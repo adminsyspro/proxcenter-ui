@@ -6849,7 +6849,9 @@
     "noCephDesc": "No Ceph clusters detected on your connections. Enable Ceph on a Proxmox cluster to see details here."
   },
   "commandPalette": {
-    "placeholder": "Search pages, VMs, nodes, PBS...",
+    "placeholder": "Search pages, VMs, nodes, IPs, MAC addresses...",
+    "lastKnownIp": "last known",
+    "notes": "Notes",
     "pages": "Pages",
     "virtualMachines": "Virtual Machines",
     "nodes": "PVE Nodes",

@@ -6849,7 +6849,9 @@
     "noCephDesc": "연결에서 감지된 Ceph 클러스터가 없습니다. 세부 정보를 보려면 Proxmox 클러스터에서 Ceph를 활성화하세요."
   },
   "commandPalette": {
-    "placeholder": "페이지, VM, 노드, PBS 검색...",
+    "placeholder": "페이지, VM, 노드, IP, MAC 주소 검색...",
+    "lastKnownIp": "마지막 확인",
+    "notes": "메모",
     "pages": "페이지",
     "virtualMachines": "가상 머신",
     "nodes": "PVE 노드",

@@ -23,36 +23,8 @@ import { useLicense } from '@/contexts/LicenseContext'
 import { useTenant } from '@/contexts/TenantContext'
 import { useMyVdcs } from '@/hooks/useMyVdcs'
 import { commandPaletteRowSx } from './commandPaletteRowSx'
-
-// ---------------------------------------------------------------------------
-// Fuzzy match utility (no external lib)
-// ---------------------------------------------------------------------------
-function fuzzyMatch(query, text) {
-  const lowerQuery = query.toLowerCase()
-  const lowerText = text.toLowerCase()
-
-  // Exact substring = highest score
-  if (lowerText.includes(lowerQuery)) {
-    const index = lowerText.indexOf(lowerQuery)
-
-    return { match: true, score: 100 - index + (lowerQuery.length / lowerText.length) * 50 }
-  }
-
-  // Character-by-character with word-start bonus
-  let qi = 0
-  let score = 0
-
-  for (let ti = 0; ti < lowerText.length && qi < lowerQuery.length; ti++) {
-    if (lowerText[ti] === lowerQuery[qi]) {
-      score += (ti === 0 || lowerText[ti - 1] === ' ' || lowerText[ti - 1] === '-') ? 10 : 1
-      qi++
-    }
-  }
-
-  if (qi === lowerQuery.length) return { match: true, score }
-
-  return { match: false, score: 0 }
-}
+import { fuzzyMatch, matchGuest, matchNode } from './commandPaletteMatch'
+import { NodeIcon, StatusIcon } from '@/app/(dashboard)/infrastructure/inventory/components/TreeIcons'
 
 // ---------------------------------------------------------------------------
 // VM status helpers
@@ -65,6 +37,42 @@ const statusColor = (status) => {
     case 'offline': return '#f44336'
     default: return '#9e9e9e'
   }
+}
+
+// While the server's address index warms up (first /api/v1/vms call of the
+// process), the palette re-polls the list this many times, this often.
+const WARMUP_MAX_POLLS = 5
+const WARMUP_POLL_MS = 4000
+
+// ---------------------------------------------------------------------------
+// Why did this row match? Shown only for IP, MAC and notes hits: name and
+// vmid are already on the row (#223, #861).
+// ---------------------------------------------------------------------------
+const MatchHint = ({ item, active, tCmd }) => {
+  if (!item.hit || (item.via !== 'ip' && item.via !== 'mac' && item.via !== 'description')) return null
+
+  const label = item.via === 'ip' ? 'IP' : item.via === 'mac' ? 'MAC' : tCmd('notes')
+  const stale = item.via === 'ip' && Array.isArray(item.staleIps) && item.staleIps.includes(item.hit)
+    ? ` • ${tCmd('lastKnownIp')}`
+    : ''
+
+  return (
+    <Typography
+      variant='caption'
+      sx={{
+        display: 'block',
+        opacity: active ? 0.9 : 0.6,
+        fontSize: '0.65rem',
+        fontFamily: item.via === 'description' ? undefined : '"JetBrains Mono", monospace',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        whiteSpace: 'nowrap'
+      }}
+    >
+      <Box component='span' sx={{ opacity: 0.7, mr: 0.75 }}>{label}</Box>
+      {item.hit}{stale}
+    </Typography>
+  )
 }
 
 // ---------------------------------------------------------------------------
@@ -90,12 +98,17 @@ const CommandPalette = ({ open, onClose }) => {
   const [infraLoading, setInfraLoading] = useState(false)
   const vmsCacheRef = useRef({ data: null, timestamp: 0 })
   const infraCacheRef = useRef({ data: null, timestamp: 0 })
+  const warmupTimerRef = useRef(null)
 
   const resultsContainerRef = useRef(null)
   const itemRefs = useRef([])
 
   // Reset state when dialog opens / closes
   useEffect(() => {
+    // Flipped by the cleanup: a response landing after the palette closed
+    // must neither touch state nor schedule another poll.
+    const active = { current: true }
+
     if (open) {
       setQuery('')
       setActiveIndex(0)
@@ -104,20 +117,43 @@ const CommandPalette = ({ open, onClose }) => {
       const cache = vmsCacheRef.current
       const now = Date.now()
 
-      if (cache.data && now - cache.timestamp < 60000) {
-        setVms(cache.data)
-      } else {
-        setVmsLoading(true)
+      // The server builds its address index in the background on the first
+      // call (#223): while it says it is still warming, poll a few more times
+      // so IP and MAC search works without closing the palette. A response
+      // that lands after the palette closed only feeds the cache.
+      const loadVms = (attempt) => {
+        const firstPass = attempt === 0
+        if (firstPass) setVmsLoading(true)
         fetch('/api/v1/vms')
           .then(res => res.ok ? res.json() : null)
           .then(json => {
-            if (!json) return setVms([])
+            if (!json) {
+              if (firstPass && active.current) setVms([])
+
+              return
+            }
+
             const vmList = json?.data?.vms || json?.data || []
-            vmsCacheRef.current = { data: Array.isArray(vmList) ? vmList : [], timestamp: Date.now() }
-            setVms(Array.isArray(vmList) ? vmList : [])
+            const list = Array.isArray(vmList) ? vmList : []
+            const warming = Boolean(json?.data?.ipIndexWarming)
+
+            vmsCacheRef.current = { data: list, timestamp: Date.now(), warming }
+            if (!active.current) return
+            setVms(list)
+
+            if (warming && attempt < WARMUP_MAX_POLLS) {
+              warmupTimerRef.current = setTimeout(() => loadVms(attempt + 1), WARMUP_POLL_MS)
+            }
           })
-          .catch(() => setVms([]))
-          .finally(() => setVmsLoading(false))
+          .catch(() => { if (firstPass && active.current) setVms([]) })
+          .finally(() => { if (firstPass && active.current) setVmsLoading(false) })
+      }
+
+      // A cached list fetched while the index was warming has no live IPs: refetch it.
+      if (cache.data && !cache.warming && now - cache.timestamp < 60000) {
+        setVms(cache.data)
+      } else {
+        loadVms(0)
       }
 
       // Fetch nodes & PBS servers with 60s cache
@@ -155,6 +191,14 @@ const CommandPalette = ({ open, onClose }) => {
           })
           .catch(() => { setNodes([]); setPbsServers([]) })
           .finally(() => setInfraLoading(false))
+      }
+    }
+
+    return () => {
+      active.current = false
+      if (warmupTimerRef.current) {
+        clearTimeout(warmupTimerRef.current)
+        warmupTimerRef.current = null
       }
     }
   }, [open])
@@ -263,24 +307,12 @@ const CommandPalette = ({ open, onClose }) => {
         .sort((a, b) => b.score - a.score)
 
       fVms = vms
-        .map(vm => {
-          const nameMatch = fuzzyMatch(q, vm.name || '')
-          const vmidMatch = fuzzyMatch(q, String(vm.vmid || ''))
-          const best = nameMatch.score >= vmidMatch.score ? nameMatch : vmidMatch
-
-          return { ...vm, ...best }
-        })
+        .map(vm => ({ ...vm, ...matchGuest(q, vm) }))
         .filter(vm => vm.match)
         .sort((a, b) => b.score - a.score)
 
       fNodes = nodes
-        .map(n => {
-          const nameMatch = fuzzyMatch(q, n.node || '')
-          const connMatch = fuzzyMatch(q, n.connName || '')
-          const best = nameMatch.score >= connMatch.score ? nameMatch : connMatch
-
-          return { ...n, ...best }
-        })
+        .map(n => ({ ...n, ...matchNode(q, n) }))
         .filter(n => n.match)
         .sort((a, b) => b.score - a.score)
 
@@ -518,16 +550,8 @@ const CommandPalette = ({ open, onClose }) => {
                   onClick={() => navigateTo({ ...vm, _type: 'vm' })}
                   sx={commandPaletteRowSx(activeIndex === idx)}
                 >
-                  {/* Status dot */}
-                  <Box
-                    sx={{
-                      width: 8,
-                      height: 8,
-                      borderRadius: '50%',
-                      bgcolor: statusColor(vm.status),
-                      flexShrink: 0
-                    }}
-                  />
+                  {/* Same guest icon and status badge as the inventory tree */}
+                  <StatusIcon status={vm.status} type='vm' template={vm.template} vmType={vm.type} lock={vm.lock} size={18} />
                   <Box sx={{ flex: 1, minWidth: 0 }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                       <Typography
@@ -585,6 +609,7 @@ const CommandPalette = ({ open, onClose }) => {
                         </>
                       )}
                     </Box>
+                    <MatchHint item={vm} active={activeIndex === idx} tCmd={tCmd} />
                   </Box>
                 </Box>
               )
@@ -620,13 +645,7 @@ const CommandPalette = ({ open, onClose }) => {
                   onClick={() => navigateTo({ ...node, _type: 'node' })}
                   sx={commandPaletteRowSx(activeIndex === idx)}
                 >
-                  <i
-                    className='ri-server-line'
-                    style={{
-                      fontSize: 18,
-                      opacity: activeIndex === idx ? 1 : 0.6
-                    }}
-                  />
+                  <NodeIcon status={node.status} maintenance={node.maintenance} size={18} />
                   <Box sx={{ flex: 1, minWidth: 0 }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                       <Typography
@@ -640,15 +659,6 @@ const CommandPalette = ({ open, onClose }) => {
                       >
                         {node.node}
                       </Typography>
-                      <Box
-                        sx={{
-                          width: 7,
-                          height: 7,
-                          borderRadius: '50%',
-                          bgcolor: statusColor(node.status),
-                          flexShrink: 0
-                        }}
-                      />
                     </Box>
                     {node.connName && (
                       <Typography
@@ -661,6 +671,7 @@ const CommandPalette = ({ open, onClose }) => {
                         {node.connName}
                       </Typography>
                     )}
+                    <MatchHint item={node} active={activeIndex === idx} tCmd={tCmd} />
                   </Box>
                 </Box>
               )

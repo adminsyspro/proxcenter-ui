@@ -101,6 +101,29 @@ describe('enrichVmsWithConfig', () => {
     expect(out[0].agentEnabled).toBe(false)
   })
 
+  it('adds the QEMU config network identity and description to an enriched guest', async () => {
+    pveFetchMock.mockResolvedValue({
+      net0: 'virtio=BC:24:11:C0:F0:6F,bridge=vmbr0',
+      ipconfig0: 'ip=10.0.0.5/24,gw=10.0.0.1',
+      description: 'web front',
+    })
+
+    const out = await enrichVmsWithConfig(CONN, [vms[0]], new Set(['n1']))
+
+    expect(out[0]).toMatchObject({
+      macs: ['BC:24:11:C0:F0:6F'],
+      configIps: ['10.0.0.5'],
+      description: 'web front',
+    })
+  })
+
+  it('adds an empty network identity on the confirmed-offline node path', async () => {
+    const out = await enrichVmsWithConfig(CONN, [vms[1]], new Set(['n1']))
+
+    expect(out[0]).toMatchObject({ macs: [], configIps: [], description: null })
+    expect(pveFetchMock).not.toHaveBeenCalled()
+  })
+
   it('probes the agent only with includeAgent, only on running VMs with the flag ON', async () => {
     pveFetchMock.mockImplementation(async (_conn, path) => {
       if (path.endsWith('/config')) return { agent: '1' }

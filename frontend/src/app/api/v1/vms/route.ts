@@ -8,6 +8,7 @@ import { formatBytes, formatUptime } from "@/utils/format"
 import { getTenantInfrastructureScope, inventoryConnectionPlan, maskingScope } from "@/lib/tenant/infraScope"
 import { prisma as globalPrisma } from "@/lib/db/prisma"
 import { enrichVmsWithConfig } from "@/lib/inventory/vmConfig"
+import { attachGuestIps } from "@/lib/inventory/guestIpIndex"
 import { withPublicApiGuard, type GuardedRouteContext } from "@/lib/api-tokens/routeGuard"
 import { restrictToTokenScope } from "@/lib/api-tokens/scope"
 
@@ -19,6 +20,8 @@ export const runtime = "nodejs"
  * API agrégée qui retourne toutes les VMs et LXCs de toutes les connexions PVE.
  * Optimisé pour charger toutes les données en parallèle.
  * Les IPs sont chargées séparément via /api/v1/vms/ips pour ne pas ralentir.
+ * `ips`/`macs` (recherche, #223/#861) viennent de la config déjà lue plus de
+ * l'index d'adresses live rafraîchi en arrière-plan : jamais d'appel bloquant.
  */
 
 function round1(n: number) {
@@ -76,6 +79,10 @@ async function handler(req: Request, ctx: GuardedRouteContext) {
     const targetConnections = connIdFilter && connIdFilter !== '*'
       ? connections.filter(c => c.id === connIdFilter)
       : connections
+
+    // True while a connection's address index is being built for the first
+    // time: the palette re-fetches once so the IPs show up without a reload.
+    let ipIndexWarming = false
 
     // Charger toutes les connexions EN PARALLÈLE
     const connectionPromises = targetConnections.map(async (conn) => {
@@ -140,7 +147,15 @@ async function handler(req: Request, ctx: GuardedRouteContext) {
           }
         })
 
-        return enrichVmsWithConfig(connData, mapped, onlineNodes, { includeAgent })
+        const enriched = await enrichVmsWithConfig(connData, mapped, onlineNodes, { includeAgent })
+        // A rejected /cluster/resources gave an EMPTY `mapped`: reading the
+        // index is fine, rebuilding it from that list is not.
+        const { vms: withIps, warming } = attachGuestIps(conn.id, connData, enriched, {
+          refresh: resourcesResult.status === 'fulfilled',
+        })
+        if (warming) ipIndexWarming = true
+
+        return withIps
       } catch (e) {
         console.error(`[vms] Error fetching connection ${conn.id}:`, e)
         
@@ -199,6 +214,7 @@ return aId - bId
       data: {
         vms: allVms,
         stats,
+        ipIndexWarming,
       }
     })
   } catch (e: any) {

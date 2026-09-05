@@ -1,3 +1,24 @@
+import { isSearchableIp } from "@/lib/net/ip"
+
+/**
+ * Every address a node answers on (management, storage, Ceph public...),
+ * loopback and link-local excluded. Feeds the node search of the command
+ * palette (#861): an admin who only knows a storage-network IP still finds
+ * the host. `/nodes/{node}/network` carries no MAC, so hosts are IP-only.
+ */
+export function collectNodeAddresses(networks: any[]): string[] {
+  if (!Array.isArray(networks)) return []
+  const out = new Set<string>()
+  for (const iface of networks) {
+    for (const raw of [iface?.address, iface?.address6]) {
+      if (typeof raw !== 'string' || !raw) continue
+      const ip = raw.split('/')[0]
+      if (isSearchableIp(ip)) out.add(ip)
+    }
+  }
+  return [...out]
+}
+
 /**
  * Resolve the management IP from Proxmox node network interfaces.
  *

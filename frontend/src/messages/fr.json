@@ -6850,7 +6850,9 @@
     "noCephDesc": "Aucun cluster Ceph détecté sur vos connexions. Activez Ceph sur un cluster Proxmox pour voir les détails ici."
   },
   "commandPalette": {
-    "placeholder": "Rechercher pages, VMs, nœuds, PBS...",
+    "placeholder": "Rechercher pages, VMs, nœuds, IP, adresses MAC...",
+    "lastKnownIp": "dernière connue",
+    "notes": "Notes",
     "pages": "Pages",
     "virtualMachines": "Machines virtuelles",
     "nodes": "Nœuds PVE",

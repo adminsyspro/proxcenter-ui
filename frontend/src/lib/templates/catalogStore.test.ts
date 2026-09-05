@@ -41,17 +41,17 @@ beforeEach(() => { settings.clear() })
 
 describe('configuration', () => {
   it('defaults to the GitHub raw URL and honours TEMPLATE_CATALOG_URL', () => {
-    expect(resolveCatalogUrl({} as NodeJS.ProcessEnv)).toBe(DEFAULT_CATALOG_URL)
-    expect(resolveCatalogUrl({ TEMPLATE_CATALOG_URL: ' https://mirror.local/catalog.json ' } as NodeJS.ProcessEnv)).toBe('https://mirror.local/catalog.json')
-    expect(resolveCatalogUrl({ TEMPLATE_CATALOG_URL: '   ' } as NodeJS.ProcessEnv)).toBe(DEFAULT_CATALOG_URL)
+    expect(resolveCatalogUrl({})).toBe(DEFAULT_CATALOG_URL)
+    expect(resolveCatalogUrl({ TEMPLATE_CATALOG_URL: ' https://mirror.local/catalog.json ' })).toBe('https://mirror.local/catalog.json')
+    expect(resolveCatalogUrl({ TEMPLATE_CATALOG_URL: '   ' })).toBe(DEFAULT_CATALOG_URL)
   })
 
   it('auto update is on unless TEMPLATE_CATALOG_AUTO_UPDATE is false', () => {
-    expect(isCatalogAutoUpdateEnabled({} as NodeJS.ProcessEnv)).toBe(true)
-    expect(isCatalogAutoUpdateEnabled({ TEMPLATE_CATALOG_AUTO_UPDATE: 'false' } as NodeJS.ProcessEnv)).toBe(false)
-    expect(isCatalogAutoUpdateEnabled({ TEMPLATE_CATALOG_AUTO_UPDATE: 'FALSE' } as NodeJS.ProcessEnv)).toBe(false)
-    expect(isCatalogAutoUpdateEnabled({ TEMPLATE_CATALOG_AUTO_UPDATE: '0' } as NodeJS.ProcessEnv)).toBe(false)
-    expect(isCatalogAutoUpdateEnabled({ TEMPLATE_CATALOG_AUTO_UPDATE: 'true' } as NodeJS.ProcessEnv)).toBe(true)
+    expect(isCatalogAutoUpdateEnabled({})).toBe(true)
+    expect(isCatalogAutoUpdateEnabled({ TEMPLATE_CATALOG_AUTO_UPDATE: 'false' })).toBe(false)
+    expect(isCatalogAutoUpdateEnabled({ TEMPLATE_CATALOG_AUTO_UPDATE: 'FALSE' })).toBe(false)
+    expect(isCatalogAutoUpdateEnabled({ TEMPLATE_CATALOG_AUTO_UPDATE: '0' })).toBe(false)
+    expect(isCatalogAutoUpdateEnabled({ TEMPLATE_CATALOG_AUTO_UPDATE: 'true' })).toBe(true)
   })
 })
 
@@ -112,7 +112,7 @@ describe('refreshRemoteCatalog', () => {
       c.images = c.images.filter(i => i.slug !== 'debian-11')
     })
     const fetchImpl = vi.fn(async () => jsonResponse(remote, { etag: '"v2"' })) as unknown as typeof fetch
-    const out = await refreshRemoteCatalog({ fetchImpl, now: fixedNow, env: {} as NodeJS.ProcessEnv })
+    const out = await refreshRemoteCatalog({ fetchImpl, now: fixedNow, env: {} })
     expect(out.result).toBe('updated')
     expect(out.added).toEqual(['ubuntu-2610'])
     expect(out.removed).toEqual(['debian-11'])
@@ -135,7 +135,7 @@ describe('refreshRemoteCatalog', () => {
     const stored: StoredRemoteCatalog = { url: DEFAULT_CATALOG_URL, etag: '"v2"', fetchedAt: 'before', catalog: remoteCatalog() }
     settings.set(CATALOG_REMOTE_SETTING_KEY, stored)
     const fetchImpl = vi.fn(async () => new Response(null, { status: 304 })) as unknown as typeof fetch
-    const out = await refreshRemoteCatalog({ fetchImpl, now: fixedNow, env: {} as NodeJS.ProcessEnv })
+    const out = await refreshRemoteCatalog({ fetchImpl, now: fixedNow, env: {} })
     expect(out).toEqual({ result: 'unchanged', added: [], updated: [], removed: [], error: null })
     const [, init] = (fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls[0] as [string, RequestInit]
     expect((init.headers as Record<string, string>)['If-None-Match']).toBe('"v2"')
@@ -147,7 +147,7 @@ describe('refreshRemoteCatalog', () => {
     const stored: StoredRemoteCatalog = { url: DEFAULT_CATALOG_URL, etag: null, fetchedAt: 'before', catalog: remoteCatalog() }
     settings.set(CATALOG_REMOTE_SETTING_KEY, stored)
     const fetchImpl = vi.fn(async () => jsonResponse(remoteCatalog(), { etag: '"v3"' })) as unknown as typeof fetch
-    const out = await refreshRemoteCatalog({ fetchImpl, now: fixedNow, env: {} as NodeJS.ProcessEnv })
+    const out = await refreshRemoteCatalog({ fetchImpl, now: fixedNow, env: {} })
     expect(out.result).toBe('unchanged')
     // The ETag is refreshed so the next call can use If-None-Match.
     expect((settings.get(CATALOG_REMOTE_SETTING_KEY) as StoredRemoteCatalog).etag).toBe('"v3"')
@@ -157,7 +157,7 @@ describe('refreshRemoteCatalog', () => {
     const stored: StoredRemoteCatalog = { url: DEFAULT_CATALOG_URL, etag: null, fetchedAt: 'before', catalog: remoteCatalog() }
     settings.set(CATALOG_REMOTE_SETTING_KEY, stored)
     const fetchImpl = vi.fn(async () => new Response('nope', { status: 503 })) as unknown as typeof fetch
-    const out = await refreshRemoteCatalog({ fetchImpl, now: fixedNow, env: {} as NodeJS.ProcessEnv })
+    const out = await refreshRemoteCatalog({ fetchImpl, now: fixedNow, env: {} })
     expect(out.result).toBe('error')
     expect(out.error).toMatch(/HTTP 503/)
     expect((settings.get(CATALOG_REMOTE_SETTING_KEY) as StoredRemoteCatalog).fetchedAt).toBe('before')
@@ -169,7 +169,7 @@ describe('refreshRemoteCatalog', () => {
       settings.clear()
       settings.set(CATALOG_REMOTE_SETTING_KEY, { url: DEFAULT_CATALOG_URL, etag: null, fetchedAt: 'before', catalog: remoteCatalog() })
       const fetchImpl = vi.fn(async () => jsonResponse(body)) as unknown as typeof fetch
-      const out = await refreshRemoteCatalog({ fetchImpl, now: fixedNow, env: {} as NodeJS.ProcessEnv })
+      const out = await refreshRemoteCatalog({ fetchImpl, now: fixedNow, env: {} })
       expect(out.result).toBe('error')
       expect((settings.get(CATALOG_REMOTE_SETTING_KEY) as StoredRemoteCatalog).fetchedAt).toBe('before')
     }
@@ -178,22 +178,31 @@ describe('refreshRemoteCatalog', () => {
   it('rejects a body over the size cap', async () => {
     const huge = JSON.stringify(remoteCatalog()).padEnd(1_048_577, ' ')
     const fetchImpl = vi.fn(async () => jsonResponse(huge)) as unknown as typeof fetch
-    const out = await refreshRemoteCatalog({ fetchImpl, now: fixedNow, env: {} as NodeJS.ProcessEnv })
+    const out = await refreshRemoteCatalog({ fetchImpl, now: fixedNow, env: {} })
     expect(out.result).toBe('error')
     expect(out.error).toMatch(/too large/i)
   })
 
   it('never throws when fetch itself rejects', async () => {
     const fetchImpl = vi.fn(async () => { throw new Error('ECONNREFUSED') }) as unknown as typeof fetch
-    const out = await refreshRemoteCatalog({ fetchImpl, now: fixedNow, env: {} as NodeJS.ProcessEnv })
+    const out = await refreshRemoteCatalog({ fetchImpl, now: fixedNow, env: {} })
     expect(out.result).toBe('error')
     expect(out.error).toMatch(/ECONNREFUSED/)
     expect(settings.get(CATALOG_REMOTE_SETTING_KEY)).toBeUndefined()
   })
 
+  it('surfaces the cause code behind undici\'s bare "fetch failed"', async () => {
+    const fetchImpl = vi.fn(async () => {
+      throw Object.assign(new TypeError('fetch failed'), { cause: { code: 'ECONNREFUSED', message: 'connect ECONNREFUSED 127.0.0.1:8765' } })
+    }) as unknown as typeof fetch
+    const out = await refreshRemoteCatalog({ fetchImpl, now: fixedNow, env: {} })
+    expect(out.result).toBe('error')
+    expect(out.error).toBe('fetch failed (ECONNREFUSED)')
+  })
+
   it('fetches the URL from TEMPLATE_CATALOG_URL when set', async () => {
     const fetchImpl = vi.fn(async () => jsonResponse(remoteCatalog())) as unknown as typeof fetch
-    await refreshRemoteCatalog({ fetchImpl, now: fixedNow, env: { TEMPLATE_CATALOG_URL: 'https://mirror.local/c.json' } as NodeJS.ProcessEnv })
+    await refreshRemoteCatalog({ fetchImpl, now: fixedNow, env: { TEMPLATE_CATALOG_URL: 'https://mirror.local/c.json' } })
     expect((fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0]).toBe('https://mirror.local/c.json')
     expect((settings.get(CATALOG_REMOTE_SETTING_KEY) as StoredRemoteCatalog).url).toBe('https://mirror.local/c.json')
   })

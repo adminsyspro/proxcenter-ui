@@ -8,7 +8,7 @@
 
 import { z } from 'zod'
 
-import type { CloudImage } from './cloudImages'
+import type { CatalogVendor, CloudImage } from './cloudImages'
 
 export const CATALOG_SCHEMA_VERSION = 1
 
@@ -69,8 +69,19 @@ export const cloudImageCatalogSchema = z.object({
   })
 })
 
-export type CatalogVendor = z.infer<typeof catalogVendorSchema>
-export type CloudImageCatalog = z.infer<typeof cloudImageCatalogSchema>
+export type { CatalogVendor }
+
+/**
+ * The catalog document, declared in terms of CloudImage so the schema's
+ * inferred type never leaks into consumers (the zod enum for `format` would
+ * otherwise clash with the plain `string` CloudImage carries).
+ */
+export interface CloudImageCatalog {
+  schemaVersion: typeof CATALOG_SCHEMA_VERSION
+  updatedAt: string
+  vendors: CatalogVendor[]
+  images: CloudImage[]
+}
 
 export type CatalogRefreshResult = 'updated' | 'unchanged' | 'error'
 
@@ -94,25 +105,27 @@ export interface CatalogDiff {
   removed: string[]
 }
 
+// Both arms carry every field: with strictNullChecks off, TypeScript does not
+// narrow this union on `res.ok`, so callers read `res.error` on either arm.
 export type CatalogParseResult =
-  | { ok: true; catalog: CloudImageCatalog }
-  | { ok: false; error: string }
+  | { ok: true; catalog: CloudImageCatalog; error: null }
+  | { ok: false; catalog: null; error: string }
 
 export function parseCatalogPayload(input: unknown): CatalogParseResult {
   if (!input || typeof input !== 'object' || Array.isArray(input)) {
-    return { ok: false, error: 'catalog payload is not an object' }
+    return { ok: false, catalog: null, error: 'catalog payload is not an object' }
   }
   const version = (input as { schemaVersion?: unknown }).schemaVersion
   if (typeof version === 'number' && version > CATALOG_SCHEMA_VERSION) {
-    return { ok: false, error: `catalog schema version ${version} requires a newer ProxCenter (supported: ${CATALOG_SCHEMA_VERSION})` }
+    return { ok: false, catalog: null, error: `catalog schema version ${version} requires a newer ProxCenter (supported: ${CATALOG_SCHEMA_VERSION})` }
   }
   const parsed = cloudImageCatalogSchema.safeParse(input)
   if (!parsed.success) {
     const first = parsed.error.issues[0]
     const where = first?.path?.length ? ` at ${first.path.join('.')}` : ''
-    return { ok: false, error: `invalid catalog${where}: ${first?.message ?? 'unknown error'}` }
+    return { ok: false, catalog: null, error: `invalid catalog${where}: ${first?.message ?? 'unknown error'}` }
   }
-  return { ok: true, catalog: parsed.data }
+  return { ok: true, catalog: parsed.data as CloudImageCatalog, error: null }
 }
 
 /**

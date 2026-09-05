@@ -55,18 +55,21 @@ export interface RefreshOutcome extends CatalogDiff {
   error: string | null
 }
 
+/** process.env or a plain object standing in for it in tests. */
+export type EnvLike = Record<string, string | undefined>
+
 export interface RefreshOptions {
   fetchImpl?: typeof fetch
   now?: () => Date
-  env?: NodeJS.ProcessEnv
+  env?: EnvLike
 }
 
-export function resolveCatalogUrl(env: NodeJS.ProcessEnv = process.env): string {
+export function resolveCatalogUrl(env: EnvLike = process.env): string {
   const override = (env.TEMPLATE_CATALOG_URL ?? '').trim()
   return override || DEFAULT_CATALOG_URL
 }
 
-export function isCatalogAutoUpdateEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+export function isCatalogAutoUpdateEnabled(env: EnvLike = process.env): boolean {
   const raw = (env.TEMPLATE_CATALOG_AUTO_UPDATE ?? '').trim().toLowerCase()
   return !(raw === 'false' || raw === '0' || raw === 'no' || raw === 'off')
 }
@@ -120,6 +123,23 @@ export async function resolveBuiltInImage(slug: string): Promise<CloudImage | un
 }
 
 class RefreshError extends Error {}
+
+/**
+ * undici reports every network failure as a bare "fetch failed" TypeError and
+ * keeps the useful part (ECONNREFUSED, ENOTFOUND, certificate errors) in
+ * `cause`. Surface it, the message is what the admin reads in the toast.
+ */
+function describeError(err: unknown): string {
+  if (!(err instanceof Error)) return String(err)
+  const cause = (err as { cause?: unknown }).cause
+  if (cause && typeof cause === 'object') {
+    const code = (cause as { code?: unknown }).code
+    const causeMessage = (cause as { message?: unknown }).message
+    const detail = typeof code === 'string' ? code : typeof causeMessage === 'string' ? causeMessage : null
+    if (detail && !err.message.includes(detail)) return `${err.message} (${detail})`
+  }
+  return err.message
+}
 
 async function fetchCatalogDocument(
   url: string,
@@ -205,7 +225,7 @@ export async function refreshRemoteCatalog(opts: RefreshOptions = {}): Promise<R
     await writeStatus(result, null)
     return { result, ...diff, error: null }
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err)
+    const message = describeError(err)
     try {
       await writeStatus('error', message)
     } catch (statusErr) {

@@ -139,7 +139,7 @@ describe('diffCatalogs', () => {
   it('ignores key order when deciding whether an image changed', () => {
     const prev = catalog()
     const reordered = JSON.parse(JSON.stringify(prev)) as CloudImageCatalog
-    const img = reordered.images[0] as Record<string, unknown>
+    const img = reordered.images[0] as unknown as Record<string, unknown>
     const swapped = Object.fromEntries(Object.entries(img).reverse()) as unknown as CloudImage
     reordered.images = [swapped]
     expect(diffCatalogs(prev, reordered)).toEqual({ added: [], updated: [], removed: [] })

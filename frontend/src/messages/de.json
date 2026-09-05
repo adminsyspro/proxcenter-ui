@@ -6793,7 +6793,9 @@
     "noCephDesc": "Keine Ceph-Cluster auf Ihren Verbindungen erkannt. Aktivieren Sie Ceph auf einem Proxmox-Cluster, um Details hier zu sehen."
   },
   "commandPalette": {
-    "placeholder": "suchen pages, VMs, Nodes, PBS...",
+    "placeholder": "Seiten, VMs, Nodes, IPs, MAC-Adressen suchen...",
+    "lastKnownIp": "zuletzt bekannt",
+    "notes": "Notizen",
     "pages": "Seiten",
     "virtualMachines": "Virtuelle Maschinen",
     "nodes": "PVE-Nodes",

@@ -6793,7 +6793,9 @@
     "noCephDesc": "在您的连接中未检测到 Ceph 集群。在 Proxmox 集群上启用 Ceph 即可在此查看详情。"
   },
   "commandPalette": {
-    "placeholder": "搜索页面、虚拟机、节点、PBS...",
+    "placeholder": "搜索页面、虚拟机、节点、IP、MAC 地址...",
+    "lastKnownIp": "最后已知",
+    "notes": "备注",
     "pages": "页面",
     "virtualMachines": "虚拟机",
     "nodes": "PVE 节点",

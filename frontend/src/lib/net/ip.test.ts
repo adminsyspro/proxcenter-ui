@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { isPrivateIp, extractHostname } from './ip'
+import { isPrivateIp, isSearchableIp, extractHostname } from './ip'
 
 describe('isPrivateIp', () => {
   it('flags IPv4 private / non-routable ranges', () => {
@@ -62,5 +62,25 @@ describe('extractHostname', () => {
   })
   it('returns empty string for empty input', () => {
     expect(extractHostname('')).toBe('')
+  })
+})
+
+describe('isSearchableIp', () => {
+  it('accepts public and private unicast addresses and strips prefixes', () => {
+    for (const ip of ['10.42.0.151', '8.8.8.8', '192.168.1.10/24', '2001:db8::10/64', 'fd00::10']) {
+      expect(isSearchableIp(ip), ip).toBe(true)
+    }
+  })
+
+  it('rejects loopback, link-local, unspecified and multicast addresses', () => {
+    for (const ip of ['127.0.0.1', '169.254.1.2', '0.0.0.0', '224.0.0.1', '239.255.255.250', '255.255.255.255', '::1', '::', 'fe80::1', 'ff02::1']) {
+      expect(isSearchableIp(ip), ip).toBe(false)
+    }
+  })
+
+  it('rejects hostnames, malformed addresses and empty values', () => {
+    for (const ip of ['', 'pve.local', '999.1.1.1', 'not-an-ip']) {
+      expect(isSearchableIp(ip), ip).toBe(false)
+    }
   })
 })

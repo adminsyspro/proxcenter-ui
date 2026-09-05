@@ -12,7 +12,7 @@ import { prisma as globalPrisma } from "@/lib/db/prisma"
 import { getConnectionById, getPbsConnectionById } from "@/lib/connections/getConnection"
 import { pveFetch } from "@/lib/proxmox/client"
 import { pbsFetch } from "@/lib/proxmox/pbs-client"
-import { resolveManagementIp } from "@/lib/proxmox/resolveManagementIp"
+import { collectNodeAddresses, resolveManagementIp } from "@/lib/proxmox/resolveManagementIp"
 import {
   getInventoryFromCache,
   setCachedInventory,
@@ -31,6 +31,8 @@ export type NodeData = {
   maxdisk?: number
   uptime?: number
   ip?: string
+  /** All non-loopback addresses of the host, for the IP search of the palette (#861). */
+  ips?: string[]
   maintenance?: string
 }
 
@@ -200,7 +202,7 @@ export async function fetchRawInventory(infra: InfraScope): Promise<RawInventory
       }
 
       const nodeEnrichPromises = nodes.map(async (node) => {
-        if (!node?.node) return { node: node.node, ip: undefined, mem: undefined, maxmem: undefined }
+        if (!node?.node) return { node: node.node, ip: undefined, ips: [] as string[], mem: undefined, maxmem: undefined }
 
         try {
           // Fetch network and node status in parallel
@@ -214,20 +216,21 @@ export async function fetchRawInventory(infra: InfraScope): Promise<RawInventory
           return {
             node: node.node,
             ip: resolveManagementIp(networks),
+            ips: collectNodeAddresses(networks),
             // Use memory from /nodes/{node}/status (excludes ZFS ARC / kernel caches)
             mem: nodeStatus?.memory?.total > 0 ? Number(nodeStatus.memory.used || 0) : undefined,
             maxmem: nodeStatus?.memory?.total > 0 ? Number(nodeStatus.memory.total || 0) : undefined,
           }
         } catch {
-          return { node: node.node, ip: undefined, mem: undefined, maxmem: undefined }
+          return { node: node.node, ip: undefined, ips: [] as string[], mem: undefined, maxmem: undefined }
         }
       })
 
       const nodeEnrichData = await Promise.all(nodeEnrichPromises)
-      const nodeIpMap = new Map<string, { ip?: string; mem?: number; maxmem?: number }>()
+      const nodeIpMap = new Map<string, { ip?: string; ips: string[]; mem?: number; maxmem?: number }>()
 
-      for (const { node, ip, mem, maxmem } of nodeEnrichData) {
-        if (node) nodeIpMap.set(node, { ip, mem, maxmem })
+      for (const { node, ip, ips, mem, maxmem } of nodeEnrichData) {
+        if (node) nodeIpMap.set(node, { ip, ips, mem, maxmem })
       }
 
       const haMap = new Map<string, HaResource>()
@@ -251,6 +254,7 @@ export async function fetchRawInventory(infra: InfraScope): Promise<RawInventory
           ...(extra?.mem !== undefined ? { mem: extra.mem } : {}),
           ...(extra?.maxmem !== undefined ? { maxmem: extra.maxmem } : {}),
           ip: extra?.ip,
+          ips: extra?.ips ?? [],
           maintenance,
           guests: []
         })

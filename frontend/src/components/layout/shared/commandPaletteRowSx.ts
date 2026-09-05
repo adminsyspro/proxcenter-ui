@@ -1,10 +1,9 @@
-import { INHERIT_ON_PRIMARY_SX } from '@/lib/theme/onPrimary'
-
 /**
  * Row style shared by the five result sections of the command palette (pages,
- * VMs, nodes, PBS servers, actions). The highlighted row is painted with the
- * primary colour, which the user can set to anything through White Label, so
- * its content follows `primary.contrastText` instead of a fixed white.
+ * VMs, nodes, PBS servers, actions). The highlighted row uses the theme's
+ * neutral selection tint (`action.selected`), never the primary colour: the
+ * rows carry status badges and monospace hints whose colours must stay
+ * readable whatever the White Label primary is.
  */
 export const commandPaletteRowSx = (active: boolean) => ({
   display: 'flex',
@@ -15,11 +14,10 @@ export const commandPaletteRowSx = (active: boolean) => ({
   cursor: 'pointer',
   borderRadius: 1,
   mx: 1,
-  bgcolor: active ? 'primary.main' : 'transparent',
-  color: active ? 'primary.contrastText' : 'text.primary',
-  ...(active ? INHERIT_ON_PRIMARY_SX : {}),
+  bgcolor: active ? 'action.selected' : 'transparent',
+  color: 'text.primary',
   '&:hover': {
-    bgcolor: active ? 'primary.main' : 'action.hover'
+    bgcolor: active ? 'action.selected' : 'action.hover'
   },
   transition: 'background-color 0.1s'
 })

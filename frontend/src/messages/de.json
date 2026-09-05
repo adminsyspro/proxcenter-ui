@@ -5748,7 +5748,20 @@
     "helpPreventOverprov": "Wenn aktiviert, migriert DRS keine VM auf einen Node, wenn dieser dadurch seine Kapazität überschreiten würde (zugewiesen > verfügbar). Verhindert Überallokation von Ressourcen.",
     "helpResourceWeights": "Wie stark jeder Ressourcentyp den Balancing-Score beeinflusst.",
     "helpResourceWeightsDesc": "Auf 0 setzen, um eine Ressource zu ignorieren. Auf 2 für maximale Priorität. Beispiel: Memory=1 CPU=0.3 Storage=0 bedeutet, DRS konzentriert sich hauptsächlich auf Speicher-Balance.",
-    "excludedFromDRS": "Vom DRS ausgeschlossen"
+    "excludedFromDRS": "Vom DRS ausgeschlossen",
+    "placementConstraints": "Platzierungsbeschränkungen",
+    "placementConstraintsDesc": "Diese Cluster können nicht frei ausgeglichen werden: eine Bridge, ein SDN-VNet oder ein Storage, den ein Gast benötigt, erreicht nicht alle Knoten.",
+    "balancingDomainsTitle": "Ausgleichsdomänen",
+    "domainGuests": "{count, plural, one {# Gast} other {# Gäste}}",
+    "domainSpread": "Spanne {value} Pkt.",
+    "pinnedGuestsTitle": "Nicht verschiebbare Gäste",
+    "pinnedGuestOn": "auf {node}",
+    "someGuestsCannotMove": "Derzeit nichts auszugleichen. Einige Gäste lassen sich überhaupt nicht verschieben, siehe die Platzierungsbeschränkungen oben.",
+    "placementConstrainedSdn": "SDN",
+    "placementConstrainedStorage": "Storage",
+    "placementConstrainedBoth": "SDN + Storage",
+    "placementConstrainedTooltip": "{count, plural, one {# Ausgleichsdomäne} other {# Ausgleichsdomänen}} in diesem Cluster: ein Gast kann sich nur innerhalb seiner eigenen bewegen. Die Speicherspanne und der Health-Score unten werden über alle Knoten berechnet und können hier daher nicht auf null sinken.",
+    "domainNoTarget": "kein Ziel möglich"
   },
   "usersPage": {
     "rbacRoles": "RBAC-Rollen",

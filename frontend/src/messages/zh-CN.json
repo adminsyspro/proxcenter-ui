@@ -5748,7 +5748,20 @@
     "helpPreventOverprov": "启用后，DRS 不会将 VM 迁移到会导致节点超出容量（已分配 > 可用）的节点。防止资源过度分配。",
     "helpResourceWeights": "每种资源类型对平衡评分的影响程度。",
     "helpResourceWeightsDesc": "设为 0 以忽略某种资源。设为 2 获得最高优先级。例如，内存=1 CPU=0.3 存储=0 意味着 DRS 主要关注内存平衡。",
-    "excludedFromDRS": "已从 DRS 排除"
+    "excludedFromDRS": "已从 DRS 排除",
+    "placementConstraints": "放置约束",
+    "placementConstraintsDesc": "这些集群无法自由均衡：来宾所需的网桥、SDN VNet 或存储并未覆盖所有节点。",
+    "balancingDomainsTitle": "均衡域",
+    "domainGuests": "{count, plural, other {# 个来宾}}",
+    "domainSpread": "差值 {value} 分",
+    "pinnedGuestsTitle": "无法迁移的来宾",
+    "pinnedGuestOn": "位于 {node}",
+    "someGuestsCannotMove": "目前无需均衡。部分来宾完全无法迁移，请参见上方的放置约束。",
+    "placementConstrainedSdn": "SDN",
+    "placementConstrainedStorage": "存储",
+    "placementConstrainedBoth": "SDN + 存储",
+    "placementConstrainedTooltip": "{count, plural, other {该集群有 # 个均衡域}}：来宾只能在自己的均衡域内迁移。下方的内存差值和健康评分按全部节点计算，因此在此无法降到零。",
+    "domainNoTarget": "无可迁移目标"
   },
   "usersPage": {
     "rbacRoles": "RBAC 角色",

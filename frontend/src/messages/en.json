@@ -5791,7 +5791,20 @@
     "helpPreventOverprov": "When enabled, DRS will not migrate a VM to a node if it would cause that node to exceed its capacity (allocated > available). Prevents overcommitting resources.",
     "helpResourceWeights": "How much each resource type influences the balancing score.",
     "helpResourceWeightsDesc": "Set to 0 to ignore a resource. Set to 2 for maximum priority. For example, Memory=1 CPU=0.3 Storage=0 means DRS focuses primarily on memory balance.",
-    "excludedFromDRS": "Excluded from DRS"
+    "excludedFromDRS": "Excluded from DRS",
+    "placementConstraints": "Placement constraints",
+    "placementConstraintsDesc": "These clusters cannot balance freely: a bridge, an SDN VNet or a storage a guest needs does not reach every node.",
+    "balancingDomainsTitle": "Balancing domains",
+    "domainGuests": "{count, plural, one {# guest} other {# guests}}",
+    "domainSpread": "spread {value} pts",
+    "pinnedGuestsTitle": "Guests that cannot be moved",
+    "pinnedGuestOn": "on {node}",
+    "someGuestsCannotMove": "Nothing to balance right now. Some guests cannot be moved at all, see the placement constraints above.",
+    "placementConstrainedSdn": "SDN",
+    "placementConstrainedStorage": "Storage",
+    "placementConstrainedBoth": "SDN + storage",
+    "placementConstrainedTooltip": "{count, plural, one {# balancing domain} other {# balancing domains}} on this cluster: a guest can only move inside its own. The memory spread and the health score below are computed over every node, so they cannot come down to zero here.",
+    "domainNoTarget": "nowhere to move"
   },
   "usersPage": {
     "rbacRoles": "RBAC Roles",

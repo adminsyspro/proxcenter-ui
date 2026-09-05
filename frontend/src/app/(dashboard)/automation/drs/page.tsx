@@ -78,6 +78,10 @@ import DRSSettingsPanel, {
   defaultDRSSettings, 
   type DRSSettings
 } from '@/components/automation/drs/DRSSettingsPanel'
+import PlacementConstraintsCard, {
+  type PinnedGuest,
+  type BalancingDomain
+} from '@/components/automation/drs/PlacementConstraintsCard'
 import AffinityRulesManager, {
   type AffinityRule, 
   type VMInfo as AffinityVMInfo 
@@ -117,6 +121,11 @@ interface DRSStatus {
   active_migrations: number
   pending_count: number
   approved_count: number
+  // Optional: an orchestrator older than the placement filter does not send
+  // them, and the tenant-scoped proxy can legitimately return them empty.
+  pinned_guests?: PinnedGuest[]
+  pinned_guest_count?: number
+  balancing_domains?: BalancingDomain[]
 }
 
 interface DRSRecommendation {
@@ -411,7 +420,8 @@ const ClusterCard = ({
   onToggle,
   excludedNodeNames = [],
   isClusterExcluded = false,
-  drsMode = 'manual'
+  drsMode = 'manual',
+  balancingDomains = []
 }: {
   clusterId: string
   clusterName: string
@@ -422,9 +432,38 @@ const ClusterCard = ({
   excludedNodeNames?: string[]
   isClusterExcluded?: boolean
   drsMode?: string
+  balancingDomains?: BalancingDomain[]
 }) => {
   const theme = useTheme()
   const clusterRecs = recommendations.filter(r => r.connection_id === clusterId)
+
+  // What segments this cluster, if anything. The memory spread and the health
+  // score below are computed over every node, so on a segmented cluster they
+  // measure a gap no migration can close: the chip is what tells the operator
+  // that a low score here is a topology fact, not a DRS failure.
+  const placementConstraint = useMemo(() => {
+    const domains = balancingDomains.filter(d => d.connection_id === clusterId)
+
+    if (domains.length < 2) return null
+
+    const kinds = new Set(domains.flatMap(d => d.constraints || []))
+
+    if (kinds.size === 0) return null
+
+    const network = kinds.has('network')
+    const storage = kinds.has('storage')
+
+    return {
+      count: domains.length,
+      icon: network ? 'ri-git-branch-line' : 'ri-hard-drive-2-line',
+      labelKey:
+        network && storage
+          ? 'drsPage.placementConstrainedBoth'
+          : network
+            ? 'drsPage.placementConstrainedSdn'
+            : 'drsPage.placementConstrainedStorage'
+    }
+  }, [balancingDomains, clusterId])
   
   // Calculer le spread (écart max-min) de mémoire
   const memorySpread = useMemo(() => {
@@ -522,6 +561,21 @@ return 'neutral'
                   variant="outlined"
                   sx={{ height: 22, fontSize: '0.7rem', color: 'text.disabled', borderColor: 'text.disabled' }}
                 />
+              )}
+              {placementConstraint && (
+                <Tooltip
+                  arrow
+                  title={t('drsPage.placementConstrainedTooltip', { count: placementConstraint.count })}
+                >
+                  <Chip
+                    icon={<i className={placementConstraint.icon} style={{ fontSize: 14 }} />}
+                    label={t(placementConstraint.labelKey)}
+                    size="small"
+                    color="warning"
+                    variant="outlined"
+                    sx={{ height: 22, fontSize: '0.7rem', fontWeight: 600 }}
+                  />
+                </Tooltip>
               )}
             </Box>
             <Typography variant="caption" sx={{ opacity: 0.6 }}>
@@ -1374,6 +1428,11 @@ return () => setPageInfo('', '', '')
 
   // Data fetching (only when Enterprise mode is active)
   const { data: status, mutate: mutateStatus, isLoading: statusLoading } = useDRSStatus(isEnterprise)
+
+  // Already tenant-filtered by /api/v1/orchestrator/drs/status; default to
+  // empty so an older orchestrator simply renders nothing extra.
+  const pinnedGuests: PinnedGuest[] = status?.pinned_guests ?? []
+  const balancingDomains: BalancingDomain[] = status?.balancing_domains ?? []
 
   const { data: recommendationsRaw, mutate: mutateRecs, isLoading: recsLoading } = useDRSRecsHook(isEnterprise)
 
@@ -2267,6 +2326,7 @@ return next
                 excludedNodeNames={drsSettings?.excluded_nodes?.[cluster.id] || []}
                 isClusterExcluded={drsSettings?.excluded_clusters?.includes(cluster.id) || false}
                 drsMode={drsSettings?.cluster_modes?.[cluster.id] || status?.mode || 'manual'}
+                balancingDomains={balancingDomains}
               />
             ))
           )}
@@ -2282,6 +2342,13 @@ return next
               {t('drsPage.recsExplainer')}
             </Typography>
           </Alert>
+
+          {/* Why DRS is constrained here, on a zoned cluster */}
+          <PlacementConstraintsCard
+            pinnedGuests={pinnedGuests}
+            balancingDomains={balancingDomains}
+            connectionNames={connectionNames}
+          />
 
           {/* Migrations actives en cours */}
           {activeMigrations.length > 0 && (
@@ -2312,9 +2379,15 @@ return next
                   {[1, 2, 3].map(i => <Skeleton key={i} height={56} />)}
                 </Stack>
               ) : pendingRecs.length === 0 && activeMigrations.length === 0 ? (
-                <Alert severity="success" icon={<CheckCircleIcon />}>
-                  {t('drsPage.clustersEquilibrated')}
-                </Alert>
+                pinnedGuests.length > 0 ? (
+                  <Alert severity="info">
+                    {t('drsPage.someGuestsCannotMove')}
+                  </Alert>
+                ) : (
+                  <Alert severity="success" icon={<CheckCircleIcon />}>
+                    {t('drsPage.clustersEquilibrated')}
+                  </Alert>
+                )
               ) : pendingRecs.length === 0 ? (
                 <Alert severity="info">
                   {t('drsPage.noNewRecommendation', { count: activeMigrations.length })}

@@ -8,8 +8,10 @@
 // mirror itself rather than maintained by hand in the catalog file:
 //
 //  - the Last-Modified header of the download URL: the publication date of
-//    the image a deploy would pull today. Measured 2026-09-06: 15 of our 16
-//    mirrors answer it, only Fedora's redirector does not.
+//    the image a deploy would pull today. Measured 2026-09-06: every one of
+//    our mirrors answers it, Fedora's redirector included, once the URL
+//    actually resolves. A missing date is the signal that an entry has rotted,
+//    which is how the dead Fedora 43 build was found.
 //  - the point release, when the vendor puts it in the checksum manifest.
 //    Rocky and AlmaLinux name their files
 //    Rocky-9-GenericCloud-Base-9.8-20260525.0.x86_64.qcow2, so "9.8" is

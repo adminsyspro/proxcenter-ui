@@ -46,7 +46,7 @@ function renderDialogWithVMs(allVMs: ComponentProps<typeof CreateJobDialog>['all
         open
         onClose={vi.fn()}
         onSubmit={vi.fn()}
-        connections={[{ id: 'src', name: 'Source', hasCeph: true }]}
+        connections={[{ id: 'src', name: 'Source', hasCeph: true, engines: ['rbd'] }]}
         allVMs={allVMs}
       />
     </SWRConfig>,
@@ -141,8 +141,8 @@ describe('CreateJobDialog snapshot retention (issue #664)', () => {
           onClose={vi.fn()}
           onSubmit={onSubmit}
           connections={[
-            { id: 'src', name: 'Source', hasCeph: true },
-            { id: 'dst', name: 'Target', hasCeph: true },
+            { id: 'src', name: 'Source', hasCeph: true, engines: ['rbd'] },
+            { id: 'dst', name: 'Target', hasCeph: true, engines: ['rbd'] },
           ]}
           allVMs={[{ vmid: 100, name: 'web-01', node: 'node1', connId: 'src', type: 'qemu', status: 'running', tags: [], diskGb: 10 }]}
         />
@@ -153,7 +153,7 @@ describe('CreateJobDialog snapshot retention (issue #664)', () => {
     fireEvent.mouseDown(screen.getAllByRole('combobox')[0])
     await userEvent.click(await screen.findByRole('option', { name: 'Source' }))
 
-    // Select the only VM (its ceph-vms entry must resolve first)
+    // Select the only VM (its replicable-vms entry must resolve first)
     await userEvent.click(await screen.findByRole('checkbox', { name: /web-01/ }))
 
     // Target cluster
@@ -201,5 +201,127 @@ describe('CreateJobDialog stopped VM replication (issue #687)', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Tags' }))
 
     expect(await screen.findByRole('checkbox', { name: /disaster-recovery/ })).toBeInTheDocument()
+  })
+})
+
+const engineConnections: ComponentProps<typeof CreateJobDialog>['connections'] = [
+  { id: 'src', name: 'Source', hasCeph: true, engines: ['rbd', 'zfs'] },
+  { id: 'dst', name: 'Target', hasCeph: false, engines: ['rbd', 'zfs'] },
+  { id: 'ceph-only', name: 'Ceph only', hasCeph: true, engines: ['rbd'] },
+]
+const engineVMs = [100, 101, 102, 103].map(vmid => ({ vmid, name: `guest-${vmid}`, node: vmid === 103 ? 'pve2' : 'pve1', connId: 'src', type: 'qemu', status: 'running', tags: ['db'], diskGb: 10 }))
+
+function engineHarness(engines: ComponentProps<typeof CreateJobDialog>['engines'] = ['rbd', 'zfs']) {
+  const onSubmit = vi.fn()
+  const fetchMock = vi.fn(async (url: string) => {
+    let body: unknown = {}
+    if (url.includes('/replicable-vms?engine=')) body = engineVMs.map(vm => ({ vmid: vm.vmid, node: vm.node, diskGb: 10, mixed: vm.vmid === 101, unsupported: vm.vmid === 102 }))
+    if (url.endsWith('/replication-storages')) body = { engines: ['zfs'], rbd: [], zfs: ['dr1', 'dr2', 'offline'].map(node => ({ storage: 'local-zfs', node, pool: 'rpool/data', availBytes: 512, totalBytes: 1024, availFormatted: '512 B', active: node !== 'offline' })) }
+    if (url.endsWith('/ceph')) body = { data: { pools: { list: [{ name: 'rbd', percentUsed: 0.5, bytesUsed: 512, maxAvail: 512 }] } } }
+    if (url.endsWith('/check-ssh')) body = { connected: true, source_node: 'pve1', target_ip: '10.0.0.1', checks: [{ source_node: 'pve1', target_node: 'dr1', ok: true }, { source_node: 'pve2', target_node: 'dr1', ok: true }] }
+    if (url.endsWith('/preflight')) body = { can_create: true, checks: [{ id: 'target_storage', status: 'ok' }, { id: 'reverse_ssh', status: 'warn', message: 'Reverse key is missing' }] }
+    return new Response(JSON.stringify(body))
+  })
+  vi.stubGlobal('fetch', fetchMock)
+  const view = renderWithProviders(<SWRConfig value={{ revalidateOnMount: true }}>
+    <CreateJobDialog open onClose={vi.fn()} onSubmit={onSubmit} engines={engines} connections={engineConnections} allVMs={engineVMs} />
+  </SWRConfig>)
+  return { ...view, onSubmit, fetchMock }
+}
+
+async function chooseEngineSource(engine: 'rbd' | 'zfs') {
+  if (engine === 'zfs') await userEvent.click(screen.getByRole('button', { name: /ZFS/ }))
+  await selectSourceCluster()
+  await screen.findByRole('checkbox', { name: /guest-100/ })
+}
+
+async function chooseTarget(node = 'dr1') {
+  fireEvent.mouseDown(screen.getAllByRole('combobox')[1])
+  await userEvent.click(await screen.findByRole('option', { name: 'Target' }))
+  const storage = screen.getByRole('combobox', { name: 'Target storage' })
+  await waitFor(() => expect(storage).not.toHaveAttribute('aria-disabled', 'true'))
+  fireEvent.mouseDown(storage)
+  expect(await screen.findByRole('option', { name: /offline/ })).toHaveAttribute('aria-disabled', 'true')
+  await userEvent.click(await screen.findByRole('option', { name: new RegExp(node) }))
+}
+
+describe('CreateJobDialog storage engines', () => {
+  it('disables ZFS when the orchestrator does not advertise it', () => {
+    engineHarness(['rbd'])
+    expect(screen.getByRole('button', { name: /ZFS/ })).toBeDisabled()
+    expect(screen.getByText('Coming soon')).toBeInTheDocument()
+  })
+
+  it('resets clusters, VM selection and storage when the engine changes and filters connections', async () => {
+    engineHarness()
+    await chooseEngineSource('rbd')
+    await userEvent.click(screen.getByRole('checkbox', { name: /guest-100/ }))
+    await userEvent.click(screen.getByRole('button', { name: /ZFS/ }))
+    expect(screen.queryByRole('checkbox', { name: /guest-100/ })).not.toBeInTheDocument()
+    fireEvent.mouseDown(screen.getAllByRole('combobox')[0])
+    expect(screen.queryByRole('option', { name: 'Ceph only' })).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('option', { name: 'Source' }))
+    expect(await screen.findByRole('checkbox', { name: /guest-100/ })).not.toBeChecked()
+    expect(screen.getByRole('combobox', { name: 'Target storage' })).toHaveAttribute('aria-disabled', 'true')
+  })
+
+  it.each(['rbd', 'zfs'] as const)('applies mixed and unsupported disk rules for %s', async engine => {
+    engineHarness()
+    await chooseEngineSource(engine)
+    expect(screen.getByRole('checkbox', { name: /guest-102/ })).toBeDisabled()
+    const mixed = screen.getByRole('checkbox', { name: /guest-101/ })
+    if (engine === 'zfs') expect(mixed).toBeDisabled()
+    else {
+      expect(mixed).toBeEnabled()
+      await userEvent.click(mixed)
+      expect(mixed).toBeChecked()
+      expect(screen.getByLabelText(/Only Ceph RBD disks will be replicated/)).toBeInTheDocument()
+    }
+  })
+
+  it('sends ZFS storage/node and VM identity, lists SSH pairs and allows reverse-SSH warnings', async () => {
+    const { onSubmit, fetchMock } = engineHarness()
+    await chooseEngineSource('zfs')
+    await userEvent.click(screen.getByRole('checkbox', { name: /guest-100/ }))
+    await chooseTarget()
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Create Job' })).toBeEnabled())
+    expect(screen.getByText('pve1 → dr1')).toBeInTheDocument()
+    expect(screen.getByText('pve2 → dr1')).toBeInTheDocument()
+    expect(screen.getByText('Reverse key is missing')).toBeInTheDocument()
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/replicable-vms?engine=zfs'))
+    await userEvent.click(screen.getByRole('button', { name: 'Create Job' }))
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ storage_engine: 'zfs', target_node: 'dr1', target_pool: 'local-zfs', vm_ids: [100] }))
+  })
+
+  it('reruns both checks when VM selection, node or tags change, even at the same disk size', async () => {
+    const { fetchMock } = engineHarness()
+    await chooseEngineSource('zfs')
+    await userEvent.click(screen.getByRole('checkbox', { name: /guest-100/ }))
+    await chooseTarget()
+    const requests = (endpoint: string) => fetchMock.mock.calls.filter(call => call[0].endsWith(endpoint))
+    await waitFor(() => expect(requests('/preflight')).toHaveLength(1))
+    await userEvent.click(screen.getByRole('checkbox', { name: /guest-100/ }))
+    expect(screen.getByRole('button', { name: 'Create Job' })).toBeDisabled()
+    await userEvent.click(screen.getByRole('checkbox', { name: /guest-103/ }))
+    await waitFor(() => expect(requests('/preflight')).toHaveLength(2))
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Target storage' }))
+    await userEvent.click(screen.getByRole('option', { name: /dr2/ }))
+    await waitFor(() => expect(requests('/check-ssh')).toHaveLength(3))
+    await userEvent.click(screen.getByRole('button', { name: /Tags/ }))
+    await userEvent.click(await screen.findByRole('checkbox', { name: /db/ }))
+    await waitFor(() => expect(requests('/preflight')).toHaveLength(4))
+    const latest = vi.mocked(fetch).mock.calls.filter(call => String(call[0]).endsWith('/preflight')).at(-1)
+    expect(JSON.parse(String(latest?.[1]?.body))).toMatchObject({ storage_engine: 'zfs', target_node: 'dr2', vm_ids: [], tags: ['db'] })
+  })
+
+  it('keeps creation disabled after preflight fails', async () => {
+    const { fetchMock } = engineHarness()
+    const implementation = fetchMock.getMockImplementation()!
+    fetchMock.mockImplementation(async url => url.endsWith('/preflight') ? new Response('{}', { status: 500 }) : implementation(url))
+    await chooseEngineSource('zfs')
+    await userEvent.click(screen.getByRole('checkbox', { name: /guest-100/ }))
+    await chooseTarget()
+    await screen.findByText('Direct SSH connection failed')
+    expect(screen.getByRole('button', { name: 'Create Job' })).toBeDisabled()
   })
 })

@@ -1,22 +1,23 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import useSWR from 'swr'
 
 import {
   Alert, Box, Button, Checkbox, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle,
-  FormControlLabel, InputAdornment, LinearProgress, MenuItem, Select, Stack,
+  FormControlLabel, InputAdornment, LinearProgress, MenuItem, Select, Stack, TablePagination, Tooltip,
   TextField, ToggleButton, ToggleButtonGroup, Typography
 } from '@mui/material'
 
 import { useTagColors } from '@/contexts/TagColorContext'
-import type { BandwidthWindow, CreateReplicationJobRequest } from '@/lib/orchestrator/site-recovery.types'
+import type { BandwidthWindow, CreateReplicationJobRequest, ReplicableVM, ReplicationStorages, SSHConnectivityResult, StorageEngine } from '@/lib/orchestrator/site-recovery.types'
 import ScheduleBuilder from './schedule/ScheduleBuilder'
 import { defaultTimezone, type ScheduleBuilderValue } from './schedule/types'
 import { cadenceSeconds, formatWindow, retentionWindowSeconds } from './schedule/retentionWindow'
 import BandwidthWindowsEditor from './BandwidthWindowsEditor'
 import RetentionSlider from './RetentionSlider'
+import EngineGlyph from './EngineGlyph'
 import NumericTextField from '@/components/ui/NumericTextField'
 
 // ── Types ───────────────────────────────────────────────────────────────
@@ -25,6 +26,7 @@ interface Connection {
   id: string
   name: string
   hasCeph: boolean
+  engines: StorageEngine[]
 }
 
 interface VM {
@@ -44,6 +46,7 @@ interface CreateJobDialogProps {
   onSubmit: (data: CreateReplicationJobRequest) => void
   connections: Connection[]
   allVMs: VM[]
+  engines?: StorageEngine[]
 }
 
 // ── Fetcher ─────────────────────────────────────────────────────────────
@@ -55,9 +58,13 @@ const fetcher = (url: string) => fetch(url).then(res => {
 
 // ── Main Component ─────────────────────────────────────────────────────
 
-export default function CreateJobDialog({ open, onClose, onSubmit, connections, allVMs }: CreateJobDialogProps) {
+export default function CreateJobDialog({ open, onClose, onSubmit, connections, allVMs, engines }: CreateJobDialogProps) {
   const t = useTranslations()
   const [name, setName] = useState('')
+  const [engine, setEngine] = useState<StorageEngine>('rbd')
+  const [targetNode, setTargetNode] = useState('')
+  const [vmPage, setVmPage] = useState(0)
+  const [tagPage, setTagPage] = useState(0)
   const [sourceCluster, setSourceCluster] = useState('')
   const { getColor: getTagColor } = useTagColors(sourceCluster || undefined)
   const [selectedVMs, setSelectedVMs] = useState<number[]>([])
@@ -94,77 +101,34 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
     })
   }, [scheduleValue, keepTarget, t])
 
-  // Ceph VM IDs for the source cluster (only VMs with disks on RBD storage)
-  const { data: cephVMsData } = useSWR(
-    sourceCluster ? `/api/v1/connections/${sourceCluster}/replicable-vms?engine=rbd` : null,
+  const { data: cephVMsData, error: vmDiscoveryError, isLoading: vmDiscoveryLoading } = useSWR<ReplicableVM[]>(
+    open && sourceCluster ? `/api/v1/connections/${sourceCluster}/replicable-vms?engine=${engine}` : null,
     fetcher
   )
-  const cephVMMap = useMemo(() => {
-    const m = new Map<number, number>()
-    for (const v of (cephVMsData || [])) m.set(v.vmid, v.diskGb)
-    return m
-  }, [cephVMsData])
+  const cephVMMap = useMemo(() => new Map((cephVMsData || []).map(vm => [vm.vmid, vm.diskGb])), [cephVMsData])
+  const eligibility = useMemo(() => new Map((cephVMsData || []).map(vm => [vm.vmid, vm])), [cephVMsData])
+  const isVMDisabled = (vmid: number) => {
+    const vm = eligibility.get(vmid)
+    return !vm || vm.unsupported || (engine === 'zfs' && vm.mixed)
+  }
 
-  // SSH connectivity check state
-  const [sshCheck, setSshCheck] = useState<'idle' | 'checking' | 'success' | 'failed'>('idle')
-  const [sshError, setSshError] = useState('')
-  const [sshSourceNode, setSshSourceNode] = useState('')
-  const [sshTargetIP, setSshTargetIP] = useState('')
-
-  // Pre-flight checks state
-  type PreflightCheck = { id: string; status: 'ok' | 'warn' | 'error'; label: string; detail?: string }
-  const [preflight, setPreflight] = useState<{ checks: PreflightCheck[]; can_create: boolean } | null>(null)
-  const [preflightLoading, setPreflightLoading] = useState(false)
-
-  // Auto-trigger SSH check when both clusters are selected
-  const runSSHCheck = useCallback(async (src: string, tgt: string) => {
-    if (!src || !tgt) {
-      setSshCheck('idle')
-      setSshError('')
-      return
-    }
-
-    setSshCheck('checking')
-    setSshError('')
-
-    try {
-      const res = await fetch('/api/v1/orchestrator/replication/check-ssh', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ source_cluster: src, target_cluster: tgt })
-      })
-      const data = await res.json()
-
-      if (data.connected) {
-        setSshCheck('success')
-        setSshSourceNode(data.source_node || '')
-        setSshTargetIP(data.target_ip || '')
-      } else {
-        setSshCheck('failed')
-        setSshError(data.error || 'Unknown error')
-      }
-    } catch {
-      setSshCheck('failed')
-      setSshError('Failed to reach orchestrator')
-    }
-  }, [])
-
-  useEffect(() => {
-    runSSHCheck(sourceCluster, targetCluster)
-  }, [sourceCluster, targetCluster, runSSHCheck])
-
-  // Only Ceph-enabled connections can be source/target
-  const cephConnections = useMemo(() =>
-    connections.filter(c => c.hasCeph)
-  , [connections])
+  // Results carry their request key so a previous selection can never enable creation.
+  type PreflightCheck = { id: 'source_health' | 'target_health' | 'target_space' | 'target_storage' | 'reverse_ssh'; status: 'ok' | 'warn' | 'error'; label?: string; detail?: string; message?: string }
+  const [checkResult, setCheckResult] = useState<{
+    key: string
+    ssh?: SSHConnectivityResult
+    preflight?: { checks: PreflightCheck[]; can_create: boolean }
+    error?: string
+  } | null>(null)
+  const [checkAttempt, setCheckAttempt] = useState(0)
+  const cephConnections = useMemo(() => connections.filter(c => c.engines.includes(engine)), [connections, engine])
 
   // Target clusters exclude the source cluster
   const targetConnections = useMemo(() =>
     cephConnections.filter(c => c.id !== sourceCluster)
   , [cephConnections, sourceCluster])
 
-  // VMs filtered by source cluster (qemu VMs on Ceph storage, any power
-  // state: replication is RBD-level and handles stopped guests, #687)
+  // Replication also supports stopped QEMU guests.
   const sourceVMs = useMemo(() =>
     allVMs.filter(vm =>
       vm.connId === sourceCluster &&
@@ -222,37 +186,55 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
     return total * 1024 * 1024 * 1024
   }, [selectionMode, selectedVMs, selectedTags, sourceVMs, cephVMMap])
 
-  // Pre-flight checks run once source/target/pool are chosen
-  const runPreflight = useCallback(async (src: string, tgt: string, pool: string, sizeBytes: number) => {
-    if (!src || !tgt || !pool) {
-      setPreflight(null)
-      return
-    }
-    setPreflightLoading(true)
-    try {
-      const res = await fetch('/api/v1/orchestrator/replication/preflight', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ source_cluster: src, target_cluster: tgt, target_pool: pool, estimated_size_bytes: sizeBytes }),
-      })
-      if (!res.ok) { setPreflight(null); return }
-      const data = await res.json()
-      setPreflight(data)
-    } catch {
-      setPreflight(null)
-    } finally {
-      setPreflightLoading(false)
-    }
-  }, [])
+  const hasSelection = selectionMode === 'vms' ? selectedVMs.length > 0 : selectedTags.length > 0
+  const checkKey = open && sourceCluster && targetCluster && targetPool && hasSelection && (engine !== 'zfs' || targetNode)
+    ? JSON.stringify({
+      source_cluster: sourceCluster, target_cluster: targetCluster, storage_engine: engine,
+      target_node: targetNode, vm_ids: selectionMode === 'vms' ? selectedVMs : [],
+      tags: selectionMode === 'tags' ? selectedTags : [], target_pool: targetPool, estimated_size_bytes: estimatedSizeBytes,
+    }) : ''
 
   useEffect(() => {
-    runPreflight(sourceCluster, targetCluster, targetPool, estimatedSizeBytes)
-  }, [sourceCluster, targetCluster, targetPool, estimatedSizeBytes, runPreflight])
+    if (!checkKey) return
+    const controller = new AbortController()
+    const { target_pool, estimated_size_bytes, ...context } = JSON.parse(checkKey)
+    const runCheck = async (endpoint: string, body: unknown) => {
+      const response = await fetch(`/api/v1/orchestrator/replication/${endpoint}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: controller.signal,
+      })
+      if (!response.ok) throw new Error(t('siteRecovery.preflight.blocked'))
+      return response.json()
+    }
+
+    Promise.all([
+      runCheck('check-ssh', context),
+      runCheck('preflight', { ...context, target_pool, estimated_size_bytes }),
+    ]).then(([ssh, preflight]) => {
+      if (!controller.signal.aborted) setCheckResult({ key: checkKey, ssh, preflight })
+    }).catch((error: unknown) => {
+      if (!controller.signal.aborted) setCheckResult({ key: checkKey, error: error instanceof Error ? error.message : String(error) })
+    })
+    return () => controller.abort()
+  }, [checkKey, checkAttempt, t])
+
+  const currentChecks = checkResult?.key === checkKey ? checkResult : null
+  const preflight = currentChecks?.preflight
+  const preflightLoading = !!checkKey && !currentChecks
+  const sshCheck = !checkKey ? 'idle' : !currentChecks ? 'checking' : currentChecks.ssh?.connected ? 'success' : 'failed'
+  const sshError = currentChecks?.error || currentChecks?.ssh?.error || ''
+  const sshSourceNode = currentChecks?.ssh?.source_node || ''
+  const sshTargetIP = currentChecks?.ssh?.target_ip || ''
+  const sshChecks = currentChecks?.ssh?.checks || []
 
   // Fetch Ceph pools for the selected target cluster
   const { data: cephData, isLoading: cephLoading } = useSWR(
-    targetCluster ? `/api/v1/connections/${targetCluster}/ceph` : null,
+    open && engine === 'rbd' && targetCluster ? `/api/v1/connections/${targetCluster}/ceph` : null,
     fetcher
+  )
+
+  const { data: targetStorages, isLoading: targetStoragesLoading, error: targetStoragesError } = useSWR<ReplicationStorages>(
+    open && engine === 'zfs' && targetCluster ? `/api/v1/connections/${targetCluster}/replication-storages` : null,
+    fetcher, { dedupingInterval: 300_000 },
   )
 
   // Filter to only RBD pools (exclude internal pools and CephFS pools)
@@ -270,24 +252,29 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
     setSelectedTags([])
     setTargetCluster('')
     setTargetPool('')
-    setSshCheck('idle')
-    setSshError('')
+    setCheckResult(null)
+    setTargetNode('')
     setSelectionMode('vms')
     setVmSearch('')
+    setVmPage(0)
+    setTagPage(0)
   }
 
   const handleTargetClusterChange = (value: string) => {
     setTargetCluster(value)
     setTargetPool('')
-    setSshCheck('idle')
-    setSshError('')
+    setCheckResult(null)
+    setTargetNode('')
   }
 
   const toggleVM = (vmid: number) => {
+    if (isVMDisabled(vmid)) return
+    setCheckResult(null)
     setSelectedVMs(prev => prev.includes(vmid) ? prev.filter(id => id !== vmid) : [...prev, vmid])
   }
 
   const handleSubmit = () => {
+    if (!canSubmit) return
     const base = {
       name: name.trim() || undefined,
       vm_ids: selectionMode === 'vms' ? selectedVMs : [],
@@ -295,7 +282,8 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
       source_cluster: sourceCluster,
       target_cluster: targetCluster,
       target_pool: targetPool,
-      storage_engine: 'rbd' as const,
+      storage_engine: engine,
+      target_node: targetNode || undefined,
       rate_limit_mbps: 0,
       bandwidth_windows: bandwidthWindows.length > 0 ? bandwidthWindows : undefined,
       vmid_prefix: vmidPrefix || undefined,
@@ -318,6 +306,9 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
 
   const handleClose = () => {
     setName('')
+    setEngine('rbd')
+    setVmPage(0)
+    setTagPage(0)
     setSourceCluster('')
     setSelectedVMs([])
     setSelectedTags([])
@@ -336,15 +327,17 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
     setKeepSource(3)
     setKeepTarget(3)
     setVmSearch('')
-    setSshCheck('idle')
-    setSshError('')
+    setCheckResult(null)
+    setTargetNode('')
     onClose()
   }
 
-  const hasSelection = selectionMode === 'vms' ? selectedVMs.length > 0 : selectedTags.length > 0
   const scheduleValid = scheduleValue.mode === 'rpo' || scheduleValue.scheduleSpec !== null
-  const preflightOk = !preflight || preflight.can_create
-  const canSubmit = sourceCluster && hasSelection && targetCluster && targetPool && sshCheck === 'success' && scheduleValid && preflightOk
+  const preflightOk = !!preflight?.can_create && !preflightLoading
+  const canSubmit = sourceCluster && hasSelection && targetCluster && targetPool && sshCheck === 'success' && scheduleValid && preflightOk && (engine === 'rbd' || !!engines?.includes('zfs'))
+    && (selectionMode === 'tags' || selectedVMs.every(vmid => !isVMDisabled(vmid)))
+    && cephConnections.some(connection => connection.id === sourceCluster) && targetConnections.some(connection => connection.id === targetCluster)
+    && (engine !== 'zfs' || !!targetStorages?.zfs.some(row => row.storage === targetPool && row.node === targetNode && row.active))
 
   return (
     <Dialog open={open} onClose={handleClose} maxWidth='sm' fullWidth>
@@ -363,6 +356,21 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
               helperText={t('siteRecovery.createJob.nameHelp')}
               InputProps={{ startAdornment: <InputAdornment position='start'><i className='ri-bookmark-line' style={{ opacity: 0.5 }} /></InputAdornment> }}
             />
+          </Box>
+
+          <Box>
+            <Typography variant='subtitle2' sx={{ mb: 0.5 }}>{t('siteRecovery.createJob.engine')}</Typography>
+            <ToggleButtonGroup value={engine} exclusive size='small' onChange={(_, value: StorageEngine | null) => {
+              if (!value || value === engine) return
+              setEngine(value)
+              handleSourceClusterChange('')
+            }}>
+              <ToggleButton value='rbd' sx={{ gap: 1 }}><EngineGlyph />{t('siteRecovery.createJob.engineCeph')}</ToggleButton>
+              <ToggleButton value='zfs' disabled={!engines?.includes('zfs')} sx={{ gap: 1 }}>
+                <EngineGlyph engine='zfs' />{t('siteRecovery.createJob.engineZfs')}
+                {!engines?.includes('zfs') && <Typography variant='caption'>{t('siteRecovery.createJob.engineComingSoon')}</Typography>}
+              </ToggleButton>
+            </ToggleButtonGroup>
           </Box>
 
           {/* Source Cluster */}
@@ -384,6 +392,8 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
           {/* VM / Tag Selection (only shown after source cluster is selected) */}
           {sourceCluster && (
             <Box>
+              {vmDiscoveryError && <Alert severity='warning'>{t('siteRecovery.discoveryError')}</Alert>}
+              {vmDiscoveryLoading && <Alert severity='info'>{t('siteRecovery.discoveryLoading')}</Alert>}
               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
                 <Typography variant='subtitle2'>{t('siteRecovery.createJob.selectVMs')}</Typography>
                 <ToggleButtonGroup
@@ -391,6 +401,7 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
                   exclusive
                   onChange={(_, v) => {
                     if (v) {
+                      setCheckResult(null)
                       setSelectionMode(v)
                       if (v === 'tags') { setSelectedVMs([]); setVmSearch('') }
                       if (v === 'vms') setSelectedTags([])
@@ -412,7 +423,7 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
                 <>
                   <TextField
                     value={vmSearch}
-                    onChange={e => setVmSearch(e.target.value)}
+                    onChange={e => { setVmSearch(e.target.value); setVmPage(0) }}
                     placeholder={t('siteRecovery.createJob.searchVMs')}
                     size='small'
                     fullWidth
@@ -424,15 +435,16 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
                     {filteredVMs.length === 0 ? (
                       <Typography variant='caption' sx={{ p: 1, color: 'text.secondary' }}>{t('siteRecovery.createJob.noVMs')}</Typography>
                     ) : (
-                      filteredVMs.map(vm => {
+                      filteredVMs.slice(vmPage * 10, vmPage * 10 + 10).map(vm => {
                         const diskGb = cephVMMap.get(vm.vmid)
                         const dotColor = vm.status === 'running' ? '#4caf50' : vm.status === 'paused' ? '#ed6c02' : '#f44336'
                         return (
                           <FormControlLabel
                             key={vm.vmid}
+                            disabled={isVMDisabled(vm.vmid)}
                             control={<Checkbox size='small' checked={selectedVMs.includes(vm.vmid)} onChange={() => toggleVM(vm.vmid)} />}
                             label={
-                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, whiteSpace: 'nowrap' }}>
                                 <Box sx={{ position: 'relative', display: 'inline-flex', flexShrink: 0, mr: 0.25 }}>
                                   <i className='ri-computer-fill' style={{ fontSize: 16, opacity: 0.7 }} />
                                   <Box sx={{
@@ -443,7 +455,12 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
                                     boxShadow: vm.status === 'running' ? `0 0 4px ${dotColor}` : 'none',
                                   }} />
                                 </Box>
-                                <Typography variant='body2'>{vm.name}</Typography>
+                                <Typography variant='body2' noWrap>{vm.name}</Typography>
+                                {(eligibility.get(vm.vmid)?.unsupported || eligibility.get(vm.vmid)?.mixed) && (
+                                  <Tooltip title={t(eligibility.get(vm.vmid)?.unsupported ? 'siteRecovery.createJob.vmUnsupportedDisk' : engine === 'zfs' ? 'siteRecovery.createJob.vmMixedStorage' : 'siteRecovery.createJob.vmMixedStorageWarn')}>
+                                    <i className='ri-error-warning-line' aria-label={t(eligibility.get(vm.vmid)?.unsupported ? 'siteRecovery.createJob.vmUnsupportedDisk' : engine === 'zfs' ? 'siteRecovery.createJob.vmMixedStorage' : 'siteRecovery.createJob.vmMixedStorageWarn')} />
+                                  </Tooltip>
+                                )}
                                 <Typography variant='caption' sx={{ color: 'text.secondary' }}>({vm.vmid})</Typography>
                                 {diskGb != null && (
                                   <Chip label={`${diskGb} GB`} size='small' variant='outlined' sx={{ height: 18, fontSize: '0.6rem' }} />
@@ -489,16 +506,16 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
                     {allTags.length === 0 ? (
                       <Typography variant='caption' sx={{ p: 1, color: 'text.secondary' }}>{t('siteRecovery.createJob.noTags')}</Typography>
                     ) : (
-                      allTags.map(tag => (
+                      allTags.slice(tagPage * 10, tagPage * 10 + 10).map(tag => (
                         <FormControlLabel
                           key={tag}
                           control={
                             <Checkbox
                               size='small'
                               checked={selectedTags.includes(tag)}
-                              onChange={() => setSelectedTags(prev =>
+                              onChange={() => { setCheckResult(null); setSelectedTags(prev =>
                                 prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
-                              )}
+                              ) }}
                             />
                           }
                           label={
@@ -526,6 +543,11 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
                 </>
               )}
             </Box>
+          )}
+
+          {sourceCluster && (selectionMode === 'vms' ? filteredVMs.length : allTags.length) > 10 && (
+            <TablePagination component='div' count={selectionMode === 'vms' ? filteredVMs.length : allTags.length} rowsPerPage={10} rowsPerPageOptions={[10]}
+              page={selectionMode === 'vms' ? vmPage : tagPage} onPageChange={(_, value) => selectionMode === 'vms' ? setVmPage(value) : setTagPage(value)} />
           )}
 
           {/* Target Cluster */}
@@ -559,7 +581,7 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
                   {t('siteRecovery.createJob.sshChecking')}
                 </Alert>
               )}
-              {sshCheck === 'success' && (
+              {sshCheck === 'success' && sshChecks.length <= 1 && (
                 <Box
                   sx={{
                     p: 1.5,
@@ -629,11 +651,23 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
                   </Box>
                 </Box>
               )}
+              {sshChecks.length > 1 && (
+                <Box sx={{ border: 1, borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
+                  <Typography variant='subtitle2'>{t('siteRecovery.createJob.sshChecks')}</Typography>
+                  {sshChecks.map(check => (
+                    <Box key={check.source_node + ':' + check.target_node} sx={{ display: 'flex', alignItems: 'center', gap: 1, whiteSpace: 'nowrap' }}>
+                      <Box component='span' sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: check.ok ? 'success.main' : 'error.main' }} />
+                      <Typography variant='body2'>{check.source_node} → {check.target_node}</Typography>
+                      {check.error && <Typography variant='caption' color='error'>{check.error}</Typography>}
+                    </Box>
+                  ))}
+                </Box>
+              )}
               {sshCheck === 'failed' && (
                 <Alert
                   severity='error'
                   action={
-                    <Button color='inherit' size='small' onClick={() => runSSHCheck(sourceCluster, targetCluster)}>
+                    <Button color='inherit' size='small' onClick={() => { setCheckResult(null); setCheckAttempt(value => value + 1) }}>
                       {t('siteRecovery.createJob.sshRetry')}
                     </Button>
                   }
@@ -649,11 +683,11 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
           )}
 
           {/* Target Pool (dynamic from Ceph API) */}
-          <Box>
+          {engine === 'rbd' ? <Box>
             <Typography variant='subtitle2' sx={{ mb: 0.5 }}>{t('siteRecovery.createJob.targetPool')}</Typography>
             <Select
               value={targetPool}
-              onChange={e => setTargetPool(e.target.value)}
+              onChange={e => { setCheckResult(null); setTargetPool(e.target.value) }}
               size='small'
               fullWidth
               displayEmpty
@@ -699,7 +733,28 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
                 )
               })}
             </Select>
-          </Box>
+          </Box> : <Box>
+            <Typography variant='subtitle2' sx={{ mb: 0.5 }}>{t('siteRecovery.createJob.targetStorage')}</Typography>
+            {targetStoragesError && <Alert severity='warning'>{t('siteRecovery.discoveryError')}</Alert>}
+            <Select value={targetPool && targetNode ? JSON.stringify([targetPool, targetNode]) : ''} size='small' fullWidth displayEmpty
+              disabled={!targetCluster || targetStoragesLoading}
+              inputProps={{ 'aria-label': t('siteRecovery.createJob.targetStorage') }}
+              onChange={event => { setCheckResult(null); const [storage, node] = JSON.parse(event.target.value); setTargetPool(storage); setTargetNode(node) }}>
+              <MenuItem value='' disabled>{t('siteRecovery.createJob.selectStorage')}</MenuItem>
+              {(targetStorages?.zfs || []).map(row => (
+                <MenuItem key={JSON.stringify([row.storage, row.node])} value={JSON.stringify([row.storage, row.node])} disabled={!row.active}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%', whiteSpace: 'nowrap' }}>
+                    <EngineGlyph engine='zfs' />
+                    <Box component='span' sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: row.active ? 'success.main' : 'text.disabled' }} />
+                    <Typography variant='body2'>{row.storage} · {row.node}</Typography>
+                    <LinearProgress variant='determinate' value={row.totalBytes ? Math.max(0, Math.min(100, 100 * (1 - row.availBytes / row.totalBytes))) : 0} sx={{ flex: 1, minWidth: 24 }} />
+                    <Typography variant='caption'>{row.availFormatted}</Typography>
+                  </Box>
+                </MenuItem>
+              ))}
+            </Select>
+            <Typography variant='caption' color='text.secondary'>{t('siteRecovery.createJob.zfsNodeHint')}</Typography>
+          </Box>}
 
           {/* Pre-flight checks — run once source/target/pool are selected */}
           {(preflight || preflightLoading) && (
@@ -718,9 +773,9 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
                       <i className={icon} style={{ color: `var(--mui-palette-${c.status === 'ok' ? 'success' : c.status === 'warn' ? 'warning' : 'error'}-main)`, fontSize: 16, marginTop: 2 }} />
                       <Box sx={{ flex: 1, minWidth: 0 }}>
                         <Typography variant='body2' sx={{ fontWeight: 500 }}>{t(`siteRecovery.preflight.checks.${c.id}`)}</Typography>
-                        {c.detail && (
+                        {(c.detail || c.message) && (
                           <Typography variant='caption' sx={{ color, display: 'block', lineHeight: 1.3 }}>
-                            {c.detail}
+                            {c.detail || c.message}
                           </Typography>
                         )}
                       </Box>

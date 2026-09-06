@@ -4120,11 +4120,11 @@
   },
   "siteRecovery": {
     "title": "Site Recovery",
-    "subtitle": "Ceph RBD cross-cluster replication & disaster recovery",
-    "noCeph": "No Ceph cluster detected",
-    "noCephDesc": "Site Recovery requires at least two PVE connections with Ceph enabled to replicate data across clusters. Enable Ceph on your connections in Settings > Connections to get started.",
-    "oneCeph": "Only one Ceph cluster detected",
-    "oneCephDesc": "Site Recovery requires at least two PVE connections with Ceph enabled to replicate data between clusters. Add and configure Ceph on a second connection to get started.",
+    "subtitle": "Cross-cluster replication and disaster recovery for Ceph RBD and ZFS",
+    "noCeph": "No replication storage found",
+    "noCephDesc": "Configure Ceph RBD or ZFS storage on two Proxmox connections to create replication jobs.",
+    "oneCeph": "No shared replication engine",
+    "oneCephDesc": "At least two connections must share a replication engine supported by the orchestrator.",
     "noCephFeatureReplication": "Cross-cluster replication",
     "noCephFeatureRecovery": "Recovery plans",
     "noCephFeatureEmergency": "Emergency DR",
@@ -4141,9 +4141,11 @@
       "title": "Pre-flight checks",
       "blocked": "Critical checks failed. Resolve the issues above before creating the job.",
       "checks": {
-        "source_health": "Source Ceph health",
-        "target_health": "Target Ceph health",
-        "target_space": "Target pool capacity"
+        "source_health": "Source storage health",
+        "target_health": "Target storage health",
+        "target_space": "Target pool capacity",
+        "target_storage": "Target storage availability",
+        "reverse_ssh": "Reverse SSH for failback"
       }
     },
     "bandwidth": {
@@ -4161,7 +4163,7 @@
       "title": "Snapshot",
       "totalSnaps": "Total snapshots",
       "orphans": "Orphans",
-      "clusters": "Ceph clusters",
+      "clusters": "Clusters",
       "searchPlaceholder": "Search cluster, pool, image, snap, VMID, VM name…",
       "allClusters": "All clusters",
       "allStatuses": "All statuses",
@@ -4186,7 +4188,7 @@
       "cannotDeleteActive": "Cannot delete: snapshot is in use by an active replication job",
       "viewDetails": "View details",
       "none": "No mirror snapshots",
-      "noneDesc": "No mirror-* snapshots were found across your Ceph clusters.",
+      "noneDesc": "Mirror snapshots will appear here after replication has run.",
       "noneMatchingDesc": "No snapshots match your current filter.",
       "created": "Created",
       "computing": "Computing…",
@@ -4194,7 +4196,9 @@
       "confirmDeleteDesc": "You are about to delete {count} mirror snapshot(s). This action cannot be undone.",
       "confirmDeleteActiveWarn": "Some of the selected snapshots belong to active replication jobs. Deleting them will force a full re-sync on the next run.",
       "deletingItem": "Deleting {name}…",
-      "andMore": "{count} more"
+      "andMore": "{count} more",
+      "engine": "Engine",
+      "node": "Node"
     },
     "status": {
       "all": "All statuses",
@@ -4250,9 +4254,9 @@
       "recentActivity": "Recent Activity",
       "events": "events",
       "noRecentActivity": "No recent activity",
-      "noSitesConfigured": "No replication sites configured. Add cluster connections with Ceph to get started.",
+      "noSitesConfigured": "No recovery sites configured",
       "noSitesTitle": "No replication job configured",
-      "noSitesDesc": "Site Recovery requires at least one replication job between two Proxmox clusters with Ceph. Configure a replication job to enable disaster recovery, failover plans, and cross-site protection.",
+      "noSitesDesc": "Configure Ceph RBD or ZFS storage on your Proxmox sites to start replication.",
       "bandwidthOverTime": "Replication Bandwidth",
       "noBandwidthData": "No bandwidth data yet. Trigger a sync to start collecting throughput metrics."
     },
@@ -4268,7 +4272,7 @@
       "bandwidthHistoryEmpty": "No samples yet. The chart fills as the job syncs.",
       "deleteConfirmTitle": "Delete replication job",
       "deleteConfirmDesc": "This will remove the replication job and its local history. VMs and their disks are not touched.",
-      "deleteOrphansNote": "Mirror-* RBD snapshots on source and target are NOT removed automatically. Open the Snapshots tab after deletion to review and purge the resulting orphans.",
+      "deleteOrphansNote": "Mirror snapshots may remain on the storage. Review orphaned snapshots in the Snapshots tab.",
       "source": "Source",
       "target": "Target",
       "schedule": "Schedule",
@@ -4283,7 +4287,7 @@
       "recentLogs": "Recent Logs",
       "searchPlaceholder": "Search VMs...",
       "noJobs": "No replication jobs configured",
-      "noJobsDesc": "Create a replication job to start protecting your VMs with Ceph RBD mirroring.",
+      "noJobsDesc": "Create a job to replicate VMs between sites using Ceph RBD or ZFS.",
       "noJobFound": "No job found",
       "noJobFoundDesc": "Modify your filters or create a new replication job.",
       "selectJob": "Select a job to view details."
@@ -4319,7 +4323,8 @@
       "failedOverTooltip": "Plan is failed over — only failback is possible.",
       "statusFailingBack": "Failing back",
       "openFailback": "Open failback",
-      "failingBackTooltip": "Cancel the failback before deleting this plan."
+      "failingBackTooltip": "Cancel the failback before deleting this plan.",
+      "jobColumn": "Replication job"
     },
     "rpoTargetLabel": "RPO target",
     "createJob": {
@@ -4361,7 +4366,7 @@
       "snapshotRetentionHelp": "Mirror snapshots kept per disk after each sync (minimum 2).",
       "retentionSource": "Keep on source",
       "retentionTarget": "Keep on target (DR)",
-      "retentionTargetHelp": "More snapshots on the DR side means more restore points, at the cost of Ceph capacity.",
+      "retentionTargetHelp": "More snapshots on the DR side means more restore points, at the cost of storage capacity.",
       "vmidPrefix": "VMID Prefix",
       "vmidPrefixHelp": "Prefix added to VM IDs on the target cluster (e.g. prefix 9 + VM 100 = 9100). Leave empty or 0 to keep the same VMID.",
       "engine": "Replication Engine",
@@ -4371,7 +4376,15 @@
       "pvNote": "Install the <pv>pv</pv> package on source and target nodes to display replication progress.",
       "pvInstallLabel": "Install <pv>pv</pv> automatically on source nodes",
       "pvInstallDesc": "Required to track replication progress. Will run apt-get install pv via SSH.",
-      "retentionCoverage": "Replicates every {cadence}, so these points cover {window}"
+      "retentionCoverage": "Replicates every {cadence}, so these points cover {window}",
+      "targetStorage": "Target storage",
+      "selectStorage": "Select storage and node",
+      "targetNode": "Target node",
+      "zfsNodeHint": "ZFS is local to a node: replicas live on this node and DR VMs start there.",
+      "vmMixedStorage": "This VM has disks outside ZFS and cannot be replicated with ZFS.",
+      "vmMixedStorageWarn": "Only Ceph RBD disks will be replicated; other disks are skipped.",
+      "vmUnsupportedDisk": "This VM has an unsupported disk reference, such as a passthrough disk.",
+      "sshChecks": "SSH connections between nodes"
     },
     "schedule": {
       "modeRpo": "Continuous (RPO)",
@@ -4477,7 +4490,9 @@
       },
       "completeTitle": "Failover complete",
       "completeVMs": "VM(s) now running on the DR site",
-      "completeLocked": "Replication is locked and the plan is failed over — failback will bring it home."
+      "completeLocked": "Replication is locked and the plan is failed over — failback will bring it home.",
+      "clonesDestroyed": "Clones destroyed, configuration restored",
+      "testActiveConflict": "A test failover is active. Run cleanup before starting this operation."
     },
     "failback": {
       "phase1Title": "Reverse replication in progress",
@@ -4570,7 +4585,13 @@
       "cephRamWarning": "{node} at {pct}% RAM — Ceph OSDs need memory headroom, risk of OSD crash",
       "cephDangerZone": "Ceph danger",
       "penalty": "Penalty"
-    }
+    },
+    "engine": {
+      "rbd": "Ceph RBD",
+      "zfs": "ZFS"
+    },
+    "discoveryError": "Storage discovery failed for a connection. Existing recovery operations remain available.",
+    "discoveryLoading": "Discovering replication storage…"
   },
   "templates": {
     "title": "Templates",

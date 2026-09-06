@@ -5,11 +5,12 @@ import { useTranslations } from 'next-intl'
 import useSWR from 'swr'
 
 import {
-  Box, Button, Chip, Tab, Tabs
+  Alert, Box, Button, Chip, CircularProgress, Tab, Tabs
 } from '@mui/material'
 
 import { Typography } from '@mui/material'
 
+import ReplicationStorageDiscovery, { type StorageDiscoveryState } from '@/components/automation/site-recovery/ReplicationStorageDiscovery'
 import EnterpriseGuard from '@/components/guards/EnterpriseGuard'
 import ProviderTenantGuard from '@/components/guards/ProviderTenantGuard'
 import { Features, useLicense } from '@/contexts/LicenseContext'
@@ -37,7 +38,7 @@ import {
 } from '@/components/automation/site-recovery'
 
 import type {
-  RecoveryPlan, RecoveryExecution, UpdateReplicationJobRequest, TestFailoverOptions
+  RecoveryPlan, RecoveryExecution, StorageEngine, UpdateReplicationJobRequest, TestFailoverOptions
 } from '@/lib/orchestrator/site-recovery.types'
 
 const fetcher = (url: string) => fetch(url).then(res => {
@@ -50,7 +51,7 @@ export default function SiteRecoveryPage() {
   const { isEnterprise } = useLicense()
   const { setPageInfo } = usePageTitle()
 
-  // Tab state — default to Simulation (5) when not enough Ceph clusters
+  // The default tab is chosen after discovery and the existing inventory settle.
   const [tab, setTab] = useState(0)
   const [tabInitialized, setTabInitialized] = useState(false)
 
@@ -84,7 +85,7 @@ export default function SiteRecoveryPage() {
   const { data: planHistory, isLoading: historyLoading, mutate: mutateHistory } = useRecoveryHistory(selectedPlanId)
 
   // Real data: PVE connections and all VMs
-  const { data: connectionsData } = useSWR<{ data: any[] }>('/api/v1/connections?type=pve', fetcher)
+  const { data: connectionsData, error: connectionsError, isLoading: connectionsLoading } = useSWR<{ data: Array<{ id: string; name: string; hasCeph: boolean }> }>('/api/v1/connections?type=pve', fetcher)
   const { data: allVMsData } = useSWR<{ data: { vms: any[] } }>('/api/v1/vms', fetcher)
 
   // Restore points for the plan currently open in the failover dialog (test/failover only — failback has no selector)
@@ -115,22 +116,27 @@ export default function SiteRecoveryPage() {
     (jobs || []).filter((j: any) => j.status === 'error').length
   , [jobs])
 
-  // PVE connections for dialogs
-  const connections = useMemo(() =>
-    (connectionsData?.data || []).map((c: any) => ({ id: c.id, name: c.name, hasCeph: c.hasCeph }))
-  , [connectionsData])
+  const [discovery, setDiscovery] = useState<Record<string, StorageDiscoveryState>>({})
+  const updateDiscovery = useCallback((id: string, state: StorageDiscoveryState) => {
+    setDiscovery(previous => ({ ...previous, [id]: state }))
+  }, [])
+  const connections = useMemo(() => (connectionsData?.data || []).map(connection => ({
+    ...connection,
+    engines: discovery[connection.id]?.error ? [] : discovery[connection.id]?.data?.engines || [],
+  })), [connectionsData, discovery])
+  const engines: StorageEngine[] = health?.engines ?? (health ? ['rbd'] : [])
+  const discoveryLoading = connectionsLoading || connections.some(connection => !discovery[connection.id] || discovery[connection.id].loading)
+  const discoveryError = !!connectionsError || connections.some(connection => discovery[connection.id]?.error)
+  const canCreateProtection = engines.some(engine => connections.filter(connection => connection.engines.includes(engine)).length >= 2)
+  const canOperate = !!jobs?.length || !!plans?.length
+  const canAccessRecovery = canCreateProtection || canOperate
 
-  const cephClusterCount = connections.filter(c => c.hasCeph).length
-  const hasEnoughCephClusters = cephClusterCount >= 2
-  const connectionsLoaded = !!connectionsData
-
-  // Default to Simulation tab when not enough Ceph clusters
   useEffect(() => {
-    if (connectionsLoaded && !tabInitialized) {
-      if (!hasEnoughCephClusters) setTab(5)
+    if (!discoveryLoading && !jobsLoading && !plansLoading && !healthLoading && !tabInitialized) {
+      if (!canAccessRecovery) setTab(5)
       setTabInitialized(true)
     }
-  }, [connectionsLoaded, hasEnoughCephClusters, tabInitialized])
+  }, [discoveryLoading, jobsLoading, plansLoading, healthLoading, canAccessRecovery, tabInitialized])
 
   // All VMs for create job dialog
   const allVMs = useMemo(() =>
@@ -416,13 +422,24 @@ export default function SiteRecoveryPage() {
     <ProviderTenantGuard>
     <EnterpriseGuard requiredFeature={Features.CEPH_REPLICATION} featureName="Site Recovery">
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+        {(connectionsData?.data || []).map(connection => (
+          <ReplicationStorageDiscovery key={connection.id} connectionId={connection.id} onChange={updateDiscovery} />
+        ))}
+        {discoveryLoading && <Alert severity='info' icon={<CircularProgress size={18} />}>{t('siteRecovery.discoveryLoading')}</Alert>}
+        {discoveryError && <Alert severity='warning'>{t('siteRecovery.discoveryError')}</Alert>}
+        {!discoveryLoading && !discoveryError && !canCreateProtection && (
+          <Alert severity='info'>
+            <Typography variant='subtitle2'>{t(connections.some(connection => connection.engines.length) ? 'siteRecovery.oneCeph' : 'siteRecovery.noCeph')}</Typography>
+            {t(connections.some(connection => connection.engines.length) ? 'siteRecovery.oneCephDesc' : 'siteRecovery.noCephDesc')}
+          </Alert>
+        )}
         {/* Tabs + Actions */}
         <Box sx={{ display: 'flex', alignItems: 'center', borderBottom: 1, borderColor: 'divider' }}>
           <Tabs
             value={tab}
             onChange={(_, v) => {
-              // Only allow switching to disabled tabs if they require Ceph
-              if (!hasEnoughCephClusters && v !== 5) return
+              // Recovery remains usable during a site outage.
+              if (!canAccessRecovery && v !== 5) return
               setTab(v)
             }}
             sx={{ flex: 1 }}
@@ -431,12 +448,12 @@ export default function SiteRecoveryPage() {
             icon={<i className='ri-dashboard-line' style={{ fontSize: 18 }} />}
             iconPosition='start'
             label={t('siteRecovery.tabs.dashboard')}
-            disabled={!hasEnoughCephClusters}
+            disabled={!canAccessRecovery}
           />
           <Tab
             icon={<i className='ri-refresh-line' style={{ fontSize: 18 }} />}
             iconPosition='start'
-            disabled={!hasEnoughCephClusters}
+            disabled={!canAccessRecovery}
             label={
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 {t('siteRecovery.tabs.replication')}
@@ -450,19 +467,19 @@ export default function SiteRecoveryPage() {
             icon={<i className='ri-camera-line' style={{ fontSize: 18 }} />}
             iconPosition='start'
             label={t('siteRecovery.tabs.snapshots')}
-            disabled={!hasEnoughCephClusters}
+            disabled={!canAccessRecovery}
           />
           <Tab
             icon={<i className='ri-file-shield-2-line' style={{ fontSize: 18 }} />}
             iconPosition='start'
             label={t('siteRecovery.tabs.recoveryPlans')}
-            disabled={!hasEnoughCephClusters}
+            disabled={!canAccessRecovery}
           />
           <Tab
             icon={<i className='ri-alarm-warning-line' style={{ fontSize: 18 }} />}
             iconPosition='start'
             label={t('siteRecovery.tabs.emergencyDR')}
-            disabled={!hasEnoughCephClusters}
+            disabled={!canAccessRecovery}
           />
           <Tab
             icon={<i className='ri-test-tube-line' style={{ fontSize: 18 }} />}
@@ -470,13 +487,14 @@ export default function SiteRecoveryPage() {
             label={t('siteRecovery.tabs.simulation')}
           />
         </Tabs>
-          {hasEnoughCephClusters && (
+          {canAccessRecovery && (
           <Box sx={{ display: 'flex', gap: 1, ml: 'auto', pl: 2 }}>
             <Button
               variant='outlined'
               size='small'
               startIcon={<i className='ri-add-line' />}
               onClick={() => setCreatePlanOpen(true)}
+              disabled={!jobs?.length}
             >
               {t('siteRecovery.createPlan.title')}
             </Button>
@@ -485,6 +503,7 @@ export default function SiteRecoveryPage() {
               size='small'
               startIcon={<i className='ri-add-line' />}
               onClick={() => setCreateJobOpen(true)}
+              disabled={!canCreateProtection}
             >
               {t('siteRecovery.createJob.title')}
             </Button>
@@ -493,11 +512,11 @@ export default function SiteRecoveryPage() {
         </Box>
 
         {/* Tab Content */}
-        {tab === 0 && hasEnoughCephClusters && (
+        {tab === 0 && canAccessRecovery && (
           <DashboardTab health={health} loading={healthLoading} jobs={jobs || []} connections={connections} vmNamesByConn={vmNamesByConn} onSyncJob={handleSyncJob} />
         )}
 
-        {tab === 1 && hasEnoughCephClusters && (
+        {tab === 1 && canAccessRecovery && (
           <ProtectionTab
             jobs={jobs || []}
             loading={jobsLoading}
@@ -515,11 +534,11 @@ export default function SiteRecoveryPage() {
           />
         )}
 
-        {tab === 2 && hasEnoughCephClusters && (
+        {tab === 2 && canAccessRecovery && (
           <SnapshotsTab connections={connections} vmNamesByConn={vmNamesByConn} />
         )}
 
-        {tab === 3 && hasEnoughCephClusters && (
+        {tab === 3 && canAccessRecovery && (
           <RecoveryPlansTab
             plans={plans || []}
             loading={plansLoading}
@@ -537,7 +556,7 @@ export default function SiteRecoveryPage() {
           />
         )}
 
-        {tab === 4 && hasEnoughCephClusters && (
+        {tab === 4 && canAccessRecovery && (
           <EmergencyDRTab
             jobs={jobs || []}
             plans={plans || []}
@@ -562,6 +581,7 @@ export default function SiteRecoveryPage() {
           onSubmit={handleCreateJob}
           connections={connections}
           allVMs={allVMs}
+          engines={engines}
         />
 
         <EditJobDialog

@@ -42,9 +42,10 @@ export function useDRSMigrations(isEnterprise: boolean) {
   return useSWR(isEnterprise ? '/api/v1/orchestrator/drs/migrations?active=true' : null, fetcher, { refreshInterval })
 }
 
+// The History tab wants more than the orchestrator's default of 100 rows.
 export function useDRSAllMigrations(isEnterprise: boolean) {
   const refreshInterval = useRefreshInterval(30000)
-  return useSWR(isEnterprise ? '/api/v1/orchestrator/drs/migrations' : null, fetcher, { refreshInterval })
+  return useSWR(isEnterprise ? '/api/v1/orchestrator/drs/migrations?limit=200' : null, fetcher, { refreshInterval })
 }
 
 export function useDRSMetrics(isEnterprise: boolean) {

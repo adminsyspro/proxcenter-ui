@@ -5,6 +5,8 @@ import { getOrchestratorClient } from "@/lib/orchestrator/client"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { getTenantConnectionIds } from "@/lib/tenant"
 
+import { parseHistoryLimit } from "./historyLimit"
+
 export const runtime = "nodejs"
 
 // GET /api/v1/orchestrator/drs/migrations — tenant-filtered
@@ -15,13 +17,14 @@ export async function GET(req: Request) {
 
     const { searchParams } = new URL(req.url)
     const active = searchParams.get('active')
+    const limit = parseHistoryLimit(searchParams.get('limit'))
 
     const tenantConnectionIds = await getTenantConnectionIds()
     const client = getOrchestratorClient()
 
     const response = active === 'true'
       ? await client.getActiveMigrations()
-      : await client.getMigrations()
+      : await client.getMigrations(limit)
 
     const all = Array.isArray(response.data) ? response.data : []
     const filtered = all.filter((m: any) => !m.connection_id || tenantConnectionIds.has(m.connection_id))

@@ -849,28 +849,6 @@ export default function DRSSettingsPanel({
 
   return (
     <Box>
-      {/* Header: unsaved indicator + save button */}
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 1.5, mb: 2 }}>
-        {hasChanges && (
-          <Chip
-            size="small"
-            label={t('drsPage.unsavedChanges')}
-            color="warning"
-            variant="outlined"
-            icon={<i className="ri-error-warning-line" style={{ fontSize: 16 }} />}
-          />
-        )}
-        <Button
-          variant="contained"
-          startIcon={<SaveIcon />}
-          onClick={handleSave}
-          disabled={saving || !hasChanges}
-        >
-          {saving ? t('common.saving') : t('common.save')}
-        </Button>
-      </Box>
-
-
       {/* Mobile: horizontal tabs */}
       {isMobile ? (
         <Box>
@@ -944,6 +922,27 @@ export default function DRSSettingsPanel({
           </Box>
         </Box>
       )}
+
+      {/* Footer: unsaved indicator + save button, bottom right */}
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 1.5, mt: 2 }}>
+        {hasChanges && (
+          <Chip
+            size="small"
+            label={t('drsPage.unsavedChanges')}
+            color="warning"
+            variant="outlined"
+            icon={<i className="ri-error-warning-line" style={{ fontSize: 16 }} />}
+          />
+        )}
+        <Button
+          variant="contained"
+          startIcon={<SaveIcon />}
+          onClick={handleSave}
+          disabled={saving || !hasChanges}
+        >
+          {saving ? t('common.saving') : t('common.save')}
+        </Button>
+      </Box>
     </Box>
   )
 }

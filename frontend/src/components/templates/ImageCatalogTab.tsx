@@ -28,6 +28,31 @@ interface ImageCatalogTabProps {
   onDeploy: (image: CloudImage) => void
 }
 
+interface ImageGroup {
+  key: string
+  /** Distribution name for a grouped card, image name for a custom one. */
+  title: string
+  versions: (CloudImage & { isCustom?: boolean })[]
+  isCustom: boolean
+}
+
+/**
+ * Newest first. Numeric segments compare as numbers, so 10 beats 9 and 24.10
+ * beats 24.04; a version with no digits at all (Arch's "rolling") sorts last.
+ */
+function compareVersionsDesc(a: CloudImage, b: CloudImage): number {
+  const parse = (v: string) => (String(v).match(/\d+/g) ?? []).map(Number)
+  const av = parse(a.version)
+  const bv = parse(b.version)
+  if (!av.length || !bv.length) return av.length === bv.length ? 0 : av.length ? -1 : 1
+  for (let i = 0; i < Math.max(av.length, bv.length); i++) {
+    const diff = (bv[i] ?? 0) - (av[i] ?? 0)
+    if (diff !== 0) return diff
+  }
+
+  return 0
+}
+
 export default function ImageCatalogTab({ onDeploy }: ImageCatalogTabProps) {
   const t = useTranslations()
   const locale = useLocale()
@@ -91,6 +116,39 @@ export default function ImageCatalogTab({ onDeploy }: ImageCatalogTabProps) {
     }
     return result
   }, [images, vendorFilter, formatFilter, search])
+
+  // One card per distribution rather than per image: the versions of a distro
+  // collapse into a single card whose picker defaults to the newest, so an old
+  // release no longer competes for attention with the one people should take.
+  // Groups are built from the FILTERED list, so searching "22.04" leaves the
+  // Ubuntu card with that version alone, already selected.
+  const groups = useMemo(() => {
+    const byVendor = new Map<string, ImageGroup>()
+    const out: ImageGroup[] = []
+    for (const image of filtered) {
+      if (image.isCustom) {
+        // Custom images stay one card each: they carry their own edit and
+        // delete actions and have no version lineage to collapse.
+        out.push({ key: `custom:${image.slug}`, title: image.name, versions: [image], isCustom: true })
+        continue
+      }
+      const existing = byVendor.get(image.vendor)
+      if (existing) {
+        existing.versions.push(image)
+        continue
+      }
+      const group: ImageGroup = { key: `builtin:${image.vendor}`, title: '', versions: [image], isCustom: false }
+      byVendor.set(image.vendor, group)
+      out.push(group)
+    }
+    for (const group of byVendor.values()) {
+      group.versions.sort(compareVersionsDesc)
+      const vendorId = group.versions[0].vendor
+      group.title = vendors.find(v => v.id === vendorId)?.name ?? vendorId
+    }
+
+    return out
+  }, [filtered, vendors])
 
   const handleDialogClose = (saved?: boolean) => {
     setDialogOpen(false)
@@ -159,6 +217,14 @@ export default function ImageCatalogTab({ onDeploy }: ImageCatalogTabProps) {
     const d = new Date(iso)
     return Number.isNaN(d.getTime()) ? iso : d.toLocaleString(locale)
   }
+
+  // "Catalog from <date>, checked <date>": shown as the tooltip of the
+  // refresh button rather than inline, the toolbar row is crowded enough.
+  const statusText = meta
+    ? `${t('templates.catalog.catalogFrom', { date: meta.catalogUpdatedAt })}, ${meta.lastCheckedAt
+      ? t('templates.catalog.lastChecked', { date: formatCheckedAt(meta.lastCheckedAt) })
+      : t('templates.catalog.neverChecked')}`
+    : ''
 
   if (loading) {
     return (
@@ -229,42 +295,51 @@ export default function ImageCatalogTab({ onDeploy }: ImageCatalogTabProps) {
           </ToggleButton>
         </ToggleButtonGroup>
         <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
-          {meta && (
-            <Typography
-              variant="caption"
-              color="text.secondary"
-              component="div"
-              sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}
-            >
-              {meta.source === 'embedded' && meta.lastError && (
-                <Tooltip title={t('templates.catalog.embeddedFallback', { error: meta.lastError })}>
-                  <Box
-                    component="i"
-                    className="ri-alert-line"
-                    aria-label={t('templates.catalog.embeddedFallback', { error: meta.lastError })}
-                    sx={{ fontSize: 16, color: 'warning.main', display: 'inline-flex' }}
-                  />
-                </Tooltip>
-              )}
-              <span>
-                {t('templates.catalog.catalogFrom', { date: meta.catalogUpdatedAt })}
-                {', '}
-                {meta.lastCheckedAt
-                  ? t('templates.catalog.lastChecked', { date: formatCheckedAt(meta.lastCheckedAt) })
-                  : t('templates.catalog.neverChecked')}
-              </span>
+          {meta && meta.lastResult === 'error' && (() => {
+            // Keyed on lastResult, not on the source: once a valid remote
+            // catalog is stored it keeps being served after a failure, so
+            // source stays 'remote' and the only persistent sign of trouble
+            // would otherwise never appear. The wording follows: falling back
+            // to the embedded catalog and serving a stale remote one are two
+            // different situations. lastError is null for a tenant.
+            const warning = meta.source === 'embedded'
+              ? t('templates.catalog.embeddedFallback', { error: meta.lastError ?? '' })
+              : t('templates.catalog.refreshStale', { error: meta.lastError ?? '' })
+
+            return (
+              <Tooltip title={warning}>
+                <Box
+                  component="i"
+                  className="ri-alert-line"
+                  aria-label={warning}
+                  sx={{ fontSize: 18, color: 'warning.main', display: 'inline-flex' }}
+                />
+              </Tooltip>
+            )
+          })()}
+          {meta && !canRefresh && (
+            // Without the refresh button there is no tooltip to carry the
+            // status, so it stays inline for read-only users.
+            <Typography variant="caption" color="text.secondary" component="span">
+              {statusText}
             </Typography>
           )}
           {canRefresh && (
-            <Button
-              variant="outlined"
-              size="small"
-              disabled={refreshing}
-              startIcon={<i className="ri-refresh-line" style={{ fontSize: 16 }} />}
-              onClick={handleRefresh}
-            >
-              {t('templates.catalog.checkUpdates')}
-            </Button>
+            // describeChild keeps the button's accessible name on its label;
+            // the span lets the tooltip open while the button is disabled.
+            <Tooltip title={statusText} describeChild>
+              <span>
+                <Button
+                  variant="outlined"
+                  size="small"
+                  disabled={refreshing}
+                  startIcon={<i className="ri-refresh-line" style={{ fontSize: 16 }} />}
+                  onClick={handleRefresh}
+                >
+                  {t('templates.catalog.checkUpdates')}
+                </Button>
+              </span>
+            </Tooltip>
           )}
           <Button
             variant="outlined"
@@ -293,20 +368,21 @@ export default function ImageCatalogTab({ onDeploy }: ImageCatalogTabProps) {
             gap: 2,
           }}
         >
-          {filtered.map(image => {
+          {groups.map(group => {
             // The image is mutable for the caller iff it's a custom image
             // they own. The provider can mutate everything (including
             // shared catalogue entries it published itself); a tenant
             // can only mutate its own private images, never the shared
             // provider entries it sees through the catalogue.
-            const isShared = !!(image as any).isShared
-            const canMutate = !!(image as any).isCustom && (isProviderTenant || !isShared)
+            const isShared = !!(group.versions[0] as any).isShared
+            const canMutate = group.isCustom && (isProviderTenant || !isShared)
             return (
               <ImageCard
-                key={image.slug}
-                image={image}
+                key={group.key}
+                versions={group.versions}
+                title={group.title}
                 onDeploy={onDeploy}
-                isCustom={!!(image as any).isCustom}
+                isCustom={group.isCustom}
                 onEdit={canMutate ? handleEdit : undefined}
                 onDelete={canMutate ? handleDelete : undefined}
               />

@@ -4198,7 +4198,8 @@
       "deletingItem": "Suppression de {name}…",
       "andMore": "{count} de plus",
       "engine": "Moteur",
-      "node": "Nœud"
+      "node": "Nœud",
+      "partialInventory": "Certains clusters ou nœuds n'ont pas pu être inventoriés ; leurs snapshots ne sont pas listés."
     },
     "status": {
       "all": "Tous les statuts",

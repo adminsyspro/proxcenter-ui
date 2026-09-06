@@ -4198,7 +4198,8 @@
       "deletingItem": "Eliminando {name}…",
       "andMore": "{count} más",
       "engine": "Motor",
-      "node": "Nodo"
+      "node": "Nodo",
+      "partialInventory": "Algunos clústeres o nodos no pudieron inventariarse; sus snapshots no aparecen en la lista."
     },
     "status": {
       "all": "Todos los estados",

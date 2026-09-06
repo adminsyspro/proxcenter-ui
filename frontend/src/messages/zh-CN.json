@@ -4174,7 +4174,8 @@
       "deletingItem": "正在删除 {name}…",
       "andMore": "还有 {count} 个",
       "engine": "引擎",
-      "node": "节点"
+      "node": "节点",
+      "partialInventory": "部分集群或节点无法清点，其快照未列出。"
     },
     "status": {
       "all": "所有状态",

@@ -175,3 +175,16 @@ it('loads usage for the selected node and displays ZFS used bytes', async () => 
   expect(Object.fromEntries(query)).toEqual({ cluster: 'c1', storage_engine: 'zfs', node: 'dr2', pool: 'rbd', image: 'vm-100-disk-0', snap: 'mirror.orphan-1' })
   expect(screen.getByText('Node: dr2')).toBeInTheDocument()
 })
+
+it('lists inventory warnings in a banner instead of rendering them as snapshot rows', async () => {
+  const rows = [
+    sameVolumeSnapshots[0],
+    { cluster_id: 'c1', cluster_name: 'Cluster A', storage_engine: 'zfs', node: 'dr3', warning: 'ssh: connect timed out' },
+  ]
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(rows))))
+  renderWithProviders(<SnapshotsTab connections={CONNECTIONS} />)
+  const banner = await screen.findByRole('alert')
+  expect(banner).toHaveTextContent('Cluster A · dr3: ssh: connect timed out')
+  expect(screen.getAllByRole('row')).toHaveLength(2)
+  expect(screen.queryByText('dr3', { selector: 'td' })).not.toBeInTheDocument()
+})

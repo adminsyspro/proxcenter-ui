@@ -35,6 +35,7 @@ const requiredKeys = [
   "preflight.checks.reverse_ssh",
   "snapshots.engine",
   "snapshots.node",
+  "snapshots.partialInventory",
   "engine.rbd",
   "engine.zfs",
   "failover.clonesDestroyed",

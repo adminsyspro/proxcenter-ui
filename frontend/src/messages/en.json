@@ -4198,7 +4198,8 @@
       "deletingItem": "Deleting {name}…",
       "andMore": "{count} more",
       "engine": "Engine",
-      "node": "Node"
+      "node": "Node",
+      "partialInventory": "Some clusters or nodes could not be inventoried; their snapshots are not listed."
     },
     "status": {
       "all": "All statuses",

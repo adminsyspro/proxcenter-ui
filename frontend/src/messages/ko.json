@@ -4198,7 +4198,8 @@
       "deletingItem": "{name} 삭제 중…",
       "andMore": "{count}개 더",
       "engine": "엔진",
-      "node": "노드"
+      "node": "노드",
+      "partialInventory": "일부 클러스터 또는 노드의 인벤토리를 가져올 수 없어 해당 스냅샷이 표시되지 않습니다."
     },
     "status": {
       "all": "모든 상태",

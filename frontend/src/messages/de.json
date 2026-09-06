@@ -4177,7 +4177,8 @@
       "deletingItem": "Lösche {name}…",
       "andMore": "{count} weitere",
       "engine": "Engine",
-      "node": "Knoten"
+      "node": "Knoten",
+      "partialInventory": "Einige Cluster oder Knoten konnten nicht inventarisiert werden; ihre Snapshots werden nicht aufgeführt."
     },
     "status": {
       "all": "Alle Status",

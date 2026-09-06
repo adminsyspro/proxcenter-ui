@@ -17,6 +17,8 @@ import EmptyState from '@/components/EmptyState'
 
 interface MirrorSnapshot extends SnapshotIdentity {
   used_bytes?: number
+  // Set on rows that describe a cluster or node the orchestrator could not inventory; such rows carry no snapshot.
+  warning?: string
   cluster_id: string
   cluster_name: string
   pool: string
@@ -85,6 +87,7 @@ export default function SnapshotsTab({ connections, vmNamesByConn }: Props) {
 
   const key = snapshotKey
 
+  const [warnings, setWarnings] = useState<MirrorSnapshot[]>([])
   const load = useCallback(async () => {
     setLoading(true)
     setError('')
@@ -92,7 +95,9 @@ export default function SnapshotsTab({ connections, vmNamesByConn }: Props) {
       const res = await fetch('/api/v1/orchestrator/replication/snapshots', { cache: 'no-store' })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data = await res.json()
-      setSnaps(Array.isArray(data) ? data : [])
+      const rows: MirrorSnapshot[] = Array.isArray(data) ? data : []
+      setWarnings(rows.filter(row => row.warning))
+      setSnaps(rows.filter(row => !row.warning))
     } catch (e: any) {
       setError(e?.message || 'Failed to load snapshots')
       setSnaps([])
@@ -310,6 +315,16 @@ export default function SnapshotsTab({ connections, vmNamesByConn }: Props) {
       </Card>
 
       {error && <Alert severity='error' sx={{ mb: 2 }}>{error}</Alert>}
+      {warnings.length > 0 && (
+        <Alert severity='warning' sx={{ mb: 2 }}>
+          {t('siteRecovery.snapshots.partialInventory')}
+          {warnings.map(row => (
+            <Typography key={`${row.cluster_id}:${row.node || ''}`} variant='caption' component='div'>
+              {row.cluster_name || connName(row.cluster_id)}{row.node ? ` · ${row.node}` : ''}: {row.warning}
+            </Typography>
+          ))}
+        </Alert>
+      )}
 
       {loading && !snaps && <LinearProgress sx={{ mb: 2 }} />}
 

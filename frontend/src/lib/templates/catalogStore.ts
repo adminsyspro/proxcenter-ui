@@ -13,6 +13,7 @@ import { APP_VERSION } from '@/config/version'
 import { getSetting, setSetting } from '@/lib/db/settings'
 import { DEFAULT_TENANT_ID } from '@/lib/tenant/constants'
 
+import { readCatalogBuilds } from './catalogBuilds'
 import {
   diffCatalogs,
   findImageBySlug,
@@ -97,11 +98,21 @@ async function readStatus(): Promise<StoredCatalogStatus | null> {
 }
 
 export async function getEffectiveCatalog(): Promise<EffectiveCatalog> {
-  const [remote, status] = await Promise.all([readStoredRemote(), readStatus()])
+  const [remote, status, builds] = await Promise.all([readStoredRemote(), readStatus(), readCatalogBuilds()])
   const source: CatalogMeta['source'] = remote ? 'remote' : 'embedded'
   const catalog = remote?.catalog ?? EMBEDDED_CATALOG
+
+  // The catalog document names a series ("Debian 13"); the build identity of
+  // the file behind its rolling URL is probed separately and merged here, so
+  // an image the probe never reached is served exactly as before.
+  const images = catalog.images.map(img => {
+    const build = builds[img.slug]
+
+    return build ? { ...img, buildDate: build.buildDate, release: build.release } : img
+  })
+
   return {
-    images: catalog.images,
+    images,
     vendors: catalog.vendors,
     meta: {
       source,

@@ -8,6 +8,7 @@ vi.mock('@/lib/db/settings', () => ({
   setSetting: vi.fn(async (key: string, _tenantId: string, value: unknown) => { settings.set(key, value) }),
 }))
 
+import { CATALOG_BUILDS_SETTING_KEY } from './catalogBuilds'
 import {
   CATALOG_REMOTE_SETTING_KEY,
   CATALOG_STATUS_SETTING_KEY,
@@ -86,6 +87,20 @@ describe('getEffectiveCatalog', () => {
     const eff = await getEffectiveCatalog()
     expect(eff.meta.source).toBe('embedded')
     expect(eff.images).toHaveLength(CLOUD_IMAGES.length)
+  })
+
+  it('merges the probed build identity into the images that have one', async () => {
+    settings.set(CATALOG_BUILDS_SETTING_KEY, {
+      checkedAt: '2026-09-06T08:00:00.000Z',
+      builds: { 'rocky-9': { buildDate: '2026-05-25', release: '9.8' } },
+    })
+    const eff = await getEffectiveCatalog()
+    const rocky = eff.images.find(i => i.slug === 'rocky-9')
+    const debian = eff.images.find(i => i.slug === 'debian-13')
+    expect(rocky?.buildDate).toBe('2026-05-25')
+    expect(rocky?.release).toBe('9.8')
+    // Untouched images keep the exact shape the catalog document has.
+    expect(debian).not.toHaveProperty('buildDate')
   })
 })
 

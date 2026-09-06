@@ -1,5 +1,16 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
+// The refresher's default probe reaches the settings table through
+// catalogStore; stub both sides so the timer tests stay pure. Tests that care
+// about the probe pass their own through options.
+vi.mock('./catalogStore', () => ({
+  refreshRemoteCatalog: vi.fn(async () => ({ result: 'unchanged', added: [], updated: [], removed: [], error: null })),
+  getEffectiveCatalog: vi.fn(async () => ({ images: [], vendors: [], meta: {} })),
+}))
+vi.mock('./catalogBuilds', () => ({
+  refreshCatalogBuilds: vi.fn(async () => ({ checkedAt: '2026-09-06T08:00:00.000Z', builds: {} })),
+}))
+
 import {
   startCatalogRefresher,
   CATALOG_REFRESH_INTERVAL_MS,
@@ -85,5 +96,39 @@ describe('startCatalogRefresher', () => {
     stop()
     log.mockRestore()
     error.mockRestore()
+  })
+})
+
+describe('startCatalogRefresher build probe', () => {
+  it('probes the image builds after every refresh, including an unchanged one', async () => {
+    const refresh = vi.fn().mockResolvedValue(ok)
+    const probeBuilds = vi.fn().mockResolvedValue(undefined)
+    const stop = startCatalogRefresher({ initialDelayMs: 0, intervalMs: 1000, refresh, probeBuilds })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(probeBuilds).toHaveBeenCalledTimes(1)
+    await vi.advanceTimersByTimeAsync(2000)
+    expect(probeBuilds).toHaveBeenCalledTimes(3)
+    stop()
+  })
+
+  it('still probes when the catalog fetch itself failed', async () => {
+    const refresh = vi.fn().mockRejectedValue(new Error('github down'))
+    const probeBuilds = vi.fn().mockResolvedValue(undefined)
+    const stop = startCatalogRefresher({ initialDelayMs: 0, intervalMs: 1000, refresh, probeBuilds })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(probeBuilds).toHaveBeenCalledTimes(1)
+    stop()
+  })
+
+  it('a rejected probe does not throw and does not stop the timer', async () => {
+    const refresh = vi.fn().mockResolvedValue(ok)
+    const probeBuilds = vi.fn().mockRejectedValue(new Error('mirror down'))
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const stop = startCatalogRefresher({ initialDelayMs: 0, intervalMs: 1000, refresh, probeBuilds })
+    await vi.advanceTimersByTimeAsync(2500)
+    expect(probeBuilds).toHaveBeenCalledTimes(3)
+    expect(errorSpy).toHaveBeenCalled()
+    errorSpy.mockRestore()
+    stop()
   })
 })

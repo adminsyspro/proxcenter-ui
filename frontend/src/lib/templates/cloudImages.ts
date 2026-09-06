@@ -31,6 +31,14 @@ export interface CloudImage {
   logoIcon: string // RemixIcon class
   /** Maintainer notes carried by the catalog file, never shown in the UI. */
   notes?: string
+  /**
+   * Resolved from the mirror at refresh time by catalogBuilds.ts and merged in
+   * by getEffectiveCatalog, never present in the catalog document: publication
+   * date (YYYY-MM-DD) of the file a rolling download URL points at today, and
+   * the vendor's point release when it publishes one.
+   */
+  buildDate?: string | null
+  release?: string | null
 }
 
 export interface CatalogVendor {

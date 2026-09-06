@@ -7,7 +7,8 @@
  * throw. Safe on every HA replica: refreshRemoteCatalog ends in an idempotent
  * upsert, so concurrent runs only cost a redundant HTTP request per day.
  */
-import { refreshRemoteCatalog, type RefreshOutcome } from './catalogStore'
+import { refreshCatalogBuilds } from './catalogBuilds'
+import { getEffectiveCatalog, refreshRemoteCatalog, type RefreshOutcome } from './catalogStore'
 
 export const CATALOG_REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000
 export const CATALOG_REFRESH_INITIAL_DELAY_MS = 30_000
@@ -16,6 +17,19 @@ export interface CatalogRefresherOptions {
   intervalMs?: number
   initialDelayMs?: number
   refresh?: () => Promise<RefreshOutcome>
+  probeBuilds?: () => Promise<unknown>
+}
+
+/**
+ * Probe the mirrors for the build identity of every image the catalog serves.
+ * Deliberately not wired to the manual button: it is 16 requests to third
+ * party mirrors and the button must stay instant, while the dates it reads
+ * only move every few weeks.
+ */
+async function probeCatalogBuilds(): Promise<unknown> {
+  const { images } = await getEffectiveCatalog()
+
+  return refreshCatalogBuilds(images)
 }
 
 function unref(timer: ReturnType<typeof setTimeout> | ReturnType<typeof setInterval>) {
@@ -34,6 +48,7 @@ export function startCatalogRefresher(options: CatalogRefresherOptions = {}): ()
     intervalMs = CATALOG_REFRESH_INTERVAL_MS,
     initialDelayMs = CATALOG_REFRESH_INITIAL_DELAY_MS,
     refresh = () => refreshRemoteCatalog(),
+    probeBuilds = probeCatalogBuilds,
   } = options
   let stopped = false
   let inFlight = false
@@ -56,6 +71,13 @@ export function startCatalogRefresher(options: CatalogRefresherOptions = {}): ()
           console.error('[catalog] remote image catalog refresh threw (non-fatal):', err)
         },
       )
+      // Runs whatever the catalog document did: the mirrors publish new builds
+      // behind the same rolling URLs, so an 'unchanged' catalog still hides a
+      // fresher image, and an unreachable GitHub says nothing about them.
+      .then(() => probeBuilds().then(
+        () => undefined,
+        (err) => { console.error('[catalog] image build probe failed (non-fatal):', err) },
+      ))
       .finally(() => { inFlight = false })
   }
 

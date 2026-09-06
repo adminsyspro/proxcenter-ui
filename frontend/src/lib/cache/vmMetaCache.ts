@@ -15,6 +15,8 @@ import { getTenantInventoriesFromCache } from "./inventoryCache"
 export interface VmMeta {
   tags: string[]
   pool?: string
+  /** Hosting node, for callers that only know (connection, vmid): alert node attribution. */
+  node?: string
 }
 
 type TenantIndex = {
@@ -52,7 +54,7 @@ function rebuildIndex(tenantId: string): Map<string, VmMeta> | null {
                   .map((t: string) => t.trim())
                   .filter(Boolean)
               : []
-          idx.set(rid, { tags, pool: g.pool || undefined })
+          idx.set(rid, { tags, pool: g.pool || undefined, node: node.node || undefined })
         }
       }
     }

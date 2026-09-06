@@ -25,6 +25,7 @@ import { DEFAULT_TENANT_ID } from "@/lib/tenant"
 import { ruleVisibleToTenant } from "@/lib/alerts/ruleOwners"
 import type { VdcScope } from "@/lib/vdc/scope"
 import { resolveVmMeta, findVmMetaByVmid, type VmMeta } from "@/lib/cache/vmMetaCache"
+import { isFlatRecordVisible, type RbacInfraScope } from "@/lib/rbac/infraScope"
 
 export interface AlertVisibilityCtx {
   tenantId: string
@@ -41,6 +42,12 @@ export interface AlertVisibilityCtx {
    * cache fallback is skipped.
    */
   vdcVmids?: Map<string, Set<string>>
+  /**
+   * The CALLER's RBAC infra scope (role grants), ANDed with the tenant gates:
+   * a connection / node / vm scoped user only sees alerts attributable to
+   * their grants. Absent or null = unrestricted (issue #525).
+   */
+  rbacScope?: RbacInfraScope | null
 }
 
 interface OrchestratorAlertLike {
@@ -95,6 +102,12 @@ export async function isAlertVisibleToTenant(
   ctx: AlertVisibilityCtx,
 ): Promise<boolean> {
   const { tenantId, tenantConnectionIds, vdcScope, infraKind } = ctx
+
+  // Gate 0: the caller's RBAC infra scope. Sync and cheap, so it runs before
+  // the rule-ownership lookup; an out-of-scope alert never costs a query.
+  if (ctx.rbacScope && !isAlertInRbacScope(alert, ctx.rbacScope, tenantId)) {
+    return debugDeny(alert, 'rbac_infra_scope', { connection_id: alert.connection_id })
+  }
 
   // Gate 1: rule visibility.
   if (alert.rule_id) {
@@ -201,6 +214,59 @@ function identifyAlertVm(alert: OrchestratorAlertLike): VmIdent | null {
     return { node: alert.node, vmid: String(alert.resource_id) }
   }
   return null
+}
+
+/**
+ * Node an alert can be attributed to: the explicit field when present, the
+ * UPID of an event alert, a node alert's `resource` (the orchestrator stores
+ * the node name there), else the hosting node of the VM from the warm
+ * inventory index. Undefined when nothing resolves, cold cache included.
+ */
+function resolveAlertNode(alert: OrchestratorAlertLike, tenantId: string): string | undefined {
+  if (alert.node) return alert.node
+  if (alert.event_id) {
+    const node = parseUpid(alert.event_id)?.node
+    if (node) return node
+  }
+  if (String(alert.resource_type || '').toLowerCase() === 'node') return alert.resource || undefined
+  const ident = identifyAlertVm(alert)
+  if (!ident || !alert.connection_id) return undefined
+  const meta =
+    findVmMetaByVmid(alert.connection_id, ident.vmid, DEFAULT_TENANT_ID) ??
+    findVmMetaByVmid(alert.connection_id, ident.vmid, tenantId)
+  return meta?.node
+}
+
+/**
+ * RBAC infra-scope gate for one alert (issue #525), shared by every alert
+ * route through AlertVisibilityCtx.rbacScope and by the dashboard merge.
+ * Connection and guest-derived verdicts never touch the inventory index;
+ * node attribution is only attempted when a node scope applies to the
+ * alert's connection.
+ */
+export function isAlertInRbacScope(
+  alert: OrchestratorAlertLike,
+  scope: RbacInfraScope | null,
+  tenantId: string,
+): boolean {
+  if (scope === null) return true
+  const connId = alert.connection_id
+  if (!connId || scope.fullConnections.has(connId) || scope.guestDerived) {
+    return isFlatRecordVisible(scope, { connId })
+  }
+  // nodesByConnection carries the node of every node AND vm grant, so a
+  // connection missing from it holds no grant at all.
+  if (!scope.nodesByConnection.has(connId)) return false
+  const rt = String(alert.resource_type || '').toLowerCase()
+  // Cluster-wide alerts (storage, license, quorum, OSD, replication) are facts
+  // about the granted connection; anything else happened on a node.
+  const nodeBound = rt === 'node' || !SYSTEM_RESOURCE_TYPES.has(rt)
+  return isFlatRecordVisible(scope, {
+    connId,
+    node: resolveAlertNode(alert, tenantId),
+    vmid: identifyAlertVm(alert)?.vmid,
+    nodeBound,
+  })
 }
 
 /**

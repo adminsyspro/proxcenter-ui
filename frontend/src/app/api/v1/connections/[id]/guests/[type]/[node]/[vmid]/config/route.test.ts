@@ -266,3 +266,52 @@ describe('PUT config: a slow apply is no longer reported as a failed save (#743)
     expect(configWriteBody()?.get('memory')).toBe('4096')
   })
 })
+
+describe('PUT config: keys the Options tab edits (#566)', () => {
+  it('forwards hostname, features and startup for a container', async () => {
+    const PUT = await loadPut()
+    const res = await callRoute(PUT, {
+      method: 'PUT',
+      params: { ...baseParams, type: 'lxc' },
+      body: { hostname: 'web-01', features: 'nesting=1,keyctl=1', startup: 'order=2' },
+    })
+
+    expect(res.status).toBe(200)
+    const body = configWriteBody()
+    expect(body?.get('hostname')).toBe('web-01')
+    expect(body?.get('features')).toBe('nesting=1,keyctl=1')
+    expect(body?.get('startup')).toBe('order=2')
+  })
+
+  it('clears every container feature through delete=features', async () => {
+    const PUT = await loadPut()
+    const res = await callRoute(PUT, {
+      method: 'PUT',
+      params: { ...baseParams, type: 'lxc' },
+      body: { delete: 'features' },
+    })
+
+    expect(res.status).toBe(200)
+    expect(configWriteBody()?.get('delete')).toBe('features')
+  })
+
+  it('rejects the QEMU-only name key for a container instead of forwarding it', async () => {
+    const PUT = await loadPut()
+    const res = await callRoute(PUT, {
+      method: 'PUT',
+      params: { ...baseParams, type: 'lxc' },
+      body: { name: 'web-01' },
+    })
+
+    expect(res.status).toBe(400)
+    expect(configWriteBody()).toBeNull()
+  })
+
+  it('forwards the startup order for a VM', async () => {
+    const PUT = await loadPut()
+    const res = await callRoute(PUT, { method: 'PUT', params: baseParams, body: { startup: 'order=1,up=30' } })
+
+    expect(res.status).toBe(200)
+    expect(configWriteBody()?.get('startup')).toBe('order=1,up=30')
+  })
+})

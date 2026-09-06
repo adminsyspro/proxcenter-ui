@@ -1,6 +1,6 @@
 // frontend/src/lib/rbac/infraScope.test.ts
 import { describe, it, expect } from 'vitest'
-import { deriveRbacInfraScope, isConnectionVisible, applyRbacInfraFilter, filterVisibleConnections, mayHaveVisibleGuests, filterCandidateConnections, pruneEmptyConnections, tokenInfraScope } from './infraScope'
+import { deriveRbacInfraScope, isConnectionVisible, applyRbacInfraFilter, filterVisibleConnections, mayHaveVisibleGuests, filterCandidateConnections, pruneEmptyConnections, tokenInfraScope, isFlatRecordVisible, hasInfraGrant, type RbacInfraScope } from './infraScope'
 
 describe('deriveRbacInfraScope', () => {
   it('returns null (unrestricted) for super admins', () => {
@@ -210,5 +210,163 @@ describe('tokenInfraScope', () => {
   it('is never guest-derived', () => {
     expect(tokenInfraScope(['connA'])!.guestDerived).toBe(false)
     expect(tokenInfraScope(null)).toBeNull()
+  })
+})
+
+describe('isFlatRecordVisible (flat feeds, issue #525)', () => {
+  const scope = (over: Partial<RbacInfraScope> = {}): RbacInfraScope => ({
+    fullConnections: new Set<string>(),
+    nodesByConnection: new Map<string, Set<string>>(),
+    guestDerived: false,
+    ...over,
+  })
+  const nodeScope = () => scope({ nodesByConnection: new Map([['connA', new Set(['n1'])]]) })
+  const connScope = () => scope({ fullConnections: new Set(['connA']) })
+
+  it('null scope keeps every row, connection-less rows included', () => {
+    expect(isFlatRecordVisible(null, { connId: 'connA', node: 'n9' })).toBe(true)
+    expect(isFlatRecordVisible(null, {})).toBe(true)
+  })
+
+  it('a row with no connection never reaches a scoped user', () => {
+    expect(isFlatRecordVisible(connScope(), { node: 'n1' })).toBe(false)
+    expect(isFlatRecordVisible(nodeScope(), { connId: '', node: 'n1' })).toBe(false)
+    expect(isFlatRecordVisible(scope({ guestDerived: true }), { node: 'n1' })).toBe(false)
+  })
+
+  it('connection grant keeps every row of that connection, node named or not, and drops other connections', () => {
+    expect(isFlatRecordVisible(connScope(), { connId: 'connA', node: 'n7' })).toBe(true)
+    expect(isFlatRecordVisible(connScope(), { connId: 'connA' })).toBe(true)
+    expect(isFlatRecordVisible(connScope(), { connId: 'connB', node: 'n1' })).toBe(false)
+  })
+
+  it('node scope keeps a row on a granted node and drops a row on another node', () => {
+    expect(isFlatRecordVisible(nodeScope(), { connId: 'connA', node: 'n1' })).toBe(true)
+    expect(isFlatRecordVisible(nodeScope(), { connId: 'connA', node: 'n2' })).toBe(false)
+  })
+
+  it('node scope drops a node-bound row that names no node (the default)', () => {
+    expect(isFlatRecordVisible(nodeScope(), { connId: 'connA' })).toBe(false)
+    expect(isFlatRecordVisible(nodeScope(), { connId: 'connA', node: null, nodeBound: true })).toBe(false)
+  })
+
+  it('node scope keeps a cluster-level row of the granted connection', () => {
+    expect(isFlatRecordVisible(nodeScope(), { connId: 'connA', nodeBound: false })).toBe(true)
+  })
+
+  it('node scope drops every row of a connection without a grant, cluster-level ones included', () => {
+    expect(isFlatRecordVisible(nodeScope(), { connId: 'connB', node: 'n1' })).toBe(false)
+    expect(isFlatRecordVisible(nodeScope(), { connId: 'connB', nodeBound: false })).toBe(false)
+  })
+
+  it('guest-derived scope keeps every connection-bound row: only the per-guest filter can decide', () => {
+    const s = scope({ guestDerived: true, nodesByConnection: new Map([['connA', new Set(['n1'])]]) })
+    expect(isFlatRecordVisible(s, { connId: 'connA', node: 'n2' })).toBe(true)
+    expect(isFlatRecordVisible(s, { connId: 'connB' })).toBe(true)
+  })
+})
+
+describe('deriveRbacInfraScope: permission-aware derivation and vm grants (issue #525)', () => {
+  const grant = (scopeType: string, scopeTarget: string | null, ...permissions: string[]) =>
+    ({ scopeType, scopeTarget, permissions: new Set(permissions) })
+
+  it('without a permission every grant counts (the #524 tree semantics)', () => {
+    const s = deriveRbacInfraScope({ superAdmin: false, byScope: [grant('node', 'c1:n1', 'alerts.manage'), grant('connection', 'c2', 'vm.view')] })!
+    expect([...s.fullConnections]).toEqual(['c2'])
+    expect([...s.nodesByConnection.keys()]).toEqual(['c1'])
+  })
+
+  it('with a permission only the grants carrying it shape the perimeter', () => {
+    const grants = {
+      superAdmin: false,
+      byScope: [grant('node', 'c1:n1', 'alerts.manage', 'connection.view'), grant('connection', 'c2', 'vm.view', 'connection.view')],
+    }
+    const manage = deriveRbacInfraScope(grants, 'alerts.manage')!
+    expect(manage.fullConnections.size).toBe(0)
+    expect([...manage.nodesByConnection.keys()]).toEqual(['c1'])
+    const view = deriveRbacInfraScope(grants, 'connection.view')!
+    expect([...view.fullConnections]).toEqual(['c2'])
+    expect([...view.nodesByConnection.keys()]).toEqual(['c1'])
+  })
+
+  it('a list of permissions matches a grant carrying any of them', () => {
+    const grants = {
+      superAdmin: false,
+      byScope: [grant('node', 'c1:n1', 'node.view'), grant('vm', 'c2:n2:qemu:200', 'vm.view'), grant('connection', 'c3', 'backup.view')],
+    }
+    const s = deriveRbacInfraScope(grants, ['vm.view', 'node.view'])!
+    expect([...s.nodesByConnection.keys()].sort()).toEqual(['c1', 'c2'])
+    expect(s.fullConnections.has('c3')).toBe(false)
+  })
+
+  it('only a global grant OF the permission makes the user unrestricted', () => {
+    const grants = { superAdmin: false, byScope: [grant('global', null, 'backup.view'), grant('node', 'c1:n1', 'connection.view')] }
+    expect(deriveRbacInfraScope(grants)).toBeNull()
+    expect(deriveRbacInfraScope(grants, 'backup.view')).toBeNull()
+    const s = deriveRbacInfraScope(grants, 'connection.view')!
+    expect([...s.nodesByConnection.get('c1')!]).toEqual(['n1'])
+  })
+
+  it('a grant without a permission set is ignored under a permission filter, kept without one', () => {
+    const grants = { superAdmin: false, byScope: [{ scopeType: 'connection', scopeTarget: 'c1' }] }
+    expect(deriveRbacInfraScope(grants)!.fullConnections.has('c1')).toBe(true)
+    expect(deriveRbacInfraScope(grants, 'vm.view')!.fullConnections.size).toBe(0)
+  })
+
+  it('a node grant is outright, a vm grant only lends its node to the tree and keeps the VMID', () => {
+    const s = deriveRbacInfraScope({ superAdmin: false, byScope: [grant('node', 'c1:n1', 'vm.view'), grant('vm', 'c1:n2:qemu:200', 'vm.view')] })!
+    expect([...s.nodesByConnection.get('c1')!].sort()).toEqual(['n1', 'n2'])
+    expect([...s.nodeGrantsByConnection!.get('c1')!]).toEqual(['n1'])
+    expect([...s.guestGrantsByConnection!.get('c1')!]).toEqual(['200'])
+  })
+
+  it('a token scope carries empty node and guest grant maps', () => {
+    const s = tokenInfraScope(['a'])!
+    expect(s.nodeGrantsByConnection!.size).toBe(0)
+    expect(s.guestGrantsByConnection!.size).toBe(0)
+  })
+})
+
+describe('isFlatRecordVisible with vm grants, and hasInfraGrant (issue #525)', () => {
+  const derived = (...byScope: Array<{ scopeType: string; scopeTarget: string | null }>) =>
+    deriveRbacInfraScope({ superAdmin: false, byScope })!
+  const vmOnly = () => derived({ scopeType: 'vm', scopeTarget: 'c1:n1:qemu:100' })
+  const mixed = () => derived({ scopeType: 'node', scopeTarget: 'c1:n1' }, { scopeType: 'vm', scopeTarget: 'c1:n2:qemu:200' })
+
+  it('vm grant: only rows naming that VMID pass, wherever the guest runs now', () => {
+    expect(isFlatRecordVisible(vmOnly(), { connId: 'c1', node: 'n1', vmid: '100' })).toBe(true)
+    expect(isFlatRecordVisible(vmOnly(), { connId: 'c1', node: 'n3', vmid: 100 })).toBe(true)
+    expect(isFlatRecordVisible(vmOnly(), { connId: 'c1', node: 'n1', vmid: '101' })).toBe(false)
+    expect(isFlatRecordVisible(vmOnly(), { connId: 'c1', vmid: '101' })).toBe(false)
+  })
+
+  it('vm grant: node-level and cluster-level rows of the host are denied', () => {
+    expect(isFlatRecordVisible(vmOnly(), { connId: 'c1', node: 'n1' })).toBe(false)
+    expect(isFlatRecordVisible(vmOnly(), { connId: 'c1', nodeBound: false })).toBe(false)
+    expect(isFlatRecordVisible(vmOnly(), { connId: 'c1' })).toBe(false)
+  })
+
+  it('node grant still covers every guest of the node; a vm grant adds its own guest elsewhere', () => {
+    expect(isFlatRecordVisible(mixed(), { connId: 'c1', node: 'n1', vmid: '999' })).toBe(true)
+    expect(isFlatRecordVisible(mixed(), { connId: 'c1', node: 'n2', vmid: '200' })).toBe(true)
+    expect(isFlatRecordVisible(mixed(), { connId: 'c1', node: 'n2', vmid: '201' })).toBe(false)
+    expect(isFlatRecordVisible(mixed(), { connId: 'c1', node: 'n2' })).toBe(false)
+    expect(isFlatRecordVisible(mixed(), { connId: 'c1', nodeBound: false })).toBe(true)
+  })
+
+  it('a hand-built scope without nodeGrantsByConnection treats every listed node as an outright grant', () => {
+    const legacy: RbacInfraScope = { fullConnections: new Set(), nodesByConnection: new Map([['c1', new Set(['n1'])]]), guestDerived: false }
+    expect(isFlatRecordVisible(legacy, { connId: 'c1', node: 'n1', vmid: '5' })).toBe(true)
+    expect(isFlatRecordVisible(legacy, { connId: 'c1', nodeBound: false })).toBe(true)
+    expect(hasInfraGrant(legacy, 'c1')).toBe(true)
+  })
+
+  it('hasInfraGrant: admin, connection and node grants yes; vm-only and tag / pool no', () => {
+    expect(hasInfraGrant(null, 'c1')).toBe(true)
+    expect(hasInfraGrant(derived({ scopeType: 'connection', scopeTarget: 'c1' }), 'c1')).toBe(true)
+    expect(hasInfraGrant(mixed(), 'c1')).toBe(true)
+    expect(hasInfraGrant(vmOnly(), 'c1')).toBe(false)
+    expect(hasInfraGrant(mixed(), 'c2')).toBe(false)
+    expect(hasInfraGrant(derived({ scopeType: 'tag', scopeTarget: 'prod' }), 'c1')).toBe(false)
   })
 })

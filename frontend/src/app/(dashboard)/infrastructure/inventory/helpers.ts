@@ -46,6 +46,155 @@ export function hotplugDevice(key: string): HotplugDevice | undefined {
   return HOTPLUG_DEVICES.find(device => device.key === wanted)
 }
 
+/**
+ * Toggles of a container's `features` property string
+ * (`nesting=1,keyctl=1,fuse=1,mknod=1,mount=nfs;cifs`), the same set the
+ * Features dialog of the PVE UI offers. Shared by the Options table and its
+ * editor so the two cannot drift (#566).
+ */
+export const LXC_FEATURES = [
+  { key: 'nesting', labelKey: 'inventory.lxcFeatures.nesting', icon: 'ri-stack-line' },
+  { key: 'keyctl', labelKey: 'inventory.lxcFeatures.keyctl', icon: 'ri-key-2-line' },
+  { key: 'fuse', labelKey: 'inventory.lxcFeatures.fuse', icon: 'ri-folder-transfer-line' },
+  { key: 'mknod', labelKey: 'inventory.lxcFeatures.mknod', icon: 'ri-usb-line' },
+  { key: 'nfs', labelKey: 'inventory.lxcFeatures.nfs', icon: 'ri-server-line' },
+  { key: 'cifs', labelKey: 'inventory.lxcFeatures.cifs', icon: 'ri-windows-line' },
+] as const
+
+export type LxcFeatureKey = (typeof LXC_FEATURES)[number]['key']
+
+const LXC_BOOLEAN_FEATURES: readonly LxcFeatureKey[] = ['nesting', 'keyctl', 'fuse', 'mknod']
+const LXC_MOUNT_FEATURES: readonly LxcFeatureKey[] = ['nfs', 'cifs']
+
+export type LxcFeatures = {
+  enabled: LxcFeatureKey[]
+  /** Mount fstypes other than nfs/cifs, kept verbatim. */
+  otherMounts: string[]
+  /** Segments this editor does not know (force_rw_sys=1, …), kept verbatim. */
+  extra: string[]
+}
+
+/** Parses a PVE `features` string. A boolean feature set to 0 is PVE's default, so it is simply dropped. */
+export function parseLxcFeatures(raw: string | undefined | null): LxcFeatures {
+  const enabled: LxcFeatureKey[] = []
+  const otherMounts: string[] = []
+  const extra: string[] = []
+
+  for (const segment of String(raw ?? '').split(',').map(s => s.trim()).filter(Boolean)) {
+    const eq = segment.indexOf('=')
+    const key = (eq === -1 ? segment : segment.slice(0, eq)).toLowerCase()
+    const value = eq === -1 ? '1' : segment.slice(eq + 1).trim()
+
+    if (key === 'mount') {
+      for (const fstype of value.split(';').map(s => s.trim().toLowerCase()).filter(Boolean)) {
+        if (fstype === 'nfs' || fstype === 'cifs') enabled.push(fstype)
+        else otherMounts.push(fstype)
+      }
+    } else if ((LXC_BOOLEAN_FEATURES as readonly string[]).includes(key)) {
+      if (value === '1') enabled.push(key as LxcFeatureKey)
+    } else {
+      extra.push(segment)
+    }
+  }
+
+  return { enabled, otherMounts, extra }
+}
+
+/** Serialises back to the PVE property string; an empty result means "no features" and must be sent as `delete=features`. */
+export function buildLxcFeatures(features: LxcFeatures): string {
+  const segments = LXC_BOOLEAN_FEATURES.filter(key => features.enabled.includes(key)).map(key => `${key}=1`)
+  const mounts = [...LXC_MOUNT_FEATURES.filter(key => features.enabled.includes(key)), ...features.otherMounts]
+
+  if (mounts.length > 0) segments.push(`mount=${mounts.join(';')}`)
+
+  return [...segments, ...features.extra].join(',')
+}
+
+/**
+ * Whether ProxCenter can flip a container feature. PVE's
+ * check_ct_modify_config_perm lets only the root@pam account change features,
+ * except `nesting` on an unprivileged container (VM.Allocate suffices). An API
+ * token id (`root@pam!name`) never equals `root@pam`, and ProxCenter only ever
+ * authenticates with tokens, so the other toggles are shown but locked.
+ */
+export function canEditLxcFeature(key: LxcFeatureKey, unprivileged: boolean): boolean {
+  return unprivileged && key === 'nesting'
+}
+
+/**
+ * PVE errors reach the UI as `PVE <status> <path>: <raw body>`, the body being
+ * PVE's JSON envelope (`{"data":null,"message":"Permission check failed …\n"}`).
+ * Surface the message alone when the body parses; keep the text otherwise.
+ */
+export function humanizePveError(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error)
+  const match = /^PVE \d{3} \S+: ([\s\S]*)$/.exec(message.trim())
+
+  if (!match) return message
+  try {
+    const body = JSON.parse(match[1])
+    const inner = typeof body?.message === 'string' ? body.message.trim() : ''
+
+    return inner || message
+  } catch {
+    return message
+  }
+}
+
+/**
+ * Hardware-tab label of a usbN / hostpciN entry. A device attached through a
+ * datacenter resource mapping (#852) shows the mapping name, a raw one its
+ * hardware address, SPICE redirection stays SPICE.
+ */
+export function passthroughLabel(kind: 'USB' | 'PCI', value: string): string {
+  const mapping = /(?:^|,)mapping=([^,]+)/.exec(value)?.[1]
+
+  if (mapping) return `${kind} (mapping: ${mapping})`
+
+  if (kind === 'USB') {
+    if (value.includes('spice')) return 'USB (SPICE)'
+    const host = /host=([^,]+)/.exec(value)?.[1]
+
+    return host ? `USB (${host})` : 'USB'
+  }
+
+  const device = /^([^,]+)/.exec(value)?.[1]
+
+  return device ? `PCI (${device})` : 'PCI'
+}
+
+/**
+ * Body of the option-dialog PUT. PVE refuses an empty `features` value:
+ * clearing every toggle of a container is expressed by deleting the key,
+ * as the PVE UI does (#566).
+ */
+export function optionSaveBody(key: string, value: unknown): Record<string, unknown> {
+  if (key === 'features' && !value) return { delete: 'features' }
+
+  return { [key]: value }
+}
+
+/**
+ * Name row of the Options tab. A container has no `name` in PVE: its display
+ * name is `hostname`, the only key the config route accepts for LXC (#566).
+ */
+export function guestNameOptionEdit(vmType: 'qemu' | 'lxc' | undefined, name: string | undefined, t: (key: string) => string) {
+  return vmType === 'lxc'
+    ? { key: 'hostname', label: t('inventory.createLxc.hostname'), value: name || '', type: 'text' as const }
+    : { key: 'name', label: t('common.name'), value: name || '', type: 'text' as const }
+}
+
+/** Flips one toggle of a `features` string, leaving everything else untouched. */
+export function toggleLxcFeature(raw: string | undefined | null, key: LxcFeatureKey): string {
+  const features = parseLxcFeatures(raw)
+
+  features.enabled = features.enabled.includes(key)
+    ? features.enabled.filter(k => k !== key)
+    : [...features.enabled, key]
+
+  return buildLxcFeatures(features)
+}
+
 export function hashStringToInt(str: string) {
   let h = 0
 
@@ -1238,7 +1387,8 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
         const configData = await configR.json()
         const config = configData?.data || configData
 
-        name = config.name || name
+        // A container has no `name`: PVE keeps its display name in `hostname` (#566).
+        name = config.name || config.hostname || name
         description = config.description || ''
 
         const pending = config.pending || {}
@@ -1426,20 +1576,17 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
         Object.keys(config).forEach(key => {
           const val = String(config[key])
           if (/^usb\d+$/.test(key)) {
-            const hostMatch = val.match(/host=([^,]+)/)
-            const isSpice = val.includes('spice')
             otherHardwareInfo.push({
               id: key,
               type: 'usb',
-              label: isSpice ? 'USB (SPICE)' : `USB${hostMatch ? ` (${hostMatch[1]})` : ''}`,
+              label: passthroughLabel('USB', val),
               rawValue: val,
             })
           } else if (/^hostpci\d+$/.test(key)) {
-            const deviceMatch = val.match(/^([^,]+)/)
             otherHardwareInfo.push({
               id: key,
               type: 'pci',
-              label: `PCI${deviceMatch ? ` (${deviceMatch[1]})` : ''}`,
+              label: passthroughLabel('PCI', val),
               rawValue: val,
             })
           } else if (/^serial\d+$/.test(key)) {
@@ -1477,6 +1624,8 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
           'freeze', 'localtime', 'agent', 'tablet', 'protection',
           'ostype', 'scsihw', 'spice_enhancements', 'vmstatestorage',
           'startdate', 'sev',
+          // LXC-only options (#566)
+          'hostname', 'features',
         ].filter(k => pending[k] !== undefined)
 
         optionsInfo = {
@@ -1499,6 +1648,12 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
           spiceEnhancements: config.spice_enhancements || 'none',
           vmStateStorage: config.vmstatestorage || 'Automatic',
           amdSEV: config.sev ? 'enabled' : 'default',
+          // LXC-only (#566): the display name lives in `hostname`, the privilege
+          // level is fixed at creation, `features` is the raw property string
+          // the Features dialog edits.
+          hostname: typeof config.hostname === 'string' ? config.hostname : undefined,
+          unprivileged: config.unprivileged === 1 || config.unprivileged === true,
+          features: typeof config.features === 'string' ? config.features : '',
           // Pending keys specific to options (for the revert button in Options tab)
           pendingKeys: optionsPendingKeys,
           // Raw pending values so the Options tab can show old→new indicators

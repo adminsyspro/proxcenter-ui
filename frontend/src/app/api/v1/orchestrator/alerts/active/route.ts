@@ -4,7 +4,7 @@ import { alertsApi } from '@/lib/orchestrator/client'
 import { demoResponse } from '@/lib/demo/demo-api'
 import { getCurrentTenantId, getSessionPrisma, getTenantConnectionIds } from '@/lib/tenant'
 import { getTenantInfrastructureScope, maskingScope } from '@/lib/tenant/infraScope'
-import { checkPermission, PERMISSIONS } from '@/lib/rbac'
+import { checkPermission, PERMISSIONS, getCurrentRbacInfraScope } from '@/lib/rbac'
 import { isAlertVisibleToTenant } from '@/lib/alerts/visibility'
 import { getVdcVmidsByConnection } from '@/lib/alerts/vdcVmids'
 import { buildOrchestratorFingerprint } from '@/lib/alerts/orchestratorFingerprint'
@@ -38,7 +38,9 @@ export async function GET(req: Request) {
 
     const resData = response.data as any
     const alerts = Array.isArray(resData) ? resData : (resData?.data || [])
-    const visibilityCtx = { tenantId, tenantConnectionIds, vdcScope, vdcVmids, infraKind: infra.kind }
+    // Caller's RBAC infra scope (issue #525), honoured inside isAlertVisibleToTenant.
+    const rbacScope = await getCurrentRbacInfraScope(PERMISSIONS.ALERTS_VIEW)
+    const visibilityCtx = { tenantId, tenantConnectionIds, vdcScope, vdcVmids, infraKind: infra.kind, rbacScope }
     // isAlertVisibleToTenant is async (Postgres cutover made the rule
     // ownership lookup a Prisma query). Array.filter doesn't await its
     // predicate — it'd see a Promise, which is truthy, and let every

@@ -83,7 +83,7 @@ describe('INHERIT_ON_PRIMARY_SX', () => {
 })
 
 describe('command palette row', () => {
-  it('gives the highlighted row a readable label', () => {
+  it('keeps the highlighted row on its usual label colour: the selection tint is neutral, so no contrast override applies', () => {
     const { getByText } = render(
       <ThemeProvider theme={theme}>
         <Box sx={commandPaletteRowSx(true)}>
@@ -93,7 +93,8 @@ describe('command palette row', () => {
       </ThemeProvider>
     )
 
-    expect(colorOf(getByText('Dashboard'))).toContain('--mui-palette-primary-contrasttext')
+    expect(colorOf(getByText('Dashboard'))).toContain('--mui-palette-text-secondary')
+    expect(colorOf(getByText('Dashboard'))).not.toContain('--mui-palette-primary-contrasttext')
   })
 
   it('leaves an idle row with its usual secondary label', () => {

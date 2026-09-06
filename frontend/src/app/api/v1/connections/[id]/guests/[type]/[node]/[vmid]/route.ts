@@ -4,6 +4,7 @@ import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
 import { releaseAllocationsForVm } from "@/lib/vdc/ipam"
+import { deleteGuestIpEntry, guestKey } from "@/lib/cache/guestIpCache"
 
 export const runtime = "nodejs"
 
@@ -99,6 +100,9 @@ export async function DELETE(
       url,
       { method: "DELETE" }
     )
+
+    // A guest created later with the same vmid must not inherit these addresses.
+    deleteGuestIpEntry(id, guestKey(type, vmid))
 
     // Release every IPAM reservation tied to this (connection, vmid).
     // Our IPAM is keyed on vmid so we don't need to re-parse netN/ipconfigN

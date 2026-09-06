@@ -3,6 +3,9 @@ import { describe, expect, it, vi, beforeEach } from 'vitest'
 const getActiveAlertsMock = vi.fn()
 const findManyMock = vi.fn()
 const isAlertVisibleToTenantMock = vi.fn()
+const { rbacScopeMock } = vi.hoisted(() => ({ rbacScopeMock: vi.fn() }))
+
+import { FAKE_RBAC_SCOPE, forwardedRbacScope } from '@/__tests__/setup/rbacScope'
 
 vi.mock('@/lib/orchestrator/client', () => ({
   alertsApi: { getActiveAlerts: (...args: unknown[]) => getActiveAlertsMock(...args) },
@@ -29,6 +32,7 @@ vi.mock('@/lib/tenant/infraScope', () => ({
 
 vi.mock('@/lib/rbac', () => ({
   checkPermission: vi.fn().mockResolvedValue(null),
+  getCurrentRbacInfraScope: (...args: unknown[]) => rbacScopeMock(...args),
   PERMISSIONS: { ALERTS_VIEW: 'alerts.view' },
 }))
 
@@ -51,6 +55,7 @@ beforeEach(() => {
   getActiveAlertsMock.mockReset()
   findManyMock.mockReset()
   isAlertVisibleToTenantMock.mockReset()
+  rbacScopeMock.mockReset().mockResolvedValue(null)
   isAlertVisibleToTenantMock.mockResolvedValue(true)
 })
 
@@ -146,5 +151,29 @@ describe('GET /api/v1/orchestrator/alerts/active', () => {
     const body = await res.json()
     expect(body).toHaveLength(1)
     expect(body[0].resource).toBe('n2')
+  })
+})
+
+describe('RBAC infra scope forwarding (issue #525)', () => {
+  const alert = { connection_id: 'conn-1', type: 'cpu', resource: 'node-1' }
+
+  beforeEach(() => {
+    getActiveAlertsMock.mockResolvedValue({ data: [alert] })
+    findManyMock.mockResolvedValue([])
+  })
+
+  it('forwards null for an unrestricted caller and keeps the alert', async () => {
+    const activeRes = await GET(makeReq())
+    expect(activeRes.status).toBe(200)
+    expect(await activeRes.json()).toHaveLength(1)
+    expect(forwardedRbacScope(isAlertVisibleToTenantMock)).toBeNull()
+  })
+
+  it('forwards the caller scope into the visibility ctx', async () => {
+    rbacScopeMock.mockResolvedValue(FAKE_RBAC_SCOPE)
+    const activeRes = await GET(makeReq())
+    expect(activeRes.status).toBe(200)
+    expect(forwardedRbacScope(isAlertVisibleToTenantMock)).toBe(FAKE_RBAC_SCOPE)
+    expect(rbacScopeMock).toHaveBeenCalledWith('alerts.view')
   })
 })

@@ -11,6 +11,9 @@ const deleteAlertMock = vi.fn()
 const isAlertVisibleToTenantMock = vi.fn()
 const getTenantInfrastructureScopeMock = vi.fn()
 const maskingScopeMock = vi.fn()
+const { rbacScopeMock } = vi.hoisted(() => ({ rbacScopeMock: vi.fn() }))
+
+import { FAKE_RBAC_SCOPE, forwardedRbacScope } from '@/__tests__/setup/rbacScope'
 
 vi.mock('@/lib/orchestrator/client', () => ({
   alertsApi: {
@@ -35,6 +38,7 @@ vi.mock('@/lib/tenant/infraScope', () => ({
 
 vi.mock('@/lib/rbac', () => ({
   checkPermission: vi.fn().mockResolvedValue(null),
+  getCurrentRbacInfraScope: (...args: unknown[]) => rbacScopeMock(...args),
   PERMISSIONS: {
     ALERTS_VIEW: 'alerts.view',
     ALERTS_MANAGE: 'alerts.manage',
@@ -67,6 +71,7 @@ beforeEach(() => {
   isAlertVisibleToTenantMock.mockReset().mockResolvedValue(true)
   getTenantInfrastructureScopeMock.mockReset()
   maskingScopeMock.mockReset().mockReturnValue(null)
+  rbacScopeMock.mockReset().mockResolvedValue(null)
 })
 
 describe('GET /api/v1/orchestrator/alerts/[id] — infraKind forwarding', () => {
@@ -167,5 +172,35 @@ describe('DELETE /api/v1/orchestrator/alerts/[id] — infraKind forwarding', () 
       method: 'DELETE',
     })
     expect(res.status).toBe(404)
+  })
+})
+
+describe('RBAC infra scope forwarding (issue #525)', () => {
+  beforeEach(() => {
+    getTenantInfrastructureScopeMock.mockResolvedValue({ kind: 'provider' })
+  })
+
+  it('GET forwards the caller scope, null when unrestricted', async () => {
+    const byIdRes = await callRoute(GET as Parameters<typeof callRoute>[0], { params: { id: 'alert-abc' } })
+    expect(byIdRes.status).toBe(200)
+    expect(forwardedRbacScope(isAlertVisibleToTenantMock)).toBeNull()
+
+    rbacScopeMock.mockResolvedValue(FAKE_RBAC_SCOPE)
+    isAlertVisibleToTenantMock.mockClear()
+    await callRoute(GET as Parameters<typeof callRoute>[0], { params: { id: 'alert-abc' } })
+    expect(forwardedRbacScope(isAlertVisibleToTenantMock)).toBe(FAKE_RBAC_SCOPE)
+    expect(rbacScopeMock).toHaveBeenCalledWith('alerts.view')
+  })
+
+  it('DELETE forwards the caller scope before deleting', async () => {
+    rbacScopeMock.mockResolvedValue(FAKE_RBAC_SCOPE)
+    const deleteRes = await callRoute(DELETE as Parameters<typeof callRoute>[0], {
+      params: { id: 'alert-abc' },
+      method: 'DELETE',
+    })
+    expect(deleteRes.status).toBe(200)
+    expect(forwardedRbacScope(isAlertVisibleToTenantMock)).toBe(FAKE_RBAC_SCOPE)
+    expect(rbacScopeMock).toHaveBeenCalledWith('alerts.manage')
+    expect(deleteAlertMock).toHaveBeenCalledWith('alert-abc')
   })
 })

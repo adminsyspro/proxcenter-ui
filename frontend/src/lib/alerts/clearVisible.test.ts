@@ -6,13 +6,16 @@
  */
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
-const { getAlertsMock, deleteAlertMock, isVisibleMock, getInfraMock, vdcVmidsMock } = vi.hoisted(() => ({
+const { getAlertsMock, deleteAlertMock, isVisibleMock, getInfraMock, vdcVmidsMock, rbacScopeMock } = vi.hoisted(() => ({
   getAlertsMock: vi.fn(),
   deleteAlertMock: vi.fn(),
   isVisibleMock: vi.fn(),
   getInfraMock: vi.fn(),
   vdcVmidsMock: vi.fn(),
+  rbacScopeMock: vi.fn(),
 }))
+
+import { FAKE_RBAC_SCOPE } from "@/__tests__/setup/rbacScope"
 
 vi.mock("@/lib/orchestrator/client", () => ({
   alertsApi: {
@@ -32,6 +35,11 @@ vi.mock("@/lib/alerts/vdcVmids", () => ({
 vi.mock("@/lib/tenant", () => ({
   getCurrentTenantId: async () => "tenant-a",
   getTenantConnectionIds: async () => new Set(["c1"]),
+}))
+
+vi.mock("@/lib/rbac", () => ({
+  getCurrentRbacInfraScope: (...a: any[]) => rbacScopeMock(...a),
+  PERMISSIONS: { ALERTS_MANAGE: "alerts.manage" },
 }))
 
 // Keep the real maskingScope (pure function); only stub the scope resolver.
@@ -54,6 +62,7 @@ beforeEach(() => {
   vdcVmidsMock.mockResolvedValue(new Map([["c1", new Set(["100", "101"])]]))
   getAlertsMock.mockResolvedValue({ data: { data: ALERTS } })
   deleteAlertMock.mockResolvedValue({ data: { status: "ok" } })
+  rbacScopeMock.mockReset().mockResolvedValue(null)
 })
 
 describe("clearVisibleTenantAlerts", () => {
@@ -85,5 +94,28 @@ describe("clearVisibleTenantAlerts", () => {
 
     expect(cleared).toBe(0)
     expect(deleteAlertMock).not.toHaveBeenCalled()
+  })
+})
+
+describe("RBAC infra scope forwarding (issue #525)", () => {
+  beforeEach(() => {
+    isVisibleMock.mockResolvedValue(true)
+  })
+
+  it("forwards the resolved RBAC scope", async () => {
+    rbacScopeMock.mockResolvedValue(FAKE_RBAC_SCOPE)
+
+    const cleared = await clearVisibleTenantAlerts("c1")
+
+    expect(cleared).toBe(3)
+    expect(isVisibleMock.mock.calls[0][1].rbacScope).toBe(FAKE_RBAC_SCOPE)
+    expect(rbacScopeMock).toHaveBeenCalledWith("alerts.manage")
+  })
+
+  it("forwards null for an unrestricted caller", async () => {
+    const cleared = await clearVisibleTenantAlerts("c1")
+
+    expect(cleared).toBe(3)
+    expect(isVisibleMock.mock.calls[0][1].rbacScope).toBeNull()
   })
 })

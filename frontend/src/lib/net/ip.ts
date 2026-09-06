@@ -63,6 +63,27 @@ export function isPrivateIp(host: string): boolean {
   return false
 }
 
+/**
+ * True when `ip` is an address worth indexing for search: an IP literal that
+ * is neither loopback, link-local, unspecified nor multicast. Private ranges
+ * ARE searchable (they are what a guest usually carries); a prefix suffix
+ * (`/24`) is tolerated and ignored.
+ */
+export function isSearchableIp(ip: string): boolean {
+  if (!ip) return false
+  const h = normalizeIp(ip.split("/")[0])
+  const v = net.isIP(h)
+  if (v === 4) {
+    const [a, b] = h.split(".").map(Number)
+    // 224/4 multicast, 240/4 reserved and the broadcast address are never a guest.
+    return !(a === 127 || a === 0 || a >= 224 || (a === 169 && b === 254))
+  }
+  if (v === 6) {
+    return !(h === "::1" || h === "::" || h.startsWith("ff") || /^fe[89ab]/.test(h))
+  }
+  return false
+}
+
 /** Extract a bare hostname/IP from a URL or a raw host[:port] string. */
 export function extractHostname(hostOrUrl: string): string {
   if (!hostOrUrl) return ""

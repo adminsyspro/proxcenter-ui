@@ -4,7 +4,7 @@ import { alertsApi } from '@/lib/orchestrator/client'
 import { demoResponse } from '@/lib/demo/demo-api'
 import { getCurrentTenantId, getTenantConnectionIds } from '@/lib/tenant'
 import { getTenantInfrastructureScope, maskingScope } from '@/lib/tenant/infraScope'
-import { checkPermission, PERMISSIONS } from '@/lib/rbac'
+import { checkPermission, PERMISSIONS, getCurrentRbacInfraScope } from '@/lib/rbac'
 import { isAlertVisibleToTenant } from '@/lib/alerts/visibility'
 import { getVdcVmidsByConnection } from '@/lib/alerts/vdcVmids'
 
@@ -40,7 +40,9 @@ export async function GET(
     const infra = await getTenantInfrastructureScope(tenantId, { ignoreVdcContext: true })
     const vdcScope = maskingScope(infra)
     const vdcVmids = vdcScope ? await getVdcVmidsByConnection(tenantId, { ignoreVdcContext: true }) : undefined
-    if (!(await isAlertVisibleToTenant(alert as any, { tenantId, tenantConnectionIds, vdcScope, vdcVmids, infraKind: infra.kind }))) {
+    // Caller's RBAC infra scope (issue #525), honoured inside isAlertVisibleToTenant.
+    const rbacScope = await getCurrentRbacInfraScope(PERMISSIONS.ALERTS_VIEW)
+    if (!(await isAlertVisibleToTenant(alert as any, { tenantId, tenantConnectionIds, vdcScope, vdcVmids, infraKind: infra.kind, rbacScope }))) {
       return NextResponse.json({ error: 'Alert not found' }, { status: 404 })
     }
 
@@ -83,7 +85,9 @@ export async function DELETE(
     const infra = await getTenantInfrastructureScope(tenantId, { ignoreVdcContext: true })
     const vdcScope = maskingScope(infra)
     const vdcVmids = vdcScope ? await getVdcVmidsByConnection(tenantId, { ignoreVdcContext: true }) : undefined
-    if (!(await isAlertVisibleToTenant(alertRes.data as any, { tenantId, tenantConnectionIds, vdcScope, vdcVmids, infraKind: infra.kind }))) {
+    // Caller's RBAC infra scope (issue #525), honoured inside isAlertVisibleToTenant.
+    const rbacScope = await getCurrentRbacInfraScope(PERMISSIONS.ALERTS_MANAGE)
+    if (!(await isAlertVisibleToTenant(alertRes.data as any, { tenantId, tenantConnectionIds, vdcScope, vdcVmids, infraKind: infra.kind, rbacScope }))) {
       return NextResponse.json({ error: 'Alert not found' }, { status: 404 })
     }
 

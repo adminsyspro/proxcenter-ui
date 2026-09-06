@@ -26,6 +26,10 @@ import {
 
 import AppDialogTitle from '@/components/ui/AppDialogTitle'
 import NumericTextField from '@/components/ui/NumericTextField'
+import { humanizePveError } from '@/app/(dashboard)/infrastructure/inventory/helpers'
+
+import { parsePropertyString, isRawPassthrough, usbMappingValue, pciMappingValue, type MappingKind } from './utils'
+import { ResourceMappingSelect, useResourceMappings } from './ResourceMappingSelect'
 
 export type OtherHardwareItem = {
   id: string
@@ -44,26 +48,6 @@ type EditOtherHardwareDialogProps = {
   hardware: OtherHardwareItem | null
 }
 
-function parseKv(raw: string): { head: string; params: Record<string, string> } {
-  const parts = String(raw || '').split(',').map(p => p.trim()).filter(Boolean)
-  const params: Record<string, string> = {}
-  let head = ''
-  parts.forEach((p, idx) => {
-    const eq = p.indexOf('=')
-    if (idx === 0 && eq === -1) {
-      head = p
-    } else if (eq > -1) {
-      params[p.slice(0, eq).trim()] = p.slice(eq + 1).trim()
-    } else if (idx === 0) {
-      head = p
-    } else {
-      // bare flag without =
-      params[p] = '1'
-    }
-  })
-  return { head, params }
-}
-
 export function EditOtherHardwareDialog({
   open, onClose, onSave, onDelete, connId, node, hardware,
 }: EditOtherHardwareDialogProps) {
@@ -74,12 +58,12 @@ export function EditOtherHardwareDialog({
   const [error, setError] = useState<string | null>(null)
 
   // USB
-  const [usbType, setUsbType] = useState<'spice' | 'device'>('spice')
-  const [usbDeviceId, setUsbDeviceId] = useState('')
+  const [usbType, setUsbType] = useState<'spice' | 'mapped'>('spice')
+  const [usbMappingId, setUsbMappingId] = useState('')
   const [usbUsb3, setUsbUsb3] = useState(false)
 
   // PCI
-  const [pciDeviceId, setPciDeviceId] = useState('')
+  const [pciMappingId, setPciMappingId] = useState('')
   const [pciPrimaryGpu, setPciPrimaryGpu] = useState(false)
   const [pciRombar, setPciRombar] = useState(true)
   const [pciPcie, setPciPcie] = useState(true)
@@ -96,10 +80,18 @@ export function EditOtherHardwareDialog({
   const [rngMaxBytes, setRngMaxBytes] = useState<number>(1024)
   const [rngPeriod, setRngPeriod] = useState<number>(1000)
 
-  // PCI/USB device lists from host (for dropdown while editing)
-  const [pciDevices, setPciDevices] = useState<any[]>([])
-  const [usbDevices, setUsbDevices] = useState<any[]>([])
-  const [devicesLoading, setDevicesLoading] = useState(false)
+  // A device given by its real hardware address: PVE only lets root@pam with a
+  // password login edit or remove it, which an API token never is (#852).
+  const passthroughKind: MappingKind | null =
+    hardware && (hardware.type === 'usb' || hardware.type === 'pci') ? hardware.type : null
+  const locked = !!hardware && !!passthroughKind && isRawPassthrough(passthroughKind, hardware.rawValue)
+
+  // Datacenter resource mappings a mapped USB/PCI device can be switched to.
+  // Nothing is fetched for a locked device; a SPICE USB item only needs the
+  // list once switched to a mapped device.
+  const { mappings, loading: mappingsLoading, error: mappingsError } = useResourceMappings(
+    connId, node, passthroughKind, open && !locked && (passthroughKind === 'pci' || usbType === 'mapped'),
+  )
 
   // Populate state from the raw config value when the dialog opens
   useEffect(() => {
@@ -109,18 +101,22 @@ export function EditOtherHardwareDialog({
     setDeleting(false)
     setConfirmDelete(false)
 
-    const { head, params } = parseKv(hardware.rawValue)
+    const { head, params } = parsePropertyString(hardware.rawValue)
 
     switch (hardware.type) {
       case 'usb': {
-        const isSpice = head === 'spice' || params['spice'] === '1'
-        setUsbType(isSpice ? 'spice' : 'device')
-        setUsbDeviceId(params['host'] || '')
+        if (params['mapping']) {
+          setUsbType('mapped')
+          setUsbMappingId(params['mapping'])
+        } else {
+          setUsbType('spice')
+          setUsbMappingId('')
+        }
         setUsbUsb3(params['usb3'] === '1')
         break
       }
       case 'pci': {
-        setPciDeviceId(head || params['host'] || '')
+        setPciMappingId(params['mapping'] || '')
         setPciPcie(params['pcie'] !== '0')
         setPciRombar(params['rombar'] !== '0')
         setPciPrimaryGpu(params['x-vga'] === '1')
@@ -144,43 +140,18 @@ export function EditOtherHardwareDialog({
     }
   }, [open, hardware])
 
-  // Load host devices for PCI/USB so the user can reassign to a different device
-  useEffect(() => {
-    if (!open || !hardware || !connId || !node) return
-    if (hardware.type !== 'pci' && hardware.type !== 'usb') return
-
-    setDevicesLoading(true)
-    const endpoint = hardware.type === 'pci'
-      ? `/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/hardware/pci`
-      : `/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/hardware/usb`
-
-    fetch(endpoint)
-      .then(r => r.json())
-      .then(json => {
-        const list = json?.data || json || []
-        if (hardware.type === 'pci') setPciDevices(list)
-        else setUsbDevices(list)
-      })
-      .catch(() => {})
-      .finally(() => setDevicesLoading(false))
-  }, [open, hardware, connId, node])
-
   if (!hardware) return null
 
   const buildValue = (): string => {
     switch (hardware.type) {
       case 'usb': {
         if (usbType === 'spice') return `spice${usbUsb3 ? ',usb3=1' : ''}`
-        if (!usbDeviceId) throw new Error(t('hardware.usbDeviceRequired'))
-        return `host=${usbDeviceId}${usbUsb3 ? ',usb3=1' : ''}`
+        if (!usbMappingId) throw new Error(t('hardware.mappingRequired'))
+        return usbMappingValue(usbMappingId, usbUsb3)
       }
       case 'pci': {
-        if (!pciDeviceId) throw new Error(t('hardware.pciDeviceRequired'))
-        const parts = [pciDeviceId]
-        if (pciPcie) parts.push('pcie=1')
-        if (pciRombar) parts.push('rombar=1')
-        if (pciPrimaryGpu) parts.push('x-vga=1')
-        return parts.join(',')
+        if (!pciMappingId) throw new Error(t('hardware.mappingRequired'))
+        return pciMappingValue(pciMappingId, { pcie: pciPcie, rombar: pciRombar, primaryGpu: pciPrimaryGpu })
       }
       case 'serial': {
         return serialPath || 'socket'
@@ -205,7 +176,8 @@ export function EditOtherHardwareDialog({
       await onSave({ [hardware.id]: value })
       onClose()
     } catch (e: any) {
-      setError(e?.message || t('errors.updateError'))
+      const message = humanizePveError(e) || t('errors.updateError')
+      setError(/only root/i.test(message) ? `${message} ${t('hardware.rootOnlyErrorHint')}` : message)
     } finally {
       setSaving(false)
     }
@@ -219,7 +191,8 @@ export function EditOtherHardwareDialog({
       setConfirmDelete(false)
       onClose()
     } catch (e: any) {
-      setError(e?.message || t('errors.deleteError'))
+      const message = humanizePveError(e) || t('errors.deleteError')
+      setError(/only root/i.test(message) ? `${message} ${t('hardware.rootOnlyErrorHint')}` : message)
     } finally {
       setDeleting(false)
     }
@@ -243,46 +216,28 @@ export function EditOtherHardwareDialog({
           <Stack spacing={2.5} sx={{ mt: 1 }}>
             {error && <Alert severity="error" onClose={() => setError(null)}>{error}</Alert>}
 
-            {hardware.type === 'usb' && (
+            {locked && (
+              <Stack spacing={2}>
+                <Alert severity="warning" sx={{ fontSize: 13 }}>{t('hardware.rawPassthroughLocked')}</Alert>
+                <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>{hardware.rawValue}</Typography>
+              </Stack>
+            )}
+
+            {hardware.type === 'usb' && !locked && (
               <Stack spacing={2}>
                 <FormControl fullWidth size="small">
                   <InputLabel>{t('hardware.usbType')}</InputLabel>
-                  <Select value={usbType} onChange={e => setUsbType(e.target.value as any)} label={t('hardware.usbType')}>
+                  <Select value={usbType} onChange={e => setUsbType(e.target.value as 'spice' | 'mapped')} label={t('hardware.usbType')}>
                     <MenuItem value="spice">{t('hardware.usbSpice')}</MenuItem>
-                    <MenuItem value="device">{t('hardware.usbHostDevice')}</MenuItem>
+                    <MenuItem value="mapped">{t('hardware.usbMappedDevice')}</MenuItem>
+                    <MenuItem value="device" disabled>{t('hardware.usbHostDeviceRootOnly')}</MenuItem>
                   </Select>
                 </FormControl>
-                {usbType === 'device' && (
-                  devicesLoading ? (
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <CircularProgress size={16} /> {t('hardware.loadingUsbDevices')}
-                    </Box>
-                  ) : usbDevices.length > 0 ? (
-                    <FormControl fullWidth size="small">
-                      <InputLabel>{t('hardware.device')}</InputLabel>
-                      <Select value={usbDeviceId} onChange={e => setUsbDeviceId(e.target.value)} label={t('hardware.device')}>
-                        {usbDevices.map((d: any) => (
-                          <MenuItem key={`${d.busnum}-${d.devnum}-${d.vendid}-${d.prodid}`} value={`${d.vendid}:${d.prodid}`}>
-                            {d.product || d.manufacturer || `${d.vendid}:${d.prodid}`}
-                            {d.serial && ` (${d.serial})`}
-                          </MenuItem>
-                        ))}
-                        {usbDeviceId && !usbDevices.some((d: any) => `${d.vendid}:${d.prodid}` === usbDeviceId) && (
-                          <MenuItem value={usbDeviceId}>{usbDeviceId} ({t('hardware.currentValue')})</MenuItem>
-                        )}
-                      </Select>
-                    </FormControl>
-                  ) : (
-                    <TextField
-                      fullWidth
-                      size="small"
-                      label={t('hardware.usbDeviceIdLabel')}
-                      value={usbDeviceId}
-                      onChange={e => setUsbDeviceId(e.target.value)}
-                      placeholder="1234:5678"
-                      helperText={t('hardware.usbDeviceIdHelper')}
-                    />
-                  )
+                {usbType === 'mapped' && (
+                  <ResourceMappingSelect
+                    kind="usb" node={node} value={usbMappingId} onChange={setUsbMappingId} keepCurrent
+                    mappings={mappings} loading={mappingsLoading} error={mappingsError}
+                  />
                 )}
                 <FormControlLabel
                   control={<Checkbox checked={usbUsb3} onChange={e => setUsbUsb3(e.target.checked)} />}
@@ -291,42 +246,19 @@ export function EditOtherHardwareDialog({
               </Stack>
             )}
 
-            {hardware.type === 'pci' && (
+            {hardware.type === 'pci' && !locked && (
               <Stack spacing={2}>
-                {devicesLoading ? (
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <CircularProgress size={16} /> {t('hardware.loadingPciDevices')}
-                  </Box>
-                ) : pciDevices.length > 0 ? (
-                  <FormControl fullWidth size="small">
-                    <InputLabel>{t('hardware.pciDevice')}</InputLabel>
-                    <Select value={pciDeviceId} onChange={e => setPciDeviceId(e.target.value)} label={t('hardware.pciDevice')}>
-                      {pciDevices.map((d: any) => (
-                        <MenuItem key={d.id} value={d.id}>
-                          <Box>
-                            <Typography variant="body2">{d.device_name || d.id}</Typography>
-                            {d.vendor_name && (
-                              <Typography variant="caption" sx={{ opacity: 0.6 }}>{d.vendor_name}</Typography>
-                            )}
-                          </Box>
-                        </MenuItem>
-                      ))}
-                      {pciDeviceId && !pciDevices.some((d: any) => d.id === pciDeviceId) && (
-                        <MenuItem value={pciDeviceId}>{pciDeviceId} ({t('hardware.currentValue')})</MenuItem>
-                      )}
-                    </Select>
-                  </FormControl>
-                ) : (
-                  <TextField
-                    fullWidth
-                    size="small"
-                    label={t('hardware.pciDeviceIdLabel')}
-                    value={pciDeviceId}
-                    onChange={e => setPciDeviceId(e.target.value)}
-                    placeholder="0000:00:02.0"
-                    helperText={t('hardware.pciDeviceIdHelper')}
-                  />
-                )}
+                <FormControl fullWidth size="small">
+                  <InputLabel>{t('hardware.pciSource')}</InputLabel>
+                  <Select value="mapped" label={t('hardware.pciSource')}>
+                    <MenuItem value="mapped">{t('hardware.pciMappedDevice')}</MenuItem>
+                    <MenuItem value="raw" disabled>{t('hardware.pciRawDeviceRootOnly')}</MenuItem>
+                  </Select>
+                </FormControl>
+                <ResourceMappingSelect
+                  kind="pci" node={node} value={pciMappingId} onChange={setPciMappingId} keepCurrent
+                  mappings={mappings} loading={mappingsLoading} error={mappingsError}
+                />
                 <FormControlLabel
                   control={<Checkbox checked={pciPcie} onChange={e => setPciPcie(e.target.checked)} />}
                   label={t('hardware.pcie')}
@@ -415,7 +347,7 @@ export function EditOtherHardwareDialog({
           <Button
             color="error"
             onClick={() => setConfirmDelete(true)}
-            disabled={saving || deleting}
+            disabled={saving || deleting || locked}
             startIcon={<i className="ri-delete-bin-line" />}
           >
             {t('common.delete')}
@@ -425,7 +357,7 @@ export function EditOtherHardwareDialog({
             <Button
               variant="contained"
               onClick={handleSave}
-              disabled={saving || deleting}
+              disabled={saving || deleting || locked}
               startIcon={saving ? <CircularProgress size={16} /> : undefined}
             >
               {t('common.save')}

@@ -4,7 +4,8 @@ import { orchestratorFetch } from '@/lib/orchestrator/client'
 import { demoResponse } from '@/lib/demo/demo-api'
 import { getCurrentTenantId, getTenantConnectionIds, getSessionPrisma, DEFAULT_TENANT_ID } from '@/lib/tenant'
 import { getTenantInfrastructureScope, maskingScope } from '@/lib/tenant/infraScope'
-import { checkPermission, PERMISSIONS } from '@/lib/rbac'
+import { checkPermission, PERMISSIONS, getCurrentRbacInfraScope } from '@/lib/rbac'
+import { isFlatRecordVisible } from '@/lib/rbac/infraScope'
 import { ruleVisibleToTenant, setRuleOwner } from '@/lib/alerts/ruleOwners'
 import { injectVdcNodeScope } from '@/lib/alerts/ruleScope'
 
@@ -45,7 +46,16 @@ export async function GET(req: Request) {
       ? ownershipFiltered.filter((r: any) => !r.connection_id || vdcScope.connectionIds.has(r.connection_id))
       : ownershipFiltered
 
-    return NextResponse.json(filtered)
+    // Caller's RBAC infra scope (issue #525): rules bound to a connection the
+    // user was not granted are dropped. A rule is connection-level config, so
+    // a node-scoped user keeps their cluster's rules; connection-less rules
+    // are tenant-global and stay visible, as under the vDC filter above.
+    const rbacScope = await getCurrentRbacInfraScope(PERMISSIONS.CONNECTION_VIEW)
+    const rbacFiltered = rbacScope && Array.isArray(filtered)
+      ? filtered.filter((r: any) => !r.connection_id || isFlatRecordVisible(rbacScope, { connId: r.connection_id, nodeBound: false }))
+      : filtered
+
+    return NextResponse.json(rbacFiltered)
   } catch (error: any) {
     if ((error as any)?.code !== 'ORCHESTRATOR_UNAVAILABLE') {
       console.error('[orchestrator/alerts/rules] GET error:', error)

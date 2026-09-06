@@ -1,13 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { callRoute } from "../../../../__tests__/setup/route-test"
+import { vmScope } from "@/__tests__/setup/rbacScope"
 
 // Hoist mocks so they can be referenced in vi.mock factories
-const { globalFindMany, sessionFindMany, getInfraMock, getConnByIdMock } = vi.hoisted(() => ({
+const { globalFindMany, sessionFindMany, getInfraMock, getConnByIdMock, pveFetchMock, rbacScopeMock } = vi.hoisted(() => ({
   globalFindMany: vi.fn(),
   sessionFindMany: vi.fn(),
   getInfraMock: vi.fn(),
   getConnByIdMock: vi.fn().mockResolvedValue({ baseUrl: "", apiToken: "" }),
+  pveFetchMock: vi.fn(),
+  rbacScopeMock: vi.fn(),
 }))
 
 // Keep REAL inventoryConnectionPlan + maskingScope; only mock getTenantInfrastructureScope
@@ -33,11 +36,12 @@ vi.mock("@/lib/connections/getConnection", () => ({
 }))
 
 // No-op PVE fetches
-vi.mock("@/lib/proxmox/client", () => ({ pveFetch: vi.fn().mockResolvedValue([]) }))
+vi.mock("@/lib/proxmox/client", () => ({ pveFetch: pveFetchMock }))
 
 // RBAC -- pass everything through
 vi.mock("@/lib/rbac", () => ({
   checkPermission: vi.fn().mockResolvedValue(null),
+  getCurrentRbacInfraScope: rbacScopeMock,
   PERMISSIONS: { CONNECTION_VIEW: "connection.view" },
 }))
 
@@ -48,13 +52,99 @@ vi.mock("@/lib/alerts/vdcVmids", () => ({
 
 // Stub task scope helper
 vi.mock("@/lib/tasks/scope", () => ({
-  extractTaskVmid: vi.fn().mockReturnValue(null),
+  extractTaskVmid: vi.fn((id: string) => id),
 }))
 
 beforeEach(() => {
   vi.clearAllMocks()
   globalFindMany.mockResolvedValue([])
   sessionFindMany.mockResolvedValue([])
+  rbacScopeMock.mockResolvedValue(null)
+  pveFetchMock.mockResolvedValue([])
+})
+
+describe("RBAC infra scope (issue #525)", () => {
+  beforeEach(() => {
+    getInfraMock.mockResolvedValue({ kind: "provider" })
+    globalFindMany.mockResolvedValue([
+      { id: "p1", name: "PVE 1", type: "pve" },
+      { id: "p2", name: "PVE 2", type: "pve" },
+    ])
+    getConnByIdMock.mockResolvedValue({ baseUrl: "https://pve", apiToken: "t" })
+    pveFetchMock.mockImplementation(async (_connection: any, path: string) => {
+      if (path === "/cluster/tasks") {
+        return [
+          { upid: "UPID:n1:...", node: "n1", type: "qmstart", id: "100", user: "root@pam", starttime: 1000, status: "OK", pid: 1, pstart: 1 },
+          { upid: "UPID:n2:...", node: "n2", type: "qmstart", id: "101", user: "root@pam", starttime: 1001, status: "OK", pid: 2, pstart: 2 },
+        ]
+      }
+      if (path === "/cluster/resources?type=vm") return []
+      if (path.startsWith("/cluster/log?")) {
+        return [
+          { uid: 1, time: 1000, msg: "m", node: "n1", pri: 6, tag: "t" },
+          { uid: 2, time: 1001, msg: "m", node: "n2", pri: 6, tag: "t" },
+        ]
+      }
+      return []
+    })
+  })
+
+  it("queries and returns only the granted node and connection", async () => {
+    rbacScopeMock.mockResolvedValue({
+      fullConnections: new Set(),
+      nodesByConnection: new Map([["p1", new Set(["n1"])]]),
+      guestDerived: false,
+    })
+
+    const { GET } = await import("./route")
+    const res = await callRoute(GET, { method: "GET" })
+    const body = await res.json()
+
+    expect(body.data.length).toBeGreaterThan(0)
+    expect(body.data.every((event: any) => event.node === "n1" && event.connectionId === "p1")).toBe(true)
+    expect(getConnByIdMock).not.toHaveBeenCalledWith("p2", expect.anything())
+    expect(body.meta.connections).toBe(1)
+  })
+
+  it("returns every node on a granted connection", async () => {
+    rbacScopeMock.mockResolvedValue({
+      fullConnections: new Set(["p1"]),
+      nodesByConnection: new Map(),
+      guestDerived: false,
+    })
+
+    const { GET } = await import("./route")
+    const res = await callRoute(GET, { method: "GET" })
+    const body = await res.json()
+
+    expect(new Set(body.data.map((event: any) => event.node))).toEqual(new Set(["n1", "n2"]))
+    expect(body.data.every((event: any) => event.connectionId === "p1")).toBe(true)
+    expect(getConnByIdMock).not.toHaveBeenCalledWith("p2", expect.anything())
+  })
+
+  it("opens every provider connection for an admin", async () => {
+    const { GET } = await import("./route")
+    const res = await callRoute(GET, { method: "GET" })
+
+    expect(res.status).toBe(200)
+    expect(getConnByIdMock).toHaveBeenCalledWith("p1", undefined)
+    expect(getConnByIdMock).toHaveBeenCalledWith("p2", undefined)
+    expect(rbacScopeMock).toHaveBeenCalledWith("connection.view")
+  })
+
+  it("returns only the directly granted guest task for a VM-only user", async () => {
+    rbacScopeMock.mockResolvedValue(vmScope("p1", "n1", "100"))
+
+    const { GET } = await import("./route")
+    const res = await callRoute(GET, { method: "GET" })
+    const body = await res.json()
+
+    expect(body.data).toHaveLength(1)
+    expect(body.data.every((event: any) =>
+      event.connectionId === "p1" && event.category === "task" && event.entity === "100"
+    )).toBe(true)
+    expect(body.data.some((event: any) => event.category === "log")).toBe(false)
+  })
 })
 
 describe("GET /api/v1/events scope routing", () => {

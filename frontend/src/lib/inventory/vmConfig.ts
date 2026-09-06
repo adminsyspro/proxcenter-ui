@@ -3,10 +3,13 @@
 // disk controller; guest agent flag). Served by default at a measured cost of
 // about 5.1s cold for 500 VMs, behind a cache whose stale window is 15 min.
 // The agent PROBE is 7x more expensive and only meaningful on running VMs, so
-// it sits behind an explicit opt-in.
+// it sits behind an explicit opt-in. The same /config read also yields the
+// search identity of the guest (MACs, static IPs, description; #223, #861),
+// parsed by guestNetIdentity.ts at no extra call.
 import { pveFetch } from "@/lib/proxmox/client"
 
 import { mapWithConcurrency, PVEPROXY_CONCURRENCY } from "./concurrency"
+import { EMPTY_GUEST_NET_IDENTITY, parseGuestNetIdentity, type GuestNetIdentity } from "./guestNetIdentity"
 
 export type VmConfigFields = {
   cpuType: string | null
@@ -84,14 +87,14 @@ export async function enrichVmsWithConfig<T extends EnrichableVm>(
   // and skips the call entirely.
   onlineNodes: Set<string> | null,
   opts: { includeAgent?: boolean } = {},
-): Promise<Array<T & VmConfigFields & Partial<VmAgentProbe>>> {
+): Promise<Array<T & VmConfigFields & GuestNetIdentity & Partial<VmAgentProbe>>> {
   return mapWithConcurrency(vms, PVEPROXY_CONCURRENCY, async (vm) => {
     // Confirmed-offline node: no call at all. Every per-guest call to a dead
     // node fails with HTTP 595 after about 1s (measured, spec section 9).
     // Unknown status (onlineNodes === null) falls through to the fetch below
     // instead of being silently treated as offline.
     if (onlineNodes !== null && !onlineNodes.has(vm.node)) {
-      return { ...vm, ...EMPTY_CONFIG }
+      return { ...vm, ...EMPTY_CONFIG, ...EMPTY_GUEST_NET_IDENTITY }
     }
 
     const kind = vm.type === "lxc" ? "lxc" : "qemu"
@@ -105,7 +108,7 @@ export async function enrichVmsWithConfig<T extends EnrichableVm>(
       // A failing /config never fails the route.
     }
     const fields = parseVmConfig(config)
-    const enriched = { ...vm, ...fields }
+    const enriched = { ...vm, ...fields, ...parseGuestNetIdentity(config, kind) }
 
     if (!opts.includeAgent) return enriched
     // The flag means "the admin ticked the box"; the probe means "the agent is

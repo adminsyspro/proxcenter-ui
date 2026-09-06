@@ -64,7 +64,7 @@ import HaGroupDialog from '../HaGroupDialog'
 import HaRuleDialog from '../HaRuleDialog'
 
 import type { InventorySelection, DetailsPayload } from '../types'
-import { parseNodeId, parseVmId, HOTPLUG_DEVICES } from '../helpers'
+import { parseNodeId, parseVmId, HOTPLUG_DEVICES, LXC_FEATURES, canEditLxcFeature, parseLxcFeatures, toggleLxcFeature } from '../helpers'
 import { AllVmItem, HostItem } from '../InventoryTree'
 import { PlayArrowIcon, StopIcon, PowerSettingsNewIcon, MoveUpIcon } from './IconWrappers'
 import { StatusIcon } from './TreeIcons'
@@ -181,8 +181,10 @@ export interface InventoryDialogsProps {
   handleTableCloneVm: (...args: any[]) => any
 
   // Edit option dialog
-  editOptionDialog: { key: string; label: string; value: any; type: 'text' | 'boolean' | 'select' | 'vga' | 'hotplug'; options?: { value: string; label: string }[] } | null
+  editOptionDialog: { key: string; label: string; value: any; type: 'text' | 'boolean' | 'select' | 'vga' | 'hotplug' | 'features'; options?: { value: string; label: string }[]; unprivileged?: boolean } | null
   setEditOptionDialog: (v: any) => void
+  /** Save failure of the option dialog, shown inline instead of a native alert (#566). */
+  editOptionError?: string | null
   editOptionValue: any
   setEditOptionValue: (v: any) => void
   editOptionSaving: boolean
@@ -418,7 +420,7 @@ export default function InventoryDialogs(props: InventoryDialogsProps) {
     handleMigrateVm, handleCrossClusterMigrate, handleCloneVm, selectedVmIsCluster,
     tableMigrateVm, setTableMigrateVm, tableCloneVm, setTableCloneVm,
     handleTableMigrateVm, handleTableCrossClusterMigrate, handleTableCloneVm,
-    editOptionDialog, setEditOptionDialog, editOptionValue, setEditOptionValue, editOptionSaving, handleSaveOption,
+    editOptionDialog, setEditOptionDialog, editOptionValue, setEditOptionValue, editOptionSaving, handleSaveOption, editOptionError,
     haGroupDialogOpen, setHaGroupDialogOpen, editingHaGroup, setEditingHaGroup,
     deleteHaGroupDialog, setDeleteHaGroupDialog, haRuleDialogOpen, setHaRuleDialogOpen,
     editingHaRule, setEditingHaRule, deleteHaRuleDialog, setDeleteHaRuleDialog,
@@ -1584,6 +1586,9 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
         </DialogTitle>
         <DialogContent sx={{ pt: '20px !important' }}>
           <Box>
+            {editOptionError && (
+              <Alert severity="error" sx={{ mb: 2 }}>{editOptionError}</Alert>
+            )}
             {editOptionDialog?.type === 'text' && (
               <TextField
                 fullWidth
@@ -1642,6 +1647,33 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
                       }
                     />
                   ))}
+                </Stack>
+              )
+            })()}
+            {editOptionDialog?.type === 'features' && (() => {
+              // Container features (#566): the value is the PVE property string,
+              // each checkbox flips one toggle and the helper rebuilds the string.
+              const raw = typeof editOptionValue === 'string' ? editOptionValue : ''
+              const enabled = parseLxcFeatures(raw).enabled
+              const unprivileged = editOptionDialog.unprivileged ?? true
+              return (
+                <Stack spacing={1}>
+                  {LXC_FEATURES.map(feature => {
+                    const locked = !canEditLxcFeature(feature.key, unprivileged)
+                    return (
+                    <FormControlLabel
+                      key={feature.key}
+                      control={<Checkbox checked={enabled.includes(feature.key)} disabled={locked} onChange={() => { if (!locked) setEditOptionValue(toggleLxcFeature(raw, feature.key)) }} />}
+                      label={
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <Box component="i" className={feature.icon} sx={{ fontSize: 16, opacity: 0.6 }} />
+                          {t(feature.labelKey)}
+                        </Box>
+                      }
+                    />
+                    )
+                  })}
+                  <Typography variant="caption" color="text.secondary">{t('inventory.lxcFeaturesHint')}</Typography>
                 </Stack>
               )
             })()}

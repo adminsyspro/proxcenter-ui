@@ -10,6 +10,9 @@ const getAlertsMock = vi.fn()
 const isAlertVisibleToTenantMock = vi.fn()
 const getTenantInfrastructureScopeMock = vi.fn()
 const maskingScopeMock = vi.fn()
+const { rbacScopeMock } = vi.hoisted(() => ({ rbacScopeMock: vi.fn() }))
+
+import { FAKE_RBAC_SCOPE, forwardedRbacScope } from '@/__tests__/setup/rbacScope'
 
 vi.mock('@/lib/orchestrator/client', () => ({
   alertsApi: { getAlerts: (...args: unknown[]) => getAlertsMock(...args) },
@@ -37,6 +40,7 @@ vi.mock('@/lib/tenant/infraScope', () => ({
 
 vi.mock('@/lib/rbac', () => ({
   checkPermission: vi.fn().mockResolvedValue(null),
+  getCurrentRbacInfraScope: (...args: unknown[]) => rbacScopeMock(...args),
   PERMISSIONS: { CONNECTION_VIEW: 'connection.view' },
 }))
 
@@ -64,6 +68,7 @@ beforeEach(() => {
   isAlertVisibleToTenantMock.mockReset()
   getTenantInfrastructureScopeMock.mockReset()
   maskingScopeMock.mockReset()
+  rbacScopeMock.mockReset().mockResolvedValue(null)
   isAlertVisibleToTenantMock.mockResolvedValue(true)
 })
 
@@ -149,5 +154,27 @@ describe('GET /api/v1/orchestrator/alerts — infraKind forwarding', () => {
     expect(res.status).toBe(200)
     const body = await res.json()
     expect(body.data).toHaveLength(0)
+  })
+})
+
+describe('RBAC infra scope forwarding (issue #525)', () => {
+  beforeEach(() => {
+    getTenantInfrastructureScopeMock.mockResolvedValue({ kind: 'provider' })
+    maskingScopeMock.mockReturnValue(null)
+    getAlertsMock.mockResolvedValue({ data: { data: [alert1] } })
+  })
+
+  it('forwards the caller scope into the visibility ctx', async () => {
+    rbacScopeMock.mockResolvedValue(FAKE_RBAC_SCOPE)
+    const listRes = await GET(makeReq())
+    expect(listRes.status).toBe(200)
+    expect(forwardedRbacScope(isAlertVisibleToTenantMock)).toBe(FAKE_RBAC_SCOPE)
+    expect(rbacScopeMock).toHaveBeenCalledWith('connection.view')
+  })
+
+  it('forwards null for an unrestricted caller', async () => {
+    const listRes = await GET(makeReq())
+    expect(listRes.status).toBe(200)
+    expect(forwardedRbacScope(isAlertVisibleToTenantMock)).toBeNull()
   })
 })

@@ -8,6 +8,7 @@ import { encryptSecret, decryptSecret } from "@/lib/crypto/secret"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { invalidateConnectionCache } from "@/lib/connections/getConnection"
 import { invalidateInventoryCache } from "@/lib/cache/inventoryCache"
+import { invalidateGuestIpIndex } from "@/lib/cache/guestIpCache"
 import { updateConnectionSchema } from "@/lib/schemas"
 import { orchestratorFetch } from "@/lib/orchestrator/client"
 import { pveFetch } from "@/lib/proxmox/client"
@@ -260,6 +261,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     // Invalidate caches after update
     invalidateConnectionCache(id)
     invalidateInventoryCache()
+    invalidateGuestIpIndex(id)
 
     // Audit
     const { audit } = await import("@/lib/audit")
@@ -360,6 +362,7 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string 
     // Invalidate caches after deletion
     invalidateConnectionCache(id)
     invalidateInventoryCache()
+    invalidateGuestIpIndex(id)
 
     // Audit
     const { audit } = await import("@/lib/audit")

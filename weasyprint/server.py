@@ -17,12 +17,29 @@ body as the error message.
 import logging
 
 from flask import Flask, Response, jsonify, request
-from weasyprint import HTML
+from weasyprint import HTML, default_url_fetcher
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("weasyprint-sidecar")
 
 app = Flask(__name__)
+
+
+def inline_only_url_fetcher(url: str, *args, **kwargs):
+    """Serve `data:` URIs, refuse everything else.
+
+    Every caller inlines its resources (CSS in <style>, images and fonts as
+    data URIs), so a fetch for any other scheme can only come from content a
+    tenant controls: a custom stylesheet, an uploaded SVG logo whose <image>
+    points at an internal address, a <link rel="attachment" href="file:///...">.
+    WeasyPrint's default fetcher would follow http(s) and file URLs from inside
+    this container, so the policy is enforced here, at the last hop, whatever
+    upstream validation let through. A refused resource is dropped with a
+    warning in the render log; the PDF is still produced.
+    """
+    if url.startswith("data:"):
+        return default_url_fetcher(url, *args, **kwargs)
+    raise ValueError(f"external resources are not allowed: {url.split(':', 1)[0]}: URL refused")
 
 
 @app.get("/health")
@@ -37,9 +54,10 @@ def render() -> Response:
         return jsonify(error="empty html body"), 400
 
     try:
-        # base_url=None disables remote resource fetching by default; the Go
-        # caller embeds CSS / images inline in the report templates.
-        pdf_bytes = HTML(string=html).write_pdf()
+        # Callers embed CSS, images and fonts inline; inline_only_url_fetcher
+        # turns any other resource reference into a logged miss instead of a
+        # network or filesystem access from this container.
+        pdf_bytes = HTML(string=html, url_fetcher=inline_only_url_fetcher).write_pdf()
     except Exception as exc:  # noqa: BLE001 — surface the rendering failure verbatim.
         log.exception("PDF rendering failed")
         return jsonify(error=str(exc)), 500

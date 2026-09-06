@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-09-05",
+  "updatedAt": "2026-09-06",
   "vendors": [
     {
       "id": "ubuntu",
@@ -323,14 +323,14 @@
       "logoIcon": "ri-centos-fill"
     },
     {
-      "slug": "fedora-43",
-      "name": "Fedora 43 Cloud",
+      "slug": "fedora-44",
+      "name": "Fedora 44 Cloud",
       "vendor": "fedora",
-      "version": "43",
+      "version": "44",
       "arch": "x86_64",
       "format": "qcow2",
-      "downloadUrl": "https://download.fedoraproject.org/pub/fedora/linux/releases/43/Cloud/x86_64/images/Fedora-Cloud-Base-Generic-43-1.1.x86_64.qcow2",
-      "checksumUrl": null,
+      "downloadUrl": "https://download.fedoraproject.org/pub/fedora/linux/releases/44/Cloud/x86_64/images/Fedora-Cloud-Base-Generic-44-1.7.x86_64.qcow2",
+      "checksumUrl": "https://download.fedoraproject.org/pub/fedora/linux/releases/44/Cloud/x86_64/images/Fedora-Cloud-44-1.7-x86_64-CHECKSUM",
       "defaultDiskSize": "20G",
       "minMemory": 1024,
       "recommendedMemory": 2048,
@@ -342,7 +342,51 @@
         "cutting-edge"
       ],
       "logoIcon": "ri-fedora-fill",
-      "notes": "Fedora exposes no stable latest symlink: the build suffix (-1.1) must be bumped after a respin. Check https://download.fedoraproject.org/pub/fedora/linux/releases/43/Cloud/x86_64/images/ if the download 404s."
+      "notes": "Same respin caveat as fedora-43: the -1.7 build suffix is deleted upstream when Fedora republishes."
+    },
+    {
+      "slug": "fedora-43",
+      "name": "Fedora 43 Cloud",
+      "vendor": "fedora",
+      "version": "43",
+      "arch": "x86_64",
+      "format": "qcow2",
+      "downloadUrl": "https://download.fedoraproject.org/pub/fedora/linux/releases/43/Cloud/x86_64/images/Fedora-Cloud-Base-Generic-43-1.6.x86_64.qcow2",
+      "checksumUrl": "https://download.fedoraproject.org/pub/fedora/linux/releases/43/Cloud/x86_64/images/Fedora-Cloud-43-1.6-x86_64-CHECKSUM",
+      "defaultDiskSize": "20G",
+      "minMemory": 1024,
+      "recommendedMemory": 2048,
+      "minCores": 1,
+      "recommendedCores": 2,
+      "ostype": "l26",
+      "tags": [
+        "cloud-init",
+        "cutting-edge"
+      ],
+      "logoIcon": "ri-fedora-fill",
+      "notes": "Fedora exposes no stable latest symlink and DELETES the previous build on a respin: this entry was pinned to -1.1 and started 404ing when Fedora moved to -1.6 (found 2026-09-06). The build suffix must be bumped from https://download.fedoraproject.org/pub/fedora/linux/releases/43/Cloud/x86_64/images/ ."
+    },
+    {
+      "slug": "opensuse-leap-161",
+      "name": "openSUSE Leap 16.1",
+      "vendor": "opensuse",
+      "version": "16.1",
+      "arch": "x86_64",
+      "format": "qcow2",
+      "downloadUrl": "https://download.opensuse.org/distribution/leap/16.1/appliances/Leap-16.1-Minimal-VM.x86_64-Cloud-Build2.16.qcow2",
+      "checksumUrl": "https://download.opensuse.org/distribution/leap/16.1/appliances/Leap-16.1-Minimal-VM.x86_64-Cloud-Build2.16.qcow2.sha256",
+      "defaultDiskSize": "20G",
+      "minMemory": 1024,
+      "recommendedMemory": 2048,
+      "minCores": 1,
+      "recommendedCores": 2,
+      "ostype": "l26",
+      "tags": [
+        "cloud-init",
+        "enterprise"
+      ],
+      "logoIcon": "ri-suse-fill",
+      "notes": "Leap 16 dropped the openSUSE- prefix and the stable alias: the file name carries a build number (Build2.16) that changes on every republish, so this URL has to be bumped. The directory listing is JavaScript only, read it with ?jsontable."
     },
     {
       "slug": "opensuse-leap-156",
@@ -364,6 +408,28 @@
         "enterprise"
       ],
       "logoIcon": "ri-suse-fill"
+    },
+    {
+      "slug": "alpine-324",
+      "name": "Alpine Linux 3.24",
+      "vendor": "alpine",
+      "version": "3.24",
+      "arch": "x86_64",
+      "format": "qcow2",
+      "downloadUrl": "https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/cloud/generic_alpine-3.24.1-x86_64-bios-cloudinit-r0.qcow2",
+      "checksumUrl": "https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/cloud/generic_alpine-3.24.1-x86_64-bios-cloudinit-r0.qcow2.sha512",
+      "defaultDiskSize": "5G",
+      "minMemory": 256,
+      "recommendedMemory": 512,
+      "minCores": 1,
+      "recommendedCores": 1,
+      "ostype": "l26",
+      "tags": [
+        "cloud-init",
+        "minimal"
+      ],
+      "logoIcon": "ri-cloud-line",
+      "notes": "Alpine dropped the nocloud_ variant: v3.24 only ships generic_, whose published metadata reads cloud: generic / bootstrap: cloudinit, so it still takes its configuration from the NoCloud drive Proxmox attaches. End of life 2028-06-01. The release and revision are in the file name, so the URL must be bumped on every point release."
     },
     {
       "slug": "alpine-321",

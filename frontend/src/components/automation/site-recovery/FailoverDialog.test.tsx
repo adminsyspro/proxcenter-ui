@@ -672,3 +672,32 @@ describe('FailoverDialog test-failover options (issues #744, #747)', () => {
     expect(onConfirm).toHaveBeenCalledWith(undefined)
   })
 })
+
+const cloneVM = {
+  vm_id: 100, vm_name: 'web-01', status: 'completed' as const, progress_percent: 100,
+  target_node: 'dr1', test_point: 'mirror-1', test_state: 'started' as const,
+  test_clones: [{ device: 'scsi0', storage: 'local-zfs', original: 'rpool/data/vm-9100-disk-0', clone: 'rpool/data/vm-9100-disk-0-test', options: 'size=4G' }],
+}
+
+it('describes clone cleanup using the execution manifest', () => {
+  renderDialog({ execution: execution({ vm_results: [cloneVM] }), cleanupResult: { vms_stopped: 1, disks_rolled: 1, jobs_resumed: 1, errors: [] } })
+  expect(screen.getByText(/Clones destroyed, configuration restored/)).toBeInTheDocument()
+  expect(screen.queryByText(/RBD disk\(s\) rolled back/)).not.toBeInTheDocument()
+  expect(screen.getByText(/dr1/)).toBeInTheDocument()
+})
+
+it('keeps cleanup retry available for an interrupted clone test with partial cleanup errors', async () => {
+  const onCleanup = vi.fn()
+  renderDialog({ plan: plan({ status: 'degraded', active_test_execution_id: 'exec-1' }), execution: execution({ status: 'failed', vm_results: [{ ...cloneVM, test_state: 'cleanup_pending' }] }),
+    onCleanup, cleanupResult: { vms_stopped: 1, disks_rolled: 0, jobs_resumed: 0, errors: ['clone still in use'] } })
+  expect(screen.queryByText(/Clones destroyed, configuration restored/)).not.toBeInTheDocument()
+  expect(screen.getByText('clone still in use')).toBeInTheDocument()
+  await userEvent.click(screen.getByRole('button', { name: 'Cleanup test' }))
+  expect(onCleanup).toHaveBeenCalledOnce()
+})
+
+it('shows an explicit cleanup-first banner for a 409', () => {
+  renderDialog({ type: 'failover', errorStatus: 409, errorMessage: 'raw backend error' })
+  expect(screen.getByText('A test failover is active. Run cleanup before starting this operation.')).toBeInTheDocument()
+  expect(screen.queryByText('raw backend error')).not.toBeInTheDocument()
+})

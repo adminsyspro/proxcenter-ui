@@ -11,6 +11,7 @@ import { defaultTimezone, type ScheduleBuilderValue } from './schedule/types'
 import { cadenceSeconds, formatWindow, retentionWindowSeconds } from './schedule/retentionWindow'
 import BandwidthWindowsEditor from './BandwidthWindowsEditor'
 import RetentionSlider from './RetentionSlider'
+import EngineGlyph from './EngineGlyph'
 import NumericTextField from '@/components/ui/NumericTextField'
 import type { BandwidthWindow, ReplicationJob, UpdateReplicationJobRequest } from '@/lib/orchestrator/site-recovery.types'
 
@@ -141,8 +142,12 @@ export default function EditJobDialog({ open, job, onClose, onSubmit, connection
                 <b>Source → Target:</b> {connName(job.source_cluster)} → {connName(job.target_cluster)}
               </Typography>
               <Typography variant='body2' component='div'>
-                <b>Pool:</b> <Chip label={job.target_pool} size='small' variant='outlined' />
+                <b>{t('siteRecovery.createJob.engine')}:</b> <EngineGlyph engine={job.storage_engine} /> {t(`siteRecovery.engine.${job.storage_engine || 'rbd'}`)}
               </Typography>
+              <Typography variant='body2' component='div'>
+                <b>{t(job.storage_engine === 'zfs' ? 'siteRecovery.createJob.targetStorage' : 'siteRecovery.createJob.targetPool')}:</b> <Chip label={job.target_pool} size='small' variant='outlined' />
+              </Typography>
+              {job.storage_engine === 'zfs' && <Typography variant='body2'><b>{t('siteRecovery.createJob.targetNode')}:</b> {job.target_node}</Typography>}
               {job.vmid_prefix > 0 && (
                 <Typography variant='body2'><b>VMID prefix:</b> {job.vmid_prefix}</Typography>
               )}

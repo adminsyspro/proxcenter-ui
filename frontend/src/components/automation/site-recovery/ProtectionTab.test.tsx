@@ -192,6 +192,7 @@ describe('ProtectionTab: partially synced status', () => {
   })
 
   it('shows the failure summary as a warning in the drawer of a partial job', async () => {
+    stubThroughputFetch()
     renderTab([job({ status: 'partial', error_message: '1 of 6 VMs failed: VM 279: failed to create snapshot' })])
 
     await openDrawer('100 - web-01')
@@ -199,4 +200,29 @@ describe('ProtectionTab: partially synced status', () => {
     const alert = await screen.findByText('1 of 6 VMs failed: VM 279: failed to create snapshot')
     expect(alert.closest('.MuiAlert-root')).toHaveClass('MuiAlert-colorWarning')
   })
+})
+
+it('shows ZFS glyphs and target node in the job row and detail drawer without a repeating tooltip', async () => {
+  stubThroughputFetch()
+  renderTab([job({ storage_engine: 'zfs', target_pool: 'local-zfs', target_node: 'dr1' })])
+  expect(screen.getByRole('img', { name: 'ZFS' })).toBeInTheDocument()
+  expect(screen.getByText('local-zfs · dr1')).toBeInTheDocument()
+  await openDrawer('100 - web-01')
+  expect(screen.getByRole('img', { name: 'ZFS' })).toBeInTheDocument()
+  expect(screen.getByText('dst / local-zfs · dr1')).toBeInTheDocument()
+  expect(screen.queryByRole('tooltip', { name: 'ZFS' })).not.toBeInTheDocument()
+})
+
+it('uses the Ceph glyph for a legacy job without an engine field', () => {
+  renderTab([job({ storage_engine: undefined })])
+  expect(screen.getByRole('img', { name: 'Ceph RBD' })).toHaveAttribute('src', '/images/ceph-logo.svg')
+})
+
+it('paginates long job lists', async () => {
+  renderTab(Array.from({ length: 26 }, (_, index) => job({ id: `job-${index}`, name: `Protection ${index}` })))
+  expect(screen.getByText('Protection 0')).toBeInTheDocument()
+  expect(screen.queryByText('Protection 25')).not.toBeInTheDocument()
+  await userEvent.click(screen.getByRole('button', { name: 'Go to next page' }))
+  expect(screen.getByText('Protection 25')).toBeInTheDocument()
+  expect(screen.queryByText('Protection 0')).not.toBeInTheDocument()
 })

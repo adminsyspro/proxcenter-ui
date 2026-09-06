@@ -6,13 +6,14 @@ import { useTranslations } from 'next-intl'
 import {
   Alert, Box, Button, Card, CardContent, Chip, Dialog, DialogActions, DialogContent, DialogTitle,
   Divider, Drawer, IconButton,
-  InputAdornment, LinearProgress, MenuItem, Select, Stack, TextField, Tooltip, Typography,
+  InputAdornment, LinearProgress, MenuItem, Select, Stack, TablePagination, TextField, Tooltip, Typography,
   alpha, useTheme
 } from '@mui/material'
 
 import { AreaChart, Area, YAxis, Tooltip as RTooltip } from 'recharts'
 import ChartContainer from '@/components/ChartContainer'
 
+import EngineGlyph from './EngineGlyph'
 import EmptyState from '@/components/EmptyState'
 
 import type { ReplicationJob, ReplicationJobStatus, ReplicationJobLog } from '@/lib/orchestrator/site-recovery.types'
@@ -212,12 +213,10 @@ const JobCard = ({ job, onClick, onEdit, vmNameMap, throughputHistory, t }: { jo
     >
       <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 }, position: 'relative', zIndex: 1 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          {/* Ceph engine indicator */}
-          <Tooltip title='Ceph RBD' arrow>
-            <Box sx={{ display: 'inline-flex', flexShrink: 0, alignItems: 'center' }}>
-              <img src='/images/ceph-logo.svg' alt='Ceph' width={18} height={18} />
-            </Box>
-          </Tooltip>
+          <Box sx={{ position: 'relative', display: 'inline-flex', flexShrink: 0 }}>
+            <EngineGlyph engine={job.storage_engine} />
+            <Box component='span' sx={{ position: 'absolute', bottom: -1, right: -2, width: 7, height: 7, borderRadius: '50%', bgcolor: isError ? 'error.main' : isSyncing ? 'primary.main' : job.status === 'synced' ? 'success.main' : 'text.disabled', border: '1.5px solid', borderColor: 'background.paper' }} />
+          </Box>
 
           {/* Sync icon */}
           {isSyncing && (
@@ -232,7 +231,7 @@ const JobCard = ({ job, onClick, onEdit, vmNameMap, throughputHistory, t }: { jo
           )}
 
           {/* Name (if set) + VM names */}
-          <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Box sx={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 1 }}>
             {job.name && (
               <Typography variant='body2' sx={{
                 fontWeight: 700, display: 'flex', alignItems: 'center', gap: 0.5, lineHeight: 1.25,
@@ -251,6 +250,8 @@ const JobCard = ({ job, onClick, onEdit, vmNameMap, throughputHistory, t }: { jo
               {jobLabel(job, vmNameMap)}
             </Typography>
           </Box>
+
+          {job.storage_engine === 'zfs' && <Typography variant='caption' noWrap sx={{ color: 'text.secondary' }}>{job.target_pool} · {job.target_node}</Typography>}
 
           {/* Syncing progress + throughput + sparkline */}
           {isSyncing && (
@@ -370,6 +371,7 @@ export default function ProtectionTab({
 }: ProtectionTabProps) {
   const t = useTranslations()
   const [q, setQ] = useState('')
+  const [page, setPage] = useState(0)
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -476,10 +478,11 @@ export default function ProtectionTab({
     })
   }, [jobs, q, statusFilter, connName, vmNamesByConn])
 
+  const currentPage = Math.min(page, Math.max(0, Math.ceil(filtered.length / 25) - 1))
   const grouped = useMemo(() => {
     const map = new Map<string, ReplicationJob[]>()
 
-    for (const job of filtered) {
+    for (const job of filtered.slice(currentPage * 25, currentPage * 25 + 25)) {
       const key = `${job.source_cluster}::${job.target_cluster}`
 
       if (!map.has(key)) map.set(key, [])
@@ -487,7 +490,7 @@ export default function ProtectionTab({
     }
 
     return map
-  }, [filtered])
+  }, [filtered, currentPage])
 
   const selected = useMemo(() => (jobs || []).find(j => j.id === selectedJobId), [jobs, selectedJobId])
 
@@ -582,13 +585,13 @@ export default function ProtectionTab({
           <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
             <TextField
               value={q}
-              onChange={e => setQ(e.target.value)}
+              onChange={e => { setQ(e.target.value); setPage(0) }}
               placeholder={t('siteRecovery.protection.searchPlaceholder')}
               size='small'
               sx={{ flex: 1, minWidth: 200 }}
               InputProps={{ startAdornment: <InputAdornment position='start'><i className='ri-search-line' style={{ opacity: 0.5 }} /></InputAdornment> }}
             />
-            <Select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} size='small' sx={{ minWidth: 140 }}>
+            <Select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(0) }} size='small' sx={{ minWidth: 140 }}>
               <MenuItem value='all'>{t('siteRecovery.status.all')}</MenuItem>
               <MenuItem value='synced'>{t('siteRecovery.status.synced')}</MenuItem>
               <MenuItem value='syncing'>{t('siteRecovery.status.syncing')}</MenuItem>
@@ -641,6 +644,8 @@ export default function ProtectionTab({
         </Stack>
       )}
 
+      {filtered.length > 25 && <TablePagination component='div' count={filtered.length} page={currentPage} rowsPerPage={25} rowsPerPageOptions={[25]} onPageChange={(_, value) => setPage(value)} />}
+
       {/* Detail Drawer */}
       <Drawer anchor='right' open={drawerOpen} onClose={closeDrawer} PaperProps={{ sx: { width: { xs: '100%', sm: 450 } } }}>
         <Box sx={{ p: 2.5, display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -649,11 +654,7 @@ export default function ProtectionTab({
           ) : (
             <>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2, gap: 1.5 }}>
-                <Tooltip title='Ceph RBD' arrow>
-                  <Box sx={{ display: 'inline-flex', flexShrink: 0, alignItems: 'center', mt: 0.5 }}>
-                    <img src='/images/ceph-logo.svg' alt='Ceph' width={24} height={24} />
-                  </Box>
-                </Tooltip>
+                <EngineGlyph engine={selected.storage_engine} size={24} />
                 <Box sx={{ minWidth: 0, flex: 1 }}>
                   <Typography variant='h6' sx={{ fontWeight: 700, mb: 0.25 }}>
                     {selected.name || jobLabel(selected, vmNamesByConn?.[selected.source_cluster])}
@@ -738,7 +739,7 @@ export default function ProtectionTab({
                 <Typography variant='body2' sx={{ fontWeight: 600, fontFamily: 'monospace', mb: 1 }}>{connName(selected.source_cluster)}</Typography>
                 <Box sx={{ color: 'text.disabled', my: 0.5 }}><i className='ri-arrow-down-line' /></Box>
                 <Typography variant='caption' sx={{ color: 'text.secondary' }}>{t('siteRecovery.protection.target')}</Typography>
-                <Typography variant='body2' sx={{ fontWeight: 600, fontFamily: 'monospace' }}>{connName(selected.target_cluster)} / {selected.target_pool}</Typography>
+                <Typography variant='body2' sx={{ fontWeight: 600, fontFamily: 'monospace' }}>{connName(selected.target_cluster)} / {selected.target_pool}{selected.storage_engine === 'zfs' && ` · ${selected.target_node || ''}`}</Typography>
               </Box>
 
               <Box sx={{ flex: 1, overflow: 'auto' }}>

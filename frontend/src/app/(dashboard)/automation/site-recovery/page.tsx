@@ -72,6 +72,8 @@ export default function SiteRecoveryPage() {
   // Execution tracking
   const [activeExecution, setActiveExecution] = useState<RecoveryExecution | null>(null)
   const [failoverError, setFailoverError] = useState<string | null>(null)
+  const [failoverErrorStatus, setFailoverErrorStatus] = useState<number | null>(null)
+  const [operationError, setOperationError] = useState<string | null>(null)
 
   // Cleanup state
   const [cleanupLoading, setCleanupLoading] = useState(false)
@@ -215,14 +217,22 @@ export default function SiteRecoveryPage() {
     }
   }, [mutatePlans])
 
-  const handleSyncJob = useCallback(async (id: string) => {
+  const handleJobAction = useCallback(async (id: string, action: 'sync' | 'resume') => {
     try {
-      await fetch(`/api/v1/orchestrator/replication/jobs/${id}/sync`, { method: 'POST' })
+      const response = await fetch(`/api/v1/orchestrator/replication/jobs/${id}/${action}`, { method: 'POST' })
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}))
+        setOperationError(response.status === 409 ? t('siteRecovery.failover.testActiveConflict') : data.error || response.statusText)
+        return
+      }
+      setOperationError(null)
       mutateJobs()
-    } catch (e) {
-      console.error('Failed to sync job:', e)
+    } catch (error) {
+      setOperationError(error instanceof Error ? error.message : String(error))
     }
-  }, [mutateJobs])
+  }, [mutateJobs, t])
+
+  const handleSyncJob = useCallback((id: string) => handleJobAction(id, 'sync'), [handleJobAction])
 
   const handlePauseJob = useCallback(async (id: string) => {
     try {
@@ -233,14 +243,7 @@ export default function SiteRecoveryPage() {
     }
   }, [mutateJobs])
 
-  const handleResumeJob = useCallback(async (id: string) => {
-    try {
-      await fetch(`/api/v1/orchestrator/replication/jobs/${id}/resume`, { method: 'POST' })
-      mutateJobs()
-    } catch (e) {
-      console.error('Failed to resume job:', e)
-    }
-  }, [mutateJobs])
+  const handleResumeJob = useCallback((id: string) => handleJobAction(id, 'resume'), [handleJobAction])
 
   const handleDeleteJob = useCallback(async (id: string) => {
     try {
@@ -266,6 +269,7 @@ export default function SiteRecoveryPage() {
     setCleanupResult(null)
     setCleanupLoading(false)
     setFailoverError(null)
+    setFailoverErrorStatus(null)
 
     // Rehydration: a test failover started before a reload has no in-memory
     // `activeExecution` — refetch it from its id on the plan so the dialog
@@ -317,11 +321,13 @@ export default function SiteRecoveryPage() {
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
+        setFailoverErrorStatus(res.status)
         setFailoverError(data?.error || t('siteRecovery.failover.testConflict'))
         mutatePlans()
         return
       }
       setFailoverError(null)
+      setFailoverErrorStatus(null)
       setActiveExecution(data)
       mutatePlans()
     } catch (e) {
@@ -394,10 +400,10 @@ export default function SiteRecoveryPage() {
     })
     if (!res.ok) {
       const data = await res.json().catch(() => ({}))
-      throw new Error(data.error || 'Failed to start VM')
+      throw new Error(res.status === 409 ? t('siteRecovery.failover.testActiveConflict') : data.error || 'Failed to start VM')
     }
     mutateJobs()
-  }, [mutateJobs])
+  }, [mutateJobs, t])
 
   // Poll execution status every 3s while running
   useEffect(() => {
@@ -426,6 +432,7 @@ export default function SiteRecoveryPage() {
           <ReplicationStorageDiscovery key={connection.id} connectionId={connection.id} onChange={updateDiscovery} />
         ))}
         {discoveryLoading && <Alert severity='info' icon={<CircularProgress size={18} />}>{t('siteRecovery.discoveryLoading')}</Alert>}
+        {operationError && <Alert severity='error' onClose={() => setOperationError(null)}>{operationError}</Alert>}
         {discoveryError && <Alert severity='warning'>{t('siteRecovery.discoveryError')}</Alert>}
         {!discoveryLoading && !discoveryError && !canCreateProtection && (
           <Alert severity='info'>
@@ -611,6 +618,7 @@ export default function SiteRecoveryPage() {
           cleanupResult={cleanupResult}
           execution={activeExecution}
           errorMessage={failoverError}
+          errorStatus={failoverErrorStatus}
           targetConnId={failoverPlan?.target_cluster}
           connections={connections}
           vmNameMap={failoverPlan ? vmNamesByConn[failoverPlan.source_cluster] : undefined}

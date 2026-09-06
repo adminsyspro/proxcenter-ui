@@ -748,7 +748,7 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
                     <Box component='span' sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: row.active ? 'success.main' : 'text.disabled' }} />
                     <Typography variant='body2'>{row.storage} · {row.node}</Typography>
                     <LinearProgress variant='determinate' value={row.totalBytes ? Math.max(0, Math.min(100, 100 * (1 - row.availBytes / row.totalBytes))) : 0} sx={{ flex: 1, minWidth: 24 }} />
-                    <Typography variant='caption'>{row.availFormatted}</Typography>
+                    <Typography variant='caption'>{row.availFormatted} {t('common.free')}</Typography>
                   </Box>
                 </MenuItem>
               ))}

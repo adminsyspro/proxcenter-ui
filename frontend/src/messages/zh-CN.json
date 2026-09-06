@@ -4096,11 +4096,11 @@
   },
   "siteRecovery": {
     "title": "站点恢复",
-    "subtitle": "Ceph RBD 跨集群复制与灾难恢复",
-    "noCeph": "未检测到 Ceph 集群",
-    "noCephDesc": "站点恢复需要至少两个启用了 Ceph 的 PVE 连接，以便跨集群复制数据。请在 设置 > 连接 中为您的连接启用 Ceph 以开始使用。",
-    "oneCeph": "仅检测到一个 Ceph 集群",
-    "oneCephDesc": "站点恢复需要至少两个启用了 Ceph 的 PVE 连接，以便在集群之间复制数据。请添加并在第二个连接上配置 Ceph 以开始使用。",
+    "subtitle": "Ceph RBD 和 ZFS 跨集群复制与灾难恢复",
+    "noCeph": "未检测到复制存储",
+    "noCephDesc": "请在两个 Proxmox 连接上配置 Ceph RBD 或 ZFS 存储以创建复制任务。",
+    "oneCeph": "没有共同的复制引擎",
+    "oneCephDesc": "至少两个连接必须具有编排器支持的共同复制引擎。",
     "noCephFeatureReplication": "跨集群复制",
     "noCephFeatureRecovery": "恢复计划",
     "noCephFeatureEmergency": "紧急灾难恢复",
@@ -4117,9 +4117,11 @@
       "title": "预检检查",
       "blocked": "关键检查失败。请先修复上述问题再创建任务。",
       "checks": {
-        "source_health": "源端 Ceph 健康",
-        "target_health": "目标端 Ceph 健康",
-        "target_space": "目标池容量"
+        "source_health": "源存储健康状态",
+        "target_health": "目标存储健康状态",
+        "target_space": "目标池容量",
+        "target_storage": "目标存储可用性",
+        "reverse_ssh": "故障恢复所需的反向 SSH"
       }
     },
     "bandwidth": {
@@ -4137,7 +4139,7 @@
       "title": "快照",
       "totalSnaps": "快照总数",
       "orphans": "孤立快照",
-      "clusters": "Ceph 集群",
+      "clusters": "集群",
       "searchPlaceholder": "搜索集群、池、镜像、快照、VMID、虚拟机名称…",
       "allClusters": "所有集群",
       "allStatuses": "所有状态",
@@ -4162,7 +4164,7 @@
       "cannotDeleteActive": "无法删除：该快照正被活动的复制任务使用",
       "viewDetails": "查看详情",
       "none": "无 mirror 快照",
-      "noneDesc": "未在 Ceph 集群中找到任何 mirror-* 快照。",
+      "noneDesc": "运行复制后，镜像快照将显示在此处。",
       "noneMatchingDesc": "没有符合当前筛选条件的快照。",
       "created": "创建时间",
       "computing": "计算中…",
@@ -4170,7 +4172,9 @@
       "confirmDeleteDesc": "即将删除 {count} 个 mirror 快照，此操作不可撤销。",
       "confirmDeleteActiveWarn": "部分选中的快照属于活动复制任务。删除后下次同步将触发完整重新同步。",
       "deletingItem": "正在删除 {name}…",
-      "andMore": "还有 {count} 个"
+      "andMore": "还有 {count} 个",
+      "engine": "引擎",
+      "node": "节点"
     },
     "status": {
       "all": "所有状态",
@@ -4226,9 +4230,9 @@
       "recentActivity": "最近活动",
       "events": "事件",
       "noRecentActivity": "暂无最近活动",
-      "noSitesConfigured": "未配置复制站点。添加启用了 Ceph 的集群连接以开始使用。",
+      "noSitesConfigured": "未配置恢复站点",
       "noSitesTitle": "未配置复制任务",
-      "noSitesDesc": "站点恢复需要至少在两个启用了 Ceph 的 Proxmox 集群之间配置一个复制任务。配置复制任务以启用灾难恢复、故障转移计划和跨站点保护。",
+      "noSitesDesc": "请在 Proxmox 站点上配置 Ceph RBD 或 ZFS 存储以开始复制。",
       "bandwidthOverTime": "复制带宽",
       "noBandwidthData": "暂无带宽数据。触发同步以开始收集吞吐量指标。"
     },
@@ -4244,7 +4248,7 @@
       "bandwidthHistoryEmpty": "暂无样本。图表将随每次同步逐步填充。",
       "deleteConfirmTitle": "删除复制任务",
       "deleteConfirmDesc": "这将删除复制任务及其本地历史记录。虚拟机及其磁盘不会受到影响。",
-      "deleteOrphansNote": "源端和目标端的 mirror-* RBD 快照不会自动删除。删除后请打开快照选项卡，查看并清理产生的孤立快照。",
+      "deleteOrphansNote": "存储上可能留有镜像快照。请在“快照”选项卡中检查孤立快照。",
       "source": "源",
       "target": "目标",
       "schedule": "计划",
@@ -4259,7 +4263,7 @@
       "recentLogs": "最近日志",
       "searchPlaceholder": "搜索 VM...",
       "noJobs": "未配置复制任务",
-      "noJobsDesc": "创建复制任务以开始使用 Ceph RBD 镜像保护您的 VM。",
+      "noJobsDesc": "创建任务，通过 Ceph RBD 或 ZFS 在站点之间复制虚拟机。",
       "noJobFound": "未找到任务",
       "noJobFoundDesc": "修改您的过滤条件或创建新的复制任务。",
       "selectJob": "选择一个任务以查看详情。"
@@ -4295,7 +4299,8 @@
       "failedOverTooltip": "计划已故障转移——只能执行故障回复。",
       "statusFailingBack": "故障回复进行中",
       "openFailback": "打开故障回复",
-      "failingBackTooltip": "删除此计划前请先取消故障回复。"
+      "failingBackTooltip": "删除此计划前请先取消故障回复。",
+      "jobColumn": "复制任务"
     },
     "rpoTargetLabel": "RPO 目标",
     "createJob": {
@@ -4337,7 +4342,7 @@
       "snapshotRetentionHelp": "每次同步后每个磁盘保留的镜像快照数量（最少 2 个）。",
       "retentionSource": "源端保留数量",
       "retentionTarget": "目标端（灾备）保留数量",
-      "retentionTargetHelp": "灾备端保留更多快照意味着更多恢复点，但会占用更多 Ceph 容量。",
+      "retentionTargetHelp": "灾备端保留更多快照意味着更多恢复点，但会占用更多存储容量。",
       "vmidPrefix": "VMID 前缀",
       "vmidPrefixHelp": "添加到目标集群 VM ID 的前缀（例如前缀 9 + VM 100 = 9100）。留空或填 0 以保持相同 VMID。",
       "engine": "复制引擎",
@@ -4347,7 +4352,15 @@
       "pvNote": "在源和目标节点上安装 <pv>pv</pv> 包以显示复制进度。",
       "pvInstallLabel": "在源节点上自动安装 <pv>pv</pv>",
       "pvInstallDesc": "跟踪复制进度所需。将通过 SSH 运行 apt-get install pv。",
-      "retentionCoverage": "每 {cadence} 复制一次，这些还原点覆盖 {window}"
+      "retentionCoverage": "每 {cadence} 复制一次，这些还原点覆盖 {window}",
+      "targetStorage": "目标存储",
+      "selectStorage": "选择存储和节点",
+      "targetNode": "目标节点",
+      "zfsNodeHint": "ZFS 是节点本地存储：副本保存在此节点上，灾备虚拟机也在此节点上启动。",
+      "vmMixedStorage": "此虚拟机具有 ZFS 以外的磁盘，无法使用 ZFS 复制。",
+      "vmMixedStorageWarn": "仅复制 Ceph RBD 磁盘，其他磁盘将被跳过。",
+      "vmUnsupportedDisk": "此虚拟机具有不受支持的磁盘引用，例如直通磁盘。",
+      "sshChecks": "节点间 SSH 连接"
     },
     "schedule": {
       "modeRpo": "持续（RPO）",
@@ -4453,7 +4466,9 @@
       },
       "completeTitle": "故障转移完成",
       "completeVMs": "虚拟机现已在 DR 站点运行",
-      "completeLocked": "复制已锁定，计划已故障转移——故障回复将恢复原状。"
+      "completeLocked": "复制已锁定，计划已故障转移——故障回复将恢复原状。",
+      "clonesDestroyed": "克隆已销毁，配置已恢复",
+      "testActiveConflict": "测试故障转移正在进行。请先执行清理，再启动此操作。"
     },
     "failback": {
       "phase1Title": "反向复制进行中",
@@ -4546,7 +4561,13 @@
       "cephRamWarning": "{node} RAM 使用率 {pct}% — Ceph OSD 需要内存余量，存在 OSD 崩溃风险",
       "cephDangerZone": "Ceph 危险区域",
       "penalty": "惩罚"
-    }
+    },
+    "engine": {
+      "rbd": "Ceph RBD",
+      "zfs": "ZFS"
+    },
+    "discoveryError": "某个连接的存储发现失败。现有恢复操作仍然可用。",
+    "discoveryLoading": "正在发现复制存储…"
   },
   "templates": {
     "title": "模板",

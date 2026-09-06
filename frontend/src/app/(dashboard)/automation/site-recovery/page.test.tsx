@@ -9,7 +9,7 @@ const state = vi.hoisted(() => ({
   connections: [] as Array<{ id: string; name: string; hasCeph: boolean }>,
   discovery: {} as Record<string, { data?: ReplicationStorages; error?: Error; isLoading?: boolean }>,
   jobs: [] as Array<{ id: string }>, plans: [] as Array<{ id: string }>, jobsLoading: false,
-  health: { engines: ['rbd', 'zfs'] }, mutate: vi.fn(), pageTitle: vi.fn(), swr: vi.fn(),
+  startError: vi.fn(), health: { engines: ['rbd', 'zfs'] }, mutate: vi.fn(), pageTitle: vi.fn(), swr: vi.fn(),
 }))
 vi.mock('swr', async importOriginal => {
   const actual = await importOriginal<typeof import('swr')>()
@@ -31,9 +31,9 @@ vi.mock('@/hooks/useSiteRecovery', () => ({
   useReplicationJobLogs: () => ({}), useRecoveryHistory: () => ({ mutate: state.mutate }),
 }))
 vi.mock('@/components/automation/site-recovery', () => ({
-  DashboardTab: () => <div>Dashboard content</div>, ProtectionTab: () => <div>Protection content</div>,
+  DashboardTab: ({ onSyncJob }: { onSyncJob: (id: string) => void }) => <div>Dashboard content<button onClick={() => onSyncJob('job')}>Sync job</button></div>, ProtectionTab: ({ onResumeJob }: { onResumeJob: (id: string) => void }) => <div>Protection content<button onClick={() => onResumeJob('job')}>Resume job</button></div>,
   SnapshotsTab: () => <div>Snapshots content</div>, RecoveryPlansTab: () => <div>Recovery plans content</div>,
-  EmergencyDRTab: () => <div>Emergency content</div>,
+  EmergencyDRTab: ({ onStartVM }: { onStartVM: (vm: number, cluster: string, job: string) => Promise<void> }) => <div>Emergency content<button onClick={() => onStartVM(100, 'dst', 'job').catch(state.startError)}>Start DR VM</button></div>,
   SimulationTab: ({ connections }: { connections: Array<{ hasCeph: boolean }> }) => <div>Simulation: {String(connections.some(connection => connection.hasCeph))}</div>,
   CreateJobDialog: ({ open }: { open: boolean }) => open ? <div>Create job dialog</div> : null,
   CreatePlanDialog: () => null, EditJobDialog: () => null, FailoverDialog: () => null,
@@ -49,7 +49,7 @@ beforeEach(() => {
   state.plans = []
   state.jobsLoading = false
 })
-afterEach(cleanup)
+afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 const storage = (engines: ReplicationStorages['engines']) => ({ data: { engines, rbd: [], zfs: [] }, isLoading: false })
 
 it('enables creation for two ZFS connections without Ceph and keeps Simulation on hasCeph', async () => {
@@ -104,4 +104,25 @@ it('waits for both discovery and jobs before initializing the default tab', asyn
   state.jobsLoading = false
   view.rerender(<SiteRecoveryPage />)
   await waitFor(() => expect(screen.getByRole('tab', { name: 'Simulation' })).toHaveAttribute('aria-selected', 'true'))
+})
+
+it.each(['Sync job', 'Resume job'])('surfaces active-test 409 errors for %s', async label => {
+  state.jobs = [{ id: 'job' }]
+  state.discovery = { src: storage([]), dst: storage([]) }
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{"error":"test active"}', { status: 409 })))
+  renderWithProviders(<SiteRecoveryPage />)
+  if (label === 'Resume job') await userEvent.click(screen.getByRole('tab', { name: 'Replication' }))
+  await userEvent.click(screen.getByRole('button', { name: label }))
+  expect(await screen.findByText('A test failover is active. Run cleanup before starting this operation.')).toBeInTheDocument()
+  expect(state.mutate).not.toHaveBeenCalled()
+})
+
+it('passes the active-test cleanup instruction to Emergency start errors', async () => {
+  state.jobs = [{ id: 'job' }]
+  state.discovery = { src: storage([]), dst: storage([]) }
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{"error":"test active"}', { status: 409 })))
+  renderWithProviders(<SiteRecoveryPage />)
+  await userEvent.click(screen.getByRole('tab', { name: 'Emergency DR' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Start DR VM' }))
+  await waitFor(() => expect(state.startError).toHaveBeenCalledWith(expect.objectContaining({ message: 'A test failover is active. Run cleanup before starting this operation.' })))
 })

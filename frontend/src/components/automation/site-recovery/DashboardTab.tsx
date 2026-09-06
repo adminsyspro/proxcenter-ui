@@ -5,12 +5,13 @@ import { useTranslations } from 'next-intl'
 
 import {
   Alert, Box, Button, Card, CardContent, Chip,
-  Skeleton, Stack, Tooltip, Typography, alpha, useTheme
+  Skeleton, Stack, TablePagination, Tooltip, Typography, alpha, useTheme
 } from '@mui/material'
 
 import { AreaChart, Area, XAxis, YAxis, Tooltip as RTooltip, Legend, CartesianGrid } from 'recharts'
 import ChartContainer from '@/components/ChartContainer'
 
+import EngineGlyph from './EngineGlyph'
 import EmptyState from '@/components/EmptyState'
 
 import type {
@@ -484,9 +485,19 @@ const BandwidthChart = ({ jobs, connections, t }: {
 
 // ── Main Component ─────────────────────────────────────────────────────
 
+function JobEngineGlyphs({ jobs, size = 18 }: { jobs: ReplicationJob[]; size?: number }) {
+  const engines = Array.from(new Set(jobs.length ? jobs.map(job => job.storage_engine || 'rbd') : ['rbd'] as const))
+  return <Box sx={{ display: 'inline-flex', gap: 0.5 }}>{engines.map(engine => <EngineGlyph key={engine} engine={engine} size={size} />)}</Box>
+}
+
+function targetStorageLabels(jobs: ReplicationJob[]): string {
+  return Array.from(new Set(jobs.filter(job => job.storage_engine === 'zfs').map(job => `${job.target_pool} · ${job.target_node || ''}`))).join(', ')
+}
+
 // ── Sites health: source → target replication flow visual ──────────────
 
-const SiteEndpoint = ({ site, t }: { site: SiteInfo; t: any }) => {
+const SiteEndpoint = ({ site, jobs = [], t }: { site: SiteInfo; jobs?: ReplicationJob[]; t: any }) => {
+  const relatedJobs = jobs.filter(job => job.source_cluster === site.cluster_id || job.target_cluster === site.cluster_id)
   const theme = useTheme()
   const statusColor = site.status === 'online' ? theme.palette.success.main
     : site.status === 'degraded' ? theme.palette.warning.main
@@ -495,7 +506,7 @@ const SiteEndpoint = ({ site, t }: { site: SiteInfo; t: any }) => {
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, flex: 1, minWidth: 0, textAlign: 'center' }}>
       <Box sx={{ position: 'relative', display: 'inline-flex' }}>
-        <img src='/images/ceph-logo.svg' alt='Ceph' width={36} height={36} />
+        <JobEngineGlyphs jobs={relatedJobs} size={36} />
         <Box sx={{
           position: 'absolute', bottom: -2, right: -3,
           width: 12, height: 12, borderRadius: '50%',
@@ -515,6 +526,7 @@ const SiteEndpoint = ({ site, t }: { site: SiteInfo; t: any }) => {
         <Typography variant='caption' sx={{ display: 'block', color: statusColor, fontWeight: 600, fontSize: '0.65rem', textTransform: 'uppercase' }}>
           {site.status}
         </Typography>
+        {site.role === 'dr' && <Typography variant='caption' noWrap>{targetStorageLabels(relatedJobs)}</Typography>}
       </Box>
     </Box>
   )
@@ -564,7 +576,7 @@ const PairRow = ({ source, target, jobs, sitesMap, connectionsMap, t }: {
       {/* Source */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flex: 1, minWidth: 0 }}>
         <Box sx={{ position: 'relative', display: 'inline-flex', flexShrink: 0 }}>
-          <img src='/images/ceph-logo.svg' alt='' width={18} height={18} />
+          <JobEngineGlyphs jobs={jobs} />
           <Box sx={{ position: 'absolute', bottom: -1, right: -2, width: 7, height: 7, borderRadius: '50%', bgcolor: statusDot(srcSite), border: '1.5px solid', borderColor: 'background.paper' }} />
         </Box>
         <Typography variant='body2' sx={{ fontWeight: 600, fontSize: '0.8rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -592,11 +604,11 @@ const PairRow = ({ source, target, jobs, sitesMap, connectionsMap, t }: {
       {/* Target */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flex: 1, minWidth: 0 }}>
         <Box sx={{ position: 'relative', display: 'inline-flex', flexShrink: 0 }}>
-          <img src='/images/ceph-logo.svg' alt='' width={18} height={18} />
+          <JobEngineGlyphs jobs={jobs} />
           <Box sx={{ position: 'absolute', bottom: -1, right: -2, width: 7, height: 7, borderRadius: '50%', bgcolor: statusDot(tgtSite), border: '1.5px solid', borderColor: 'background.paper' }} />
         </Box>
         <Typography variant='body2' sx={{ fontWeight: 600, fontSize: '0.8rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {tgtName}
+          {tgtName} {targetStorageLabels(jobs)}
         </Typography>
       </Box>
 
@@ -623,7 +635,7 @@ const ReplicationFlow = ({ sites, connectivity, latencyMs, jobs, connections, t 
   sites: SiteInfo[]; connectivity: string; latencyMs: number; jobs?: ReplicationJob[]; connections?: { id: string; name: string }[]; t: any
 }) => {
   const theme = useTheme()
-  const [showAll, setShowAll] = useState(false)
+  const [pairPage, setPairPage] = useState(0)
 
   // Detect source→target pairs from jobs (a "replication couple")
   const pairs = useMemo(() => {
@@ -674,7 +686,8 @@ const ReplicationFlow = ({ sites, connectivity, latencyMs, jobs, connections, t 
 
   // Compact pair-by-pair list when 2+ pairs exist (MSP / multi-couple scaling)
   if (pairs.length >= 2) {
-    const visiblePairs = showAll ? pairs : pairs.slice(0, 5)
+    const currentPage = Math.min(pairPage, Math.max(0, Math.ceil(pairs.length / 5) - 1))
+    const visiblePairs = pairs.slice(currentPage * 5, currentPage * 5 + 5)
     return (
       <Card variant='outlined' sx={{ borderRadius: 2 }}>
         <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
@@ -695,15 +708,7 @@ const ReplicationFlow = ({ sites, connectivity, latencyMs, jobs, connections, t 
               />
             ))}
           </Stack>
-          {pairs.length > 5 && (
-            <Box sx={{ display: 'flex', justifyContent: 'center', mt: 1 }}>
-              <Button size='small' onClick={() => setShowAll(v => !v)} sx={{ fontSize: '0.7rem' }}>
-                {showAll
-                  ? t('siteRecovery.dashboard.pairsShowLess')
-                  : t('siteRecovery.dashboard.pairsShowAll', { count: pairs.length - 5 })}
-              </Button>
-            </Box>
-          )}
+          {pairs.length > 5 && <TablePagination component='div' count={pairs.length} page={currentPage} rowsPerPage={5} rowsPerPageOptions={[5]} onPageChange={(_, value) => setPairPage(value)} />}
         </CardContent>
       </Card>
     )
@@ -730,7 +735,7 @@ const ReplicationFlow = ({ sites, connectivity, latencyMs, jobs, connections, t 
           <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)' } }}>
             {sites.map(site => (
               <Box key={site.cluster_id} sx={{ display: 'flex', justifyContent: 'center', p: 1, border: 1, borderColor: 'divider', borderRadius: 2 }}>
-                <SiteEndpoint site={site} t={t} />
+                <SiteEndpoint site={site} jobs={jobs} t={t} />
               </Box>
             ))}
           </Box>
@@ -743,7 +748,7 @@ const ReplicationFlow = ({ sites, connectivity, latencyMs, jobs, connections, t 
     <Card variant='outlined' sx={{ borderRadius: 2 }}>
       <CardContent sx={{ p: 2.5, '&:last-child': { pb: 2.5 } }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 2, md: 3 } }}>
-          <SiteEndpoint site={primary} t={t} />
+          <SiteEndpoint site={primary} jobs={jobs} t={t} />
 
           {/* Animated link */}
           <Box sx={{ flex: 2, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.75, minWidth: 0, opacity: linkOpacity }}>
@@ -822,7 +827,7 @@ const ReplicationFlow = ({ sites, connectivity, latencyMs, jobs, connections, t 
             </Box>
           </Box>
 
-          <SiteEndpoint site={dr} t={t} />
+          <SiteEndpoint site={dr} jobs={jobs} t={t} />
         </Box>
       </CardContent>
     </Card>

@@ -4099,11 +4099,11 @@
   },
   "siteRecovery": {
     "title": "Site Recovery",
-    "subtitle": "Ceph RBD Cross-Cluster-Replikation & Disaster Recovery",
-    "noCeph": "Kein Ceph-Cluster erkannt",
-    "noCephDesc": "Site Recovery erfordert mindestens zwei PVE-Verbindungen mit aktiviertem Ceph, um Daten zwischen Clustern zu replizieren. Aktivieren Sie Ceph auf Ihren Verbindungen unter Einstellungen > Verbindungen.",
-    "oneCeph": "Nur ein Ceph-Cluster erkannt",
-    "oneCephDesc": "Site Recovery erfordert mindestens zwei PVE-Verbindungen mit aktiviertem Ceph, um Daten zwischen Clustern zu replizieren. Fügen Sie eine zweite Verbindung mit Ceph hinzu.",
+    "subtitle": "Clusterübergreifende Replikation und Disaster Recovery für Ceph RBD und ZFS",
+    "noCeph": "Kein Replikationsspeicher gefunden",
+    "noCephDesc": "Konfigurieren Sie Ceph RBD oder ZFS auf zwei Proxmox-Verbindungen, um Replikationsjobs zu erstellen.",
+    "oneCeph": "Keine gemeinsame Replikations-Engine",
+    "oneCephDesc": "Mindestens zwei Verbindungen müssen eine vom Orchestrator unterstützte Replikations-Engine gemeinsam haben.",
     "noCephFeatureReplication": "Cross-cluster Replikation",
     "noCephFeatureRecovery": "Wiederherstellungspläne",
     "noCephFeatureEmergency": "Notfall-DR",
@@ -4120,9 +4120,11 @@
       "title": "Vorabprüfungen",
       "blocked": "Kritische Prüfungen fehlgeschlagen. Beheben Sie die Probleme oben, bevor Sie den Auftrag anlegen.",
       "checks": {
-        "source_health": "Ceph-Zustand Quelle",
-        "target_health": "Ceph-Zustand Ziel",
-        "target_space": "Kapazität Zielpool"
+        "source_health": "Zustand des Quellspeichers",
+        "target_health": "Zustand des Zielspeichers",
+        "target_space": "Kapazität Zielpool",
+        "target_storage": "Verfügbarkeit des Zielspeichers",
+        "reverse_ssh": "Umgekehrte SSH-Verbindung für Failback"
       }
     },
     "bandwidth": {
@@ -4140,7 +4142,7 @@
       "title": "Snapshot",
       "totalSnaps": "Snapshots gesamt",
       "orphans": "Verwaist",
-      "clusters": "Ceph-Cluster",
+      "clusters": "Cluster",
       "searchPlaceholder": "Suche Cluster, Pool, Image, Snap, VMID, VM-Name…",
       "allClusters": "Alle Cluster",
       "allStatuses": "Alle Status",
@@ -4165,7 +4167,7 @@
       "cannotDeleteActive": "Löschen nicht möglich: Snapshot wird von einem aktiven Replikationsauftrag verwendet",
       "viewDetails": "Details anzeigen",
       "none": "Keine Mirror-Snapshots",
-      "noneDesc": "Keine mirror-* Snapshots auf den Ceph-Clustern gefunden.",
+      "noneDesc": "Mirror-Snapshots erscheinen hier nach einer Replikation.",
       "noneMatchingDesc": "Keine Snapshots entsprechen dem Filter.",
       "created": "Erstellt",
       "computing": "Berechne…",
@@ -4173,7 +4175,9 @@
       "confirmDeleteDesc": "Sie sind dabei, {count} Mirror-Snapshot(s) zu löschen. Dieser Vorgang kann nicht rückgängig gemacht werden.",
       "confirmDeleteActiveWarn": "Einige Snapshots gehören zu aktiven Replikationsaufträgen. Ihr Löschen erzwingt eine vollständige Synchronisierung beim nächsten Lauf.",
       "deletingItem": "Lösche {name}…",
-      "andMore": "{count} weitere"
+      "andMore": "{count} weitere",
+      "engine": "Engine",
+      "node": "Knoten"
     },
     "status": {
       "all": "Alle Status",
@@ -4229,9 +4233,9 @@
       "recentActivity": "Letzte Aktivität",
       "events": "Ereignisse",
       "noRecentActivity": "Keine aktuelle Aktivität",
-      "noSitesConfigured": "Keine Replikationsstandorte konfiguriert. Fügen Sie Cluster-Verbindungen mit Ceph hinzu.",
+      "noSitesConfigured": "Keine Wiederherstellungsstandorte konfiguriert",
       "noSitesTitle": "No Replikation job configured",
-      "noSitesDesc": "Site Recovery erfordert mindestens einen Replikationsjob zwischen zwei Proxmox-Clustern mit Ceph. Konfigurieren Sie einen Replikationsjob, um Disaster Recovery, Failover-Pläne und standortübergreifenden Schutz zu ermöglichen.",
+      "noSitesDesc": "Konfigurieren Sie Ceph RBD oder ZFS auf Ihren Proxmox-Standorten, um die Replikation zu starten.",
       "bandwidthOverTime": "Replikation Bandwidth",
       "noBandwidthData": "Noch keine Bandbreitendaten. Starten Sie eine Synchronisation, um Durchsatzmetriken zu erfassen."
     },
@@ -4247,7 +4251,7 @@
       "bandwidthHistoryEmpty": "Noch keine Daten. Das Diagramm füllt sich mit jeder Synchronisierung.",
       "deleteConfirmTitle": "Replikationsauftrag löschen",
       "deleteConfirmDesc": "Der Replikationsauftrag und sein lokaler Verlauf werden entfernt. VMs und deren Festplatten bleiben unberührt.",
-      "deleteOrphansNote": "Mirror-* RBD-Snapshots auf Quelle und Ziel werden NICHT automatisch entfernt. Öffnen Sie nach dem Löschen den Snapshots-Tab, um die entstehenden verwaisten Snapshots zu prüfen und zu bereinigen.",
+      "deleteOrphansNote": "Mirror-Snapshots können auf dem Speicher verbleiben. Prüfen Sie verwaiste Snapshots im Tab Snapshots.",
       "source": "Quelle",
       "target": "Ziel",
       "schedule": "Zeitplan",
@@ -4262,7 +4266,7 @@
       "recentLogs": "Letzte Logs",
       "searchPlaceholder": "suchen VMs...",
       "noJobs": "No Replikation jobs configured",
-      "noJobsDesc": "Erstellen Sie einen Replikationsjob, um Ihre VMs mit Ceph RBD Mirroring zu schützen.",
+      "noJobsDesc": "Erstellen Sie einen Job, um VMs mit Ceph RBD oder ZFS zwischen Standorten zu replizieren.",
       "noJobFound": "Kein Job gefunden",
       "noJobFoundDesc": "Ändern Sie Ihre Filter oder erstellen Sie einen neuen Replikationsjob.",
       "selectJob": "Wählen Sie einen Job, um Details anzuzeigen."
@@ -4298,7 +4302,8 @@
       "failedOverTooltip": "Plan ist umgeschaltet — nur Failback ist möglich.",
       "statusFailingBack": "Failback läuft",
       "openFailback": "Failback öffnen",
-      "failingBackTooltip": "Failback abbrechen, bevor dieser Plan gelöscht wird."
+      "failingBackTooltip": "Failback abbrechen, bevor dieser Plan gelöscht wird.",
+      "jobColumn": "Replikationsjob"
     },
     "rpoTargetLabel": "RPO-Ziel",
     "createJob": {
@@ -4340,7 +4345,7 @@
       "snapshotRetentionHelp": "Anzahl der pro Datenträger nach jeder Synchronisierung aufbewahrten Spiegel-Snapshots (mindestens 2).",
       "retentionSource": "Aufbewahren auf der Quelle",
       "retentionTarget": "Aufbewahren auf dem Ziel (DR)",
-      "retentionTargetHelp": "Mehr Snapshots auf der DR-Seite bedeuten mehr Wiederherstellungspunkte, kosten aber mehr Ceph-Kapazität.",
+      "retentionTargetHelp": "Mehr Snapshots auf der DR-Seite bedeuten mehr Wiederherstellungspunkte, benötigen aber mehr Speicherkapazität.",
       "vmidPrefix": "VMID-Präfix",
       "vmidPrefixHelp": "Präfix für VM-IDs auf dem Ziel-Cluster (z.B. Präfix 9 + VM 100 = 9100). Leer oder 0 lassen, um die gleiche VMID beizubehalten.",
       "engine": "Replikation Engine",
@@ -4350,7 +4355,15 @@
       "pvNote": "Installieren Sie das <pv>pv</pv>-Paket auf Quell- und Ziel-Nodes, um den Replikationsfortschritt anzuzeigen.",
       "pvInstallLabel": "<pv>pv</pv> automatisch auf Quell-Nodes installieren",
       "pvInstallDesc": "Erforderlich zur Verfolgung des Replikationsfortschritts. Führt apt-get install pv via SSH aus.",
-      "retentionCoverage": "Replikation alle {cadence}, diese Punkte decken {window} ab"
+      "retentionCoverage": "Replikation alle {cadence}, diese Punkte decken {window} ab",
+      "targetStorage": "Zielspeicher",
+      "selectStorage": "Speicher und Knoten auswählen",
+      "targetNode": "Zielknoten",
+      "zfsNodeHint": "ZFS ist lokal auf einem Knoten: Replikate liegen auf diesem Knoten und DR-VMs starten dort.",
+      "vmMixedStorage": "Diese VM hat Datenträger außerhalb von ZFS und kann nicht mit ZFS repliziert werden.",
+      "vmMixedStorageWarn": "Nur Ceph-RBD-Datenträger werden repliziert; andere Datenträger werden übersprungen.",
+      "vmUnsupportedDisk": "Diese VM hat einen nicht unterstützten Datenträgerverweis, etwa einen Passthrough-Datenträger.",
+      "sshChecks": "SSH-Verbindungen zwischen Knoten"
     },
     "schedule": {
       "modeRpo": "Kontinuierlich (RPO)",
@@ -4456,7 +4469,9 @@
       },
       "completeTitle": "Failover abgeschlossen",
       "completeVMs": "VM(s) laufen jetzt am DR-Standort",
-      "completeLocked": "Die Replikation ist gesperrt und der Plan ist umgeschaltet — Failback bringt ihn zurück."
+      "completeLocked": "Die Replikation ist gesperrt und der Plan ist umgeschaltet — Failback bringt ihn zurück.",
+      "clonesDestroyed": "Klone gelöscht, Konfiguration wiederhergestellt",
+      "testActiveConflict": "Ein Test-Failover ist aktiv. Führen Sie die Bereinigung aus, bevor Sie diesen Vorgang starten."
     },
     "failback": {
       "phase1Title": "Umgekehrte Replikation läuft",
@@ -4549,7 +4564,13 @@
       "cephRamWarning": "{node} bei {pct}% RAM — Ceph-OSDs benötigen Speicherreserven, Risiko eines OSD-Absturzes",
       "cephDangerZone": "Ceph-Gefahr",
       "penalty": "Abzug"
-    }
+    },
+    "engine": {
+      "rbd": "Ceph RBD",
+      "zfs": "ZFS"
+    },
+    "discoveryError": "Die Speichererkennung ist für eine Verbindung fehlgeschlagen. Bestehende Wiederherstellungsvorgänge bleiben verfügbar.",
+    "discoveryLoading": "Replikationsspeicher werden ermittelt…"
   },
   "templates": {
     "title": "Vorlagen",

@@ -162,3 +162,9 @@ describe('POST /api/v1/orchestrator/replication/snapshots', () => {
     expect(await readJson(res)).toEqual({ error: 'boom' })
   })
 })
+
+it('refuses a ZFS deletion without the node component of its identity', async () => {
+  const res = await callRoute(postRoute, { body: { items: [{ cluster_id: 'conn-a', storage_engine: 'zfs', pool: 'rpool/data', image: 'vm-1-disk-0', snapshot: 'mirror-1' }] } })
+  expect(res.status).toBe(400)
+  expect(deleteMirrorSnapshotsMock).not.toHaveBeenCalled()
+})

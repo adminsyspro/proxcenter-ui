@@ -202,19 +202,25 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
       const response = await fetch(`/api/v1/orchestrator/replication/${endpoint}`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: controller.signal,
       })
-      if (!response.ok) throw new Error(t('siteRecovery.preflight.blocked'))
-      return response.json()
+      const data = await response.json().catch(() => null)
+      // Keep the orchestrator's own diagnosis (SSH failure, missing node...) over a generic label.
+      if (!response.ok) throw new Error(data?.error || t('siteRecovery.preflight.blocked'))
+      return data
     }
 
-    Promise.all([
-      runCheck('check-ssh', context),
-      runCheck('preflight', { ...context, target_pool, estimated_size_bytes }),
-    ]).then(([ssh, preflight]) => {
-      if (!controller.signal.aborted) setCheckResult({ key: checkKey, ssh, preflight })
-    }).catch((error: unknown) => {
-      if (!controller.signal.aborted) setCheckResult({ key: checkKey, error: error instanceof Error ? error.message : String(error) })
-    })
-    return () => controller.abort()
+    // The SSH check opens real sessions on the PVE nodes: let the selection settle
+    // instead of firing on every VM toggle.
+    const timer = setTimeout(() => {
+      Promise.all([
+        runCheck('check-ssh', context),
+        runCheck('preflight', { ...context, target_pool, estimated_size_bytes }),
+      ]).then(([ssh, preflight]) => {
+        if (!controller.signal.aborted) setCheckResult({ key: checkKey, ssh, preflight })
+      }).catch((error: unknown) => {
+        if (!controller.signal.aborted) setCheckResult({ key: checkKey, error: error instanceof Error ? error.message : String(error) })
+      })
+    }, 400)
+    return () => { clearTimeout(timer); controller.abort() }
   }, [checkKey, checkAttempt, t])
 
   const currentChecks = checkResult?.key === checkKey ? checkResult : null

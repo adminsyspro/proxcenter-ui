@@ -133,10 +133,10 @@ describe('SnapshotsTab cleanup-orphans tooltip', () => {
 })
 
 const sameVolumeSnapshots = [
-  { ...SNAPSHOTS[0], storage_engine: 'zfs', node: 'dr1', used: 1024 },
-  { ...SNAPSHOTS[0], storage_engine: 'zfs', node: 'dr2', used: 2048 },
+  { ...SNAPSHOTS[0], storage_engine: 'zfs', node: 'dr1', used_bytes: 1024 },
+  { ...SNAPSHOTS[0], storage_engine: 'zfs', node: 'dr2', used_bytes: 2048 },
   { ...SNAPSHOTS[0], storage_engine: 'rbd', node: '' },
-  { ...SNAPSHOTS[0], cluster_id: 'c2', storage_engine: 'zfs', node: 'dr1', used: 0 },
+  { ...SNAPSHOTS[0], cluster_id: 'c2', storage_engine: 'zfs', node: 'dr1', used_bytes: 0 },
 ]
 
 it('keeps otherwise identical snapshots on distinct nodes, engines and connections independently selectable and deletes full identities', async () => {
@@ -163,7 +163,7 @@ it('keeps otherwise identical snapshots on distinct nodes, engines and connectio
 })
 
 it('loads usage for the selected node and displays ZFS used bytes', async () => {
-  const fetchMock = vi.fn(async (url: RequestInfo | URL) => new Response(JSON.stringify(String(url).includes('/usage?') ? { used: 4096 } : sameVolumeSnapshots)))
+  const fetchMock = vi.fn(async (url: RequestInfo | URL) => new Response(JSON.stringify(String(url).includes('/usage?') ? { used_bytes: 4096 } : sameVolumeSnapshots)))
   vi.stubGlobal('fetch', fetchMock)
   renderWithProviders(<SnapshotsTab connections={CONNECTIONS} />)
   await screen.findByText('dr2')

@@ -135,10 +135,15 @@ export async function discoverReplicableVMs({ conn, configs, resources }: Discov
   if (!storages.size) return []
   const guests = resources.filter(vm => vm.type === 'qemu' && vm.template !== 1 && vm.vmid !== undefined)
   const results = await Promise.all(guests.map(async vm => {
-    const config = await pveFetch<Record<string, unknown>>(conn, `/nodes/${encodeURIComponent(vm.node)}/qemu/${vm.vmid}/config`)
-    const disks = classifyReplicationVM(config, storages)
+    try {
+      const config = await pveFetch<Record<string, unknown>>(conn, `/nodes/${encodeURIComponent(vm.node)}/qemu/${vm.vmid}/config`)
+      const disks = classifyReplicationVM(config, storages)
 
-    return disks ? { vmid: vm.vmid!, node: vm.node, ...disks } : null
+      return disks ? { vmid: vm.vmid!, node: vm.node, ...disks } : null
+    } catch {
+      // One unreadable guest (node offline, transient PVE error) must not hide the whole list.
+      return null
+    }
   }))
 
   return results.filter((vm): vm is ReplicableVM => vm !== null)

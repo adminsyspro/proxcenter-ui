@@ -45,11 +45,14 @@ it('returns an empty list without reading configs when the engine has no storage
   expect(pveFetch).toHaveBeenCalledTimes(2)
 })
 
-it('reports unreadable guest configuration as discovery failure', async () => {
+it('skips a guest whose configuration cannot be read instead of failing the whole list', async () => {
   vi.mocked(pveFetch).mockImplementation(async (_conn, path) => {
     if (path === '/storage') return [{ storage: 'pool', type: 'zfspool' }]
-    if (path === '/cluster/resources') return [{ type: 'qemu', node: 'n1', vmid: 100 }]
+    if (path === '/cluster/resources') return [{ type: 'qemu', node: 'n1', vmid: 100 }, { type: 'qemu', node: 'n1', vmid: 101 }]
+    if (String(path).endsWith('/qemu/101/config')) return { scsi0: 'pool:vm-101-disk-0,size=4G' }
     throw new Error('config unavailable')
   })
-  expect((await get('?engine=zfs')).status).toBe(500)
+  const response = await get('?engine=zfs')
+  expect(response.status).toBe(200)
+  expect(await response.json()).toEqual([{ vmid: 101, node: 'n1', diskGb: 4, mixed: false, unsupported: false }])
 })

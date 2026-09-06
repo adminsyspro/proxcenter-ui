@@ -16,7 +16,7 @@ import type { SnapshotIdentity } from '@/lib/orchestrator/site-recovery.types'
 import EmptyState from '@/components/EmptyState'
 
 interface MirrorSnapshot extends SnapshotIdentity {
-  used?: number
+  used_bytes?: number
   cluster_id: string
   cluster_name: string
   pool: string
@@ -164,8 +164,8 @@ export default function SnapshotsTab({ connections, vmNamesByConn }: Props) {
   useEffect(() => {
     if (!detail) return
     const controller = new AbortController()
-    setDetailUsage(detail.storage_engine === 'zfs' && detail.used !== undefined
-      ? { used_bytes: detail.used, provisioned_bytes: detail.provisioned_bytes } : null)
+    setDetailUsage(detail.storage_engine === 'zfs' && detail.used_bytes !== undefined
+      ? { used_bytes: detail.used_bytes, provisioned_bytes: detail.provisioned_bytes } : null)
     setDetailLoading(true)
     const identity = snapshotIdentity(detail)
     const params = new URLSearchParams({ cluster: identity.cluster_id, pool: identity.pool, image: identity.image,
@@ -175,7 +175,7 @@ export default function SnapshotsTab({ connections, vmNamesByConn }: Props) {
         if (!response.ok) return
         const data = await response.json()
         if (!controller.signal.aborted) setDetailUsage({
-          used_bytes: detail.storage_engine === 'zfs' ? data.used ?? detail.used : data.used_bytes,
+          used_bytes: data.used_bytes ?? detail.used_bytes,
           provisioned_bytes: data.provisioned_bytes,
         })
       })
@@ -385,7 +385,7 @@ export default function SnapshotsTab({ connections, vmNamesByConn }: Props) {
                     <TableCell sx={{ fontFamily: '"JetBrains Mono", monospace', fontSize: '0.75rem' }}>{s.snapshot}</TableCell>
                     <TableCell align='right'>{formatAge(s.created_ts)}</TableCell>
                     <TableCell align='right'>{formatBytes(s.provisioned_bytes)}</TableCell>
-                    <TableCell align='right'>{s.storage_engine === 'zfs' ? formatBytes(s.used) : '—'}</TableCell>
+                    <TableCell align='right'>{s.storage_engine === 'zfs' ? formatBytes(s.used_bytes) : '—'}</TableCell>
                     <TableCell>
                       {s.is_orphan ? (
                         <Chip label={t('siteRecovery.snapshots.orphan')} size='small' color='warning' sx={{ height: 20, fontSize: '0.65rem' }} />

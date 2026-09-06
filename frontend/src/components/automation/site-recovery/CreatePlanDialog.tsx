@@ -27,6 +27,7 @@ interface ReplicatedVM {
   vm_name: string
   replication_job_id: string
   job_name: string
+  job_status: ReplicationJob['status']
   storage_engine: StorageEngine
 }
 
@@ -62,7 +63,7 @@ export default function CreatePlanDialog({ open, onClose, onSubmit, connections,
       const ids = j.vm_ids || []
       const names = j.vm_names || []
       for (let k = 0; k < ids.length; k++) {
-        groups[key].vms.push({ vm_id: ids[k], vm_name: names[k] || `VM ${ids[k]}`, replication_job_id: j.id, job_name: j.name || j.id, storage_engine: j.storage_engine || 'rbd' })
+        groups[key].vms.push({ vm_id: ids[k], vm_name: names[k] || `VM ${ids[k]}`, replication_job_id: j.id, job_name: j.name || j.id, job_status: j.status, storage_engine: j.storage_engine || 'rbd' })
       }
     }
     return groups
@@ -187,7 +188,7 @@ export default function CreatePlanDialog({ open, onClose, onSubmit, connections,
                         >
                           <Checkbox inputProps={{ 'aria-label': `${vm.vm_name} (${vm.vm_id}) · ${vm.job_name}` }} size='small' checked={selected} disabled={pairDisabled} sx={{ p: 0.5 }} />
                           <EngineGlyph engine={vm.storage_engine} size={16} />
-                          <Box component='span' sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: 'success.main' }} />
+                          <Box component='span' sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: vm.job_status === 'error' ? 'error.main' : vm.job_status === 'syncing' ? 'primary.main' : vm.job_status === 'synced' ? 'success.main' : 'text.disabled' }} />
                           <Typography variant='body2' noWrap sx={{ fontWeight: selected ? 600 : 400 }}>
                             {vm.vm_name}
                           </Typography>

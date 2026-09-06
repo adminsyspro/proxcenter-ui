@@ -137,7 +137,10 @@ export function parseCatalogPayload(input: unknown): CatalogParseResult {
 export function stableStringify(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`
   if (value && typeof value === 'object') {
-    const entries = Object.keys(value as Record<string, unknown>).sort()
+    // Explicit comparator, and deliberately NOT localeCompare: this ordering
+    // has to be identical on every machine that serialises the payload, and a
+    // locale-aware collation is not. Code-unit order is the canonical one.
+    const entries = Object.keys(value as Record<string, unknown>).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
       .map(k => `${JSON.stringify(k)}:${stableStringify((value as Record<string, unknown>)[k])}`)
     return `{${entries.join(',')}}`
   }

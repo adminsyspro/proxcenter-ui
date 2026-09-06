@@ -15,9 +15,11 @@ import {
 import { usePageTitle } from '@/contexts/PageTitleContext'
 import { useLicense, Features } from '@/contexts/LicenseContext'
 import EnterpriseGuard from '@/components/guards/EnterpriseGuard'
+import { useRBAC } from '@/contexts/RBACContext'
 import { useToast } from '@/contexts/ToastContext'
 import { useReportsData } from '@/hooks/useReports'
 
+import ReportCustomization from './components/ReportCustomization'
 import ReportGenerator from './components/ReportGenerator'
 import ReportHistory from './components/ReportHistory'
 import ScheduleManager from './components/ScheduleManager'
@@ -72,6 +74,7 @@ export default function ReportsPage() {
   const t = useTranslations()
   const { setPageInfo } = usePageTitle()
   const { hasFeature, isLicensed, isEnterprise } = useLicense()
+  const { hasPermission } = useRBAC()
   const [mounted, setMounted] = useState(false)
   const [tab, setTab] = useState(0)
   const { showToast } = useToast()
@@ -83,6 +86,10 @@ export default function ReportsPage() {
   const reports = reportsData?.reports || []
   const schedules = reportsData?.schedules || []
   const languages = reportsData?.languages || [{ code: 'en', name: 'English' }, { code: 'fr', name: 'Français' }]
+
+  // The layout template is a tenant-wide setting, same permission as the
+  // white label it builds on.
+  const canCustomize = hasPermission('admin.settings')
 
   useEffect(() => {
     setMounted(true)
@@ -243,6 +250,7 @@ export default function ReportsPage() {
               <Tab label={t('reports.generate')} />
               <Tab label={`${t('reports.history')} (${reports.length})`} />
               <Tab label={`${t('reports.schedules')} (${schedules.length})`} />
+              {canCustomize && <Tab label={t('reports.customization.tab')} />}
             </Tabs>
           </Box>
 
@@ -277,6 +285,8 @@ export default function ReportsPage() {
             loading={loading}
           />
         )}
+
+        {tab === 3 && canCustomize && <ReportCustomization languages={languages} />}
       </Card>
 
       </Box>

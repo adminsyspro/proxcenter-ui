@@ -36,8 +36,6 @@ import {
   Typography
 } from '@mui/material'
 import { DataGrid, GridColDef, GridRowSelectionModel } from '@mui/x-data-grid'
-import { PieChart, Pie, Cell } from 'recharts'
-import ChartContainer from '@/components/ChartContainer'
 
 import { usePageTitle } from '@/contexts/PageTitleContext'
 import { useTenant } from '@/contexts/TenantContext'
@@ -49,6 +47,7 @@ import { useConnections } from '@/hooks/useConnections'
 import { resolveSelectedRowIds } from '@/utils/gridSelection'
 import EmptyState from '@/components/EmptyState'
 import { CardsSkeleton, TableSkeleton } from '@/components/skeletons'
+import { DonutStatCard, DonutTotalCard } from '@/components/charts/DonutStatCards'
 
 /* --------------------------------
    Types
@@ -199,70 +198,6 @@ function StatusChip({ status, t }: { status: string; t: ReturnType<typeof useTra
 
 
 return <Chip size="small" label={cfg.labelKey ? t(cfg.labelKey) : status} color={cfg.color} variant={cfg.variant} />
-}
-
-function DonutStatCard({ title, value, total, color }: { title: string; value: number; total: number; color: string }) {
-  const remainder = Math.max(0, total - value)
-
-  return (
-    <Card variant="outlined">
-      <CardContent sx={{ py: 1.5, px: 2, display: 'flex', alignItems: 'center', gap: 1.5 }}>
-        <Box sx={{ width: 52, height: 52, flexShrink: 0 }}>
-          <ChartContainer>
-            <PieChart>
-              <Pie
-                data={[{ value: value || 0 }, { value: remainder || 1 }]}
-                dataKey="value"
-                cx="50%" cy="50%"
-                innerRadius={14} outerRadius={24}
-                strokeWidth={0}
-                startAngle={90} endAngle={-270}
-              >
-                <Cell fill={color} />
-                <Cell fill="rgba(255,255,255,0.08)" />
-              </Pie>
-            </PieChart>
-          </ChartContainer>
-        </Box>
-        <Box>
-          <Typography variant="caption" sx={{ opacity: 0.6 }}>{title}</Typography>
-          <Typography variant="h5" sx={{ fontWeight: 700 }}>{value}</Typography>
-        </Box>
-      </CardContent>
-    </Card>
-  )
-}
-
-function DonutTotalCard({ title, value, segments }: { title: string; value: number; segments: { value: number; color: string }[] }) {
-  const data = segments.filter(s => s.value > 0)
-  if (data.length === 0) data.push({ value: 1, color: 'rgba(255,255,255,0.08)' })
-
-  return (
-    <Card variant="outlined">
-      <CardContent sx={{ py: 1.5, px: 2, display: 'flex', alignItems: 'center', gap: 1.5 }}>
-        <Box sx={{ width: 52, height: 52, flexShrink: 0 }}>
-          <ChartContainer>
-            <PieChart>
-              <Pie
-                data={data}
-                dataKey="value"
-                cx="50%" cy="50%"
-                innerRadius={14} outerRadius={24}
-                strokeWidth={0}
-                startAngle={90} endAngle={-270}
-              >
-                {data.map((s, i) => <Cell key={i} fill={s.color} />)}
-              </Pie>
-            </PieChart>
-          </ChartContainer>
-        </Box>
-        <Box>
-          <Typography variant="caption" sx={{ opacity: 0.6 }}>{title}</Typography>
-          <Typography variant="h5" sx={{ fontWeight: 700 }}>{value}</Typography>
-        </Box>
-      </CardContent>
-    </Card>
-  )
 }
 
 /* --------------------------------

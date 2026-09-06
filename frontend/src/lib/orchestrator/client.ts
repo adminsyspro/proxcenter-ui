@@ -176,6 +176,8 @@ export interface DRSMigration {
   completed_at?: string
   status: 'running' | 'completed' | 'failed'
   error?: string
+  reason?: string
+  maintenance_evacuation?: boolean
 }
 
 export interface AffinityRule {
@@ -351,8 +353,8 @@ return this.get<DRSRecommendation[]>(`/drs/recommendations${query}`)
   }
 
   // Migrations
-  getMigrations() {
-    return this.get<DRSMigration[]>('/drs/migrations')
+  getMigrations(limit?: number) {
+    return this.get<DRSMigration[]>(limit ? `/drs/migrations?limit=${limit}` : '/drs/migrations')
   }
 
   getActiveMigrations() {

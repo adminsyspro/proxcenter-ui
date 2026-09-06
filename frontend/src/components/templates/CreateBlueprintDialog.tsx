@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import {
   Autocomplete,
@@ -105,6 +105,12 @@ export default function CreateBlueprintDialog({ open, onClose, blueprint }: Crea
   // Network options fetched on dialog open (VDC VNets)
   const [networkOptions, setNetworkOptions] = useState<NetworkOption[]>([])
 
+  // Read when the catalog fetch resolves. A ref rather than a dependency:
+  // `blueprint` is an object prop, adding it to the fetch effect would refire
+  // the request on every parent render that rebuilds it.
+  const createModeRef = useRef(!blueprint)
+  useEffect(() => { createModeRef.current = !blueprint })
+
   // Reset form on open / populate from editing blueprint
   useEffect(() => {
     if (!open) return
@@ -173,7 +179,16 @@ export default function CreateBlueprintDialog({ open, onClose, blueprint }: Crea
       })
       .then(res => {
         const imgs: CatalogImage[] = res.data?.images || []
-        setCatalogImages(imgs.length > 0 ? imgs : CLOUD_IMAGES)
+        const list = imgs.length > 0 ? imgs : CLOUD_IMAGES
+        setCatalogImages(list)
+        // Create mode seeds imageSlug from the embedded list before this fetch
+        // lands. When the served catalog has retired that slug the Select sits
+        // blank while Save still persists the retired slug, so reconcile onto a
+        // slug the list actually offers. Edit mode keeps what the blueprint
+        // stored, retired or not, so reopening it never rewrites its image.
+        if (createModeRef.current) {
+          setImageSlug(current => (list.some(i => i.slug === current) ? current : (list[0]?.slug ?? current)))
+        }
       })
       .catch(() => {
         // Graceful degradation: keep the built-in list so the dialog stays usable.

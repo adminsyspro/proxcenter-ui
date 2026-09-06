@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
     }
 
     const client = getOrchestratorClient()
-    const response = await client.checkSSHConnectivity(body.source_cluster, body.target_cluster)
+    const response = await client.checkSSHConnectivity(body)
 
     return NextResponse.json(response.data)
   } catch (e: any) {

@@ -413,3 +413,41 @@ describe('leader routing (ui#803 defect 2)', () => {
     expect(await fetchPathWithLeaderUrl('/drs/status', undefined)).toBe('http://localhost:8080/api/v1/drs/status')
   })
 })
+
+describe('replication engine wire contracts', () => {
+  const body = { source_cluster: 'src', target_cluster: 'dst', storage_engine: 'zfs' as const, target_node: 'dr1', vm_ids: [100], tags: ['db'] }
+
+  it('serializes SSH engine, target node and both selection modes', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ connected: true, checks: [{ source_node: 'pve1', target_node: 'dr1', ok: true }] }))
+    const { getOrchestratorClient } = await import('./client')
+    const result = await getOrchestratorClient().checkSSHConnectivity(body)
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual(body)
+    expect(result.data.checks?.[0].target_node).toBe('dr1')
+  })
+
+  it('serializes preflight engine and selection fields', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ checks: [] }))
+    const { getOrchestratorClient } = await import('./client')
+    const request = { ...body, target_pool: 'local-zfs', estimated_size_bytes: 1024 }
+    await getOrchestratorClient().preflightReplication(request)
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual(request)
+  })
+
+  it('encodes the complete snapshot identity in usage and deletion', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ used: 1024 }))
+    const { getOrchestratorClient } = await import('./client')
+    const client = getOrchestratorClient()
+    await client.getSnapshotUsage('dst', 'rpool/data', 'vm-1-disk-0', 'mirror-1', 'zfs', 'dr1')
+    expect(Object.fromEntries(new URL(fetchMock.mock.calls[0][0]).searchParams)).toEqual({ cluster: 'dst', pool: 'rpool/data', image: 'vm-1-disk-0', snap: 'mirror-1', storage_engine: 'zfs', node: 'dr1' })
+    const items = [{ cluster_id: 'dst', pool: 'rpool/data', image: 'vm-1-disk-0', snapshot: 'mirror-1', storage_engine: 'zfs' as const, node: 'dr1' }]
+    await client.deleteMirrorSnapshots(items)
+    expect(fetchMock.mock.calls[1][0]).toContain('/replication/snapshots/delete')
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({ items })
+  })
+
+  it('returns advertised engines from status', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ engines: ['rbd', 'zfs'] }))
+    const { getOrchestratorClient } = await import('./client')
+    expect((await getOrchestratorClient().getReplicationHealth()).data.engines).toEqual(['rbd', 'zfs'])
+  })
+})

@@ -96,12 +96,12 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
 
   // Ceph VM IDs for the source cluster (only VMs with disks on RBD storage)
   const { data: cephVMsData } = useSWR(
-    sourceCluster ? `/api/v1/connections/${sourceCluster}/ceph-vms` : null,
+    sourceCluster ? `/api/v1/connections/${sourceCluster}/replicable-vms?engine=rbd` : null,
     fetcher
   )
   const cephVMMap = useMemo(() => {
     const m = new Map<number, number>()
-    for (const v of (cephVMsData?.data || [])) m.set(v.vmid, v.cephDiskGb)
+    for (const v of (cephVMsData || [])) m.set(v.vmid, v.diskGb)
     return m
   }, [cephVMsData])
 
@@ -295,6 +295,7 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
       source_cluster: sourceCluster,
       target_cluster: targetCluster,
       target_pool: targetPool,
+      storage_engine: 'rbd' as const,
       rate_limit_mbps: 0,
       bandwidth_windows: bandwidthWindows.length > 0 ? bandwidthWindows : undefined,
       vmid_prefix: vmidPrefix || undefined,

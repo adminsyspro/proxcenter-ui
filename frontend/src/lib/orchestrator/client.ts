@@ -1,3 +1,5 @@
+import type { ReplicationCheckRequest, ReplicationHealthStatus, SnapshotIdentity, SSHConnectivityResult } from './site-recovery.types'
+
 // src/lib/orchestrator/client.ts
 // Client pour communiquer avec le backend Go d'orchestration
 
@@ -452,7 +454,7 @@ return this.get<ClusterMetrics[]>(`/metrics/${connectionId}/history${query ? `?$
   // ============================================
 
   getReplicationHealth() {
-    return this.get<any>('/replication/status')
+    return this.get<ReplicationHealthStatus>('/replication/status')
   }
 
   getReplicationJobs() {
@@ -486,12 +488,12 @@ return this.get<ClusterMetrics[]>(`/metrics/${connectionId}/history${query ? `?$
     return this.get<any[]>(`/replication/snapshots${suffix}`)
   }
 
-  getSnapshotUsage(cluster: string, pool: string, image: string, snap: string) {
-    const q = new URLSearchParams({ cluster, pool, image, snap }).toString()
+  getSnapshotUsage(cluster: string, pool: string, image: string, snap: string, storage_engine: 'rbd' | 'zfs' = 'rbd', node = '') {
+    const q = new URLSearchParams({ cluster, pool, image, snap, storage_engine, node }).toString()
     return this.get<any>(`/replication/snapshots/usage?${q}`)
   }
 
-  deleteMirrorSnapshots(items: Array<{ cluster_id: string; pool: string; image: string; snapshot: string }>) {
+  deleteMirrorSnapshots(items: SnapshotIdentity[]) {
     return this.post<any>('/replication/snapshots/delete', { items })
   }
 
@@ -519,18 +521,12 @@ return this.get<ClusterMetrics[]>(`/metrics/${connectionId}/history${query ? `?$
     return this.get<any[]>(`/replication/jobs/${id}/throughput?window=${encodeURIComponent(window)}`)
   }
 
-  preflightReplication(body: { source_cluster: string; target_cluster: string; target_pool: string; estimated_size_bytes: number }) {
+  preflightReplication(body: ReplicationCheckRequest & { target_pool: string; estimated_size_bytes: number }) {
     return this.post<any>('/replication/preflight', body)
   }
 
-  checkSSHConnectivity(sourceCluster: string, targetCluster: string) {
-    return this.post<{
-      connected: boolean
-      source_node: string
-      target_node: string
-      target_ip: string
-      error: string
-    }>('/replication/check-ssh', { source_cluster: sourceCluster, target_cluster: targetCluster })
+  checkSSHConnectivity(body: ReplicationCheckRequest) {
+    return this.post<SSHConnectivityResult>('/replication/check-ssh', body)
   }
 
   // ============================================

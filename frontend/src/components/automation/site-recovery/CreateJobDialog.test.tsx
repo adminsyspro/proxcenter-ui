@@ -33,10 +33,8 @@ function renderDialog() {
 
 function renderDialogWithVMs(allVMs: ComponentProps<typeof CreateJobDialog>['allVMs']) {
   vi.stubGlobal('fetch', vi.fn(async (url: string) => {
-    if (url === '/api/v1/connections/src/ceph-vms') {
-      return new Response(JSON.stringify({
-        data: allVMs.map(vm => ({ vmid: vm.vmid, cephDiskGb: vm.diskGb })),
-      }), { status: 200 })
+    if (url === '/api/v1/connections/src/replicable-vms?engine=rbd') {
+      return new Response(JSON.stringify(allVMs.map(vm => ({ vmid: vm.vmid, diskGb: vm.diskGb }))), { status: 200 })
     }
 
     return new Response('{}', { status: 200 })
@@ -108,8 +106,8 @@ describe('CreateJobDialog snapshot retention (issue #664)', () => {
 
   it('includes snapshot_keep_source/target in the submitted payload', async () => {
     vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
-      if (url === '/api/v1/connections/src/ceph-vms') {
-        return new Response(JSON.stringify({ data: [{ vmid: 100, cephDiskGb: 10 }] }), { status: 200 })
+      if (url === '/api/v1/connections/src/replicable-vms?engine=rbd') {
+        return new Response(JSON.stringify([{ vmid: 100, diskGb: 10 }]), { status: 200 })
       }
       if (url === '/api/v1/orchestrator/replication/check-ssh' && init?.method === 'POST') {
         return new Response(

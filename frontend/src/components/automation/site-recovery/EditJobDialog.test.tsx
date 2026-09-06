@@ -22,6 +22,7 @@ afterEach(cleanup)
 
 function job(overrides: Partial<ReplicationJob> = {}): ReplicationJob {
   return {
+    storage_engine: 'rbd',
     id: 'job-1',
     name: 'nightly',
     vm_ids: [100],

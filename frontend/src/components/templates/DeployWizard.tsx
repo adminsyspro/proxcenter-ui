@@ -1,12 +1,14 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useTheme } from '@mui/material/styles'
 import { useTranslations } from 'next-intl'
 import {
   Alert,
   Box,
   Button,
   Chip,
+  LinearProgress,
   CircularProgress,
   Dialog,
   DialogActions,
@@ -37,6 +39,7 @@ import { buildDeployIpconfig0, parseIpconfig0 } from '@/lib/templates/deployIpco
 import { supportsVmDisks } from '@/lib/proxmox/storage'
 import type { StoragePolicyCaps } from '@/components/hardware/utils'
 import NumericTextField from '@/components/ui/NumericTextField'
+import StorageTypeIcon from '@/components/storage/StorageTypeIcon'
 import DeploymentProgress from './DeploymentProgress'
 import VendorLogo from './VendorLogo'
 import IsoNetworkReservation from './IsoNetworkReservation'
@@ -71,6 +74,11 @@ interface Connection {
   type: string
 }
 
+// Same palette as the dashboard node widgets (Nodes Status, Guest Map, Node
+// Guests): green online, grey unknown, red for anything else.
+const NODE_STATUS_COLORS: Record<string, string> = { online: '#4caf50', unknown: '#9e9e9e' }
+const nodeStatusColor = (status: string) => NODE_STATUS_COLORS[status] ?? '#f44336'
+
 interface NodeInfo {
   node: string
   status: string
@@ -95,6 +103,7 @@ interface StorageInfo {
 
 export default function DeployWizard({ open, onClose, image, prefillBlueprint, resumeDeploymentId }: DeployWizardProps) {
   const t = useTranslations()
+  const theme = useTheme()
   // Tenants get cloud-style abstraction in step "Target": no connection /
   // node / storage / VMID picker. They only enter a name. Selections are
   // resolved in the background (first allowed connection, least-loaded
@@ -955,7 +964,12 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
           label={t('templates.deploy.target.connection')}
         >
           {connections.map(c => (
-            <MenuItem key={c.id} value={c.id}>{c.name}</MenuItem>
+            <MenuItem key={c.id} value={c.id}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Box component="i" className="ri-server-line" sx={{ fontSize: 16, opacity: 0.8, display: 'inline-flex' }} />
+                {c.name}
+              </Box>
+            </MenuItem>
           ))}
         </Select>
       </FormControl>
@@ -970,6 +984,29 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
           {nodes.map(n => (
             <MenuItem key={n.node} value={n.node}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
+                {/* A node is the Proxmox logo with its status dot, as in the
+                    Nodes Status and Guest Map widgets. */}
+                <Box sx={{ position: 'relative', width: 16, height: 16, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <img
+                    src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'}
+                    alt=""
+                    width={14}
+                    height={14}
+                    style={{ opacity: n.status === 'online' ? 0.8 : 0.4 }}
+                  />
+                  <Box
+                    sx={{
+                      position: 'absolute',
+                      bottom: -1,
+                      right: -2,
+                      width: 6,
+                      height: 6,
+                      borderRadius: '50%',
+                      bgcolor: nodeStatusColor(n.status),
+                      border: theme => `1px solid ${theme.palette.background.paper}`,
+                    }}
+                  />
+                </Box>
                 <Typography variant="body2">{n.node}</Typography>
                 <Typography variant="caption" sx={{ opacity: 0.5, ml: 'auto' }}>
                   CPU: {(n.cpu * 100).toFixed(0)}% &middot; RAM: {((n.mem / n.maxmem) * 100).toFixed(0)}%
@@ -987,21 +1024,39 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
           onChange={e => setStorage(e.target.value)}
           label={t('templates.deploy.target.storage')}
         >
-          {storages.map(s => (
-            <MenuItem key={s.storage} value={s.storage}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
-                <Typography variant="body2">{s.storage}</Typography>
-                {/* Tier chip, same affordance as AddDiskDialog's storage
-                    picker: the /nodes/{node}/storages payload carries the
-                    governing storage policy for an iaas tenant, so the
-                    deployed disk's QoS caps are visible before the deploy. */}
-                {s.policy && <Chip size="small" label={s.policy.name} />}
-                <Typography variant="caption" sx={{ opacity: 0.5, ml: 'auto' }}>
-                  {s.type} &middot; {((s.avail || 0) / 1073741824).toFixed(1)} GB {t('templates.deploy.target.available')}
-                </Typography>
-              </Box>
-            </MenuItem>
-          ))}
+          {storages.map(s => {
+            // Usage bar and thresholds copied from EditDiskDialog's storage
+            // picker so a storage keeps its colour from one dialog to the next.
+            const usagePct = s.total > 0 ? Math.round(((s.used || 0) / s.total) * 100) : 0
+            const usageColor = usagePct > 90 ? 'error' : usagePct > 75 ? 'warning' : 'primary'
+
+            return (
+              <MenuItem key={s.storage} value={s.storage}>
+                <Box sx={{ width: '100%' }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
+                    <StorageTypeIcon type={s.type} />
+                    <Typography variant="body2">{s.storage}</Typography>
+                    {/* Tier chip, same affordance as AddDiskDialog's storage
+                        picker: the /nodes/{node}/storages payload carries the
+                        governing storage policy for an iaas tenant, so the
+                        deployed disk's QoS caps are visible before the deploy. */}
+                    {s.policy && <Chip size="small" label={s.policy.name} />}
+                    <Typography variant="caption" sx={{ opacity: 0.5, ml: 'auto' }}>
+                      {s.type} &middot; {((s.avail || 0) / 1073741824).toFixed(1)} GB {t('templates.deploy.target.available')}
+                    </Typography>
+                  </Box>
+                  {s.total > 0 && (
+                    <LinearProgress
+                      variant="determinate"
+                      value={usagePct}
+                      color={usageColor}
+                      sx={{ height: 4, borderRadius: 1, mt: 0.5 }}
+                    />
+                  )}
+                </Box>
+              </MenuItem>
+            )
+          })}
         </Select>
       </FormControl>
 
@@ -1123,6 +1178,7 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
         return (
           <Box sx={{ gridColumn: '1 / -1', px: 1.5 }}>
             <Stack direction="row" alignItems="baseline" spacing={1} sx={{ mb: 0.5 }}>
+              <Box component="i" className="ri-cpu-line" sx={{ fontSize: 15, opacity: 0.7, alignSelf: 'center', display: 'inline-flex' }} />
               <Typography variant="caption" sx={{ opacity: 0.7, fontWeight: 600 }}>
                 {t('templates.deploy.hardware.cores')}
               </Typography>
@@ -1188,6 +1244,7 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
         return (
           <Box sx={{ gridColumn: '1 / -1', px: 1.5 }}>
             <Stack direction="row" alignItems="baseline" spacing={1} sx={{ mb: 0.5 }}>
+              <Box component="i" className="ri-ram-line" sx={{ fontSize: 15, opacity: 0.7, alignSelf: 'center', display: 'inline-flex' }} />
               <Typography variant="caption" sx={{ opacity: 0.7, fontWeight: 600 }}>
                 {t('templates.deploy.hardware.memory')}
               </Typography>
@@ -1263,6 +1320,7 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
         return (
           <Box sx={{ gridColumn: '1 / -1', px: 1.5 }}>
             <Stack direction="row" alignItems="baseline" spacing={1} sx={{ mb: 0.5 }}>
+              <Box component="i" className="ri-hard-drive-3-line" sx={{ fontSize: 15, opacity: 0.7, alignSelf: 'center', display: 'inline-flex' }} />
               <Typography variant="caption" sx={{ opacity: 0.7, fontWeight: 600 }}>
                 {t('templates.deploy.hardware.diskSize')}
               </Typography>

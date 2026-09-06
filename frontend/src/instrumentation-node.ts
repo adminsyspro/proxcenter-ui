@@ -14,6 +14,8 @@ import { importDiskAssets } from '@/lib/branding/importDiskAssets'
 import { prisma } from '@/lib/db/prisma'
 import { resolveInstanceId, sweepOrphanedMigrationJobs } from '@/lib/migration/orphan-sweep'
 import { startSFlowReconciler } from '@/lib/sflow/reconciler'
+import { startCatalogRefresher } from '@/lib/templates/catalogRefresher'
+import { isCatalogAutoUpdateEnabled } from '@/lib/templates/catalogStore'
 
 export async function registerNode(): Promise<void> {
   // undici 8 negotiates HTTP/2 through ALPN by default. Every hypervisor API we
@@ -67,5 +69,16 @@ export async function registerNode(): Promise<void> {
     // Boot must never depend on this: the nodes simply stay as they are and
     // the next boot retries starting the reconciler.
     console.error('[startup] sFlow reconciler failed to start (non-fatal):', err)
+  }
+
+  try {
+    // The built-in cloud image catalog is also published as JSON in the
+    // public repo. One fetch a day keeps new distribution releases showing
+    // up without a ProxCenter release. TEMPLATE_CATALOG_AUTO_UPDATE=false
+    // (air-gapped sites) leaves only the manual button on the catalog tab.
+    if (isCatalogAutoUpdateEnabled()) startCatalogRefresher()
+  } catch (err) {
+    // Boot must never depend on this: the embedded catalog keeps serving.
+    console.error('[startup] catalog refresher failed to start (non-fatal):', err)
   }
 }

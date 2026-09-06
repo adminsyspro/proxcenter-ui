@@ -24,6 +24,7 @@ import ExpandableChart from './ExpandableChart'
 import StorageContentGroup from './StorageContentGroup'
 import { UploadDialog } from '@/components/storage/StorageContentBrowser'
 import TemplateDownloadDialog from '@/components/storage/TemplateDownloadDialog'
+import StorageTypeIcon, { isCephStorage } from '@/components/storage/StorageTypeIcon'
 import type { PbsServerPanelHandle } from './PbsServerPanel'
 import type { InventorySelection, DetailsPayload, RrdTimeframe } from '../types'
 
@@ -106,27 +107,12 @@ export default function StorageDetailPanel({
   const si = data.storageInfo
   if (!si) return null
 
-  const isCeph = si.type === 'rbd' || si.type === 'cephfs'
+  const isCeph = isCephStorage(si.type)
   const typeLabels: Record<string, string> = {
     rbd: 'Ceph RBD', cephfs: 'CephFS', nfs: 'NFS', cifs: 'SMB/CIFS',
     zfspool: 'ZFS', zfs: 'ZFS over iSCSI', lvm: 'LVM', lvmthin: 'LVM-Thin',
     dir: 'Directory', iscsi: 'iSCSI', glusterfs: 'GlusterFS', pbs: 'PBS',
   }
-  const storageTypeIcon = (type: string) => {
-    if (type === 'rbd' || type === 'cephfs') return null // use img
-    if (type === 'nfs' || type === 'cifs') return 'ri-folder-shared-fill'
-    if (type === 'zfspool' || type === 'zfs') return 'ri-stack-fill'
-    if (type === 'lvm' || type === 'lvmthin') return 'ri-hard-drive-2-fill'
-    if (type === 'dir') return 'ri-folder-fill'
-    return 'ri-hard-drive-fill'
-  }
-  const storageTypeColor = (type: string) => {
-    if (type === 'nfs' || type === 'cifs') return '#3498db'
-    if (type === 'zfspool' || type === 'zfs') return '#2ecc71'
-    if (type === 'lvm' || type === 'lvmthin') return '#e67e22'
-    return '#95a5a6'
-  }
-
   // Group content items by type
   const groups: Record<string, { label: string; icon: string; items: any[]; contentType?: string }> = {}
   const contentLabelMap: Record<string, { label: string; icon: string }> = {
@@ -166,10 +152,7 @@ export default function StorageDetailPanel({
         <Card variant="outlined" sx={{ borderRadius: 2, flexShrink: 0 }}>
           <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
             <Typography fontWeight={900} sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-              {isCeph
-                ? <img src="/images/ceph-logo.svg" alt="" width={18} height={18} />
-                : <i className={storageTypeIcon(si.type) || 'ri-hard-drive-fill'} style={{ fontSize: 18, color: storageTypeColor(si.type) }} />
-              }
+              <StorageTypeIcon type={si.type} size={18} />
               {t('inventory.storageUsage')}
             </Typography>
 

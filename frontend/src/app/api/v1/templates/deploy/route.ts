@@ -8,7 +8,8 @@ import { authOptions } from "@/lib/auth/config"
 import { deploySchema } from "@/lib/schemas"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { pveFetch } from "@/lib/proxmox/client"
-import { getImageBySlug, customImageToCloudImage } from "@/lib/templates/cloudImages"
+import { customImageToCloudImage } from "@/lib/templates/cloudImages"
+import { resolveBuiltInImage } from "@/lib/templates/catalogStore"
 import { isFileBasedStorage, supportsVmDisks } from "@/lib/proxmox/storage"
 import { resolveVdcForTenant, checkVdcQuota } from "@/lib/vdc/quota"
 import { getAllowedNetworksForTenant, validateNetAgainstScope, resolveSubnetForBridge } from "@/lib/vdc/vnets"
@@ -68,7 +69,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: vmidRangeCheck.error }, { status: vmidRangeCheck.status ?? 400 })
     }
 
-    let image = getImageBySlug(body.imageSlug) as any
+    let image = (await resolveBuiltInImage(body.imageSlug)) as any
     let isCustom = false
     let sourceType = 'url'
     let volumeId: string | null = null

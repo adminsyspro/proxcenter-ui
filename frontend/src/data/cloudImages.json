@@ -1,0 +1,481 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-06",
+  "vendors": [
+    {
+      "id": "ubuntu",
+      "name": "Ubuntu",
+      "icon": "ri-ubuntu-fill"
+    },
+    {
+      "id": "debian",
+      "name": "Debian",
+      "icon": "ri-debian-fill"
+    },
+    {
+      "id": "rocky",
+      "name": "Rocky Linux",
+      "icon": "ri-centos-fill"
+    },
+    {
+      "id": "alma",
+      "name": "AlmaLinux",
+      "icon": "ri-centos-fill"
+    },
+    {
+      "id": "fedora",
+      "name": "Fedora",
+      "icon": "ri-fedora-fill"
+    },
+    {
+      "id": "opensuse",
+      "name": "openSUSE",
+      "icon": "ri-suse-fill"
+    },
+    {
+      "id": "alpine",
+      "name": "Alpine Linux",
+      "icon": "ri-cloud-line"
+    },
+    {
+      "id": "arch",
+      "name": "Arch Linux",
+      "icon": "ri-cloud-line"
+    },
+    {
+      "id": "centos",
+      "name": "CentOS Stream",
+      "icon": "ri-centos-fill"
+    },
+    {
+      "id": "freebsd",
+      "name": "FreeBSD",
+      "icon": "ri-server-line"
+    }
+  ],
+  "images": [
+    {
+      "slug": "ubuntu-2604",
+      "name": "Ubuntu 26.04 LTS (Resolute Reindeer)",
+      "vendor": "ubuntu",
+      "version": "26.04",
+      "arch": "amd64",
+      "format": "qcow2",
+      "downloadUrl": "https://cloud-images.ubuntu.com/resolute/current/resolute-server-cloudimg-amd64.img",
+      "checksumUrl": "https://cloud-images.ubuntu.com/resolute/current/SHA256SUMS",
+      "defaultDiskSize": "20G",
+      "minMemory": 512,
+      "recommendedMemory": 2048,
+      "minCores": 1,
+      "recommendedCores": 2,
+      "ostype": "l26",
+      "tags": [
+        "lts",
+        "cloud-init",
+        "popular"
+      ],
+      "logoIcon": "ri-ubuntu-fill"
+    },
+    {
+      "slug": "ubuntu-2404",
+      "name": "Ubuntu 24.04 LTS (Noble Numbat)",
+      "vendor": "ubuntu",
+      "version": "24.04",
+      "arch": "amd64",
+      "format": "qcow2",
+      "downloadUrl": "https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img",
+      "checksumUrl": "https://cloud-images.ubuntu.com/noble/current/SHA256SUMS",
+      "defaultDiskSize": "20G",
+      "minMemory": 512,
+      "recommendedMemory": 2048,
+      "minCores": 1,
+      "recommendedCores": 2,
+      "ostype": "l26",
+      "tags": [
+        "lts",
+        "cloud-init",
+        "popular"
+      ],
+      "logoIcon": "ri-ubuntu-fill"
+    },
+    {
+      "slug": "ubuntu-2204",
+      "name": "Ubuntu 22.04 LTS (Jammy Jellyfish)",
+      "vendor": "ubuntu",
+      "version": "22.04",
+      "arch": "amd64",
+      "format": "qcow2",
+      "downloadUrl": "https://cloud-images.ubuntu.com/jammy/current/jammy-server-cloudimg-amd64.img",
+      "checksumUrl": "https://cloud-images.ubuntu.com/jammy/current/SHA256SUMS",
+      "defaultDiskSize": "20G",
+      "minMemory": 512,
+      "recommendedMemory": 2048,
+      "minCores": 1,
+      "recommendedCores": 2,
+      "ostype": "l26",
+      "tags": [
+        "lts",
+        "cloud-init"
+      ],
+      "logoIcon": "ri-ubuntu-fill"
+    },
+    {
+      "slug": "debian-13",
+      "name": "Debian 13 (Trixie)",
+      "vendor": "debian",
+      "version": "13",
+      "arch": "amd64",
+      "format": "qcow2",
+      "downloadUrl": "https://cloud.debian.org/images/cloud/trixie/latest/debian-13-generic-amd64.qcow2",
+      "checksumUrl": "https://cloud.debian.org/images/cloud/trixie/latest/SHA512SUMS",
+      "defaultDiskSize": "20G",
+      "minMemory": 512,
+      "recommendedMemory": 1024,
+      "minCores": 1,
+      "recommendedCores": 2,
+      "ostype": "l26",
+      "tags": [
+        "stable",
+        "cloud-init",
+        "popular"
+      ],
+      "logoIcon": "ri-debian-fill",
+      "notes": "/latest/ redirects to the freshest point release (13.0, 13.1, ...), so the URL survives patch cycles. Same pattern as bookworm and bullseye."
+    },
+    {
+      "slug": "debian-12",
+      "name": "Debian 12 (Bookworm)",
+      "vendor": "debian",
+      "version": "12",
+      "arch": "amd64",
+      "format": "qcow2",
+      "downloadUrl": "https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-generic-amd64.qcow2",
+      "checksumUrl": "https://cloud.debian.org/images/cloud/bookworm/latest/SHA512SUMS",
+      "defaultDiskSize": "20G",
+      "minMemory": 512,
+      "recommendedMemory": 1024,
+      "minCores": 1,
+      "recommendedCores": 2,
+      "ostype": "l26",
+      "tags": [
+        "oldstable",
+        "cloud-init"
+      ],
+      "logoIcon": "ri-debian-fill"
+    },
+    {
+      "slug": "debian-11",
+      "name": "Debian 11 (Bullseye)",
+      "vendor": "debian",
+      "version": "11",
+      "arch": "amd64",
+      "format": "qcow2",
+      "downloadUrl": "https://cloud.debian.org/images/cloud/bullseye/latest/debian-11-generic-amd64.qcow2",
+      "checksumUrl": "https://cloud.debian.org/images/cloud/bullseye/latest/SHA512SUMS",
+      "defaultDiskSize": "20G",
+      "minMemory": 512,
+      "recommendedMemory": 1024,
+      "minCores": 1,
+      "recommendedCores": 2,
+      "ostype": "l26",
+      "tags": [
+        "oldoldstable",
+        "cloud-init",
+        "eol-soon"
+      ],
+      "logoIcon": "ri-debian-fill",
+      "notes": "Bullseye LTS ends in August 2026. Kept for transition workloads, flagged eol-soon so it is not picked as a default."
+    },
+    {
+      "slug": "rocky-10",
+      "name": "Rocky Linux 10",
+      "vendor": "rocky",
+      "version": "10",
+      "arch": "x86_64",
+      "format": "qcow2",
+      "downloadUrl": "https://dl.rockylinux.org/pub/rocky/10/images/x86_64/Rocky-10-GenericCloud.latest.x86_64.qcow2",
+      "checksumUrl": "https://dl.rockylinux.org/pub/rocky/10/images/x86_64/CHECKSUM",
+      "defaultDiskSize": "20G",
+      "minMemory": 1024,
+      "recommendedMemory": 2048,
+      "minCores": 1,
+      "recommendedCores": 2,
+      "ostype": "l26",
+      "tags": [
+        "rhel",
+        "cloud-init",
+        "enterprise",
+        "popular"
+      ],
+      "logoIcon": "ri-centos-fill",
+      "notes": ".latest. is a server-side symlink to the most recent point release, same convention as Rocky 9."
+    },
+    {
+      "slug": "rocky-9",
+      "name": "Rocky Linux 9",
+      "vendor": "rocky",
+      "version": "9",
+      "arch": "x86_64",
+      "format": "qcow2",
+      "downloadUrl": "https://dl.rockylinux.org/pub/rocky/9/images/x86_64/Rocky-9-GenericCloud.latest.x86_64.qcow2",
+      "checksumUrl": "https://dl.rockylinux.org/pub/rocky/9/images/x86_64/CHECKSUM",
+      "defaultDiskSize": "20G",
+      "minMemory": 1024,
+      "recommendedMemory": 2048,
+      "minCores": 1,
+      "recommendedCores": 2,
+      "ostype": "l26",
+      "tags": [
+        "rhel",
+        "cloud-init",
+        "enterprise"
+      ],
+      "logoIcon": "ri-centos-fill"
+    },
+    {
+      "slug": "alma-10",
+      "name": "AlmaLinux 10",
+      "vendor": "alma",
+      "version": "10",
+      "arch": "x86_64",
+      "format": "qcow2",
+      "downloadUrl": "https://repo.almalinux.org/almalinux/10/cloud/x86_64/images/AlmaLinux-10-GenericCloud-latest.x86_64.qcow2",
+      "checksumUrl": "https://repo.almalinux.org/almalinux/10/cloud/x86_64/images/CHECKSUM",
+      "defaultDiskSize": "20G",
+      "minMemory": 1024,
+      "recommendedMemory": 2048,
+      "minCores": 1,
+      "recommendedCores": 2,
+      "ostype": "l26",
+      "tags": [
+        "rhel",
+        "cloud-init",
+        "enterprise",
+        "popular"
+      ],
+      "logoIcon": "ri-centos-fill"
+    },
+    {
+      "slug": "alma-9",
+      "name": "AlmaLinux 9",
+      "vendor": "alma",
+      "version": "9",
+      "arch": "x86_64",
+      "format": "qcow2",
+      "downloadUrl": "https://repo.almalinux.org/almalinux/9/cloud/x86_64/images/AlmaLinux-9-GenericCloud-latest.x86_64.qcow2",
+      "checksumUrl": "https://repo.almalinux.org/almalinux/9/cloud/x86_64/images/CHECKSUM",
+      "defaultDiskSize": "20G",
+      "minMemory": 1024,
+      "recommendedMemory": 2048,
+      "minCores": 1,
+      "recommendedCores": 2,
+      "ostype": "l26",
+      "tags": [
+        "rhel",
+        "cloud-init",
+        "enterprise"
+      ],
+      "logoIcon": "ri-centos-fill"
+    },
+    {
+      "slug": "centos-stream-10",
+      "name": "CentOS Stream 10",
+      "vendor": "centos",
+      "version": "10-stream",
+      "arch": "x86_64",
+      "format": "qcow2",
+      "downloadUrl": "https://cloud.centos.org/centos/10-stream/x86_64/images/CentOS-Stream-GenericCloud-10-latest.x86_64.qcow2",
+      "checksumUrl": "https://cloud.centos.org/centos/10-stream/x86_64/images/CHECKSUM",
+      "defaultDiskSize": "20G",
+      "minMemory": 1024,
+      "recommendedMemory": 2048,
+      "minCores": 1,
+      "recommendedCores": 2,
+      "ostype": "l26",
+      "tags": [
+        "rhel",
+        "cloud-init",
+        "upstream"
+      ],
+      "logoIcon": "ri-centos-fill",
+      "notes": "CentOS Stream is the upstream rolling preview of RHEL; Stream 10 tracks RHEL 10. The -latest. segment is a server-side symlink to the freshest build."
+    },
+    {
+      "slug": "centos-stream-9",
+      "name": "CentOS Stream 9",
+      "vendor": "centos",
+      "version": "9-stream",
+      "arch": "x86_64",
+      "format": "qcow2",
+      "downloadUrl": "https://cloud.centos.org/centos/9-stream/x86_64/images/CentOS-Stream-GenericCloud-9-latest.x86_64.qcow2",
+      "checksumUrl": "https://cloud.centos.org/centos/9-stream/x86_64/images/CHECKSUM",
+      "defaultDiskSize": "20G",
+      "minMemory": 1024,
+      "recommendedMemory": 2048,
+      "minCores": 1,
+      "recommendedCores": 2,
+      "ostype": "l26",
+      "tags": [
+        "rhel",
+        "cloud-init",
+        "upstream"
+      ],
+      "logoIcon": "ri-centos-fill"
+    },
+    {
+      "slug": "fedora-44",
+      "name": "Fedora 44 Cloud",
+      "vendor": "fedora",
+      "version": "44",
+      "arch": "x86_64",
+      "format": "qcow2",
+      "downloadUrl": "https://download.fedoraproject.org/pub/fedora/linux/releases/44/Cloud/x86_64/images/Fedora-Cloud-Base-Generic-44-1.7.x86_64.qcow2",
+      "checksumUrl": "https://download.fedoraproject.org/pub/fedora/linux/releases/44/Cloud/x86_64/images/Fedora-Cloud-44-1.7-x86_64-CHECKSUM",
+      "defaultDiskSize": "20G",
+      "minMemory": 1024,
+      "recommendedMemory": 2048,
+      "minCores": 1,
+      "recommendedCores": 2,
+      "ostype": "l26",
+      "tags": [
+        "cloud-init",
+        "cutting-edge"
+      ],
+      "logoIcon": "ri-fedora-fill",
+      "notes": "Same respin caveat as fedora-43: the -1.7 build suffix is deleted upstream when Fedora republishes."
+    },
+    {
+      "slug": "fedora-43",
+      "name": "Fedora 43 Cloud",
+      "vendor": "fedora",
+      "version": "43",
+      "arch": "x86_64",
+      "format": "qcow2",
+      "downloadUrl": "https://download.fedoraproject.org/pub/fedora/linux/releases/43/Cloud/x86_64/images/Fedora-Cloud-Base-Generic-43-1.6.x86_64.qcow2",
+      "checksumUrl": "https://download.fedoraproject.org/pub/fedora/linux/releases/43/Cloud/x86_64/images/Fedora-Cloud-43-1.6-x86_64-CHECKSUM",
+      "defaultDiskSize": "20G",
+      "minMemory": 1024,
+      "recommendedMemory": 2048,
+      "minCores": 1,
+      "recommendedCores": 2,
+      "ostype": "l26",
+      "tags": [
+        "cloud-init",
+        "cutting-edge"
+      ],
+      "logoIcon": "ri-fedora-fill",
+      "notes": "Fedora exposes no stable latest symlink and DELETES the previous build on a respin: this entry was pinned to -1.1 and started 404ing when Fedora moved to -1.6 (found 2026-09-06). The build suffix must be bumped from https://download.fedoraproject.org/pub/fedora/linux/releases/43/Cloud/x86_64/images/ ."
+    },
+    {
+      "slug": "opensuse-leap-161",
+      "name": "openSUSE Leap 16.1",
+      "vendor": "opensuse",
+      "version": "16.1",
+      "arch": "x86_64",
+      "format": "qcow2",
+      "downloadUrl": "https://download.opensuse.org/distribution/leap/16.1/appliances/Leap-16.1-Minimal-VM.x86_64-Cloud-Build2.16.qcow2",
+      "checksumUrl": "https://download.opensuse.org/distribution/leap/16.1/appliances/Leap-16.1-Minimal-VM.x86_64-Cloud-Build2.16.qcow2.sha256",
+      "defaultDiskSize": "20G",
+      "minMemory": 1024,
+      "recommendedMemory": 2048,
+      "minCores": 1,
+      "recommendedCores": 2,
+      "ostype": "l26",
+      "tags": [
+        "cloud-init",
+        "enterprise"
+      ],
+      "logoIcon": "ri-suse-fill",
+      "notes": "Leap 16 dropped the openSUSE- prefix and the stable alias: the file name carries a build number (Build2.16) that changes on every republish, so this URL has to be bumped. The directory listing is JavaScript only, read it with ?jsontable."
+    },
+    {
+      "slug": "opensuse-leap-156",
+      "name": "openSUSE Leap 15.6",
+      "vendor": "opensuse",
+      "version": "15.6",
+      "arch": "x86_64",
+      "format": "qcow2",
+      "downloadUrl": "https://download.opensuse.org/distribution/leap/15.6/appliances/openSUSE-Leap-15.6-Minimal-VM.x86_64-Cloud.qcow2",
+      "checksumUrl": null,
+      "defaultDiskSize": "20G",
+      "minMemory": 1024,
+      "recommendedMemory": 2048,
+      "minCores": 1,
+      "recommendedCores": 2,
+      "ostype": "l26",
+      "tags": [
+        "cloud-init",
+        "enterprise"
+      ],
+      "logoIcon": "ri-suse-fill"
+    },
+    {
+      "slug": "alpine-324",
+      "name": "Alpine Linux 3.24",
+      "vendor": "alpine",
+      "version": "3.24",
+      "arch": "x86_64",
+      "format": "qcow2",
+      "downloadUrl": "https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/cloud/generic_alpine-3.24.1-x86_64-bios-cloudinit-r0.qcow2",
+      "checksumUrl": "https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/cloud/generic_alpine-3.24.1-x86_64-bios-cloudinit-r0.qcow2.sha512",
+      "defaultDiskSize": "5G",
+      "minMemory": 256,
+      "recommendedMemory": 512,
+      "minCores": 1,
+      "recommendedCores": 1,
+      "ostype": "l26",
+      "tags": [
+        "cloud-init",
+        "minimal"
+      ],
+      "logoIcon": "ri-cloud-line",
+      "notes": "Alpine dropped the nocloud_ variant: v3.24 only ships generic_, whose published metadata reads cloud: generic / bootstrap: cloudinit, so it still takes its configuration from the NoCloud drive Proxmox attaches. End of life 2028-06-01. The release and revision are in the file name, so the URL must be bumped on every point release."
+    },
+    {
+      "slug": "alpine-321",
+      "name": "Alpine Linux 3.21",
+      "vendor": "alpine",
+      "version": "3.21",
+      "arch": "x86_64",
+      "format": "qcow2",
+      "downloadUrl": "https://dl-cdn.alpinelinux.org/alpine/v3.21/releases/cloud/nocloud_alpine-3.21.0-x86_64-bios-cloudinit-r0.qcow2",
+      "checksumUrl": null,
+      "defaultDiskSize": "5G",
+      "minMemory": 256,
+      "recommendedMemory": 512,
+      "minCores": 1,
+      "recommendedCores": 1,
+      "ostype": "l26",
+      "tags": [
+        "cloud-init",
+        "minimal",
+        "edge"
+      ],
+      "logoIcon": "ri-cloud-line",
+      "notes": "Alpine cloud images live under /releases/cloud/. nocloud_* is the variant that reads cloud-init metadata from the NoCloud datasource Proxmox provides on its CD-ROM drive. Minimal footprint: 256 MB RAM and a 5 GB disk are enough."
+    },
+    {
+      "slug": "arch-rolling",
+      "name": "Arch Linux (rolling)",
+      "vendor": "arch",
+      "version": "rolling",
+      "arch": "x86_64",
+      "format": "qcow2",
+      "downloadUrl": "https://geo.mirror.pkgbuild.com/images/latest/Arch-Linux-x86_64-cloudimg.qcow2",
+      "checksumUrl": "https://geo.mirror.pkgbuild.com/images/latest/Arch-Linux-x86_64-cloudimg.qcow2.SHA256",
+      "defaultDiskSize": "10G",
+      "minMemory": 512,
+      "recommendedMemory": 2048,
+      "minCores": 1,
+      "recommendedCores": 2,
+      "ostype": "l26",
+      "tags": [
+        "cloud-init",
+        "rolling",
+        "cutting-edge"
+      ],
+      "logoIcon": "ri-cloud-line",
+      "notes": "Arch publishes monthly rebuilt cloud images under /images/latest/, a server-side symlink to the most recent snapshot, so the URL stays valid."
+    }
+  ]
+}

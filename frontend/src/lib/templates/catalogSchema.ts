@@ -95,7 +95,8 @@ export interface CatalogMeta {
   lastCheckedAt: string | null
   lastResult: CatalogRefreshResult | null
   lastError: string | null
-  url: string
+  /** Mirror URL, null for a tenant: it can carry a token or internal topology. */
+  url: string | null
   autoUpdate: boolean
 }
 

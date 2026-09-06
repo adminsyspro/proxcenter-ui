@@ -35,6 +35,10 @@ services:
       # A malformed value falls back to those defaults rather than to no limit.
       - SESSION_IDLE_TIMEOUT=${SESSION_IDLE_TIMEOUT:-}
       - SESSION_ABSOLUTE_TIMEOUT=${SESSION_ABSOLUTE_TIMEOUT:-}
+      # Cloud image catalog: point TEMPLATE_CATALOG_URL at an internal mirror,
+      # or set TEMPLATE_CATALOG_AUTO_UPDATE=false on an air-gapped install.
+      - TEMPLATE_CATALOG_URL=${TEMPLATE_CATALOG_URL:-}
+      - TEMPLATE_CATALOG_AUTO_UPDATE=${TEMPLATE_CATALOG_AUTO_UPDATE:-}
       # Shared secret for the first-run setup endpoint, which is reachable
       # without authentication for as long as no account exists. Empty keeps
       # the historical behaviour. Set it when the first boot happens on a

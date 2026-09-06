@@ -74,6 +74,27 @@ describe('GET /api/v1/templates/catalog', () => {
     expect(body.data.images.at(-1)).toMatchObject({ slug: 'custom-x', isCustom: true })
   })
 
+  it('redacts the mirror URL and the raw error for a tenant, keeps them for the provider', async () => {
+    getEffectiveCatalogMock.mockResolvedValue({
+      images: [img('ubuntu-2404', 'ubuntu')],
+      vendors: [{ id: 'ubuntu', name: 'Ubuntu', icon: 'ri-ubuntu-fill' }],
+      meta: { ...meta, lastResult: 'error', lastError: 'HTTP 404 from https://mirror.internal/catalog.json?token=s3cret' },
+    })
+
+    getCurrentTenantIdMock.mockResolvedValue('acme')
+    const tenant = await (await GET(new Request('http://localhost/api/v1/templates/catalog'))).json()
+    expect(tenant.data.meta.url).toBeNull()
+    expect(tenant.data.meta.lastError).toBeNull()
+    // The tenant still learns that the last refresh failed, just not where.
+    expect(tenant.data.meta.lastResult).toBe('error')
+    expect(JSON.stringify(tenant)).not.toContain('s3cret')
+
+    getCurrentTenantIdMock.mockResolvedValue('default')
+    const provider = await (await GET(new Request('http://localhost/api/v1/templates/catalog'))).json()
+    expect(provider.data.meta.url).toBe(meta.url)
+    expect(provider.data.meta.lastError).toContain('mirror.internal')
+  })
+
   it('returns the permission denial untouched', async () => {
     const denied = new Response(JSON.stringify({ error: 'nope' }), { status: 403 })
     checkPermissionMock.mockResolvedValue(denied)

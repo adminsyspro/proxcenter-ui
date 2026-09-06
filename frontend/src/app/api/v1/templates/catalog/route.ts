@@ -58,11 +58,19 @@ export async function GET(req: Request) {
       .filter(v => !effective.vendors.some(bv => bv.id === v))
       .map(v => ({ id: v, name: v.charAt(0).toUpperCase() + v.slice(1), icon: 'ri-image-line' }))
 
+    // meta carries the mirror URL, and lastError embeds that URL on an HTTP
+    // failure. TEMPLATE_CATALOG_URL can point at an internal mirror with a
+    // signed token, so both are provider-only. Tenants keep source, dates and
+    // lastResult, which is everything the tab renders for them.
+    const meta = isProvider
+      ? effective.meta
+      : { ...effective.meta, url: null, lastError: null }
+
     return NextResponse.json({
       data: {
         images,
         vendors: [...effective.vendors, ...extraVendors],
-        meta: effective.meta,
+        meta,
       },
     })
   } catch (e: any) {

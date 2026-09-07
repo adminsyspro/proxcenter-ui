@@ -4142,6 +4142,7 @@
       "blocked": "필수 점검에 실패했습니다. 작업을 생성하기 전에 위의 문제를 해결하세요.",
       "checks": {
         "target_vmids": "대상 VMID 사용 가능 여부",
+        "target_qemu": "대상 qemu-server 버전",
         "source_health": "소스 스토리지 상태",
         "target_health": "대상 스토리지 상태",
         "target_space": "대상 풀 용량",

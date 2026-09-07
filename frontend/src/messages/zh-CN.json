@@ -4118,6 +4118,7 @@
       "blocked": "关键检查失败。请先修复上述问题再创建任务。",
       "checks": {
         "target_vmids": "目标 VMID 可用性",
+        "target_qemu": "目标 qemu-server 版本",
         "source_health": "源存储健康状态",
         "target_health": "目标存储健康状态",
         "target_space": "目标池容量",

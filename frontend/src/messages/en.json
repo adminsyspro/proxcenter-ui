@@ -4142,6 +4142,7 @@
       "blocked": "Critical checks failed. Resolve the issues above before creating the job.",
       "checks": {
         "target_vmids": "Target VMID availability",
+        "target_qemu": "Target qemu-server version",
         "source_health": "Source storage health",
         "target_health": "Target storage health",
         "target_space": "Target pool capacity",

@@ -33,6 +33,7 @@ const requiredKeys = [
   "createJob.sshChecks",
   "preflight.checks.target_storage",
   "preflight.checks.target_vmids",
+  "preflight.checks.target_qemu",
   "preflight.checks.reverse_ssh",
   "snapshots.engine",
   "snapshots.node",

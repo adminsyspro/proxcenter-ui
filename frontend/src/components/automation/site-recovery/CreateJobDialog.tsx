@@ -113,7 +113,7 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
   }
 
   // Results carry their request key so a previous selection can never enable creation.
-  type PreflightCheck = { id: 'target_vmids' | 'source_health' | 'target_health' | 'target_space' | 'target_storage' | 'reverse_ssh'; status: 'ok' | 'warn' | 'error'; label?: string; detail?: string; message?: string }
+  type PreflightCheck = { id: 'target_vmids' | 'target_qemu' | 'source_health' | 'target_health' | 'target_space' | 'target_storage' | 'reverse_ssh'; status: 'ok' | 'warn' | 'error'; label?: string; detail?: string; message?: string }
   const [checkResult, setCheckResult] = useState<{
     key: string
     ssh?: SSHConnectivityResult

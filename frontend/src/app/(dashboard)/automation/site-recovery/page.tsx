@@ -560,6 +560,7 @@ export default function SiteRecoveryPage() {
             onCleanupTest={(id) => openFailoverDialog(id, 'test')}
             onHistoryCleared={() => mutateHistory()}
             connections={connections}
+            jobs={jobs || []}
           />
         )}
 

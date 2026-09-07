@@ -13,7 +13,8 @@ import EmptyState from '@/components/EmptyState'
 
 import ExecutionScreenshots from './ExecutionScreenshots'
 
-import type { RecoveryPlan, RecoveryExecution, RecoveryPlanStatus } from '@/lib/orchestrator/site-recovery.types'
+import EngineGlyph from './EngineGlyph'
+import type { RecoveryPlan, RecoveryExecution, RecoveryPlanStatus, ReplicationJob, StorageEngine } from '@/lib/orchestrator/site-recovery.types'
 
 // ── Helpers ────────────────────────────────────────────────────────────
 
@@ -42,6 +43,29 @@ const PlanStatusBadge = ({ status, t }: { status: RecoveryPlanStatus; t: any }) 
   return <Chip size='small' label={label} color={c.color} />
 }
 
+const planStatusDot: Record<RecoveryPlanStatus, string> = {
+  ready: 'success.main', degraded: 'warning.main', executing: 'info.main', failed: 'error.main',
+  not_ready: 'text.disabled', failed_over: 'error.main', failing_back: 'info.main',
+}
+
+// planEngines lists the storage engines behind a plan, Ceph first, from the jobs
+// its VMs reference; a plan whose jobs are unknown is shown as Ceph, the legacy default.
+export function planEngines(plan: RecoveryPlan, jobs: ReplicationJob[] = []): StorageEngine[] {
+  const byId = new Map(jobs.map(job => [job.id, job.storage_engine || 'rbd'] as const))
+  const engines = new Set<StorageEngine>(plan.vms.map(vm => byId.get(vm.replication_job_id) || 'rbd'))
+  return (['rbd', 'zfs'] as StorageEngine[]).filter(engine => engines.has(engine))
+}
+
+// PlanEngineGlyphs draws the plan's engine glyph(s), optionally badged with the plan status dot.
+const PlanEngineGlyphs = ({ engines, size = 18, status }: { engines: StorageEngine[]; size?: number; status?: RecoveryPlanStatus }) => (
+  <Box sx={{ position: 'relative', display: 'inline-flex', gap: 0.5, flexShrink: 0 }}>
+    {engines.map(engine => <EngineGlyph key={engine} engine={engine} size={size} />)}
+    {status && (
+      <Box component='span' sx={{ position: 'absolute', bottom: -1, right: -2, width: 7, height: 7, borderRadius: '50%', bgcolor: planStatusDot[status] || planStatusDot.not_ready, border: '1.5px solid', borderColor: 'background.paper' }} />
+    )}
+  </Box>
+)
+
 const TierSummary = ({ vms, t }: { vms: RecoveryPlan['vms']; t: any }) => {
   const tiers = [1, 2, 3] as const
   const counts = tiers.map(tier => vms.filter(v => v.tier === tier).length)
@@ -64,7 +88,7 @@ const TierSummary = ({ vms, t }: { vms: RecoveryPlan['vms']; t: any }) => {
   )
 }
 
-const PlanRow = ({ plan, onClick, t, connName }: { plan: RecoveryPlan; onClick: () => void; t: any; connName: (id: string) => string }) => {
+const PlanRow = ({ plan, engines, onClick, t, connName }: { plan: RecoveryPlan; engines: StorageEngine[]; onClick: () => void; t: any; connName: (id: string) => string }) => {
   const daysSinceTest = daysSince(plan.last_test)
   const testWarning = daysSinceTest === null || daysSinceTest > 30
 
@@ -77,6 +101,9 @@ const PlanRow = ({ plan, onClick, t, connName }: { plan: RecoveryPlan; onClick: 
         '&:hover': { bgcolor: 'action.hover' }
       }}
     >
+      {/* Engine glyph(s) + plan status dot */}
+      <PlanEngineGlyphs engines={engines} status={plan.status} />
+
       {/* Name + description */}
       <Box sx={{ flex: '1 1 30%', minWidth: 0 }}>
         <Typography variant='body2' sx={{ fontWeight: 600, lineHeight: 1.3 }} noWrap>{plan.name}</Typography>
@@ -85,11 +112,13 @@ const PlanRow = ({ plan, onClick, t, connName }: { plan: RecoveryPlan; onClick: 
         )}
       </Box>
 
-      {/* Source → Destination */}
-      <Box sx={{ flex: '1 1 30%', minWidth: 0 }}>
-        <Typography variant='caption' sx={{ color: 'text.secondary' }} noWrap>
-          {connName(plan.source_cluster)} → {connName(plan.target_cluster)}
-        </Typography>
+      {/* Source → Destination, each end carrying the engine glyph(s) */}
+      <Box sx={{ flex: '1 1 30%', minWidth: 0, display: 'flex', alignItems: 'center', gap: 0.75, whiteSpace: 'nowrap' }}>
+        <PlanEngineGlyphs engines={engines} size={14} />
+        <Typography variant='caption' sx={{ color: 'text.secondary' }} noWrap>{connName(plan.source_cluster)}</Typography>
+        <Typography variant='caption' sx={{ color: 'text.disabled' }}>→</Typography>
+        <PlanEngineGlyphs engines={engines} size={14} />
+        <Typography variant='caption' sx={{ color: 'text.secondary' }} noWrap>{connName(plan.target_cluster)}</Typography>
       </Box>
 
       {/* Tier summary */}
@@ -157,13 +186,14 @@ interface RecoveryPlansTabProps {
   onCleanupTest: (id: string) => void
   onHistoryCleared?: () => void
   connections?: Array<{ id: string; name: string }>
+  jobs?: ReplicationJob[]
 }
 
 export default function RecoveryPlansTab({
   plans, loading, history, historyLoading,
   selectedPlanId, onSelectPlan,
   onTestFailover, onFailover, onFailback, onDeletePlan, onCleanupTest, onHistoryCleared,
-  connections
+  connections, jobs = []
 }: RecoveryPlansTabProps) {
   const t = useTranslations()
   const theme = useTheme()
@@ -254,7 +284,7 @@ export default function RecoveryPlansTab({
           {(plans || []).map((p, i) => (
             <Box key={p.id}>
               {i > 0 && <Divider />}
-              <PlanRow plan={p} onClick={() => openPlan(p.id)} t={t} connName={connName} />
+              <PlanRow plan={p} engines={planEngines(p, jobs)} onClick={() => openPlan(p.id)} t={t} connName={connName} />
             </Box>
           ))}
         </Card>
@@ -279,9 +309,12 @@ export default function RecoveryPlansTab({
 
               <PlanStatusBadge status={selected.status} t={t} />
 
-              <Typography variant='caption' sx={{ color: 'text.secondary', mt: 1, display: 'block' }}>
-                {connName(selected.source_cluster)} → {connName(selected.target_cluster)}
-              </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mt: 1 }}>
+                <PlanEngineGlyphs engines={planEngines(selected, jobs)} size={14} />
+                <Typography variant='caption' sx={{ color: 'text.secondary' }}>
+                  {connName(selected.source_cluster)} → {connName(selected.target_cluster)}
+                </Typography>
+              </Box>
 
               <Box sx={{ flex: 1, overflow: 'auto', mt: 2 }}>
                 {/* VMs grouped by tier */}

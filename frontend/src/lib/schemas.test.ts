@@ -53,3 +53,43 @@ describe('connection schemas subType', () => {
     expect(r.success).toBe(true)
   })
 })
+
+describe('connection schemas replicationNetwork', () => {
+  const pveBody = { name: 'pve', type: 'pve', baseUrl: 'https://pve:8006', apiToken: 'root@pam!t=s' }
+
+  it('accepts, trims and nulls the replication network on create', () => {
+    const r = createConnectionSchema.safeParse({ ...pveBody, replicationNetwork: ' 10.10.50.0/24 ' })
+    expect(r.success).toBe(true)
+    if (r.success) expect(r.data.replicationNetwork).toBe('10.10.50.0/24')
+    expect(createConnectionSchema.safeParse({ ...pveBody, replicationNetwork: null }).success).toBe(true)
+    expect(createConnectionSchema.safeParse({ ...pveBody, replicationNetwork: '' }).success).toBe(true)
+    expect(createConnectionSchema.safeParse(pveBody).success).toBe(true)
+  })
+
+  it('rejects a replication network that is not a CIDR on create', () => {
+    // With SSH enabled: without it the value is dropped by the route anyway.
+    const sshBody = { ...pveBody, sshEnabled: true, sshAuthMethod: 'key', sshKey: 'k' }
+    for (const bad of ['10.10.50.0', '10.10.50.0/33', 'replication.lan/24', '2001:db8::/129']) {
+      const r = createConnectionSchema.safeParse({ ...sshBody, replicationNetwork: bad })
+      expect(r.success, bad).toBe(false)
+      if (!r.success) expect(r.error.issues.some(i => i.path.join('.') === 'replicationNetwork'), bad).toBe(true)
+    }
+  })
+
+  it('ignores the replication network when SSH is disabled in the same request', () => {
+    // The routes null the field when SSH is off, so a stale or half-typed value
+    // left in a hidden field must not turn a save into a 400.
+    expect(createConnectionSchema.safeParse({ ...pveBody, sshEnabled: false, replicationNetwork: '10.10.50' }).success).toBe(true)
+    expect(updateConnectionSchema.safeParse({ sshEnabled: false, replicationNetwork: '10.10.50' }).success).toBe(true)
+    expect(createConnectionSchema.safeParse({ ...pveBody, sshEnabled: true, sshAuthMethod: 'key', sshKey: 'k', replicationNetwork: '10.10.50' }).success).toBe(false)
+  })
+
+  it('applies the same rule on update, where an empty string is the way to clear it', () => {
+    expect(updateConnectionSchema.safeParse({ replicationNetwork: 'fd00:10:50::/64' }).success).toBe(true)
+    expect(updateConnectionSchema.safeParse({ replicationNetwork: '' }).success).toBe(true)
+    expect(updateConnectionSchema.safeParse({ replicationNetwork: null }).success).toBe(true)
+    const r = updateConnectionSchema.safeParse({ replicationNetwork: '10.10.50.0/24/8' })
+    expect(r.success).toBe(false)
+    if (!r.success) expect(r.error.issues[0].path).toEqual(['replicationNetwork'])
+  })
+})

@@ -209,3 +209,63 @@ describe("PATCH /api/v1/connections/[id] XCP-ng mode", () => {
     })
   })
 })
+
+describe("PATCH /api/v1/connections/[id] replication network", () => {
+  it("persists the replication network of a PVE row", async () => {
+    setRow({ type: "pve", subType: null, baseUrl: "https://pve.test:8006", replicationNetwork: null })
+
+    const res = await callRoute(PATCH, {
+      method: "PATCH",
+      params: { id: "conn-1" },
+      body: { replicationNetwork: "10.10.50.0/24" },
+    })
+
+    expect(res.status).toBe(200)
+    expect(await readJson(res)).toEqual(expectedBody())
+    expect(h.row.replicationNetwork).toBe("10.10.50.0/24")
+    expect(h.connectionUpdate).toHaveBeenCalledWith({
+      where: { id: "conn-1" },
+      data: { replicationNetwork: "10.10.50.0/24" },
+    })
+  })
+
+  it("clears the replication network when an empty string is sent", async () => {
+    setRow({ type: "pve", subType: null, baseUrl: "https://pve.test:8006", replicationNetwork: "10.10.50.0/24" })
+
+    const res = await callRoute(PATCH, {
+      method: "PATCH",
+      params: { id: "conn-1" },
+      body: { replicationNetwork: "" },
+    })
+
+    expect(res.status).toBe(200)
+    expect(h.row.replicationNetwork).toBeNull()
+    expect(h.connectionUpdate).toHaveBeenCalledWith({
+      where: { id: "conn-1" },
+      data: { replicationNetwork: null },
+    })
+  })
+
+  it("clears the replication network when SSH is disabled, whatever value comes along", async () => {
+    setRow({ type: "pve", subType: null, baseUrl: "https://pve.test:8006", replicationNetwork: "10.10.50.0/24" })
+
+    const res = await callRoute(PATCH, {
+      method: "PATCH",
+      params: { id: "conn-1" },
+      body: { sshEnabled: false, replicationNetwork: "10.10.60.0/24" },
+    })
+
+    expect(res.status).toBe(200)
+    expect(h.row.replicationNetwork).toBeNull()
+    expect(h.connectionUpdate).toHaveBeenCalledWith({
+      where: { id: "conn-1" },
+      data: {
+        sshEnabled: false,
+        sshAuthMethod: null,
+        sshKeyEnc: null,
+        sshPassEnc: null,
+        replicationNetwork: null,
+      },
+    })
+  })
+})

@@ -41,6 +41,7 @@ import {
 
 import { NodeRow, BulkAction } from '@/components/NodesTable'
 import NumericTextField from '@/components/ui/NumericTextField'
+import { NFC_CONCURRENCY_MIN, NFC_CONCURRENCY_MAX } from '@/lib/migration/nfc-progress'
 import { usedVmidsOnConnection, nextVmidOnConnection } from '@/components/hardware/utils'
 import { tooltipSlotProps } from '@/components/settings/ha/tooltipSlotProps'
 // Dependency-free eligibility check (NOT ./cbt, which pulls the server-only SOAP client).
@@ -291,6 +292,8 @@ export interface InventoryDialogsProps {
   setMigTempStorage: (v: string) => void
   migV2vRoot: string
   setMigV2vRoot: (v: string) => void
+  migNfcConcurrency: number
+  setMigNfcConcurrency: (v: number) => void
   migType: 'cold' | 'sshfs_boot' | 'warm'
   setMigType: (v: 'cold' | 'sshfs_boot' | 'warm') => void
   migTransferMode: 'https' | 'sshfs' | 'auto'
@@ -329,7 +332,7 @@ export interface InventoryDialogsProps {
   setBulkMigLogsExpanded: (v: React.SetStateAction<boolean>) => void
   bulkMigLogsFilter: string | null
   setBulkMigLogsFilter: (v: string | null) => void
-  bulkMigConfigRef: React.MutableRefObject<{ sourceConnectionId: string; targetConnectionId: string; targetStorage: string; networkBridge: string; vlanTag?: number; migrationType: string; transferMode: string; startAfterMigration: boolean; convertDisksToQcow2: boolean; sourceType: string; tempStorage?: string; v2vRoot?: string } | null>
+  bulkMigConfigRef: React.MutableRefObject<{ sourceConnectionId: string; targetConnectionId: string; targetStorage: string; networkBridge: string; vlanTag?: number; migrationType: string; transferMode: string; startAfterMigration: boolean; convertDisksToQcow2: boolean; sourceType: string; tempStorage?: string; v2vRoot?: string; nfcConcurrency?: number } | null>
   bulkMigHostInfo: any
 
   // Upgrade dialog
@@ -442,6 +445,7 @@ export default function InventoryDialogs(props: InventoryDialogsProps) {
     migManualCutover, setMigManualCutover,
     migDowntimeBudget, setMigDowntimeBudget,
     migDiskPaths, setMigDiskPaths, migTempStorage, setMigTempStorage, migV2vRoot, setMigV2vRoot,
+    migNfcConcurrency, setMigNfcConcurrency,
     migType, setMigType, migTransferMode, setMigTransferMode, migPveConnections, migNodes, migStorages,
     migStoragesLoading, migStoragesError, retryMigStorages,
     migSshfsAvailable, vcenterPreflight, setVcenterPreflight, migStarting, setMigStarting,
@@ -764,7 +768,8 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
   // 'nbd' for an XCP-ng one (nbdkit + its nbd plugin + nbd-client, no VDDK and
   // nothing to install from the Enterprise repo). It drives which remediation
   // the not-ready alert offers.
-  const [warmPreflight, setWarmPreflight] = useState<{ key: string; loading: boolean; ok: boolean; missing: string[]; kind: 'nbd' | 'vddk'; error?: string; tokenConfigured?: boolean; osUnsupported?: boolean; debianMajor?: number } | null>(null)
+  type WarmSpace = { storage: string; availableBytes: number; requiredBytes: number; sufficient: boolean; error?: string }
+  const [warmPreflight, setWarmPreflight] = useState<{ key: string; loading: boolean; ok: boolean; missing: string[]; kind: 'nbd' | 'vddk'; error?: string; tokenConfigured?: boolean; osUnsupported?: boolean; debianMajor?: number; space?: WarmSpace } | null>(null)
   // Bumped after a successful automated node setup so this effect re-runs and
   // the go/no-go flips to ready without the user having to reselect the node.
   const [warmPreflightRefresh, setWarmPreflightRefresh] = useState(0)
@@ -773,7 +778,9 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
       setWarmPreflight(null)
       return
     }
-    const key = `${migTargetConn}::${migTargetNode}`
+    // The storage is part of the key: the free-space verdict below belongs to
+    // one storage, and switching storage must re-run the check.
+    const key = `${migTargetConn}::${migTargetNode}::${migTargetStorage}`
     // Which runtime the node needs follows the source, so the expected kind is
     // known before the answer comes back: it keeps the loading and network-error
     // states on the right remediation instead of defaulting to the VDDK one.
@@ -785,24 +792,29 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
       headers: { 'Content-Type': 'application/json' },
       // sourceConnectionId picks the probe: an XCP-ng source is checked for the
       // NBD toolchain, everything else for the VDDK runtime.
-      body: JSON.stringify({ targetConnectionId: migTargetConn, targetNode: migTargetNode, action: 'warm-check', sourceConnectionId: esxiMigrateVm?.connId }),
+      // targetStorage + requiredDiskBytes let the server compare the storage's
+      // live free space with the source disks (same rule as the cold engine).
+      body: JSON.stringify({ targetConnectionId: migTargetConn, targetNode: migTargetNode, action: 'warm-check', sourceConnectionId: esxiMigrateVm?.connId, targetStorage: migTargetStorage || undefined, requiredDiskBytes: esxiMigrateVm?.committed || 0 }),
     })
       .then(r => r.json())
-      .then((d: { ok?: boolean; missing?: string[]; kind?: string; error?: string; vddkTokenConfigured?: boolean; osUnsupported?: boolean; debianMajor?: number }) => {
+      .then((d: { ok?: boolean; missing?: string[]; kind?: string; error?: string; vddkTokenConfigured?: boolean; osUnsupported?: boolean; debianMajor?: number; space?: WarmSpace }) => {
         // vddkTokenConfigured: server-side boolean saying an Enterprise VDDK
         // package token exists, i.e. the automated "Prepare this node" action
         // can work. The token itself never reaches the client.
-        if (!cancelled) setWarmPreflight({ key, loading: false, ok: !!d.ok, missing: d.missing || [], kind: d.kind === 'nbd' ? 'nbd' : 'vddk', error: d.error, tokenConfigured: !!d.vddkTokenConfigured, osUnsupported: !!d.osUnsupported, debianMajor: d.debianMajor })
+        if (!cancelled) setWarmPreflight({ key, loading: false, ok: !!d.ok, missing: d.missing || [], kind: d.kind === 'nbd' ? 'nbd' : 'vddk', error: d.error, tokenConfigured: !!d.vddkTokenConfigured, osUnsupported: !!d.osUnsupported, debianMajor: d.debianMajor, space: d.space })
       })
       .catch(() => { if (!cancelled) setWarmPreflight({ key, loading: false, ok: false, missing: [], kind: expectedKind }) })
     return () => { cancelled = true }
-  }, [singleWarmAllowed, esxiMigrateVm?.hostType, esxiMigrateVm?.connId, migType, migTargetConn, migTargetNode, warmPreflightRefresh])
+  }, [singleWarmAllowed, esxiMigrateVm?.hostType, esxiMigrateVm?.connId, esxiMigrateVm?.committed, migType, migTargetConn, migTargetNode, migTargetStorage, warmPreflightRefresh])
   // Only trust the verdict when it belongs to the currently selected target. On a
   // node/connection switch the state briefly still holds the prior target's result
   // (the effect re-runs after render); ignoring a mismatched key stops a stale "ready"
   // from re-enabling the launch against a node that has not passed the current check.
   const warmPreflightCurrent =
-    warmPreflight && warmPreflight.key === `${migTargetConn}::${migTargetNode}` ? warmPreflight : null
+    warmPreflight && warmPreflight.key === `${migTargetConn}::${migTargetNode}::${migTargetStorage}` ? warmPreflight : null
+  // Free-space verdict for the selected storage; undefined while loading or when
+  // no storage is chosen yet. Blocks the launch on its own, independently of ok.
+  const warmSpaceShort = warmPreflightCurrent && !warmPreflightCurrent.loading && warmPreflightCurrent.space && !warmPreflightCurrent.space.sufficient ? warmPreflightCurrent.space : null
 
   // Automated warm-node provisioning (Enterprise VDDK package). Offered inside
   // the not-ready alert only when the server reported a configured package
@@ -977,6 +989,36 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
           error={downtimeBudgetInvalid}
           label={t('inventoryPage.esxiMigration.downtimeBudgetSeconds')}
           sx={{ width: 110, flexShrink: 0 }}
+        />
+      </Box>
+    </Box>
+  )
+
+  // Cold vCenter only (#807): how many disks download at once over NFC. Each
+  // stream is capped by the ESXi host, so this is the lever for a multi-disk
+  // VM. Same shape as the downtime budget slider, rendered by both dialogs.
+  const renderNfcConcurrencyField = (isVcenter: boolean) => isVcenter && migType !== 'warm' && (
+    <Box sx={{ px: 0.5 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.5 }}>
+        <Typography variant="body2">{t('inventoryPage.esxiMigration.nfcConcurrency')}</Typography>
+        <MuiTooltip title={t('inventoryPage.esxiMigration.nfcConcurrencyTooltip')} arrow placement="top" slotProps={tooltipSlotProps}>
+          <i className="ri-question-line" style={{ fontSize: 14, opacity: 0.6 }} />
+        </MuiTooltip>
+        <Typography variant="body2" fontWeight={700} sx={{ ml: 'auto' }}>
+          {t('inventoryPage.esxiMigration.nfcConcurrencyValue', { count: migNfcConcurrency })}
+        </Typography>
+      </Box>
+      <Box sx={{ px: 1 }}>
+        <Slider
+          size="small"
+          value={migNfcConcurrency}
+          onChange={(_, val) => setMigNfcConcurrency(Math.round(val as number))}
+          min={NFC_CONCURRENCY_MIN}
+          max={NFC_CONCURRENCY_MAX}
+          step={1}
+          marks
+          valueLabelDisplay="auto"
+          aria-label={t('inventoryPage.esxiMigration.nfcConcurrency')}
         />
       </Box>
     </Box>
@@ -2807,6 +2849,21 @@ return
                     )
                   )}
 
+                  {/* Warm target too small: the engine refuses it at planning time (disks'
+                      capacity plus a 10 % margin, like the cold engine), so say so while the
+                      storage can still be changed, with the two figures that matter. */}
+                  {migType === 'warm' && warmSpaceShort && (
+                    <Alert severity="error" sx={{ fontSize: 12 }} icon={<i className="ri-hard-drive-2-line" style={{ fontSize: 18 }} />}>
+                      {warmSpaceShort.error
+                        ? t('inventoryPage.esxiMigration.warmStorageCheckFailed', { storage: warmSpaceShort.storage, error: warmSpaceShort.error })
+                        : t('inventoryPage.esxiMigration.warmStorageInsufficient', {
+                            storage: warmSpaceShort.storage,
+                            available: (warmSpaceShort.availableBytes / 1073741824).toFixed(1),
+                            required: (warmSpaceShort.requiredBytes / 1073741824).toFixed(1),
+                          })}
+                    </Alert>
+                  )}
+
                   {/* CBT-fallback warning: the source VM cannot use CBT (pre-existing
                       snapshot / old hardware version / independent or multi-writer disk),
                       so warm falls back to the checksum block-diff, which shuts the
@@ -3111,6 +3168,8 @@ return
                       helperText={t('inventoryPage.esxiMigration.v2vRootHelp')}
                     />
                   )}
+
+                  {renderNfcConcurrencyField(esxiMigrateVm?.hostType === 'vcenter')}
 
                   {/* Disk paths for Hyper-V */}
                   {esxiMigrateVm?.hostType === 'hyperv' && (
@@ -3444,6 +3503,8 @@ return
                   // failed check, and a click can't beat the verdict to fire a doomed
                   // migration. Cluster-auto is not gated (the engine backstop covers it).
                   if (migType === 'warm' && migTargetNode !== '__auto__' && !warmPreflightCurrent?.ok) return true
+                  // Warm: the selected storage cannot hold the source disks (or could not be read).
+                  if (migType === 'warm' && warmSpaceShort) return true
                   return false
                 })()}
                 sx={{ textTransform: 'none' }}
@@ -3496,6 +3557,8 @@ return
                         }),
                         // virt-v2v root filesystem override (#738); omitted when empty.
                         ...(migV2vRoot.trim() && { v2vRoot: migV2vRoot.trim() }),
+                        // Parallel NFC downloads (#807): cold vCenter only, gated like the slider.
+                        ...(esxiMigrateVm.hostType === 'vcenter' && migType !== 'warm' && { nfcConcurrency: migNfcConcurrency }),
                         ...(esxiMigrateVm.hostType === 'hyperv' && migDiskPaths.trim() && {
                           diskPaths: migDiskPaths.trim().split('\n').map((p: string) => p.trim()).filter(Boolean),
                         }),
@@ -4252,6 +4315,8 @@ return
                   />
                 )}
 
+                {renderNfcConcurrencyField(bulkMigHostInfo?.hostType === 'vcenter')}
+
                 <FormControlLabel
                   control={<Switch size="small" checked={migStartAfter} onChange={(_, v) => setMigStartAfter(v)} />}
                   label={<Typography variant="body2">{t('inventoryPage.esxiMigration.startAfterMigration')}</Typography>}
@@ -4642,6 +4707,7 @@ return
                           }),
                           // virt-v2v root filesystem override (#738); omitted when empty.
                           ...(migV2vRoot.trim() && { v2vRoot: migV2vRoot.trim() }),
+                          ...(isVcenterBulk && migType !== 'warm' && { nfcConcurrency: migNfcConcurrency }),
                         }),
                       })
                       const d = await res.json()
@@ -4688,6 +4754,7 @@ return
                       tempStorage: migTempStorage,
                     }),
                     ...(migV2vRoot.trim() && { v2vRoot: migV2vRoot.trim() }),
+                    ...(isVcenterBulk && migType !== 'warm' && { nfcConcurrency: migNfcConcurrency }),
                   }
                   setBulkMigJobs(jobs)
                   setBulkMigStarting(false)

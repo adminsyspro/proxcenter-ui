@@ -90,6 +90,7 @@ export async function GET(req: Request) {
       sshUser: string
       sshAuthMethod: string | null
       sshUseSudo: boolean
+      replicationNetwork: string | null
       apiTokenEnc: string | null
       sshKeyEnc: string | null
       sshPassEnc: string | null
@@ -127,6 +128,7 @@ export async function GET(req: Request) {
         sshUser: true,
         sshAuthMethod: true,
         sshUseSudo: true,
+        replicationNetwork: true,
         apiTokenEnc: true,
         sshKeyEnc: true,
         sshPassEnc: true,
@@ -220,7 +222,7 @@ export async function POST(req: Request) {
       subType, vmwareUser, vmwarePassword, vmwareDatacenter, hypervShareName,
       latitude, longitude, locationLabel, country,
       sshEnabled, sshPort, sshUser, sshAuthMethod,
-      sshKey, sshPassphrase, sshPassword, sshUseSudo,
+      sshKey, sshPassphrase, sshPassword, sshUseSudo, replicationNetwork,
       ownerTenantId,
     } = parseResult.data
 
@@ -317,6 +319,8 @@ export async function POST(req: Request) {
       data.sshUser = sshUser
       data.sshAuthMethod = sshEnabled ? sshAuthMethod : null
       data.sshUseSudo = sshEnabled ? sshUseSudo : false
+      // Site Recovery replication network: PVE only, meaningless without SSH
+      data.replicationNetwork = (type === 'pve' && sshEnabled && replicationNetwork) ? replicationNetwork : null
 
       // Chiffrer les secrets SSH si fournis
       if (sshEnabled && sshAuthMethod === 'key' && sshKey) {
@@ -458,8 +462,8 @@ export async function POST(req: Request) {
           id: true, name: true, type: true, baseUrl: true, behindProxy: true,
           insecureTLS: true, hasCeph: true, latitude: true, longitude: true,
           locationLabel: true, country: true, sshEnabled: true, sshPort: true,
-          sshUser: true, sshAuthMethod: true, sshUseSudo: true, createdAt: true,
-          updatedAt: true,
+          sshUser: true, sshAuthMethod: true, sshUseSudo: true, replicationNetwork: true,
+          createdAt: true, updatedAt: true,
         },
       })
       if (conn.type === 'pve' && tenantId === DEFAULT_TENANT_ID) {

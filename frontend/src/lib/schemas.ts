@@ -4,8 +4,26 @@
 import { z } from 'zod'
 
 import type { BroadcastInput } from '@/lib/broadcast/types'
+import { isValidCidr } from '@/lib/net/cidr'
 
 // ─── Connections ───────────────────────────────────────────────────────────────
+
+/**
+ * A non-empty replication network must be an IPv4 or IPv6 CIDR. A request that
+ * disables SSH is exempt: the routes null the field in that case, and a stale
+ * value left in the dialog's hidden field must not turn the save into a 400.
+ */
+function refineReplicationNetwork(data: { sshEnabled?: boolean; replicationNetwork?: string | null }, ctx: z.RefinementCtx) {
+  if (data.sshEnabled === false) return
+  const value = data.replicationNetwork
+  if (value && !isValidCidr(value)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'replicationNetwork must be a CIDR such as 10.10.50.0/24',
+      path: ['replicationNetwork'],
+    })
+  }
+}
 
 /** POST /api/v1/connections — create a Proxmox connection */
 export const createConnectionSchema = z.object({
@@ -42,6 +60,8 @@ export const createConnectionSchema = z.object({
   sshPassphrase: z.nullable(z.string().transform(s => s.trim())).optional(),
   sshPassword: z.nullable(z.string().transform(s => s.trim())).optional(),
   sshUseSudo: z.boolean().default(false),
+  // Site Recovery replication network (CIDR), PVE only. Empty or null clears it.
+  replicationNetwork: z.nullable(z.string().transform(s => s.trim())).optional(),
 }).superRefine((data, ctx) => {
   // PVE/PBS require apiToken
   if ((data.type === 'pve' || data.type === 'pbs') && !data.apiToken) {
@@ -101,6 +121,7 @@ export const createConnectionSchema = z.object({
       })
     }
   }
+  refineReplicationNetwork(data, ctx)
 })
 
 /** PATCH /api/v1/connections/[id] — update a connection (all fields optional) */
@@ -133,6 +154,9 @@ export const updateConnectionSchema = z.object({
   sshPassphrase: z.nullable(z.string().transform(s => s.trim())).optional(),
   sshPassword: z.nullable(z.string().transform(s => s.trim())).optional(),
   sshUseSudo: z.boolean().optional(),
+  replicationNetwork: z.nullable(z.string().transform(s => s.trim())).optional(),
+}).superRefine((data, ctx) => {
+  refineReplicationNetwork(data, ctx)
 })
 
 // ─── Alerts ────────────────────────────────────────────────────────────────────

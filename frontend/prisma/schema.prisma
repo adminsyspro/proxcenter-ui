@@ -46,6 +46,10 @@ model Connection {
   sshKeyEnc     String?
   sshPassEnc    String?
   sshUseSudo    Boolean @default(false)
+  // Site Recovery replication network (CIDR). When set, the orchestrator sends
+  // the RBD stream to the DR node's address inside this network instead of the
+  // management address, the way the Proxmox migration network works.
+  replicationNetwork String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

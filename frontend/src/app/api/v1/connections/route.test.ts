@@ -293,6 +293,62 @@ describe('POST /api/v1/connections - PVE path', () => {
     expect(created.sshPassEnc).toBeUndefined()
   })
 
+  it('persists the replication network of a PVE connection when SSH is enabled', async () => {
+    pveFetchMock
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce([])
+
+    const POST = await importPOST()
+    const res = await callRoute(POST, {
+      body: {
+        ...basePveBody,
+        sshEnabled: true,
+        sshAuthMethod: 'password',
+        sshPassword: 'hunter2',
+        replicationNetwork: ' 10.10.50.0/24 ',
+      },
+    })
+
+    expect(res.status).toBe(201)
+    const created = connectionCreateMock.mock.calls[0][0].data
+    expect(created.replicationNetwork).toBe('10.10.50.0/24')
+    expect(connectionCreateMock.mock.calls[0][0].select).toEqual(expect.objectContaining({ replicationNetwork: true }))
+  })
+
+  it('stores a null replication network when SSH is disabled, even if a value is sent', async () => {
+    pveFetchMock
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce([])
+
+    const POST = await importPOST()
+    const res = await callRoute(POST, {
+      body: { ...basePveBody, sshEnabled: false, replicationNetwork: '10.10.50.0/24' },
+    })
+
+    expect(res.status).toBe(201)
+    expect(connectionCreateMock.mock.calls[0][0].data.replicationNetwork).toBeNull()
+  })
+
+  it('returns 400 when the replication network is not a CIDR', async () => {
+    const POST = await importPOST()
+    const res = await callRoute(POST, {
+      body: {
+        ...basePveBody,
+        sshEnabled: true,
+        sshAuthMethod: 'password',
+        sshPassword: 'hunter2',
+        replicationNetwork: '10.10.50.0',
+      },
+    })
+
+    expect(res.status).toBe(400)
+    const json = await readJson<any>(res)
+    expect(json.error).toBe('Invalid input')
+    expect(JSON.stringify(json.details)).toMatch(/replicationNetwork/)
+    expect(pveFetchMock).not.toHaveBeenCalled()
+    expect(connectionCreateMock).not.toHaveBeenCalled()
+  })
+
   it('fires an audit log and the orchestrator reload notification on success', async () => {
     pveFetchMock
       .mockResolvedValueOnce({})

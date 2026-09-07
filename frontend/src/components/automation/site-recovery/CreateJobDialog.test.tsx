@@ -325,3 +325,23 @@ describe('CreateJobDialog storage engines', () => {
     expect(screen.getByRole('button', { name: 'Create Job' })).toBeDisabled()
   })
 })
+
+describe('CreateJobDialog SSH check against a replication network (issue #870)', () => {
+  // The orchestrator refuses a target connection whose replication network
+  // matches no address of the DR node. That is a settings problem, not a
+  // missing SSH key, so the alert must not send the operator to fix SSH.
+  it('points at the connection setting rather than at passwordless SSH', async () => {
+    const { fetchMock } = engineHarness()
+    const implementation = fetchMock.getMockImplementation()!
+    fetchMock.mockImplementation(async url => url.endsWith('/check-ssh')
+      ? new Response(JSON.stringify({ connected: false, error: 'node 10.42.0.111: no address lies in the replication network 10.44.0.0/24 (addresses: 10.42.0.111, 10.43.0.111)' }))
+      : implementation(url))
+    await chooseEngineSource('zfs')
+    await userEvent.click(screen.getByRole('checkbox', { name: /guest-100/ }))
+    await chooseTarget()
+
+    await screen.findByText(/no address lies in the replication network 10\.44\.0\.0\/24/)
+    expect(screen.getByText(/replication network of the target connection/i)).toBeInTheDocument()
+    expect(screen.queryByText(/Passwordless SSH must be configured/)).not.toBeInTheDocument()
+  })
+})

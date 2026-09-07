@@ -36,7 +36,13 @@ describe("pure builders", () => {
   })
   it("tears down device, nbdkit, socket, password file", () => {
     const c = buildReaderTeardownCmd({ nbdDev: "/dev/nbd3", sock: "/tmp/v.sock", pwFile: "/tmp/pw" })
+    expect(c).toContain("nbd_release_tree() {")
+    expect(c).toContain("nbd_release_holders() {")
+    expect(c).toContain("nbd_release_holders /dev/nbd3")
     expect(c).toContain("nbd-client -d /dev/nbd3")
+    expect(c.indexOf("nbd_release_tree() {")).toBeLessThan(c.indexOf("nbd_release_holders /dev/nbd3"))
+    expect(c.indexOf("nbd_release_holders() {")).toBeLessThan(c.indexOf("nbd_release_holders /dev/nbd3"))
+    expect(c.indexOf("nbd_release_holders /dev/nbd3")).toBeLessThan(c.indexOf("nbd-client -d /dev/nbd3"))
     expect(c).toContain("/tmp/v.sock")
     expect(c).toContain("/tmp/pw")
     // Guard against the pkill self-match: the pattern must be "[n]bdkit", not
@@ -47,12 +53,16 @@ describe("pure builders", () => {
   it("also removes the log file when present in the handle", () => {
     const c = buildReaderTeardownCmd({ nbdDev: "/dev/nbd3", sock: "/tmp/v.sock", pwFile: "/tmp/pw", logFile: "/tmp/v.log" })
     expect(c).toContain("/tmp/v.log")
+    const lastLine = c.split("\n").at(-1)
+    expect(lastLine).toMatch(/rm -f \/tmp\/v\.sock \/tmp\/pw \/tmp\/v\.log$/)
+    expect(lastLine).toContain('pkill -f "[n]bdkit.*/tmp/v.sock"')
   })
   it("omits the device detach when no device was allocated (attach failed before a device was chosen)", () => {
     const c = buildReaderTeardownCmd({ nbdDev: "", sock: "/tmp/v.sock", pwFile: "/tmp/pw" })
     // With no owned device there is nothing to detach; a bare `nbd-client -d`
     // would error and, worse, could target an unintended device.
     expect(c).not.toContain("nbd-client -d")
+    expect(c).not.toContain("nbd_release_holders")
     // nbdkit and temp files are still cleaned up.
     expect(c).toContain('pkill -f "[n]bdkit.*/tmp/v.sock"')
     expect(c).toContain("rm -f /tmp/v.sock /tmp/pw")
@@ -132,6 +142,7 @@ describe("stopVddkReader", () => {
     mockSSH.mockResolvedValue({ success: true, output: "" })
     await stopVddkReader("conn", "10.99.99.201", { nbdDev: "/dev/nbd3", sock: "/tmp/v.sock", pwFile: "/tmp/pw", logFile: "/tmp/v.log" })
     const cmd = mockSSH.mock.calls[0][2] as string
+    expect(cmd).toContain("nbd_release_holders /dev/nbd3")
     expect(cmd).toContain("nbd-client -d /dev/nbd3")
     expect(cmd).toContain("pkill -f")
   })

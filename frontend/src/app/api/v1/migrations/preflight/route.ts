@@ -5,6 +5,7 @@ import { runV2vPreflight, installV2vPackages, startVirtioWinDownload, checkVirti
 import { runWarmNodePreflight } from "@/lib/migration/warm/vddk-preflight"
 import { runXcpngWarmNodePreflight } from "@/lib/migration/warm/xcpng-node-preflight"
 import { isVddkPackageTokenConfigured } from "@/lib/migration/warm/vddk-provision"
+import { checkTargetStorageSpace } from "@/lib/migration/warm/target-space"
 import { prisma } from "@/lib/db/prisma"
 import { safeLog } from "@/lib/log/sanitize"
 
@@ -18,6 +19,7 @@ export async function POST(req: Request) {
     sourceConnectionId?: string
     targetConnectionId?: string
     targetNode?: string
+    targetStorage?: string
     requiredDiskBytes?: number
     action?: string
     vmName?: string
@@ -31,7 +33,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 })
   }
 
-  const { sourceConnectionId, targetConnectionId, targetNode, requiredDiskBytes, action, vmName, sourceType, vddkLibdir } = body
+  const { sourceConnectionId, targetConnectionId, targetNode, targetStorage, requiredDiskBytes, action, vmName, sourceType, vddkLibdir } = body
 
   if (!targetConnectionId || !targetNode) {
     return NextResponse.json(
@@ -69,16 +71,24 @@ export async function POST(req: Request) {
     // one runs, and `kind` tells the dialog which one answered. On the nbd path
     // there is nothing to install from the Enterprise repo, so the VDDK token
     // flag is always false there.
+    //
+    // `space` is the target storage's live free space against the source disks
+    // (requiredDiskBytes, the dialog's committed size) plus the 10 % margin the
+    // cold engine applies. Only computed when the dialog names a storage; it is
+    // independent of the runtime verdict so the dialog can show both.
     if (action === "warm-check") {
       const sourceConn = sourceConnectionId
         ? await prisma.connection.findUnique({ where: { id: sourceConnectionId }, select: { type: true } })
         : null
+      const space = targetStorage
+        ? await checkTargetStorageSpace(targetConnectionId, targetNode, targetStorage, Math.max(0, Number(requiredDiskBytes) || 0))
+        : undefined
       if (sourceConn?.type === "xcpng") {
         const nbdResult = await runXcpngWarmNodePreflight(targetConnectionId, targetNode)
-        return NextResponse.json({ ...nbdResult, kind: "nbd", vddkTokenConfigured: false })
+        return NextResponse.json({ ...nbdResult, kind: "nbd", vddkTokenConfigured: false, space })
       }
       const result = await runWarmNodePreflight(targetConnectionId, targetNode, vddkLibdir)
-      return NextResponse.json({ ...result, kind: "vddk", vddkTokenConfigured: isVddkPackageTokenConfigured() })
+      return NextResponse.json({ ...result, kind: "vddk", vddkTokenConfigured: isVddkPackageTokenConfigured(), space })
     }
 
     const result = await runV2vPreflight(

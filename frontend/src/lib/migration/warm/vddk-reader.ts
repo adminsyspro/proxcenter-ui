@@ -1,4 +1,5 @@
 import { executeSSH, shellEscape } from "@/lib/ssh/exec"
+import { NBD_RELEASE_HOLDERS_FN, nbdReleaseHoldersCall } from "../nbd-holders"
 import { buildNbdkitVddkCmd, type VddkOpts } from "./vddk-cmd"
 
 /** A running nbdkit-vddk reader: the kernel device it is attached to plus the
@@ -49,6 +50,8 @@ export function buildNbdConnectCmd(sock: string): string {
 }
 
 /**
+ * Release holders first so host-activated guest LVM volumes cannot keep the
+ * NBD device pinned after detach (#535).
  * Detach the device, kill the nbdkit serving this socket (matched by its argv,
  * not a PID, so it works even after nbdkit daemonizes), and remove the socket,
  * password file, and log. Each step is best-effort so teardown never aborts on
@@ -59,7 +62,9 @@ export function buildReaderTeardownCmd(h: VddkReaderHandle): string {
   // Only detach a device we actually own. When attach failed before any device
   // was chosen (h.nbdDev === ""), a bare `nbd-client -d` would error and could
   // target an unintended device — so skip it entirely in that case.
-  const detach = h.nbdDev ? `nbd-client -d ${h.nbdDev} 2>/dev/null; ` : ""
+  const detach = h.nbdDev
+    ? `${NBD_RELEASE_HOLDERS_FN}\n${nbdReleaseHoldersCall(h.nbdDev)}; nbd-client -d ${h.nbdDev} 2>/dev/null; `
+    : ""
   // The pkill pattern is "[n]bdkit" (a one-character class), not "nbdkit":
   // pkill -f matches against each process's FULL command line, and this teardown
   // command's own shell carries the pattern string in its argv (and the sock path

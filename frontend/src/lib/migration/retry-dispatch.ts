@@ -79,17 +79,25 @@ export function v2vConfigFromJobConfig(
     migrationType,
     ...(config.targetVmid !== undefined && { targetVmid: config.targetVmid }),
     ...(config.v2vRoot !== undefined && { v2vRoot: config.v2vRoot }),
+    ...(Number.isInteger(config.nfcConcurrency) && { nfcConcurrency: config.nfcConcurrency }),
   }
 }
 
 /**
  * virt-v2v inputs the migration dialog sends (Hyper-V / Nutanix disk paths,
- * vCenter placement, temporary storage, root override). Persisted in
- * `job.config` so a retry rebuilds the same job instead of falling back to the
- * ESXi defaults. Empty values are dropped so the stored config stays small.
+ * vCenter placement, temporary storage, root override, NFC download
+ * concurrency). Persisted in `job.config` so a retry rebuilds the same job
+ * instead of falling back to the ESXi defaults. Empty values are dropped so the
+ * stored config stays small. `v2vRoot` and `nfcConcurrency` arrive already
+ * validated by the route, never straight from the body.
  */
-export function persistedV2vInputs(body: Record<string, any>, v2vRoot: string | undefined): Record<string, unknown> {
+export function persistedV2vInputs(
+  body: Record<string, any>,
+  v2vRoot: string | undefined,
+  nfcConcurrency?: number,
+): Record<string, unknown> {
   const out: Record<string, unknown> = {}
+  if (nfcConcurrency !== undefined) out.nfcConcurrency = nfcConcurrency
   if (Array.isArray(body.diskPaths) && body.diskPaths.length > 0) out.diskPaths = body.diskPaths
   if (body.tempStorage) out.tempStorage = body.tempStorage
   if (body.vcenterDatacenter) out.vcenterDatacenter = body.vcenterDatacenter

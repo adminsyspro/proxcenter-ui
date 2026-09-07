@@ -15,6 +15,8 @@ const DEFAULT_THRESHOLDS = {
   storage_warning: 80,
   storage_critical: 90,
   snapshot_max_age_days: 7,
+  // Stale-snapshot exclude regex (discussion #875), a string the Go side compiles.
+  snapshot_exclude_pattern: '',
   // Recovery hysteresis (#551) — see the settings route for the rationale.
   recovery_margin: 5,
   recovery_confirmations: 3,
@@ -37,15 +39,19 @@ const INT_THRESHOLD_KEYS: ReadonlySet<keyof Thresholds> = new Set([
 ])
 
 function coerceThresholds(raw: unknown): Thresholds {
-  const t = { ...DEFAULT_THRESHOLDS }
-  if (!raw || typeof raw !== 'object') return t
+  const t: Record<string, number | string> = { ...DEFAULT_THRESHOLDS }
+  if (!raw || typeof raw !== 'object') return t as Thresholds
   const obj = raw as Record<string, unknown>
   for (const key of Object.keys(DEFAULT_THRESHOLDS) as (keyof Thresholds)[]) {
     const v = obj[key]
+    if (typeof DEFAULT_THRESHOLDS[key] === 'string') {
+      if (typeof v === 'string') t[key] = v.trim()
+      continue
+    }
     if (typeof v !== 'number' || !Number.isFinite(v)) continue
     t[key] = INT_THRESHOLD_KEYS.has(key) ? Math.trunc(v) : v
   }
-  return t
+  return t as Thresholds
 }
 
 /**

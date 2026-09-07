@@ -11,6 +11,7 @@ import {
 } from '@mui/material'
 
 import { widgetColors } from './themeColors'
+import { formatAlertValue } from '@/lib/alerts/formatAlertValue'
 
 // ─── Entity icon with status dot ─────────────────────────────────────────────
 function EntityIcon({ entityType, severity, isDark }) {
@@ -97,8 +98,8 @@ return null
       : alert.entityName },
     alert.entityType && { label: t('alerts.detail.entityType'), value: alert.entityType },
     alert.metric && { label: t('alerts.detail.metric'), value: alert.metric },
-    alert.currentValue != null && { label: t('alerts.detail.currentValue'), value: `${alert.currentValue}%` },
-    alert.threshold != null && { label: t('alerts.detail.threshold'), value: `${alert.threshold}%` },
+    alert.currentValue != null && { label: t('alerts.detail.currentValue'), value: formatAlertValue(alert.currentValue, alert.unit) },
+    alert.threshold != null && { label: t('alerts.detail.threshold'), value: formatAlertValue(alert.threshold, alert.unit) },
     alert.time && { label: t('alerts.detail.time'), value: new Date(alert.time).toLocaleString() },
   ].filter(Boolean)
 

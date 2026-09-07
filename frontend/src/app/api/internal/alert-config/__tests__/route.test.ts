@@ -179,6 +179,21 @@ describe('GET /api/v1/internal/alert-config', () => {
     expect(body.thresholds.replication_rpo_grace_percent).toBe(0)
   })
 
+  it('ships the stale-snapshot exclude pattern trimmed, and empty when unset or not a string (#875)', async () => {
+    findManyMock.mockResolvedValue([])
+    getSettingMock.mockResolvedValue({ snapshot_exclude_pattern: '  (?i)replica  ' })
+    let res = await GET(makeReq({ 'X-API-Key': 'secret-key' }))
+    expect((await res.json()).thresholds.snapshot_exclude_pattern).toBe('(?i)replica')
+
+    getSettingMock.mockResolvedValue({ snapshot_max_age_days: 7 })
+    res = await GET(makeReq({ 'X-API-Key': 'secret-key' }))
+    expect((await res.json()).thresholds.snapshot_exclude_pattern).toBe('')
+
+    getSettingMock.mockResolvedValue({ snapshot_exclude_pattern: 42 })
+    res = await GET(makeReq({ 'X-API-Key': 'secret-key' }))
+    expect((await res.json()).thresholds.snapshot_exclude_pattern).toBe('')
+  })
+
   it('honors X-Tenant-ID by scoping the query', async () => {
     getSettingMock.mockResolvedValueOnce({})
     findManyMock.mockResolvedValueOnce([])

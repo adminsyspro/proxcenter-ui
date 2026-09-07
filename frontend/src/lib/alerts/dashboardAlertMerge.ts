@@ -18,6 +18,7 @@ export interface RawOrchestratorAlert {
   message?: string
   current_value?: number
   threshold?: number
+  unit?: string
   last_seen_at?: string
   created_at?: string
 }
@@ -39,6 +40,7 @@ export interface DashboardAlert {
   metric?: string
   currentValue?: number
   threshold?: number
+  unit?: string
   time?: string
   [key: string]: unknown
 }
@@ -107,6 +109,7 @@ export function mergeAndFilterDashboardAlerts(params: {
         metric: oa.type,
         currentValue: oa.current_value,
         threshold: oa.threshold,
+        unit: oa.unit,
         time: oa.last_seen_at || oa.created_at,
       })
     }

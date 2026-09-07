@@ -681,6 +681,8 @@
     "snapshotAgeDesc": "Warnung wenn Snapshots dieses Alter überschreiten",
     "snapshotDays": "Tage",
     "snapshotDisabled": "Deaktiviert",
+    "snapshotExclude": "Ausschlussmuster (Regex)",
+    "snapshotExcludeDesc": "VMs oder Snapshots, deren Name auf diese Regex passt, werden übersprungen, z. B. (?i)replica für Veeam-Replikate. RE2-Syntax, kein Lookahead.",
     "recoveryTitle": "Alarm-Entwarnung",
     "recoveryDesc": "Wie weit eine Metrik zurückgehen muss, bevor ihr Alarm als behoben gilt, damit ein schwankender Wert nicht jede Minute eine Auslösung und eine Entwarnung verschickt",
     "recoveryMargin": "Punkte unter dem Warnschwellenwert",

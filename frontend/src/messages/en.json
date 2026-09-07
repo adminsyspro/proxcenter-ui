@@ -692,6 +692,8 @@
     "snapshotAgeDesc": "Alert when VM snapshots exceed this age",
     "snapshotDays": "days",
     "snapshotDisabled": "Disabled",
+    "snapshotExclude": "Exclude pattern (regex)",
+    "snapshotExcludeDesc": "VMs or snapshots whose name matches this regex are skipped, e.g. (?i)replica for Veeam replicas. RE2 syntax, no lookahead.",
     "recoveryTitle": "Alert recovery",
     "recoveryDesc": "How far a metric must settle back down before its alert is declared resolved, so an unstable value does not email a firing and a recovery every minute",
     "recoveryMargin": "points below the warning threshold",

@@ -44,6 +44,9 @@ describe('alerts message namespace', () => {
       'messages.nodeOffline',
       'snapshotAge',
       'snapshotDisabled',
+      // Discussion #875: exclude Veeam replicas from the stale-snapshot check.
+      'snapshotExclude',
+      'snapshotExcludeDesc',
       'recoveryTitle',
       'recoveryMargin',
       'recoveryConfirmations',

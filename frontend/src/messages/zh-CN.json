@@ -4271,6 +4271,8 @@
       "throughput": "吞吐量",
       "bandwidth": "带宽",
       "actions": "操作",
+      "deleteJobInUse": "此作业保护着恢复计划 {plans} 中的虚拟机。请先将其从计划中移除，或删除该计划，再删除此作业。",
+      "deleteJobRunning": "此作业正在同步中。请在同步完成后重试。",
       "syncNow": "立即同步",
       "resume": "恢复",
       "pause": "暂停",

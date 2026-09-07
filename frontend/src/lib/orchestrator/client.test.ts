@@ -348,7 +348,7 @@ describe('parseOrchestratorError', () => {
     const { parseOrchestratorError } = await import('./client')
     const error = new Error(`Orchestrator 409: ${JSON.stringify({ error: 'a failback is already in progress' })}`)
 
-    expect(parseOrchestratorError(error)).toEqual({ status: 409, message: 'a failback is already in progress' })
+    expect(parseOrchestratorError(error)).toEqual({ status: 409, message: 'a failback is already in progress', details: { error: 'a failback is already in progress' } })
   })
 
   it('falls back to the raw body text when the JSON has no error field', async () => {

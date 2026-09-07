@@ -4295,6 +4295,8 @@
       "throughput": "Throughput",
       "bandwidth": "Bandwidth",
       "actions": "Actions",
+      "deleteJobInUse": "This job protects VMs of the recovery plan {plans}. Remove them from the plan, or delete the plan, before deleting the job.",
+      "deleteJobRunning": "A synchronization of this job is in progress. Retry once it completes.",
       "syncNow": "Sync Now",
       "resume": "Resume",
       "pause": "Pause",

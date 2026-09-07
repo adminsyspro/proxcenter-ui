@@ -112,7 +112,7 @@ export async function orchestratorFetch<T>(
  * Returns null when the error doesn't match that shape (timeouts, connection
  * failures, etc.) — callers should fall back to a 500 in that case.
  */
-export function parseOrchestratorError(error: unknown): { status: number; message: string } | null {
+export function parseOrchestratorError(error: unknown): { status: number; message: string; details?: Record<string, unknown> } | null {
   const raw = error instanceof Error ? error.message : typeof error === 'string' ? error : ''
   const match = /^Orchestrator (\d+): ([\s\S]*)$/.exec(raw)
 
@@ -125,7 +125,9 @@ export function parseOrchestratorError(error: unknown): { status: number; messag
     const parsed = JSON.parse(body)
 
     if (parsed && typeof parsed.error === 'string' && parsed.error) {
-      return { status, message: parsed.error }
+      // The body may carry more than the message (a code, the plans that
+      // block a deletion): relays pass it through, see replicationErrorResponse.
+      return { status, message: parsed.error, details: parsed }
     }
   } catch {
     // Not JSON — fall through to the raw body text below

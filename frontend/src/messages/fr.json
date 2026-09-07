@@ -4295,6 +4295,8 @@
       "throughput": "Débit",
       "bandwidth": "Bande passante",
       "actions": "Actions",
+      "deleteJobInUse": "Ce job protège des VM du plan de reprise {plans}. Retirez-les du plan, ou supprimez le plan, avant de supprimer le job.",
+      "deleteJobRunning": "Une synchronisation de ce job est en cours. Réessayez quand elle sera terminée.",
       "syncNow": "Synchroniser",
       "resume": "Reprendre",
       "pause": "Pause",

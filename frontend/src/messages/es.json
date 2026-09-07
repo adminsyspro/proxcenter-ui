@@ -4295,6 +4295,8 @@
       "throughput": "Throughput",
       "bandwidth": "Ancho de banda",
       "actions": "Acciones",
+      "deleteJobInUse": "Este trabajo protege VM del plan de recuperación {plans}. Quítelas del plan, o elimine el plan, antes de eliminar el trabajo.",
+      "deleteJobRunning": "Hay una sincronización de este trabajo en curso. Vuelva a intentarlo cuando termine.",
       "syncNow": "Sincronizar ahora",
       "resume": "Reanudar",
       "pause": "Pausar",

@@ -247,21 +247,39 @@ export default function SiteRecoveryPage() {
 
   const handleDeleteJob = useCallback(async (id: string) => {
     try {
-      await fetch(`/api/v1/orchestrator/replication/jobs/${id}`, { method: 'DELETE' })
+      const response = await fetch(`/api/v1/orchestrator/replication/jobs/${id}`, { method: 'DELETE' })
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}))
+        if (response.status === 409 && data.code === 'job_in_use_by_plan') {
+          setOperationError(t('siteRecovery.protection.deleteJobInUse', { plans: (data.plans || []).join(', ') }))
+        } else if (response.status === 409 && data.code === 'job_running') {
+          setOperationError(t('siteRecovery.protection.deleteJobRunning'))
+        } else {
+          setOperationError(response.status === 409 ? t('siteRecovery.failover.testActiveConflict') : data.error || response.statusText)
+        }
+        return
+      }
+      setOperationError(null)
       mutateJobs()
-    } catch (e) {
-      console.error('Failed to delete job:', e)
+    } catch (error) {
+      setOperationError(error instanceof Error ? error.message : String(error))
     }
-  }, [mutateJobs])
+  }, [mutateJobs, t])
 
   const handleDeletePlan = useCallback(async (id: string) => {
     try {
-      await fetch(`/api/v1/orchestrator/replication/plans/${id}`, { method: 'DELETE' })
+      const response = await fetch(`/api/v1/orchestrator/replication/plans/${id}`, { method: 'DELETE' })
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}))
+        setOperationError(response.status === 409 ? t('siteRecovery.failover.testActiveConflict') : data.error || response.statusText)
+        return
+      }
+      setOperationError(null)
       mutatePlans()
-    } catch (e) {
-      console.error('Failed to delete plan:', e)
+    } catch (error) {
+      setOperationError(error instanceof Error ? error.message : String(error))
     }
-  }, [mutatePlans])
+  }, [mutatePlans, t])
 
   const openFailoverDialog = useCallback((planId: string, type: 'test' | 'failover' | 'failback') => {
     setFailoverDialog({ open: true, planId, type })
@@ -610,7 +628,12 @@ export default function SiteRecoveryPage() {
 
         <FailoverDialog
           open={failoverDialog.open}
-          onClose={() => setFailoverDialog({ open: false, planId: null, type: 'test' })}
+          onClose={() => {
+            setFailoverDialog({ open: false, planId: null, type: 'test' })
+            // The next open rehydrates from the plan; keeping the old execution
+            // would leave its pollers alive for a test that may be gone.
+            setActiveExecution(null)
+          }}
           plan={failoverPlan}
           type={failoverDialog.type}
           onConfirm={handleFailoverConfirm}

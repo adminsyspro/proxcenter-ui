@@ -4295,6 +4295,8 @@
       "throughput": "처리량",
       "bandwidth": "대역폭",
       "actions": "작업",
+      "deleteJobInUse": "이 작업은 복구 계획 {plans}의 VM을 보호합니다. 작업을 삭제하기 전에 계획에서 해당 VM을 제거하거나 계획을 삭제하세요.",
+      "deleteJobRunning": "이 작업의 동기화가 진행 중입니다. 완료된 후 다시 시도하세요.",
       "syncNow": "지금 동기화",
       "resume": "재개",
       "pause": "일시 중지",

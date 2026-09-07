@@ -4274,6 +4274,8 @@
       "throughput": "Durchsatz",
       "bandwidth": "Bandbreite",
       "actions": "Aktionen",
+      "deleteJobInUse": "Dieser Job schützt VMs des Wiederherstellungsplans {plans}. Entfernen Sie sie aus dem Plan oder löschen Sie den Plan, bevor Sie den Job löschen.",
+      "deleteJobRunning": "Eine Synchronisierung dieses Jobs läuft gerade. Versuchen Sie es erneut, sobald sie abgeschlossen ist.",
       "syncNow": "Jetzt synchronisieren",
       "resume": "Fortsetzen",
       "pause": "Pausieren",

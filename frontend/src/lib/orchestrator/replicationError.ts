@@ -6,7 +6,7 @@ export function replicationErrorResponse(error: unknown, fallback: string) {
   const upstream = parseOrchestratorError(error)
 
   return NextResponse.json(
-    { error: upstream?.message || (error instanceof Error ? error.message : fallback) },
+    { ...(upstream?.details ?? {}), error: upstream?.message || (error instanceof Error ? error.message : fallback) },
     { status: upstream?.status || 500 },
   )
 }

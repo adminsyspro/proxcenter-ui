@@ -57,7 +57,10 @@ export default function FailoverDialog({ open, onClose, plan, type, onConfirm, o
   const t = useTranslations()
   const [confirmText, setConfirmText] = useState('')
   const [selectedPoints, setSelectedPoints] = useState<Record<number, string>>({})
-  const screenshots = useExecutionScreenshots(execution && type === 'test' ? execution.id : null)
+  // Only while the dialog is open: the component stays mounted when closed and
+  // the page keeps the last execution around, so an unconditional key kept
+  // polling the screenshots of a test that could already be deleted.
+  const screenshots = useExecutionScreenshots(open && execution && type === 'test' ? execution.id : null)
   const [screenshotPreview, setScreenshotPreview] = useState<ScreenshotMeta | null>(null)
   const hasRollbackVMs = !!execution?.vm_results?.some(vm => !vm.test_clones?.length)
   const hasTestClones = !!execution?.vm_results?.some(vm => vm.test_clones?.length)

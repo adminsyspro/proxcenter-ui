@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 
 import { getOrchestratorClient } from "@/lib/orchestrator/client"
+import { replicationErrorResponse } from "@/lib/orchestrator/replicationError"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { getTenantConnectionIds } from "@/lib/tenant"
 
@@ -98,13 +99,7 @@ export async function DELETE(_request: NextRequest, { params }: { params: Promis
 
     return NextResponse.json(response.data)
   } catch (e: any) {
-    if ((e as any)?.code !== 'ORCHESTRATOR_UNAVAILABLE') {
-      console.error("Error deleting replication job:", e)
-    }
-
-    return NextResponse.json(
-      { error: e?.message || "Failed to delete replication job" },
-      { status: 500 }
-    )
+    // 409 while a test failover holds the job's replicas: keep the orchestrator's status
+    return replicationErrorResponse(e, "Failed to delete replication job")
   }
 }

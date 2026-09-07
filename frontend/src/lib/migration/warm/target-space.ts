@@ -74,3 +74,27 @@ export async function checkTargetStorageSpace(
 export function gib(bytes: number): string {
   return (bytes / 1073741824).toFixed(1)
 }
+
+/**
+ * Planning-time guard: the same verdict as checkTargetStorageSpace, turned into
+ * the error the operator reads in the job log. Throws when the storage cannot
+ * hold the disks or cannot be read; returns the verdict otherwise so the
+ * caller can log the two figures.
+ */
+export async function assertTargetStorageSpace(
+  targetConnectionId: string,
+  node: string,
+  storage: string,
+  requiredBytes: number,
+): Promise<TargetSpaceResult> {
+  const space = await checkTargetStorageSpace(targetConnectionId, node, storage, requiredBytes)
+  if (space.error) {
+    throw new Error(`Cannot read free space on "${storage}" (node ${node}): ${space.error}`)
+  }
+  if (!space.sufficient) {
+    throw new Error(
+      `Insufficient disk space on "${storage}": ${gib(space.availableBytes)} GB free, need ${gib(space.requiredBytes)} GB plus a 10% margin. Free up space or pick another storage.`,
+    )
+  }
+  return space
+}

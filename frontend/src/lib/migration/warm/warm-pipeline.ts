@@ -2,7 +2,7 @@ import { getTenantPrisma } from "@/lib/tenant"
 import { decryptSecret } from "@/lib/crypto/secret"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { pveFetch } from "@/lib/proxmox/client"
-import { checkTargetStorageSpace, gib } from "./target-space"
+import { assertTargetStorageSpace, gib } from "./target-space"
 import { isFileBasedStorage } from "@/lib/proxmox/storage"
 import { executeSSH, shellEscape } from "@/lib/ssh/exec"
 import {
@@ -271,15 +271,7 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
     // cluster-auto node choice and direct API calls reach here unchecked, and a
     // zvol allocation that fails for space would otherwise surface only as a
     // PVE error after the node preflight said "ready".
-    const space = await checkTargetStorageSpace(
-      config.targetConnectionId, config.targetNode, config.targetStorage,
-      vmConfig.disks.reduce((s, d) => s + d.capacityBytes, 0),
-    )
-    if (!space.sufficient) {
-      throw new Error(space.error
-        ? `Cannot read free space on "${config.targetStorage}" (node ${config.targetNode}): ${space.error}`
-        : `Insufficient disk space on "${config.targetStorage}": ${gib(space.availableBytes)} GB free, need ${gib(space.requiredBytes)} GB plus a 10% margin. Free up space or pick another storage.`)
-    }
+    const space = await assertTargetStorageSpace(config.targetConnectionId, config.targetNode, config.targetStorage, vmConfig.disks.reduce((s, d) => s + d.capacityBytes, 0))
     await appendLog(jobId, `Target storage "${config.targetStorage}": ${gib(space.availableBytes)} GB free, need ${gib(space.requiredBytes)} GB`, "info")
 
     // VDDK preflight on the PVE node — actionable error before we touch anything.

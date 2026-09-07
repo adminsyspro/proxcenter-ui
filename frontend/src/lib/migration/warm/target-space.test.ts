@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { pveFetch } from "@/lib/proxmox/client"
-import { evaluateTargetSpace, checkTargetStorageSpace, gib } from "./target-space"
+import { evaluateTargetSpace, checkTargetStorageSpace, assertTargetStorageSpace, gib } from "./target-space"
 
 vi.mock("@/lib/connections/getConnection", () => ({ getConnectionById: vi.fn() }))
 vi.mock("@/lib/proxmox/client", () => ({ pveFetch: vi.fn() }))
@@ -118,5 +118,37 @@ describe("gib", () => {
     { bytes: 0, expected: "0.0" },
   ])("formats $bytes bytes as $expected GiB", ({ bytes, expected }) => {
     expect(gib(bytes)).toBe(expected)
+  })
+})
+
+describe("assertTargetStorageSpace (planning-time guard)", () => {
+  beforeEach(() => {
+    mockConnection.mockReset()
+    mockFetch.mockReset()
+    mockConnection.mockResolvedValue({ baseUrl: "https://pve.local:8006", apiToken: "t" } as never)
+  })
+
+  it("returns the verdict when the storage can hold the disks plus the margin", async () => {
+    mockFetch.mockResolvedValue({ avail: 44.7 * GiB, type: "zfspool" })
+    await expect(assertTargetStorageSpace("tgt", "pve1", "ZFS-Pool", 16 * GiB)).resolves.toMatchObject({
+      storage: "ZFS-Pool",
+      type: "zfspool",
+      requiredBytes: 16 * GiB,
+      sufficient: true,
+    })
+  })
+
+  it("throws the operator-facing message with both figures when the storage is too small", async () => {
+    mockFetch.mockResolvedValue({ avail: 12.2 * GiB, type: "zfspool" })
+    await expect(assertTargetStorageSpace("tgt", "pve1", "ZFS-Pool", 16 * GiB)).rejects.toThrow(
+      'Insufficient disk space on "ZFS-Pool": 12.2 GB free, need 16.0 GB plus a 10% margin',
+    )
+  })
+
+  it("throws a read error, not a space verdict, when the node cannot report the storage", async () => {
+    mockFetch.mockRejectedValue(new Error("PVE 400 /nodes/pve1/storage/nope/status: No such storage."))
+    await expect(assertTargetStorageSpace("tgt", "pve1", "nope", 16 * GiB)).rejects.toThrow(
+      /^Cannot read free space on "nope" \(node pve1\): PVE 400 .*No such storage\.$/,
+    )
   })
 })

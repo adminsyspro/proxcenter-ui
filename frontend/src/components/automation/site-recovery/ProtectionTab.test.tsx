@@ -208,7 +208,9 @@ it('shows ZFS glyphs and target node in the job row and detail drawer without a 
   expect(screen.getByRole('img', { name: 'ZFS' })).toBeInTheDocument()
   expect(screen.queryByText('local-zfs · dr1')).not.toBeInTheDocument()
   await openDrawer('100 - web-01')
-  expect(screen.getByRole('img', { name: 'ZFS' })).toBeInTheDocument()
+  // Drawer header, then the source and target of its route block; the open
+  // drawer hides the list behind it from assistive technology.
+  expect(screen.getAllByRole('img', { name: 'ZFS' })).toHaveLength(3)
   expect(screen.getByText('dst / local-zfs · dr1')).toBeInTheDocument()
   expect(screen.queryByRole('tooltip', { name: 'ZFS' })).not.toBeInTheDocument()
 })

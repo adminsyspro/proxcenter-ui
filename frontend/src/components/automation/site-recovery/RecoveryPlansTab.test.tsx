@@ -256,12 +256,12 @@ describe('RecoveryPlansTab — clear execution history', () => {
 
 it('shows the engine glyphs of the plan jobs on both ends of the route', () => {
   const zfsJob = { id: 'job-1', storage_engine: 'zfs' } as ReplicationJob
-  renderWithProviders(<Harness plans={[plan()]} history={[]} jobs={[zfsJob]} />)
+  renderWithProviders(<Harness plans={[plan()]} history={[]} jobs={[zfsJob]} onTestFailover={vi.fn()} onCleanupTest={vi.fn()} />)
   expect(screen.getAllByRole('img', { name: 'ZFS' })).toHaveLength(2)
   expect(screen.queryByRole('img', { name: 'Ceph RBD' })).not.toBeInTheDocument()
 })
 
 it('falls back to the Ceph glyph when the plan jobs are unknown', () => {
-  renderWithProviders(<Harness plans={[plan()]} history={[]} />)
+  renderWithProviders(<Harness plans={[plan()]} history={[]} onTestFailover={vi.fn()} onCleanupTest={vi.fn()} />)
   expect(screen.getAllByRole('img', { name: 'Ceph RBD' })).toHaveLength(2)
 })

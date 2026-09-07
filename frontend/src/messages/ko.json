@@ -2208,6 +2208,8 @@
       "warmPreflightFailedTitle": "대상 노드가 웜 마이그레이션 준비가 되지 않았습니다",
       "warmPreflightMissing": "노드에 없는 항목: {items}.",
       "warmPreflightNbdHint": "Proxmox 노드에 NBD 도구를 설치하세요: apt install nbdkit nbd-client libnbd-bin. 그런 다음 노드를 다시 선택하세요.",
+      "warmStorageInsufficient": "{storage}의 여유 공간이 부족합니다: {available} GB 사용 가능, 원본 디스크와 10% 여유분을 위해 {required} GB 필요. 공간을 확보하거나 다른 스토리지를 선택하세요.",
+      "warmStorageCheckFailed": "대상 노드에서 {storage}의 여유 공간을 읽을 수 없습니다: {error}",
       "warmPrepNeedsPve9": "이 노드는 Proxmox VE {pve}(Debian {debian})에서 실행 중입니다. 웜 마이그레이션에는 Proxmox VE 9가 필요합니다. Debian 13부터 nbdkit VDDK 플러그인이 제공되므로 이 노드는 자동으로도 수동으로도 준비할 수 없습니다.",
       "warmPreflightDocsHint": "먼저 Proxmox 노드를 준비한 후(nbdkit, nbdkit VDDK 플러그인, nbd-client, Broadcom VDDK 설치) 노드를 다시 선택하세요. <link>웜 마이그레이션 노드 설정 가이드</link>를 참조하세요.",
       "warmSetupAction": "이 노드 준비",

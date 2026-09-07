@@ -2208,6 +2208,8 @@
       "warmPreflightFailedTitle": "Le noeud cible n'est pas pret pour la migration a chaud",
       "warmPreflightMissing": "Manquant sur le noeud : {items}.",
       "warmPreflightNbdHint": "Installez les outils NBD sur le nœud Proxmox : apt install nbdkit nbd-client libnbd-bin, puis sélectionnez à nouveau le nœud.",
+      "warmStorageInsufficient": "Espace libre insuffisant sur {storage} : {available} Go disponibles, {required} Go nécessaires pour les disques source plus une marge de 10 %. Libérez de l'espace ou choisissez un autre stockage.",
+      "warmStorageCheckFailed": "Impossible de lire l'espace libre de {storage} sur le nœud cible : {error}",
       "warmPrepNeedsPve9": "Ce nœud est en Proxmox VE {pve} (Debian {debian}). La migration warm exige Proxmox VE 9 : Debian 13 est la première version à fournir le plugin VDDK de nbdkit, ce nœud ne peut donc pas être préparé, ni automatiquement ni à la main.",
       "warmPreflightDocsHint": "Preparez d'abord le noeud Proxmox (installez nbdkit, le plugin VDDK de nbdkit, nbd-client et le VDDK Broadcom), puis reselectionnez le noeud. Consultez le <link>guide de preparation du noeud pour la migration a chaud</link>.",
       "warmSetupAction": "Preparer ce noeud",

@@ -41,6 +41,7 @@ import {
 
 import { NodeRow, BulkAction } from '@/components/NodesTable'
 import NumericTextField from '@/components/ui/NumericTextField'
+import { NFC_CONCURRENCY_MIN, NFC_CONCURRENCY_MAX } from '@/lib/migration/nfc-progress'
 import { usedVmidsOnConnection, nextVmidOnConnection } from '@/components/hardware/utils'
 import { tooltipSlotProps } from '@/components/settings/ha/tooltipSlotProps'
 // Dependency-free eligibility check (NOT ./cbt, which pulls the server-only SOAP client).
@@ -291,6 +292,8 @@ export interface InventoryDialogsProps {
   setMigTempStorage: (v: string) => void
   migV2vRoot: string
   setMigV2vRoot: (v: string) => void
+  migNfcConcurrency: number
+  setMigNfcConcurrency: (v: number) => void
   migType: 'cold' | 'sshfs_boot' | 'warm'
   setMigType: (v: 'cold' | 'sshfs_boot' | 'warm') => void
   migTransferMode: 'https' | 'sshfs' | 'auto'
@@ -329,7 +332,7 @@ export interface InventoryDialogsProps {
   setBulkMigLogsExpanded: (v: React.SetStateAction<boolean>) => void
   bulkMigLogsFilter: string | null
   setBulkMigLogsFilter: (v: string | null) => void
-  bulkMigConfigRef: React.MutableRefObject<{ sourceConnectionId: string; targetConnectionId: string; targetStorage: string; networkBridge: string; vlanTag?: number; migrationType: string; transferMode: string; startAfterMigration: boolean; convertDisksToQcow2: boolean; sourceType: string; tempStorage?: string; v2vRoot?: string } | null>
+  bulkMigConfigRef: React.MutableRefObject<{ sourceConnectionId: string; targetConnectionId: string; targetStorage: string; networkBridge: string; vlanTag?: number; migrationType: string; transferMode: string; startAfterMigration: boolean; convertDisksToQcow2: boolean; sourceType: string; tempStorage?: string; v2vRoot?: string; nfcConcurrency?: number } | null>
   bulkMigHostInfo: any
 
   // Upgrade dialog
@@ -442,6 +445,7 @@ export default function InventoryDialogs(props: InventoryDialogsProps) {
     migManualCutover, setMigManualCutover,
     migDowntimeBudget, setMigDowntimeBudget,
     migDiskPaths, setMigDiskPaths, migTempStorage, setMigTempStorage, migV2vRoot, setMigV2vRoot,
+    migNfcConcurrency, setMigNfcConcurrency,
     migType, setMigType, migTransferMode, setMigTransferMode, migPveConnections, migNodes, migStorages,
     migStoragesLoading, migStoragesError, retryMigStorages,
     migSshfsAvailable, vcenterPreflight, setVcenterPreflight, migStarting, setMigStarting,
@@ -977,6 +981,36 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
           error={downtimeBudgetInvalid}
           label={t('inventoryPage.esxiMigration.downtimeBudgetSeconds')}
           sx={{ width: 110, flexShrink: 0 }}
+        />
+      </Box>
+    </Box>
+  )
+
+  // Cold vCenter only (#807): how many disks download at once over NFC. Each
+  // stream is capped by the ESXi host, so this is the lever for a multi-disk
+  // VM. Same shape as the downtime budget slider, rendered by both dialogs.
+  const renderNfcConcurrencyField = (isVcenter: boolean) => isVcenter && migType !== 'warm' && (
+    <Box sx={{ px: 0.5 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.5 }}>
+        <Typography variant="body2">{t('inventoryPage.esxiMigration.nfcConcurrency')}</Typography>
+        <MuiTooltip title={t('inventoryPage.esxiMigration.nfcConcurrencyTooltip')} arrow placement="top" slotProps={tooltipSlotProps}>
+          <i className="ri-question-line" style={{ fontSize: 14, opacity: 0.6 }} />
+        </MuiTooltip>
+        <Typography variant="body2" fontWeight={700} sx={{ ml: 'auto' }}>
+          {t('inventoryPage.esxiMigration.nfcConcurrencyValue', { count: migNfcConcurrency })}
+        </Typography>
+      </Box>
+      <Box sx={{ px: 1 }}>
+        <Slider
+          size="small"
+          value={migNfcConcurrency}
+          onChange={(_, val) => setMigNfcConcurrency(Math.round(val as number))}
+          min={NFC_CONCURRENCY_MIN}
+          max={NFC_CONCURRENCY_MAX}
+          step={1}
+          marks
+          valueLabelDisplay="auto"
+          aria-label={t('inventoryPage.esxiMigration.nfcConcurrency')}
         />
       </Box>
     </Box>
@@ -3112,6 +3146,8 @@ return
                     />
                   )}
 
+                  {renderNfcConcurrencyField(esxiMigrateVm?.hostType === 'vcenter')}
+
                   {/* Disk paths for Hyper-V */}
                   {esxiMigrateVm?.hostType === 'hyperv' && (
                     <Box>
@@ -3496,6 +3532,8 @@ return
                         }),
                         // virt-v2v root filesystem override (#738); omitted when empty.
                         ...(migV2vRoot.trim() && { v2vRoot: migV2vRoot.trim() }),
+                        // Parallel NFC downloads (#807): cold vCenter only, gated like the slider.
+                        ...(esxiMigrateVm.hostType === 'vcenter' && migType !== 'warm' && { nfcConcurrency: migNfcConcurrency }),
                         ...(esxiMigrateVm.hostType === 'hyperv' && migDiskPaths.trim() && {
                           diskPaths: migDiskPaths.trim().split('\n').map((p: string) => p.trim()).filter(Boolean),
                         }),
@@ -4252,6 +4290,8 @@ return
                   />
                 )}
 
+                {renderNfcConcurrencyField(bulkMigHostInfo?.hostType === 'vcenter')}
+
                 <FormControlLabel
                   control={<Switch size="small" checked={migStartAfter} onChange={(_, v) => setMigStartAfter(v)} />}
                   label={<Typography variant="body2">{t('inventoryPage.esxiMigration.startAfterMigration')}</Typography>}
@@ -4642,6 +4682,7 @@ return
                           }),
                           // virt-v2v root filesystem override (#738); omitted when empty.
                           ...(migV2vRoot.trim() && { v2vRoot: migV2vRoot.trim() }),
+                          ...(isVcenterBulk && migType !== 'warm' && { nfcConcurrency: migNfcConcurrency }),
                         }),
                       })
                       const d = await res.json()
@@ -4688,6 +4729,7 @@ return
                       tempStorage: migTempStorage,
                     }),
                     ...(migV2vRoot.trim() && { v2vRoot: migV2vRoot.trim() }),
+                    ...(isVcenterBulk && migType !== 'warm' && { nfcConcurrency: migNfcConcurrency }),
                   }
                   setBulkMigJobs(jobs)
                   setBulkMigStarting(false)

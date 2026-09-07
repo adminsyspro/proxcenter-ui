@@ -322,3 +322,47 @@ describe("POST /api/v1/migrations, virt-v2v root filesystem", () => {
     expect(v2v.mock.calls[0][1]).not.toHaveProperty("v2vRoot")
   })
 })
+
+describe("POST /api/v1/migrations, NFC concurrency (#807)", () => {
+  const vcenterConnections = () => {
+    h.prisma.connection.findUnique
+      .mockResolvedValueOnce({ id: "src", type: "vmware", subType: "vcenter", name: "vc", baseUrl: "https://vc" })
+      .mockResolvedValueOnce({ id: "tgt", type: "pve", name: "pve" })
+  }
+
+  it.each([0, 9, -1, 2.5, "many", ""])("rejects nfcConcurrency %j before creating a job", async (nfcConcurrency) => {
+    const res = await callRoute(POST, { body: { ...body, migrationType: "cold", nfcConcurrency } })
+    expect(res.status).toBe(400)
+    expect((await readJson<any>(res))?.error).toMatch(/nfcConcurrency/)
+    expect(h.prisma.migrationJob.create).not.toHaveBeenCalled()
+    await runAfters()
+    expect(v2v).not.toHaveBeenCalled()
+  })
+
+  it("forwards the slider value to the virt-v2v pipeline and persists it for retries", async () => {
+    vcenterConnections()
+    const res = await callRoute(POST, { body: { ...body, migrationType: "cold", nfcConcurrency: 3 } })
+    expect(res.status).toBe(200)
+    expect(createdJobData().config).toMatchObject({ nfcConcurrency: 3 })
+    await runAfters()
+    expect(v2v).toHaveBeenCalledTimes(1)
+    expect(v2v.mock.calls[0]?.[1]).toMatchObject({ nfcConcurrency: 3 })
+  })
+
+  it("accepts the value as a numeric string from a raw API caller", async () => {
+    vcenterConnections()
+    const res = await callRoute(POST, { body: { ...body, migrationType: "cold", nfcConcurrency: "4" } })
+    expect(res.status).toBe(200)
+    await runAfters()
+    expect(v2v.mock.calls[0]?.[1]).toMatchObject({ nfcConcurrency: 4 })
+  })
+
+  it("leaves nfcConcurrency out of the payload when the caller omits it", async () => {
+    vcenterConnections()
+    const res = await callRoute(POST, { body: { ...body, migrationType: "cold" } })
+    expect(res.status).toBe(200)
+    await runAfters()
+    expect(v2v.mock.calls[0]?.[1]).not.toHaveProperty("nfcConcurrency")
+    expect(createdJobData().config).not.toHaveProperty("nfcConcurrency")
+  })
+})

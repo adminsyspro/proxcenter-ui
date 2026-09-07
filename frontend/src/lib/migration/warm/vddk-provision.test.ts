@@ -207,6 +207,37 @@ describe("buildVddkInstallScript", () => {
     expect(s).toContain("printf 'options nbd max_part=0\\n' > /etc/modprobe.d/proxcenter-nbd.conf")
   })
 
+  it("guards the global_filter edit on an active filter without an nbd exclusion", () => {
+    const s = script()
+    expect(s).toContain("LVMCONF=/etc/lvm/lvm.conf")
+    expect(s).toContain(
+      `if grep -qE '^[[:space:]]*global_filter[[:space:]]*=[[:space:]]*\\[' "$LVMCONF" && ! grep -qE '^[[:space:]]*global_filter[[:space:]]*=.*nbd' "$LVMCONF"; then`,
+    )
+  })
+
+  it("backs up the config, prepends the nbd exclusion, and validates the filter", () => {
+    const s = script()
+    expect(s).toContain('cp -a "$LVMCONF" "$LVMCONF.proxcenter-bak"')
+    expect(s).toContain(
+      `sed -i -E 's#^([[:space:]]*global_filter[[:space:]]*=[[:space:]]*\\[)#\\1 "r|/dev/nbd.*|",#' "$LVMCONF"`,
+    )
+    expect(s).toContain('if lvmconfig --validate >/dev/null 2>&1; then\n    rm -f "$LVMCONF.proxcenter-bak"')
+  })
+
+  it("restores the original config and warns if filter validation fails", () => {
+    const s = script()
+    expect(s).toContain('else\n    mv "$LVMCONF.proxcenter-bak" "$LVMCONF"')
+    expect(s).toContain('echo "WARN: /etc/lvm/lvm.conf left unchanged (global_filter edit failed validation); add r|/dev/nbd.*| to devices/global_filter by hand" >&2')
+  })
+
+  it("edits the LVM filter after configuring the nbd kernel module", () => {
+    const s = script()
+    expect(s).toContain("modprobe nbd max_part=0")
+    expect(s).toContain("LVMCONF=/etc/lvm/lvm.conf")
+    expect(s.indexOf("LVMCONF=/etc/lvm/lvm.conf")).toBeGreaterThan(s.indexOf("modprobe nbd max_part=0"))
+    expect(s.indexOf("LVMCONF=/etc/lvm/lvm.conf")).toBeGreaterThan(s.indexOf("/etc/modprobe.d/proxcenter-nbd.conf"))
+  })
+
   it("fails fast and loud: set -eo pipefail so a broken curl cannot be masked by tar", () => {
     expect(script()).toContain("set -eo pipefail")
   })

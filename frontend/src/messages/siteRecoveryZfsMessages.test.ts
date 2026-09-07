@@ -32,6 +32,7 @@ const requiredKeys = [
   "createJob.vmUnsupportedDisk",
   "createJob.sshChecks",
   "preflight.checks.target_storage",
+  "preflight.checks.target_vmids",
   "preflight.checks.reverse_ssh",
   "snapshots.engine",
   "snapshots.node",

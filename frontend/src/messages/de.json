@@ -4120,6 +4120,7 @@
       "title": "Vorabprüfungen",
       "blocked": "Kritische Prüfungen fehlgeschlagen. Beheben Sie die Probleme oben, bevor Sie den Auftrag anlegen.",
       "checks": {
+        "target_vmids": "Verfügbarkeit der Ziel-VMIDs",
         "source_health": "Zustand des Quellspeichers",
         "target_health": "Zustand des Zielspeichers",
         "target_space": "Kapazität Zielpool",

@@ -113,7 +113,7 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
   }
 
   // Results carry their request key so a previous selection can never enable creation.
-  type PreflightCheck = { id: 'source_health' | 'target_health' | 'target_space' | 'target_storage' | 'reverse_ssh'; status: 'ok' | 'warn' | 'error'; label?: string; detail?: string; message?: string }
+  type PreflightCheck = { id: 'target_vmids' | 'source_health' | 'target_health' | 'target_space' | 'target_storage' | 'reverse_ssh'; status: 'ok' | 'warn' | 'error'; label?: string; detail?: string; message?: string }
   const [checkResult, setCheckResult] = useState<{
     key: string
     ssh?: SSHConnectivityResult
@@ -192,12 +192,13 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
       source_cluster: sourceCluster, target_cluster: targetCluster, storage_engine: engine,
       target_node: targetNode, vm_ids: selectionMode === 'vms' ? selectedVMs : [],
       tags: selectionMode === 'tags' ? selectedTags : [], target_pool: targetPool, estimated_size_bytes: estimatedSizeBytes,
+      vmid_prefix: vmidPrefix || 0,
     }) : ''
 
   useEffect(() => {
     if (!checkKey) return
     const controller = new AbortController()
-    const { target_pool, estimated_size_bytes, ...context } = JSON.parse(checkKey)
+    const { target_pool, estimated_size_bytes, vmid_prefix, ...context } = JSON.parse(checkKey)
     const runCheck = async (endpoint: string, body: unknown) => {
       const response = await fetch(`/api/v1/orchestrator/replication/${endpoint}`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: controller.signal,
@@ -213,7 +214,7 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
     const timer = setTimeout(() => {
       Promise.all([
         runCheck('check-ssh', context),
-        runCheck('preflight', { ...context, target_pool, estimated_size_bytes }),
+        runCheck('preflight', { ...context, target_pool, estimated_size_bytes, vmid_prefix }),
       ]).then(([ssh, preflight]) => {
         if (!controller.signal.aborted) setCheckResult({ key: checkKey, ssh, preflight })
       }).catch((error: unknown) => {

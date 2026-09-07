@@ -4117,6 +4117,7 @@
       "title": "预检检查",
       "blocked": "关键检查失败。请先修复上述问题再创建任务。",
       "checks": {
+        "target_vmids": "目标 VMID 可用性",
         "source_health": "源存储健康状态",
         "target_health": "目标存储健康状态",
         "target_space": "目标池容量",

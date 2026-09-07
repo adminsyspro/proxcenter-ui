@@ -4141,6 +4141,7 @@
       "title": "Comprobaciones previas",
       "blocked": "Han fallado comprobaciones críticas. Resuelve los problemas anteriores antes de crear el trabajo.",
       "checks": {
+        "target_vmids": "Disponibilidad de los VMID de destino",
         "source_health": "Estado del almacenamiento de origen",
         "target_health": "Estado del almacenamiento de destino",
         "target_space": "Capacidad del pool destino",

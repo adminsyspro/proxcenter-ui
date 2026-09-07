@@ -4141,6 +4141,7 @@
       "title": "Vérifications préalables",
       "blocked": "Vérifications critiques en échec. Résolvez les problèmes ci-dessus avant de créer le job.",
       "checks": {
+        "target_vmids": "Disponibilité des VMID cibles",
         "source_health": "Santé du stockage source",
         "target_health": "Santé du stockage cible",
         "target_space": "Capacité pool cible",

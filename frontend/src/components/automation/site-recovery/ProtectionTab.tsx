@@ -645,7 +645,7 @@ export default function ProtectionTab({
                   return sections.map(([engine, list]) => (
                     <Box key={engine} sx={{ mb: sections.length > 1 ? 1.5 : 0 }}>
                       {sections.length > 1 && (
-                        <Divider textAlign='left' role='separator' aria-label={t(`siteRecovery.engine.${engine}`)} sx={{ mb: 1 }}>
+                        <Divider textAlign='center' role='separator' aria-label={t(`siteRecovery.engine.${engine}`)} sx={{ mb: 1 }}>
                           <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75 }}>
                             <EngineGlyph engine={engine} size={14} />
                             <Typography variant='caption' sx={{ fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.4 }}>

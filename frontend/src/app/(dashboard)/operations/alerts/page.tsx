@@ -48,6 +48,7 @@ import { resolveSelectedRowIds } from '@/utils/gridSelection'
 import EmptyState from '@/components/EmptyState'
 import { CardsSkeleton, TableSkeleton } from '@/components/skeletons'
 import { DonutStatCard, DonutTotalCard } from '@/components/charts/DonutStatCards'
+import { formatAlertValue } from '@/lib/alerts/formatAlertValue'
 
 /* --------------------------------
    Types
@@ -613,7 +614,7 @@ return true
         )
       }
     },
-    { field: 'current_value', headerName: t('alerts.value'), width: 80, renderCell: (p) => p.value ? `${p.value.toFixed(1)}${p.row.unit || ''}` : '—' },
+    { field: 'current_value', headerName: t('alerts.value'), width: 80, renderCell: (p) => p.value ? formatAlertValue(p.value, p.row.unit) : '—' },
     { field: 'last_seen_at', headerName: t('alerts.lastSeen'), width: 120, renderCell: (p) => <Tooltip title={new Date(p.value).toLocaleString()}><span>{timeAgo(p.value)}</span></Tooltip> },
     {
       field: 'actions',

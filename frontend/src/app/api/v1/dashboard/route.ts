@@ -599,6 +599,7 @@ return null
           connId: node.connId,
           metric: 'ram',
           currentValue: node.memPct,
+          unit: '%',
           threshold: thresholds.memory_critical,
           time: new Date().toISOString()
         })
@@ -616,6 +617,7 @@ return null
           connId: node.connId,
           metric: 'ram',
           currentValue: node.memPct,
+          unit: '%',
           threshold: thresholds.memory_warning,
           time: new Date().toISOString()
         })
@@ -635,6 +637,7 @@ return null
           connId: node.connId,
           metric: 'cpu',
           currentValue: node.cpuPct,
+          unit: '%',
           threshold: thresholds.cpu_critical,
           time: new Date().toISOString()
         })
@@ -652,6 +655,7 @@ return null
           connId: node.connId,
           metric: 'cpu',
           currentValue: node.cpuPct,
+          unit: '%',
           threshold: thresholds.cpu_warning,
           time: new Date().toISOString()
         })
@@ -712,6 +716,7 @@ return null
           entityName: pbs.name,
           metric: 'storage',
           currentValue: pbs.usagePct,
+          unit: '%',
           threshold: thresholds.storage_critical,
           time: new Date().toISOString()
         })
@@ -728,6 +733,7 @@ return null
           entityName: pbs.name,
           metric: 'storage',
           currentValue: pbs.usagePct,
+          unit: '%',
           threshold: thresholds.storage_warning,
           time: new Date().toISOString()
         })

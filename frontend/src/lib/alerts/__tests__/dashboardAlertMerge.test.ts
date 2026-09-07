@@ -31,6 +31,31 @@ describe('mergeAndFilterDashboardAlerts', () => {
     expect(result[0].entityId).toBe('pve-1')
   })
 
+  it('carries the orchestrator unit so a snapshot age is not shown as a percentage (#875)', () => {
+    const result = mergeAndFilterDashboardAlerts({
+      baseAlerts: [],
+      orchAlerts: [{
+        connection_id: 'conn-1',
+        type: 'snapshot_stale',
+        severity: 'warning',
+        resource_type: 'vm',
+        resource: 'VM 122 (app-replica) / VeeamRP-20260829-200239',
+        message: 'Snapshot is 9 days old',
+        current_value: 8.789080648219757,
+        threshold: 7,
+        unit: 'days',
+      }],
+      connectionNameById: new Map([['conn-1', 'PVE-PROD']]),
+      visibleNodeNames: visibleNodes(['pve-1']),
+      hasVisibleNodes: true,
+      silencedFingerprints: new Set(),
+    })
+    expect(result).toHaveLength(1)
+    expect(result[0].unit).toBe('days')
+    expect(result[0].currentValue).toBeCloseTo(8.789, 3)
+    expect(result[0].threshold).toBe(7)
+  })
+
   it('merges orchestrator alerts that do not duplicate a local alert', () => {
     const orchAlert = {
       connection_id: 'conn-1',

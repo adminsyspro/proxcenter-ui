@@ -692,6 +692,8 @@
     "snapshotAgeDesc": "Alertar cuando los snapshots de VM superen esta antigüedad",
     "snapshotDays": "días",
     "snapshotDisabled": "Deshabilitado",
+    "snapshotExclude": "Patrón de exclusión (regex)",
+    "snapshotExcludeDesc": "Las VM o snapshots cuyo nombre coincida con esta regex se omiten, p. ej. (?i)replica para réplicas de Veeam. Sintaxis RE2, sin lookahead.",
     "recoveryTitle": "Recuperación de alertas",
     "recoveryDesc": "Cuánto debe bajar una métrica antes de declarar resuelta su alerta, para evitar que un valor inestable envíe un aviso y una recuperación cada minuto",
     "recoveryMargin": "puntos por debajo del umbral de advertencia",

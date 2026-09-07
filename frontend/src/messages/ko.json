@@ -692,6 +692,8 @@
     "snapshotAgeDesc": "VM 스냅샷이 이 기간을 초과하면 알림",
     "snapshotDays": "일",
     "snapshotDisabled": "비활성화됨",
+    "snapshotExclude": "제외 패턴 (정규식)",
+    "snapshotExcludeDesc": "이름이 이 정규식과 일치하는 VM 또는 스냅샷은 검사하지 않습니다. 예: Veeam 복제본은 (?i)replica. RE2 문법, 전방 탐색 미지원.",
     "recoveryTitle": "알림 해제",
     "recoveryDesc": "불안정한 값이 매분 발생 및 해제 메일을 보내지 않도록, 알림을 해제로 선언하기 전에 지표가 얼마나 안정되어야 하는지 정합니다",
     "recoveryMargin": "경고 임계값보다 낮은 포인트",

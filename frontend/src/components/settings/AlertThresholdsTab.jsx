@@ -13,6 +13,7 @@ import {
   Slider,
   Snackbar,
   Switch,
+  TextField,
   Typography,
 } from '@mui/material'
 
@@ -26,6 +27,7 @@ const DEFAULTS = {
   storage_warning: 80,
   storage_critical: 90,
   snapshot_max_age_days: 7,
+  snapshot_exclude_pattern: '',
   recovery_margin: 5,
   recovery_confirmations: 3,
   osd_latency_warning: 0,
@@ -216,7 +218,23 @@ export default function AlertThresholdsTab() {
           enabled={thresholds.snapshot_max_age_days > 0}
           onToggle={(checked) => setThresholds(th => ({ ...th, snapshot_max_age_days: checked ? 7 : 0 }))}
           tDisabled={t('alerts.snapshotDisabled')}
-        />
+        >
+          {/* Veeam keeps a replica's restore points as PVE snapshots on a VM
+              suffixed "-replica" (discussion #875): the operator cannot act on
+              them, so they can be left out by name. RE2 on the Go side, hence
+              the (?i) example rather than a case-insensitive toggle. */}
+          <TextField
+            size='small'
+            fullWidth
+            label={t('alerts.snapshotExclude')}
+            placeholder='(?i)replica'
+            value={thresholds.snapshot_exclude_pattern || ''}
+            onChange={(e) => setThresholds(th => ({ ...th, snapshot_exclude_pattern: e.target.value }))}
+            helperText={t('alerts.snapshotExcludeDesc')}
+            slotProps={{ inputLabel: { shrink: true }, input: { sx: { fontFamily: 'monospace' } } }}
+            sx={{ mt: 1.5 }}
+          />
+        </SingleThresholdCard>
 
         <Card variant='outlined' sx={{ borderRadius: 2 }}>
           <CardContent sx={{ p: 2.5, '&:last-child': { pb: 2.5 } }}>
@@ -350,7 +368,7 @@ function ThresholdCard({
 function SingleThresholdCard({
   icon, label, description, value, onChange,
   min, max, step = 1, unit = '%', formatValue, markFormat,
-  enabled, onToggle, tDisabled,
+  enabled, onToggle, tDisabled, children,
 }) {
   const format = formatValue || ((v) => `${v}${unit}`)
   const mark = markFormat || format
@@ -379,6 +397,7 @@ function SingleThresholdCard({
             ]}
             sx={edgeMarkSx}
           />
+          {children}
         </>
       ) : (
         <Typography variant='body2' color='text.disabled' sx={{ mt: 2 }}>{tDisabled}</Typography>

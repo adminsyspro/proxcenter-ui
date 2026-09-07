@@ -16,7 +16,7 @@ import ChartContainer from '@/components/ChartContainer'
 import EngineGlyph from './EngineGlyph'
 import EmptyState from '@/components/EmptyState'
 
-import type { ReplicationJob, ReplicationJobStatus, ReplicationJobLog } from '@/lib/orchestrator/site-recovery.types'
+import type { ReplicationJob, ReplicationJobStatus, ReplicationJobLog, StorageEngine } from '@/lib/orchestrator/site-recovery.types'
 import { scheduleToLabel } from './schedule/scheduleToLabel'
 import { copyToClipboard } from '@/lib/clipboard'
 
@@ -251,8 +251,6 @@ const JobCard = ({ job, onClick, onEdit, vmNameMap, throughputHistory, t }: { jo
             </Typography>
           </Box>
 
-          {job.storage_engine === 'zfs' && <Typography variant='caption' noWrap sx={{ color: 'text.secondary' }}>{job.target_pool} · {job.target_node}</Typography>}
-
           {/* Syncing progress + throughput + sparkline */}
           {isSyncing && (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0 }}>
@@ -339,6 +337,15 @@ const JobCard = ({ job, onClick, onEdit, vmNameMap, throughputHistory, t }: { jo
       )}
     </Card>
   )
+}
+
+// jobsByEngine splits the jobs of one cluster pair by storage engine, Ceph first,
+// so mixed pairs get one section per engine; a single-engine pair stays flat.
+export function jobsByEngine(jobs: ReplicationJob[]): Array<[StorageEngine, ReplicationJob[]]> {
+  const engines: StorageEngine[] = ['rbd', 'zfs']
+  return engines
+    .map(engine => [engine, jobs.filter(j => (j.storage_engine || 'rbd') === engine)] as [StorageEngine, ReplicationJob[]])
+    .filter(([, list]) => list.length > 0)
 }
 
 // ── Main Component ─────────────────────────────────────────────────────
@@ -632,12 +639,30 @@ export default function ProtectionTab({
                   </Typography>
                   <Chip size='small' label={`${groupJobs.length} job${groupJobs.length > 1 ? 's' : ''}`} variant='outlined' sx={{ height: 20, fontSize: '0.65rem' }} />
                 </Box>
-                {/* Group jobs */}
-                <Stack spacing={1}>
-                  {groupJobs.map(j => (
-                    <JobCard key={j.id} job={j} onClick={() => openJob(j.id)} onEdit={() => onEditJob(j.id)} vmNameMap={vmNamesByConn?.[j.source_cluster]} throughputHistory={throughputHistoryRef.current.get(j.id)} t={t} />
-                  ))}
-                </Stack>
+                {/* Group jobs, one section per storage engine when the pair mixes them */}
+                {(() => {
+                  const sections = jobsByEngine(groupJobs)
+                  return sections.map(([engine, list]) => (
+                    <Box key={engine} sx={{ mb: sections.length > 1 ? 1.5 : 0 }}>
+                      {sections.length > 1 && (
+                        <Divider textAlign='left' role='separator' aria-label={t(`siteRecovery.engine.${engine}`)} sx={{ mb: 1 }}>
+                          <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75 }}>
+                            <EngineGlyph engine={engine} size={14} />
+                            <Typography variant='caption' sx={{ fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.4 }}>
+                              {t(`siteRecovery.engine.${engine}`)}
+                            </Typography>
+                            <Chip size='small' label={list.length} variant='outlined' sx={{ height: 18, fontSize: '0.6rem' }} />
+                          </Box>
+                        </Divider>
+                      )}
+                      <Stack spacing={1}>
+                        {list.map(j => (
+                          <JobCard key={j.id} job={j} onClick={() => openJob(j.id)} onEdit={() => onEditJob(j.id)} vmNameMap={vmNamesByConn?.[j.source_cluster]} throughputHistory={throughputHistoryRef.current.get(j.id)} t={t} />
+                        ))}
+                      </Stack>
+                    </Box>
+                  ))
+                })()}
               </Box>
             )
           })}

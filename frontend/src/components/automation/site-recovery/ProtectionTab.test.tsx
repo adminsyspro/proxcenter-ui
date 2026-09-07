@@ -206,7 +206,7 @@ it('shows ZFS glyphs and target node in the job row and detail drawer without a 
   stubThroughputFetch()
   renderTab([job({ storage_engine: 'zfs', target_pool: 'local-zfs', target_node: 'dr1' })])
   expect(screen.getByRole('img', { name: 'ZFS' })).toBeInTheDocument()
-  expect(screen.getByText('local-zfs · dr1')).toBeInTheDocument()
+  expect(screen.queryByText('local-zfs · dr1')).not.toBeInTheDocument()
   await openDrawer('100 - web-01')
   expect(screen.getByRole('img', { name: 'ZFS' })).toBeInTheDocument()
   expect(screen.getByText('dst / local-zfs · dr1')).toBeInTheDocument()
@@ -225,4 +225,20 @@ it('paginates long job lists', async () => {
   await userEvent.click(screen.getByRole('button', { name: 'Go to next page' }))
   expect(screen.getByText('Protection 25')).toBeInTheDocument()
   expect(screen.queryByText('Protection 0')).not.toBeInTheDocument()
+})
+
+it('separates Ceph and ZFS jobs of the same cluster pair with one labelled section per engine', () => {
+  renderTab([
+    job({ id: 'zfs-1', vm_ids: [102], vm_names: ['win'], storage_engine: 'zfs', target_pool: 'ZFS-Pool', target_node: 'pve2-dr' }),
+    job({ id: 'rbd-1', storage_engine: 'rbd' }),
+  ])
+  const separators = screen.getAllByRole('separator')
+  expect(separators.map(s => s.getAttribute('aria-label'))).toEqual(['Ceph RBD', 'ZFS'])
+  const rows = screen.getAllByText(/100 - web-01|102 - win/)
+  expect(rows.map(r => r.textContent)).toEqual(['100 - web-01', '102 - win'])
+})
+
+it('shows no engine section when a cluster pair holds a single engine', () => {
+  renderTab([job({ id: 'a' }), job({ id: 'b', vm_ids: [101], vm_names: ['db'] })])
+  expect(screen.queryByRole('separator')).not.toBeInTheDocument()
 })

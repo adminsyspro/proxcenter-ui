@@ -486,19 +486,19 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
                   {selectedVMs.length > 0 && (() => {
                     const totalGb = selectedVMs.reduce((sum, vmid) => sum + (cephVMMap.get(vmid) || 0), 0)
                     return (
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mt: 0.5 }}>
                         <Typography variant='caption' sx={{ color: 'primary.main' }}>
                           {t('siteRecovery.createJob.selectedCount', { count: selectedVMs.length })}
                         </Typography>
+                        {/* Total to replicate, as quiet text next to the count rather than a coloured chip */}
                         {totalGb > 0 && (
-                          <Chip
-                            icon={<i className='ri-hard-drive-2-line' style={{ fontSize: 14 }} />}
-                            label={totalGb >= 1024 ? `${(totalGb / 1024).toFixed(1)} TB` : `${totalGb} GB`}
-                            size='small'
-                            variant='outlined'
-                            color='info'
-                            sx={{ height: 20, fontSize: '0.7rem' }}
-                          />
+                          <>
+                            <Typography variant='caption' sx={{ color: 'text.disabled' }}>·</Typography>
+                            <Box component='i' className='ri-hard-drive-2-line' sx={{ fontSize: 13, color: 'text.secondary', display: 'inline-flex' }} />
+                            <Typography variant='caption' sx={{ color: 'text.secondary' }}>
+                              {totalGb >= 1024 ? `${(totalGb / 1024).toFixed(1)} TB` : `${totalGb} GB`}
+                            </Typography>
+                          </>
                         )}
                       </Box>
                     )

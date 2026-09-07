@@ -217,11 +217,15 @@ export default function SnapshotsTab({ connections, vmNamesByConn }: Props) {
 
     setDeleteProgress({ done: items.length, total: items.length, current: null })
 
-    if (failures.length > 0) {
-      setError(`${failures.length}/${items.length} snapshot(s) failed to delete: ${failures.map(f => f.item.snapshot).join(', ')}`)
-    }
     setSelected(new Set())
+    // Reload first: load() clears the error banner on its way in, so a message
+    // set before it never reached the operator.
     await load()
+    if (failures.length > 0) {
+      // The reason matters: "snapshot has dependent clones" tells the operator a
+      // test failover still holds it, a bare list of names does not.
+      setError(`${failures.length}/${items.length} snapshot(s) failed to delete: ${failures.map(f => `${f.item.snapshot} (${f.reason})`).join(', ')}`)
+    }
     setDeleting(false)
     setConfirmDelete(null)
     setDeleteProgress({ done: 0, total: 0, current: null })

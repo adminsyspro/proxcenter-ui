@@ -43,6 +43,7 @@ import { CountryFlag } from '@/components/ui/CountryFlag'
 import NumericTextField from '@/components/ui/NumericTextField'
 import { useTenant } from '@/contexts/TenantContext'
 import { useCopyToClipboard } from '@/lib/clipboard'
+import { isPartialIPv4Cidr, isValidCidr } from '@/lib/net/cidr'
 
 export type ConnectionFormData = {
   name: string
@@ -71,6 +72,8 @@ export type ConnectionFormData = {
   sshPassphrase: string
   sshPassword: string
   sshUseSudo: boolean
+  // Site Recovery replication network (CIDR), PVE only, '' = management network
+  replicationNetwork: string
   // Provider-only, create mode: own the connection by an MSP tenant ('' = pool)
   ownerTenantId: string
 }
@@ -112,7 +115,45 @@ const defaultFormData: ConnectionFormData = {
   sshPassphrase: '',
   sshPassword: '',
   sshUseSudo: false,
+  replicationNetwork: '',
   ownerTenantId: '',
+}
+
+// The dialog repeats one info bubble next to labels and section titles, and
+// one section title shape. Two small components keep them in a single place
+// and out of the duplication radar.
+function InfoTooltip({ text, size = 14 }: { text: string; size?: number }) {
+  const theme = useTheme()
+
+  return (
+    <Tooltip
+      arrow
+      slotProps={{
+        tooltip: { sx: { bgcolor: 'background.paper', color: 'text.primary', border: `1px solid ${theme.palette.divider}`, boxShadow: 3, fontSize: '0.75rem' } },
+        arrow: { sx: { color: 'background.paper' } },
+      }}
+      title={
+        <Box sx={{ p: 1 }}>
+          <Typography variant='caption' sx={{ display: 'block' }}>{text}</Typography>
+        </Box>
+      }
+    >
+      <Box component='span' sx={{ display: 'inline-flex', alignItems: 'center', cursor: 'default' }}>
+        <i className='ri-information-line' style={{ fontSize: size, opacity: 0.6 }} />
+      </Box>
+    </Tooltip>
+  )
+}
+
+function SectionTitle({ icon, title, optional, info }: { icon: string; title: string; optional: string; info: string }) {
+  return (
+    <Typography variant="subtitle2" sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
+      <i className={icon} />
+      {title}
+      <Chip label={optional} size="small" variant="outlined" sx={{ ml: 1 }} />
+      <InfoTooltip text={info} />
+    </Typography>
+  )
 }
 
 export default function ConnectionDialog({
@@ -173,6 +214,8 @@ export default function ConnectionDialog({
           sshPassphrase: '',
           sshPassword: '',
           sshAuthMethod: initialData.sshAuthMethod || '',
+          // The list payload hands back null when no replication network is set
+          replicationNetwork: (initialData as any).replicationNetwork || '',
           subType: editSubType,
           // External hypervisors keep "user:password" encrypted; the list payload
           // hands the user back as apiUser (never the password). Without it the
@@ -397,6 +440,12 @@ export default function ConnectionDialog({
       
       if (form.sshAuthMethod === 'password' && !form.sshPassword.trim() && !initialData?.sshPassConfigured) {
         setError(t('settings.errorSshPasswordRequired'))
+        return
+      }
+
+      const replicationNetwork = form.replicationNetwork.trim()
+      if (replicationNetwork && !isValidCidr(replicationNetwork)) {
+        setError(t('settings.errorReplicationNetworkInvalid'))
         return
       }
     }
@@ -638,21 +687,7 @@ export default function ConnectionDialog({
             <InputLabel id='conn-owner-tenant-label'>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                 {t('settings.connOwnerTenantLabel')}
-                <Tooltip
-                  arrow
-                  slotProps={tooltipSlotProps}
-                  title={
-                    <Box sx={{ p: 1 }}>
-                      <Typography variant='caption' sx={{ display: 'block' }}>
-                        {t('settings.connOwnerHelper')}
-                      </Typography>
-                    </Box>
-                  }
-                >
-                  <Box component='span' sx={{ display: 'inline-flex', alignItems: 'center', cursor: 'default' }}>
-                    <i className='ri-information-line' style={{ fontSize: 14, opacity: 0.6 }} />
-                  </Box>
-                </Tooltip>
+                <InfoTooltip text={t('settings.connOwnerHelper')} />
               </Box>
             </InputLabel>
             <Select
@@ -751,21 +786,7 @@ export default function ConnectionDialog({
             label={
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                 <Typography variant="body2">{t('settings.behindProxy')}</Typography>
-                <Tooltip
-                  arrow
-                  slotProps={tooltipSlotProps}
-                  title={
-                    <Box sx={{ p: 1 }}>
-                      <Typography variant='caption' sx={{ display: 'block' }}>
-                        {t('settings.behindProxyHelper')}
-                      </Typography>
-                    </Box>
-                  }
-                >
-                  <Box component='span' sx={{ display: 'inline-flex', alignItems: 'center', cursor: 'default' }}>
-                    <i className='ri-information-line' style={{ fontSize: 14, opacity: 0.6 }} />
-                  </Box>
-                </Tooltip>
+                <InfoTooltip text={t('settings.behindProxyHelper')} />
               </Box>
             }
           />
@@ -1022,26 +1043,7 @@ export default function ConnectionDialog({
         <Divider sx={{ my: 3 }} />
 
         {/* Section: SSH access (PVE + VMware/ESXi) */}
-        <Typography variant="subtitle2" sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
-          <i className="ri-terminal-line" />
-          {t('settings.sshAccess')}
-          <Chip label={t('common.optional')} size="small" variant="outlined" sx={{ ml: 1 }} />
-          <Tooltip
-            arrow
-            slotProps={tooltipSlotProps}
-            title={
-              <Box sx={{ p: 1 }}>
-                <Typography variant='caption' sx={{ display: 'block' }}>
-                  {t('settings.sshInfo')}
-                </Typography>
-              </Box>
-            }
-          >
-            <Box component='span' sx={{ display: 'inline-flex', alignItems: 'center', cursor: 'default' }}>
-              <i className='ri-information-line' style={{ fontSize: 14, opacity: 0.6 }} />
-            </Box>
-          </Tooltip>
-        </Typography>
+        <SectionTitle icon="ri-terminal-line" title={t('settings.sshAccess')} optional={t('common.optional')} info={t('settings.sshInfo')} />
 
         <FormControlLabel
           control={
@@ -1186,21 +1188,7 @@ export default function ConnectionDialog({
               label={
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                   <Typography variant="body2">{t('settings.sshUseSudo')}</Typography>
-                  <Tooltip
-                    arrow
-                    slotProps={tooltipSlotProps}
-                    title={
-                      <Box sx={{ p: 1 }}>
-                        <Typography variant='caption' sx={{ display: 'block' }}>
-                          {t('settings.sshUseSudoHelper')}
-                        </Typography>
-                      </Box>
-                    }
-                  >
-                    <Box component='span' sx={{ display: 'inline-flex', alignItems: 'center', cursor: 'default' }}>
-                      <i className='ri-information-line' style={{ fontSize: 14, opacity: 0.6 }} />
-                    </Box>
-                  </Tooltip>
+                  <InfoTooltip text={t('settings.sshUseSudoHelper')} />
                 </Box>
               }
               sx={{ mt: 1, ml: 0 }}
@@ -1255,31 +1243,54 @@ export default function ConnectionDialog({
           </>
         )}
 
+        {type === 'pve' && (
+          <>
+            <Divider sx={{ my: 3 }} />
+
+            {/* Section: Site Recovery (PVE only). Its own section rather than a
+                field lost among the SSH credentials: the replication stream rides
+                on the SSH trust above, so the field waits for SSH to be enabled,
+                but what it configures is the replication traffic, not SSH. */}
+            <SectionTitle icon="ri-refresh-line" title={t('settings.siteRecovery')} optional={t('common.optional')} info={t('settings.siteRecoveryInfo')} />
+
+            <TextField
+              fullWidth
+              label={t('settings.replicationNetwork')}
+              value={form.replicationNetwork}
+              // Input mask: a keystroke that could no longer lead to an IPv4
+              // CIDR is dropped. IPv4 is the overwhelmingly common case here.
+              onChange={e => {
+                if (isPartialIPv4Cidr(e.target.value)) handleChange('replicationNetwork', e.target.value)
+              }}
+              placeholder="10.10.50.0/24"
+              disabled={!form.sshEnabled}
+              error={form.sshEnabled && form.replicationNetwork !== '' && !isValidCidr(form.replicationNetwork)}
+              helperText={
+                !form.sshEnabled
+                  ? t('settings.replicationNetworkNeedsSsh')
+                  : (form.replicationNetwork !== '' && !isValidCidr(form.replicationNetwork) ? t('settings.errorReplicationNetworkInvalid') : undefined)
+              }
+              slotProps={{
+                htmlInput: { inputMode: 'decimal' },
+                input: {
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <InfoTooltip text={t('settings.replicationNetworkHelper')} size={16} />
+                    </InputAdornment>
+                  )
+                }
+              }}
+              sx={{ mt: 1 }}
+            />
+          </>
+        )}
+
         {!isExternalHypervisor && (
           <>
             <Divider sx={{ my: 3 }} />
 
             {/* Section: Location (optionnelle) — PVE/PBS only */}
-            <Typography variant="subtitle2" sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
-              <i className="ri-map-pin-line" />
-              {t('settings.location')}
-              <Chip label={t('common.optional')} size="small" variant="outlined" sx={{ ml: 1 }} />
-              <Tooltip
-                arrow
-                slotProps={tooltipSlotProps}
-                title={
-                  <Box sx={{ p: 1 }}>
-                    <Typography variant='caption' sx={{ display: 'block' }}>
-                      {t('settings.locationInfo')}
-                    </Typography>
-                  </Box>
-                }
-              >
-                <Box component='span' sx={{ display: 'inline-flex', alignItems: 'center', cursor: 'default' }}>
-                  <i className='ri-information-line' style={{ fontSize: 14, opacity: 0.6 }} />
-                </Box>
-              </Tooltip>
-            </Typography>
+            <SectionTitle icon="ri-map-pin-line" title={t('settings.location')} optional={t('common.optional')} info={t('settings.locationInfo')} />
 
             <Box sx={{ display: 'flex', gap: 2, mt: 1 }}>
               <TextField

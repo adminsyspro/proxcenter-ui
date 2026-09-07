@@ -205,3 +205,42 @@ describe('CreateJobDialog stopped VM replication (issue #687)', () => {
     expect(await screen.findByRole('checkbox', { name: /disaster-recovery/ })).toBeInTheDocument()
   })
 })
+
+describe('CreateJobDialog SSH check against a replication network (issue #870)', () => {
+  // The orchestrator refuses a target connection whose replication network
+  // matches no address of the DR node. That is a settings problem, not a
+  // missing SSH key, so the alert must not send the operator to fix SSH.
+  it('points at the connection setting rather than at passwordless SSH', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === '/api/v1/orchestrator/replication/check-ssh' && init?.method === 'POST') {
+        return new Response(JSON.stringify({
+          connected: false,
+          error: 'node 10.42.0.111: no address lies in the replication network 10.44.0.0/24 (addresses: 10.42.0.111, 10.43.0.111)',
+        }), { status: 200 })
+      }
+      return new Response('{}', { status: 200 })
+    }))
+
+    renderWithProviders(
+      <CreateJobDialog
+        open
+        onClose={vi.fn()}
+        onSubmit={vi.fn()}
+        connections={[
+          { id: 'src', name: 'Source', hasCeph: true },
+          { id: 'dst', name: 'Target', hasCeph: true },
+        ]}
+        allVMs={[]}
+      />,
+    )
+
+    fireEvent.mouseDown(screen.getAllByRole('combobox')[0])
+    await userEvent.click(await screen.findByRole('option', { name: 'Source' }))
+    fireEvent.mouseDown(screen.getAllByRole('combobox')[1])
+    await userEvent.click(await screen.findByRole('option', { name: 'Target' }))
+
+    await screen.findByText(/no address lies in the replication network 10\.44\.0\.0\/24/)
+    expect(screen.getByText(/replication network of the target connection/i)).toBeInTheDocument()
+    expect(screen.queryByText(/Passwordless SSH must be configured/)).not.toBeInTheDocument()
+  })
+})

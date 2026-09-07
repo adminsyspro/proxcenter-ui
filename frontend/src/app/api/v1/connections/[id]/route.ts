@@ -177,12 +177,18 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
         data.sshAuthMethod = null
         data.sshKeyEnc = null
         data.sshPassEnc = null
+        data.replicationNetwork = null
       }
     }
 
     if (body.sshPort !== undefined) data.sshPort = body.sshPort
     if (body.sshUser !== undefined) data.sshUser = body.sshUser || 'root'
     if (body.sshUseSudo !== undefined) data.sshUseSudo = body.sshUseSudo
+    // Site Recovery replication network: an empty string clears it, and
+    // disabling SSH in the same request wins over any value sent along.
+    if (body.replicationNetwork !== undefined && body.sshEnabled !== false) {
+      data.replicationNetwork = body.replicationNetwork || null
+    }
     if (body.sshAuthMethod !== undefined) {
       data.sshAuthMethod = body.sshAuthMethod || null
 

@@ -478,6 +478,9 @@ function ConnectionsTab() {
         sshUser: formData.sshUser,
         sshAuthMethod: formData.sshAuthMethod || null,
         sshUseSudo: !!formData.sshUseSudo,
+        // Site Recovery replication network (PVE only), null = management network.
+        // Cleared along with SSH: the field is hidden then and may hold a half-typed value.
+        ...(addConnType === 'pve' && { replicationNetwork: formData.sshEnabled ? (formData.replicationNetwork?.trim() || null) : null }),
         ...(formData.sshKey.trim() && { sshKey: formData.sshKey.trim() }),
         ...(formData.sshPassphrase.trim() && { sshPassphrase: formData.sshPassphrase.trim() }),
         ...(formData.sshPassword.trim() && { sshPassword: formData.sshPassword.trim() }),

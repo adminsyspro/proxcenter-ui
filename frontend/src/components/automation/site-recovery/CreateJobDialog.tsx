@@ -640,7 +640,12 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
                   <Typography variant='body2' sx={{ fontWeight: 600 }}>{t('siteRecovery.createJob.sshFailed')}</Typography>
                   <Typography variant='caption' sx={{ display: 'block', mt: 0.5 }}>{sshError}</Typography>
                   <Typography variant='caption' sx={{ display: 'block', mt: 0.5, opacity: 0.85 }}>
-                    {t('siteRecovery.createJob.sshRequirement')}
+                    {/* A target connection whose replication network matches no
+                        address of the DR node is a settings problem, not a
+                        missing key: sending the operator to fix SSH would mislead. */}
+                    {/replication network/i.test(sshError)
+                      ? t('siteRecovery.createJob.sshRequirementReplicationNetwork')
+                      : t('siteRecovery.createJob.sshRequirement')}
                   </Typography>
                 </Alert>
               )}

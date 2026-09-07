@@ -699,60 +699,47 @@ export default function ProtectionTab({
                 <IconButton onClick={closeDrawer} size='small'><i className='ri-close-line' /></IconButton>
               </Box>
 
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', mb: 1.5 }}>
-                <StatusChip status={selected.status} t={t} />
-              </Box>
-
-              {/* Actions: top placement for visibility, full-width equal split.
-                  The Tooltip wrappers are flex containers so the button inside
-                  stretches to the row height like its unwrapped siblings;
-                  "Sync Now" wrapping onto two lines otherwise left "Edit"
-                  visibly shorter than "Pause" and "Delete". */}
-              <Box sx={{ display: 'flex', gap: 1, mb: 2, '& > *': { flex: 1, minWidth: 0 } }}>
-                <Tooltip title={t('siteRecovery.jobs.failedOverTooltip')} disableHoverListener={selected.status !== 'failed_over'} arrow>
-                  <span style={{ display: 'flex' }}>
-                    <Button
-                      variant='contained' size='small' fullWidth
-                      startIcon={<i className='ri-refresh-line' />}
-                      onClick={() => onSyncJob(selected.id)}
-                      disabled={selected.status === 'failed_over'}
-                    >
-                      {t('siteRecovery.protection.syncNow')}
-                    </Button>
+              {/* Actions as icon buttons, the tooltip carries the label: four
+                  labelled buttons do not fit one row of a 450 px drawer
+                  ("Synchroniser" alone is wider than its quarter). A disabled
+                  button fires no events, hence the span under its Tooltip.
+                  The status chip closes the row on the right. */}
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                <Tooltip title={selected.status === 'failed_over' ? t('siteRecovery.jobs.failedOverTooltip') : t('siteRecovery.protection.syncNow')} arrow>
+                  <span>
+                    <IconButton color='primary' aria-label={t('siteRecovery.protection.syncNow')} onClick={() => onSyncJob(selected.id)} disabled={selected.status === 'failed_over'}>
+                      <i className='ri-refresh-line' />
+                    </IconButton>
                   </span>
                 </Tooltip>
                 {selected.status === 'failed_over' ? (
                   <Tooltip title={t('siteRecovery.jobs.failedOverTooltip')} arrow>
-                    <span style={{ display: 'flex' }}>
-                      <Button variant='outlined' size='small' fullWidth startIcon={<i className='ri-play-circle-line' />} disabled>
-                        {t('siteRecovery.protection.resume')}
-                      </Button>
+                    <span>
+                      <IconButton aria-label={t('siteRecovery.protection.resume')} disabled><i className='ri-play-circle-line' /></IconButton>
                     </span>
                   </Tooltip>
                 ) : selected.status === 'paused' ? (
-                  <Button variant='outlined' size='small' startIcon={<i className='ri-play-circle-line' />} onClick={() => onResumeJob(selected.id)}>
-                    {t('siteRecovery.protection.resume')}
-                  </Button>
+                  <Tooltip title={t('siteRecovery.protection.resume')} arrow>
+                    <IconButton aria-label={t('siteRecovery.protection.resume')} onClick={() => onResumeJob(selected.id)}><i className='ri-play-circle-line' /></IconButton>
+                  </Tooltip>
                 ) : (
-                  <Button variant='outlined' size='small' startIcon={<i className='ri-pause-line' />} onClick={() => onPauseJob(selected.id)}>
-                    {t('siteRecovery.protection.pause')}
-                  </Button>
+                  <Tooltip title={t('siteRecovery.protection.pause')} arrow>
+                    <IconButton aria-label={t('siteRecovery.protection.pause')} onClick={() => onPauseJob(selected.id)}><i className='ri-pause-line' /></IconButton>
+                  </Tooltip>
                 )}
-                <Tooltip title={t('siteRecovery.jobs.failedOverTooltip')} disableHoverListener={selected.status !== 'failed_over'} arrow>
-                  <span style={{ display: 'flex' }}>
-                    <Button
-                      variant='outlined' size='small' fullWidth
-                      startIcon={<i className='ri-edit-line' />}
-                      onClick={() => onEditJob(selected.id)}
-                      disabled={selected.status === 'failed_over'}
-                    >
-                      {t('common.edit')}
-                    </Button>
+                <Tooltip title={selected.status === 'failed_over' ? t('siteRecovery.jobs.failedOverTooltip') : t('common.edit')} arrow>
+                  <span>
+                    <IconButton aria-label={t('common.edit')} onClick={() => onEditJob(selected.id)} disabled={selected.status === 'failed_over'}>
+                      <i className='ri-edit-line' />
+                    </IconButton>
                   </span>
                 </Tooltip>
-                <Button variant='outlined' size='small' color='error' startIcon={<i className='ri-delete-bin-line' />} onClick={() => setConfirmDeleteJob(selected)}>
-                  {t('common.delete')}
-                </Button>
+                <Tooltip title={t('common.delete')} arrow>
+                  <IconButton color='error' aria-label={t('common.delete')} onClick={() => setConfirmDeleteJob(selected)}><i className='ri-delete-bin-line' /></IconButton>
+                </Tooltip>
+                <Box sx={{ ml: 'auto' }}>
+                  <StatusChip status={selected.status} t={t} />
+                </Box>
               </Box>
 
               {(selected.status === 'error' || selected.status === 'partial') && selected.error_message && (
@@ -761,10 +748,16 @@ export default function ProtectionTab({
 
               <Box sx={{ p: 2, borderRadius: 1, bgcolor: 'action.hover', mb: 2, textAlign: 'center' }}>
                 <Typography variant='caption' sx={{ color: 'text.secondary' }}>{t('siteRecovery.protection.source')}</Typography>
-                <Typography variant='body2' sx={{ fontWeight: 600, fontFamily: 'monospace', mb: 1 }}>{connName(selected.source_cluster)}</Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.75, mb: 1 }}>
+                  <EngineGlyph engine={selected.storage_engine} />
+                  <Typography variant='body2' sx={{ fontWeight: 600 }}>{connName(selected.source_cluster)}</Typography>
+                </Box>
                 <Box sx={{ color: 'text.disabled', my: 0.5 }}><i className='ri-arrow-down-line' /></Box>
                 <Typography variant='caption' sx={{ color: 'text.secondary' }}>{t('siteRecovery.protection.target')}</Typography>
-                <Typography variant='body2' sx={{ fontWeight: 600, fontFamily: 'monospace' }}>{connName(selected.target_cluster)} / {selected.target_pool}{selected.storage_engine === 'zfs' && ` · ${selected.target_node || ''}`}</Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.75 }}>
+                  <EngineGlyph engine={selected.storage_engine} />
+                  <Typography variant='body2' sx={{ fontWeight: 600 }}>{connName(selected.target_cluster)} / {selected.target_pool}{selected.storage_engine === 'zfs' && ` · ${selected.target_node || ''}`}</Typography>
+                </Box>
               </Box>
 
               <Box sx={{ flex: 1, overflow: 'auto' }}>

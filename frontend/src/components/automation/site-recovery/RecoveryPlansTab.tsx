@@ -43,11 +43,6 @@ const PlanStatusBadge = ({ status, t }: { status: RecoveryPlanStatus; t: any }) 
   return <Chip size='small' label={label} color={c.color} />
 }
 
-const planStatusDot: Record<RecoveryPlanStatus, string> = {
-  ready: 'success.main', degraded: 'warning.main', executing: 'info.main', failed: 'error.main',
-  not_ready: 'text.disabled', failed_over: 'error.main', failing_back: 'info.main',
-}
-
 // planEngines lists the storage engines behind a plan, Ceph first, from the jobs
 // its VMs reference; a plan whose jobs are unknown is shown as Ceph, the legacy default.
 export function planEngines(plan: RecoveryPlan, jobs: ReplicationJob[] = []): StorageEngine[] {
@@ -63,13 +58,8 @@ const PlanEngineGlyphs = ({ engines, size = 14 }: { engines: StorageEngine[]; si
   </Box>
 )
 
-// PlanIcon opens a row with the same pictogram as the Recovery Plans tab, badged with the plan status.
-const PlanIcon = ({ status }: { status: RecoveryPlanStatus }) => (
-  <Box sx={{ position: 'relative', display: 'inline-flex', flexShrink: 0 }}>
-    <i className='ri-file-shield-2-line' style={{ fontSize: 18, opacity: 0.8 }} />
-    <Box component='span' sx={{ position: 'absolute', bottom: -1, right: -2, width: 7, height: 7, borderRadius: '50%', bgcolor: planStatusDot[status] || planStatusDot.not_ready, border: '1.5px solid', borderColor: 'background.paper' }} />
-  </Box>
-)
+// PlanIcon opens a row with the same pictogram as the Recovery Plans tab; the status has its own chip.
+const PlanIcon = () => <i className='ri-file-shield-2-line' style={{ fontSize: 18, opacity: 0.8, flexShrink: 0 }} />
 
 const TierSummary = ({ vms, t }: { vms: RecoveryPlan['vms']; t: any }) => {
   const tiers = [1, 2, 3] as const
@@ -106,8 +96,8 @@ const PlanRow = ({ plan, engines, onClick, t, connName }: { plan: RecoveryPlan; 
         '&:hover': { bgcolor: 'action.hover' }
       }}
     >
-      {/* Plan pictogram, same as the tab, with the plan status dot */}
-      <PlanIcon status={plan.status} />
+      {/* Plan pictogram, same as the tab */}
+      <PlanIcon />
 
       {/* Name + description */}
       <Box sx={{ flex: '1 1 30%', minWidth: 0 }}>

@@ -34,29 +34,26 @@ import type { V2vVmConfig } from "./v2vConfigMapper"
 import { allocateAndMapBlockVolume, nextFreeDiskName, type AllocatedVolume } from "./pvesm-alloc"
 import { adoptImportAndAttachFileVolume } from "./adopt-file-volume"
 import { convertDisksToQcow2 } from "./qcow2-convert"
-// SOAP imports for the NFC (HttpNfcLease) transport path used when the source VM
-// has any disk on a vSAN datastore. vpx://+HTTPS /folder/ download is broken for
-// vSAN because vSAN VMDK descriptors reference vsan:// URIs that only ESXi's
-// internal filesystem layer can resolve. NFC export goes through ESXi's NFC
-// service which is vSAN-aware, the same way ovftool extracts vSAN-backed VMs.
+import { runVcenterNfcExport } from "./nfc-export"
+import { resolveNfcConcurrency, serializeByKey } from "./nfc-progress"
+// SOAP session, inventory, snapshot and power calls for the vCenter path. The
+// disk transfer itself is the NFC (HttpNfcLease) export in ./nfc-export:
+// vpx://+HTTPS /folder/ downloads are broken for vSAN because vSAN VMDK
+// descriptors reference vsan:// URIs that only ESXi's internal filesystem
+// layer can resolve, while the NFC service is vSAN-aware, the same way ovftool
+// extracts vSAN-backed VMs.
 import {
   soapLogin,
   soapLogout,
   soapGetVmConfig,
   parseVmConfig,
-  soapExportVm,
-  soapExportSnapshot,
-  soapWaitForNfcLease,
-  soapNfcLeaseProgress,
-  soapNfcLeaseComplete,
-  soapNfcLeaseAbort,
   soapCreateSnapshot,
   soapRemoveSnapshot,
   SNAPSHOT_REMOVE_TERMINAL_TIMEOUT_MS,
   soapGetSnapshotQuiesced,
   soapPowerOffVm,
 } from "@/lib/vmware/soap"
-import type { SoapSession, NfcLeaseDeviceUrl, EsxiVmConfig } from "@/lib/vmware/soap"
+import type { SoapSession, EsxiVmConfig } from "@/lib/vmware/soap"
 import { pveSetVmConfig, destroyPveVm } from "./pve-vm-config"
 import { startJobHeartbeat } from "./job-heartbeat"
 import { sanitizeV2vRoot, planV2vRootRetry } from "./v2v-root-select"
@@ -141,6 +138,12 @@ export interface V2vMigrationConfig {
    * single non-snapshot candidate (see ./v2v-root-select).
    */
   v2vRoot?: string
+  /**
+   * Disks downloaded at once over NFC on the vCenter path (#807), the
+   * migration dialog's "Parallel disk downloads" slider, 1 to 8. Unset means
+   * the default of 2.
+   */
+  nfcConcurrency?: number
 }
 
 interface LogEntry {
@@ -210,13 +213,15 @@ async function updateJob(id: string, status: MigrationStatus, extra: Record<stri
   await prisma.migrationJob.update({ where: { id }, data })
 }
 
-async function appendLog(id: string, msg: string, level: LogEntry["level"] = "info") {
+// Appends are serialised per job: the log is a JSON column rewritten whole on
+// every line, and the NFC downloads of one job run in parallel (#807).
+const appendLog = serializeByKey(async (id: string, msg: string, level: LogEntry["level"] = "info") => {
   const prisma = getPrismaForJob(id)
   const job = await prisma.migrationJob.findUnique({ where: { id }, select: { logs: true, progress: true } })
   const logs: LogEntry[] = (job?.logs as LogEntry[] | null) ?? []
   logs.push({ ts: new Date().toISOString(), msg, level, progress: job?.progress ?? 0 } as any)
   await prisma.migrationJob.update({ where: { id }, data: { logs } })
-}
+})
 
 function isCancelled(jobId: string): boolean {
   return cancelledJobs.has(jobId)
@@ -347,410 +352,6 @@ async function waitForPveTask(
     await new Promise(r => setTimeout(r, 3000))
   }
   throw new Error(`PVE task timed out after ${timeoutMs / 1000}s`)
-}
-
-/**
- * Download a single VM disk through an NFC lease device URL.
- *
- * The download runs in the background on the Proxmox node via curl writing to a
- * local file. We poll the file size for progress, periodically send NFC progress
- * keep-alive to vCenter (the lease times out after ~5 min of silence), and surface
- * progress to the migration job UI scaled to the caller-provided range.
- *
- * Auth: NFC URLs accept the same SOAP session cookie issued by login. We pass it
- * via curl --cookie. Self-signed vCenter certs require -k (ProxCenter routinely
- * connects to lab vCenters with --insecure).
- */
-async function downloadDiskViaNfc(
-  jobId: string,
-  targetConnectionId: string,
-  nodeIp: string,
-  vmwareSession: SoapSession,
-  leaseMor: string,
-  device: NfcLeaseDeviceUrl,
-  localPath: string,
-  diskIndex: number,
-  totalDisks: number,
-  progressOffset: number,
-  progressScale: number,
-): Promise<void> {
-  const sizeGB = device.fileSize > 0 ? (device.fileSize / 1073741824).toFixed(1) : "?"
-  await appendLog(jobId, `[NFC disk ${diskIndex + 1}/${totalDisks}] Downloading ${device.targetId || device.key} (${sizeGB} GB)...`)
-
-  // vSphere's Set-Cookie usually returns the session id WITH surrounding double
-  // quotes (e.g. vmware_soap_session="abc"). A naive `header = "Cookie: ${cookie}"`
-  // in a curl config file would have unescaped inner quotes and curl's config
-  // parser would stop at the first one, dropping the session id and landing us
-  // on a 401 from vCenter. Escape any " inside the cookie before embedding.
-  const cookieEsc = (vmwareSession.cookie || "").replaceAll("\\", "\\\\").replaceAll('"', '\\"')
-
-  const ctrlPrefix = `${localPath}.ctrl`
-  const pidFile = `${ctrlPrefix}.pid`
-  const exitFile = `${ctrlPrefix}.exit`
-  const errFile = `${ctrlPrefix}.err`
-  const statsFile = `${ctrlPrefix}.stats`
-
-  // Curl is launched in the background via nohup so we can poll its progress.
-  // We write the cookie to a temp config file (chmod 600) instead of inlining it
-  // on the command line to avoid leaking the SOAP session token in process listings.
-  //
-  // write-out captures the HTTP response code + final body size + timing so
-  // we can diagnose silently-truncated streams (HTTP 200 with tiny chunked
-  // body). These end up in statsFile and are surfaced in error messages when
-  // validation fails.
-  const curlCfg = `${ctrlPrefix}.curlcfg`
-  const cfgContent = [
-    `header = "Cookie: ${cookieEsc}"`,
-    `output = "${localPath}"`,
-    `url = "${device.url}"`,
-    `write-out = "http_code=%{http_code}\\nresponse_code=%{response_code}\\nsize_download=%{size_download}\\ntime_total=%{time_total}\\ncontent_type=%{content_type}\\nnum_connects=%{num_connects}\\nspeed_download=%{speed_download}\\n"`,
-    "silent",
-    "show-error",
-    "fail",
-    vmwareSession.insecureTLS ? "insecure" : "",
-  ].filter(Boolean).join("\n")
-
-  const writeCfg = await executeSSH(
-    targetConnectionId,
-    nodeIp,
-    `printf '%s' ${shellEscape(cfgContent)} > ${shellEscape(curlCfg)} && chmod 600 ${shellEscape(curlCfg)}`,
-  )
-  if (!writeCfg.success) {
-    throw new Error(`Failed to write NFC curl config: ${writeCfg.error}`)
-  }
-
-  const launchCmd =
-    `nohup bash -c ` +
-    `"curl -K ${shellEscape(curlCfg)} >${shellEscape(statsFile)} 2>${shellEscape(errFile)}; ` +
-    `echo \\$? > ${shellEscape(exitFile)}; ` +
-    `rm -f ${shellEscape(curlCfg)}" ` +
-    `> /dev/null 2>&1 & echo $!`
-  const launch = await executeSSH(targetConnectionId, nodeIp, launchCmd)
-  if (!launch.success || !launch.output?.trim()) {
-    await executeSSH(targetConnectionId, nodeIp, `rm -f ${shellEscape(curlCfg)}`).catch(() => {})
-    throw new Error(`Failed to start NFC download: ${launch.error}`)
-  }
-  const pid = launch.output.trim()
-  await executeSSH(targetConnectionId, nodeIp, `echo ${pid} > ${shellEscape(pidFile)}`)
-
-  // Poll loop: track size + send NFC keep-alive every 30s + abort on cancel.
-  const startedAt = Date.now()
-  let lastKeepAliveAt = 0
-  let lastProgressLog = -10
-  let lastSize = 0
-  let stallCounter = 0
-  const stallCheckIntervalMs = 5000
-  const maxStallChecks = 60 // 60 * 5s = 5 min without growth = stalled
-  const keepAliveIntervalMs = 30_000
-
-  while (true) {
-    if (isCancelled(jobId)) {
-      await executeSSH(targetConnectionId, nodeIp, `kill ${pid} 2>/dev/null; rm -f ${shellEscape(curlCfg)} ${shellEscape(localPath)} ${shellEscape(pidFile)} ${shellEscape(exitFile)} ${shellEscape(errFile)} ${shellEscape(statsFile)}`).catch(() => {})
-      throw new Error("Migration cancelled")
-    }
-    await new Promise(r => setTimeout(r, stallCheckIntervalMs))
-
-    // Has curl exited?
-    const exitCheck = await executeSSH(targetConnectionId, nodeIp, `cat ${shellEscape(exitFile)} 2>/dev/null || echo RUNNING`)
-    const exitOut = exitCheck.output?.trim() || "RUNNING"
-
-    if (exitOut !== "RUNNING") {
-      const exitCode = Number.parseInt(exitOut, 10)
-      // Read curl diagnostic files BEFORE any cleanup: both the success and
-      // failure paths may need them to build actionable error messages.
-      const [errCapture, statsCapture] = await Promise.all([
-        executeSSH(targetConnectionId, nodeIp, `tail -c 1000 ${shellEscape(errFile)} 2>/dev/null`),
-        executeSSH(targetConnectionId, nodeIp, `cat ${shellEscape(statsFile)} 2>/dev/null`),
-      ])
-      const curlStderr = (errCapture.output || "").trim()
-      const curlStats = (statsCapture.output || "").trim()
-
-      if (exitCode !== 0) {
-        await executeSSH(targetConnectionId, nodeIp, `rm -f ${shellEscape(localPath)} ${shellEscape(pidFile)} ${shellEscape(exitFile)} ${shellEscape(errFile)} ${shellEscape(statsFile)}`).catch(() => {})
-        throw new Error(
-          `NFC disk download failed (curl exit ${exitCode}). ` +
-          `URL: ${device.url}. ` +
-          `Stats: ${curlStats || "(none)"}. ` +
-          `Curl stderr: ${curlStderr || "(empty)"}. ` +
-          `Common causes: vCenter cert mismatch (set insecureTLS on the connection), ` +
-          `expired SOAP session (lease timed out), ` +
-          `or vCenter NFC service unhealthy.`,
-        )
-      }
-      // Surface the curl stats on success so users can see HTTP code + actual
-      // byte count + transfer time in the job logs for diagnosis.
-      if (curlStats) {
-        const statsLine = curlStats.replaceAll("\n", " ")
-        await appendLog(jobId, `[NFC disk ${diskIndex + 1}/${totalDisks}] curl: ${statsLine}`, "info")
-      }
-      // Defer the control-file cleanup until after validation so the rest of
-      // this block can attach curl diagnostics to validation error messages.
-      const cleanupCtrl = async () => {
-        await executeSSH(targetConnectionId, nodeIp, `rm -f ${shellEscape(pidFile)} ${shellEscape(exitFile)} ${shellEscape(errFile)} ${shellEscape(statsFile)}`).catch(() => {})
-      }
-
-      // Validate the downloaded VMDK before declaring success. curl --fail
-      // catches HTTP >= 400 but NOT stream truncation (a chunked 200 response
-      // with a partial body is treated as success). vCenter occasionally
-      // terminates NFC streams mid-transfer on multi-disk migrations when the
-      // lease state drifts between disks, so we defend with three checks:
-      // a) minimum file size, b) KDMV sparse-stream magic, c) ratio vs the
-      // expected capacity when known.
-      const statRes = await executeSSH(
-        targetConnectionId,
-        nodeIp,
-        `stat -c '%s' ${shellEscape(localPath)} 2>/dev/null || echo 0`,
-      )
-      const got = Number.parseInt(statRes.output?.trim() || "0", 10)
-      // Common diagnostic suffix for validation errors: curl stats + stderr
-      // give the user actionable context (was it HTTP 200 with 0 bytes? a
-      // specific error from vCenter? a connection reset?). We format them
-      // compactly on a single line.
-      const diagSuffix = ` [curl: ${(curlStats || "(no stats)").replaceAll("\n", " ")}]` +
-        (curlStderr ? ` [stderr: ${curlStderr.slice(0, 200)}]` : "")
-
-      if (got < 65536) {
-        await cleanupCtrl()
-        throw new Error(
-          `NFC disk download produced a suspiciously small file (${got} bytes) at ${localPath}. ` +
-          `vCenter likely terminated the NFC lease prematurely; retry the migration.${diagSuffix}`,
-        )
-      }
-      const magicRes = await executeSSH(
-        targetConnectionId,
-        nodeIp,
-        `head -c 4 ${shellEscape(localPath)} 2>/dev/null | od -An -c | tr -d ' \\n\\t' || echo missing`,
-      )
-      const magicDump = (magicRes.output || "").trim()
-      if (!/K[^K]{0,10}D[^D]{0,10}M[^M]{0,10}V/.test(magicDump)) {
-        await cleanupCtrl()
-        throw new Error(
-          `NFC disk download did not produce a valid VMDK sparse stream at ${localPath} ` +
-          `(expected KDMV magic, got: "${magicDump.slice(0, 40)}"). ` +
-          `vCenter likely returned an error body instead of the disk stream.${diagSuffix}`,
-        )
-      }
-      // Size-ratio warning only (NOT a hard reject): thin-provisioned disks
-      // with little or no committed data legitimately stream down to a few
-      // tens of KB (VMDK sparse header + empty grain directory + footer for
-      // a freshly-attached unformatted disk). The only reliable truncation
-      // detector at this layer is KDMV magic + min size 64 KB, already
-      // enforced above. Genuine mid-stream truncation produces a stream
-      // without the end-of-stream footer and virt-v2v rejects it during
-      // ingestion, which surfaces a clear error at that stage.
-      if (device.fileSize > 0 && got < device.fileSize * 0.9) {
-        const ratio = got / device.fileSize
-        const suspicious = device.fileSize > 1073741824 && ratio < 0.005
-        const hint = suspicious
-          ? " (very small relative to capacity: either a legitimate empty data disk or a silent NFC truncation. virt-v2v will reject the stream if it is malformed)"
-          : ""
-        await appendLog(
-          jobId,
-          `[NFC disk ${diskIndex + 1}/${totalDisks}] Downloaded ${(got / 1073741824).toFixed(2)} GB (expected ~${sizeGB} GB, ` +
-          `acceptable for thin-provisioned disks)${hint}`,
-          "warn",
-        )
-      }
-
-      await cleanupCtrl()
-      const elapsed = (Date.now() - startedAt) / 1000
-      await appendLog(
-        jobId,
-        `[NFC disk ${diskIndex + 1}/${totalDisks}] Download complete in ${elapsed.toFixed(0)}s`,
-        "success",
-      )
-      return
-    }
-
-    // Track size growth for stall detection + progress.
-    const stat = await executeSSH(targetConnectionId, nodeIp, `stat -c '%s' ${shellEscape(localPath)} 2>/dev/null || echo 0`)
-    const currentSize = Number.parseInt(stat.output?.trim() || "0", 10)
-
-    if (currentSize === lastSize) {
-      stallCounter++
-      if (stallCounter >= maxStallChecks) {
-        await executeSSH(targetConnectionId, nodeIp, `kill ${pid} 2>/dev/null; rm -f ${shellEscape(localPath)} ${shellEscape(pidFile)} ${shellEscape(exitFile)} ${shellEscape(errFile)}`).catch(() => {})
-        throw new Error(
-          `NFC disk download stalled: no progress for ${(maxStallChecks * stallCheckIntervalMs / 60000).toFixed(0)} min ` +
-          `at ${(currentSize / 1073741824).toFixed(2)} GB / ${sizeGB} GB`,
-        )
-      }
-    } else {
-      stallCounter = 0
-      lastSize = currentSize
-    }
-
-    // Per-disk + global progress.
-    const diskPct = device.fileSize > 0 ? Math.min(99, Math.round((currentSize / device.fileSize) * 100)) : 0
-    if (diskPct > lastProgressLog + 9) {
-      await appendLog(
-        jobId,
-        `[NFC disk ${diskIndex + 1}/${totalDisks}] ${diskPct}% (${(currentSize / 1073741824).toFixed(1)} GB)`,
-      )
-      lastProgressLog = diskPct
-    }
-    const perDiskWeight = progressScale / Math.max(1, totalDisks)
-    const globalPct = Math.round(progressOffset + diskIndex * perDiskWeight + (diskPct / 100) * perDiskWeight)
-    await updateJob(jobId, "transferring", { progress: Math.min(globalPct, 100) })
-
-    // Keep the NFC lease alive so vCenter doesn't tear it down on us mid-download.
-    if (Date.now() - lastKeepAliveAt >= keepAliveIntervalMs) {
-      await soapNfcLeaseProgress(vmwareSession, leaseMor, diskPct).catch(() => {
-        // Keep-alive failures are non-fatal; if the lease really dies, the curl
-        // download itself will fail and we'll surface that error.
-      })
-      lastKeepAliveAt = Date.now()
-    }
-  }
-}
-
-/**
- * Run a full NFC export for a vCenter VM: open a lease, download every disk
- * device URL to local files on the Proxmox node, complete the lease.
- *
- * Returns the list of local disk file paths in lease order.  Caller is
- * responsible for cleaning up the files after virt-v2v has consumed them.
- */
-async function runVcenterNfcExport(
-  jobId: string,
-  config: V2vMigrationConfig,
-  nodeIp: string,
-  vmwareSession: SoapSession,
-  outputDir: string,
-  /**
-   * Parsed source VM config from vCenter SOAP. Used to backfill fileSize on NFC
-   * device URLs when vCenter reports 0 (common for thin-provisioned vSAN VMs):
-   * without a known size the progress bar stays at 0% for the whole download
-   * and the stall detector can't distinguish a slow-start from a dead transfer.
-   */
-  sourceVmwareConfig: EsxiVmConfig | null,
-  /**
-   * Snapshot MOR when we're in live mode. If set, we export from the snapshot
-   * via ExportSnapshot (the only path that works on running VMs — ExportVm
-   * fails with InvalidPowerState when the VM is powered on). Falsy means the
-   * VM is already powered off and we can use ExportVm.
-   */
-  snapshotMor: string | null = null,
-): Promise<string[]> {
-  await appendLog(jobId, "Opening NFC export lease via vCenter (HttpNfcLease)...", "info")
-
-  // Make sure the staging directory exists on the PVE node.
-  await executeSSH(config.targetConnectionId, nodeIp, `mkdir -p ${shellEscape(outputDir)}`)
-
-  // First lease: used only to enumerate how many disk URLs the VM exposes.
-  // We then open a fresh lease per disk below. vCenter multi-disk NFC leases
-  // are unreliable on vSAN: the second disk's deviceUrl frequently starts
-  // returning empty chunked 200s once disk 1 has been fully consumed in the
-  // same lease (server-side lease state appears to tie the stream to the
-  // first-downloaded device). Per-disk leases sidestep this entirely: each
-  // download gets a clean HttpNfcLease in the vCenter's ready state, so the
-  // deviceUrl we hit has never been "consumed".
-  // Live mode uses ExportSnapshot on the snapshot MOR; cold uses ExportVm
-  // on the VM MOR. Only ExportSnapshot works on running VMs, since their
-  // base VMDKs are locked by the running instance while the snapshot's
-  // frozen VMDKs are always readable.
-  const openLease = () => snapshotMor
-    ? soapExportSnapshot(vmwareSession, snapshotMor)
-    : soapExportVm(vmwareSession, config.sourceVmId)
-
-  await appendLog(jobId, `Initiating NFC export lease via vCenter ${snapshotMor ? "ExportSnapshot" : "ExportVm"}...`)
-  const probeLease = await openLease()
-  let diskCount: number
-  try {
-    await appendLog(jobId, `NFC lease ${probeLease} created, waiting for ready state...`)
-    const probeDevices = await soapWaitForNfcLease(vmwareSession, probeLease)
-    diskCount = probeDevices.filter(d => d.disk).length
-    if (diskCount === 0) {
-      throw new Error("NFC lease returned no disk device URLs (VM has no disks?)")
-    }
-    await appendLog(jobId, `NFC lease ready: ${diskCount} disk URL(s) to download`, "success")
-  } catch (err) {
-    await soapNfcLeaseAbort(vmwareSession, probeLease, (err as Error)?.message || "ProxCenter probe error").catch(() => {})
-    throw err
-  }
-  // Release the probe lease straight away; it has done its job.
-  await soapNfcLeaseComplete(vmwareSession, probeLease).catch(() => {})
-
-  const downloadedPaths: string[] = []
-  try {
-    for (let i = 0; i < diskCount; i++) {
-      if (isCancelled(jobId)) throw new Error("Migration cancelled")
-      const localPath = `${outputDir}/disk-${i}.vmdk`
-
-      // Open a fresh lease per disk. We still get deviceUrls for every disk
-      // in the VM on each lease (vCenter has no "single-device" export API),
-      // but we only download the i-th URL and complete the lease immediately
-      // after. The other URLs are left untouched and vCenter reclaims them
-      // when the lease is completed.
-      await appendLog(jobId, `[NFC disk ${i + 1}/${diskCount}] Opening fresh NFC lease...`, "info")
-      const leaseMor = await openLease()
-      let leaseFinalised = false
-      try {
-        const allDevices = await soapWaitForNfcLease(vmwareSession, leaseMor)
-        const diskDevices = allDevices.filter(d => d.disk)
-        const dev = diskDevices[i]
-        if (!dev) {
-          throw new Error(`NFC lease returned ${diskDevices.length} disk URL(s) but disk index ${i} is missing`)
-        }
-        await appendLog(
-          jobId,
-          `[NFC disk ${i + 1}/${diskCount}] Fresh lease ${leaseMor} ready, ${diskDevices.length} device URL(s) available, targeting index ${i}`,
-          "info",
-        )
-
-        // Patch the device fileSize when vCenter reports 0 but we know the disk
-        // capacity from the source VM inspection. The indexed match relies on
-        // NFC returning device URLs in the same order as the VM's disks; vSphere
-        // is consistent on this but it's not contractually guaranteed.
-        if (dev.fileSize === 0 && sourceVmwareConfig?.disks[i]?.capacityBytes) {
-          dev.fileSize = sourceVmwareConfig.disks[i].capacityBytes
-          await appendLog(
-            jobId,
-            `[NFC disk ${i + 1}/${diskCount}] NFC lease reported fileSize=0 (typical for thin vSAN); ` +
-            `using vCenter disk capacity ${(dev.fileSize / 1073741824).toFixed(1)} GB as progress target`,
-            "info",
-          )
-        }
-
-        await downloadDiskViaNfc(
-          jobId,
-          config.targetConnectionId,
-          nodeIp,
-          vmwareSession,
-          leaseMor,
-          dev,
-          localPath,
-          i,
-          diskCount,
-          0,    // progressOffset: NFC transfer occupies 0..50% of the migration
-          50,   // progressScale: leaving 50..100% for virt-v2v + import phases
-        )
-        downloadedPaths.push(localPath)
-
-        // Release this per-disk lease. Anything unexpected here is warned, not
-        // thrown: the disk is already on the PVE node, we don't want to lose
-        // it just because lease-complete hiccupped on vCenter's side.
-        await soapNfcLeaseComplete(vmwareSession, leaseMor)
-        leaseFinalised = true
-      } catch (err) {
-        if (!leaseFinalised) {
-          await soapNfcLeaseAbort(vmwareSession, leaseMor, (err as Error)?.message || "ProxCenter migration error").catch(() => {})
-        }
-        throw err
-      }
-    }
-
-    await appendLog(jobId, "NFC lease completed successfully", "success")
-    return downloadedPaths
-  } catch (err) {
-    // Clean up partial downloads across any disks that succeeded before the
-    // failing one. The per-disk lease that failed has already been aborted in
-    // the inner catch above.
-    for (const p of downloadedPaths) {
-      await executeSSH(config.targetConnectionId, nodeIp, `rm -f ${shellEscape(p)}`).catch(() => {})
-    }
-    throw err
-  }
 }
 
 /**
@@ -2195,17 +1796,22 @@ export async function runV2vMigrationPipeline(
 
       // Reset to the transferring phase since NFC download is the bulk of the work.
       await updateJob(jobId, "transferring", { progress: 0 })
-      nfcDownloadedDisks = await runVcenterNfcExport(
+      nfcDownloadedDisks = await runVcenterNfcExport({
         jobId,
-        config,
+        targetConnectionId: config.targetConnectionId,
+        sourceVmId: config.sourceVmId,
         nodeIp,
-        vmwareSession,
+        session: vmwareSession,
         // Source VMDKs land on the TEMP storage even in direct-write mode:
         // only the converted output moves to the target storage (#292).
-        tempDir,
+        outputDir: tempDir,
         sourceVmwareConfig,
-        liveSnapshotMor,
-      )
+        snapshotMor: liveSnapshotMor,
+        // The NFC transfer occupies 0..50% of the migration, leaving 50..100%
+        // for the virt-v2v conversion and the import.
+        band: { offset: 0, scale: 50 },
+        concurrency: resolveNfcConcurrency(config.nfcConcurrency),
+      }, { appendLog, updateJob, isCancelled })
 
       // Live migration cutover: all disks are on the PVE node now, so we can
       // power off the source (downtime starts HERE, not at migration start)

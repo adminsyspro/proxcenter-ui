@@ -2208,6 +2208,8 @@
       "warmPreflightFailedTitle": "Target node is not ready for warm migration",
       "warmPreflightMissing": "Missing on the node: {items}.",
       "warmPreflightNbdHint": "Install the NBD tooling on the Proxmox node: apt install nbdkit nbd-client libnbd-bin, then reselect the node.",
+      "warmStorageInsufficient": "Not enough free space on {storage}: {available} GB available, {required} GB needed for the source disks plus a 10% margin. Free up space on it or pick another storage.",
+      "warmStorageCheckFailed": "Could not read the free space of {storage} on the target node: {error}",
       "warmPrepNeedsPve9": "This node runs Proxmox VE {pve} (Debian {debian}). Warm migration needs Proxmox VE 9: Debian 13 is the first release that ships the nbdkit VDDK plugin, so this node cannot be prepared, automatically or by hand.",
       "warmPreflightDocsHint": "Prepare the Proxmox node first (install nbdkit, the nbdkit VDDK plugin, nbd-client and the Broadcom VDDK), then reselect the node. See the <link>warm migration node setup guide</link>.",
       "warmSetupAction": "Prepare this node",

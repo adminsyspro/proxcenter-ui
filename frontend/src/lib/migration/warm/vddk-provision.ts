@@ -207,6 +207,27 @@ export function buildVddkInstallScript(opts: VddkInstallScriptOpts): string {
     "modprobe nbd max_part=0",
     "echo nbd > /etc/modules-load.d/proxcenter-nbd.conf",
     "printf 'options nbd max_part=0\\n' > /etc/modprobe.d/proxcenter-nbd.conf",
+    // 5. Keep the host's LVM off the transient NBD devices (#535). Without
+    // this, udev's `pvscan --cache -aay` auto-activates the GUEST volume group
+    // it finds on /dev/nbdN(pM): the dm LVs pin the device until reboot, and a
+    // guest VG named like the host's (`pve`) breaks PVE's own lvcreate for as
+    // long as the copy runs ("Multiple VGs found with the same name"). PVE
+    // already ships an active global_filter line (r|/dev/zd.*|, r|/dev/rbd.*|):
+    // prepend the nbd exclusion to that line, validate, and roll back on any
+    // parse error so the host's LVM can never be left broken. A conf without an
+    // active global_filter line is left alone: the teardown-side release in
+    // nbd-holders.ts still frees the device, only the prevention is skipped.
+    "LVMCONF=/etc/lvm/lvm.conf",
+    `if grep -qE '^[[:space:]]*global_filter[[:space:]]*=[[:space:]]*\\[' "$LVMCONF" && ! grep -qE '^[[:space:]]*global_filter[[:space:]]*=.*nbd' "$LVMCONF"; then`,
+    '  cp -a "$LVMCONF" "$LVMCONF.proxcenter-bak"',
+    `  sed -i -E 's#^([[:space:]]*global_filter[[:space:]]*=[[:space:]]*\\[)#\\1 "r|/dev/nbd.*|",#' "$LVMCONF"`,
+    "  if lvmconfig --validate >/dev/null 2>&1; then",
+    '    rm -f "$LVMCONF.proxcenter-bak"',
+    "  else",
+    '    mv "$LVMCONF.proxcenter-bak" "$LVMCONF"',
+    `    echo "WARN: /etc/lvm/lvm.conf left unchanged (global_filter edit failed validation); add r|/dev/nbd.*| to devices/global_filter by hand" >&2`,
+    "  fi",
+    "fi",
   ].join("\n")
 }
 

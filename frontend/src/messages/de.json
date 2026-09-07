@@ -2195,6 +2195,8 @@
       "warmPreflightFailedTitle": "Zielknoten ist nicht bereit fur die Warm-Migration",
       "warmPreflightMissing": "Fehlt auf dem Knoten: {items}.",
       "warmPreflightNbdHint": "Installieren Sie die NBD-Werkzeuge auf dem Proxmox-Knoten: apt install nbdkit nbd-client libnbd-bin, und wählen Sie den Knoten anschließend erneut aus.",
+      "warmStorageInsufficient": "Nicht genügend freier Speicherplatz auf {storage}: {available} GB verfügbar, {required} GB für die Quell-Festplatten plus 10 % Reserve erforderlich. Geben Sie Speicherplatz frei oder wählen Sie einen anderen Speicher.",
+      "warmStorageCheckFailed": "Der freie Speicherplatz von {storage} auf dem Zielknoten konnte nicht gelesen werden: {error}",
       "warmPrepNeedsPve9": "Dieser Node läuft mit Proxmox VE {pve} (Debian {debian}). Die Warm-Migration erfordert Proxmox VE 9: Debian 13 ist die erste Version mit dem nbdkit-VDDK-Plugin, dieser Node kann daher weder automatisch noch manuell vorbereitet werden.",
       "warmPreflightDocsHint": "Bereiten Sie zuerst den Proxmox-Knoten vor (nbdkit, das nbdkit-VDDK-Plugin, nbd-client und das Broadcom-VDDK installieren), dann wahlen Sie den Knoten erneut aus. Siehe die <link>Anleitung zur Knotenvorbereitung fur die Warm-Migration</link>.",
       "warmSetupAction": "Diesen Knoten vorbereiten",

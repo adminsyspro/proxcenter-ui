@@ -2,6 +2,7 @@ import { getTenantPrisma } from "@/lib/tenant"
 import { decryptSecret } from "@/lib/crypto/secret"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { pveFetch } from "@/lib/proxmox/client"
+import { assertTargetStorageSpace, gib } from "./target-space"
 import { isFileBasedStorage } from "@/lib/proxmox/storage"
 import { executeSSH, shellEscape } from "@/lib/ssh/exec"
 import {
@@ -264,6 +265,14 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
     if (isFileBasedStorage(storageInfo?.type || "dir")) {
       throw new Error(`Warm migration requires a block-storage target (LVM/LVM-thin/ZFS/Ceph RBD); "${config.targetStorage}" is file-based (${storageInfo?.type}). Pick a block storage or use a cold migration.`)
     }
+
+    // Free space backstop, same rule as the cold engine (disks' capacity plus
+    // 10 %). The dialog runs this check before enabling the launch, but the
+    // cluster-auto node choice and direct API calls reach here unchecked, and a
+    // zvol allocation that fails for space would otherwise surface only as a
+    // PVE error after the node preflight said "ready".
+    const space = await assertTargetStorageSpace(config.targetConnectionId, config.targetNode, config.targetStorage, vmConfig.disks.reduce((s, d) => s + d.capacityBytes, 0))
+    await appendLog(jobId, `Target storage "${config.targetStorage}": ${gib(space.availableBytes)} GB free, need ${gib(space.requiredBytes)} GB`, "info")
 
     // VDDK preflight on the PVE node — actionable error before we touch anything.
     const pf = await checkVddkPreflight(config.targetConnectionId, nodeIp, libdir)

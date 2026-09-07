@@ -2192,6 +2192,8 @@
       "warmPreflightFailedTitle": "目标节点尚未就绪，无法进行温迁移",
       "warmPreflightMissing": "节点上缺少：{items}。",
       "warmPreflightNbdHint": "在 Proxmox 节点上安装 NBD 工具：apt install nbdkit nbd-client libnbd-bin，然后重新选择该节点。",
+      "warmStorageInsufficient": "{storage} 上的可用空间不足：可用 {available} GB，源磁盘加 10% 余量需要 {required} GB。请释放空间或选择其他存储。",
+      "warmStorageCheckFailed": "无法读取目标节点上 {storage} 的可用空间：{error}",
       "warmPrepNeedsPve9": "此节点运行的是 Proxmox VE {pve}（Debian {debian}）。热迁移需要 Proxmox VE 9：Debian 13 是首个提供 nbdkit VDDK 插件的版本，因此无法自动或手动准备此节点。",
       "warmPreflightDocsHint": "请先准备 Proxmox 节点（安装 nbdkit、nbdkit VDDK 插件、nbd-client 以及 Broadcom VDDK），然后重新选择节点。请参阅<link>温迁移节点准备指南</link>。",
       "warmSetupAction": "准备此节点",

@@ -804,6 +804,9 @@ describe('migration dialog options', () => {
     status: 'poweredOff',
     guestOS: 'Ubuntu Linux (64-bit)',
   }
+  // Warm is only offered for vmware/vcenter sources (warmAllowedFor); ESXI_VM's
+  // hostType 'esxi' is a cold-only fixture, so the warm tests use this one.
+  const WARM_VM = { ...ESXI_VM, hostType: 'vmware', committed: 20 * 1024 ** 3 }
   const THICK_LVM = { storage: 'san-lvm', type: 'lvm', content: 'images', total: 1099511627776, avail: 879609302220 }
   const ZFS = { storage: 'tank', type: 'zfspool', content: 'images', total: 1099511627776, avail: 879609302220 }
   const START_AFTER_LABEL = 'Start VM after migration'
@@ -836,13 +839,16 @@ describe('migration dialog options', () => {
   // Harness owning the dialog-open state the same way InventoryDetails does:
   // the option family comes from the real useMigrationOptions hook, so this
   // exercises the production reset path rather than a test-local copy.
-  function OptionsHarness({ dialogOverrides = {} }: { dialogOverrides?: Partial<InventoryDialogsProps> }) {
+  function OptionsHarness({ dialogOverrides = {}, vm = ESXI_VM }: {
+    dialogOverrides?: Partial<InventoryDialogsProps>
+    vm?: InventoryDialogsProps['esxiMigrateVm']
+  }) {
     const [esxiMigrateVm, setEsxiMigrateVm] = React.useState<any>(null)
     const [bulkMigOpen, setBulkMigOpen] = React.useState(false)
     const options = useMigrationOptions({ esxiMigrateVm, bulkMigOpen })
     return (
       <>
-        <button onClick={() => setEsxiMigrateVm(ESXI_VM)}>harness-open-single</button>
+        <button onClick={() => setEsxiMigrateVm(vm)}>harness-open-single</button>
         <button onClick={() => setEsxiMigrateVm(null)}>harness-close-single</button>
         <InventoryDialogs
           {...makeProps({
@@ -902,6 +908,120 @@ describe('migration dialog options', () => {
 
     fireEvent.click(screen.getByText('harness-open-single'))
     expect(getSwitch(AUTO_CUTOVER_LABEL).checked).toBe(true)
+  })
+
+  it('blocks the launch when the target storage is too small', async () => {
+    const preflightBodies: any[] = []
+    server.use(
+      http.post('*/api/v1/migrations/preflight', async ({ request }) => {
+        const body = await request.json() as any
+        preflightBodies.push(body)
+        return HttpResponse.json({
+          ok: true, missing: [], kind: 'vddk', vddkTokenConfigured: false,
+          space: { storage: body.targetStorage, availableBytes: 12 * 1024 ** 3, requiredBytes: body.requiredDiskBytes, sufficient: false },
+        })
+      }),
+    )
+    renderWithProviders(
+      <OptionsHarness
+        vm={WARM_VM}
+        dialogOverrides={{
+          migType: 'warm', migTargetStorage: 'san-lvm', migStorages: [THICK_LVM, ZFS],
+          migTargetConn: CONN_ID, migTargetNode: NODE_NAME,
+        }}
+      />,
+    )
+
+    fireEvent.click(screen.getByText('harness-open-single'))
+    await screen.findByText(/Not enough free space on san-lvm: 12\.0 GB available, 20\.0 GB needed/)
+    expect(screen.getByRole('button', { name: /Migrate to Proxmox/ })).toBeDisabled()
+    expect(preflightBodies[0]).toMatchObject({
+      action: 'warm-check', targetStorage: 'san-lvm', requiredDiskBytes: 20 * 1024 ** 3,
+    })
+  })
+
+  it('enables the launch when the storage is large enough', async () => {
+    const preflightBodies: any[] = []
+    server.use(
+      http.post('*/api/v1/migrations/preflight', async ({ request }) => {
+        const body = await request.json() as any
+        preflightBodies.push(body)
+        return HttpResponse.json({
+          ok: true, missing: [], kind: 'vddk', vddkTokenConfigured: false,
+          space: { storage: body.targetStorage, availableBytes: 32 * 1024 ** 3, requiredBytes: body.requiredDiskBytes, sufficient: true },
+        })
+      }),
+    )
+    renderWithProviders(
+      <OptionsHarness
+        vm={WARM_VM}
+        dialogOverrides={{
+          migType: 'warm', migTargetStorage: 'san-lvm', migStorages: [THICK_LVM, ZFS],
+          migTargetConn: CONN_ID, migTargetNode: NODE_NAME,
+          // Warm launch also requires a running source and SSH on the target.
+          esxiMigrateVm: { ...WARM_VM, status: 'poweredOn' },
+          migPveConnections: [{ id: CONN_ID, name: 'pve-lab', sshEnabled: true }],
+        }}
+      />,
+    )
+
+    fireEvent.click(screen.getByText('harness-open-single'))
+    await screen.findByText(/Target node is ready for warm migration/)
+    expect(screen.queryByText(/Not enough free space/)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Migrate to Proxmox/ })).toBeEnabled()
+    expect(preflightBodies[0]).toMatchObject({
+      action: 'warm-check', targetStorage: 'san-lvm', requiredDiskBytes: 20 * 1024 ** 3,
+    })
+  })
+
+  it('shows the read error when the storage cannot be read', async () => {
+    const preflightBodies: any[] = []
+    server.use(
+      http.post('*/api/v1/migrations/preflight', async ({ request }) => {
+        const body = await request.json() as any
+        preflightBodies.push(body)
+        return HttpResponse.json({
+          ok: true, missing: [], kind: 'vddk', vddkTokenConfigured: false,
+          space: { storage: 'san-lvm', availableBytes: 0, requiredBytes: 0, sufficient: false, error: 'No such storage.' },
+        })
+      }),
+    )
+    renderWithProviders(
+      <OptionsHarness vm={WARM_VM} dialogOverrides={{
+        migType: 'warm', migTargetStorage: 'san-lvm', migStorages: [THICK_LVM, ZFS],
+        migTargetConn: CONN_ID, migTargetNode: NODE_NAME,
+      }} />,
+    )
+
+    fireEvent.click(screen.getByText('harness-open-single'))
+    await screen.findByText(/Could not read the free space of san-lvm on the target node: No such storage\./)
+    expect(screen.getByRole('button', { name: /Migrate to Proxmox/ })).toBeDisabled()
+    expect(preflightBodies[0]).toMatchObject({ action: 'warm-check', targetStorage: 'san-lvm' })
+  })
+
+  it('sends no targetStorage when none is selected', async () => {
+    const preflightBodies: any[] = []
+    server.use(
+      http.post('*/api/v1/migrations/preflight', async ({ request }) => {
+        const body = await request.json() as any
+        preflightBodies.push(body)
+        return HttpResponse.json({
+          ok: true, missing: [], kind: 'vddk', vddkTokenConfigured: false,
+          space: { storage: body.targetStorage, availableBytes: 12 * 1024 ** 3, requiredBytes: body.requiredDiskBytes, sufficient: true },
+        })
+      }),
+    )
+    renderWithProviders(
+      <OptionsHarness vm={{ ...WARM_VM, committed: undefined }} dialogOverrides={{
+        migType: 'warm', migTargetStorage: '', migStorages: [THICK_LVM, ZFS],
+        migTargetConn: CONN_ID, migTargetNode: NODE_NAME,
+      }} />,
+    )
+
+    fireEvent.click(screen.getByText('harness-open-single'))
+    await waitFor(() => expect(preflightBodies.length).toBeGreaterThan(0))
+    expect(preflightBodies[0].targetStorage).toBeUndefined()
+    expect(preflightBodies[0].requiredDiskBytes).toBe(0)
   })
 
   // #663: the budget only governs the automatic decision, so it follows the

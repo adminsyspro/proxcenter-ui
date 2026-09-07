@@ -254,14 +254,14 @@ describe('RecoveryPlansTab — clear execution history', () => {
   })
 })
 
-it('opens each plan row with the engine glyphs of its jobs and repeats them on both ends of the route', () => {
+it('shows the engine glyphs of the plan jobs on both ends of the route', () => {
   const zfsJob = { id: 'job-1', storage_engine: 'zfs' } as ReplicationJob
   renderWithProviders(<Harness plans={[plan()]} history={[]} jobs={[zfsJob]} />)
-  expect(screen.getAllByRole('img', { name: 'ZFS' })).toHaveLength(3)
+  expect(screen.getAllByRole('img', { name: 'ZFS' })).toHaveLength(2)
   expect(screen.queryByRole('img', { name: 'Ceph RBD' })).not.toBeInTheDocument()
 })
 
 it('falls back to the Ceph glyph when the plan jobs are unknown', () => {
   renderWithProviders(<Harness plans={[plan()]} history={[]} />)
-  expect(screen.getAllByRole('img', { name: 'Ceph RBD' })).toHaveLength(3)
+  expect(screen.getAllByRole('img', { name: 'Ceph RBD' })).toHaveLength(2)
 })

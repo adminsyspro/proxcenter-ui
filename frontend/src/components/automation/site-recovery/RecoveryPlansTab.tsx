@@ -56,13 +56,18 @@ export function planEngines(plan: RecoveryPlan, jobs: ReplicationJob[] = []): St
   return (['rbd', 'zfs'] as StorageEngine[]).filter(engine => engines.has(engine))
 }
 
-// PlanEngineGlyphs draws the plan's engine glyph(s), optionally badged with the plan status dot.
-const PlanEngineGlyphs = ({ engines, size = 18, status }: { engines: StorageEngine[]; size?: number; status?: RecoveryPlanStatus }) => (
-  <Box sx={{ position: 'relative', display: 'inline-flex', gap: 0.5, flexShrink: 0 }}>
+// PlanEngineGlyphs draws the glyph(s) of the engines behind a plan, on each end of its route.
+const PlanEngineGlyphs = ({ engines, size = 14 }: { engines: StorageEngine[]; size?: number }) => (
+  <Box sx={{ display: 'inline-flex', gap: 0.5, flexShrink: 0 }}>
     {engines.map(engine => <EngineGlyph key={engine} engine={engine} size={size} />)}
-    {status && (
-      <Box component='span' sx={{ position: 'absolute', bottom: -1, right: -2, width: 7, height: 7, borderRadius: '50%', bgcolor: planStatusDot[status] || planStatusDot.not_ready, border: '1.5px solid', borderColor: 'background.paper' }} />
-    )}
+  </Box>
+)
+
+// PlanIcon opens a row with the same pictogram as the Recovery Plans tab, badged with the plan status.
+const PlanIcon = ({ status }: { status: RecoveryPlanStatus }) => (
+  <Box sx={{ position: 'relative', display: 'inline-flex', flexShrink: 0 }}>
+    <i className='ri-file-shield-2-line' style={{ fontSize: 18, opacity: 0.8 }} />
+    <Box component='span' sx={{ position: 'absolute', bottom: -1, right: -2, width: 7, height: 7, borderRadius: '50%', bgcolor: planStatusDot[status] || planStatusDot.not_ready, border: '1.5px solid', borderColor: 'background.paper' }} />
   </Box>
 )
 
@@ -101,8 +106,8 @@ const PlanRow = ({ plan, engines, onClick, t, connName }: { plan: RecoveryPlan; 
         '&:hover': { bgcolor: 'action.hover' }
       }}
     >
-      {/* Engine glyph(s) + plan status dot */}
-      <PlanEngineGlyphs engines={engines} status={plan.status} />
+      {/* Plan pictogram, same as the tab, with the plan status dot */}
+      <PlanIcon status={plan.status} />
 
       {/* Name + description */}
       <Box sx={{ flex: '1 1 30%', minWidth: 0 }}>
@@ -114,10 +119,10 @@ const PlanRow = ({ plan, engines, onClick, t, connName }: { plan: RecoveryPlan; 
 
       {/* Source → Destination, each end carrying the engine glyph(s) */}
       <Box sx={{ flex: '1 1 30%', minWidth: 0, display: 'flex', alignItems: 'center', gap: 0.75, whiteSpace: 'nowrap' }}>
-        <PlanEngineGlyphs engines={engines} size={14} />
+        <PlanEngineGlyphs engines={engines} />
         <Typography variant='caption' sx={{ color: 'text.secondary' }} noWrap>{connName(plan.source_cluster)}</Typography>
         <Typography variant='caption' sx={{ color: 'text.disabled' }}>→</Typography>
-        <PlanEngineGlyphs engines={engines} size={14} />
+        <PlanEngineGlyphs engines={engines} />
         <Typography variant='caption' sx={{ color: 'text.secondary' }} noWrap>{connName(plan.target_cluster)}</Typography>
       </Box>
 
@@ -310,7 +315,7 @@ export default function RecoveryPlansTab({
               <PlanStatusBadge status={selected.status} t={t} />
 
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mt: 1 }}>
-                <PlanEngineGlyphs engines={planEngines(selected, jobs)} size={14} />
+                <PlanEngineGlyphs engines={planEngines(selected, jobs)} />
                 <Typography variant='caption' sx={{ color: 'text.secondary' }}>
                   {connName(selected.source_cluster)} → {connName(selected.target_cluster)}
                 </Typography>

@@ -170,6 +170,7 @@ describe("startXapiReader", () => {
     expect(teardownCmd).toContain("rm -rf '/tmp/xapi.sock.ca'")
     expect(teardownCmd).toContain("/tmp/xapi.sock.log")
     expect(teardownCmd).not.toContain("nbd-client -d")
+    expect(teardownCmd).not.toContain("nbd_release_holders")
   })
 })
 
@@ -187,8 +188,10 @@ describe("stopXapiReader", () => {
     })
 
     const cmd = mockSSH.mock.calls[0][2] as string
+    expect(cmd).toContain("nbd_release_holders /dev/nbd3")
     expect(cmd).toContain("nbd-client -d /dev/nbd3")
+    expect(cmd.indexOf("nbd_release_holders /dev/nbd3")).toBeLessThan(cmd.indexOf("nbd-client -d /dev/nbd3"))
     expect(cmd).toContain('pkill -f "[n]bdkit.*/tmp/xapi.sock"')
-    expect(cmd).toContain("; rm -rf '/tmp/xapi.sock.ca'")
+    expect(cmd.endsWith("; rm -rf '/tmp/xapi.sock.ca'")).toBe(true)
   })
 })

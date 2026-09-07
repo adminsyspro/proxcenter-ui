@@ -112,7 +112,7 @@ describe('SnapshotsTab cleanup-orphans tooltip', () => {
 
     await waitFor(() => expect(button).toBeDisabled())
     expect(fetchMock).toHaveBeenCalledWith(
-      '/api/v1/orchestrator/replication/snapshots',
+      '/api/v1/orchestrator/replication/snapshots/delete',
       expect.objectContaining({ method: 'POST' })
     )
 
@@ -130,4 +130,61 @@ describe('SnapshotsTab cleanup-orphans tooltip', () => {
 
     expect(logged).not.toMatch(/disabled button child to the Tooltip/)
   })
+})
+
+const sameVolumeSnapshots = [
+  { ...SNAPSHOTS[0], storage_engine: 'zfs', node: 'dr1', used_bytes: 1024 },
+  { ...SNAPSHOTS[0], storage_engine: 'zfs', node: 'dr2', used_bytes: 2048 },
+  { ...SNAPSHOTS[0], storage_engine: 'rbd', node: '' },
+  { ...SNAPSHOTS[0], cluster_id: 'c2', storage_engine: 'zfs', node: 'dr1', used_bytes: 0 },
+]
+
+it('keeps otherwise identical snapshots on distinct nodes, engines and connections independently selectable and deletes full identities', async () => {
+  const fetchMock = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => new Response(JSON.stringify(init?.method === 'POST' ? { deleted: [], failed: [] } : sameVolumeSnapshots)))
+  vi.stubGlobal('fetch', fetchMock)
+  renderWithProviders(<SnapshotsTab connections={CONNECTIONS} />)
+  await screen.findByRole('columnheader', { name: 'Engine' })
+  expect(screen.getByRole('columnheader', { name: 'Node' })).toBeInTheDocument()
+  expect(screen.getAllByRole('img', { name: 'ZFS' })).toHaveLength(3)
+  expect(screen.getByRole('img', { name: 'Ceph RBD' })).toBeInTheDocument()
+  expect(screen.getByText('0 B')).toBeInTheDocument()
+  const rows = screen.getAllByRole('row').slice(1)
+  fireEvent.click(within(rows[0]).getByRole('checkbox'))
+  expect(within(rows[1]).getByRole('checkbox')).not.toBeChecked()
+  expect(within(rows[2]).getByRole('checkbox')).not.toBeChecked()
+  expect(within(rows[3]).getByRole('checkbox')).not.toBeChecked()
+  fireEvent.click(within(rows[1]).getByRole('checkbox'))
+  fireEvent.click(screen.getByRole('button', { name: 'Delete 2 selected' }))
+  const dialog = await screen.findByRole('dialog')
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }))
+  await waitFor(() => expect(fetchMock.mock.calls.filter(call => call[1]?.method === 'POST')).toHaveLength(2))
+  const bodies = fetchMock.mock.calls.filter(call => call[1]?.method === 'POST').map(call => JSON.parse(String(call[1]?.body)))
+  expect(bodies).toEqual(['dr1', 'dr2'].map(node => ({ items: [{ cluster_id: 'c1', storage_engine: 'zfs', node, pool: 'rbd', image: 'vm-100-disk-0', snapshot: 'mirror.orphan-1' }] })))
+})
+
+it('loads usage for the selected node and displays ZFS used bytes', async () => {
+  const fetchMock = vi.fn(async (url: RequestInfo | URL) => new Response(JSON.stringify(String(url).includes('/usage?') ? { used_bytes: 4096 } : sameVolumeSnapshots)))
+  vi.stubGlobal('fetch', fetchMock)
+  renderWithProviders(<SnapshotsTab connections={CONNECTIONS} />)
+  await screen.findByText('dr2')
+  const row = screen.getAllByRole('row')[2]
+  fireEvent.click(within(row).getByRole('button', { name: 'View details' }))
+  await screen.findByText('4.0 KB')
+  const call = fetchMock.mock.calls.find(call => String(call[0]).includes('/usage?'))
+  const query = new URL(String(call?.[0]), 'http://localhost').searchParams
+  expect(Object.fromEntries(query)).toEqual({ cluster: 'c1', storage_engine: 'zfs', node: 'dr2', pool: 'rbd', image: 'vm-100-disk-0', snap: 'mirror.orphan-1' })
+  expect(screen.getByText('Node: dr2')).toBeInTheDocument()
+})
+
+it('lists inventory warnings in a banner instead of rendering them as snapshot rows', async () => {
+  const rows = [
+    sameVolumeSnapshots[0],
+    { cluster_id: 'c1', cluster_name: 'Cluster A', storage_engine: 'zfs', node: 'dr3', warning: 'ssh: connect timed out' },
+  ]
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(rows))))
+  renderWithProviders(<SnapshotsTab connections={CONNECTIONS} />)
+  const banner = await screen.findByRole('alert')
+  expect(banner).toHaveTextContent('Cluster A · dr3: ssh: connect timed out')
+  expect(screen.getAllByRole('row')).toHaveLength(2)
+  expect(screen.queryByText('dr3', { selector: 'td' })).not.toBeInTheDocument()
 })

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 
+import { replicationErrorResponse } from '@/lib/orchestrator/replicationError'
 import { getOrchestratorClient } from "@/lib/orchestrator/client"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { getTenantConnectionIds } from "@/lib/tenant"
@@ -25,14 +26,7 @@ export async function POST(request: NextRequest) {
     const response = await client.stopDRVM(body)
 
     return NextResponse.json(response.data)
-  } catch (e: any) {
-    if ((e as any)?.code !== 'ORCHESTRATOR_UNAVAILABLE') {
-      console.error("Error stopping DR VM:", e)
-    }
-
-    return NextResponse.json(
-      { error: e?.message || "Failed to stop DR VM" },
-      { status: 500 }
-    )
+  } catch (error) {
+    return replicationErrorResponse(error, 'Failed to stop DR VM')
   }
 }

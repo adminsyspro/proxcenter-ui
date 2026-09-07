@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 
+import { replicationErrorResponse } from '@/lib/orchestrator/replicationError'
 import { getOrchestratorClient } from "@/lib/orchestrator/client"
 import { checkPlanTenantScope } from "@/lib/orchestrator/planTenantScope"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
@@ -21,14 +22,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const response = await getOrchestratorClient().executeFailover(id, body)
 
     return NextResponse.json(response.data)
-  } catch (e: any) {
-    if ((e as any)?.code !== 'ORCHESTRATOR_UNAVAILABLE') {
-      console.error("Error executing failover:", e)
-    }
-
-    return NextResponse.json(
-      { error: e?.message || "Failed to execute failover" },
-      { status: 500 }
-    )
+  } catch (error) {
+    return replicationErrorResponse(error, 'Failed to execute failover')
   }
 }

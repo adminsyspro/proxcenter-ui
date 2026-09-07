@@ -10,9 +10,15 @@ import {
   TextField, Tooltip, Typography,
 } from '@mui/material'
 
+import EngineGlyph from './EngineGlyph'
+import { snapshotIdentity, snapshotKey } from '@/lib/orchestrator/snapshotIdentity'
+import type { SnapshotIdentity } from '@/lib/orchestrator/site-recovery.types'
 import EmptyState from '@/components/EmptyState'
 
-interface MirrorSnapshot {
+interface MirrorSnapshot extends SnapshotIdentity {
+  used_bytes?: number
+  // Set on rows that describe a cluster or node the orchestrator could not inventory; such rows carry no snapshot.
+  warning?: string
   cluster_id: string
   cluster_name: string
   pool: string
@@ -38,7 +44,8 @@ interface Props {
 }
 
 function formatBytes(b: number | undefined | null): string {
-  if (!b || b <= 0) return '—'
+  if (b === 0) return '0 B'
+  if (!b || b < 0) return '—'
   const units = ['B', 'KB', 'MB', 'GB', 'TB']
   const i = Math.floor(Math.log(b) / Math.log(1024))
   return `${(b / Math.pow(1024, i)).toFixed(1)} ${units[i]}`
@@ -78,8 +85,9 @@ export default function SnapshotsTab({ connections, vmNamesByConn }: Props) {
   const [page, setPage] = useState(0)
   const [rowsPerPage, setRowsPerPage] = useState(25)
 
-  const key = (s: MirrorSnapshot) => `${s.cluster_id}::${s.pool}::${s.image}::${s.snapshot}`
+  const key = snapshotKey
 
+  const [warnings, setWarnings] = useState<MirrorSnapshot[]>([])
   const load = useCallback(async () => {
     setLoading(true)
     setError('')
@@ -87,7 +95,9 @@ export default function SnapshotsTab({ connections, vmNamesByConn }: Props) {
       const res = await fetch('/api/v1/orchestrator/replication/snapshots', { cache: 'no-store' })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data = await res.json()
-      setSnaps(Array.isArray(data) ? data : [])
+      const rows: MirrorSnapshot[] = Array.isArray(data) ? data : []
+      setWarnings(rows.filter(row => row.warning))
+      setSnaps(rows.filter(row => !row.warning))
     } catch (e: any) {
       setError(e?.message || 'Failed to load snapshots')
       setSnaps([])
@@ -154,21 +164,30 @@ export default function SnapshotsTab({ connections, vmNamesByConn }: Props) {
     else setSelected(new Set(selectableFiltered.map(key)))
   }
 
-  const openDetail = useCallback(async (s: MirrorSnapshot) => {
-    setDetail(s)
-    setDetailUsage(null)
+  const openDetail = useCallback((snapshot: MirrorSnapshot) => { setDetail(snapshot) }, [])
+
+  useEffect(() => {
+    if (!detail) return
+    const controller = new AbortController()
+    setDetailUsage(detail.storage_engine === 'zfs' && detail.used_bytes !== undefined
+      ? { used_bytes: detail.used_bytes, provisioned_bytes: detail.provisioned_bytes } : null)
     setDetailLoading(true)
-    try {
-      const params = new URLSearchParams({ cluster: s.cluster_id, pool: s.pool, image: s.image, snap: s.snapshot })
-      const res = await fetch(`/api/v1/orchestrator/replication/snapshots/usage?${params.toString()}`, { cache: 'no-store' })
-      if (res.ok) {
-        const data = await res.json()
-        setDetailUsage({ used_bytes: data.used_bytes, provisioned_bytes: data.provisioned_bytes })
-      }
-    } catch { /* ignore — drawer just shows "—" */ } finally {
-      setDetailLoading(false)
-    }
-  }, [])
+    const identity = snapshotIdentity(detail)
+    const params = new URLSearchParams({ cluster: identity.cluster_id, pool: identity.pool, image: identity.image,
+      snap: identity.snapshot, storage_engine: identity.storage_engine, node: identity.node })
+    fetch(`/api/v1/orchestrator/replication/snapshots/usage?${params}`, { cache: 'no-store', signal: controller.signal })
+      .then(async response => {
+        if (!response.ok) return
+        const data = await response.json()
+        if (!controller.signal.aborted) setDetailUsage({
+          used_bytes: data.used_bytes ?? detail.used_bytes,
+          provisioned_bytes: data.provisioned_bytes,
+        })
+      })
+      .catch(() => { /* Inventory usage remains visible if the node becomes unreachable. */ })
+      .finally(() => { if (!controller.signal.aborted) setDetailLoading(false) })
+    return () => controller.abort()
+  }, [detail])
 
   const runDelete = useCallback(async (items: MirrorSnapshot[]) => {
     setDeleting(true)
@@ -179,16 +198,11 @@ export default function SnapshotsTab({ connections, vmNamesByConn }: Props) {
       const item = items[i]
       setDeleteProgress({ done: i, total: items.length, current: item.snapshot })
       try {
-        const res = await fetch('/api/v1/orchestrator/replication/snapshots', {
+        const res = await fetch('/api/v1/orchestrator/replication/snapshots/delete', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            items: [{
-              cluster_id: item.cluster_id,
-              pool: item.pool,
-              image: item.image,
-              snapshot: item.snapshot,
-            }],
+            items: [snapshotIdentity(item)],
           }),
         })
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
@@ -203,11 +217,15 @@ export default function SnapshotsTab({ connections, vmNamesByConn }: Props) {
 
     setDeleteProgress({ done: items.length, total: items.length, current: null })
 
-    if (failures.length > 0) {
-      setError(`${failures.length}/${items.length} snapshot(s) failed to delete: ${failures.map(f => f.item.snapshot).join(', ')}`)
-    }
     setSelected(new Set())
+    // Reload first: load() clears the error banner on its way in, so a message
+    // set before it never reached the operator.
     await load()
+    if (failures.length > 0) {
+      // The reason matters: "snapshot has dependent clones" tells the operator a
+      // test failover still holds it, a bare list of names does not.
+      setError(`${failures.length}/${items.length} snapshot(s) failed to delete: ${failures.map(f => `${f.item.snapshot} (${f.reason})`).join(', ')}`)
+    }
     setDeleting(false)
     setConfirmDelete(null)
     setDeleteProgress({ done: 0, total: 0, current: null })
@@ -218,7 +236,7 @@ export default function SnapshotsTab({ connections, vmNamesByConn }: Props) {
 
   const selectedList = useMemo(
     () => (snaps || []).filter(s => selected.has(key(s))),
-    [snaps, selected]
+    [snaps, selected, key]
   )
   const orphansInView = useMemo(() => filtered.filter(s => s.is_orphan), [filtered])
 
@@ -301,6 +319,16 @@ export default function SnapshotsTab({ connections, vmNamesByConn }: Props) {
       </Card>
 
       {error && <Alert severity='error' sx={{ mb: 2 }}>{error}</Alert>}
+      {warnings.length > 0 && (
+        <Alert severity='warning' sx={{ mb: 2 }}>
+          {t('siteRecovery.snapshots.partialInventory')}
+          {warnings.map(row => (
+            <Typography key={`${row.cluster_id}:${row.node || ''}`} variant='caption' component='div'>
+              {row.cluster_name || connName(row.cluster_id)}{row.node ? ` · ${row.node}` : ''}: {row.warning}
+            </Typography>
+          ))}
+        </Alert>
+      )}
 
       {loading && !snaps && <LinearProgress sx={{ mb: 2 }} />}
 
@@ -329,12 +357,15 @@ export default function SnapshotsTab({ connections, vmNamesByConn }: Props) {
                   />
                 </TableCell>
                 <TableCell>{t('siteRecovery.snapshots.cluster')}</TableCell>
+                <TableCell>{t('siteRecovery.snapshots.engine')}</TableCell>
+                <TableCell>{t('siteRecovery.snapshots.node')}</TableCell>
                 <TableCell>{t('siteRecovery.snapshots.pool')}</TableCell>
                 <TableCell>{t('siteRecovery.snapshots.image')}</TableCell>
                 <TableCell>{t('siteRecovery.snapshots.vm')}</TableCell>
                 <TableCell>{t('siteRecovery.snapshots.snapshot')}</TableCell>
                 <TableCell align='right'>{t('siteRecovery.snapshots.age')}</TableCell>
                 <TableCell align='right'>{t('siteRecovery.snapshots.imageSize')}</TableCell>
+                <TableCell align='right'>{t('siteRecovery.snapshots.cowUsed')}</TableCell>
                 <TableCell>{t('siteRecovery.snapshots.status')}</TableCell>
                 <TableCell />
               </TableRow>
@@ -344,7 +375,7 @@ export default function SnapshotsTab({ connections, vmNamesByConn }: Props) {
                 const k = key(s)
                 const vmName = s.vmid ? vmNamesByConn?.[s.cluster_id]?.[s.vmid] : undefined
                 return (
-                  <TableRow key={k} hover selected={selected.has(k)}>
+                  <TableRow key={k} hover selected={selected.has(k)} sx={{ '& .MuiTableCell-root': { whiteSpace: 'nowrap' } }}>
                     <TableCell padding='checkbox'>
                       <Tooltip title={!s.is_orphan ? t('siteRecovery.snapshots.cannotDeleteActive') : ''} arrow disableHoverListener={s.is_orphan}>
                         <span>
@@ -363,6 +394,8 @@ export default function SnapshotsTab({ connections, vmNamesByConn }: Props) {
                         <span>{s.cluster_name || connName(s.cluster_id)}</span>
                       </Box>
                     </TableCell>
+                    <TableCell><EngineGlyph engine={s.storage_engine} /></TableCell>
+                    <TableCell>{s.storage_engine === 'zfs' ? s.node : '—'}</TableCell>
                     <TableCell>{s.pool}</TableCell>
                     <TableCell>{s.image}</TableCell>
                     <TableCell>
@@ -371,6 +404,7 @@ export default function SnapshotsTab({ connections, vmNamesByConn }: Props) {
                     <TableCell sx={{ fontFamily: '"JetBrains Mono", monospace', fontSize: '0.75rem' }}>{s.snapshot}</TableCell>
                     <TableCell align='right'>{formatAge(s.created_ts)}</TableCell>
                     <TableCell align='right'>{formatBytes(s.provisioned_bytes)}</TableCell>
+                    <TableCell align='right'>{s.storage_engine === 'zfs' ? formatBytes(s.used_bytes) : '—'}</TableCell>
                     <TableCell>
                       {s.is_orphan ? (
                         <Chip label={t('siteRecovery.snapshots.orphan')} size='small' color='warning' sx={{ height: 20, fontSize: '0.65rem' }} />
@@ -429,6 +463,11 @@ export default function SnapshotsTab({ connections, vmNamesByConn }: Props) {
             </Box>
 
             <Stack spacing={1.25}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <EngineGlyph engine={detail.storage_engine} />
+                <Typography variant='body2'>{t(`siteRecovery.engine.${detail.storage_engine || 'rbd'}`)}</Typography>
+                {detail.storage_engine === 'zfs' && <Typography variant='body2'>{t('siteRecovery.snapshots.node')}: {detail.node}</Typography>}
+              </Box>
               <Box>
                 <Typography variant='caption' color='text.secondary'>{t('siteRecovery.snapshots.cluster')}</Typography>
                 <Typography variant='body2' fontWeight={600}>{detail.cluster_name || connName(detail.cluster_id)}</Typography>

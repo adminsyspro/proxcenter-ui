@@ -6,16 +6,17 @@ import { useTranslations } from 'next-intl'
 import {
   Alert, Box, Button, Card, CardContent, Chip, Dialog, DialogActions, DialogContent, DialogTitle,
   Divider, Drawer, IconButton,
-  InputAdornment, LinearProgress, MenuItem, Select, Stack, TextField, Tooltip, Typography,
+  InputAdornment, LinearProgress, MenuItem, Select, Stack, TablePagination, TextField, Tooltip, Typography,
   alpha, useTheme
 } from '@mui/material'
 
 import { AreaChart, Area, YAxis, Tooltip as RTooltip } from 'recharts'
 import ChartContainer from '@/components/ChartContainer'
 
+import EngineGlyph from './EngineGlyph'
 import EmptyState from '@/components/EmptyState'
 
-import type { ReplicationJob, ReplicationJobStatus, ReplicationJobLog } from '@/lib/orchestrator/site-recovery.types'
+import type { ReplicationJob, ReplicationJobStatus, ReplicationJobLog, StorageEngine } from '@/lib/orchestrator/site-recovery.types'
 import { scheduleToLabel } from './schedule/scheduleToLabel'
 import { copyToClipboard } from '@/lib/clipboard'
 
@@ -212,12 +213,10 @@ const JobCard = ({ job, onClick, onEdit, vmNameMap, throughputHistory, t }: { jo
     >
       <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 }, position: 'relative', zIndex: 1 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          {/* Ceph engine indicator */}
-          <Tooltip title='Ceph RBD' arrow>
-            <Box sx={{ display: 'inline-flex', flexShrink: 0, alignItems: 'center' }}>
-              <img src='/images/ceph-logo.svg' alt='Ceph' width={18} height={18} />
-            </Box>
-          </Tooltip>
+          <Box sx={{ position: 'relative', display: 'inline-flex', flexShrink: 0 }}>
+            <EngineGlyph engine={job.storage_engine} />
+            <Box component='span' sx={{ position: 'absolute', bottom: -1, right: -2, width: 7, height: 7, borderRadius: '50%', bgcolor: isError ? 'error.main' : isSyncing ? 'primary.main' : job.status === 'synced' ? 'success.main' : 'text.disabled', border: '1.5px solid', borderColor: 'background.paper' }} />
+          </Box>
 
           {/* Sync icon */}
           {isSyncing && (
@@ -232,7 +231,7 @@ const JobCard = ({ job, onClick, onEdit, vmNameMap, throughputHistory, t }: { jo
           )}
 
           {/* Name (if set) + VM names */}
-          <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Box sx={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 1 }}>
             {job.name && (
               <Typography variant='body2' sx={{
                 fontWeight: 700, display: 'flex', alignItems: 'center', gap: 0.5, lineHeight: 1.25,
@@ -340,6 +339,15 @@ const JobCard = ({ job, onClick, onEdit, vmNameMap, throughputHistory, t }: { jo
   )
 }
 
+// jobsByEngine splits the jobs of one cluster pair by storage engine, Ceph first,
+// so mixed pairs get one section per engine; a single-engine pair stays flat.
+export function jobsByEngine(jobs: ReplicationJob[]): Array<[StorageEngine, ReplicationJob[]]> {
+  const engines: StorageEngine[] = ['rbd', 'zfs']
+  return engines
+    .map(engine => [engine, jobs.filter(j => (j.storage_engine || 'rbd') === engine)] as [StorageEngine, ReplicationJob[]])
+    .filter(([, list]) => list.length > 0)
+}
+
 // ── Main Component ─────────────────────────────────────────────────────
 
 interface Connection {
@@ -370,6 +378,7 @@ export default function ProtectionTab({
 }: ProtectionTabProps) {
   const t = useTranslations()
   const [q, setQ] = useState('')
+  const [page, setPage] = useState(0)
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -476,10 +485,11 @@ export default function ProtectionTab({
     })
   }, [jobs, q, statusFilter, connName, vmNamesByConn])
 
+  const currentPage = Math.min(page, Math.max(0, Math.ceil(filtered.length / 25) - 1))
   const grouped = useMemo(() => {
     const map = new Map<string, ReplicationJob[]>()
 
-    for (const job of filtered) {
+    for (const job of filtered.slice(currentPage * 25, currentPage * 25 + 25)) {
       const key = `${job.source_cluster}::${job.target_cluster}`
 
       if (!map.has(key)) map.set(key, [])
@@ -487,7 +497,7 @@ export default function ProtectionTab({
     }
 
     return map
-  }, [filtered])
+  }, [filtered, currentPage])
 
   const selected = useMemo(() => (jobs || []).find(j => j.id === selectedJobId), [jobs, selectedJobId])
 
@@ -582,13 +592,13 @@ export default function ProtectionTab({
           <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
             <TextField
               value={q}
-              onChange={e => setQ(e.target.value)}
+              onChange={e => { setQ(e.target.value); setPage(0) }}
               placeholder={t('siteRecovery.protection.searchPlaceholder')}
               size='small'
               sx={{ flex: 1, minWidth: 200 }}
               InputProps={{ startAdornment: <InputAdornment position='start'><i className='ri-search-line' style={{ opacity: 0.5 }} /></InputAdornment> }}
             />
-            <Select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} size='small' sx={{ minWidth: 140 }}>
+            <Select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(0) }} size='small' sx={{ minWidth: 140 }}>
               <MenuItem value='all'>{t('siteRecovery.status.all')}</MenuItem>
               <MenuItem value='synced'>{t('siteRecovery.status.synced')}</MenuItem>
               <MenuItem value='syncing'>{t('siteRecovery.status.syncing')}</MenuItem>
@@ -629,17 +639,37 @@ export default function ProtectionTab({
                   </Typography>
                   <Chip size='small' label={`${groupJobs.length} job${groupJobs.length > 1 ? 's' : ''}`} variant='outlined' sx={{ height: 20, fontSize: '0.65rem' }} />
                 </Box>
-                {/* Group jobs */}
-                <Stack spacing={1}>
-                  {groupJobs.map(j => (
-                    <JobCard key={j.id} job={j} onClick={() => openJob(j.id)} onEdit={() => onEditJob(j.id)} vmNameMap={vmNamesByConn?.[j.source_cluster]} throughputHistory={throughputHistoryRef.current.get(j.id)} t={t} />
-                  ))}
-                </Stack>
+                {/* Group jobs, one section per storage engine when the pair mixes them */}
+                {(() => {
+                  const sections = jobsByEngine(groupJobs)
+                  return sections.map(([engine, list]) => (
+                    <Box key={engine} sx={{ mb: sections.length > 1 ? 1.5 : 0 }}>
+                      {sections.length > 1 && (
+                        <Divider textAlign='center' role='separator' aria-label={t(`siteRecovery.engine.${engine}`)} sx={{ mb: 1 }}>
+                          <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75 }}>
+                            <EngineGlyph engine={engine} size={14} />
+                            <Typography variant='caption' sx={{ fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.4 }}>
+                              {t(`siteRecovery.engine.${engine}`)}
+                            </Typography>
+                            <Chip size='small' label={list.length} variant='outlined' sx={{ height: 18, fontSize: '0.6rem' }} />
+                          </Box>
+                        </Divider>
+                      )}
+                      <Stack spacing={1}>
+                        {list.map(j => (
+                          <JobCard key={j.id} job={j} onClick={() => openJob(j.id)} onEdit={() => onEditJob(j.id)} vmNameMap={vmNamesByConn?.[j.source_cluster]} throughputHistory={throughputHistoryRef.current.get(j.id)} t={t} />
+                        ))}
+                      </Stack>
+                    </Box>
+                  ))
+                })()}
               </Box>
             )
           })}
         </Stack>
       )}
+
+      {filtered.length > 25 && <TablePagination component='div' count={filtered.length} page={currentPage} rowsPerPage={25} rowsPerPageOptions={[25]} onPageChange={(_, value) => setPage(value)} />}
 
       {/* Detail Drawer */}
       <Drawer anchor='right' open={drawerOpen} onClose={closeDrawer} PaperProps={{ sx: { width: { xs: '100%', sm: 450 } } }}>
@@ -649,11 +679,7 @@ export default function ProtectionTab({
           ) : (
             <>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2, gap: 1.5 }}>
-                <Tooltip title='Ceph RBD' arrow>
-                  <Box sx={{ display: 'inline-flex', flexShrink: 0, alignItems: 'center', mt: 0.5 }}>
-                    <img src='/images/ceph-logo.svg' alt='Ceph' width={24} height={24} />
-                  </Box>
-                </Tooltip>
+                <EngineGlyph engine={selected.storage_engine} size={24} />
                 <Box sx={{ minWidth: 0, flex: 1 }}>
                   <Typography variant='h6' sx={{ fontWeight: 700, mb: 0.25 }}>
                     {selected.name || jobLabel(selected, vmNamesByConn?.[selected.source_cluster])}
@@ -673,60 +699,47 @@ export default function ProtectionTab({
                 <IconButton onClick={closeDrawer} size='small'><i className='ri-close-line' /></IconButton>
               </Box>
 
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', mb: 1.5 }}>
-                <StatusChip status={selected.status} t={t} />
-              </Box>
-
-              {/* Actions: top placement for visibility, full-width equal split.
-                  The Tooltip wrappers are flex containers so the button inside
-                  stretches to the row height like its unwrapped siblings;
-                  "Sync Now" wrapping onto two lines otherwise left "Edit"
-                  visibly shorter than "Pause" and "Delete". */}
-              <Box sx={{ display: 'flex', gap: 1, mb: 2, '& > *': { flex: 1, minWidth: 0 } }}>
-                <Tooltip title={t('siteRecovery.jobs.failedOverTooltip')} disableHoverListener={selected.status !== 'failed_over'} arrow>
-                  <span style={{ display: 'flex' }}>
-                    <Button
-                      variant='contained' size='small' fullWidth
-                      startIcon={<i className='ri-refresh-line' />}
-                      onClick={() => onSyncJob(selected.id)}
-                      disabled={selected.status === 'failed_over'}
-                    >
-                      {t('siteRecovery.protection.syncNow')}
-                    </Button>
+              {/* Actions as icon buttons, the tooltip carries the label: four
+                  labelled buttons do not fit one row of a 450 px drawer
+                  ("Synchroniser" alone is wider than its quarter). A disabled
+                  button fires no events, hence the span under its Tooltip.
+                  The status chip closes the row on the right. */}
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                <Tooltip title={selected.status === 'failed_over' ? t('siteRecovery.jobs.failedOverTooltip') : t('siteRecovery.protection.syncNow')} arrow>
+                  <span>
+                    <IconButton color='primary' aria-label={t('siteRecovery.protection.syncNow')} onClick={() => onSyncJob(selected.id)} disabled={selected.status === 'failed_over'}>
+                      <i className='ri-refresh-line' />
+                    </IconButton>
                   </span>
                 </Tooltip>
                 {selected.status === 'failed_over' ? (
                   <Tooltip title={t('siteRecovery.jobs.failedOverTooltip')} arrow>
-                    <span style={{ display: 'flex' }}>
-                      <Button variant='outlined' size='small' fullWidth startIcon={<i className='ri-play-circle-line' />} disabled>
-                        {t('siteRecovery.protection.resume')}
-                      </Button>
+                    <span>
+                      <IconButton aria-label={t('siteRecovery.protection.resume')} disabled><i className='ri-play-circle-line' /></IconButton>
                     </span>
                   </Tooltip>
                 ) : selected.status === 'paused' ? (
-                  <Button variant='outlined' size='small' startIcon={<i className='ri-play-circle-line' />} onClick={() => onResumeJob(selected.id)}>
-                    {t('siteRecovery.protection.resume')}
-                  </Button>
+                  <Tooltip title={t('siteRecovery.protection.resume')} arrow>
+                    <IconButton aria-label={t('siteRecovery.protection.resume')} onClick={() => onResumeJob(selected.id)}><i className='ri-play-circle-line' /></IconButton>
+                  </Tooltip>
                 ) : (
-                  <Button variant='outlined' size='small' startIcon={<i className='ri-pause-line' />} onClick={() => onPauseJob(selected.id)}>
-                    {t('siteRecovery.protection.pause')}
-                  </Button>
+                  <Tooltip title={t('siteRecovery.protection.pause')} arrow>
+                    <IconButton aria-label={t('siteRecovery.protection.pause')} onClick={() => onPauseJob(selected.id)}><i className='ri-pause-line' /></IconButton>
+                  </Tooltip>
                 )}
-                <Tooltip title={t('siteRecovery.jobs.failedOverTooltip')} disableHoverListener={selected.status !== 'failed_over'} arrow>
-                  <span style={{ display: 'flex' }}>
-                    <Button
-                      variant='outlined' size='small' fullWidth
-                      startIcon={<i className='ri-edit-line' />}
-                      onClick={() => onEditJob(selected.id)}
-                      disabled={selected.status === 'failed_over'}
-                    >
-                      {t('common.edit')}
-                    </Button>
+                <Tooltip title={selected.status === 'failed_over' ? t('siteRecovery.jobs.failedOverTooltip') : t('common.edit')} arrow>
+                  <span>
+                    <IconButton aria-label={t('common.edit')} onClick={() => onEditJob(selected.id)} disabled={selected.status === 'failed_over'}>
+                      <i className='ri-edit-line' />
+                    </IconButton>
                   </span>
                 </Tooltip>
-                <Button variant='outlined' size='small' color='error' startIcon={<i className='ri-delete-bin-line' />} onClick={() => setConfirmDeleteJob(selected)}>
-                  {t('common.delete')}
-                </Button>
+                <Tooltip title={t('common.delete')} arrow>
+                  <IconButton color='error' aria-label={t('common.delete')} onClick={() => setConfirmDeleteJob(selected)}><i className='ri-delete-bin-line' /></IconButton>
+                </Tooltip>
+                <Box sx={{ ml: 'auto' }}>
+                  <StatusChip status={selected.status} t={t} />
+                </Box>
               </Box>
 
               {(selected.status === 'error' || selected.status === 'partial') && selected.error_message && (
@@ -735,10 +748,16 @@ export default function ProtectionTab({
 
               <Box sx={{ p: 2, borderRadius: 1, bgcolor: 'action.hover', mb: 2, textAlign: 'center' }}>
                 <Typography variant='caption' sx={{ color: 'text.secondary' }}>{t('siteRecovery.protection.source')}</Typography>
-                <Typography variant='body2' sx={{ fontWeight: 600, fontFamily: 'monospace', mb: 1 }}>{connName(selected.source_cluster)}</Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.75, mb: 1 }}>
+                  <EngineGlyph engine={selected.storage_engine} />
+                  <Typography variant='body2' sx={{ fontWeight: 600 }}>{connName(selected.source_cluster)}</Typography>
+                </Box>
                 <Box sx={{ color: 'text.disabled', my: 0.5 }}><i className='ri-arrow-down-line' /></Box>
                 <Typography variant='caption' sx={{ color: 'text.secondary' }}>{t('siteRecovery.protection.target')}</Typography>
-                <Typography variant='body2' sx={{ fontWeight: 600, fontFamily: 'monospace' }}>{connName(selected.target_cluster)} / {selected.target_pool}</Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.75 }}>
+                  <EngineGlyph engine={selected.storage_engine} />
+                  <Typography variant='body2' sx={{ fontWeight: 600 }}>{connName(selected.target_cluster)} / {selected.target_pool}{selected.storage_engine === 'zfs' && ` · ${selected.target_node || ''}`}</Typography>
+                </Box>
               </Box>
 
               <Box sx={{ flex: 1, overflow: 'auto' }}>

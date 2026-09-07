@@ -13,7 +13,7 @@ import { describe, expect, it, vi, afterEach } from 'vitest'
 import { cleanup, waitFor } from '@testing-library/react'
 
 import { renderWithProviders, screen, userEvent } from '@/__tests__/setup/renderWithProviders'
-import type { RecoveryExecution, RecoveryPlan } from '@/lib/orchestrator/site-recovery.types'
+import type { RecoveryExecution, RecoveryPlan, ReplicationJob } from '@/lib/orchestrator/site-recovery.types'
 
 import RecoveryPlansTab from './RecoveryPlansTab'
 
@@ -46,6 +46,7 @@ function Harness({
   onCleanupTest,
   onHistoryCleared,
   onFailback,
+  jobs = [],
 }: {
   plans: RecoveryPlan[]
   history?: RecoveryExecution[]
@@ -53,12 +54,14 @@ function Harness({
   onCleanupTest: (id: string) => void
   onHistoryCleared?: () => void
   onFailback?: (id: string) => void
+  jobs?: ReplicationJob[]
 }) {
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null)
 
   return (
     <RecoveryPlansTab
       plans={plans}
+      jobs={jobs}
       loading={false}
       history={history}
       historyLoading={false}
@@ -249,4 +252,16 @@ describe('RecoveryPlansTab — clear execution history', () => {
     )
     await waitFor(() => expect(onHistoryCleared).toHaveBeenCalled())
   })
+})
+
+it('shows the engine glyphs of the plan jobs on both ends of the route', () => {
+  const zfsJob = { id: 'job-1', storage_engine: 'zfs' } as ReplicationJob
+  renderWithProviders(<Harness plans={[plan()]} history={[]} jobs={[zfsJob]} onTestFailover={vi.fn()} onCleanupTest={vi.fn()} />)
+  expect(screen.getAllByRole('img', { name: 'ZFS' })).toHaveLength(2)
+  expect(screen.queryByRole('img', { name: 'Ceph RBD' })).not.toBeInTheDocument()
+})
+
+it('falls back to the Ceph glyph when the plan jobs are unknown', () => {
+  renderWithProviders(<Harness plans={[plan()]} history={[]} onTestFailover={vi.fn()} onCleanupTest={vi.fn()} />)
+  expect(screen.getAllByRole('img', { name: 'Ceph RBD' })).toHaveLength(2)
 })

@@ -2,11 +2,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup } from '@testing-library/react'
 
 import { renderWithProviders, screen } from '@/__tests__/setup/renderWithProviders'
-import type { ReplicationHealthStatus } from '@/lib/orchestrator/site-recovery.types'
+import type { ReplicationHealthStatus, ReplicationJob } from '@/lib/orchestrator/site-recovery.types'
 
 import DashboardTab from './DashboardTab'
 
-afterEach(cleanup)
+afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 
 function health(overrides: Partial<ReplicationHealthStatus> = {}): ReplicationHealthStatus {
   return {
@@ -129,4 +129,19 @@ describe('DashboardTab job status distribution', () => {
 
     expect(screen.getByText('No replication job configured')).toBeInTheDocument()
   })
+})
+
+it.each(['single', 'multiple', 'mixed'] as const)('renders engine glyphs and ZFS target nodes for %s replication pairs', mode => {
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('[]')))
+  const base = { id: 'j1', name: 'ZFS job', storage_engine: 'zfs', source_cluster: 'source-cluster', target_cluster: 'dr', target_pool: 'local-zfs', target_node: 'dr1', status: 'synced', vm_ids: [100], vm_names: ['web'], tags: [], rpo_target: 900, throughput_bps: 0, progress_percent: 0 }
+  const jobs = [base]
+  if (mode === 'multiple') jobs.push({ ...base, id: 'j2', target_cluster: 'dr2', target_node: 'dr2' })
+  if (mode === 'mixed') jobs.push({ ...base, id: 'j2', storage_engine: 'rbd', target_pool: 'rbd', target_node: '' })
+  const value = health()
+  value.sites.push({ ...value.sites[0], cluster_id: 'dr', name: 'DR', role: 'dr' })
+  renderWithProviders(<DashboardTab health={value} loading={false} jobs={jobs as ReplicationJob[]} connections={[]} onSyncJob={vi.fn()} />)
+  expect(screen.getAllByRole('img', { name: 'ZFS' }).length).toBeGreaterThanOrEqual(2)
+  expect(screen.getByText(/local-zfs · dr1/)).toBeInTheDocument()
+  if (mode === 'mixed') expect(screen.getAllByRole('img', { name: 'Ceph RBD' }).length).toBeGreaterThanOrEqual(2)
+  else expect(screen.queryByRole('img', { name: 'Ceph RBD' })).not.toBeInTheDocument()
 })

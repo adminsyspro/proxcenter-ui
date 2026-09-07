@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { Fragment, useMemo, useState } from 'react'
 import { useTranslations } from 'next-intl'
 
 import {
@@ -13,7 +13,8 @@ import EmptyState from '@/components/EmptyState'
 
 import ExecutionScreenshots from './ExecutionScreenshots'
 
-import type { RecoveryPlan, RecoveryExecution, RecoveryPlanStatus } from '@/lib/orchestrator/site-recovery.types'
+import EngineGlyph from './EngineGlyph'
+import type { RecoveryPlan, RecoveryExecution, RecoveryPlanStatus, ReplicationJob, StorageEngine } from '@/lib/orchestrator/site-recovery.types'
 
 // ── Helpers ────────────────────────────────────────────────────────────
 
@@ -42,6 +43,24 @@ const PlanStatusBadge = ({ status, t }: { status: RecoveryPlanStatus; t: any }) 
   return <Chip size='small' label={label} color={c.color} />
 }
 
+// planEngines lists the storage engines behind a plan, Ceph first, from the jobs
+// its VMs reference; a plan whose jobs are unknown is shown as Ceph, the legacy default.
+export function planEngines(plan: RecoveryPlan, jobs: ReplicationJob[] = []): StorageEngine[] {
+  const byId = new Map(jobs.map(job => [job.id, job.storage_engine || 'rbd'] as const))
+  const engines = new Set<StorageEngine>(plan.vms.map(vm => byId.get(vm.replication_job_id) || 'rbd'))
+  return (['rbd', 'zfs'] as StorageEngine[]).filter(engine => engines.has(engine))
+}
+
+// PlanEngineGlyphs draws the glyph(s) of the engines behind a plan, on each end of its route.
+const PlanEngineGlyphs = ({ engines, size = 14 }: { engines: StorageEngine[]; size?: number }) => (
+  <Box sx={{ display: 'inline-flex', gap: 0.5, flexShrink: 0 }}>
+    {engines.map(engine => <EngineGlyph key={engine} engine={engine} size={size} />)}
+  </Box>
+)
+
+// PlanIcon opens a row with the same pictogram as the Recovery Plans tab; the status has its own chip.
+const PlanIcon = () => <i className='ri-file-shield-2-line' style={{ fontSize: 18, opacity: 0.8, flexShrink: 0 }} />
+
 const TierSummary = ({ vms, t }: { vms: RecoveryPlan['vms']; t: any }) => {
   const tiers = [1, 2, 3] as const
   const counts = tiers.map(tier => vms.filter(v => v.tier === tier).length)
@@ -64,7 +83,15 @@ const TierSummary = ({ vms, t }: { vms: RecoveryPlan['vms']; t: any }) => {
   )
 }
 
-const PlanRow = ({ plan, onClick, t, connName }: { plan: RecoveryPlan; onClick: () => void; t: any; connName: (id: string) => string }) => {
+// The list is one CSS grid: the header and every row are subgrids of it, so
+// a column is as wide as its widest cell across ALL rows and the cells line
+// up whatever a single row carries (the "cleanup pending" chip used to push
+// the source and destination of its own row to the left). Columns: pictogram,
+// name, source and destination, tiers, last test, active-test chip, status.
+const planGridColumns = 'auto minmax(0, 3fr) minmax(0, 3fr) auto minmax(90px, auto) auto auto'
+const planGridRow = { display: 'grid', gridColumn: '1 / -1', gridTemplateColumns: 'subgrid', alignItems: 'center' } as const
+
+const PlanRow = ({ plan, engines, onClick, t, connName }: { plan: RecoveryPlan; engines: StorageEngine[]; onClick: () => void; t: any; connName: (id: string) => string }) => {
   const daysSinceTest = daysSince(plan.last_test)
   const testWarning = daysSinceTest === null || daysSinceTest > 30
 
@@ -72,33 +99,38 @@ const PlanRow = ({ plan, onClick, t, connName }: { plan: RecoveryPlan; onClick: 
     <Box
       onClick={onClick}
       sx={{
-        display: 'flex', alignItems: 'center', gap: 2, px: 2, py: 1.25,
+        ...planGridRow, px: 2, py: 1.25,
         cursor: 'pointer', transition: 'all 0.15s ease', borderRadius: 1,
         '&:hover': { bgcolor: 'action.hover' }
       }}
     >
+      {/* Plan pictogram, same as the tab */}
+      <PlanIcon />
+
       {/* Name + description */}
-      <Box sx={{ flex: '1 1 30%', minWidth: 0 }}>
+      <Box sx={{ minWidth: 0 }}>
         <Typography variant='body2' sx={{ fontWeight: 600, lineHeight: 1.3 }} noWrap>{plan.name}</Typography>
         {plan.description && (
           <Typography variant='caption' sx={{ color: 'text.secondary', lineHeight: 1.2 }} noWrap>{plan.description}</Typography>
         )}
       </Box>
 
-      {/* Source → Destination */}
-      <Box sx={{ flex: '1 1 30%', minWidth: 0 }}>
-        <Typography variant='caption' sx={{ color: 'text.secondary' }} noWrap>
-          {connName(plan.source_cluster)} → {connName(plan.target_cluster)}
-        </Typography>
+      {/* Source → Destination, each end carrying the engine glyph(s) */}
+      <Box sx={{ minWidth: 0, display: 'flex', alignItems: 'center', gap: 0.75, whiteSpace: 'nowrap' }}>
+        <PlanEngineGlyphs engines={engines} />
+        <Typography variant='caption' sx={{ color: 'text.secondary' }} noWrap>{connName(plan.source_cluster)}</Typography>
+        <Typography variant='caption' sx={{ color: 'text.disabled' }}>→</Typography>
+        <PlanEngineGlyphs engines={engines} />
+        <Typography variant='caption' sx={{ color: 'text.secondary' }} noWrap>{connName(plan.target_cluster)}</Typography>
       </Box>
 
       {/* Tier summary */}
-      <Box sx={{ flex: '0 0 auto' }}>
+      <Box>
         <TierSummary vms={plan.vms} t={t} />
       </Box>
 
       {/* Last test */}
-      <Box sx={{ flex: '0 0 auto', textAlign: 'right', minWidth: 90 }}>
+      <Box sx={{ textAlign: 'right' }}>
         <Typography variant='caption' sx={{
           color: testWarning ? 'warning.main' : 'text.secondary',
           fontWeight: testWarning ? 600 : 400,
@@ -116,10 +148,11 @@ const PlanRow = ({ plan, onClick, t, connName }: { plan: RecoveryPlan; onClick: 
       </Box>
 
       {/* Active test: while the plan is executing the test is still running;
-          once it finishes, active_test_execution_id alone means cleanup is due */}
-      {plan.active_test_execution_id && (
-        <Box sx={{ flex: '0 0 auto' }}>
-          {plan.status === 'executing' ? (
+          once it finishes, active_test_execution_id alone means cleanup is due.
+          The cell is always there so the status column stays put. */}
+      <Box>
+        {plan.active_test_execution_id && (
+          plan.status === 'executing' ? (
             <Chip size='small' color='info' variant='outlined'
               icon={<i className='ri-test-tube-line' />}
               label={t('siteRecovery.plans.testRunning')}
@@ -129,12 +162,12 @@ const PlanRow = ({ plan, onClick, t, connName }: { plan: RecoveryPlan; onClick: 
               icon={<i className='ri-eraser-line' />}
               label={t('siteRecovery.plans.cleanupPending')}
               sx={{ height: 22, fontSize: '0.65rem' }} />
-          )}
-        </Box>
-      )}
+          )
+        )}
+      </Box>
 
       {/* Status */}
-      <Box sx={{ flex: '0 0 auto' }}>
+      <Box>
         <PlanStatusBadge status={plan.status} t={t} />
       </Box>
     </Box>
@@ -157,13 +190,14 @@ interface RecoveryPlansTabProps {
   onCleanupTest: (id: string) => void
   onHistoryCleared?: () => void
   connections?: Array<{ id: string; name: string }>
+  jobs?: ReplicationJob[]
 }
 
 export default function RecoveryPlansTab({
   plans, loading, history, historyLoading,
   selectedPlanId, onSelectPlan,
   onTestFailover, onFailover, onFailback, onDeletePlan, onCleanupTest, onHistoryCleared,
-  connections
+  connections, jobs = []
 }: RecoveryPlansTabProps) {
   const t = useTranslations()
   const theme = useTheme()
@@ -231,31 +265,33 @@ export default function RecoveryPlansTab({
           size='large'
         />
       ) : (
-        <Card variant='outlined' sx={{ borderRadius: 2 }}>
-          {/* Header */}
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, px: 2, py: 1, borderBottom: '1px solid', borderColor: 'divider' }}>
-            <Typography variant='caption' sx={{ flex: '1 1 30%', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase', fontSize: '0.65rem' }}>
+        <Card variant='outlined' sx={{ borderRadius: 2, display: 'grid', gridTemplateColumns: planGridColumns, columnGap: 2 }}>
+          {/* Header: one cell per column, the pictogram and chip cells stay empty */}
+          <Box sx={{ ...planGridRow, px: 2, py: 1, borderBottom: '1px solid', borderColor: 'divider' }}>
+            <Box />
+            <Typography variant='caption' sx={{ fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase', fontSize: '0.65rem' }}>
               {t('siteRecovery.plans.planName')}
             </Typography>
-            <Typography variant='caption' sx={{ flex: '1 1 30%', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase', fontSize: '0.65rem' }}>
+            <Typography variant='caption' sx={{ fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase', fontSize: '0.65rem' }}>
               {t('siteRecovery.plans.sourceDestination')}
             </Typography>
-            <Typography variant='caption' sx={{ flex: '0 0 auto', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase', fontSize: '0.65rem' }}>
+            <Typography variant='caption' sx={{ fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase', fontSize: '0.65rem' }}>
               VMs
             </Typography>
-            <Typography variant='caption' sx={{ flex: '0 0 auto', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase', fontSize: '0.65rem', minWidth: 90, textAlign: 'right' }}>
+            <Typography variant='caption' sx={{ fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase', fontSize: '0.65rem', textAlign: 'right' }}>
               {t('siteRecovery.plans.lastTest')}
             </Typography>
-            <Typography variant='caption' sx={{ flex: '0 0 auto', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase', fontSize: '0.65rem' }}>
+            <Box />
+            <Typography variant='caption' sx={{ fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase', fontSize: '0.65rem' }}>
               {t('common.status')}
             </Typography>
           </Box>
           {/* Rows */}
           {(plans || []).map((p, i) => (
-            <Box key={p.id}>
-              {i > 0 && <Divider />}
-              <PlanRow plan={p} onClick={() => openPlan(p.id)} t={t} connName={connName} />
-            </Box>
+            <Fragment key={p.id}>
+              {i > 0 && <Divider sx={{ gridColumn: '1 / -1' }} />}
+              <PlanRow plan={p} engines={planEngines(p, jobs)} onClick={() => openPlan(p.id)} t={t} connName={connName} />
+            </Fragment>
           ))}
         </Card>
       )}
@@ -279,9 +315,12 @@ export default function RecoveryPlansTab({
 
               <PlanStatusBadge status={selected.status} t={t} />
 
-              <Typography variant='caption' sx={{ color: 'text.secondary', mt: 1, display: 'block' }}>
-                {connName(selected.source_cluster)} → {connName(selected.target_cluster)}
-              </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mt: 1 }}>
+                <PlanEngineGlyphs engines={planEngines(selected, jobs)} />
+                <Typography variant='caption' sx={{ color: 'text.secondary' }}>
+                  {connName(selected.source_cluster)} → {connName(selected.target_cluster)}
+                </Typography>
+              </Box>
 
               <Box sx={{ flex: 1, overflow: 'auto', mt: 2 }}>
                 {/* VMs grouped by tier */}

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 
+import { replicationErrorResponse } from '@/lib/orchestrator/replicationError'
 import { getOrchestratorClient } from "@/lib/orchestrator/client"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { getTenantConnectionIds } from "@/lib/tenant"
@@ -31,14 +32,7 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
     const response = await client.resumeReplicationJob(id)
 
     return NextResponse.json(response.data)
-  } catch (e: any) {
-    if ((e as any)?.code !== 'ORCHESTRATOR_UNAVAILABLE') {
-      console.error("Error resuming replication job:", e)
-    }
-
-    return NextResponse.json(
-      { error: e?.message || "Failed to resume replication job" },
-      { status: 500 }
-    )
+  } catch (error) {
+    return replicationErrorResponse(error, 'Failed to resume replication job')
   }
 }

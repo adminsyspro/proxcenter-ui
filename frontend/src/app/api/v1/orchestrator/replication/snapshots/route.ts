@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 
+import type { SnapshotIdentity } from '@/lib/orchestrator/site-recovery.types'
 import { getOrchestratorClient } from "@/lib/orchestrator/client"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { getTenantConnectionIds } from "@/lib/tenant"
@@ -48,9 +49,13 @@ export async function POST(request: NextRequest) {
     if (denied) return denied
 
     const body = await request.json()
-    const items = Array.isArray(body?.items) ? body.items : []
+    const items: SnapshotIdentity[] = Array.isArray(body?.items) ? body.items : []
     if (items.length === 0) {
       return NextResponse.json({ error: 'items is required' }, { status: 400 })
+    }
+
+    if (items.some(item => item.storage_engine === 'zfs' && !item.node)) {
+      return NextResponse.json({ error: 'ZFS snapshot node is required' }, { status: 400 })
     }
 
     // Tenant-scope filter: drop items whose cluster is not owned by the current tenant

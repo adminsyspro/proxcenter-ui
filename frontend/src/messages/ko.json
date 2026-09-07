@@ -4131,11 +4131,11 @@
   },
   "siteRecovery": {
     "title": "사이트 복구",
-    "subtitle": "Ceph RBD 클러스터 간 복제 및 재해 복구",
-    "noCeph": "감지된 Ceph 클러스터 없음",
-    "noCephDesc": "사이트 복구는 클러스터 간 데이터 복제를 위해 Ceph가 활성화된 PVE 연결이 최소 2개 필요합니다. 시작하려면 설정 > 연결에서 연결에 Ceph를 활성화하세요.",
-    "oneCeph": "Ceph 클러스터가 하나만 감지됨",
-    "oneCephDesc": "사이트 복구는 클러스터 간 데이터 복제를 위해 Ceph가 활성화된 PVE 연결이 최소 2개 필요합니다. 시작하려면 두 번째 연결을 추가하고 Ceph를 구성하세요.",
+    "subtitle": "Ceph RBD 및 ZFS 클러스터 간 복제와 재해 복구",
+    "noCeph": "복제 스토리지를 찾을 수 없음",
+    "noCephDesc": "복제 작업을 만들려면 두 Proxmox 연결에 Ceph RBD 또는 ZFS 스토리지를 구성하세요.",
+    "oneCeph": "공통 복제 엔진 없음",
+    "oneCephDesc": "최소 두 연결이 오케스트레이터에서 지원하는 복제 엔진을 공유해야 합니다.",
     "noCephFeatureReplication": "클러스터 간 복제",
     "noCephFeatureRecovery": "복구 계획",
     "noCephFeatureEmergency": "긴급 DR",
@@ -4152,9 +4152,13 @@
       "title": "사전 점검",
       "blocked": "필수 점검에 실패했습니다. 작업을 생성하기 전에 위의 문제를 해결하세요.",
       "checks": {
-        "source_health": "소스 Ceph 상태",
-        "target_health": "대상 Ceph 상태",
-        "target_space": "대상 풀 용량"
+        "target_vmids": "대상 VMID 사용 가능 여부",
+        "target_qemu": "대상 qemu-server 버전",
+        "source_health": "소스 스토리지 상태",
+        "target_health": "대상 스토리지 상태",
+        "target_space": "대상 풀 용량",
+        "target_storage": "대상 스토리지 가용성",
+        "reverse_ssh": "장애 복귀를 위한 역방향 SSH"
       }
     },
     "bandwidth": {
@@ -4172,7 +4176,7 @@
       "title": "스냅샷",
       "totalSnaps": "총 스냅샷",
       "orphans": "고아 스냅샷",
-      "clusters": "Ceph 클러스터",
+      "clusters": "클러스터",
       "searchPlaceholder": "클러스터, 풀, 이미지, 스냅샷, VMID, VM 이름 검색…",
       "allClusters": "모든 클러스터",
       "allStatuses": "모든 상태",
@@ -4197,7 +4201,7 @@
       "cannotDeleteActive": "삭제할 수 없음: 스냅샷이 활성 복제 작업에서 사용 중입니다",
       "viewDetails": "상세 보기",
       "none": "미러 스냅샷 없음",
-      "noneDesc": "Ceph 클러스터에서 mirror-* 스냅샷을 찾을 수 없습니다.",
+      "noneDesc": "복제를 실행하면 여기에 미러 스냅샷이 표시됩니다.",
       "noneMatchingDesc": "현재 필터와 일치하는 스냅샷이 없습니다.",
       "created": "생성됨",
       "computing": "계산 중…",
@@ -4205,7 +4209,10 @@
       "confirmDeleteDesc": "미러 스냅샷 {count}개를 삭제하려고 합니다. 이 작업은 되돌릴 수 없습니다.",
       "confirmDeleteActiveWarn": "선택한 스냅샷 중 일부는 활성 복제 작업에 속합니다. 삭제하면 다음 실행 시 전체 재동기화가 강제로 수행됩니다.",
       "deletingItem": "{name} 삭제 중…",
-      "andMore": "{count}개 더"
+      "andMore": "{count}개 더",
+      "engine": "엔진",
+      "node": "노드",
+      "partialInventory": "일부 클러스터 또는 노드의 인벤토리를 가져올 수 없어 해당 스냅샷이 표시되지 않습니다."
     },
     "status": {
       "all": "모든 상태",
@@ -4261,9 +4268,9 @@
       "recentActivity": "최근 활동",
       "events": "이벤트",
       "noRecentActivity": "최근 활동 없음",
-      "noSitesConfigured": "구성된 복제 사이트가 없습니다. 시작하려면 Ceph가 있는 클러스터 연결을 추가하세요.",
+      "noSitesConfigured": "구성된 복구 사이트 없음",
       "noSitesTitle": "구성된 복제 작업 없음",
-      "noSitesDesc": "사이트 복구는 Ceph가 있는 두 Proxmox 클러스터 간에 최소 하나의 복제 작업이 필요합니다. 재해 복구, 페일오버 계획 및 사이트 간 보호를 활성화하려면 복제 작업을 구성하세요.",
+      "noSitesDesc": "복제를 시작하려면 Proxmox 사이트에 Ceph RBD 또는 ZFS 스토리지를 구성하세요.",
       "bandwidthOverTime": "복제 대역폭",
       "noBandwidthData": "아직 대역폭 데이터가 없습니다. 처리량 지표 수집을 시작하려면 동기화를 실행하세요."
     },
@@ -4279,7 +4286,7 @@
       "bandwidthHistoryEmpty": "아직 샘플이 없습니다. 작업이 동기화되면서 차트가 채워집니다.",
       "deleteConfirmTitle": "복제 작업 삭제",
       "deleteConfirmDesc": "복제 작업과 해당 로컬 기록이 제거됩니다. VM과 디스크는 건드리지 않습니다.",
-      "deleteOrphansNote": "소스와 대상의 mirror-* RBD 스냅샷은 자동으로 제거되지 않습니다. 삭제 후 스냅샷 탭을 열어 남은 고아 스냅샷을 검토하고 정리하세요.",
+      "deleteOrphansNote": "스토리지에 미러 스냅샷이 남아 있을 수 있습니다. 스냅샷 탭에서 고아 스냅샷을 확인하세요.",
       "source": "소스",
       "target": "대상",
       "schedule": "스케줄",
@@ -4288,13 +4295,15 @@
       "throughput": "처리량",
       "bandwidth": "대역폭",
       "actions": "작업",
+      "deleteJobInUse": "이 작업은 복구 계획 {plans}의 VM을 보호합니다. 작업을 삭제하기 전에 계획에서 해당 VM을 제거하거나 계획을 삭제하세요.",
+      "deleteJobRunning": "이 작업의 동기화가 진행 중입니다. 완료된 후 다시 시도하세요.",
       "syncNow": "지금 동기화",
       "resume": "재개",
       "pause": "일시 중지",
       "recentLogs": "최근 로그",
       "searchPlaceholder": "VM 검색...",
       "noJobs": "구성된 복제 작업 없음",
-      "noJobsDesc": "Ceph RBD 미러링으로 VM 보호를 시작하려면 복제 작업을 생성하세요.",
+      "noJobsDesc": "Ceph RBD 또는 ZFS로 사이트 간에 VM을 복제하는 작업을 만드세요.",
       "noJobFound": "작업을 찾을 수 없음",
       "noJobFoundDesc": "필터를 수정하거나 새 복제 작업을 생성하세요.",
       "selectJob": "상세 정보를 보려면 작업을 선택하세요."
@@ -4330,7 +4339,8 @@
       "failedOverTooltip": "플랜이 페일오버되었습니다 — 페일백만 가능합니다.",
       "statusFailingBack": "페일백 진행 중",
       "openFailback": "페일백 열기",
-      "failingBackTooltip": "플랜을 삭제하기 전에 페일백을 취소하세요."
+      "failingBackTooltip": "플랜을 삭제하기 전에 페일백을 취소하세요.",
+      "jobColumn": "복제 작업"
     },
     "rpoTargetLabel": "RPO 목표",
     "createJob": {
@@ -4373,7 +4383,7 @@
       "snapshotRetentionHelp": "각 동기화 후 디스크별로 보관되는 미러 스냅샷 수입니다 (최소 2개).",
       "retentionSource": "소스에 보관",
       "retentionTarget": "대상(DR)에 보관",
-      "retentionTargetHelp": "DR 측에 스냅샷이 많을수록 복원 지점이 늘어나지만 Ceph 용량을 더 사용합니다.",
+      "retentionTargetHelp": "DR 측에 스냅샷이 많을수록 복원 지점이 늘어나지만 스토리지 용량을 더 사용합니다.",
       "vmidPrefix": "VMID 접두사",
       "vmidPrefixHelp": "대상 클러스터의 VM ID에 추가되는 접두사입니다 (예: 접두사 9 + VM 100 = 9100). 동일한 VMID를 유지하려면 비워 두거나 0을 입력하세요.",
       "engine": "복제 엔진",
@@ -4383,7 +4393,15 @@
       "pvNote": "복제 진행률을 표시하려면 소스 및 대상 노드에 <pv>pv</pv> 패키지를 설치하세요.",
       "pvInstallLabel": "소스 노드에 <pv>pv</pv> 자동 설치",
       "pvInstallDesc": "복제 진행률 추적에 필요합니다. SSH를 통해 apt-get install pv를 실행합니다.",
-      "retentionCoverage": "{cadence}마다 복제되며, 이 복원 지점들은 {window}를 포함합니다"
+      "retentionCoverage": "{cadence}마다 복제되며, 이 복원 지점들은 {window}를 포함합니다",
+      "targetStorage": "대상 스토리지",
+      "selectStorage": "스토리지 및 노드 선택",
+      "targetNode": "대상 노드",
+      "zfsNodeHint": "ZFS는 노드 로컬 스토리지입니다. 복제본은 이 노드에 저장되며 DR VM도 이 노드에서 시작됩니다.",
+      "vmMixedStorage": "이 VM에는 ZFS 외부의 디스크가 있어 ZFS로 복제할 수 없습니다.",
+      "vmMixedStorageWarn": "Ceph RBD 디스크만 복제되며 다른 디스크는 건너뜁니다.",
+      "vmUnsupportedDisk": "이 VM에는 패스스루 디스크와 같이 지원되지 않는 디스크 참조가 있습니다.",
+      "sshChecks": "노드 간 SSH 연결"
     },
     "schedule": {
       "modeRpo": "연속 (RPO)",
@@ -4489,7 +4507,9 @@
       },
       "completeTitle": "페일오버 완료",
       "completeVMs": "VM이 DR 사이트에서 실행 중",
-      "completeLocked": "복제가 잠기고 플랜이 페일오버되었습니다 — 페일백으로 복구합니다."
+      "completeLocked": "복제가 잠기고 플랜이 페일오버되었습니다 — 페일백으로 복구합니다.",
+      "clonesDestroyed": "클론 삭제 및 구성 복원 완료",
+      "testActiveConflict": "테스트 장애 조치가 활성 상태입니다. 이 작업을 시작하기 전에 정리를 실행하세요."
     },
     "failback": {
       "phase1Title": "역방향 복제 진행 중",
@@ -4582,7 +4602,13 @@
       "cephRamWarning": "{node}의 RAM이 {pct}%입니다. Ceph OSD는 메모리 여유 공간이 필요하며 OSD 크래시 위험이 있습니다",
       "cephDangerZone": "Ceph 위험",
       "penalty": "패널티"
-    }
+    },
+    "engine": {
+      "rbd": "Ceph RBD",
+      "zfs": "ZFS"
+    },
+    "discoveryError": "연결의 스토리지 검색에 실패했습니다. 기존 복구 작업은 계속 사용할 수 있습니다.",
+    "discoveryLoading": "복제 스토리지 검색 중…"
   },
   "templates": {
     "title": "템플릿",

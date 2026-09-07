@@ -16,7 +16,10 @@ vi.mock('@/lib/tenant', () => ({
   getTenantConnectionIds: () => getTenantConnectionIdsMock(),
 }))
 
-vi.mock('@/lib/orchestrator/client', () => ({
+// Partial mock: the tenant-scope check also uses parseOrchestratorError from
+// this module to turn a vanished execution into a 404.
+vi.mock('@/lib/orchestrator/client', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/orchestrator/client')>()),
   getOrchestratorClient: () => ({
     getExecution: (...args: unknown[]) => getExecutionMock(...args),
     getRecoveryPlan: (...args: unknown[]) => getRecoveryPlanMock(...args),

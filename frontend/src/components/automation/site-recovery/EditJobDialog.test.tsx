@@ -22,6 +22,7 @@ afterEach(cleanup)
 
 function job(overrides: Partial<ReplicationJob> = {}): ReplicationJob {
   return {
+    storage_engine: 'rbd',
     id: 'job-1',
     name: 'nightly',
     vm_ids: [100],
@@ -128,4 +129,17 @@ describe('EditJobDialog snapshot retention (issue #664)', () => {
       snapshot_keep_target: 20,
     }))
   })
+})
+
+it('shows engine, storage and node as immutable information and excludes them from updates', async () => {
+  const { onSubmit } = renderDialog({ storage_engine: 'zfs', target_pool: 'local-zfs', target_node: 'dr1' })
+  expect(screen.getByRole('img', { name: 'ZFS' })).toBeInTheDocument()
+  expect(screen.getByText('local-zfs')).toBeInTheDocument()
+  expect(screen.getByText(/dr1/)).toBeInTheDocument()
+  expect(screen.queryByRole('combobox', { name: 'Target storage' })).not.toBeInTheDocument()
+  await userEvent.click(save())
+  const update = onSubmit.mock.calls[0][1]
+  expect(update).not.toHaveProperty('storage_engine')
+  expect(update).not.toHaveProperty('target_pool')
+  expect(update).not.toHaveProperty('target_node')
 })

@@ -21,6 +21,7 @@ afterEach(cleanup)
 
 function job(overrides: Partial<ReplicationJob> = {}): ReplicationJob {
   return {
+    storage_engine: 'rbd',
     id: 'job-1',
     name: '',
     vm_ids: [100],
@@ -191,6 +192,7 @@ describe('ProtectionTab: partially synced status', () => {
   })
 
   it('shows the failure summary as a warning in the drawer of a partial job', async () => {
+    stubThroughputFetch()
     renderTab([job({ status: 'partial', error_message: '1 of 6 VMs failed: VM 279: failed to create snapshot' })])
 
     await openDrawer('100 - web-01')
@@ -198,4 +200,47 @@ describe('ProtectionTab: partially synced status', () => {
     const alert = await screen.findByText('1 of 6 VMs failed: VM 279: failed to create snapshot')
     expect(alert.closest('.MuiAlert-root')).toHaveClass('MuiAlert-colorWarning')
   })
+})
+
+it('shows ZFS glyphs and target node in the job row and detail drawer without a repeating tooltip', async () => {
+  stubThroughputFetch()
+  renderTab([job({ storage_engine: 'zfs', target_pool: 'local-zfs', target_node: 'dr1' })])
+  expect(screen.getByRole('img', { name: 'ZFS' })).toBeInTheDocument()
+  expect(screen.queryByText('local-zfs · dr1')).not.toBeInTheDocument()
+  await openDrawer('100 - web-01')
+  // Drawer header, then the source and target of its route block; the open
+  // drawer hides the list behind it from assistive technology.
+  expect(screen.getAllByRole('img', { name: 'ZFS' })).toHaveLength(3)
+  expect(screen.getByText('dst / local-zfs · dr1')).toBeInTheDocument()
+  expect(screen.queryByRole('tooltip', { name: 'ZFS' })).not.toBeInTheDocument()
+})
+
+it('uses the Ceph glyph for a legacy job without an engine field', () => {
+  renderTab([job({ storage_engine: undefined })])
+  expect(screen.getByRole('img', { name: 'Ceph RBD' })).toHaveAttribute('src', '/images/ceph-logo.svg')
+})
+
+it('paginates long job lists', async () => {
+  renderTab(Array.from({ length: 26 }, (_, index) => job({ id: `job-${index}`, name: `Protection ${index}` })))
+  expect(screen.getByText('Protection 0')).toBeInTheDocument()
+  expect(screen.queryByText('Protection 25')).not.toBeInTheDocument()
+  await userEvent.click(screen.getByRole('button', { name: 'Go to next page' }))
+  expect(screen.getByText('Protection 25')).toBeInTheDocument()
+  expect(screen.queryByText('Protection 0')).not.toBeInTheDocument()
+})
+
+it('separates Ceph and ZFS jobs of the same cluster pair with one labelled section per engine', () => {
+  renderTab([
+    job({ id: 'zfs-1', vm_ids: [102], vm_names: ['win'], storage_engine: 'zfs', target_pool: 'ZFS-Pool', target_node: 'pve2-dr' }),
+    job({ id: 'rbd-1', storage_engine: 'rbd' }),
+  ])
+  const separators = screen.getAllByRole('separator')
+  expect(separators.map(s => s.getAttribute('aria-label'))).toEqual(['Ceph RBD', 'ZFS'])
+  const rows = screen.getAllByText(/100 - web-01|102 - win/)
+  expect(rows.map(r => r.textContent)).toEqual(['100 - web-01', '102 - win'])
+})
+
+it('shows no engine section when a cluster pair holds a single engine', () => {
+  renderTab([job({ id: 'a' }), job({ id: 'b', vm_ids: [101], vm_names: ['db'] })])
+  expect(screen.queryByRole('separator')).not.toBeInTheDocument()
 })

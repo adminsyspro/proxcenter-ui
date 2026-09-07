@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 
-import { getOrchestratorClient } from "@/lib/orchestrator/client"
+import { getOrchestratorClient, parseOrchestratorError } from "@/lib/orchestrator/client"
 import { getTenantConnectionIds } from "@/lib/tenant"
 
 /**
@@ -13,8 +13,17 @@ import { getTenantConnectionIds } from "@/lib/tenant"
  */
 export async function checkExecutionTenantScope(executionId: string): Promise<{ denied: NextResponse | null; execution: any }> {
   const client = getOrchestratorClient()
-  const response = await client.getExecution(executionId)
-  const execution = response.data
+  let execution: any
+  try {
+    execution = (await client.getExecution(executionId)).data
+  } catch (e) {
+    // An execution that no longer exists (its plan was deleted) is a 404 for
+    // the caller too, not an orchestrator failure to log and retry.
+    if (parseOrchestratorError(e)?.status === 404) {
+      return { denied: NextResponse.json({ error: "Not found" }, { status: 404 }), execution: null }
+    }
+    throw e
+  }
   const tenantConnectionIds = await getTenantConnectionIds()
 
   if (execution?.plan_id) {

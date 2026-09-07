@@ -42,6 +42,7 @@ interface FailoverDialogProps {
   cleanupResult?: { vms_stopped: number; disks_rolled: number; jobs_resumed: number; errors: string[] } | null
   execution: RecoveryExecution | null
   errorMessage?: string | null
+  errorStatus?: number | null
   targetConnId?: string
   connections?: { id: string; name: string }[]
   vmNameMap?: Record<number, string>
@@ -52,12 +53,17 @@ interface FailoverDialogProps {
   onFailbackCancel?: (planId: string) => void
 }
 
-export default function FailoverDialog({ open, onClose, plan, type, onConfirm, onCleanup, cleanupLoading, cleanupResult, execution, errorMessage, targetConnId, connections, vmNameMap, restorePoints, restorePointsLoading, restorePointsError, onFailbackCutover, onFailbackCancel }: FailoverDialogProps) {
+export default function FailoverDialog({ open, onClose, plan, type, onConfirm, onCleanup, cleanupLoading, cleanupResult, execution, errorMessage, errorStatus, targetConnId, connections, vmNameMap, restorePoints, restorePointsLoading, restorePointsError, onFailbackCutover, onFailbackCancel }: FailoverDialogProps) {
   const t = useTranslations()
   const [confirmText, setConfirmText] = useState('')
   const [selectedPoints, setSelectedPoints] = useState<Record<number, string>>({})
-  const screenshots = useExecutionScreenshots(execution && type === 'test' ? execution.id : null)
+  // Only while the dialog is open: the component stays mounted when closed and
+  // the page keeps the last execution around, so an unconditional key kept
+  // polling the screenshots of a test that could already be deleted.
+  const screenshots = useExecutionScreenshots(open && execution && type === 'test' ? execution.id : null)
   const [screenshotPreview, setScreenshotPreview] = useState<ScreenshotMeta | null>(null)
+  const hasRollbackVMs = !!execution?.vm_results?.some(vm => !vm.test_clones?.length)
+  const hasTestClones = !!execution?.vm_results?.some(vm => vm.test_clones?.length)
   const isDestructive = type === 'failover' || type === 'failback'
   const isExecuting = !!execution && execution.status === 'running'
   const [stabilizeRemainingSeconds, setStabilizeRemainingSeconds] = useState<number | null>(null)
@@ -283,6 +289,7 @@ export default function FailoverDialog({ open, onClose, plan, type, onConfirm, o
                         <Typography variant='body2' sx={{ fontWeight: 500, fontSize: '0.8rem', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {vmNameMap?.[vm.vm_id] || (vm.vm_name && !vm.vm_name.startsWith('VM ') ? vm.vm_name : `VM ${vm.vm_id}`)}
                         </Typography>
+                        {res?.target_node && <Typography variant='caption' color='text.secondary'>{res.target_node}</Typography>}
                         {showRestoreSelector && !restorePointsError && (
                           restorePointsLoading ? (
                             <CircularProgress size={14} />
@@ -391,11 +398,12 @@ export default function FailoverDialog({ open, onClose, plan, type, onConfirm, o
             return (
               <Alert severity={errs.length > 0 ? 'warning' : 'success'}>
                 <Typography variant='body2' sx={{ fontWeight: 600, mb: 0.5 }}>
-                  {t('siteRecovery.failover.cleanupDone')}
+                  {t(errs.length > 0 ? 'siteRecovery.failover.cleanup' : 'siteRecovery.failover.cleanupDone')}
                 </Typography>
                 <Typography variant='caption' component='div'>
                   {cleanupResult.vms_stopped > 0 && <>{cleanupResult.vms_stopped} VM(s) {t('siteRecovery.failover.stopped')}<br /></>}
-                  {cleanupResult.disks_rolled > 0 && <>{cleanupResult.disks_rolled} {t('siteRecovery.failover.disksRolledBack')}<br /></>}
+                  {hasTestClones && errs.length === 0 && <>{t('siteRecovery.failover.clonesDestroyed')}<br /></>}
+                  {(!hasTestClones || hasRollbackVMs) && cleanupResult.disks_rolled > 0 && <>{cleanupResult.disks_rolled} {t('siteRecovery.failover.disksRolledBack')}<br /></>}
                   {cleanupResult.jobs_resumed > 0 && <>{cleanupResult.jobs_resumed} {t('siteRecovery.failover.jobsResumed')}</>}
                 </Typography>
                 {errs.length > 0 && errs.map((err: string, i: number) => (
@@ -547,7 +555,7 @@ export default function FailoverDialog({ open, onClose, plan, type, onConfirm, o
                     </Box>
                     <Box sx={{ flex: 1 }}>
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.25 }}>
-                        <Typography variant='body2' sx={{ fontWeight: 500, fontSize: '0.8rem' }}>{vm.vm_name}</Typography>
+                        <Typography variant='body2' sx={{ fontWeight: 500, fontSize: '0.8rem' }}>{vm.vm_name}{vm.target_node && ` · ${vm.target_node}`}</Typography>
                         <Typography variant='caption' sx={{ color: 'text.secondary' }}>{vm.progress_percent}%</Typography>
                       </Box>
                       <LinearProgress
@@ -648,7 +656,7 @@ export default function FailoverDialog({ open, onClose, plan, type, onConfirm, o
           )}
         </Stack>
       </DialogContent>
-      {errorMessage && <Alert severity='error' sx={{ mx: 3 }}>{errorMessage}</Alert>}
+      {(errorMessage || errorStatus === 409) && <Alert severity='error' sx={{ mx: 3 }}>{errorStatus === 409 ? t('siteRecovery.failover.testActiveConflict') : errorMessage}</Alert>}
       <DialogActions sx={{ px: 3, pb: 2 }}>
         {!execution && (
           <>
@@ -689,7 +697,7 @@ export default function FailoverDialog({ open, onClose, plan, type, onConfirm, o
         )}
         {execution && execution.status !== 'running' && (
           <>
-            {type === 'test' && onCleanup && !cleanupResult && (
+            {type === 'test' && onCleanup && (!cleanupResult || cleanupResult.errors?.length > 0) && (
               <Button
                 variant='outlined'
                 color='warning'

@@ -1,6 +1,49 @@
-// Site Recovery Types - Ceph RBD cross-cluster replication & disaster recovery
+// Site Recovery Types - Ceph RBD and ZFS cross-cluster replication & disaster recovery
 
 import type { ScheduleSpec } from '@/components/automation/site-recovery/schedule/types'
+
+export type StorageEngine = 'rbd' | 'zfs'
+
+export interface ReplicationStorages {
+  engines: StorageEngine[]
+  rbd: Array<{ storage: string; pool: string }>
+  zfs: Array<{ storage: string; node: string; pool: string; availBytes: number; totalBytes: number; availFormatted: string; active: boolean }>
+}
+
+export interface ReplicableVM {
+  vmid: number
+  node: string
+  diskGb: number
+  mixed: boolean
+  unsupported: boolean
+}
+
+export interface ReplicationCheckRequest {
+  source_cluster: string
+  target_cluster: string
+  storage_engine?: StorageEngine
+  target_node?: string
+  vm_ids?: number[]
+  tags?: string[]
+}
+
+export interface SSHConnectivityResult {
+  connected: boolean
+  source_node: string
+  target_node?: string
+  target_ip: string
+  error?: string
+  checks?: Array<{ source_node: string; target_node: string; ok: boolean; error?: string }>
+}
+
+export interface SnapshotIdentity {
+  cluster_id: string
+  storage_engine?: StorageEngine
+  node?: string
+  pool: string
+  image: string
+  snapshot: string
+}
 
 // ============================================
 // Replication Jobs
@@ -24,6 +67,8 @@ export interface ReplicationJob {
   source_cluster: string
   target_cluster: string
   target_pool: string
+  storage_engine: StorageEngine
+  target_node?: string
   vmid_prefix: number
   status: ReplicationJobStatus
   schedule: string
@@ -53,6 +98,8 @@ export interface CreateReplicationJobRequest {
   source_cluster: string
   target_cluster: string
   target_pool: string
+  storage_engine: StorageEngine
+  target_node?: string
   schedule?: string
   rpo_target?: number
   schedule_spec?: ScheduleSpec | null
@@ -122,7 +169,7 @@ export interface CreateRecoveryPlanRequest {
   description: string
   source_cluster: string
   target_cluster: string
-  vms: Array<{ vm_id: number; tier: 1 | 2 | 3; boot_order: number }>
+  vms: Array<{ vm_id: number; tier: 1 | 2 | 3; boot_order: number; replication_job_id?: string }>
 }
 
 export interface UpdateRecoveryPlanRequest {
@@ -175,7 +222,18 @@ export interface PlanRestorePoints {
 export type RecoveryExecutionType = 'test' | 'failover' | 'failback'
 export type RecoveryExecutionStatus = 'running' | 'completed' | 'failed' | 'cancelled'
 
+export interface TestCloneRef {
+  device: string
+  storage: string
+  original: string
+  clone: string
+  options: string
+}
+
 export interface RecoveryVMResult {
+  test_point?: string
+  test_state?: 'cloning' | 'config_rewritten' | 'started' | 'cleanup_pending' | 'cleaned'
+  test_clones?: TestCloneRef[]
   vm_id: number
   vm_name: string
   status: 'pending' | 'running' | 'completed' | 'failed'
@@ -270,6 +328,7 @@ export interface JobStatusSummary {
 }
 
 export interface ReplicationHealthStatus {
+  engines?: StorageEngine[]
   sites: SiteInfo[]
   connectivity: 'connected' | 'degraded' | 'disconnected'
   latency_ms: number

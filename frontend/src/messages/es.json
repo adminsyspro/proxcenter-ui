@@ -4131,11 +4131,11 @@
   },
   "siteRecovery": {
     "title": "Site Recovery",
-    "subtitle": "Replicación entre clústeres Ceph RBD y recuperación ante desastres",
-    "noCeph": "No se ha detectado ningún clúster Ceph",
-    "noCephDesc": "Site Recovery requiere al menos dos conexiones PVE con Ceph activado para replicar datos entre clústeres. Activa Ceph en tus conexiones en Configuración > Conexiones para empezar.",
-    "oneCeph": "Solo se ha detectado un clúster Ceph",
-    "oneCephDesc": "Site Recovery requiere al menos dos conexiones PVE con Ceph activado para replicar datos entre clústeres. Añade y configura Ceph en una segunda conexión para empezar.",
+    "subtitle": "Replicación entre clústeres y recuperación ante desastres con Ceph RBD y ZFS",
+    "noCeph": "No se ha detectado almacenamiento de replicación",
+    "noCephDesc": "Configure almacenamiento Ceph RBD o ZFS en dos conexiones Proxmox para crear trabajos de replicación.",
+    "oneCeph": "No hay un motor de replicación común",
+    "oneCephDesc": "Al menos dos conexiones deben compartir un motor de replicación compatible con el orquestador.",
     "noCephFeatureReplication": "Replicación entre clústeres",
     "noCephFeatureRecovery": "Planes de recuperación",
     "noCephFeatureEmergency": "DR de emergencia",
@@ -4152,9 +4152,13 @@
       "title": "Comprobaciones previas",
       "blocked": "Han fallado comprobaciones críticas. Resuelve los problemas anteriores antes de crear el trabajo.",
       "checks": {
-        "source_health": "Salud de Ceph origen",
-        "target_health": "Salud de Ceph destino",
-        "target_space": "Capacidad del pool destino"
+        "target_vmids": "Disponibilidad de los VMID de destino",
+        "target_qemu": "Versión de qemu-server en el destino",
+        "source_health": "Estado del almacenamiento de origen",
+        "target_health": "Estado del almacenamiento de destino",
+        "target_space": "Capacidad del pool destino",
+        "target_storage": "Disponibilidad del almacenamiento de destino",
+        "reverse_ssh": "SSH inverso para failback"
       }
     },
     "bandwidth": {
@@ -4172,7 +4176,7 @@
       "title": "Snapshot",
       "totalSnaps": "Snapshots totales",
       "orphans": "Huérfanos",
-      "clusters": "Clústeres Ceph",
+      "clusters": "Clústeres",
       "searchPlaceholder": "Buscar clúster, pool, imagen, snap, VMID, nombre de VM…",
       "allClusters": "Todos los clústeres",
       "allStatuses": "Todos los estados",
@@ -4197,7 +4201,7 @@
       "cannotDeleteActive": "No se puede eliminar: el snapshot está en uso por un trabajo de replicación activo",
       "viewDetails": "Ver detalles",
       "none": "Sin snapshots mirror",
-      "noneDesc": "No se encontraron snapshots mirror-* en tus clústeres Ceph.",
+      "noneDesc": "Los snapshots mirror aparecerán aquí después de una replicación.",
       "noneMatchingDesc": "Ningún snapshot coincide con el filtro actual.",
       "created": "Creado",
       "computing": "Calculando…",
@@ -4205,7 +4209,10 @@
       "confirmDeleteDesc": "Vas a eliminar {count} snapshot(s) mirror. Esta acción no se puede deshacer.",
       "confirmDeleteActiveWarn": "Algunos de los snapshots seleccionados pertenecen a trabajos de replicación activos. Eliminarlos forzará una resincronización completa en la próxima ejecución.",
       "deletingItem": "Eliminando {name}…",
-      "andMore": "{count} más"
+      "andMore": "{count} más",
+      "engine": "Motor",
+      "node": "Nodo",
+      "partialInventory": "Algunos clústeres o nodos no pudieron inventariarse; sus snapshots no aparecen en la lista."
     },
     "status": {
       "all": "Todos los estados",
@@ -4261,9 +4268,9 @@
       "recentActivity": "Actividad reciente",
       "events": "eventos",
       "noRecentActivity": "Sin actividad reciente",
-      "noSitesConfigured": "No hay sitios de replicación configurados. Añade conexiones de clúster con Ceph para empezar.",
+      "noSitesConfigured": "No hay sitios de recuperación configurados",
       "noSitesTitle": "No hay ningún trabajo de replicación configurado",
-      "noSitesDesc": "Site Recovery requiere al menos un trabajo de replicación entre dos clústeres Proxmox con Ceph. Configura un trabajo de replicación para activar recuperación ante desastres, planes de failover y protección entre sitios.",
+      "noSitesDesc": "Configure almacenamiento Ceph RBD o ZFS en sus sitios Proxmox para iniciar la replicación.",
       "bandwidthOverTime": "Ancho de banda de replicación",
       "noBandwidthData": "Aún no hay datos de ancho de banda. Lanza una sincronización para empezar a recopilar métricas de throughput."
     },
@@ -4279,7 +4286,7 @@
       "bandwidthHistoryEmpty": "Aún no hay muestras. El gráfico se rellena a medida que el trabajo sincroniza.",
       "deleteConfirmTitle": "Eliminar trabajo de replicación",
       "deleteConfirmDesc": "Esto eliminará el trabajo de replicación y su historial local. Las VMs y sus discos no se modifican.",
-      "deleteOrphansNote": "Los snapshots RBD Mirror-* en origen y destino NO se eliminan automáticamente. Abre la pestaña Snapshots después de la eliminación para revisar y purgar los huérfanos resultantes.",
+      "deleteOrphansNote": "Pueden quedar snapshots mirror en el almacenamiento. Revise los snapshots huérfanos en la pestaña Snapshots.",
       "source": "Origen",
       "target": "Destino",
       "schedule": "Programación",
@@ -4288,13 +4295,15 @@
       "throughput": "Throughput",
       "bandwidth": "Ancho de banda",
       "actions": "Acciones",
+      "deleteJobInUse": "Este trabajo protege VM del plan de recuperación {plans}. Quítelas del plan, o elimine el plan, antes de eliminar el trabajo.",
+      "deleteJobRunning": "Hay una sincronización de este trabajo en curso. Vuelva a intentarlo cuando termine.",
       "syncNow": "Sincronizar ahora",
       "resume": "Reanudar",
       "pause": "Pausar",
       "recentLogs": "Logs recientes",
       "searchPlaceholder": "Buscar VMs...",
       "noJobs": "No hay trabajos de replicación configurados",
-      "noJobsDesc": "Crea un trabajo de replicación para empezar a proteger tus VMs con mirroring Ceph RBD.",
+      "noJobsDesc": "Cree un trabajo para replicar VM entre sitios con Ceph RBD o ZFS.",
       "noJobFound": "No se ha encontrado ningún trabajo",
       "noJobFoundDesc": "Modifica los filtros o crea un nuevo trabajo de replicación.",
       "selectJob": "Selecciona un trabajo para ver los detalles."
@@ -4330,7 +4339,8 @@
       "failedOverTooltip": "Plan conmutado — solo es posible el failback.",
       "statusFailingBack": "Failback en curso",
       "openFailback": "Abrir failback",
-      "failingBackTooltip": "Cancele el failback antes de eliminar este plan."
+      "failingBackTooltip": "Cancele el failback antes de eliminar este plan.",
+      "jobColumn": "Trabajo de replicación"
     },
     "rpoTargetLabel": "RPO objetivo",
     "createJob": {
@@ -4373,7 +4383,7 @@
       "snapshotRetentionHelp": "Snapshots espejo conservados por disco tras cada sincronización (mínimo 2).",
       "retentionSource": "Conservar en origen",
       "retentionTarget": "Conservar en destino (DR)",
-      "retentionTargetHelp": "Más snapshots en el lado DR significa más puntos de restauración, a costa de la capacidad de Ceph.",
+      "retentionTargetHelp": "Más snapshots en el lado DR significa más puntos de restauración, a costa de la capacidad de almacenamiento.",
       "vmidPrefix": "Prefijo VMID",
       "vmidPrefixHelp": "Prefijo añadido a los IDs de VM en el clúster destino (p. ej., prefijo 9 + VM 100 = 9100). Déjalo vacío o en 0 para conservar el mismo VMID.",
       "engine": "Motor de replicación",
@@ -4383,7 +4393,15 @@
       "pvNote": "Instala el paquete <pv>pv</pv> en los nodos origen y destino para mostrar el progreso de la replicación.",
       "pvInstallLabel": "Instalar <pv>pv</pv> automáticamente en los nodos origen",
       "pvInstallDesc": "Necesario para seguir el progreso de la replicación. Ejecutará apt-get install pv mediante SSH.",
-      "retentionCoverage": "Replica cada {cadence}, estos puntos cubren {window}"
+      "retentionCoverage": "Replica cada {cadence}, estos puntos cubren {window}",
+      "targetStorage": "Almacenamiento de destino",
+      "selectStorage": "Seleccionar almacenamiento y nodo",
+      "targetNode": "Nodo de destino",
+      "zfsNodeHint": "ZFS es local al nodo: las réplicas residen en este nodo y las VM de DR se inician allí.",
+      "vmMixedStorage": "Esta VM tiene discos fuera de ZFS y no se puede replicar con ZFS.",
+      "vmMixedStorageWarn": "Solo se replicarán los discos Ceph RBD; se omitirán los demás discos.",
+      "vmUnsupportedDisk": "Esta VM tiene una referencia de disco no compatible, como un disco passthrough.",
+      "sshChecks": "Conexiones SSH entre nodos"
     },
     "schedule": {
       "modeRpo": "Continuo (RPO)",
@@ -4489,7 +4507,9 @@
       },
       "completeTitle": "Failover completado",
       "completeVMs": "VM ahora activas en el sitio DR",
-      "completeLocked": "La replicación está bloqueada y el plan está conmutado — el failback lo devolverá."
+      "completeLocked": "La replicación está bloqueada y el plan está conmutado — el failback lo devolverá.",
+      "clonesDestroyed": "Clones eliminados, configuración restaurada",
+      "testActiveConflict": "Hay una prueba de conmutación activa. Ejecute la limpieza antes de iniciar esta operación."
     },
     "failback": {
       "phase1Title": "Replicación inversa en curso",
@@ -4582,7 +4602,13 @@
       "cephRamWarning": "{node} al {pct}% de RAM: los OSDs de Ceph necesitan margen de memoria, riesgo de caída de OSD",
       "cephDangerZone": "Peligro Ceph",
       "penalty": "Penalización"
-    }
+    },
+    "engine": {
+      "rbd": "Ceph RBD",
+      "zfs": "ZFS"
+    },
+    "discoveryError": "La detección de almacenamiento ha fallado para una conexión. Las operaciones de recuperación existentes siguen disponibles.",
+    "discoveryLoading": "Detectando almacenamiento de replicación…"
   },
   "templates": {
     "title": "Plantillas",

@@ -308,6 +308,8 @@ function makeProps(overrides: Partial<InventoryDialogsProps> = {}): InventoryDia
     setMigTempStorage: vi.fn(),
     migV2vRoot: '',
     setMigV2vRoot: vi.fn(),
+    migNfcConcurrency: 2,
+    setMigNfcConcurrency: vi.fn(),
     migType: 'cold',
     setMigType: vi.fn(),
     migTransferMode: 'auto',

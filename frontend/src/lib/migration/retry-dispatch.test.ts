@@ -104,6 +104,12 @@ describe("v2vConfigFromJobConfig", () => {
     expect(result).not.toHaveProperty("v2vRoot")
   })
 
+  it("carries the persisted NFC concurrency and ignores a malformed one", () => {
+    expect(v2vConfigFromJobConfig({ sourceType: "vcenter", nfcConcurrency: 3 }, job)).toMatchObject({ nfcConcurrency: 3 })
+    expect(v2vConfigFromJobConfig({ sourceType: "vcenter" }, job)).not.toHaveProperty("nfcConcurrency")
+    expect(v2vConfigFromJobConfig({ sourceType: "vcenter", nfcConcurrency: "3" }, job)).not.toHaveProperty("nfcConcurrency")
+  })
+
   it("takes the source type from the live connection for a legacy job without sourceType", () => {
     const result = v2vConfigFromJobConfig({ migrationType: "cold" }, job, { type: "hyperv", subType: null })
     expect(result.sourceType).toBe("hyperv")
@@ -125,14 +131,20 @@ describe("persistedV2vInputs", () => {
       vcenterDatacenter: "DC1",
       vcenterCluster: "Prod",
       vcenterHost: "esx1.lab",
-    }, "/dev/sda3")).toEqual({
+    }, "/dev/sda3", 3)).toEqual({
       diskPaths: ["/mnt/hyperv/Win2025/Virtual Hard Disks/Win2025.vhdx"],
       tempStorage: "/var/lib/vz",
       vcenterDatacenter: "DC1",
       vcenterCluster: "Prod",
       vcenterHost: "esx1.lab",
       v2vRoot: "/dev/sda3",
+      nfcConcurrency: 3,
     })
+  })
+
+  it("keeps the NFC concurrency only when the route validated one", () => {
+    expect(persistedV2vInputs({ nfcConcurrency: "4" }, undefined)).toEqual({})
+    expect(persistedV2vInputs({}, undefined, 4)).toEqual({ nfcConcurrency: 4 })
   })
 
   it("drops empty disk path lists, non-arrays and blank strings", () => {

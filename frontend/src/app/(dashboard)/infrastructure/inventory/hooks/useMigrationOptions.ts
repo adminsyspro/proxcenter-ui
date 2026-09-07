@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 
 import { DOWNTIME_BUDGET_DEFAULT_SEC } from '../components/migrationGuards'
+import { NFC_CONCURRENCY_DEFAULT } from '@/lib/migration/nfc-progress'
 
 /**
  * Minimal shape of the VM the single-migration dialog was opened for. Only the
@@ -61,6 +62,9 @@ export function useMigrationOptions({
   // only a genuine multi-boot guest needs the exact root device, copied from
   // the failed job's log.
   const [migV2vRoot, setMigV2vRoot] = useState<string>('')
+  // Cold vCenter only (#807): disks downloaded at once over NFC, 1 to 8. Starts
+  // at the pipeline default so the slider opens where the engine would run.
+  const [migNfcConcurrency, setMigNfcConcurrency] = useState<number>(NFC_CONCURRENCY_DEFAULT)
   const [migType, setMigType] = useState<'cold' | 'sshfs_boot' | 'warm'>('cold')
   // Transfer method is auto-detected by the backend (SSHFS when ESXi SSH is available, HTTPS otherwise).
   // Kept in state for the payload contract; no longer user-selectable in the UI.
@@ -86,6 +90,7 @@ export function useMigrationOptions({
     setMigDiskPaths(deriveHypervDiskPaths(esxiMigrateVm))
     setMigTempStorage('/tmp')
     setMigV2vRoot('')
+    setMigNfcConcurrency(NFC_CONCURRENCY_DEFAULT)
     setMigType('cold')
     setMigTransferMode('auto')
     setMigConvertToQcow2(false)
@@ -106,6 +111,8 @@ export function useMigrationOptions({
     setMigTempStorage,
     migV2vRoot,
     setMigV2vRoot,
+    migNfcConcurrency,
+    setMigNfcConcurrency,
     migType,
     setMigType,
     migTransferMode,

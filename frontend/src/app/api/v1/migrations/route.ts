@@ -15,6 +15,7 @@ import { decryptSecret } from "@/lib/crypto/secret"
 import { assertStorageName } from "@/lib/ssh/validate"
 import { sanitizeV2vRoot } from "@/lib/migration/v2v-root-select"
 import { persistedV2vInputs } from "@/lib/migration/retry-dispatch"
+import { parseNfcConcurrency, NFC_CONCURRENCY_MIN, NFC_CONCURRENCY_MAX } from "@/lib/migration/nfc-progress"
 
 export const runtime = "nodejs"
 
@@ -133,6 +134,21 @@ export async function POST(req: Request) {
       v2vRoot = cleaned
     }
 
+    // Parallel NFC disk downloads for the cold vCenter path (#807): the
+    // dialog's slider, 1 to 8. Validated strictly so a bad value from a raw
+    // API caller is a 400 rather than a silent fallback to the default.
+    let nfcConcurrency: number | undefined
+    if (body.nfcConcurrency !== undefined && body.nfcConcurrency !== null) {
+      const parsed = parseNfcConcurrency(body.nfcConcurrency)
+      if (parsed === null) {
+        return NextResponse.json(
+          { error: `nfcConcurrency must be an integer between ${NFC_CONCURRENCY_MIN} and ${NFC_CONCURRENCY_MAX}` },
+          { status: 400 },
+        )
+      }
+      nfcConcurrency = parsed
+    }
+
     // Verify connections exist
     const [sourceConn, pveConn] = await Promise.all([
       prisma.connection.findUnique({ where: { id: sourceConnectionId }, select: { id: true, type: true, subType: true, name: true, baseUrl: true } }),
@@ -192,7 +208,7 @@ export async function POST(req: Request) {
           // Source type and virt-v2v inputs (disk paths, vCenter placement, temp
           // storage, root override): persisted so a retry rebuilds the same job.
           sourceType: effectiveSourceType,
-          ...persistedV2vInputs(body, v2vRoot) },
+          ...persistedV2vInputs(body, v2vRoot, nfcConcurrency) },
         status: "pending",
         currentStep: "pending",
         startedAt: new Date(),
@@ -268,6 +284,7 @@ export async function POST(req: Request) {
           migrationType: v2vMigrationType,
           ...(targetVmid !== undefined && { targetVmid }),
           ...(v2vRoot !== undefined && { v2vRoot }),
+          ...(nfcConcurrency !== undefined && { nfcConcurrency }),
         }, tenantId)
       } else if (effectiveSourceType === "xcpng") {
         await runXcpngMigrationPipeline(job.id, { ...migrationConfig, migrationType: "cold" }, tenantId)

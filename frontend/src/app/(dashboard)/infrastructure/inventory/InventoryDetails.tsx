@@ -372,6 +372,7 @@ export default function InventoryDetails({
     migDiskPaths, setMigDiskPaths,
     migTempStorage, setMigTempStorage,
     migV2vRoot, setMigV2vRoot,
+    migNfcConcurrency, setMigNfcConcurrency,
     migType, setMigType,
     migTransferMode, setMigTransferMode,
     migConvertToQcow2, setMigConvertToQcow2,
@@ -388,7 +389,7 @@ export default function InventoryDetails({
   const [bulkMigLogsFilter, setBulkMigLogsFilter] = useState<string | null>(null)
   const bulkMigJobsRef = useRef(bulkMigJobs)
   bulkMigJobsRef.current = bulkMigJobs
-  const bulkMigConfigRef = useRef<{ sourceConnectionId: string; targetConnectionId: string; targetStorage: string; networkBridge: string; vlanTag?: number; migrationType: string; transferMode: string; startAfterMigration: boolean; convertDisksToQcow2: boolean; sourceType: string; tempStorage?: string; v2vRoot?: string } | null>(null)
+  const bulkMigConfigRef = useRef<{ sourceConnectionId: string; targetConnectionId: string; targetStorage: string; networkBridge: string; vlanTag?: number; migrationType: string; transferMode: string; startAfterMigration: boolean; convertDisksToQcow2: boolean; sourceType: string; tempStorage?: string; v2vRoot?: string; nfcConcurrency?: number } | null>(null)
   // Snapshot of host info when bulk dialog opens (avoids null data when selection changes)
   const [bulkMigHostInfo, setBulkMigHostInfo] = useState<any>(null)
   const [extHostMigrations, setExtHostMigrations] = useState<any[]>([])
@@ -1052,6 +1053,8 @@ export default function InventoryDetails({
                   ...((job as any).vcenterHost && { vcenterHost: (job as any).vcenterHost }),
                   ...(cfg.tempStorage && { tempStorage: cfg.tempStorage }),
                   ...(cfg.v2vRoot && { v2vRoot: cfg.v2vRoot }),
+                  // Parallel NFC downloads (#807), captured with the batch like the other options.
+                  ...(typeof cfg.nfcConcurrency === 'number' && { nfcConcurrency: cfg.nfcConcurrency }),
                 }),
               })
               const d = await res.json()
@@ -4634,6 +4637,8 @@ return vm?.isCluster ?? false
         setMigTempStorage={setMigTempStorage}
         migV2vRoot={migV2vRoot}
         setMigV2vRoot={setMigV2vRoot}
+        migNfcConcurrency={migNfcConcurrency}
+        setMigNfcConcurrency={setMigNfcConcurrency}
         migType={migType}
         setMigType={setMigType}
         migTransferMode={migTransferMode}

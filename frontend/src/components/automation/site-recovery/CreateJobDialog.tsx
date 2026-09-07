@@ -602,7 +602,7 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
                 >
                   {/* Source node */}
                   <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1, minWidth: 0 }}>
-                    <i className='ri-server-line' style={{ fontSize: 22, opacity: 0.75 }} />
+                    <EngineGlyph engine={engine} size={22} />
                     <Typography variant='caption' sx={{ fontFamily: '"JetBrains Mono", monospace', fontSize: '0.7rem', fontWeight: 600, mt: 0.25, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '100%' }}>
                       {sshSourceNode}
                     </Typography>
@@ -647,7 +647,7 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
 
                   {/* Target IP */}
                   <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1, minWidth: 0 }}>
-                    <i className='ri-server-line' style={{ fontSize: 22, opacity: 0.75 }} />
+                    <EngineGlyph engine={engine} size={22} />
                     <Typography variant='caption' sx={{ fontFamily: '"JetBrains Mono", monospace', fontSize: '0.7rem', fontWeight: 600, mt: 0.25, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '100%' }}>
                       {sshTargetIP}
                     </Typography>

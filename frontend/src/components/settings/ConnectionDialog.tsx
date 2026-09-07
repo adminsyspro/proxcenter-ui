@@ -43,6 +43,7 @@ import { CountryFlag } from '@/components/ui/CountryFlag'
 import NumericTextField from '@/components/ui/NumericTextField'
 import { useTenant } from '@/contexts/TenantContext'
 import { useCopyToClipboard } from '@/lib/clipboard'
+import { isPartialIPv4Cidr, isValidCidr } from '@/lib/net/cidr'
 
 export type ConnectionFormData = {
   name: string
@@ -71,6 +72,8 @@ export type ConnectionFormData = {
   sshPassphrase: string
   sshPassword: string
   sshUseSudo: boolean
+  // Site Recovery replication network (CIDR), PVE only, '' = management network
+  replicationNetwork: string
   // Provider-only, create mode: own the connection by an MSP tenant ('' = pool)
   ownerTenantId: string
 }
@@ -112,6 +115,7 @@ const defaultFormData: ConnectionFormData = {
   sshPassphrase: '',
   sshPassword: '',
   sshUseSudo: false,
+  replicationNetwork: '',
   ownerTenantId: '',
 }
 
@@ -173,6 +177,8 @@ export default function ConnectionDialog({
           sshPassphrase: '',
           sshPassword: '',
           sshAuthMethod: initialData.sshAuthMethod || '',
+          // The list payload hands back null when no replication network is set
+          replicationNetwork: (initialData as any).replicationNetwork || '',
           subType: editSubType,
           // External hypervisors keep "user:password" encrypted; the list payload
           // hands the user back as apiUser (never the password). Without it the
@@ -397,6 +403,12 @@ export default function ConnectionDialog({
       
       if (form.sshAuthMethod === 'password' && !form.sshPassword.trim() && !initialData?.sshPassConfigured) {
         setError(t('settings.errorSshPasswordRequired'))
+        return
+      }
+
+      const replicationNetwork = form.replicationNetwork.trim()
+      if (replicationNetwork && !isValidCidr(replicationNetwork)) {
+        setError(t('settings.errorReplicationNetworkInvalid'))
         return
       }
     }
@@ -1252,6 +1264,81 @@ export default function ConnectionDialog({
             )}
           </Box>
         </Collapse>
+          </>
+        )}
+
+        {type === 'pve' && (
+          <>
+            <Divider sx={{ my: 3 }} />
+
+            {/* Section: Site Recovery (PVE only). Its own section rather than a
+                field lost among the SSH credentials: the replication stream rides
+                on the SSH trust above, so the field waits for SSH to be enabled,
+                but what it configures is the replication traffic, not SSH. */}
+            <Typography variant="subtitle2" sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
+              <i className="ri-refresh-line" />
+              {t('settings.siteRecovery')}
+              <Chip label={t('common.optional')} size="small" variant="outlined" sx={{ ml: 1 }} />
+              <Tooltip
+                arrow
+                slotProps={tooltipSlotProps}
+                title={
+                  <Box sx={{ p: 1 }}>
+                    <Typography variant='caption' sx={{ display: 'block' }}>
+                      {t('settings.siteRecoveryInfo')}
+                    </Typography>
+                  </Box>
+                }
+              >
+                <Box component='span' sx={{ display: 'inline-flex', alignItems: 'center', cursor: 'default' }}>
+                  <i className='ri-information-line' style={{ fontSize: 14, opacity: 0.6 }} />
+                </Box>
+              </Tooltip>
+            </Typography>
+
+            <TextField
+              fullWidth
+              label={t('settings.replicationNetwork')}
+              value={form.replicationNetwork}
+              // Input mask: a keystroke that could no longer lead to an IPv4
+              // CIDR is dropped. IPv4 is the overwhelmingly common case here.
+              onChange={e => {
+                if (isPartialIPv4Cidr(e.target.value)) handleChange('replicationNetwork', e.target.value)
+              }}
+              placeholder="10.10.50.0/24"
+              disabled={!form.sshEnabled}
+              error={form.sshEnabled && form.replicationNetwork !== '' && !isValidCidr(form.replicationNetwork)}
+              helperText={
+                !form.sshEnabled
+                  ? t('settings.replicationNetworkNeedsSsh')
+                  : (form.replicationNetwork !== '' && !isValidCidr(form.replicationNetwork) ? t('settings.errorReplicationNetworkInvalid') : undefined)
+              }
+              slotProps={{
+                htmlInput: { inputMode: 'decimal' },
+                input: {
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <Tooltip
+                        arrow
+                        slotProps={tooltipSlotProps}
+                        title={
+                          <Box sx={{ p: 1 }}>
+                            <Typography variant='caption' sx={{ display: 'block' }}>
+                              {t('settings.replicationNetworkHelper')}
+                            </Typography>
+                          </Box>
+                        }
+                      >
+                        <Box component='span' sx={{ display: 'inline-flex', alignItems: 'center', cursor: 'default' }}>
+                          <i className='ri-information-line' style={{ fontSize: 16, opacity: 0.6 }} />
+                        </Box>
+                      </Tooltip>
+                    </InputAdornment>
+                  )
+                }
+              }}
+              sx={{ mt: 1 }}
+            />
           </>
         )}
 

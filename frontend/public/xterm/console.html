@@ -1,57 +1,55 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Console Terminal</title>
-  <!-- xterm.js CSS -->
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css">
+  <title>Node Shell</title>
+  <!-- xterm.js, bundled locally: an on-premise install has no CDN. -->
+  <link rel="stylesheet" href="/xterm/xterm.css">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    html, body { 
-      width: 100%; 
-      height: 100%; 
-      overflow: hidden; 
-      background: #000;
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #0c0c0c;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     }
     #app { display: flex; flex-direction: column; height: 100vh; }
     #toolbar {
       display: flex; align-items: center; justify-content: space-between;
-      padding: 8px 16px; background: #111; border-bottom: 1px solid #333; flex-shrink: 0;
+      padding: 8px 16px; background: #1a1a1a; border-bottom: 1px solid #333;
+      flex-shrink: 0; flex-wrap: nowrap;
     }
-    #toolbar .info { display: flex; align-items: center; gap: 12px; }
-    #status-dot { width: 8px; height: 8px; border-radius: 50%; background: #6b7280; }
+    /* Une seule ligne, toujours: le nom du nœud cède avant les boutons. */
+    #toolbar .info { display: flex; align-items: center; gap: 12px; min-width: 120px; flex: 1 100 auto; overflow: hidden; }
+    #status-dot { width: 8px; height: 8px; border-radius: 50%; background: #6b7280; flex-shrink: 0; }
     #status-dot.connected { background: #22c55e; }
     #status-dot.connecting { background: #f59e0b; }
     #status-dot.error { background: #ef4444; }
-    #vm-info { color: #fff; font-size: 14px; font-weight: 600; }
-    #console-type { 
-      background: #22c55e; color: #fff; padding: 2px 8px; 
-      border-radius: 4px; font-size: 11px; font-weight: 600; 
+    #console-type {
+      background: #22c55e; color: #fff; padding: 2px 8px;
+      border-radius: 4px; font-size: 11px; font-weight: 600; flex-shrink: 0;
     }
-    #status-text { color: #666; font-size: 12px; }
-    #toolbar .buttons { display: flex; gap: 8px; }
+    #node-info { color: #fff; font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+    #status-text { color: #666; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex-shrink: 100; }
+    #toolbar .buttons { display: flex; gap: 6px; align-items: center; min-width: 0; }
+    #toolbar .buttons button { flex-shrink: 0; }
     button {
       padding: 6px 12px; font-size: 12px; background: #333; color: #fff;
       border: 1px solid #444; border-radius: 4px; cursor: pointer;
     }
     button:hover { background: #444; }
     button:disabled { background: #222; color: #666; cursor: not-allowed; }
+    #toolbar .buttons button.icon { padding: 6px 9px; font-size: 14px; line-height: 1; }
+    #toolbar .buttons button.active { background: #1e3a8a; border-color: #3b82f6; }
     #error-bar {
       padding: 12px 16px; background: #7f1d1d; color: #fecaca; font-size: 13px; display: none;
     }
     #error-bar.visible { display: block; }
-    #terminal-container { 
-      flex: 1; 
-      width: 100%; 
-      background: #000; 
-      position: relative;
-      padding: 4px;
-    }
-    #terminal-container .xterm {
-      height: 100%;
-    }
+    #terminal-container { flex: 1; width: 100%; background: #0c0c0c; position: relative; padding: 4px; overflow: hidden; }
+    #terminal-container .xterm { height: 100%; }
+    #terminal { height: 100%; }
     #loading {
       position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
       text-align: center; color: #666;
@@ -59,6 +57,14 @@
     #loading .icon { font-size: 48px; margin-bottom: 16px; }
     #loading .text { font-size: 14px; }
     #loading .subtext { font-size: 12px; margin-top: 8px; color: #555; }
+    /* Plein écran: même comportement que les consoles graphiques, la barre
+       quitte le flux et revient au bord haut, donc Close et Reconnect restent
+       à un geste. */
+    body.fs #toolbar {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 20; opacity: 0.97;
+      transform: translateY(-100%); transition: transform 0.18s ease;
+    }
+    body.fs #toolbar.peek, body.fs #toolbar:hover { transform: none; }
   </style>
 </head>
 <body>
@@ -67,105 +73,91 @@
       <div class="info">
         <span id="status-dot"></span>
         <span id="console-type">xterm.js</span>
-        <span id="vm-info">Console</span>
-        <span id="status-text">• Initialisation...</span>
+        <span id="node-info">Shell</span>
+        <span id="status-text">• Initializing...</span>
       </div>
       <div class="buttons">
-        <button id="btn-switch" title="Basculer vers noVNC">🖥️ noVNC</button>
-        <button id="btn-reconnect">Reconnecter</button>
-        <button id="btn-close">Fermer</button>
+        <button id="btn-fullscreen" class="icon" title="Fullscreen">&#9974;</button>
+        <button id="btn-reconnect">Reconnect</button>
+        <button id="btn-close">Close</button>
       </div>
     </div>
     <div id="error-bar"></div>
     <div id="terminal-container">
       <div id="loading">
         <div class="icon">💻</div>
-        <div class="text" id="loading-text">Chargement...</div>
+        <div class="text" id="loading-text">Loading...</div>
         <div class="subtext" id="loading-subtext"></div>
       </div>
       <div id="terminal"></div>
     </div>
   </div>
 
-  <!-- xterm.js -->
-  <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/xterm-addon-web-links@0.9.0/lib/xterm-addon-web-links.min.js"></script>
-  
+  <!-- xterm.js + fit addon (window.XtermLib), built by node bundle-xterm.js -->
+  <script src="/xterm/xterm.bundle.js"></script>
+  <!-- Helpers partagés avec les consoles graphiques, testés dans
+       src/lib/console/viewport.test.ts puis bundlés par bundle-console.js. -->
+  <script src="/console/console-ui.bundle.js"></script>
+
   <script>
     const statusDot = document.getElementById('status-dot');
-    const vmInfo = document.getElementById('vm-info');
+    const nodeInfo = document.getElementById('node-info');
     const statusText = document.getElementById('status-text');
     const errorBar = document.getElementById('error-bar');
-    const terminalContainer = document.getElementById('terminal-container');
     const terminalDiv = document.getElementById('terminal');
     const loading = document.getElementById('loading');
     const loadingText = document.getElementById('loading-text');
     const loadingSubtext = document.getElementById('loading-subtext');
-    const btnSwitch = document.getElementById('btn-switch');
+    const toolbar = document.getElementById('toolbar');
+    const btnFullscreen = document.getElementById('btn-fullscreen');
     const btnReconnect = document.getElementById('btn-reconnect');
     const btnClose = document.getElementById('btn-close');
-    
+
     const params = new URLSearchParams(window.location.search);
-    const connId = params.get('connId') || '1';
-    const type = params.get('type');
+    const connId = params.get('connId');
     const node = params.get('node');
-    const vmid = params.get('vmid');
-    
+
     let terminal = null;
     let fitAddon = null;
     let socket = null;
-    
-    // Nom de la VM en tête du libellé, comme les consoles noVNC et SPICE
-    // (issue #630) : c'est ce que la barre des tâches laisse voir.
-    let vmName = null;
 
-    function renderVmLabel() {
-      const suffix = `Terminal ${type?.toUpperCase()} ${vmid} • ${node}`;
-      const label = vmName ? `${vmName} • ${suffix}` : suffix;
+    // Le nœud en tête du libellé: c'est ce que la barre des tâches laisse voir
+    // quand plusieurs shells sont ouverts côte à côte (issue #630, #879).
+    function renderNodeLabel(host) {
+      const label = node ? node + ' • Shell' : 'Shell';
 
       document.title = label;
-      vmInfo.textContent = label;
+      nodeInfo.textContent = host ? label + ' • ' + host : label;
     }
 
-    renderVmLabel();
+    renderNodeLabel(null);
 
-    // Un seul GET suffit à nommer la fenêtre; en cas d'échec le libellé garde
-    // son repli.
-    async function fetchVmName() {
-      if (!type || !node || !vmid) return;
-
-      try {
-        const res = await fetch(
-          `/api/v1/connections/${encodeURIComponent(connId)}/guests/${encodeURIComponent(type)}/${encodeURIComponent(node)}/${encodeURIComponent(vmid)}/status`
-        );
-        if (!res.ok) return;
-        const json = await res.json();
-        if (json?.data?.name) {
-          vmName = json.data.name;
-          renderVmLabel();
-        }
-      } catch (err) {
-        console.error('Failed to fetch VM name:', err);
-      }
-    }
-    
     function setStatus(status, text) {
       statusDot.className = status;
-      statusText.textContent = `• ${text}`;
+      statusText.textContent = '• ' + text;
     }
-    
+
     function showError(msg) {
       errorBar.textContent = msg;
       errorBar.classList.add('visible');
     }
-    
+
     function hideError() {
       errorBar.classList.remove('visible');
     }
-    
+
+    // Le pty distant ne demande jamais sa taille: chaque changement de boîte
+    // doit être renvoyé, sinon les lignes longues se replient de travers.
+    function refit() {
+      if (!fitAddon || !terminal) return;
+      fitAddon.fit();
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.send('1:' + terminal.cols + ':' + terminal.rows + ':');
+      }
+    }
+
     function initTerminal() {
-      terminal = new Terminal({
+      terminal = new XtermLib.Terminal({
         cursorBlink: true,
         cursorStyle: 'block',
         fontSize: 14,
@@ -196,159 +188,170 @@
         allowProposedApi: true,
         scrollback: 10000,
       });
-      
-      fitAddon = new FitAddon.FitAddon();
+
+      fitAddon = new XtermLib.FitAddon();
       terminal.loadAddon(fitAddon);
-      
-      const webLinksAddon = new WebLinksAddon.WebLinksAddon();
-      terminal.loadAddon(webLinksAddon);
-      
       terminal.open(terminalDiv);
       fitAddon.fit();
-      
-      // Resize handler
-      window.addEventListener('resize', () => {
-        if (fitAddon) {
-          fitAddon.fit();
-          if (socket && socket.readyState === WebSocket.OPEN) {
-            const dims = { cols: terminal.cols, rows: terminal.rows };
-            // Envoyer la taille au serveur (format Proxmox)
-            socket.send('1:' + dims.cols + ':' + dims.rows + ':');
-          }
+
+      window.addEventListener('resize', refit);
+
+      terminal.onData(function(data) {
+        if (socket && socket.readyState === WebSocket.OPEN) {
+          // Format Proxmox termproxy: 0:length:data
+          socket.send('0:' + data.length + ':' + data);
         }
       });
-      
+
       return terminal;
     }
-    
+
     async function connect() {
-      if (!type || !node || !vmid) {
-        showError('Paramètres manquants');
-        setStatus('error', 'Erreur');
+      if (!connId || !node) {
+        showError('Missing parameters: connId and node are required');
+        setStatus('error', 'Error');
+        loadingText.textContent = 'Error';
+
         return;
       }
-      
+
       hideError();
-      setStatus('connecting', 'Connexion...');
+      setStatus('connecting', 'Connecting...');
       loading.style.display = 'block';
-      loadingText.textContent = 'Création de la session...';
+      loadingText.textContent = 'Creating the session...';
       loadingSubtext.textContent = '';
-      
+
       try {
-        // Appeler l'API avec ?console=xterm
-        const apiUrl = `/api/v1/connections/${encodeURIComponent(connId)}/guests/${encodeURIComponent(type)}/${encodeURIComponent(node)}/${encodeURIComponent(vmid)}/console?console=xterm`;
-        console.log('API call:', apiUrl);
-        
+        // Chaque fenêtre crée SA session termproxy: elles sont à usage unique
+        // côté serveur, donc deux shells du même nœud ne se marchent pas dessus.
+        const apiUrl = '/api/v1/connections/' + encodeURIComponent(connId) +
+          '/nodes/' + encodeURIComponent(node) + '/terminal';
         const res = await fetch(apiUrl, { method: 'POST' });
-        console.log('API status:', res.status);
-        
+
         if (!res.ok) {
-          const errText = await res.text();
-          throw new Error(`HTTP ${res.status}: ${errText}`);
+          let message = 'HTTP ' + res.status;
+          try {
+            const err = await res.json();
+            if (err && err.error) message = err.error;
+          } catch (e) { /* réponse non JSON: le code HTTP suffit */ }
+          throw new Error(message);
         }
-        
+
         const json = await res.json();
-        console.log('API response:', json);
-        
-        const { wsUrl, password } = json?.data || {};
-        if (!wsUrl) throw new Error('Session invalide');
+        const session = (json && json.data) || {};
+        if (!session.sessionId) throw new Error('Invalid session');
 
-        loadingText.textContent = 'Connexion au terminal...';
+        renderNodeLabel(session.host);
+        loadingText.textContent = 'Connecting to the terminal...';
 
-        // Initialiser le terminal
-        if (!terminal) {
-          initTerminal();
+        if (!terminal) initTerminal();
+        else terminal.clear();
+
+        if (socket) {
+          const previous = socket;
+          socket = null;
+          previous.close();
         }
 
-        // Connexion WebSocket
+        // Le navigateur ne reçoit qu'un sessionId; hôte, port, ticket et jeton
+        // PVE restent côté serveur. En dev, next ne gère pas l'upgrade WS et
+        // c'est ws-proxy.js sur 3001 qui répond.
         const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        // In dev mode, redirect to standalone ws-proxy on port 3001
         const isDev = window.location.port === '3000' && window.location.hostname === 'localhost';
         const wsHost = isDev ? 'localhost:3001' : window.location.host;
-        const wsFullUrl = `${wsProtocol}//${wsHost}/api/internal${wsUrl}`;
-        console.log('WebSocket URL:', wsFullUrl);
-        
-        socket = new WebSocket(wsFullUrl, 'binary');
-        
-        socket.onopen = () => {
-          console.log('WebSocket connected');
+        const wsUrl = wsProtocol + '//' + wsHost + '/api/internal/ws/shell/' + encodeURIComponent(session.sessionId);
+
+        const ws = new WebSocket(wsUrl, ['binary']);
+        socket = ws;
+        ws.binaryType = 'arraybuffer';
+
+        ws.onopen = function() {
           loading.style.display = 'none';
-          setStatus('connected', 'Connecté');
+          setStatus('connected', 'Connected');
           terminal.focus();
-          
-          // Envoyer les dimensions initiales
-          setTimeout(() => {
-            fitAddon.fit();
-            const dims = { cols: terminal.cols, rows: terminal.rows };
-            socket.send('1:' + dims.cols + ':' + dims.rows + ':');
-          }, 100);
+          setTimeout(refit, 100);
         };
-        
-        socket.onmessage = (event) => {
-          // Les données de Proxmox termproxy sont en format texte
-          if (typeof event.data === 'string') {
+
+        ws.onmessage = function(event) {
+          if (event.data instanceof ArrayBuffer) {
+            terminal.write(new TextDecoder().decode(event.data));
+          } else if (typeof event.data === 'string') {
             terminal.write(event.data);
           } else if (event.data instanceof Blob) {
-            event.data.text().then(text => {
-              terminal.write(text);
-            });
-          } else if (event.data instanceof ArrayBuffer) {
-            const decoder = new TextDecoder();
-            terminal.write(decoder.decode(event.data));
+            event.data.text().then(function(text) { terminal.write(text); });
           }
         };
-        
-        socket.onclose = (event) => {
-          console.log('WebSocket closed:', event.code, event.reason);
-          setStatus('', 'Déconnecté');
+
+        ws.onclose = function(event) {
+          // Une fermeture d'un socket déjà remplacé (Reconnect) ne doit pas
+          // repeindre l'écran de la session vivante.
+          if (socket !== ws) return;
+          setStatus('', 'Disconnected');
           loading.style.display = 'block';
-          loadingText.textContent = 'Déconnecté';
-          loadingSubtext.textContent = 'Cliquez sur Reconnecter';
-        };
-        
-        socket.onerror = (error) => {
-          console.error('WebSocket error:', error);
-          showError('Erreur de connexion WebSocket');
-          setStatus('error', 'Erreur');
-        };
-        
-        // Envoyer les entrées clavier au serveur
-        terminal.onData((data) => {
-          if (socket && socket.readyState === WebSocket.OPEN) {
-            // Format Proxmox: 0:data_length:data
-            socket.send('0:' + data.length + ':' + data);
+          loadingText.textContent = 'Disconnected';
+          loadingSubtext.textContent = 'Click Reconnect';
+          if (event.code !== 1000 && event.code !== 1005 && event.reason) {
+            showError('Connection closed: ' + event.reason);
           }
-        });
-        
+        };
+
+        ws.onerror = function() {
+          if (socket !== ws) return;
+          showError('WebSocket connection failed.');
+          setStatus('error', 'Error');
+        };
       } catch (err) {
-        console.error('Error:', err);
         showError(err.message);
-        setStatus('error', 'Erreur');
-        loadingText.textContent = 'Erreur';
+        setStatus('error', 'Error');
+        loadingText.textContent = 'Error';
         loadingSubtext.textContent = err.message;
       }
     }
-    
-    // Basculer vers noVNC
-    btnSwitch.addEventListener('click', () => {
-      const novncUrl = `/novnc/console.html?connId=${encodeURIComponent(connId)}&type=${encodeURIComponent(type)}&node=${encodeURIComponent(node)}&vmid=${encodeURIComponent(vmid)}`;
-      window.location.href = novncUrl;
+
+    // --- Plein écran --------------------------------------------------------
+    function syncFullscreenUi() {
+      const on = ConsoleUI.isFullscreen(document);
+
+      document.body.classList.toggle('fs', on);
+      btnFullscreen.classList.toggle('active', on);
+      btnFullscreen.title = on ? 'Leave fullscreen' : 'Fullscreen';
+      if (!on) toolbar.classList.remove('peek');
+      // La boîte n'est mise en page qu'à la frame suivante.
+      requestAnimationFrame(refit);
+      if (terminal) terminal.focus();
+    }
+
+    if (!ConsoleUI.fullscreenSupported(document.documentElement)) {
+      btnFullscreen.style.display = 'none';
+    }
+
+    btnFullscreen.addEventListener('click', function() {
+      ConsoleUI.toggleFullscreen(document, document.documentElement);
     });
-    
-    btnReconnect.addEventListener('click', () => {
-      if (socket) {
-        socket.close();
-      }
-      if (terminal) {
-        terminal.clear();
-      }
+
+    ['fullscreenchange', 'webkitfullscreenchange', 'MSFullscreenChange'].forEach(function(evt) {
+      document.addEventListener(evt, syncFullscreenUi);
+    });
+
+    // En plein écran la barre est hors écran: le bord haut la ramène.
+    document.addEventListener('mousemove', function(e) {
+      if (!document.body.classList.contains('fs')) return;
+      toolbar.classList.toggle('peek', e.clientY <= 4);
+    });
+
+    btnReconnect.addEventListener('click', function() {
       connect();
     });
-    
-    btnClose.addEventListener('click', () => window.close());
-    
-    // Démarrer
-    fetchVmName();
+
+    btnClose.addEventListener('click', function() {
+      if (socket) {
+        const previous = socket;
+        socket = null;
+        previous.close();
+      }
+      window.close();
+    });
+
     connect();
   </script>
 </body>

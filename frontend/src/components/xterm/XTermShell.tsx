@@ -1,10 +1,18 @@
 'use client'
 
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { Box, CircularProgress, Typography, Chip, Button } from '@mui/material'
+import { Box, CircularProgress, Typography, Chip, Button, IconButton, Tooltip } from '@mui/material'
+import { useTranslations } from 'next-intl'
+
+import { fullscreenSupported, isFullscreen, toggleFullscreen } from '@/lib/console/viewport'
 
 interface XTermShellProps {
   sessionId: string
+  // Connection and node the session belongs to. Optional because the status
+  // bar is the only consumer: without them the pop-out control is hidden
+  // rather than opening a window that could not create its own session.
+  connId?: string
+  node?: string
   // Display-only label shown in the status bar. The actual host/port
   // PVE talks to live server-side in the consume route and never leak
   // to the browser.
@@ -12,13 +20,48 @@ interface XTermShellProps {
   onDisconnect?: () => void
 }
 
-export default function XTermShell({ sessionId, host, onDisconnect }: XTermShellProps) {
+export default function XTermShell({ sessionId, connId, node, host, onDisconnect }: XTermShellProps) {
+  const t = useTranslations()
+  const rootRef = useRef<HTMLDivElement>(null)
   const terminalRef = useRef<HTMLDivElement>(null)
   const xtermRef = useRef<any>(null)
   const fitAddonRef = useRef<any>(null)
   const wsRef = useRef<WebSocket | null>(null)
   const [status, setStatus] = useState<'connecting' | 'connected' | 'disconnected' | 'error'>('connecting')
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  const [fullscreen, setFullscreen] = useState(false)
+  const [canFullscreen, setCanFullscreen] = useState(false)
+
+  // Remesure le terminal et annonce la nouvelle géométrie à Proxmox : termproxy
+  // ne demande jamais la taille, donc un redimensionnement que le client garde
+  // pour lui laisse le pty distant sur ses anciens cols/rows et casse le retour
+  // à la ligne des commandes longues.
+  const refit = useCallback(() => {
+    if (!fitAddonRef.current || !xtermRef.current) return
+
+    fitAddonRef.current.fit()
+
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(`1:${xtermRef.current.cols}:${xtermRef.current.rows}:`)
+    }
+  }, [])
+
+  // Une fenêtre par nœud: le nom de fenêtre est la clé, donc un second clic
+  // ramène la fenêtre existante au premier plan au lieu d'empiler les shells.
+  // Chaque fenêtre crée SA session termproxy, celle de l'onglet continue de
+  // vivre.
+  const detach = useCallback(() => {
+    if (!connId || !node) return
+
+    const url = `/xterm/console.html?connId=${encodeURIComponent(connId)}&node=${encodeURIComponent(node)}`
+    const popup = window.open(
+      url,
+      `shell-${connId}-${node}`,
+      'width=1024,height=768,menubar=no,toolbar=no,location=no,status=no'
+    )
+
+    popup?.focus()
+  }, [connId, node])
 
   const connect = useCallback(async () => {
     if (!terminalRef.current) return
@@ -77,19 +120,6 @@ export default function XTermShell({ sessionId, host, onDisconnect }: XTermShell
         xtermRef.current = terminal
         fitAddonRef.current = fitAddon
 
-        // Resize handler
-        const handleResize = () => {
-          if (fitAddonRef.current) {
-            fitAddonRef.current.fit()
-            // Envoyer les nouvelles dimensions au serveur Proxmox
-            if (wsRef.current?.readyState === WebSocket.OPEN && xtermRef.current) {
-              const dims = `1:${xtermRef.current.cols}:${xtermRef.current.rows}:`
-              wsRef.current.send(dims)
-            }
-          }
-        }
-        window.addEventListener('resize', handleResize)
-
         // Input handler - envoyer les données au serveur
         terminal.onData((data: string) => {
           if (wsRef.current?.readyState === WebSocket.OPEN) {
@@ -129,13 +159,7 @@ export default function XTermShell({ sessionId, host, onDisconnect }: XTermShell
         xtermRef.current?.focus()
 
         // Envoyer les dimensions initiales après un court délai
-        setTimeout(() => {
-          if (fitAddonRef.current && xtermRef.current) {
-            fitAddonRef.current.fit()
-            const dims = `1:${xtermRef.current.cols}:${xtermRef.current.rows}:`
-            ws.send(dims)
-          }
-        }, 100)
+        setTimeout(refit, 100)
       }
 
       ws.onmessage = (event) => {
@@ -180,7 +204,7 @@ export default function XTermShell({ sessionId, host, onDisconnect }: XTermShell
       setStatus('error')
       setErrorMsg(err.message || 'Failed to initialize terminal')
     }
-  }, [sessionId])
+  }, [sessionId, refit])
 
   // Connexion initiale
   useEffect(() => {
@@ -193,6 +217,38 @@ export default function XTermShell({ sessionId, host, onDisconnect }: XTermShell
     }
   }, [connect])
 
+  // Le plein écran n'existe pas côté serveur, et l'élément n'est monté qu'au
+  // premier rendu client : sonder au montage évite un bouton qui apparaît après
+  // l'hydratation.
+  useEffect(() => {
+    setCanFullscreen(fullscreenSupported(rootRef.current))
+  }, [])
+
+  // Redimensionnement de la fenêtre et entrées/sorties de plein écran changent
+  // tous les deux la boîte du terminal. Les orthographes webkit/MS suivent
+  // celles de lib/console/viewport : ces écrans s'ouvrent aussi dans le
+  // navigateur qu'un serveur de rebond a sous la main.
+  useEffect(() => {
+    const syncFullscreen = () => {
+      setFullscreen(isFullscreen(document))
+      // La boîte plein écran n'est mise en page qu'à la frame suivante :
+      // mesurer maintenant ajusterait le terminal à la taille qu'il quitte.
+      requestAnimationFrame(refit)
+    }
+
+    window.addEventListener('resize', refit)
+    document.addEventListener('fullscreenchange', syncFullscreen)
+    document.addEventListener('webkitfullscreenchange', syncFullscreen)
+    document.addEventListener('MSFullscreenChange', syncFullscreen)
+
+    return () => {
+      window.removeEventListener('resize', refit)
+      document.removeEventListener('fullscreenchange', syncFullscreen)
+      document.removeEventListener('webkitfullscreenchange', syncFullscreen)
+      document.removeEventListener('MSFullscreenChange', syncFullscreen)
+    }
+  }, [refit])
+
   // Focus le terminal quand il devient visible
   useEffect(() => {
     if (status === 'connected' && xtermRef.current) {
@@ -201,7 +257,7 @@ export default function XTermShell({ sessionId, host, onDisconnect }: XTermShell
   }, [status])
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', bgcolor: '#0c0c0c' }}>
+    <Box ref={rootRef} sx={{ display: 'flex', flexDirection: 'column', height: '100%', bgcolor: '#0c0c0c' }}>
       {/* Status bar */}
       <Box sx={{ 
         display: 'flex', 
@@ -248,7 +304,45 @@ export default function XTermShell({ sessionId, host, onDisconnect }: XTermShell
                status === 'error' ? 'Error' : 'Disconnected'}
           </Typography>
         </Box>
-        <Box sx={{ display: 'flex', gap: 1 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          {connId && node && (
+            <Tooltip title={t('console.openInNewWindow')}>
+              <IconButton
+                size="small"
+                aria-label={t('console.openInNewWindow')}
+                onClick={detach}
+                sx={{
+                  width: 26,
+                  height: 26,
+                  color: '#ccc',
+                  border: '1px solid #444',
+                  borderRadius: 1,
+                  '&:hover': { borderColor: '#666', bgcolor: '#333' }
+                }}
+              >
+                <i className="ri-external-link-line" style={{ fontSize: 14 }} />
+              </IconButton>
+            </Tooltip>
+          )}
+          {canFullscreen && (
+            <Tooltip title={fullscreen ? t('console.exitFullscreen') : t('console.fullscreen')}>
+              <IconButton
+                size="small"
+                aria-label={fullscreen ? t('console.exitFullscreen') : t('console.fullscreen')}
+                onClick={() => setFullscreen(toggleFullscreen(document, rootRef.current))}
+                sx={{
+                  width: 26,
+                  height: 26,
+                  color: '#ccc',
+                  border: '1px solid #444',
+                  borderRadius: 1,
+                  '&:hover': { borderColor: '#666', bgcolor: '#333' }
+                }}
+              >
+                <i className={fullscreen ? 'ri-fullscreen-exit-line' : 'ri-fullscreen-line'} style={{ fontSize: 14 }} />
+              </IconButton>
+            </Tooltip>
+          )}
           {status !== 'connected' && (
             <Button 
               size="small" 

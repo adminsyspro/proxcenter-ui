@@ -4804,6 +4804,8 @@
   "console": {
     "title": "控制台",
     "fullscreen": "全屏",
+    "exitFullscreen": "退出全屏",
+    "openInNewWindow": "在新窗口中打开",
     "sendCtrlAltDel": "发送 Ctrl+Alt+Del",
     "connecting": "正在连接控制台...",
     "notAvailable": "控制台不可用",

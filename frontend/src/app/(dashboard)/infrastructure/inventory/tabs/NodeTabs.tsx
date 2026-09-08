@@ -1125,6 +1125,29 @@ export default function NodeTabs(props: any) {
                           >
                             {nodeShellLoading ? t('inventory.connecting') : t('inventory.connectToShell')}
                           </Button>
+                          {/* Ouvrir directement une fenêtre séparée: c'est ainsi
+                              qu'on tient plusieurs shells de plusieurs nœuds
+                              côte à côte, sans consommer la session de l'onglet. */}
+                          <Button
+                            variant="outlined"
+                            sx={{ ml: 1 }}
+                            startIcon={<i className="ri-external-link-line" />}
+                            onClick={() => {
+                              const { connId, node } = parseNodeId(selection?.id || '')
+
+                              if (!connId || !node) return
+
+                              const url = `/xterm/console.html?connId=${encodeURIComponent(connId)}&node=${encodeURIComponent(node)}`
+
+                              window.open(
+                                url,
+                                `shell-${connId}-${node}`,
+                                'width=1024,height=768,menubar=no,toolbar=no,location=no,status=no'
+                              )?.focus()
+                            }}
+                          >
+                            {t('console.openInNewWindow')}
+                          </Button>
                         </Box>
                       </Box>
                     ) : (
@@ -1136,6 +1159,8 @@ export default function NodeTabs(props: any) {
                           return (
                             <XTermShell
                               sessionId={nodeShellData.sessionId}
+                              connId={parseNodeId(selection?.id || '').connId}
+                              node={nodeShellData.node}
                               host={nodeShellData.host}
                               onDisconnect={() => {
                                 setNodeShellData(null)

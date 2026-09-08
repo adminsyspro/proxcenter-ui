@@ -203,6 +203,57 @@ export interface ClusterMetrics {
   nodes: NodeMetrics[]
   vms: VMMetrics[]
   summary: ClusterSummary
+  /** Per-storage guest disk latency, aggregated over every disk on it (#881). */
+  storages?: StorageLatency[]
+  /** Length of the sliding window behind the window_* latency fields (#881). */
+  disk_latency_window_minutes?: number
+}
+
+/** Latency of one virtual disk, derived from QEMU block statistics (#881). */
+export interface DiskLatency {
+  disk: string
+  storage?: string
+  read_ms: number
+  write_ms: number
+  latency_ms: number
+  read_ops: number
+  write_ops: number
+  window_avg_ms: number
+  window_max_ms: number
+  window_full: boolean
+}
+
+/** One bucket of a guest's disk latency history (#881); `time` is the bucket start in Unix seconds. */
+export interface DiskLatencySeriesPoint {
+  time: number
+  disk: string
+  storage?: string
+  latency_ms: number
+  max_ms: number
+  read_ops: number
+  write_ops: number
+}
+
+export interface DiskLatencySeries {
+  from?: string
+  to?: string
+  step: number
+  points: DiskLatencySeriesPoint[]
+}
+
+/** Latency of a storage, aggregated over the guest disks it backs (#881). */
+export interface StorageLatency {
+  storage: string
+  read_ms: number
+  write_ms: number
+  latency_ms: number
+  window_avg_ms: number
+  window_max_ms: number
+  window_full: boolean
+  /** False on the orchestrator's first round after a start, or when every read failed: nothing to show yet. */
+  measured?: boolean
+  disks: number
+  vms: number
 }
 
 export interface NodeMetrics {
@@ -232,6 +283,11 @@ export interface VMMetrics {
   memory_total: number
   memory_usage: number
   uptime: number
+  /** Worst disk, ops-weighted read+write ms per I/O at the last collection (#881). Absent for LXC or before two samples exist. */
+  disk_latency_ms?: number
+  /** Worst disk's max per-collection latency over the window (#881). */
+  disk_latency_window_max_ms?: number
+  disk_latency?: DiskLatency[]
 }
 
 export interface ClusterSummary {
@@ -406,6 +462,18 @@ return this.get<DRSRecommendation[]>(`/drs/recommendations${query}`)
 
   getMetrics(connectionId: string) {
     return this.get<ClusterMetrics>(`/metrics/${connectionId}`)
+  }
+
+  /** Guest disk latency history, per disk and bucket, for the Disk I/O chart (#881). */
+  getVMDiskLatencySeries(connectionId: string, vmid: string | number, opts: { from?: string; to?: string; step?: number } = {}) {
+    const params = new URLSearchParams()
+
+    if (opts.from) params.set('from', opts.from)
+    if (opts.to) params.set('to', opts.to)
+    if (opts.step) params.set('step', String(opts.step))
+    const query = params.toString()
+
+    return this.get<DiskLatencySeries>(`/metrics/${connectionId}/vms/${vmid}/disk-latency${query ? `?${query}` : ''}`)
   }
 
   getMetricsHistory(connectionId: string, from?: string, to?: string) {
@@ -674,6 +742,7 @@ export interface Alert {
     | 'event'
     | 'snapshot_stale'
     | 'osd_latency'
+    | 'disk_latency'
     | 'replication_rpo'
     | 'replication_failed'
     | 'custom'
@@ -728,6 +797,16 @@ export interface AlertThresholds {
   osd_latency_warning: number
   /** Ceph OSD latency in ms that raises a critical alert (#721). */
   osd_latency_critical: number
+  /** Guest disk latency in ms that raises a warning (#881). 0 disables the check. */
+  disk_latency_warning: number
+  /** Guest disk latency in ms that raises a critical alert (#881). */
+  disk_latency_critical: number
+  /** Minutes a disk must stay above a threshold before it alerts (#881). */
+  disk_latency_window_minutes: number
+  /** Days of per-disk latency history kept for the Disk I/O charts (#881). */
+  disk_latency_retention_days: number
+  /** 1 = the orchestrator reads QEMU block statistics of every running VM (#881); 0 stops the collection, charts and alert included. */
+  disk_latency_collection: number
   /**
    * Tolerance above a replication job's own RPO target, in percent, before its
    * last successful sync counts as late (#721). 0 disables replication alerts.

@@ -520,7 +520,7 @@ export const EXTRA_MOCKS: MockDataMap = {
       'Replication job 118-0 (mail-relay to pve-dr-02) failed: connection reset by peer',
     ]
     const sources = ['pve-node-03','pve-node-07','pve-node-01','pve-node-05','pve-dr-02','pve-node-11','PBS-MASTER','pve-node-01','pve-node-02','pve-node-01','pve-node-05']
-    const types = ['memory','cpu','custom','event','node_down','storage','event','custom','osd_latency','replication_rpo','replication_failed']
+    const types = ['memory','cpu','disk_latency','event','node_down','storage','event','custom','osd_latency','replication_rpo','replication_failed']
     const entityTypes = ['node','node','vm','vm','osd','vm','vm','vm','osd','replication','replication']
     const entityNames = [...sources.slice(0, 8), 'osd.3', '102-0', '118-0']
     const metrics = ['ram','cpu','disk_io',null,null,null,null,null,'osd_apply_latency','replication_lag',null]
@@ -583,6 +583,13 @@ export const EXTRA_MOCKS: MockDataMap = {
     recovery_confirmations: 3,
     osd_latency_warning: 100,
     osd_latency_critical: 250,
+    // Same story for the guest disk latency check (#881): the demo has a
+    // "Disk I/O latency" alert above, so its card shows the check enabled.
+    disk_latency_warning: 30,
+    disk_latency_critical: 100,
+    disk_latency_window_minutes: 5,
+    disk_latency_retention_days: 30,
+    disk_latency_collection: 1,
     replication_rpo_grace_percent: 25,
     replication_failure_alerts: 1,
   },

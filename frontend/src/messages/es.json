@@ -703,6 +703,11 @@
     "osdLatencyDesc": "Alertar cuando un OSD de Ceph se mantiene más lento que estos valores, algo que los usuarios perciben como discos lentos",
     "osdLatencyWarning": "ms (advertencia)",
     "osdLatencyCritical": "ms (crítico)",
+    "diskLatency": "Latencia de los discos invitados",
+    "diskLatencyDesc": "Alertar cuando un disco virtual, o un almacenamiento completo, se mantiene más lento que estos valores durante la ventana indicada a continuación",
+    "diskLatencyWindow": "minutos de latencia sostenida antes de alertar",
+    "diskLatencyCollection": "Recoger la latencia de cada VM en ejecución para los gráficos y listas (una llamada API por VM y recogida)",
+    "diskLatencyRetention": "días de historial de latencia conservados para los gráficos de E/S de disco",
     "replicationRpo": "RPO de replicación",
     "replicationRpoDesc": "Alertar cuando la última sincronización correcta de un trabajo de replicación se retrasa más que su propio objetivo de RPO, más este margen",
     "replicationRpoGrace": "% tolerado por encima del objetivo de RPO del trabajo",
@@ -717,6 +722,7 @@
       "predictiveAlertsSection": "Capacidad forecasts"
     },
     "title": "Inventario",
+    "diskLatency": "Latencia de disco",
     "vms": "Máquinas virtuales",
     "containers": "Contenedores",
     "nodes": "Nodos",
@@ -5504,6 +5510,8 @@
     "monitorHealth": "Supervisión de salud"
   },
   "storageOverview": {
+    "latency": "Latencia",
+    "latencyTooltip": "Latencia media de los discos invitados en este almacenamiento durante la última recopilación, entre {vms} VM. Máximo en {minutes} min: {max} ms",
     "scope": "Ámbito",
     "nodes": "Nodo(s)"
   },

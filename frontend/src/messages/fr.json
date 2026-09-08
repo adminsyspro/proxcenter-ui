@@ -703,6 +703,11 @@
     "osdLatencyDesc": "Alerter quand un OSD Ceph reste plus lent que ces valeurs, ce que les utilisateurs ressentent comme des disques poussifs",
     "osdLatencyWarning": "ms (avertissement)",
     "osdLatencyCritical": "ms (critique)",
+    "diskLatency": "Latence des disques invités",
+    "diskLatencyDesc": "Alerter quand un disque virtuel, ou un stockage entier, reste plus lent que ces valeurs pendant la fenêtre ci-dessous",
+    "diskLatencyWindow": "minutes de latence soutenue avant de déclencher une alerte",
+    "diskLatencyCollection": "Collecter la latence de chaque VM en marche pour les graphes et les listes (un appel API par VM et par collecte)",
+    "diskLatencyRetention": "jours d'historique de latence conservés pour les graphes Disk I/O",
     "replicationRpo": "RPO de réplication",
     "replicationRpoDesc": "Alerter quand la dernière synchronisation réussie d'une tâche de réplication accuse un retard supérieur à son propre objectif RPO, majoré de cette marge",
     "replicationRpoGrace": "% toléré au-delà de l'objectif RPO de la tâche",
@@ -717,6 +722,7 @@
       "predictiveAlertsSection": "Prévisions de capacité"
     },
     "title": "Inventaire",
+    "diskLatency": "Latence des disques",
     "vms": "Machines virtuelles",
     "containers": "Containers",
     "nodes": "Nœuds",
@@ -5504,6 +5510,8 @@
     "monitorHealth": "Surveillance santé"
   },
   "storageOverview": {
+    "latency": "Latence",
+    "latencyTooltip": "Latence moyenne des disques invités sur ce stockage lors de la dernière collecte, sur {vms} VM. Maximum sur {minutes} min : {max} ms",
     "scope": "Portée",
     "nodes": "Nœud(s)"
   },

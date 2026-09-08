@@ -703,6 +703,11 @@
     "osdLatencyDesc": "Ceph OSD가 이 값보다 계속 느릴 때 알림을 보냅니다. 사용자는 디스크가 느려진 것으로 체감합니다",
     "osdLatencyWarning": "ms (경고)",
     "osdLatencyCritical": "ms (심각)",
+    "diskLatency": "게스트 디스크 지연 시간",
+    "diskLatencyDesc": "가상 디스크 또는 전체 스토리지가 아래 시간 구간 동안 이 값보다 계속 느릴 때 알림을 보냅니다",
+    "diskLatencyWindow": "알림을 보내기 전 지연 시간이 지속되는 시간(분)",
+    "diskLatencyCollection": "실행 중인 모든 VM의 지연 시간을 그래프와 목록용으로 수집 (수집마다 VM당 API 호출 1회)",
+    "diskLatencyRetention": "Disk I/O 그래프용 지연 시간 기록 보관 일수",
     "replicationRpo": "복제 RPO",
     "replicationRpoDesc": "복제 작업의 마지막 성공 동기화가 해당 작업의 RPO 목표에 이 여유를 더한 값보다 더 뒤처질 때 알림을 보냅니다",
     "replicationRpoGrace": "작업의 RPO 목표를 초과해 허용하는 비율(%)",
@@ -717,6 +722,7 @@
       "predictiveAlertsSection": "용량 예측"
     },
     "title": "인벤토리",
+    "diskLatency": "디스크 지연 시간",
     "vms": "가상 머신",
     "containers": "컨테이너",
     "nodes": "노드",
@@ -5504,6 +5510,8 @@
     "monitorHealth": "상태 모니터링"
   },
   "storageOverview": {
+    "latency": "지연 시간",
+    "latencyTooltip": "마지막 수집 구간에서 이 스토리지의 VM {vms}대에 걸친 게스트 디스크 평균 지연 시간입니다. {minutes}분 동안의 최댓값: {max} ms",
     "scope": "범위",
     "nodes": "노드"
   },

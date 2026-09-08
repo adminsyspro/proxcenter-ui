@@ -56,7 +56,7 @@ import {
   alpha,
   useTheme,
 } from '@mui/material'
-import { AreaChart, Area, XAxis, YAxis, Tooltip } from 'recharts'
+import { AreaChart, Area, ComposedChart, Line, XAxis, YAxis, Tooltip } from 'recharts'
 import ChartContainer from '@/components/ChartContainer'
 
 import { formatBytes } from '@/utils/format'
@@ -84,9 +84,16 @@ import InventorySummary from '../components/InventorySummary'
 import LxcOptionRows from './LxcOptionRows'
 import { SaveIcon, AddIcon, CloseIcon } from '../components/IconWrappers'
 import VdcQuotaBanner from '@/components/inventory/VdcQuotaBanner'
+import { useVmDiskLatencySeries } from '@/hooks/useVmDiskLatencySeries'
+import { diskIoTooltipRow, latencyKey } from '@/lib/metrics/latencySeries'
+import { formatLatencyAxis } from '@/lib/metrics/latency'
 import NumericTextField from '@/components/ui/NumericTextField'
 import { extractCustomCpuModels, isKnownCpuType } from '@/lib/inventory/cpuModels'
 import { cpuGroupHeaderSx } from '../cpuSelectStyles'
+
+// Latency curves sit on the Disk I/O chart next to red bandwidth areas: amber
+// first, then violet and teal for a second and third disk.
+const LATENCY_LINE_COLORS = ['#f59e0b', '#a855f7', '#14b8a6']
 
 export default function VmDetailTabs(props: any) {
   const toast = useToast()
@@ -380,6 +387,18 @@ export default function VmDetailTabs(props: any) {
   } = props
 
   const { hasFeature } = useLicense()
+
+  // Guest disk latency from the orchestrator, joined onto the RRD series so the
+  // Disk I/O chart carries one latency curve per disk (#881). Nothing is
+  // fetched on Community or for a container.
+  const latencyTarget = selection?.id ? parseVmId(selection.id) : null
+  const diskIo = useVmDiskLatencySeries({
+    connId: latencyTarget?.connId ?? '',
+    node: latencyTarget?.node ?? '',
+    vmid: latencyTarget?.vmid ?? '',
+    type: latencyTarget?.type ?? '',
+    series,
+  })
   const changeTrackingAvailable = hasFeature(Features.CHANGE_TRACKING)
 
   // Namespaces seen in the loaded backup snapshots, sorted alphabetically with
@@ -706,10 +725,10 @@ export default function VmDetailTabs(props: any) {
                             </ChartContainer>
                           </ExpandableChart>
 
-                          {/* Disk I/O (VMs) */}
+                          {/* Disk I/O (VMs), with the orchestrator's latency per disk on a right axis (#881) */}
                           <ExpandableChart title={t('inventory.diskIo')} height={185}>
                             <ChartContainer>
-                              <AreaChart data={series} margin={{ top: 2, right: 4, bottom: 0, left: 4 }}>
+                              <ComposedChart data={diskIo.data} margin={{ top: 2, right: 4, bottom: 0, left: 4 }}>
                                 <defs>
                                   <linearGradient id="gradDiskRead" x1="0" y1="0" x2="0" y2="1">
                                     <stop offset="0%" stopColor="#ef4444" stopOpacity={0.35} />
@@ -722,6 +741,9 @@ export default function VmDetailTabs(props: any) {
                                 </defs>
                                 <XAxis dataKey="t" tickFormatter={v => formatRrdTick(Number(v), tf)} minTickGap={40} tick={{ fontSize: 9 }} />
                                 <YAxis tickFormatter={v => formatBps(Number(v))} tick={{ fontSize: 9 }} width={40} domain={[0, 'auto']} />
+                                {diskIo.disks.length > 0 ? (
+                                  <YAxis yAxisId="latency" orientation="right" tickFormatter={v => formatLatencyAxis(Number(v))} tick={{ fontSize: 9 }} width={52} domain={[0, 'auto']} />
+                                ) : null}
                                 <Tooltip wrapperStyle={{ backgroundColor: 'transparent', boxShadow: 'none' }} content={({ active, payload, label }) => {
                                   if (!active || !payload?.length) return null
                                   return (
@@ -732,20 +754,27 @@ export default function VmDetailTabs(props: any) {
                                         <Typography variant="caption" sx={{ ml: 'auto', opacity: 0.6 }}>{formatRrdTooltipTs(Number(label), tf)}</Typography>
                                       </Box>
                                       <Box sx={{ px: 1.5, py: 0.75 }}>
-                                        {payload.map(entry => (
-                                          <Box key={String(entry.dataKey)} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25 }}>
-                                            <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
-                                            <Typography variant="caption" sx={{ flex: 1 }}>{String(entry.name) === 'diskReadBps' ? 'Read' : 'Write'}</Typography>
-                                            <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: '"JetBrains Mono", monospace' }}>{formatBps(Number(entry.value))}</Typography>
-                                          </Box>
-                                        ))}
+                                        {payload.filter(entry => entry.value != null).map(entry => {
+                                          const row = diskIoTooltipRow(String(entry.name), Number(entry.value), formatBps, t('inventory.diskLatency'))
+
+                                          return (
+                                            <Box key={String(entry.dataKey)} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25 }}>
+                                              <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
+                                              <Typography variant="caption" sx={{ flex: 1 }}>{row.label}</Typography>
+                                              <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: '"JetBrains Mono", monospace' }}>{row.value}</Typography>
+                                            </Box>
+                                          )
+                                        })}
                                       </Box>
                                     </Box>
                                   )
                                 }} />
                                 <Area type="monotone" dataKey="diskReadBps" stroke="#ef4444" fill="url(#gradDiskRead)" strokeWidth={1.5} isAnimationActive={false} name="diskReadBps" connectNulls />
                                 <Area type="monotone" dataKey="diskWriteBps" stroke="#fca5a5" fill="url(#gradDiskWrite)" strokeWidth={1.5} isAnimationActive={false} name="diskWriteBps" connectNulls />
-                              </AreaChart>
+                                {diskIo.disks.map((disk, i) => (
+                                  <Line key={disk} yAxisId="latency" type="monotone" dataKey={latencyKey(disk)} name={latencyKey(disk)} stroke={LATENCY_LINE_COLORS[i % LATENCY_LINE_COLORS.length]} strokeWidth={1.5} dot={false} isAnimationActive={false} connectNulls />
+                                ))}
+                              </ComposedChart>
                             </ChartContainer>
                           </ExpandableChart>
                         </Box>

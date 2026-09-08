@@ -692,6 +692,11 @@
     "osdLatencyDesc": "Warnen, wenn ein Ceph-OSD dauerhaft langsamer als diese Werte bleibt, was Benutzer als träge Datenträger wahrnehmen",
     "osdLatencyWarning": "ms (Warnung)",
     "osdLatencyCritical": "ms (kritisch)",
+    "diskLatency": "Gast-Datenträgerlatenz",
+    "diskLatencyDesc": "Warnen, wenn ein virtueller Datenträger oder ein gesamter Storage während des unten angegebenen Zeitfensters langsamer als diese Werte bleibt",
+    "diskLatencyWindow": "Minuten anhaltender Latenz vor der Alarmierung",
+    "diskLatencyCollection": "Latenz jeder laufenden VM für Diagramme und Listen erfassen (ein API-Aufruf pro VM und Erfassung)",
+    "diskLatencyRetention": "Tage Latenzverlauf für die Disk-I/O-Diagramme",
     "replicationRpo": "Replikations-RPO",
     "replicationRpoDesc": "Warnen, wenn die letzte erfolgreiche Synchronisierung eines Replikationsauftrags weiter zurückliegt als dessen eigenes RPO-Ziel zuzüglich dieser Marge",
     "replicationRpoGrace": "% Toleranz über dem RPO-Ziel des Auftrags",
@@ -706,6 +711,7 @@
       "predictiveAlertsSection": "Kapazitätsprognosen"
     },
     "title": "Inventar",
+    "diskLatency": "Datenträgerlatenz",
     "vms": "Virtuelle Maschinen",
     "containers": "Container",
     "nodes": "Nodes",
@@ -5483,6 +5489,8 @@
     "monitorHealth": "Health Überwachung"
   },
   "storageOverview": {
+    "latency": "Latenz",
+    "latencyTooltip": "Durchschnittliche Gast-Datenträgerlatenz auf diesem Storage bei der letzten Datenerfassung über {vms} VMs. Maximum über {minutes} Min.: {max} ms",
     "scope": "Bereich",
     "nodes": "Node(s)"
   },

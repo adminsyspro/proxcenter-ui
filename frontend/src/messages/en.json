@@ -703,6 +703,11 @@
     "osdLatencyDesc": "Alert when a Ceph OSD stays slower than these values, which users feel as sluggish disks",
     "osdLatencyWarning": "ms (warning)",
     "osdLatencyCritical": "ms (critical)",
+    "diskLatency": "Guest disk latency",
+    "diskLatencyDesc": "Alert when a virtual disk, or a whole storage, stays slower than these values for the window below",
+    "diskLatencyWindow": "minutes of sustained latency before alerting",
+    "diskLatencyCollection": "Collect the latency of every running VM for the charts and lists (one API call per VM per collection)",
+    "diskLatencyRetention": "days of latency history kept for the Disk I/O charts",
     "replicationRpo": "Replication RPO",
     "replicationRpoDesc": "Alert when a replication job's last successful sync falls further behind than its own RPO target, plus this margin",
     "replicationRpoGrace": "% tolerated above the job's RPO target",
@@ -717,6 +722,7 @@
       "predictiveAlertsSection": "Capacity forecasts"
     },
     "title": "Inventory",
+    "diskLatency": "Disk latency",
     "vms": "Virtual machines",
     "containers": "Containers",
     "nodes": "Nodes",
@@ -5504,6 +5510,8 @@
     "monitorHealth": "Health monitoring"
   },
   "storageOverview": {
+    "latency": "Latency",
+    "latencyTooltip": "Average guest disk latency on this storage over the last collection, across {vms} VMs. Max over {minutes} min: {max} ms",
     "scope": "Scope",
     "nodes": "Node(s)"
   },

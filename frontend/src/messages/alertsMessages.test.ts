@@ -59,6 +59,10 @@ describe('alerts message namespace', () => {
       'replicationRpo',
       'replicationRpoDesc',
       'replicationRpoGrace',
+      // #881: guest disk latency thresholds and sustained-latency window.
+      'diskLatency',
+      'diskLatencyDesc',
+      'diskLatencyWindow',
     ]) {
       expect(reference).toContain(required)
     }

@@ -31,6 +31,16 @@ const DEFAULT_THRESHOLDS = {
   // OSD latency check, mirroring the snapshot_max_age_days convention.
   osd_latency_warning: 0,
   osd_latency_critical: 250,
+  // Guest disk latency in milliseconds, derived from QEMU block statistics
+  // (#881). 0 disables the check like the OSD one; the window is how long a
+  // disk or storage must stay above a threshold before it alerts.
+  disk_latency_warning: 0,
+  disk_latency_critical: 100,
+  disk_latency_window_minutes: 5,
+  // Days of per-disk latency history kept for the charts, and the collection
+  // switch itself (1 = on): one PVE call per running VM per collection.
+  disk_latency_retention_days: 30,
+  disk_latency_collection: 1,
   // Tolerance above a replication job's own RPO target before its last
   // successful sync is considered late, as a percentage of that target (#721).
   // 0 disables the replication alerts.

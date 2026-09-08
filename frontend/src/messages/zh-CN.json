@@ -690,6 +690,11 @@
     "osdLatencyDesc": "当 Ceph OSD 持续慢于这些数值时告警，用户会感觉磁盘变慢",
     "osdLatencyWarning": "ms (警告)",
     "osdLatencyCritical": "ms (严重)",
+    "diskLatency": "客户机磁盘延迟",
+    "diskLatencyDesc": "当虚拟磁盘或整个存储在以下时间窗口内持续慢于这些数值时告警",
+    "diskLatencyWindow": "告警前延迟持续的分钟数",
+    "diskLatencyCollection": "为图表和列表采集每台运行中虚拟机的延迟（每次采集每台虚拟机一次 API 调用）",
+    "diskLatencyRetention": "为 Disk I/O 图表保留的延迟历史天数",
     "replicationRpo": "复制 RPO",
     "replicationRpoDesc": "当复制任务上次成功同步的滞后超过其自身的 RPO 目标加上此余量时告警",
     "replicationRpoGrace": "% 相对任务 RPO 目标的容忍上限",
@@ -704,6 +709,7 @@
       "predictiveAlertsSection": "容量预测"
     },
     "title": "资源清单",
+    "diskLatency": "磁盘延迟",
     "vms": "虚拟机",
     "containers": "容器",
     "nodes": "节点",
@@ -5477,6 +5483,8 @@
     "monitorHealth": "健康监控"
   },
   "storageOverview": {
+    "latency": "延迟",
+    "latencyTooltip": "最近一次采集期间，此存储上 {vms} 台虚拟机的客户机磁盘平均延迟。{minutes} 分钟内的最大值：{max} ms",
     "scope": "范围",
     "nodes": "节点"
   },

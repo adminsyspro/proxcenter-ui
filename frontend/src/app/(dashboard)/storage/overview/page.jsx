@@ -38,6 +38,8 @@ import EmptyState from '@/components/EmptyState'
 import { CardsSkeleton, TableSkeleton } from '@/components/skeletons'
 import StorageContentBrowser from '@/components/storage/StorageContentBrowser'
 import { filterStorages } from '@/lib/storage/filterStorages'
+import { useDiskLatency } from '@/hooks/useDiskLatency'
+import { StorageLatencyCell } from '@/components/inventory/DiskLatencyCell'
 
 // Sentinel MenuItem value for the "select all / clear selection" toggle in the
 // tenant selector (issue #609). MUI's Select clones every child with its own
@@ -262,6 +264,10 @@ return () => setPageInfo('', '', '')
   const [tenantIds, setTenantIds] = useState(null)
   const [unavailable, setUnavailable] = useState([])
 
+  // Guest disk latency per storage from the orchestrator (#881); the column
+  // only appears once a cluster reports one, so Community sees no change.
+  const latency = useDiskLatency()
+
   // Charger tous les storages en une seule requête
   const loadStorages = async () => {
     setLoading(true)
@@ -471,6 +477,22 @@ return (
         </Box>
       )
     },
+    ...(latency.available ? [{
+      field: 'latency',
+      headerName: t('storageOverview.latency'),
+      width: 110,
+      valueGetter: (_value, row) => latency.storages.get(`${row.connId}:${row.storage}`)?.latency_ms ?? null,
+      renderCell: params => {
+        const s = latency.storages.get(`${params.row.connId}:${params.row.storage}`)
+
+        return (
+          <StorageLatencyCell
+            entry={s}
+            tooltip={s ? t('storageOverview.latencyTooltip', { vms: s.vms, minutes: latency.windowMinutes, max: Math.round(s.window_max_ms) }) : ''}
+          />
+        )
+      }
+    }] : []),
     {
       field: 'totalFormatted',
       headerName: t('storage.capacity'),
@@ -512,7 +534,7 @@ return (
     }
 
     return cols
-  }, [t, showTenantSelector])
+  }, [t, showTenantSelector, latency])
 
   return (
     // Page pleine hauteur, même recette que /operations/task-center : la racine

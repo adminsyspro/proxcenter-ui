@@ -4807,6 +4807,8 @@
   "console": {
     "title": "Konsole",
     "fullscreen": "Vollbild",
+    "exitFullscreen": "Vollbild beenden",
+    "openInNewWindow": "In neuem Fenster öffnen",
     "sendCtrlAltDel": "Strg+Alt+Entf senden",
     "connecting": "Verbindung zur Konsole wird hergestellt...",
     "notAvailable": "Console nicht verfügbar",

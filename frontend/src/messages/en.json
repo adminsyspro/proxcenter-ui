@@ -4828,6 +4828,8 @@
   "console": {
     "title": "Console",
     "fullscreen": "Fullscreen",
+    "exitFullscreen": "Exit fullscreen",
+    "openInNewWindow": "Open in a new window",
     "sendCtrlAltDel": "Send Ctrl+Alt+Del",
     "connecting": "Connecting to console...",
     "notAvailable": "Console not available",

@@ -1222,6 +1222,8 @@ export default function TreeDialogs(props: TreeDialogsProps) {
                 return (
                   <XTermShell
                     sessionId={shellDialog.data.sessionId}
+                    connId={shellDialog.connId}
+                    node={shellDialog.node}
                     host={shellDialog.data.host}
                     onDisconnect={() => setShellDialog(prev => ({ ...prev, data: null, error: 'Disconnected' }))}
                   />

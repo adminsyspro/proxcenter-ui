@@ -90,7 +90,7 @@ export function mergeLatencySeries<T extends { t: number }>(
     if ((p.read_ops ?? 0) + (p.write_ops ?? 0) > 0) active.add(p.disk)
   }
 
-  const disks = [...active].sort()
+  const disks = [...active].sort((a, b) => a.localeCompare(b))
   if (disks.length === 0) return { data: series.map(pt => ({ ...pt })), disks }
 
   const data = series.map(pt => {

@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { ensureNamespace, ensureSubToken, setNamespaceAcl, deleteSubToken } from './pbsNamespace'
+import {
+  deleteSubToken, ensureNamespace, ensureSubToken, setDatastoreAcl, setDatastoreAuditAcl, setNamespaceAcl,
+} from './pbsNamespace'
 
 vi.mock('./pbs-client', () => ({
   pbsFetch: vi.fn(),
@@ -81,5 +83,45 @@ describe('deleteSubToken', () => {
   it('swallows 404 (already deleted)', async () => {
     mock.mockRejectedValueOnce(new Error('PBS 404 /access/users/root@pam/token/vdc-abc'))
     await expect(deleteSubToken(conn, 'root@pam', 'vdc-abc')).resolves.not.toThrow()
+  })
+})
+
+describe('datastore-root ACLs', () => {
+  beforeEach(() => mock.mockReset())
+
+  it('grants DatastoreBackup on the datastore root by default', async () => {
+    // The root grant is what a storage attached to the datastore root needs,
+    // since it has no namespace path to scope the ACL to (issue #890).
+    mock.mockResolvedValueOnce({})
+    await setDatastoreAcl(conn, 'store1', 'root@pam!pxc-x')
+
+    expect(mock.mock.calls[0][1]).toBe('/access/acl')
+    expect(mock.mock.calls[0][2].body).toMatchObject({
+      path: '/datastore/store1',
+      'auth-id': 'root@pam!pxc-x',
+      role: 'DatastoreBackup',
+      propagate: true,
+    })
+  })
+
+  it('honours an explicit role', async () => {
+    mock.mockResolvedValueOnce({})
+    await setDatastoreAcl(conn, 'store1', 'root@pam!pxc-x', 'DatastoreReader')
+
+    expect(mock.mock.calls[0][2].body).toMatchObject({ role: 'DatastoreReader' })
+  })
+
+  it('setDatastoreAuditAcl delegates with the audit role', async () => {
+    // PVE's pbs: probe needs the datastore itself to be visible, hence this
+    // second grant next to the namespace one.
+    mock.mockResolvedValueOnce({})
+    await setDatastoreAuditAcl(conn, 'store1', 'root@pam!pxc-x')
+
+    expect(mock.mock.calls[0][2].body).toMatchObject({
+      path: '/datastore/store1',
+      'auth-id': 'root@pam!pxc-x',
+      role: 'DatastoreAudit',
+      propagate: true,
+    })
   })
 })

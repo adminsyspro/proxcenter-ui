@@ -62,6 +62,8 @@ import DatacenterSettingsTab from '@/components/datacenter-settings'
 import MetricServerTab from '@/components/MetricServerTab'
 import NotificationsTab from '@/components/NotificationsTab'
 import SnapshotsTab from '@/components/SnapshotsTab'
+import AttachPbsStorageDialog from '@/components/storage/AttachPbsStorageDialog'
+import DetachPbsStorageDialog from '@/components/storage/DetachPbsStorageDialog'
 import RollingUpdateWizard from '@/components/RollingUpdateWizard'
 
 import type { InventorySelection, DetailsPayload, RrdTimeframe, SeriesPoint, Status } from '../types'
@@ -234,6 +236,8 @@ export default function ClusterTabs(props: any) {
   const [addHaSaving, setAddHaSaving] = useState(false)
   const [clusterTags, setClusterTags] = useState<string[]>([])
   const [clusterTagsLoaded, setClusterTagsLoaded] = useState<string | null>(null)
+  const [attachPbsOpen, setAttachPbsOpen] = useState(false)
+  const [detachPbsTarget, setDetachPbsTarget] = useState<{ connId: string; connName?: string | null; storage: string } | null>(null)
   const theme = useTheme()
   const chartTooltipStyle = { backgroundColor: theme.palette.background.paper, border: `1px solid ${theme.palette.divider}`, borderRadius: 4, color: theme.palette.text.primary }
   const toast = useToast()
@@ -266,6 +270,7 @@ export default function ClusterTabs(props: any) {
     clusterStorageData,
     clusterStorageLoading,
     clusterTab,
+    loadClusterStorage,
     createClusterDialogOpen,
     cveAvailable,
     data,
@@ -330,6 +335,10 @@ export default function ClusterTabs(props: any) {
   // Track active rolling update for this cluster (from global context)
   const { hasActiveUpdate, openMonitor } = useRollingUpdates()
   const clusterConnId = selection?.type === 'cluster' ? selection.id : ''
+
+  // Écrire storage.cfg relève de la gestion de la connexion, le grant que les
+  // routes POST / DELETE exigent (issue #890).
+  const canManageCluster = hasPermission('connection.manage')
   const activeRollingUpdateId = hasActiveUpdate(clusterConnId)
 
   const drsHealth = useMemo(() => {
@@ -3125,6 +3134,27 @@ export default function ClusterTabs(props: any) {
                 {/* Onglet Storage - Index 8 */}
                 {clusterTab === 8 && (
                   <Box sx={{ p: 0 }}>
+                    {/* Ajouter une cible de sauvegarde se fait ici, au niveau du
+                        cluster, comme dans Proxmox où le stockage se déclare au
+                        datacenter puis se restreint à des nœuds (issue #890). */}
+                    {/* En-tête de section avec le « + » d'ajout, la même forme que
+                        les sections HA juste à côté. Le libellé du bouton ne nomme
+                        aucun type: la modale porte le sélecteur, et d'autres types
+                        que PBS viendront s'y ajouter (issue #890). Le `pt` décolle
+                        la ligne de la barre d'onglets, qu'elle recouvrait sinon. */}
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pt: 1.5, pb: 1.5 }}>
+                      <Typography variant="subtitle1" fontWeight={700} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <i className="ri-hard-drive-2-line" style={{ fontSize: 18, opacity: 0.7 }} />
+                        {t('storage.storages')} ({clusterStorageData.length})
+                      </Typography>
+                      {canManageCluster && (
+                        <MuiTooltip title={t('storage.attachPbs.title')}>
+                          <IconButton size="small" color="primary" onClick={() => setAttachPbsOpen(true)}>
+                            <AddIcon sx={{ fontSize: 20 }} />
+                          </IconButton>
+                        </MuiTooltip>
+                      )}
+                    </Box>
                     {clusterStorageLoading ? (
                       <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
                         <CircularProgress size={24} />
@@ -3140,6 +3170,7 @@ export default function ClusterTabs(props: any) {
                               <TableCell sx={{ fontWeight: 700 }}>{t('cluster.pathTarget')}</TableCell>
                               <TableCell sx={{ fontWeight: 700 }} align="center">{t('cluster.shared')}</TableCell>
                               <TableCell sx={{ fontWeight: 700 }} align="center">{t('common.enabled')}</TableCell>
+                              {canManageCluster && <TableCell sx={{ fontWeight: 700 }} align="right">{t('common.actions')}</TableCell>}
                             </TableRow>
                           </TableHead>
                           <TableBody>
@@ -3186,11 +3217,33 @@ export default function ClusterTabs(props: any) {
                                       <i className="ri-checkbox-circle-fill" style={{ color: '#4caf50', fontSize: 18 }} />
                                     )}
                                   </TableCell>
+                                  {canManageCluster && (
+                                    <TableCell align="right">
+                                      {/* Seul un stockage PBS se détache d'ici: les autres
+                                          types ne sont pas rattachables depuis ProxCenter,
+                                          donc les proposer au retrait serait un piège. */}
+                                      {storage.type === 'pbs' && (
+                                        <MuiTooltip title={t('storage.attachPbs.detach')}>
+                                          <IconButton
+                                            size="small"
+                                            color="error"
+                                            onClick={() => setDetachPbsTarget({
+                                              connId: clusterConnId,
+                                              connName: data?.title,
+                                              storage: storage.storage,
+                                            })}
+                                          >
+                                            <i className="ri-link-unlink" style={{ fontSize: 16 }} />
+                                          </IconButton>
+                                        </MuiTooltip>
+                                      )}
+                                    </TableCell>
+                                  )}
                                 </TableRow>
                               ))
                             ) : (
                               <TableRow>
-                                <TableCell colSpan={6} align="center" sx={{ py: 4 }}>
+                                <TableCell colSpan={canManageCluster ? 7 : 6} align="center" sx={{ py: 4 }}>
                                   <Box sx={{ opacity: 0.5 }}>
                                     <i className="ri-hard-drive-2-line" style={{ fontSize: 48 }} />
                                     <Typography sx={{ mt: 1 }}>{t('cluster.noStorageConfigured')}</Typography>
@@ -3201,6 +3254,25 @@ export default function ClusterTabs(props: any) {
                           </TableBody>
                         </Table>
                       </Box>
+                    )}
+
+                    {/* Montés à l'ouverture seulement: chaque ouverture repart de
+                        champs vides, et le secret saisi ne survit pas à la fermeture. */}
+                    {attachPbsOpen && (
+                      <AttachPbsStorageDialog
+                        open
+                        onClose={() => setAttachPbsOpen(false)}
+                        cluster={{ id: clusterConnId, name: data?.title }}
+                        onAttached={() => loadClusterStorage?.(clusterConnId)}
+                      />
+                    )}
+
+                    {detachPbsTarget && (
+                      <DetachPbsStorageDialog
+                        target={detachPbsTarget}
+                        onClose={() => setDetachPbsTarget(null)}
+                        onDetached={() => loadClusterStorage?.(clusterConnId)}
+                      />
                     )}
                   </Box>
                 )}

@@ -7064,7 +7064,20 @@
       "description": "Descripción"
     },
     "lastScan": "Último escaneo: {date}",
-    "filterBySeverity": "Filtrar por gravedad"
+    "filterBySeverity": "Filtrar por gravedad",
+    "scanFailed": "El escaneo ha fallado",
+    "partialScan": "Escaneo parcial",
+    "coverage": "{scanned} paquetes analizados, {tracked} conocidos por el rastreador de seguridad de Debian",
+    "noFix": "Sin corrección aún",
+    "noFixFilter": "Sin corrección ({count})",
+    "status": {
+      "ssh-not-configured": "SSH no está configurado en esta conexión, por lo que solo se han analizado los paquetes que informa la API de Proxmox. La mayor parte del sistema base de Debian queda fuera.",
+      "ssh-failed": "El inventario de paquetes por SSH ha fallado en {node}. El escaneo ha recurrido a la API de Proxmox y solo cubre parte de los paquetes instalados.",
+      "credentials-failed": "No se han podido leer las credenciales SSH de esta conexión. El escaneo ha recurrido a la API de Proxmox y solo cubre parte de los paquetes instalados.",
+      "release-not-tracked": "El rastreador de seguridad de Debian ya no publica datos para {release}, por lo que {node} no puede analizarse.",
+      "node-offline": "{node} está sin conexión y no se ha analizado.",
+      "inventory-empty": "No se ha podido leer ninguna lista de paquetes de {node}."
+    }
   },
   "emptyState": {
     "noEvents": "Sin eventos",

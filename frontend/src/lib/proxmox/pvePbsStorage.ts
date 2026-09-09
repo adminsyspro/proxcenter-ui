@@ -54,7 +54,9 @@ export async function createPbsStorage(conn: PveConn, args: CreatePbsStorageArgs
   params.append('type', 'pbs')
   params.append('server', args.server)
   params.append('datastore', args.datastore)
-  params.append('namespace', args.namespace)
+  // A storage attached to the datastore ROOT carries no namespace, and PVE
+  // rejects an empty `namespace` value rather than reading it as the root.
+  if (args.namespace) params.append('namespace', args.namespace)
   params.append('username', args.username)
   params.append('password', args.password)
   params.append('fingerprint', args.fingerprint)

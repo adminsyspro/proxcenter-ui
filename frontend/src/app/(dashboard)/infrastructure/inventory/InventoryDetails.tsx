@@ -3596,7 +3596,7 @@ return vm?.isCluster ?? false
                 clusterCephLoading, clusterCephPerf, clusterCephPerfFiltered, clusterCephTimeframe, clusterConfig,
                 clusterConfigLoaded, clusterConfigLoading, clusterHaGroups, clusterHaLoaded, clusterHaLoading, clusterHaResources, clusterHaRules, clusterHaStatus, loadClusterHa,
                 clusterNotesContent, clusterNotesEditMode, clusterNotesLoading, clusterNotesSaving, clusterPveMajorVersion,
-                clusterStorageData, clusterStorageLoading, clusterTab, createClusterDialogOpen, data,
+                clusterStorageData, clusterStorageLoading, clusterTab, createClusterDialogOpen, data, loadClusterStorage,
                 error, expandedClusterNodes, favorites, handleCreateCluster, handleJoinCluster, handleNodeBulkAction, loadVmTrendsBatch,
                 handleSaveClusterNotes, handleTableMigrate, handleTableVmAction, joinClusterDialogOpen, joinClusterInfo,
                 joinClusterPassword, joinInfoDialogOpen, loading, localVmsDialogNode, localVmsDialogOpen,

@@ -1,7 +1,6 @@
 import { randomUUID } from 'crypto'
 
 import { prisma } from '@/lib/db/prisma'
-import { decryptSecret } from '@/lib/crypto/secret'
 import {
   ensureNamespacePath, ensureSubToken, setNamespaceAcl, setDatastoreAuditAcl, deleteSubToken,
   waitForPbsTokenReady,
@@ -9,6 +8,7 @@ import {
 import {
   createPbsStorage, deletePbsStorage, sanitizeStorageName,
 } from '@/lib/proxmox/pvePbsStorage'
+import { resolvePbsMeta } from '@/lib/proxmox/pbsConnMeta'
 import { getConnectionById } from '@/lib/connections/getConnection'
 import {
   insertBinding, insertPveStorage, deleteBinding, deletePveStorage,
@@ -53,36 +53,6 @@ async function withLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
   locks.set(key, prev.then(() => next))
   try { return await prev.then(fn) }
   finally { resolve(); if (locks.get(key) === next) locks.delete(key) }
-}
-
-function parsePbsUser(apiToken: string): string {
-  const m = apiToken.match(/^([^!]+)!/)
-  if (!m) throw new Error('Unexpected PBS root token format; expected user@realm!tokenid:secret')
-  return m[1]
-}
-
-async function resolvePbsMeta(pbsConnectionId: string): Promise<{
-  conn: { baseUrl: string; apiToken: string; insecureDev: boolean }
-  host: string
-  fingerprint: string
-  rootUser: string
-}> {
-  const row = await prisma.connection.findUnique({
-    where: { id: pbsConnectionId },
-    select: { baseUrl: true, fingerprint: true, apiTokenEnc: true, insecureTLS: true, type: true },
-  })
-  if (!row || row.type !== 'pbs') throw new Error(`PBS connection not found: ${pbsConnectionId}`)
-  if (!row.fingerprint) throw new Error('PBS fingerprint missing — capture it on the connection first')
-
-  const apiToken = decryptSecret(row.apiTokenEnc)
-  const host = row.baseUrl.replace(/^https?:\/\//, '').replace(/\/.*$/, '').replace(/:\d+$/, '')
-
-  return {
-    conn: { baseUrl: row.baseUrl, apiToken, insecureDev: !!row.insecureTLS },
-    host,
-    fingerprint: row.fingerprint,
-    rootUser: parsePbsUser(apiToken),
-  }
 }
 
 async function readVdcAndTenant(vdcId: string) {

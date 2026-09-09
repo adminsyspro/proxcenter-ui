@@ -90,6 +90,28 @@ export async function setNamespaceAcl(
 }
 
 /**
+ * Grant a role on the datastore ROOT (propagate=true), i.e. on every
+ * namespace it holds. Used when a storage is attached to the datastore root
+ * and therefore has no namespace path to scope the ACL to.
+ */
+export async function setDatastoreAcl(
+  conn: PbsClientOptions,
+  datastore: string,
+  authId: string,
+  role: 'DatastoreBackup' | 'DatastoreReader' | 'DatastoreAudit' = 'DatastoreBackup',
+): Promise<void> {
+  await pbsFetch(conn, '/access/acl', {
+    method: 'PUT',
+    body: {
+      path: `/datastore/${datastore}`,
+      'auth-id': authId,
+      role,
+      propagate: true,
+    } as any,
+  })
+}
+
+/**
  * Grant DatastoreAudit on the datastore root (propagate=true). Required so
  * PVE's `pbs:` storage probe can confirm the datastore exists. Datastore.Audit
  * only allows seeing the datastore + namespace *names* — no data access — so
@@ -100,15 +122,7 @@ export async function setDatastoreAuditAcl(
   datastore: string,
   authId: string,
 ): Promise<void> {
-  await pbsFetch(conn, '/access/acl', {
-    method: 'PUT',
-    body: {
-      path: `/datastore/${datastore}`,
-      'auth-id': authId,
-      role: 'DatastoreAudit',
-      propagate: true,
-    } as any,
-  })
+  await setDatastoreAcl(conn, datastore, authId, 'DatastoreAudit')
 }
 
 /**

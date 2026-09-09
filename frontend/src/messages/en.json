@@ -481,6 +481,7 @@
       "activityFeed": "Recent Activity",
       "storagePools": "Storages",
       "cephStatus": "Ceph Status",
+      "storageLatency": "Storage Latency",
       "vmStatusWaffle": "Guest Status (Waffle)",
       "resourceTrends": "Resource Trends",
       "infraGlobalChart": "Infra CPU/RAM",
@@ -515,6 +516,7 @@
       "activityFeed": "Recent tasks and events",
       "storagePools": "PVE storages list",
       "cephStatus": "Ceph cluster status",
+      "storageLatency": "Guest disk latency per storage, slowest first (Enterprise)",
       "vmStatusWaffle": "Waffle view of guests by cluster and status",
       "resourceTrends": "CPU/RAM evolution over 1h, 24h or 7d",
       "infraGlobalChart": "Per-node CPU/RAM across all infrastructure",
@@ -562,6 +564,13 @@
     },
     "widgetArc": {
       "noData": "No ZFS ARC data. Requires PVE 9 or later on a node using ZFS."
+    },
+    "widgetStorageLatency": {
+      "title": "Storage latency",
+      "noData": "No storage latency yet. The orchestrator measures it at every metrics collection from the running VMs of each storage.",
+      "readWrite": "Read {read} · Write {write}",
+      "window": "Last {minutes} min: average {avg}, max {max}",
+      "guests": "{vms} VMs · {disks} disks"
     },
     "nodeGuests": {
       "guests": "{count} guests",

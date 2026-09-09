@@ -481,6 +481,7 @@
       "activityFeed": "Activité récente",
       "storagePools": "Stockages",
       "cephStatus": "État Ceph",
+      "storageLatency": "Latence des stockages",
       "vmStatusWaffle": "État des guests (Waffle)",
       "resourceTrends": "Tendances ressources",
       "infraGlobalChart": "Infra CPU/RAM",
@@ -515,6 +516,7 @@
       "activityFeed": "Tâches et événements récents",
       "storagePools": "Liste des storages PVE",
       "cephStatus": "État du cluster Ceph",
+      "storageLatency": "Latence disque des VM par stockage, du plus lent au plus rapide (Enterprise)",
       "vmStatusWaffle": "Vue waffle des guests par cluster et status",
       "resourceTrends": "Évolution CPU/RAM sur 1h, 24h ou 7j",
       "infraGlobalChart": "CPU/RAM par nœud sur toute l'infrastructure",
@@ -562,6 +564,13 @@
     },
     "widgetArc": {
       "noData": "Aucune donnée ZFS ARC. Nécessite PVE 9 ou supérieur sur un nœud utilisant ZFS."
+    },
+    "widgetStorageLatency": {
+      "title": "Latence des stockages",
+      "noData": "Pas encore de latence de stockage. L'orchestrateur la mesure à chaque collecte de métriques à partir des VM en marche de chaque stockage.",
+      "readWrite": "Lecture {read} · Écriture {write}",
+      "window": "{minutes} dernières min : moyenne {avg}, max {max}",
+      "guests": "{vms} VM · {disks} disques"
     },
     "nodeGuests": {
       "guests": "{count} guests",

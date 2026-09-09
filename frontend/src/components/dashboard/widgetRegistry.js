@@ -16,6 +16,7 @@ const ClustersListWidget = dynamic(() => import('./widgets/ClustersListWidget'),
 const GuestsSummaryWidget = dynamic(() => import('./widgets/GuestsSummaryWidget'), { ssr: false })
 const AlertsListWidget = dynamic(() => import('./widgets/AlertsListWidget'), { ssr: false })
 const CephStatusWidget = dynamic(() => import('./widgets/CephStatusWidget'), { ssr: false })
+const StorageLatencyWidget = dynamic(() => import('./widgets/StorageLatencyWidget'), { ssr: false })
 
 // Nouveaux widgets
 const ActivityFeedWidget = dynamic(() => import('./widgets/ActivityFeedWidget'), { ssr: false })
@@ -304,6 +305,19 @@ export const WIDGET_REGISTRY = {
     noContainer: true,
     requiresInfraScope: true,
     component: CephStatusWidget,
+  },
+  'storage-latency': {
+    type: 'storage-latency',
+    name: 'Storage Latency',
+    description: 'Guest disk latency per storage (Enterprise)',
+    icon: 'ri-pulse-line',
+    category: 'storage',
+    defaultSize: { w: 4, h: 5 },
+    minSize: { w: 3, h: 3 },
+    maxSize: { w: 12, h: 20 },
+    noContainer: true,
+    requiresInfraScope: true,
+    component: StorageLatencyWidget,
   },
 
   'infra-global-chart': {

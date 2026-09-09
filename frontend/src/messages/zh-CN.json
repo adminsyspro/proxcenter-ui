@@ -469,6 +469,7 @@
       "activityFeed": "最近活动",
       "storagePools": "存储",
       "cephStatus": "Ceph 状态",
+      "storageLatency": "存储延迟",
       "zerotrustScore": "零信任概览",
       "zerotrustSecuritygroups": "安全组",
       "vmStatusWaffle": "客户机状态（华夫图）",
@@ -500,6 +501,7 @@
       "activityFeed": "最近任务和事件",
       "storagePools": "PVE 存储列表",
       "cephStatus": "Ceph 集群状态",
+      "storageLatency": "按存储统计的虚拟机磁盘延迟，最慢的优先 (Enterprise)",
       "zerotrustScore": "按集群的安全评分（防火墙 + 策略）",
       "zerotrustSecuritygroups": "按集群的安全组列表",
       "vmStatusWaffle": "按集群和状态的客户机华夫图",
@@ -549,6 +551,13 @@
     },
     "widgetArc": {
       "noData": "无 ZFS ARC 数据。需要 PVE 9 或更高版本，且节点使用 ZFS。"
+    },
+    "widgetStorageLatency": {
+      "title": "存储延迟",
+      "noData": "尚无存储延迟数据。编排器在每次指标采集时从每个存储上运行的虚拟机中测量。",
+      "readWrite": "读取 {read} · 写入 {write}",
+      "window": "最近 {minutes} 分钟：平均 {avg}，最大 {max}",
+      "guests": "{vms} 台虚拟机 · {disks} 个磁盘"
     },
     "nodeGuests": {
       "guests": "{count} 个客户机",

@@ -481,6 +481,7 @@
       "activityFeed": "최근 활동",
       "storagePools": "스토리지",
       "cephStatus": "Ceph 상태",
+      "storageLatency": "스토리지 지연 시간",
       "vmStatusWaffle": "게스트 상태 (와플)",
       "resourceTrends": "리소스 추세",
       "infraGlobalChart": "인프라 CPU/RAM",
@@ -515,6 +516,7 @@
       "activityFeed": "최근 작업 및 이벤트",
       "storagePools": "PVE 스토리지 목록",
       "cephStatus": "Ceph 클러스터 상태",
+      "storageLatency": "스토리지별 게스트 디스크 지연 시간, 가장 느린 것부터 (Enterprise)",
       "vmStatusWaffle": "클러스터 및 상태별 게스트 와플 뷰",
       "resourceTrends": "1시간, 24시간, 7일간의 CPU/RAM 추이",
       "infraGlobalChart": "전체 인프라의 노드별 CPU/RAM",
@@ -562,6 +564,13 @@
     },
     "widgetArc": {
       "noData": "ZFS ARC 데이터가 없습니다. ZFS를 사용하는 노드에서 PVE 9 이상이 필요합니다."
+    },
+    "widgetStorageLatency": {
+      "title": "스토리지 지연 시간",
+      "noData": "아직 스토리지 지연 시간 데이터가 없습니다. 오케스트레이터가 메트릭 수집마다 각 스토리지의 실행 중인 VM에서 측정합니다.",
+      "readWrite": "읽기 {read} · 쓰기 {write}",
+      "window": "최근 {minutes}분: 평균 {avg}, 최대 {max}",
+      "guests": "VM {vms}개 · 디스크 {disks}개"
     },
     "nodeGuests": {
       "guests": "게스트 {count}개",

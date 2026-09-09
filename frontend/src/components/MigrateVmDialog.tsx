@@ -1,7 +1,9 @@
 'use client'
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react'
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useTranslations } from 'next-intl'
+import type { CcmPrereqCapture, CcmRestorePlan, HaResourceCapture, ReplicationJobCapture, SiteRecoveryJobRef } from '@/lib/migration/ccm-prereqs.types'
+import { storageSupportsReplication } from '@/lib/migration/ccm-prereqs.types'
 import { isSharedStorage } from '@/lib/proxmox/storage'
 import { computeNegativeAffinityConflicts, getAffinityPeers, type AffinityPeer, type HaRule, type HaStatusEntry } from '@/lib/proxmox/haAffinity'
 
@@ -18,6 +20,11 @@ import {
   MenuItem,
   FormControlLabel,
   Checkbox,
+  Switch,
+  List,
+  ListItem,
+  ListItemText,
+  LinearProgress,
   Box,
   Typography,
   Stack,
@@ -138,6 +145,149 @@ export type CrossClusterMigrateParams = {
   online: boolean
   deleteSource: boolean
   bwlimit?: number
+  restore?: (CcmRestorePlan & { rollbackOnFailure?: boolean })
+}
+
+export function mergeCapture(prev: CcmPrereqCapture | null, next: CcmPrereqCapture): CcmPrereqCapture {
+  const replication = new Map((prev?.replication || []).map(job => [job.id, job]))
+  for (const job of next.replication) {
+    if (!replication.has(job.id)) replication.set(job.id, job)
+  }
+
+  return {
+    ha: prev?.ha ?? next.ha,
+    replication: [...replication.values()],
+    snapshotsDeleted: [...new Set([...(prev?.snapshotsDeleted || []), ...next.snapshotsDeleted])],
+  }
+}
+
+/**
+ * Short domain name per check code, so a check reads as one line instead of a
+ * banner. The issue's own `message` becomes the line's detail and `details` its
+ * tooltip, so the wording still comes from the route.
+ */
+type SourcePrereqs = {
+  ha: HaResourceCapture | null
+  replication: ReplicationJobCapture[]
+  snapshots: string[]
+  siteRecoveryJobs: SiteRecoveryJobRef[]
+}
+
+/**
+ * Detail wording per check code, rendered from the issue's `context` so a row
+ * shows the values in the reader's language instead of repeating its own label
+ * with the route's English sentence. Codes absent here fall back to `message`.
+ */
+const CHECK_DETAIL_KEY: Record<string, string> = {
+  LXC_NOT_SUPPORTED: 'guestType',
+  SOURCE_VM_NOT_FOUND: 'sourceVm',
+  HA_RULES_NOT_PORTABLE: 'haRules',
+  REPLICATION_CHECK_FAILED: 'checkFailed',
+  SNAPSHOTS_CHECK_FAILED: 'checkFailed',
+  CLOUD_INIT_DRIVE: 'cloudInit',
+  CPU_HOST: 'cpuType',
+  CPU_HOST_MISMATCH: 'cpuMismatch',
+  CPU_TYPE_NOT_ON_TARGET: 'cpuNotOnTarget',
+  CPU_TYPE_CHECK_FAILED: 'cpuCheckFailed',
+  TARGET_NODE_NOT_FOUND: 'targetNodeNotFound',
+  TARGET_NODE_OFFLINE: 'targetNodeOffline',
+  TARGET_CLUSTER_UNREACHABLE: 'targetClusterUnreachable',
+  TARGET_STORAGE_NOT_FOUND: 'storageNotFound',
+  TARGET_STORAGE_NO_IMAGES: 'storageNoImages',
+  TARGET_STORAGE_LOW_SPACE: 'storageLowSpace',
+  TARGET_STORAGE_CHECK_FAILED: 'checkFailed',
+  TARGET_BRIDGE_NOT_FOUND: 'bridgeNotFound',
+  TARGET_NOT_A_BRIDGE: 'notABridge',
+  TARGET_NETWORK_CHECK_FAILED: 'checkFailed',
+  MTU_MISMATCH: 'mtuMismatch',
+  VMID_EXISTS_ON_TARGET: 'vmidExists',
+  INSUFFICIENT_CPU: 'insufficientCpu',
+  INSUFFICIENT_MEMORY: 'insufficientMemory',
+}
+
+const CHECK_LABEL_SLUG: Record<string, string> = {
+  HA_ENABLED: 'ha',
+  HA_RULES_NOT_PORTABLE: 'haRules',
+  SITE_RECOVERY_JOB: 'siteRecovery',
+  REPLICATION_CONFIGURED: 'replication',
+  REPLICATION_CHECK_FAILED: 'replication',
+  SNAPSHOTS_PRESENT: 'snapshots',
+  SNAPSHOTS_CHECK_FAILED: 'snapshots',
+  CPU_HOST: 'cpu',
+  CPU_HOST_MISMATCH: 'cpu',
+  CPU_TYPE_NOT_ON_TARGET: 'cpu',
+  CPU_TYPE_CHECK_FAILED: 'cpu',
+  CLOUD_INIT_DRIVE: 'cloudInit',
+  MTU_MISMATCH: 'network',
+  TARGET_BRIDGE_NOT_FOUND: 'network',
+  TARGET_NOT_A_BRIDGE: 'network',
+  TARGET_NETWORK_CHECK_FAILED: 'network',
+  TARGET_NODE_NOT_FOUND: 'targetNode',
+  TARGET_NODE_OFFLINE: 'targetNode',
+  TARGET_CLUSTER_UNREACHABLE: 'targetNode',
+  TARGET_STORAGE_NOT_FOUND: 'storage',
+  TARGET_STORAGE_NO_IMAGES: 'storage',
+  TARGET_STORAGE_LOW_SPACE: 'storage',
+  TARGET_STORAGE_CHECK_FAILED: 'storage',
+  VMID_EXISTS_ON_TARGET: 'vmid',
+  INSUFFICIENT_CPU: 'targetResources',
+  INSUFFICIENT_MEMORY: 'targetResources',
+  LXC_NOT_SUPPORTED: 'guestType',
+  SOURCE_VM_NOT_FOUND: 'sourceVm',
+}
+
+const CHECK_ROW_GLYPH: Record<string, { icon: string; color: string }> = {
+  error: { icon: 'ri-close-circle-fill', color: 'error.main' },
+  warning: { icon: 'ri-alert-fill', color: 'warning.main' },
+  success: { icon: 'ri-checkbox-circle-fill', color: 'success.main' },
+}
+
+export type CheckRowSeverity = 'error' | 'warning' | 'success' | 'busy'
+
+/**
+ * One check on a single line: glyph, domain, detail, and its remediation button.
+ *
+ * Replaces the stack of MUI Alerts this tab used to render. Six banners for
+ * five facts pushed the modal past the viewport, so the detail is ellipsized
+ * with the full text in a tooltip rather than wrapped over three lines.
+ */
+function CheckRow({
+  severity,
+  label,
+  detail,
+  tooltip,
+  action,
+}: {
+  severity: CheckRowSeverity
+  label?: string
+  detail?: string
+  tooltip?: string
+  action?: React.ReactNode
+}) {
+  const glyph = CHECK_ROW_GLYPH[severity]
+
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.25, py: 0.75, minHeight: 34 }}>
+      {glyph ? (
+        // Box, never a raw <i>: a theme colour token in a plain style attribute
+        // is dropped without a word.
+        <Box component="i" className={glyph.icon} sx={{ fontSize: 16, color: glyph.color, flexShrink: 0 }} />
+      ) : (
+        <CircularProgress size={14} sx={{ flexShrink: 0 }} />
+      )}
+      {label && (
+        <Typography variant="body2" fontWeight={600} sx={{ flexShrink: 0 }}>
+          {label}
+        </Typography>
+      )}
+      <Tooltip title={tooltip && tooltip !== detail ? tooltip : ''} placement="top">
+        <Typography variant="caption" color="text.secondary" noWrap sx={{ flex: 1, minWidth: 0 }}>
+          {detail}
+        </Typography>
+      </Tooltip>
+      {action}
+    </Box>
+  )
 }
 
 // Tab Panel component
@@ -222,20 +372,39 @@ export function MigrateVmDialog({
   const [haState, setHaState] = useState<string>('')
   const [haGroup, setHaGroup] = useState<string>('')
   const [haLoading, setHaLoading] = useState(false)
-  const [haRemoving, setHaRemoving] = useState(false)
   const [haRules, setHaRules] = useState<HaRule[]>([])
   const [haStatusEntries, setHaStatusEntries] = useState<HaStatusEntry[]>([])
 
   // ========== PRE-MIGRATION VALIDATION ==========
+  type RemediationHint =
+    | { kind: 'ha'; sid: string; state?: string; group?: string; reversible: true }
+    | { kind: 'replication'; jobs: { id: string; target: string; schedule?: string }[]; reversible: true }
+    | { kind: 'snapshots'; names: string[]; reversible: false }
+
   type ValidationIssue = {
     type: 'error' | 'warning'
     code: string
     message: string
     details?: string
+    /** Values behind the message, rendered under the row's own label. */
+    context?: Record<string, string | number>
+    remediation?: RemediationHint
+    siteRecovery?: SiteRecoveryJobRef
   }
   const [validationIssues, setValidationIssues] = useState<ValidationIssue[]>([])
   const [validationLoading, setValidationLoading] = useState(false)
   const [validationDone, setValidationDone] = useState(false)
+  const [prereqCapture, setPrereqCapture] = useState<CcmPrereqCapture | null>(null)
+  const [prereqBusy, setPrereqBusy] = useState(false)
+  const [prereqError, setPrereqError] = useState<string | null>(null)
+  const [prereqPendingJobs, setPrereqPendingJobs] = useState<string[]>([])
+  const [sourcePrereqs, setSourcePrereqs] = useState<SourcePrereqs | null>(null)
+  const [snapshotConfirmOpen, setSnapshotConfirmOpen] = useState(false)
+  const [restoreEnabled, setRestoreEnabled] = useState(true)
+  const [restoreHaState, setRestoreHaState] = useState<string>('')
+  const [restoreReplTarget, setRestoreReplTarget] = useState<string>('')
+  const [restoreReplSchedule, setRestoreReplSchedule] = useState<string>('*/15')
+  const [restoreReplRate, setRestoreReplRate] = useState<number | ''>('')
   
   // Calculer les stockages actuels uniques
   const currentStorageNames = useMemo(() => {
@@ -288,6 +457,17 @@ export function MigrateVmDialog({
       setHaStatusEntries([])
       setValidationIssues([])
       setValidationDone(false)
+      setPrereqCapture(null)
+      setPrereqBusy(false)
+      setPrereqError(null)
+      setPrereqPendingJobs([])
+      setSourcePrereqs(null)
+      setSnapshotConfirmOpen(false)
+      setRestoreEnabled(true)
+      setRestoreHaState('')
+      setRestoreReplTarget('')
+      setRestoreReplSchedule('*/15')
+      setRestoreReplRate('')
     }
   }, [open])
 
@@ -743,55 +923,29 @@ export function MigrateVmDialog({
         online: onlineMigration && vmStatus === 'running',
         deleteSource: deleteSourceAfter,
         bwlimit: bwLimit ? Number(bwLimit) : undefined,
+        restore: capturedSomething && restoreEnabled
+          ? {
+              capture: prereqCapture as CcmPrereqCapture,
+              restoreHa: !!prereqCapture?.ha,
+              haState: restoreHaState || undefined,
+              restoreReplication:
+                canRecreateReplication &&
+                (prereqCapture?.replication.length ?? 0) > 0 &&
+                !!restoreReplTarget,
+              replicationTarget: restoreReplTarget || undefined,
+              replicationSchedule: restoreReplSchedule || undefined,
+              replicationRate: restoreReplRate === '' ? undefined : Number(restoreReplRate),
+              rollbackOnFailure: true,
+            }
+          : capturedSomething
+            ? { capture: prereqCapture as CcmPrereqCapture, restoreHa: false, restoreReplication: false, rollbackOnFailure: true }
+            : undefined,
       })
       onClose()
     } catch (e: any) {
       setError(e.message || 'Cross-cluster migration failed')
     } finally {
       setMigrating(false)
-    }
-  }
-  
-  // Handle HA removal
-  const handleRemoveHa = async () => {
-    setHaRemoving(true)
-    setError(null)
-    
-    try {
-      const res = await fetch(
-        `/api/v1/connections/${encodeURIComponent(connId)}/ha/${encodeURIComponent(vmSid)}`,
-        { method: 'DELETE' }
-      )
-      
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
-        throw new Error(err?.error || `HTTP ${res.status}`)
-      }
-      
-      // Rafraîchir le statut HA après suppression
-      await new Promise(resolve => setTimeout(resolve, 1000))
-      
-      // Recharger le statut HA
-      const haRes = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/ha`)
-      if (haRes.ok) {
-        const haJson = await haRes.json()
-        const resources = haJson.data?.resources || []
-        const haResource = resources.find((r: any) => r.sid === vmSid)
-        
-        if (haResource) {
-          setIsHaManaged(true)
-          setHaState(haResource.state || 'unknown')
-          setHaGroup(haResource.group || '')
-        } else {
-          setIsHaManaged(false)
-          setHaState('')
-          setHaGroup('')
-        }
-      }
-    } catch (e: any) {
-      setError(e.message || 'Failed to remove HA')
-    } finally {
-      setHaRemoving(false)
     }
   }
   
@@ -822,6 +976,9 @@ export function MigrateVmDialog({
       if (res.ok) {
         const data = await res.json()
         setValidationIssues(data.issues || [])
+        if (!(data.issues || []).some((issue: ValidationIssue) => issue.code === 'REPLICATION_CONFIGURED')) {
+          setPrereqPendingJobs(prev => prev.length > 0 ? [] : prev)
+        }
         setValidationDone(true)
       }
     } catch (e) {
@@ -843,9 +1000,321 @@ export function MigrateVmDialog({
   }, [activeTab, selectedRemoteConn, selectedRemoteNode, selectedRemoteStorage, selectedRemoteBridge])
   
   const isVmRunning = vmStatus === 'running'
-  const hasValidationErrors = validationIssues.some(i => i.type === 'error')
-  const hasValidationWarnings = validationIssues.some(i => i.type === 'warning')
   const selectedRemoteConnInfo = remoteConnections.find(c => c.id === selectedRemoteConn)
+
+
+  const selectedRemoteStorageType = remoteStorages.find(s => s.storage === selectedRemoteStorage)?.type
+  const canRecreateReplication =
+    storageSupportsReplication(selectedRemoteStorageType) && remoteNodes.length > 1
+
+  const capturedSomething = !!prereqCapture && (
+    !!prereqCapture.ha || prereqCapture.replication.length > 0
+  )
+
+  useEffect(() => {
+    setRestoreReplTarget(remoteNodes.find(n => n.node !== selectedRemoteNode)?.node || '')
+  }, [selectedRemoteNode, remoteNodes])
+
+  // HA, replication and snapshots belong to the SOURCE guest, so they are read
+  // as soon as the tab opens. Waiting for a cluster, node, storage and bridge to
+  // be picked before saying the migration is impossible anyway is backwards.
+  const loadSourcePrereqs = useCallback(async () => {
+    if (!connId || vmType !== 'qemu') return
+    try {
+      const res = await fetch(
+        `/api/v1/connections/${encodeURIComponent(connId)}/guests/${vmType}/${encodeURIComponent(currentNode)}/${encodeURIComponent(vmid)}/remote-migrate/prepare`,
+      )
+      if (!res.ok) return
+      const data = await res.json()
+      setSourcePrereqs({
+        ha: data?.ha ?? null,
+        replication: Array.isArray(data?.replication) ? data.replication : [],
+        snapshots: Array.isArray(data?.snapshots) ? data.snapshots : [],
+        siteRecoveryJobs: Array.isArray(data?.siteRecoveryJobs) ? data.siteRecoveryJobs : [],
+      })
+    } catch {
+      // Best effort: the full preflight reports these too once a target is set.
+    }
+  }, [connId, vmType, currentNode, vmid])
+
+  useEffect(() => {
+    if (!open || activeTab !== 1) return
+    loadSourcePrereqs()
+  }, [open, activeTab, loadSourcePrereqs])
+
+  const runPrepare = async (payload: {
+    removeHa?: boolean
+    removeReplication?: boolean
+    removeSnapshots?: string[]
+  }) => {
+    setPrereqBusy(true)
+    setPrereqError(null)
+    try {
+      const res = await fetch(
+        `/api/v1/connections/${encodeURIComponent(connId)}/guests/${vmType}/${encodeURIComponent(currentNode)}/${encodeURIComponent(vmid)}/remote-migrate/prepare`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        },
+      )
+      const data = await res.json().catch(() => ({}))
+
+      // A partial failure still returns the capture: keep it, it is the only way
+      // back to the pre-migration state.
+      if (data?.capture) {
+        setPrereqCapture(prev => mergeCapture(prev, data.capture))
+        if (data.capture.ha?.state && !restoreHaState) setRestoreHaState(data.capture.ha.state)
+      }
+      setPrereqPendingJobs(data?.pending?.replicationJobs || [])
+
+      if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`)
+
+      if (data?.cleared?.ha) setIsHaManaged(false)
+
+      // Refresh both views: the source-only read drives the rows before a target
+      // is picked, the preflight once one is.
+      await Promise.all([loadSourcePrereqs(), validateCrossClusterMigration()])
+    } catch (e: any) {
+      setPrereqError(e?.message || String(e))
+    } finally {
+      setPrereqBusy(false)
+    }
+  }
+
+  // One action per row rather than a single "clear everything" button: the
+  // grouped button needed an explanatory banner of its own, and a row already
+  // says which prerequisite it is about.
+  const handleRemoveHa = () => runPrepare({ removeHa: true })
+  const handleRemoveReplication = () => runPrepare({ removeReplication: true })
+
+  const handleDeleteSnapshots = async () => {
+    await runPrepare({ removeSnapshots: snapshotNames })
+    setSnapshotConfirmOpen(false)
+  }
+
+
+  // The same rows the preflight would produce, built from the source-only read
+  // so they can be shown and acted on before a target exists.
+  const sourceIssues = useMemo<ValidationIssue[]>(() => {
+    if (!sourcePrereqs) return []
+    const rows: ValidationIssue[] = []
+
+    if (sourcePrereqs.ha) {
+      rows.push({
+        type: 'error',
+        code: 'HA_ENABLED',
+        message: '',
+        remediation: {
+          kind: 'ha',
+          sid: sourcePrereqs.ha.sid,
+          state: sourcePrereqs.ha.state,
+          group: sourcePrereqs.ha.group,
+          reversible: true,
+        },
+      })
+    }
+    if (sourcePrereqs.replication.length > 0) {
+      rows.push({
+        type: 'error',
+        code: 'REPLICATION_CONFIGURED',
+        message: '',
+        remediation: {
+          kind: 'replication',
+          jobs: sourcePrereqs.replication.map(job => ({ id: job.id, target: job.target, schedule: job.schedule })),
+          reversible: true,
+        },
+      })
+    }
+    if (sourcePrereqs.snapshots.length > 0) {
+      rows.push({
+        type: 'error',
+        code: 'SNAPSHOTS_PRESENT',
+        message: '',
+        remediation: { kind: 'snapshots', names: sourcePrereqs.snapshots, reversible: false },
+      })
+    }
+    for (const job of sourcePrereqs.siteRecoveryJobs) {
+      // ⛔ No remediation on purpose: a Site Recovery job can cover several
+      // guests, so it must never be cleared on this one's behalf.
+      rows.push({ type: 'warning', code: 'SITE_RECOVERY_JOB', message: '', siteRecovery: job })
+    }
+
+    return rows
+  }, [sourcePrereqs])
+
+  // Errors before warnings, order otherwise preserved (Array.sort is stable).
+  const orderedIssues = useMemo(() => {
+    const list = validationDone ? validationIssues : sourceIssues
+
+    return [...list].sort((a, b) => (a.type === b.type ? 0 : a.type === 'error' ? -1 : 1))
+  }, [validationDone, validationIssues, sourceIssues])
+
+  // Gated on the rows actually SHOWN, not on the preflight list alone. The
+  // source-only read can hold blockers before the preflight has ever run, and
+  // the preflight clears its list while re-running, which briefly re-enabled the
+  // button under the user's cursor with every blocker still in place.
+  const hasValidationErrors =
+    orderedIssues.some(i => i.type === 'error') || prereqPendingJobs.length > 0
+
+  // Must come from the SAME list the rows are built from: before the preflight
+  // has run the rows come from the source-only read, and deriving the names from
+  // the preflight list instead opened the confirmation with nothing in it.
+  const snapshotNames = useMemo(() => {
+    const remediation = orderedIssues.find(i => i.remediation?.kind === 'snapshots')?.remediation
+
+    return remediation?.kind === 'snapshots' ? remediation.names : []
+  }, [orderedIssues])
+
+  const replicationPending = prereqPendingJobs.length > 0
+
+  const checkLabel = (issue: ValidationIssue) => {
+    const slug = CHECK_LABEL_SLUG[issue.code]
+
+    return slug ? t(`hardware.crossCluster.prereq.check.${slug}`) : undefined
+  }
+
+  // A replication job PVE is still clearing in the background reads as busy,
+  // not as a failure: it lifts on its own within about a minute.
+  const checkSeverity = (issue: ValidationIssue): CheckRowSeverity =>
+    issue.code === 'REPLICATION_CONFIGURED' && replicationPending ? 'busy' : issue.type
+
+  /**
+   * A row already names its domain, so the detail carries the actual values
+   * rather than a sentence repeating the label. The route's full wording stays
+   * in the tooltip.
+   */
+  const checkDetail = (issue: ValidationIssue) => {
+    const remediation = issue.remediation
+
+    if (remediation?.kind === 'replication') {
+      if (replicationPending) {
+        return t('hardware.crossCluster.prereq.replicationPending', { jobs: prereqPendingJobs.join(', ') })
+      }
+
+      return remediation.jobs.map(job => `${job.id} \u2192 ${job.target}`).join(', ')
+    }
+
+    if (remediation?.kind === 'snapshots') return remediation.names.join(', ')
+
+    const job = issue.siteRecovery
+    if (job) {
+      return job.otherVmids.length > 0
+        ? t('hardware.crossCluster.prereq.siteRecoveryShared', { name: job.name, count: job.otherVmids.length })
+        : t('hardware.crossCluster.prereq.siteRecoveryOnly', { name: job.name })
+    }
+
+    if (remediation?.kind === 'ha') {
+      const group = remediation.group || haGroup
+
+      return [
+        remediation.state,
+        group ? t('hardware.crossCluster.prereq.check.inGroup', { group }) : '',
+      ].filter(Boolean).join(' ')
+    }
+
+    const key = CHECK_DETAIL_KEY[issue.code]
+    if (key && issue.context) {
+      // A route sent from an older build has the code but not the values: keep
+      // its sentence rather than rendering a message with holes in it.
+      try {
+        return t(`hardware.crossCluster.prereq.detail.${key}`, issue.context)
+      } catch {
+        return issue.message
+      }
+    }
+
+    return issue.message
+  }
+
+  const checkTooltip = (issue: ValidationIssue) => {
+    const job = issue.siteRecovery
+    if (job) {
+      if (job.otherVmids.length > 0) {
+        return t('hardware.crossCluster.prereq.siteRecoveryHintShared', { vmids: job.otherVmids.join(', ') })
+      }
+
+      return job.byTag
+        ? t('hardware.crossCluster.prereq.siteRecoveryHintTag')
+        : t('hardware.crossCluster.prereq.siteRecoveryHint')
+    }
+
+    return [issue.message, issue.details].filter(Boolean).join(' ')
+  }
+
+  const prereqButton = (label: string, onClick: () => void, destructive: boolean) => (
+    <Button
+      size="small"
+      // Outlined, never contained: a solid button on every row outweighed the
+      // dialog's own primary action at the bottom.
+      variant="outlined"
+      color={destructive ? 'error' : 'primary'}
+      onClick={onClick}
+      disabled={prereqBusy || validationLoading}
+      startIcon={prereqBusy ? <CircularProgress size={12} /> : undefined}
+      sx={{ height: 24, fontSize: '0.7rem', textTransform: 'none', whiteSpace: 'nowrap', minWidth: 'auto', px: 1.25, flexShrink: 0 }}
+    >
+      {label}
+    </Button>
+  )
+
+  const checkAction = (issue: ValidationIssue) => {
+    const remediation = issue.remediation
+    if (!remediation) return null
+
+    if (remediation.kind === 'ha') {
+      return prereqButton(t('hardware.crossCluster.prereq.removeHa'), handleRemoveHa, false)
+    }
+    if (remediation.kind === 'replication') {
+      // Nothing to offer while PVE finishes its background removal.
+      if (replicationPending) return null
+
+      return prereqButton(
+        t('hardware.crossCluster.prereq.removeReplication', { count: remediation.jobs.length }),
+        handleRemoveReplication,
+        false,
+      )
+    }
+
+    // ⛔ Never deletes directly: snapshot deletion cannot be undone, so it always
+    // goes through the confirmation that names every snapshot.
+    return prereqButton(
+      t('hardware.crossCluster.prereq.removeSnapshots', { count: remediation.names.length }),
+      () => setSnapshotConfirmOpen(true),
+      true,
+    )
+  }
+
+  const validatePrereqsRef = useRef(validateCrossClusterMigration)
+  useEffect(() => {
+    validatePrereqsRef.current = validateCrossClusterMigration
+  })
+
+  // Keyed on the CONTENT of the pending list, not on the array identity: every
+  // poll re-runs the preflight, which re-sets this state, and an identity dep
+  // would tear the interval down and reset `attempts` on each pass, defeating
+  // the cap and re-arming the poll forever.
+  const prereqPendingKey = prereqPendingJobs.join(',')
+
+  useEffect(() => {
+    if (!open || !prereqPendingKey) return
+
+    let attempts = 0
+    let checking = false
+    const interval = setInterval(async () => {
+      if (checking) return
+      checking = true
+      attempts += 1
+      if (attempts >= 12) clearInterval(interval)
+      try {
+        await validatePrereqsRef.current()
+      } finally {
+        checking = false
+      }
+    }, 10_000)
+
+    return () => clearInterval(interval)
+  }, [prereqPendingKey, open])
   
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
@@ -1201,50 +1670,6 @@ export function MigrateVmDialog({
               </Alert>
             )}
             
-            {/* Warning for HA-managed VMs */}
-            {isHaManaged && (
-              <Alert severity="error" icon={<i className="ri-shield-check-line" />}>
-                <Typography variant="body2" fontWeight={600}>
-                  {t('hardware.crossCluster.haNotSupported')}
-                </Typography>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
-                  <Typography variant="caption">
-                    {t('hardware.crossCluster.haNotSupportedDesc')}{haGroup ? ` ${t('hardware.crossCluster.haInGroup', { group: haGroup })}` : ''}.
-                    {' '}{t('hardware.crossCluster.haCurrentState')}
-                  </Typography>
-                  <Chip
-                    icon={<i className="ri-shield-check-line" style={{ fontSize: 12 }} />}
-                    label={`HA: ${haState || 'managed'}`}
-                    size="small"
-                    color="error"
-                    sx={{ height: 20, fontSize: '0.65rem' }}
-                  />
-                </Box>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1 }}>
-                  <Typography variant="caption">
-                    {t('hardware.crossCluster.haRemoveInstructions')}
-                  </Typography>
-                  <Button
-                    size="small"
-                    variant="outlined"
-                    color="error"
-                    onClick={handleRemoveHa}
-                    disabled={haRemoving}
-                    startIcon={haRemoving ? <CircularProgress size={14} /> : <i className="ri-delete-bin-line" style={{ fontSize: 14 }} />}
-                    sx={{ 
-                      height: 26, 
-                      fontSize: '0.7rem',
-                      textTransform: 'none',
-                      minWidth: 'auto',
-                      px: 1.5
-                    }}
-                  >
-                    {haRemoving ? t('common.loading') : t('hardware.crossCluster.haRemoveButton')}
-                  </Button>
-                </Box>
-              </Alert>
-            )}
-            
             {/* Source info */}
             <Box sx={{ p: 1.5, bgcolor: 'action.hover', borderRadius: 1.5 }}>
               <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
@@ -1415,11 +1840,11 @@ export function MigrateVmDialog({
                     <CircularProgress size={16} />
                   ) : (
                     <FormControl fullWidth size="small">
-                      <InputLabel>Storage</InputLabel>
+                      <InputLabel>{t('hardware.crossCluster.storage')}</InputLabel>
                       <Select
                         value={selectedRemoteStorage}
                         onChange={(e) => setSelectedRemoteStorage(e.target.value)}
-                        label="Storage"
+                        label={t('hardware.crossCluster.storage')}
                       >
                         {remoteStorages.map((s) => (
                           <MenuItem key={s.storage} value={s.storage}>
@@ -1462,43 +1887,118 @@ export function MigrateVmDialog({
               </Box>
             )}
             
-            {/* Validation Results */}
-            {selectedRemoteNode && selectedRemoteStorage && selectedRemoteBridge && (
+            {/* Checks, one compact row each. Errors first. Source-side
+                prerequisites show before any target is picked. */}
+            {(orderedIssues.length > 0 || prereqError || (selectedRemoteNode && selectedRemoteStorage && selectedRemoteBridge)) && (
               <Box sx={{ mt: 1 }}>
-                {validationLoading ? (
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 1 }}>
-                    <CircularProgress size={16} />
-                    <Typography variant="caption" color="text.secondary">
-                      {t('hardware.crossCluster.validating')}
+                <Box sx={{ border: 1, borderColor: 'divider', borderRadius: 1.5, overflow: 'hidden' }}>
+                  {validationLoading && !validationDone ? (
+                    <CheckRow severity="busy" detail={t('hardware.crossCluster.validating')} />
+                  ) : (
+                    <Stack divider={<Divider />}>
+                      {orderedIssues.map((issue, idx) => (
+                        <CheckRow
+                          key={`${issue.code}-${idx}`}
+                          severity={checkSeverity(issue)}
+                          label={checkLabel(issue)}
+                          detail={checkDetail(issue)}
+                          tooltip={checkTooltip(issue)}
+                          action={checkAction(issue)}
+                        />
+                      ))}
+                      {validationDone && validationIssues.length === 0 && (
+                        <CheckRow
+                          severity="success"
+                          label={t('hardware.crossCluster.prereq.check.allClear')}
+                          detail={t('hardware.crossCluster.validationSuccess')}
+                        />
+                      )}
+                      {prereqError && (
+                        <CheckRow
+                          severity="error"
+                          label={t('hardware.crossCluster.prereq.check.actionFailed')}
+                          detail={prereqError}
+                        />
+                      )}
+                    </Stack>
+                  )}
+                </Box>
+
+                {capturedSomething && selectedRemoteStorage && (
+                  <Box sx={{ mt: 1, p: 1.5, borderRadius: 1.5, border: 1, borderColor: 'divider' }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
+                      <FormControlLabel
+                        sx={{ mr: 0 }}
+                        control={<Switch size="small" checked={restoreEnabled} onChange={e => setRestoreEnabled(e.target.checked)} />}
+                        label={<Typography variant="caption">{t('hardware.crossCluster.prereq.restoreSwitch')}</Typography>}
+                      />
+                      {restoreEnabled && prereqCapture?.ha && (
+                        <FormControl size="small" sx={{ minWidth: 160 }}>
+                          <InputLabel id="ccm-restore-ha-state-label">{t('hardware.crossCluster.prereq.restoreHaState')}</InputLabel>
+                          <Select
+                            labelId="ccm-restore-ha-state-label"
+                            label={t('hardware.crossCluster.prereq.restoreHaState')}
+                            value={restoreHaState}
+                            onChange={e => setRestoreHaState(e.target.value)}
+                          >
+                            {['started', 'stopped', 'enabled', 'disabled', 'ignored'].map(state => (
+                              <MenuItem key={state} value={state}>{state}</MenuItem>
+                            ))}
+                          </Select>
+                        </FormControl>
+                      )}
+                    </Box>
+                    {restoreEnabled && (prereqCapture?.replication.length ?? 0) > 0 && (
+                      canRecreateReplication ? (
+                        <>
+                          <Box sx={{ display: 'flex', gap: 1, mt: 1.5, flexWrap: 'wrap' }}>
+                            <FormControl size="small" sx={{ minWidth: 150 }}>
+                              <InputLabel id="ccm-restore-replication-target-label">{t('hardware.crossCluster.prereq.restoreReplicationTarget')}</InputLabel>
+                              <Select
+                                labelId="ccm-restore-replication-target-label"
+                                label={t('hardware.crossCluster.prereq.restoreReplicationTarget')}
+                                value={restoreReplTarget}
+                                onChange={e => setRestoreReplTarget(e.target.value)}
+                              >
+                                {remoteNodes.filter(n => n.node !== selectedRemoteNode).map(n => (
+                                  <MenuItem key={n.node} value={n.node}>{n.node}</MenuItem>
+                                ))}
+                              </Select>
+                            </FormControl>
+                            <TextField
+                              size="small"
+                              sx={{ width: 140 }}
+                              label={t('hardware.crossCluster.prereq.restoreReplicationSchedule')}
+                              value={restoreReplSchedule}
+                              onChange={e => setRestoreReplSchedule(e.target.value)}
+                            />
+                            <TextField
+                              size="small"
+                              sx={{ width: 130 }}
+                              type="number"
+                              label={t('hardware.crossCluster.prereq.restoreReplicationRate')}
+                              value={restoreReplRate}
+                              onChange={e => setRestoreReplRate(e.target.value === '' ? '' : Number(e.target.value))}
+                              inputProps={{ min: 0 }}
+                            />
+                          </Box>
+                          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+                            {t('hardware.crossCluster.prereq.restoreReplicationFullSync')}
+                          </Typography>
+                        </>
+                      ) : (
+                        <Typography variant="caption" color="warning.main" sx={{ display: 'block', mt: 1 }}>
+                          {!storageSupportsReplication(selectedRemoteStorageType)
+                            ? t('hardware.crossCluster.prereq.restoreReplicationUnavailableStorage', { storage: selectedRemoteStorage })
+                            : t('hardware.crossCluster.prereq.restoreReplicationUnavailableNodes')}
+                        </Typography>
+                      )
+                    )}
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+                      {t('hardware.crossCluster.prereq.rollbackNote')}
                     </Typography>
                   </Box>
-                ) : validationDone && validationIssues.length > 0 ? (
-                  <Stack spacing={1}>
-                    {validationIssues.map((issue, idx) => (
-                      <Alert 
-                        key={idx} 
-                        severity={issue.type === 'error' ? 'error' : 'warning'}
-                        sx={{ py: 0.5 }}
-                        icon={<i className={issue.type === 'error' ? 'ri-close-circle-line' : 'ri-alert-line'} style={{ fontSize: 18 }} />}
-                      >
-                        <Typography variant="body2" fontWeight={500}>
-                          {issue.message}
-                        </Typography>
-                        {issue.details && (
-                          <Typography variant="caption" sx={{ opacity: 0.8 }}>
-                            {issue.details}
-                          </Typography>
-                        )}
-                      </Alert>
-                    ))}
-                  </Stack>
-                ) : validationDone && validationIssues.length === 0 ? (
-                  <Alert severity="success" sx={{ py: 0.5 }} icon={<i className="ri-checkbox-circle-line" style={{ fontSize: 18 }} />}>
-                    <Typography variant="body2">
-                      {t('hardware.crossCluster.validationSuccess')}
-                    </Typography>
-                  </Alert>
-                ) : null}
+                )}
               </Box>
             )}
             
@@ -1597,18 +2097,31 @@ export function MigrateVmDialog({
                     </Box>
                   }
                 />
-                
-                {isVmRunning && onlineMigration && (
-                  <Alert severity="info" sx={{ py: 0.5 }}>
-                    <Typography variant="caption">
-                      {t('hardware.crossCluster.liveMigrationInfo')}
-                    </Typography>
-                  </Alert>
-                )}
               </>
             )}
           </Stack>
         </TabPanel>
+        <Dialog open={snapshotConfirmOpen} onClose={() => !prereqBusy && setSnapshotConfirmOpen(false)} maxWidth="xs" fullWidth aria-labelledby="ccm-snapshot-confirm-title">
+          <DialogTitle id="ccm-snapshot-confirm-title">{t('hardware.crossCluster.prereq.snapshotConfirmTitle')}</DialogTitle>
+          <DialogContent>
+            <Typography variant="body2">{t('hardware.crossCluster.prereq.snapshotConfirmBody', { vmName })}</Typography>
+            <List dense>
+              {snapshotNames.map(name => <ListItem key={name}><ListItemText primary={name} /></ListItem>)}
+            </List>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setSnapshotConfirmOpen(false)} disabled={prereqBusy}>{t('hardware.cancel')}</Button>
+            <Button
+              variant="contained"
+              color="error"
+              onClick={handleDeleteSnapshots}
+              disabled={prereqBusy || validationLoading}
+              startIcon={prereqBusy ? <CircularProgress size={14} /> : <i className="ri-delete-bin-line" />}
+            >
+              {t('hardware.crossCluster.prereq.snapshotConfirmAction')}
+            </Button>
+          </DialogActions>
+        </Dialog>
       </DialogContent>
       
       <DialogActions sx={{ px: 3, pb: 2 }}>
@@ -1629,9 +2142,8 @@ export function MigrateVmDialog({
           <Button 
             variant="contained" 
             onClick={handleCrossClusterMigrate} 
-            disabled={migrating || !selectedRemoteConn || !selectedRemoteNode || !selectedRemoteStorage || !selectedRemoteBridge || vmType === 'lxc' || isHaManaged || hasValidationErrors || validationLoading}
+            disabled={migrating || !selectedRemoteConn || !selectedRemoteNode || !selectedRemoteStorage || !selectedRemoteBridge || vmType === 'lxc' || isHaManaged || hasValidationErrors || validationLoading || prereqBusy}
             startIcon={migrating ? <CircularProgress size={16} /> : <i className="ri-global-line" />}
-            color={hasValidationWarnings && !hasValidationErrors ? 'warning' : 'primary'}
           >
             {migrating ? t('hardware.crossCluster.migrating') : t('hardware.crossCluster.startMigration')}
           </Button>

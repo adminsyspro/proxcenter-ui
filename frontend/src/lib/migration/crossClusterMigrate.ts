@@ -17,7 +17,7 @@ export type CrossClusterMigrateResult = {
  *
  * Owns the body-shape contract with the route (notably the `delete` field
  * remap from the dialog's `deleteSource`), so callers cannot forget the
- * remap and silently disable source deletion.
+ * remap and silently disable source deletion. `restore` is passed through untouched.
  *
  * Throws on non-2xx with the route's error message when available.
  */
@@ -41,6 +41,7 @@ export async function crossClusterMigrate(
         online: params.online,
         delete: params.deleteSource,
         bwlimit: params.bwlimit,
+        restore: params.restore,
       }),
     },
   )

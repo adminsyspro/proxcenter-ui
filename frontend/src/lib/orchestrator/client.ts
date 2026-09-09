@@ -807,6 +807,8 @@ export interface AlertThresholds {
   disk_latency_retention_days: number
   /** 1 = the orchestrator reads QEMU block statistics of every running VM (#881); 0 stops the collection, charts and alert included. */
   disk_latency_collection: number
+  /** Seconds between two metrics collections of the orchestrator (#881), 30 to 600; applied to the scheduler on save. */
+  metrics_interval_seconds: number
   /**
    * Tolerance above a replication job's own RPO target, in percent, before its
    * last successful sync counts as late (#721). 0 disables replication alerts.

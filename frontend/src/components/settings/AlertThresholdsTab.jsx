@@ -13,6 +13,8 @@ import {
   Slider,
   Snackbar,
   Switch,
+  Tab,
+  Tabs,
   TextField,
   Typography,
 } from '@mui/material'
@@ -35,15 +37,27 @@ const DEFAULTS = {
   disk_latency_warning: 0,
   disk_latency_critical: 100,
   disk_latency_window_minutes: 5,
-  disk_latency_retention_days: 30,
+  disk_latency_retention_days: 7,
   disk_latency_collection: 1,
+  metrics_interval_seconds: 60,
   replication_rpo_grace_percent: 25,
   replication_failure_alerts: 1,
 }
 
+// The tab grew to eleven cards: one row per family stopped reading as a
+// screen. Each family is now a sub-tab; the state and the Save button stay
+// above them, so saving always sends every family, seen or not.
+const SECTIONS = [
+  { id: 'resources', label: 'alerts.resourceUsage', icon: 'ri-bar-chart-box-line' },
+  { id: 'performance', label: 'alerts.performanceReplication', icon: 'ri-timer-flash-line' },
+  { id: 'snapshots', label: 'alerts.snapshots', icon: 'ri-camera-line' },
+  { id: 'collection', label: 'alerts.collectionRecovery', icon: 'ri-timer-line' },
+]
+
 export default function AlertThresholdsTab() {
   const t = useTranslations()
   const [thresholds, setThresholds] = useState(DEFAULTS)
+  const [section, setSection] = useState(SECTIONS[0].id)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [snackbar, setSnackbar] = useState({ open: false, severity: 'success', message: '' })
@@ -114,12 +128,27 @@ export default function AlertThresholdsTab() {
         </Button>
       </Box>
 
-      <Typography variant='overline' color='text.secondary' fontWeight={700} sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 3, mb: 2 }}>
-        <i className='ri-bar-chart-box-line' style={{ fontSize: 16 }} />
-        {t('alerts.resourceUsage')}
-      </Typography>
+      <Tabs
+        value={section}
+        onChange={(_, v) => setSection(v)}
+        variant='scrollable'
+        scrollButtons='auto'
+        sx={{ borderBottom: 1, borderColor: 'divider', mt: 2, mb: 3 }}
+      >
+        {SECTIONS.map((sec) => (
+          <Tab
+            key={sec.id}
+            value={sec.id}
+            label={t(sec.label)}
+            icon={<i className={sec.icon} style={{ fontSize: 16 }} />}
+            iconPosition='start'
+            sx={{ minHeight: 48, textTransform: 'none' }}
+          />
+        ))}
+      </Tabs>
 
-      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '1fr 1fr 1fr' }, gap: 2, mb: 4 }}>
+      {section === 'resources' && (
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '1fr 1fr 1fr' }, gap: 2 }}>
         <ThresholdCard
           icon='ri-cpu-line'
           label={t('alerts.cpu')}
@@ -148,13 +177,10 @@ export default function AlertThresholdsTab() {
           tCritical={t('alerts.critical')}
         />
       </Box>
+      )}
 
-      <Typography variant='overline' color='text.secondary' fontWeight={700} sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-        <i className='ri-timer-flash-line' style={{ fontSize: 16 }} />
-        {t('alerts.performanceReplication')}
-      </Typography>
-
-      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr', xl: 'repeat(4, 1fr)' }, gap: 2, mb: 4 }}>
+      {section === 'performance' && (
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr', xl: 'repeat(4, 1fr)' }, gap: 2 }}>
         <ThresholdCard
           icon='ri-speed-line'
           label={t('alerts.osdLatency')}
@@ -213,7 +239,7 @@ export default function AlertThresholdsTab() {
                   size='small'
                   value={thresholds.disk_latency_retention_days}
                   onChange={(days) => setThresholds(th => ({ ...th, disk_latency_retention_days: Math.min(365, Math.max(1, Math.trunc(days))) }))}
-                  fallback={30}
+                  fallback={7}
                   min={1}
                   slotProps={{ htmlInput: { min: 1, max: 365 } }}
                   sx={{ width: 80 }}
@@ -263,12 +289,9 @@ export default function AlertThresholdsTab() {
           tDisabled={t('alerts.snapshotDisabled')}
         />
       </Box>
+      )}
 
-      <Typography variant='overline' color='text.secondary' fontWeight={700} sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-        <i className='ri-tools-line' style={{ fontSize: 16 }} />
-        {t('alerts.maintenance')}
-      </Typography>
-
+      {section === 'snapshots' && (
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '1fr 1fr 1fr' }, gap: 2 }}>
         <SingleThresholdCard
           icon='ri-camera-line'
@@ -304,6 +327,17 @@ export default function AlertThresholdsTab() {
             sx={{ mt: 1.5 }}
           />
         </SingleThresholdCard>
+      </Box>
+      )}
+
+      {section === 'collection' && (
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '1fr 1fr 1fr' }, gap: 2 }}>
+        <MetricsIntervalCard
+          seconds={thresholds.metrics_interval_seconds}
+          confirmations={thresholds.recovery_confirmations}
+          onChange={(seconds) => setThresholds(th => ({ ...th, metrics_interval_seconds: seconds }))}
+          t={t}
+        />
 
         <Card variant='outlined' sx={{ borderRadius: 2 }}>
           <CardContent sx={{ p: 2.5, '&:last-child': { pb: 2.5 } }}>
@@ -341,6 +375,7 @@ export default function AlertThresholdsTab() {
           </CardContent>
         </Card>
       </Box>
+      )}
 
       <Snackbar
         open={snackbar.open}
@@ -361,6 +396,57 @@ const edgeMarkSx = {
   mt: 2,
   '& .MuiSlider-markLabel[data-index="0"]': { left: '6% !important' },
   '& .MuiSlider-markLabel[data-index="2"]': { left: '94% !important' },
+}
+
+// The orchestrator accepts 30 s to 10 min (alerts.MetricsInterval on the Go
+// side). A slider rather than a free field: the bounds are the control itself,
+// nothing to type outside them, and the 30-second step matches what the
+// cadence can meaningfully be.
+const MIN_INTERVAL_SECONDS = 30
+const MAX_INTERVAL_SECONDS = 600
+const INTERVAL_STEP_SECONDS = 30
+const INTERVAL_MARKS = [MIN_INTERVAL_SECONDS, 300, MAX_INTERVAL_SECONDS]
+
+/** "30 s", "2 min", "2 min 30 s": a duration the way an operator says it. */
+export function formatSeconds(seconds) {
+  if (seconds < 60) return `${seconds} s`
+  const minutes = Math.floor(seconds / 60)
+  const rest = seconds % 60
+
+  return rest === 0 ? `${minutes} min` : `${minutes} min ${rest} s`
+}
+
+/** How long the recovery confirmations take at a cadence, e.g. "3 min" or "90 s". */
+export function formatCalm(seconds, confirmations) {
+  return formatSeconds(Math.max(1, confirmations || 1) * seconds)
+}
+
+/**
+ * The collection cadence of the orchestrator. The caption below the slider
+ * translates it into what the operator feels, the calm required before an
+ * alert resolves, since the recovery confirmations count collections.
+ */
+function MetricsIntervalCard({ seconds, confirmations, onChange, t }) {
+  return (
+    <SingleThresholdCard
+      icon='ri-timer-line'
+      label={t('alerts.metricsInterval')}
+      description={t('alerts.metricsIntervalDesc')}
+      value={seconds}
+      onChange={onChange}
+      min={MIN_INTERVAL_SECONDS}
+      max={MAX_INTERVAL_SECONDS}
+      step={INTERVAL_STEP_SECONDS}
+      marks={INTERVAL_MARKS}
+      formatValue={formatSeconds}
+      ariaLabel={t('alerts.metricsInterval')}
+      enabled
+    >
+      <Typography variant='caption' color='text.secondary' display='block' sx={{ mt: 1 }}>
+        {t('alerts.metricsIntervalHelp', { count: confirmations, duration: formatCalm(seconds, confirmations) })}
+      </Typography>
+    </SingleThresholdCard>
+  )
 }
 
 function CardShell({ icon, label, enabled, onToggle, children }) {
@@ -463,12 +549,15 @@ function DisabledCaption({ text }) {
  */
 function SingleThresholdCard({
   icon, label, description, value, onChange,
-  min, max, step = 1, unit = '%', formatValue, markFormat,
+  min, max, step = 1, unit = '%', formatValue, markFormat, marks, ariaLabel,
   enabled, onToggle, tDisabled, children,
 }) {
   const format = formatValue || ((v) => `${v}${unit}`)
   const mark = markFormat || format
   const mid = Math.round((min + max) / 2)
+  // `marks` names the values worth a label when the midpoint is not one of them
+  // (315 s on a 30 s..10 min scale); the default keeps the three-mark scale.
+  const scale = (marks || [min, mid, max]).map((v) => ({ value: v, label: mark(v) }))
 
   return (
     <CardShell icon={icon} label={label} enabled={enabled} onToggle={onToggle}>
@@ -486,11 +575,8 @@ function SingleThresholdCard({
             min={min}
             max={max}
             step={step}
-            marks={[
-              { value: min, label: mark(min) },
-              { value: mid, label: mark(mid) },
-              { value: max, label: mark(max) },
-            ]}
+            marks={scale}
+            aria-label={ariaLabel}
             sx={edgeMarkSx}
           />
           {children}

@@ -39,8 +39,12 @@ const DEFAULT_THRESHOLDS = {
   disk_latency_window_minutes: 5,
   // Days of per-disk latency history kept for the charts, and the collection
   // switch itself (1 = on): one PVE call per running VM per collection.
-  disk_latency_retention_days: 30,
+  disk_latency_retention_days: 7,
   disk_latency_collection: 1,
+  // Seconds between two metrics collections of the orchestrator (#881), the
+  // cadence every resource alert and recovery confirmation counts in. The
+  // config.yaml value is only the starting point; 30 s to 10 min.
+  metrics_interval_seconds: 60,
   // Tolerance above a replication job's own RPO target before its last
   // successful sync is considered late, as a percentage of that target (#721).
   // 0 disables the replication alerts.

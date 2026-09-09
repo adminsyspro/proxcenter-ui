@@ -31,8 +31,10 @@ const DEFAULT_THRESHOLDS = {
   disk_latency_warning: 0,
   disk_latency_critical: 100,
   disk_latency_window_minutes: 5,
-  disk_latency_retention_days: 30,
+  disk_latency_retention_days: 7,
   disk_latency_collection: 1,
+  // Metrics collection cadence in seconds (#881), an int on the Go side too.
+  metrics_interval_seconds: 60,
 }
 
 type Thresholds = typeof DEFAULT_THRESHOLDS
@@ -45,6 +47,7 @@ const INT_THRESHOLD_KEYS: ReadonlySet<keyof Thresholds> = new Set([
   'recovery_confirmations',
   'disk_latency_window_minutes',
   'disk_latency_retention_days',
+  'metrics_interval_seconds',
 ])
 
 function coerceThresholds(raw: unknown): Thresholds {

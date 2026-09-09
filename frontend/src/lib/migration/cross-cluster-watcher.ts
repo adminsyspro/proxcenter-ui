@@ -1,3 +1,4 @@
+import { applyRestorePlan, rollbackPrereqsOnSource, type CcmRestorePlan } from '@/lib/migration/ccm-prereqs'
 import { pveFetch } from '@/lib/proxmox/client'
 import { decryptSecret } from '@/lib/crypto/secret'
 import { getTenantPrisma } from '@/lib/tenant'
@@ -21,6 +22,11 @@ type WatcherOpts = {
   vmid: string
   upid: string
   deleteSource: boolean
+  guestType?: string
+  targetConn?: PveConn
+  targetNode?: string
+  targetVmid?: string
+  restore?: (CcmRestorePlan & { rollbackOnFailure?: boolean }) | undefined
 }
 
 /**
@@ -119,7 +125,7 @@ async function runSshForWatcher(
  * unlocked, and DELETE responds 404 when the VM is already gone.
  */
 export async function watchMigrationAndCleanup(opts: WatcherOpts): Promise<void> {
-  const { connectionId, tenantId, sourceConn, sourceNode, vmid, upid, deleteSource } = opts
+  const { connectionId, tenantId, sourceConn, sourceNode, vmid, upid, deleteSource, guestType, targetConn, targetNode, targetVmid, restore } = opts
   const tag = `[migrate-watcher:${safeLog(vmid)}]`
 
   // Defence in depth: the remote-migrate route already validates vmid, but
@@ -152,6 +158,11 @@ export async function watchMigrationAndCleanup(opts: WatcherOpts): Promise<void>
 
   if (taskStatus?.status !== 'stopped') {
     console.warn(`${tag} timed out waiting for migration task to finish`)
+    if (restore?.capture && restore.rollbackOnFailure !== false) {
+      const { restored, errors } = await rollbackPrereqsOnSource(sourceConn, restore.capture)
+      if (restored.length > 0) console.log(`${tag} rolled back on source: ${restored.join(', ')}`)
+      for (const err of errors) console.warn(`${tag} rollback failed: ${safeLog(err)}`)
+    }
     return
   }
 
@@ -174,9 +185,15 @@ export async function watchMigrationAndCleanup(opts: WatcherOpts): Promise<void>
 
   if (!shouldCleanup) {
     console.log(`${tag} migration ended with exit=${exitstatus || 'unknown'}, skipping cleanup`)
+    if (restore?.capture && restore.rollbackOnFailure !== false) {
+      const { restored, errors } = await rollbackPrereqsOnSource(sourceConn, restore.capture)
+      if (restored.length > 0) console.log(`${tag} rolled back on source: ${restored.join(', ')}`)
+      for (const err of errors) console.warn(`${tag} rollback failed: ${safeLog(err)}`)
+    }
     return
   }
 
+  let sourceGone = false
   let unlocked = false
   try {
     const vmConfig = await pveFetch<any>(
@@ -199,10 +216,24 @@ export async function watchMigrationAndCleanup(opts: WatcherOpts): Promise<void>
     const msg = String(e?.message || '')
     if (msg.includes('404')) {
       console.log(`${tag} source VM already gone, nothing to clean up`)
-      return
+      sourceGone = true
+    } else {
+      console.warn(`${tag} could not read source VM config:`, msg)
     }
-    console.warn(`${tag} could not read source VM config:`, msg)
   }
+
+  if (restore && (restore.restoreHa || restore.restoreReplication) && targetConn) {
+    const { restored, errors } = await applyRestorePlan(targetConn, restore, {
+      vmid: targetVmid || vmid,
+      type: guestType || 'qemu',
+      node: targetNode,
+    })
+    if (restored.length > 0) console.log(`${tag} restored on target: ${restored.join(', ')}`)
+    for (const err of errors) console.warn(`${tag} target restore failed: ${safeLog(err)}`)
+    if (errors.length > 0) return
+  }
+
+  if (sourceGone) return
 
   if (deleteSource && unlocked) {
     try {

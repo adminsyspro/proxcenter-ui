@@ -9,7 +9,50 @@ import { watchMigrationAndCleanup } from "@/lib/migration/cross-cluster-watcher"
 import { assertVmid, assertNodeName } from "@/lib/ssh/validate"
 import { getNodeIp } from "@/lib/ssh/node-ip"
 
+import { captureReplicationJobs, type CcmRestorePlan } from '@/lib/migration/ccm-prereqs'
+
 export const runtime = "nodejs"
+
+type RestoreRequest = CcmRestorePlan & {
+  /** Put the captured config back on the SOURCE if the migration fails. */
+  rollbackOnFailure?: boolean
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+/** Ignore malformed captures before they reach the detached watcher. */
+function parseRestoreRequest(value: unknown): RestoreRequest | undefined {
+  if (!isRecord(value) || !isRecord(value.capture)) return undefined
+  const capture = value.capture
+  const optionalStrings = (record: Record<string, unknown>, keys: string[]) =>
+    keys.every(key => record[key] === undefined || typeof record[key] === 'string')
+  const optionalNumbers = (record: Record<string, unknown>, keys: string[]) =>
+    keys.every(key => record[key] === undefined || (typeof record[key] === 'number' && Number.isFinite(record[key])))
+
+  // Loose comparison on purpose: an absent `ha` key is as valid as an explicit
+  // null, and rejecting it would silently drop the whole plan, rollback included.
+  if (capture.ha != null && (
+    !isRecord(capture.ha) || typeof capture.ha.sid !== 'string' || !capture.ha.sid ||
+    !optionalStrings(capture.ha, ['state', 'group', 'comment']) ||
+    !optionalNumbers(capture.ha, ['maxRestart', 'maxRelocate', 'failback', 'autoRebalance'])
+  )) return undefined
+  if (!Array.isArray(capture.replication) || !capture.replication.every(job =>
+    isRecord(job) && typeof job.id === 'string' && job.id.length > 0 &&
+    typeof job.guest === 'number' && Number.isSafeInteger(job.guest) && job.guest > 0 &&
+    typeof job.target === 'string' &&
+    optionalStrings(job, ['schedule', 'comment']) && optionalNumbers(job, ['rate', 'disable'])
+  )) return undefined
+  if (!Array.isArray(capture.snapshotsDeleted) || !capture.snapshotsDeleted.every(name => typeof name === 'string')) return undefined
+  if (!['restoreHa', 'restoreReplication', 'rollbackOnFailure'].every(key =>
+    value[key] === undefined || typeof value[key] === 'boolean'
+  )) return undefined
+  if (!optionalStrings(value, ['haState', 'replicationTarget', 'replicationSchedule']) ||
+    !optionalNumbers(value, ['replicationRate'])) return undefined
+
+  return { ...value, restoreHa: value.restoreHa === true, restoreReplication: value.restoreReplication === true } as RestoreRequest
+}
 
 /**
  * POST /api/v1/connections/{id}/guests/{type}/{node}/{vmid}/remote-migrate
@@ -74,6 +117,7 @@ export async function POST(
     }
 
     const body = await req.json()
+    body.restore = parseRestoreRequest(body.restore)
     const {
       targetConnectionId,
       targetNode,
@@ -83,6 +127,7 @@ export async function POST(
       online = true,
       delete: deleteSource = false,
       bwlimit,
+      restore,
     } = body
 
     // Validation des paramètres requis
@@ -110,6 +155,18 @@ export async function POST(
     // Récupérer les informations de connexion source et cible
     const sourceConn = await getConnectionById(id)
     const targetConn = await getConnectionById(targetConnectionId)
+
+    if (restore && typeof restore === 'object') {
+      const stillReplicated = await captureReplicationJobs(sourceConn, vmid).catch(() => [])
+      if (stillReplicated.length > 0) {
+        return NextResponse.json(
+          {
+            error: `Proxmox is still removing replication job(s) ${stillReplicated.map(j => j.id).join(', ')} for this VM. Cross-cluster migration stays blocked until that finishes, usually about a minute.`,
+          },
+          { status: 409 },
+        )
+      }
+    }
 
     // Resolve the target NODE's address, not the cluster baseUrl, so the
     // migration lands on the user-selected host. PVE's remote_migrate uses the
@@ -259,7 +316,7 @@ export async function POST(
       category: 'vms',
       resourceType: type,
       resourceId: vmid,
-      details: { sourceNode: node, targetNode, targetCluster: targetConn.name, connectionId: id, online },
+      details: { sourceNode: node, targetNode, targetCluster: targetConn.name, connectionId: id, online, restore: !!restore },
     })
 
     // Fire-and-forget server-side watcher. Guarantees post-migration cleanup
@@ -275,6 +332,13 @@ export async function POST(
         vmid: safeVmid,
         upid: result,
         deleteSource,
+        guestType: type,
+        targetConn,
+        targetNode,
+        targetVmid: targetVmid !== undefined && targetVmid !== null && targetVmid !== ''
+          ? String(targetVmid)
+          : safeVmid,
+        restore: restore && typeof restore === 'object' ? restore : undefined,
       }).catch(err => {
         console.warn('[remote-migrate] background watcher failed:', String(err?.message || err).replace(/[\r\n]/g, ''))
       })

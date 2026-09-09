@@ -209,3 +209,131 @@ describe("POST .../remote-migrate — node/vmid validation (command injection)",
     expect(watchMigrationMock).not.toHaveBeenCalled()
   })
 })
+
+// The restore plan is built by the browser and handed to a detached watcher that
+// writes HA resources and replication jobs on the TARGET cluster. It is parsed at
+// the boundary so a malformed capture is dropped rather than replayed.
+describe("POST .../remote-migrate — restore plan", () => {
+  const CAPTURE = {
+    ha: { sid: "vm:100", state: "started", group: "prod", maxRestart: 2, maxRelocate: 3 },
+    replication: [{ id: "100-0", guest: 100, target: "pve2", schedule: "*/15" }],
+    snapshotsDeleted: ["before-upgrade"],
+  }
+  const PLAN = {
+    capture: CAPTURE,
+    restoreHa: true,
+    restoreReplication: true,
+    haState: "started",
+    replicationTarget: "pve2-dr",
+    replicationSchedule: "*/15",
+  }
+
+  function wirePve({ replicationJobs = [] as any[] } = {}) {
+    pveFetchMock.mockImplementation((_conn: any, path: string) => {
+      if (path === "/cluster/replication") return Promise.resolve(replicationJobs)
+      if (path.includes("remote_migrate")) return Promise.resolve("UPID:pve1:0000A:qmigrate:100:root@pam:")
+
+      return Promise.resolve([])
+    })
+  }
+
+  const post = async (body: any, params = PARAMS) => {
+    const POST = (await import("./route")).POST as Parameters<typeof callRoute>[0]
+
+    return callRoute(POST, { method: "POST", params, body })
+  }
+
+  beforeEach(() => {
+    getInfraMock.mockResolvedValue({ kind: "provider" })
+    wirePve()
+  })
+
+  it("hands a well-formed plan to the watcher, with the target it was given", async () => {
+    const res = await post({ ...VALID_BODY, targetVmid: "9100", restore: PLAN })
+
+    expect(res.status).toBe(200)
+    expect(watchMigrationMock).toHaveBeenCalledTimes(1)
+    expect(watchMigrationMock.mock.calls[0][0]).toMatchObject({
+      targetVmid: "9100",
+      targetNode: "pve2",
+      restore: { restoreHa: true, restoreReplication: true, haState: "started", replicationTarget: "pve2-dr" },
+    })
+    expect(watchMigrationMock.mock.calls[0][0].restore.capture.replication[0].id).toBe("100-0")
+  })
+
+  it("falls back to the source vmid when no target vmid is asked for", async () => {
+    await post({ ...VALID_BODY, restore: PLAN })
+
+    expect(watchMigrationMock.mock.calls[0][0].targetVmid).toBe("100")
+  })
+
+  // A guest with no HA resource captures `ha: null`, and an older client may not
+  // send the key at all. Both must survive: dropping the plan would also drop the
+  // rollback that puts the source back together after a failed migration.
+  it.each([
+    ["explicit null", null],
+    ["absent", undefined],
+  ])("keeps a plan whose ha capture is %s", async (_label, ha) => {
+    const capture: Record<string, unknown> = { ...CAPTURE, ha }
+    if (ha === undefined) delete capture.ha
+
+    await post({ ...VALID_BODY, restore: { ...PLAN, capture } })
+
+    expect(watchMigrationMock).toHaveBeenCalledTimes(1)
+    expect(watchMigrationMock.mock.calls[0][0].restore).toBeDefined()
+  })
+
+  it.each([
+    ["no capture at all", { restoreHa: true }],
+    ["a capture that is not an object", { capture: "vm:100" }],
+    ["an ha entry without a sid", { capture: { ...CAPTURE, ha: { state: "started" } } }],
+    ["an ha entry with an empty sid", { capture: { ...CAPTURE, ha: { sid: "" } } }],
+    ["an ha entry with a non-string group", { capture: { ...CAPTURE, ha: { sid: "vm:100", group: 7 } } }],
+    ["an ha entry with a non-finite maxRestart", { capture: { ...CAPTURE, ha: { sid: "vm:100", maxRestart: Number.NaN } } }],
+    ["a replication list that is not an array", { capture: { ...CAPTURE, replication: "100-0" } }],
+    ["a replication job without an id", { capture: { ...CAPTURE, replication: [{ guest: 100, target: "pve2" }] } }],
+    ["a replication job whose guest is not a positive integer", { capture: { ...CAPTURE, replication: [{ id: "100-0", guest: 0, target: "pve2" }] } }],
+    ["a replication job whose target is not a string", { capture: { ...CAPTURE, replication: [{ id: "100-0", guest: 100, target: 2 }] } }],
+    ["a replication job whose rate is not a number", { capture: { ...CAPTURE, replication: [{ id: "100-0", guest: 100, target: "pve2", rate: "fast" }] } }],
+    ["a snapshot list holding something else than names", { capture: { ...CAPTURE, snapshotsDeleted: [{ name: "s1" }] } }],
+    ["a non-boolean restoreHa", { capture: CAPTURE, restoreHa: "yes" }],
+    ["a non-string haState", { capture: CAPTURE, haState: 1 }],
+    ["a non-number replicationRate", { capture: CAPTURE, replicationRate: "10" }],
+  ])("drops a plan with %s", async (_label, restore) => {
+    const res = await post({ ...VALID_BODY, restore })
+
+    expect(res.status).toBe(200)
+    expect(watchMigrationMock).toHaveBeenCalledTimes(1)
+    expect(watchMigrationMock.mock.calls[0][0].restore).toBeUndefined()
+  })
+
+  // Proxmox keeps refusing remote_migrate while a replication job is still being
+  // torn down, and answers with a raw perl error. Catch it before the migration.
+  it("returns 409 while Proxmox is still removing the replication job", async () => {
+    wirePve({ replicationJobs: [{ id: "100-0", guest: 100, target: "pve2" }] })
+
+    const res = await post({ ...VALID_BODY, restore: PLAN })
+
+    expect(res.status).toBe(409)
+    expect((await res.json()).error).toMatch(/still removing replication job\(s\) 100-0/i)
+    expect(watchMigrationMock).not.toHaveBeenCalled()
+  })
+
+  it("ignores a replication job that belongs to another guest", async () => {
+    wirePve({ replicationJobs: [{ id: "101-0", guest: 101, target: "pve2" }] })
+
+    const res = await post({ ...VALID_BODY, restore: PLAN })
+
+    expect(res.status).toBe(200)
+    expect(watchMigrationMock).toHaveBeenCalledTimes(1)
+  })
+
+  // Without a plan there is nothing to put back, so the guard must not cost a
+  // round trip to /cluster/replication on every ordinary migration.
+  it("does not query replication when no plan is sent", async () => {
+    const res = await post({ ...VALID_BODY })
+
+    expect(res.status).toBe(200)
+    expect(pveFetchMock.mock.calls.some(([, path]: any[]) => path === "/cluster/replication")).toBe(false)
+  })
+})

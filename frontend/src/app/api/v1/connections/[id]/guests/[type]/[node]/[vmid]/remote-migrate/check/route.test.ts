@@ -24,14 +24,27 @@ const PARAMS = { id: "conn-src", type: "qemu", node: "pve1", vmid: "100" }
 const BODY = { targetConnectionId: "conn-tgt", targetNode: "pve2", targetStorage: "local-lvm", targetBridge: "vmbr0" }
 
 // Route pveFetch responses by path substring. `snapshotResult` is per-test.
-function wirePveFetch(snapshotResult: any) {
+function wirePveFetch(snapshotResult: any, prerequisites?: {
+  replication?: any
+  ha?: any[]
+  rules?: any
+}) {
   pveFetchMock.mockImplementation((_conn: any, path: string) => {
     if (path.includes("/snapshot")) {
       if (snapshotResult instanceof Error) return Promise.reject(snapshotResult)
       return Promise.resolve(snapshotResult)
     }
     if (path.endsWith("/config")) return Promise.resolve({})
-    if (path.includes("/cluster/ha/resources")) return Promise.resolve([])
+    if (path.includes("/cluster/ha/resources")) return Promise.resolve(prerequisites?.ha || [])
+    if (path === "/cluster/replication" || path === "/cluster/ha/rules") {
+      const result = path === "/cluster/replication" ? prerequisites?.replication : prerequisites?.rules
+      return result instanceof Error ? Promise.reject(result) : Promise.resolve(result || [])
+    }
+    if (prerequisites) {
+      if (path === "/nodes") return Promise.resolve([{ node: BODY.targetNode, status: "online" }])
+      if (path.endsWith("/storage")) return Promise.resolve([{ storage: BODY.targetStorage, content: "images" }])
+      if (path.endsWith("/network")) return Promise.resolve([{ iface: BODY.targetBridge, type: "bridge" }])
+    }
     // target-side checks: return benign empties so they don't crash
     return Promise.resolve([])
   })
@@ -162,5 +175,121 @@ describe("POST .../remote-migrate/check — CPU type availability on target", ()
     const hostIssue = json.issues.find((i: any) => i.code === "CPU_HOST")
     expect(hostIssue).toBeDefined()
     expect(hostIssue.type).toBe("warning")
+  })
+})
+
+
+describe("POST .../remote-migrate/check — replication pre-flight", () => {
+  it("blocks matching replication jobs and supplies their remediation config", async () => {
+    wirePveFetch([], { replication: [
+      { id: "100-0", guest: 100, target: "pve3", schedule: "*/15", remove_job: "full" },
+      { id: "101-0", guest: 101, target: "pve4" },
+    ] })
+    const POST = (await import("./route")).POST as Parameters<typeof callRoute>[0]
+    const res = await callRoute(POST, { method: "POST", params: PARAMS, body: BODY })
+    const json = await res.json()
+    expect(json.valid).toBe(false)
+    expect(json.issues.find((i: any) => i.code === "REPLICATION_CONFIGURED")).toMatchObject({
+      type: "error",
+      remediation: { kind: "replication", reversible: true, jobs: [{ id: "100-0", target: "pve3", schedule: "*/15" }] },
+    })
+  })
+
+  it("ignores jobs belonging only to other guests", async () => {
+    wirePveFetch([], { replication: [{ id: "101-0", guest: 101, target: "pve3" }] })
+    const POST = (await import("./route")).POST as Parameters<typeof callRoute>[0]
+    const res = await callRoute(POST, { method: "POST", params: PARAMS, body: BODY })
+    const json = await res.json()
+    expect(json.issues.some((i: any) => i.code === "REPLICATION_CONFIGURED")).toBe(false)
+    expect(json.valid).toBe(true)
+  })
+
+  it("warns without blocking when replication cannot be read", async () => {
+    wirePveFetch([], { replication: new Error("PVE unavailable") })
+    const POST = (await import("./route")).POST as Parameters<typeof callRoute>[0]
+    const res = await callRoute(POST, { method: "POST", params: PARAMS, body: BODY })
+    const json = await res.json()
+    expect(json.issues.find((i: any) => i.code === "REPLICATION_CHECK_FAILED")).toMatchObject({
+      type: "warning", details: "PVE unavailable",
+    })
+    expect(json.issues.some((i: any) => i.code === "REPLICATION_CONFIGURED")).toBe(false)
+    expect(json.valid).toBe(true)
+  })
+
+  it("keeps other blockers when the replication read fails", async () => {
+    wirePveFetch([{ name: "snap1" }], { replication: new Error("PVE unavailable") })
+    const POST = (await import("./route")).POST as Parameters<typeof callRoute>[0]
+    const res = await callRoute(POST, { method: "POST", params: PARAMS, body: BODY })
+    const json = await res.json()
+    expect(json.valid).toBe(false)
+    expect(json.issues.find((i: any) => i.code === "REPLICATION_CHECK_FAILED").type).toBe("warning")
+    expect(json.issues.find((i: any) => i.code === "SNAPSHOTS_PRESENT").type).toBe("error")
+  })
+
+  it("attaches the HA sid, state, and group to the HA blocker", async () => {
+    wirePveFetch([], { ha: [{ sid: "vm:100", state: "started", group: "source-ha" }] })
+    const POST = (await import("./route")).POST as Parameters<typeof callRoute>[0]
+    const res = await callRoute(POST, { method: "POST", params: PARAMS, body: BODY })
+    const json = await res.json()
+    expect(json.issues.find((i: any) => i.code === "HA_ENABLED")).toMatchObject({
+      type: "error", remediation: { kind: "ha", sid: "vm:100", state: "started", group: "source-ha", reversible: true },
+    })
+  })
+
+  it("warns about source HA rules that name the guest", async () => {
+    wirePveFetch([], {
+      ha: [{ sid: "vm:100" }],
+      rules: [{ rule: "source-affinity", resources: "vm:100, vm:101" }],
+    })
+    const POST = (await import("./route")).POST as Parameters<typeof callRoute>[0]
+    const res = await callRoute(POST, { method: "POST", params: PARAMS, body: BODY })
+    const json = await res.json()
+    expect(json.issues.find((i: any) => i.code === "HA_RULES_NOT_PORTABLE")).toMatchObject({
+      type: "warning", details: expect.stringContaining("source-affinity"),
+    })
+    expect(json.summary.errors).toBe(1)
+  })
+
+  it.each([[], new Error("PVE 8 endpoint 404")])("does not warn for unavailable or empty HA rules: %s", async rules => {
+    wirePveFetch([], { ha: [{ sid: "vm:100" }], rules })
+    const POST = (await import("./route")).POST as Parameters<typeof callRoute>[0]
+    const res = await callRoute(POST, { method: "POST", params: PARAMS, body: BODY })
+    const json = await res.json()
+    expect(json.issues.some((i: any) => i.code === "HA_RULES_NOT_PORTABLE")).toBe(false)
+    expect(json.issues.some((i: any) => i.code === "HA_ENABLED")).toBe(true)
+  })
+
+  it("sends the values behind a warning, not just its English sentence", async () => {
+    // The dialog shows a check as `label · values`, so a sentence that repeats
+    // its own label ("VMID" + "VMID 100 already exists...") reads twice and
+    // stays English whatever the locale. The route carries the values.
+    wirePveFetch([], { ha: [] })
+    pveFetchMock.mockImplementation((_conn: any, path: string) => {
+      if (path.endsWith("/config")) return Promise.resolve({})
+      if (path === "/nodes") return Promise.resolve([{ node: BODY.targetNode, status: "online" }])
+      if (path.endsWith("/storage")) return Promise.resolve([{ storage: BODY.targetStorage, content: "images" }])
+      if (path.endsWith("/network")) return Promise.resolve([{ iface: BODY.targetBridge, type: "bridge" }])
+      if (path.includes("/cluster/resources")) return Promise.resolve([{ vmid: 100, node: "pve2", name: "clone" }])
+
+      return Promise.resolve([])
+    })
+    const POST = (await import("./route")).POST as Parameters<typeof callRoute>[0]
+    const res = await callRoute(POST, { method: "POST", params: PARAMS, body: BODY })
+    const json = await res.json()
+    expect(json.issues.find((i: any) => i.code === "VMID_EXISTS_ON_TARGET")).toMatchObject({
+      type: "warning",
+      context: { vmid: "100", node: "pve2" },
+      message: expect.stringContaining("already exists"),
+    })
+  })
+
+  it("names only real snapshots in the irreversible remediation", async () => {
+    wirePveFetch([{ name: "current" }, { name: "before-upgrade" }, { name: "backup" }], {})
+    const POST = (await import("./route")).POST as Parameters<typeof callRoute>[0]
+    const res = await callRoute(POST, { method: "POST", params: PARAMS, body: BODY })
+    const json = await res.json()
+    expect(json.issues.find((i: any) => i.code === "SNAPSHOTS_PRESENT").remediation).toEqual({
+      kind: "snapshots", names: ["before-upgrade", "backup"], reversible: false,
+    })
   })
 })

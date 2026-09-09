@@ -481,6 +481,7 @@
       "activityFeed": "최근 활동",
       "storagePools": "스토리지",
       "cephStatus": "Ceph 상태",
+      "storageLatency": "스토리지 지연 시간",
       "vmStatusWaffle": "게스트 상태 (와플)",
       "resourceTrends": "리소스 추세",
       "infraGlobalChart": "인프라 CPU/RAM",
@@ -515,6 +516,7 @@
       "activityFeed": "최근 작업 및 이벤트",
       "storagePools": "PVE 스토리지 목록",
       "cephStatus": "Ceph 클러스터 상태",
+      "storageLatency": "스토리지별 게스트 디스크 지연 시간, 가장 느린 것부터 (Enterprise)",
       "vmStatusWaffle": "클러스터 및 상태별 게스트 와플 뷰",
       "resourceTrends": "1시간, 24시간, 7일간의 CPU/RAM 추이",
       "infraGlobalChart": "전체 인프라의 노드별 CPU/RAM",
@@ -562,6 +564,13 @@
     },
     "widgetArc": {
       "noData": "ZFS ARC 데이터가 없습니다. ZFS를 사용하는 노드에서 PVE 9 이상이 필요합니다."
+    },
+    "widgetStorageLatency": {
+      "title": "스토리지 지연 시간",
+      "noData": "아직 스토리지 지연 시간 데이터가 없습니다. 오케스트레이터가 메트릭 수집마다 각 스토리지의 실행 중인 VM에서 측정합니다.",
+      "readWrite": "읽기 {read} · 쓰기 {write}",
+      "window": "최근 {minutes}분: 평균 {avg}, 최대 {max}",
+      "guests": "VM {vms}개 · 디스크 {disks}개"
     },
     "nodeGuests": {
       "guests": "게스트 {count}개",
@@ -651,7 +660,6 @@
     "criticalSeverity": "심각",
     "thresholdsConfig": "알림 임계값",
     "resourceUsage": "리소스 사용량",
-    "maintenance": "유지 관리",
     "memory": "메모리",
     "storage": "스토리지",
     "rulesDescription": "규칙을 사용하면 Proxmox 이벤트(작업, 로그)에 대한 알림을 트리거할 수 있습니다",
@@ -703,6 +711,16 @@
     "osdLatencyDesc": "Ceph OSD가 이 값보다 계속 느릴 때 알림을 보냅니다. 사용자는 디스크가 느려진 것으로 체감합니다",
     "osdLatencyWarning": "ms (경고)",
     "osdLatencyCritical": "ms (심각)",
+    "diskLatency": "게스트 디스크 지연 시간",
+    "diskLatencyDesc": "가상 디스크 또는 전체 스토리지가 아래 시간 구간 동안 이 값보다 계속 느릴 때 알림을 보냅니다",
+    "diskLatencyWindow": "알림을 보내기 전 지연 시간이 지속되는 시간(분)",
+    "diskLatencyCollection": "실행 중인 모든 VM의 지연 시간을 그래프와 목록용으로 수집 (수집마다 VM당 API 호출 1회)",
+    "diskLatencyRetention": "Disk I/O 그래프용 지연 시간 기록 보관 일수",
+    "metricsInterval": "수집 간격",
+    "snapshots": "스냅샷",
+    "collectionRecovery": "수집 및 정상 복귀",
+    "metricsIntervalDesc": "오케스트레이터가 각 노드와 실행 중인 VM의 CPU, 메모리, 디스크, 지연 시간을 읽는 주기입니다. 리소스 알림의 평가 주기이자 정상 복귀 확인 횟수의 단위이기도 합니다.",
+    "metricsIntervalHelp": "저장 시 오케스트레이터에 적용됩니다. 정상 복귀 확인 {count}회 기준으로, 이 주기에서는 {duration} 동안 안정되면 알림이 해제됩니다.",
     "replicationRpo": "복제 RPO",
     "replicationRpoDesc": "복제 작업의 마지막 성공 동기화가 해당 작업의 RPO 목표에 이 여유를 더한 값보다 더 뒤처질 때 알림을 보냅니다",
     "replicationRpoGrace": "작업의 RPO 목표를 초과해 허용하는 비율(%)",
@@ -717,6 +735,7 @@
       "predictiveAlertsSection": "용량 예측"
     },
     "title": "인벤토리",
+    "diskLatency": "디스크 지연 시간",
     "vms": "가상 머신",
     "containers": "컨테이너",
     "nodes": "노드",
@@ -5504,6 +5523,8 @@
     "monitorHealth": "상태 모니터링"
   },
   "storageOverview": {
+    "latency": "지연 시간",
+    "latencyTooltip": "마지막 수집 구간에서 이 스토리지의 VM {vms}대에 걸친 게스트 디스크 평균 지연 시간입니다. {minutes}분 동안의 최댓값: {max} ms",
     "scope": "범위",
     "nodes": "노드"
   },

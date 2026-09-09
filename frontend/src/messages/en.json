@@ -481,6 +481,7 @@
       "activityFeed": "Recent Activity",
       "storagePools": "Storages",
       "cephStatus": "Ceph Status",
+      "storageLatency": "Storage Latency",
       "vmStatusWaffle": "Guest Status (Waffle)",
       "resourceTrends": "Resource Trends",
       "infraGlobalChart": "Infra CPU/RAM",
@@ -515,6 +516,7 @@
       "activityFeed": "Recent tasks and events",
       "storagePools": "PVE storages list",
       "cephStatus": "Ceph cluster status",
+      "storageLatency": "Guest disk latency per storage, slowest first (Enterprise)",
       "vmStatusWaffle": "Waffle view of guests by cluster and status",
       "resourceTrends": "CPU/RAM evolution over 1h, 24h or 7d",
       "infraGlobalChart": "Per-node CPU/RAM across all infrastructure",
@@ -562,6 +564,13 @@
     },
     "widgetArc": {
       "noData": "No ZFS ARC data. Requires PVE 9 or later on a node using ZFS."
+    },
+    "widgetStorageLatency": {
+      "title": "Storage latency",
+      "noData": "No storage latency yet. The orchestrator measures it at every metrics collection from the running VMs of each storage.",
+      "readWrite": "Read {read} · Write {write}",
+      "window": "Last {minutes} min: average {avg}, max {max}",
+      "guests": "{vms} VMs · {disks} disks"
     },
     "nodeGuests": {
       "guests": "{count} guests",
@@ -651,7 +660,6 @@
     "criticalSeverity": "Critical",
     "thresholdsConfig": "Alert Thresholds",
     "resourceUsage": "Resource Usage",
-    "maintenance": "Maintenance",
     "memory": "Memory",
     "storage": "Storage",
     "rulesDescription": "Rules allow you to trigger alerts on Proxmox events (tasks, logs)",
@@ -703,6 +711,16 @@
     "osdLatencyDesc": "Alert when a Ceph OSD stays slower than these values, which users feel as sluggish disks",
     "osdLatencyWarning": "ms (warning)",
     "osdLatencyCritical": "ms (critical)",
+    "diskLatency": "Guest disk latency",
+    "diskLatencyDesc": "Alert when a virtual disk, or a whole storage, stays slower than these values for the window below",
+    "diskLatencyWindow": "minutes of sustained latency before alerting",
+    "diskLatencyCollection": "Collect the latency of every running VM for the charts and lists (one API call per VM per collection)",
+    "diskLatencyRetention": "days of latency history kept for the Disk I/O charts",
+    "metricsInterval": "Collection interval",
+    "snapshots": "Snapshots",
+    "collectionRecovery": "Collection & recovery",
+    "metricsIntervalDesc": "How often the orchestrator reads CPU, memory, disk and latency figures from every node and running VM. It is also the step of the resource alerts and the unit of the recovery confirmations.",
+    "metricsIntervalHelp": "Applied to the orchestrator on save. With {count} recovery confirmations, an alert resolves after {duration} of calm at this cadence.",
     "replicationRpo": "Replication RPO",
     "replicationRpoDesc": "Alert when a replication job's last successful sync falls further behind than its own RPO target, plus this margin",
     "replicationRpoGrace": "% tolerated above the job's RPO target",
@@ -717,6 +735,7 @@
       "predictiveAlertsSection": "Capacity forecasts"
     },
     "title": "Inventory",
+    "diskLatency": "Disk latency",
     "vms": "Virtual machines",
     "containers": "Containers",
     "nodes": "Nodes",
@@ -5504,6 +5523,8 @@
     "monitorHealth": "Health monitoring"
   },
   "storageOverview": {
+    "latency": "Latency",
+    "latencyTooltip": "Average guest disk latency on this storage over the last collection, across {vms} VMs. Max over {minutes} min: {max} ms",
     "scope": "Scope",
     "nodes": "Node(s)"
   },

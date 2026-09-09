@@ -471,6 +471,7 @@
       "activityFeed": "Letzte Aktivitäten",
       "storagePools": "Storages",
       "cephStatus": "Ceph-Status",
+      "storageLatency": "Storage-Latenz",
       "zerotrustScore": "Zero-Trust-Übersicht",
       "zerotrustSecuritygroups": "Sicherheitsgruppen",
       "vmStatusWaffle": "Guest-Status (Waffle)",
@@ -502,6 +503,7 @@
       "activityFeed": "Letzte Aufgaben und Ereignisse",
       "storagePools": "PVE-Storageliste",
       "cephStatus": "Ceph-Clusterstatus",
+      "storageLatency": "Gast-Datenträgerlatenz je Storage, langsamste zuerst (Enterprise)",
       "zerotrustScore": "Sicherheitsbewertung pro Cluster",
       "zerotrustSecuritygroups": "Sicherheitsgruppen pro Cluster",
       "vmStatusWaffle": "Waffle-Ansicht der Guests nach Cluster und Status",
@@ -551,6 +553,13 @@
     },
     "widgetArc": {
       "noData": "Keine ZFS-ARC-Daten. Erfordert PVE 9 oder neuer auf einem Node mit ZFS."
+    },
+    "widgetStorageLatency": {
+      "title": "Storage-Latenz",
+      "noData": "Noch keine Storage-Latenz. Der Orchestrator misst sie bei jeder Metrikerfassung anhand der laufenden VMs jedes Storages.",
+      "readWrite": "Lesen {read} · Schreiben {write}",
+      "window": "Letzte {minutes} Min: Durchschnitt {avg}, max {max}",
+      "guests": "{vms} VMs · {disks} Datenträger"
     },
     "nodeGuests": {
       "guests": "{count} Guests",
@@ -640,7 +649,6 @@
     "criticalSeverity": "Kritisch",
     "thresholdsConfig": "Schwellenwerte",
     "resourceUsage": "Ressourcenauslastung",
-    "maintenance": "Wartung",
     "memory": "Arbeitsspeicher",
     "storage": "Storage",
     "rulesDescription": "Regeln ermöglichen es, Warnungen bei Proxmox-Ereignissen (Aufgaben, Protokolle) auszulösen",
@@ -692,6 +700,16 @@
     "osdLatencyDesc": "Warnen, wenn ein Ceph-OSD dauerhaft langsamer als diese Werte bleibt, was Benutzer als träge Datenträger wahrnehmen",
     "osdLatencyWarning": "ms (Warnung)",
     "osdLatencyCritical": "ms (kritisch)",
+    "diskLatency": "Gast-Datenträgerlatenz",
+    "diskLatencyDesc": "Warnen, wenn ein virtueller Datenträger oder ein gesamter Storage während des unten angegebenen Zeitfensters langsamer als diese Werte bleibt",
+    "diskLatencyWindow": "Minuten anhaltender Latenz vor der Alarmierung",
+    "diskLatencyCollection": "Latenz jeder laufenden VM für Diagramme und Listen erfassen (ein API-Aufruf pro VM und Erfassung)",
+    "diskLatencyRetention": "Tage Latenzverlauf für die Disk-I/O-Diagramme",
+    "metricsInterval": "Erfassungsintervall",
+    "snapshots": "Snapshots",
+    "collectionRecovery": "Erfassung und Entwarnung",
+    "metricsIntervalDesc": "Wie oft der Orchestrator CPU, Arbeitsspeicher, Datenträger und Latenz jedes Knotens und jeder laufenden VM abfragt. Zugleich der Takt der Ressourcen-Alarme und die Einheit der Entwarnungsbestätigungen.",
+    "metricsIntervalHelp": "Wird beim Speichern auf den Orchestrator angewendet. Mit {count} Entwarnungsbestätigungen wird ein Alarm nach {duration} Ruhe in diesem Takt aufgelöst.",
     "replicationRpo": "Replikations-RPO",
     "replicationRpoDesc": "Warnen, wenn die letzte erfolgreiche Synchronisierung eines Replikationsauftrags weiter zurückliegt als dessen eigenes RPO-Ziel zuzüglich dieser Marge",
     "replicationRpoGrace": "% Toleranz über dem RPO-Ziel des Auftrags",
@@ -706,6 +724,7 @@
       "predictiveAlertsSection": "Kapazitätsprognosen"
     },
     "title": "Inventar",
+    "diskLatency": "Datenträgerlatenz",
     "vms": "Virtuelle Maschinen",
     "containers": "Container",
     "nodes": "Nodes",
@@ -5483,6 +5502,8 @@
     "monitorHealth": "Health Überwachung"
   },
   "storageOverview": {
+    "latency": "Latenz",
+    "latencyTooltip": "Durchschnittliche Gast-Datenträgerlatenz auf diesem Storage bei der letzten Datenerfassung über {vms} VMs. Maximum über {minutes} Min.: {max} ms",
     "scope": "Bereich",
     "nodes": "Node(s)"
   },

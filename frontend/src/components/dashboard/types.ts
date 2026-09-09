@@ -95,6 +95,7 @@ export const PRESET_LAYOUTS: Record<string, DashboardLayout> = {
       { id: 'ceph-1', type: 'ceph-status', x: 6, y: 8, w: 6, h: 8 },
       { id: 'storage-1', type: 'storage-pools', x: 0, y: 16, w: 6, h: 6 },
       { id: 'calendar-1', type: 'backup-calendar', x: 6, y: 16, w: 6, h: 6 },
+      { id: 'latency-1', type: 'storage-latency', x: 0, y: 22, w: 6, h: 6 },
     ],
   },
   monitoring: {

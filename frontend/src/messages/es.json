@@ -481,6 +481,7 @@
       "activityFeed": "Actividad reciente",
       "storagePools": "Almacenamientos",
       "cephStatus": "Estado de Ceph",
+      "storageLatency": "Latencia de almacenamiento",
       "vmStatusWaffle": "Estado de guests (waffle)",
       "resourceTrends": "Tendencias de recursos",
       "infraGlobalChart": "Infra CPU/RAM",
@@ -515,6 +516,7 @@
       "activityFeed": "Recent tareas y events",
       "storagePools": "PVE almacenamientos list",
       "cephStatus": "Ceph cluster estado",
+      "storageLatency": "Latencia de disco de las VM por almacenamiento, el más lento primero (Enterprise)",
       "vmStatusWaffle": "Waffle ver de guests por cluster y estado",
       "resourceTrends": "CPU/RAM evolution over 1h, 24h o 7d",
       "infraGlobalChart": "por-nodo CPU/RAM across all infrastructure",
@@ -562,6 +564,13 @@
     },
     "widgetArc": {
       "noData": "Sin datos de ZFS ARC. Requiere PVE 9 o posterior en un nodo que use ZFS."
+    },
+    "widgetStorageLatency": {
+      "title": "Latencia de almacenamiento",
+      "noData": "Aún no hay latencia de almacenamiento. El orquestador la mide en cada recogida de métricas a partir de las VM en ejecución de cada almacenamiento.",
+      "readWrite": "Lectura {read} · Escritura {write}",
+      "window": "Últimos {minutes} min: media {avg}, máx {max}",
+      "guests": "{vms} VM · {disks} discos"
     },
     "nodeGuests": {
       "guests": "{count} guests",
@@ -651,7 +660,6 @@
     "criticalSeverity": "Crítico",
     "thresholdsConfig": "Umbrales de alerta",
     "resourceUsage": "Uso de recursos",
-    "maintenance": "Mantenimiento",
     "memory": "Memoria",
     "storage": "Almacenamiento",
     "rulesDescription": "Las reglas permiten lanzar alertas sobre eventos de Proxmox (tareas, logs)",
@@ -703,6 +711,16 @@
     "osdLatencyDesc": "Alertar cuando un OSD de Ceph se mantiene más lento que estos valores, algo que los usuarios perciben como discos lentos",
     "osdLatencyWarning": "ms (advertencia)",
     "osdLatencyCritical": "ms (crítico)",
+    "diskLatency": "Latencia de los discos invitados",
+    "diskLatencyDesc": "Alertar cuando un disco virtual, o un almacenamiento completo, se mantiene más lento que estos valores durante la ventana indicada a continuación",
+    "diskLatencyWindow": "minutos de latencia sostenida antes de alertar",
+    "diskLatencyCollection": "Recoger la latencia de cada VM en ejecución para los gráficos y listas (una llamada API por VM y recogida)",
+    "diskLatencyRetention": "días de historial de latencia conservados para los gráficos de E/S de disco",
+    "metricsInterval": "Intervalo de recogida",
+    "snapshots": "Snapshots",
+    "collectionRecovery": "Recogida y recuperación",
+    "metricsIntervalDesc": "Con qué frecuencia el orquestador lee CPU, memoria, disco y latencia de cada nodo y de cada VM en ejecución. Es también el paso de las alertas de recursos y la unidad de las confirmaciones de recuperación.",
+    "metricsIntervalHelp": "Se aplica al orquestador al guardar. Con {count} confirmaciones de recuperación, una alerta se resuelve tras {duration} de calma a esta cadencia.",
     "replicationRpo": "RPO de replicación",
     "replicationRpoDesc": "Alertar cuando la última sincronización correcta de un trabajo de replicación se retrasa más que su propio objetivo de RPO, más este margen",
     "replicationRpoGrace": "% tolerado por encima del objetivo de RPO del trabajo",
@@ -717,6 +735,7 @@
       "predictiveAlertsSection": "Capacidad forecasts"
     },
     "title": "Inventario",
+    "diskLatency": "Latencia de disco",
     "vms": "Máquinas virtuales",
     "containers": "Contenedores",
     "nodes": "Nodos",
@@ -5504,6 +5523,8 @@
     "monitorHealth": "Supervisión de salud"
   },
   "storageOverview": {
+    "latency": "Latencia",
+    "latencyTooltip": "Latencia media de los discos invitados en este almacenamiento durante la última recopilación, entre {vms} VM. Máximo en {minutes} min: {max} ms",
     "scope": "Ámbito",
     "nodes": "Nodo(s)"
   },

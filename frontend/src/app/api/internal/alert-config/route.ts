@@ -26,6 +26,15 @@ const DEFAULT_THRESHOLDS = {
   osd_latency_critical: 250,
   replication_rpo_grace_percent: 25,
   replication_failure_alerts: 1,
+  // Guest disk latency (#881), see the settings route. The window is a whole
+  // number of minutes on the Go side, hence its place in INT_THRESHOLD_KEYS.
+  disk_latency_warning: 0,
+  disk_latency_critical: 100,
+  disk_latency_window_minutes: 5,
+  disk_latency_retention_days: 7,
+  disk_latency_collection: 1,
+  // Metrics collection cadence in seconds (#881), an int on the Go side too.
+  metrics_interval_seconds: 60,
 }
 
 type Thresholds = typeof DEFAULT_THRESHOLDS
@@ -36,6 +45,9 @@ type Thresholds = typeof DEFAULT_THRESHOLDS
 const INT_THRESHOLD_KEYS: ReadonlySet<keyof Thresholds> = new Set([
   'snapshot_max_age_days',
   'recovery_confirmations',
+  'disk_latency_window_minutes',
+  'disk_latency_retention_days',
+  'metrics_interval_seconds',
 ])
 
 function coerceThresholds(raw: unknown): Thresholds {

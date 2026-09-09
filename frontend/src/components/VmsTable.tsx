@@ -7,6 +7,8 @@ import { useTagColors } from '@/contexts/TagColorContext'
 import { vmIconOpacity } from '@/app/(dashboard)/infrastructure/inventory/helpers'
 import { NodeIcon } from '@/app/(dashboard)/infrastructure/inventory/components/TreeIcons'
 import { useTenant } from '@/contexts/TenantContext'
+import { useDiskLatency } from '@/hooks/useDiskLatency'
+import { GuestLatencyCell } from '@/components/inventory/DiskLatencyCell'
 
 import { createPortal } from 'react-dom'
 import {
@@ -535,6 +537,9 @@ function VmsTable({
   const { loading: tenantLoading, isFullClusterView } = useTenant()
   const canMigrate = !tenantLoading && isFullClusterView
   const effectiveOnMigrate = canMigrate ? onMigrate : undefined
+  // Guest disk latency from the orchestrator (#881): an empty index on
+  // Community, so the column only appears once a cluster reports one.
+  const diskLatency = useDiskLatency()
   
   // Load tag color overrides for all connections in the table
   useEffect(() => {
@@ -1133,6 +1138,18 @@ return (
           )
         }
       })
+
+      // Guest disk latency (#881), worst disk of the VM at the last collection
+      if (diskLatency.available) {
+        cols.push({
+          field: 'latency',
+          headerName: t('inventory.diskLatency'),
+          width: 70,
+          renderHeader: headerIconOnly('ri-timer-line'),
+          valueGetter: (_value, row) => diskLatency.guests.get(`${row.connId}:${row.vmid}`)?.latencyMs ?? null,
+          renderCell: (params) => <GuestLatencyCell entry={diskLatency.guests.get(`${params.row.connId}:${params.row.vmid}`)} />
+        })
+      }
       
       // Tags
       cols.push({
@@ -1729,7 +1746,7 @@ return true
       // MUI re-runs flex layout on every columns-prop change and ignores width.
       return { ...col, width: saved, flex: undefined }
     })
-  }, [isCompact, expanded, showNode, nodeStatuses, showTrends, showActions, showIpSnap, onVmAction, onMigrate, canMigrate, onNodeClick, primaryColor, trendsData, trendsLoading, vms, isMobile, isTablet, isSmallDesktop, isLargeDesktop, favorites, onToggleFavorite, visibleColumns, columnWidths, showVdcColumn])
+  }, [isCompact, expanded, showNode, nodeStatuses, showTrends, showActions, showIpSnap, onVmAction, onMigrate, canMigrate, onNodeClick, primaryColor, trendsData, trendsLoading, vms, isMobile, isTablet, isSmallDesktop, isLargeDesktop, favorites, onToggleFavorite, visibleColumns, columnWidths, showVdcColumn, diskLatency])
 
   return (
     <Box sx={{
@@ -1853,6 +1870,7 @@ return true
                 { field: 'ram', label: 'RAM' },
                 { field: 'maxmem', label: t('common.memory') },
                 { field: 'disk', label: t('vms.disk') },
+                ...(diskLatency.available ? [{ field: 'latency', label: t('inventory.diskLatency') }] : []),
                 { field: 'tags', label: t('common.tags') },
                 { field: 'ip', label: 'IP' },
                 { field: 'snapshots', label: t('vms.snapshots') },

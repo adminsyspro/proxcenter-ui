@@ -469,6 +469,7 @@
       "activityFeed": "最近活动",
       "storagePools": "存储",
       "cephStatus": "Ceph 状态",
+      "storageLatency": "存储延迟",
       "zerotrustScore": "零信任概览",
       "zerotrustSecuritygroups": "安全组",
       "vmStatusWaffle": "客户机状态（华夫图）",
@@ -500,6 +501,7 @@
       "activityFeed": "最近任务和事件",
       "storagePools": "PVE 存储列表",
       "cephStatus": "Ceph 集群状态",
+      "storageLatency": "按存储统计的虚拟机磁盘延迟，最慢的优先 (Enterprise)",
       "zerotrustScore": "按集群的安全评分（防火墙 + 策略）",
       "zerotrustSecuritygroups": "按集群的安全组列表",
       "vmStatusWaffle": "按集群和状态的客户机华夫图",
@@ -549,6 +551,13 @@
     },
     "widgetArc": {
       "noData": "无 ZFS ARC 数据。需要 PVE 9 或更高版本，且节点使用 ZFS。"
+    },
+    "widgetStorageLatency": {
+      "title": "存储延迟",
+      "noData": "尚无存储延迟数据。编排器在每次指标采集时从每个存储上运行的虚拟机中测量。",
+      "readWrite": "读取 {read} · 写入 {write}",
+      "window": "最近 {minutes} 分钟：平均 {avg}，最大 {max}",
+      "guests": "{vms} 台虚拟机 · {disks} 个磁盘"
     },
     "nodeGuests": {
       "guests": "{count} 个客户机",
@@ -638,7 +647,6 @@
     "criticalSeverity": "严重",
     "thresholdsConfig": "告警阈值",
     "resourceUsage": "资源使用",
-    "maintenance": "维护",
     "memory": "内存",
     "storage": "存储",
     "rulesDescription": "规则允许您在 Proxmox 事件（任务、日志）上触发告警",
@@ -690,6 +698,16 @@
     "osdLatencyDesc": "当 Ceph OSD 持续慢于这些数值时告警，用户会感觉磁盘变慢",
     "osdLatencyWarning": "ms (警告)",
     "osdLatencyCritical": "ms (严重)",
+    "diskLatency": "客户机磁盘延迟",
+    "diskLatencyDesc": "当虚拟磁盘或整个存储在以下时间窗口内持续慢于这些数值时告警",
+    "diskLatencyWindow": "告警前延迟持续的分钟数",
+    "diskLatencyCollection": "为图表和列表采集每台运行中虚拟机的延迟（每次采集每台虚拟机一次 API 调用）",
+    "diskLatencyRetention": "为 Disk I/O 图表保留的延迟历史天数",
+    "metricsInterval": "采集间隔",
+    "snapshots": "快照",
+    "collectionRecovery": "采集与恢复",
+    "metricsIntervalDesc": "编排器从每个节点和运行中虚拟机读取 CPU、内存、磁盘和延迟数据的频率。它也是资源告警的评估步长和恢复确认次数的计数单位。",
+    "metricsIntervalHelp": "保存时应用到编排器。按 {count} 次恢复确认计算，在此频率下告警需平稳 {duration} 后解除。",
     "replicationRpo": "复制 RPO",
     "replicationRpoDesc": "当复制任务上次成功同步的滞后超过其自身的 RPO 目标加上此余量时告警",
     "replicationRpoGrace": "% 相对任务 RPO 目标的容忍上限",
@@ -704,6 +722,7 @@
       "predictiveAlertsSection": "容量预测"
     },
     "title": "资源清单",
+    "diskLatency": "磁盘延迟",
     "vms": "虚拟机",
     "containers": "容器",
     "nodes": "节点",
@@ -5477,6 +5496,8 @@
     "monitorHealth": "健康监控"
   },
   "storageOverview": {
+    "latency": "延迟",
+    "latencyTooltip": "最近一次采集期间，此存储上 {vms} 台虚拟机的客户机磁盘平均延迟。{minutes} 分钟内的最大值：{max} ms",
     "scope": "范围",
     "nodes": "节点"
   },

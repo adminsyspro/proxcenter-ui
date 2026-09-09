@@ -451,3 +451,32 @@ describe('replication engine wire contracts', () => {
     expect((await getOrchestratorClient().getReplicationHealth()).data.engines).toEqual(['rbd', 'zfs'])
   })
 })
+
+describe('getVMDiskLatencySeries', () => {
+  it('addresses the guest history endpoint with the optional window and step', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ step: 60, points: [] }))
+
+    const { getOrchestratorClient } = await import('./client')
+    const res = await getOrchestratorClient().getVMDiskLatencySeries('conn-a', 104, {
+      from: '2026-09-08T14:00:00.000Z',
+      to: '2026-09-08T15:00:00.000Z',
+      step: 60,
+    })
+
+    expect(res.data).toEqual({ step: 60, points: [] })
+    const [url] = fetchMock.mock.calls[0]
+    expect(url).toBe(
+      'http://localhost:8080/api/v1/metrics/conn-a/vms/104/disk-latency?from=2026-09-08T14%3A00%3A00.000Z&to=2026-09-08T15%3A00%3A00.000Z&step=60',
+    )
+  })
+
+  it('sends no query string when nothing is narrowed down', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ step: 60, points: [] }))
+
+    const { getOrchestratorClient } = await import('./client')
+    await getOrchestratorClient().getVMDiskLatencySeries('conn-a', '104')
+
+    const [url] = fetchMock.mock.calls[0]
+    expect(url).toBe('http://localhost:8080/api/v1/metrics/conn-a/vms/104/disk-latency')
+  })
+})

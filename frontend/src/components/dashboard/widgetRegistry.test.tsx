@@ -41,6 +41,16 @@ describe('WIDGET_REGISTRY', () => {
     expect(def.defaultSize).toEqual({ w: 6, h: 5 })
   })
 
+  it('registers the storage latency widget under Storage, behind the infrastructure scope', () => {
+    const def = WIDGET_REGISTRY['storage-latency']
+
+    expect(def).toBeTruthy()
+    expect(def.category).toBe('storage')
+    expect(def.requiresInfraScope).toBe(true)
+    expect(getWidgetsByCategory('storage').map(w => w.type)).toContain('storage-latency')
+    expect(getWidgetsByCategory('storage', { hasInfraScope: false }).map(w => w.type)).not.toContain('storage-latency')
+  })
+
   it('registers the theme logo widget under Other, visible to any scope', () => {
     const def = WIDGET_REGISTRY['theme-logo']
 

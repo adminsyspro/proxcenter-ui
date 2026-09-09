@@ -7064,7 +7064,20 @@
       "description": "Description"
     },
     "lastScan": "Last scan: {date}",
-    "filterBySeverity": "Filter by severity"
+    "filterBySeverity": "Filter by severity",
+    "scanFailed": "Scan failed",
+    "partialScan": "Partial scan",
+    "coverage": "{scanned} packages scanned, {tracked} known to the Debian security tracker",
+    "noFix": "No fix yet",
+    "noFixFilter": "No fix yet ({count})",
+    "status": {
+      "ssh-not-configured": "SSH is not configured on this connection, so only the packages the Proxmox API reports were scanned. Most of the Debian base system is left out.",
+      "ssh-failed": "The package inventory over SSH failed on {node}. The scan fell back to the Proxmox API and covers only part of the installed packages.",
+      "credentials-failed": "The SSH credentials of this connection could not be read. The scan fell back to the Proxmox API and covers only part of the installed packages.",
+      "release-not-tracked": "The Debian security tracker no longer publishes data for {release}, so {node} cannot be scanned.",
+      "node-offline": "{node} is offline and was not scanned.",
+      "inventory-empty": "No package list could be read from {node}."
+    }
   },
   "emptyState": {
     "noEvents": "No events",

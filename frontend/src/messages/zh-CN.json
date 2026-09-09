@@ -7070,7 +7070,20 @@
       "description": "描述"
     },
     "lastScan": "上次扫描：{date}",
-    "filterBySeverity": "按严重程度筛选"
+    "filterBySeverity": "按严重程度筛选",
+    "scanFailed": "扫描失败",
+    "partialScan": "部分扫描",
+    "coverage": "已扫描 {scanned} 个软件包，其中 {tracked} 个在 Debian 安全跟踪器中",
+    "noFix": "尚无修复",
+    "noFixFilter": "无修复（{count}）",
+    "status": {
+      "ssh-not-configured": "此连接未配置 SSH，因此仅扫描了 Proxmox API 报告的软件包，Debian 基础系统的大部分内容未被覆盖。",
+      "ssh-failed": "{node} 上通过 SSH 获取软件包清单失败。扫描回退到 Proxmox API，仅覆盖部分已安装的软件包。",
+      "credentials-failed": "无法读取此连接的 SSH 凭据。扫描回退到 Proxmox API，仅覆盖部分已安装的软件包。",
+      "release-not-tracked": "Debian 安全跟踪器不再发布 {release} 的数据，因此无法扫描 {node}。",
+      "node-offline": "{node} 处于离线状态，未进行扫描。",
+      "inventory-empty": "无法从 {node} 读取软件包列表。"
+    }
   },
   "emptyState": {
     "noEvents": "暂无事件",

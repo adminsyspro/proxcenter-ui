@@ -7064,7 +7064,20 @@
       "description": "설명"
     },
     "lastScan": "마지막 스캔: {date}",
-    "filterBySeverity": "심각도로 필터"
+    "filterBySeverity": "심각도로 필터",
+    "scanFailed": "스캔 실패",
+    "partialScan": "부분 스캔",
+    "coverage": "패키지 {scanned}개 스캔, 그중 {tracked}개가 Debian 보안 트래커에 등록됨",
+    "noFix": "아직 수정본 없음",
+    "noFixFilter": "수정본 없음 ({count})",
+    "status": {
+      "ssh-not-configured": "이 연결에 SSH가 구성되어 있지 않아 Proxmox API가 보고하는 패키지만 스캔했습니다. Debian 기본 시스템의 대부분이 제외됩니다.",
+      "ssh-failed": "{node}에서 SSH 패키지 인벤토리에 실패했습니다. 스캔은 Proxmox API로 대체되어 설치된 패키지의 일부만 포함합니다.",
+      "credentials-failed": "이 연결의 SSH 자격 증명을 읽을 수 없습니다. 스캔은 Proxmox API로 대체되어 설치된 패키지의 일부만 포함합니다.",
+      "release-not-tracked": "Debian 보안 트래커가 더 이상 {release}에 대한 데이터를 게시하지 않으므로 {node}는 스캔할 수 없습니다.",
+      "node-offline": "{node}가 오프라인이어서 스캔하지 않았습니다.",
+      "inventory-empty": "{node}에서 패키지 목록을 읽을 수 없습니다."
+    }
   },
   "emptyState": {
     "noEvents": "이벤트 없음",

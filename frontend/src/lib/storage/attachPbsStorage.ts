@@ -110,9 +110,26 @@ export function normalizeStorageName(raw: unknown): string {
   return name
 }
 
+/**
+ * Trims one repeated character off both ends, in linear time.
+ *
+ * The obvious `/^x+|x+$/` form backtracks polynomially on a long run of that
+ * character, and these values come from a request body (CodeQL
+ * js/polynomial-redos).
+ */
+function trimChar(value: string, char: string): string {
+  let start = 0
+  let end = value.length
+
+  while (start < end && value[start] === char) start++
+  while (end > start && value[end - 1] === char) end--
+
+  return value.slice(start, end)
+}
+
 /** PBS namespaces: `a/b/c`, each level alphanumeric with dash or underscore. */
 export function normalizeNamespace(raw: unknown): string {
-  const ns = String(raw ?? '').trim().replace(/^\/+|\/+$/g, '')
+  const ns = trimChar(String(raw ?? '').trim(), '/')
 
   if (!ns) return ''
 
@@ -152,7 +169,7 @@ export function buildScopedTokenId(args: {
   storage: string
 }): string {
   const slug = (s: string, max: number) =>
-    s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, max)
+    trimChar(s.toLowerCase().replace(/[^a-z0-9]+/g, '-'), '-').slice(0, max)
 
   const cluster = slug(String(args.pveConnName ?? ''), 16)
   const storage = slug(args.storage, 20)

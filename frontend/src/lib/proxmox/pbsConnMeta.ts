@@ -22,12 +22,22 @@ export function parsePbsUser(apiToken: string): string {
   return m[1]
 }
 
-/** Splits `https://pbs.example.com:8007/` into its host and its port. */
+/**
+ * Splits `https://pbs.example.com:8007/` into its host and its port.
+ *
+ * Sliced rather than matched: an `/^(.*):(\d+)$/` style pattern backtracks
+ * polynomially on a long run of colons or digits (CodeQL js/polynomial-redos).
+ */
 export function pbsHostPort(baseUrl: string): { host: string; port: number } {
-  const authority = baseUrl.replace(/^https?:\/\//, '').replace(/\/.*$/, '')
-  const m = authority.match(/^(.*):(\d+)$/)
+  const withoutScheme = baseUrl.replace(/^https?:\/\//, '')
+  const slash = withoutScheme.indexOf('/')
+  const authority = slash < 0 ? withoutScheme : withoutScheme.slice(0, slash)
+  const colon = authority.lastIndexOf(':')
+  const portText = colon < 0 ? '' : authority.slice(colon + 1)
 
-  return m ? { host: m[1], port: Number(m[2]) } : { host: authority, port: PBS_DEFAULT_PORT }
+  if (!portText || !/^\d{1,5}$/.test(portText)) return { host: authority, port: PBS_DEFAULT_PORT }
+
+  return { host: authority.slice(0, colon), port: Number(portText) }
 }
 
 /**

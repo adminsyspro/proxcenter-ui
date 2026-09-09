@@ -81,6 +81,15 @@ describe('normalizeNamespace', () => {
     expect(normalizeNamespace(raw)).toBe('')
   })
 
+  it('stays linear on a long run of slashes', () => {
+    // The regex form of this trim backtracked polynomially, and the namespace
+    // arrives in a request body (CodeQL js/polynomial-redos).
+    const started = Date.now()
+
+    expect(normalizeNamespace('/'.repeat(200_000))).toBe('')
+    expect(Date.now() - started).toBeLessThan(500)
+  })
+
   it('strips leading and trailing slashes', () => {
     expect(normalizeNamespace('///tenant-1/prod_2///')).toBe('tenant-1/prod_2')
   })

@@ -44,8 +44,19 @@ describe('pbsHostPort', () => {
     ['https://pbs.lab:9007', 'pbs.lab', 9007],
     ['https://pbs.lab', 'pbs.lab', PBS_DEFAULT_PORT],
     ['http://10.42.0.201:8007/some/path', '10.42.0.201', 8007],
+    ['https://[::1]:8007', '[::1]', 8007],
+    ['https://pbs.lab:not-a-port', 'pbs.lab:not-a-port', PBS_DEFAULT_PORT],
   ])('splits %s into %s:%i', (url, host, port) => {
     expect(pbsHostPort(url)).toEqual({ host, port })
+  })
+
+  it('stays linear on a long run of colons', () => {
+    // The matched form of this split backtracked polynomially (CodeQL
+    // js/polynomial-redos).
+    const started = Date.now()
+
+    expect(pbsHostPort(`https://${':'.repeat(100_000)}`).port).toBe(PBS_DEFAULT_PORT)
+    expect(Date.now() - started).toBeLessThan(500)
   })
 })
 

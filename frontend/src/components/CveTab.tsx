@@ -25,7 +25,9 @@ interface CveEntry {
   package: string
   installedVersion: string
   fixedVersion: string
-  fixAvailable: boolean
+  // Absent when the orchestrator predates the ui#905 fix; a published fixed
+  // version is then the only signal that the finding is actionable.
+  fixAvailable?: boolean
   noDsaReason?: string
   severity: 'critical' | 'high' | 'medium' | 'low'
   description: string
@@ -53,6 +55,8 @@ interface CveTabProps {
 }
 
 const SEVERITIES = ['critical', 'high', 'medium', 'low'] as const
+
+const hasFix = (cve: CveEntry) => cve.fixAvailable ?? Boolean(cve.fixedVersion)
 
 const SEVERITY_ORDER: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 }
 
@@ -141,7 +145,7 @@ export default function CveTab({ connectionId, node, available }: CveTabProps) {
   }
 
   const visibleByFix = useMemo(
-    () => cves.filter(cve => showNoFix || cve.fixAvailable),
+    () => cves.filter(cve => showNoFix || hasFix(cve)),
     [cves, showNoFix]
   )
 
@@ -156,7 +160,7 @@ export default function CveTab({ connectionId, node, available }: CveTabProps) {
   const fixCounts = useMemo(() => {
     let fixable = 0
     for (const cve of cves) {
-      if (cve.fixAvailable) fixable++
+      if (hasFix(cve)) fixable++
     }
     return { fixable, noFix: cves.length - fixable }
   }, [cves])
@@ -166,7 +170,7 @@ export default function CveTab({ connectionId, node, available }: CveTabProps) {
       .filter(cve => activeFilters.has(cve.severity))
       .sort((a, b) => {
         // Actionable findings first, then by severity.
-        if (a.fixAvailable !== b.fixAvailable) return a.fixAvailable ? -1 : 1
+        if (hasFix(a) !== hasFix(b)) return hasFix(a) ? -1 : 1
         return (SEVERITY_ORDER[a.severity] ?? 4) - (SEVERITY_ORDER[b.severity] ?? 4)
       })
   }, [visibleByFix, activeFilters])
@@ -182,8 +186,8 @@ export default function CveTab({ connectionId, node, available }: CveTabProps) {
     const tracked = nodes.reduce((sum, n) => sum + (n.packagesTracked || 0), 0)
     const degraded = nodes.filter(n => n.warning || n.error)
     const release = nodes.find(n => n.release)?.release || ''
-    const full = nodes.length > 0 && nodes.every(n => n.source === 'ssh' && !n.error)
-    return { scanned, tracked, degraded, release, full }
+    const full = nodes.every(n => n.source === 'ssh' && !n.error)
+    return { scanned, tracked, degraded, release, full, known: nodes.length > 0 }
   }, [nodes])
 
   const degradedNode = coverage.degraded[0]
@@ -268,7 +272,7 @@ export default function CveTab({ connectionId, node, available }: CveTabProps) {
   }
 
   if (cves.length === 0) {
-    const partial = !coverage.full
+    const partial = coverage.known && !coverage.full
     return (
       <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', py: 8 }}>
         <Box sx={{ color: partial ? 'warning.main' : 'success.main', mb: 2, display: 'flex' }}>
@@ -277,9 +281,11 @@ export default function CveTab({ connectionId, node, available }: CveTabProps) {
         <Typography variant="body1" fontWeight={600}>
           {partial ? t('partialScan') : t('noVulnerabilities')}
         </Typography>
-        <Typography variant="body2" sx={{ mt: 1, opacity: 0.7, maxWidth: 620, textAlign: 'center' }}>
-          {t('coverage', { scanned: coverage.scanned, tracked: coverage.tracked })}
-        </Typography>
+        {coverage.known && (
+          <Typography variant="body2" sx={{ mt: 1, opacity: 0.7, maxWidth: 620, textAlign: 'center' }}>
+            {t('coverage', { scanned: coverage.scanned, tracked: coverage.tracked })}
+          </Typography>
+        )}
         {degradedLabel && (
           <Typography variant="body2" sx={{ mt: 0.5, opacity: 0.7, maxWidth: 620, textAlign: 'center' }}>
             {degradedLabel}
@@ -338,15 +344,17 @@ export default function CveTab({ connectionId, node, available }: CveTabProps) {
           )}
         </Box>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <Tooltip title={degradedLabel || ''} disableHoverListener={!degradedLabel}>
-            <Typography
-              variant="caption"
-              sx={{ opacity: degradedLabel ? 0.9 : 0.5, color: degradedLabel ? 'warning.main' : 'inherit', display: 'flex', alignItems: 'center', gap: 0.5 }}
-            >
-              {degradedLabel && <i className="ri-error-warning-line" style={{ fontSize: 14 }} />}
-              {t('coverage', { scanned: coverage.scanned, tracked: coverage.tracked })}
-            </Typography>
-          </Tooltip>
+          {coverage.known && (
+            <Tooltip title={degradedLabel || ''} disableHoverListener={!degradedLabel}>
+              <Typography
+                variant="caption"
+                sx={{ opacity: degradedLabel ? 0.9 : 0.5, color: degradedLabel ? 'warning.main' : 'inherit', display: 'flex', alignItems: 'center', gap: 0.5 }}
+              >
+                {degradedLabel && <i className="ri-error-warning-line" style={{ fontSize: 14 }} />}
+                {t('coverage', { scanned: coverage.scanned, tracked: coverage.tracked })}
+              </Typography>
+            </Tooltip>
+          )}
           {lastScan && (
             <Typography variant="caption" sx={{ opacity: 0.5 }}>
               {t('lastScan', { date: new Date(lastScan).toLocaleString() })}
@@ -405,7 +413,7 @@ export default function CveTab({ connectionId, node, available }: CveTabProps) {
                   </Typography>
                 </TableCell>
                 <TableCell>
-                  {cve.fixAvailable ? (
+                  {hasFix(cve) ? (
                     <Typography variant="body2" sx={{ fontSize: 11, color: 'success.main', fontWeight: 600 }}>
                       {cve.fixedVersion}
                     </Typography>

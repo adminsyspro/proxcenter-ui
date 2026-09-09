@@ -26,6 +26,14 @@ vi.mock('@/contexts/TenantContext', () => ({
   useTenant: () => ({ loading: false, isFullClusterView: true }),
 }))
 
+// The latency column (#881) runs useDiskLatency, which reads the license and
+// the refresh interval from their providers. Community keeps the hook idle and
+// the column hidden, which is the state these tests were written against.
+vi.mock('@/contexts/LicenseContext', () => ({
+  useLicense: () => ({ isEnterprise: false, hasFeature: () => false, loading: false }),
+}))
+vi.mock('@/hooks/useRefreshInterval', () => ({ useRefreshInterval: () => 60000 }))
+
 // TagColorContext: VmsTable destructures { getColor, getShape, loadConnection }
 vi.mock('@/contexts/TagColorContext', () => ({
   useTagColors: () => ({

@@ -30,6 +30,12 @@ export async function POST(
       return NextResponse.json({ error: `Cannot cut over a ${job.status} job` }, { status: 400 })
     }
 
+    // The row is the signal: the pipeline mirrors it back into its own
+    // registry (lib/migration/operator-signals). Writing it before the
+    // in-process call is what makes the click survive a route handler that
+    // does not share the pipeline's module instance, which is the normal case
+    // in dev and with more than one frontend replica in production.
+    await prisma.migrationJob.update({ where: { id }, data: { cutoverRequestedAt: new Date() } })
     requestWarmCutover(id)
     return NextResponse.json({ data: { status: "cutover_requested" } })
   } catch (e: any) {

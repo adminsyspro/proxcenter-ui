@@ -64,7 +64,7 @@ export function cbtEligibilityXcpng(disks: XoDiskInfo[]): { eligible: boolean; r
  */
 export async function runXcpngWarmMigration(jobId: string, config: WarmMigrationConfig, tenantId = "default"): Promise<void> {
   const prisma = getTenantPrisma(tenantId)
-  registerJob(jobId, prisma)
+  await registerJob(jobId, prisma)
   const budget = config.downtimeBudgetSec ?? 300
   const maxPasses = config.maxPasses ?? 5
   const cutoverMode = config.cutoverMode === "manual" ? "manual" : "auto"

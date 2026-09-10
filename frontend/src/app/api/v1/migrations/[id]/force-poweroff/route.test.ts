@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
 const h = vi.hoisted(() => ({
-  prisma: { migrationJob: { findUnique: vi.fn() } },
+  prisma: { migrationJob: { findUnique: vi.fn(), update: vi.fn(async () => ({})) } },
 }))
 
 vi.mock("@/lib/rbac", () => ({ checkPermission: vi.fn(async () => null), PERMISSIONS: { VM_MIGRATE: "vm.migrate" } }))
@@ -14,7 +14,12 @@ import { requestWarmForcePowerOff } from "@/lib/migration/warm/warm-pipeline"
 
 const signal = requestWarmForcePowerOff as unknown as ReturnType<typeof vi.fn>
 
-beforeEach(() => { h.prisma.migrationJob.findUnique.mockReset(); signal.mockReset() })
+beforeEach(() => {
+  h.prisma.migrationJob.findUnique.mockReset()
+  h.prisma.migrationJob.update.mockReset()
+  h.prisma.migrationJob.update.mockResolvedValue({})
+  signal.mockReset()
+})
 
 describe("POST /api/v1/migrations/[id]/force-poweroff", () => {
   it("404s when the job is missing", async () => {
@@ -31,6 +36,7 @@ describe("POST /api/v1/migrations/[id]/force-poweroff", () => {
     const res = await callRoute(POST, { params: { id: "j1" } })
     expect(res.status).toBe(400)
     expect(signal).not.toHaveBeenCalled()
+    expect(h.prisma.migrationJob.update).not.toHaveBeenCalled()
   })
 
   it("signals the hard power off during a cutover wait", async () => {
@@ -39,6 +45,12 @@ describe("POST /api/v1/migrations/[id]/force-poweroff", () => {
     expect(res.status).toBe(200)
     expect(await readJson<any>(res)).toEqual({ data: { status: "force_power_off_requested" } })
     expect(signal).toHaveBeenCalledWith("j1")
+    // Recorded on the row, which is what the run actually polls when the route
+    // handler does not share its module instance.
+    expect(h.prisma.migrationJob.update).toHaveBeenCalledWith({
+      where: { id: "j1" },
+      data: { forcePowerOffRequestedAt: expect.any(Date) },
+    })
   })
 
   it("signals it during the checksum fallback wait too, which runs under full_copy", async () => {

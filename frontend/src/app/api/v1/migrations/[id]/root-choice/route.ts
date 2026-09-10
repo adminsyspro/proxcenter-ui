@@ -58,6 +58,11 @@ export async function POST(
     if (!requestV2vRootChoice(id, root)) {
       return NextResponse.json({ error: "The pipeline rejected this root device" }, { status: 400 })
     }
+    // Recorded on the row too, so the parked job reads the pick even when this
+    // handler holds its own copy of the pipeline module. The value is already
+    // allowlisted against the candidates above, and the pipeline sanitizes it
+    // again on the way in.
+    await prisma.migrationJob.update({ where: { id }, data: { rootChoice: root } })
     return NextResponse.json({ data: { status: "root_choice_requested", root } })
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })

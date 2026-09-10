@@ -191,7 +191,7 @@ export async function sweepWarmSnapshots(
  */
 export async function runWarmMigration(jobId: string, config: WarmMigrationConfig, tenantId = "default"): Promise<void> {
   const prisma = getTenantPrisma(tenantId)
-  registerJob(jobId, prisma)
+  await registerJob(jobId, prisma)
 
   const libdir = config.vddkLibdir || "/usr/lib/vmware-vix-disklib"
   const budget = config.downtimeBudgetSec ?? 300

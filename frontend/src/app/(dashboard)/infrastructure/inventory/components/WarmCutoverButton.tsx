@@ -3,6 +3,7 @@
 import { useTranslations } from 'next-intl'
 
 import ConfirmActionButton from './ConfirmActionButton'
+import { postJobAction } from './jobAction'
 
 /**
  * The operator's switchover control, with its confirmation.
@@ -73,7 +74,9 @@ export default function WarmCutoverButton({
       // warning hold: a manual hold is waiting on purpose, not diverging.
       alert={job!.status === 'awaiting_cutover' ? t('inventoryPage.esxiMigration.cutoverNotConverging') : undefined}
       onConfirm={async () => {
-        await fetch(`/api/v1/migrations/${job!.id}/cutover`, { method: 'POST' })
+        // Throws on a rejected request, which keeps the dialog open with the
+        // reason instead of closing it on a cutover that never started.
+        await postJobAction(`/api/v1/migrations/${job!.id}/cutover`)
         onRequested?.()
       }}
     />

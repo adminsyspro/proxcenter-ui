@@ -147,6 +147,34 @@ describe('WarmCutoverButton', () => {
     await waitFor(() => expect(screen.queryByText(CONFIRM_TITLE)).not.toBeInTheDocument())
   })
 
+  it('keeps the dialog open and states the reason when the route refuses', async () => {
+    // A refused request used to close the dialog like a successful one, which
+    // is what made a lost cutover look like a button that does nothing.
+    server.use(http.post('*/api/v1/migrations/:id/cutover', () =>
+      HttpResponse.json({ error: 'Cannot cut over a verify job' }, { status: 400 })))
+    const onRequested = vi.fn()
+
+    renderWithProviders(<WarmCutoverButton job={hold} onRequested={onRequested} />)
+    fireEvent.click(screen.getByRole('button', { name: CUTOVER_LABEL }))
+    const dialogButtons = await screen.findAllByRole('button', { name: CUTOVER_LABEL })
+    fireEvent.click(dialogButtons[dialogButtons.length - 1])
+
+    expect(await screen.findByText(/Cannot cut over a verify job/)).toBeInTheDocument()
+    expect(screen.getByText(CONFIRM_TITLE)).toBeInTheDocument()
+    expect(onRequested).not.toHaveBeenCalled()
+  })
+
+  it('reports the status code when the failure carries no message', async () => {
+    server.use(http.post('*/api/v1/migrations/:id/cutover', () => new HttpResponse(null, { status: 500 })))
+
+    renderWithProviders(<WarmCutoverButton job={hold} />)
+    fireEvent.click(screen.getByRole('button', { name: CUTOVER_LABEL }))
+    const dialogButtons = await screen.findAllByRole('button', { name: CUTOVER_LABEL })
+    fireEvent.click(dialogButtons[dialogButtons.length - 1])
+
+    expect(await screen.findByText(/HTTP 500/)).toBeInTheDocument()
+  })
+
   it('fires nothing when the confirmation is dismissed', async () => {
     const calls: string[] = []
     server.use(http.post('*/api/v1/migrations/:id/cutover', ({ params }) => {

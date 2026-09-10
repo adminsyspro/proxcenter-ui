@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
 const h = vi.hoisted(() => ({
-  prisma: { migrationJob: { findUnique: vi.fn() } },
+  prisma: { migrationJob: { findUnique: vi.fn(), update: vi.fn(async () => ({})) } },
 }))
 
 vi.mock("@/lib/rbac", () => ({ checkPermission: vi.fn(async () => null), PERMISSIONS: { VM_MIGRATE: "vm.migrate" } }))
@@ -30,6 +30,8 @@ const parkedJob = (overrides: Record<string, unknown> = {}) => ({
 
 beforeEach(() => {
   h.prisma.migrationJob.findUnique.mockReset()
+  h.prisma.migrationJob.update.mockReset()
+  h.prisma.migrationJob.update.mockResolvedValue({})
   signal.mockReset()
   signal.mockReturnValue(true)
 })
@@ -41,6 +43,12 @@ describe("POST /api/v1/migrations/[id]/root-choice", () => {
     expect(res.status).toBe(200)
     expect(await readJson<any>(res)).toEqual({ data: { status: "root_choice_requested", root: "/dev/sda1" } })
     expect(signal).toHaveBeenCalledWith("j1", "/dev/sda1")
+    // Same pick on the row: a parked job in another module instance reads it
+    // from there, not from the set this handler just filled.
+    expect(h.prisma.migrationJob.update).toHaveBeenCalledWith({
+      where: { id: "j1" },
+      data: { rootChoice: "/dev/sda1" },
+    })
   })
 
   it("400s when the root is missing from the body", async () => {
@@ -49,6 +57,7 @@ describe("POST /api/v1/migrations/[id]/root-choice", () => {
     expect(res.status).toBe(400)
     expect((await readJson<any>(res))?.error).toMatch(/root/i)
     expect(signal).not.toHaveBeenCalled()
+    expect(h.prisma.migrationJob.update).not.toHaveBeenCalled()
   })
 
   it("400s when the root is not a string", async () => {

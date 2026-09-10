@@ -1,13 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const h = vi.hoisted(() => ({
-  checkPermission: vi.fn(async () => null as any),
+  requireBrandingAdmin: vi.fn(async () => null as any),
   getCurrentTenantId: vi.fn(async () => 'default'),
   getSetting: vi.fn(async () => null as any),
   setSetting: vi.fn(async (_key: string, _tenantId: string, _value: unknown) => {}),
 }))
 
-vi.mock('@/lib/rbac', () => ({ checkPermission: h.checkPermission, PERMISSIONS: { ADMIN_SETTINGS: 'admin.settings' } }))
+vi.mock('@/lib/branding/guard', () => ({ requireBrandingAdmin: h.requireBrandingAdmin }))
 vi.mock('@/lib/tenant', () => ({ getCurrentTenantId: h.getCurrentTenantId }))
 vi.mock('@/lib/db/settings', () => ({ getSetting: h.getSetting, setSetting: h.setSetting }))
 
@@ -15,7 +15,7 @@ import { GET, PUT } from './route'
 import { callRoute, readJson } from '@/__tests__/setup/route-test'
 
 beforeEach(() => {
-  h.checkPermission.mockReset().mockResolvedValue(null)
+  h.requireBrandingAdmin.mockReset().mockResolvedValue(null)
   h.getCurrentTenantId.mockReset().mockResolvedValue('default')
   h.getSetting.mockReset().mockResolvedValue(null)
   h.setSetting.mockReset().mockResolvedValue(undefined)
@@ -68,8 +68,8 @@ describe('PUT /settings/branding primary colour (#754)', () => {
     expect(h.setSetting).not.toHaveBeenCalled()
   })
 
-  it('denies without the admin settings permission', async () => {
-    h.checkPermission.mockResolvedValue(new Response('no', { status: 403 }) as any)
+  it('denies whoever the branding guard refuses', async () => {
+    h.requireBrandingAdmin.mockResolvedValue(new Response('no', { status: 403 }) as any)
 
     const res = await callRoute(PUT, { method: 'PUT', body: { primaryColor: '#00ECB2' } })
 

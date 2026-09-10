@@ -3088,7 +3088,7 @@ export default function SettingsPage() {
     { label: t('settings.license'), icon: 'ri-key-2-line', component: LicenseTab, providerOnly: true },
     { label: t('settings.ai'), icon: 'ri-robot-line', component: AITab, requiredFeature: Features.AI_INSIGHTS, providerOnly: true },
     { label: 'RSE / Green IT', icon: 'ri-leaf-line', component: GreenTab, requiredFeature: Features.GREEN_METRICS, providerOnly: true },
-    { label: 'White Label', icon: 'ri-pantone-line', component: WhiteLabelTab, requiredFeature: Features.WHITE_LABEL, providerOnly: true },
+    { label: 'White Label', icon: 'ri-pantone-line', component: WhiteLabelTab, requiredFeature: Features.WHITE_LABEL, superAdminOnly: true },
     { label: t('vdc.title'), icon: 'ri-cloud-line', component: VdcTab, requiredFeature: Features.MULTI_TENANCY, providerOnly: true },
     { label: 'Tenants', icon: 'ri-building-line', component: TenantsTab, requiredFeature: Features.MULTI_TENANCY, providerOnly: true },
     { label: t('settings.sshCommands.tabLabel'), icon: 'ri-terminal-line', component: SshCommandsTab, providerOnly: true },
@@ -3096,14 +3096,24 @@ export default function SettingsPage() {
     { label: t('settings.apiTokens.tabLabel'), icon: 'ri-key-2-line', component: ApiTokensTab, providerOnly: true },
   ]
 
-  // Hide provider-only tabs (Tenants, vDC) unless super admin AND currently
-  // in provider tenant. License-gated tabs are also filtered out entirely
-  // when the feature is missing — same UX as the inventory detail tabs:
-  // the user only sees what they can actually use, no greyed-out chips.
-  // While the license is still loading we keep gated tabs visible to avoid
-  // a visible→hidden flicker once the response lands.
+  // Two different gates, deliberately:
+  //   providerOnly   — the tab configures the provider itself (connections,
+  //                    license, tenants, vDC…), so it needs a super admin
+  //                    standing in the provider tenant.
+  //   superAdminOnly — the tab configures the CURRENT tenant, whichever it
+  //                    is, and only a super admin may do it. White Label is
+  //                    the case: the branding row is keyed by tenant, so a
+  //                    super admin brands a tenant by switching onto it.
+  //                    Marking it providerOnly (a55c3856) left no UI path to
+  //                    brand a tenant at all.
+  // License-gated tabs are also filtered out entirely when the feature is
+  // missing — same UX as the inventory detail tabs: the user only sees what
+  // they can actually use, no greyed-out chips. While the license is still
+  // loading we keep gated tabs visible to avoid a visible→hidden flicker
+  // once the response lands.
   const visibleIndices = allTabs.reduce((acc, tab, idx) => {
     if (tab.providerOnly && !(isSuperAdmin && isProviderTenant)) return acc
+    if (tab.superAdminOnly && !isSuperAdmin) return acc
     if (!licenseLoading && tab.requiredFeature && !hasFeature(tab.requiredFeature)) return acc
     acc.push(idx)
     return acc

@@ -228,17 +228,22 @@ async function pveCluster(conn: ProxmoxClientOptions, hasCeph: boolean): Promise
       if (healthStatus === 'HEALTH_OK') {
         return { status: 'ok', message: 'Ceph health is OK.' }
       }
+      // Ceph names every condition it is unhappy about, keyed by code. Report
+      // them all: a status on its own leaves the operator with nothing to act
+      // on, and the code is what `ceph health detail` is searched by.
+      const entries = Object.entries(data?.health?.checks ?? {}) as [string, any][]
+      const msgs = entries
+        .map(([code, c]) => {
+          const msg = c?.summary?.message ?? c?.message ?? ''
+          return msg ? `${code}: ${msg}` : code
+        })
+        .sort((a, b) => a.localeCompare(b))
+      const detail = msgs.length > 0 ? msgs.join('; ') : undefined
       if (healthStatus === 'HEALTH_WARN') {
-        const checks = Object.values(data?.health?.checks ?? {}) as any[]
-        const msgs = checks.map((c: any) => c?.summary?.message ?? c?.message ?? '').filter(Boolean)
-        return {
-          status: 'warn',
-          message: 'Ceph health warning.',
-          detail: msgs.length > 0 ? msgs.join('; ') : undefined,
-        }
+        return { status: 'warn', message: 'Ceph health warning.', detail }
       }
       if (healthStatus === 'HEALTH_ERR') {
-        return { status: 'error', message: 'Ceph health error.', detail: healthStatus }
+        return { status: 'error', message: 'Ceph health error.', detail: detail ?? healthStatus }
       }
       // Unexpected or empty status
       return { status: 'warn', message: `Ceph health status: "${healthStatus || 'unknown'}"` }

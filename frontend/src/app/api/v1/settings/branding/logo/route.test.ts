@@ -1,13 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const h = vi.hoisted(() => ({
-  checkPermission: vi.fn(async () => null as any),
+  requireBrandingAdmin: vi.fn(async () => null as any),
   getCurrentTenantId: vi.fn(async () => 'default'),
   putAsset: vi.fn(async () => {}),
   deleteAsset: vi.fn(async () => {}),
 }))
 
-vi.mock('@/lib/rbac', () => ({ checkPermission: h.checkPermission, PERMISSIONS: { ADMIN_SETTINGS: 'admin.settings' } }))
+vi.mock('@/lib/branding/guard', () => ({ requireBrandingAdmin: h.requireBrandingAdmin }))
 vi.mock('@/lib/tenant', () => ({ getCurrentTenantId: h.getCurrentTenantId }))
 vi.mock('@/lib/branding/assetStore', () => ({ putAsset: h.putAsset, deleteAsset: h.deleteAsset }))
 
@@ -15,7 +15,7 @@ import { POST, DELETE } from './route'
 import { callRoute, readJson } from '@/__tests__/setup/route-test'
 
 beforeEach(() => {
-  h.checkPermission.mockReset().mockResolvedValue(null)
+  h.requireBrandingAdmin.mockReset().mockResolvedValue(null)
   h.getCurrentTenantId.mockReset().mockResolvedValue('default')
   h.putAsset.mockReset().mockResolvedValue(undefined)
   h.deleteAsset.mockReset().mockResolvedValue(undefined)
@@ -30,7 +30,7 @@ function formWith(file: File, type: string) {
 
 describe('POST /settings/branding/logo', () => {
   it('403 when denied', async () => {
-    h.checkPermission.mockResolvedValue(new Response('no', { status: 403 }) as any)
+    h.requireBrandingAdmin.mockResolvedValue(new Response('no', { status: 403 }) as any)
     const res = await callRoute(POST, { body: formWith(new File(['x'], 'logo.png', { type: 'image/png' }), 'logo') })
     expect(res.status).toBe(403)
   })

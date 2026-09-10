@@ -18,6 +18,7 @@
  */
 
 import { getTenantPrisma } from "@/lib/tenant"
+import { startOperatorSignalWatch, stopOperatorSignalWatch } from "@/lib/migration/operator-signals"
 import { decryptSecret } from "@/lib/crypto/secret"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { pveFetch } from "@/lib/proxmox/client"
@@ -165,11 +166,12 @@ export function cancelV2vMigrationJob(jobId: string) {
 
 /**
  * Root filesystem an operator picked for a job parked on the multi-boot gate,
- * keyed by job id. In memory on purpose, mirroring the warm cutover gate: the
- * pipeline runs inside the POST request's after() continuation, so the route
- * handler and the pipeline share this module instance. A process restart loses
- * the signal, and the parked job is failed by the orphan sweep like any other
- * in-flight job.
+ * keyed by job id. This set is only the fast path: the route handler running
+ * in this very module instance fills it directly, and the signal mirror fills
+ * it from the job row for every other case, which is the common one (a route
+ * compiled after the pipeline started holds a different copy of this module).
+ * A process restart still loses the parked job, which the orphan sweep fails
+ * like any other in-flight job.
  */
 const rootChoiceRequests = new Map<string, string>()
 
@@ -948,6 +950,13 @@ export async function runV2vMigrationPipeline(
   // Register tenant-scoped prisma for this job
   const prisma = getTenantPrisma(tenantId)
   jobPrisma.set(jobId, prisma)
+  // Cancel and the multi-boot root pick both arrive from route handlers that
+  // may hold their own copy of this module, so the row is what this run reads
+  // them from (lib/migration/operator-signals).
+  await startOperatorSignalWatch(prisma, jobId, signals => {
+    if (signals.cancelled) cancelledJobs.add(jobId)
+    if (signals.rootChoice) requestV2vRootChoice(jobId, signals.rootChoice)
+  })
 
   let targetVmid: number | null = null
   /**
@@ -2971,6 +2980,7 @@ export async function runV2vMigrationPipeline(
         ).catch(() => {})
       }
     }
+    stopOperatorSignalWatch(jobId)
     cancelledJobs.delete(jobId)
     rootChoiceRequests.delete(jobId)
     jobPrisma.delete(jobId)

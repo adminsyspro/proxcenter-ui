@@ -37,6 +37,8 @@ export async function POST(
       return NextResponse.json({ error: "This migration is not waiting for the source to power off" }, { status: 400 })
     }
 
+    // Durable first, in-process second: same reason as the cutover route.
+    await prisma.migrationJob.update({ where: { id }, data: { forcePowerOffRequestedAt: new Date() } })
     requestWarmForcePowerOff(id)
     return NextResponse.json({ data: { status: "force_power_off_requested" } })
   } catch (e: any) {

@@ -1,5 +1,6 @@
 import { getTenantPrisma } from "@/lib/tenant"
 import { TERMINAL_STATUSES } from "@/lib/tasks/sharedTask"
+import { startOperatorSignalWatch, stopOperatorSignalWatch } from "@/lib/migration/operator-signals"
 import type { WarmStatus, LogEntry } from "./types"
 
 // ── Job tracking (per-orchestrator, mirrors the other migration pipelines) ──
@@ -15,15 +16,29 @@ const jobPrisma = new Map<string, any>()
 // second run for a VM already migrating is rejected (design §12 concurrency lock).
 const activeWarmVms = new Set<string>()
 
-/** Bind a job to its tenant Prisma client and clear stale operator requests before a run. */
-export function registerJob(jobId: string, prisma: any): void {
+/**
+ * Bind a job to its tenant Prisma client, drop the previous attempt's operator
+ * requests, and start mirroring the durable ones from the job row.
+ *
+ * The mirror is what makes the sets above trustworthy: a route handler sets
+ * them from whichever module instance it was compiled into, which is not
+ * necessarily this one, so a click that only reached the route's copy would
+ * never be seen here. See lib/migration/operator-signals.
+ */
+export async function registerJob(jobId: string, prisma: any): Promise<void> {
   jobPrisma.set(jobId, prisma)
   cutoverRequests.delete(jobId)
   forcePowerOffRequests.delete(jobId)
+  await startOperatorSignalWatch(prisma, jobId, signals => {
+    if (signals.cancelled) cancelledJobs.add(jobId)
+    if (signals.cutover) cutoverRequests.add(jobId)
+    if (signals.forcePowerOff) forcePowerOffRequests.add(jobId)
+  })
 }
 
 /** Drop the job's Prisma binding and every per-job signal once the run has ended. */
 export function unregisterJob(jobId: string): void {
+  stopOperatorSignalWatch(jobId)
   jobPrisma.delete(jobId)
   cancelledJobs.delete(jobId)
   cutoverRequests.delete(jobId)

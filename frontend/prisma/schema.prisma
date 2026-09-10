@@ -265,6 +265,19 @@ model MigrationJob {
   // Live estimate of the cutover downtime (seconds) at the last delta pass;
   // surfaced in the UI so the operator can decide when to trigger cutover.
   projectedDowntimeSec Int? @map("projected_downtime_sec")
+
+  // Operator decisions that reach a running pipeline from a route handler.
+  // They live on the row, not in a module-level Set, because the handler and
+  // the after() continuation running the pipeline are not guaranteed to share
+  // a module instance (a dev recompile gives the route a fresh one) nor a
+  // process (a second frontend replica). Each pipeline mirrors these back into
+  // its own registry while the job runs, see lib/migration/operator-signals.
+  // Cancellation needs no column of its own: the cancel route already writes
+  // `status = "cancelled"`, which is the durable signal.
+  cutoverRequestedAt       DateTime? @map("cutover_requested_at")
+  forcePowerOffRequestedAt DateTime? @map("force_poweroff_requested_at")
+  rootChoice               String?   @map("root_choice")
+
   error            String?
 
   // Logs

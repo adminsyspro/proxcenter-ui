@@ -24,6 +24,10 @@ import { alpha, useTheme } from '@mui/material/styles'
  * what is about to happen, an optional warning, and a busy state while the
  * request is in flight. Written once so the second one cannot drift from the
  * first, and so a third does not arrive as a third copy.
+ *
+ * A failed action keeps the dialog open and states why. The dialog used to
+ * close whatever happened, which turned a rejected request into a button that
+ * did nothing at all: no message, no change on screen, nothing to report.
  */
 export default function ConfirmActionButton({
   label,
@@ -46,20 +50,25 @@ export default function ConfirmActionButton({
   body: ReactNode
   /** Shown as a warning inside the dialog when the action deserves a caveat. */
   alert?: ReactNode
+  /** Rejected by throwing: the message is shown in the dialog, which stays open. */
   onConfirm: () => Promise<void>
 }) {
   const t = useTranslations()
   const theme = useTheme()
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const confirm = async () => {
     setBusy(true)
+    setError(null)
     try {
       await onConfirm()
+      setOpen(false)
+    } catch (e: any) {
+      setError(e?.message || String(e))
     } finally {
       setBusy(false)
-      setOpen(false)
     }
   }
 
@@ -71,7 +80,7 @@ export default function ConfirmActionButton({
         color={color}
         disabled={busy}
         startIcon={<i className={icon} style={{ fontSize: 14 }} />}
-        onClick={() => setOpen(true)}
+        onClick={() => { setError(null); setOpen(true) }}
         sx={{ textTransform: 'none' }}
       >
         {label}
@@ -91,6 +100,7 @@ export default function ConfirmActionButton({
         <DialogContent>
           <DialogContentText>{body}</DialogContentText>
           {alert && <Alert severity="warning" sx={{ mt: 2 }}>{alert}</Alert>}
+          {error && <Alert severity="error" sx={{ mt: 2 }}>{t('common.errorWithMessage', { error })}</Alert>}
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
           <Button onClick={() => setOpen(false)} color="inherit">

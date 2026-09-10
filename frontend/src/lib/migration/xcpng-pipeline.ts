@@ -18,6 +18,7 @@
  */
 
 import { getTenantPrisma } from "@/lib/tenant"
+import { startOperatorSignalWatch, stopOperatorSignalWatch } from "@/lib/migration/operator-signals"
 import { decryptSecret } from "@/lib/crypto/secret"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { pveFetch } from "@/lib/proxmox/client"
@@ -249,6 +250,11 @@ async function executeSSHWithTimeout(
 export async function runXcpngMigrationPipeline(jobId: string, config: MigrationConfig, tenantId = 'default'): Promise<void> {
   const prisma = getTenantPrisma(tenantId)
   jobPrisma.set(jobId, prisma)
+  // Same mirror as the other pipelines: the cancel route may not share this
+  // module instance (lib/migration/operator-signals).
+  await startOperatorSignalWatch(prisma, jobId, signals => {
+    if (signals.cancelled) cancelledJobs.add(jobId)
+  })
 
   let targetVmid: number | null = null
   /**
@@ -817,6 +823,7 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
     stopSourceKeepAlive()
     await source?.close().catch(() => {})
     stopHeartbeat()
+    stopOperatorSignalWatch(jobId)
     cancelledJobs.delete(jobId)
     jobPrisma.delete(jobId)
   }

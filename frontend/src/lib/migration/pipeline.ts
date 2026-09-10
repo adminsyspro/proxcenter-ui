@@ -17,6 +17,7 @@
  */
 
 import { getTenantPrisma } from "@/lib/tenant"
+import { startOperatorSignalWatch, stopOperatorSignalWatch } from "@/lib/migration/operator-signals"
 import { decryptSecret } from "@/lib/crypto/secret"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { pveFetch } from "@/lib/proxmox/client"
@@ -152,6 +153,12 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
   // Register tenant-scoped prisma for this job
   const prisma = getTenantPrisma(tenantId)
   jobPrisma.set(jobId, prisma)
+  // The cancel route fills `cancelledJobs` from whichever module instance it
+  // was compiled into, which is not necessarily this one, so mirror the row's
+  // own verdict into the set this run polls (lib/migration/operator-signals).
+  await startOperatorSignalWatch(prisma, jobId, signals => {
+    if (signals.cancelled) cancelledJobs.add(jobId)
+  })
 
   let soapSession: SoapSession | null = null
   let targetVmid: number | null = null
@@ -2959,6 +2966,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
     if (soapSession) {
       await soapLogout(soapSession)
     }
+    stopOperatorSignalWatch(jobId)
     cancelledJobs.delete(jobId)
     jobPrisma.delete(jobId)
   }

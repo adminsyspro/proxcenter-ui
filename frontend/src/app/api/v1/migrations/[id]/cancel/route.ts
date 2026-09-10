@@ -40,6 +40,12 @@ export async function POST(
     // since #738: a job parked on the multi-boot gate polls that set, so without
     // this the cancel would only change the row and leave the pipeline waiting
     // until the gate expires.
+    //
+    // These four are the fast path only. The row written just below is what
+    // actually reaches a run whose pipeline holds a different copy of those
+    // modules than this handler does: every run mirrors its own status back
+    // into its cancel set (lib/migration/operator-signals), so a cancel no
+    // longer leaves the transfer running behind a row that reads "cancelled".
     cancelMigrationJob(id)
     cancelWarmMigrationJob(id)
     cancelV2vMigrationJob(id)

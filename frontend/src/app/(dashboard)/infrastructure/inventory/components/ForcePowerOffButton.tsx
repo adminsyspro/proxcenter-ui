@@ -3,6 +3,7 @@
 import { useTranslations } from 'next-intl'
 
 import ConfirmActionButton from './ConfirmActionButton'
+import { postJobAction } from './jobAction'
 
 /**
  * The way out of a refused guest shutdown.
@@ -49,7 +50,7 @@ export default function ForcePowerOffButton({
       body={t('inventoryPage.esxiMigration.forcePowerOffConfirmBody')}
       alert={t('inventoryPage.esxiMigration.forcePowerOffCrashConsistent')}
       onConfirm={async () => {
-        await fetch(`/api/v1/migrations/${job!.id}/force-poweroff`, { method: 'POST' })
+        await postJobAction(`/api/v1/migrations/${job!.id}/force-poweroff`)
         onRequested?.()
       }}
     />

@@ -20,6 +20,8 @@ import {
 } from '@mui/material'
 import { alpha, useTheme } from '@mui/material/styles'
 
+import { postJobAction } from './jobAction'
+
 /**
  * The way out of an ambiguous guest inspection.
  *
@@ -74,17 +76,9 @@ export default function RootChoiceButton({
     setBusy(true)
     setError(null)
     try {
-      const res = await fetch(`/api/v1/migrations/${job!.id}/root-choice`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ root: selected }),
-      })
-      if (!res.ok) {
-        // 400 carries the reason (value not a candidate, job no longer waiting).
-        const d = await res.json().catch(() => null)
-        setError(d?.error || `HTTP ${res.status}`)
-        return
-      }
+      // Throws with the route's reason on 400 (value not a candidate, job no
+      // longer waiting) or on any other rejection.
+      await postJobAction(`/api/v1/migrations/${job!.id}/root-choice`, { root: selected })
       setOpen(false)
       onRequested?.()
     } catch (e: any) {

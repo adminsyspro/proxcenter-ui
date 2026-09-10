@@ -28419,7 +28419,7 @@
         "updated_at": "2026-05-11T08:00:00.000Z",
         "is_super_admin": true,
         "tenants": [
-          { "id": "demo-tenant-provider", "name": "ProxCenter Demo MSP", "isDefault": true },
+          { "id": "default", "name": "ProxCenter Demo MSP", "isDefault": true },
           { "id": "demo-tenant-acme", "name": "Acme Corporation", "isDefault": false },
           { "id": "demo-tenant-globex", "name": "Globex SAS", "isDefault": false },
           { "id": "demo-tenant-initech", "name": "Initech", "isDefault": false }
@@ -28437,7 +28437,7 @@
         "updated_at": "2026-05-10T09:00:00.000Z",
         "is_super_admin": true,
         "tenants": [
-          { "id": "demo-tenant-provider", "name": "ProxCenter Demo MSP", "isDefault": true }
+          { "id": "default", "name": "ProxCenter Demo MSP", "isDefault": true }
         ]
       },
       {

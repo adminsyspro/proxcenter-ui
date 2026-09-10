@@ -6863,6 +6863,8 @@
     "allSections": "Toutes les sections",
     "generating": "Génération en cours...",
     "download": "Télécharger",
+    "downloadPdf": "Télécharger le PDF",
+    "downloadCsv": "Télécharger le CSV",
     "scheduleReport": "Planifier un rapport",
     "frequency": "Fréquence",
     "recipients": "Destinataires",

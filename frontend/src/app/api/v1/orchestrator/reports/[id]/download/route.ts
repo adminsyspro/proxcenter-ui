@@ -10,7 +10,20 @@ const ORCHESTRATOR_API_KEY = process.env.ORCHESTRATOR_API_KEY || ''
 
 export const runtime = 'nodejs'
 
+// Formats the orchestrator can serve for a stored report. Both are built at
+// generation time from the same data, so neither re-runs any collection.
+const FORMATS = ['pdf', 'csv'] as const
+
+type Format = (typeof FORMATS)[number]
+
+// Content type to announce when the orchestrator does not send one.
+function fallbackContentType(format: Format): string {
+  return format === 'csv' ? 'text/csv; charset=utf-8' : 'application/pdf'
+}
+
 // GET /api/v1/orchestrator/reports/[id]/download — tenant-scoped
+//
+// ?format=csv downloads the report's data as one CSV instead of the PDF.
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -20,11 +33,24 @@ export async function GET(
     if (denied) return denied
 
     const { id } = await params
+    const { searchParams } = new URL(request.url)
+    const format = (searchParams.get('format') || 'pdf').toLowerCase()
+
+    if (!FORMATS.includes(format as Format)) {
+      return NextResponse.json({ error: `Unsupported format: ${format}` }, { status: 400 })
+    }
 
     // Tenant ownership is enforced by the orchestrator: orchestratorFetch
     // does not stream binary, so we hit the download URL directly here and
     // forward the X-Tenant-ID header explicitly.
-    const url = `${ORCHESTRATOR_URL}/api/v1/reports/${id}/download`
+    const query = new URLSearchParams()
+
+    if (format === 'csv') {
+      query.set('format', 'csv')
+    }
+
+    const suffix = query.toString()
+    const url = `${ORCHESTRATOR_URL}/api/v1/reports/${id}/download${suffix ? `?${suffix}` : ''}`
 
     const headers: Record<string, string> = {}
     if (ORCHESTRATOR_API_KEY) {
@@ -49,8 +75,10 @@ export async function GET(
     }
 
     // Get headers from orchestrator response
-    const contentType = response.headers.get('Content-Type') || 'application/pdf'
-    const contentDisposition = response.headers.get('Content-Disposition') || `attachment; filename="report-${id}.pdf"`
+    const fallbackType = fallbackContentType(format as Format)
+    const fallbackExt = format === 'csv' ? 'csv' : 'pdf'
+    const contentType = response.headers.get('Content-Type') || fallbackType
+    const contentDisposition = response.headers.get('Content-Disposition') || `attachment; filename="report-${id}.${fallbackExt}"`
     const contentLength = response.headers.get('Content-Length')
 
     // Stream the response

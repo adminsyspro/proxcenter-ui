@@ -6866,6 +6866,8 @@
     "allSections": "所有章节",
     "generating": "正在生成...",
     "download": "下载",
+    "downloadPdf": "下载 PDF",
+    "downloadCsv": "下载 CSV",
     "scheduleReport": "计划报告",
     "frequency": "频率",
     "recipients": "收件人",

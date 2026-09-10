@@ -6862,6 +6862,8 @@
     "allSections": "All sections",
     "generating": "Generating...",
     "download": "Download",
+    "downloadPdf": "Download PDF",
+    "downloadCsv": "Download CSV",
     "scheduleReport": "Schedule report",
     "frequency": "Frequency",
     "recipients": "Recipients",

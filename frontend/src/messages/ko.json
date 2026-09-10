@@ -6862,6 +6862,8 @@
     "allSections": "모든 섹션",
     "generating": "생성 중...",
     "download": "다운로드",
+    "downloadPdf": "PDF 다운로드",
+    "downloadCsv": "CSV 다운로드",
     "scheduleReport": "보고서 예약",
     "frequency": "주기",
     "recipients": "수신자",

@@ -42,6 +42,7 @@ interface Report {
   status: 'pending' | 'generating' | 'completed' | 'failed'
   file_path?: string
   file_size?: number
+  csv_size?: number
   date_from: string
   date_to: string
   connection_ids?: string[]

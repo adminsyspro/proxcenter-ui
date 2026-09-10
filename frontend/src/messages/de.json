@@ -6809,6 +6809,8 @@
     "allSections": "Alle Abschnitte",
     "generating": "Wird generiert...",
     "download": "Herunterladen",
+    "downloadPdf": "PDF herunterladen",
+    "downloadCsv": "CSV herunterladen",
     "scheduleReport": "Zeitplan report",
     "frequency": "Häufigkeit",
     "recipients": "Empfänger",

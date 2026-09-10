@@ -22,6 +22,10 @@ interface Report {
   status: 'pending' | 'generating' | 'completed' | 'failed'
   file_path?: string
   file_size?: number
+
+  // Length of the report's CSV export. Reports generated before it existed
+  // have none, so the action only shows up when it is set.
+  csv_size?: number
   date_from: string
   date_to: string
   connection_ids?: string[]
@@ -53,8 +57,10 @@ function formatDate(dateStr: string): string {
 export default function ReportHistory({ reports, reportTypes, onDelete, onRefresh, loading }: ReportHistoryProps) {
   const t = useTranslations()
 
-  const handleDownload = (reportId: string) => {
-    window.open(`/api/v1/orchestrator/reports/${reportId}/download`, '_blank')
+  const handleDownload = (reportId: string, format: 'pdf' | 'csv' = 'pdf') => {
+    const query = format === 'csv' ? '?format=csv' : ''
+
+    window.open(`/api/v1/orchestrator/reports/${reportId}/download${query}`, '_blank')
   }
 
   const getStatusChip = (status: string) => {
@@ -123,14 +129,21 @@ export default function ReportHistory({ reports, reportTypes, onDelete, onRefres
     {
       field: 'actions',
       headerName: t('common.actions'),
-      width: 120,
+      width: 140,
       sortable: false,
       renderCell: (params) => (
         <Box sx={{ display: 'flex', gap: 0.5 }}>
           {params.row.status === 'completed' && (
-            <Tooltip title={t('reports.download')}>
+            <Tooltip title={t('reports.downloadPdf')}>
               <IconButton size="small" color="primary" onClick={() => handleDownload(params.row.id)}>
-                <i className="ri-download-2-line" />
+                <i className="ri-file-pdf-line" />
+              </IconButton>
+            </Tooltip>
+          )}
+          {params.row.status === 'completed' && !!params.row.csv_size && (
+            <Tooltip title={t('reports.downloadCsv')}>
+              <IconButton size="small" color="primary" onClick={() => handleDownload(params.row.id, 'csv')}>
+                <i className="ri-file-excel-2-line" />
               </IconButton>
             </Tooltip>
           )}

@@ -435,6 +435,25 @@ describe('runConnectionDiagnostics - PVE Ceph check', () => {
     expect(cephCheck?.status).toBe('error')
   })
 
+  it('names every condition behind a HEALTH_ERR, not just the status', async () => {
+    setupPveWithCeph({
+      health: {
+        status: 'HEALTH_ERR',
+        checks: {
+          OSD_FULL: { severity: 'HEALTH_ERR', summary: { message: '1 full osd(s)' } },
+          AUTH_INSECURE_SERVICE_TICKETS: { severity: 'HEALTH_ERR', summary: { message: 'Monitors are configured to issue insecure service tickets' } },
+        },
+      },
+    })
+    const meta: DiagnosticMeta = { ...pveMeta, hasCeph: true }
+    const report = await runConnectionDiagnostics(meta, pveConn)
+    const cephCheck = report.checks.find((c) => c.id === 'pve.ceph')
+    expect(cephCheck?.status).toBe('error')
+    expect(cephCheck?.detail).toBe(
+      'AUTH_INSECURE_SERVICE_TICKETS: Monitors are configured to issue insecure service tickets; OSD_FULL: 1 full osd(s)',
+    )
+  })
+
   it('does not include a ceph check when hasCeph is false', async () => {
     pveFetchMock.mockImplementation((_conn: any, path: string) => {
       if (path === '/version') return Promise.resolve({ version: '8.0.0' })

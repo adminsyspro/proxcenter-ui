@@ -1,6 +1,6 @@
 export const dynamic = "force-dynamic"
 import { NextResponse } from 'next/server'
-import { checkPermission, PERMISSIONS } from '@/lib/rbac'
+import { requireBrandingAdmin } from '@/lib/branding/guard'
 import { getCurrentTenantId } from '@/lib/tenant'
 import { putAsset, deleteAsset } from '@/lib/branding/assetStore'
 
@@ -11,7 +11,7 @@ const SLOTS = ['logo', 'favicon', 'loginLogo']
 
 export async function POST(req: Request) {
   try {
-    const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
+    const denied = await requireBrandingAdmin()
     if (denied) return denied
 
     const tenantId = await getCurrentTenantId()
@@ -38,7 +38,7 @@ export async function POST(req: Request) {
 
 export async function DELETE(req: Request) {
   try {
-    const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
+    const denied = await requireBrandingAdmin()
     if (denied) return denied
 
     const tenantId = await getCurrentTenantId()

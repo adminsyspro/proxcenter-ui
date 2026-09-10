@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic"
 import { NextResponse } from 'next/server'
 import { getSetting, setSetting } from '@/lib/db/settings'
-import { checkPermission, PERMISSIONS } from '@/lib/rbac'
+import { requireBrandingAdmin } from '@/lib/branding/guard'
 import { getCurrentTenantId } from '@/lib/tenant'
 import { normalizeHexColor } from '@/lib/theme/hexColor'
 
@@ -26,7 +26,7 @@ const DEFAULT_BRANDING = {
 
 export async function GET() {
   try {
-    const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
+    const denied = await requireBrandingAdmin()
     if (denied) return denied
 
     const tenantId = await getCurrentTenantId()
@@ -53,7 +53,7 @@ export async function GET() {
 
 export async function PUT(req: Request) {
   try {
-    const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
+    const denied = await requireBrandingAdmin()
     if (denied) return denied
 
     const body = await req.json()

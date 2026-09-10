@@ -8,6 +8,7 @@ import {
 } from '@mui/material'
 import { useTranslations } from 'next-intl'
 import { useBranding } from '@/contexts/BrandingContext'
+import { useTenant } from '@/contexts/TenantContext'
 import ColorPicker from '@/components/common/ColorPicker'
 import { isHexColor, normalizeHexColor } from '@/lib/theme/hexColor'
 
@@ -17,6 +18,11 @@ export default function WhiteLabelTab() {
   const t = useTranslations()
   const theme = useTheme()
   const { branding, refresh } = useBranding()
+
+  // The branding row is keyed by the tenant the session is on, so the same
+  // form edits a different tenant depending on the tenant switcher. Name the
+  // target rather than let a super admin rebrand the provider by accident.
+  const { currentTenant } = useTenant()
 
   const [config, setConfig] = useState({
     enabled: false,
@@ -186,7 +192,9 @@ export default function WhiteLabelTab() {
         White Label / Branding
       </Typography>
       <Typography variant="body2" sx={{ mb: 3, opacity: 0.6 }}>
-        Customize the application branding for your organization. Replace the logo, name, colors and footer to match your brand.
+        {currentTenant
+          ? `Customize the branding of the ${currentTenant.name} tenant. Replace the logo, name, colors and footer to match its brand.`
+          : 'Customize the application branding for your organization. Replace the logo, name, colors and footer to match your brand.'}
       </Typography>
 
       {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>{error}</Alert>}

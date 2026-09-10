@@ -790,6 +790,64 @@ const DEMO_FW_IPSETS: any[] = [
 ]
 
 /**
+ * One CSV per report, the shape the export produces: frozen English headers,
+ * raw values, a single file (no archive). Enough rows to show the format.
+ */
+function buildDemoReportCsv(report: any): string {
+  const rows: Record<string, string[][]> = {
+    infrastructure: [
+      ['cluster', 'node', 'status', 'cpu_percent', 'memory_percent', 'guests'],
+      ['Production Cluster', 'pve-node-01', 'online', '22.0', '71.0', '18'],
+      ['Production Cluster', 'pve-node-02', 'online', '41.0', '88.0', '26'],
+      ['Production Cluster', 'pve-node-06', 'online', '3.0', '34.0', '7'],
+      ['DR Cluster (GRA)', 'pve-dr-01', 'online', '4.0', '22.0', '6'],
+    ],
+    backup: [
+      ['vmid', 'name', 'datastore', 'started_at', 'duration_seconds', 'size_bytes', 'transferred_bytes', 'status'],
+      ['100', 'web-prod-01', 'backup-main', '2026-09-09T01:24:47Z', '188', '10639572992', '2415919104', 'ok'],
+      ['101', 'db-master', 'backup-main', '2026-09-09T01:31:02Z', '742', '44446351360', '9126805504', 'ok'],
+      ['117', 'ci-runner-02', 'backup-main', '2026-09-09T01:48:19Z', '96', '5368709120', '1073741824', 'warning'],
+    ],
+    site_recovery: [
+      ['job', 'source_cluster', 'target_cluster', 'vmid', 'rpo_target_minutes', 'last_sync_minutes_ago', 'compliant'],
+      ['Critical Infrastructure DR', 'Production Cluster', 'DR Cluster (GRA)', '100', '15', '7', 'true'],
+      ['Database Servers', 'Production Cluster', 'DR Cluster (GRA)', '101', '30', '41', 'false'],
+      ['Web Frontends', 'Production Cluster', 'DR Cluster (GRA)', '118', '60', '18', 'true'],
+    ],
+    security: [
+      ['node', 'package', 'installed_version', 'cve', 'severity', 'fixed_version'],
+      ['pve-node-01', 'openssl', '3.0.14-1', 'CVE-2026-1234', 'high', '3.0.15-1'],
+      ['pve-node-03', 'curl', '8.5.0-2', 'CVE-2026-5678', 'medium', '8.5.1-1'],
+      ['pve-node-11', 'libxml2', '2.12.4-1', 'CVE-2026-9012', 'critical', '2.12.6-1'],
+    ],
+    compliance: [
+      ['check', 'category', 'severity', 'status', 'earned_points', 'max_points', 'details'],
+      ['root_tfa', 'access', 'critical', 'fail', '0', '20', 'root@pam has no TOTP factor enrolled'],
+      ['cluster_fw_enabled', 'cluster', 'high', 'pass', '15', '15', 'Compliant on every node checked'],
+      ['svc_fail2ban', 'services', 'medium', 'fail', '0', '10', 'Fail2Ban is not installed on any node'],
+    ],
+    vdc: [
+      ['tenant', 'vdc', 'cluster', 'pool', 'vcpu_quota', 'vcpu_used', 'memory_quota_gb', 'memory_used_gb'],
+      ['Acme Corporation', 'Acme Production', 'Production Cluster', 'vdc-acme-acme-prod', '128', '96', '512', '384'],
+      ['Globex SAS', 'Globex Production', 'Production Cluster', 'vdc-globex-globex-prod', '64', '38', '256', '162'],
+      ['Initech', 'Initech Production', 'Production Cluster', 'vdc-initech-initech-prod', '32', '21', '128', '77'],
+    ],
+    utilization: [
+      ['date', 'cpu_percent', 'memory_percent', 'storage_percent', 'network_in_bytes', 'network_out_bytes'],
+      ['2026-09-07', '18.4', '62.1', '54.6', '4821992243', '2914384112'],
+      ['2026-09-08', '20.9', '63.8', '54.9', '5233918744', '3102884519'],
+      ['2026-09-09', '19.8', '63.3', '55.0', '5019283746', '2998172630'],
+    ],
+  }
+  const table = rows[report.type] || [
+    ['report', 'type', 'generated_at', 'generated_by'],
+    [report.name, report.type, report.created_at, report.generated_by],
+  ]
+  const escape = (v: string) => (/[",\n;]/.test(v) ? `"${v.replaceAll('"', '""')}"` : v)
+  return table.map(line => line.map(escape).join(',')).join('\n') + '\n'
+}
+
+/**
  * A one-page PDF, assembled with computed xref offsets so it is always valid.
  * The report history advertises completed reports with a Download button that
  * opens the file in a tab; without this it opened raw `{ "data": [] }` JSON.
@@ -1088,6 +1146,10 @@ function generateReportHistory(): any[] {
       type,
       status,
       file_size: fileSize,
+      // The CSV action in ReportHistory is gated on csv_size, so a report
+      // without it stays PDF-only. The two oldest are left without one, the
+      // way a report generated before the export existed would be.
+      csv_size: status === 'completed' && i < 5 ? Math.round(fileSize * 0.11) : undefined,
       file_path: status === 'completed' ? `/var/lib/proxcenter/reports/demo-report-${i + 1}.pdf` : null,
       language: i % 3 === 0 ? 'fr' : 'en',
       date_from: new Date(created - windowDays * day).toISOString(),
@@ -4077,10 +4139,15 @@ export function demoResponse(req: Request): NextResponse | Response | Promise<Ne
   if (reportDownload) {
     const report = generateReportHistory().find(r => r.id === reportDownload[1])
     if (report && report.status === 'completed') {
-      return new NextResponse(buildDemoReportPdf(report.name), {
+      // ?format=csv is the data export (#906); anything else is the PDF.
+      const wantCsv = (urlObj.searchParams.get('format') || 'pdf').toLowerCase() === 'csv'
+      if (wantCsv && !report.csv_size) {
+        return NextResponse.json({ error: 'This report has no CSV export' }, { status: 404, headers: demoHeaders })
+      }
+      return new NextResponse(wantCsv ? buildDemoReportCsv(report) : buildDemoReportPdf(report.name), {
         headers: {
-          'Content-Type': 'application/pdf',
-          'Content-Disposition': `attachment; filename="${report.id}.pdf"`,
+          'Content-Type': wantCsv ? 'text/csv; charset=utf-8' : 'application/pdf',
+          'Content-Disposition': `attachment; filename="${report.id}.${wantCsv ? 'csv' : 'pdf'}"`,
           'x-demo-mode': 'true',
         },
       })

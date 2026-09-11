@@ -22,12 +22,14 @@ import {
   MenuItem,
   Select,
   Slider,
-  Stack,
   TablePagination,
   TextField,
   Tooltip,
   Typography
 } from '@mui/material'
+
+import { buildChangesCsv } from '@/lib/changes/csv'
+import { dateStamp, downloadCsv } from '@/lib/export/download'
 
 import { usePageTitle } from '@/contexts/PageTitleContext'
 import { Features, useLicense } from '@/contexts/LicenseContext'
@@ -379,6 +381,29 @@ export default function ChangesPage() {
     }
   }, [mutate])
 
+  // The CSV carries what the filters select, every page of it, not just the
+  // rows currently on screen.
+  const handleExportCsv = useCallback(() => {
+    const csv = buildChangesCsv(filteredChanges, {
+      headers: [
+        t('changes.csvDate'),
+        t('changes.csvResourceType'),
+        t('changes.csvResourceId'),
+        t('changes.csvResourceName'),
+        t('changes.csvAction'),
+        t('changes.csvUser'),
+        t('changes.csvNode'),
+        t('changes.csvConnection'),
+        t('changes.csvFieldCount'),
+        t('changes.csvDetails')
+      ],
+      resourceType: type => resourceTypeConfig[type]?.label || type || '',
+      action: action => (actionConfig[action] ? t(actionConfig[action].label) : action || '')
+    })
+
+    downloadCsv(csv, `changes-${dateStamp()}.csv`)
+  }, [filteredChanges, t])
+
   const handleOpenSettings = useCallback(() => {
     setRetentionDays(currentRetention)
     setSettingsOpen(true)
@@ -410,39 +435,6 @@ export default function ChangesPage() {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1, minHeight: 0 }}>
-      {/* Header Actions */}
-      <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, flexShrink: 0 }}>
-        <Tooltip title={t('changes.retentionInfo', { days: currentRetention })}>
-          <Button
-            variant='outlined'
-            size='small'
-            startIcon={<i className='ri-settings-3-line' />}
-            onClick={handleOpenSettings}
-          >
-            {t('changes.settings')}
-          </Button>
-        </Tooltip>
-        <Button
-          variant='outlined'
-          size='small'
-          color='error'
-          startIcon={<i className='ri-delete-bin-line' />}
-          onClick={() => setPurgeOpen(true)}
-          disabled={stats.total === 0}
-        >
-          {t('changes.purge')}
-        </Button>
-        <Button
-          variant='outlined'
-          size='small'
-          startIcon={<i className='ri-refresh-line' />}
-          onClick={() => mutate()}
-          disabled={isLoading}
-        >
-          {t('common.refresh')}
-        </Button>
-      </Box>
-
       {/* Stats row - same style as events page */}
       <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 2, flexShrink: 0 }}>
         <DonutTotalCard
@@ -461,7 +453,9 @@ export default function ChangesPage() {
       {/* Filters */}
       <Card variant='outlined' sx={{ flexShrink: 0 }}>
         <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
-          <Stack direction='row' spacing={1.5} sx={{ flexWrap: 'wrap', alignItems: 'center' }}>
+          {/* A flex box rather than a Stack: Stack spaces with margins, which
+              beats the `ml: auto` that pins the actions to the right. */}
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1.5 }}>
             <TextField
               size='small'
               placeholder={t('changes.search')}
@@ -507,7 +501,55 @@ export default function ChangesPage() {
                 <MenuItem value='migrated'>{t('changes.actionMigrated')}</MenuItem>
               </Select>
             </FormControl>
-          </Stack>
+
+            {/* Icon-only actions, pinned right. Each carries its own
+                aria-label: with no visible text, a disabled button wrapped in
+                the tooltip's <span> would otherwise have no accessible name. */}
+            <Box sx={{ display: 'flex', gap: 0.5, ml: 'auto', alignItems: 'center' }}>
+              <Tooltip title={`${t('changes.settings')} · ${t('changes.retentionInfo', { days: currentRetention })}`}>
+                <IconButton size='small' aria-label={t('changes.settings')} onClick={handleOpenSettings}>
+                  <i className='ri-settings-3-line' style={{ fontSize: 18 }} />
+                </IconButton>
+              </Tooltip>
+              <Tooltip title={`${t('common.export')} CSV`}>
+                <span>
+                  <IconButton
+                    size='small'
+                    aria-label={`${t('common.export')} CSV`}
+                    onClick={handleExportCsv}
+                    disabled={filteredTotal === 0}
+                  >
+                    <i className='ri-download-line' style={{ fontSize: 18 }} />
+                  </IconButton>
+                </span>
+              </Tooltip>
+              <Tooltip title={t('common.refresh')}>
+                <span>
+                  <IconButton
+                    size='small'
+                    aria-label={t('common.refresh')}
+                    onClick={() => mutate()}
+                    disabled={isLoading}
+                  >
+                    <i className='ri-refresh-line' style={{ fontSize: 18 }} />
+                  </IconButton>
+                </span>
+              </Tooltip>
+              <Tooltip title={t('changes.purge')}>
+                <span>
+                  <IconButton
+                    size='small'
+                    color='error'
+                    aria-label={t('changes.purge')}
+                    onClick={() => setPurgeOpen(true)}
+                    disabled={stats.total === 0}
+                  >
+                    <i className='ri-delete-bin-line' style={{ fontSize: 18 }} />
+                  </IconButton>
+                </span>
+              </Tooltip>
+            </Box>
+          </Box>
         </CardContent>
       </Card>
 

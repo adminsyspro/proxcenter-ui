@@ -324,7 +324,7 @@
         "overrides": []
       },
       "options": {
-        "colorMode": "value",
+        "colorMode": "none",
         "graphMode": "none",
         "justifyMode": "auto",
         "orientation": "auto",
@@ -337,7 +337,8 @@
         },
         "textMode": "auto",
         "wideLayout": true
-      }
+      },
+      "description": "Neutral on purpose: with nothing backed up there is no age to report, and colouring that green would read as good news."
     },
     {
       "type": "row",
@@ -561,7 +562,8 @@
               "Time": true,
               "__name__": true,
               "job": true,
-              "instance": true
+              "instance": true,
+              "Value": true
             },
             "indexByName": {},
             "renameByName": {}
@@ -647,7 +649,9 @@
               "instance": true
             },
             "indexByName": {},
-            "renameByName": {}
+            "renameByName": {
+              "Value": "Backup age"
+            }
           }
         },
         {
@@ -656,7 +660,7 @@
             "fields": {},
             "sort": [
               {
-                "field": "Value",
+                "field": "Backup age",
                 "desc": true
               }
             ]
@@ -736,7 +740,7 @@
         "overrides": []
       },
       "options": {
-        "displayMode": "gradient",
+        "displayMode": "basic",
         "legend": {
           "calcs": [],
           "displayMode": "list",
@@ -954,13 +958,28 @@
           "id": "organize",
           "options": {
             "excludeByName": {
-              "Time": true,
-              "__name__": true,
-              "job": true,
-              "instance": true
+              "Time 1": true,
+              "Time 2": true,
+              "Time 3": true,
+              "__name__ 1": true,
+              "__name__ 2": true,
+              "__name__ 3": true,
+              "connection 2": true,
+              "connection 3": true,
+              "job 1": true,
+              "job 2": true,
+              "job 3": true,
+              "instance 1": true,
+              "instance 2": true,
+              "instance 3": true
             },
-            "indexByName": {},
-            "renameByName": {}
+            "renameByName": {
+              "connection 1": "PBS server",
+              "Value #A": "Capacity",
+              "Value #B": "In use",
+              "Value #C": "Available"
+            },
+            "indexByName": {}
           }
         }
       ]
@@ -1170,7 +1189,7 @@
       "fieldConfig": {
         "defaults": {
           "color": {
-            "mode": "thresholds"
+            "mode": "palette-classic"
           },
           "custom": {
             "fillOpacity": 70,
@@ -1205,8 +1224,7 @@
             ]
           },
           "min": 0,
-          "max": 1,
-          "noValue": "No PBS server in this selection"
+          "max": 1
         },
         "overrides": []
       },
@@ -1302,7 +1320,8 @@
               "Time": true,
               "__name__": true,
               "job": true,
-              "instance": true
+              "instance": true,
+              "Value": true
             },
             "indexByName": {},
             "renameByName": {}

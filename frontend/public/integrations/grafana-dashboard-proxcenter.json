@@ -645,7 +645,7 @@
     },
     {
       "type": "bargauge",
-      "title": "Memory headroom per node",
+      "title": "Memory free per node",
       "id": 12,
       "datasource": {
         "type": "prometheus",
@@ -664,7 +664,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "proxcenter_node_mem_total_bytes{connection=~\"$connection\",node=~\"$node\"} - proxcenter_node_mem_bytes{connection=~\"$connection\",node=~\"$node\"}",
+          "expr": "(proxcenter_node_mem_total_bytes{connection=~\"$connection\",node=~\"$node\"} - proxcenter_node_mem_bytes{connection=~\"$connection\",node=~\"$node\"}) / proxcenter_node_mem_total_bytes{connection=~\"$connection\",node=~\"$node\"}",
           "range": true,
           "instant": false,
           "refId": "A",
@@ -686,21 +686,23 @@
               },
               {
                 "color": "orange",
-                "value": 8589934592
+                "value": 0.1
               },
               {
                 "color": "green",
-                "value": 34359738368
+                "value": 0.2
               }
             ]
           },
-          "unit": "bytes",
-          "min": 0
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "noValue": "No node reporting memory"
         },
         "overrides": []
       },
       "options": {
-        "displayMode": "gradient",
+        "displayMode": "basic",
         "legend": {
           "calcs": [],
           "displayMode": "list",
@@ -723,7 +725,7 @@
         "sizing": "auto",
         "valueMode": "color"
       },
-      "description": "Bytes still free. Low is bad here, so the thresholds run the other way: red under 8 GiB, amber under 32 GiB."
+      "description": "Free memory as a share of the node's own capacity. A ratio rather than a byte count on purpose: 20 GiB free is comfortable on a 24 GiB node and critical on a 1 TiB one, so an absolute threshold cannot be right for both."
     },
     {
       "type": "bargauge",
@@ -783,7 +785,7 @@
         "overrides": []
       },
       "options": {
-        "displayMode": "gradient",
+        "displayMode": "basic",
         "legend": {
           "calcs": [],
           "displayMode": "list",
@@ -946,7 +948,7 @@
     },
     {
       "type": "state-timeline",
-      "title": "Cluster degraded",
+      "title": "Cluster health",
       "id": 15,
       "datasource": {
         "type": "prometheus",
@@ -977,7 +979,29 @@
           "color": {
             "mode": "palette-classic"
           },
-          "mappings": [],
+          "custom": {
+            "fillOpacity": 70,
+            "lineWidth": 0,
+            "spanNulls": false,
+            "insertNulls": false
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "Healthy",
+                  "color": "green",
+                  "index": 0
+                },
+                "1": {
+                  "text": "Degraded",
+                  "color": "red",
+                  "index": 1
+                }
+              }
+            }
+          ],
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -988,13 +1012,7 @@
             ]
           },
           "min": 0,
-          "max": 1,
-          "custom": {
-            "fillOpacity": 70,
-            "lineWidth": 0,
-            "spanNulls": false,
-            "insertNulls": false
-          }
+          "max": 1
         },
         "overrides": []
       },
@@ -1012,7 +1030,8 @@
           "mode": "single",
           "sort": "none"
         }
-      }
+      },
+      "description": "A degraded cluster has lost quorum or a node. Green is the healthy state, so a coloured band here is always something to look at."
     },
     {
       "type": "table",
@@ -1093,7 +1112,9 @@
               "instance": true
             },
             "indexByName": {},
-            "renameByName": {}
+            "renameByName": {
+              "Value": "Uptime"
+            }
           }
         },
         {
@@ -1102,7 +1123,7 @@
             "fields": {},
             "sort": [
               {
-                "field": "Value",
+                "field": "Uptime",
                 "desc": true
               }
             ]
@@ -1327,7 +1348,7 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 8,
+        "w": 12,
         "x": 0,
         "y": 36
       },
@@ -1395,7 +1416,9 @@
               "instance": true
             },
             "indexByName": {},
-            "renameByName": {}
+            "renameByName": {
+              "Value": "CPU"
+            }
           }
         },
         {
@@ -1404,7 +1427,7 @@
             "fields": {},
             "sort": [
               {
-                "field": "Value",
+                "field": "CPU",
                 "desc": true
               }
             ]
@@ -1422,8 +1445,8 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 8,
-        "x": 8,
+        "w": 12,
+        "x": 12,
         "y": 36
       },
       "targets": [
@@ -1490,7 +1513,9 @@
               "instance": true
             },
             "indexByName": {},
-            "renameByName": {}
+            "renameByName": {
+              "Value": "Memory"
+            }
           }
         },
         {
@@ -1499,7 +1524,7 @@
             "fields": {},
             "sort": [
               {
-                "field": "Value",
+                "field": "Memory",
                 "desc": true
               }
             ]
@@ -1517,9 +1542,9 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 8,
-        "x": 16,
-        "y": 36
+        "w": 24,
+        "x": 0,
+        "y": 44
       },
       "targets": [
         {
@@ -1585,7 +1610,9 @@
               "instance": true
             },
             "indexByName": {},
-            "renameByName": {}
+            "renameByName": {
+              "Value": "Uptime"
+            }
           }
         },
         {
@@ -1594,7 +1621,7 @@
             "fields": {},
             "sort": [
               {
-                "field": "Value",
+                "field": "Uptime",
                 "desc": true
               }
             ]
@@ -1611,7 +1638,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 44
+        "y": 52
       },
       "panels": []
     },
@@ -1627,7 +1654,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 45
+        "y": 53
       },
       "targets": [
         {
@@ -1733,7 +1760,7 @@
         "h": 8,
         "w": 16,
         "x": 8,
-        "y": 45
+        "y": 53
       },
       "targets": [
         {
@@ -1796,7 +1823,8 @@
               "Time": true,
               "__name__": true,
               "job": true,
-              "instance": true
+              "instance": true,
+              "Value": true
             },
             "indexByName": {},
             "renameByName": {}
@@ -1813,7 +1841,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 53
+        "y": 61
       },
       "panels": [
         {
@@ -1828,7 +1856,7 @@
             "h": 8,
             "w": 24,
             "x": 0,
-            "y": 54
+            "y": 62
           },
           "targets": [
             {

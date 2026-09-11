@@ -4454,6 +4454,14 @@
       "retentionTargetHelp": "DR 측에 스냅샷이 많을수록 복원 지점이 늘어나지만 스토리지 용량을 더 사용합니다.",
       "vmidPrefix": "VMID 접두사",
       "vmidPrefixHelp": "대상 클러스터의 VM ID에 추가되는 접두사입니다 (예: 접두사 9 + VM 100 = 9100). 동일한 VMID를 유지하려면 비워 두거나 0을 입력하세요.",
+      "replicaName": "복제본 이름",
+      "replicaNameHelp": "대상 클러스터에서 복제된 VM 이름에 추가되는 접두사와 접미사입니다. DR 복제본을 운영 VM으로 착각하지 않도록 합니다. 비워 두면 원본 이름을 그대로 사용합니다. 영문자, 숫자, 하이픈만 사용할 수 있습니다.",
+      "replicaNamePrefix": "접두사",
+      "replicaNameSuffix": "접미사",
+      "replicaNameError": {
+        "shape": "영문자, 숫자, 하이픈만 사용할 수 있으며 복제본 이름은 하이픈으로 시작하거나 끝날 수 없습니다.",
+        "tooLong": "최대 {max}자입니다."
+      },
       "engine": "복제 엔진",
       "engineCeph": "Ceph RBD",
       "engineZfs": "ZFS",
@@ -4521,7 +4529,8 @@
       "immutableTooltip": "VM, 클러스터, 풀 및 VMID 접두사는 변경할 수 없습니다. 변경하려면 작업을 삭제하고 다시 생성하세요.",
       "syncingAlert": "작업이 현재 동기화 중입니다. 몇 초 후에 다시 시도하세요.",
       "save": "변경 사항 저장",
-      "rateLimitHelp": "0 = 무제한"
+      "rateLimitHelp": "0 = 무제한",
+      "replicaNameHelp": "다음 동기화에 적용됩니다. 복제본 구성은 매 주기마다 원본에서 다시 작성되므로 디스크를 다시 복사하지 않습니다."
     },
     "createPlan": {
       "title": "복구 계획 생성",

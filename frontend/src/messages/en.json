@@ -4454,6 +4454,14 @@
       "retentionTargetHelp": "More snapshots on the DR side means more restore points, at the cost of storage capacity.",
       "vmidPrefix": "VMID Prefix",
       "vmidPrefixHelp": "Prefix added to VM IDs on the target cluster (e.g. prefix 9 + VM 100 = 9100). Leave empty or 0 to keep the same VMID.",
+      "replicaName": "Replica name",
+      "replicaNameHelp": "Prefix and suffix added to the replicated VM's own name on the target cluster, so a DR replica is never mistaken for production. Leave empty to keep the source name. Letters, digits and hyphens only.",
+      "replicaNamePrefix": "Prefix",
+      "replicaNameSuffix": "Suffix",
+      "replicaNameError": {
+        "shape": "Letters, digits and hyphens only, and the replica name must not start or end on a hyphen.",
+        "tooLong": "At most {max} characters."
+      },
       "engine": "Replication Engine",
       "engineCeph": "Ceph RBD",
       "engineZfs": "ZFS",
@@ -4521,7 +4529,8 @@
       "immutableTooltip": "VMs, clusters, pool and VMID prefix are immutable — delete and recreate the job to change them.",
       "syncingAlert": "The job is currently syncing. Retry in a few seconds.",
       "save": "Save changes",
-      "rateLimitHelp": "0 = unlimited"
+      "rateLimitHelp": "0 = unlimited",
+      "replicaNameHelp": "Applied on the next sync: the replica's configuration is rewritten from the source at every cycle, so no disk is copied again."
     },
     "createPlan": {
       "title": "Create Recovery Plan",

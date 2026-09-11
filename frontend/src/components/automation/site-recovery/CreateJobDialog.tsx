@@ -19,6 +19,7 @@ import BandwidthWindowsEditor from './BandwidthWindowsEditor'
 import RetentionSlider from './RetentionSlider'
 import EngineGlyph from './EngineGlyph'
 import NumericTextField from '@/components/ui/NumericTextField'
+import { MAX_VM_NAME_AFFIX, replicaName, vmNameAffixError } from '@/lib/orchestrator/replicaName'
 
 // ── Types ───────────────────────────────────────────────────────────────
 
@@ -80,6 +81,8 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
   const [selectionMode, setSelectionMode] = useState<'vms' | 'tags'>('vms')
   const [selectedTags, setSelectedTags] = useState<string[]>([])
   const [vmidPrefix, setVmidPrefix] = useState<number>(0)
+  const [namePrefix, setNamePrefix] = useState('')
+  const [nameSuffix, setNameSuffix] = useState('')
   const [installPv, setInstallPv] = useState(true)
   const [bandwidthWindows, setBandwidthWindows] = useState<BandwidthWindow[]>([])
   const [keepSource, setKeepSource] = useState(3)
@@ -294,6 +297,8 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
       rate_limit_mbps: 0,
       bandwidth_windows: bandwidthWindows.length > 0 ? bandwidthWindows : undefined,
       vmid_prefix: vmidPrefix || undefined,
+      vm_name_prefix: namePrefix || undefined,
+      vm_name_suffix: nameSuffix || undefined,
       install_pv: installPv || undefined,
       network_mapping: {},
       snapshot_keep_source: keepSource,
@@ -329,6 +334,8 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
       timezone: defaultTimezone(),
     })
     setVmidPrefix(0)
+    setNamePrefix('')
+    setNameSuffix('')
     setInstallPv(true)
     setBandwidthWindows([])
     setKeepSource(3)
@@ -341,7 +348,20 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
 
   const scheduleValid = scheduleValue.mode === 'rpo' || scheduleValue.scheduleSpec !== null
   const preflightOk = !!preflight?.can_create && !preflightLoading
+  const namePrefixError = vmNameAffixError(namePrefix, 'prefix')
+  const nameSuffixError = vmNameAffixError(nameSuffix, 'suffix')
+
+  // Show the rename on a VM the user actually picked, so the affix is judged
+  // against a real name and not an example.
+  const replicaNameSample = useMemo(() => {
+    const picked = selectionMode === 'vms'
+      ? sourceVMs.find(vm => vm.vmid === selectedVMs[0])
+      : sourceVMs.find(vm => vm.tags?.some(tag => selectedTags.includes(tag)))
+
+    return picked?.name || ''
+  }, [selectionMode, selectedVMs, selectedTags, sourceVMs])
   const canSubmit = sourceCluster && hasSelection && targetCluster && targetPool && sshCheck === 'success' && scheduleValid && preflightOk && (engine === 'rbd' || !!engines?.includes('zfs'))
+    && !namePrefixError && !nameSuffixError
     && (selectionMode === 'tags' || selectedVMs.every(vmid => !isVMDisabled(vmid)))
     && cephConnections.some(connection => connection.id === sourceCluster) && targetConnections.some(connection => connection.id === targetCluster)
     && (engine !== 'zfs' || !!targetStorages?.zfs.some(row => row.storage === targetPool && row.node === targetNode && row.active))
@@ -845,6 +865,45 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
                 startAdornment: <InputAdornment position='start'><i className='ri-hashtag' style={{ opacity: 0.5 }} /></InputAdornment>
               }}
             />
+          </Box>
+
+          {/* Replica name: a same-named DR twin is what gets started by mistake */}
+          <Box>
+            <Typography variant='subtitle2' sx={{ mb: 0.5 }}>{t('siteRecovery.createJob.replicaName')}</Typography>
+            <Typography variant='caption' sx={{ color: 'text.secondary', display: 'block', mb: 1 }}>
+              {t('siteRecovery.createJob.replicaNameHelp')}
+            </Typography>
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
+              <TextField
+                label={t('siteRecovery.createJob.replicaNamePrefix')}
+                value={namePrefix}
+                onChange={e => setNamePrefix(e.target.value)}
+                size='small'
+                fullWidth
+                placeholder='DR-'
+                error={!!namePrefixError}
+                helperText={namePrefixError ? t(`siteRecovery.createJob.replicaNameError.${namePrefixError}`, { max: MAX_VM_NAME_AFFIX }) : ' '}
+              />
+              <TextField
+                label={t('siteRecovery.createJob.replicaNameSuffix')}
+                value={nameSuffix}
+                onChange={e => setNameSuffix(e.target.value)}
+                size='small'
+                fullWidth
+                placeholder='-DR'
+                error={!!nameSuffixError}
+                helperText={nameSuffixError ? t(`siteRecovery.createJob.replicaNameError.${nameSuffixError}`, { max: MAX_VM_NAME_AFFIX }) : ' '}
+              />
+            </Stack>
+            {replicaNameSample && (namePrefix || nameSuffix) && !namePrefixError && !nameSuffixError && (
+              <Typography variant='caption' sx={{ color: 'text.secondary', display: 'block' }}>
+                {replicaNameSample}
+                {' → '}
+                <Box component='span' sx={{ fontFamily: 'JetBrains Mono, monospace', fontWeight: 600, color: 'text.primary' }}>
+                  {replicaName(replicaNameSample, namePrefix, nameSuffix)}
+                </Box>
+              </Typography>
+            )}
           </Box>
 
           {/* pv package — auto-install checkbox when SSH is connected, info note otherwise */}

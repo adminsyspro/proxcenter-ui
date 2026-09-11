@@ -143,3 +143,43 @@ it('shows engine, storage and node as immutable information and excludes them fr
   expect(update).not.toHaveProperty('target_pool')
   expect(update).not.toHaveProperty('target_node')
 })
+
+// #915: a job created before the feature must be able to name its replicas
+// without being deleted and re-seeded, so unlike the VMID prefix the affixes
+// are editable — the replica's config is rewritten from the source every sync.
+describe('EditJobDialog replica name (issue #915)', () => {
+  it('loads the job affixes and submits the edited ones', async () => {
+    const { onSubmit } = renderDialog({ vm_name_prefix: '', vm_name_suffix: '-DR' })
+
+    expect((screen.getByLabelText('Suffix') as HTMLInputElement).value).toBe('-DR')
+
+    await userEvent.type(screen.getByLabelText('Prefix'), 'DR-')
+    expect(await screen.findByText('DR-web-01-DR')).toBeInTheDocument()
+
+    await userEvent.click(save())
+
+    expect(onSubmit).toHaveBeenCalledWith('job-1', expect.objectContaining({
+      vm_name_prefix: 'DR-',
+      vm_name_suffix: '-DR',
+    }))
+  })
+
+  it('refuses to save an affix PVE would reject on the replica', async () => {
+    const { onSubmit } = renderDialog()
+
+    await userEvent.type(screen.getByLabelText('Prefix'), '-DR')
+
+    expect(await screen.findByText(/must not start or end on a hyphen/)).toBeInTheDocument()
+    expect(save()).toBeDisabled()
+    expect(onSubmit).not.toHaveBeenCalled()
+  })
+
+  it('can clear an affix back to the source name', async () => {
+    const { onSubmit } = renderDialog({ vm_name_suffix: '-DR' })
+
+    await userEvent.clear(screen.getByLabelText('Suffix'))
+    await userEvent.click(save())
+
+    expect(onSubmit).toHaveBeenCalledWith('job-1', expect.objectContaining({ vm_name_suffix: '' }))
+  })
+})

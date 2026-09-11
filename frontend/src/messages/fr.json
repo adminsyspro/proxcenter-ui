@@ -4454,6 +4454,14 @@
       "retentionTargetHelp": "Plus de snapshots côté DR offre plus de points de restauration, au prix de la capacité de stockage.",
       "vmidPrefix": "Préfixe VMID",
       "vmidPrefixHelp": "Préfixe ajouté aux IDs de VM sur le cluster cible (ex : préfixe 9 + VM 100 = 9100). Laisser vide ou 0 pour garder le même VMID.",
+      "replicaName": "Nom de la réplique",
+      "replicaNameHelp": "Préfixe et suffixe ajoutés au nom de la VM répliquée sur le cluster cible, pour qu'une réplique DR ne soit jamais confondue avec la production. Laisser vide pour conserver le nom source. Lettres, chiffres et tirets uniquement.",
+      "replicaNamePrefix": "Préfixe",
+      "replicaNameSuffix": "Suffixe",
+      "replicaNameError": {
+        "shape": "Lettres, chiffres et tirets uniquement, et le nom de la réplique ne doit ni commencer ni finir par un tiret.",
+        "tooLong": "{max} caractères maximum."
+      },
       "engine": "Moteur de réplication",
       "engineCeph": "Ceph RBD",
       "engineZfs": "ZFS",
@@ -4521,7 +4529,8 @@
       "immutableTooltip": "VMs, clusters, pool et préfixe VMID sont immuables. Supprimez puis recréez le job pour les modifier.",
       "syncingAlert": "Le job est en cours de synchronisation. Réessayez dans quelques instants.",
       "save": "Enregistrer",
-      "rateLimitHelp": "0 = illimité"
+      "rateLimitHelp": "0 = illimité",
+      "replicaNameHelp": "Appliqué à la prochaine synchronisation : la configuration de la réplique est réécrite depuis la source à chaque cycle, aucun disque n'est recopié."
     },
     "createPlan": {
       "title": "Créer un plan de reprise",

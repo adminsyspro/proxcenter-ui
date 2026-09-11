@@ -4454,6 +4454,14 @@
       "retentionTargetHelp": "Más snapshots en el lado DR significa más puntos de restauración, a costa de la capacidad de almacenamiento.",
       "vmidPrefix": "Prefijo VMID",
       "vmidPrefixHelp": "Prefijo añadido a los IDs de VM en el clúster destino (p. ej., prefijo 9 + VM 100 = 9100). Déjalo vacío o en 0 para conservar el mismo VMID.",
+      "replicaName": "Nombre de la réplica",
+      "replicaNameHelp": "Prefijo y sufijo añadidos al nombre de la VM replicada en el clúster de destino, para que una réplica de DR nunca se confunda con la producción. Déjalo vacío para conservar el nombre de origen. Solo letras, dígitos y guiones.",
+      "replicaNamePrefix": "Prefijo",
+      "replicaNameSuffix": "Sufijo",
+      "replicaNameError": {
+        "shape": "Solo letras, dígitos y guiones, y el nombre de la réplica no debe empezar ni terminar con un guion.",
+        "tooLong": "{max} caracteres como máximo."
+      },
       "engine": "Motor de replicación",
       "engineCeph": "Ceph RBD",
       "engineZfs": "ZFS",
@@ -4521,7 +4529,8 @@
       "immutableTooltip": "Las VMs, clústeres, pool y prefijo VMID son inmutables: elimina y vuelve a crear el trabajo para cambiarlos.",
       "syncingAlert": "El trabajo se está sincronizando. Reinténtalo en unos segundos.",
       "save": "Guardar cambios",
-      "rateLimitHelp": "0 = ilimitado"
+      "rateLimitHelp": "0 = ilimitado",
+      "replicaNameHelp": "Se aplica en la próxima sincronización: la configuración de la réplica se reescribe desde el origen en cada ciclo, no se vuelve a copiar ningún disco."
     },
     "createPlan": {
       "title": "Crear plan de recuperación",

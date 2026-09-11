@@ -70,6 +70,10 @@ export interface ReplicationJob {
   storage_engine: StorageEngine
   target_node?: string
   vmid_prefix: number
+  // Decorate the replica's own name so production and DR are told apart in
+  // the inventory. Empty = the replica carries the source name unchanged.
+  vm_name_prefix?: string
+  vm_name_suffix?: string
   status: ReplicationJobStatus
   schedule: string
   schedule_spec: ScheduleSpec | null   // null = RPO mode
@@ -107,6 +111,8 @@ export interface CreateReplicationJobRequest {
   rate_limit_mbps: number
   bandwidth_windows?: BandwidthWindow[]
   vmid_prefix?: number
+  vm_name_prefix?: string
+  vm_name_suffix?: string
   install_pv?: boolean
   network_mapping: Record<string, string>
   snapshot_keep_source?: number
@@ -124,6 +130,10 @@ export interface UpdateReplicationJobRequest {
   network_mapping?: Record<string, string>
   snapshot_keep_source?: number
   snapshot_keep_target?: number
+  // Editable, unlike vmid_prefix: the replica's config is rewritten from the
+  // source at every sync, so a new affix lands on the next cycle.
+  vm_name_prefix?: string
+  vm_name_suffix?: string
 }
 
 export interface ReplicationJobLog {

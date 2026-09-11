@@ -4458,6 +4458,14 @@
       "retentionTargetHelp": "灾备端保留更多快照意味着更多恢复点，但会占用更多存储容量。",
       "vmidPrefix": "VMID 前缀",
       "vmidPrefixHelp": "添加到目标集群 VM ID 的前缀（例如前缀 9 + VM 100 = 9100）。留空或填 0 以保持相同 VMID。",
+      "replicaName": "副本名称",
+      "replicaNameHelp": "在目标集群上为复制的虚拟机名称添加的前缀和后缀，避免将容灾副本误认为生产虚拟机。留空则保留源名称。仅支持字母、数字和连字符。",
+      "replicaNamePrefix": "前缀",
+      "replicaNameSuffix": "后缀",
+      "replicaNameError": {
+        "shape": "仅支持字母、数字和连字符，且副本名称不能以连字符开头或结尾。",
+        "tooLong": "最多 {max} 个字符。"
+      },
       "engine": "复制引擎",
       "engineCeph": "Ceph RBD",
       "engineZfs": "ZFS",
@@ -4525,7 +4533,8 @@
       "immutableTooltip": "VM、集群、池和 VMID 前缀不可修改。如需更改，请删除并重新创建任务。",
       "syncingAlert": "任务正在同步，请稍后重试。",
       "save": "保存更改",
-      "rateLimitHelp": "0 = 无限制"
+      "rateLimitHelp": "0 = 无限制",
+      "replicaNameHelp": "将在下次同步时生效：副本配置在每个周期都会从源端重新写入，不会重新复制磁盘。"
     },
     "createPlan": {
       "title": "创建恢复计划",

@@ -69,7 +69,7 @@ async function handleChunk(
   try {
     const { id, node, storage } = await ctx.params
 
-    const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW, "connection", id)
+    const denied = await checkPermission(PERMISSIONS.STORAGE_UPLOAD, "connection", id)
     if (denied) return denied
 
     const chunkIndex = Number.parseInt(req.headers.get("x-chunk-index") || "0", 10)
@@ -213,7 +213,7 @@ async function handleFinalize(
   try {
     const { id, node, storage } = await ctx.params
 
-    const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW, "connection", id)
+    const denied = await checkPermission(PERMISSIONS.STORAGE_UPLOAD, "connection", id)
     if (denied) return denied
 
     const finalizeName = req.headers.get("x-file-name")

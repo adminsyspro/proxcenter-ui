@@ -576,7 +576,23 @@
       "guests": "{count} guests",
       "running": "{count} running",
       "nodes": "{count} nodes"
-    }
+    },
+    "importDropped": "{count, plural, one {# widget was left out: unknown here, or not available to you.} other {# widgets were left out: unknown here, or not available to you.}}",
+    "importReset": "{count, plural, one {# widget now shows all connections: the ones it named are not on this install.} other {# widgets now show all connections: the ones they named are not on this install.}}",
+    "exportFailed": "This dashboard could not be exported.",
+    "importError": {
+      "invalid-json": "This file is not valid JSON.",
+      "not-a-dashboard": "This file is not a ProxCenter dashboard export.",
+      "unsupported-version": "This dashboard file comes from a newer version of ProxCenter.",
+      "no-widgets": "Nothing to import: none of the widgets in this file are available here.",
+      "not-stored": "The import was accepted but the dashboards were not stored."
+    },
+    "importedSuffix": "imported",
+    "exportDashboards": "Export all dashboards",
+    "importDashboards": "Import dashboards…",
+    "dashboardsExported": "{count, plural, one {# dashboard exported.} other {# dashboards exported to one file.}}",
+    "dashboardsImported": "{count, plural, one {# dashboard imported.} other {# dashboards imported.}}",
+    "importSkipped": "{count, plural, one {# dashboard was skipped: none of its widgets are available here.} other {# dashboards were skipped: none of their widgets are available here.}}"
   },
   "alerts": {
     "title": "Alerts",
@@ -7421,7 +7437,17 @@
     "retentionDescription": "Changes older than the retention period will be automatically deleted.",
     "retentionDays": "Retention",
     "retentionInfo": "Retention: {days} days",
-    "days": "days"
+    "days": "days",
+    "csvDate": "Date",
+    "csvResourceType": "Resource type",
+    "csvResourceId": "Resource ID",
+    "csvResourceName": "Resource name",
+    "csvAction": "Action",
+    "csvUser": "User",
+    "csvNode": "Node",
+    "csvConnection": "Connection",
+    "csvFieldCount": "Fields changed",
+    "csvDetails": "Details"
   },
   "tenants": {
     "title": "Tenants",

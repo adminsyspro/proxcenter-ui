@@ -565,7 +565,23 @@
       "guests": "{count} Guests",
       "running": "{count} aktiv",
       "nodes": "{count} Nodes"
-    }
+    },
+    "importDropped": "{count, plural, one {# Widget wurde ausgelassen: hier unbekannt oder für Sie nicht verfügbar.} other {# Widgets wurden ausgelassen: hier unbekannt oder für Sie nicht verfügbar.}}",
+    "importReset": "{count, plural, one {# Widget zeigt jetzt alle Verbindungen: die benannten fehlen in dieser Installation.} other {# Widgets zeigen jetzt alle Verbindungen: die benannten fehlen in dieser Installation.}}",
+    "exportFailed": "Dieses Dashboard konnte nicht exportiert werden.",
+    "importError": {
+      "invalid-json": "Diese Datei ist kein gültiges JSON.",
+      "not-a-dashboard": "Diese Datei ist kein ProxCenter-Dashboard-Export.",
+      "unsupported-version": "Diese Datei stammt aus einer neueren ProxCenter-Version.",
+      "no-widgets": "Nichts zu importieren: keines der Widgets dieser Datei ist hier verfügbar.",
+      "not-stored": "Der Import wurde angenommen, die Dashboards aber nicht gespeichert."
+    },
+    "importedSuffix": "importiert",
+    "exportDashboards": "Alle Dashboards exportieren",
+    "importDashboards": "Dashboards importieren…",
+    "dashboardsExported": "{count, plural, one {# Dashboard exportiert.} other {# Dashboards in eine Datei exportiert.}}",
+    "dashboardsImported": "{count, plural, one {# Dashboard importiert.} other {# Dashboards importiert.}}",
+    "importSkipped": "{count, plural, one {# Dashboard wurde übersprungen: keines seiner Widgets ist hier verfügbar.} other {# Dashboards wurden übersprungen: keines ihrer Widgets ist hier verfügbar.}}"
   },
   "alerts": {
     "title": "Warnmeldungen",
@@ -7365,7 +7381,17 @@
     "retentionDescription": "Änderungen, die älter als der Aufbewahrungszeitraum sind, werden automatisch gelöscht.",
     "retentionDays": "Aufbewahrung",
     "retentionInfo": "Aufbewahrung: {days} Tage",
-    "days": "Tage"
+    "days": "Tage",
+    "csvDate": "Datum",
+    "csvResourceType": "Ressourcentyp",
+    "csvResourceId": "Ressourcen-ID",
+    "csvResourceName": "Ressourcenname",
+    "csvAction": "Aktion",
+    "csvUser": "Benutzer",
+    "csvNode": "Knoten",
+    "csvConnection": "Verbindung",
+    "csvFieldCount": "Geänderte Felder",
+    "csvDetails": "Details"
   },
   "tenants": {
     "title": "Mandanten",

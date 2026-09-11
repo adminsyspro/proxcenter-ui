@@ -576,7 +576,23 @@
       "guests": "{count} guests",
       "running": "{count} en cours",
       "nodes": "{count} nœuds"
-    }
+    },
+    "importDropped": "{count, plural, one {# widget a été écarté : inconnu ici, ou non accessible à votre compte.} other {# widgets ont été écartés : inconnus ici, ou non accessibles à votre compte.}}",
+    "importReset": "{count, plural, one {# widget affiche désormais toutes les connexions : celles qu’il désignait sont absentes de cette installation.} other {# widgets affichent désormais toutes les connexions : celles qu’ils désignaient sont absentes de cette installation.}}",
+    "exportFailed": "Ce dashboard n’a pas pu être exporté.",
+    "importError": {
+      "invalid-json": "Ce fichier n’est pas du JSON valide.",
+      "not-a-dashboard": "Ce fichier n’est pas un export de dashboards ProxCenter.",
+      "unsupported-version": "Ce fichier provient d’une version plus récente de ProxCenter.",
+      "no-widgets": "Rien à importer : aucun widget de ce fichier n’est disponible ici.",
+      "not-stored": "L'import a été accepté mais les dashboards n'ont pas été enregistrés."
+    },
+    "importedSuffix": "importé",
+    "exportDashboards": "Exporter tous les dashboards",
+    "importDashboards": "Importer des dashboards…",
+    "dashboardsExported": "{count, plural, one {# dashboard exporté.} other {# dashboards exportés dans un seul fichier.}}",
+    "dashboardsImported": "{count, plural, one {# dashboard importé.} other {# dashboards importés.}}",
+    "importSkipped": "{count, plural, one {# dashboard a été ignoré : aucun de ses widgets n’est disponible ici.} other {# dashboards ont été ignorés : aucun de leurs widgets n’est disponible ici.}}"
   },
   "alerts": {
     "title": "Alertes",
@@ -7422,7 +7438,17 @@
     "retentionDescription": "Les changements plus anciens que la période de rétention seront automatiquement supprimés.",
     "retentionDays": "Rétention",
     "retentionInfo": "Rétention : {days} jours",
-    "days": "jours"
+    "days": "jours",
+    "csvDate": "Date",
+    "csvResourceType": "Type de ressource",
+    "csvResourceId": "ID de ressource",
+    "csvResourceName": "Nom de la ressource",
+    "csvAction": "Action",
+    "csvUser": "Utilisateur",
+    "csvNode": "Nœud",
+    "csvConnection": "Connexion",
+    "csvFieldCount": "Champs modifiés",
+    "csvDetails": "Détail"
   },
   "tenants": {
     "title": "Tenants",

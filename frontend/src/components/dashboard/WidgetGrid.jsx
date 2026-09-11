@@ -16,6 +16,8 @@ import { computeReclaimedRows, yShiftFor } from './layoutReclaim'
 import { DEFAULT_LAYOUT, PRESET_LAYOUTS } from './types'
 import { CardsSkeleton } from '@/components/skeletons'
 import { useWidgetVisibility } from '@/hooks/useWidgetVisibility'
+import { parseDashboardFile, serializeDashboards } from '@/lib/dashboard/layoutTransfer'
+import { dateStamp, downloadJson } from '@/lib/export/download'
 import { INHERIT_ON_PRIMARY_SX } from '@/lib/theme/onPrimary'
 
 const GRID_COLS = { lg: 12, md: 12, sm: 12, xs: 12, xxs: 12 }
@@ -338,6 +340,7 @@ export default function WidgetGrid({ data, loading, onRefresh, refreshLoading })
   const [deleteDashDialog, setDeleteDashDialog] = useState(false)
   const [dragTabName, setDragTabName] = useState(null)
   const [dragOverName, setDragOverName] = useState(null)
+  const importInputRef = useRef(null)
 
   const [timeRange, setTimeRange] = useState(() => {
     if (typeof window !== 'undefined') return localStorage.getItem('dashboard-timerange') || 'hour'
@@ -409,10 +412,15 @@ return 'hour'
 
       if (res.ok) {
         const json = await res.json()
+        const list = json.data || []
 
-        setDashboards(json.data || [])
+        setDashboards(list)
+
+        return list
       }
     } catch {}
+
+    return []
   }, [])
 
   useEffect(() => {
@@ -699,6 +707,120 @@ return {
     } catch {}
   }
 
+  // Which connections this install actually exposes to this user. An imported
+  // layout names connections by id, and an id from another install resolves to
+  // nothing here, so this is what tells the two apart.
+  const knownConnectionIds = useMemo(() => {
+    const ids = new Set()
+
+    for (const cluster of data?.clusters || []) if (cluster?.id) ids.add(cluster.id)
+    for (const node of data?.nodes || []) if (node?.connId) ids.add(node.connId)
+
+    return ids
+  }, [data])
+
+  // Multi-dashboard: export every dashboard into one file. A set of monitoring
+  // views travels as a set; one file per tab only makes it harder to hand over.
+  const handleExportDashboards = async () => {
+    try {
+      const names = dashList.map(d => d.name)
+
+      const loaded = await Promise.all(
+        names.map(async name => {
+          const res = await fetch(`/api/v1/dashboard/layout?name=${encodeURIComponent(name)}`)
+
+          if (!res.ok) return null
+          const json = await res.json()
+
+          return Array.isArray(json.data?.widgets) ? { name, widgets: json.data.widgets } : null
+        })
+      )
+
+      // Exporting a subset silently would be worse than failing: the file is
+      // meant to be the whole set.
+      if (loaded.some(d => d === null)) throw new Error('incomplete')
+
+      downloadJson(serializeDashboards(loaded), `proxcenter-dashboards-${dateStamp()}.json`)
+      setSnackbar({
+        open: true,
+        message: t('dashboard.dashboardsExported', { count: loaded.length }),
+        severity: 'success',
+      })
+    } catch {
+      setSnackbar({ open: true, message: t('dashboard.exportFailed'), severity: 'error' })
+    }
+  }
+
+  // Multi-dashboard: import from a file
+  const handleImportFile = async (event) => {
+    const file = event.target.files?.[0]
+
+    // Clearing the input lets the same file be picked again after a failure.
+    event.target.value = ''
+    if (!file) return
+
+    const result = parseDashboardFile(await file.text(), {
+      isWidgetAllowed: type => Boolean(WIDGET_REGISTRY[type]) && isWidgetVisibleForScope(type, { hasInfraScope, hiddenWidgets }),
+      knownConnectionIds,
+      takenNames: dashList.map(d => d.name),
+      generateId,
+      importedSuffix: t('dashboard.importedSuffix'),
+    })
+
+    if (!result.ok) {
+      setSnackbar({ open: true, message: t(`dashboard.importError.${result.reason}`), severity: 'error' })
+
+      return
+    }
+
+    try {
+      // Sequential on purpose: the route deactivates the other dashboards on
+      // every create, so parallel writes would race over which one ends active.
+      for (const dashboard of result.dashboards) {
+        const res = await fetch('/api/v1/dashboard/layout', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: dashboard.name, widgets: dashboard.widgets }),
+        })
+
+        if (!res.ok) {
+          const json = await res.json().catch(() => ({}))
+
+          throw new Error(json.error || 'import failed')
+        }
+      }
+
+      // A 200 is not proof the dashboards exist: an unhandled POST answers
+      // `{"data":[]}` in demo mode. Announce an import only once the list
+      // carries them.
+      const list = await refreshDashboardList()
+      const missing = result.dashboards.filter(d => !list.some(l => l.name === d.name))
+
+      if (missing.length > 0) throw new Error(t('dashboard.importError.not-stored'))
+
+      await loadDashboard(result.dashboards[0].name)
+
+      // Say what was left behind: a silently thinner dashboard is the failure
+      // this import is built to avoid.
+      const notes = [
+        t('dashboard.dashboardsImported', { count: result.dashboards.length }),
+        result.skipped > 0 ? t('dashboard.importSkipped', { count: result.skipped }) : null,
+        result.dropped > 0 ? t('dashboard.importDropped', { count: result.dropped }) : null,
+        result.reset > 0 ? t('dashboard.importReset', { count: result.reset }) : null,
+      ].filter(Boolean)
+
+      const incomplete = result.skipped > 0 || result.dropped > 0 || result.reset > 0
+
+      setSnackbar({
+        open: true,
+        message: notes.join(' '),
+        severity: incomplete ? 'warning' : 'success',
+      })
+    } catch (e) {
+      setSnackbar({ open: true, message: e?.message || t('dashboard.importError.invalid-json'), severity: 'error' })
+    }
+  }
+
   const dashboardRef = useRef(null)
 
   const toggleFullscreen = useCallback(() => {
@@ -832,6 +954,14 @@ return () => document.removeEventListener('fullscreenchange', handler)
           </MenuItem>
         )}
       </Menu>
+
+      <input
+        ref={importInputRef}
+        type='file'
+        accept='application/json,.json'
+        hidden
+        onChange={handleImportFile}
+      />
 
       <Box sx={{ flex: 1, display: 'flex', flexDirection: 'row', minHeight: 0 }}>
       {/* Grid avec react-grid-layout */}
@@ -990,6 +1120,20 @@ return () => document.removeEventListener('fullscreenchange', handler)
             </span>
           </Tooltip>
         )}
+        <Tooltip title={t('dashboard.exportDashboards')} placement='left'>
+          <IconButton aria-label={t('dashboard.exportDashboards')} onClick={handleExportDashboards} size='small'>
+            <i className='ri-download-line' style={{ fontSize: 18 }} />
+          </IconButton>
+        </Tooltip>
+        <Tooltip title={t('dashboard.importDashboards')} placement='left'>
+          <IconButton
+            aria-label={t('dashboard.importDashboards')}
+            onClick={() => importInputRef.current?.click()}
+            size='small'
+          >
+            <i className='ri-upload-line' style={{ fontSize: 18 }} />
+          </IconButton>
+        </Tooltip>
         <Tooltip title={fullscreen ? 'Exit fullscreen' : 'Fullscreen'} placement='left'>
           <IconButton onClick={toggleFullscreen} size='small'>
             <i className={fullscreen ? 'ri-fullscreen-exit-line' : 'ri-fullscreen-line'} style={{ fontSize: 18 }} />

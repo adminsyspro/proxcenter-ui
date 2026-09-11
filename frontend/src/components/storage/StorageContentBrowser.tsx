@@ -26,6 +26,7 @@ import {
 
 import { formatBytes } from '@/utils/format'
 import { useProxCenterTasks } from '@/contexts/ProxCenterTasksContext'
+import { useRBAC } from '@/contexts/RBACContext'
 import TemplateDownloadDialog from '@/components/storage/TemplateDownloadDialog'
 
 // ---------- Types ----------
@@ -86,7 +87,11 @@ function ContentGroupCard({ group, connId, node, storage, readOnly, onDeleted, o
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
 
-  const canDelete = !readOnly
+  // The delete control follows the `storage.delete` right, not just the
+  // read-only flag: the route behind it now refuses without that right
+  // (issue #920), so rendering the button would only produce a 403.
+  const { hasPermission } = useRBAC()
+  const canDelete = !readOnly && hasPermission('storage.delete')
   const isAttachedType = group.contentType === 'images' || group.contentType === 'rootdir'
 
   const filtered = useMemo(() => {

@@ -137,7 +137,7 @@ export const ROLES: RoleSeed[] = [
     permissions: [
       "vm.view", "vm.console", "vm.start", "vm.stop", "vm.restart", "vm.suspend",
       "vm.snapshot", "vm.backup", "vm.clone", "vm.migrate", "vm.config", "vm.delete", "vm.create",
-      "storage.view", "storage.content", "storage.upload",
+      "storage.view", "storage.content", "storage.upload", "storage.delete",
       "node.view", "node.console", "node.manage", "connection.view",
       "backup.view", "backup.restore",
       "events.view", "tasks.view", "storage.admin",
@@ -179,7 +179,7 @@ export const ROLES: RoleSeed[] = [
       "vm.view", "vm.console", "vm.start", "vm.stop", "vm.restart", "vm.suspend",
       "vm.snapshot", "vm.backup", "vm.clone", "vm.migrate", "vm.config", "vm.delete", "vm.create",
       "node.view", "connection.view",
-      "storage.view",
+      "storage.view", "storage.content", "storage.upload", "storage.delete",
       "backup.view", "backup.restore", "backup.delete",
       "backup.job.view", "backup.job.create", "backup.job.edit", "backup.job.delete", "backup.job.run",
       "admin.users", "admin.rbac", "admin.settings", "admin.audit",

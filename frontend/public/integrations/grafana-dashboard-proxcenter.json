@@ -2870,7 +2870,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "rate(proxcenter_vm_disk_read_bytes_total{connection=~\"$connection\",node=~\"$node\"}[$__rate_interval])",
+          "expr": "rate(proxcenter_vm_disk_read_bytes_total{connection=~\"$connection\",node=~\"$node\"}[5m])",
           "range": true,
           "instant": false,
           "refId": "A",
@@ -2934,7 +2934,7 @@
           "sort": "desc"
         }
       },
-      "description": "Derived with rate() from a cumulative counter, which is why a guest restart shows as a gap rather than as an enormous negative spike."
+      "description": "Derived with rate() from a cumulative counter, which is why a guest restart shows as a gap rather than as an enormous negative spike. The window is an explicit 5m rather than $__rate_interval on purpose: that macro is computed from the scrape interval DECLARED on the reader's datasource, and an undeclared one makes Grafana assume 15s, pick a 60s window, and return nothing at all against ProxCenter's 60s scrape."
     },
     {
       "type": "timeseries",
@@ -2957,7 +2957,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "rate(proxcenter_vm_disk_written_bytes_total{connection=~\"$connection\",node=~\"$node\"}[$__rate_interval])",
+          "expr": "rate(proxcenter_vm_disk_written_bytes_total{connection=~\"$connection\",node=~\"$node\"}[5m])",
           "range": true,
           "instant": false,
           "refId": "A",
@@ -3043,7 +3043,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "rate(proxcenter_vm_network_receive_bytes_total{connection=~\"$connection\",node=~\"$node\"}[$__rate_interval])",
+          "expr": "rate(proxcenter_vm_network_receive_bytes_total{connection=~\"$connection\",node=~\"$node\"}[5m])",
           "range": true,
           "instant": false,
           "refId": "A",
@@ -3129,7 +3129,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "rate(proxcenter_vm_network_transmit_bytes_total{connection=~\"$connection\",node=~\"$node\"}[$__rate_interval])",
+          "expr": "rate(proxcenter_vm_network_transmit_bytes_total{connection=~\"$connection\",node=~\"$node\"}[5m])",
           "range": true,
           "instant": false,
           "refId": "A",

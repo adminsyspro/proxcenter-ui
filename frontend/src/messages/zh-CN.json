@@ -580,7 +580,23 @@
       "guests": "{count} 个客户机",
       "running": "{count} 个运行中",
       "nodes": "{count} 个节点"
-    }
+    },
+    "importDropped": "已略过 {count} 个小部件：此处不存在，或您的账号无权使用。",
+    "importReset": "{count} 个小部件现在显示全部连接：它们指定的连接不在此安装中。",
+    "exportFailed": "无法导出此仪表盘。",
+    "importError": {
+      "invalid-json": "此文件不是有效的 JSON。",
+      "not-a-dashboard": "此文件不是 ProxCenter 仪表盘导出文件。",
+      "unsupported-version": "此文件来自更新版本的 ProxCenter。",
+      "no-widgets": "没有可导入的内容：此文件中的小部件在此处均不可用。",
+      "not-stored": "导入已被接受，但仪表盘未保存。"
+    },
+    "importedSuffix": "导入",
+    "exportDashboards": "导出全部仪表盘",
+    "importDashboards": "导入仪表盘…",
+    "dashboardsExported": "已将 {count} 个仪表盘导出为一个文件。",
+    "dashboardsImported": "已导入 {count} 个仪表盘。",
+    "importSkipped": "已跳过 {count} 个仪表盘：其小部件在此处均不可用。"
   },
   "alerts": {
     "title": "告警",
@@ -7427,7 +7443,17 @@
     "retentionDescription": "超过保留期的变更将被自动删除。",
     "retentionDays": "保留期",
     "retentionInfo": "保留期：{days} 天",
-    "days": "天"
+    "days": "天",
+    "csvDate": "日期",
+    "csvResourceType": "资源类型",
+    "csvResourceId": "资源 ID",
+    "csvResourceName": "资源名称",
+    "csvAction": "操作",
+    "csvUser": "用户",
+    "csvNode": "节点",
+    "csvConnection": "连接",
+    "csvFieldCount": "变更字段数",
+    "csvDetails": "详情"
   },
   "tenants": {
     "title": "租户",

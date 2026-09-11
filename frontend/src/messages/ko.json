@@ -576,7 +576,23 @@
       "guests": "게스트 {count}개",
       "running": "실행 중 {count}개",
       "nodes": "노드 {count}개"
-    }
+    },
+    "importDropped": "위젯 {count}개를 제외했습니다. 이 설치에 없거나 계정에서 사용할 수 없습니다.",
+    "importReset": "위젯 {count}개가 이제 모든 연결을 표시합니다. 지정된 연결이 이 설치에 없습니다.",
+    "exportFailed": "이 대시보드를 내보내지 못했습니다.",
+    "importError": {
+      "invalid-json": "이 파일은 올바른 JSON이 아닙니다.",
+      "not-a-dashboard": "이 파일은 ProxCenter 대시보드 내보내기 파일이 아닙니다.",
+      "unsupported-version": "이 파일은 더 새로운 ProxCenter 버전에서 만들어졌습니다.",
+      "no-widgets": "가져올 항목이 없습니다. 이 파일의 위젯 중 여기에서 사용할 수 있는 것이 없습니다.",
+      "not-stored": "가져오기는 수락되었지만 대시보드가 저장되지 않았습니다."
+    },
+    "importedSuffix": "가져옴",
+    "exportDashboards": "모든 대시보드 내보내기",
+    "importDashboards": "대시보드 가져오기…",
+    "dashboardsExported": "대시보드 {count}개를 파일 하나로 내보냈습니다.",
+    "dashboardsImported": "대시보드 {count}개를 가져왔습니다.",
+    "importSkipped": "대시보드 {count}개를 건너뛰었습니다. 해당 위젯이 이 설치에 없습니다."
   },
   "alerts": {
     "title": "알림",
@@ -7421,7 +7437,17 @@
     "retentionDescription": "보존 기간보다 오래된 변경 사항은 자동으로 삭제됩니다.",
     "retentionDays": "보존 기간",
     "retentionInfo": "보존 기간: {days}일",
-    "days": "일"
+    "days": "일",
+    "csvDate": "날짜",
+    "csvResourceType": "리소스 유형",
+    "csvResourceId": "리소스 ID",
+    "csvResourceName": "리소스 이름",
+    "csvAction": "작업",
+    "csvUser": "사용자",
+    "csvNode": "노드",
+    "csvConnection": "연결",
+    "csvFieldCount": "변경된 필드",
+    "csvDetails": "상세"
   },
   "tenants": {
     "title": "테넌트",

@@ -19,6 +19,16 @@ export type PublicNode = {
   cpu: number
   mem: number
   maxmem: number
+  /** Root filesystem of the HOST, not cluster storage capacity (#925). */
+  disk: number
+  maxdisk: number
+  uptime: number
+  /**
+   * Reduced to a boolean on purpose: the raw Proxmox value is a free-form
+   * mode name, and letting it through would hand an unbounded label value
+   * to `proxcenter_node_maintenance`.
+   */
+  maintenance: boolean
 }
 
 export type PublicGuest = {
@@ -43,6 +53,32 @@ export type PublicGuest = {
    */
   agentEnabled: boolean | null
   template: boolean
+  /** Provisioned disk size; `disk` itself is only meaningful for LXC (#925). */
+  maxdisk: number
+  uptime: number
+  /** null when HA does not manage this guest, never a fabricated state (#925). */
+  hastate: string | null
+}
+
+export type PublicPbsDatastore = {
+  name: string
+  /** 0 when the backend does not report a capacity, as with an S3-backed datastore. */
+  total: number
+  used: number
+  available: number
+  usagePercent: number
+  backupCount: number
+  vmCount: number
+  ctCount: number
+  hostCount: number
+}
+
+export type PublicPbsServer = {
+  connId: string
+  connectionName: string
+  status: string
+  version: string | null
+  datastores: PublicPbsDatastore[]
 }
 
 export type PublicFleetView = {
@@ -51,6 +87,7 @@ export type PublicFleetView = {
   clusters: ClusterData[]
   nodes: PublicNode[]
   guests: PublicGuest[]
+  pbsServers: PublicPbsServer[]
   cached: boolean
 }
 
@@ -93,6 +130,10 @@ export async function loadPublicFleetView(principal?: Principal): Promise<Public
         cpu: Number(node.cpu || 0),
         mem: Number(node.mem || 0),
         maxmem: Number(node.maxmem || 0),
+        disk: Number(node.disk || 0),
+        maxdisk: Number(node.maxdisk || 0),
+        uptime: Number(node.uptime || 0),
+        maintenance: typeof node.maintenance === "string" && node.maintenance !== "",
       })
       for (const guest of node.guests as any[]) {
         if (isTemplate(guest)) continue
@@ -109,10 +150,36 @@ export async function loadPublicFleetView(principal?: Principal): Promise<Public
           maxmem: Number(guest.maxmem || 0),
           agentEnabled: typeof guest.agentEnabled === "boolean" ? guest.agentEnabled : null,
           template: false,
+          maxdisk: Number(guest.maxdisk || 0),
+          uptime: Number(guest.uptime || 0),
+          hastate: typeof guest.hastate === "string" && guest.hastate !== "" ? guest.hastate : null,
         })
       }
     }
   }
 
-  return { tenantId, visible, clusters, nodes, guests, cached }
+  // Same TENANT BOUNDARY as `clusters` above, never a display filter: a
+  // helper that accepts this argument and never reads it is exactly the
+  // `resolveVisibleConnectionIds` bug this chantier already shipped once.
+  const pbsServers: PublicPbsServer[] = (raw.pbsServers ?? [])
+    .filter(server => visible.has(server.id))
+    .map(server => ({
+      connId: server.id,
+      connectionName: server.name,
+      status: server.status,
+      version: typeof server.version === "string" && server.version !== "" ? server.version : null,
+      datastores: (server.datastores ?? []).map(datastore => ({
+        name: datastore.name,
+        total: Number(datastore.total || 0),
+        used: Number(datastore.used || 0),
+        available: Number(datastore.available || 0),
+        usagePercent: Number(datastore.usagePercent || 0),
+        backupCount: Number(datastore.backupCount || 0),
+        vmCount: Number(datastore.vmCount || 0),
+        ctCount: Number(datastore.ctCount || 0),
+        hostCount: Number(datastore.hostCount || 0),
+      })),
+    }))
+
+  return { tenantId, visible, clusters, nodes, guests, pbsServers, cached }
 }

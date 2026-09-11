@@ -33,8 +33,12 @@ const RAW = {
           cpu: 0.25,
           mem: 1000,
           maxmem: 4000,
+          disk: 3000,
+          maxdisk: 10000,
+          uptime: 86400,
+          maintenance: 'migrate',
           guests: [
-            { vmid: 100, name: 'web', type: 'qemu', status: 'running', cpu: 0.5, mem: 500, maxmem: 2000, agentEnabled: true },
+            { vmid: 100, name: 'web', type: 'qemu', status: 'running', cpu: 0.5, mem: 500, maxmem: 2000, maxdisk: 32000, uptime: 3600, hastate: 'started', agentEnabled: true },
             { vmid: 900, name: 'tpl', type: 'qemu', status: 'stopped', template: 1 },
           ],
         },
@@ -43,7 +47,20 @@ const RAW = {
     },
     { id: 'pve-hidden', name: 'Hidden', nodes: [{ node: 'x', status: 'online', guests: [{ vmid: 5, type: 'qemu', status: 'running' }] }] },
   ],
-  pbsServers: [],
+  pbsServers: [
+    {
+      id: 'pbs-1', name: 'PBS One', type: 'pbs', status: 'online', version: '4.2.1',
+      datastores: [
+        { name: 'S3manu', total: 0, used: 4096, available: 0, usagePercent: 12.5, backupCount: 7, vmCount: 3, ctCount: 1, hostCount: 0 },
+      ],
+      stats: { totalSize: 0, totalUsed: 4096, datastoreCount: 1, backupCount: 7 },
+    },
+    {
+      id: 'pbs-hidden', name: 'PBS Hidden', type: 'pbs', status: 'online', version: '4.2.1',
+      datastores: [{ name: 'secret', total: 10, used: 1, available: 9, usagePercent: 10, backupCount: 1, vmCount: 1, ctCount: 0, hostCount: 0 }],
+      stats: { totalSize: 10, totalUsed: 1, datastoreCount: 1, backupCount: 1 },
+    },
+  ],
   externalHypervisors: [],
   storages: [],
   stats: {
@@ -59,7 +76,7 @@ beforeEach(() => {
   // resetAllMocks wipes the implementation too, so every default below is
   // re-established explicitly and nothing bleeds in from another test.
   vi.resetAllMocks()
-  resolvePublicRequestScopeMock.mockResolvedValue({ tenantId: 'default', visible: new Set(['pve-1']) })
+  resolvePublicRequestScopeMock.mockResolvedValue({ tenantId: 'default', visible: new Set(['pve-1', 'pbs-1']) })
   getTenantInfrastructureScopeMock.mockResolvedValue({ kind: 'provider' })
   getInventorySWRMock.mockResolvedValue({ raw: RAW, cached: true })
 })
@@ -70,16 +87,17 @@ describe('loadPublicFleetView', () => {
     expect(view.tenantId).toBe('default')
     expect(view.clusters.map(c => c.id)).toEqual(['pve-1'])
     expect(view.nodes).toEqual([
-      { connId: 'pve-1', connectionName: 'PVE One', node: 'n1', status: 'online', cpu: 0.25, mem: 1000, maxmem: 4000 },
-      { connId: 'pve-1', connectionName: 'PVE One', node: 'n2', status: 'offline', cpu: 0, mem: 0, maxmem: 0 },
+      { connId: 'pve-1', connectionName: 'PVE One', node: 'n1', status: 'online', cpu: 0.25, mem: 1000, maxmem: 4000, disk: 3000, maxdisk: 10000, uptime: 86400, maintenance: true },
+      { connId: 'pve-1', connectionName: 'PVE One', node: 'n2', status: 'offline', cpu: 0, mem: 0, maxmem: 0, disk: 0, maxdisk: 0, uptime: 0, maintenance: false },
     ])
     expect(view.guests).toHaveLength(1)
     expect(view.guests[0]).toEqual({
       connId: 'pve-1', connectionName: 'PVE One', node: 'n1', vmid: '100', name: 'web', type: 'qemu',
-      status: 'running', cpu: 0.5, mem: 500, maxmem: 2000, agentEnabled: true, template: false,
+      status: 'running', cpu: 0.5, mem: 500, maxmem: 2000, maxdisk: 32000, uptime: 3600, hastate: 'started',
+      agentEnabled: true, template: false,
     })
     expect(view.cached).toBe(true)
-    expect(view.visible).toEqual(new Set(['pve-1']))
+    expect(view.visible).toEqual(new Set(['pve-1', 'pbs-1']))
   })
 
   it('carries the VM name through: Task 17 must be able to label proxcenter_vm_* series without re-walking clusters', async () => {
@@ -196,5 +214,80 @@ describe('loadPublicFleetView', () => {
     getInventorySWRMock.mockResolvedValue({ raw: RAW, cached: false })
     const view = await loadPublicFleetView({ kind: 'token', tenantId: 'default', connectionIds: ['pve-1'] } as any)
     expect(view.cached).toBe(false)
+  })
+})
+
+describe('loadPublicFleetView, widened projections (#925)', () => {
+  it('carries the node capacity, uptime and maintenance fields the exposition needs', async () => {
+    const view = await loadPublicFleetView(undefined)
+    expect(view.nodes.find(node => node.node === 'n1')).toMatchObject({
+      disk: 3000, maxdisk: 10000, uptime: 86400, maintenance: true,
+    })
+    expect(view.nodes.find(node => node.node === 'n2')).toMatchObject({
+      disk: 0, maxdisk: 0, uptime: 0, maintenance: false,
+    })
+  })
+
+  /**
+   * `maintenance` is projected as a BOOLEAN, never the raw string: the raw
+   * value is a free-form Proxmox mode name, so letting it through would
+   * hand an unbounded label value to `proxcenter_node_maintenance`.
+   */
+  it('reduces the maintenance mode to a boolean rather than leaking the raw mode name', async () => {
+    const view = await loadPublicFleetView(undefined)
+    expect(view.nodes.find(node => node.node === 'n1')?.maintenance).toBe(true)
+  })
+
+  it('carries the guest capacity, uptime and HA state', async () => {
+    const view = await loadPublicFleetView(undefined)
+    expect(view.guests[0]).toMatchObject({ maxdisk: 32000, uptime: 3600, hastate: 'started' })
+  })
+
+  it('leaves hastate null rather than inventing a state for a guest HA does not manage', async () => {
+    getInventorySWRMock.mockResolvedValue({
+      raw: {
+        ...RAW,
+        clusters: [
+          {
+            id: 'pve-1',
+            name: 'PVE One',
+            nodes: [{ node: 'n1', status: 'online', guests: [{ vmid: 1, type: 'qemu', status: 'running' }] }],
+          },
+        ],
+      },
+      cached: true,
+    })
+    const view = await loadPublicFleetView(undefined)
+    expect(view.guests[0].hastate).toBeNull()
+  })
+
+  /**
+   * The PBS filter is a TENANT BOUNDARY, not a display filter. A projection
+   * that accepts the perimeter and never reads it is exactly the
+   * resolveVisibleConnectionIds bug this chantier already shipped once, so
+   * `pbs-hidden` sits in the fixture purely to fail that regression.
+   */
+  it('projects PBS servers and filters them on the tenant perimeter', async () => {
+    const view = await loadPublicFleetView(undefined)
+    expect(view.pbsServers.map(server => server.connectionName)).toEqual(['PBS One'])
+    expect(view.pbsServers[0]).toMatchObject({ connId: 'pbs-1', status: 'online', version: '4.2.1' })
+  })
+
+  it('projects every datastore field the PBS families need, including a zero capacity', async () => {
+    const view = await loadPublicFleetView(undefined)
+    expect(view.pbsServers[0].datastores[0]).toEqual({
+      name: 'S3manu', total: 0, used: 4096, available: 0, usagePercent: 12.5,
+      backupCount: 7, vmCount: 3, ctCount: 1, hostCount: 0,
+    })
+  })
+
+  it('reports a version-less PBS server as null rather than an empty string', async () => {
+    getInventorySWRMock.mockResolvedValue({
+      raw: { ...RAW, pbsServers: [{ id: 'pbs-1', name: 'PBS One', type: 'pbs', status: 'offline', datastores: [] }] },
+      cached: true,
+    })
+    const view = await loadPublicFleetView(undefined)
+    expect(view.pbsServers[0].version).toBeNull()
+    expect(view.pbsServers[0].datastores).toEqual([])
   })
 })

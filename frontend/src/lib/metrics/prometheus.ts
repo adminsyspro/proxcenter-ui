@@ -22,6 +22,11 @@ export const METRIC_FAMILY_SCOPES: Record<string, string> = {
   proxcenter_node_: "nodes:read",
   proxcenter_vm_: "vms:read",
   proxcenter_backup_: "backups:read",
+  // #925. `proxcenter_pbs_` sits under backups:read rather than a scope of
+  // its own: a PBS server's datastores ARE the backup estate, and the
+  // scope vocabulary only bundles existing read permissions.
+  proxcenter_cluster_: "nodes:read",
+  proxcenter_pbs_: "backups:read",
 }
 
 /**
@@ -66,6 +71,17 @@ export function isFamilyAllowed(metricName: string, tokenScopes: readonly string
   const scope = familyScope(metricName)
   if (scope === null) return true
   return tokenScopes.includes(scope)
+}
+
+/**
+ * 0 rather than NaN when the denominator is absent (#925). An offline node
+ * or a stopped guest reports a zero capacity, and a single NaN makes
+ * Prometheus reject the WHOLE scrape, so one dead node would blank every
+ * series on the dashboard. Lives here, not in each family module, so the
+ * five builders share one guard.
+ */
+export function ratio(used: number, total: number): number {
+  return total > 0 ? Math.round((used / total) * 10_000) / 10_000 : 0
 }
 
 function renderLabels(labels: Sample["labels"]): string {

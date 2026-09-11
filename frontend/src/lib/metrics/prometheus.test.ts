@@ -1,8 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import {
-  escapeLabelValue, escapeHelpText, renderExposition, familyScope, isFamilyAllowed, METRIC_FAMILY_SCOPES,
-} from './prometheus'
+import { METRIC_FAMILY_SCOPES, escapeHelpText, escapeLabelValue, familyScope, isFamilyAllowed, ratio, renderExposition } from './prometheus'
 
 describe('escapeLabelValue', () => {
   it('escapes backslash, double quote and newline together', () => {
@@ -207,11 +205,17 @@ describe('family scoping (spec section 8)', () => {
       proxcenter_node_: 'nodes:read',
       proxcenter_vm_: 'vms:read',
       proxcenter_backup_: 'backups:read',
+      proxcenter_cluster_: 'nodes:read',
+      proxcenter_pbs_: 'backups:read',
     })
     expect(familyScope('proxcenter_vm_cpu_usage_ratio')).toBe('vms:read')
     expect(familyScope('proxcenter_backup_age_seconds')).toBe('backups:read')
     expect(familyScope('proxcenter_node_online')).toBe('nodes:read')
+    expect(familyScope('proxcenter_cluster_ceph_health')).toBe('nodes:read')
+    expect(familyScope('proxcenter_pbs_datastore_usage_ratio')).toBe('backups:read')
     expect(familyScope('proxcenter_unknown_metric')).toBeNull()
+    // #925: unscoped by design, so any valid token sees the build info.
+    expect(familyScope('proxcenter_build_info')).toBeNull()
   })
 
   it('a vms:read-only token gets the VM family and not the others', () => {
@@ -236,5 +240,22 @@ describe('family scoping (spec section 8)', () => {
   it('an unscoped family is always allowed regardless of the token scopes (no scope requirement)', () => {
     expect(isFamilyAllowed('proxcenter_up', [])).toBe(true)
     expect(isFamilyAllowed('proxcenter_up', ['vms:read'])).toBe(true)
+  })
+})
+
+describe('ratio (#925)', () => {
+  it('rounds to four decimals, the precision the exposition already used', () => {
+    expect(ratio(1000, 4000)).toBe(0.25)
+    expect(ratio(1, 3)).toBe(0.3333)
+  })
+
+  /**
+   * An offline node and a stopped guest both report a zero capacity. A
+   * single NaN makes Prometheus reject the WHOLE scrape, so one dead node
+   * would blank every series on the dashboard.
+   */
+  it('answers 0 rather than NaN when the denominator is absent', () => {
+    expect(ratio(0, 0)).toBe(0)
+    expect(ratio(500, 0)).toBe(0)
   })
 })

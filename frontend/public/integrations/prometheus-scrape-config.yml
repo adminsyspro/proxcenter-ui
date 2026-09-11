@@ -1,7 +1,28 @@
 # ProxCenter public read-only API: Prometheus scrape configuration.
-# Create the token in ProxCenter under Settings > API with at least the
+#
+# Requires ProxCenter Enterprise with the API option. Without it every call
+# on this path answers 403 "Feature not licensed".
+#
+# Create the token in ProxCenter under Settings > API with all three of the
 # nodes:read, vms:read and backups:read scopes, then paste the secret below.
 # The token is shown once at creation and never again.
+#
+# A token short of one scope still gets HTTP 200: the families it may not see
+# are filtered out of the response rather than refused. On a dashboard that
+# looks exactly like a broken panel, so grant all three.
+#
+# One job covers every cluster. ProxCenter serves its own aggregated view, so
+# there is nothing to install on any Proxmox node, and the scrape is answered
+# from ProxCenter's inventory cache rather than fanning out to the
+# hypervisor. Keep the 60s interval: a tighter one buys no fresher data.
+#
+# Two dashboards read this exposition, both published on grafana.com:
+#   proxcenter-fleet     ProxCenter Fleet Overview
+#                        reachability, capacity headroom, guest load, HA state
+#   proxcenter-backups   ProxCenter Backup Compliance
+#                        protection coverage, staleness, PBS datastore capacity
+# They also ship beside this file, as
+# grafana-dashboard-proxcenter.json and grafana-dashboard-proxcenter-backups.json.
 scrape_configs:
   - job_name: proxcenter
     scheme: https

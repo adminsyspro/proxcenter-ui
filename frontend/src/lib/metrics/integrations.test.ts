@@ -41,12 +41,35 @@ const CORE_PANEL_TYPES = [
  */
 const VALIDATED_GRAFANA_FLOOR = '11.0.0'
 
+/**
+ * Five focused dashboards rather than one of forty-five panels. Each answers
+ * one question and stands on its own as a hub listing; they navigate to each
+ * other through a dashboard link on the shared `proxcenter` tag.
+ */
 const DASHBOARDS = [
   {
     label: 'Fleet Overview',
     file: 'public/integrations/grafana-dashboard-proxcenter.json',
     uid: 'proxcenter-fleet',
     title: 'ProxCenter Fleet Overview',
+  },
+  {
+    label: 'Node Performance',
+    file: 'public/integrations/grafana-dashboard-proxcenter-nodes.json',
+    uid: 'proxcenter-nodes',
+    title: 'ProxCenter Node Performance',
+  },
+  {
+    label: 'Guest Workload',
+    file: 'public/integrations/grafana-dashboard-proxcenter-guests.json',
+    uid: 'proxcenter-guests',
+    title: 'ProxCenter Guest Workload',
+  },
+  {
+    label: 'Storage',
+    file: 'public/integrations/grafana-dashboard-proxcenter-storage.json',
+    uid: 'proxcenter-storage',
+    title: 'ProxCenter Storage',
   },
   {
     label: 'Backup Compliance',
@@ -178,7 +201,7 @@ describe.each(DASHBOARDS)('$label dashboard', ({ json, uid, title }) => {
   })
 })
 
-describe('the two dashboards together', () => {
+describe('the five dashboards together', () => {
   /**
    * A family nobody charts is a family nobody validated. This is the exact
    * check that would have caught the 3 August drift.
@@ -189,8 +212,33 @@ describe('the two dashboards together', () => {
     expect(unused).toEqual([])
   })
 
-  it('keeps the two uids distinct, so one does not overwrite the other on import', () => {
+  it('keeps every uid distinct, so one does not overwrite another on import', () => {
     expect(new Set(DASHBOARDS.map(entry => entry.json.uid)).size).toBe(DASHBOARDS.length)
+  })
+
+  /**
+   * Split into five, they are only usable as a family if a reader can get from
+   * one to the next. The link is by tag rather than by uid so it keeps working
+   * whatever folder the reader imports them into.
+   */
+  it('links each dashboard to the others by the shared tag', () => {
+    for (const entry of DASHBOARDS) {
+      const link = (entry.json.links ?? []).find((l: any) => l.type === 'dashboards')
+      expect(link, `${entry.label} has no dashboard link`).toBeDefined()
+      expect(link.tags).toContain('proxcenter')
+      expect(link.keepTime).toBe(true)
+    }
+  })
+
+  /**
+   * Forty-five panels on one page is what this split exists to undo, so the
+   * ceiling is enforced rather than left to judgement.
+   */
+  it('keeps every dashboard small enough to read', () => {
+    for (const entry of DASHBOARDS) {
+      const count = allPanels(entry.json).filter((p: any) => p.type !== 'row').length
+      expect(count, `${entry.label} has ${count} panels`).toBeLessThanOrEqual(22)
+    }
   })
 
   /**
@@ -213,8 +261,8 @@ describe('the two dashboards together', () => {
   })
 })
 
-describe('Fleet Overview, the guest agent disclosure', () => {
-  const fleet = DASHBOARDS.find(entry => entry.uid === 'proxcenter-fleet')!.json
+describe('Guest Workload, the guest agent disclosure', () => {
+  const guests = DASHBOARDS.find(entry => entry.uid === 'proxcenter-guests')!.json
 
   /**
    * `proxcenter_vm_agent_enabled` is deliberately omitted whenever the agent
@@ -232,7 +280,7 @@ describe('Fleet Overview, the guest agent disclosure', () => {
    * the "quietly removed" shortcut this must not take.
    */
   it('keeps the panel, keeps its explanation, and keeps it out of first paint', () => {
-    const collapsedRows = (fleet.panels ?? []).filter((panel: any) => panel.type === 'row' && panel.collapsed)
+    const collapsedRows = (guests.panels ?? []).filter((panel: any) => panel.type === 'row' && panel.collapsed)
     const agentPanel = collapsedRows
       .flatMap((row: any) => row.panels ?? [])
       .find((panel: any) => panel.title === 'Guests without the guest agent enabled')

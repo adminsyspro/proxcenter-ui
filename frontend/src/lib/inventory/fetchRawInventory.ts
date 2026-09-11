@@ -366,13 +366,25 @@ return aId - bId
       // open PBS servers owned by MSP tenants, not just default-owned ones.
       const connConfig = await getPbsConnectionById(conn.id, (conn as any).tenantId)
 
-      const [statusResult, datastoresResult] = await Promise.allSettled([
+      const [statusResult, datastoresResult, versionResult] = await Promise.allSettled([
         pbsFetch<any>(connConfig, '/status'),
         pbsFetch<any[]>(connConfig, '/admin/datastore'),
+        // #925: `/status` carries NO version on PBS. It was read here as
+        // `status.info.version` and had always been undefined, so the PBS
+        // version was blank in the inventory tree and absent from the
+        // Prometheus exposition. `/version` is the endpoint that answers it,
+        // as connectionDiagnostics.ts:368 and the connections route already do.
+        pbsFetch<any>(connConfig, '/version'),
       ])
 
       const status = statusResult.status === 'fulfilled' ? statusResult.value : null
       const datastores = datastoresResult.status === 'fulfilled' ? datastoresResult.value || [] : []
+      const versionInfo = versionResult.status === 'fulfilled' ? versionResult.value : null
+      // allSettled swallows a rejection, which is how `status.info.version`
+      // stayed dead and unnoticed. Say WHY the version is missing (#925).
+      if (versionResult.status === 'rejected') {
+        console.warn(`[inventory] PBS ${conn.name}: /version failed:`, versionResult.reason?.message)
+      }
 
       const datastoreDetailsPromises = datastores.map(async (ds): Promise<PbsDatastoreData> => {
         const storeName = ds.store || ds.name
@@ -446,7 +458,10 @@ return aId - bId
         name: conn.name,
         type: 'pbs',
         status: status ? 'online' : 'offline',
-        version: status?.info?.version || undefined,
+        version: versionInfo?.version || undefined,
+        // KNOWN DEAD, left as-is on purpose (#925): `/status` carries no
+        // uptime either. The answer is on /nodes/{node}/status, which needs a
+        // node name this call does not have, and no consumer reads it today.
         uptime: status?.uptime || undefined,
         datastores: datastoreDetails,
         stats: { totalSize, totalUsed, datastoreCount: datastoreDetails.length, backupCount: totalBackups }

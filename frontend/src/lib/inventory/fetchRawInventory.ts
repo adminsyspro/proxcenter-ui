@@ -11,6 +11,7 @@ import { getSessionPrisma } from "@/lib/tenant"
 import { prisma as globalPrisma } from "@/lib/db/prisma"
 import { getConnectionById, getPbsConnectionById } from "@/lib/connections/getConnection"
 import { pveFetch } from "@/lib/proxmox/client"
+import { aggregateStorage, type AggregatedStorage, type RawStorageEntry } from "@/lib/proxmox/storage"
 import { pbsFetch } from "@/lib/proxmox/pbs-client"
 import { collectNodeAddresses, resolveManagementIp } from "@/lib/proxmox/resolveManagementIp"
 import {
@@ -30,6 +31,21 @@ export type NodeData = {
   disk?: number
   maxdisk?: number
   uptime?: number
+  /**
+   * Everything below comes from the per-node `/nodes/{node}/status` call this
+   * module ALREADY makes for its memory figures (#925). The payload carries
+   * load, iowait, swap and the exact root filesystem bytes, and all of it used
+   * to be discarded. `/nodes` and `/cluster/resources` carry none of them.
+   */
+  loadavg?: number[]
+  iowait?: number
+  swapUsed?: number
+  swapTotal?: number
+  rootfsUsed?: number
+  rootfsTotal?: number
+  cores?: number
+  pveVersion?: string
+  kernel?: string
   ip?: string
   /** All non-loopback addresses of the host, for the IP search of the palette (#861). */
   ips?: string[]
@@ -53,6 +69,18 @@ export type GuestData = {
   template?: number | boolean
   hastate?: string
   hagroup?: string
+  /**
+   * Cumulative byte COUNTERS since guest start, straight off
+   * `/cluster/resources?type=vm` (#925). Measured present on PVE 9. They were
+   * fetched and dropped by this projection.
+   */
+  netin?: number
+  netout?: number
+  diskread?: number
+  diskwrite?: number
+  cores?: number
+  /** PVE 9 host-side memory of the guest, distinct from the guest-side `mem`. */
+  memhost?: number
 }
 
 export type HaResource = {
@@ -121,7 +149,7 @@ export type RawInventory = {
   clusters: ClusterData[]
   pbsServers: PbsServerData[]
   externalHypervisors: ExternalHypervisor[]
-  storages: any[]
+  storages: AggregatedStorage[]
   stats: { totalClusters: number; totalNodes: number; totalGuests: number; onlineNodes: number; runningGuests: number; totalPbsServers: number; totalDatastores: number; totalBackups: number }
 }
 
@@ -169,16 +197,21 @@ export async function fetchRawInventory(infra: InfraScope): Promise<RawInventory
   }
 
   // 2) Pour chaque connexion PVE, charger nodes et guests EN PARALLÈLE
-  const clusterPromises = pveConnections.map(async (conn): Promise<ClusterData | null> => {
+  const clusterPromises = pveConnections.map(async (conn): Promise<{ cluster: ClusterData; storages: AggregatedStorage[] } | null> => {
     try {
       const connConfig = await getConnectionById(conn.id, (conn as any).tenantId)
 
-      const [nodesResult, guestsResult, haResult, cephResult, nodeResourcesResult] = await Promise.allSettled([
+      const [nodesResult, guestsResult, haResult, cephResult, nodeResourcesResult, storagesResult] = await Promise.allSettled([
         pveFetch<NodeData[]>(connConfig, '/nodes'),
         pveFetch<GuestData[]>(connConfig, '/cluster/resources?type=vm'),
         pveFetch<HaResource[]>(connConfig, '/cluster/ha/resources'),
         pveFetch<any>(connConfig, '/cluster/ceph/status'),
         pveFetch<any[]>(connConfig, '/cluster/resources?type=node'),
+        // #925: the ONE call this module gains. `storages` has been declared on
+        // RawInventory since the beginning and never filled, and
+        // inventoryCache.ts treats a missing one as a cache miss, so filling it
+        // is the direction that was always intended.
+        pveFetch<any[]>(connConfig, '/cluster/resources?type=storage'),
       ])
 
       const nodes: NodeData[] = nodesResult.status === 'fulfilled' ? nodesResult.value || [] : []
@@ -213,6 +246,10 @@ export async function fetchRawInventory(infra: InfraScope): Promise<RawInventory
               : Promise.resolve(null),
           ])
 
+          // loadavg arrives as an array of STRINGS ("0.61"), so it is parsed
+          // rather than passed through (#925).
+          const rawLoad = Array.isArray(nodeStatus?.loadavg) ? nodeStatus.loadavg : null
+
           return {
             node: node.node,
             ip: resolveManagementIp(networks),
@@ -220,6 +257,15 @@ export async function fetchRawInventory(infra: InfraScope): Promise<RawInventory
             // Use memory from /nodes/{node}/status (excludes ZFS ARC / kernel caches)
             mem: nodeStatus?.memory?.total > 0 ? Number(nodeStatus.memory.used || 0) : undefined,
             maxmem: nodeStatus?.memory?.total > 0 ? Number(nodeStatus.memory.total || 0) : undefined,
+            loadavg: rawLoad ? rawLoad.slice(0, 3).map((v: any) => Number(v)).filter((v: number) => Number.isFinite(v)) : undefined,
+            iowait: typeof nodeStatus?.wait === 'number' ? nodeStatus.wait : undefined,
+            swapUsed: nodeStatus?.swap?.total > 0 ? Number(nodeStatus.swap.used || 0) : undefined,
+            swapTotal: nodeStatus?.swap?.total > 0 ? Number(nodeStatus.swap.total || 0) : undefined,
+            rootfsUsed: nodeStatus?.rootfs?.total > 0 ? Number(nodeStatus.rootfs.used || 0) : undefined,
+            rootfsTotal: nodeStatus?.rootfs?.total > 0 ? Number(nodeStatus.rootfs.total || 0) : undefined,
+            cores: typeof nodeStatus?.cpuinfo?.cpus === 'number' ? nodeStatus.cpuinfo.cpus : undefined,
+            pveVersion: typeof nodeStatus?.pveversion === 'string' ? nodeStatus.pveversion : undefined,
+            kernel: typeof nodeStatus?.['current-kernel']?.release === 'string' ? nodeStatus['current-kernel'].release : undefined,
           }
         } catch {
           return { node: node.node, ip: undefined, ips: [] as string[], mem: undefined, maxmem: undefined }
@@ -227,10 +273,12 @@ export async function fetchRawInventory(infra: InfraScope): Promise<RawInventory
       })
 
       const nodeEnrichData = await Promise.all(nodeEnrichPromises)
-      const nodeIpMap = new Map<string, { ip?: string; ips: string[]; mem?: number; maxmem?: number }>()
+      type NodeEnrichment = Omit<(typeof nodeEnrichData)[number], 'node'>
+      const nodeIpMap = new Map<string, NodeEnrichment>()
 
-      for (const { node, ip, ips, mem, maxmem } of nodeEnrichData) {
-        if (node) nodeIpMap.set(node, { ip, ips, mem, maxmem })
+      for (const entry of nodeEnrichData) {
+        const { node, ...rest } = entry as any
+        if (node) nodeIpMap.set(node, rest)
       }
 
       const haMap = new Map<string, HaResource>()
@@ -253,6 +301,16 @@ export async function fetchRawInventory(infra: InfraScope): Promise<RawInventory
           // Override mem/maxmem with accurate values from /nodes/{node}/status
           ...(extra?.mem !== undefined ? { mem: extra.mem } : {}),
           ...(extra?.maxmem !== undefined ? { maxmem: extra.maxmem } : {}),
+          // #925: load, iowait, swap and root filesystem, from the same call.
+          loadavg: (extra as any)?.loadavg,
+          iowait: (extra as any)?.iowait,
+          swapUsed: (extra as any)?.swapUsed,
+          swapTotal: (extra as any)?.swapTotal,
+          rootfsUsed: (extra as any)?.rootfsUsed,
+          rootfsTotal: (extra as any)?.rootfsTotal,
+          cores: (extra as any)?.cores ?? (n as any)?.maxcpu,
+          pveVersion: (extra as any)?.pveVersion,
+          kernel: (extra as any)?.kernel,
           ip: extra?.ip,
           ips: extra?.ips ?? [],
           maintenance,
@@ -286,6 +344,13 @@ export async function fetchRawInventory(infra: InfraScope): Promise<RawInventory
           pool: g.pool,
           tags: g.tags,
           template: g.template === 1 || g.template === true,
+          // #925: cumulative counters, dropped by this projection until now.
+          netin: g.netin,
+          netout: g.netout,
+          diskread: g.diskread,
+          diskwrite: g.diskwrite,
+          cores: (g as any).maxcpu,
+          memhost: (g as any).memhost,
           hastate: (() => {
             const haSid = `${g.type === 'lxc' ? 'ct' : 'vm'}:${g.vmid}`
             const ha = haMap.get(haSid)
@@ -325,7 +390,29 @@ return aId - bId
         status = 'degraded'
       }
 
+      // #925. aggregateStorage is reused rather than reimplemented: a shared
+      // storage appears once PER NODE in /cluster/resources, so summing the raw
+      // rows triples the capacity of an RBD pool on a three node cluster. That
+      // helper already collapses shared storages to one entry and sums local
+      // ones per node, producing the nodeBreakdown a per-node panel needs.
+      const rawStorages: RawStorageEntry[] = (storagesResult.status === 'fulfilled' ? storagesResult.value || [] : [])
+        .filter((row: any) => row?.storage)
+        .map((row: any) => ({
+          connId: conn.id,
+          connName: conn.name,
+          node: String(row.node ?? ''),
+          storage: String(row.storage),
+          type: String(row.plugintype || row.type || 'unknown'),
+          shared: row.shared,
+          used: Number(row.disk || 0),
+          total: Number(row.maxdisk || 0),
+          content: typeof row.content === 'string' ? row.content.split(',') : undefined,
+          enabled: row.status !== 'unknown' && row.status !== 'disabled',
+          status: row.status,
+        }))
+
       return {
+        cluster: {
         id: conn.id,
         name: conn.name,
         type: conn.type,
@@ -337,11 +424,14 @@ return aId - bId
         longitude: conn.longitude,
         locationLabel: conn.locationLabel,
         nodes: nodesArray.sort((a, b) => a.node.localeCompare(b.node)),
+        },
+        storages: aggregateStorage(rawStorages),
       }
     } catch (e: any) {
       console.error(`[inventory] Failed to load ${conn.name}:`, e?.message)
 
       return {
+        cluster: {
         id: conn.id,
         name: conn.name,
         type: conn.type,
@@ -352,12 +442,16 @@ return aId - bId
         longitude: conn.longitude,
         locationLabel: conn.locationLabel,
         nodes: [],
+        },
+        storages: [],
       }
     }
   })
 
   const clustersResults = await Promise.all(clusterPromises)
-  const clusters = clustersResults.filter((c): c is ClusterData => c !== null)
+  const clusterEntries = clustersResults.filter((c): c is { cluster: ClusterData; storages: AggregatedStorage[] } => c !== null)
+  const clusters = clusterEntries.map(entry => entry.cluster)
+  const storages = clusterEntries.flatMap(entry => entry.storages)
 
   // 3) Pour chaque connexion PBS, charger status et datastores EN PARALLÈLE
   const pbsPromises = pbsConnections.map(async (conn): Promise<PbsServerData | null> => {
@@ -512,7 +606,7 @@ return aId - bId
     clusters,
     pbsServers,
     externalHypervisors: externalConnections,
-    storages: [],
+    storages,
     stats: {
       totalClusters: clusters.length,
       totalNodes,

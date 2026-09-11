@@ -37,8 +37,17 @@ const RAW = {
           maxdisk: 10000,
           uptime: 86400,
           maintenance: 'migrate',
+          loadavg: [1.3, 1.27, 1.23],
+          iowait: 0.02,
+          swapUsed: 28672,
+          swapTotal: 2550132736,
+          rootfsUsed: 7818567680,
+          rootfsTotal: 17983504384,
+          cores: 8,
+          pveVersion: 'pve-manager/9.2.11/f6997e698c7933ea',
+          kernel: '7.0.2-6-pve',
           guests: [
-            { vmid: 100, name: 'web', type: 'qemu', status: 'running', cpu: 0.5, mem: 500, maxmem: 2000, maxdisk: 32000, uptime: 3600, hastate: 'started', agentEnabled: true },
+            { vmid: 100, name: 'web', type: 'qemu', status: 'running', cpu: 0.5, mem: 500, maxmem: 2000, maxdisk: 32000, uptime: 3600, hastate: 'started', agentEnabled: true, netin: 292131298, netout: 3046818, diskread: 154857472, diskwrite: 639959040, cores: 2, memhost: 700 },
             { vmid: 900, name: 'tpl', type: 'qemu', status: 'stopped', template: 1 },
           ],
         },
@@ -46,6 +55,22 @@ const RAW = {
       ],
     },
     { id: 'pve-hidden', name: 'Hidden', nodes: [{ node: 'x', status: 'online', guests: [{ vmid: 5, type: 'qemu', status: 'running' }] }] },
+  ],
+  storages: [
+    {
+      connId: 'pve-1', connName: 'PVE One', storage: 'CephPool', type: 'rbd', shared: true,
+      used: 100, total: 1000, enabled: true,
+      nodeBreakdown: [{ node: 'n1', used: 100, total: 1000 }],
+    },
+    {
+      connId: 'pve-1', connName: 'PVE One', storage: 'local', type: 'dir', shared: false,
+      used: 30, total: 90, enabled: true,
+      nodeBreakdown: [{ node: 'n1', used: 10, total: 30 }, { node: 'n2', used: 20, total: 60 }],
+    },
+    {
+      connId: 'pve-hidden', connName: 'Hidden', storage: 'secret', type: 'dir', shared: false,
+      used: 1, total: 2, enabled: true, nodeBreakdown: [{ node: 'x', used: 1, total: 2 }],
+    },
   ],
   pbsServers: [
     {
@@ -62,7 +87,6 @@ const RAW = {
     },
   ],
   externalHypervisors: [],
-  storages: [],
   stats: {
     totalClusters: 2, totalNodes: 3, totalGuests: 2, onlineNodes: 2,
     runningGuests: 1, totalPbsServers: 0, totalDatastores: 0, totalBackups: 0,
@@ -87,14 +111,28 @@ describe('loadPublicFleetView', () => {
     expect(view.tenantId).toBe('default')
     expect(view.clusters.map(c => c.id)).toEqual(['pve-1'])
     expect(view.nodes).toEqual([
-      { connId: 'pve-1', connectionName: 'PVE One', node: 'n1', status: 'online', cpu: 0.25, mem: 1000, maxmem: 4000, disk: 3000, maxdisk: 10000, uptime: 86400, maintenance: true },
-      { connId: 'pve-1', connectionName: 'PVE One', node: 'n2', status: 'offline', cpu: 0, mem: 0, maxmem: 0, disk: 0, maxdisk: 0, uptime: 0, maintenance: false },
+      {
+        connId: 'pve-1', connectionName: 'PVE One', node: 'n1', status: 'online', cpu: 0.25, mem: 1000, maxmem: 4000,
+        disk: 3000, maxdisk: 10000, uptime: 86400, maintenance: true,
+        load1: 1.3, load5: 1.27, load15: 1.23, iowait: 0.02,
+        swapUsed: 28672, swapTotal: 2550132736, rootfsUsed: 7818567680, rootfsTotal: 17983504384,
+        cores: 8, pveVersion: '9.2.11', kernel: '7.0.2-6-pve',
+      },
+      {
+        connId: 'pve-1', connectionName: 'PVE One', node: 'n2', status: 'offline', cpu: 0, mem: 0, maxmem: 0,
+        disk: 0, maxdisk: 0, uptime: 0, maintenance: false,
+        load1: 0, load5: 0, load15: 0, iowait: 0,
+        swapUsed: 0, swapTotal: 0, rootfsUsed: 0, rootfsTotal: 0,
+        cores: 0, pveVersion: null, kernel: null,
+      },
     ])
     expect(view.guests).toHaveLength(1)
     expect(view.guests[0]).toEqual({
       connId: 'pve-1', connectionName: 'PVE One', node: 'n1', vmid: '100', name: 'web', type: 'qemu',
       status: 'running', cpu: 0.5, mem: 500, maxmem: 2000, maxdisk: 32000, uptime: 3600, hastate: 'started',
       agentEnabled: true, template: false,
+      netIn: 292131298, netOut: 3046818, diskRead: 154857472, diskWritten: 639959040,
+      cores: 2, memHost: 700,
     })
     expect(view.cached).toBe(true)
     expect(view.visible).toEqual(new Set(['pve-1', 'pbs-1']))
@@ -289,5 +327,67 @@ describe('loadPublicFleetView, widened projections (#925)', () => {
     const view = await loadPublicFleetView(undefined)
     expect(view.pbsServers[0].version).toBeNull()
     expect(view.pbsServers[0].datastores).toEqual([])
+  })
+})
+
+describe('loadPublicFleetView, node status and guest counters (#925)', () => {
+  it('parses the load average, which Proxmox sends as an array of strings', async () => {
+    const view = await loadPublicFleetView(undefined)
+    const n1 = view.nodes.find(node => node.node === 'n1')
+    expect(n1).toMatchObject({ load1: 1.3, load5: 1.27, load15: 1.23 })
+    expect(typeof n1?.load1).toBe('number')
+  })
+
+  /**
+   * The raw value is `pve-manager/9.2.11/<commit>`. Carrying the commit into a
+   * metric label would churn it on every point release rebuild, for no gain.
+   */
+  it('keeps only the version number out of the pve-manager string', async () => {
+    const view = await loadPublicFleetView(undefined)
+    expect(view.nodes.find(node => node.node === 'n1')?.pveVersion).toBe('9.2.11')
+  })
+
+  it('carries the four cumulative counters off cluster/resources', async () => {
+    const view = await loadPublicFleetView(undefined)
+    expect(view.guests[0]).toMatchObject({
+      netIn: 292131298, netOut: 3046818, diskRead: 154857472, diskWritten: 639959040,
+    })
+  })
+
+  it('defaults every new field to 0 rather than undefined, so a ratio never divides by NaN', async () => {
+    const view = await loadPublicFleetView(undefined)
+    const n2 = view.nodes.find(node => node.node === 'n2')
+    for (const value of [n2?.load1, n2?.iowait, n2?.swapTotal, n2?.rootfsTotal, n2?.cores]) {
+      expect(Number.isFinite(value)).toBe(true)
+    }
+  })
+})
+
+describe('loadPublicFleetView, storages (#925)', () => {
+  it('projects the aggregated storages and filters them on the tenant perimeter', async () => {
+    const view = await loadPublicFleetView(undefined)
+    expect(view.storages.map(s => s.storage)).toEqual(['CephPool', 'local'])
+  })
+
+  /**
+   * The point of reusing aggregateStorage upstream: a shared storage arrives
+   * already collapsed to ONE entry, so summing `total` across the view cannot
+   * triple an RBD pool that appears once per node in the raw Proxmox data.
+   */
+  it('carries a shared storage once, with its own capacity, not once per node', async () => {
+    const view = await loadPublicFleetView(undefined)
+    const ceph = view.storages.find(s => s.storage === 'CephPool')
+    expect(ceph).toMatchObject({ shared: true, used: 100, total: 1000 })
+    expect(ceph?.nodes).toHaveLength(1)
+  })
+
+  it('keeps the per-node breakdown of a local storage, which is where it means something', async () => {
+    const view = await loadPublicFleetView(undefined)
+    const local = view.storages.find(s => s.storage === 'local')
+    expect(local).toMatchObject({ shared: false, used: 30, total: 90 })
+    expect(local?.nodes).toEqual([
+      { node: 'n1', used: 10, total: 30 },
+      { node: 'n2', used: 20, total: 60 },
+    ])
   })
 })

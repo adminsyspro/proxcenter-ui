@@ -29,6 +29,19 @@ export type PublicNode = {
    * to `proxcenter_node_maintenance`.
    */
   maintenance: boolean
+  /** From /nodes/{node}/status, the call the fan-out already makes (#925). */
+  load1: number
+  load5: number
+  load15: number
+  iowait: number
+  swapUsed: number
+  swapTotal: number
+  rootfsUsed: number
+  rootfsTotal: number
+  cores: number
+  /** Short version only: the raw value is `pve-manager/9.2.11/<commit>`, whose commit would churn the label. */
+  pveVersion: string | null
+  kernel: string | null
 }
 
 export type PublicGuest = {
@@ -58,6 +71,14 @@ export type PublicGuest = {
   uptime: number
   /** null when HA does not manage this guest, never a fabricated state (#925). */
   hastate: string | null
+  /** Cumulative COUNTERS since guest start, not gauges (#925). */
+  netIn: number
+  netOut: number
+  diskRead: number
+  diskWritten: number
+  cores: number
+  /** PVE 9 host-side memory. 0 on an LXC, which reports none. */
+  memHost: number
 }
 
 export type PublicPbsDatastore = {
@@ -81,6 +102,26 @@ export type PublicPbsServer = {
   datastores: PublicPbsDatastore[]
 }
 
+export type PublicStorageNode = { node: string; used: number; total: number }
+
+export type PublicStorage = {
+  connId: string
+  connectionName: string
+  storage: string
+  type: string
+  /**
+   * A shared storage appears once PER NODE upstream, so summing raw rows
+   * triples an RBD pool on a three node cluster. `aggregateStorage` has
+   * already collapsed those, which is why this carries no node of its own:
+   * per-node figures live in `nodes`, and only for non-shared storages.
+   */
+  shared: boolean
+  used: number
+  total: number
+  enabled: boolean
+  nodes: PublicStorageNode[]
+}
+
 export type PublicFleetView = {
   tenantId: string
   visible: Set<string>
@@ -88,6 +129,7 @@ export type PublicFleetView = {
   nodes: PublicNode[]
   guests: PublicGuest[]
   pbsServers: PublicPbsServer[]
+  storages: PublicStorage[]
   cached: boolean
 }
 
@@ -134,6 +176,19 @@ export async function loadPublicFleetView(principal?: Principal): Promise<Public
         maxdisk: Number(node.maxdisk || 0),
         uptime: Number(node.uptime || 0),
         maintenance: typeof node.maintenance === "string" && node.maintenance !== "",
+        load1: Number(node.loadavg?.[0] || 0),
+        load5: Number(node.loadavg?.[1] || 0),
+        load15: Number(node.loadavg?.[2] || 0),
+        iowait: Number(node.iowait || 0),
+        swapUsed: Number(node.swapUsed || 0),
+        swapTotal: Number(node.swapTotal || 0),
+        rootfsUsed: Number(node.rootfsUsed || 0),
+        rootfsTotal: Number(node.rootfsTotal || 0),
+        cores: Number(node.cores || 0),
+        // `pve-manager/9.2.11/<commit>` -> `9.2.11`. The commit would make the
+        // label churn on every point release rebuild.
+        pveVersion: typeof node.pveVersion === "string" ? (node.pveVersion.split("/")[1] || node.pveVersion) : null,
+        kernel: typeof node.kernel === "string" && node.kernel !== "" ? node.kernel : null,
       })
       for (const guest of node.guests as any[]) {
         if (isTemplate(guest)) continue
@@ -152,6 +207,12 @@ export async function loadPublicFleetView(principal?: Principal): Promise<Public
           template: false,
           maxdisk: Number(guest.maxdisk || 0),
           uptime: Number(guest.uptime || 0),
+          netIn: Number(guest.netin || 0),
+          netOut: Number(guest.netout || 0),
+          diskRead: Number(guest.diskread || 0),
+          diskWritten: Number(guest.diskwrite || 0),
+          cores: Number(guest.cores || 0),
+          memHost: Number(guest.memhost || 0),
           hastate: typeof guest.hastate === "string" && guest.hastate !== "" ? guest.hastate : null,
         })
       }
@@ -181,5 +242,24 @@ export async function loadPublicFleetView(principal?: Principal): Promise<Public
       })),
     }))
 
-  return { tenantId, visible, clusters, nodes, guests, pbsServers, cached }
+  // Same TENANT BOUNDARY as clusters and PBS servers.
+  const storages: PublicStorage[] = (raw.storages ?? [])
+    .filter(entry => visible.has(entry.connId))
+    .map(entry => ({
+      connId: entry.connId,
+      connectionName: entry.connName,
+      storage: entry.storage,
+      type: entry.type,
+      shared: !!entry.shared,
+      used: Number(entry.used || 0),
+      total: Number(entry.total || 0),
+      enabled: entry.enabled !== false,
+      nodes: (entry.nodeBreakdown ?? []).map(n => ({
+        node: n.node,
+        used: Number(n.used || 0),
+        total: Number(n.total || 0),
+      })),
+    }))
+
+  return { tenantId, visible, clusters, nodes, guests, pbsServers, storages, cached }
 }

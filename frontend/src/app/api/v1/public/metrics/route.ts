@@ -9,6 +9,7 @@ import { buildGuestFamilies } from "@/lib/metrics/families/guest"
 import { buildMetaFamilies } from "@/lib/metrics/families/meta"
 import { buildNodeFamilies } from "@/lib/metrics/families/node"
 import { buildPbsFamilies } from "@/lib/metrics/families/pbs"
+import { buildStorageFamilies } from "@/lib/metrics/families/storage"
 import { PERMISSIONS } from "@/lib/rbac"
 import type { Principal } from "@/lib/auth/principal"
 
@@ -40,6 +41,7 @@ async function handler(_req: Request, ctx: { principal?: Principal }) {
     ...buildNodeFamilies(view),
     ...buildGuestFamilies(view),
     ...buildPbsFamilies(view),
+    ...buildStorageFamilies(view),
   ]
 
   // The backup aggregation walks every visible PBS connection, so it is the

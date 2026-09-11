@@ -76,7 +76,7 @@ function allExpressions(dashboard: any): string[] {
 function referencedMetrics(dashboard: any): Set<string> {
   return new Set(
     allExpressions(dashboard).flatMap(expr =>
-      Array.from(expr.matchAll(/proxcenter_[a-z_]+/g)).map(match => match[0]),
+      Array.from(expr.matchAll(/proxcenter_[a-z0-9_]+/g)).map(match => match[0]),
     ),
   )
 }

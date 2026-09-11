@@ -44,10 +44,16 @@ const VIEW = {
     {
       connId: 'pve-1', connectionName: 'PVE One', node: 'n1', status: 'online', cpu: 0.25, mem: 1000, maxmem: 4000,
       disk: 3000, maxdisk: 10000, uptime: 86400, maintenance: false,
+      load1: 1.3, load5: 1.27, load15: 1.23, iowait: 0.02,
+      swapUsed: 28672, swapTotal: 2550132736, rootfsUsed: 7818567680, rootfsTotal: 17983504384,
+      cores: 8, pveVersion: '9.2.11', kernel: '7.0.2-6-pve',
     },
     {
       connId: 'pve-1', connectionName: 'PVE One', node: 'n2', status: 'offline', cpu: 0, mem: 0, maxmem: 0,
       disk: 0, maxdisk: 0, uptime: 0, maintenance: true,
+      load1: 0, load5: 0, load15: 0, iowait: 0,
+      swapUsed: 0, swapTotal: 0, rootfsUsed: 0, rootfsTotal: 0,
+      cores: 0, pveVersion: null, kernel: null,
     },
   ],
   guests: [
@@ -55,6 +61,19 @@ const VIEW = {
       connId: 'pve-1', connectionName: 'PVE One', node: 'n1', vmid: '100', name: 'web-01', type: 'qemu',
       status: 'running', cpu: 0.5, mem: 500, maxmem: 2000, agentEnabled: true, template: false,
       maxdisk: 32000, uptime: 3600, hastate: 'started',
+      netIn: 292131298, netOut: 3046818, diskRead: 154857472, diskWritten: 639959040,
+      cores: 2, memHost: 700,
+    },
+  ],
+  storages: [
+    {
+      connId: 'pve-1', connectionName: 'PVE One', storage: 'CephPool', type: 'rbd', shared: true,
+      used: 100, total: 1000, enabled: true, nodes: [{ node: 'n1', used: 100, total: 1000 }],
+    },
+    {
+      connId: 'pve-1', connectionName: 'PVE One', storage: 'local', type: 'dir', shared: false,
+      used: 30, total: 90, enabled: true,
+      nodes: [{ node: 'n1', used: 10, total: 30 }, { node: 'n2', used: 20, total: 60 }],
     },
   ],
   pbsServers: [
@@ -107,7 +126,7 @@ beforeEach(() => {
 
 describe('GET /api/v1/public/metrics', () => {
   it('emits every family for a full-scope token, in Prometheus format', async () => {
-    currentPrincipal.value = tokenPrincipal(['nodes:read', 'vms:read', 'backups:read'])
+    currentPrincipal.value = tokenPrincipal(['nodes:read', 'vms:read', 'backups:read', 'storage:read'])
     const { GET } = await import('./metrics/route')
     const res = await callRoute(GET)
     expect(res.status).toBe(200)
@@ -286,7 +305,7 @@ describe('GET /api/v1/public/metrics after the family extraction (#925)', () => 
    * headers, not merely that the names appear somewhere.
    */
   it('renders the seven pre-existing families with their original headers', async () => {
-    currentPrincipal.value = tokenPrincipal(['nodes:read', 'vms:read', 'backups:read'])
+    currentPrincipal.value = tokenPrincipal(['nodes:read', 'vms:read', 'backups:read', 'storage:read'])
     const { GET } = await import('./metrics/route')
     const body = await (await callRoute(GET)).text()
     for (const [name, help] of [
@@ -304,7 +323,7 @@ describe('GET /api/v1/public/metrics after the family extraction (#925)', () => 
   })
 
   it('serves every registered family to a full-scope token', async () => {
-    currentPrincipal.value = tokenPrincipal(['nodes:read', 'vms:read', 'backups:read'])
+    currentPrincipal.value = tokenPrincipal(['nodes:read', 'vms:read', 'backups:read', 'storage:read'])
     const { GET } = await import('./metrics/route')
     const body = await (await callRoute(GET)).text()
     const rendered = new Set(
@@ -388,7 +407,7 @@ describe('GET /api/v1/public/metrics after the family extraction (#925)', () => 
       nodes: [{ connId: 'pve-1', connectionName: 'PVE One', node: 'n1', status: 'online', cpu: 0, mem: 0, maxmem: 0 }],
       guests: [{ connId: 'pve-1', connectionName: 'PVE One', node: 'n1', vmid: '1', name: 'a', type: 'qemu', status: 'running', cpu: 0, mem: 0, maxmem: 0, agentEnabled: null, template: false }],
     })
-    currentPrincipal.value = tokenPrincipal(['nodes:read', 'vms:read', 'backups:read'])
+    currentPrincipal.value = tokenPrincipal(['nodes:read', 'vms:read', 'backups:read', 'storage:read'])
     const { GET } = await import('./metrics/route')
     const res = await callRoute(GET)
     expect(res.status).toBe(200)
@@ -397,5 +416,59 @@ describe('GET /api/v1/public/metrics after the family extraction (#925)', () => 
     expect(body).not.toContain('proxcenter_pbs_up')
     expect(body).not.toContain('proxcenter_vm_ha_state')
     expect(body).not.toContain('NaN')
+  })
+})
+
+describe('GET /api/v1/public/metrics, the storage and counter families (#925)', () => {
+  it('serves the storage families to a storage:read token, and nothing else', async () => {
+    currentPrincipal.value = tokenPrincipal(['storage:read'])
+    const { GET } = await import('./metrics/route')
+    const body = await (await callRoute(GET)).text()
+    expect(body).toContain('proxcenter_storage_total_bytes{connection="PVE One",storage="CephPool",type="rbd",shared="true"} 1000')
+    expect(body).toContain('proxcenter_storage_usage_ratio{connection="PVE One",storage="local",type="dir",shared="false"} 0.3333')
+    expect(body).not.toContain('proxcenter_node_online{')
+    expect(body).not.toContain('proxcenter_vm_status{')
+  })
+
+  /**
+   * A shared storage has ONE capacity for the cluster. Upstream Proxmox
+   * reports it once per node, so a per-node sample here would let any sum()
+   * triple an RBD pool on a three node cluster.
+   */
+  it('emits no per-node sample for a shared storage', async () => {
+    currentPrincipal.value = tokenPrincipal(['storage:read'])
+    const { GET } = await import('./metrics/route')
+    const body = await (await callRoute(GET)).text()
+    expect(body).toContain('proxcenter_storage_node_used_bytes{connection="PVE One",storage="local",node="n1"} 10')
+    expect(body).not.toContain('storage="CephPool",node=')
+  })
+
+  /**
+   * The TYPE line is the whole point of declaring these as counters: it tells
+   * Prometheus to handle a guest restart as a reset rather than read it as an
+   * enormous negative rate.
+   */
+  it('renders the four guest byte totals as counters, not gauges', async () => {
+    currentPrincipal.value = tokenPrincipal(['vms:read'])
+    const { GET } = await import('./metrics/route')
+    const body = await (await callRoute(GET)).text()
+    for (const name of [
+      'proxcenter_vm_network_receive_bytes_total',
+      'proxcenter_vm_network_transmit_bytes_total',
+      'proxcenter_vm_disk_read_bytes_total',
+      'proxcenter_vm_disk_written_bytes_total',
+    ]) {
+      expect(body).toContain(`# TYPE ${name} counter`)
+    }
+    expect(body).toContain('# TYPE proxcenter_vm_cpu_cores gauge')
+  })
+
+  it('serves the node load average and root filesystem bytes', async () => {
+    currentPrincipal.value = tokenPrincipal(['nodes:read'])
+    const { GET } = await import('./metrics/route')
+    const body = await (await callRoute(GET)).text()
+    expect(body).toContain('proxcenter_node_load1{connection="PVE One",node="n1"} 1.3')
+    expect(body).toContain('proxcenter_node_rootfs_total_bytes{connection="PVE One",node="n1"} 17983504384')
+    expect(body).toContain('proxcenter_node_info{connection="PVE One",node="n1",pve_version="9.2.11",kernel="7.0.2-6-pve"} 1')
   })
 })

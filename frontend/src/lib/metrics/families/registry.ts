@@ -19,6 +19,12 @@ export type FamilyDeclaration = {
   help: string
   /** null = no prefix match in METRIC_FAMILY_SCOPES, so always visible. */
   scope: string | null
+  /**
+   * Omitted means gauge. `counter` is declared only for the cumulative byte
+   * totals Proxmox reports per guest, and their names end in `_total` to match
+   * the Prometheus convention a reader will expect.
+   */
+  type?: "gauge" | "counter"
 }
 
 export const FAMILY_REGISTRY: readonly FamilyDeclaration[] = [
@@ -86,6 +92,57 @@ export const FAMILY_REGISTRY: readonly FamilyDeclaration[] = [
   },
 
   {
+    name: "proxcenter_node_load1",
+    help: "Node load average over one minute",
+    scope: "nodes:read",
+  },
+  {
+    name: "proxcenter_node_load5",
+    help: "Node load average over five minutes",
+    scope: "nodes:read",
+  },
+  {
+    name: "proxcenter_node_load15",
+    help: "Node load average over fifteen minutes",
+    scope: "nodes:read",
+  },
+  {
+    name: "proxcenter_node_iowait_ratio",
+    help: "Share of node CPU time spent waiting on I/O (0 to 1)",
+    scope: "nodes:read",
+  },
+  {
+    name: "proxcenter_node_swap_bytes",
+    help: "Node swap in use, in bytes",
+    scope: "nodes:read",
+  },
+  {
+    name: "proxcenter_node_swap_total_bytes",
+    help: "Node swap capacity, in bytes; 0 when the node has no swap",
+    scope: "nodes:read",
+  },
+  {
+    name: "proxcenter_node_rootfs_bytes",
+    help: "Node root filesystem in use, in bytes",
+    scope: "nodes:read",
+  },
+  {
+    name: "proxcenter_node_rootfs_total_bytes",
+    help: "Node root filesystem capacity, in bytes",
+    scope: "nodes:read",
+  },
+  {
+    name: "proxcenter_node_cpu_cores",
+    help: "CPU cores the node reports",
+    scope: "nodes:read",
+  },
+  {
+    name: "proxcenter_node_info",
+    help: "Node build information: Proxmox VE version and running kernel",
+    scope: "nodes:read",
+  },
+
+  {
     name: "proxcenter_vm_status",
     help: "Guest running state (1 running, 0 otherwise)",
     scope: "vms:read",
@@ -124,6 +181,41 @@ export const FAMILY_REGISTRY: readonly FamilyDeclaration[] = [
     name: "proxcenter_vm_ha_state",
     help: "Guest HA state as a state set; guests not managed by HA emit nothing",
     scope: "vms:read",
+  },
+
+  {
+    name: "proxcenter_vm_cpu_cores",
+    help: "Virtual CPU cores allocated to the guest",
+    scope: "vms:read",
+  },
+  {
+    name: "proxcenter_vm_mem_host_bytes",
+    help: "Guest memory as the PVE 9 host accounts it, distinct from the guest-side figure; 0 for a container, which reports none",
+    scope: "vms:read",
+  },
+  {
+    name: "proxcenter_vm_network_receive_bytes_total",
+    help: "Bytes received by the guest since it started",
+    scope: "vms:read",
+    type: "counter",
+  },
+  {
+    name: "proxcenter_vm_network_transmit_bytes_total",
+    help: "Bytes sent by the guest since it started",
+    scope: "vms:read",
+    type: "counter",
+  },
+  {
+    name: "proxcenter_vm_disk_read_bytes_total",
+    help: "Bytes read from the guest's disks since it started",
+    scope: "vms:read",
+    type: "counter",
+  },
+  {
+    name: "proxcenter_vm_disk_written_bytes_total",
+    help: "Bytes written to the guest's disks since it started",
+    scope: "vms:read",
+    type: "counter",
   },
 
   {
@@ -177,6 +269,42 @@ export const FAMILY_REGISTRY: readonly FamilyDeclaration[] = [
     help: "Distinct backup sources in this datastore, by kind (vm, ct, host)",
     scope: "backups:read",
   },
+
+  {
+    name: "proxcenter_storage_total_bytes",
+    help: "Storage capacity in bytes. A shared storage is reported ONCE for the cluster, never once per node",
+    scope: "storage:read",
+  },
+  {
+    name: "proxcenter_storage_used_bytes",
+    help: "Storage space in use, in bytes. A shared storage is reported ONCE for the cluster, never once per node",
+    scope: "storage:read",
+  },
+  {
+    name: "proxcenter_storage_usage_ratio",
+    help: "Storage usage ratio (0 to 1), served pre-computed so a consumer never divides by a zero capacity",
+    scope: "storage:read",
+  },
+  {
+    name: "proxcenter_storage_enabled",
+    help: "Storage enabled state (1 enabled, 0 disabled); a disabled storage still reports its capacity",
+    scope: "storage:read",
+  },
+  {
+    name: "proxcenter_storage_node_total_bytes",
+    help: "Capacity of a non-shared storage on one node. Shared storages emit nothing here, since their capacity is not per node",
+    scope: "storage:read",
+  },
+  {
+    name: "proxcenter_storage_node_used_bytes",
+    help: "Space in use of a non-shared storage on one node",
+    scope: "storage:read",
+  },
+  {
+    name: "proxcenter_storage_node_usage_ratio",
+    help: "Usage ratio (0 to 1) of a non-shared storage on one node, served pre-computed",
+    scope: "storage:read",
+  },
 ] as const
 
 export const REGISTERED_NAMES: readonly string[] = FAMILY_REGISTRY.map(entry => entry.name)
@@ -192,5 +320,5 @@ const BY_NAME = new Map(FAMILY_REGISTRY.map(entry => [entry.name, entry]))
 export function family(name: string, samples: Sample[]): MetricFamily {
   const declaration = BY_NAME.get(name)
   if (!declaration) throw new Error(`Unregistered metric family: ${name}`)
-  return { name, help: declaration.help, type: "gauge", samples }
+  return { name, help: declaration.help, type: declaration.type ?? "gauge", samples }
 }

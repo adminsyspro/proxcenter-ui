@@ -30,6 +30,12 @@ export function buildGuestFamilies(view: PublicFleetView): MetricFamily[] {
   const memTotalBytesSamples: Sample[] = []
   const uptimeSamples: Sample[] = []
   const haStateSamples: Sample[] = []
+  const cpuCoresSamples: Sample[] = []
+  const memHostBytesSamples: Sample[] = []
+  const netInSamples: Sample[] = []
+  const netOutSamples: Sample[] = []
+  const diskReadSamples: Sample[] = []
+  const diskWrittenSamples: Sample[] = []
 
   for (const guest of guests) {
     const labels = {
@@ -106,6 +112,48 @@ export function buildGuestFamilies(view: PublicFleetView): MetricFamily[] {
         })
       }
     }
+
+    cpuCoresSamples.push({
+      name: "proxcenter_vm_cpu_cores",
+      labels,
+      value: guest.cores,
+    })
+
+    // 0 for a container on purpose (PVE 9 reports none): the raw value is
+    // pushed unconditionally, never guarded by a truthy check, or every LXC
+    // would silently vanish from this series (#925).
+    memHostBytesSamples.push({
+      name: "proxcenter_vm_mem_host_bytes",
+      labels,
+      value: guest.memHost,
+    })
+
+    // Cumulative COUNTERS since guest start (#925): the raw value goes out
+    // as-is, never a delta or a rate. Prometheus computes rates itself and
+    // needs the raw counter to detect a reset when a guest restarts.
+    netInSamples.push({
+      name: "proxcenter_vm_network_receive_bytes_total",
+      labels,
+      value: guest.netIn,
+    })
+
+    netOutSamples.push({
+      name: "proxcenter_vm_network_transmit_bytes_total",
+      labels,
+      value: guest.netOut,
+    })
+
+    diskReadSamples.push({
+      name: "proxcenter_vm_disk_read_bytes_total",
+      labels,
+      value: guest.diskRead,
+    })
+
+    diskWrittenSamples.push({
+      name: "proxcenter_vm_disk_written_bytes_total",
+      labels,
+      value: guest.diskWritten,
+    })
   }
 
   return [
@@ -117,5 +165,11 @@ export function buildGuestFamilies(view: PublicFleetView): MetricFamily[] {
     family("proxcenter_vm_mem_total_bytes", memTotalBytesSamples),
     family("proxcenter_vm_uptime_seconds", uptimeSamples),
     family("proxcenter_vm_ha_state", haStateSamples),
+    family("proxcenter_vm_cpu_cores", cpuCoresSamples),
+    family("proxcenter_vm_mem_host_bytes", memHostBytesSamples),
+    family("proxcenter_vm_network_receive_bytes_total", netInSamples),
+    family("proxcenter_vm_network_transmit_bytes_total", netOutSamples),
+    family("proxcenter_vm_disk_read_bytes_total", diskReadSamples),
+    family("proxcenter_vm_disk_written_bytes_total", diskWrittenSamples),
   ]
 }

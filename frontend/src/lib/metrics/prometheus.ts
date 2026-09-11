@@ -13,7 +13,13 @@ export type Sample = {
 export type MetricFamily = {
   name: string
   help: string
-  type: "gauge"
+  /**
+   * `counter` exists for the cumulative byte counters Proxmox reports on a
+   * guest (#925). Publishing those as a gauge would still let `rate()` run,
+   * but a guest restart resets the counter and Prometheus would read the
+   * reset as an enormous negative rate instead of handling it.
+   */
+  type: "gauge" | "counter"
   samples: Sample[]
 }
 
@@ -27,6 +33,7 @@ export const METRIC_FAMILY_SCOPES: Record<string, string> = {
   // scope vocabulary only bundles existing read permissions.
   proxcenter_cluster_: "nodes:read",
   proxcenter_pbs_: "backups:read",
+  proxcenter_storage_: "storage:read",
 }
 
 /**
@@ -107,6 +114,12 @@ export function renderExposition(families: MetricFamily[]): string {
     out += `# HELP ${family.name} ${escapeHelpText(family.help)}\n`
     out += `# TYPE ${family.name} ${family.type}\n`
     for (const sample of family.samples) {
+      // LAST LINE OF DEFENCE (#925). A single NaN or Infinity makes Prometheus
+      // reject the ENTIRE scrape, so one bad value would blank every panel on
+      // every dashboard. Dropping that one sample is strictly better than
+      // losing the whole exposition, and it is done here, once, rather than
+      // trusted to every current and future family builder.
+      if (!Number.isFinite(sample.value)) continue
       out += `${sample.name}${renderLabels(sample.labels)} ${sample.value}\n`
     }
   }

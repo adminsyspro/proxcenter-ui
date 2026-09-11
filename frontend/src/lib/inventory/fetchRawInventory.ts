@@ -11,7 +11,8 @@ import { getSessionPrisma } from "@/lib/tenant"
 import { prisma as globalPrisma } from "@/lib/db/prisma"
 import { getConnectionById, getPbsConnectionById } from "@/lib/connections/getConnection"
 import { pveFetch } from "@/lib/proxmox/client"
-import { aggregateStorage, type AggregatedStorage, type RawStorageEntry } from "@/lib/proxmox/storage"
+import { aggregateStorage, type AggregatedStorage } from "@/lib/proxmox/storage"
+import { readNodeStatus, readStorageResources } from "./proxmoxProjections"
 import { pbsFetch } from "@/lib/proxmox/pbs-client"
 import { collectNodeAddresses, resolveManagementIp } from "@/lib/proxmox/resolveManagementIp"
 import {
@@ -246,26 +247,15 @@ export async function fetchRawInventory(infra: InfraScope): Promise<RawInventory
               : Promise.resolve(null),
           ])
 
-          // loadavg arrives as an array of STRINGS ("0.61"), so it is parsed
-          // rather than passed through (#925).
-          const rawLoad = Array.isArray(nodeStatus?.loadavg) ? nodeStatus.loadavg : null
-
+          // Everything read out of the status payload lives in a pure module
+          // with its own tests (#925): the parsing is where the awkward
+          // Proxmox details are, and this function is unreachable by a unit
+          // test without mocking every network call around it.
           return {
             node: node.node,
             ip: resolveManagementIp(networks),
             ips: collectNodeAddresses(networks),
-            // Use memory from /nodes/{node}/status (excludes ZFS ARC / kernel caches)
-            mem: nodeStatus?.memory?.total > 0 ? Number(nodeStatus.memory.used || 0) : undefined,
-            maxmem: nodeStatus?.memory?.total > 0 ? Number(nodeStatus.memory.total || 0) : undefined,
-            loadavg: rawLoad ? rawLoad.slice(0, 3).map((v: any) => Number(v)).filter((v: number) => Number.isFinite(v)) : undefined,
-            iowait: typeof nodeStatus?.wait === 'number' ? nodeStatus.wait : undefined,
-            swapUsed: nodeStatus?.swap?.total > 0 ? Number(nodeStatus.swap.used || 0) : undefined,
-            swapTotal: nodeStatus?.swap?.total > 0 ? Number(nodeStatus.swap.total || 0) : undefined,
-            rootfsUsed: nodeStatus?.rootfs?.total > 0 ? Number(nodeStatus.rootfs.used || 0) : undefined,
-            rootfsTotal: nodeStatus?.rootfs?.total > 0 ? Number(nodeStatus.rootfs.total || 0) : undefined,
-            cores: typeof nodeStatus?.cpuinfo?.cpus === 'number' ? nodeStatus.cpuinfo.cpus : undefined,
-            pveVersion: typeof nodeStatus?.pveversion === 'string' ? nodeStatus.pveversion : undefined,
-            kernel: typeof nodeStatus?.['current-kernel']?.release === 'string' ? nodeStatus['current-kernel'].release : undefined,
+            ...readNodeStatus(nodeStatus),
           }
         } catch {
           return { node: node.node, ip: undefined, ips: [] as string[], mem: undefined, maxmem: undefined }
@@ -395,21 +385,11 @@ return aId - bId
       // rows triples the capacity of an RBD pool on a three node cluster. That
       // helper already collapses shared storages to one entry and sums local
       // ones per node, producing the nodeBreakdown a per-node panel needs.
-      const rawStorages: RawStorageEntry[] = (storagesResult.status === 'fulfilled' ? storagesResult.value || [] : [])
-        .filter((row: any) => row?.storage)
-        .map((row: any) => ({
-          connId: conn.id,
-          connName: conn.name,
-          node: String(row.node ?? ''),
-          storage: String(row.storage),
-          type: String(row.plugintype || row.type || 'unknown'),
-          shared: row.shared,
-          used: Number(row.disk || 0),
-          total: Number(row.maxdisk || 0),
-          content: typeof row.content === 'string' ? row.content.split(',') : undefined,
-          enabled: row.status !== 'unknown' && row.status !== 'disabled',
-          status: row.status,
-        }))
+      const rawStorages = readStorageResources(
+        storagesResult.status === 'fulfilled' ? storagesResult.value : null,
+        conn.id,
+        conn.name,
+      )
 
       return {
         cluster: {

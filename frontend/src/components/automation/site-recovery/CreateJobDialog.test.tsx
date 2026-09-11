@@ -97,6 +97,76 @@ describe('CreateJobDialog VMID prefix', () => {
   })
 })
 
+// The full create flow: every fetch the dialog owns, the four selections the
+// Create button waits on, and the payload it finally submits. Shared so a test
+// about one field does not carry a copy of the whole wiring.
+function stubCreateFlowFetches() {
+  vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+    if (url === '/api/v1/connections/src/replicable-vms?engine=rbd') {
+      return new Response(JSON.stringify([{ vmid: 100, diskGb: 10 }]), { status: 200 })
+    }
+    if (url === '/api/v1/orchestrator/replication/check-ssh' && init?.method === 'POST') {
+      return new Response(
+        JSON.stringify({ connected: true, source_node: 'node1', target_ip: '10.0.0.1' }),
+        { status: 200 },
+      )
+    }
+    if (url === '/api/v1/connections/dst/ceph') {
+      return new Response(
+        JSON.stringify({
+          data: { pools: { list: [{ name: 'rbd', percentUsed: 0.1, bytesUsed: 100, maxAvail: 900, bytesUsedFormatted: '100 MB', maxAvailFormatted: '900 MB' }] } },
+        }),
+        { status: 200 },
+      )
+    }
+    if (url === '/api/v1/orchestrator/replication/preflight' && init?.method === 'POST') {
+      return new Response(JSON.stringify({ checks: [], can_create: true }), { status: 200 })
+    }
+
+    return new Response('{}', { status: 200 })
+  }))
+}
+
+function renderCreateFlow(onSubmit: () => void) {
+  stubCreateFlowFetches()
+  renderWithProviders(
+    // renderWithProviders's own SWRConfig sets revalidateOnMount:false (to
+    // keep other tests from triggering background fetches); this dialog's
+    // VM list depends on a real SWR fetch resolving, so override it back
+    // on for this one render — SWRConfig context merges when nested.
+    <SWRConfig value={{ revalidateOnMount: true }}>
+      <CreateJobDialog
+        open
+        onClose={vi.fn()}
+        onSubmit={onSubmit}
+        connections={[
+          { id: 'src', name: 'Source', hasCeph: true, engines: ['rbd'] },
+          { id: 'dst', name: 'Target', hasCeph: true, engines: ['rbd'] },
+        ]}
+        allVMs={[{ vmid: 100, name: 'web-01', node: 'node1', connId: 'src', type: 'qemu', status: 'running', tags: [], diskGb: 10 }]}
+      />
+    </SWRConfig>,
+  )
+}
+
+async function fillCreateFlow() {
+  // Source cluster
+  fireEvent.mouseDown(screen.getAllByRole('combobox')[0])
+  await userEvent.click(await screen.findByRole('option', { name: 'Source' }))
+
+  // Select the only VM (its replicable-vms entry must resolve first)
+  await userEvent.click(await screen.findByRole('checkbox', { name: /web-01/ }))
+
+  // Target cluster
+  fireEvent.mouseDown(screen.getAllByRole('combobox')[1])
+  await userEvent.click(await screen.findByRole('option', { name: 'Target' }))
+
+  // Target pool (Select enables once the Ceph pools fetch resolves)
+  await waitFor(() => expect(screen.getAllByRole('combobox')[2]).not.toHaveAttribute('aria-disabled', 'true'))
+  fireEvent.mouseDown(screen.getAllByRole('combobox')[2])
+  await userEvent.click(await screen.findByRole('option', { name: /rbd/ }))
+}
+
 describe('CreateJobDialog snapshot retention (issue #664)', () => {
   it('shows the default retention of 3 on both source and target', () => {
     renderDialog()
@@ -105,65 +175,9 @@ describe('CreateJobDialog snapshot retention (issue #664)', () => {
   })
 
   it('includes snapshot_keep_source/target in the submitted payload', async () => {
-    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
-      if (url === '/api/v1/connections/src/replicable-vms?engine=rbd') {
-        return new Response(JSON.stringify([{ vmid: 100, diskGb: 10 }]), { status: 200 })
-      }
-      if (url === '/api/v1/orchestrator/replication/check-ssh' && init?.method === 'POST') {
-        return new Response(
-          JSON.stringify({ connected: true, source_node: 'node1', target_ip: '10.0.0.1' }),
-          { status: 200 },
-        )
-      }
-      if (url === '/api/v1/connections/dst/ceph') {
-        return new Response(
-          JSON.stringify({
-            data: { pools: { list: [{ name: 'rbd', percentUsed: 0.1, bytesUsed: 100, maxAvail: 900, bytesUsedFormatted: '100 MB', maxAvailFormatted: '900 MB' }] } },
-          }),
-          { status: 200 },
-        )
-      }
-      if (url === '/api/v1/orchestrator/replication/preflight' && init?.method === 'POST') {
-        return new Response(JSON.stringify({ checks: [], can_create: true }), { status: 200 })
-      }
-      return new Response('{}', { status: 200 })
-    }))
-
     const onSubmit = vi.fn()
-    renderWithProviders(
-      // renderWithProviders's own SWRConfig sets revalidateOnMount:false (to
-      // keep other tests from triggering background fetches); this dialog's
-      // VM list depends on a real SWR fetch resolving, so override it back
-      // on for this one render — SWRConfig context merges when nested.
-      <SWRConfig value={{ revalidateOnMount: true }}>
-        <CreateJobDialog
-          open
-          onClose={vi.fn()}
-          onSubmit={onSubmit}
-          connections={[
-            { id: 'src', name: 'Source', hasCeph: true, engines: ['rbd'] },
-            { id: 'dst', name: 'Target', hasCeph: true, engines: ['rbd'] },
-          ]}
-          allVMs={[{ vmid: 100, name: 'web-01', node: 'node1', connId: 'src', type: 'qemu', status: 'running', tags: [], diskGb: 10 }]}
-        />
-      </SWRConfig>,
-    )
-
-    // Source cluster
-    fireEvent.mouseDown(screen.getAllByRole('combobox')[0])
-    await userEvent.click(await screen.findByRole('option', { name: 'Source' }))
-
-    // Select the only VM (its replicable-vms entry must resolve first)
-    await userEvent.click(await screen.findByRole('checkbox', { name: /web-01/ }))
-
-    // Target cluster
-    fireEvent.mouseDown(screen.getAllByRole('combobox')[1])
-    await userEvent.click(await screen.findByRole('option', { name: 'Target' }))
-
-    // Target pool (Select enables once the Ceph pools fetch resolves)
-    await waitFor(() => expect(screen.getAllByRole('combobox')[2]).not.toHaveAttribute('aria-disabled', 'true'))
-    fireEvent.mouseDown(screen.getAllByRole('combobox')[2])
-    await userEvent.click(await screen.findByRole('option', { name: /rbd/ }))
+    renderCreateFlow(onSubmit)
+    await fillCreateFlow()
 
     // The Create button only enables once the SSH check succeeds
     await waitFor(() => expect(screen.getByRole('button', { name: 'Create Job' })).not.toBeDisabled())
@@ -173,6 +187,56 @@ describe('CreateJobDialog snapshot retention (issue #664)', () => {
       snapshot_keep_source: 3,
       snapshot_keep_target: 3,
     }))
+  })
+})
+
+// #915: production and DR carried the same name, so the wrong VM got started.
+describe('CreateJobDialog replica name (issue #915)', () => {
+  it('previews the rename on a VM the user actually picked, and submits the affixes', async () => {
+    const onSubmit = vi.fn()
+    renderCreateFlow(onSubmit)
+    await fillCreateFlow()
+
+    await userEvent.type(screen.getByLabelText('Prefix'), 'DR-')
+    await userEvent.type(screen.getByLabelText('Suffix'), '-2')
+    expect(await screen.findByText('DR-web-01-2')).toBeInTheDocument()
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Create Job' })).not.toBeDisabled())
+    await userEvent.click(screen.getByRole('button', { name: 'Create Job' }))
+
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+      vm_name_prefix: 'DR-',
+      vm_name_suffix: '-2',
+    }))
+  })
+
+  it('omits the affixes entirely when both are left empty', async () => {
+    const onSubmit = vi.fn()
+    renderCreateFlow(onSubmit)
+    await fillCreateFlow()
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Create Job' })).not.toBeDisabled())
+    await userEvent.click(screen.getByRole('button', { name: 'Create Job' }))
+
+    const payload = onSubmit.mock.calls[0][0]
+
+    expect(payload.vm_name_prefix).toBeUndefined()
+    expect(payload.vm_name_suffix).toBeUndefined()
+  })
+
+  // The replica's config is written straight into the target's /etc/pve, so an
+  // affix PVE would refuse must never reach the orchestrator.
+  it('blocks creation on an affix that is not a DNS name fragment', async () => {
+    const onSubmit = vi.fn()
+    renderCreateFlow(onSubmit)
+    await fillCreateFlow()
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Create Job' })).not.toBeDisabled())
+
+    await userEvent.type(screen.getByLabelText('Suffix'), '_DR')
+
+    expect(await screen.findByText(/must not start or end on a hyphen/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Create Job' })).toBeDisabled()
+    expect(onSubmit).not.toHaveBeenCalled()
   })
 })
 

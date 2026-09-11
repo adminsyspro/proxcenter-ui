@@ -13,6 +13,7 @@ import BandwidthWindowsEditor from './BandwidthWindowsEditor'
 import RetentionSlider from './RetentionSlider'
 import EngineGlyph from './EngineGlyph'
 import NumericTextField from '@/components/ui/NumericTextField'
+import { MAX_VM_NAME_AFFIX, replicaName, vmNameAffixError } from '@/lib/orchestrator/replicaName'
 import type { BandwidthWindow, ReplicationJob, UpdateReplicationJobRequest } from '@/lib/orchestrator/site-recovery.types'
 
 interface Connection {
@@ -38,6 +39,8 @@ export default function EditJobDialog({ open, job, onClose, onSubmit, connection
   const [bandwidthWindows, setBandwidthWindows] = useState<BandwidthWindow[]>([])
   const [keepSource, setKeepSource] = useState(3)
   const [keepTarget, setKeepTarget] = useState(3)
+  const [namePrefix, setNamePrefix] = useState('')
+  const [nameSuffix, setNameSuffix] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [is409, setIs409] = useState(false)
@@ -69,6 +72,8 @@ export default function EditJobDialog({ open, job, onClose, onSubmit, connection
     setBandwidthWindows(job.bandwidth_windows || [])
     setKeepSource(job.snapshot_keep_source || 3)
     setKeepTarget(job.snapshot_keep_target || 3)
+    setNamePrefix(job.vm_name_prefix || '')
+    setNameSuffix(job.vm_name_suffix || '')
     setError('')
     setIs409(false)
   }, [job])
@@ -76,6 +81,9 @@ export default function EditJobDialog({ open, job, onClose, onSubmit, connection
   if (!job) return null
 
   const connName = (id: string) => connections?.find(c => c.id === id)?.name || id
+  const namePrefixError = vmNameAffixError(namePrefix, 'prefix')
+  const nameSuffixError = vmNameAffixError(nameSuffix, 'suffix')
+  const replicaNameSample = job.vm_names?.find(Boolean) || ''
 
   const handleSave = async () => {
     setSubmitting(true)
@@ -88,6 +96,8 @@ export default function EditJobDialog({ open, job, onClose, onSubmit, connection
         bandwidth_windows: bandwidthWindows,
         snapshot_keep_source: keepSource,
         snapshot_keep_target: keepTarget,
+        vm_name_prefix: namePrefix,
+        vm_name_suffix: nameSuffix,
       }
       if (scheduleValue.mode === 'scheduled' && scheduleValue.scheduleSpec) {
         req.schedule_spec = scheduleValue.scheduleSpec
@@ -193,6 +203,46 @@ export default function EditJobDialog({ open, job, onClose, onSubmit, connection
             </Stack>
           </Box>
 
+          {/* Replica name: editable, unlike the VMID prefix, because the
+              replica's config is rewritten from the source at every sync. */}
+          <Box>
+            <Typography variant='subtitle2' sx={{ mb: 0.5 }}>{t('siteRecovery.createJob.replicaName')}</Typography>
+            <Typography variant='caption' sx={{ color: 'text.secondary', display: 'block', mb: 1 }}>
+              {t('siteRecovery.editJob.replicaNameHelp')}
+            </Typography>
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
+              <TextField
+                label={t('siteRecovery.createJob.replicaNamePrefix')}
+                value={namePrefix}
+                onChange={e => setNamePrefix(e.target.value)}
+                size='small'
+                fullWidth
+                placeholder='DR-'
+                error={!!namePrefixError}
+                helperText={namePrefixError ? t(`siteRecovery.createJob.replicaNameError.${namePrefixError}`, { max: MAX_VM_NAME_AFFIX }) : ' '}
+              />
+              <TextField
+                label={t('siteRecovery.createJob.replicaNameSuffix')}
+                value={nameSuffix}
+                onChange={e => setNameSuffix(e.target.value)}
+                size='small'
+                fullWidth
+                placeholder='-DR'
+                error={!!nameSuffixError}
+                helperText={nameSuffixError ? t(`siteRecovery.createJob.replicaNameError.${nameSuffixError}`, { max: MAX_VM_NAME_AFFIX }) : ' '}
+              />
+            </Stack>
+            {replicaNameSample && (namePrefix || nameSuffix) && !namePrefixError && !nameSuffixError && (
+              <Typography variant='caption' sx={{ color: 'text.secondary', display: 'block' }}>
+                {replicaNameSample}
+                {' → '}
+                <Box component='span' sx={{ fontFamily: 'JetBrains Mono, monospace', fontWeight: 600, color: 'text.primary' }}>
+                  {replicaName(replicaNameSample, namePrefix, nameSuffix)}
+                </Box>
+              </Typography>
+            )}
+          </Box>
+
           <BandwidthWindowsEditor value={bandwidthWindows} onChange={setBandwidthWindows} staticRateMbps={rateLimit} />
 
           {is409 && <Alert severity='warning'>{t('siteRecovery.editJob.syncingAlert')}</Alert>}
@@ -201,7 +251,7 @@ export default function EditJobDialog({ open, job, onClose, onSubmit, connection
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 2 }}>
         <Button onClick={onClose} disabled={submitting}>{t('common.cancel')}</Button>
-        <Button variant='contained' onClick={handleSave} disabled={submitting}>
+        <Button variant='contained' onClick={handleSave} disabled={submitting || !!namePrefixError || !!nameSuffixError}>
           {t('siteRecovery.editJob.save')}
         </Button>
       </DialogActions>

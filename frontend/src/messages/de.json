@@ -4433,6 +4433,14 @@
       "retentionTargetHelp": "Mehr Snapshots auf der DR-Seite bedeuten mehr Wiederherstellungspunkte, benötigen aber mehr Speicherkapazität.",
       "vmidPrefix": "VMID-Präfix",
       "vmidPrefixHelp": "Präfix für VM-IDs auf dem Ziel-Cluster (z.B. Präfix 9 + VM 100 = 9100). Leer oder 0 lassen, um die gleiche VMID beizubehalten.",
+      "replicaName": "Name des Replikats",
+      "replicaNameHelp": "Präfix und Suffix, die dem Namen der replizierten VM auf dem Zielcluster hinzugefügt werden, damit ein DR-Replikat nie mit der Produktion verwechselt wird. Leer lassen, um den Quellnamen beizubehalten. Nur Buchstaben, Ziffern und Bindestriche.",
+      "replicaNamePrefix": "Präfix",
+      "replicaNameSuffix": "Suffix",
+      "replicaNameError": {
+        "shape": "Nur Buchstaben, Ziffern und Bindestriche, und der Name des Replikats darf nicht mit einem Bindestrich beginnen oder enden.",
+        "tooLong": "Höchstens {max} Zeichen."
+      },
       "engine": "Replikation Engine",
       "engineCeph": "Ceph RBD",
       "engineZfs": "ZFS",
@@ -4500,7 +4508,8 @@
       "immutableTooltip": "VMs, Cluster, Pool und VMID-Präfix sind unveränderlich — löschen und neu erstellen, um sie zu ändern.",
       "syncingAlert": "Der Job wird gerade synchronisiert. Bitte in einigen Sekunden erneut versuchen.",
       "save": "Änderungen speichern",
-      "rateLimitHelp": "0 = unbegrenzt"
+      "rateLimitHelp": "0 = unbegrenzt",
+      "replicaNameHelp": "Wird bei der nächsten Synchronisierung übernommen: Die Konfiguration des Replikats wird in jedem Zyklus von der Quelle neu geschrieben, es wird keine Festplatte erneut kopiert."
     },
     "createPlan": {
       "title": "erstellen Recovery Plan",

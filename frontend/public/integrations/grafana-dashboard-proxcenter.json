@@ -455,7 +455,7 @@
     {
       "type": "row",
       "title": "Capacity",
-      "id": 100,
+      "id": 7,
       "collapsed": false,
       "gridPos": {
         "h": 1,
@@ -468,7 +468,7 @@
     {
       "type": "timeseries",
       "title": "Node CPU usage",
-      "id": 10,
+      "id": 8,
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -557,7 +557,7 @@
     {
       "type": "timeseries",
       "title": "Node memory usage",
-      "id": 11,
+      "id": 9,
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -646,7 +646,7 @@
     {
       "type": "bargauge",
       "title": "Memory free per node",
-      "id": 12,
+      "id": 10,
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -730,7 +730,7 @@
     {
       "type": "bargauge",
       "title": "Root filesystem usage",
-      "id": 13,
+      "id": 11,
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -813,7 +813,7 @@
     {
       "type": "piechart",
       "title": "Ceph health across clusters",
-      "id": 14,
+      "id": 12,
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -949,7 +949,7 @@
     {
       "type": "state-timeline",
       "title": "Cluster health",
-      "id": 15,
+      "id": 13,
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -1036,7 +1036,7 @@
     {
       "type": "table",
       "title": "Node uptime, longest first",
-      "id": 16,
+      "id": 14,
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -1076,7 +1076,6 @@
               }
             ]
           },
-          "unit": "s",
           "noValue": "No node reporting uptime",
           "custom": {
             "align": "auto",
@@ -1086,7 +1085,20 @@
             "inspect": false
           }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Uptime"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "s"
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "showHeader": true,
@@ -1111,7 +1123,16 @@
               "job": true,
               "instance": true
             },
-            "indexByName": {},
+            "indexByName": {
+              "name": 0,
+              "Value": 1,
+              "node": 2,
+              "connection": 3,
+              "type": 4,
+              "vmid": 5,
+              "storage": 6,
+              "datastore": 7
+            },
             "renameByName": {
               "Value": "Uptime"
             }
@@ -1134,7 +1155,7 @@
     {
       "type": "stat",
       "title": "Memory overcommit",
-      "id": 17,
+      "id": 15,
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -1207,7 +1228,7 @@
     {
       "type": "bargauge",
       "title": "Peak memory per node",
-      "id": 18,
+      "id": 16,
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -1291,7 +1312,7 @@
     {
       "type": "bargauge",
       "title": "Root filesystem in seven days",
-      "id": 19,
+      "id": 17,
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -1374,7 +1395,7 @@
     {
       "type": "timeseries",
       "title": "Load average, 1 minute",
-      "id": 20,
+      "id": 18,
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -1460,7 +1481,7 @@
     {
       "type": "timeseries",
       "title": "Load average, 5 minutes",
-      "id": 21,
+      "id": 19,
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -1545,7 +1566,7 @@
     {
       "type": "timeseries",
       "title": "Load average, 15 minutes",
-      "id": 22,
+      "id": 20,
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -1631,7 +1652,7 @@
     {
       "type": "timeseries",
       "title": "I/O wait per node",
-      "id": 23,
+      "id": 21,
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -1718,7 +1739,7 @@
     {
       "type": "bargauge",
       "title": "Swap in use per node",
-      "id": 24,
+      "id": 22,
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -1802,7 +1823,7 @@
     {
       "type": "table",
       "title": "Node inventory",
-      "id": 25,
+      "id": 23,
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -1950,7 +1971,7 @@
     {
       "type": "row",
       "title": "Stability",
-      "id": 104,
+      "id": 24,
       "collapsed": false,
       "gridPos": {
         "h": 1,
@@ -1963,7 +1984,7 @@
     {
       "type": "bargauge",
       "title": "Cluster availability over the window",
-      "id": 50,
+      "id": 25,
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -2047,7 +2068,7 @@
     {
       "type": "table",
       "title": "Nodes that changed state",
-      "id": 51,
+      "id": 26,
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -2122,7 +2143,16 @@
               "job": true,
               "instance": true
             },
-            "indexByName": {},
+            "indexByName": {
+              "name": 0,
+              "Value": 1,
+              "node": 2,
+              "connection": 3,
+              "type": 4,
+              "vmid": 5,
+              "storage": 6,
+              "datastore": 7
+            },
             "renameByName": {
               "Value": "Transitions"
             }
@@ -2145,7 +2175,7 @@
     {
       "type": "table",
       "title": "Nodes that rebooted",
-      "id": 52,
+      "id": 27,
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -2220,7 +2250,16 @@
               "job": true,
               "instance": true
             },
-            "indexByName": {},
+            "indexByName": {
+              "name": 0,
+              "Value": 1,
+              "node": 2,
+              "connection": 3,
+              "type": 4,
+              "vmid": 5,
+              "storage": 6,
+              "datastore": 7
+            },
             "renameByName": {
               "Value": "Reboots"
             }
@@ -2243,7 +2282,7 @@
     {
       "type": "table",
       "title": "Guests that changed state",
-      "id": 53,
+      "id": 28,
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -2318,7 +2357,16 @@
               "job": true,
               "instance": true
             },
-            "indexByName": {},
+            "indexByName": {
+              "name": 0,
+              "Value": 1,
+              "node": 2,
+              "connection": 3,
+              "type": 4,
+              "vmid": 5,
+              "storage": 6,
+              "datastore": 7
+            },
             "renameByName": {
               "Value": "Transitions"
             }
@@ -2341,7 +2389,7 @@
     {
       "type": "row",
       "title": "Guests",
-      "id": 101,
+      "id": 29,
       "collapsed": false,
       "gridPos": {
         "h": 1,
@@ -2354,7 +2402,7 @@
     {
       "type": "timeseries",
       "title": "Guests running and stopped",
-      "id": 20,
+      "id": 30,
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -2450,7 +2498,7 @@
     {
       "type": "timeseries",
       "title": "Guest memory, allocated against in use",
-      "id": 21,
+      "id": 31,
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -2548,7 +2596,7 @@
     {
       "type": "table",
       "title": "Top guests by CPU",
-      "id": 22,
+      "id": 32,
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -2588,7 +2636,6 @@
               }
             ]
           },
-          "unit": "percentunit",
           "noValue": "No guest reporting CPU",
           "custom": {
             "align": "auto",
@@ -2598,7 +2645,20 @@
             "inspect": false
           }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "CPU"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percentunit"
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "showHeader": true,
@@ -2622,7 +2682,16 @@
               "job": true,
               "instance": true
             },
-            "indexByName": {},
+            "indexByName": {
+              "name": 0,
+              "Value": 1,
+              "node": 2,
+              "connection": 3,
+              "type": 4,
+              "vmid": 5,
+              "storage": 6,
+              "datastore": 7
+            },
             "renameByName": {
               "Value": "CPU"
             }
@@ -2645,7 +2714,7 @@
     {
       "type": "table",
       "title": "Top guests by memory",
-      "id": 23,
+      "id": 33,
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -2685,7 +2754,6 @@
               }
             ]
           },
-          "unit": "percentunit",
           "noValue": "No guest reporting memory",
           "custom": {
             "align": "auto",
@@ -2695,7 +2763,20 @@
             "inspect": false
           }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Memory"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percentunit"
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "showHeader": true,
@@ -2719,7 +2800,16 @@
               "job": true,
               "instance": true
             },
-            "indexByName": {},
+            "indexByName": {
+              "name": 0,
+              "Value": 1,
+              "node": 2,
+              "connection": 3,
+              "type": 4,
+              "vmid": 5,
+              "storage": 6,
+              "datastore": 7
+            },
             "renameByName": {
               "Value": "Memory"
             }
@@ -2742,7 +2832,7 @@
     {
       "type": "table",
       "title": "Guest uptime, longest first",
-      "id": 24,
+      "id": 34,
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -2782,7 +2872,6 @@
               }
             ]
           },
-          "unit": "s",
           "noValue": "No guest reporting uptime",
           "custom": {
             "align": "auto",
@@ -2792,7 +2881,20 @@
             "inspect": false
           }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Uptime"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "s"
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "showHeader": true,
@@ -2816,7 +2918,16 @@
               "job": true,
               "instance": true
             },
-            "indexByName": {},
+            "indexByName": {
+              "name": 0,
+              "Value": 1,
+              "node": 2,
+              "connection": 3,
+              "type": 4,
+              "vmid": 5,
+              "storage": 6,
+              "datastore": 7
+            },
             "renameByName": {
               "Value": "Uptime"
             }
@@ -2839,7 +2950,7 @@
     {
       "type": "row",
       "title": "Guest I/O",
-      "id": 105,
+      "id": 35,
       "collapsed": false,
       "gridPos": {
         "h": 1,
@@ -2852,7 +2963,7 @@
     {
       "type": "timeseries",
       "title": "Guest disk read",
-      "id": 60,
+      "id": 36,
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -2939,7 +3050,7 @@
     {
       "type": "timeseries",
       "title": "Guest disk write",
-      "id": 61,
+      "id": 37,
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -3025,7 +3136,7 @@
     {
       "type": "timeseries",
       "title": "Guest network in",
-      "id": 62,
+      "id": 38,
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -3111,7 +3222,7 @@
     {
       "type": "timeseries",
       "title": "Guest network out",
-      "id": 63,
+      "id": 39,
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -3197,7 +3308,7 @@
     {
       "type": "stat",
       "title": "vCPU overcommit",
-      "id": 64,
+      "id": 40,
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -3270,7 +3381,7 @@
     {
       "type": "timeseries",
       "title": "Guest memory as the host accounts it",
-      "id": 65,
+      "id": 41,
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -3369,7 +3480,7 @@
     {
       "type": "row",
       "title": "Storage",
-      "id": 106,
+      "id": 42,
       "collapsed": false,
       "gridPos": {
         "h": 1,
@@ -3382,7 +3493,7 @@
     {
       "type": "bargauge",
       "title": "Storage usage",
-      "id": 70,
+      "id": 43,
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -3466,7 +3577,7 @@
     {
       "type": "bargauge",
       "title": "Local storage, per node",
-      "id": 71,
+      "id": 44,
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -3550,7 +3661,7 @@
     {
       "type": "table",
       "title": "Storage capacity",
-      "id": 72,
+      "id": 45,
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -3666,7 +3777,7 @@
     {
       "type": "table",
       "title": "Local storage per node, in bytes",
-      "id": 73,
+      "id": 46,
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -3780,7 +3891,7 @@
     {
       "type": "table",
       "title": "Disabled storages",
-      "id": 74,
+      "id": 47,
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -3864,7 +3975,7 @@
     {
       "type": "row",
       "title": "High availability",
-      "id": 102,
+      "id": 48,
       "collapsed": false,
       "gridPos": {
         "h": 1,
@@ -3877,7 +3988,7 @@
     {
       "type": "piechart",
       "title": "Guests by HA state",
-      "id": 30,
+      "id": 49,
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -3983,7 +4094,7 @@
     {
       "type": "table",
       "title": "Guests in HA error",
-      "id": 31,
+      "id": 50,
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -4067,7 +4178,7 @@
     {
       "type": "row",
       "title": "Guest agent inventory",
-      "id": 103,
+      "id": 51,
       "collapsed": true,
       "gridPos": {
         "h": 1,
@@ -4079,7 +4190,7 @@
         {
           "type": "table",
           "title": "Guests without the guest agent enabled",
-          "id": 40,
+          "id": 52,
           "datasource": {
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"

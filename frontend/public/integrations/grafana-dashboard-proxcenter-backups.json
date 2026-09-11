@@ -343,7 +343,7 @@
     {
       "type": "row",
       "title": "Compliance over time",
-      "id": 100,
+      "id": 5,
       "collapsed": false,
       "gridPos": {
         "h": 1,
@@ -356,7 +356,7 @@
     {
       "type": "stat",
       "title": "Coverage over the window",
-      "id": 50,
+      "id": 6,
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -430,7 +430,7 @@
     {
       "type": "timeseries",
       "title": "Guests past each staleness bucket",
-      "id": 10,
+      "id": 7,
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -552,7 +552,7 @@
     {
       "type": "row",
       "title": "Offenders",
-      "id": 101,
+      "id": 8,
       "collapsed": false,
       "gridPos": {
         "h": 1,
@@ -565,7 +565,7 @@
     {
       "type": "table",
       "title": "Guests never backed up",
-      "id": 20,
+      "id": 9,
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -648,7 +648,7 @@
     {
       "type": "table",
       "title": "Guests past the staleness threshold",
-      "id": 21,
+      "id": 10,
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -688,7 +688,6 @@
               }
             ]
           },
-          "unit": "s",
           "noValue": "No guest is past the threshold",
           "custom": {
             "align": "auto",
@@ -698,7 +697,20 @@
             "inspect": false
           }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Backup age"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "s"
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "showHeader": true,
@@ -722,7 +734,16 @@
               "job": true,
               "instance": true
             },
-            "indexByName": {},
+            "indexByName": {
+              "name": 0,
+              "Value": 1,
+              "node": 2,
+              "connection": 3,
+              "type": 4,
+              "vmid": 5,
+              "storage": 6,
+              "datastore": 7
+            },
             "renameByName": {
               "Value": "Backup age"
             }
@@ -745,7 +766,7 @@
     {
       "type": "table",
       "title": "Backups that stopped running",
-      "id": 51,
+      "id": 11,
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -829,7 +850,7 @@
     {
       "type": "row",
       "title": "PBS capacity",
-      "id": 102,
+      "id": 12,
       "collapsed": false,
       "gridPos": {
         "h": 1,
@@ -842,7 +863,7 @@
     {
       "type": "bargauge",
       "title": "Datastore usage",
-      "id": 30,
+      "id": 13,
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -926,7 +947,7 @@
     {
       "type": "timeseries",
       "title": "Datastore space in use",
-      "id": 31,
+      "id": 14,
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -1015,7 +1036,7 @@
     {
       "type": "table",
       "title": "Datastore capacity",
-      "id": 32,
+      "id": 15,
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -1145,7 +1166,7 @@
     {
       "type": "timeseries",
       "title": "Snapshots per datastore",
-      "id": 33,
+      "id": 16,
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -1231,7 +1252,7 @@
     {
       "type": "piechart",
       "title": "Backup sources by kind",
-      "id": 34,
+      "id": 17,
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -1306,7 +1327,7 @@
     {
       "type": "bargauge",
       "title": "Time before a datastore is full",
-      "id": 52,
+      "id": 18,
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -1390,7 +1411,7 @@
     {
       "type": "table",
       "title": "Space in use in seven days",
-      "id": 53,
+      "id": 19,
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -1465,7 +1486,16 @@
               "job": true,
               "instance": true
             },
-            "indexByName": {},
+            "indexByName": {
+              "name": 0,
+              "Value": 1,
+              "node": 2,
+              "connection": 3,
+              "type": 4,
+              "vmid": 5,
+              "storage": 6,
+              "datastore": 7
+            },
             "renameByName": {
               "Value": "Projected"
             }
@@ -1488,7 +1518,7 @@
     {
       "type": "timeseries",
       "title": "Backups added per day",
-      "id": 54,
+      "id": 20,
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -1575,7 +1605,7 @@
     {
       "type": "row",
       "title": "PBS availability",
-      "id": 103,
+      "id": 21,
       "collapsed": false,
       "gridPos": {
         "h": 1,
@@ -1588,7 +1618,7 @@
     {
       "type": "stat",
       "title": "PBS availability over the window",
-      "id": 55,
+      "id": 22,
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -1662,7 +1692,7 @@
     {
       "type": "state-timeline",
       "title": "PBS reachability",
-      "id": 40,
+      "id": 23,
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -1749,7 +1779,7 @@
     {
       "type": "table",
       "title": "PBS servers",
-      "id": 41,
+      "id": 24,
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"

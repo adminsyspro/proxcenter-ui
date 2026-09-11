@@ -354,6 +354,80 @@
       "panels": []
     },
     {
+      "type": "stat",
+      "title": "Coverage over the window",
+      "id": 50,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 0,
+        "y": 5
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "avg(avg_over_time(proxcenter_backup_protected{connection=~\"$connection\"}[$__range]))",
+          "range": true,
+          "instant": false,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.9
+              },
+              {
+                "color": "green",
+                "value": 0.99
+              }
+            ]
+          },
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "noValue": "No guest in this selection"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "description": "Average coverage across the selected window rather than at this instant, which is what a compliance report is actually claiming when it quotes a percentage. The outer avg() is not decoration: avg_over_time is a window function applied per series, so without it this tile renders one number per guest."
+    },
+    {
       "type": "timeseries",
       "title": "Guests past each staleness bucket",
       "id": 10,
@@ -363,8 +437,8 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 24,
-        "x": 0,
+        "w": 18,
+        "x": 6,
         "y": 5
       },
       "targets": [
@@ -669,6 +743,90 @@
       ]
     },
     {
+      "type": "table",
+      "title": "Backups that stopped running",
+      "id": 51,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 24,
+        "x": 0,
+        "y": 22
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "deriv(proxcenter_backup_age_seconds{connection=~\"$connection\"}[$__range]) > 0.9",
+          "range": false,
+          "instant": true,
+          "refId": "A",
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "noValue": "Every protected guest was backed up during this window",
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "countRows": false,
+          "fields": ""
+        }
+      },
+      "description": "A backup age that grows one second per second means no backup ran during the window. This catches a job that silently stopped, which a staleness threshold only reveals once the threshold is finally crossed.",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "job": true,
+              "instance": true,
+              "Value": true
+            },
+            "indexByName": {},
+            "renameByName": {}
+          }
+        }
+      ]
+    },
+    {
       "type": "row",
       "title": "PBS capacity",
       "id": 102,
@@ -677,7 +835,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 22
+        "y": 29
       },
       "panels": []
     },
@@ -693,7 +851,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 23
+        "y": 30
       },
       "targets": [
         {
@@ -777,7 +935,7 @@
         "h": 8,
         "w": 16,
         "x": 8,
-        "y": 23
+        "y": 30
       },
       "targets": [
         {
@@ -866,7 +1024,7 @@
         "h": 8,
         "w": 10,
         "x": 0,
-        "y": 31
+        "y": 38
       },
       "targets": [
         {
@@ -996,7 +1154,7 @@
         "h": 8,
         "w": 8,
         "x": 10,
-        "y": 31
+        "y": 38
       },
       "targets": [
         {
@@ -1082,7 +1240,7 @@
         "h": 8,
         "w": 6,
         "x": 18,
-        "y": 31
+        "y": 38
       },
       "targets": [
         {
@@ -1146,6 +1304,275 @@
       "description": "Distinct sources, by kind: vm, ct and host."
     },
     {
+      "type": "bargauge",
+      "title": "Time before a datastore is full",
+      "id": 52,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 0,
+        "y": 46
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "(proxcenter_pbs_datastore_total_bytes{connection=~\"$pbs\",datastore=~\"$datastore\"} - proxcenter_pbs_datastore_used_bytes{connection=~\"$pbs\",datastore=~\"$datastore\"}) / deriv(proxcenter_pbs_datastore_used_bytes{connection=~\"$pbs\",datastore=~\"$datastore\"}[6h]) > 0",
+          "range": true,
+          "instant": false,
+          "refId": "A",
+          "legendFormat": "{{connection}} / {{datastore}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 604800
+              },
+              {
+                "color": "green",
+                "value": 2592000
+              }
+            ]
+          },
+          "unit": "s",
+          "min": 0,
+          "max": 7776000,
+          "noValue": "No datastore is growing"
+        },
+        "overrides": []
+      },
+      "options": {
+        "displayMode": "basic",
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "maxVizHeight": 300,
+        "minVizHeight": 16,
+        "minVizWidth": 8,
+        "namePlacement": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showUnfilled": true,
+        "sizing": "auto",
+        "valueMode": "color"
+      },
+      "description": "At the current trend. The bar is capped at 90 days so that a datastore with days left reads as a short red bar rather than as an invisible sliver next to one with years left. A datastore that is not growing is absent rather than shown as infinite. Needs several hours of history, so read it as a direction and not as a date."
+    },
+    {
+      "type": "table",
+      "title": "Space in use in seven days",
+      "id": 53,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 8,
+        "y": 46
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "predict_linear(proxcenter_pbs_datastore_used_bytes{connection=~\"$pbs\",datastore=~\"$datastore\"}[6h], 7*86400)",
+          "range": false,
+          "instant": true,
+          "refId": "A",
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "unit": "bytes",
+          "noValue": "Not enough history yet",
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "countRows": false,
+          "fields": ""
+        }
+      },
+      "description": "Projected from the current trend, to read against the capacity in the table above.",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "job": true,
+              "instance": true
+            },
+            "indexByName": {},
+            "renameByName": {
+              "Value": "Projected"
+            }
+          }
+        },
+        {
+          "id": "sortBy",
+          "options": {
+            "fields": {},
+            "sort": [
+              {
+                "field": "Projected",
+                "desc": true
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Backups added per day",
+      "id": 54,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 16,
+        "y": 46
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "delta(proxcenter_pbs_datastore_snapshots{connection=~\"$pbs\",datastore=~\"$datastore\"}[24h])",
+          "range": true,
+          "instant": false,
+          "refId": "A",
+          "legendFormat": "{{connection}} / {{datastore}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "min": 0,
+          "noValue": "No datastore in this selection",
+          "decimals": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "gradientMode": "none",
+            "showPoints": "never",
+            "pointSize": 8,
+            "spanNulls": true,
+            "axisBorderShow": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "description": "Snapshots added over a rolling 24 hours. A line falling to zero is a backup job that stopped, which the snapshot count itself never shows because it simply stays high."
+    },
+    {
       "type": "row",
       "title": "PBS availability",
       "id": 103,
@@ -1154,9 +1581,83 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 39
+        "y": 53
       },
       "panels": []
+    },
+    {
+      "type": "stat",
+      "title": "PBS availability over the window",
+      "id": 55,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 0,
+        "y": 54
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "min(avg_over_time(proxcenter_pbs_up{connection=~\"$pbs\"}[$__range]))",
+          "range": true,
+          "instant": false,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.99
+              },
+              {
+                "color": "green",
+                "value": 0.999
+              }
+            ]
+          },
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "noValue": "No PBS server in this selection"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "description": "Share of the selected window during which PBS answered, for the WORST server in the selection, which is the figure a compliance claim rests on. A gap here is a window in which no backup could have been taken or verified."
     },
     {
       "type": "state-timeline",
@@ -1168,9 +1669,9 @@
       },
       "gridPos": {
         "h": 6,
-        "w": 16,
-        "x": 0,
-        "y": 40
+        "w": 12,
+        "x": 6,
+        "y": 54
       },
       "targets": [
         {
@@ -1255,9 +1756,9 @@
       },
       "gridPos": {
         "h": 6,
-        "w": 8,
-        "x": 16,
-        "y": 40
+        "w": 6,
+        "x": 18,
+        "y": 54
       },
       "targets": [
         {

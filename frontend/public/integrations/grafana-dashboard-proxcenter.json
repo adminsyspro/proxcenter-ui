@@ -1132,6 +1132,637 @@
       ]
     },
     {
+      "type": "stat",
+      "title": "Memory overcommit",
+      "id": 17,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 6,
+        "x": 0,
+        "y": 27
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "sum(proxcenter_vm_mem_total_bytes{connection=~\"$connection\",node=~\"$node\"}) / sum(proxcenter_node_mem_total_bytes{connection=~\"$connection\",node=~\"$node\"})",
+          "range": true,
+          "instant": false,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 1.5
+              }
+            ]
+          },
+          "unit": "percentunit",
+          "min": 0,
+          "noValue": "No node reporting memory"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "description": "Memory promised to guests against memory that exists. Above 1 the fleet depends on the balloon driver handing memory back, which a Windows guest without free page reporting will not do."
+    },
+    {
+      "type": "bargauge",
+      "title": "Peak memory per node",
+      "id": 18,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 9,
+        "x": 6,
+        "y": 27
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "max_over_time(proxcenter_node_mem_usage_ratio{connection=~\"$connection\",node=~\"$node\"}[$__range])",
+          "range": true,
+          "instant": false,
+          "refId": "A",
+          "legendFormat": "{{connection}} / {{node}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.8
+              },
+              {
+                "color": "red",
+                "value": 0.9
+              }
+            ]
+          },
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "noValue": "No node reporting memory"
+        },
+        "overrides": []
+      },
+      "options": {
+        "displayMode": "basic",
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "maxVizHeight": 300,
+        "minVizHeight": 16,
+        "minVizWidth": 8,
+        "namePlacement": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showUnfilled": true,
+        "sizing": "auto",
+        "valueMode": "color"
+      },
+      "description": "The peak over the selected window. A node sitting at 60 per cent that peaked at 95 nearly ran out, and the current value never shows it."
+    },
+    {
+      "type": "bargauge",
+      "title": "Root filesystem in seven days",
+      "id": 19,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 9,
+        "x": 15,
+        "y": 27
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "predict_linear(proxcenter_node_rootfs_usage_ratio{connection=~\"$connection\",node=~\"$node\"}[6h], 7*86400)",
+          "range": true,
+          "instant": false,
+          "refId": "A",
+          "legendFormat": "{{connection}} / {{node}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.8
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "percentunit",
+          "min": 0,
+          "noValue": "Not enough history yet"
+        },
+        "overrides": []
+      },
+      "options": {
+        "displayMode": "basic",
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "maxVizHeight": 300,
+        "minVizHeight": 16,
+        "minVizWidth": 8,
+        "namePlacement": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showUnfilled": true,
+        "sizing": "auto",
+        "valueMode": "color"
+      },
+      "description": "Where each root filesystem lands in seven days at the current trend. Needs several hours of history to mean anything, so read it as a direction and not as a date."
+    },
+    {
+      "type": "row",
+      "title": "Stability",
+      "id": 104,
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 34
+      },
+      "panels": []
+    },
+    {
+      "type": "bargauge",
+      "title": "Cluster availability over the window",
+      "id": 50,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 0,
+        "y": 35
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "avg_over_time(proxcenter_cluster_up{connection=~\"$connection\"}[$__range])",
+          "range": true,
+          "instant": false,
+          "refId": "A",
+          "legendFormat": "{{connection}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.99
+              },
+              {
+                "color": "green",
+                "value": 0.999
+              }
+            ]
+          },
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "noValue": "No cluster in this selection"
+        },
+        "overrides": []
+      },
+      "options": {
+        "displayMode": "basic",
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "maxVizHeight": 300,
+        "minVizHeight": 16,
+        "minVizWidth": 8,
+        "namePlacement": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showUnfilled": true,
+        "sizing": "auto",
+        "valueMode": "color"
+      },
+      "description": "Share of the selected window during which each cluster answered. Anything short of 1 is a gap the instantaneous tiles at the top cannot show."
+    },
+    {
+      "type": "table",
+      "title": "Nodes that changed state",
+      "id": 51,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 8,
+        "y": 35
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "changes(proxcenter_node_online{connection=~\"$connection\",node=~\"$node\"}[$__range]) > 0",
+          "range": false,
+          "instant": true,
+          "refId": "A",
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "noValue": "No node changed state in this window",
+          "decimals": 0,
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "countRows": false,
+          "fields": ""
+        }
+      },
+      "description": "A node that bounced overnight reads as online on the tile above, exactly like one that never moved. This counts the transitions.",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "job": true,
+              "instance": true
+            },
+            "indexByName": {},
+            "renameByName": {
+              "Value": "Transitions"
+            }
+          }
+        },
+        {
+          "id": "sortBy",
+          "options": {
+            "fields": {},
+            "sort": [
+              {
+                "field": "Transitions",
+                "desc": true
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "type": "table",
+      "title": "Nodes that rebooted",
+      "id": 52,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 16,
+        "y": 35
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "resets(proxcenter_node_uptime_seconds{connection=~\"$connection\",node=~\"$node\"}[$__range]) > 0",
+          "range": false,
+          "instant": true,
+          "refId": "A",
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "noValue": "No node rebooted in this window",
+          "decimals": 0,
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "countRows": false,
+          "fields": ""
+        }
+      },
+      "description": "An uptime that goes backwards is a reboot. Counted over the window without going through the task log.",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "job": true,
+              "instance": true
+            },
+            "indexByName": {},
+            "renameByName": {
+              "Value": "Reboots"
+            }
+          }
+        },
+        {
+          "id": "sortBy",
+          "options": {
+            "fields": {},
+            "sort": [
+              {
+                "field": "Reboots",
+                "desc": true
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "type": "table",
+      "title": "Guests that changed state",
+      "id": 53,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 24,
+        "x": 0,
+        "y": 42
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "changes(proxcenter_vm_status{connection=~\"$connection\",node=~\"$node\"}[$__range]) > 0",
+          "range": false,
+          "instant": true,
+          "refId": "A",
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "noValue": "No guest changed state in this window",
+          "decimals": 0,
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "countRows": false,
+          "fields": ""
+        }
+      },
+      "description": "Guests that stopped and restarted on their own. A guest in a crash loop shows the same running state as a stable one on any instantaneous count.",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "job": true,
+              "instance": true
+            },
+            "indexByName": {},
+            "renameByName": {
+              "Value": "Transitions"
+            }
+          }
+        },
+        {
+          "id": "sortBy",
+          "options": {
+            "fields": {},
+            "sort": [
+              {
+                "field": "Transitions",
+                "desc": true
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
       "type": "row",
       "title": "Guests",
       "id": 101,
@@ -1140,7 +1771,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 27
+        "y": 49
       },
       "panels": []
     },
@@ -1156,7 +1787,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 28
+        "y": 50
       },
       "targets": [
         {
@@ -1252,7 +1883,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 28
+        "y": 50
       },
       "targets": [
         {
@@ -1350,7 +1981,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 36
+        "y": 58
       },
       "targets": [
         {
@@ -1447,7 +2078,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 36
+        "y": 58
       },
       "targets": [
         {
@@ -1544,7 +2175,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 44
+        "y": 66
       },
       "targets": [
         {
@@ -1638,7 +2269,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 52
+        "y": 74
       },
       "panels": []
     },
@@ -1654,7 +2285,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 53
+        "y": 75
       },
       "targets": [
         {
@@ -1760,7 +2391,7 @@
         "h": 8,
         "w": 16,
         "x": 8,
-        "y": 53
+        "y": 75
       },
       "targets": [
         {
@@ -1841,7 +2472,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 61
+        "y": 83
       },
       "panels": [
         {
@@ -1856,7 +2487,7 @@
             "h": 8,
             "w": 24,
             "x": 0,
-            "y": 62
+            "y": 84
           },
           "targets": [
             {

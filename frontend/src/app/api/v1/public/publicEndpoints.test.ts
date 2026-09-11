@@ -24,6 +24,7 @@ vi.mock('@/lib/rbac', () => ({
 }))
 
 import { callRoute, readJson } from '@/__tests__/setup/route-test'
+import { FAMILY_REGISTRY } from '@/lib/metrics/families/registry'
 
 const VIEW = {
   tenantId: 'default',
@@ -40,16 +41,41 @@ const VIEW = {
     },
   ],
   nodes: [
-    { connId: 'pve-1', connectionName: 'PVE One', node: 'n1', status: 'online', cpu: 0.25, mem: 1000, maxmem: 4000 },
-    { connId: 'pve-1', connectionName: 'PVE One', node: 'n2', status: 'offline', cpu: 0, mem: 0, maxmem: 0 },
+    {
+      connId: 'pve-1', connectionName: 'PVE One', node: 'n1', status: 'online', cpu: 0.25, mem: 1000, maxmem: 4000,
+      disk: 3000, maxdisk: 10000, uptime: 86400, maintenance: false,
+    },
+    {
+      connId: 'pve-1', connectionName: 'PVE One', node: 'n2', status: 'offline', cpu: 0, mem: 0, maxmem: 0,
+      disk: 0, maxdisk: 0, uptime: 0, maintenance: true,
+    },
   ],
   guests: [
     {
       connId: 'pve-1', connectionName: 'PVE One', node: 'n1', vmid: '100', name: 'web-01', type: 'qemu',
       status: 'running', cpu: 0.5, mem: 500, maxmem: 2000, agentEnabled: true, template: false,
+      maxdisk: 32000, uptime: 3600, hastate: 'started',
+    },
+  ],
+  pbsServers: [
+    {
+      connId: 'pbs-1', connectionName: 'PBS Main', status: 'online', version: '4.2.1',
+      datastores: [
+        {
+          name: 'ds', total: 8000, used: 2000, available: 6000, usagePercent: 25,
+          backupCount: 12, vmCount: 3, ctCount: 2, hostCount: 1,
+        },
+      ],
     },
   ],
 }
+
+/**
+ * Families the VIEW fixture above genuinely cannot populate, so the
+ * "serves every registered family" loop skips them rather than being
+ * weakened: the fixture's single cluster carries no `cephHealth`.
+ */
+const EMPTY_ON_THIS_FIXTURE = ['proxcenter_cluster_ceph_health']
 
 function tokenPrincipal(scopes: string[]) {
   return { kind: 'token', tokenId: 't', tenantId: 'default', connectionIds: null, scopes }
@@ -95,7 +121,9 @@ describe('GET /api/v1/public/metrics', () => {
     expect(body).toContain('proxcenter_vm_status{connection="PVE One",node="n1",vmid="100",name="web-01",type="qemu"} 1')
     expect(body).toContain('proxcenter_vm_cpu_usage_ratio{connection="PVE One",node="n1",vmid="100",name="web-01",type="qemu"} 0.5')
     expect(body).toContain('proxcenter_vm_agent_enabled{connection="PVE One",node="n1",vmid="100",name="web-01"} 1')
-    expect(body).toContain('proxcenter_backup_age_seconds{connection="PVE One",vmid="100",datastore="ds"} 3600')
+    // #925: the ONE authorised label break. node, name and type are added so
+    // the offenders table can name a guest without a group_left join.
+    expect(body).toContain('proxcenter_backup_age_seconds{connection="PVE One",node="n1",vmid="100",name="web-01",type="qemu",datastore="ds"} 3600')
     // D12: the backup family, once allowed, must still forward nonBlocking
     // so a scrape never blocks on a cold PBS cache.
     expect(buildFleetBackupFreshnessMock).toHaveBeenCalledWith(expect.objectContaining({ nonBlocking: true }))
@@ -247,5 +275,127 @@ describe('GET /api/v1/public/health', () => {
     const res = await callRoute(GET)
     expect(res.status).toBe(200)
     expect(checkPermissionMock).toHaveBeenCalledWith('node.view')
+  })
+})
+
+describe('GET /api/v1/public/metrics after the family extraction (#925)', () => {
+  /**
+   * The seven families shipped on 3 August are a published contract. Moving
+   * them out of the route into per-domain modules must not change one
+   * character of their output, so this asserts the rendered HELP and TYPE
+   * headers, not merely that the names appear somewhere.
+   */
+  it('renders the seven pre-existing families with their original headers', async () => {
+    currentPrincipal.value = tokenPrincipal(['nodes:read', 'vms:read', 'backups:read'])
+    const { GET } = await import('./metrics/route')
+    const body = await (await callRoute(GET)).text()
+    for (const [name, help] of [
+      ['proxcenter_node_online', 'Node online state (1 online, 0 otherwise)'],
+      ['proxcenter_node_cpu_usage_ratio', 'Node CPU usage ratio (0 to 1)'],
+      ['proxcenter_node_mem_usage_ratio', 'Node memory usage ratio (0 to 1)'],
+      ['proxcenter_vm_status', 'Guest running state (1 running, 0 otherwise)'],
+      ['proxcenter_vm_cpu_usage_ratio', 'Guest CPU usage ratio (0 to 1)'],
+      ['proxcenter_vm_agent_enabled', 'Guest agent config flag (1 enabled, 0 otherwise)'],
+      ['proxcenter_backup_age_seconds', 'Seconds since the most recent backup of this guest'],
+    ]) {
+      expect(body).toContain(`# HELP ${name} ${help}`)
+      expect(body).toContain(`# TYPE ${name} gauge`)
+    }
+  })
+
+  it('serves every registered family to a full-scope token', async () => {
+    currentPrincipal.value = tokenPrincipal(['nodes:read', 'vms:read', 'backups:read'])
+    const { GET } = await import('./metrics/route')
+    const body = await (await callRoute(GET)).text()
+    const rendered = new Set(
+      body.split(String.fromCharCode(10))
+        .filter(line => line.startsWith('# TYPE '))
+        .map(line => line.split(' ')[2]),
+    )
+    for (const declaration of FAMILY_REGISTRY) {
+      if (EMPTY_ON_THIS_FIXTURE.includes(declaration.name)) continue
+      expect(rendered, `missing family ${declaration.name}`).toContain(declaration.name)
+    }
+  })
+
+  /**
+   * Per-family filtering, never a route-level gate: a token holding only
+   * nodes:read gets a 200 carrying the node and cluster families and
+   * nothing else.
+   */
+  it('filters the new families by token scope, one family at a time', async () => {
+    currentPrincipal.value = tokenPrincipal(['nodes:read'])
+    const { GET } = await import('./metrics/route')
+    const res = await callRoute(GET)
+    const body = await res.text()
+    expect(res.status).toBe(200)
+    expect(body).toContain('proxcenter_cluster_up{')
+    expect(body).toContain('proxcenter_node_mem_bytes{')
+    expect(body).toContain('proxcenter_node_rootfs_usage_ratio{')
+    expect(body).not.toContain('proxcenter_vm_mem_bytes{')
+    expect(body).not.toContain('proxcenter_pbs_up{')
+    expect(body).not.toContain('proxcenter_backup_protected{')
+  })
+
+  it('serves the PBS and backup families to a backups:read token, and no node series', async () => {
+    currentPrincipal.value = tokenPrincipal(['backups:read'])
+    const { GET } = await import('./metrics/route')
+    const body = await (await callRoute(GET)).text()
+    expect(body).toContain('proxcenter_pbs_up{connection="PBS Main"} 1')
+    expect(body).toContain('proxcenter_pbs_datastore_usage_ratio{connection="PBS Main",datastore="ds"} 0.25')
+    expect(body).toContain('proxcenter_backup_protected{connection="PVE One",node="n1",vmid="100",name="web-01",type="qemu"} 1')
+    expect(body).not.toContain('proxcenter_node_online{')
+    expect(body).not.toContain('proxcenter_cluster_up{')
+  })
+
+  it('always serves the build info, whatever the token holds', async () => {
+    currentPrincipal.value = tokenPrincipal(['nodes:read'])
+    const { GET } = await import('./metrics/route')
+    const body = await (await callRoute(GET)).text()
+    expect(body).toMatch(/proxcenter_build_info\{version="[0-9]+\.[0-9]+\.[0-9]+"\} 1/)
+  })
+
+  /**
+   * The backup aggregation walks every visible PBS connection, so it is the
+   * expensive part of this handler. A token that cannot see its output must
+   * not pay for it.
+   */
+  it('does not compute backup freshness for a nodes:read token', async () => {
+    currentPrincipal.value = tokenPrincipal(['nodes:read'])
+    const { GET } = await import('./metrics/route')
+    await callRoute(GET)
+    expect(buildFleetBackupFreshnessMock).not.toHaveBeenCalled()
+  })
+
+  it('reports a node in maintenance and one that is not', async () => {
+    currentPrincipal.value = tokenPrincipal(['nodes:read'])
+    const { GET } = await import('./metrics/route')
+    const body = await (await callRoute(GET)).text()
+    expect(body).toContain('proxcenter_node_maintenance{connection="PVE One",node="n1"} 0')
+    expect(body).toContain('proxcenter_node_maintenance{connection="PVE One",node="n2"} 1')
+  })
+
+  /**
+   * A view missing a collection entirely, which is what a caller written
+   * before #925 hands over, must yield empty families rather than a throw:
+   * one missing optional field must never take the whole scrape down and
+   * blind every panel.
+   */
+  it('survives a fleet view with no PBS servers and no HA state at all', async () => {
+    loadPublicFleetViewMock.mockResolvedValue({
+      tenantId: 'default', visible: new Set(['pve-1']), cached: true,
+      clusters: [{ id: 'pve-1', name: 'PVE One', nodes: [] }],
+      nodes: [{ connId: 'pve-1', connectionName: 'PVE One', node: 'n1', status: 'online', cpu: 0, mem: 0, maxmem: 0 }],
+      guests: [{ connId: 'pve-1', connectionName: 'PVE One', node: 'n1', vmid: '1', name: 'a', type: 'qemu', status: 'running', cpu: 0, mem: 0, maxmem: 0, agentEnabled: null, template: false }],
+    })
+    currentPrincipal.value = tokenPrincipal(['nodes:read', 'vms:read', 'backups:read'])
+    const { GET } = await import('./metrics/route')
+    const res = await callRoute(GET)
+    expect(res.status).toBe(200)
+    const body = await res.text()
+    expect(body).toContain('proxcenter_node_online{connection="PVE One",node="n1"} 1')
+    expect(body).not.toContain('proxcenter_pbs_up')
+    expect(body).not.toContain('proxcenter_vm_ha_state')
+    expect(body).not.toContain('NaN')
   })
 })

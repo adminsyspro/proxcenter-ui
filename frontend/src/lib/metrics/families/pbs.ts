@@ -7,15 +7,22 @@ import { family } from "./registry"
 const GUEST_KINDS = ["vm", "ct", "host"] as const
 
 export function buildPbsFamilies(view: PublicFleetView): MetricFamily[] {
-  const upSamples: Sample[] = view.pbsServers.map(server => ({
+  // `?? []` on purpose: a missing collection must yield empty families, never
+  // a throw that takes the whole exposition down (#925).
+  const servers = view.pbsServers ?? []
+
+  const upSamples: Sample[] = servers.map(server => ({
     name: "proxcenter_pbs_up",
     labels: { connection: server.connectionName },
     value: server.status === "online" ? 1 : 0,
   }))
 
   const infoSamples: Sample[] = []
-  for (const server of view.pbsServers) {
-    if (server.version === null) continue
+  for (const server of servers) {
+    // typeof, not `=== null`: an absent key is `undefined`, and renderLabels
+    // drops empty label values, so a version-less server would otherwise
+    // collapse onto one unlabelled series shared with every other.
+    if (typeof server.version !== "string" || server.version === "") continue
     infoSamples.push({
       name: "proxcenter_pbs_info",
       labels: { connection: server.connectionName, version: server.version },
@@ -30,7 +37,7 @@ export function buildPbsFamilies(view: PublicFleetView): MetricFamily[] {
   const snapshotsSamples: Sample[] = []
   const guestsSamples: Sample[] = []
 
-  for (const server of view.pbsServers) {
+  for (const server of servers) {
     for (const datastore of server.datastores) {
       const labels = { connection: server.connectionName, datastore: datastore.name }
 

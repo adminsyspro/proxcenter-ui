@@ -13,12 +13,16 @@ export function buildBackupFamilies(
   view: PublicFleetView,
   freshness: FleetBackupFreshness,
 ): MetricFamily[] {
+  // `?? []` on purpose: a missing collection must yield empty families, never
+  // a throw that takes the whole exposition down (#925).
+  const guests = view.guests ?? []
+
   const byGuest = new Map(freshness.guests.map(guest => [key(guest.connId, guest.vmid), guest]))
 
   const ageSamples: Sample[] = []
   const protectedSamples: Sample[] = []
 
-  for (const guest of view.guests) {
+  for (const guest of guests) {
     const labels = {
       connection: guest.connectionName,
       node: guest.node,

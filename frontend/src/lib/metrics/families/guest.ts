@@ -18,6 +18,10 @@ function haState(raw: string): (typeof HA_STATES)[number] {
 }
 
 export function buildGuestFamilies(view: PublicFleetView): MetricFamily[] {
+  // `?? []` on purpose: a missing collection must yield empty families, never
+  // a throw that takes the whole exposition down (#925).
+  const guests = view.guests ?? []
+
   const statusSamples: Sample[] = []
   const cpuSamples: Sample[] = []
   const agentSamples: Sample[] = []
@@ -27,7 +31,7 @@ export function buildGuestFamilies(view: PublicFleetView): MetricFamily[] {
   const uptimeSamples: Sample[] = []
   const haStateSamples: Sample[] = []
 
-  for (const guest of view.guests) {
+  for (const guest of guests) {
     const labels = {
       connection: guest.connectionName,
       node: guest.node,
@@ -89,7 +93,10 @@ export function buildGuestFamilies(view: PublicFleetView): MetricFamily[] {
     // can chart `proxcenter_vm_ha_state{state="error"}` directly instead
     // of decoding a free-form string. Guests HA does not manage (hastate
     // null) contribute no sample at all.
-    if (guest.hastate !== null) {
+    // typeof, not `!== null`: a view built before this field existed carries
+    // `undefined`, and an exposition handler that throws takes the WHOLE scrape
+    // down, blinding every panel over one missing optional field.
+    if (typeof guest.hastate === "string" && guest.hastate !== "") {
       const current = haState(guest.hastate)
       for (const state of HA_STATES) {
         haStateSamples.push({

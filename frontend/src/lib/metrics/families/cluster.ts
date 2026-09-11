@@ -20,20 +20,24 @@ function cephState(health: string): (typeof CEPH_STATES)[number] {
 }
 
 export function buildClusterFamilies(view: PublicFleetView): MetricFamily[] {
-  const upSamples: Sample[] = view.clusters.map(cluster => ({
+  // `?? []` on purpose: a missing collection must yield empty families, never
+  // a throw that takes the whole exposition down (#925).
+  const clusters = view.clusters ?? []
+
+  const upSamples: Sample[] = clusters.map(cluster => ({
     name: "proxcenter_cluster_up",
     labels: { connection: cluster.name, type: cluster.type },
     value: cluster.status === "online" ? 1 : 0,
   }))
 
-  const degradedSamples: Sample[] = view.clusters.map(cluster => ({
+  const degradedSamples: Sample[] = clusters.map(cluster => ({
     name: "proxcenter_cluster_degraded",
     labels: { connection: cluster.name },
     value: cluster.status === "degraded" ? 1 : 0,
   }))
 
   const cephSamples: Sample[] = []
-  for (const cluster of view.clusters) {
+  for (const cluster of clusters) {
     const health = (cluster as { cephHealth?: string }).cephHealth
     if (typeof health !== "string" || health === "") continue
     const active = cephState(health)

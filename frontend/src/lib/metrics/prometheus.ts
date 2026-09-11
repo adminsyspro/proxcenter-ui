@@ -13,7 +13,13 @@ export type Sample = {
 export type MetricFamily = {
   name: string
   help: string
-  type: "gauge"
+  /**
+   * `counter` exists for the cumulative byte counters Proxmox reports on a
+   * guest (#925). Publishing those as a gauge would still let `rate()` run,
+   * but a guest restart resets the counter and Prometheus would read the
+   * reset as an enormous negative rate instead of handling it.
+   */
+  type: "gauge" | "counter"
   samples: Sample[]
 }
 
@@ -22,6 +28,12 @@ export const METRIC_FAMILY_SCOPES: Record<string, string> = {
   proxcenter_node_: "nodes:read",
   proxcenter_vm_: "vms:read",
   proxcenter_backup_: "backups:read",
+  // #925. `proxcenter_pbs_` sits under backups:read rather than a scope of
+  // its own: a PBS server's datastores ARE the backup estate, and the
+  // scope vocabulary only bundles existing read permissions.
+  proxcenter_cluster_: "nodes:read",
+  proxcenter_pbs_: "backups:read",
+  proxcenter_storage_: "storage:read",
 }
 
 /**
@@ -68,6 +80,17 @@ export function isFamilyAllowed(metricName: string, tokenScopes: readonly string
   return tokenScopes.includes(scope)
 }
 
+/**
+ * 0 rather than NaN when the denominator is absent (#925). An offline node
+ * or a stopped guest reports a zero capacity, and a single NaN makes
+ * Prometheus reject the WHOLE scrape, so one dead node would blank every
+ * series on the dashboard. Lives here, not in each family module, so the
+ * five builders share one guard.
+ */
+export function ratio(used: number, total: number): number {
+  return total > 0 ? Math.round((used / total) * 10_000) / 10_000 : 0
+}
+
 function renderLabels(labels: Sample["labels"]): string {
   const parts: string[] = []
   for (const [key, raw] of Object.entries(labels)) {
@@ -91,6 +114,12 @@ export function renderExposition(families: MetricFamily[]): string {
     out += `# HELP ${family.name} ${escapeHelpText(family.help)}\n`
     out += `# TYPE ${family.name} ${family.type}\n`
     for (const sample of family.samples) {
+      // LAST LINE OF DEFENCE (#925). A single NaN or Infinity makes Prometheus
+      // reject the ENTIRE scrape, so one bad value would blank every panel on
+      // every dashboard. Dropping that one sample is strictly better than
+      // losing the whole exposition, and it is done here, once, rather than
+      // trusted to every current and future family builder.
+      if (!Number.isFinite(sample.value)) continue
       out += `${sample.name}${renderLabels(sample.labels)} ${sample.value}\n`
     }
   }

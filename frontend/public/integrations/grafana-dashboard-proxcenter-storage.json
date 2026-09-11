@@ -42,21 +42,21 @@
     },
     {
       "type": "panel",
-      "id": "state-timeline",
-      "name": "State timeline",
+      "id": "table",
+      "name": "Table",
       "version": ""
     },
     {
       "type": "panel",
-      "id": "table",
-      "name": "Table",
+      "id": "timeseries",
+      "name": "Time series",
       "version": ""
     }
   ],
   "annotations": {
     "list": []
   },
-  "description": "Is every Proxmox cluster reachable, and has it been? Multi-cluster reachability, Ceph health, high availability state and the changes that an instantaneous count hides, such as a node that bounced overnight. One Prometheus job covers every cluster, with no agent on any node. Start here, then follow the dashboard links to nodes, guests, storage or backups. Requires ProxCenter Enterprise with the API option.",
+  "description": "Where is the space going across every Proxmox cluster? Capacity and usage per storage, split the way Proxmox splits it: a shared storage such as a Ceph pool or an NFS export counted ONCE for the cluster, and non-shared storages broken down per node, which is where a single full host hides behind a comfortable cluster average. Requires ProxCenter Enterprise with the API option.",
   "editable": true,
   "graphTooltip": 1,
   "id": null,
@@ -79,7 +79,7 @@
   "panels": [
     {
       "type": "stat",
-      "title": "Clusters",
+      "title": "Fleet capacity",
       "id": 1,
       "datasource": {
         "type": "prometheus",
@@ -87,7 +87,7 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 4,
+        "w": 6,
         "x": 0,
         "y": 0
       },
@@ -98,7 +98,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "count(proxcenter_cluster_up{connection=~\"$connection\"})",
+          "expr": "sum(proxcenter_storage_total_bytes{connection=~\"$connection\"})",
           "range": true,
           "instant": false,
           "refId": "A"
@@ -119,7 +119,8 @@
               }
             ]
           },
-          "noValue": "0"
+          "unit": "bytes",
+          "noValue": "No storage in this selection"
         },
         "overrides": []
       },
@@ -138,11 +139,11 @@
         "textMode": "auto",
         "wideLayout": true
       },
-      "description": "Every PVE connection ProxCenter manages, clustered or standalone."
+      "description": "Every storage of every selected cluster, shared ones counted once."
     },
     {
       "type": "stat",
-      "title": "Nodes online",
+      "title": "Fleet space in use",
       "id": 2,
       "datasource": {
         "type": "prometheus",
@@ -150,8 +151,8 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 4,
-        "x": 4,
+        "w": 6,
+        "x": 6,
         "y": 0
       },
       "targets": [
@@ -161,7 +162,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "sum(proxcenter_node_online{connection=~\"$connection\",node=~\"$node\"})",
+          "expr": "sum(proxcenter_storage_used_bytes{connection=~\"$connection\"})",
           "range": true,
           "instant": false,
           "refId": "A"
@@ -182,7 +183,8 @@
               }
             ]
           },
-          "noValue": "0"
+          "unit": "bytes",
+          "noValue": "No storage in this selection"
         },
         "overrides": []
       },
@@ -204,7 +206,7 @@
     },
     {
       "type": "stat",
-      "title": "Nodes offline",
+      "title": "Fleet usage",
       "id": 3,
       "datasource": {
         "type": "prometheus",
@@ -212,74 +214,7 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 4,
-        "x": 8,
-        "y": 0
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "editorMode": "code",
-          "expr": "count(proxcenter_node_online{connection=~\"$connection\",node=~\"$node\"}) - sum(proxcenter_node_online{connection=~\"$connection\",node=~\"$node\"})",
-          "range": true,
-          "instant": false,
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 1
-              }
-            ]
-          },
-          "noValue": "0"
-        },
-        "overrides": []
-      },
-      "options": {
-        "colorMode": "value",
-        "graphMode": "none",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "auto",
-        "wideLayout": true
-      },
-      "description": "The actionable half of the pair: anything above zero is a node the fleet lost."
-    },
-    {
-      "type": "stat",
-      "title": "Guests running",
-      "id": 4,
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 4,
+        "w": 6,
         "x": 12,
         "y": 0
       },
@@ -290,70 +225,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "sum(proxcenter_vm_status{connection=~\"$connection\",node=~\"$node\"})",
-          "range": true,
-          "instant": false,
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "text",
-                "value": null
-              }
-            ]
-          },
-          "noValue": "0"
-        },
-        "overrides": []
-      },
-      "options": {
-        "colorMode": "value",
-        "graphMode": "none",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "auto",
-        "wideLayout": true
-      },
-      "description": "Templates are excluded upstream, so this counts real workloads only."
-    },
-    {
-      "type": "stat",
-      "title": "Nodes in maintenance",
-      "id": 5,
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 4,
-        "x": 16,
-        "y": 0
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "editorMode": "code",
-          "expr": "sum(proxcenter_node_maintenance{connection=~\"$connection\",node=~\"$node\"})",
+          "expr": "sum(proxcenter_storage_used_bytes{connection=~\"$connection\"}) / sum(proxcenter_storage_total_bytes{connection=~\"$connection\"})",
           "range": true,
           "instant": false,
           "refId": "A"
@@ -369,7 +241,80 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "text",
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.8
+              },
+              {
+                "color": "red",
+                "value": 0.9
+              }
+            ]
+          },
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "noValue": "No storage in this selection"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Storages disabled",
+      "id": 4,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 18,
+        "y": 0
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "count(proxcenter_storage_enabled{connection=~\"$connection\"} == 0) or vector(0)",
+          "range": true,
+          "instant": false,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
                 "value": null
               },
               {
@@ -396,75 +341,13 @@
         },
         "textMode": "auto",
         "wideLayout": true
-      }
-    },
-    {
-      "type": "stat",
-      "title": "ProxCenter",
-      "id": 6,
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
       },
-      "gridPos": {
-        "h": 4,
-        "w": 4,
-        "x": 20,
-        "y": 0
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "editorMode": "code",
-          "expr": "proxcenter_build_info",
-          "range": true,
-          "instant": false,
-          "refId": "A",
-          "legendFormat": "{{version}}"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "text",
-                "value": null
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "colorMode": "none",
-        "graphMode": "none",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "name",
-        "wideLayout": true
-      },
-      "description": "Version of the ProxCenter being scraped."
+      "description": "A disabled storage still reports its capacity, so it inflates the fleet total above while accepting no new volume."
     },
     {
       "type": "row",
-      "title": "Cluster health",
-      "id": 7,
+      "title": "Usage",
+      "id": 5,
       "collapsed": false,
       "gridPos": {
         "h": 1,
@@ -475,254 +358,18 @@
       "panels": []
     },
     {
-      "type": "state-timeline",
-      "title": "Cluster health",
-      "id": 8,
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 16,
-        "x": 0,
-        "y": 5
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "editorMode": "code",
-          "expr": "proxcenter_cluster_degraded{connection=~\"$connection\"}",
-          "range": true,
-          "instant": false,
-          "refId": "A",
-          "legendFormat": "{{connection}}"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "fillOpacity": 70,
-            "lineWidth": 0,
-            "spanNulls": false,
-            "insertNulls": false
-          },
-          "mappings": [
-            {
-              "type": "value",
-              "options": {
-                "0": {
-                  "text": "Healthy",
-                  "color": "green",
-                  "index": 0
-                },
-                "1": {
-                  "text": "Degraded",
-                  "color": "red",
-                  "index": 1
-                }
-              }
-            }
-          ],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "text",
-                "value": null
-              }
-            ]
-          },
-          "min": 0,
-          "max": 1
-        },
-        "overrides": []
-      },
-      "options": {
-        "alignValue": "left",
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "mergeValues": true,
-        "rowHeight": 0.9,
-        "showValue": "never",
-        "tooltip": {
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "description": "A degraded cluster has lost quorum or a node. Green is the healthy state, so a coloured band here is always something to look at."
-    },
-    {
-      "type": "piechart",
-      "title": "Ceph health across clusters",
-      "id": 9,
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 8,
-        "x": 16,
-        "y": 5
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "editorMode": "code",
-          "expr": "sum by (health) (proxcenter_cluster_ceph_health{connection=~\"$connection\"} == 1)",
-          "range": true,
-          "instant": false,
-          "refId": "A",
-          "legendFormat": "{{health}}"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "text",
-                "value": null
-              }
-            ]
-          },
-          "noValue": "No Ceph cluster in this selection"
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "ok"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "mode": "fixed",
-                  "fixedColor": "green"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "warn"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "mode": "fixed",
-                  "fixedColor": "orange"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "err"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "mode": "fixed",
-                  "fixedColor": "red"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "unknown"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "mode": "fixed",
-                  "fixedColor": "text"
-                }
-              }
-            ]
-          }
-        ]
-      },
-      "options": {
-        "displayLabels": [
-          "name",
-          "percent"
-        ],
-        "legend": {
-          "displayMode": "list",
-          "placement": "right",
-          "showLegend": true,
-          "values": [
-            "value"
-          ]
-        },
-        "pieType": "donut",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "tooltip": {
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "description": "Clusters without Ceph emit nothing, so they are absent rather than counted as unknown."
-    },
-    {
-      "type": "row",
-      "title": "Stability",
-      "id": 10,
-      "collapsed": false,
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 13
-      },
-      "panels": []
-    },
-    {
       "type": "bargauge",
-      "title": "Cluster availability over the window",
-      "id": 11,
+      "title": "Storage usage",
+      "id": 6,
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
       },
       "gridPos": {
-        "h": 7,
-        "w": 8,
+        "h": 12,
+        "w": 12,
         "x": 0,
-        "y": 14
+        "y": 5
       },
       "targets": [
         {
@@ -731,11 +378,11 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "avg_over_time(proxcenter_cluster_up{connection=~\"$connection\"}[$__range])",
+          "expr": "proxcenter_storage_usage_ratio{connection=~\"$connection\"}",
           "range": true,
           "instant": false,
           "refId": "A",
-          "legendFormat": "{{connection}}"
+          "legendFormat": "{{connection}} / {{storage}} ({{type}})"
         }
       ],
       "fieldConfig": {
@@ -748,23 +395,23 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "red",
+                "color": "green",
                 "value": null
               },
               {
                 "color": "orange",
-                "value": 0.99
+                "value": 0.8
               },
               {
-                "color": "green",
-                "value": 0.999
+                "color": "red",
+                "value": 0.9
               }
             ]
           },
           "unit": "percentunit",
           "min": 0,
           "max": 1,
-          "noValue": "No cluster in this selection"
+          "noValue": "No storage in this selection"
         },
         "overrides": []
       },
@@ -792,21 +439,21 @@
         "sizing": "auto",
         "valueMode": "color"
       },
-      "description": "Share of the selected window during which each cluster answered. Anything short of 1 is a gap the instantaneous tiles at the top cannot show."
+      "description": "One bar per storage, shared ones counted ONCE for the whole cluster rather than once per node, which is how a Ceph pool otherwise appears to have three times its real capacity."
     },
     {
-      "type": "table",
-      "title": "Nodes that changed state",
-      "id": 12,
+      "type": "bargauge",
+      "title": "Local storage, per node",
+      "id": 7,
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
       },
       "gridPos": {
-        "h": 7,
-        "w": 8,
-        "x": 8,
-        "y": 14
+        "h": 12,
+        "w": 12,
+        "x": 12,
+        "y": 5
       },
       "targets": [
         {
@@ -815,323 +462,176 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "changes(proxcenter_node_online{connection=~\"$connection\",node=~\"$node\"}[$__range]) > 0",
-          "range": false,
-          "instant": true,
+          "expr": "proxcenter_storage_node_usage_ratio{connection=~\"$connection\"}",
+          "range": true,
+          "instant": false,
           "refId": "A",
-          "format": "table"
+          "legendFormat": "{{storage}} ({{node}})"
         }
       ],
       "fieldConfig": {
         "defaults": {
           "color": {
-            "mode": "palette-classic"
+            "mode": "thresholds"
           },
           "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "text",
+                "color": "green",
                 "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.8
+              },
+              {
+                "color": "red",
+                "value": 0.9
               }
             ]
           },
-          "noValue": "No node changed state in this window",
-          "decimals": 0,
-          "custom": {
-            "align": "auto",
-            "cellOptions": {
-              "type": "auto"
-            },
-            "inspect": false
-          }
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "noValue": "No non-shared storage in this selection"
         },
         "overrides": []
       },
       "options": {
-        "showHeader": true,
-        "cellHeight": "sm",
-        "footer": {
-          "show": false,
-          "reducer": [
-            "sum"
+        "displayMode": "basic",
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "maxVizHeight": 300,
+        "minVizHeight": 16,
+        "minVizWidth": 8,
+        "namePlacement": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
           ],
-          "countRows": false,
-          "fields": ""
-        }
-      },
-      "description": "A node that bounced overnight reads as online on the tile above, exactly like one that never moved. This counts the transitions.",
-      "transformations": [
-        {
-          "id": "organize",
-          "options": {
-            "excludeByName": {
-              "Time": true,
-              "__name__": true,
-              "job": true,
-              "instance": true
-            },
-            "indexByName": {
-              "name": 0,
-              "Value": 1,
-              "node": 2,
-              "connection": 3,
-              "type": 4,
-              "vmid": 5,
-              "storage": 6,
-              "datastore": 7
-            },
-            "renameByName": {
-              "Value": "Transitions"
-            }
-          }
+          "fields": "",
+          "values": false
         },
-        {
-          "id": "sortBy",
-          "options": {
-            "fields": {},
-            "sort": [
-              {
-                "field": "Transitions",
-                "desc": true
-              }
-            ]
-          }
-        }
-      ]
-    },
-    {
-      "type": "table",
-      "title": "Nodes that rebooted",
-      "id": 13,
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "showUnfilled": true,
+        "sizing": "auto",
+        "valueMode": "color"
       },
-      "gridPos": {
-        "h": 7,
-        "w": 8,
-        "x": 16,
-        "y": 14
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "editorMode": "code",
-          "expr": "resets(proxcenter_node_uptime_seconds{connection=~\"$connection\",node=~\"$node\"}[$__range]) > 0",
-          "range": false,
-          "instant": true,
-          "refId": "A",
-          "format": "table"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "text",
-                "value": null
-              }
-            ]
-          },
-          "noValue": "No node rebooted in this window",
-          "decimals": 0,
-          "custom": {
-            "align": "auto",
-            "cellOptions": {
-              "type": "auto"
-            },
-            "inspect": false
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "showHeader": true,
-        "cellHeight": "sm",
-        "footer": {
-          "show": false,
-          "reducer": [
-            "sum"
-          ],
-          "countRows": false,
-          "fields": ""
-        }
-      },
-      "description": "An uptime that goes backwards is a reboot. Counted over the window without going through the task log.",
-      "transformations": [
-        {
-          "id": "organize",
-          "options": {
-            "excludeByName": {
-              "Time": true,
-              "__name__": true,
-              "job": true,
-              "instance": true
-            },
-            "indexByName": {
-              "name": 0,
-              "Value": 1,
-              "node": 2,
-              "connection": 3,
-              "type": 4,
-              "vmid": 5,
-              "storage": 6,
-              "datastore": 7
-            },
-            "renameByName": {
-              "Value": "Reboots"
-            }
-          }
-        },
-        {
-          "id": "sortBy",
-          "options": {
-            "fields": {},
-            "sort": [
-              {
-                "field": "Reboots",
-                "desc": true
-              }
-            ]
-          }
-        }
-      ]
-    },
-    {
-      "type": "table",
-      "title": "Guests that changed state",
-      "id": 14,
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "gridPos": {
-        "h": 7,
-        "w": 24,
-        "x": 0,
-        "y": 21
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "editorMode": "code",
-          "expr": "changes(proxcenter_vm_status{connection=~\"$connection\",node=~\"$node\"}[$__range]) > 0",
-          "range": false,
-          "instant": true,
-          "refId": "A",
-          "format": "table"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "text",
-                "value": null
-              }
-            ]
-          },
-          "noValue": "No guest changed state in this window",
-          "decimals": 0,
-          "custom": {
-            "align": "auto",
-            "cellOptions": {
-              "type": "auto"
-            },
-            "inspect": false
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "showHeader": true,
-        "cellHeight": "sm",
-        "footer": {
-          "show": false,
-          "reducer": [
-            "sum"
-          ],
-          "countRows": false,
-          "fields": ""
-        }
-      },
-      "description": "Guests that stopped and restarted on their own. A guest in a crash loop shows the same running state as a stable one on any instantaneous count.",
-      "transformations": [
-        {
-          "id": "organize",
-          "options": {
-            "excludeByName": {
-              "Time": true,
-              "__name__": true,
-              "job": true,
-              "instance": true
-            },
-            "indexByName": {
-              "name": 0,
-              "Value": 1,
-              "node": 2,
-              "connection": 3,
-              "type": 4,
-              "vmid": 5,
-              "storage": 6,
-              "datastore": 7
-            },
-            "renameByName": {
-              "Value": "Transitions"
-            }
-          }
-        },
-        {
-          "id": "sortBy",
-          "options": {
-            "fields": {},
-            "sort": [
-              {
-                "field": "Transitions",
-                "desc": true
-              }
-            ]
-          }
-        }
-      ]
+      "description": "Non-shared storages only. A shared storage has one capacity for the cluster, so it emits nothing here on purpose rather than repeating itself once per node."
     },
     {
       "type": "row",
-      "title": "High availability",
-      "id": 15,
+      "title": "Trend",
+      "id": 8,
       "collapsed": false,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 28
+        "y": 17
       },
       "panels": []
     },
     {
+      "type": "timeseries",
+      "title": "Space in use over time",
+      "id": 9,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 16,
+        "x": 0,
+        "y": 18
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "proxcenter_storage_used_bytes{connection=~\"$connection\"}",
+          "range": true,
+          "instant": false,
+          "refId": "A",
+          "legendFormat": "{{connection}} / {{storage}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "unit": "bytes",
+          "min": 0,
+          "noValue": "No storage in this selection",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "gradientMode": "none",
+            "showPoints": "never",
+            "pointSize": 8,
+            "spanNulls": true,
+            "axisBorderShow": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true,
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "description": "The slope is what tells you when a storage runs out, which a usage percentage never does."
+    },
+    {
       "type": "piechart",
-      "title": "Guests by HA state",
-      "id": 16,
+      "title": "Capacity by storage type",
+      "id": 10,
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -1139,8 +639,8 @@
       "gridPos": {
         "h": 8,
         "w": 8,
-        "x": 0,
-        "y": 29
+        "x": 16,
+        "y": 18
       },
       "targets": [
         {
@@ -1149,11 +649,11 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "sum by (state) (proxcenter_vm_ha_state{connection=~\"$connection\",node=~\"$node\"} == 1)",
+          "expr": "sum by (type) (proxcenter_storage_total_bytes{connection=~\"$connection\"})",
           "range": true,
           "instant": false,
           "refId": "A",
-          "legendFormat": "{{state}}"
+          "legendFormat": "{{type}}"
         }
       ],
       "fieldConfig": {
@@ -1171,40 +671,10 @@
               }
             ]
           },
-          "noValue": "No guest is managed by HA"
+          "unit": "bytes",
+          "noValue": "No storage in this selection"
         },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "started"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "mode": "fixed",
-                  "fixedColor": "green"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "error"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "mode": "fixed",
-                  "fixedColor": "red"
-                }
-              }
-            ]
-          }
-        ]
+        "overrides": []
       },
       "options": {
         "displayLabels": [
@@ -1232,21 +702,21 @@
           "sort": "none"
         }
       },
-      "description": "Guests HA does not manage emit nothing at all, so this counts only the HA estate."
+      "description": "How the fleet's capacity is split across Proxmox storage plugins: rbd, zfspool, dir, lvmthin and the rest."
     },
     {
-      "type": "table",
-      "title": "Guests in HA error",
-      "id": 17,
+      "type": "bargauge",
+      "title": "Time before a storage is full",
+      "id": 11,
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
       },
       "gridPos": {
-        "h": 8,
-        "w": 16,
-        "x": 8,
-        "y": 29
+        "h": 7,
+        "w": 12,
+        "x": 0,
+        "y": 26
       },
       "targets": [
         {
@@ -1255,10 +725,119 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "proxcenter_vm_ha_state{connection=~\"$connection\",node=~\"$node\",state=\"error\"} == 1",
+          "expr": "(proxcenter_storage_total_bytes{connection=~\"$connection\"} - proxcenter_storage_used_bytes{connection=~\"$connection\"}) / (deriv(proxcenter_storage_used_bytes{connection=~\"$connection\"}[6h]) > 0)",
+          "range": true,
+          "instant": false,
+          "refId": "A",
+          "legendFormat": "{{connection}} / {{storage}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 604800
+              },
+              {
+                "color": "green",
+                "value": 2592000
+              }
+            ]
+          },
+          "unit": "s",
+          "min": 0,
+          "max": 7776000,
+          "noValue": "No storage is growing"
+        },
+        "overrides": []
+      },
+      "options": {
+        "displayMode": "basic",
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "maxVizHeight": 300,
+        "minVizHeight": 16,
+        "minVizWidth": 8,
+        "namePlacement": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showUnfilled": true,
+        "sizing": "auto",
+        "valueMode": "color"
+      },
+      "description": "At the current trend, with the filter on the derivative rather than on the quotient so a storage that is not growing is absent instead of reading as infinite. Capped at 90 days so a storage with days left reads as a short red bar rather than an invisible sliver. Needs several hours of history."
+    },
+    {
+      "type": "row",
+      "title": "Detail",
+      "id": 12,
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 33
+      },
+      "panels": []
+    },
+    {
+      "type": "table",
+      "title": "Storage capacity",
+      "id": 13,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 34
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "proxcenter_storage_total_bytes{connection=~\"$connection\"}",
           "range": false,
           "instant": true,
           "refId": "A",
+          "format": "table"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "proxcenter_storage_used_bytes{connection=~\"$connection\"}",
+          "range": false,
+          "instant": true,
+          "refId": "B",
           "format": "table"
         }
       ],
@@ -1277,7 +856,8 @@
               }
             ]
           },
-          "noValue": "No guest is in HA error",
+          "unit": "bytes",
+          "noValue": "No storage in this selection",
           "custom": {
             "align": "auto",
             "cellOptions": {
@@ -1300,7 +880,224 @@
           "fields": ""
         }
       },
-      "description": "An HA resource in error has stopped being managed: HA will not restart or relocate it until an operator clears the state.",
+      "description": "Capacity and space in use per storage, with its Proxmox type and whether the cluster shares it.",
+      "transformations": [
+        {
+          "id": "joinByField",
+          "options": {
+            "byField": "storage",
+            "mode": "outer"
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time 1": true,
+              "Time 2": true,
+              "__name__ 1": true,
+              "__name__ 2": true,
+              "connection 2": true,
+              "type 2": true,
+              "shared 2": true,
+              "job 1": true,
+              "job 2": true,
+              "instance 1": true,
+              "instance 2": true
+            },
+            "renameByName": {
+              "connection 1": "Connection",
+              "type 1": "Type",
+              "shared 1": "Shared",
+              "Value #A": "Capacity",
+              "Value #B": "In use"
+            },
+            "indexByName": {}
+          }
+        }
+      ]
+    },
+    {
+      "type": "table",
+      "title": "Local storage per node, in bytes",
+      "id": 14,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 12,
+        "y": 34
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "proxcenter_storage_node_used_bytes{connection=~\"$connection\"}",
+          "range": false,
+          "instant": true,
+          "refId": "A",
+          "format": "table"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "proxcenter_storage_node_total_bytes{connection=~\"$connection\"}",
+          "range": false,
+          "instant": true,
+          "refId": "B",
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "unit": "bytes",
+          "noValue": "No non-shared storage in this selection",
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "countRows": false,
+          "fields": ""
+        }
+      },
+      "description": "The absolute figures behind the per-node bars, for the moment a percentage is not enough.",
+      "transformations": [
+        {
+          "id": "joinByField",
+          "options": {
+            "byField": "node",
+            "mode": "outer"
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time 1": true,
+              "Time 2": true,
+              "__name__ 1": true,
+              "__name__ 2": true,
+              "connection 2": true,
+              "storage 2": true,
+              "job 1": true,
+              "job 2": true,
+              "instance 1": true,
+              "instance 2": true
+            },
+            "renameByName": {
+              "connection 1": "Connection",
+              "storage 1": "Storage",
+              "Value #A": "In use",
+              "Value #B": "Capacity"
+            },
+            "indexByName": {}
+          }
+        }
+      ]
+    },
+    {
+      "type": "table",
+      "title": "Disabled storages",
+      "id": 15,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 24,
+        "x": 0,
+        "y": 42
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "proxcenter_storage_enabled{connection=~\"$connection\"} == 0",
+          "range": false,
+          "instant": true,
+          "refId": "A",
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "noValue": "Every storage is enabled",
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "countRows": false,
+          "fields": ""
+        }
+      },
+      "description": "A disabled storage still reports its capacity, so it inflates any fleet total while accepting no new volume. Worth knowing before planning against that capacity.",
       "transformations": [
         {
           "id": "organize",
@@ -1326,8 +1123,9 @@
     "proxmox",
     "proxcenter",
     "pve",
-    "fleet",
-    "virtualization"
+    "storage",
+    "ceph",
+    "zfs"
   ],
   "templating": {
     "list": [
@@ -1363,39 +1161,6 @@
         "sort": 1,
         "hide": 0,
         "skipUrlSync": false
-      },
-      {
-        "name": "node",
-        "label": "Node",
-        "description": "Nodes of the selected connections.",
-        "type": "query",
-        "datasource": {
-          "type": "prometheus",
-          "uid": "${DS_PROMETHEUS}"
-        },
-        "definition": "label_values(proxcenter_node_online{connection=~\"$connection\"}, node)",
-        "query": {
-          "qryType": 1,
-          "query": "label_values(proxcenter_node_online{connection=~\"$connection\"}, node)",
-          "refId": "PrometheusVariableQueryEditor-VariableQuery"
-        },
-        "refresh": 1,
-        "includeAll": true,
-        "allValue": ".*",
-        "multi": true,
-        "current": {
-          "selected": true,
-          "text": [
-            "All"
-          ],
-          "value": [
-            "$__all"
-          ]
-        },
-        "options": [],
-        "sort": 1,
-        "hide": 0,
-        "skipUrlSync": false
       }
     ]
   },
@@ -1405,8 +1170,8 @@
   },
   "timepicker": {},
   "timezone": "",
-  "title": "ProxCenter Fleet Overview",
-  "uid": "proxcenter-fleet",
+  "title": "ProxCenter Storage",
+  "uid": "proxcenter-storage",
   "version": 1,
   "weekStart": ""
 }

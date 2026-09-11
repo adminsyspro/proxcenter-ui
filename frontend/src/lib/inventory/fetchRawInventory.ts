@@ -11,6 +11,8 @@ import { getSessionPrisma } from "@/lib/tenant"
 import { prisma as globalPrisma } from "@/lib/db/prisma"
 import { getConnectionById, getPbsConnectionById } from "@/lib/connections/getConnection"
 import { pveFetch } from "@/lib/proxmox/client"
+import { aggregateStorage, type AggregatedStorage } from "@/lib/proxmox/storage"
+import { readNodeStatus, readStorageResources } from "./proxmoxProjections"
 import { pbsFetch } from "@/lib/proxmox/pbs-client"
 import { collectNodeAddresses, resolveManagementIp } from "@/lib/proxmox/resolveManagementIp"
 import {
@@ -30,6 +32,21 @@ export type NodeData = {
   disk?: number
   maxdisk?: number
   uptime?: number
+  /**
+   * Everything below comes from the per-node `/nodes/{node}/status` call this
+   * module ALREADY makes for its memory figures (#925). The payload carries
+   * load, iowait, swap and the exact root filesystem bytes, and all of it used
+   * to be discarded. `/nodes` and `/cluster/resources` carry none of them.
+   */
+  loadavg?: number[]
+  iowait?: number
+  swapUsed?: number
+  swapTotal?: number
+  rootfsUsed?: number
+  rootfsTotal?: number
+  cores?: number
+  pveVersion?: string
+  kernel?: string
   ip?: string
   /** All non-loopback addresses of the host, for the IP search of the palette (#861). */
   ips?: string[]
@@ -53,6 +70,18 @@ export type GuestData = {
   template?: number | boolean
   hastate?: string
   hagroup?: string
+  /**
+   * Cumulative byte COUNTERS since guest start, straight off
+   * `/cluster/resources?type=vm` (#925). Measured present on PVE 9. They were
+   * fetched and dropped by this projection.
+   */
+  netin?: number
+  netout?: number
+  diskread?: number
+  diskwrite?: number
+  cores?: number
+  /** PVE 9 host-side memory of the guest, distinct from the guest-side `mem`. */
+  memhost?: number
 }
 
 export type HaResource = {
@@ -121,7 +150,7 @@ export type RawInventory = {
   clusters: ClusterData[]
   pbsServers: PbsServerData[]
   externalHypervisors: ExternalHypervisor[]
-  storages: any[]
+  storages: AggregatedStorage[]
   stats: { totalClusters: number; totalNodes: number; totalGuests: number; onlineNodes: number; runningGuests: number; totalPbsServers: number; totalDatastores: number; totalBackups: number }
 }
 
@@ -169,16 +198,21 @@ export async function fetchRawInventory(infra: InfraScope): Promise<RawInventory
   }
 
   // 2) Pour chaque connexion PVE, charger nodes et guests EN PARALLÈLE
-  const clusterPromises = pveConnections.map(async (conn): Promise<ClusterData | null> => {
+  const clusterPromises = pveConnections.map(async (conn): Promise<{ cluster: ClusterData; storages: AggregatedStorage[] } | null> => {
     try {
       const connConfig = await getConnectionById(conn.id, (conn as any).tenantId)
 
-      const [nodesResult, guestsResult, haResult, cephResult, nodeResourcesResult] = await Promise.allSettled([
+      const [nodesResult, guestsResult, haResult, cephResult, nodeResourcesResult, storagesResult] = await Promise.allSettled([
         pveFetch<NodeData[]>(connConfig, '/nodes'),
         pveFetch<GuestData[]>(connConfig, '/cluster/resources?type=vm'),
         pveFetch<HaResource[]>(connConfig, '/cluster/ha/resources'),
         pveFetch<any>(connConfig, '/cluster/ceph/status'),
         pveFetch<any[]>(connConfig, '/cluster/resources?type=node'),
+        // #925: the ONE call this module gains. `storages` has been declared on
+        // RawInventory since the beginning and never filled, and
+        // inventoryCache.ts treats a missing one as a cache miss, so filling it
+        // is the direction that was always intended.
+        pveFetch<any[]>(connConfig, '/cluster/resources?type=storage'),
       ])
 
       const nodes: NodeData[] = nodesResult.status === 'fulfilled' ? nodesResult.value || [] : []
@@ -213,13 +247,15 @@ export async function fetchRawInventory(infra: InfraScope): Promise<RawInventory
               : Promise.resolve(null),
           ])
 
+          // Everything read out of the status payload lives in a pure module
+          // with its own tests (#925): the parsing is where the awkward
+          // Proxmox details are, and this function is unreachable by a unit
+          // test without mocking every network call around it.
           return {
             node: node.node,
             ip: resolveManagementIp(networks),
             ips: collectNodeAddresses(networks),
-            // Use memory from /nodes/{node}/status (excludes ZFS ARC / kernel caches)
-            mem: nodeStatus?.memory?.total > 0 ? Number(nodeStatus.memory.used || 0) : undefined,
-            maxmem: nodeStatus?.memory?.total > 0 ? Number(nodeStatus.memory.total || 0) : undefined,
+            ...readNodeStatus(nodeStatus),
           }
         } catch {
           return { node: node.node, ip: undefined, ips: [] as string[], mem: undefined, maxmem: undefined }
@@ -227,10 +263,12 @@ export async function fetchRawInventory(infra: InfraScope): Promise<RawInventory
       })
 
       const nodeEnrichData = await Promise.all(nodeEnrichPromises)
-      const nodeIpMap = new Map<string, { ip?: string; ips: string[]; mem?: number; maxmem?: number }>()
+      type NodeEnrichment = Omit<(typeof nodeEnrichData)[number], 'node'>
+      const nodeIpMap = new Map<string, NodeEnrichment>()
 
-      for (const { node, ip, ips, mem, maxmem } of nodeEnrichData) {
-        if (node) nodeIpMap.set(node, { ip, ips, mem, maxmem })
+      for (const entry of nodeEnrichData) {
+        const { node, ...rest } = entry as any
+        if (node) nodeIpMap.set(node, rest)
       }
 
       const haMap = new Map<string, HaResource>()
@@ -253,6 +291,16 @@ export async function fetchRawInventory(infra: InfraScope): Promise<RawInventory
           // Override mem/maxmem with accurate values from /nodes/{node}/status
           ...(extra?.mem !== undefined ? { mem: extra.mem } : {}),
           ...(extra?.maxmem !== undefined ? { maxmem: extra.maxmem } : {}),
+          // #925: load, iowait, swap and root filesystem, from the same call.
+          loadavg: (extra as any)?.loadavg,
+          iowait: (extra as any)?.iowait,
+          swapUsed: (extra as any)?.swapUsed,
+          swapTotal: (extra as any)?.swapTotal,
+          rootfsUsed: (extra as any)?.rootfsUsed,
+          rootfsTotal: (extra as any)?.rootfsTotal,
+          cores: (extra as any)?.cores ?? (n as any)?.maxcpu,
+          pveVersion: (extra as any)?.pveVersion,
+          kernel: (extra as any)?.kernel,
           ip: extra?.ip,
           ips: extra?.ips ?? [],
           maintenance,
@@ -286,6 +334,13 @@ export async function fetchRawInventory(infra: InfraScope): Promise<RawInventory
           pool: g.pool,
           tags: g.tags,
           template: g.template === 1 || g.template === true,
+          // #925: cumulative counters, dropped by this projection until now.
+          netin: g.netin,
+          netout: g.netout,
+          diskread: g.diskread,
+          diskwrite: g.diskwrite,
+          cores: (g as any).maxcpu,
+          memhost: (g as any).memhost,
           hastate: (() => {
             const haSid = `${g.type === 'lxc' ? 'ct' : 'vm'}:${g.vmid}`
             const ha = haMap.get(haSid)
@@ -325,7 +380,19 @@ return aId - bId
         status = 'degraded'
       }
 
+      // #925. aggregateStorage is reused rather than reimplemented: a shared
+      // storage appears once PER NODE in /cluster/resources, so summing the raw
+      // rows triples the capacity of an RBD pool on a three node cluster. That
+      // helper already collapses shared storages to one entry and sums local
+      // ones per node, producing the nodeBreakdown a per-node panel needs.
+      const rawStorages = readStorageResources(
+        storagesResult.status === 'fulfilled' ? storagesResult.value : null,
+        conn.id,
+        conn.name,
+      )
+
       return {
+        cluster: {
         id: conn.id,
         name: conn.name,
         type: conn.type,
@@ -337,11 +404,14 @@ return aId - bId
         longitude: conn.longitude,
         locationLabel: conn.locationLabel,
         nodes: nodesArray.sort((a, b) => a.node.localeCompare(b.node)),
+        },
+        storages: aggregateStorage(rawStorages),
       }
     } catch (e: any) {
       console.error(`[inventory] Failed to load ${conn.name}:`, e?.message)
 
       return {
+        cluster: {
         id: conn.id,
         name: conn.name,
         type: conn.type,
@@ -352,12 +422,16 @@ return aId - bId
         longitude: conn.longitude,
         locationLabel: conn.locationLabel,
         nodes: [],
+        },
+        storages: [],
       }
     }
   })
 
   const clustersResults = await Promise.all(clusterPromises)
-  const clusters = clustersResults.filter((c): c is ClusterData => c !== null)
+  const clusterEntries = clustersResults.filter((c): c is { cluster: ClusterData; storages: AggregatedStorage[] } => c !== null)
+  const clusters = clusterEntries.map(entry => entry.cluster)
+  const storages = clusterEntries.flatMap(entry => entry.storages)
 
   // 3) Pour chaque connexion PBS, charger status et datastores EN PARALLÈLE
   const pbsPromises = pbsConnections.map(async (conn): Promise<PbsServerData | null> => {
@@ -366,13 +440,25 @@ return aId - bId
       // open PBS servers owned by MSP tenants, not just default-owned ones.
       const connConfig = await getPbsConnectionById(conn.id, (conn as any).tenantId)
 
-      const [statusResult, datastoresResult] = await Promise.allSettled([
+      const [statusResult, datastoresResult, versionResult] = await Promise.allSettled([
         pbsFetch<any>(connConfig, '/status'),
         pbsFetch<any[]>(connConfig, '/admin/datastore'),
+        // #925: `/status` carries NO version on PBS. It was read here as
+        // `status.info.version` and had always been undefined, so the PBS
+        // version was blank in the inventory tree and absent from the
+        // Prometheus exposition. `/version` is the endpoint that answers it,
+        // as connectionDiagnostics.ts:368 and the connections route already do.
+        pbsFetch<any>(connConfig, '/version'),
       ])
 
       const status = statusResult.status === 'fulfilled' ? statusResult.value : null
       const datastores = datastoresResult.status === 'fulfilled' ? datastoresResult.value || [] : []
+      const versionInfo = versionResult.status === 'fulfilled' ? versionResult.value : null
+      // allSettled swallows a rejection, which is how `status.info.version`
+      // stayed dead and unnoticed. Say WHY the version is missing (#925).
+      if (versionResult.status === 'rejected') {
+        console.warn(`[inventory] PBS ${conn.name}: /version failed:`, versionResult.reason?.message)
+      }
 
       const datastoreDetailsPromises = datastores.map(async (ds): Promise<PbsDatastoreData> => {
         const storeName = ds.store || ds.name
@@ -446,7 +532,10 @@ return aId - bId
         name: conn.name,
         type: 'pbs',
         status: status ? 'online' : 'offline',
-        version: status?.info?.version || undefined,
+        version: versionInfo?.version || undefined,
+        // KNOWN DEAD, left as-is on purpose (#925): `/status` carries no
+        // uptime either. The answer is on /nodes/{node}/status, which needs a
+        // node name this call does not have, and no consumer reads it today.
         uptime: status?.uptime || undefined,
         datastores: datastoreDetails,
         stats: { totalSize, totalUsed, datastoreCount: datastoreDetails.length, backupCount: totalBackups }
@@ -497,7 +586,7 @@ return aId - bId
     clusters,
     pbsServers,
     externalHypervisors: externalConnections,
-    storages: [],
+    storages,
     stats: {
       totalClusters: clusters.length,
       totalNodes,

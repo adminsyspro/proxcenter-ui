@@ -6,6 +6,7 @@ vi.mock('@/lib/rbac', () => ({
   checkPermission: vi.fn<(...args: any[]) => Promise<Response | null>>(),
   PERMISSIONS: {
     CONNECTION_VIEW: 'connection.view',
+    STORAGE_DELETE: 'storage.delete',
   },
 }))
 
@@ -100,6 +101,13 @@ describe('DELETE /api/v1/connections/[id]/nodes/[node]/storage/[storage]/content
       '/nodes/pve-node-01/storage/local/content/local%3Aiso%2Fubuntu-22.04.iso',
       { method: 'DELETE' },
     )
+  })
+
+  // Issue #920: deleting a volume is `storage.delete`, not `connection.view`.
+  it('gates on storage.delete', async () => {
+    await callRoute(DELETE as any, { method: 'DELETE', params: BASE_PARAMS })
+
+    expect(checkPermissionMock).toHaveBeenCalledWith('storage.delete', 'connection', BASE_PARAMS.id)
   })
 
   it('403 when checkPermission denies', async () => {

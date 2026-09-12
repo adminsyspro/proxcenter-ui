@@ -4561,6 +4561,8 @@
       "openConsole": "Ouvrir la console",
       "cleanup": "Nettoyer le test",
       "cleanupDone": "Nettoyage terminé",
+      "cleanupIncomplete": "Nettoyage non terminé",
+      "cleanupFailed": "Le nettoyage n'a pas pu aboutir, les invités DR tournent peut-être encore sur les images répliquées",
       "stopped": "arrêtée(s)",
       "disksRolledBack": "disque(s) RBD restauré(s)",
       "jobsResumed": "job(s) de réplication repris",

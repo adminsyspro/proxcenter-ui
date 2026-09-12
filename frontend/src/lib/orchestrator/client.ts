@@ -347,10 +347,10 @@ return { data, status: 200 }
   /**
    * POST request - retourne { data: T }
    */
-  async post<T = any>(path: string, body?: any): Promise<OrchestratorResponse<T>> {
-    const data = await orchestratorFetch<T>(path, { method: 'POST', body })
+  async post<T = any>(path: string, body?: any, timeout?: number): Promise<OrchestratorResponse<T>> {
+    const data = await orchestratorFetch<T>(path, { method: 'POST', body, timeout })
 
-    
+
 return { data, status: 200 }
   }
 
@@ -648,7 +648,13 @@ return this.get<ClusterMetrics[]>(`/metrics/${connectionId}/history${query ? `?$
   }
 
   cleanupTestFailover(planId: string) {
-    return this.post<any>(`/replication/plans/${planId}/cleanup-test`)
+    // A test failover cleanup stops each DR VM, waits for it to report
+    // stopped, reconnects its NICs and rolls every replica image back, one VM
+    // after another: measured at ~20s for a single-disk VM on a local cluster,
+    // so the 30s default expires on any plan with more than one guest. Kept
+    // under the 60s nginx read timeout of a packaged install, so the abort
+    // comes back as our own JSON error rather than an nginx 504 page.
+    return this.post<any>(`/replication/plans/${planId}/cleanup-test`, undefined, 55_000)
   }
 
   startDRVM(body: { vm_id: number; target_cluster: string; replication_job_id: string }) {

@@ -4540,6 +4540,8 @@
       "openConsole": "Konsole öffnen",
       "cleanup": "Test bereinigen",
       "cleanupDone": "Cleanup abgeschlossen",
+      "cleanupIncomplete": "Bereinigung nicht abgeschlossen",
+      "cleanupFailed": "Die Bereinigung konnte nicht abgeschlossen werden, die DR-Gäste laufen möglicherweise noch auf den replizierten Images",
       "stopped": "Gestoppt",
       "disksRolledBack": "RBD-Festplatte(n) zurückgesetzt",
       "jobsResumed": "Replikation job(s) resumed",

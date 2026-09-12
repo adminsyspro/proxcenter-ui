@@ -133,3 +133,40 @@ describe("inventoryPoller tag threading", () => {
     expect(events[0]).not.toHaveProperty("tags")
   })
 })
+
+/**
+ * A DR replica lands on its target cluster as a brand new guest, so Auto-HA
+ * handed it to the CRM with state "started". That overrides the onboot: 0 the
+ * replica config carries on purpose and undoes every `qm stop` a test failover
+ * cleanup issues, leaving a second writer on an image the next incremental
+ * sync imports into. The orchestrator tags replicas; Auto-HA must skip them.
+ */
+describe("inventoryPoller Auto-HA", () => {
+  async function haCallsFor(guest: any) {
+    const { getSetting } = await import("@/lib/db/settings")
+
+    ;(getSetting as any).mockResolvedValue({ enabled: true, state: "started" })
+    await pollTwice([], [guest])
+
+    return pveFetchMock.mock.calls.filter(call => call[1] === "/cluster/ha/resources")
+  }
+
+  it("enables HA on a guest somebody really did add", async () => {
+    const calls = await haCallsFor({ type: "qemu", vmid: 100, node: "n1", status: "running", tags: "prod" })
+
+    expect(calls).toHaveLength(1)
+    expect(calls[0][2].body).toContain("sid=vm%3A100")
+  })
+
+  it("never enables HA on a DR replica", async () => {
+    const calls = await haCallsFor({ type: "qemu", vmid: 9100, node: "n1", status: "stopped", tags: "prod;proxcenter-replica" })
+
+    expect(calls).toEqual([])
+  })
+
+  it("matches the tag exactly, not as a substring", async () => {
+    const calls = await haCallsFor({ type: "qemu", vmid: 101, node: "n1", status: "running", tags: "proxcenter-replicated" })
+
+    expect(calls).toHaveLength(1)
+  })
+})

@@ -4561,6 +4561,8 @@
       "openConsole": "Abrir consola",
       "cleanup": "Limpiar prueba",
       "cleanupDone": "Limpieza completada",
+      "cleanupIncomplete": "La limpieza no se completó",
+      "cleanupFailed": "La limpieza no pudo completarse, los invitados de DR podrían seguir ejecutándose en las imágenes replicadas",
       "stopped": "detenida",
       "disksRolledBack": "disco(s) RBD revertido(s)",
       "jobsResumed": "trabajo(s) de replicación reanudado(s)",

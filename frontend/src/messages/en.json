@@ -4561,6 +4561,8 @@
       "openConsole": "Open Console",
       "cleanup": "Cleanup test",
       "cleanupDone": "Cleanup completed",
+      "cleanupIncomplete": "Cleanup did not complete",
+      "cleanupFailed": "The cleanup could not be completed, the DR guests may still be running on the replica images",
       "stopped": "stopped",
       "disksRolledBack": "RBD disk(s) rolled back",
       "jobsResumed": "replication job(s) resumed",

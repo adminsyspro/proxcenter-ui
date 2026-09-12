@@ -680,7 +680,7 @@ const cloneVM = {
 }
 
 it('describes clone cleanup using the execution manifest', () => {
-  renderDialog({ execution: execution({ vm_results: [cloneVM] }), cleanupResult: { vms_stopped: 1, disks_rolled: 1, jobs_resumed: 1, errors: [] } })
+  renderDialog({ execution: execution({ vm_results: [cloneVM] }), cleanupResult: { all_cleaned: true, vms_stopped: 1, disks_rolled: 1, jobs_resumed: 1, errors: [] } })
   expect(screen.getByText(/Clones destroyed, configuration restored/)).toBeInTheDocument()
   expect(screen.queryByText(/RBD disk\(s\) rolled back/)).not.toBeInTheDocument()
   expect(screen.getByText(/dr1/)).toBeInTheDocument()
@@ -694,6 +694,29 @@ it('keeps cleanup retry available for an interrupted clone test with partial cle
   expect(screen.getByText('clone still in use')).toBeInTheDocument()
   await userEvent.click(screen.getByRole('button', { name: 'Cleanup test' }))
   expect(onCleanup).toHaveBeenCalledOnce()
+})
+
+// Reported from the field: a cleanup whose call was aborted came back as an
+// error body, and the dialog read its missing `errors` key as "no errors" and
+// announced "Cleanup completed" with no detail line, while two DR guests were
+// still running on their replica images. Only all_cleaned may claim success.
+it.each([
+  ['an aborted call', { error: 'Orchestrator request timeout' }],
+  ['a payload without the verdict', { vms_stopped: 1, disks_rolled: 1, jobs_resumed: 1, errors: [] }],
+  ['an explicitly unfinished run', { all_cleaned: false, vms_stopped: 1, disks_rolled: 0, jobs_resumed: 0, errors: ['VM 2000102 is not stopped'] }],
+])('never announces a completed cleanup for %s', async (_label, cleanupResult) => {
+  const onCleanup = vi.fn()
+  renderDialog({ execution: execution(), onCleanup, cleanupResult: cleanupResult as never })
+  expect(screen.queryByText('Cleanup completed')).not.toBeInTheDocument()
+  expect(screen.getByText('Cleanup did not complete')).toBeInTheDocument()
+  await userEvent.click(screen.getByRole('button', { name: 'Cleanup test' }))
+  expect(onCleanup).toHaveBeenCalledOnce()
+})
+
+it('announces a completed cleanup only on the orchestrator verdict', () => {
+  renderDialog({ execution: execution(), onCleanup: vi.fn(), cleanupResult: { all_cleaned: true, vms_stopped: 2, disks_rolled: 3, jobs_resumed: 1, errors: [] } })
+  expect(screen.getByText('Cleanup completed')).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Cleanup test' })).not.toBeInTheDocument()
 })
 
 it('shows an explicit cleanup-first banner for a 409', () => {

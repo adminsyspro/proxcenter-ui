@@ -4561,6 +4561,8 @@
       "openConsole": "콘솔 열기",
       "cleanup": "테스트 정리",
       "cleanupDone": "정리 완료",
+      "cleanupIncomplete": "정리가 완료되지 않았습니다",
+      "cleanupFailed": "정리를 완료하지 못했습니다. DR 게스트가 복제 이미지에서 계속 실행 중일 수 있습니다",
       "stopped": "중지됨",
       "disksRolledBack": "RBD 디스크 롤백됨",
       "jobsResumed": "복제 작업 재개됨",

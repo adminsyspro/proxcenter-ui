@@ -335,6 +335,20 @@ async function pollAll() {
 
 // ---------- Auto-HA Handler ----------
 
+// The tag the orchestrator writes into every replica config it transfers.
+const REPLICA_TAG = 'proxcenter-replica'
+
+// A DR replica reaches its target cluster as a brand new guest, so Auto-HA saw
+// one every time a replication job seeded a VM and handed it to the CRM with
+// state "started". That overrides the onboot: 0 the replica config carries on
+// purpose, and it also undoes every `qm stop` a test failover cleanup issues:
+// the replica comes back up and writes to the image the next incremental sync
+// imports into, which silently tears it. A replica is only ever started by a
+// failover, never by us.
+function isReplica(e: InventoryEvent & { tags?: string }): boolean {
+  return (e.tags || '').split(';').some(tag => tag.trim() === REPLICA_TAG)
+}
+
 async function handleAutoHaEvents(events: InventoryEvent[]) {
   // Relocations emit a remove+add pair in the same batch (see pollConnection).
   // Skip Auto-HA for those: the VM is already an HA resource, just moved.
@@ -351,6 +365,7 @@ async function handleAutoHaEvents(events: InventoryEvent[]) {
     (e): e is Extract<InventoryEvent, { event: 'vm:added' }> =>
       e.event === 'vm:added' &&
       (e as any).template !== 1 &&
+      !isReplica(e) &&
       !relocatedKeys.has(`${e.connId}:${e.type}/${e.vmid}`)
   )
 

@@ -4565,6 +4565,8 @@
       "openConsole": "打开控制台",
       "cleanup": "清理测试",
       "cleanupDone": "清理完成",
+      "cleanupIncomplete": "清理未完成",
+      "cleanupFailed": "清理未能完成，DR 客户机可能仍在副本镜像上运行",
       "stopped": "已停止",
       "disksRolledBack": "RBD 磁盘已回滚",
       "jobsResumed": "复制任务已恢复",

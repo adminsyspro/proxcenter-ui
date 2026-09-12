@@ -39,7 +39,7 @@ interface FailoverDialogProps {
   onConfirm: (options?: TestFailoverOptions) => void
   onCleanup?: () => void
   cleanupLoading?: boolean
-  cleanupResult?: { vms_stopped: number; disks_rolled: number; jobs_resumed: number; errors: string[] } | null
+  cleanupResult?: { all_cleaned?: boolean; vms_stopped: number; disks_rolled: number; jobs_resumed: number; errors: string[] } | null
   execution: RecoveryExecution | null
   errorMessage?: string | null
   errorStatus?: number | null
@@ -395,14 +395,31 @@ export default function FailoverDialog({ open, onClose, plan, type, onConfirm, o
           {/* Cleanup result */}
           {cleanupResult && (() => {
             const errs = cleanupResult.errors || []
+
+            // all_cleaned is the orchestrator's own verdict, and the only
+            // field that says the run reached its end. Keying the banner on an
+            // empty error list instead would call any payload without one a
+            // success, including the error bodies an aborted or refused call
+            // returns, while the DR guests are still up on the replica images.
+            const done = cleanupResult.all_cleaned === true && errs.length === 0
             return (
-              <Alert severity={errs.length > 0 ? 'warning' : 'success'}>
+              <Alert severity={done ? 'success' : 'warning'}>
                 <Typography variant='body2' sx={{ fontWeight: 600, mb: 0.5 }}>
-                  {t(errs.length > 0 ? 'siteRecovery.failover.cleanup' : 'siteRecovery.failover.cleanupDone')}
+                  {t(done ? 'siteRecovery.failover.cleanupDone' : 'siteRecovery.failover.cleanupIncomplete')}
                 </Typography>
+                {/* What an unfinished cleanup means for the operator, said in
+                    their own language. The route's message follows below as
+                    the technical cause: on its own, a string like
+                    "Orchestrator request timeout" is untranslated and says
+                    nothing about the DR guests left running on the replicas. */}
+                {!done && (
+                  <Typography variant='caption' component='div' sx={{ mb: 0.5 }}>
+                    {t('siteRecovery.failover.cleanupFailed')}
+                  </Typography>
+                )}
                 <Typography variant='caption' component='div'>
                   {cleanupResult.vms_stopped > 0 && <>{cleanupResult.vms_stopped} VM(s) {t('siteRecovery.failover.stopped')}<br /></>}
-                  {hasTestClones && errs.length === 0 && <>{t('siteRecovery.failover.clonesDestroyed')}<br /></>}
+                  {hasTestClones && done && <>{t('siteRecovery.failover.clonesDestroyed')}<br /></>}
                   {(!hasTestClones || hasRollbackVMs) && cleanupResult.disks_rolled > 0 && <>{cleanupResult.disks_rolled} {t('siteRecovery.failover.disksRolledBack')}<br /></>}
                   {cleanupResult.jobs_resumed > 0 && <>{cleanupResult.jobs_resumed} {t('siteRecovery.failover.jobsResumed')}</>}
                 </Typography>
@@ -697,7 +714,7 @@ export default function FailoverDialog({ open, onClose, plan, type, onConfirm, o
         )}
         {execution && execution.status !== 'running' && (
           <>
-            {type === 'test' && onCleanup && (!cleanupResult || cleanupResult.errors?.length > 0) && (
+            {type === 'test' && onCleanup && cleanupResult?.all_cleaned !== true && (
               <Button
                 variant='outlined'
                 color='warning'

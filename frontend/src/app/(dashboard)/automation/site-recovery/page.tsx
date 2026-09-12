@@ -358,12 +358,25 @@ export default function SiteRecoveryPage() {
     setCleanupLoading(true)
     try {
       const res = await fetch(`/api/v1/orchestrator/replication/plans/${failoverDialog.planId}/cleanup-test`, { method: 'POST' })
-      const data = await res.json()
-      setCleanupResult(data)
+      const data = await res.json().catch(() => ({}))
+
+      // A cleanup that never reached the orchestrator, or whose call was cut
+      // off on the way back, must never read as a finished one: the DR guests
+      // may still be running on the replica images. Feed the error through the
+      // same shape the dialog already renders, so the retry button stays.
+      // What travels here is the technical cause only; the dialog states the
+      // operator-facing consequence itself, in the operator's own language.
+      setCleanupResult(res.ok
+        ? data
+        : { vms_stopped: 0, disks_rolled: 0, jobs_resumed: 0, errors: data?.error ? [data.error] : [] })
       mutateJobs()
       mutatePlans()
     } catch (e) {
+      // A request that never came back leaves the DR guests up just the same,
+      // so it owes the operator a banner rather than a console line and a
+      // spinner that stops on its own.
       console.error('Failed to cleanup test:', e)
+      setCleanupResult({ vms_stopped: 0, disks_rolled: 0, jobs_resumed: 0, errors: [e instanceof Error ? e.message : String(e)] })
     } finally {
       setCleanupLoading(false)
     }

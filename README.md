@@ -33,7 +33,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/multi-cluster-inventory.png" alt="Multi-cluster Inventory" width="100%">
+  <img src="docs/screenshots/dashboard.png" alt="Modular Dashboard" width="100%">
 </p>
 
 ---
@@ -75,7 +75,7 @@ See the [documentation](https://docs.proxcenter.io/) for the full feature list a
 
 <table>
   <tr>
-    <td width="50%" align="center"><img src="docs/screenshots/dashboard.png" alt="Modular Dashboard" width="100%"><br><sub><b>Modular Dashboard</b></sub></td>
+    <td width="50%" align="center"><img src="docs/screenshots/multi-cluster-inventory.png" alt="Multi-cluster Inventory" width="100%"><br><sub><b>Multi-cluster Inventory</b></sub></td>
     <td width="50%" align="center"><img src="docs/screenshots/drs.png" alt="DRS Load Balancing" width="100%"><br><sub><b>DRS Load Balancing</b></sub></td>
   </tr>
   <tr>
@@ -87,7 +87,7 @@ See the [documentation](https://docs.proxcenter.io/) for the full feature list a
     <td width="50%" align="center"><img src="docs/screenshots/alerts.png" alt="Multi-channel Alerts" width="100%"><br><sub><b>Multi-channel Alerts</b></sub></td>
   </tr>
   <tr>
-    <td width="50%" align="center"><img src="docs/screenshots/network-security.png" alt="Micro-segmentation (NSX)" width="100%"><br><sub><b>Micro-segmentation (NSX)</b></sub></td>
+    <td width="50%" align="center"><img src="docs/screenshots/network-security.png" alt="Zero Trust Network Security" width="100%"><br><sub><b>Zero Trust Network Security</b></sub></td>
     <td width="50%" align="center"><img src="docs/screenshots/topology.png" alt="Network Topology Map" width="100%"><br><sub><b>Network Topology Map</b></sub></td>
   </tr>
 </table>

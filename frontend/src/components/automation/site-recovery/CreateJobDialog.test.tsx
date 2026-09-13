@@ -31,7 +31,10 @@ function renderDialog() {
   )
 }
 
-function renderDialogWithVMs(allVMs: ComponentProps<typeof CreateJobDialog>['allVMs']) {
+function renderDialogWithVMs(
+  allVMs: ComponentProps<typeof CreateJobDialog>['allVMs'],
+  jobs?: ComponentProps<typeof CreateJobDialog>['jobs'],
+) {
   vi.stubGlobal('fetch', vi.fn(async (url: string) => {
     if (url === '/api/v1/connections/src/replicable-vms?engine=rbd') {
       return new Response(JSON.stringify(allVMs.map(vm => ({ vmid: vm.vmid, diskGb: vm.diskGb }))), { status: 200 })
@@ -48,6 +51,7 @@ function renderDialogWithVMs(allVMs: ComponentProps<typeof CreateJobDialog>['all
         onSubmit={vi.fn()}
         connections={[{ id: 'src', name: 'Source', hasCeph: true, engines: ['rbd'] }]}
         allVMs={allVMs}
+        jobs={jobs}
       />
     </SWRConfig>,
   )
@@ -265,6 +269,54 @@ describe('CreateJobDialog stopped VM replication (issue #687)', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Tags' }))
 
     expect(await screen.findByRole('checkbox', { name: /disaster-recovery/ })).toBeInTheDocument()
+  })
+})
+
+describe('CreateJobDialog existing replication jobs', () => {
+  const candidate = { vmid: 200, name: 'database', node: 'node1', connId: 'src', type: 'qemu', status: 'running', tags: [], diskGb: 20 }
+  const existingJob = (source_cluster: string, name = 'Database DR'): NonNullable<ComponentProps<typeof CreateJobDialog>['jobs']>[number] => ({
+    storage_engine: 'rbd',
+    id: 'existing-job',
+    name,
+    source_cluster,
+    vm_ids: [200],
+    vm_names: ['database'],
+    tags: [],
+    target_cluster: 'dst',
+    target_pool: 'rbd',
+    vmid_prefix: 0,
+    status: 'synced',
+    schedule: '*/15 * * * *',
+    schedule_spec: null,
+    timezone: '',
+    rpo_target: 900,
+    retry_count: 0,
+    throughput_bps: 0,
+    rate_limit_mbps: 0,
+    bandwidth_windows: [],
+    network_mapping: {},
+    progress_percent: 0,
+    created_at: '2026-01-01T00:00:00Z',
+    updated_at: '2026-01-01T00:00:00Z',
+  })
+
+  it('disables a VM held by a job on the selected source cluster and names that job', async () => {
+    renderDialogWithVMs([candidate], [existingJob('src')])
+
+    await selectSourceCluster()
+
+    expect(await screen.findByRole('checkbox', { name: /database.*Already replicated by Database DR.*200/ })).toBeDisabled()
+    expect(screen.getByText('Already replicated by Database DR')).toBeInTheDocument()
+  })
+
+  it('keeps the same VMID selectable when the existing job belongs to another source cluster', async () => {
+    renderDialogWithVMs([candidate], [existingJob('another-source')])
+
+    await selectSourceCluster()
+
+    const checkbox = await screen.findByRole('checkbox', { name: /database.*200/ })
+    expect(checkbox).toBeEnabled()
+    expect(screen.queryByText(/Already replicated by/)).not.toBeInTheDocument()
   })
 })
 

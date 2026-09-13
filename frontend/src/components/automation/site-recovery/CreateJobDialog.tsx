@@ -11,7 +11,7 @@ import {
 } from '@mui/material'
 
 import { useTagColors } from '@/contexts/TagColorContext'
-import type { BandwidthWindow, CreateReplicationJobRequest, ReplicableVM, ReplicationStorages, SSHConnectivityResult, StorageEngine } from '@/lib/orchestrator/site-recovery.types'
+import type { BandwidthWindow, CreateReplicationJobRequest, ReplicableVM, ReplicationJob, ReplicationStorages, SSHConnectivityResult, StorageEngine } from '@/lib/orchestrator/site-recovery.types'
 import ScheduleBuilder from './schedule/ScheduleBuilder'
 import { defaultTimezone, type ScheduleBuilderValue } from './schedule/types'
 import { cadenceSeconds, formatWindow, retentionWindowSeconds } from './schedule/retentionWindow'
@@ -48,6 +48,8 @@ interface CreateJobDialogProps {
   connections: Connection[]
   allVMs: VM[]
   engines?: StorageEngine[]
+  // Existing jobs, to keep a guest from landing in a second one.
+  jobs?: ReplicationJob[]
 }
 
 // ── Fetcher ─────────────────────────────────────────────────────────────
@@ -59,7 +61,7 @@ const fetcher = (url: string) => fetch(url).then(res => {
 
 // ── Main Component ─────────────────────────────────────────────────────
 
-export default function CreateJobDialog({ open, onClose, onSubmit, connections, allVMs, engines }: CreateJobDialogProps) {
+export default function CreateJobDialog({ open, onClose, onSubmit, connections, allVMs, engines, jobs }: CreateJobDialogProps) {
   const t = useTranslations()
   const [name, setName] = useState('')
   const [engine, setEngine] = useState<StorageEngine>('rbd')
@@ -110,9 +112,22 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
   )
   const cephVMMap = useMemo(() => new Map((cephVMsData || []).map(vm => [vm.vmid, vm.diskGb])), [cephVMsData])
   const eligibility = useMemo(() => new Map((cephVMsData || []).map(vm => [vm.vmid, vm])), [cephVMsData])
+  // A guest already replicated on this source cluster, mapped to the job holding
+  // it. Two jobs on one source image prune each other's snapshots, so the second
+  // one is refused server-side; catching it here means the operator sees why
+  // before submitting rather than after.
+  const alreadyReplicated = useMemo(() => {
+    const held = new Map<number, string>()
+    for (const job of jobs || []) {
+      if (job.source_cluster !== sourceCluster) continue
+      for (const vmid of job.vm_ids || []) held.set(vmid, job.name || job.id)
+    }
+    return held
+  }, [jobs, sourceCluster])
+
   const isVMDisabled = (vmid: number) => {
     const vm = eligibility.get(vmid)
-    return !vm || vm.unsupported || (engine === 'zfs' && vm.mixed)
+    return !vm || vm.unsupported || (engine === 'zfs' && vm.mixed) || alreadyReplicated.has(vmid)
   }
 
   // Results carry their request key so a previous selection can never enable creation.
@@ -483,6 +498,11 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
                                   }} />
                                 </Box>
                                 <Typography variant='body2' noWrap>{vm.name}</Typography>
+                                {alreadyReplicated.has(vm.vmid) && (
+                                  <Typography variant='caption' sx={{ color: 'warning.main', flexShrink: 0 }}>
+                                    {t('siteRecovery.createJob.vmAlreadyReplicated', { job: alreadyReplicated.get(vm.vmid) })}
+                                  </Typography>
+                                )}
                                 {(eligibility.get(vm.vmid)?.unsupported || eligibility.get(vm.vmid)?.mixed) && (
                                   <Tooltip title={t(eligibility.get(vm.vmid)?.unsupported ? 'siteRecovery.createJob.vmUnsupportedDisk' : engine === 'zfs' ? 'siteRecovery.createJob.vmMixedStorage' : 'siteRecovery.createJob.vmMixedStorageWarn')}>
                                     <i className='ri-error-warning-line' aria-label={t(eligibility.get(vm.vmid)?.unsupported ? 'siteRecovery.createJob.vmUnsupportedDisk' : engine === 'zfs' ? 'siteRecovery.createJob.vmMixedStorage' : 'siteRecovery.createJob.vmMixedStorageWarn')} />

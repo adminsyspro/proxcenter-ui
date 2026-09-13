@@ -79,13 +79,21 @@ function renderTab(jobs: ReplicationJob[]) {
   renderWithProviders(<Harness jobs={jobs} />)
 }
 
-// Opening the drawer triggers a throughput fetch unconditionally (and a
-// per-VM status fetch for multi-VM jobs, not used here since every fixture
-// job has a single VM). Stub it so the drawer renders without an unhandled
-// MSW request failing the test.
-function stubThroughputFetch() {
+type VMStatus = {
+  vmid: number
+  vm_name?: string
+  status: string
+  last_sync: string | null
+  last_error?: string
+  bytes_sent: number
+  duration_ms: number
+}
+
+// Opening the drawer triggers both requests for every job that protects a VM.
+function stubDrawerFetch(vmStatuses: VMStatus[] = []) {
   server.use(
     http.get('/api/v1/orchestrator/replication/jobs/:id/throughput', () => HttpResponse.json([])),
+    http.get('/api/v1/orchestrator/replication/jobs/:id/vms', () => HttpResponse.json(vmStatuses)),
   )
 }
 
@@ -113,7 +121,7 @@ describe('ProtectionTab — failed-over job lockdown', () => {
   })
 
   it('disables Sync now, Resume and Edit in the drawer for a failed-over job, keeps Delete enabled', async () => {
-    stubThroughputFetch()
+    stubDrawerFetch()
     renderTab([job({ status: 'failed_over' })])
 
     await openDrawer('100 - web-01')
@@ -125,7 +133,7 @@ describe('ProtectionTab — failed-over job lockdown', () => {
   })
 
   it('keeps Sync now and Resume enabled in the drawer for a paused (not failed-over) job', async () => {
-    stubThroughputFetch()
+    stubDrawerFetch()
     renderTab([job({ status: 'paused' })])
 
     await openDrawer('100 - web-01')
@@ -192,7 +200,7 @@ describe('ProtectionTab: partially synced status', () => {
   })
 
   it('shows the failure summary as a warning in the drawer of a partial job', async () => {
-    stubThroughputFetch()
+    stubDrawerFetch()
     renderTab([job({ status: 'partial', error_message: '1 of 6 VMs failed: VM 279: failed to create snapshot' })])
 
     await openDrawer('100 - web-01')
@@ -203,7 +211,7 @@ describe('ProtectionTab: partially synced status', () => {
 })
 
 it('shows ZFS glyphs and target node in the job row and detail drawer without a repeating tooltip', async () => {
-  stubThroughputFetch()
+  stubDrawerFetch()
   renderTab([job({ storage_engine: 'zfs', target_pool: 'local-zfs', target_node: 'dr1' })])
   expect(screen.getByRole('img', { name: 'ZFS' })).toBeInTheDocument()
   expect(screen.queryByText('local-zfs · dr1')).not.toBeInTheDocument()
@@ -243,4 +251,99 @@ it('separates Ceph and ZFS jobs of the same cluster pair with one labelled secti
 it('shows no engine section when a cluster pair holds a single engine', () => {
   renderTab([job({ id: 'a' }), job({ id: 'b', vm_ids: [101], vm_names: ['db'] })])
   expect(screen.queryByRole('separator')).not.toBeInTheDocument()
+})
+
+describe('ProtectionTab job details', () => {
+  it('shows the explicit job name, engine and replication label while syncing from source to target', async () => {
+    stubDrawerFetch()
+    renderTab([job({ name: 'Nightly DR', status: 'syncing' })])
+
+    await openDrawer('Nightly DR')
+
+    const dialog = await screen.findByRole('dialog')
+    expect(screen.getByRole('heading')).toHaveTextContent('Nightly DR- Ceph RBD Replication')
+    expect(dialog).toHaveTextContent('0100111011010010')
+    expect(dialog.querySelector('.ri-arrow-right-s-line')).toBeInTheDocument()
+  })
+
+  it('falls back to the derived guest label and shows an idle connector', async () => {
+    stubDrawerFetch()
+    renderTab([job({ storage_engine: 'zfs', target_node: 'dr1', target_pool: 'local-zfs' })])
+
+    await openDrawer('100 - web-01')
+
+    const dialog = await screen.findByRole('dialog')
+    expect(screen.getByRole('heading')).toHaveTextContent('100 - web-01- ZFS Replication')
+    expect(dialog).not.toHaveTextContent('0100111011010010')
+    expect(dialog.querySelector('.ri-arrow-right-s-line')).not.toBeInTheDocument()
+  })
+
+  it('shows every per-VM state with its state colour, tooltip, figures and glyph', async () => {
+    stubDrawerFetch([
+      { vmid: 100, vm_name: 'synced-vm', status: 'synced', last_sync: '2026-01-02T03:04:05Z', bytes_sent: 2048, duration_ms: 120000 },
+      { vmid: 101, vm_name: 'syncing-vm', status: 'syncing', last_sync: null, bytes_sent: 0, duration_ms: 0 },
+      { vmid: 102, vm_name: 'error-vm', status: 'error', last_sync: null, last_error: 'snapshot failed', bytes_sent: 4096, duration_ms: 60000 },
+      { vmid: 103, vm_name: 'suspended-vm', status: 'suspended', last_sync: null, bytes_sent: 0, duration_ms: 0 },
+      { vmid: 104, status: 'pending', last_sync: null, bytes_sent: 0, duration_ms: 0 },
+    ])
+    renderTab([job({ vm_ids: [100, 101, 102, 103, 104], vm_names: ['synced-vm', 'syncing-vm', 'error-vm', 'suspended-vm', 'pending-vm'] })])
+
+    await openDrawer('5 VMs (100 - synced-vm, 101 - syncing-vm…)')
+
+    const expected = [
+      ['Synced', 'ri-checkbox-circle-line', 'rgb(46, 125, 50)'],
+      ['Syncing', 'ri-refresh-line', 'rgb(25, 118, 210)'],
+      ['Error', 'ri-error-warning-line', 'rgb(211, 47, 47)'],
+      ['Suspended (test in progress)', 'ri-pause-circle-line', 'rgb(237, 108, 2)'],
+      ['Pending', 'ri-time-line', 'rgba(0, 0, 0, 0.38)'],
+    ] as const
+
+    for (const [label, glyph, dotColor] of expected) {
+      const state = await screen.findByRole('img', { name: label })
+      const row = state.parentElement!
+      expect(row.querySelector(`.${glyph}`)).toBeInTheDocument()
+      expect(getComputedStyle(state.querySelector('span')!).backgroundColor).toBe(dotColor)
+    }
+
+    expect(screen.getByText('100 · synced-vm').parentElement).toHaveTextContent('2.0 KB · 2m')
+    const errorRow = screen.getByText('102 · error-vm').parentElement!
+    expect(errorRow).toHaveTextContent('snapshot failed')
+    expect(errorRow).not.toHaveTextContent('4.0 KB')
+    await userEvent.hover(screen.getByRole('img', { name: 'Error' }))
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('Error — snapshot failed')
+    expect(screen.getByText('VM 104')).toBeInTheDocument()
+  })
+
+  it('fetches and displays per-VM status for a single guest', async () => {
+    stubDrawerFetch([
+      { vmid: 100, vm_name: 'web-01', status: 'synced', last_sync: null, bytes_sent: 0, duration_ms: 0 },
+    ])
+    renderTab([job()])
+
+    await openDrawer('100 - web-01')
+
+    expect(await screen.findByText('Per-VM status')).toBeInTheDocument()
+    expect(screen.getByText('100 · web-01')).toBeInTheDocument()
+  })
+
+  it('paginates per-VM status beyond five guests', async () => {
+    const statuses = Array.from({ length: 7 }, (_, index) => ({
+      vmid: 200 + index,
+      vm_name: `guest-${index + 1}`,
+      status: 'pending',
+      last_sync: null,
+      bytes_sent: 0,
+      duration_ms: 0,
+    }))
+    stubDrawerFetch(statuses)
+    renderTab([job({ vm_ids: statuses.map(row => row.vmid), vm_names: statuses.map(row => row.vm_name) })])
+
+    await openDrawer('7 VMs (200 - guest-1, 201 - guest-2…)')
+
+    expect(await screen.findByText('200 · guest-1')).toBeInTheDocument()
+    expect(screen.queryByText('206 · guest-7')).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Go to next page' }))
+    expect(screen.getByText('206 · guest-7')).toBeInTheDocument()
+    expect(screen.queryByText('200 · guest-1')).not.toBeInTheDocument()
+  })
 })

@@ -29,7 +29,7 @@ import {
   type PassWindow, type PassProgress,
 } from "./apply"
 import { createTargetVmShell, provisionBlockTargets, markVolumesCopied } from "./target-provision"
-import { cleanShutdownAndConfirm, type PowerOffOps } from "./power-off"
+import { cleanShutdownAndConfirm, isXapiGuestAgentMissing, type PowerOffOps } from "./power-off"
 import { attachDisksAndBoot, verifySampledFirstBlock } from "./finish"
 import { startXapiReader, stopXapiReader, readAllocatedExtents, type XapiReaderHandle } from "./xapi-reader"
 import { checkNbdNodePreflight } from "./xcpng-node-preflight"
@@ -247,6 +247,9 @@ export async function runXcpngWarmMigration(jobId: string, config: WarmMigration
         return (await xapiPowerState(session!, vmRef)) === "Halted"
       },
       hardPowerOff: () => xapiHardShutdown(session!, vmRef),
+      // No guest agent means VM.clean_shutdown can never succeed: the source is
+      // then powered off hard without the operator (see cleanShutdownAndConfirm).
+      isGuestUnreachable: isXapiGuestAgentMissing,
     }
 
     if (useCbt) {
@@ -341,7 +344,7 @@ export async function runXcpngWarmMigration(jobId: string, config: WarmMigration
     }
 
     await attachDisksAndBoot({
-      jobId, pveConn: pveConn as any, node: config.targetNode, vmid: targetVmid, diskCount: vmConfig.disks.length, bootDiskSlot: pveParams.bootDiskSlot,
+      jobId, pveConn: pveConn as any, node: config.targetNode, vmid: targetVmid, diskCount: vmConfig.disks.length, diskSlots: pveParams.diskSlots, bootDiskSlot: pveParams.bootDiskSlot,
       allocatedVolumes, startAfterMigration: config.startAfterMigration, convertDisksToQcow2: config.convertDisksToQcow2 === true, targetStorage: config.targetStorage,
     })
     await updateJob(jobId, "completed", { progress: 100 })

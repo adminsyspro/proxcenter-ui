@@ -11,20 +11,22 @@ import { updateJob, appendLog } from "./job-control"
  * disks); the conversion never fails the migration.
  */
 export async function attachDisksAndBoot(a: {
-  jobId: string; pveConn: any; node: string; vmid: number; diskCount: number; bootDiskSlot: string
+  jobId: string; pveConn: any; node: string; vmid: number; diskCount: number
+  /** Target slot per disk and the boot slot, both from the hardware mapper (IDE/SATA sources keep their bus). */
+  diskSlots: string[]; bootDiskSlot: string
   allocatedVolumes: AllocatedVolume[]; startAfterMigration: boolean; convertDisksToQcow2: boolean; targetStorage: string
 }): Promise<void> {
-  const { jobId, pveConn, node, vmid, diskCount, bootDiskSlot, allocatedVolumes, startAfterMigration, targetStorage } = a
+  const { jobId, pveConn, node, vmid, diskCount, diskSlots, bootDiskSlot, allocatedVolumes, startAfterMigration, targetStorage } = a
   await appendLog(jobId, "Attaching target disks…")
 
   const reconfig = new URLSearchParams()
   const slots: string[] = []
   for (let i = 0; i < diskCount; i++) {
-    const slot = i === 0 ? bootDiskSlot : `scsi${i}`
+    const slot = diskSlots[i] ?? (i === 0 ? bootDiskSlot : `scsi${i}`)
     slots.push(slot)
     reconfig.set(slot, allocatedVolumes[i].volumeId)
   }
-  reconfig.set("boot", `order=${slots[0]}`)
+  reconfig.set("boot", `order=${bootDiskSlot}`)
   try {
     await pveSetVmConfig(pveConn, node, vmid, reconfig)
   } catch (e: any) {
@@ -32,7 +34,7 @@ export async function attachDisksAndBoot(a: {
     throw new Error(`FATAL: could not attach target disks at cutover: ${e?.message || e}`)
   }
   for (const v of allocatedVolumes) v.attached = true
-  await appendLog(jobId, `Attached ${diskCount} disk(s); boot order ${slots[0]}`, "success")
+  await appendLog(jobId, `Attached ${diskCount} disk(s) as ${slots.join(", ")}; boot order ${bootDiskSlot}`, "success")
 
   if (startAfterMigration) {
     await pveFetch<any>(pveConn, `/nodes/${encodeURIComponent(node)}/qemu/${vmid}/status/start`, { method: "POST" })

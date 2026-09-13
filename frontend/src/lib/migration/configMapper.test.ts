@@ -87,3 +87,83 @@ describe("mapEsxiToPveConfig — controller and boot disk bus (#653)", () => {
     expect(p.boot).toBe("order=sata0")
   })
 })
+
+describe("mapEsxiToPveConfig — disk bus follows the source controller", () => {
+  const ideDisk = (label: string, controllerKey: number, unitNumber: number) => ({
+    label, fileName: `[ds] vm/${label}.vmdk`, capacityBytes: 1 << 30, thinProvisioned: true,
+    datastoreName: "ds", relativePath: `vm/${label}.vmdk`, controllerType: "ide", controllerKey, unitNumber,
+  })
+  const busDisk = (label: string, controllerType: string, unitNumber: number, controllerKey = controllerType === "sata" ? 15000 : 1000) => ({
+    ...ideDisk(label, controllerKey, unitNumber), controllerType,
+  })
+
+  it("keeps IDE disks on IDE at their source positions and picks the i440fx machine", () => {
+    // The closed appliance of the field case: four IDE disks, no Tools, guestOS "other".
+    const p = mapEsxiToPveConfig(makeConfig({
+      guestId: "otherGuest", guestOS: "Other (32-bit)", toolsStatus: "toolsNotInstalled",
+      disks: [ideDisk("hd-boot", 200, 0), ideDisk("hd-cf", 200, 1), ideDisk("hd-flash", 201, 0), ideDisk("hd-dump", 201, 1)],
+    }), 100, "local-lvm", "vmbr0")
+    expect(p.diskSlots).toEqual(["ide0", "ide1", "ide2", "ide3"])
+    expect(p.bootDiskSlot).toBe("ide0")
+    expect(p.boot).toBe("order=ide0")
+    expect(p.machine).toBe("pc")
+    expect(p.agent).toBe("0")
+  })
+
+  it("maps IDE positions from the controller and unit, not from the listing order", () => {
+    const p = mapEsxiToPveConfig(makeConfig({
+      disks: [ideDisk("second", 201, 0), ideDisk("first", 200, 0)],
+    }), 100, "local-lvm", "vmbr0")
+    expect(p.diskSlots).toEqual(["ide2", "ide0"])
+    // The boot order names the disk that sits first on the bus, not the first listed.
+    expect(p.boot).toBe("order=ide0")
+  })
+
+  it("keeps SATA disks on SATA and stays on q35", () => {
+    const p = mapEsxiToPveConfig(makeConfig({
+      disks: [busDisk("a", "sata", 0), busDisk("b", "sata", 1)],
+    }), 100, "local-lvm", "vmbr0")
+    expect(p.diskSlots).toEqual(["sata0", "sata1"])
+    expect(p.machine).toBe("q35")
+    expect(p.boot).toBe("order=sata0")
+  })
+
+  it("keeps the #653 rule for SCSI sources: Windows boots from sata0, data disks on scsi", () => {
+    const p = mapEsxiToPveConfig(makeConfig({
+      guestId: "windows9Server64Guest", guestOS: "Microsoft Windows Server 2022 (64-bit)",
+      disks: [busDisk("os", "scsi", 0), busDisk("data", "scsi", 1)],
+    }), 100, "local-lvm", "vmbr0")
+    expect(p.diskSlots).toEqual(["sata0", "scsi1"])
+    expect(p.machine).toBe("q35")
+  })
+
+  it("never collides a Windows SCSI boot disk with a SATA data disk", () => {
+    const p = mapEsxiToPveConfig(makeConfig({
+      guestId: "windows9Server64Guest", guestOS: "Microsoft Windows Server 2022 (64-bit)",
+      disks: [busDisk("os", "scsi", 0), busDisk("data", "sata", 0)],
+    }), 100, "local-lvm", "vmbr0")
+    expect(p.diskSlots).toEqual(["sata0", "sata1"])
+  })
+
+  it("overflows past the six SATA slots of Proxmox onto SCSI", () => {
+    const disks = Array.from({ length: 8 }, (_, i) => busDisk(`d${i}`, "sata", i))
+    const p = mapEsxiToPveConfig(makeConfig({ disks }), 100, "local-lvm", "vmbr0")
+    expect(p.diskSlots).toEqual(["sata0", "sata1", "sata2", "sata3", "sata4", "sata5", "scsi6", "scsi7"])
+  })
+
+  it("falls back to the listing order when an IDE disk carries no unit number", () => {
+    const p = mapEsxiToPveConfig(makeConfig({
+      disks: [{ ...ideDisk("x", 0, 0), controllerKey: undefined, unitNumber: undefined } as any, ideDisk("y", 200, 0)],
+    }), 100, "local-lvm", "vmbr0")
+    // "y" owns ide0 by position, "x" takes the next free IDE slot.
+    expect(p.diskSlots).toEqual(["ide1", "ide0"])
+  })
+
+  it("leaves a guest with Tools installed on the QEMU agent, and a guest without any disks on the old boot slot", () => {
+    expect(mapEsxiToPveConfig(makeConfig({ toolsStatus: "toolsOk" }), 100, "local-lvm", "vmbr0").agent).toBe("1")
+    expect(mapEsxiToPveConfig(makeConfig({ toolsStatus: "toolsNotRunning" }), 100, "local-lvm", "vmbr0").agent).toBe("1")
+    const none = mapEsxiToPveConfig(makeConfig({ disks: [] }), 100, "local-lvm", "vmbr0")
+    expect(none.diskSlots).toEqual([])
+    expect(none.bootDiskSlot).toBe("scsi0")
+  })
+})

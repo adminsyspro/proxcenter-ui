@@ -83,7 +83,7 @@ export async function GET(req: Request, ctx: RouteContext) {
 
     type Choice =
       | { kind: "vnet"; name: string; displayName: string; vdc: string; vdcId: string | null; zone: string; subnet: SubnetInfo | null }
-      | { kind: "shared"; name: string; label: string | null }
+      | { kind: "shared"; name: string; label: string | null; vlanRanges: [number, number][] }
       | { kind: "bridge"; name: string; type: string }
 
     const choices: Choice[] = []
@@ -153,16 +153,30 @@ export async function GET(req: Request, ctx: RouteContext) {
         }
       }
 
-      // Shared bridges with labels
+      // Shared bridges with labels and VLAN pools
       if (allowedShared.size > 0) {
         const sharedRows = await prisma.vdcSharedBridge.findMany({
           where: { vdc: { tenantId, connectionId: connId } },
-          select: { bridge: true, label: true },
+          select: { bridge: true, label: true, vdcId: true },
         })
         const labelMap = new Map<string, string | null>()
-        for (const r of sharedRows) labelMap.set(r.bridge, r.label ?? null)
+        const vdcIds = new Set<string>()
+        for (const r of sharedRows) { labelMap.set(r.bridge, r.label ?? null); vdcIds.add(r.vdcId) }
+        const vlanPools = vdcIds.size > 0
+          ? await prisma.vdcVlanPool.findMany({
+              where: { vdcId: { in: [...vdcIds] }, bridge: { in: [...allowedShared] } },
+              select: { bridge: true, rangeStart: true, rangeEnd: true },
+              orderBy: { rangeStart: 'asc' },
+            })
+          : []
+        const rangesByBridge = new Map<string, [number, number][]>()
+        for (const p of vlanPools) {
+          let arr = rangesByBridge.get(p.bridge)
+          if (!arr) { arr = []; rangesByBridge.set(p.bridge, arr) }
+          arr.push([p.rangeStart, p.rangeEnd])
+        }
         for (const bridge of allowedShared) {
-          choices.push({ kind: "shared", name: bridge, label: labelMap.get(bridge) ?? null })
+          choices.push({ kind: "shared", name: bridge, label: labelMap.get(bridge) ?? null, vlanRanges: rangesByBridge.get(bridge) ?? [] })
         }
       }
     }

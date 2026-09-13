@@ -4817,6 +4817,9 @@
         "vlanDisabledOnVnet": "— VNet SDN, etiqueta ignorada",
         "vlanDisabledOnVnetHelp": "Cada VNet es su propio dominio L2 (VNI). Para separar tráfico, crea otra VNet.",
         "vlanDisabledOnVnetTooltip": "El etiquetado VLAN en una NIC no es compatible con VNets SDN VXLAN: cada VNet ya es su propio dominio L2 aislado (VNI). Para separar tráfico, crea una segunda VNet en lugar de etiquetar aquí una NIC.",
+        "vlanInvalid": "El tag VLAN debe ser un entero entre 1 y 4094.",
+        "vlanPoolHint": "Rangos VLAN permitidos: {ranges}",
+        "vlanNoPool": "No hay pool VLAN configurado para este bridge.",
         "qemuAgent": "QEMU Guest Agent"
       },
       "cloudInit": {

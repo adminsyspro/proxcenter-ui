@@ -4796,6 +4796,9 @@
         "vlanDisabledOnVnet": "— SDN-VNet, Tag ignoriert",
         "vlanDisabledOnVnetHelp": "Jedes VNet ist seine eigene L2-Domäne (VNI). Erstellen Sie ein weiteres VNet, um den Verkehr zu trennen.",
         "vlanDisabledOnVnetTooltip": "VLAN-Tagging an einer NIC wird auf VXLAN-SDN-VNets nicht unterstützt — jedes VNet ist bereits seine eigene isolierte L2-Domäne (VNI). Erstellen Sie ein zweites VNet, statt die NIC hier zu taggen.",
+        "vlanInvalid": "Der VLAN-Tag muss eine Ganzzahl zwischen 1 und 4094 sein.",
+        "vlanPoolHint": "Erlaubte VLAN-Bereiche: {ranges}",
+        "vlanNoPool": "Kein VLAN-Pool für diese Bridge konfiguriert.",
         "qemuAgent": "QEMU Guest Agent"
       },
       "cloudInit": {

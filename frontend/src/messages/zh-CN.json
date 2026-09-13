@@ -4821,6 +4821,9 @@
         "vlanDisabledOnVnet": "— SDN VNet，忽略标签",
         "vlanDisabledOnVnetHelp": "每个 VNet 都是独立的 L2 域（VNI）。如需隔离流量，请新建另一个 VNet。",
         "vlanDisabledOnVnetTooltip": "VXLAN SDN VNet 上的网卡不支持 VLAN 标签——每个 VNet 已经是独立隔离的 L2 域（VNI）。如需隔离流量，请创建第二个 VNet，而不是在此处给网卡打标签。",
+        "vlanInvalid": "VLAN 标签必须是 1 到 4094 之间的整数。",
+        "vlanPoolHint": "允许的 VLAN 范围：{ranges}",
+        "vlanNoPool": "此网桥未配置 VLAN 池。",
         "qemuAgent": "QEMU Guest Agent"
       },
       "cloudInit": {

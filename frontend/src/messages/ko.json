@@ -4817,6 +4817,9 @@
         "vlanDisabledOnVnet": "- SDN VNet, 태그 무시됨",
         "vlanDisabledOnVnetHelp": "각 VNet은 자체 L2 도메인(VNI)입니다. 트래픽을 분리하려면 다른 VNet을 생성하세요.",
         "vlanDisabledOnVnetTooltip": "VXLAN SDN VNet에서는 NIC의 VLAN 태깅이 지원되지 않습니다. 각 VNet은 이미 자체적으로 격리된 L2 도메인(VNI)입니다. 트래픽을 분리하려면 NIC에 태그를 지정하는 대신 두 번째 VNet을 생성하세요.",
+        "vlanInvalid": "VLAN 태그는 1에서 4094 사이의 정수여야 합니다.",
+        "vlanPoolHint": "허용된 VLAN 범위: {ranges}",
+        "vlanNoPool": "이 브리지에 구성된 VLAN 풀이 없습니다.",
         "qemuAgent": "QEMU 게스트 에이전트"
       },
       "cloudInit": {

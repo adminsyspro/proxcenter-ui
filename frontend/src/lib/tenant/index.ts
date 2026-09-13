@@ -530,9 +530,15 @@ export async function addUserToTenant(userId: string, tenantId: string, isDefaul
     if (!markDefault) {
       const existingDefault = await tx.userTenant.findFirst({
         where: { userId, isDefault: true },
-        select: { userId: true },
+        select: { userId: true, tenantId: true },
       })
-      if (!existingDefault) markDefault = true
+      if (!existingDefault || (existingDefault.tenantId === 'default' && tenantId !== 'default')) {
+        const user = await tx.user.findUnique({
+          where: { id: userId },
+          select: { isSuperAdmin: true },
+        })
+        if (!user?.isSuperAdmin) markDefault = true
+      }
     }
 
     if (markDefault) {

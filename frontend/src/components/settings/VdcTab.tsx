@@ -1397,6 +1397,7 @@ export default function VdcTab() {
               the connection too). The slug field is no longer exposed —
               it's a derived identifier the user shouldn't tune. */}
           <Autocomplete
+            fullWidth
             options={tenants.filter((t) => editingVdc ? true : t.id !== 'default')}
             getOptionLabel={(o) => o.name || o.slug || o.id}
             value={tenants.find((t) => t.id === form.tenantId) || null}
@@ -1480,6 +1481,7 @@ export default function VdcTab() {
 
           {/* Connection / Cluster */}
           <Autocomplete
+            fullWidth
             options={editingVdc ? connections : poolConnections.filter((c) => !occupiedConnectionIds.has(c.id))}
             getOptionLabel={(o) => o.name || o.id}
             value={connections.find((c) => c.id === form.connectionId) || null}

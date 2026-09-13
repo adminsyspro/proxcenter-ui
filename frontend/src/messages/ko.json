@@ -4477,6 +4477,7 @@
       "zfsNodeHint": "ZFS는 노드 로컬 스토리지입니다. 복제본은 이 노드에 저장되며 DR VM도 이 노드에서 시작됩니다.",
       "vmMixedStorage": "이 VM에는 ZFS 외부의 디스크가 있어 ZFS로 복제할 수 없습니다.",
       "vmMixedStorageWarn": "Ceph RBD 디스크만 복제되며 다른 디스크는 건너뜁니다.",
+      "vmAlreadyReplicated": "{job}에서 이미 복제됨",
       "vmUnsupportedDisk": "이 VM에는 패스스루 디스크와 같이 지원되지 않는 디스크 참조가 있습니다.",
       "sshChecks": "노드 간 SSH 연결"
     },

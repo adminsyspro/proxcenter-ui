@@ -4481,6 +4481,7 @@
       "zfsNodeHint": "ZFS 是节点本地存储：副本保存在此节点上，灾备虚拟机也在此节点上启动。",
       "vmMixedStorage": "此虚拟机具有 ZFS 以外的磁盘，无法使用 ZFS 复制。",
       "vmMixedStorageWarn": "仅复制 Ceph RBD 磁盘，其他磁盘将被跳过。",
+      "vmAlreadyReplicated": "已由 {job} 复制",
       "vmUnsupportedDisk": "此虚拟机具有不受支持的磁盘引用，例如直通磁盘。",
       "sshChecks": "节点间 SSH 连接"
     },

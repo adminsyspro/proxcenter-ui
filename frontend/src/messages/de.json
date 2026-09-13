@@ -4456,6 +4456,7 @@
       "zfsNodeHint": "ZFS ist lokal auf einem Knoten: Replikate liegen auf diesem Knoten und DR-VMs starten dort.",
       "vmMixedStorage": "Diese VM hat Datenträger außerhalb von ZFS und kann nicht mit ZFS repliziert werden.",
       "vmMixedStorageWarn": "Nur Ceph-RBD-Datenträger werden repliziert; andere Datenträger werden übersprungen.",
+      "vmAlreadyReplicated": "Bereits repliziert von {job}",
       "vmUnsupportedDisk": "Diese VM hat einen nicht unterstützten Datenträgerverweis, etwa einen Passthrough-Datenträger.",
       "sshChecks": "SSH-Verbindungen zwischen Knoten"
     },

@@ -4477,6 +4477,7 @@
       "zfsNodeHint": "ZFS is local to a node: replicas live on this node and DR VMs start there.",
       "vmMixedStorage": "This VM has disks outside ZFS and cannot be replicated with ZFS.",
       "vmMixedStorageWarn": "Only Ceph RBD disks will be replicated; other disks are skipped.",
+      "vmAlreadyReplicated": "Already replicated by {job}",
       "vmUnsupportedDisk": "This VM has an unsupported disk reference, such as a passthrough disk.",
       "sshChecks": "SSH connections between nodes"
     },

@@ -621,6 +621,7 @@ export default function SiteRecoveryPage() {
           connections={connections}
           allVMs={allVMs}
           engines={engines}
+          jobs={jobs}
         />
 
         <EditJobDialog

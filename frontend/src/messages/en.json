@@ -4288,6 +4288,7 @@
       "syncing": "Syncing",
       "error": "Error",
       "paused": "Paused",
+      "suspended": "Suspended (test in progress)",
       "pending": "Pending",
       "noMatch": "No matching VMs",
       "partial": "Partially synced"

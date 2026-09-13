@@ -4288,6 +4288,7 @@
       "syncing": "동기화 중",
       "error": "오류",
       "paused": "일시 중지됨",
+      "suspended": "일시 중단 (테스트 진행 중)",
       "pending": "대기 중",
       "noMatch": "일치하는 VM 없음",
       "partial": "부분 동기화"

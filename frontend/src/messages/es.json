@@ -4288,6 +4288,7 @@
       "syncing": "Sincronizando",
       "error": "Error",
       "paused": "En pausa",
+      "suspended": "Suspendida (prueba en curso)",
       "pending": "Pendiente",
       "noMatch": "Sin VMs coincidentes",
       "partial": "Parcialmente sincronizado"

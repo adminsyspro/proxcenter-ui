@@ -5,7 +5,7 @@ import { useTranslations } from 'next-intl'
 
 import {
   Alert, Box, Button, Card, CardContent, Chip, Dialog, DialogActions, DialogContent, DialogTitle,
-  Divider, Drawer, IconButton,
+  Divider, IconButton,
   InputAdornment, LinearProgress, MenuItem, Select, Stack, TablePagination, TextField, Tooltip, Typography,
   alpha, useTheme
 } from '@mui/material'
@@ -14,6 +14,7 @@ import { AreaChart, Area, YAxis, Tooltip as RTooltip } from 'recharts'
 import ChartContainer from '@/components/ChartContainer'
 
 import EngineGlyph from './EngineGlyph'
+import AppDialogTitle from '@/components/ui/AppDialogTitle'
 import EmptyState from '@/components/EmptyState'
 
 import type { ReplicationJob, ReplicationJobStatus, ReplicationJobLog, StorageEngine } from '@/lib/orchestrator/site-recovery.types'
@@ -42,6 +43,18 @@ function computeRpoActual(lastSync: string | null | undefined): number | null {
   if (!lastSync) return null
   const diff = Math.floor((Date.now() - new Date(lastSync).getTime()) / 1000)
   return diff > 0 ? diff : null
+}
+
+// Per-VM replication state as a glyph, shown at the end of the row. Must stay
+// in step with the siteRecovery.status catalogue that names it in the tooltip.
+function vmStatusIcon(status: string): string {
+  switch (status) {
+    case 'synced': return 'ri-checkbox-circle-line'
+    case 'syncing': return 'ri-refresh-line'
+    case 'error': return 'ri-error-warning-line'
+    case 'suspended': return 'ri-pause-circle-line'
+    default: return 'ri-time-line'
+  }
 }
 
 function jobLabel(job: ReplicationJob, vmNameMap?: Record<number, string>): string {
@@ -230,9 +243,13 @@ const JobCard = ({ job, onClick, onEdit, vmNameMap, throughputHistory, t }: { jo
             </Box>
           )}
 
-          {/* Name (if set) + VM names */}
+          {/* The job's name carries the row. The guests it protects are listed,
+              with their own state, in the details dialog: spelling them out here
+              too pushed the row towards an unreadable enumeration as soon as a
+              job grew. A job with no name falls back to the derived label, which
+              is then its only identifier. */}
           <Box sx={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 1 }}>
-            {job.name && (
+            {job.name ? (
               <Typography variant='body2' sx={{
                 fontWeight: 700, display: 'flex', alignItems: 'center', gap: 0.5, lineHeight: 1.25,
                 overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
@@ -240,15 +257,15 @@ const JobCard = ({ job, onClick, onEdit, vmNameMap, throughputHistory, t }: { jo
                 <i className='ri-bookmark-line' style={{ fontSize: 14, opacity: 0.7 }} />
                 {job.name}
               </Typography>
+            ) : (
+              <Typography variant='body2' sx={{
+                fontWeight: 600, color: 'text.primary',
+                display: 'block', lineHeight: 1.3,
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
+              }}>
+                {jobLabel(job, vmNameMap)}
+              </Typography>
             )}
-            <Typography variant={job.name ? 'caption' : 'body2'} sx={{
-              fontWeight: job.name ? 400 : 600,
-              color: job.name ? 'text.secondary' : 'text.primary',
-              display: 'block', lineHeight: 1.3,
-              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
-            }}>
-              {jobLabel(job, vmNameMap)}
-            </Typography>
           </Box>
 
           {/* Syncing progress + throughput + sparkline */}
@@ -387,7 +404,9 @@ export default function ProtectionTab({
     job_id: string
     vmid: number
     vm_name?: string
-    status: 'pending' | 'syncing' | 'synced' | 'error'
+    // suspended: a test failover is running on this guest's replica, so the job
+    // skips it and keeps replicating its siblings.
+    status: 'pending' | 'syncing' | 'synced' | 'error' | 'suspended'
     last_sync?: string | null
     last_error?: string
     bytes_sent: number
@@ -395,6 +414,10 @@ export default function ProtectionTab({
     updated_at: string
   }
   const [vmStatuses, setVmStatuses] = useState<VMStatusRow[] | null>(null)
+  // Five rows a page keeps the block a fixed height, so the dialog itself
+  // never scrolls however many guests a tag-based job ends up carrying.
+  const VM_ROWS_PER_PAGE = 5
+  const [vmPage, setVmPage] = useState(0)
   const [vmStatusesLoading, setVmStatusesLoading] = useState(false)
 
   // Historical throughput from the server
@@ -504,16 +527,19 @@ export default function ProtectionTab({
   const openJob = (id: string) => {
     onSelectJob(id)
     setDrawerOpen(true)
+    setVmPage(0)
   }
 
-  // Fetch per-VM status when drawer opens on a job with multiple VMs.
+  // Fetch per-VM status when the drawer opens on a job that protects anything.
+  // A single-guest job gets the table too: its own last run, volume and duration
+  // live there and nowhere else.
   useEffect(() => {
     if (!drawerOpen || !selectedJobId) {
       setVmStatuses(null)
       return
     }
     const job = (jobs || []).find(j => j.id === selectedJobId)
-    if (!job || (job.vm_ids || []).length <= 1) {
+    if (!job || (job.vm_ids || []).length === 0) {
       setVmStatuses(null)
       return
     }
@@ -671,39 +697,60 @@ export default function ProtectionTab({
 
       {filtered.length > 25 && <TablePagination component='div' count={filtered.length} page={currentPage} rowsPerPage={25} rowsPerPageOptions={[25]} onPageChange={(_, value) => setPage(value)} />}
 
-      {/* Detail Drawer */}
-      <Drawer anchor='right' open={drawerOpen} onClose={closeDrawer} PaperProps={{ sx: { width: { xs: '100%', sm: 450 } } }}>
-        <Box sx={{ p: 2.5, display: 'flex', flexDirection: 'column', height: '100%' }}>
-          {!selected ? (
+      {/* Job details. A centred dialog rather than the 450 px side drawer this
+          replaces: the per-VM list, the bandwidth chart and the log lines each
+          want width, and stacking them in a narrow column turned the panel into
+          one long scroll. Below sm the Paper takes the whole screen, where a
+          centred box would only lose its margins. */}
+      <Dialog
+        open={drawerOpen}
+        onClose={closeDrawer}
+        fullWidth
+        maxWidth='lg'
+        PaperProps={{
+          sx: {
+            m: { xs: 0, sm: 4 },
+            width: { xs: '100%', sm: 'auto' },
+            maxWidth: { xs: '100%', sm: 1180 },
+            height: { xs: '100%', sm: 'auto' },
+            maxHeight: { sm: '90vh' },
+            borderRadius: { xs: 0, sm: 1 }
+          }
+        }}
+      >
+        {!selected ? (
+          <Box sx={{ p: 2.5 }}>
             <Alert severity='info'>{t('siteRecovery.protection.selectJob')}</Alert>
-          ) : (
-            <>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2, gap: 1.5 }}>
-                <EngineGlyph engine={selected.storage_engine} size={24} />
-                <Box sx={{ minWidth: 0, flex: 1 }}>
-                  <Typography variant='h6' sx={{ fontWeight: 700, mb: 0.25 }}>
-                    {selected.name || jobLabel(selected, vmNamesByConn?.[selected.source_cluster])}
-                  </Typography>
-                  {selected.name && (
-                    <Typography variant='body2' sx={{ color: 'text.primary', fontWeight: 500, mb: 0.25 }}>
-                      {jobLabel(selected, vmNamesByConn?.[selected.source_cluster])}
-                    </Typography>
-                  )}
-                  <Typography variant='caption' sx={{ color: 'text.secondary' }}>
-                    {(selected.vm_ids || []).length} VM(s) — {(selected.vm_ids || []).map(id => {
-                      const name = vmNamesByConn?.[selected.source_cluster]?.[id]
-                      return name ? `${id} - ${name}` : `${id}`
-                    }).join(', ')}
-                  </Typography>
+          </Box>
+        ) : (
+          <>
+            {/* The shared dialog header, as everywhere else in the app. The job
+                name alone: the guests it carries are listed with their state
+                further down, and repeating them here said the same thing three
+                times over. */}
+            <AppDialogTitle
+              icon={<EngineGlyph engine={selected.storage_engine} size={24} />}
+              onClose={closeDrawer}
+            >
+              <Box component='span' sx={{ display: 'inline-flex', alignItems: 'baseline', gap: 0.75, minWidth: 0, maxWidth: '100%' }}>
+                <Box component='span' sx={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {selected.name || jobLabel(selected, vmNamesByConn?.[selected.source_cluster])}
                 </Box>
-                <IconButton onClick={closeDrawer} size='small'><i className='ri-close-line' /></IconButton>
+                {/* The engine reads off the existing siteRecovery.engine catalogue,
+                    the same wording the create dialog uses, rather than a second
+                    hard-coded spelling of "Ceph RBD". */}
+                <Box component='span' sx={{ flexShrink: 0, color: 'text.secondary', fontWeight: 400 }}>
+                  - {t(`siteRecovery.engine.${selected.storage_engine}`)} {t('siteRecovery.tabs.replication')}
+                </Box>
               </Box>
+            </AppDialogTitle>
+            <Box sx={{ px: 2.5, pb: 2.5, pt: 0.5, display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
 
               {/* Actions as icon buttons, the tooltip carries the label: four
-                  labelled buttons do not fit one row of a 450 px drawer
-                  ("Synchroniser" alone is wider than its quarter). A disabled
-                  button fires no events, hence the span under its Tooltip.
-                  The status chip closes the row on the right. */}
+                  labelled buttons crowd the row once the status chip claims its
+                  right end ("Synchroniser" alone is wider than a quarter of it).
+                  A disabled button fires no events, hence the span under its
+                  Tooltip. */}
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
                 <Tooltip title={selected.status === 'failed_over' ? t('siteRecovery.jobs.failedOverTooltip') : t('siteRecovery.protection.syncNow')} arrow>
                   <span>
@@ -746,30 +793,141 @@ export default function ProtectionTab({
                 <Alert severity={selected.status === 'partial' ? 'warning' : 'error'} sx={{ mb: 2 }} icon={<i className='ri-error-warning-line' />}>{selected.error_message}</Alert>
               )}
 
-              <Box sx={{ p: 2, borderRadius: 1, bgcolor: 'action.hover', mb: 2, textAlign: 'center' }}>
-                <Typography variant='caption' sx={{ color: 'text.secondary' }}>{t('siteRecovery.protection.source')}</Typography>
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.75, mb: 1 }}>
-                  <EngineGlyph engine={selected.storage_engine} />
-                  <Typography variant='body2' sx={{ fontWeight: 600 }}>{connName(selected.source_cluster)}</Typography>
+              {/* Source and target side by side, so the layout carries the
+                  direction on its own, joined edge to edge by the connector. */}
+              <Box sx={{
+                p: 2, borderRadius: 1, bgcolor: 'action.hover', mb: 2,
+                display: 'grid',
+                gridTemplateColumns: { xs: 'minmax(0, 1fr)', sm: 'minmax(0, max-content) minmax(48px, 1fr) minmax(0, max-content)' },
+                rowGap: { xs: 0.5, sm: 0 }
+              }}>
+                <Box sx={{ display: 'contents' }}>
+                  <Typography variant='caption' sx={{ color: 'text.secondary', display: 'block', gridColumn: 1, gridRow: 1, textAlign: { xs: 'center', sm: 'left' } }}>
+                    {t('siteRecovery.protection.source')}
+                  </Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0, overflow: 'hidden', gridColumn: 1, gridRow: 2, justifyContent: { xs: 'center', sm: 'flex-start' } }}>
+                    <EngineGlyph engine={selected.storage_engine} />
+                    <Typography variant='body2' sx={{ fontWeight: 600, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {connName(selected.source_cluster)}
+                    </Typography>
+                  </Box>
                 </Box>
-                <Box sx={{ color: 'text.disabled', my: 0.5 }}><i className='ri-arrow-down-line' /></Box>
-                <Typography variant='caption' sx={{ color: 'text.secondary' }}>{t('siteRecovery.protection.target')}</Typography>
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.75 }}>
-                  <EngineGlyph engine={selected.storage_engine} />
-                  <Typography variant='body2' sx={{ fontWeight: 600 }}>{connName(selected.target_cluster)} / {selected.target_pool}{selected.storage_engine === 'zfs' && ` · ${selected.target_node || ''}`}</Typography>
+
+                <Box
+                  aria-hidden
+                  sx={{
+                    display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, alignItems: 'center',
+                    gridColumn: { xs: 1, sm: 2 }, gridRow: { xs: 3, sm: 2 },
+                    justifySelf: { xs: 'center', sm: 'stretch' }, alignSelf: 'stretch',
+                    width: { xs: 28, sm: 'auto' }, height: { xs: 38, sm: 'auto' },
+                    color: selected.status === 'syncing' ? 'primary.main' : 'text.disabled'
+                  }}
+                >
+                  {selected.status === 'syncing' ? (
+                  <>
+                  {/* Two identical binary runs make one continuous belt: moving
+                      the belt by exactly half its width swaps one run for the
+                      other, so the loop has neither a gap nor a visible seam. */}
+                  <Box sx={{
+                    position: 'relative', flex: 1, minWidth: 0,
+                    width: { xs: 18, sm: 'auto' }, height: { xs: 30, sm: 16 },
+                    overflow: 'hidden', display: 'flex', alignItems: 'center',
+                    maskImage: {
+                      xs: 'linear-gradient(to bottom, transparent 0%, black 14%, black 86%, transparent 100%)',
+                      sm: 'linear-gradient(to right, transparent 0%, rgba(0, 0, 0, 0.45) 7%, black 72%, black 95%, transparent 100%)'
+                    },
+                    WebkitMaskImage: {
+                      xs: 'linear-gradient(to bottom, transparent 0%, black 14%, black 86%, transparent 100%)',
+                      sm: 'linear-gradient(to right, transparent 0%, rgba(0, 0, 0, 0.45) 7%, black 72%, black 95%, transparent 100%)'
+                    }
+                  }}>
+                    <Box sx={{
+                      display: 'inline-flex', width: 'max-content', flexShrink: 0,
+                      fontFamily: 'monospace', fontSize: 9.5, fontWeight: 700,
+                      lineHeight: 1, letterSpacing: '0.08em', whiteSpace: 'nowrap',
+                      writingMode: { xs: 'vertical-rl', sm: 'horizontal-tb' },
+                      textOrientation: { xs: 'upright', sm: 'mixed' },
+                      animation: { xs: 'none', sm: `srBinaryFlow ${selected.status === 'syncing' ? '2.4s' : '8s'} linear infinite` },
+                      filter: selected.status === 'syncing'
+                        ? theme => `drop-shadow(0 0 3px ${alpha(theme.palette.primary.main, 0.55)})`
+                        : 'none',
+                      // Source to target, so the run starts shifted back by one
+                      // copy and slides forward. Translating the other way made
+                      // the digits read as travelling from the target to the
+                      // source. Two identical copies, so -50% is exactly one
+                      // run width and the loop has no seam.
+                      '@keyframes srBinaryFlow': {
+                        from: { transform: 'translate3d(-50%, 0, 0)' },
+                        to: { transform: 'translate3d(0, 0, 0)' }
+                      },
+                      '@media (prefers-reduced-motion: reduce)': {
+                        animation: 'none', transform: 'translate3d(0, 0, 0)'
+                      },
+                      '& > span': {
+                        display: 'inline-block', flexShrink: 0,
+                        backgroundImage: theme => {
+                          const streamColor = selected.status === 'syncing' ? theme.palette.primary.main : theme.palette.text.disabled
+
+                          return `linear-gradient(90deg, ${alpha(streamColor, 0.34)} 0%, ${alpha(streamColor, 0.72)} 18%, ${alpha(streamColor, 0.46)} 36%, ${alpha(streamColor, 0.9)} 57%, ${alpha(streamColor, 0.52)} 76%, ${streamColor} 100%)`
+                        },
+                        backgroundClip: 'text', WebkitBackgroundClip: 'text',
+                        color: 'transparent'
+                      }
+                    }}>
+                      <Box component='span'>0100111011010010110100011100101001110101100010110011010010111001011010001110100101101100011011010100111001011010011100101101000111010010</Box>
+                      <Box component='span'>0100111011010010110100011100101001110101100010110011010010111001011010001110100101101100011011010100111001011010011100101101000111010010</Box>
+                    </Box>
+                  </Box>
+                  </>
+                  ) : (
+                    /* At rest, a plain rule. Dimming the digits instead made
+                       them depend on the theme: text.disabled is a light grey
+                       on a dark ground but a dark one on a light ground, so
+                       the same opacity that hid them in dark mode left them
+                       plainly legible in light mode. */
+                    <Box sx={{ flex: 1, minWidth: 0, width: { xs: 2, sm: 'auto' }, height: { xs: 30, sm: 2 }, borderRadius: 1, bgcolor: 'divider' }} />
+                  )}
+                  {/* The arrow head belongs to a transfer in progress. On an
+                      idle job it pointed at nothing and read as a stray glyph. */}
+                  {selected.status === 'syncing' && (
+                    <Box sx={{ lineHeight: 0, ml: { sm: -0.25 }, mt: { xs: -0.25 }, fontSize: '1.1rem', transform: { xs: 'rotate(90deg)', sm: 'none' } }}>
+                      <i className='ri-arrow-right-s-line' />
+                    </Box>
+                  )}
+                </Box>
+
+                <Box sx={{ display: 'contents' }}>
+                  <Typography variant='caption' sx={{ color: 'text.secondary', display: 'block', gridColumn: { xs: 1, sm: 3 }, gridRow: { xs: 4, sm: 1 }, textAlign: { xs: 'center', sm: 'right' } }}>
+                    {t('siteRecovery.protection.target')}
+                  </Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0, overflow: 'hidden', gridColumn: { xs: 1, sm: 3 }, gridRow: { xs: 5, sm: 2 }, justifyContent: { xs: 'center', sm: 'flex-end' } }}>
+                    <EngineGlyph engine={selected.storage_engine} />
+                    <Typography variant='body2' sx={{ fontWeight: 600, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {connName(selected.target_cluster)} / {selected.target_pool}{selected.storage_engine === 'zfs' && ` · ${selected.target_node || ''}`}
+                    </Typography>
+                  </Box>
                 </Box>
               </Box>
 
-              <Box sx={{ flex: 1, overflow: 'auto' }}>
-                <DetailRow icon='ri-time-line' label={t('siteRecovery.protection.schedule')} value={planningLabel(selected)} />
-                <DetailRow icon='ri-timer-line' label={t('siteRecovery.protection.rpoTarget')} value={formatDuration(selected.rpo_target)} />
-                <DetailRow icon='ri-timer-flash-line' label={t('siteRecovery.protection.rpoActual')} value={formatDuration(computeRpoActual(selected.last_sync))} />
-                <DetailRow icon='ri-speed-line' label={t('siteRecovery.protection.throughput')} value={selected.throughput_bps > 0 ? `${formatBytes(selected.throughput_bps)}/s` : '—'} />
-                <DetailRow icon='ri-calendar-line' label={t('siteRecovery.protection.lastSync')} value={selected.last_sync ? new Date(selected.last_sync).toLocaleString() : '—'} mono />
-                <DetailRow icon='ri-calendar-schedule-line' label={t('siteRecovery.protection.nextSync')} value={selected.next_sync && selected.status !== 'paused' ? new Date(selected.next_sync).toLocaleString() : '—'} mono />
+              {/* Two columns from md: the figures and the guests on the left,
+                  the chart and the log tail on the right. Stacked, the same
+                  content forced the dialog to scroll on a laptop; side by
+                  side it fits, and each long block is bounded on its own. */}
+              <Box sx={{ flex: 1, minHeight: 0, display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, columnGap: 3, alignItems: 'start' }}>
+                <Box sx={{ minWidth: 0 }}>
+                {/* Six short label/value pairs. One per row spent all the height
+                    the wider dialog just gained, so they pair up from sm. */}
+                <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, columnGap: 3 }}>
+                  <DetailRow icon='ri-time-line' label={t('siteRecovery.protection.schedule')} value={planningLabel(selected)} />
+                  <DetailRow icon='ri-timer-line' label={t('siteRecovery.protection.rpoTarget')} value={formatDuration(selected.rpo_target)} />
+                  <DetailRow icon='ri-timer-flash-line' label={t('siteRecovery.protection.rpoActual')} value={formatDuration(computeRpoActual(selected.last_sync))} />
+                  <DetailRow icon='ri-speed-line' label={t('siteRecovery.protection.throughput')} value={selected.throughput_bps > 0 ? `${formatBytes(selected.throughput_bps)}/s` : '—'} />
+                  <DetailRow icon='ri-calendar-line' label={t('siteRecovery.protection.lastSync')} value={selected.last_sync ? new Date(selected.last_sync).toLocaleString() : '—'} mono />
+                  <DetailRow icon='ri-calendar-schedule-line' label={t('siteRecovery.protection.nextSync')} value={selected.next_sync && selected.status !== 'paused' ? new Date(selected.next_sync).toLocaleString() : '—'} mono />
+                </Box>
 
-                {/* Per-VM breakdown — only shown for multi-VM jobs */}
-                {(selected.vm_ids || []).length > 1 && (
+                {/* Per-VM breakdown, single-guest jobs included */}
+                {(selected.vm_ids || []).length > 0 && (
                   <>
                     <Divider sx={{ my: 2 }} />
                     <Typography variant='overline' sx={{ color: 'text.secondary', fontWeight: 600, mb: 1, display: 'block' }}>
@@ -781,43 +939,97 @@ export default function ProtectionTab({
                         {t('siteRecovery.protection.perVmEmpty')}
                       </Typography>
                     ) : vmStatuses && (
-                      <Box sx={{ maxHeight: 280, overflow: 'auto', border: 1, borderColor: 'divider', borderRadius: 1 }}>
-                        {vmStatuses.map(row => {
-                          const color = row.status === 'synced' ? 'success' : row.status === 'syncing' ? 'primary' : row.status === 'error' ? 'error' : 'default'
+                      <Box sx={{ border: 1, borderColor: 'divider', borderRadius: 1 }}>
+                        {vmStatuses.slice(vmPage * VM_ROWS_PER_PAGE, vmPage * VM_ROWS_PER_PAGE + VM_ROWS_PER_PAGE).map(row => {
+                          // A suspended guest is not failing, but it is not
+                          // being protected right now either, so it reads as a
+                          // warning rather than a neutral state.
+                          const color = row.status === 'synced' ? 'success' : row.status === 'syncing' ? 'primary' : row.status === 'error' ? 'error' : row.status === 'suspended' ? 'warning' : 'default'
                           return (
-                            <Box key={row.vmid} sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, px: 1.25, py: 1, borderBottom: 1, borderColor: 'divider', '&:last-child': { borderBottom: 0 } }}>
-                              <Box sx={{ flex: 1, minWidth: 0 }}>
-                                <Typography variant='body2' sx={{ fontWeight: 600, lineHeight: 1.25 }}>
-                                  {row.vm_name ? `${row.vmid} · ${row.vm_name}` : `VM ${row.vmid}`}
-                                </Typography>
-                                <Typography variant='caption' sx={{ color: 'text.secondary', display: 'block', lineHeight: 1.3 }}>
-                                  {row.last_sync ? new Date(row.last_sync).toLocaleString() : '—'}
-                                  {row.bytes_sent > 0 && ` · ${formatBytes(row.bytes_sent)}`}
-                                  {row.duration_ms > 0 && ` · ${formatDuration(Math.round(row.duration_ms / 1000))}`}
-                                </Typography>
-                                {row.status === 'error' && row.last_error && (
-                                  <Typography variant='caption' sx={{ color: 'error.main', display: 'block', mt: 0.25 }}>
-                                    {row.last_error}
-                                  </Typography>
+                            /* One line per guest, built like every other list row
+                               in the app: type glyph carrying a state dot, then
+                               the identity, then the run figures pushed right.
+                               The tooltip names the state, which the dot alone
+                               cannot, and carries the error when there is one so
+                               nothing is lost by folding the row up. */
+                            <Box key={row.vmid} sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.25, py: 0.75, borderBottom: 1, borderColor: 'divider', '&:last-child': { borderBottom: 0 } }}>
+                              <Tooltip title={row.last_error ? `${t(`siteRecovery.status.${row.status}`)} — ${row.last_error}` : t(`siteRecovery.status.${row.status}`)} arrow>
+                                <Box
+                                  component='span'
+                                  role='img'
+                                  aria-label={t(`siteRecovery.status.${row.status}`)}
+                                  sx={{ position: 'relative', display: 'inline-flex', flexShrink: 0, lineHeight: 0, fontSize: '1.05rem', color: 'text.secondary' }}
+                                >
+                                  <i className='ri-computer-line' />
+                                  <Box
+                                    component='span'
+                                    sx={{
+                                      position: 'absolute', bottom: -1, right: -2, width: 7, height: 7, borderRadius: '50%',
+                                      border: '1.5px solid', borderColor: 'background.paper',
+                                      bgcolor: color === 'default' ? 'text.disabled' : `${color}.main`,
+                                      ...(row.status === 'syncing' ? {
+                                        animation: 'srVmPulse 1.4s ease-in-out infinite',
+                                        '@keyframes srVmPulse': { '0%, 100%': { opacity: 1 }, '50%': { opacity: 0.35 } },
+                                        '@media (prefers-reduced-motion: reduce)': { animation: 'none' }
+                                      } : {})
+                                    }}
+                                  />
+                                </Box>
+                              </Tooltip>
+                              <Typography variant='body2' sx={{ fontWeight: 600, flexShrink: 0 }}>
+                                {row.vm_name ? `${row.vmid} · ${row.vm_name}` : `VM ${row.vmid}`}
+                              </Typography>
+                              <Typography
+                                variant='caption'
+                                sx={{ ml: 'auto', pl: 1, color: row.status === 'error' && row.last_error ? 'error.main' : 'text.secondary', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                              >
+                                {row.status === 'error' && row.last_error ? row.last_error : (
+                                  <>
+                                    {row.last_sync ? new Date(row.last_sync).toLocaleString() : '—'}
+                                    {row.bytes_sent > 0 && ` · ${formatBytes(row.bytes_sent)}`}
+                                    {row.duration_ms > 0 && ` · ${formatDuration(Math.round(row.duration_ms / 1000))}`}
+                                  </>
                                 )}
+                              </Typography>
+                              <Box
+                                component='span'
+                                aria-hidden
+                                sx={{
+                                  flexShrink: 0, lineHeight: 0, fontSize: '1.05rem',
+                                  color: color === 'default' ? 'text.disabled' : `${color}.main`,
+                                  ...(row.status === 'syncing' ? {
+                                    animation: 'srVmSpin 1.5s linear infinite',
+                                    '@keyframes srVmSpin': { '0%': { transform: 'rotate(0deg)' }, '100%': { transform: 'rotate(360deg)' } },
+                                    '@media (prefers-reduced-motion: reduce)': { animation: 'none' }
+                                  } : {})
+                                }}
+                              >
+                                <i className={vmStatusIcon(row.status)} />
                               </Box>
-                              <Chip
-                                size='small'
-                                label={t(`siteRecovery.status.${row.status}`)}
-                                color={color as any}
-                                variant={row.status === 'pending' ? 'outlined' : 'filled'}
-                                sx={{ height: 20, fontSize: '0.65rem' }}
-                              />
                             </Box>
                           )
                         })}
                       </Box>
                     )}
+                    {vmStatuses && vmStatuses.length > VM_ROWS_PER_PAGE && (
+                      <TablePagination
+                        component='div'
+                        count={vmStatuses.length}
+                        page={vmPage}
+                        rowsPerPage={VM_ROWS_PER_PAGE}
+                        rowsPerPageOptions={[VM_ROWS_PER_PAGE]}
+                        onPageChange={(_, value) => setVmPage(value)}
+                        sx={{ '& .MuiTablePagination-toolbar': { minHeight: 40, pl: 1 } }}
+                      />
+                    )}
                   </>
                 )}
 
+                </Box>
+
+                <Box sx={{ minWidth: 0 }}>
                 {/* Bandwidth history (server-sourced) */}
-                <Divider sx={{ my: 2 }} />
+                <Divider sx={{ my: 2, display: { xs: 'block', md: 'none' } }} />
                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
                   <Typography variant='overline' sx={{ color: 'text.secondary', fontWeight: 600 }}>
                     {t('siteRecovery.protection.bandwidthHistory')}
@@ -905,7 +1117,7 @@ export default function ProtectionTab({
                   )}
                 </Box>
                 {logs && logs.length > 0 ? (
-                  <Box sx={{ maxHeight: 350, overflow: 'auto', bgcolor: 'background.default', border: 1, borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
+                  <Box sx={{ maxHeight: { xs: 200, md: '34vh' }, overflow: 'auto', bgcolor: 'background.default', border: 1, borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
                     {logs.slice(0, 50).map((log, i) => (
                       <Typography key={i} variant='caption' sx={{
                         display: 'block', fontFamily: '"JetBrains Mono", monospace', fontSize: '0.65rem', lineHeight: 1.7,
@@ -921,11 +1133,12 @@ export default function ProtectionTab({
                   </Typography>
                 )}
 
+                </Box>
               </Box>
-            </>
-          )}
-        </Box>
-      </Drawer>
+            </Box>
+          </>
+        )}
+      </Dialog>
 
       {/* Delete confirmation */}
       <Dialog open={!!confirmDeleteJob} onClose={() => setConfirmDeleteJob(null)} maxWidth='sm' fullWidth>

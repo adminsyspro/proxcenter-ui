@@ -4288,6 +4288,7 @@
       "syncing": "En cours",
       "error": "Erreur",
       "paused": "En pause",
+      "suspended": "Suspendue (test en cours)",
       "pending": "En attente",
       "noMatch": "Aucune VM correspondante",
       "partial": "Partiellement synchronisé"
@@ -4476,6 +4477,7 @@
       "zfsNodeHint": "ZFS est local au nœud : les répliques résident sur ce nœud et les VM DR y démarrent.",
       "vmMixedStorage": "Cette VM possède des disques hors ZFS et ne peut pas être répliquée avec ZFS.",
       "vmMixedStorageWarn": "Seuls les disques Ceph RBD seront répliqués ; les autres disques seront ignorés.",
+      "vmAlreadyReplicated": "Déjà répliquée par {job}",
       "vmUnsupportedDisk": "Cette VM possède une référence de disque non prise en charge, par exemple un disque en passthrough.",
       "sshChecks": "Connexions SSH entre nœuds"
     },

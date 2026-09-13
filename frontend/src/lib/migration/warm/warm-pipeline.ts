@@ -6,7 +6,7 @@ import { assertTargetStorageSpace, gib } from "./target-space"
 import { isFileBasedStorage } from "@/lib/proxmox/storage"
 import { executeSSH, shellEscape } from "@/lib/ssh/exec"
 import {
-  soapLogin, soapLogout, soapGetVmConfig, parseVmConfig, soapCreateSnapshot, soapRemoveSnapshot,
+  soapLogin, soapLogout, soapGetVmConfig, parseVmConfig, vmwareToolsState, soapCreateSnapshot, soapRemoveSnapshot,
   soapWaitForConsolidation, soapFindSnapshotsByNamePrefix, CONSOLIDATION_TIMEOUT_MS,
   SNAPSHOT_REMOVE_TERMINAL_TIMEOUT_MS, soapPowerOffVm,
 } from "@/lib/vmware/soap"
@@ -39,7 +39,7 @@ import {
   APPLY_INACTIVITY_MS, PROGRESS_LOG_INTERVAL_MS, type PassWindow, type PassProgress,
 } from "./apply"
 import { createTargetVmShell, provisionBlockTargets, markVolumesCopied } from "./target-provision"
-import { cleanShutdownAndConfirm, type PowerOffOps } from "./power-off"
+import { cleanShutdownAndConfirm, isVmwareToolsUnavailable, type PowerOffOps } from "./power-off"
 import { attachDisksAndBoot, verifySampledFirstBlock } from "./finish"
 
 // ── Pure convergence planning (unit-tested) ──
@@ -257,6 +257,14 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
       totalDisks: vmConfig.disks.length,
       totalBytes: BigInt(vmConfig.disks.reduce((s, d) => s + d.capacityBytes, 0)),
     })
+    // Say it now rather than hours later at cutover: a guest without Tools cannot
+    // be shut down cleanly, so the run will stop it hard and the final delta will
+    // be crash-consistent. The decision itself is taken at cutover, on vSphere's
+    // answer to ShutdownGuest, in case Tools come up in the meantime.
+    const tools = vmwareToolsState(vmConfig)
+    if (tools !== "running" && tools !== "unknown") {
+      await appendLog(jobId, `VMware Tools are ${tools === "not-installed" ? "not installed" : "not running"} on the source: a clean shutdown will not be possible, so the source will be powered off hard at cutover (crash-consistent final delta)`, "warn")
+    }
 
     // Warm patches the target by byte offset, which is only valid on a raw
     // block device. A file-based target (dir/NFS qcow2) would be silently
@@ -435,6 +443,9 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
       requestShutdown: () => soapGuestShutdown(soapSession!, config.sourceVmId),
       waitPoweredOff: ms => soapWaitPoweredOff(soapSession!, config.sourceVmId, ms),
       hardPowerOff: () => soapPowerOffVm(soapSession!, config.sourceVmId),
+      // No Tools means the guest can never honour ShutdownGuest: the source is
+      // then powered off hard without the operator (see cleanShutdownAndConfirm).
+      isGuestUnreachable: isVmwareToolsUnavailable,
     }
 
     if (useCbt) {

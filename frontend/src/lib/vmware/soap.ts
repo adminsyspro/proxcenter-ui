@@ -843,6 +843,9 @@ export interface EsxiDiskInfo {
   datastoreName: string
   relativePath: string
   controllerType?: string // "scsi" | "sata" | "ide" — derived from controllerKey
+  /** vSphere device key of the controller (IDE 200-201, SCSI 1000-1003, SATA 15000-15003); with unitNumber, the disk's exact bus position. */
+  controllerKey?: number
+  unitNumber?: number
   // CBT-relevant fields (warm migration), populated by parseVmConfig via parseDiskCbtFields.
   deviceKey?: number
   diskMode?: string
@@ -898,6 +901,19 @@ export interface EsxiVmConfig {
   toolsStatus?: string
   /** "guestToolsRunning" | "guestToolsNotRunning" | "guestToolsExecutingScripts". */
   toolsRunningStatus?: string
+}
+
+/**
+ * VMware Tools state as the pipelines need it. "unknown" when vCenter reported
+ * neither property (a property collector answer without the guest block), so a
+ * caller never mistakes a missing answer for absent Tools.
+ */
+export function vmwareToolsState(c: Pick<EsxiVmConfig, "toolsStatus" | "toolsRunningStatus">): "running" | "not-running" | "not-installed" | "unknown" {
+  if (c.toolsStatus === "toolsNotInstalled") return "not-installed"
+  if (c.toolsRunningStatus === "guestToolsRunning" || c.toolsRunningStatus === "guestToolsExecutingScripts") return "running"
+  if (c.toolsRunningStatus === "guestToolsNotRunning" || c.toolsStatus === "toolsNotRunning") return "not-running"
+  if (c.toolsStatus === "toolsOk" || c.toolsStatus === "toolsOld") return "running"
+  return "unknown"
 }
 
 /** Parse full VM config from SOAP XML */
@@ -961,8 +977,10 @@ export function parseVmConfig(xml: string): EsxiVmConfig {
     // Resolve controller type from controllerKey
     const controllerKey = Number.parseInt(d.match(/<controllerKey>(\d+)<\/controllerKey>/)?.[1] || "0", 10)
     const controllerType = controllerKeyMap.get(controllerKey) || (controllerKey >= 1000 && controllerKey < 2000 ? "scsi" : controllerKey >= 15000 ? "sata" : controllerKey >= 200 && controllerKey < 300 ? "ide" : undefined)
+    const unitMatch = d.match(/<unitNumber>(\d+)<\/unitNumber>/)
+    const unitNumber = unitMatch ? Number.parseInt(unitMatch[1], 10) : undefined
 
-    disks.push({ label, fileName, capacityBytes, thinProvisioned, datastoreName, relativePath, controllerType, ...parseDiskCbtFields(d) })
+    disks.push({ label, fileName, capacityBytes, thinProvisioned, datastoreName, relativePath, controllerType, controllerKey: controllerKey || undefined, unitNumber, ...parseDiskCbtFields(d) })
   }
 
   // NICs

@@ -25,7 +25,7 @@ import { useRBAC } from '@/contexts/RBACContext'
 import { useToast } from '@/contexts/ToastContext'
 
 interface ImageCatalogTabProps {
-  onDeploy: (image: CloudImage) => void
+  onDeploy?: (image: CloudImage) => void
 }
 
 interface ImageGroup {

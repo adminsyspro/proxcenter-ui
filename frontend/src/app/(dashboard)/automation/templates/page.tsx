@@ -6,6 +6,7 @@ import { useSearchParams, useRouter } from 'next/navigation'
 import { Box, Card, Tab, Tabs } from '@mui/material'
 
 import { usePageTitle } from '@/contexts/PageTitleContext'
+import { useRBAC } from '@/contexts/RBACContext'
 import type { CloudImage } from '@/lib/templates/cloudImages'
 import { ImageCatalogTab, BlueprintsTab, DeploymentsTab, DeployWizard } from '@/components/templates'
 import { TableSkeleton } from '@/components/skeletons'
@@ -30,6 +31,8 @@ async function resolveImage(slug: string): Promise<CloudImage | null> {
 export default function TemplatesPage() {
   const t = useTranslations()
   const { setPageInfo } = usePageTitle()
+  const { hasPermission } = useRBAC()
+  const canCreate = hasPermission('vm.create')
   const [mounted, setMounted] = useState(false)
   const [tab, setTab] = useState(0)
 
@@ -153,8 +156,8 @@ export default function TemplatesPage() {
         </Box>
 
         <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'auto' }}>
-          {tab === 0 && <ImageCatalogTab onDeploy={handleDeployImage} />}
-          {tab === 1 && <BlueprintsTab onDeploy={handleDeployBlueprint} />}
+          {tab === 0 && <ImageCatalogTab onDeploy={canCreate ? handleDeployImage : undefined} />}
+          {tab === 1 && <BlueprintsTab onDeploy={canCreate ? handleDeployBlueprint : undefined} />}
           {tab === 2 && <DeploymentsTab onRetry={handleRetryDeployment} />}
         </Box>
       </Card>

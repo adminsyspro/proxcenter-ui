@@ -180,6 +180,12 @@ function buildVdcWithDetails(row: any, pbsConnNames?: Map<string, string>): VdcW
     namespace: b.namespace,
     mode: (b.mode ?? 'auto') as 'auto' | 'manual',
     createdAt: b.createdAt.toISOString(),
+    pveStorages: (b.pveStorages ?? []).map((s: any) => ({
+      id: s.id,
+      pveConnectionId: s.pveConnectionId,
+      pveStorageName: s.pveStorageName,
+      managed: !!s.managed,
+    })),
   }))
 
   return {
@@ -214,7 +220,7 @@ const vdcWithDetailsInclude = {
     )[],
   },
   storagePolicies: { include: { policy: true }, orderBy: { createdAt: 'asc' as const } },
-  pbsNamespaces: true,
+  pbsNamespaces: { include: { pveStorages: true } },
 } as const
 
 // ---------------------------------------------------------------------------

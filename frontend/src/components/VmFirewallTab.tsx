@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useTranslations } from 'next-intl'
+import { useRBAC } from '@/contexts/RBACContext'
 
 import {
   Alert,
@@ -59,6 +60,8 @@ interface Props {
 export default function VmFirewallTab({ connectionId, node, vmType, vmid, vmName }: Props) {
   const theme = useTheme()
   const t = useTranslations()
+  const { hasPermission } = useRBAC()
+  const canConfig = hasPermission('vm.config')
 
   // VM-specific API adapter
   const api = useMemo<FirewallAPIAdapter>(() => ({
@@ -305,16 +308,16 @@ export default function VmFirewallTab({ connectionId, node, vmType, vmid, vmName
               dragOverRule={fw.dragOverRule}
               availableGroups={fw.availableGroups}
               variant="vm"
-              onAddRuleOpen={() => fw.setAddRuleOpen(true)}
-              onAddGroupOpen={() => fw.setAddGroupOpen(true)}
-              onToggleRule={fw.handleToggleRule}
-              onEditRule={(rule) => { fw.setEditingRule(rule); fw.setEditRuleOpen(true); }}
-              onDeleteRule={fw.confirmDeleteRule}
-              onDragStart={fw.handleDragStart}
-              onDragEnd={fw.handleDragEnd}
-              onDragOver={fw.handleDragOver}
-              onDragLeave={fw.handleDragLeave}
-              onDrop={fw.handleDrop}
+              onAddRuleOpen={canConfig ? () => fw.setAddRuleOpen(true) : undefined}
+              onAddGroupOpen={canConfig ? () => fw.setAddGroupOpen(true) : undefined}
+              onToggleRule={canConfig ? fw.handleToggleRule : undefined}
+              onEditRule={canConfig ? (rule) => { fw.setEditingRule(rule); fw.setEditRuleOpen(true); } : undefined}
+              onDeleteRule={canConfig ? fw.confirmDeleteRule : undefined}
+              onDragStart={canConfig ? fw.handleDragStart : undefined}
+              onDragEnd={canConfig ? fw.handleDragEnd : undefined}
+              onDragOver={canConfig ? fw.handleDragOver : undefined}
+              onDragLeave={canConfig ? fw.handleDragLeave : undefined}
+              onDrop={canConfig ? fw.handleDrop : undefined}
               headerExtra={
                 <>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mr: 0.5 }}>
@@ -324,7 +327,7 @@ export default function VmFirewallTab({ connectionId, node, vmType, vmid, vmName
                         value={fw.options.policy_in || 'ACCEPT'}
                         onChange={(e) => fw.handlePolicyChange('policy_in', e.target.value)}
                         sx={{ fontSize: 10, height: 22, minWidth: 72, '& .MuiSelect-select': { py: 0.1 } }}
-                        disabled={fw.saving}
+                        disabled={fw.saving || !canConfig}
                       >
                         <MenuItem value="ACCEPT">ACCEPT</MenuItem>
                         <MenuItem value="DROP">DROP</MenuItem>
@@ -337,7 +340,7 @@ export default function VmFirewallTab({ connectionId, node, vmType, vmid, vmName
                         value={fw.options.policy_out || 'ACCEPT'}
                         onChange={(e) => fw.handlePolicyChange('policy_out', e.target.value)}
                         sx={{ fontSize: 10, height: 22, minWidth: 72, '& .MuiSelect-select': { py: 0.1 } }}
-                        disabled={fw.saving}
+                        disabled={fw.saving || !canConfig}
                       >
                         <MenuItem value="ACCEPT">ACCEPT</MenuItem>
                         <MenuItem value="DROP">DROP</MenuItem>
@@ -350,7 +353,7 @@ export default function VmFirewallTab({ connectionId, node, vmType, vmid, vmName
                     onChange={fw.handleToggleFirewall}
                     color="success"
                     size="small"
-                    disabled={fw.saving}
+                    disabled={fw.saving || !canConfig}
                   />
                   <Typography variant="caption" sx={{ fontWeight: 600, color: fw.options.enable === 1 ? '#22c55e' : 'text.secondary', fontSize: 11, minWidth: 24 }}>
                     {fw.options.enable === 1 ? 'ON' : 'OFF'}

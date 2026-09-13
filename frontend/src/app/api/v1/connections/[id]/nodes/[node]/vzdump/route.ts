@@ -3,6 +3,8 @@ import { NextResponse } from "next/server"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, buildNodeResourceId, PERMISSIONS } from "@/lib/rbac"
+import { getCurrentTenantId, DEFAULT_TENANT_ID } from "@/lib/tenant"
+import { getTenantInfrastructureScope } from "@/lib/tenant/infraScope"
 
 export const runtime = "nodejs"
 
@@ -30,6 +32,20 @@ export async function POST(
 
     if (!storage) {
       return NextResponse.json({ error: "Storage is required" }, { status: 400 })
+    }
+
+    const tenantId = await getCurrentTenantId()
+    if (tenantId && tenantId !== DEFAULT_TENANT_ID) {
+      const infra = await getTenantInfrastructureScope(tenantId, { ignoreVdcContext: true })
+      if (infra.kind === 'iaas' && infra.vdcScope) {
+        const allowed = infra.vdcScope.storagesByConnection.get(id) ?? new Set<string>()
+        if (!allowed.has(storage)) {
+          return NextResponse.json(
+            { error: `Storage "${storage}" is not authorised for this tenant.` },
+            { status: 403 },
+          )
+        }
+      }
     }
 
     const conn = await getConnectionById(id)

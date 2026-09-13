@@ -2027,20 +2027,24 @@ return
         </DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }}>
-            <FormControl fullWidth size="small">
-              <InputLabel>{t('backups.backupStorage')}</InputLabel>
-              <Select
-                value={backupStorage}
-                onChange={(e) => setBackupStorage(e.target.value)}
-                label={t('backups.backupStorage')}
-              >
-                {backupStorages.map((s) => (
-                  <MenuItem key={s.storage} value={s.storage}>
-                    {s.storage} ({s.type})
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
+            {backupStorages.length === 0 ? (
+              <Alert severity="warning">{t('backups.noBackupTarget')}</Alert>
+            ) : (
+              <FormControl fullWidth size="small">
+                <InputLabel>{t('backups.backupStorage')}</InputLabel>
+                <Select
+                  value={backupStorage}
+                  onChange={(e) => setBackupStorage(e.target.value)}
+                  label={t('backups.backupStorage')}
+                >
+                  {backupStorages.map((s) => (
+                    <MenuItem key={s.storage} value={s.storage}>
+                      {s.storage} ({s.type})
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            )}
             
             <FormControl fullWidth size="small">
               <InputLabel>{t('inventory.backupMode')}</InputLabel>

@@ -55,7 +55,7 @@ async function withLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
   finally { resolve(); if (locks.get(key) === next) locks.delete(key) }
 }
 
-async function readVdcAndTenant(vdcId: string) {
+export async function readVdcAndTenant(vdcId: string) {
   const vdc = await prisma.vdc.findUnique({ where: { id: vdcId } })
   if (!vdc) throw new Error(`vDC not found: ${vdcId}`)
   const tenant = await prisma.tenant.findUnique({ where: { id: vdc.tenantId } })
@@ -63,12 +63,12 @@ async function readVdcAndTenant(vdcId: string) {
   return { vdc, tenant }
 }
 
-async function readVdcNodeNames(vdcId: string): Promise<string[]> {
+export async function readVdcNodeNames(vdcId: string): Promise<string[]> {
   const rows = await prisma.vdcNode.findMany({ where: { vdcId }, select: { nodeName: true } })
   return rows.map(r => r.nodeName)
 }
 
-async function appendVdcStorage(vdcId: string, storageId: string): Promise<void> {
+export async function appendVdcStorage(vdcId: string, storageId: string): Promise<void> {
   // Mirror the SQLite `INSERT OR IGNORE` semantic: skip if the (vdcId,
   // storageId) row already exists thanks to the @@unique constraint.
   await prisma.vdcStorage.upsert({

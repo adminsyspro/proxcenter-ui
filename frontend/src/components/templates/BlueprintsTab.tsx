@@ -32,7 +32,7 @@ interface Blueprint {
 }
 
 interface BlueprintsTabProps {
-  onDeploy: (blueprint: Blueprint) => void
+  onDeploy?: (blueprint: Blueprint) => void
 }
 
 export default function BlueprintsTab({ onDeploy }: BlueprintsTabProps) {
@@ -159,11 +159,13 @@ export default function BlueprintsTab({ onDeploy }: BlueprintsTabProps) {
       sortable: false,
       renderCell: (p) => (
         <Box sx={{ display: 'flex', gap: 0.5 }}>
+          {onDeploy && (
           <Tooltip title={t('templates.catalog.deploy')}>
             <IconButton size="small" color="primary" onClick={() => onDeploy(p.row)}>
               <i className="ri-rocket-2-line" style={{ fontSize: 18 }} />
             </IconButton>
           </Tooltip>
+          )}
           {canManage && (
             <Tooltip title={t('common.edit')}>
               <IconButton size="small" onClick={() => handleEdit(p.row)}>

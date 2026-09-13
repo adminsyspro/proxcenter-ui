@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import {
-  Alert, Box, Button, FormControlLabel, IconButton, MenuItem, Stack, Switch, TextField, Typography,
+  Alert, Box, Button, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, FormControlLabel, IconButton, MenuItem, Stack, Switch, TextField, Typography,
 } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
@@ -46,6 +46,7 @@ export default function VdcPbsBindingsSection({ vdcId, tenantSlug, vdcSlug, pbsC
   const [submitting, setSubmitting] = useState(false)
   const [stepReport, setStepReport] = useState<any | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
 
   const reload = useCallback(async () => {
     setLoading(true)
@@ -87,9 +88,9 @@ export default function VdcPbsBindingsSection({ vdcId, tenantSlug, vdcSlug, pbsC
   }
 
   const handleDelete = async (bindingId: string) => {
-    if (!confirm(t('vdc.pbsRemoveConfirm'))) return
     const r = await fetch(`/api/v1/admin/vdcs/${encodeURIComponent(vdcId)}/pbs-bindings/${encodeURIComponent(bindingId)}`, { method: 'DELETE' })
     if (r.ok) void reload()
+    setDeleteTarget(null)
   }
 
   const eligibleAuto = pbsConnections.filter(c => c.fingerprint)
@@ -123,7 +124,7 @@ export default function VdcPbsBindingsSection({ vdcId, tenantSlug, vdcSlug, pbsC
                   {b.pbsTokenId ? ` — token ${b.pbsTokenId}` : ''}
                 </Typography>
               </Box>
-              <IconButton size="small" color="error" onClick={() => handleDelete(b.id)}><i className="ri-delete-bin-line" /></IconButton>
+              <IconButton size="small" color="error" onClick={() => setDeleteTarget(b.id)}><i className="ri-delete-bin-line" /></IconButton>
             </Stack>
           ))}
         </Stack>
@@ -161,14 +162,16 @@ export default function VdcPbsBindingsSection({ vdcId, tenantSlug, vdcSlug, pbsC
                 {t('vdc.pbsManualSuccess', { status: stepReport.pveStorage })}
               </Alert>
             )}
-            {stepReport && stepReport.mode !== 'manual' && (
-              <Alert severity="info">
-                namespace {stepReport.namespace} · token {stepReport.token} · acl {stepReport.acl}
-                {stepReport.pveStorages?.map((s: any) => (
-                  <div key={s.name}>PVE {s.name} on {s.pveConnectionId}: {s.status}{s.error ? ` (${s.error})` : ''}</div>
-                ))}
-              </Alert>
-            )}
+            {stepReport && stepReport.mode !== 'manual' && (() => {
+              const failed = stepReport.pveStorages?.find((s: any) => s.status === 'failed')
+              return failed ? (
+                <Alert severity="warning">
+                  {t('vdc.pbsPveStorageCreationFailed', { error: failed.error || 'unknown' })}
+                </Alert>
+              ) : (
+                <Alert severity="success">{t('vdc.pbsBindSuccess')}</Alert>
+              )
+            })()}
             <Stack direction="row" spacing={1} justifyContent="flex-end">
               <Button onClick={() => { setAddOpen(false); setStepReport(null); setError(null) }}>{t('vdc.pbsCancel')}</Button>
               <Button variant="contained" disabled={!form.pbsConnectionId || !form.datastore || submitting} onClick={handleSubmit}>
@@ -178,6 +181,17 @@ export default function VdcPbsBindingsSection({ vdcId, tenantSlug, vdcSlug, pbsC
           </Stack>
         </Box>
       )}
+
+      <Dialog open={!!deleteTarget} onClose={() => setDeleteTarget(null)}>
+        <DialogTitle>{t('vdc.pbsRemoveTitle')}</DialogTitle>
+        <DialogContent>
+          <DialogContentText>{t('vdc.pbsRemoveConfirm')}</DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteTarget(null)}>{t('common.cancel')}</Button>
+          <Button color="error" variant="contained" onClick={() => deleteTarget && handleDelete(deleteTarget)}>{t('common.delete')}</Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   )
 }

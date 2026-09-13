@@ -17,6 +17,7 @@ import { useHA } from './hooks/useHA'
 import { formatBytes } from '@/utils/format'
 import { getDateLocale } from '@/lib/i18n/date'
 import { useCopyToClipboard } from '@/lib/clipboard'
+import { useRBAC } from '@/contexts/RBACContext'
 
 import {
   Accordion,
@@ -237,6 +238,8 @@ export default function InventoryDetails({
   // setups. Same gate is used to funnel tenants through the template
   // catalogue instead of the bare-metal Create VM dialog.
   const { currentTenant, loading: tenantLoading, isFullClusterView } = useTenant()
+  const { hasPermission } = useRBAC()
+  const canCreate = hasPermission('vm.create')
   // connectionId → vDC name (tenant IaaS): powers the vDC chip and the vDC
   // column. Bijective per the DB unique (tenant_id, connection_id).
   const { vdcs: myVdcs } = useMyVdcs()
@@ -2701,8 +2704,8 @@ return vm?.isCluster ?? false
           showIpSnap={showIpSnap}
           ipSnapLoading={ipSnapLoading}
           onLoadIpSnap={onLoadIpSnap}
-          onCreateVm={() => setCreateVmDialogOpen(true)}
-          onCreateLxc={() => setCreateLxcDialogOpen(true)}
+          onCreateVm={canCreate ? () => setCreateVmDialogOpen(true) : undefined}
+          onCreateLxc={canCreate ? () => setCreateLxcDialogOpen(true) : undefined}
           onBulkAction={handleHostBulkAction}
           clusterStorages={clusterStorages}
           externalHypervisors={externalHypervisors}
@@ -2726,6 +2729,7 @@ return vm?.isCluster ?? false
                     <i className="ri-computer-line" style={{ fontSize: 20, opacity: 0.7 }} />
                     {t('inventory.guests')} ({displayVms.length})
                   </Typography>
+                  {canCreate && (
                   <Stack direction="row" spacing={1}>
                     {allowBlankVm ? (
                       <Button
@@ -2760,6 +2764,7 @@ return vm?.isCluster ?? false
                       </Button>
                     )}
                   </Stack>
+                  )}
                 </Box>
                 <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                   <VmsTable

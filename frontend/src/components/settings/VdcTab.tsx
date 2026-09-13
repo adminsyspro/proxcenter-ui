@@ -707,6 +707,12 @@ export default function VdcTab() {
               if (!bindRes.ok) {
                 const bindErr = await bindRes.json().catch(() => ({}))
                 setError(t('vdc.pbsBindCreatedVdcFailedBind', { error: bindErr.error || `HTTP ${bindRes.status}` }))
+              } else {
+                const bindData = await bindRes.json().catch(() => ({}))
+                const failedPve = bindData?.steps?.pveStorages?.find((s: any) => s.status === 'failed')
+                if (failedPve) {
+                  setError(t('vdc.pbsPveStorageCreationFailed', { error: failedPve.error || 'unknown' }))
+                }
               }
             } catch (e: any) {
               setError(t('vdc.pbsBindCreatedVdcFailedBind', { error: e?.message || String(e) }))
@@ -1066,27 +1072,60 @@ export default function VdcTab() {
       renderCell: (params) => {
         const bindings: any[] = Array.isArray(params.row.pbsBindings) ? params.row.pbsBindings : []
         const count = bindings.length
+        const hasMissingPve = bindings.some((b) => !b.pveStorages?.length)
         const tooltip = count === 0 ? t('myVdc.cockpit.noBackups') : (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.25 }}>
             {bindings.map((b) => (
               <Typography key={b.id} variant="caption" sx={{ whiteSpace: 'nowrap' }}>
                 {b.pbsConnectionName} • {b.datastore}{b.namespace ? ` / ${b.namespace}` : ''}
+                {!b.pveStorages?.length && ` — ${t('vdc.pbsPveStorageMissing')}`}
               </Typography>
             ))}
           </Box>
         )
 
+        const brokenBinding = hasMissingPve ? bindings.find((b) => !b.pveStorages?.length) : null
+
         return (
-          <Tooltip arrow title={tooltip}>
-            <Chip
-              icon={<Box component="i" className="ri-database-2-line" sx={{ fontSize: 14, ml: '6px !important' }} />}
-              label={count}
-              size="small"
-              color={count === 0 ? 'error' : 'default'}
-              variant={count === 0 ? 'outlined' : 'filled'}
-              sx={{ height: 24, cursor: 'default' }}
-            />
-          </Tooltip>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            <Tooltip arrow title={tooltip}>
+              <Chip
+                icon={<Box component="i" className="ri-database-2-line" sx={{ fontSize: 14, ml: '6px !important' }} />}
+                label={count}
+                size="small"
+                color={count === 0 ? 'error' : hasMissingPve ? 'warning' : 'default'}
+                variant={count === 0 ? 'outlined' : hasMissingPve ? 'outlined' : 'filled'}
+                sx={{ height: 24, cursor: 'default' }}
+              />
+            </Tooltip>
+            {brokenBinding && (
+              <Tooltip arrow title={t('vdc.pbsRetryPveStorage')}>
+                <IconButton
+                  size="small"
+                  color="warning"
+                  onClick={async () => {
+                    try {
+                      const res = await fetch(
+                        `/api/v1/admin/vdcs/${encodeURIComponent(params.row.id)}/pbs-bindings/${encodeURIComponent(brokenBinding.id)}/retry-pve-storage`,
+                        { method: 'POST' },
+                      )
+                      if (!res.ok) {
+                        const err = await res.json().catch(() => ({}))
+                        setError(err.error || `HTTP ${res.status}`)
+                      } else {
+                        setSuccess(t('vdc.pbsPveStorageRetried'))
+                        fetchVdcs()
+                      }
+                    } catch (e: any) {
+                      setError(e?.message || String(e))
+                    }
+                  }}
+                >
+                  <i className="ri-refresh-line" style={{ fontSize: 16 }} />
+                </IconButton>
+              </Tooltip>
+            )}
+          </Box>
         )
       },
     },

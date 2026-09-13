@@ -471,12 +471,12 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       })
     }
 
-    // Attach a pre-allocated block volume to a SCSI slot
+    // Attach a pre-allocated block volume to its slot
     async function attachBlockDisk(i: number, volumeId: string) {
-      // Boot disk slot comes from the mapper (sata0 for OVMF and Windows guests,
-      // #653). Data disks stay on SCSI.
-      const scsiSlot = i === 0 ? pveParams.bootDiskSlot : `scsi${i}`
-      const attachBody = new URLSearchParams({ [scsiSlot]: volumeId })
+      // Slot from the mapper: sata0 for the boot disk of OVMF and Windows guests
+      // (#653), IDE and SATA source disks on their own bus, the rest on SCSI.
+      const diskSlot = pveParams.diskSlots[i] ?? `scsi${i}`
+      const attachBody = new URLSearchParams({ [diskSlot]: volumeId })
       try {
         await pveSetVmConfig(pveConn, config.targetNode, targetVmid!, attachBody)
         // Record the attachment so the failure-path cleanup in
@@ -485,9 +485,9 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
         // (destroy-unreferenced-disks=1) is the right tool for it.
         const entry = allocatedVolumes.find(v => v.volumeId === volumeId)
         if (entry) entry.attached = true
-        await appendLog(jobId, `Disk ${i + 1} attached as ${scsiSlot} (${volumeId})`, "success")
+        await appendLog(jobId, `Disk ${i + 1} attached as ${diskSlot} (${volumeId})`, "success")
       } catch (attachErr: any) {
-        await appendLog(jobId, `Warning: Could not auto-attach ${scsiSlot}: ${attachErr.message}`, "warn")
+        await appendLog(jobId, `Warning: Could not auto-attach ${diskSlot}: ${attachErr.message}`, "warn")
       }
     }
 
@@ -1250,7 +1250,8 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
     // inputFormat: "raw" for flat VMDKs (direct raw data), "vmdk" for VMDK descriptors (vSAN/object storage)
     async function sshfsConvertAndImport(i: number, disk: EsxiDiskInfo, sourcePath: string, tmpFile: string, inputFormat: "raw" | "vmdk" = "raw") {
       const diskSizeGB = (disk.capacityBytes / 1073741824).toFixed(1)
-      const scsiSlot = `scsi${i}`
+      // Slot from the mapper (IDE and SATA source disks keep their bus).
+      const diskSlot = pveParams.diskSlots[i] ?? `scsi${i}`
 
       await updateJob(jobId, "transferring", {
         currentStep: `converting_disk_${i + 1}`,
@@ -1379,7 +1380,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
         imagesDir: storageTempDir,
         targetVmid: targetVmid!,
         format: importFormat,
-        slot: scsiSlot,
+        slot: diskSlot,
         driveOpts: isFileBased ? ",discard=on" : "",
         diskLabel: `Disk ${i + 1}`,
         taken: adoptedVolumes,
@@ -1785,11 +1786,11 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
     // Helper: convert + import + attach a single disk
     async function convertAndImportDisk(i: number) {
       const tmpFile = storageTempDir ? `${storageTempDir}/proxcenter-mig-${jobId}-disk${i}` : `${tempBase}/proxcenter-mig-${jobId}-disk${i}`
-      // Boot disk slot comes from the mapper: sata0 for OVMF guests (the firmware
-      // cannot enumerate an LSI controller) and for Windows guests (no boot-start
-      // VirtIO driver in an untouched guest, #653). Data disks (i>=1) stay on
-      // SCSI for performance.
-      const scsiSlot = i === 0 ? pveParams.bootDiskSlot : `scsi${i}`
+      // Slot from the mapper: sata0 for the boot disk of OVMF guests (the firmware
+      // cannot enumerate an LSI controller) and of Windows guests (no boot-start
+      // VirtIO driver in an untouched guest, #653), IDE and SATA source disks on
+      // their own bus, SCSI data disks on SCSI for performance.
+      const diskSlot = pveParams.diskSlots[i] ?? `scsi${i}`
 
       // Convert VMDK to target format
       await appendLog(jobId, `[Disk ${i + 1}/${vmConfig.disks.length}] Converting to ${importFormat} format...`)
@@ -1826,7 +1827,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
         imagesDir: storageTempDir,
         targetVmid: targetVmid!,
         format: importFormat,
-        slot: scsiSlot,
+        slot: diskSlot,
         driveOpts: isFileBased ? ",discard=on" : "",
         diskLabel: `Disk ${i + 1}`,
         taken: adoptedVolumes,

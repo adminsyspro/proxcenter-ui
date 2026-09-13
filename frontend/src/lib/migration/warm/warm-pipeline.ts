@@ -624,7 +624,7 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
     }
     await attachDisksAndBoot({
       jobId, pveConn, node: config.targetNode, vmid: targetVmid, diskCount: vmConfig.disks.length,
-      bootDiskSlot: pveParams.bootDiskSlot, allocatedVolumes,
+      diskSlots: pveParams.diskSlots, bootDiskSlot: pveParams.bootDiskSlot, allocatedVolumes,
       startAfterMigration: config.startAfterMigration, convertDisksToQcow2: config.convertDisksToQcow2 === true,
       targetStorage: config.targetStorage,
     })

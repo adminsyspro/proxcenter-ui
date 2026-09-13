@@ -468,7 +468,7 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
     // Attach a pre-allocated block volume to a SCSI slot
     async function attachBlockDisk(i: number, volumeId: string) {
       // sata0 for Windows/EFI boot disks (#653), SCSI for data disks.
-      const scsiSlot = i === 0 ? pveParams.bootDiskSlot : `scsi${i}`
+      const scsiSlot = pveParams.diskSlots[i] ?? (i === 0 ? pveParams.bootDiskSlot : `scsi${i}`)
       const attachBody = new URLSearchParams({ [scsiSlot]: volumeId })
       try {
         await pveSetVmConfig(pveConn, config.targetNode, targetVmid!, attachBody)
@@ -657,7 +657,7 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
     async function convertAndImportDisk(i: number) {
       const tmpFile = `${storageTempDir}/proxcenter-mig-${jobId}-disk${i}`
       // sata0 for Windows/EFI boot disks (#653), SCSI for data disks.
-      const scsiSlot = i === 0 ? pveParams.bootDiskSlot : `scsi${i}`
+      const scsiSlot = pveParams.diskSlots[i] ?? (i === 0 ? pveParams.bootDiskSlot : `scsi${i}`)
 
       await appendLog(jobId, `[Disk ${i + 1}/${vmConfig.disks.length}] Converting VHD to ${importFormat} format...`)
       await updateJob(jobId, "transferring", { currentStep: `converting_disk_${i + 1}` })

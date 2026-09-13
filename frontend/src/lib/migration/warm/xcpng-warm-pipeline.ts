@@ -344,7 +344,7 @@ export async function runXcpngWarmMigration(jobId: string, config: WarmMigration
     }
 
     await attachDisksAndBoot({
-      jobId, pveConn: pveConn as any, node: config.targetNode, vmid: targetVmid, diskCount: vmConfig.disks.length, bootDiskSlot: pveParams.bootDiskSlot,
+      jobId, pveConn: pveConn as any, node: config.targetNode, vmid: targetVmid, diskCount: vmConfig.disks.length, diskSlots: pveParams.diskSlots, bootDiskSlot: pveParams.bootDiskSlot,
       allocatedVolumes, startAfterMigration: config.startAfterMigration, convertDisksToQcow2: config.convertDisksToQcow2 === true, targetStorage: config.targetStorage,
     })
     await updateJob(jobId, "completed", { progress: 100 })

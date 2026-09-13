@@ -49,6 +49,9 @@ export function mapXoToPveConfig(
   const scsihw = "virtio-scsi-single"
   const nicModel = isWin ? "e1000" : "virtio"
   const bootDiskSlot: "sata0" | "scsi0" = isEfi || isWin ? "sata0" : "scsi0"
+  // One slot per source disk, boot disk first then scsiN, so the attach steps
+  // shared with the ESXi pipelines read the same list on both sources.
+  const diskSlots = (xoConfig.disks || []).map((_, i) => i === 0 ? bootDiskSlot : `scsi${i}`)
 
   const tagSuffix =
     typeof vlanTag === "number" && Number.isInteger(vlanTag) && vlanTag >= 1 && vlanTag <= 4094
@@ -68,6 +71,7 @@ export function mapXoToPveConfig(
     machine: "q35",
     boot: `order=${bootDiskSlot}`,
     bootDiskSlot,
+    diskSlots,
     agent: "1",
     net0: `${nicModel},bridge=${networkBridge}${tagSuffix}`,
   }

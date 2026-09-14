@@ -9,6 +9,7 @@ import { checkPermission, checkPermissions, buildVmResourceId, PERMISSIONS } fro
 import { classifyConfigBody } from "@/lib/rbac/configClassifier"
 import { getCurrentTenantId } from "@/lib/tenant"
 import { resolveVdcForTenant, checkVdcQuota } from "@/lib/vdc/quota"
+import { validateCpuAgainstPolicy, parseCpuProperty, loadCpuCapabilitiesIfNeeded } from "@/lib/vdc/computePolicy"
 import { enforceTenantDrives, meterImportRefs, DriveScopeError } from "@/lib/vdc/driveGuard"
 import { getAllowedNetworksForTenant, validateNetAgainstScope } from "@/lib/vdc/vnets"
 import { syncIpamForVmConfig, IpamHintUnavailableError, IpamExhaustedError } from "@/lib/vdc/ipamSync"
@@ -228,6 +229,20 @@ export async function PUT(
     let vdcInfo: Awaited<ReturnType<typeof resolveVdcForTenant>> = null
     try {
       vdcInfo = await resolveVdcForTenant(tenantId, id, node)
+
+      // vDC compute policy (#893): a tenant may only move the CPU model
+      // inside the allowed set and may not touch NUMA / flags / limit /
+      // units when the advanced switch is off. Keeping the current model
+      // (e.g. one a provider template shipped with) always passes.
+      if (vdcInfo && type === 'qemu') {
+        const verdict = validateCpuAgainstPolicy(vdcInfo.computePolicy, body, {
+          clusterCapabilities: await loadCpuCapabilitiesIfNeeded(vdcInfo.computePolicy, body, () =>
+            pveFetch<any[]>(conn, `/nodes/${encodeURIComponent(node)}/capabilities/qemu/cpu`),
+          ),
+          currentModel: parseCpuProperty(String(currentConfig?.cpu ?? '')).model || null,
+        })
+        if (verdict.ok === false) return NextResponse.json({ error: verdict.error }, { status: 400 })
+      }
 
       if (vdcInfo && (body.cores || body.sockets || body.memory)) {
         const currentVcpus = (currentConfig?.cores || 1) * (currentConfig?.sockets || 1)

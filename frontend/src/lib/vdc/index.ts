@@ -14,6 +14,7 @@ import { generateZoneName, isZoneNameTaken, createZone, deleteZone, deleteVnetPv
 import { clearVdcScopeCache } from './scope'
 import { validateVlanPoolsInput, assertNoCrossVdcOverlap, assertPoolShrinkSafe, type VlanPoolInput } from './vlan'
 import { getVdcStorageUsedMb } from './quota'
+import { DEFAULT_COMPUTE_POLICY, normalizeComputePolicyInput, type VdcComputePolicy } from './computePolicy'
 
 import type {
   Vdc,
@@ -25,7 +26,7 @@ import type {
 } from './types'
 
 // Re-export all types
-export type { Vdc, VdcWithDetails, VdcQuota, VdcUsage, CreateVdcInput, UpdateVdcInput } from './types'
+export type { Vdc, VdcWithDetails, VdcQuota, VdcUsage, CreateVdcInput, UpdateVdcInput, VdcComputePolicy } from './types'
 
 // ---------------------------------------------------------------------------
 // Row mapping helpers
@@ -42,9 +43,22 @@ type VdcRow = {
   enabled: boolean | null
   primaryStorage: string | null
   sdnZoneName: string | null
+  cpuModelMode?: string | null
+  cpuAllowedModels?: string[] | null
+  cpuDefaultModel?: string | null
+  cpuAdvancedSettings?: boolean | null
   createdBy: string | null
   createdAt: Date
   updatedAt: Date
+}
+
+export function rowToComputePolicy(row: Pick<VdcRow, 'cpuModelMode' | 'cpuAllowedModels' | 'cpuDefaultModel' | 'cpuAdvancedSettings'>): VdcComputePolicy {
+  return normalizeComputePolicyInput({
+    cpuModelMode: (row.cpuModelMode ?? DEFAULT_COMPUTE_POLICY.cpuModelMode) as VdcComputePolicy['cpuModelMode'],
+    cpuAllowedModels: row.cpuAllowedModels ?? [],
+    cpuDefaultModel: row.cpuDefaultModel ?? null,
+    cpuAdvancedSettings: row.cpuAdvancedSettings ?? true,
+  })
 }
 
 function rowToVdc(row: VdcRow): Vdc {
@@ -58,10 +72,20 @@ function rowToVdc(row: VdcRow): Vdc {
     pvePoolName: row.pvePoolName,
     sdnZoneName: row.sdnZoneName ?? null,
     primaryStorage: row.primaryStorage ?? null,
+    computePolicy: rowToComputePolicy(row),
     enabled: row.enabled !== false,
     createdBy: row.createdBy ?? null,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
+  }
+}
+
+function computePolicyToRow(policy: VdcComputePolicy) {
+  return {
+    cpuModelMode: policy.cpuModelMode,
+    cpuAllowedModels: policy.cpuAllowedModels,
+    cpuDefaultModel: policy.cpuDefaultModel,
+    cpuAdvancedSettings: policy.cpuAdvancedSettings,
   }
 }
 
@@ -431,6 +455,7 @@ export async function createVdc(input: CreateVdcInput, createdBy: string | null)
           pvePoolName: poolName,
           sdnZoneName,
           primaryStorage: input.primaryStorage ?? null,
+          ...computePolicyToRow(normalizeComputePolicyInput(input.computePolicy)),
           enabled: true,
           createdBy,
           createdAt: now,
@@ -539,7 +564,10 @@ export async function updateVdc(id: string, input: UpdateVdcInput): Promise<VdcW
   // Verify vDC exists
   const existing = await prisma.vdc.findUnique({
     where: { id },
-    select: { id: true, tenantId: true, connectionId: true },
+    select: {
+      id: true, tenantId: true, connectionId: true,
+      cpuModelMode: true, cpuAllowedModels: true, cpuDefaultModel: true, cpuAdvancedSettings: true,
+    },
   })
   if (!existing) {
     throw new Error(`vDC not found: ${id}`)
@@ -568,6 +596,11 @@ export async function updateVdc(id: string, input: UpdateVdcInput): Promise<VdcW
     if (input.description !== undefined) updateData.description = input.description
     if (input.enabled !== undefined) updateData.enabled = input.enabled
     if (input.primaryStorage !== undefined) updateData.primaryStorage = input.primaryStorage
+    if (input.computePolicy !== undefined) {
+      // Partial input: fields left out keep their stored value, so a PUT that
+      // only flips the advanced switch does not reset the mode or the list.
+      Object.assign(updateData, computePolicyToRow(normalizeComputePolicyInput(input.computePolicy, rowToComputePolicy(existing))))
+    }
 
     await tx.vdc.update({ where: { id }, data: updateData })
 

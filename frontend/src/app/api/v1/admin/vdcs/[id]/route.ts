@@ -67,6 +67,7 @@ export async function PUT(req: Request, ctx: RouteContext) {
       sharedBridges: body.sharedBridges,
       vlanPools: body.vlanPools,
       storagePolicies: body.storagePolicies,
+      computePolicy: body.computePolicy,
       quota: body.quota,
     })
 

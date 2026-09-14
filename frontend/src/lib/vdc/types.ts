@@ -1,3 +1,5 @@
+import type { VdcComputePolicy } from './computePolicy'
+
 export interface Vdc {
   id: string
   tenantId: string
@@ -12,11 +14,14 @@ export interface Vdc {
    *  storage before tenants can deploy. New vDCs are validated to point
    *  at a shared+images storage. */
   primaryStorage: string | null
+  computePolicy: VdcComputePolicy
   enabled: boolean
   createdBy: string | null
   createdAt: string
   updatedAt: string
 }
+
+export type { VdcComputePolicy, CpuModelMode } from './computePolicy'
 
 export interface VdcWithDetails extends Vdc {
   tenantName?: string
@@ -167,6 +172,7 @@ export interface CreateVdcInput {
   sharedBridges?: Array<{ bridge: string; label?: string }>
   vlanPools?: Array<{ bridge: string; rangeStart: number; rangeEnd: number }>
   storagePolicies?: Array<{ policyId: string; quotaMb: number | null }>
+  computePolicy?: Partial<VdcComputePolicy>
 }
 
 export interface UpdateVdcInput {
@@ -179,4 +185,5 @@ export interface UpdateVdcInput {
   sharedBridges?: Array<{ bridge: string; label?: string }>
   vlanPools?: Array<{ bridge: string; rangeStart: number; rangeEnd: number }>
   storagePolicies?: Array<{ policyId: string; quotaMb: number | null }>
+  computePolicy?: Partial<VdcComputePolicy>
 }

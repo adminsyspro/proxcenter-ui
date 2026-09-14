@@ -738,6 +738,12 @@ model Vdc {
   enabled        Boolean? @default(true)
   primaryStorage String?  @map("primary_storage")
   sdnZoneName    String?  @map("sdn_zone_name")
+  // Compute policy (#893): which CPU models a tenant may pick, and whether
+  // the advanced CPU controls (NUMA, flags, limit, units) are exposed.
+  cpuModelMode        String   @default("unrestricted") @map("cpu_model_mode")
+  cpuAllowedModels    String[] @default([]) @map("cpu_allowed_models")
+  cpuDefaultModel     String?  @map("cpu_default_model")
+  cpuAdvancedSettings Boolean  @default(true) @map("cpu_advanced_settings")
   createdBy      String?  @map("created_by")
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @default(now()) @map("updated_at")

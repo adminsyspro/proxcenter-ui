@@ -88,7 +88,7 @@ import { useVmDiskLatencySeries } from '@/hooks/useVmDiskLatencySeries'
 import { diskIoTooltipRow, latencyKey } from '@/lib/metrics/latencySeries'
 import { formatLatencyAxis } from '@/lib/metrics/latency'
 import NumericTextField from '@/components/ui/NumericTextField'
-import { extractCustomCpuModels, isKnownCpuType } from '@/lib/inventory/cpuModels'
+import { extractCustomCpuModels } from '@/lib/inventory/cpuModels'
 import { cpuGroupHeaderSx } from '../cpuSelectStyles'
 
 // Latency curves sit on the Disk I/O chart next to red bandwidth areas: amber
@@ -127,20 +127,33 @@ export default function VmDetailTabs(props: any) {
   // statique : sans cette liste, une VM configurée en "custom-*" affiche un
   // champ vide (#665).
   const [customCpuModels, setCustomCpuModels] = useState<string[]>([])
+  // vDC compute policy (#893), carried by the same cpu-models answer: the set
+  // of models the tenant may pick (null = unrestricted) and whether the
+  // advanced CPU controls (NUMA, limit, flags) are exposed at all.
+  const [cpuPolicy, setCpuPolicy] = useState<{ allowed: Set<string> | null; advanced: boolean } | null>(null)
   useEffect(() => {
     const { connId, node, type } = props.selection?.id ? parseVmId(props.selection.id) : { connId: '', node: '', type: '' }
-    if (!connId || !node || type !== 'qemu') { setCustomCpuModels([]); return }
+    if (!connId || !node || type !== 'qemu') { setCustomCpuModels([]); setCpuPolicy(null); return }
     let cancelled = false
     void (async () => {
       try {
         const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/cpu-models`)
         if (!res.ok) return
         const json = await res.json()
-        if (!cancelled) setCustomCpuModels(extractCustomCpuModels(json?.data))
+        if (cancelled) return
+        setCustomCpuModels(extractCustomCpuModels(json?.data))
+        const p = json?.policy
+        setCpuPolicy(p && typeof p === 'object'
+          ? {
+              allowed: Array.isArray(p.allowedModels) ? new Set<string>(p.allowedModels.map(String)) : null,
+              advanced: p.cpuAdvancedSettings !== false,
+            }
+          : { allowed: null, advanced: true })
       } catch { /* on retombe sur la liste statique */ }
     })()
     return () => { cancelled = true }
   }, [props.selection?.id])
+  const cpuAdvancedHidden = cpuPolicy?.advanced === false
 
   // Fetch vDC quota+usage for the connection that hosts this VM. Skipped
   // for the provider (no vDC mapping → API returns nothing). Refreshed
@@ -395,6 +408,72 @@ export default function VmDetailTabs(props: any) {
   } = props
 
   const { hasFeature } = useLicense()
+
+  // CPU Type options as data so the vDC compute policy can filter them.
+  // Groups that end up empty are dropped; the guest's current model always
+  // stays selectable, even outside the allowed set (a template deployed with
+  // a provider model must not read as an empty select).
+  const cpuOptionGroups = useMemo(() => {
+    const groups: Array<{ header: string; items: Array<{ value: string; label: string }> }> = [
+      { header: 'Custom', items: customCpuModels.map((m: string) => ({ value: m, label: m })) },
+      { header: 'Special', items: [
+        { value: 'host', label: `host (${t('inventory.maxPerformance')})` },
+        { value: 'max', label: 'max' },
+        { value: 'kvm64', label: `kvm64 (${t('inventory.compatible')})` },
+        { value: 'kvm32', label: 'kvm32' },
+        { value: 'qemu64', label: `qemu64 (${t('inventory.emulation')})` },
+        { value: 'qemu32', label: 'qemu32' },
+      ] },
+      { header: 'x86-64 Microarchitecture Levels', items: [
+        { value: 'x86-64-v2', label: 'x86-64-v2' },
+        { value: 'x86-64-v2-AES', label: 'x86-64-v2-AES (Recommended)' },
+        { value: 'x86-64-v3', label: 'x86-64-v3' },
+        { value: 'x86-64-v4', label: 'x86-64-v4' },
+      ] },
+      { header: 'Intel', items: [
+        { value: '486', label: '486' },
+        { value: 'pentium', label: 'Pentium' },
+        { value: 'pentium2', label: 'Pentium 2' },
+        { value: 'pentium3', label: 'Pentium 3' },
+        ...['Conroe', 'Penryn', 'Nehalem', 'Nehalem-IBRS', 'Westmere', 'Westmere-IBRS',
+          'SandyBridge', 'SandyBridge-IBRS', 'IvyBridge', 'IvyBridge-IBRS',
+          'Haswell', 'Haswell-IBRS', 'Haswell-noTSX', 'Haswell-noTSX-IBRS',
+          'Broadwell', 'Broadwell-IBRS', 'Broadwell-noTSX', 'Broadwell-noTSX-IBRS',
+          'Skylake-Client', 'Skylake-Client-IBRS', 'Skylake-Client-noTSX-IBRS', 'Skylake-Client-v4',
+          'Skylake-Server', 'Skylake-Server-IBRS', 'Skylake-Server-noTSX-IBRS', 'Skylake-Server-v4', 'Skylake-Server-v5',
+          'Cascadelake-Server', 'Cascadelake-Server-noTSX', 'Cascadelake-Server-v2', 'Cascadelake-Server-v4', 'Cascadelake-Server-v5',
+          'Cooperlake', 'Cooperlake-v2',
+          'Icelake-Client', 'Icelake-Client-noTSX',
+          'Icelake-Server', 'Icelake-Server-noTSX', 'Icelake-Server-v3', 'Icelake-Server-v4', 'Icelake-Server-v5', 'Icelake-Server-v6',
+          'SapphireRapids', 'SapphireRapids-v2', 'GraniteRapids', 'KnightsMill',
+        ].map(v => ({ value: v, label: v })),
+      ] },
+      { header: 'AMD', items: [
+        { value: 'athlon', label: 'Athlon' },
+        { value: 'phenom', label: 'Phenom' },
+        { value: 'Opteron_G1', label: 'Opteron G1' },
+        { value: 'Opteron_G2', label: 'Opteron G2' },
+        { value: 'Opteron_G3', label: 'Opteron G3' },
+        { value: 'Opteron_G4', label: 'Opteron G4' },
+        { value: 'Opteron_G5', label: 'Opteron G5' },
+        ...['EPYC', 'EPYC-IBPB', 'EPYC-v3', 'EPYC-v4',
+          'EPYC-Rome', 'EPYC-Rome-v2', 'EPYC-Rome-v3', 'EPYC-Rome-v4',
+          'EPYC-Milan', 'EPYC-Milan-v2', 'EPYC-Genoa',
+        ].map(v => ({ value: v, label: v })),
+      ] },
+      { header: 'Legacy', items: [
+        { value: 'coreduo', label: 'Core Duo' },
+        { value: 'core2duo', label: 'Core 2 Duo' },
+      ] },
+    ]
+    const allowed = cpuPolicy?.allowed ?? null
+    const filtered = groups.map(g => ({ ...g, items: allowed ? g.items.filter(i => allowed.has(i.value)) : g.items }))
+    const listed = new Set(filtered.flatMap(g => g.items.map(i => i.value)))
+    if (cpuType && !listed.has(cpuType)) {
+      filtered[0].items.unshift({ value: cpuType, label: allowed ? `${cpuType} (current)` : cpuType })
+    }
+    return filtered.filter(g => g.items.length > 0)
+  }, [customCpuModels, cpuPolicy, cpuType, t])
 
   // Guest disk latency from the orchestrator, joined onto the RRD series so the
   // Disk I/O chart carries one latency curve per disk (#881). Nothing is
@@ -1029,104 +1108,17 @@ export default function VmDetailTabs(props: any) {
                               label={t('inventory.cpuType')}
                               onChange={(e) => setCpuType(e.target.value)}
                             >
-                              {(customCpuModels.length > 0 || Boolean(cpuType && !isKnownCpuType(cpuType) && !customCpuModels.includes(cpuType))) && (
-                                <ListSubheader disableSticky sx={cpuGroupHeaderSx}>Custom</ListSubheader>
-                              )}
-                              {customCpuModels.map((m: string) => (
-                                <MenuItem key={m} value={m}>{m}</MenuItem>
-                              ))}
-                              {Boolean(cpuType && !isKnownCpuType(cpuType) && !customCpuModels.includes(cpuType)) && (
-                                <MenuItem value={cpuType}>{cpuType}</MenuItem>
-                              )}
-                              <ListSubheader disableSticky sx={cpuGroupHeaderSx}>Special</ListSubheader>
-                              <MenuItem value="host">host ({t('inventory.maxPerformance')})</MenuItem>
-                              <MenuItem value="max">max</MenuItem>
-                              <MenuItem value="kvm64">kvm64 ({t('inventory.compatible')})</MenuItem>
-                              <MenuItem value="kvm32">kvm32</MenuItem>
-                              <MenuItem value="qemu64">qemu64 ({t('inventory.emulation')})</MenuItem>
-                              <MenuItem value="qemu32">qemu32</MenuItem>
-                              <ListSubheader disableSticky sx={cpuGroupHeaderSx}>x86-64 Microarchitecture Levels</ListSubheader>
-                              <MenuItem value="x86-64-v2">x86-64-v2</MenuItem>
-                              <MenuItem value="x86-64-v2-AES">x86-64-v2-AES (Recommended)</MenuItem>
-                              <MenuItem value="x86-64-v3">x86-64-v3</MenuItem>
-                              <MenuItem value="x86-64-v4">x86-64-v4</MenuItem>
-                              <ListSubheader disableSticky sx={cpuGroupHeaderSx}>Intel</ListSubheader>
-                              <MenuItem value="486">486</MenuItem>
-                              <MenuItem value="pentium">Pentium</MenuItem>
-                              <MenuItem value="pentium2">Pentium 2</MenuItem>
-                              <MenuItem value="pentium3">Pentium 3</MenuItem>
-                              <MenuItem value="Conroe">Conroe</MenuItem>
-                              <MenuItem value="Penryn">Penryn</MenuItem>
-                              <MenuItem value="Nehalem">Nehalem</MenuItem>
-                              <MenuItem value="Nehalem-IBRS">Nehalem-IBRS</MenuItem>
-                              <MenuItem value="Westmere">Westmere</MenuItem>
-                              <MenuItem value="Westmere-IBRS">Westmere-IBRS</MenuItem>
-                              <MenuItem value="SandyBridge">SandyBridge</MenuItem>
-                              <MenuItem value="SandyBridge-IBRS">SandyBridge-IBRS</MenuItem>
-                              <MenuItem value="IvyBridge">IvyBridge</MenuItem>
-                              <MenuItem value="IvyBridge-IBRS">IvyBridge-IBRS</MenuItem>
-                              <MenuItem value="Haswell">Haswell</MenuItem>
-                              <MenuItem value="Haswell-IBRS">Haswell-IBRS</MenuItem>
-                              <MenuItem value="Haswell-noTSX">Haswell-noTSX</MenuItem>
-                              <MenuItem value="Haswell-noTSX-IBRS">Haswell-noTSX-IBRS</MenuItem>
-                              <MenuItem value="Broadwell">Broadwell</MenuItem>
-                              <MenuItem value="Broadwell-IBRS">Broadwell-IBRS</MenuItem>
-                              <MenuItem value="Broadwell-noTSX">Broadwell-noTSX</MenuItem>
-                              <MenuItem value="Broadwell-noTSX-IBRS">Broadwell-noTSX-IBRS</MenuItem>
-                              <MenuItem value="Skylake-Client">Skylake-Client</MenuItem>
-                              <MenuItem value="Skylake-Client-IBRS">Skylake-Client-IBRS</MenuItem>
-                              <MenuItem value="Skylake-Client-noTSX-IBRS">Skylake-Client-noTSX-IBRS</MenuItem>
-                              <MenuItem value="Skylake-Client-v4">Skylake-Client-v4</MenuItem>
-                              <MenuItem value="Skylake-Server">Skylake-Server</MenuItem>
-                              <MenuItem value="Skylake-Server-IBRS">Skylake-Server-IBRS</MenuItem>
-                              <MenuItem value="Skylake-Server-noTSX-IBRS">Skylake-Server-noTSX-IBRS</MenuItem>
-                              <MenuItem value="Skylake-Server-v4">Skylake-Server-v4</MenuItem>
-                              <MenuItem value="Skylake-Server-v5">Skylake-Server-v5</MenuItem>
-                              <MenuItem value="Cascadelake-Server">Cascadelake-Server</MenuItem>
-                              <MenuItem value="Cascadelake-Server-noTSX">Cascadelake-Server-noTSX</MenuItem>
-                              <MenuItem value="Cascadelake-Server-v2">Cascadelake-Server-v2</MenuItem>
-                              <MenuItem value="Cascadelake-Server-v4">Cascadelake-Server-v4</MenuItem>
-                              <MenuItem value="Cascadelake-Server-v5">Cascadelake-Server-v5</MenuItem>
-                              <MenuItem value="Cooperlake">Cooperlake</MenuItem>
-                              <MenuItem value="Cooperlake-v2">Cooperlake-v2</MenuItem>
-                              <MenuItem value="Icelake-Client">Icelake-Client</MenuItem>
-                              <MenuItem value="Icelake-Client-noTSX">Icelake-Client-noTSX</MenuItem>
-                              <MenuItem value="Icelake-Server">Icelake-Server</MenuItem>
-                              <MenuItem value="Icelake-Server-noTSX">Icelake-Server-noTSX</MenuItem>
-                              <MenuItem value="Icelake-Server-v3">Icelake-Server-v3</MenuItem>
-                              <MenuItem value="Icelake-Server-v4">Icelake-Server-v4</MenuItem>
-                              <MenuItem value="Icelake-Server-v5">Icelake-Server-v5</MenuItem>
-                              <MenuItem value="Icelake-Server-v6">Icelake-Server-v6</MenuItem>
-                              <MenuItem value="SapphireRapids">SapphireRapids</MenuItem>
-                              <MenuItem value="SapphireRapids-v2">SapphireRapids-v2</MenuItem>
-                              <MenuItem value="GraniteRapids">GraniteRapids</MenuItem>
-                              <MenuItem value="KnightsMill">KnightsMill</MenuItem>
-                              <ListSubheader disableSticky sx={cpuGroupHeaderSx}>AMD</ListSubheader>
-                              <MenuItem value="athlon">Athlon</MenuItem>
-                              <MenuItem value="phenom">Phenom</MenuItem>
-                              <MenuItem value="Opteron_G1">Opteron G1</MenuItem>
-                              <MenuItem value="Opteron_G2">Opteron G2</MenuItem>
-                              <MenuItem value="Opteron_G3">Opteron G3</MenuItem>
-                              <MenuItem value="Opteron_G4">Opteron G4</MenuItem>
-                              <MenuItem value="Opteron_G5">Opteron G5</MenuItem>
-                              <MenuItem value="EPYC">EPYC</MenuItem>
-                              <MenuItem value="EPYC-IBPB">EPYC-IBPB</MenuItem>
-                              <MenuItem value="EPYC-v3">EPYC-v3</MenuItem>
-                              <MenuItem value="EPYC-v4">EPYC-v4</MenuItem>
-                              <MenuItem value="EPYC-Rome">EPYC-Rome</MenuItem>
-                              <MenuItem value="EPYC-Rome-v2">EPYC-Rome-v2</MenuItem>
-                              <MenuItem value="EPYC-Rome-v3">EPYC-Rome-v3</MenuItem>
-                              <MenuItem value="EPYC-Rome-v4">EPYC-Rome-v4</MenuItem>
-                              <MenuItem value="EPYC-Milan">EPYC-Milan</MenuItem>
-                              <MenuItem value="EPYC-Milan-v2">EPYC-Milan-v2</MenuItem>
-                              <MenuItem value="EPYC-Genoa">EPYC-Genoa</MenuItem>
-                              <ListSubheader disableSticky sx={cpuGroupHeaderSx}>Legacy</ListSubheader>
-                              <MenuItem value="coreduo">Core Duo</MenuItem>
-                              <MenuItem value="core2duo">Core 2 Duo</MenuItem>
+                              {cpuOptionGroups.flatMap((g) => [
+                                <ListSubheader key={`hdr-${g.header}`} disableSticky sx={cpuGroupHeaderSx}>{g.header}</ListSubheader>,
+                                ...g.items.map((i) => (
+                                  <MenuItem key={i.value} value={i.value}>{i.label}</MenuItem>
+                                )),
+                              ])}
                             </Select>
                           </FormControl>
 
                           {/* CPU Limit + NUMA toggles */}
+                          {!cpuAdvancedHidden && (
                           <Box sx={{ mb: 2 }}>
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
                               <FormControlLabel
@@ -1181,9 +1173,10 @@ export default function VmDetailTabs(props: any) {
                               </Box>
                             )}
                           </Box>
+                          )}
 
                           {/* Extra CPU Flags (collapsible) */}
-                          {(() => {
+                          {!cpuAdvancedHidden && (() => {
                             const activeCount = Object.keys(cpuFlags).length
                             return (
                             <Box sx={{ mb: 2, border: 1, borderColor: 'divider', borderRadius: 1, overflow: 'hidden' }}>
@@ -1280,7 +1273,7 @@ export default function VmDetailTabs(props: any) {
                             variant="contained"
                             fullWidth
                             disabled={!canConfigHardware || savingCpu || !cpuModified || hwQuotaBlocked}
-                            onClick={saveCpuConfig}
+                            onClick={() => saveCpuConfig({ omitAdvanced: cpuAdvancedHidden })}
                             startIcon={savingCpu ? <CircularProgress size={16} /> : <SaveIcon />}
                           >
                             {savingCpu ? t('common.saving') : t('inventory.saveCpuChanges')}

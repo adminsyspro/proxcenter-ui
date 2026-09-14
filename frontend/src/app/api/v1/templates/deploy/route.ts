@@ -12,6 +12,7 @@ import { customImageToCloudImage } from "@/lib/templates/cloudImages"
 import { resolveBuiltInImage } from "@/lib/templates/catalogStore"
 import { isFileBasedStorage, supportsVmDisks } from "@/lib/proxmox/storage"
 import { resolveVdcForTenant, checkVdcQuota } from "@/lib/vdc/quota"
+import { validateCpuAgainstPolicy, isPolicyRestrictive, resolveAllowedCpuModels, pickPolicyDefaultModel, parseCpuProperty } from "@/lib/vdc/computePolicy"
 import { getAllowedNetworksForTenant, validateNetAgainstScope, resolveSubnetForBridge } from "@/lib/vdc/vnets"
 import { generatePveMacAddress } from "@/lib/vdc/sdn"
 import { allocateIp, releaseIp, IpamExhaustedError } from "@/lib/vdc/ipam"
@@ -108,6 +109,46 @@ export async function POST(req: Request) {
     }
     if (isTenant && !vdcInfo) {
       return NextResponse.json({ error: 'No vDC on this connection — deploy not allowed' }, { status: 403 })
+    }
+
+    // vDC compute policy (#893). The policy constrains what the tenant
+    // chooses, never what the PROVIDER put in a blueprint: a blueprint owned
+    // by the provider tenant keeps its model even outside the allowed set.
+    // A tenant's own blueprint is a tenant choice and gets no exemption.
+    // The wizard has no CPU picker and always submits its hidden `host`
+    // default, so a model outside the set is replaced by the vDC default
+    // (or first allowed model) rather than refused; only the advanced part
+    // (flags, extra options) can still 400.
+    if (vdcInfo && isPolicyRestrictive(vdcInfo.computePolicy)) {
+      const policy = vdcInfo.computePolicy
+      const hwCpu = body.hardware ?? (body.hardware = {})
+      const requestedCpu: string = typeof hwCpu.cpu === 'string' ? hwCpu.cpu : ''
+      const caps = policy.cpuModelMode === 'custom'
+        ? await getConnectionById(body.connectionId)
+            .then(capConn => pveFetch<any[]>(capConn, `/nodes/${encodeURIComponent(body.node)}/capabilities/qemu/cpu`))
+            .catch(() => undefined)
+        : undefined
+      let trustedModel: string | null = null
+      if (body.blueprintId) {
+        try {
+          const bp = await prisma.blueprint.findUnique({ where: { id: String(body.blueprintId) }, select: { hardware: true, tenantId: true } })
+          const bpHw = bp?.hardware as { cpu?: unknown } | null
+          if (bp?.tenantId === DEFAULT_TENANT_ID && typeof bpHw?.cpu === 'string') trustedModel = parseCpuProperty(bpHw.cpu).model || null
+        } catch {
+          trustedModel = null
+        }
+      }
+      const allowed = resolveAllowedCpuModels(policy, caps)
+      const requestedModel = parseCpuProperty(requestedCpu).model
+      if (allowed && requestedModel !== trustedModel && !allowed.has(requestedModel)) {
+        const fallback = pickPolicyDefaultModel(policy, caps)
+        if (!fallback) {
+          return NextResponse.json({ error: 'The vDC compute policy allows no CPU model on this cluster.' }, { status: 400 })
+        }
+        hwCpu.cpu = fallback
+      }
+      const verdict = validateCpuAgainstPolicy(policy, { cpu: hwCpu.cpu }, { clusterCapabilities: caps, currentModel: trustedModel })
+      if (verdict.ok === false) return NextResponse.json({ error: verdict.error }, { status: 400 })
     }
 
     // QoS suffix (`,iops_rd=..,iops_wr=..,mbps_rd=..,mbps_wr=..`) stamped onto

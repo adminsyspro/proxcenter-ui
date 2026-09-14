@@ -81,6 +81,7 @@ export async function POST(req: NextRequest) {
         sharedBridges: body.sharedBridges,
         vlanPools: body.vlanPools,
         storagePolicies: body.storagePolicies,
+        computePolicy: body.computePolicy,
         quota: body.quota,
       },
       session?.user?.id ?? null

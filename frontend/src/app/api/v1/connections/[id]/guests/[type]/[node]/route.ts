@@ -5,6 +5,7 @@ import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, getRequestGuestScopePerimeter, PERMISSIONS } from "@/lib/rbac"
 import { getCurrentTenantId } from "@/lib/tenant"
 import { resolveVdcForTenant, checkVdcQuota } from "@/lib/vdc/quota"
+import { validateCpuAgainstPolicy, pickPolicyDefaultModel } from "@/lib/vdc/computePolicy"
 import { getAllowedNetworksForTenant, validateNetAgainstScope, resolveSubnetForBridge, parseBridgeFromNet } from "@/lib/vdc/vnets"
 import { generatePveMacAddress } from "@/lib/vdc/sdn"
 import { allocateIp, releaseIp, IpamExhaustedError } from "@/lib/vdc/ipam"
@@ -119,6 +120,26 @@ export async function POST(
       const vdcInfo = await resolveVdcForTenant(tenantId, id, node)
 
       if (vdcInfo) {
+        // vDC compute policy (#893): the model must sit inside the allowed
+        // set and the advanced CPU options are refused when the switch is off.
+        // A body without `cpu` would let PVE pick kvm64 behind the policy's
+        // back, so the vDC default (or first allowed model) is injected.
+        const policy = vdcInfo.computePolicy
+        if (type === 'qemu' && policy) {
+          const caps = policy.cpuModelMode === 'custom'
+            ? await pveFetch<any[]>(conn, `/nodes/${encodeURIComponent(node)}/capabilities/qemu/cpu`).catch(() => undefined)
+            : undefined
+          if (body.cpu === undefined || body.cpu === null || String(body.cpu) === '') {
+            const fallback = pickPolicyDefaultModel(policy, caps)
+            if (fallback === null) {
+              return NextResponse.json({ error: 'The vDC compute policy allows no CPU model on this cluster.' }, { status: 400 })
+            }
+            if (fallback) body.cpu = fallback
+          }
+          const verdict = validateCpuAgainstPolicy(policy, body, { clusterCapabilities: caps })
+          if (verdict.ok === false) return NextResponse.json({ error: verdict.error }, { status: 400 })
+        }
+
         // Import-from metering (Finding I2): PVE allocates a full-size
         // volume for scsiN: "gold:0,import-from=gold:vm-100-disk-0", so meter
         // the REAL source size rather than accept the tenant-declared zero.

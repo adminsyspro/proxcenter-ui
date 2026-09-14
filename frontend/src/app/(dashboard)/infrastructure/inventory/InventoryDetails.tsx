@@ -2258,33 +2258,37 @@ return (
   }
 
   // Sauvegarder la configuration CPU
-  const saveCpuConfig = async () => {
+  const saveCpuConfig = async (opts?: { omitAdvanced?: boolean }) => {
     if (!selection || selection.type !== 'vm') return
 
     const { connId, node, type, vmid } = parseVmId(selection.id)
     const vmTitle = data?.title
+    // The vDC compute policy can hide NUMA, CPU limit and flags from the
+    // tenant (#893). Those controls then keep whatever the guest already has,
+    // so the patch must leave them out (the server refuses truthy values) and
+    // only carry the model when the tenant actually changed it.
+    const omitAdvanced = !!(opts && typeof opts === 'object' && 'omitAdvanced' in opts && opts.omitAdvanced)
 
     setSavingCpu(true)
 
     try {
-      // Build cpu field with flags: "host,flags=+aes;-pcid"
-      const activeFlags = Object.entries(cpuFlags).filter(([, v]) => v === '+' || v === '-')
-      let cpuField = cpuType
-      if (activeFlags.length > 0) {
-        cpuField += ',flags=' + activeFlags.map(([k, v]) => `${v}${k}`).join(';')
-      }
-
       const configUpdate: any = {
         sockets: cpuSockets,
         cores: cpuCores,
-        cpu: cpuField,
-        numa: numaEnabled ? 1 : 0,
       }
 
-      if (cpuLimitEnabled && cpuLimit > 0) {
-        configUpdate.cpulimit = cpuLimit
+      if (omitAdvanced) {
+        if (cpuType !== (data?.cpuInfo?.type || 'kvm64')) configUpdate.cpu = cpuType
       } else {
-        configUpdate.cpulimit = 0
+        // Build cpu field with flags: "host,flags=+aes;-pcid"
+        const activeFlags = Object.entries(cpuFlags).filter(([, v]) => v === '+' || v === '-')
+        let cpuField = cpuType
+        if (activeFlags.length > 0) {
+          cpuField += ',flags=' + activeFlags.map(([k, v]) => `${v}${k}`).join(';')
+        }
+        configUpdate.cpu = cpuField
+        configUpdate.numa = numaEnabled ? 1 : 0
+        configUpdate.cpulimit = cpuLimitEnabled && cpuLimit > 0 ? cpuLimit : 0
       }
 
       await pushGuestConfig(connId, type, node, vmid, configUpdate)

@@ -54,6 +54,7 @@ const PowerSettingsNewIcon = (props: any) => <i className="ri-shut-down-line" st
 import EntityTagManager from './components/EntityTagManager'
 import { resolveVmPowerAction } from './helpers'
 import { useRBAC } from '@/contexts/RBACContext'
+import { showsClusterLevel } from '@/lib/rbac/scopeKinds'
 import { useTagColors } from '@/contexts/TagColorContext'
 import { useTenant } from '@/contexts/TenantContext'
 import { useTaskTracker } from '@/hooks/useTaskTracker'
@@ -452,7 +453,7 @@ function safeJson<T>(x: any): T {
 export default function InventoryTree({ selected, onSelect, onRefreshRef, onOptimisticVmStatusRef, onOptimisticVmTagsRef, viewMode: controlledViewMode, onViewModeChange, onAllVmsChange, onHostsChange, onPoolsChange, onTagsChange, onPbsServersChange, favorites: propFavorites, onToggleFavorite, migratingVmIds, pendingActionVmIds, onRefresh, refreshLoading, onCollapse, isCollapsed, allowedViewModes, onCreateVm, onCreateLxc, onNodeAction, onStoragesChange, onExternalHypervisorsChange, showVmId, onToggleShowVmId }: Props) {
   const t = useTranslations()
   const theme = useTheme()
-  const { isAdmin } = useRBAC()
+  const { isAdmin, scopeTypes } = useRBAC()
   // Tenants other than the provider get the cloud-style abstraction —
   // shared storages on a multi-tenant cluster would leak other tenants'
   // VMID metadata, so we hide the STORAGES section from them entirely
@@ -463,6 +464,12 @@ export default function InventoryTree({ selected, onSelect, onRefreshRef, onOpti
   // cluster view like the provider, not the vDC abstraction.
   const isMspTenant = !tenantLoading && currentTenant?.operatingModel === 'msp'
   const isFullClusterView = isProviderTenant || isMspTenant
+  // Whether nodes are grouped under their cluster. Gated on the tenant AND on
+  // the RBAC scope, like the topology page and the widgets: the previous
+  // `!isAdmin` test read is_super_admin, so a provider admin, a tenant admin or
+  // an operator on the provider tenant lost the cluster level while the header
+  // right above kept counting the clusters they could not see.
+  const showClusterLevel = showsClusterLevel({ isFullClusterView, scopeTypes, isSuperAdmin: isAdmin })
   // connectionId → vDC (tenant IaaS only): drives the per-vDC root nodes.
   // Bijective thanks to the DB unique (tenant_id, connection_id). Empty for
   // provider/MSP (their /api/v1/vdcs list is empty or unused) — fail-open to
@@ -3925,10 +3932,12 @@ return (
             )
           }
 
-          // Pour un tenant vDC (non-admin), on n'affiche pas le noeud cluster,
-          // on rend les nodes directement au premier niveau. Les tenants MSP
-          // possèdent le cluster entier → vue complète (comme le provider).
-          if (!isAdmin && !isMspTenant) {
+          // Vue plate : un tenant vDC ne voit jamais le cluster dont il est une
+          // tranche (c'est l'abstraction), et un utilisateur cantonné à un pool,
+          // un tag ou des VMs n'a pas à voir la topologie. Les autres (provider
+          // et MSP avec une portée infra) ont le cluster comme niveau au-dessus
+          // des nodes.
+          if (!showClusterLevel) {
             return clu.nodes.map(n => (
               <TreeItem
                 key={`${clu.connId}:${n.node}`}

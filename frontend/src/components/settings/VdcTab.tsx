@@ -1495,19 +1495,9 @@ export default function VdcTab() {
           {/* Informational: lists the tenant's existing vDCs (with their
               clusters). Turns into a warning when every cluster is taken —
               in that state nothing is selectable below. */}
-          {tenantHasExistingVdc && (
-            <Alert severity={allClustersUsed ? 'warning' : 'info'}>
-              {allClustersUsed
-                ? t('vdc.tenantAllClustersUsed')
-                : t('vdc.tenantHasVdcs', {
-                    count: existingTenantVdcs.length,
-                    names: existingTenantVdcs
-                      .map((v: any) => {
-                        const conn = connections.find((c: any) => c.id === v.connectionId)
-                        return conn?.name ? `${v.name} (${conn.name})` : v.name
-                      })
-                      .join(', '),
-                  })}
+          {allClustersUsed && (
+            <Alert severity="warning">
+              {t('vdc.tenantAllClustersUsed')}
             </Alert>
           )}
 

@@ -1966,27 +1966,36 @@ export default function VdcTab() {
                       </Typography>
                     ) : (
                       <Stack spacing={1} sx={{ mt: 1 }}>
-                        {providerBridges.map((pb) => {
+                        {providerBridges.map((pb: any) => {
                           const selected = selectedSharedBridges.has(pb.iface)
+                          const isVnet = pb.type === 'sdn-vnet'
                           const label = selectedSharedBridges.get(pb.iface) ?? ''
                           return (
                             <Stack key={pb.iface} direction="row" spacing={1} alignItems="center">
                               <FormControlLabel
-                                sx={{ minWidth: 180 }}
+                                sx={{ minWidth: 220 }}
                                 control={
                                   <Checkbox
                                     checked={selected}
                                     onChange={(e) => {
                                       setSelectedSharedBridges((prev) => {
                                         const next = new Map(prev)
-                                        if (e.target.checked) next.set(pb.iface, label)
+                                        if (e.target.checked) next.set(pb.iface, label || pb.alias || '')
                                         else next.delete(pb.iface)
                                         return next
                                       })
                                     }}
                                   />
                                 }
-                                label={<Typography>{pb.iface}</Typography>}
+                                label={
+                                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                    <i className={isVnet ? 'ri-share-line' : 'ri-router-line'} style={{ fontSize: 16, opacity: 0.6 }} />
+                                    <Typography>{pb.iface}</Typography>
+                                    {isVnet && pb.zone && (
+                                      <Typography variant="caption" color="text.secondary">({pb.zone})</Typography>
+                                    )}
+                                  </Box>
+                                }
                               />
                               <TextField
                                 size="small"

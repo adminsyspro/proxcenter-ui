@@ -104,6 +104,11 @@ export default function VmDetailTabs(props: any) {
   // planning, node failover policies) — hide their tabs from tenants.
   const { isAdmin, hasPermission } = useRBAC()
   const canConfig = hasPermission('vm.config')
+  const canConfigMedia = hasPermission('vm.config.media')
+  const canConfigNicLink = hasPermission('vm.config.nic.link')
+  const canConfigNic = hasPermission('vm.config.nic')
+  const canConfigHardware = hasPermission('vm.config.hardware')
+  const canConfigBoot = hasPermission('vm.config.boot')
   const canBackup = hasPermission('vm.backup')
   const canSnapshot = hasPermission('vm.snapshot')
   // Tenant-only: live vDC quota banner on the Hardware tab so the user
@@ -952,7 +957,7 @@ export default function VmDetailTabs(props: any) {
                               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
                                 <Typography variant="body2" fontWeight={600}>{t('inventory.sockets')}</Typography>
                                 <NumericTextField
-                                  disabled={!canConfig}
+                                  disabled={!canConfigHardware}
                                   size="small"
                                   type="number"
                                   value={cpuSockets}
@@ -963,7 +968,7 @@ export default function VmDetailTabs(props: any) {
                                 />
                               </Box>
                               <Slider
-                                disabled={!canConfig}
+                                disabled={!canConfigHardware}
                                 value={Math.min(cpuSockets, maxSockets)}
                                 onChange={(_, val) => setCpuSockets(Math.round(val as number))}
                                 min={1}
@@ -980,7 +985,7 @@ export default function VmDetailTabs(props: any) {
                               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
                                 <Typography variant="body2" fontWeight={600}>{t('inventory.coresPerSocket')}</Typography>
                                 <NumericTextField
-                                  disabled={!canConfig}
+                                  disabled={!canConfigHardware}
                                   size="small"
                                   type="number"
                                   value={cpuCores}
@@ -1001,7 +1006,7 @@ export default function VmDetailTabs(props: any) {
                                 ]
                                 return (
                                   <Slider
-                                    disabled={!canConfig}
+                                    disabled={!canConfigHardware}
                                     value={Math.min(cpuCores, sliderMax)}
                                     onChange={(_, val) => setCpuCores(Math.round(val as number))}
                                     min={1}
@@ -1019,7 +1024,7 @@ export default function VmDetailTabs(props: any) {
                           <FormControl fullWidth sx={{ mb: 3 }}>
                             <InputLabel>{t('inventory.cpuType')}</InputLabel>
                             <Select
-                              disabled={!canConfig}
+                              disabled={!canConfigHardware}
                               value={cpuType}
                               label={t('inventory.cpuType')}
                               onChange={(e) => setCpuType(e.target.value)}
@@ -1127,7 +1132,7 @@ export default function VmDetailTabs(props: any) {
                               <FormControlLabel
                                 control={
                                   <Switch
-                                    disabled={!canConfig}
+                                    disabled={!canConfigHardware}
                                     checked={cpuLimitEnabled}
                                     onChange={(e) => setCpuLimitEnabled(e.target.checked)}
                                   />
@@ -1137,7 +1142,7 @@ export default function VmDetailTabs(props: any) {
                               <FormControlLabel
                                 control={
                                   <Switch
-                                    disabled={!canConfig}
+                                    disabled={!canConfigHardware}
                                     checked={numaEnabled}
                                     onChange={(e) => setNumaEnabled(e.target.checked)}
                                   />
@@ -1150,7 +1155,7 @@ export default function VmDetailTabs(props: any) {
                                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
                                   <Typography variant="body2" fontWeight={600}>{t('inventory.cpuLimit')}</Typography>
                                   <NumericTextField
-                                    disabled={!canConfig}
+                                    disabled={!canConfigHardware}
                                     size="small"
                                     type="number"
                                     value={cpuLimit}
@@ -1162,7 +1167,7 @@ export default function VmDetailTabs(props: any) {
                                   />
                                 </Box>
                                 <Slider
-                                  disabled={!canConfig}
+                                  disabled={!canConfigHardware}
                                   value={cpuLimit}
                                   onChange={(_, val) => setCpuLimit(val as number)}
                                   min={0}
@@ -1219,7 +1224,7 @@ export default function VmDetailTabs(props: any) {
                                     <MuiTooltip key={flag} title={desc} placement="top" arrow>
                                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                         <ToggleButtonGroup
-                                          disabled={!canConfig}
+                                          disabled={!canConfigHardware}
                                           size="small"
                                           exclusive
                                           value={val}
@@ -1274,7 +1279,7 @@ export default function VmDetailTabs(props: any) {
                           <Button
                             variant="contained"
                             fullWidth
-                            disabled={!canConfig || savingCpu || !cpuModified || hwQuotaBlocked}
+                            disabled={!canConfigHardware || savingCpu || !cpuModified || hwQuotaBlocked}
                             onClick={saveCpuConfig}
                             startIcon={savingCpu ? <CircularProgress size={16} /> : <SaveIcon />}
                           >
@@ -1340,7 +1345,7 @@ export default function VmDetailTabs(props: any) {
                                   parent that re-clamped mid-keystroke would rewrite the buffer
                                   under the user's fingers. */}
                               <NumericTextField
-                                disabled={!canConfig}
+                                disabled={!canConfigHardware}
                                 size="small"
                                 type="number"
                                 value={memory}
@@ -1371,7 +1376,7 @@ export default function VmDetailTabs(props: any) {
                               ]
                               return (
                                 <Slider
-                                  disabled={!canConfig}
+                                  disabled={!canConfigHardware}
                                   value={Math.min(memory / 1024, sliderMax)}
                                   onChange={(_, val) => {
                                     const newMem = Math.round(val as number) * 1024
@@ -1395,7 +1400,7 @@ export default function VmDetailTabs(props: any) {
                             <FormControlLabel
                               control={
                                 <Switch
-                                  disabled={!canConfig}
+                                  disabled={!canConfigHardware}
                                   checked={balloonEnabled}
                                   onChange={(e) => setBalloonEnabled(e.target.checked)}
                                 />
@@ -1412,7 +1417,7 @@ export default function VmDetailTabs(props: any) {
                                       blur) instead of a Math.min in onChange: clamping in the
                                       parent would rewrite the buffer on every keystroke. */}
                                   <NumericTextField
-                                    disabled={!canConfig}
+                                    disabled={!canConfigHardware}
                                     size="small"
                                     type="number"
                                     value={balloon}
@@ -1430,7 +1435,7 @@ export default function VmDetailTabs(props: any) {
                                   />
                                 </Box>
                                 <Slider
-                                  disabled={!canConfig}
+                                  disabled={!canConfigHardware}
                                   value={balloon / 1024}
                                   onChange={(_, val) => setBalloon((val as number) * 1024)}
                                   min={0}
@@ -1464,7 +1469,7 @@ export default function VmDetailTabs(props: any) {
                                 {t('inventory.swap')}
                               </Typography>
                               <NumericTextField
-                                disabled={!canConfig}
+                                disabled={!canConfigHardware}
                                 size="small"
                                 type="number"
                                 value={swap}
@@ -1479,7 +1484,7 @@ export default function VmDetailTabs(props: any) {
                               />
                             </Box>
                             <Slider
-                              disabled={!canConfig}
+                              disabled={!canConfigHardware}
                               value={swap}
                               onChange={(_, val) => setSwap(val as number)}
                               min={0}
@@ -1505,7 +1510,7 @@ export default function VmDetailTabs(props: any) {
                           <Button
                             variant="contained"
                             fullWidth
-                            disabled={!canConfig || savingMemory || !memoryModified || hwQuotaBlocked}
+                            disabled={!canConfigHardware || savingMemory || !memoryModified || hwQuotaBlocked}
                             onClick={saveMemoryConfig}
                             startIcon={savingMemory ? <CircularProgress size={16} /> : <SaveIcon />}
                           >
@@ -1537,14 +1542,14 @@ export default function VmDetailTabs(props: any) {
                               <Chip label={data.disksInfo?.length || 0} size="small" sx={{ height: 22, fontSize: 11 }} />
                             </Typography>
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                                {canConfig && (
+                                {canConfigHardware && (
                                 <MuiTooltip title={data.optionsInfo?.scsihw || 'virtio-scsi-single'}>
                                   <IconButton size="small" onClick={(e) => { e.stopPropagation(); setEditScsiControllerDialogOpen(true) }}>
                                     <i className="ri-settings-3-line" style={{ fontSize: 16 }} />
                                   </IconButton>
                                 </MuiTooltip>
                                 )}
-                                {canConfig && (
+                                {canConfigHardware && (
                                 <MuiTooltip title={t('common.add')}>
                                   <IconButton size="small" color="primary" onClick={(e) => { e.stopPropagation(); setAddDiskDialogOpen(true) }}>
                                     <i className="ri-add-line" style={{ fontSize: 18 }} />
@@ -1569,7 +1574,7 @@ export default function VmDetailTabs(props: any) {
                                     '&:last-child': { mb: 0 }
                                   }}
                                   onClick={() => {
-                                    if (!canConfig) return
+                                    if (!canConfigHardware) return
                                     if (disk.isCloudInit) return
                                     setSelectedDisk(disk)
                                     setEditDiskDialogOpen(true)
@@ -1623,7 +1628,7 @@ export default function VmDetailTabs(props: any) {
                                     }
                                   />
                                   {disk.isUnused ? (
-                                    canConfig ? <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }} onClick={(e) => e.stopPropagation()}>
+                                    canConfigHardware ? <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }} onClick={(e) => e.stopPropagation()}>
                                       <MuiTooltip title={t('hardware.attach')}>
                                         <IconButton
                                           size="small"
@@ -1655,8 +1660,8 @@ export default function VmDetailTabs(props: any) {
                                       </MuiTooltip>
                                     </Box> : null
                                   ) : disk.isCloudInit ? null : (disk.isCdrom || disk.isEfi || disk.isTpm) ? (
-                                    canConfig ? <i className="ri-pencil-line" style={{ fontSize: 16, opacity: 0.5 }} /> : null
-                                  ) : canConfig ? (
+                                    canConfigHardware ? <i className="ri-pencil-line" style={{ fontSize: 16, opacity: 0.5 }} /> : null
+                                  ) : canConfigHardware ? (
                                     <IconButton
                                       size="small"
                                       onClick={(e) => {
@@ -1772,7 +1777,7 @@ export default function VmDetailTabs(props: any) {
                               <Chip label={data.networkInfo?.length || 0} size="small" sx={{ height: 22, fontSize: 11 }} />
                             </Typography>
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                                {canConfig && (
+                                {canConfigNic && (
                                 <MuiTooltip title={t('common.add')}>
                                   <IconButton size="small" color="primary" onClick={(e) => { e.stopPropagation(); setAddNetworkDialogOpen(true) }}>
                                     <i className="ri-add-line" style={{ fontSize: 18 }} />
@@ -1789,7 +1794,7 @@ export default function VmDetailTabs(props: any) {
                                 {data.networkInfo.map((net: any, idx: number) => (
                                   <ListItemButton
                                     key={idx}
-                                    disabled={!canConfig}
+                                    disabled={!canConfigNic}
                                     sx={{
                                       bgcolor: net.linkDown ? 'rgba(245,158,11,0.08)' : 'action.hover',
                                       borderRadius: 1,
@@ -1896,7 +1901,7 @@ export default function VmDetailTabs(props: any) {
                               <Chip label={data.otherHardwareInfo?.length || 0} size="small" sx={{ height: 22, fontSize: 11 }} />
                             </Typography>
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                                {canConfig && (
+                                {canConfigHardware && (
                                 <MuiTooltip title={t('common.add')}>
                                   <IconButton size="small" color="primary" onClick={(e) => { e.stopPropagation(); setAddOtherHardwareDialogOpen(true) }}>
                                     <i className="ri-add-line" style={{ fontSize: 18 }} />
@@ -1935,18 +1940,18 @@ export default function VmDetailTabs(props: any) {
                                 return (
                                   <ListItem
                                     key={idx}
-                                    onClick={isEditable && canConfig ? openEdit : undefined}
+                                    onClick={isEditable && canConfigHardware ? openEdit : undefined}
                                     sx={{
                                       bgcolor: 'action.hover',
                                       borderRadius: 1,
                                       mb: 1,
                                       '&:last-child': { mb: 0 },
-                                      ...(isEditable && canConfig && {
+                                      ...(isEditable && canConfigHardware && {
                                         cursor: 'pointer',
                                         '&:hover': { bgcolor: 'action.selected' },
                                       }),
                                     }}
-                                    secondaryAction={isEditable && canConfig ? (
+                                    secondaryAction={isEditable && canConfigHardware ? (
                                       <MuiTooltip title={t('common.edit')}>
                                         <IconButton
                                           size="small"
@@ -2382,7 +2387,7 @@ return (
                                   {pendingChip('boot')}
                                 </td>
                                 <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12, textAlign: 'center' }}>
-                                  {canConfig && (
+                                  {canConfigBoot && (
                                   <MuiTooltip title={t('common.edit')}>
                                     <IconButton size="small" onClick={() => {
                                       // Build device list from all disks + networks

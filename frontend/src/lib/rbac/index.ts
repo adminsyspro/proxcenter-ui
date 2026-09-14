@@ -185,6 +185,21 @@ async function loadUserGrants(userId: string, tenantId: string): Promise<LoadedG
 }
 
 /**
+ * Whether `grantedSet` satisfies `requested`, including the permission
+ * hierarchy: holding a parent right (e.g. `vm.config`) implies every child
+ * (`vm.config.media`, `vm.config.nic.link`, …). The walk is O(depth),
+ * which is at most 2-3 for the deepest permission (`vm.config.nic.link`).
+ */
+function grantsPermission(grantedSet: Set<string>, requested: string): boolean {
+  if (grantedSet.has(requested)) return true
+  const parts = requested.split('.')
+  for (let i = parts.length - 1; i >= 2; i--) {
+    if (grantedSet.has(parts.slice(0, i).join('.'))) return true
+  }
+  return false
+}
+
+/**
  * Sync predicate over preloaded grants. Equivalent to one `hasPermission`
  * check but with zero DB calls — meant to be invoked in a tight loop after
  * a single `loadUserGrants` call.
@@ -198,7 +213,7 @@ function checkGrants(
 ): boolean {
   if (grants.superAdmin) return true
   for (const g of grants.byScope) {
-    if (!g.permissions.has(permission)) continue
+    if (!grantsPermission(g.permissions, permission)) continue
     if (scopeMatches(g.scopeType, g.scopeTarget, resourceType, resourceId, resourceMeta)) {
       return true
     }
@@ -468,6 +483,11 @@ export const PERMISSIONS = {
   VM_CLONE: "vm.clone",
   VM_MIGRATE: "vm.migrate",
   VM_CONFIG: "vm.config",
+  VM_CONFIG_MEDIA: "vm.config.media",
+  VM_CONFIG_NIC_LINK: "vm.config.nic.link",
+  VM_CONFIG_NIC: "vm.config.nic",
+  VM_CONFIG_HARDWARE: "vm.config.hardware",
+  VM_CONFIG_BOOT: "vm.config.boot",
   VM_DELETE: "vm.delete",
   VM_CREATE: "vm.create",
 
@@ -523,6 +543,13 @@ export const PERMISSIONS = {
   ADMIN_COMPLIANCE: "admin.compliance",
   ADMIN_TENANTS: "admin.tenants",
   ADMIN_APITOKENS: "admin.apitokens",
+
+  // SDN / VNet
+  SDN_VNET_VIEW: "sdn.vnet.view",
+  SDN_VNET_CREATE: "sdn.vnet.create",
+  SDN_VNET_EDIT: "sdn.vnet.edit",
+  SDN_VNET_DELETE: "sdn.vnet.delete",
+  SDN_VNET_FIREWALL: "sdn.vnet.firewall",
 } as const
 
 export type Permission = typeof PERMISSIONS[keyof typeof PERMISSIONS]
@@ -606,7 +633,7 @@ function checkTokenPermission(
 ): NextResponse | null {
   const deny = () =>
     NextResponse.json({ error: `Permission denied: ${permission}` }, { status: 403 })
-  if (!principal.permissions?.has(permission)) {
+  if (!principal.permissions || !grantsPermission(principal.permissions, permission)) {
     return deny()
   }
   // Connection perimeter: only RESOURCE-BEARING checks are constrained.
@@ -677,11 +704,82 @@ export async function checkPermission(
 }
 
 /**
+ * Check that the caller holds EVERY permission in `permissions`. One principal
+ * resolution and one grant load regardless of the list length. Returns a 403
+ * naming the first denied permission, or null when all pass.
+ */
+export async function checkPermissions(
+  permissions: string[],
+  resourceType?: "connection" | "node" | "vm" | "global" | "pbs",
+  resourceId?: string,
+): Promise<NextResponse | null> {
+  if (permissions.length === 0) return null
+  if (permissions.length === 1) return checkPermission(permissions[0], resourceType, resourceId)
+
+  const result = await getPrincipal()
+  if (!result.ok) return rejectionToResponse(result.rejection)
+  const principal = result.principal
+
+  if (principal && principal.kind === "token") {
+    for (const p of permissions) {
+      const denied = checkTokenPermission(principal, p, resourceType, resourceId)
+      if (denied) return denied
+    }
+    return null
+  }
+
+  if (!principal?.userId) {
+    return NextResponse.json({ error: "Not authenticated" }, { status: 401 })
+  }
+
+  const userId = principal.userId
+  const tenantId = principal.tenantId
+  const grants = await loadUserGrants(userId, tenantId)
+
+  for (const permission of permissions) {
+    if (checkGrants(grants, permission, resourceType, resourceId)) continue
+    if (resourceType === "vm" && resourceId && grants.byScope.some(g => g.scopeType === "tag" || g.scopeType === "pool")) {
+      const meta = resolveVmMeta(resourceId, tenantId)
+      if (meta && checkGrants(grants, permission, resourceType, resourceId, meta)) continue
+    }
+    return NextResponse.json({ error: `Permission denied: ${permission}` }, { status: 403 })
+  }
+  return null
+}
+
+/**
  * Check admin-only permission (for admin routes)
  * Returns a 401/403 NextResponse if denied, or null if allowed
  */
 export async function requireAdmin(): Promise<NextResponse | null> {
   return checkPermission(PERMISSIONS.ADMIN_SETTINGS)
+}
+
+/**
+ * Children implied by a parent permission. Used by `expandPermissionHierarchy`
+ * to turn a set that contains `vm.config` into one that also contains every
+ * `vm.config.*` sub-right, so the client-side `hasPermission('vm.config.media')`
+ * returns true without the UI having to know the hierarchy itself.
+ */
+const PERMISSION_CHILDREN: Record<string, string[]> = {
+  "vm.config": [
+    "vm.config.media",
+    "vm.config.nic.link",
+    "vm.config.nic",
+    "vm.config.hardware",
+    "vm.config.boot",
+  ],
+  "vm.config.nic": ["vm.config.nic.link"],
+}
+
+export function expandPermissionHierarchy(perms: Set<string>): Set<string> {
+  const expanded = new Set(perms)
+  for (const [parent, children] of Object.entries(PERMISSION_CHILDREN)) {
+    if (expanded.has(parent)) {
+      for (const child of children) expanded.add(child)
+    }
+  }
+  return expanded
 }
 
 /**

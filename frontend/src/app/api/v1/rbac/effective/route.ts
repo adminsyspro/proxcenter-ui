@@ -6,7 +6,7 @@ import { getServerSession } from "next-auth"
 
 import { authOptions } from "@/lib/auth/config"
 import { prisma } from "@/lib/db/prisma"
-import { hasPermission, isUserSuperAdmin, resolveEffectiveScopes } from "@/lib/rbac"
+import { hasPermission, isUserSuperAdmin, resolveEffectiveScopes, expandPermissionHierarchy } from "@/lib/rbac"
 import { getCurrentTenantId } from "@/lib/tenant"
 import { demoResponse } from "@/lib/demo/demo-api"
 
@@ -188,6 +188,9 @@ export async function GET(req: NextRequest) {
         })
       }
     }
+
+    const expanded = expandPermissionHierarchy(effectivePermissions)
+    for (const p of expanded) effectivePermissions.add(p)
 
     const isSuperAdmin = userRoles.some(ur => ur.role.id === "role_super_admin")
 

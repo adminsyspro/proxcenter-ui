@@ -31,9 +31,8 @@ export async function POST(
   try {
     const { id, type, node, vmid } = await ctx.params
 
-    // RBAC: Check vm.config permission
     const resourceId = buildVmResourceId(id, node, type, vmid)
-    const denied = await checkPermission(PERMISSIONS.VM_CONFIG, "vm", resourceId)
+    const denied = await checkPermission(PERMISSIONS.VM_CONFIG_HARDWARE, "vm", resourceId)
 
     if (denied) return denied
 

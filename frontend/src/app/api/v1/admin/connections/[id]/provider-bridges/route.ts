@@ -11,7 +11,9 @@ export const runtime = "nodejs"
 type RouteContext = { params: Promise<{ id: string }> | { id: string } }
 
 // GET /api/v1/admin/connections/{id}/provider-bridges
-// Returns physical (non-SDN) bridges available on the cluster, deduplicated across nodes.
+// Returns bridges AND provider-managed SDN VNets available on the cluster.
+// Physical bridges are deduplicated across nodes. SDN VNets carry `type: 'sdn-vnet'`
+// so the UI can tell them apart from host bridges.
 // `?scope=vlan-pool` switches to the VLAN-pool picker's needs: zone uplink bridges are
 // kept (only vnet names are excluded) and each bridge carries a `vlanAware` flag.
 export async function GET(req: Request, ctx: RouteContext) {
@@ -35,23 +37,57 @@ export async function GET(req: Request, ctx: RouteContext) {
     const scope = url.searchParams.get("scope")
     const forVlanPool = scope === "vlan-pool"
 
-    // Exclude SDN-managed bridges: vnet names always, zone uplink bridges only
-    // outside vlan-pool scope (the VLAN-pool picker wants zone uplinks back).
-    const sdnBridges: Set<string> = new Set()
+    // SDN zone uplink bridges are excluded from the host-bridge list so they
+    // don't appear twice. Provider-managed VNets (whose zone is NOT assigned
+    // to any vDC on this connection) are returned as `type: 'sdn-vnet'` so the
+    // UI can offer them as shared uplinks. Tenant VNets (zone = a vDC's
+    // sdnZoneName) are excluded: they are already the tenant's own networks.
+    const sdnZoneBridges: Set<string> = new Set()
+    const sdnVnetNames: Set<string> = new Set()
+    type SdnVnetEntry = {
+      iface: string; type: 'sdn-vnet'; zone: string; tag?: number; alias?: string
+    }
+    const sdnVnets: SdnVnetEntry[] = []
     try {
+      const zones = await pveFetch<any[]>(conn, "/cluster/sdn/zones") || []
       if (!forVlanPool) {
-        const zones = await pveFetch<any[]>(conn, "/cluster/sdn/zones") || []
         for (const z of zones) {
-          if (z.bridge) sdnBridges.add(String(z.bridge))
+          if (z.bridge) sdnZoneBridges.add(String(z.bridge))
         }
       }
+
+      const tenantZones = new Set(
+        (await prisma.vdc.findMany({
+          where: { connectionId: id, sdnZoneName: { not: null } },
+          select: { sdnZoneName: true },
+        })).map(r => r.sdnZoneName!),
+      )
+
+      const tenantVnetNames = new Set(
+        (await prisma.vdcVnet.findMany({
+          where: { vdc: { connectionId: id } },
+          select: { pveName: true },
+        })).map(r => r.pveName),
+      )
+
       const vnets = await pveFetch<any[]>(conn, "/cluster/sdn/vnets") || []
       for (const v of vnets) {
-        if (v.vnet) sdnBridges.add(String(v.vnet))
+        if (!v.vnet) continue
+        sdnVnetNames.add(String(v.vnet))
+        if (!forVlanPool && !tenantZones.has(String(v.zone ?? '')) && !tenantVnetNames.has(String(v.vnet))) {
+          sdnVnets.push({
+            iface: String(v.vnet),
+            type: 'sdn-vnet',
+            zone: String(v.zone ?? ''),
+            tag: typeof v.tag === 'number' ? v.tag : undefined,
+            alias: typeof v.alias === 'string' ? v.alias : undefined,
+          })
+        }
       }
     } catch (err: any) {
       console.warn(`[provider-bridges] Failed to fetch SDN config: ${err?.message}`)
     }
+    const sdnExclude = new Set([...sdnZoneBridges, ...sdnVnetNames])
 
     // Gather bridges from all nodes, deduplicate by iface name
     const nodesRaw = await pveFetch<any[]>(conn, "/nodes") || []
@@ -68,7 +104,7 @@ export async function GET(req: Request, ctx: RouteContext) {
         const ifaces = await pveFetch<any[]>(conn, `/nodes/${encodeURIComponent(nodeName)}/network`) || []
         for (const ifc of ifaces) {
           if (ifc.type !== "bridge" && ifc.type !== "OVSBridge") continue
-          if (sdnBridges.has(ifc.iface)) continue
+          if (sdnExclude.has(ifc.iface)) continue
 
           const existing = bridgeMap.get(ifc.iface)
           if (existing) {
@@ -91,7 +127,8 @@ export async function GET(req: Request, ctx: RouteContext) {
     }
 
     const bridges = Array.from(bridgeMap.values()).sort((a, b) => a.iface.localeCompare(b.iface))
-    return NextResponse.json({ data: bridges })
+    const sdnSorted = sdnVnets.sort((a, b) => a.iface.localeCompare(b.iface))
+    return NextResponse.json({ data: [...bridges, ...sdnSorted] })
   } catch (e: any) {
     console.error("[provider-bridges] error:", e)
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })

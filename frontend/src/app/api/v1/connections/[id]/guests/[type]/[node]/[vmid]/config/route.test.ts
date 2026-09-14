@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { callRoute } from '@/__tests__/setup/route-test'
 
 const checkPermissionMock = vi.fn<(...args: any[]) => Promise<Response | null>>()
+const checkPermissionsMock = vi.fn<(...args: any[]) => Promise<Response | null>>()
 const getConnectionByIdMock = vi.fn<(id: string) => Promise<any>>()
 const pveFetchMock = vi.fn<(...args: any[]) => Promise<any>>()
 const resolveVdcForTenantMock = vi.fn<(...args: any[]) => Promise<any>>()
@@ -13,8 +14,16 @@ const getTenantInfrastructureScopeMock = vi.fn<(...args: any[]) => Promise<any>>
 
 vi.mock('@/lib/rbac', () => ({
   checkPermission: checkPermissionMock,
+  checkPermissions: checkPermissionsMock,
   buildVmResourceId: () => 'res',
-  PERMISSIONS: { VM_CONFIG: 'vm.config' },
+  PERMISSIONS: {
+    VM_CONFIG: 'vm.config',
+    VM_CONFIG_MEDIA: 'vm.config.media',
+    VM_CONFIG_NIC_LINK: 'vm.config.nic.link',
+    VM_CONFIG_NIC: 'vm.config.nic',
+    VM_CONFIG_HARDWARE: 'vm.config.hardware',
+    VM_CONFIG_BOOT: 'vm.config.boot',
+  },
 }))
 vi.mock('@/lib/connections/getConnection', () => ({ getConnectionById: getConnectionByIdMock }))
 // Spread the real module: the config write path also reads
@@ -77,6 +86,7 @@ function configWriteMethod() {
 
 beforeEach(() => {
   checkPermissionMock.mockReset().mockResolvedValue(null)
+  checkPermissionsMock.mockReset().mockResolvedValue(null)
   getConnectionByIdMock.mockReset().mockResolvedValue({ id: 'conn-1' })
   resolveVdcForTenantMock.mockReset().mockResolvedValue(null)
   checkVdcQuotaMock.mockReset().mockResolvedValue({ allowed: true })

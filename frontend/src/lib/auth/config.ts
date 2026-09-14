@@ -610,6 +610,14 @@ export const authOptions: NextAuthOptions = {
         token.role = user.role
         token.authProvider = account?.provider === 'oidc' ? 'oidc' : user.authProvider
 
+        // Kept for RP-initiated logout: without an id_token_hint the IdP either
+        // refuses to end its own session or asks the user to confirm, and the
+        // local sign-out alone leaves the SSO session standing. Only stored for
+        // OIDC logins, so a local or LDAP session's cookie is unchanged.
+        if (account?.provider === 'oidc' && account.id_token) {
+          token.idToken = account.id_token
+        }
+
         try {
           const origin = await requestOrigin()
           token.sid = await createSession({ userId: user.id, ...origin })

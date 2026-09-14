@@ -16,7 +16,10 @@ import { buildEndSessionUrl, discoverEndSessionEndpoint } from "@/lib/auth/oidcL
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
-const NO_LOGOUT = NextResponse.json({ url: null })
+// A function, not a module-level constant: a Response body can only be read
+// once, so a shared instance would come back already consumed on the second
+// request that has nothing to log out of.
+const noLogout = () => NextResponse.json({ url: null })
 
 export async function GET(req: NextRequest) {
   try {
@@ -24,18 +27,18 @@ export async function GET(req: NextRequest) {
       req,
       secret: process.env.NEXTAUTH_SECRET || "build-time-placeholder",
     })
-    if (!token || token.authProvider !== "oidc") return NO_LOGOUT
+    if (!token || token.authProvider !== "oidc") return noLogout()
 
     const config = await getOidcConfig()
-    if (!config || !config.enabled) return NO_LOGOUT
+    if (!config || !config.enabled) return noLogout()
 
     const endSessionEndpoint = await discoverEndSessionEndpoint(config.issuerUrl)
-    if (!endSessionEndpoint) return NO_LOGOUT
+    if (!endSessionEndpoint) return noLogout()
 
     // Back to our own login page. Built from the request so a deployment behind
     // a proxy lands on the host the user actually browsed, and NEXTAUTH_URL
     // wins when it is set (it is the value registered at the IdP).
-    const base = process.env.NEXTAUTH_URL || req.nextUrl.origin
+    const base = process.env.NEXTAUTH_URL || new URL(req.url).origin
     const postLogoutRedirectUri = new URL("/login", base).toString()
 
     return NextResponse.json({

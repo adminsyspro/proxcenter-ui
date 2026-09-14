@@ -93,6 +93,32 @@ describe('validateDriveAgainstScope', () => {
   it('refuses an import-from volid whose own volume is a raw path', () => {
     expect(validateDriveAgainstScope('scsi0', 'ceph-nvme:0,import-from=ceph-nvme:/dev/sda', scope).ok).toBe(false)
   })
+
+  describe('read-only ISO libraries (#894)', () => {
+    const withLib = new Set(['ceph-nvme', 'ceph-hdd', 'isolib'])
+    const readOnly = new Set(['isolib'])
+
+    it('accepts a CD/DVD drive backed by a library storage', () => {
+      expect(validateDriveAgainstScope('ide2', 'isolib:iso/debian.iso,media=cdrom', withLib, readOnly).ok).toBe(true)
+    })
+    it('refuses a data disk on a library storage, naming the library', () => {
+      const r = validateDriveAgainstScope('scsi1', 'isolib:32', withLib, readOnly)
+      expect(r.ok).toBe(false)
+      if (r.ok === false) expect(r.error).toMatch(/isolib.*read-only ISO library/)
+    })
+    it('refuses a volume reference (unusedN reassign) on a library storage', () => {
+      expect(validateDriveAgainstScope('unused0', 'isolib:vm-100-disk-3', withLib, readOnly).ok).toBe(false)
+    })
+    it('still lets none,media=cdrom through', () => {
+      expect(validateDriveAgainstScope('ide2', 'none,media=cdrom', withLib, readOnly).ok).toBe(true)
+    })
+    it('leaves a data disk on a writable storage untouched', () => {
+      expect(validateDriveAgainstScope('scsi0', 'ceph-nvme:32', withLib, readOnly).ok).toBe(true)
+    })
+    it('without the readOnly argument every visible storage still accepts a data disk (pre-#894 contract)', () => {
+      expect(validateDriveAgainstScope('scsi1', 'isolib:32', withLib).ok).toBe(true)
+    })
+  })
 })
 
 describe('stampDriveQos', () => {

@@ -5415,7 +5415,12 @@
     "cdrom": {
       "useIso": "Use CD/DVD disc image file (ISO)",
       "usePhysical": "Use physical CD/DVD Drive",
-      "noMedia": "Do not use any media"
+      "noMedia": "Do not use any media",
+      "uploadIso": "Upload ISO",
+      "uploadingIso": "Uploading {name}: {pct}%",
+      "transferringIso": "Handing {name} over to Proxmox…",
+      "deleteIso": "Delete this ISO",
+      "deleteIsoConfirm": "Delete {name} from {storage}? Guests still referencing it will fail to boot from it."
     },
     "loadNodesError": "Unable to load the node list"
   },
@@ -7802,7 +7807,15 @@
     "tabCompute": "Compute",
     "tabStorage": "Storage",
     "tabNetwork": "Network",
-    "selectConnectionFirst": "Select a connection first to configure this section."
+    "selectConnectionFirst": "Select a connection first to configure this section.",
+    "isoLibraryTitle": "ISO library",
+    "isoLibraryHint": "Grant read-only ISO storages to this vDC. Tenants can mount any ISO of the provider catalogue on a CD/DVD drive, but cannot upload, delete, or place disks there. Use a dedicated share replicated on every node, or one storage per catalogue tier.",
+    "isoLibraryNone": "No storage on this cluster advertises ISO content.",
+    "isoLibraryPerNode": "per node",
+    "isoLibraryShared": "shared",
+    "isoLibraryMissing": "not found on the cluster anymore",
+    "isoLibraryAllowUploads": "Allow tenant uploads",
+    "isoLibraryAllowUploadsHint": "Tenants may upload and delete their own files there, named custom-tenant-…; the provider catalogue and other tenants' files stay untouchable. Not a disk, backup or clone target."
   },
   "myVdc": {
     "title": "My Datacenter",

@@ -5415,7 +5415,12 @@
     "cdrom": {
       "useIso": "Usar archivo de imagen de disco CD/DVD (ISO)",
       "usePhysical": "Usar unidad física de CD/DVD",
-      "noMedia": "No usar ningún medio"
+      "noMedia": "No usar ningún medio",
+      "uploadIso": "Subir ISO",
+      "uploadingIso": "Subiendo {name}: {pct}%",
+      "transferringIso": "Entregando {name} a Proxmox…",
+      "deleteIso": "Eliminar esta ISO",
+      "deleteIsoConfirm": "¿Eliminar {name} de {storage}? Las máquinas que aún la referencien no podrán arrancar desde ella."
     },
     "loadNodesError": "No se pudo cargar la lista de nodos"
   },
@@ -7802,7 +7807,15 @@
     "tabCompute": "Cómputo",
     "tabStorage": "Almacenamiento",
     "tabNetwork": "Red",
-    "selectConnectionFirst": "Seleccione primero una conexión para configurar esta sección."
+    "selectConnectionFirst": "Seleccione primero una conexión para configurar esta sección.",
+    "isoLibraryTitle": "Biblioteca ISO",
+    "isoLibraryHint": "Conceda almacenamientos ISO de solo lectura a este vDC. Los tenants pueden montar cualquier ISO del catálogo del proveedor en una unidad de CD/DVD, pero no pueden subir, eliminar ni colocar discos allí. Use un recurso compartido dedicado replicado en cada nodo, o un almacenamiento por nivel de catálogo.",
+    "isoLibraryNone": "Ningún almacenamiento de este clúster anuncia contenido ISO.",
+    "isoLibraryPerNode": "por nodo",
+    "isoLibraryShared": "compartido",
+    "isoLibraryMissing": "ya no se encuentra en el clúster",
+    "isoLibraryAllowUploads": "Permitir subidas del tenant",
+    "isoLibraryAllowUploadsHint": "El tenant puede subir y eliminar allí sus propios archivos, llamados custom-tenant-…; el catálogo del proveedor y los archivos de otros tenants quedan intocables. Nunca es destino de disco, copia de seguridad ni clonación."
   },
   "myVdc": {
     "title": "Mi datacenter",

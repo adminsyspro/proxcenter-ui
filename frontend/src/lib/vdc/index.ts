@@ -23,6 +23,8 @@ import type {
   VdcUsage,
   CreateVdcInput,
   UpdateVdcInput,
+  VdcIsoLibraryGrant,
+  VdcIsoLibraryInput,
 } from './types'
 
 // Re-export all types
@@ -78,6 +80,41 @@ function rowToVdc(row: VdcRow): Vdc {
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   }
+}
+
+const STORAGE_ID_RE = /^[A-Za-z0-9_.-]{1,64}$/
+
+/**
+ * ISO library grants must name storages that exist on the cluster and
+ * advertise `iso` content: anything else would be a silent no-op for the
+ * tenant's CD/DVD picker. Accepts bare storage ids (read-only grant) or
+ * `{ storageId, allowUploads }` objects; returns the deduplicated,
+ * validated grants (a storage listed twice keeps `allowUploads` if any).
+ */
+async function validateIsoLibraries(conn: any, input: VdcIsoLibraryInput[]): Promise<VdcIsoLibraryGrant[]> {
+  const byId = new Map<string, boolean>()
+  for (const item of input) {
+    const id = String(typeof item === 'string' ? item : item?.storageId ?? '').trim()
+    if (!id) continue
+    const allow = typeof item === 'object' && item !== null && item.allowUploads === true
+    byId.set(id, (byId.get(id) ?? false) || allow)
+  }
+  if (byId.size === 0) return []
+  for (const id of byId.keys()) {
+    if (!STORAGE_ID_RE.test(id)) throw new Error(`Invalid ISO library storage id "${id}"`)
+  }
+  const defs = await pveFetch<any[]>(conn, '/storage') || []
+  const isoCapable = new Set(
+    defs
+      .filter(s => String(s?.content ?? '').split(',').map((t: string) => t.trim()).includes('iso'))
+      .map(s => String(s.storage)),
+  )
+  for (const id of byId.keys()) {
+    if (!isoCapable.has(id)) {
+      throw new Error(`Storage "${id}" does not exist on this cluster or does not hold ISO content`)
+    }
+  }
+  return [...byId.entries()].map(([storageId, allowUploads]) => ({ storageId, allowUploads }))
 }
 
 function computePolicyToRow(policy: VdcComputePolicy) {
@@ -195,6 +232,10 @@ function buildVdcWithDetails(row: any, pbsConnNames?: Map<string, string>): VdcW
     mbpsWr: sp.policy.mbpsWr ?? null,
     quotaMb: sp.quotaMb ?? null,
   }))
+  const isoLibraries: VdcIsoLibraryGrant[] = (row.isoLibraries ?? []).map((l: any) => ({
+    storageId: l.storageId,
+    allowUploads: l.allowUploads === true,
+  }))
   const pbsBindings = row.pbsNamespaces.map((b: any) => ({
     id: b.id,
     vdcId: b.vdcId,
@@ -224,6 +265,7 @@ function buildVdcWithDetails(row: any, pbsConnNames?: Map<string, string>): VdcW
     vlanPools,
     storagePolicies,
     pbsBindings,
+    isoLibraries,
   }
 }
 
@@ -231,6 +273,7 @@ const vdcWithDetailsInclude = {
   tenant: { select: { name: true } },
   nodes: true,
   storages: true,
+  isoLibraries: { orderBy: { storageId: 'asc' as const } },
   quota: true,
   usageCache: true,
   sharedBridges: { orderBy: { bridge: 'asc' as const } },
@@ -384,6 +427,15 @@ export async function createVdc(input: CreateVdcInput, createdBy: string | null)
     await assertNoCrossVdcOverlap(input.connectionId, null, vlanPools)
   }
 
+  // 2ter-bis. ISO library grants (#894): checked against the cluster's
+  // storage definitions before any PVE side effect, for the same reason.
+  let isoLibraries: VdcIsoLibraryGrant[] = []
+  if (input.isoLibraries && input.isoLibraries.length > 0) {
+    const libOwner = await getConnectionOwnerTenantId(input.connectionId)
+    const libConn = await getConnectionById(input.connectionId, libOwner)
+    isoLibraries = await validateIsoLibraries(libConn, input.isoLibraries)
+  }
+
   // 2quater. Same reasoning as 2ter: validate storage-policy assignments
   // before any PVE side effect (pool/zone creation below is not rolled back
   // by a validation failure caught this early).
@@ -503,6 +555,12 @@ export async function createVdc(input: CreateVdcInput, createdBy: string | null)
         })
       }
 
+      if (isoLibraries.length > 0) {
+        await tx.vdcIsoLibrary.createMany({
+          data: isoLibraries.map(l => ({ id: randomUUID(), vdcId: id, storageId: l.storageId, allowUploads: l.allowUploads, createdAt: now })),
+        })
+      }
+
       if (vlanPools.length > 0) {
         await tx.vdcVlanPool.createMany({
           data: vlanPools.map(p => ({
@@ -588,6 +646,13 @@ export async function updateVdc(id: string, input: UpdateVdcInput): Promise<VdcW
     await assertPolicyUnassignSafe(id, kept, guardConn)
   }
 
+  let isoLibraries: VdcIsoLibraryGrant[] | null = null
+  if (input.isoLibraries) {
+    const libOwner = await getConnectionOwnerTenantId(existing.connectionId)
+    const libConn = await getConnectionById(existing.connectionId, libOwner)
+    isoLibraries = await validateIsoLibraries(libConn, input.isoLibraries)
+  }
+
   const now = new Date()
 
   await prisma.$transaction(async tx => {
@@ -636,6 +701,15 @@ export async function updateVdc(id: string, input: UpdateVdcInput): Promise<VdcW
             id: randomUUID(), vdcId: id, bridge: p.bridge,
             rangeStart: p.rangeStart, rangeEnd: p.rangeEnd, createdAt: now,
           })),
+        })
+      }
+    }
+
+    if (isoLibraries !== null) {
+      await tx.vdcIsoLibrary.deleteMany({ where: { vdcId: id } })
+      if (isoLibraries.length > 0) {
+        await tx.vdcIsoLibrary.createMany({
+          data: isoLibraries.map(l => ({ id: randomUUID(), vdcId: id, storageId: l.storageId, allowUploads: l.allowUploads, createdAt: now })),
         })
       }
     }

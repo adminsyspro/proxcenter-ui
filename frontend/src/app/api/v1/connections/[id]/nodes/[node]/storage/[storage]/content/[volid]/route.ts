@@ -3,10 +3,9 @@ import { NextResponse } from "next/server"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
-import { guardTenantStorageWrite } from "@/lib/vdc/scope"
+import { guardTenantStorageWrite, loadTenantSlugs, resolveUploadOwner } from "@/lib/vdc/scope"
 import { getTenantInfrastructureScope, maskingScope } from "@/lib/tenant/infraScope"
 import { getCurrentTenantId } from "@/lib/tenant"
-import { prisma } from "@/lib/db/prisma"
 
 export const runtime = "nodejs"
 
@@ -27,30 +26,33 @@ export async function DELETE(
     const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW, "connection", id)
     if (denied) return denied
 
-    const storageBlock = await guardTenantStorageWrite(id, storage)
+    // The volid is URL-encoded; Proxmox expects the full volid (storage:path)
+    const decodedVolid = decodeURIComponent(volid)
+    // Volid format is "<storage>:<contentType>/<filename>".
+    const volidMatch = decodedVolid.match(/^[^:]+:([^/]+)\/(.+)$/)
+    const itemContent = volidMatch?.[1] || ''
+    const filename = volidMatch?.[2] || ''
+
+    // The guard needs the target filename: on an ISO library that allows
+    // uploads a tenant may only delete its own `custom-<slug>-*` files (#894).
+    const storageBlock = await guardTenantStorageWrite(id, storage, { filename })
     if (storageBlock) return storageBlock
 
     const conn = await getConnectionById(id)
 
-    // The volid is URL-encoded; Proxmox expects the full volid (storage:path)
-    const decodedVolid = decodeURIComponent(volid)
-
-    // Tenant-ownership guard for the controlled content types. Volid format
-    // is "<storage>:<contentType>/<filename>" — extract contentType and the
-    // filename, refuse delete on iso/import volumes whose filename doesn't
-    // match `custom-<tenantSlug>-*`. Super admins (scope===null) skip this.
+    // Tenant-ownership guard for the controlled content types: refuse delete
+    // on iso/import volumes whose filename doesn't match
+    // `custom-<tenantSlug>-*`. Super admins (scope===null) skip this.
     const tenantId = await getCurrentTenantId()
     // provider + msp own the full cluster (maskingScope null → no prefix guard);
     // iaas tenants keep the per-tenant filename-ownership check below.
     const scope = maskingScope(await getTenantInfrastructureScope(tenantId))
     if (scope) {
-      const m = decodedVolid.match(/^[^:]+:([^/]+)\/(.+)$/)
-      const itemContent = m?.[1] || ''
-      const filename = m?.[2] || ''
       if (TENANT_FILTERED_CONTENT.has(itemContent)) {
-        const row = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { slug: true } })
-        const tenantSlug = row?.slug || tenantId.replace(/[^a-z0-9-]/gi, '').toLowerCase()
-        if (!filename.startsWith(`custom-${tenantSlug}-`)) {
+        // Longest-slug ownership: `custom-acme-prod-x` is acme-prod's, not acme's.
+        const { mine, all } = await loadTenantSlugs(tenantId)
+        const owner = resolveUploadOwner(filename, all)
+        if (owner.kind !== 'tenant' || owner.slug !== mine) {
           return NextResponse.json({ error: "Volume not accessible" }, { status: 403 })
         }
       }

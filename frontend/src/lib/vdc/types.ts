@@ -35,7 +35,17 @@ export interface VdcWithDetails extends Vdc {
   vlanPools: VdcVlanPool[]
   storagePolicies: VdcStoragePolicyDto[]
   pbsBindings: VdcPbsBinding[]
+  /** ISO storages granted to the tenant (#894): read-only catalogue, plus an
+   *  optional upload area for the tenant's own `custom-<slug>-*` files. */
+  isoLibraries: VdcIsoLibraryGrant[]
 }
+
+export interface VdcIsoLibraryGrant {
+  storageId: string
+  allowUploads: boolean
+}
+
+export type VdcIsoLibraryInput = string | { storageId: string; allowUploads?: boolean }
 
 export interface VdcPbsBinding {
   id: string
@@ -173,6 +183,7 @@ export interface CreateVdcInput {
   vlanPools?: Array<{ bridge: string; rangeStart: number; rangeEnd: number }>
   storagePolicies?: Array<{ policyId: string; quotaMb: number | null }>
   computePolicy?: Partial<VdcComputePolicy>
+  isoLibraries?: VdcIsoLibraryInput[]
 }
 
 export interface UpdateVdcInput {
@@ -186,4 +197,5 @@ export interface UpdateVdcInput {
   vlanPools?: Array<{ bridge: string; rangeStart: number; rangeEnd: number }>
   storagePolicies?: Array<{ policyId: string; quotaMb: number | null }>
   computePolicy?: Partial<VdcComputePolicy>
+  isoLibraries?: VdcIsoLibraryInput[]
 }

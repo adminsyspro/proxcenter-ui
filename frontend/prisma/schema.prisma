@@ -758,6 +758,7 @@ model Vdc {
   storagePolicies    VdcStoragePolicy[]
   ipam               VdcIpamAllocation[]
   pbsNamespaces      VdcPbsNamespace[]
+  isoLibraries       VdcIsoLibrary[]
 
   @@unique([tenantId, connectionId])
   @@unique([tenantId, slug])
@@ -792,6 +793,23 @@ model VdcStorage {
   @@unique([vdcId, storageId])
   @@index([vdcId])
   @@map("vdc_storages")
+}
+
+// Read-only ISO storages a provider hands to a vDC (#894): visible to the
+// tenant's CD/DVD pickers, never writable, never a data-disk target.
+model VdcIsoLibrary {
+  id           String   @id
+  vdcId        String   @map("vdc_id")
+  vdc          Vdc      @relation(fields: [vdcId], references: [id], onDelete: Cascade)
+  storageId    String   @map("storage_id")
+  // Tenants may upload/delete their own `custom-<slug>-*` files there; the
+  // provider catalogue and other tenants' files stay untouchable either way.
+  allowUploads Boolean  @default(false) @map("allow_uploads")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@unique([vdcId, storageId])
+  @@index([vdcId])
+  @@map("vdc_iso_libraries")
 }
 
 model VdcQuota {

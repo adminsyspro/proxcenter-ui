@@ -34,6 +34,7 @@ import { vmDiskFormats } from '@/lib/proxmox/storage'
 import AppDialogTitle from '@/components/ui/AppDialogTitle'
 import NumericTextField from '@/components/ui/NumericTextField'
 import { DetachConfirmDialog } from './DetachConfirmDialog'
+import { IsoUploadControls, type IsoStorageRow } from './IsoUploadControls'
 import type { StoragePolicyCaps } from './utils'
 
 // Renders a QoS cap for a disabled, policy-driven field: empty for "no limit
@@ -160,10 +161,12 @@ export function EditDiskDialog({ open, onClose, onSave, onDelete, onResize, onMo
   const [cdromMode, setCdromMode] = useState<'iso' | 'physical' | 'none'>('none')
   const [isoStorage, setIsoStorage] = useState('')
   const [isoImage, setIsoImage] = useState('')
-  const [isoStorages, setIsoStorages] = useState<Array<{ storage: string; type: string }>>([])
+  const [isoStorages, setIsoStorages] = useState<IsoStorageRow[]>([])
   const [isoImages, setIsoImages] = useState<string[]>([])
   const [isoLoading, setIsoLoading] = useState(false)
   const [cdromSaving, setCdromSaving] = useState(false)
+  // A tenant upload/delete in progress on the ISO library (#894).
+  const [isoBusy, setIsoBusy] = useState(false)
 
   // Unused disk reassign state
   const [reassignBus, setReassignBus] = useState<'scsi' | 'virtio' | 'sata' | 'ide'>('scsi')
@@ -254,29 +257,31 @@ export function EditDiskDialog({ open, onClose, onSave, onDelete, onResize, onMo
     loadIsoStorages()
   }, [open, disk?.isCdrom, connId, node])
 
-  // Load ISO images for selected storage
-  useEffect(() => {
+  // Load ISO images for selected storage. Callable so the upload/delete
+  // controls can refresh the list without waiting for a dependency change.
+  const loadIsoImages = useCallback(async () => {
     if (!open || !disk?.isCdrom || !connId || !node || !isoStorage) {
       setIsoImages([])
       return
     }
-    const loadIsos = async () => {
-      setIsoLoading(true)
-      try {
-        const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/storage/${encodeURIComponent(isoStorage)}/content?content=iso`)
-        if (res.ok) {
-          const json = await res.json()
-          setIsoImages((json.data || []).map((i: any) => {
-            // volid looks like "local:iso/debian.iso" — extract filename
-            const m = i.volid?.match(/iso\/(.+)$/)
-            return m ? m[1] : i.volid || ''
-          }).filter(Boolean))
-        }
-      } catch {}
-      finally { setIsoLoading(false) }
-    }
-    loadIsos()
+    setIsoLoading(true)
+    try {
+      const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/storage/${encodeURIComponent(isoStorage)}/content?content=iso`)
+      if (res.ok) {
+        const json = await res.json()
+        setIsoImages((json.data || []).map((i: any) => {
+          // volid looks like "local:iso/debian.iso" — extract filename
+          const m = i.volid?.match(/iso\/(.+)$/)
+          return m ? m[1] : i.volid || ''
+        }).filter(Boolean))
+      }
+    } catch {}
+    finally { setIsoLoading(false) }
   }, [open, disk?.isCdrom, connId, node, isoStorage])
+
+  useEffect(() => {
+    loadIsoImages()
+  }, [loadIsoImages])
 
   // Charger les storages disponibles
   useEffect(() => {
@@ -510,7 +515,7 @@ return
 
   if (!disk) return null
 
-  const isWorking = saving || deleting || resizing || moving || cdromSaving || reassigning
+  const isWorking = saving || deleting || resizing || moving || cdromSaving || reassigning || isoBusy
 
   const detachConfirmDialog = disk ? (
     <DetachConfirmDialog
@@ -606,6 +611,16 @@ return
                     ))}
                   </Select>
                 </FormControl>
+                <IsoUploadControls
+                  connId={connId}
+                  node={node}
+                  storage={isoStorage}
+                  storageRow={isoStorages.find(s => s.storage === isoStorage)}
+                  selectedIso={isoImage}
+                  onBusy={setIsoBusy}
+                  onUploaded={async (filename) => { await loadIsoImages(); setIsoImage(filename) }}
+                  onDeleted={async () => { setIsoImage(''); await loadIsoImages() }}
+                />
               </Box>
             )}
 

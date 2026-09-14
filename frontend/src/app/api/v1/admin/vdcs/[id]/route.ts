@@ -68,6 +68,7 @@ export async function PUT(req: Request, ctx: RouteContext) {
       vlanPools: body.vlanPools,
       storagePolicies: body.storagePolicies,
       computePolicy: body.computePolicy,
+      isoLibraries: Array.isArray(body.isoLibraries) ? body.isoLibraries : undefined,
       quota: body.quota,
     })
 

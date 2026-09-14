@@ -5419,7 +5419,12 @@
     "cdrom": {
       "useIso": "使用 CD/DVD 光盘镜像文件（ISO）",
       "usePhysical": "使用物理 CD/DVD 驱动器",
-      "noMedia": "不使用任何介质"
+      "noMedia": "不使用任何介质",
+      "uploadIso": "上传 ISO",
+      "uploadingIso": "正在上传 {name}：{pct}%",
+      "transferringIso": "正在将 {name} 交给 Proxmox…",
+      "deleteIso": "删除此 ISO",
+      "deleteIsoConfirm": "从 {storage} 删除 {name}？仍在引用它的虚拟机将无法从中启动。"
     },
     "loadNodesError": "无法加载节点列表"
   },
@@ -7957,7 +7962,15 @@
     "tabCompute": "计算",
     "tabStorage": "存储",
     "tabNetwork": "网络",
-    "selectConnectionFirst": "请先选择一个连接以配置此部分。"
+    "selectConnectionFirst": "请先选择一个连接以配置此部分。",
+    "isoLibraryTitle": "ISO 库",
+    "isoLibraryHint": "向此 vDC 授予只读 ISO 存储。租户可以将提供商目录中的任何 ISO 挂载到 CD/DVD 驱动器，但不能上传、删除或在其上放置磁盘。请使用在每个节点上复制的专用共享存储，或为每个目录层级使用一个存储。",
+    "isoLibraryNone": "此集群上没有存储声明 ISO 内容。",
+    "isoLibraryPerNode": "按节点",
+    "isoLibraryShared": "共享",
+    "isoLibraryMissing": "在集群上已不存在",
+    "isoLibraryAllowUploads": "允许租户上传",
+    "isoLibraryAllowUploadsHint": "租户可以在此上传和删除自己的文件（命名为 custom-tenant-…）；提供商目录和其他租户的文件不可更改。该存储不会作为磁盘、备份或克隆目标。"
   },
   "sdn": {
     "subtab": {

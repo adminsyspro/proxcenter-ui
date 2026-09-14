@@ -25,6 +25,7 @@ import {
 } from '@mui/material'
 
 import { formatBytes } from '@/utils/format'
+import { uploadFileToStorage } from '@/lib/storage/uploadClient'
 import { useProxCenterTasks } from '@/contexts/ProxCenterTasksContext'
 import TemplateDownloadDialog from '@/components/storage/TemplateDownloadDialog'
 
@@ -393,66 +394,38 @@ export function UploadDialog({ open, onClose, onOpen, connId, node, storage, con
         onOpen()
       })
 
-      const CHUNK_SIZE = 5 * 1024 * 1024 // 5 MB
-      const totalChunks = Math.ceil(file.size / CHUNK_SIZE)
-      const uploadUrl = `/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/storage/${encodeURIComponent(storage)}/upload`
-
-      // Phase 1: Send file in chunks (PUT requests)
-      for (let i = 0; i < totalChunks; i++) {
-        const start = i * CHUNK_SIZE
-        const end = Math.min(start + CHUNK_SIZE, file.size)
-        const chunk = file.slice(start, end)
-
-        const res = await fetch(uploadUrl, {
-          method: 'POST',
-          headers: {
-            'X-Upload-Id': uploadId,
-            'X-Chunk-Index': String(i),
-            'X-Total-Chunks': String(totalChunks),
-            'X-Total-Size': String(file.size),
-            'X-File-Name': file.name,
-            'X-Content-Type': contentType,
-            'X-Mime-Type': file.type || 'application/octet-stream',
-          },
-          body: chunk,
-        })
-
-        if (!res.ok) {
-          const json = await res.json().catch(() => ({}))
-          throw new Error(json.error || `Chunk ${i} failed: HTTP ${res.status}`)
-        }
-
-        const pct = Math.round(((i + 1) / totalChunks) * 100)
-        setProgress(pct)
-        updateTask(uploadId, { progress: Math.round(pct / 2) })
-      }
-
-      // Phase 2: Finalize - server sends assembled file to Proxmox
-      setPhase('transferring')
-
-      pollInterval = setInterval(async () => {
-        try {
-          const res = await fetch(`/api/v1/upload-progress/${uploadId}`)
-          if (res.ok) {
-            const data = await res.json()
-            if (data.totalBytes > 0) {
-              const pct = Math.round((data.bytesSent / data.totalBytes) * 100)
-              setTransferProgress(pct)
-              updateTask(uploadId, { progress: 50 + Math.round(pct / 2) })
-            }
-          }
-        } catch { /* ignore polling errors */ }
-      }, 1500)
-
-      const finalRes = await fetch(uploadUrl, {
-        method: 'POST',
-        headers: { 'X-Upload-Id': uploadId, 'X-Finalize': '1' },
+      // Phase 1 streams the chunks, phase 2 finalizes; both legs live in the
+      // shared client so the CD/DVD dialogs speak the exact same protocol.
+      await uploadFileToStorage({
+        connId,
+        node,
+        storage,
+        file,
+        contentType,
+        uploadId,
+        onProgress: (pct) => {
+          setProgress(pct)
+          updateTask(uploadId, { progress: Math.round(pct / 2) })
+        },
+        onPhase: (ph) => {
+          if (ph !== 'transferring') return
+          // Server sends the assembled file to Proxmox: follow its counters.
+          setPhase('transferring')
+          pollInterval = setInterval(async () => {
+            try {
+              const res = await fetch(`/api/v1/upload-progress/${uploadId}`)
+              if (res.ok) {
+                const data = await res.json()
+                if (data.totalBytes > 0) {
+                  const pct = Math.round((data.bytesSent / data.totalBytes) * 100)
+                  setTransferProgress(pct)
+                  updateTask(uploadId, { progress: 50 + Math.round(pct / 2) })
+                }
+              }
+            } catch { /* ignore polling errors */ }
+          }, 1500)
+        },
       })
-
-      if (!finalRes.ok) {
-        const json = await finalRes.json().catch(() => ({}))
-        throw new Error(json.error || `Finalize failed: HTTP ${finalRes.status}`)
-      }
 
       updateTask(uploadId, { progress: 100, status: 'done' })
       setSuccess(true)

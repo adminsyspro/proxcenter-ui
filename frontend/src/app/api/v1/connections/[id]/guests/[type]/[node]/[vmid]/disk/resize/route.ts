@@ -6,6 +6,7 @@ import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
 import { resizeDiskSchema } from "@/lib/schemas"
 import { getCurrentTenantId } from '@/lib/tenant'
 import { getTenantInfrastructureScope } from '@/lib/tenant/infraScope'
+import { writableStoragesFor } from '@/lib/vdc/scope'
 import { resolveVdcForTenant, checkVdcQuota } from '@/lib/vdc/quota'
 import { parseDriveString } from '@/lib/vdc/drives'
 
@@ -66,7 +67,9 @@ export async function POST(
           const cfg = await pveFetch<any>(conn, `/nodes/${encodeURIComponent(node)}/${resourceTypePve}/${encodeURIComponent(vmid)}/config`)
           const parsed = parseDriveString(String(cfg?.[disk] ?? ''))
           diskStorage = parsed.ok === false ? null : parsed.drive.storage
-          const allowed = scope?.storagesByConnection.get(id) ?? new Set<string>()
+          // Growing a disk writes to its storage: judged on the writable set,
+          // so a disk somehow sitting on a read-only ISO library (#894) is refused.
+          const allowed = scope ? writableStoragesFor(scope, id) : new Set<string>()
           if (diskStorage && !allowed.has(diskStorage)) {
             return NextResponse.json(
               { error: `Storage "${diskStorage}" is not authorised for this tenant.` }, { status: 403 })

@@ -82,6 +82,7 @@ export async function POST(req: NextRequest) {
         vlanPools: body.vlanPools,
         storagePolicies: body.storagePolicies,
         computePolicy: body.computePolicy,
+        isoLibraries: Array.isArray(body.isoLibraries) ? body.isoLibraries : undefined,
         quota: body.quota,
       },
       session?.user?.id ?? null

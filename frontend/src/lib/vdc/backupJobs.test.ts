@@ -48,6 +48,9 @@ function makeScope(over: Partial<{
     pbsConnectionIds: new Set(),
     nodesByConnection: new Map([[CONN, new Set(over.nodes ?? ['pve1', 'pve2'])]]),
     storagesByConnection: new Map([[CONN, new Set(over.storages ?? ['vdc-acme-pbs', 'vdc-acme-rbd'])]]),
+    writableStoragesByConnection: new Map([[CONN, new Set(over.storages ?? ['vdc-acme-pbs', 'vdc-acme-rbd'])]]),
+    isoLibrariesByConnection: new Map([[CONN, new Set<string>()]]),
+    uploadLibrariesByConnection: new Map([[CONN, new Set<string>()]]),
     storagePoliciesByConnection: new Map(),
     poolsByConnection: new Map([[CONN, new Set(over.pools ?? ['pool-acme'])]]),
     vnetsByConnection: new Map(),
@@ -194,5 +197,34 @@ describe('isJobOwnedByTenantPools', () => {
   })
   it('rejects jobs with a foreign pool', () => {
     expect(isJobOwnedByTenantPools({ pool: 'pool-other' }, new Set(['pool-acme']))).toBe(false)
+  })
+})
+
+describe('validateTenantJobInfra: read-only ISO library (#894)', () => {
+  function libraryScope(): VdcScope {
+    const scope = makeScope({ storages: ['vdc-acme-pbs'] })
+    scope.storagesByConnection.get(CONN)!.add('isolib')
+    scope.isoLibrariesByConnection.get(CONN)!.add('isolib')
+    return scope
+  }
+
+  it('refuses a job storage the tenant only reaches as an ISO library', () => {
+    const err = validateTenantJobInfra({ storage: 'isolib', node: 'pve1' }, libraryScope(), CONN)
+    expect(err).toMatch(/not authorised/)
+  })
+
+  it('refuses a fleecing storage that is an ISO library', () => {
+    const err = validateTenantJobInfra({ storage: 'vdc-acme-pbs', node: 'pve1', fleecing: true, fleecingStorage: 'isolib' }, libraryScope(), CONN)
+    expect(err).toMatch(/Fleecing storage/)
+  })
+
+  it('keeps accepting the writable PBS storage', () => {
+    expect(validateTenantJobInfra({ storage: 'vdc-acme-pbs', node: 'pve1' }, libraryScope(), CONN)).toBeNull()
+  })
+
+  it('a scope without the writable map keeps every visible storage writable', () => {
+    const legacy = makeScope({ storages: ['vdc-acme-rbd'] }) as any
+    delete legacy.writableStoragesByConnection
+    expect(validateTenantJobInfra({ storage: 'vdc-acme-rbd', node: 'pve1' }, legacy, CONN)).toBeNull()
   })
 })

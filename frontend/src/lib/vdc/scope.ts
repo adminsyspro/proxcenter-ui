@@ -30,8 +30,14 @@ export interface VdcScope {
   pbsConnectionIds: Set<string>
   /** Per-connection: allowed node names */
   nodesByConnection: Map<string, Set<string>>
-  /** Per-connection: allowed storage IDs */
+  /** Per-connection: storage IDs the tenant may SEE (writable ones plus read-only ISO libraries) */
   storagesByConnection: Map<string, Set<string>>
+  /** Per-connection: storage IDs the tenant may WRITE to (primary, storage policies, PBS pseudo-storages) */
+  writableStoragesByConnection: Map<string, Set<string>>
+  /** Per-connection: read-only ISO library storages granted to the tenant (#894) */
+  isoLibrariesByConnection: Map<string, Set<string>>
+  /** Per-connection: ISO libraries where the tenant may upload/delete its own `custom-<slug>-*` files */
+  uploadLibrariesByConnection: Map<string, Set<string>>
   /** Per-connection: policied storages and their QoS caps */
   storagePoliciesByConnection: Map<string, Map<string, VdcStoragePolicyInfo>>
   /** Per-connection: PVE pool names (VMs must be in one of these pools) */
@@ -50,6 +56,23 @@ export interface VdcScope {
    * by PBS connection id.
    */
   pbsNamespacesByPveConnection: Map<string, Set<string>>
+}
+
+/**
+ * Storages a tenant may WRITE to on a connection: primary VM-disk storage,
+ * storage-policy tiers and PBS pseudo-storages, never a read-only ISO
+ * library (#894). A scope built before the writable map existed (older
+ * fixtures) falls back to the visible set, which is the pre-#894 contract.
+ */
+export function writableStoragesFor(scope: VdcScope, connId: string): Set<string> {
+  return scope.writableStoragesByConnection?.get(connId)
+    ?? scope.storagesByConnection.get(connId)
+    ?? new Set<string>()
+}
+
+/** 403 body for a write aimed at a storage the tenant only reaches as an ISO library. */
+export function readOnlyLibraryError(storage: string): string {
+  return `Storage "${storage}" is a read-only ISO library`
 }
 
 // ---------------------------------------------------------------------------
@@ -149,6 +172,7 @@ async function buildVdcScope(tenantId: string, vdcContext: string | null = null)
       primaryStorage: true,
       nodes: { select: { nodeName: true } },
       storages: { select: { storageId: true } },
+      isoLibraries: { select: { storageId: true, allowUploads: true } },
       vnets: { select: { pveName: true } },
       sharedBridges: { select: { bridge: true } },
       pbsNamespaces: { select: { pbsConnectionId: true, datastore: true, namespace: true } },
@@ -170,6 +194,9 @@ async function buildVdcScope(tenantId: string, vdcContext: string | null = null)
   const connectionIds = new Set<string>()
   const nodesByConnection = new Map<string, Set<string>>()
   const storagesByConnection = new Map<string, Set<string>>()
+  const writableStoragesByConnection = new Map<string, Set<string>>()
+  const isoLibrariesByConnection = new Map<string, Set<string>>()
+  const uploadLibrariesByConnection = new Map<string, Set<string>>()
   const storagePoliciesByConnection = new Map<string, Map<string, VdcStoragePolicyInfo>>()
   const poolsByConnection = new Map<string, Set<string>>()
   const vnetsByConnection = new Map<string, Set<string>>()
@@ -194,9 +221,22 @@ async function buildVdcScope(tenantId: string, vdcContext: string | null = null)
     // managed by pbsOrchestrator). Together these form the tenant's
     // visible storage scope for inventory and deploy paths.
     if (!storagesByConnection.has(connId)) storagesByConnection.set(connId, new Set())
-    if (row.primaryStorage) storagesByConnection.get(connId)!.add(row.primaryStorage)
+    if (!writableStoragesByConnection.has(connId)) writableStoragesByConnection.set(connId, new Set())
+    if (!isoLibrariesByConnection.has(connId)) isoLibrariesByConnection.set(connId, new Set())
+    if (!uploadLibrariesByConnection.has(connId)) uploadLibrariesByConnection.set(connId, new Set())
+    const visible = storagesByConnection.get(connId)!
+    const writable = writableStoragesByConnection.get(connId)!
+    if (row.primaryStorage) { visible.add(row.primaryStorage); writable.add(row.primaryStorage) }
     for (const sr of row.storages) {
-      storagesByConnection.get(connId)!.add(sr.storageId)
+      visible.add(sr.storageId); writable.add(sr.storageId)
+    }
+    // ISO libraries (#894) are visible so the CD/DVD pickers and the content
+    // route accept them, but deliberately NOT writable: uploads, deletions
+    // and data disks on them are refused downstream.
+    for (const lib of row.isoLibraries ?? []) {
+      visible.add(lib.storageId)
+      isoLibrariesByConnection.get(connId)!.add(lib.storageId)
+      if (lib.allowUploads) uploadLibrariesByConnection.get(connId)!.add(lib.storageId)
     }
 
     // Storage policies: their storages join the visible/authorised storage
@@ -207,6 +247,7 @@ async function buildVdcScope(tenantId: string, vdcContext: string | null = null)
     if (!storagePoliciesByConnection.has(connId)) storagePoliciesByConnection.set(connId, new Map())
     for (const sp of row.storagePolicies) {
       storagesByConnection.get(connId)!.add(sp.policy.storageId)
+      writableStoragesByConnection.get(connId)!.add(sp.policy.storageId)
       storagePoliciesByConnection.get(connId)!.set(sp.policy.storageId, {
         policyId: sp.policy.id,
         name: sp.policy.name,
@@ -255,6 +296,9 @@ async function buildVdcScope(tenantId: string, vdcContext: string | null = null)
     pbsConnectionIds,
     nodesByConnection,
     storagesByConnection,
+    writableStoragesByConnection,
+    isoLibrariesByConnection,
+    uploadLibrariesByConnection,
     storagePoliciesByConnection,
     poolsByConnection,
     vnetsByConnection,
@@ -325,9 +369,80 @@ export function applyVdcFilter(cluster: any, scope: VdcScope | null): any {
  *   not shared (ceph/nfs/cifs leak content across tenants).
  * Returns a Response (403) when blocked, null when allowed.
  */
+/** Filename prefix a tenant's own uploads carry, mirroring POST /custom-images. */
+export function tenantUploadPrefix(tenantId: string, slug: string | null | undefined): string {
+  return `custom-${slug || tenantId.replace(/[^a-z0-9-]/gi, '').toLowerCase()}-`
+}
+
+export type UploadOwner = { kind: 'provider' } | { kind: 'tenant'; slug: string } | { kind: 'unknown' }
+
+/**
+ * Who owns a file on a storage shared between tenants, from its name alone
+ * (PVE keeps no per-file metadata). Files without the `custom-` prefix are
+ * the provider's catalogue. A `custom-<slug>-…` file belongs to the tenant
+ * whose slug is the LONGEST match, so `custom-acme-prod-x.iso` is `acme-prod`'s
+ * and never `acme`'s; a prefix matching no known slug is `unknown` and is
+ * treated as nobody's (hidden, never writable).
+ */
+export function resolveUploadOwner(filename: string, slugs: Iterable<string>): UploadOwner {
+  const base = String(filename ?? '').split('/').pop() ?? ''
+  if (!base.startsWith('custom-')) return { kind: 'provider' }
+  let best: string | null = null
+  for (const s of slugs) {
+    if (s && base.startsWith(`custom-${s}-`) && (best === null || s.length > best.length)) best = s
+  }
+  return best ? { kind: 'tenant', slug: best } : { kind: 'unknown' }
+}
+
+/** Slug of the current tenant plus every slug of the platform, for ownership resolution. */
+export async function loadTenantSlugs(tenantId: string): Promise<{ mine: string; all: string[] }> {
+  const rows = await prisma.tenant.findMany({ select: { id: true, slug: true } })
+  const mine = rows.find(r => r.id === tenantId)?.slug || tenantId.replace(/[^a-z0-9-]/gi, '').toLowerCase()
+  // `mine` may be the id-derived fallback of a tenant without a slug: it must
+  // still count as a known owner, or its own files would resolve to `unknown`.
+  const all = new Set(rows.map(r => r.slug).filter(Boolean) as string[])
+  all.add(mine)
+  return { mine, all: [...all] }
+}
+
+/** True when the tenant reaches `storage` only through an ISO library grant. */
+export function isLibraryOnlyStorage(scope: VdcScope, connId: string, storage: string): boolean {
+  if (!scope.isoLibrariesByConnection?.get(connId)?.has(storage)) return false
+  const writable = scope.writableStoragesByConnection?.get(connId) ?? scope.storagesByConnection.get(connId) ?? new Set<string>()
+  return !writable.has(storage)
+}
+
+/**
+ * The name a file uploaded by the current caller must carry on `storage`.
+ * On an ISO library that allows uploads, an iaas tenant's file is namespaced
+ * with `custom-<slug>-` when it is not already (the storage browser sends the
+ * raw file name), so the guard accepts it and the provider catalogue can never
+ * be shadowed. Everywhere else the name is returned unchanged.
+ */
+export async function tenantUploadFilename(connId: string, storage: string, filename: string): Promise<string> {
+  const { getCurrentTenantId } = await import('@/lib/tenant')
+  const { getTenantInfrastructureScope } = await import('@/lib/tenant/infraScope')
+  const base = String(filename ?? '').split('/').pop() ?? ''
+  if (!base) return filename
+  const tenantId = await getCurrentTenantId()
+  const infra = await getTenantInfrastructureScope(tenantId, { ignoreVdcContext: true })
+  if (infra.kind !== 'iaas') return filename
+  const scope = infra.vdcScope
+  const writable = scope.writableStoragesByConnection?.get(connId) ?? scope.storagesByConnection.get(connId) ?? new Set<string>()
+  if (writable.has(storage) || !scope.uploadLibrariesByConnection?.get(connId)?.has(storage)) return filename
+  const { mine, all } = await loadTenantSlugs(tenantId)
+  const owner = resolveUploadOwner(base, all)
+  // Already ours: keep. Anything else (provider-looking, another tenant's
+  // prefix, unknown prefix) gets our namespace in front; the guard then
+  // re-checks ownership, so a name colliding with a longer slug still 403s.
+  if (owner.kind === 'tenant' && owner.slug === mine) return base
+  return `${tenantUploadPrefix(tenantId, mine)}${base}`
+}
+
 export async function guardTenantStorageWrite(
   connId: string,
-  storage: string
+  storage: string,
+  opts: { filename?: string | null; content?: string | null } = {},
 ): Promise<Response | null> {
   const { getCurrentTenantId } = await import('@/lib/tenant')
   const { NextResponse } = await import('next/server')
@@ -337,7 +452,8 @@ export async function guardTenantStorageWrite(
 
   // Authorization verdict (design ruling §5): judged against the tenant's
   // FULL union — the view context must not turn a legitimate access into a 403.
-  const infra = await getTenantInfrastructureScope(await getCurrentTenantId(), {
+  const tenantId = await getCurrentTenantId()
+  const infra = await getTenantInfrastructureScope(tenantId, {
     ignoreVdcContext: true,
   })
   // Provider: no restriction.
@@ -356,6 +472,39 @@ export async function guardTenantStorageWrite(
   const allowed = scope.storagesByConnection.get(connId)
   if (!allowed || !allowed.has(storage)) {
     return NextResponse.json({ error: 'Storage not accessible' }, { status: 403 })
+  }
+  // A storage the tenant only reaches as an ISO library (#894) is read-only,
+  // unless the grant allows uploads: then the tenant may write or delete ITS
+  // OWN files only, recognised by the `custom-<slug>-` prefix that keeps them
+  // apart from the provider catalogue and from other tenants' uploads. The
+  // shared-backend refusal below does not apply there, the prefix does the
+  // isolation; a caller that cannot name the file fails closed.
+  const writable = scope.writableStoragesByConnection?.get(connId) ?? allowed
+  if (!writable.has(storage)) {
+    if (scope.uploadLibrariesByConnection?.get(connId)?.has(storage)) {
+      const filename = String(opts.filename ?? '').split('/').pop() ?? ''
+      if (!filename) {
+        return NextResponse.json({ error: 'This storage is a read-only ISO library' }, { status: 403 })
+      }
+      // Only ISO content may land on a library: other types are not
+      // ownership-filtered anywhere and would leak to every grantee.
+      if (opts.content !== undefined && opts.content !== null && String(opts.content) !== 'iso') {
+        return NextResponse.json({ error: 'Only ISO images can be written to an ISO library' }, { status: 403 })
+      }
+      const { mine, all } = await loadTenantSlugs(tenantId)
+      const owner = resolveUploadOwner(filename, all)
+      if (owner.kind !== 'tenant' || owner.slug !== mine) {
+        const hint = owner.kind === 'tenant'
+          ? `"${filename}" falls in another tenant's namespace (custom-${owner.slug}-), rename it`
+          : `files on this ISO library must be named custom-${mine}-<name> to be yours`
+        return NextResponse.json(
+          { error: `${hint}; the provider catalogue and other tenants' files cannot be changed` },
+          { status: 403 },
+        )
+      }
+      return null
+    }
+    return NextResponse.json({ error: 'This storage is a read-only ISO library' }, { status: 403 })
   }
 
   const conn = await getConnectionById(connId)

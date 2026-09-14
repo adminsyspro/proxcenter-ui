@@ -60,7 +60,13 @@ vi.mock('@/lib/vdc/ipamScan', () => ({ scanUsedIpsForSubnet: vi.fn(), scannedToI
 vi.mock('@/lib/vdc/network', () => ({ parseCidr: () => null }))
 vi.mock('@/lib/proxmox/tasks', () => ({ waitForTask: vi.fn() }))
 const getVdcScopeMock = vi.fn<(...args: any[]) => Promise<any>>()
-vi.mock('@/lib/vdc/scope', () => ({ getVdcScope: getVdcScopeMock }))
+// Spread the real module: the route also imports the pure helpers
+// writableStoragesFor / readOnlyLibraryError (#894); only the DB-backed
+// scope loader is stubbed.
+vi.mock('@/lib/vdc/scope', async (io) => {
+  const actual = await io<typeof import('@/lib/vdc/scope')>()
+  return { ...actual, getVdcScope: getVdcScopeMock }
+})
 const auditMock = vi.fn<(...args: any[]) => Promise<any>>()
 vi.mock('@/lib/audit', () => ({ audit: (...a: any[]) => auditMock(...a) }))
 
@@ -333,5 +339,47 @@ describe('POST templates/deploy: storage-policy tier quota', () => {
       storagePolicies,
       'pve1',
     )
+  })
+})
+
+describe('POST templates/deploy: read-only ISO library (#894)', () => {
+  function libraryScope() {
+    getImageBySlugMock.mockReturnValue({ slug: 'ubuntu-22.04', format: 'qcow2', downloadUrl: 'https://img.test/u.qcow2' })
+    resolveVdcForTenantMock.mockResolvedValue({ poolName: 'pool-a', quota: null, storagePolicies: [] })
+    getVdcScopeMock.mockResolvedValue({
+      storagesByConnection: new Map([['conn-1', new Set(['local-lvm', 'isolib'])]]),
+      writableStoragesByConnection: new Map([['conn-1', new Set(['local-lvm'])]]),
+      isoLibrariesByConnection: new Map([['conn-1', new Set(['isolib'])]]),
+      storagePoliciesByConnection: new Map([['conn-1', new Map()]]),
+    })
+  }
+
+  it('403: the data disk cannot land on a library storage', async () => {
+    libraryScope()
+    const POST = await loadPost()
+    const res = await callRoute(POST, { body: { ...baseBody, storage: 'isolib' } })
+    expect(res.status).toBe(403)
+    const json = await readJson<{ error: string }>(res)
+    expect(json?.error).toMatch(/read-only ISO library/)
+    expect(pveFetchMock).not.toHaveBeenCalled()
+  })
+
+  it('403: an ISO downloaded from a URL cannot be written onto a library storage', async () => {
+    libraryScope()
+    const POST = await loadPost()
+    const res = await callRoute(POST, { body: { ...baseBody, isoStorage: 'isolib' } })
+    expect(res.status).toBe(403)
+    const json = await readJson<{ error: string }>(res)
+    expect(json?.error).toMatch(/read-only ISO library/)
+    expect(pveFetchMock).not.toHaveBeenCalled()
+  })
+
+  it('a visible-but-unwritable storage outside the library set keeps the generic refusal', async () => {
+    libraryScope()
+    const POST = await loadPost()
+    const res = await callRoute(POST, { body: { ...baseBody, storage: 'elsewhere' } })
+    expect(res.status).toBe(403)
+    const json = await readJson<{ error: string }>(res)
+    expect(json?.error).toMatch(/not authorised/)
   })
 })

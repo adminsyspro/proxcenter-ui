@@ -5,6 +5,7 @@ import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, buildNodeResourceId, PERMISSIONS } from "@/lib/rbac"
 import { getCurrentTenantId, DEFAULT_TENANT_ID } from "@/lib/tenant"
 import { getTenantInfrastructureScope } from "@/lib/tenant/infraScope"
+import { writableStoragesFor, readOnlyLibraryError } from "@/lib/vdc/scope"
 
 export const runtime = "nodejs"
 
@@ -38,10 +39,13 @@ export async function POST(
     if (tenantId && tenantId !== DEFAULT_TENANT_ID) {
       const infra = await getTenantInfrastructureScope(tenantId, { ignoreVdcContext: true })
       if (infra.kind === 'iaas' && infra.vdcScope) {
-        const allowed = infra.vdcScope.storagesByConnection.get(id) ?? new Set<string>()
+        // A backup is a write: a read-only ISO library (#894) is visible to
+        // the tenant but never a valid destination.
+        const allowed = writableStoragesFor(infra.vdcScope, id)
         if (!allowed.has(storage)) {
+          const visible = infra.vdcScope.storagesByConnection.get(id)?.has(storage)
           return NextResponse.json(
-            { error: `Storage "${storage}" is not authorised for this tenant.` },
+            { error: visible ? readOnlyLibraryError(storage) : `Storage "${storage}" is not authorised for this tenant.` },
             { status: 403 },
           )
         }

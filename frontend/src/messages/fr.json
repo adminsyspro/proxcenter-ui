@@ -5415,7 +5415,12 @@
     "cdrom": {
       "useIso": "Utiliser une image CD/DVD (ISO)",
       "usePhysical": "Utiliser le lecteur CD/DVD physique",
-      "noMedia": "Ne pas utiliser de média"
+      "noMedia": "Ne pas utiliser de média",
+      "uploadIso": "Envoyer une ISO",
+      "uploadingIso": "Envoi de {name} : {pct} %",
+      "transferringIso": "Transmission de {name} à Proxmox…",
+      "deleteIso": "Supprimer cette ISO",
+      "deleteIsoConfirm": "Supprimer {name} de {storage} ? Les VM qui la référencent encore ne pourront plus démarrer dessus."
     },
     "loadNodesError": "Impossible de charger la liste des nodes"
   },
@@ -7803,7 +7808,15 @@
     "tabCompute": "Calcul",
     "tabStorage": "Stockage",
     "tabNetwork": "Réseau",
-    "selectConnectionFirst": "Sélectionnez d'abord une connexion pour configurer cette section."
+    "selectConnectionFirst": "Sélectionnez d'abord une connexion pour configurer cette section.",
+    "isoLibraryTitle": "Bibliothèque ISO",
+    "isoLibraryHint": "Accordez des stockages ISO en lecture seule à ce vDC. Les tenants peuvent monter n'importe quelle ISO du catalogue du fournisseur sur un lecteur CD/DVD, mais ne peuvent ni téléverser, ni supprimer, ni y placer de disques. Utilisez un partage dédié répliqué sur chaque nœud, ou un stockage par palier de catalogue.",
+    "isoLibraryNone": "Aucun stockage de ce cluster n'annonce de contenu ISO.",
+    "isoLibraryPerNode": "par nœud",
+    "isoLibraryShared": "partagé",
+    "isoLibraryMissing": "introuvable sur le cluster",
+    "isoLibraryAllowUploads": "Autoriser les uploads du tenant",
+    "isoLibraryAllowUploadsHint": "Le tenant peut y déposer et supprimer ses propres fichiers, nommés custom-tenant-… ; le catalogue du provider et les fichiers des autres tenants restent intouchables. Jamais une cible de disque, de sauvegarde ou de clone."
   },
   "myVdc": {
     "title": "Mon datacenter",

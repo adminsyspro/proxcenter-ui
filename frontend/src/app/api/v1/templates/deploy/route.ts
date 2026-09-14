@@ -19,7 +19,7 @@ import { allocateIp, releaseIp, IpamExhaustedError } from "@/lib/vdc/ipam"
 import { scanUsedIpsForSubnet, scannedToIntSet } from "@/lib/vdc/ipamScan"
 import { parseCidr } from "@/lib/vdc/network"
 import { waitForTask } from "@/lib/proxmox/tasks"
-import { getVdcScope } from "@/lib/vdc/scope"
+import { getVdcScope, writableStoragesFor, readOnlyLibraryError } from "@/lib/vdc/scope"
 import { policyQosSuffix } from "@/lib/vdc/drives"
 import { DEFAULT_TENANT_ID } from "@/lib/tenant"
 import { checkVmidAgainstTenantRange } from "@/lib/tenant/vmidRange"
@@ -202,18 +202,28 @@ export async function POST(req: Request) {
       if (!scope) {
         return NextResponse.json({ error: 'Tenant vDC scope not resolved' }, { status: 403 })
       }
-      const allowedStorages = scope.storagesByConnection.get(body.connectionId) ?? new Set<string>()
-      if (!allowedStorages.has(body.storage)) {
+      // The data disk lands on body.storage: a write, judged on the writable
+      // set so a read-only ISO library (#894) is refused even when visible.
+      const visibleStorages = scope.storagesByConnection.get(body.connectionId) ?? new Set<string>()
+      const writableStorages = writableStoragesFor(scope, body.connectionId)
+      if (!writableStorages.has(body.storage)) {
         return NextResponse.json(
-          { error: `Storage "${body.storage}" is not authorised for this tenant.` },
+          { error: visibleStorages.has(body.storage) ? readOnlyLibraryError(body.storage) : `Storage "${body.storage}" is not authorised for this tenant.` },
           { status: 403 },
         )
       }
-      if (body.isoStorage && !allowedStorages.has(body.isoStorage)) {
-        return NextResponse.json(
-          { error: `ISO storage "${body.isoStorage}" is not authorised for this tenant.` },
-          { status: 403 },
-        )
+      // The ISO storage is only READ when the ISO already exists as a PVE
+      // volume; a URL download writes the file there first, so a library
+      // may serve an existing ISO but never receive a download.
+      if (body.isoStorage) {
+        const isoIsWrite = sourceType !== 'volume'
+        const isoAllowed = isoIsWrite ? writableStorages : visibleStorages
+        if (!isoAllowed.has(body.isoStorage)) {
+          return NextResponse.json(
+            { error: isoIsWrite && visibleStorages.has(body.isoStorage) ? readOnlyLibraryError(body.isoStorage) : `ISO storage "${body.isoStorage}" is not authorised for this tenant.` },
+            { status: 403 },
+          )
+        }
       }
 
       // Storage-policy QoS: body.storage may carry a tier's IOPS/MBPS caps in

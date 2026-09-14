@@ -237,3 +237,32 @@ describe('POST clone: vDC network allow-list', () => {
     expect(json.error).toContain('is not authorized')
   })
 })
+
+describe('POST clone — read-only ISO library target (#894)', () => {
+  const libraryScope = {
+    kind: 'iaas',
+    vdcScope: {
+      storagesByConnection: new Map([['conn-1', new Set(['ceph-nvme', 'isolib'])]]),
+      writableStoragesByConnection: new Map([['conn-1', new Set(['ceph-nvme'])]]),
+      isoLibrariesByConnection: new Map([['conn-1', new Set(['isolib'])]]),
+      storagePoliciesByConnection: new Map([['conn-1', new Map()]]),
+    },
+  }
+
+  it('403: cloning onto a library storage is refused before any PVE call', async () => {
+    getTenantInfrastructureScopeMock.mockResolvedValue(libraryScope)
+    const POST = await loadPost()
+    const res = await callRoute(POST, { params: baseParams, body: { newid: 101, full: true, storage: 'isolib' } })
+    expect(res.status).toBe(403)
+    const json = (await res.json()) as { error: string }
+    expect(json.error).toMatch(/read-only ISO library/)
+    expect(pveFetchMock).not.toHaveBeenCalled()
+  })
+
+  it('a writable target next to the library passes the storage check', async () => {
+    getTenantInfrastructureScopeMock.mockResolvedValue(libraryScope)
+    const POST = await loadPost()
+    const res = await callRoute(POST, { params: baseParams, body: { newid: 101, full: true, storage: 'ceph-nvme' } })
+    expect(res.status).toBe(200)
+  })
+})

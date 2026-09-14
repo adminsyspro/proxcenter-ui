@@ -232,6 +232,11 @@ export default function VdcTab() {
   const [computePolicy, setComputePolicy] = useState<ComputePolicyForm>(emptyComputePolicy)
   const [customCpuModels, setCustomCpuModels] = useState<string[]>([])
 
+  // ISO library (#894): read-only ISO storages granted to the tenant, picked
+  // among the cluster storages that advertise `iso` content.
+  const [isoLibraries, setIsoLibraries] = useState<Array<{ storageId: string; allowUploads: boolean }>>([])
+  const [isoStorageCandidates, setIsoStorageCandidates] = useState<Array<{ storage: string; type: string; shared: boolean }>>([])
+
   // Node statuses keyed `${connectionId}|${nodeName}` -> 'online' | 'offline' | …
   // Populated once vDCs are loaded by hitting available-resources for each
   // distinct connection. Used to render the status pastille in the Nodes cell.
@@ -467,8 +472,29 @@ export default function VdcTab() {
       setProviderBridges([])
       setPoolBridges([])
       setConnPolicies([])
+      setIsoStorageCandidates([])
       return
     }
+    void (async () => {
+      try {
+        const res = await fetch(`/api/v1/connections/${encodeURIComponent(form.connectionId)}/storage`)
+        if (!res.ok) { setIsoStorageCandidates([]); return }
+        const json = await res.json()
+        const rows: any[] = Array.isArray(json?.data) ? json.data : []
+        // Non-shared storages come back once per node: keep one row per id.
+        const byId = new Map<string, { storage: string; type: string; shared: boolean }>()
+        for (const r of rows) {
+          const id = String(r?.storage ?? r?.id ?? '')
+          const content: string[] = Array.isArray(r?.content) ? r.content.map((c: unknown) => String(c).trim()) : []
+          if (!id || !content.includes('iso') || byId.has(id)) continue
+          byId.set(id, { storage: id, type: String(r?.type ?? 'unknown'), shared: !!r?.shared })
+        }
+        setIsoStorageCandidates([...byId.values()].sort((a, b) => a.storage.localeCompare(b.storage)))
+      } catch (err) {
+        console.error('Failed to load ISO storages', err)
+        setIsoStorageCandidates([])
+      }
+    })()
     void (async () => {
       try {
         const res = await fetch(`/api/v1/admin/connections/${encodeURIComponent(form.connectionId)}/provider-bridges`)
@@ -506,6 +532,13 @@ export default function VdcTab() {
       }
     })()
   }, [form.connectionId])
+
+  // Create mode: an ISO library grant belongs to the cluster it was ticked on,
+  // so switching the connection drops the selection instead of carrying an
+  // id such as `local` over to a cluster where it was never chosen.
+  useEffect(() => {
+    if (!editingVdc) setIsoLibraries([])
+  }, [form.connectionId, editingVdc])
 
   // Custom CPU models of the cluster, for the compute policy section. The
   // cpu-models route is per node; any node of the cluster answers the same
@@ -586,6 +619,7 @@ export default function VdcTab() {
     setVlanPools([])
     setVdcPolicies([])
     setComputePolicy(emptyComputePolicy)
+    setIsoLibraries([])
     setPbsDraft({ enabled: false, mode: 'auto', pbsConnectionId: '', datastore: '', namespace: '' })
     setPbsDraftDatastores([])
     setDialogTab(0)
@@ -643,6 +677,18 @@ export default function VdcTab() {
       cpuDefaultModel: cp?.cpuDefaultModel ?? '',
       cpuAdvancedSettings: cp?.cpuAdvancedSettings !== false,
     })
+    // Older payloads carried bare storage ids (read-only grants).
+    setIsoLibraries(
+      Array.isArray(vdc.isoLibraries)
+        ? vdc.isoLibraries
+            .map((l: any) =>
+              typeof l === 'string'
+                ? { storageId: l, allowUploads: false }
+                : { storageId: String(l?.storageId ?? ''), allowUploads: l?.allowUploads === true },
+            )
+            .filter((l: { storageId: string }) => l.storageId)
+        : [],
+    )
 
     setDialogTab(0)
     setDialogOpen(true)
@@ -736,6 +782,7 @@ export default function VdcTab() {
           vlanPools: vlanPoolsPayload,
           storagePolicies: storagePoliciesPayload,
           computePolicy: computePolicyPayload,
+          isoLibraries,
           quota,
         }
 
@@ -768,6 +815,7 @@ export default function VdcTab() {
           vlanPools: vlanPoolsPayload,
           storagePolicies: storagePoliciesPayload,
           computePolicy: computePolicyPayload,
+          isoLibraries,
           quota: Object.keys(quota).some((k) => quota[k] !== null) ? quota : undefined,
         }
 
@@ -1874,6 +1922,105 @@ export default function VdcTab() {
                       })}
                     </Stack>
                   </Box>
+
+                  {/* ISO library (#894): read-only ISO storages the tenant may
+                      mount on a CD/DVD drive. Excludes the primary storage and
+                      the policied storages, which are already writable. */}
+                  {(() => {
+                    const policiedStorages = new Set(
+                      vdcPolicies
+                        .map((sp) => connPolicies.find((p) => p.id === sp.policyId)?.storageId)
+                        .filter((s): s is string => !!s),
+                    )
+                    const candidates = isoStorageCandidates.filter(
+                      (s) => s.storage !== form.primaryStorage && !policiedStorages.has(s.storage),
+                    )
+                    const known = new Set(candidates.map((s) => s.storage))
+                    const rows = [
+                      ...candidates.map((s) => ({ ...s, missing: false })),
+                      ...isoLibraries
+                        .filter((l) => !known.has(l.storageId))
+                        .map((l) => ({ storage: l.storageId, type: '', shared: false, missing: true })),
+                    ]
+                    return (
+                      <Box sx={{ p: 2, border: 1, borderColor: 'divider', borderRadius: 1 }}>
+                        <Typography variant="subtitle2" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <i className="ri-disc-line" />
+                          {t('vdc.isoLibraryTitle')}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">{t('vdc.isoLibraryHint')}</Typography>
+
+                        {rows.length === 0 ? (
+                          <Typography variant="body2" sx={{ mt: 1, fontStyle: 'italic' }}>
+                            {t('vdc.isoLibraryNone')}
+                          </Typography>
+                        ) : (
+                          <Stack spacing={0.5} sx={{ mt: 1 }}>
+                            {rows.map((s) => {
+                              const grant = isoLibraries.find((l) => l.storageId === s.storage)
+                              const checked = !!grant
+                              return (
+                                <Box key={s.storage}>
+                                  <FormControlLabel
+                                    control={
+                                      <Checkbox
+                                        checked={checked}
+                                        onChange={(e) => {
+                                          setIsoLibraries((prev) =>
+                                            e.target.checked
+                                              ? (prev.some((l) => l.storageId === s.storage)
+                                                  ? prev
+                                                  : [...prev, { storageId: s.storage, allowUploads: false }])
+                                              : prev.filter((l) => l.storageId !== s.storage),
+                                          )
+                                        }}
+                                      />
+                                    }
+                                    label={
+                                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                        <Typography>{s.storage}</Typography>
+                                        {s.missing ? (
+                                          <Typography variant="caption" color="warning.main" sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                            <i className="ri-error-warning-line" style={{ fontSize: 14 }} />
+                                            {t('vdc.isoLibraryMissing')}
+                                          </Typography>
+                                        ) : (
+                                          <Typography variant="caption" color="text.secondary">
+                                            {s.type} · {s.shared ? t('vdc.isoLibraryShared') : t('vdc.isoLibraryPerNode')}
+                                          </Typography>
+                                        )}
+                                      </Box>
+                                    }
+                                  />
+                                  {grant && (
+                                    <Box sx={{ ml: 4, mb: 0.5 }}>
+                                      <FormControlLabel
+                                        control={
+                                          <Switch
+                                            size="small"
+                                            checked={grant.allowUploads}
+                                            onChange={(e) => {
+                                              setIsoLibraries((prev) =>
+                                                prev.map((l) => (l.storageId === s.storage ? { ...l, allowUploads: e.target.checked } : l)),
+                                              )
+                                            }}
+                                          />
+                                        }
+                                        label={<Typography variant="body2">{t('vdc.isoLibraryAllowUploads')}</Typography>}
+                                      />
+                                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                                        {t('vdc.isoLibraryAllowUploadsHint')}
+                                      </Typography>
+                                    </Box>
+                                  )}
+                                </Box>
+                              )
+                            })}
+                          </Stack>
+                        )}
+                      </Box>
+                    )
+                  })()}
 
                   {/* PBS bindings (only when editing an existing vDC).
                       The Pool / Nodes / Storages summary that used to live

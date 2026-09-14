@@ -3,7 +3,7 @@ import { NextResponse } from "next/server"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
-import { guardTenantStorageWrite } from "@/lib/vdc/scope"
+import { guardTenantStorageWrite, tenantUploadFilename } from "@/lib/vdc/scope"
 
 export const runtime = "nodejs"
 
@@ -19,10 +19,6 @@ export async function POST(
     const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW, "connection", id)
     if (denied) return denied
 
-    const storageBlock = await guardTenantStorageWrite(id, storage)
-    if (storageBlock) return storageBlock
-
-    const conn = await getConnectionById(id)
     const body = await req.json()
 
     const { url, content, filename } = body
@@ -33,10 +29,19 @@ export async function POST(
       )
     }
 
+    // On an ISO library that allows uploads, a tenant's file is namespaced
+    // `custom-<slug>-*` server-side and the guard then only lets the tenant
+    // write its own files (#894).
+    const targetName = await tenantUploadFilename(id, storage, String(filename))
+    const storageBlock = await guardTenantStorageWrite(id, storage, { filename: targetName, content: String(content) })
+    if (storageBlock) return storageBlock
+
+    const conn = await getConnectionById(id)
+
     const params = new URLSearchParams({
       url,
       content,
-      filename,
+      filename: targetName,
       node,
       storage,
       "verify-certificates": "0",

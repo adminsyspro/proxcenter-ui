@@ -271,3 +271,40 @@ describe('POST disk/move: provider tenant (unchanged)', () => {
     expect(checkVdcQuotaMock).not.toHaveBeenCalled()
   })
 })
+
+describe('POST disk/move: read-only ISO library target (#894)', () => {
+  /** Visible scope carries `isolib`, the writable one does not. */
+  const libraryScope = {
+    kind: 'iaas',
+    vdcScope: {
+      storagesByConnection: new Map([['conn-1', new Set(['ceph-nvme', 'isolib'])]]),
+      writableStoragesByConnection: new Map([['conn-1', new Set(['ceph-nvme'])]]),
+      isoLibrariesByConnection: new Map([['conn-1', new Set(['isolib'])]]),
+      storagePoliciesByConnection: new Map([['conn-1', new Map()]]),
+    },
+  }
+
+  it('403: a library storage is refused as move target and PVE is never called', async () => {
+    getTenantInfrastructureScopeMock.mockResolvedValue(libraryScope)
+    const POST = await loadPost()
+    const res = await callRoute(POST, {
+      params: baseParams,
+      body: { disk: 'scsi0', storage: 'isolib', deleteSource: true },
+    })
+    expect(res.status).toBe(403)
+    const json = (await res.json()) as { error: string }
+    expect(json.error).toMatch(/read-only ISO library/)
+    expect(pveFetchMock).not.toHaveBeenCalled()
+  })
+
+  it('the writable storage next to it still passes the scope check', async () => {
+    getTenantInfrastructureScopeMock.mockResolvedValue(libraryScope)
+    resolveVdcForTenantMock.mockResolvedValue({ poolName: 'pool-x', quota: null, storagePolicies: [] })
+    const POST = await loadPost()
+    const res = await callRoute(POST, {
+      params: baseParams,
+      body: { disk: 'scsi0', storage: 'ceph-nvme', deleteSource: true },
+    })
+    expect(res.status).not.toBe(403)
+  })
+})

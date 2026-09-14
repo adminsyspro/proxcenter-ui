@@ -65,6 +65,24 @@ const BrandingContext = createContext<BrandingContextValue>({
   refresh: async () => {},
 })
 
+// The uploaded favicon keeps the extension it was stored under (see the
+// branding uploads route), and the stock <link> tags carry a type of their
+// own, so the type has to be recomputed rather than inherited.
+const FAVICON_MIME_TYPES: Record<string, string> = {
+  ico: 'image/x-icon',
+  jpeg: 'image/jpeg',
+  jpg: 'image/jpeg',
+  png: 'image/png',
+  svg: 'image/svg+xml',
+  webp: 'image/webp',
+}
+
+function faviconMimeType(url: string): string {
+  const ext = url.split('?')[0].split('.').pop()?.toLowerCase() ?? ''
+
+  return FAVICON_MIME_TYPES[ext] ?? ''
+}
+
 export function BrandingProvider({ children }: { children: ReactNode }) {
   const [branding, setBranding] = useState<BrandingConfig>(DEFAULT_BRANDING)
   const [loading, setLoading] = useState(true)
@@ -103,17 +121,66 @@ export function BrandingProvider({ children }: { children: ReactNode }) {
     fetchBranding()
   }, [fetchBranding, status, sessionUserId, sessionTenantId])
 
-  // Update favicon dynamically
+  // Update favicon dynamically.
+  //
+  // src/app ships BOTH favicon.ico and icon.svg, so Next renders two icon
+  // links, in that order:
+  //   <link rel="icon" href="/favicon.ico?…" sizes="48x48" type="image/x-icon">
+  //   <link rel="icon" href="/icon.svg?…"    sizes="any"   type="image/svg+xml">
+  // Browsers keep the SVG (declared last, and preferred because it scales),
+  // so repointing the first match alone left the stock icon in the tab and
+  // the white-label one loaded by nobody. Every icon link has to follow, and
+  // the stock type/sizes have to go with them, or a PNG upload is announced
+  // as a 48x48 image/x-icon. The tags are mutated rather than replaced: they
+  // are rendered by Next's metadata, and removing them from under React is
+  // what turns a cosmetic bug into a crash on navigation.
   useEffect(() => {
-    if (branding.faviconUrl) {
-      const link = document.querySelector("link[rel~='icon']") as HTMLLinkElement
-      if (link) {
-        link.href = branding.faviconUrl
-      } else {
-        const newLink = document.createElement('link')
-        newLink.rel = 'icon'
-        newLink.href = branding.faviconUrl
-        document.head.appendChild(newLink)
+    const url = branding.faviconUrl
+
+    if (!url) return
+
+    const type = faviconMimeType(url)
+    const existing = Array.from(document.querySelectorAll<HTMLLinkElement>("link[rel~='icon']"))
+
+    let created: HTMLLinkElement | null = null
+
+    if (existing.length === 0) {
+      created = document.createElement('link')
+      created.rel = 'icon'
+      document.head.appendChild(created)
+      existing.push(created)
+    }
+
+    const stock = existing.map(link => ({
+      link,
+      href: link.getAttribute('href'),
+      type: link.getAttribute('type'),
+      sizes: link.getAttribute('sizes'),
+    }))
+
+    for (const { link } of stock) {
+      link.setAttribute('href', url)
+      link.removeAttribute('sizes')
+
+      if (type) link.setAttribute('type', type)
+      else link.removeAttribute('type')
+    }
+
+    // Put the stock icons back when the tenant clears the upload, or when a
+    // tenant switch lands on a tenant without one — otherwise the previous
+    // tenant's icon stays in the tab until the next hard reload.
+    return () => {
+      if (created) {
+        created.remove()
+
+        return
+      }
+
+      for (const entry of stock) {
+        for (const [name, value] of [['href', entry.href], ['type', entry.type], ['sizes', entry.sizes]] as const) {
+          if (value === null) entry.link.removeAttribute(name)
+          else entry.link.setAttribute(name, value)
+        }
       }
     }
   }, [branding.faviconUrl])

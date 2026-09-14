@@ -145,9 +145,16 @@ describe('OidcConfigTab — tenant / vDC group mapping', () => {
     mockFetch(baseConfig())
     renderWithProviders(<OidcConfigTab />)
 
+    // Anchored, and matched on the whole line: an unanchored URL pattern would
+    // also pass on https://evil.test/?x=https://pxc.example.com/login, which is
+    // exactly what CodeQL's missing-regexp-anchor rule is there to catch.
     await waitFor(() => {
-      expect(screen.getByText(/https:\/\/pxc\.example\.com\/api\/auth\/callback\/oidc/)).toBeTruthy()
-      expect(screen.getByText(/https:\/\/pxc\.example\.com\/login/)).toBeTruthy()
+      expect(
+        screen.getByText(/^Redirect \/ callback URL : https:\/\/pxc\.example\.com\/api\/auth\/callback\/oidc$/),
+      ).toBeTruthy()
+      expect(
+        screen.getByText(/^Post-logout redirect URL : https:\/\/pxc\.example\.com\/login$/),
+      ).toBeTruthy()
     })
   })
 })

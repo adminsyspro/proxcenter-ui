@@ -4,6 +4,8 @@ import { createContext, useContext, useEffect, useState, useCallback, type React
 
 import { useSession } from 'next-auth/react'
 
+import { applyFavicon } from '@/lib/branding/favicon'
+
 export interface BrandingHighlight {
   icon: string
   text: string
@@ -103,19 +105,13 @@ export function BrandingProvider({ children }: { children: ReactNode }) {
     fetchBranding()
   }, [fetchBranding, status, sessionUserId, sessionTenantId])
 
-  // Update favicon dynamically
+  // Update favicon dynamically. applyFavicon repoints EVERY icon link Next
+  // rendered, not just the first one, and hands back the undo that restores
+  // the stock icons when the upload is cleared. See lib/branding/favicon.
   useEffect(() => {
-    if (branding.faviconUrl) {
-      const link = document.querySelector("link[rel~='icon']") as HTMLLinkElement
-      if (link) {
-        link.href = branding.faviconUrl
-      } else {
-        const newLink = document.createElement('link')
-        newLink.rel = 'icon'
-        newLink.href = branding.faviconUrl
-        document.head.appendChild(newLink)
-      }
-    }
+    if (!branding.faviconUrl) return
+
+    return applyFavicon(branding.faviconUrl)
   }, [branding.faviconUrl])
 
   // Update browser title dynamically

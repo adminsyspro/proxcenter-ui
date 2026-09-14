@@ -2,16 +2,17 @@
 
 import { useEffect } from 'react'
 
-import { signOut } from 'next-auth/react'
 import { useTranslations } from 'next-intl'
+
+import { federatedSignOut } from '@/lib/auth/federatedSignOut'
 import { Box, CircularProgress, Typography } from '@mui/material'
 
 export default function LogoutPage() {
   const t = useTranslations()
 
   useEffect(() => {
-    // Auto logout and redirect to login
-    signOut({ callbackUrl: '/login' })
+    // Auto logout and redirect to login. Federated so the IdP session goes too.
+    federatedSignOut('/login')
   }, [])
 
   return (

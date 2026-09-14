@@ -6,6 +6,8 @@
 // each route's PUT handler stays a single function call, which keeps
 // the new-code duplication metric inside the Sonar quality gate.
 
+import { DEFAULT_TENANT_ID } from '@/lib/tenant/constants'
+
 /**
  * Parse and normalise a group->role mapping payload from the LDAP/OIDC
  * config form. Accepts either a JSON string (current frontend pattern)
@@ -106,4 +108,104 @@ export function normalizeGroupRoleMapping(input: unknown): Record<string, string
     cleaned[key] = v
   }
   return cleaned
+}
+
+// ---------------------------------------------------------------------------
+// Tenant / vDC aware mapping (OIDC only)
+// ---------------------------------------------------------------------------
+//
+// The flat `{ group: role }` shape above can only ever describe one grant per
+// group, in the provider tenant. An MSP mapping a group to a role inside a
+// customer tenant (or inside one vDC of that tenant) needs several grants for
+// the same group, so the OIDC side stores a LIST of entries in the very same
+// `group_role_mapping` JSONB column:
+//
+//   [{ group: "ops-acme", tenant: "t_acme", vdc: "vdc_prod", role: "role_operator" }]
+//
+// `vdc` absent/empty means "the whole tenant". A config written before this
+// feature is still a flat object, and reads back as one default-tenant,
+// unscoped entry per key, so no data migration is required.
+
+// The provider tenant id, single-sourced from lib/tenant/constants (that module
+// is dependency-free, so importing it here keeps this helper client-safe).
+export { DEFAULT_TENANT_ID }
+
+export type GroupGrant = {
+  /** IdP group name, matched exactly (trimmed on both sides). */
+  group: string
+  tenantId: string
+  /** null = the grant covers the whole tenant. */
+  vdcId: string | null
+  /** Role id or bare role name; normalised to a role_ id at resolution time. */
+  role: string
+}
+
+/** Trim an unknown into a string, treating null/undefined as empty. */
+function trimmed(value: unknown): string {
+  if (value == null) return ''
+  return String(value).trim()
+}
+
+/**
+ * Parse a group->grant payload into a clean entry list. Accepts the new array
+ * form, the legacy flat object, or a JSON string of either (the config form
+ * posts a string). Malformed input yields an empty list rather than throwing,
+ * so a broken payload can never take the login path down with it.
+ *
+ * Entries missing a group or a role are dropped: a half-filled UI row must not
+ * silently become a grant.
+ */
+export function normalizeGroupGrantMapping(input: unknown): GroupGrant[] {
+  let raw: unknown = input
+  if (typeof input === 'string') {
+    try {
+      raw = JSON.parse(input || '[]')
+    } catch {
+      return []
+    }
+  }
+
+  if (Array.isArray(raw)) {
+    const out: GroupGrant[] = []
+    for (const item of raw) {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) continue
+      const entry = item as Record<string, unknown>
+      const group = trimmed(entry.group)
+      const role = trimmed(entry.role)
+      if (!group || PROTOTYPE_POLLUTION_KEYS.has(group) || !role) continue
+      // Accept both the wire names (tenant/vdc) and the internal ones.
+      const tenantId = trimmed(entry.tenant ?? entry.tenantId) || DEFAULT_TENANT_ID
+      const vdcId = trimmed(entry.vdc ?? entry.vdcId) || null
+      out.push({ group, tenantId, vdcId, role })
+    }
+    return out
+  }
+
+  // Legacy flat object: every key is a provider-tenant, unscoped grant.
+  const flat = normalizeGroupRoleMapping(raw)
+  const out: GroupGrant[] = []
+  for (const [group, rawRole] of Object.entries(flat)) {
+    const role = trimmed(rawRole)
+    if (!role) continue
+    out.push({ group, tenantId: DEFAULT_TENANT_ID, vdcId: null, role })
+  }
+  return out
+}
+
+/**
+ * Project a grant list back onto the flat `{ group: role }` shape, keeping only
+ * the unscoped provider-tenant entries (first one per group wins). This is what
+ * the legacy `resolveOidcRole` path and the denormalised `users.role` display
+ * column still read, so a mapping that only targets customer tenants simply
+ * projects to an empty object and those callers fall back to the default role.
+ */
+export function projectGrantsToRoleMapping(grants: readonly GroupGrant[]): Record<string, string> {
+  const out: Record<string, string> = Object.create(null)
+  for (const grant of grants) {
+    if (grant.tenantId !== DEFAULT_TENANT_ID || grant.vdcId) continue
+    if (PROTOTYPE_POLLUTION_KEYS.has(grant.group)) continue
+    if (out[grant.group]) continue
+    out[grant.group] = grant.role
+  }
+  return out
 }

@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 import { syncOidcRoleAssignment, oidcRoleId } from './oidc'
 import type { OidcConfig } from './oidc'
+import { normalizeGroupGrantMapping } from './groupMapping'
 
 function makeConfig(mapping: Record<string, string>, defaultRole = 'role_viewer'): OidcConfig {
   return {
@@ -20,6 +21,7 @@ function makeConfig(mapping: Record<string, string>, defaultRole = 'role_viewer'
     autoProvision: true,
     defaultRole,
     groupRoleMapping: mapping,
+    groupGrants: normalizeGroupGrantMapping(mapping),
     showLocalLogin: true,
     forceSsoRedirect: false,
   }
@@ -30,12 +32,21 @@ function makeDb(overrides: Partial<Record<string, any>> = {}) {
     rbacRole: { findUnique: vi.fn().mockResolvedValue({ id: 'role_db' }) },
     rbacUserRole: {
       findFirst: vi.fn().mockResolvedValue(null),
+      // Rows this provider already owns, all tenants confounded.
+      findMany: vi.fn().mockResolvedValue([]),
       deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
       create: vi.fn().mockResolvedValue({}),
     },
-    $transaction: vi.fn().mockResolvedValue([]),
+    vdc: { findMany: vi.fn().mockResolvedValue([]) },
+    // Resolve the ops array so the deleteMany/create mocks are actually called.
+    $transaction: vi.fn(async (ops: any[]) => ops),
     ...overrides,
   } as any
+}
+
+/** Tenant membership side effects, asserted on in the multi-tenant suites. */
+function makeMembership() {
+  return { add: vi.fn().mockResolvedValue(undefined), remove: vi.fn().mockResolvedValue(undefined) }
 }
 
 const baseParams = (extra: any = {}) => ({
@@ -46,6 +57,7 @@ const baseParams = (extra: any = {}) => ({
   newId: () => 'oidc_fixed',
   // The IdP sent an actual groups array (authoritative) unless a test overrides it.
   groupsClaimIsArray: true,
+  membership: makeMembership(),
   ...extra,
 })
 
@@ -115,6 +127,7 @@ describe('syncOidcRoleAssignment — preserve vs revoke (issue #442 regression)'
     makeDb({
       rbacUserRole: {
         findFirst: vi.fn().mockResolvedValue({ id: 'manual_row' }),
+        findMany: vi.fn().mockResolvedValue([]),
         deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
         create: vi.fn().mockResolvedValue({}),
       },
@@ -196,6 +209,11 @@ describe('syncOidcRoleAssignment — admin takeover from the Users dialog', () =
       rbacUserRole: {
         findFirst: vi.fn(async (args: any) =>
           args?.where?.id?.startsWith ? providerRow : anyRow,
+        ),
+        // Provider-row presence is now read through findMany (the sync owns a
+        // set of rows across tenants, not a single one).
+        findMany: vi.fn().mockResolvedValue(
+          providerRow ? [{ id: providerRow.id, tenantId: 'default' }] : [],
         ),
         deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
         create: vi.fn().mockResolvedValue({}),

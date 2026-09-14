@@ -9,7 +9,7 @@ import { prisma } from "@/lib/db/prisma"
 import { verifyPassword, hashPassword } from "./password"
 import { readGroupsClaim, isLdapGroupAllowed } from "./groupMapping"
 import { authenticateLdap, isLdapEnabled, getLdapConfig, resolveLdapRole, syncLdapRoleAssignment } from "./ldap"
-import { getOidcConfig, oidcRoleId, syncOidcRoleAssignment } from "./oidc"
+import { getOidcConfig, oidcSeedRoleId, syncOidcRoleAssignment } from "./oidc"
 import { loadJwtContext } from "./jwtContext"
 import { createSession, evaluateSession, touchSession } from "./sessions"
 import { sessionDurations } from "./durations"
@@ -458,6 +458,11 @@ export const authOptions: NextAuthOptions = {
           })
         }
 
+        // Set when this login created the account: the provisioning below seeds
+        // a `default` membership so the account is never tenant-less, and that
+        // seed has to be cleaned up if the mapping placed the user elsewhere.
+        let justProvisioned = false
+
         if (existing) {
           if (!existing.enabled) return false
 
@@ -512,7 +517,7 @@ export const authOptions: NextAuthOptions = {
           const id = nanoid()
           // Legacy users.role display column (the authoritative RBAC assignment
           // is created by syncOidcRoleAssignment below).
-          const roleName = oidcRoleId(groups, oidcConfig).replace(/^role_/, '')
+          const roleName = oidcSeedRoleId(groups, oidcConfig).replace(/^role_/, '')
 
           await prisma.user.create({
             data: {
@@ -541,12 +546,18 @@ export const authOptions: NextAuthOptions = {
           user.name = name
           user.role = roleName as UserRole
           user.authProvider = 'oidc'
+          justProvisioned = true
         }
 
-        // Re-sync the RBAC assignment from the current IdP groups on every
-        // login (new or existing), mirroring the LDAP path. scopeType "inherit"
-        // follows the role's default scope; only the oidc_ row is touched, so
-        // manual assignments are preserved (issue #383).
+        // Re-sync the RBAC assignments from the current IdP groups on every
+        // login (new or existing), mirroring the LDAP path. A mapping entry may
+        // name a tenant and a vDC, so this reconciles every oidc_ row across
+        // tenants and keeps membership in step; manual assignments are never
+        // touched (issues #383, #940).
+        //
+        // lib/tenant is imported lazily: it pulls lib/auth/principal, which
+        // would close an import cycle back onto this module.
+        const { addUserToTenant, removeUserFromTenant } = await import("@/lib/tenant")
         await syncOidcRoleAssignment(prisma, {
           userId: user.id,
           groups,
@@ -554,7 +565,33 @@ export const authOptions: NextAuthOptions = {
           now,
           newId: () => `oidc_${nanoid(12)}`,
           groupsClaimIsArray,
+          membership: {
+            add: (userId, tenantId) => addUserToTenant(userId, tenantId),
+            remove: (userId, tenantId) => removeUserFromTenant(userId, tenantId),
+          },
         })
+
+        // A brand new account mapped only into customer tenants would otherwise
+        // stay a member of the provider tenant with no role there, i.e. a ghost
+        // in its member list. removeUserFromTenant keeps its own guards, so a
+        // user this would leave tenant-less simply keeps the seed.
+        if (justProvisioned) {
+          const roleInDefault = await prisma.rbacUserRole.findFirst({
+            where: {
+              userId: user.id,
+              tenantId: "default",
+              OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+            },
+            select: { id: true },
+          })
+          if (!roleInDefault) {
+            try {
+              await removeUserFromTenant(user.id, "default")
+            } catch (e: any) {
+              console.warn(`[oidc] keeping the default membership of ${user.id}: ${e?.message || e}`)
+            }
+          }
+        }
       }
 
       return true

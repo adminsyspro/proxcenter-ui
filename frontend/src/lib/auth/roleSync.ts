@@ -159,3 +159,173 @@ export async function syncProviderRoleAssignment(
     })
   }
 }
+
+// ---------------------------------------------------------------------------
+// Multi-tenant / multi-scope variant
+// ---------------------------------------------------------------------------
+//
+// syncProviderRoleAssignment above owns exactly ONE row, in the provider
+// tenant. A mapping that grants a role inside a customer tenant (or inside one
+// vDC of it) produces a SET of rows spread over several tenants, so the
+// reconciliation below replaces "delete my row, write my row" with "make the
+// user's provider-owned rows match the grants, tenant by tenant".
+//
+// Two invariants carry over unchanged from the single-row version:
+//  - only rows carrying `idPrefix` are ever touched, so a manual assignment
+//    survives;
+//  - a tenant where the provider row is gone while an admin-granted one still
+//    stands is a tenant an admin has taken over (issue #940), and is skipped.
+//    That test is now made PER TENANT: an admin owning the user in tenant A
+//    must not freeze the IdP out of tenant B.
+//
+// Membership is reconciled alongside: a role in a tenant the user is not a
+// member of grants nothing, and a membership left behind after the role is
+// revoked shows a ghost in the tenant's member list.
+
+/** One row the provider wants to own, already resolved to RBAC vocabulary. */
+export type ProviderGrantRow = {
+  tenantId: string
+  roleId: string
+  scopeType: string
+  scopeTarget: string | null
+}
+
+/**
+ * Tenant membership side effects, injected so the sync stays unit testable and
+ * so the caller decides which implementation runs (lib/tenant in production).
+ */
+export type MembershipPort = {
+  add: (userId: string, tenantId: string) => Promise<void>
+  remove: (userId: string, tenantId: string) => Promise<void>
+}
+
+export type ProviderGrantsDb = ProviderSyncDb & {
+  rbacUserRole: ProviderSyncDb["rbacUserRole"] & {
+    findMany: (args: any) => Promise<Array<{ id: string; tenantId: string }>>
+  }
+}
+
+/**
+ * Membership changes must never take a login down. `removeUserFromTenant`
+ * legitimately refuses on the user's last tenant and on super-admins, and those
+ * refusals are outcomes, not failures: the user simply keeps that membership.
+ */
+async function tryMembership(label: string, fn: () => Promise<void>): Promise<void> {
+  try {
+    await fn()
+  } catch (e: any) {
+    console.warn(`[roleSync] ${label} skipped: ${e?.message || e}`)
+  }
+}
+
+/**
+ * Reconcile the provider-owned RBAC rows of a user against the grants resolved
+ * from the IdP on this login.
+ *
+ * `grants === null` means the re-sync is NOT authoritative (no mapping
+ * configured, or the IdP sent no groups array, issue #442): nothing is revoked
+ * and the configured default is seeded only when the user holds no role at all.
+ */
+export async function syncProviderGrants(
+  db: ProviderGrantsDb,
+  params: {
+    userId: string
+    grants: ProviderGrantRow[] | null
+    defaultRoleId: string
+    now: Date
+    idPrefix: string
+    newId: () => string
+    membership: MembershipPort
+  },
+): Promise<void> {
+  const { userId, grants, defaultRoleId, now, idPrefix, newId, membership } = params
+
+  if (!grants) {
+    // Any role, in any tenant, counts as "this user already has one".
+    const hasAnyRole = await db.rbacUserRole.findFirst({
+      where: { userId, ...activeRow(now) },
+      select: { id: true },
+    })
+    if (hasAnyRole) return
+
+    const defaultExists = await db.rbacRole.findUnique({
+      where: { id: defaultRoleId },
+      select: { id: true },
+    })
+    await db.rbacUserRole.create({
+      data: {
+        id: newId(),
+        userId,
+        roleId: defaultExists ? defaultRoleId : "role_viewer",
+        scopeType: "inherit",
+        tenantId: "default",
+        grantedById: null,
+        grantedAt: now,
+      },
+    })
+    return
+  }
+
+  const byTenant = new Map<string, ProviderGrantRow[]>()
+  for (const grant of grants) {
+    const rows = byTenant.get(grant.tenantId)
+    if (rows) rows.push(grant)
+    else byTenant.set(grant.tenantId, [grant])
+  }
+
+  const ownedRows = await db.rbacUserRole.findMany({
+    where: { userId, id: { startsWith: idPrefix } },
+    select: { id: true, tenantId: true },
+  })
+  const ownedTenants = new Set(ownedRows.map(row => row.tenantId))
+
+  // Resolve every distinct role once. A role deleted since the mapping was
+  // written must degrade to viewer rather than FK-fail the whole login.
+  const validRoleIds = new Set<string>()
+  for (const roleId of new Set(grants.map(g => g.roleId))) {
+    const row = await db.rbacRole.findUnique({ where: { id: roleId }, select: { id: true } })
+    if (row) validRoleIds.add(roleId)
+  }
+
+  for (const [tenantId, rows] of byTenant) {
+    if (!ownedTenants.has(tenantId)) {
+      const adminOwnedRole = await db.rbacUserRole.findFirst({
+        where: {
+          userId,
+          tenantId,
+          ...activeRow(now),
+          NOT: { OR: PROVIDER_ID_PREFIXES.map(prefix => ({ id: { startsWith: prefix } })) },
+        },
+        select: { id: true },
+      })
+      if (adminOwnedRole) continue
+    }
+
+    await tryMembership(`add ${userId} to ${tenantId}`, () => membership.add(userId, tenantId))
+    await db.$transaction([
+      db.rbacUserRole.deleteMany({ where: { userId, tenantId, id: { startsWith: idPrefix } } }),
+      ...rows.map(row =>
+        db.rbacUserRole.create({
+          data: {
+            id: newId(),
+            userId,
+            roleId: validRoleIds.has(row.roleId) ? row.roleId : "role_viewer",
+            scopeType: row.scopeType,
+            scopeTarget: row.scopeTarget,
+            tenantId,
+            grantedById: null,
+            grantedAt: now,
+          },
+        }),
+      ),
+    ])
+  }
+
+  // Tenants the provider owned a row in that the IdP no longer grants: the user
+  // left the mapped group, so both the row and the membership it stood on go.
+  for (const tenantId of ownedTenants) {
+    if (byTenant.has(tenantId)) continue
+    await db.rbacUserRole.deleteMany({ where: { userId, tenantId, id: { startsWith: idPrefix } } })
+    await tryMembership(`remove ${userId} from ${tenantId}`, () => membership.remove(userId, tenantId))
+  }
+}

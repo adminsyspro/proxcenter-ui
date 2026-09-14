@@ -27,6 +27,11 @@ import {
   Typography,
 } from '@mui/material'
 
+// Mapping rows are a grid, not three content-sized boxes: without a fixed width
+// each Select sizes itself on its own value ("Tenant Operator" vs "Viewer") and
+// the columns stop lining up from one row to the next.
+const SCOPE_FIELD_WIDTH = 170
+
 export default function OidcConfigTab() {
   const t = useTranslations()
 
@@ -47,7 +52,7 @@ export default function OidcConfigTab() {
     default_role: 'role_viewer',
     show_local_login: true,
     force_sso_redirect: false,
-    group_role_mapping: '{}',
+    group_role_mapping: '[]',
   })
 
   const [loading, setLoading] = useState(true)
@@ -60,6 +65,13 @@ export default function OidcConfigTab() {
   const [hasClientSecret, setHasClientSecret] = useState(false)
   const [groupMappings, setGroupMappings] = useState([])
   const [availableRoles, setAvailableRoles] = useState([])
+  // Tenant / vDC pickers are served by the OIDC config route itself: it gates on
+  // ADMIN_SETTINGS like this tab, while /api/v1/tenants needs ADMIN_TENANTS.
+  const [tenants, setTenants] = useState([])
+  const [vdcs, setVdcs] = useState([])
+  // Served by the route: it is the origin the server itself uses towards the
+  // IdP, which is what the admin has to register.
+  const [appOrigin, setAppOrigin] = useState('')
 
   useEffect(() => {
     loadConfig()
@@ -91,12 +103,29 @@ export default function OidcConfigTab() {
         }))
         setHasClientSecret(data.data.hasClientSecret || false)
 
-        // Parse group role mapping into array
+        setTenants(data.data.tenants || [])
+        setVdcs(data.data.vdcs || [])
+        setAppOrigin(data.data.app_origin || '')
+
+        // Parse the group mapping. The route always answers the entry-list
+        // shape, but a flat { group: role } object is still accepted so a stale
+        // cached payload cannot wipe the mapping on the next save.
         try {
-          const mapping = JSON.parse(data.data.group_role_mapping || '{}')
-          setGroupMappings(
-            Object.entries(mapping).map(([group, role]) => ({ group, role: normalizeRole(role) }))
-          )
+          const mapping = JSON.parse(data.data.group_role_mapping || '[]')
+          const entries = Array.isArray(mapping)
+            ? mapping.map(m => ({
+                group: m.group || '',
+                tenant: m.tenant || m.tenantId || 'default',
+                vdc: m.vdc || m.vdcId || '',
+                role: normalizeRole(m.role),
+              }))
+            : Object.entries(mapping).map(([group, role]) => ({
+                group,
+                tenant: 'default',
+                vdc: '',
+                role: normalizeRole(role),
+              }))
+          setGroupMappings(entries)
         } catch {
           setGroupMappings([])
         }
@@ -124,13 +153,15 @@ export default function OidcConfigTab() {
     setTestResult(null)
 
     try {
-      // Build group_role_mapping from array. Trim group names so a stray
+      // Build the group mapping entry list. Trim group names so a stray
       // leading/trailing space pasted from the IdP doesn't silently break
-      // the mapping at login time.
-      const mapping = {}
-      groupMappings.forEach(({ group, role }) => {
+      // the mapping at login time. A half-filled row is dropped rather than
+      // saved as a grant nobody asked for.
+      const mapping = []
+      groupMappings.forEach(({ group, tenant, vdc, role }) => {
         const key = (group || '').trim()
-        if (key && role) mapping[key] = role
+        if (!key || !role) return
+        mapping.push({ group: key, tenant: tenant || 'default', vdc: vdc || '', role })
       })
 
       const res = await fetch('/api/v1/auth/oidc', {
@@ -198,7 +229,7 @@ export default function OidcConfigTab() {
   }
 
   const addGroupMapping = () => {
-    setGroupMappings([...groupMappings, { group: '', role: 'role_viewer' }])
+    setGroupMappings([...groupMappings, { group: '', tenant: 'default', vdc: '', role: 'role_viewer' }])
   }
 
   const removeGroupMapping = (index) => {
@@ -207,9 +238,20 @@ export default function OidcConfigTab() {
 
   const updateGroupMapping = (index, field, value) => {
     setGroupMappings(
-      groupMappings.map((m, i) => (i === index ? { ...m, [field]: value } : m))
+      groupMappings.map((m, i) => {
+        if (i !== index) return m
+        // A vDC belongs to one tenant, so moving the row to another tenant
+        // invalidates the current selection instead of silently keeping a vDC
+        // the backend would then reject.
+        if (field === 'tenant') return { ...m, tenant: value, vdc: '' }
+        return { ...m, [field]: value }
+      })
     )
   }
+
+  // Nothing to choose on a single-tenant install with no vDC: keep the mapping
+  // rows at their historical two fields rather than showing two inert pickers.
+  const showScopePickers = tenants.length > 1 || vdcs.length > 0
 
   if (loading) {
     return (
@@ -352,6 +394,25 @@ export default function OidcConfigTab() {
             disabled={!config.enabled}
             helperText={t('oidc.scopesHelper')}
           />
+
+          {/* The two URLs the admin has to declare on the IdP side. The callback
+              one was always implicit; the post-logout one is a hard requirement
+              since ProxCenter ends the IdP session on sign-out, and a provider
+              rejects an unregistered one outright. */}
+          <Alert severity='info' variant='outlined' sx={{ mt: 3 }}>
+            <Typography variant='body2' fontWeight={600} sx={{ mb: 1 }}>
+              {t('oidc.registerUrlsTitle')}
+            </Typography>
+            <Typography variant='body2' sx={{ mb: 0.5 }}>
+              {t('oidc.registerCallbackUrl')} : {appOrigin}/api/auth/callback/oidc
+            </Typography>
+            <Typography variant='body2'>
+              {t('oidc.registerPostLogoutUrl')} : {appOrigin}/login
+            </Typography>
+            <Typography variant='caption' sx={{ display: 'block', mt: 1, opacity: 0.75 }}>
+              {t('oidc.registerPostLogoutHelp')}
+            </Typography>
+          </Alert>
         </CardContent>
       </Card>
 
@@ -542,37 +603,80 @@ export default function OidcConfigTab() {
             {t('oidc.groupMapping')}
           </Typography>
           <Typography variant='body2' sx={{ opacity: 0.6, mb: 2 }}>
-            {t('oidc.groupMappingDesc')}
+            {showScopePickers ? t('oidc.groupMappingScopedDesc') : t('oidc.groupMappingDesc')}
           </Typography>
 
-          {groupMappings.map((mapping, index) => (
-            <Box key={index} sx={{ display: 'flex', gap: 1, mb: 1, alignItems: 'center' }}>
-              <TextField
-                size='small'
-                label={t('oidc.groupName')}
-                value={mapping.group}
-                onChange={e => updateGroupMapping(index, 'group', e.target.value)}
-                disabled={!config.enabled}
-                sx={{ flex: 1 }}
-                placeholder='admins, devops, viewers...'
-              />
-              <FormControl size='small' sx={{ minWidth: 140 }} disabled={!config.enabled}>
-                <InputLabel>{t('oidc.role')}</InputLabel>
-                <Select
-                  value={mapping.role}
-                  label={t('oidc.role')}
-                  onChange={e => updateGroupMapping(index, 'role', e.target.value)}
-                >
-                  {availableRoles.map(role => (
-                    <MenuItem key={role.id} value={role.id}>{role.is_system ? t(`rbac.roles.${role.id}`) : role.name}</MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-              <IconButton size='small' onClick={() => removeGroupMapping(index)} disabled={!config.enabled}>
-                <i className='ri-delete-bin-line' />
-              </IconButton>
-            </Box>
-          ))}
+          {groupMappings.map((mapping, index) => {
+            const rowTenant = mapping.tenant || 'default'
+            const tenantVdcs = vdcs.filter(v => v.tenantId === rowTenant)
+            // A mapping written before a tenant or vDC was deleted keeps its id
+            // as an option, so the Select stays controlled and the stale value
+            // is visible instead of silently blanking on load.
+            const tenantMissing = rowTenant && !tenants.some(x => x.id === rowTenant)
+            const vdcMissing = mapping.vdc && !tenantVdcs.some(v => v.id === mapping.vdc)
+
+            return (
+              <Box key={index} sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 1, alignItems: 'center' }}>
+                <TextField
+                  size='small'
+                  label={t('oidc.groupName')}
+                  value={mapping.group}
+                  onChange={e => updateGroupMapping(index, 'group', e.target.value)}
+                  disabled={!config.enabled}
+                  sx={{ flex: '1 1 200px', minWidth: 200 }}
+                  placeholder='admins, devops, viewers...'
+                />
+                {showScopePickers && (
+                  <>
+                    <FormControl size='small' sx={{ width: SCOPE_FIELD_WIDTH }} disabled={!config.enabled}>
+                      <InputLabel>{t('oidc.tenant')}</InputLabel>
+                      <Select
+                        value={rowTenant}
+                        label={t('oidc.tenant')}
+                        onChange={e => updateGroupMapping(index, 'tenant', e.target.value)}
+                      >
+                        {tenantMissing && <MenuItem value={rowTenant}>{rowTenant}</MenuItem>}
+                        {tenants.map(tenant => (
+                          <MenuItem key={tenant.id} value={tenant.id}>{tenant.name}</MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                    <FormControl size='small' sx={{ width: SCOPE_FIELD_WIDTH }} disabled={!config.enabled}>
+                      <InputLabel shrink>{t('oidc.vdc')}</InputLabel>
+                      <Select
+                        value={mapping.vdc || ''}
+                        label={t('oidc.vdc')}
+                        displayEmpty
+                        notched
+                        onChange={e => updateGroupMapping(index, 'vdc', e.target.value)}
+                      >
+                        <MenuItem value=''>{t('oidc.vdcWholeTenant')}</MenuItem>
+                        {vdcMissing && <MenuItem value={mapping.vdc}>{mapping.vdc}</MenuItem>}
+                        {tenantVdcs.map(vdc => (
+                          <MenuItem key={vdc.id} value={vdc.id}>{vdc.name}</MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  </>
+                )}
+                <FormControl size='small' sx={{ width: SCOPE_FIELD_WIDTH }} disabled={!config.enabled}>
+                  <InputLabel>{t('oidc.role')}</InputLabel>
+                  <Select
+                    value={mapping.role}
+                    label={t('oidc.role')}
+                    onChange={e => updateGroupMapping(index, 'role', e.target.value)}
+                  >
+                    {availableRoles.map(role => (
+                      <MenuItem key={role.id} value={role.id}>{role.is_system ? t(`rbac.roles.${role.id}`) : role.name}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+                <IconButton size='small' onClick={() => removeGroupMapping(index)} disabled={!config.enabled}>
+                  <i className='ri-delete-bin-line' />
+                </IconButton>
+              </Box>
+            )
+          })}
 
           <Button
             size='small'

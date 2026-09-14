@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 
 import { resolveOidcRole } from './oidc'
 import type { OidcConfig } from './oidc'
+import { normalizeGroupGrantMapping } from './groupMapping'
 
 function makeConfig(mapping: Record<string, string>, defaultRole = 'role_default'): OidcConfig {
   return {
@@ -20,6 +21,7 @@ function makeConfig(mapping: Record<string, string>, defaultRole = 'role_default
     autoProvision: true,
     defaultRole,
     groupRoleMapping: mapping,
+    groupGrants: normalizeGroupGrantMapping(mapping),
     showLocalLogin: true,
     forceSsoRedirect: false,
   }

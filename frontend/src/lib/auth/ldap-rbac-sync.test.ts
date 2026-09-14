@@ -73,3 +73,37 @@ describe('syncLdapRoleAssignment (issue #383)', () => {
     expect(db.rbacUserRole.deleteMany).not.toHaveBeenCalled()
   })
 })
+
+describe('syncLdapRoleAssignment — admin takeover from the Users dialog', () => {
+  // Same ownership rule as OIDC: the Users dialog wipes the `ldap_` row along
+  // with the rest, so its absence next to a standing assignment means an admin
+  // now owns the role and a matching LDAP group must not re-add a second row.
+  const makeDbWithRows = (providerRow: any, anyRow: any) =>
+    makeDb({
+      rbacUserRole: {
+        findFirst: vi.fn(async (args: any) =>
+          args?.where?.id?.startsWith ? providerRow : anyRow,
+        ),
+        deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+        create: vi.fn().mockResolvedValue({}),
+      },
+    })
+
+  it('leaves a manually assigned role alone when the LDAP row is gone', async () => {
+    const db = makeDbWithRows(null, { id: 'tenant_role_default_u1_abc123' })
+    await syncLdapRoleAssignment(db, params({ resolvedRoleId: 'role_db' }))
+
+    expect(db.rbacUserRole.deleteMany).not.toHaveBeenCalled()
+    expect(db.rbacUserRole.create).not.toHaveBeenCalled()
+  })
+
+  it('still replaces the LDAP row while the directory owns it', async () => {
+    const db = makeDbWithRows({ id: 'ldap_previous' }, { id: 'ldap_previous' })
+    await syncLdapRoleAssignment(db, params({ resolvedRoleId: 'role_db' }))
+
+    expect(db.rbacUserRole.deleteMany).toHaveBeenCalledWith({
+      where: { userId: 'u1', tenantId: 'default', id: { startsWith: 'ldap_' } },
+    })
+    expect(db.rbacUserRole.create.mock.calls[0][0].data.roleId).toBe('role_db')
+  })
+})

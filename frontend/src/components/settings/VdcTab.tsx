@@ -1846,7 +1846,7 @@ export default function VdcTab() {
                         <i className="ri-database-2-line" />
                         {t('vdc.vdcPoliciesTitle')}
                       </Typography>
-                      <Tooltip title={t('vdc.vdcPolicyAdd')} arrow>
+                      <Tooltip title={connPolicies.length === 0 ? t('vdc.storagePolicyNoneOnConnection') : vdcPolicies.length >= connPolicies.length ? t('vdc.storagePolicyAllAttached') : t('vdc.vdcPolicyAdd')} arrow>
                         <span>
                           <IconButton
                             size="small"
@@ -1860,6 +1860,12 @@ export default function VdcTab() {
                       </Tooltip>
                     </Stack>
                     <Typography variant="caption" color="text.secondary">{t('vdc.vdcPoliciesHint')}</Typography>
+                    {connPolicies.length === 0 && (
+                      <Alert severity="info" sx={{ mt: 1, py: 0 }}>{t('vdc.storagePolicyNoneOnConnection')}</Alert>
+                    )}
+                    {connPolicies.length > 0 && vdcPolicies.length >= connPolicies.length && (
+                      <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>{t('vdc.storagePolicyAllAttached')}</Typography>
+                    )}
 
                     <Stack spacing={1} sx={{ mt: 1 }}>
                       {vdcPolicies.map((sp, idx) => {
@@ -1915,6 +1921,25 @@ export default function VdcTab() {
                     </Stack>
                   </Box>
 
+                  {/* SDN Network (read-only, edit mode only) */}
+                  {editingVdc?.sdnZoneName && (
+                    <Box sx={{ mt: 2, p: 2, border: 1, borderColor: 'divider', borderRadius: 1 }}>
+                      <Typography variant="subtitle2" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <i className="ri-share-line" />
+                        {t('vdc.sdnZoneTitle')}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">{t('vdc.sdnZoneHint')}</Typography>
+                      <Box sx={{ mt: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Chip label={editingVdc.sdnZoneName} size="small" variant="outlined" />
+                        {Array.isArray(editingVdc.vnets) && editingVdc.vnets.length > 0 && (
+                          <Typography variant="caption" color="text.secondary">
+                            {editingVdc.vnets.length} VNet{editingVdc.vnets.length > 1 ? 's' : ''}
+                          </Typography>
+                        )}
+                      </Box>
+                    </Box>
+                  )}
+
                   {/* Shared Bridges */}
 
                   <Box sx={{ mt: 2, p: 2, border: 1, borderColor: 'divider', borderRadius: 1 }}>
@@ -1922,7 +1947,7 @@ export default function VdcTab() {
                       <i className="ri-router-line" />
                       {t('vdc.sharedBridgesTitle')}
                     </Typography>
-                    <Typography variant="caption" color="text.secondary">{t('vdc.sharedBridgesHint')}</Typography>
+                    <Typography variant="caption" color="text.secondary">{t('vdc.sharedBridgesHintRevised')}</Typography>
 
                     {providerBridges.length === 0 ? (
                       <Typography variant="body2" sx={{ mt: 1, fontStyle: 'italic' }}>

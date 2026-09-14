@@ -7794,6 +7794,11 @@
     "vdcPoliciesTitle": "Speicherrichtlinien",
     "vdcPoliciesHint": "Weisen Sie dieser vDC QoS-Speicherrichtlinien zu. Der Tenant kann Disks anschließend im Self-Service auf diesen Richtlinien platzieren.",
     "vdcPolicyAdd": "Richtlinie zuweisen",
+    "storagePolicyNoneOnConnection": "Für diese Verbindung ist noch keine Speicherrichtlinie definiert.",
+    "storagePolicyAllAttached": "Alle verfügbaren Speicherrichtlinien sind bereits zugewiesen.",
+    "sdnZoneTitle": "SDN-Netzwerk",
+    "sdnZoneHint": "Tenants erstellen ihre eigenen VNets in dieser dedizierten VXLAN-Zone über Mein vDC.",
+    "sharedBridgesHintRevised": "Optional: Host-Bridges für WAN- oder Management-Uplinks freigeben. Die eigenen Netzwerke des Tenants sind die VNets, die er in seiner SDN-Zone erstellt.",
     "vdcPolicyQuotaGb": "Kontingent (GB)",
     "vdcPolicyUnlimited": "Leer = unbegrenzt"
   },

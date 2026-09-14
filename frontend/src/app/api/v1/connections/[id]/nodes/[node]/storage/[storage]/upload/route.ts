@@ -66,7 +66,7 @@ async function handleChunk(
   try {
     const { id, node, storage } = await ctx.params
 
-    const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW, "connection", id)
+    const denied = await checkPermission(PERMISSIONS.STORAGE_UPLOAD, "connection", id)
     if (denied) return denied
 
     const storageBlock = await guardTenantStorageWrite(id, storage)
@@ -207,7 +207,7 @@ async function handleFinalize(
   try {
     const { id, node, storage } = await ctx.params
 
-    const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW, "connection", id)
+    const denied = await checkPermission(PERMISSIONS.STORAGE_UPLOAD, "connection", id)
     if (denied) return denied
 
     const storageBlock = await guardTenantStorageWrite(id, storage)

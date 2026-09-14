@@ -24,7 +24,7 @@ export async function DELETE(
   try {
     const { id, node, storage, volid } = await ctx.params
 
-    const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW, "connection", id)
+    const denied = await checkPermission(PERMISSIONS.STORAGE_DELETE, "connection", id)
     if (denied) return denied
 
     const storageBlock = await guardTenantStorageWrite(id, storage)

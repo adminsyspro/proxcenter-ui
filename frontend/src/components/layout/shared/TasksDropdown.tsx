@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useTranslations } from 'next-intl'
 
 import Link from 'next/link'
@@ -24,6 +24,7 @@ import {
 import { useRunningTasks } from '@/hooks/useRunningTasks'
 import { useRecentChanges } from '@/hooks/useChanges'
 import { useRollingUpdates } from '@/contexts/RollingUpdateContext'
+import { useBranding } from '@/contexts/BrandingContext'
 import { useTenant } from '@/contexts/TenantContext'
 import { useActiveDeployments } from '@/hooks/useNavbarNotifications'
 import { useRouter } from 'next/navigation'
@@ -119,36 +120,41 @@ const sendNotification = (title: string, options?: NotificationOptions) => {
 }
 
 // Gestion du titre de l'onglet
-const originalTitle = typeof document !== 'undefined' ? document.title : 'Pulse'
+const TAB_TITLE_MARKERS = ['⏳', '🔔']
+const TAB_TITLE_SEPARATOR = ' · '
 
-const updateTabTitle = (tasks: RunningTask[], hasNewActivity: boolean) => {
-  if (typeof document === 'undefined') return
+// A browser tab shows about twenty characters, and PVE keeps a vncshell task
+// open for as long as the shell console is: joining every running task turned
+// the tab into "vncshell • vncshell • vncshell". Name the job only when there
+// is exactly one of them, and count beyond that.
+const buildTabTitle = (tasks: RunningTask[], baseTitle: string, runningLabel: string): string => {
+  if (tasks.length === 0) return baseTitle
 
-  if (tasks.length > 0) {
-    // Construire la liste des tâches
-    const taskNames = tasks.map(t => {
-      if (t.entity) {
-        return `${t.typeLabel} (${t.entity})`
-      }
+  if (tasks.length === 1) {
+    const [task] = tasks
+    const label = task.entity ? `${task.typeLabel} (${task.entity})` : task.typeLabel
 
-
-return t.typeLabel
-    }).join(' • ')
-
-    if (hasNewActivity) {
-      document.title = `🔔 ${taskNames}`
-    } else {
-      document.title = `⏳ ${taskNames}`
-    }
-  } else {
-    document.title = originalTitle
+    return `⏳ ${label}${TAB_TITLE_SEPARATOR}${baseTitle}`
   }
+
+  return `⏳ ${tasks.length} ${runningLabel}${TAB_TITLE_SEPARATOR}${baseTitle}`
+}
+
+// A remount while jobs are running reads back our own decorated title, which
+// would then serve as the base and stack a marker on every mount.
+const undecorateTabTitle = (title: string): string => {
+  const separator = title.indexOf(TAB_TITLE_SEPARATOR)
+
+  if (separator === -1 || !TAB_TITLE_MARKERS.some(marker => title.startsWith(marker))) return title
+
+
+return title.slice(separator + TAB_TITLE_SEPARATOR.length)
 }
 
 // Faire clignoter le titre
 let blinkInterval: NodeJS.Timeout | null = null
 
-const startTitleBlink = (message: string) => {
+const startTitleBlink = (message: string, baseTitle: string) => {
   if (typeof document === 'undefined') return
 
   // Arrêter le clignotement précédent
@@ -159,8 +165,12 @@ const startTitleBlink = (message: string) => {
   let isOriginal = false
   const originalTitleNow = document.title
 
+  // Same shape as buildTabTitle, marker then separator then base, so that a
+  // remount during the 10 s blink can strip it back to the base title.
+  const alert = `🔔 ${message}${TAB_TITLE_SEPARATOR}${baseTitle}`
+
   blinkInterval = setInterval(() => {
-    document.title = isOriginal ? originalTitleNow : `🔔 ${message}`
+    document.title = isOriginal ? originalTitleNow : alert
     isOriginal = !isOriginal
   }, 1000)
 
@@ -187,6 +197,20 @@ export default function TasksDropdown() {
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null)
   const [notificationsEnabled, setNotificationsEnabled] = useState(false)
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | 'unsupported'>('default')
+
+  // The base title is read at mount, not at module load. The white-label
+  // browser title is written to document.title by BrandingContext once its
+  // fetch resolves, so a snapshot taken at import time restored "PROXCENTER"
+  // when the last job ended and wiped the tenant's own title. `browserTitle`
+  // is the live value, and the mount-time read only covers the instances
+  // that have no white-label title of their own.
+  const { branding } = useBranding()
+  const fallbackTitleRef = useRef<string>(
+    typeof document !== 'undefined' ? undecorateTabTitle(document.title) : 'ProxCenter'
+  )
+
+  const baseTitle = branding.browserTitle?.trim() || fallbackTitleRef.current
+  const runningLabel = t('jobs.running').toLowerCase()
 
   // Référence pour suivre les tâches connues
   const knownTasksRef = useRef<Set<string>>(new Set())
@@ -238,7 +262,7 @@ export default function TasksDropdown() {
           })
 
           // Faire clignoter le titre de l'onglet
-          startTitleBlink(t('tasks.notifications.newTask', { type: task.typeLabel }))
+          startTitleBlink(t('tasks.notifications.newTask', { type: task.typeLabel }), baseTitle)
         }
       }
 
@@ -252,7 +276,7 @@ export default function TasksDropdown() {
           })
 
           // Faire clignoter le titre
-          startTitleBlink(t('tasks.notifications.completed', { type: prevTask.typeLabel }))
+          startTitleBlink(t('tasks.notifications.completed', { type: prevTask.typeLabel }), baseTitle)
         }
       }
     }
@@ -265,7 +289,10 @@ export default function TasksDropdown() {
 
     setTasks(newTasks)
     setLastUpdate(new Date())
-  }, [tasksResponse?.data, notificationsEnabled, t])
+    // baseTitle only feeds startTitleBlink here. Re-running on a branding
+    // change is harmless: knownTasksRef already holds the same ids, so no
+    // task reads as new or finished a second time.
+  }, [tasksResponse?.data, notificationsEnabled, t, baseTitle])
 
   // Vérifier la permission au chargement
   useEffect(() => {
@@ -288,31 +315,37 @@ export default function TasksDropdown() {
     }
   }, [notificationsEnabled])
 
+  const applyTabTitle = useCallback(() => {
+    if (typeof document === 'undefined') return
+
+    document.title = buildTabTitle(tasks, baseTitle, runningLabel)
+  }, [tasks, baseTitle, runningLabel])
+
   // Mettre à jour le titre quand les tâches changent
   useEffect(() => {
-    updateTabTitle(tasks, false)
+    applyTabTitle()
 
     return () => {
       // Restaurer le titre original quand le composant est démonté
       if (typeof document !== 'undefined') {
-        document.title = originalTitle
+        document.title = baseTitle
       }
 
       stopTitleBlink()
     }
-  }, [tasks])
+  }, [applyTabTitle, baseTitle])
 
   // Arrêter le clignotement quand la fenêtre est focus
   useEffect(() => {
     const handleFocus = () => {
       stopTitleBlink()
-      updateTabTitle(tasks, false)
+      applyTabTitle()
     }
 
     window.addEventListener('focus', handleFocus)
 
 return () => window.removeEventListener('focus', handleFocus)
-  }, [tasks])
+  }, [applyTabTitle])
 
   // Mettre à jour les durées toutes les secondes quand le menu est ouvert
   useEffect(() => {
@@ -352,7 +385,7 @@ return () => window.removeEventListener('focus', handleFocus)
 
     // Arrêter le clignotement quand on ouvre le menu
     stopTitleBlink()
-    updateTabTitle(tasks, false)
+    applyTabTitle()
   }
 
   const handleClose = () => {

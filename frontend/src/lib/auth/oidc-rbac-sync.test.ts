@@ -183,3 +183,56 @@ describe('syncOidcRoleAssignment — preserve vs revoke (issue #442 regression)'
     expect(created.scopeType).toBe('inherit')
   })
 })
+
+describe('syncOidcRoleAssignment — admin takeover from the Users dialog', () => {
+  // The Users dialog (PATCH /api/v1/users/[id]) and the tenant assignment
+  // routes delete EVERY row of the user, the `oidc_` one included, and write
+  // back a `tenant_role_default_…` / `assign_` row. The provider row being
+  // absent while another assignment exists is therefore the signature of an
+  // admin having taken ownership of that user's role, and the login re-sync
+  // must not undo it by seeding its own row next to theirs.
+  const makeDbWithRows = (providerRow: any, anyRow: any) =>
+    makeDb({
+      rbacUserRole: {
+        findFirst: vi.fn(async (args: any) =>
+          args?.where?.id?.startsWith ? providerRow : anyRow,
+        ),
+        deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+        create: vi.fn().mockResolvedValue({}),
+      },
+    })
+
+  it('leaves a manually assigned role alone when the provider row is gone', async () => {
+    const db = makeDbWithRows(null, { id: 'tenant_role_default_u1_abc123' })
+    await syncOidcRoleAssignment(db, baseParams({ groups: ['unmapped'] }))
+
+    expect(db.rbacUserRole.deleteMany).not.toHaveBeenCalled()
+    expect(db.rbacUserRole.create).not.toHaveBeenCalled()
+  })
+
+  it('leaves a manually assigned role alone even when the user IS in a mapped group', async () => {
+    const db = makeDbWithRows(null, { id: 'assign_u1_abc123' })
+    await syncOidcRoleAssignment(db, baseParams({ groups: ['db'] }))
+
+    expect(db.rbacUserRole.deleteMany).not.toHaveBeenCalled()
+    expect(db.rbacUserRole.create).not.toHaveBeenCalled()
+  })
+
+  it('still replaces the provider row while the IdP owns it (issue #442 revoke)', async () => {
+    const db = makeDbWithRows({ id: 'oidc_previous' }, { id: 'oidc_previous' })
+    await syncOidcRoleAssignment(db, baseParams({ groups: ['unmapped'] }))
+
+    expect(db.rbacUserRole.deleteMany).toHaveBeenCalledWith({
+      where: { userId: 'u1', tenantId: 'default', id: { startsWith: 'oidc_' } },
+    })
+    expect(db.rbacUserRole.create.mock.calls[0][0].data.roleId).toBe('role_viewer')
+  })
+
+  it('seeds the provider row for a first login, when the user holds nothing at all', async () => {
+    const db = makeDbWithRows(null, null)
+    await syncOidcRoleAssignment(db, baseParams())
+
+    expect(db.rbacUserRole.deleteMany).toHaveBeenCalled()
+    expect(db.rbacUserRole.create.mock.calls[0][0].data.roleId).toBe('role_db')
+  })
+})

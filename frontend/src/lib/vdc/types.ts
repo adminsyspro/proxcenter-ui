@@ -162,6 +162,7 @@ export interface CreateVdcInput {
   /** Single shared storage. Validated against the connection's storage
    *  list (must be `shared=true` and advertise `content=images`). */
   primaryStorage: string
+  sdnZoneName?: string
   quota?: Partial<VdcQuota>
   sharedBridges?: Array<{ bridge: string; label?: string }>
   vlanPools?: Array<{ bridge: string; rangeStart: number; rangeEnd: number }>

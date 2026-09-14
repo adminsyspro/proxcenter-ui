@@ -7798,6 +7798,9 @@
     "storagePolicyAllAttached": "Alle verfügbaren Speicherrichtlinien sind bereits zugewiesen.",
     "sdnZoneTitle": "SDN-Netzwerk",
     "sdnZoneHint": "Tenants erstellen ihre eigenen VNets in dieser dedizierten VXLAN-Zone über Mein vDC.",
+    "sdnZoneIdLabel": "SDN-Zonen-ID",
+    "sdnZoneIdHelper": "Optional. Max. 8 Zeichen, Kleinbuchstaben, beginnt mit einem Buchstaben. Automatisch generiert, wenn leer.",
+    "sdnZoneIdInvalid": "Muss 1-8 alphanumerische Kleinbuchstaben enthalten und mit einem Buchstaben beginnen.",
     "sharedBridgesHintRevised": "Optional: Host-Bridges für WAN- oder Management-Uplinks freigeben. Die eigenen Netzwerke des Tenants sind die VNets, die er in seiner SDN-Zone erstellt.",
     "vdcPolicyQuotaGb": "Kontingent (GB)",
     "vdcPolicyUnlimited": "Leer = unbegrenzt"

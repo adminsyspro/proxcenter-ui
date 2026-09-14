@@ -10,7 +10,7 @@ import { prisma } from '@/lib/db/prisma'
 import { decryptSecret } from '@/lib/crypto/secret'
 import { DEFAULT_TENANT_ID } from '@/lib/tenant'
 
-import { generateZoneName, createZone, deleteZone, deleteVnetPve, applySdn } from './sdn'
+import { generateZoneName, isZoneNameTaken, createZone, deleteZone, deleteVnetPve, applySdn } from './sdn'
 import { clearVdcScopeCache } from './scope'
 import { validateVlanPoolsInput, assertNoCrossVdcOverlap, assertPoolShrinkSafe, type VlanPoolInput } from './vlan'
 import { getVdcStorageUsedMb } from './quota'
@@ -395,7 +395,19 @@ export async function createVdc(input: CreateVdcInput, createdBy: string | null)
   }
 
   // 5. Create SDN zone on PVE
-  const sdnZoneName = await generateZoneName(input.connectionId, { id, slug: input.slug })
+  let sdnZoneName: string
+  if (input.sdnZoneName?.trim()) {
+    const custom = input.sdnZoneName.trim().toLowerCase()
+    if (!/^[a-z][a-z0-9]{0,7}$/.test(custom)) {
+      throw new Error('SDN zone ID must be 1-8 lowercase alphanumeric characters, starting with a letter.')
+    }
+    if (await isZoneNameTaken(input.connectionId, custom)) {
+      throw new Error(`SDN zone ID "${custom}" is already in use on this connection.`)
+    }
+    sdnZoneName = custom
+  } else {
+    sdnZoneName = await generateZoneName(input.connectionId, { id, slug: input.slug })
+  }
   try {
     await createZone(conn, sdnZoneName)
   } catch (err: any) {

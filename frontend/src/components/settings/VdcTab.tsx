@@ -68,6 +68,7 @@ interface VdcFormState {
   unlimitedSnapshots: boolean
   unlimitedBackups: boolean
   unlimitedVnets: boolean
+  sdnZoneName: string
 }
 
 const emptyForm: VdcFormState = {
@@ -92,6 +93,7 @@ const emptyForm: VdcFormState = {
   unlimitedSnapshots: true,
   unlimitedBackups: true,
   unlimitedVnets: true,
+  sdnZoneName: '',
 }
 
 // Translates an ISO timestamp into a localized "3m ago" / "2h ago" / "5d ago"
@@ -657,6 +659,7 @@ export default function VdcTab() {
           name: resolvedName,
           slug: form.slug,
           description: form.description || undefined,
+          sdnZoneName: form.sdnZoneName || undefined,
           nodes: nodesPayload,
           primaryStorage: form.primaryStorage,
           sharedBridges: sharedBridgesPayload,
@@ -1564,6 +1567,24 @@ export default function VdcTab() {
               />
             )}
           />
+
+          {!editingVdc && form.connectionId && (
+            <TextField
+              size="small"
+              fullWidth
+              label={t('vdc.sdnZoneIdLabel')}
+              value={form.sdnZoneName}
+              onChange={(e) => setForm((f) => ({ ...f, sdnZoneName: e.target.value.toLowerCase().replace(/[^a-z0-9]/g, '') }))}
+              placeholder={t('vdc.sdnZoneIdHelper')}
+              helperText={
+                form.sdnZoneName && !/^[a-z][a-z0-9]{0,7}$/.test(form.sdnZoneName)
+                  ? t('vdc.sdnZoneIdInvalid')
+                  : t('vdc.sdnZoneIdHelper')
+              }
+              error={!!form.sdnZoneName && !/^[a-z][a-z0-9]{0,7}$/.test(form.sdnZoneName)}
+              slotProps={{ htmlInput: { maxLength: 8 } }}
+            />
+          )}
 
           {/* Resources section (when connection selected) */}
           {form.connectionId && (

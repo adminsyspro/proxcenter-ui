@@ -26,7 +26,7 @@ const ZONE_HASH_LEN = 2        // collision suffix length (hex)
 
 interface ZoneNameInput { id: string; slug: string }
 
-async function isZoneNameTaken(connectionId: string, sdnZoneName: string): Promise<boolean> {
+export async function isZoneNameTaken(connectionId: string, sdnZoneName: string): Promise<boolean> {
   const row = await prisma.vdc.findFirst({
     where: { connectionId, sdnZoneName },
     select: { id: true },

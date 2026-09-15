@@ -40,6 +40,7 @@ import { useTranslations } from 'next-intl'
 
 import StoragePoliciesSection from './StoragePoliciesSection'
 import VdcPbsBindingsSection from './VdcPbsBindingsSection'
+import TenantNetworksSection from './TenantNetworksSection'
 import TransportModeDiagram, { TRANSPORT_MODE_KEYS } from './TransportModeDiagram'
 import QuotaDonut from '@/components/mydc/QuotaDonut'
 import { NodeIcon } from '@/app/(dashboard)/infrastructure/inventory/components/TreeIcons'
@@ -330,7 +331,7 @@ export default function VdcTab() {
   const [dialogTab, setDialogTab] = useState(0)
   // Sub-tabs: the vDC list and the connection-level storage policies are
   // separate concerns; showing both stacked made the page too long.
-  const [activeSection, setActiveSection] = useState<'vdcs' | 'policies'>('vdcs')
+  const [activeSection, setActiveSection] = useState<'vdcs' | 'policies' | 'networks'>('vdcs')
   const [editingVdc, setEditingVdc] = useState<any>(null)
   const [saving, setSaving] = useState(false)
 
@@ -396,6 +397,24 @@ export default function VdcTab() {
   const [transport, setTransport] = useState<TransportForm>(emptyTransport)
   const [nodeAddressInfo, setNodeAddressInfo] = useState<{ nodes: NodeAddressEntry[]; devices: string[] }>({ nodes: [], devices: [] })
   const [zoneStatus, setZoneStatus] = useState<ZoneStatus | null>(null)
+  // Stretched tenant networks (#901) this vDC carries, read-only here: the
+  // memberships are managed from the Tenant networks tab.
+  const [vdcNetworks, setVdcNetworks] = useState<Array<{ id: string; name: string; vni: number; pveName: string }>>([])
+  useEffect(() => {
+    if (!editingVdc?.id || !editingVdc?.tenantId) { setVdcNetworks([]); return }
+    let cancelled = false
+    fetch(`/api/v1/admin/tenant-networks?tenantId=${encodeURIComponent(editingVdc.tenantId)}`)
+      .then(r => (r.ok ? r.json() : { data: [] }))
+      .then(j => {
+        if (cancelled) return
+        const list = Array.isArray(j?.data) ? j.data : []
+        setVdcNetworks(list
+          .filter((n: any) => Array.isArray(n.members) && n.members.some((m: any) => m.vdcId === editingVdc.id))
+          .map((n: any) => ({ id: n.id, name: n.name, vni: n.vni, pveName: n.members.find((m: any) => m.vdcId === editingVdc.id)?.pveName ?? n.pveName })))
+      })
+      .catch(() => { if (!cancelled) setVdcNetworks([]) })
+    return () => { cancelled = true }
+  }, [editingVdc?.id, editingVdc?.tenantId])
   const [zoneLoading, setZoneLoading] = useState(false)
   const [zoneMessage, setZoneMessage] = useState<{ severity: 'success' | 'info' | 'error'; text: string } | null>(null)
   const [provisioning, setProvisioning] = useState(false)
@@ -1921,9 +1940,19 @@ export default function VdcTab() {
             </Box>
           }
         />
+        <Tab
+          value="networks"
+          label={
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <i className="ri-git-branch-line" style={{ fontSize: 18 }} />
+              {t('vdc.tenantNetworksTitle')}
+            </Box>
+          }
+        />
       </Tabs>
 
       {activeSection === 'policies' && <StoragePoliciesSection connections={connections} />}
+      {activeSection === 'networks' && <TenantNetworksSection tenants={tenants} vdcs={vdcs} connections={connections} />}
 
       {activeSection === 'vdcs' && (
       <Card>
@@ -3136,6 +3165,26 @@ export default function VdcTab() {
                       })}
                     </Stack>
                   </Box>
+
+                  {/* Stretched tenant networks (#901), read-only: same card as the sections above. */}
+                  {editingVdc && (
+                    <Box sx={{ mt: 2, p: 2, border: 1, borderColor: 'divider', borderRadius: 1 }}>
+                      <Typography variant="subtitle2" sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                        <i className="ri-git-branch-line" />
+                        {t('vdc.tenantNetworksTitle')}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>{t('vdc.tenantNetworkOnVdcHint')}</Typography>
+                      {vdcNetworks.length === 0 ? (
+                        <Typography variant="caption" sx={{ fontStyle: 'italic' }}>{t('vdc.tenantNetworkOnVdcNone')}</Typography>
+                      ) : (
+                        <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap>
+                          {vdcNetworks.map((n) => (
+                            <Chip key={n.id} size="small" variant="outlined" icon={<i className="ri-git-branch-line" style={{ fontSize: 14 }} />} label={`${n.name} · VNI ${n.vni} · ${n.pveName}`} />
+                          ))}
+                        </Stack>
+                      )}
+                    </Box>
+                  )}
               </>
             )}
           </TabPanel>

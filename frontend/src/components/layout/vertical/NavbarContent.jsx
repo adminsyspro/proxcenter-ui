@@ -4,7 +4,9 @@ import { useEffect, useState, useMemo } from 'react'
 
 import { useRouter } from 'next/navigation'
 
-import { useSession, signOut } from 'next-auth/react'
+import { useSession } from 'next-auth/react'
+
+import { federatedSignOut } from '@/lib/auth/federatedSignOut'
 import { useBranding } from '@/contexts/BrandingContext'
 import {
   Avatar,
@@ -470,7 +472,7 @@ return () => window.removeEventListener('keydown', onKeyDown)
 
   const handleLogout = async () => {
     setUserAnchor(null)
-    await signOut({ callbackUrl: '/login' })
+    await federatedSignOut('/login')
   }
 
   // PXCore (orchestrator) status - derived from orchestrator-native components only

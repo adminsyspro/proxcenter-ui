@@ -6,7 +6,9 @@ import { useRef, useState } from 'react'
 // Next Imports
 import { useRouter } from 'next/navigation'
 
-import { useSession, signOut } from 'next-auth/react'
+import { useSession } from 'next-auth/react'
+
+import { federatedSignOut } from '@/lib/auth/federatedSignOut'
 import { useTranslations } from 'next-intl'
 
 // MUI Imports
@@ -93,7 +95,7 @@ const UserDropdown = () => {
 
   const handleUserLogout = async () => {
     setOpen(false)
-    await signOut({ callbackUrl: '/login' })
+    await federatedSignOut('/login')
   }
 
   return (

@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 import { syncOidcRoleAssignment, oidcRoleId } from './oidc'
 import type { OidcConfig } from './oidc'
+import { normalizeGroupGrantMapping } from './groupMapping'
 
 function makeConfig(mapping: Record<string, string>, defaultRole = 'role_viewer'): OidcConfig {
   return {
@@ -20,6 +21,7 @@ function makeConfig(mapping: Record<string, string>, defaultRole = 'role_viewer'
     autoProvision: true,
     defaultRole,
     groupRoleMapping: mapping,
+    groupGrants: normalizeGroupGrantMapping(mapping),
     showLocalLogin: true,
     forceSsoRedirect: false,
   }
@@ -30,12 +32,21 @@ function makeDb(overrides: Partial<Record<string, any>> = {}) {
     rbacRole: { findUnique: vi.fn().mockResolvedValue({ id: 'role_db' }) },
     rbacUserRole: {
       findFirst: vi.fn().mockResolvedValue(null),
+      // Rows this provider already owns, all tenants confounded.
+      findMany: vi.fn().mockResolvedValue([]),
       deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
       create: vi.fn().mockResolvedValue({}),
     },
-    $transaction: vi.fn().mockResolvedValue([]),
+    vdc: { findMany: vi.fn().mockResolvedValue([]) },
+    // Resolve the ops array so the deleteMany/create mocks are actually called.
+    $transaction: vi.fn(async (ops: any[]) => ops),
     ...overrides,
   } as any
+}
+
+/** Tenant membership side effects, asserted on in the multi-tenant suites. */
+function makeMembership() {
+  return { add: vi.fn().mockResolvedValue(undefined), remove: vi.fn().mockResolvedValue(undefined) }
 }
 
 const baseParams = (extra: any = {}) => ({
@@ -46,6 +57,7 @@ const baseParams = (extra: any = {}) => ({
   newId: () => 'oidc_fixed',
   // The IdP sent an actual groups array (authoritative) unless a test overrides it.
   groupsClaimIsArray: true,
+  membership: makeMembership(),
   ...extra,
 })
 
@@ -115,6 +127,7 @@ describe('syncOidcRoleAssignment — preserve vs revoke (issue #442 regression)'
     makeDb({
       rbacUserRole: {
         findFirst: vi.fn().mockResolvedValue({ id: 'manual_row' }),
+        findMany: vi.fn().mockResolvedValue([]),
         deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
         create: vi.fn().mockResolvedValue({}),
       },
@@ -181,5 +194,63 @@ describe('syncOidcRoleAssignment — preserve vs revoke (issue #442 regression)'
     const created = db.rbacUserRole.create.mock.calls[0][0].data
     expect(created.roleId).toBe('role_viewer')
     expect(created.scopeType).toBe('inherit')
+  })
+})
+
+describe('syncOidcRoleAssignment — admin takeover from the Users dialog', () => {
+  // The Users dialog (PATCH /api/v1/users/[id]) and the tenant assignment
+  // routes delete EVERY row of the user, the `oidc_` one included, and write
+  // back a `tenant_role_default_…` / `assign_` row. The provider row being
+  // absent while another assignment exists is therefore the signature of an
+  // admin having taken ownership of that user's role, and the login re-sync
+  // must not undo it by seeding its own row next to theirs.
+  const makeDbWithRows = (providerRow: any, anyRow: any) =>
+    makeDb({
+      rbacUserRole: {
+        findFirst: vi.fn(async (args: any) =>
+          args?.where?.id?.startsWith ? providerRow : anyRow,
+        ),
+        // Provider-row presence is now read through findMany (the sync owns a
+        // set of rows across tenants, not a single one).
+        findMany: vi.fn().mockResolvedValue(
+          providerRow ? [{ id: providerRow.id, tenantId: 'default' }] : [],
+        ),
+        deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+        create: vi.fn().mockResolvedValue({}),
+      },
+    })
+
+  it('leaves a manually assigned role alone when the provider row is gone', async () => {
+    const db = makeDbWithRows(null, { id: 'tenant_role_default_u1_abc123' })
+    await syncOidcRoleAssignment(db, baseParams({ groups: ['unmapped'] }))
+
+    expect(db.rbacUserRole.deleteMany).not.toHaveBeenCalled()
+    expect(db.rbacUserRole.create).not.toHaveBeenCalled()
+  })
+
+  it('leaves a manually assigned role alone even when the user IS in a mapped group', async () => {
+    const db = makeDbWithRows(null, { id: 'assign_u1_abc123' })
+    await syncOidcRoleAssignment(db, baseParams({ groups: ['db'] }))
+
+    expect(db.rbacUserRole.deleteMany).not.toHaveBeenCalled()
+    expect(db.rbacUserRole.create).not.toHaveBeenCalled()
+  })
+
+  it('still replaces the provider row while the IdP owns it (issue #442 revoke)', async () => {
+    const db = makeDbWithRows({ id: 'oidc_previous' }, { id: 'oidc_previous' })
+    await syncOidcRoleAssignment(db, baseParams({ groups: ['unmapped'] }))
+
+    expect(db.rbacUserRole.deleteMany).toHaveBeenCalledWith({
+      where: { userId: 'u1', tenantId: 'default', id: { startsWith: 'oidc_' } },
+    })
+    expect(db.rbacUserRole.create.mock.calls[0][0].data.roleId).toBe('role_viewer')
+  })
+
+  it('seeds the provider row for a first login, when the user holds nothing at all', async () => {
+    const db = makeDbWithRows(null, null)
+    await syncOidcRoleAssignment(db, baseParams())
+
+    expect(db.rbacUserRole.deleteMany).toHaveBeenCalled()
+    expect(db.rbacUserRole.create.mock.calls[0][0].data.roleId).toBe('role_db')
   })
 })

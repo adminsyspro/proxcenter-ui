@@ -41,6 +41,7 @@ import { useTranslations } from 'next-intl'
 import StoragePoliciesSection from './StoragePoliciesSection'
 import VdcPbsBindingsSection from './VdcPbsBindingsSection'
 import TenantNetworksSection from './TenantNetworksSection'
+import VdcHelpSection from './VdcHelpSection'
 import TransportModeDiagram, { TRANSPORT_MODE_KEYS } from './TransportModeDiagram'
 import QuotaDonut from '@/components/mydc/QuotaDonut'
 import { NodeIcon } from '@/app/(dashboard)/infrastructure/inventory/components/TreeIcons'
@@ -331,7 +332,7 @@ export default function VdcTab() {
   const [dialogTab, setDialogTab] = useState(0)
   // Sub-tabs: the vDC list and the connection-level storage policies are
   // separate concerns; showing both stacked made the page too long.
-  const [activeSection, setActiveSection] = useState<'vdcs' | 'policies' | 'networks'>('vdcs')
+  const [activeSection, setActiveSection] = useState<'vdcs' | 'policies' | 'networks' | 'help'>('vdcs')
   const [editingVdc, setEditingVdc] = useState<any>(null)
   const [saving, setSaving] = useState(false)
 
@@ -1949,10 +1950,20 @@ export default function VdcTab() {
             </Box>
           }
         />
+        <Tab
+          value="help"
+          label={
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <i className="ri-question-line" style={{ fontSize: 18 }} />
+              {t('vdc.helpTitle')}
+            </Box>
+          }
+        />
       </Tabs>
 
       {activeSection === 'policies' && <StoragePoliciesSection connections={connections} />}
       {activeSection === 'networks' && <TenantNetworksSection tenants={tenants} vdcs={vdcs} connections={connections} />}
+      {activeSection === 'help' && <VdcHelpSection />}
 
       {activeSection === 'vdcs' && (
       <Card>

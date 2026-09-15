@@ -39,6 +39,8 @@ import {
 
 import { useTranslations } from 'next-intl'
 
+import { NodeIcon } from '@/app/(dashboard)/infrastructure/inventory/components/TreeIcons'
+
 interface TenantNetworkMember {
   vdcId: string
   vdcName: string
@@ -76,6 +78,17 @@ interface ZoneSyncResult {
   zoneName: string
   changed: boolean
   error?: string
+}
+
+interface ReachabilityResult {
+  vdcId: string
+  vdcName: string
+  connectionId: string
+  connectionName: string
+  node: string
+  peer: string
+  state: 'reachable' | 'unreachable' | 'unavailable'
+  message?: string
 }
 
 interface Props {
@@ -128,6 +141,7 @@ export default function TenantNetworksSection({ tenants, vdcs, connections }: Pr
 
   const [memberMenu, setMemberMenu] = useState<{ anchor: HTMLElement; network: TenantNetworkDto } | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
+  const [reach, setReach] = useState<{ network: TenantNetworkDto; loading: boolean; results: ReachabilityResult[]; error: string } | null>(null)
   const [confirm, setConfirm] = useState<
     | { kind: 'remove-member'; network: TenantNetworkDto; member: TenantNetworkMember }
     | { kind: 'delete'; network: TenantNetworkDto }
@@ -285,6 +299,17 @@ export default function TenantNetworksSection({ tenants, vdcs, connections }: Pr
     }
   }
 
+  /** Every node of each member pings the other members' peers over SSH; results in a dialog. */
+  const testReachability = async (network: TenantNetworkDto) => {
+    setReach({ network, loading: true, results: [], error: '' })
+    try {
+      const body = await request(`/api/v1/admin/tenant-networks/${encodeURIComponent(network.id)}/reachability`, { method: 'POST' })
+      setReach({ network, loading: false, results: body.data?.results ?? [], error: '' })
+    } catch (e: any) {
+      setReach({ network, loading: false, results: [], error: e?.message || String(e) })
+    }
+  }
+
   const remove = async (network: TenantNetworkDto) => {
     setConfirm(null)
     setBusyId(network.id)
@@ -407,6 +432,13 @@ export default function TenantNetworksSection({ tenants, vdcs, connections }: Pr
                               <CircularProgress size={18} sx={{ mr: 1, verticalAlign: 'middle' }} />
                             ) : (
                               <Stack direction="row" spacing={0.5} justifyContent="flex-end">
+                                <Tooltip title={n.members.length < 2 ? t('vdc.tenantNetworkReachabilityNeedsTwo') : t('vdc.tenantNetworkReachability')} arrow>
+                                  <span>
+                                    <IconButton size="small" aria-label={t('vdc.tenantNetworkReachability')} disabled={n.members.length < 2} onClick={() => void testReachability(n)}>
+                                      <i className="ri-pulse-line" />
+                                    </IconButton>
+                                  </span>
+                                </Tooltip>
                                 <Tooltip title={t('vdc.tenantNetworkSync')} arrow>
                                   <span>
                                     <IconButton size="small" aria-label={t('vdc.tenantNetworkSync')} disabled={n.members.length === 0} onClick={() => void sync(n)}>
@@ -550,6 +582,90 @@ export default function TenantNetworksSection({ tenants, vdcs, connections }: Pr
             {editing ? t('common.save') : t('common.create')}
           </Button>
         </DialogActions>
+      </Dialog>
+
+      {/* Reachability results: one line per member node, one chip per peer of the other members. */}
+      <Dialog open={!!reach} onClose={() => !reach?.loading && setReach(null)} maxWidth="md" fullWidth>
+        {reach && (
+          <>
+            <DialogTitle>{t('vdc.tenantNetworkReachabilityTitle', { name: reach.network.name })}</DialogTitle>
+            <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+              <Typography variant="caption" color="text.secondary">{t('vdc.tenantNetworkReachabilityHint')}</Typography>
+              {reach.loading && <LinearProgress />}
+              {reach.error && <Alert severity="error">{reach.error}</Alert>}
+              {!reach.loading && !reach.error && reach.results.length === 0 && (
+                <Typography variant="body2" sx={{ fontStyle: 'italic' }}>{t('vdc.tenantNetworkReachabilityNoResult')}</Typography>
+              )}
+              {!reach.loading && reach.results.length > 0 && (() => {
+                const ok = reach.results.filter(r => r.state === 'reachable').length
+                const rows = new Map<string, { connectionName: string; vdcName: string; node: string; peers: ReachabilityResult[] }>()
+                for (const r of reach.results) {
+                  const key = `${r.vdcId}|${r.node}`
+                  const row = rows.get(key) ?? { connectionName: r.connectionName, vdcName: r.vdcName, node: r.node, peers: [] }
+                  row.peers.push(r)
+                  rows.set(key, row)
+                }
+                return (
+                  <>
+                    <Chip
+                      size="small"
+                      color={ok === reach.results.length ? 'success' : ok === 0 ? 'error' : 'warning'}
+                      label={t('vdc.tenantNetworkReachabilitySummary', { ok, total: reach.results.length })}
+                      sx={{ alignSelf: 'flex-start' }}
+                    />
+                    <TableContainer>
+                      <Table size="small">
+                        <TableHead>
+                          <TableRow>
+                            <TableCell>{t('vdc.connection')}</TableCell>
+                            <TableCell>{t('vdc.tenantNetworkReachabilityNode')}</TableCell>
+                            <TableCell>{t('vdc.tenantNetworkReachabilityPeers')}</TableCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {[...rows.values()].map((row) => (
+                            <TableRow key={`${row.vdcName}|${row.node}`} sx={{ '&:last-child td': { border: 0 } }}>
+                              <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                                <Stack direction="row" spacing={0.75} alignItems="center">
+                                  <i className="ri-server-line" style={{ opacity: 0.7 }} />
+                                  <span>{row.connectionName} · {row.vdcName}</span>
+                                </Stack>
+                              </TableCell>
+                              <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                                {/* A node answered SSH when at least one check ran; otherwise it stayed out of reach. */}
+                                <Stack direction="row" spacing={0.75} alignItems="center">
+                                  <NodeIcon status={row.peers.some(r => r.state !== 'unavailable') ? 'online' : 'unknown'} size={16} />
+                                  <span>{row.node}</span>
+                                </Stack>
+                              </TableCell>
+                              <TableCell>
+                                <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap>
+                                  {row.peers.map((r) => (
+                                    <Tooltip key={r.peer} title={r.message ?? t(`vdc.tenantNetwork${r.state === 'reachable' ? 'Reachable' : r.state === 'unreachable' ? 'Unreachable' : 'Unavailable'}`)} arrow>
+                                      <Chip
+                                        size="small"
+                                        variant={r.state === 'unavailable' ? 'outlined' : 'filled'}
+                                        color={r.state === 'reachable' ? 'success' : r.state === 'unreachable' ? 'error' : 'default'}
+                                        label={r.peer}
+                                      />
+                                    </Tooltip>
+                                  ))}
+                                </Stack>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </TableContainer>
+                  </>
+                )
+              })()}
+            </DialogContent>
+            <DialogActions>
+              <Button onClick={() => setReach(null)} disabled={reach.loading}>{t('common.close')}</Button>
+            </DialogActions>
+          </>
+        )}
       </Dialog>
 
       {/* Confirmations */}

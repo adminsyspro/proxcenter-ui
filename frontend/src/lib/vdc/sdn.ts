@@ -111,7 +111,7 @@ export async function generatePveVnetId(vdcId: string, displayName: string): Pro
 // VNI allocation (cluster-wide per PVE connection)
 // ---------------------------------------------------------------------------
 
-const VNI_BASE = 10000
+export const VNI_BASE = 10000
 
 export async function allocateVni(vdcId: string, conn?: any): Promise<number> {
   // VXLAN VNIs must be unique across the entire PVE cluster (transport is one

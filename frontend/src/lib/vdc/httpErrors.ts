@@ -42,3 +42,19 @@ export function mapCreateVdcError(e: any): { status: number; message: string } {
 
   return { status: 500, message: msg }
 }
+
+// Tenant networks (#901): the module prefixes every business message with
+// "Tenant network:"; a lost race on (tenant_id, name) or on the VNI lands as
+// P2002 with no message.
+export function mapTenantNetworkError(e: any): { status: number; message: string } {
+  const msg = e?.message || String(e)
+  if (e?.code === 'P2002') {
+    return { status: 409, message: 'A tenant network with this name or VNI already exists.' }
+  }
+  if (msg.startsWith('Tenant network: not found')) return { status: 404, message: msg }
+  if (msg.startsWith('Tenant network:') && (msg.includes('already') || msg.includes('is still carried') || msg.includes('cannot change while'))) {
+    return { status: 409, message: msg }
+  }
+  if (msg.startsWith('Tenant network:') || msg.startsWith('Tenant not found')) return { status: 400, message: msg }
+  return { status: 500, message: msg }
+}

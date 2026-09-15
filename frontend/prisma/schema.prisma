@@ -537,6 +537,7 @@ model Tenant {
   members   UserTenant[]
   vdcs      Vdc[]
   apiTokens ApiToken[]
+  tenantNetworks TenantNetwork[]
 
   @@index([slug])
   @@map("tenants")
@@ -770,6 +771,7 @@ model Vdc {
   ipam               VdcIpamAllocation[]
   pbsNamespaces      VdcPbsNamespace[]
   isoLibraries       VdcIsoLibrary[]
+  tenantNetworkMembers TenantNetworkMember[]
 
   @@unique([tenantId, connectionId])
   @@unique([tenantId, slug])
@@ -885,12 +887,61 @@ model VdcVnet {
 
   subnet VdcSubnet?
   ipam   VdcIpamAllocation[]
+  tenantNetworkMember TenantNetworkMember?
 
   @@unique([vdcId, pveName])
   @@unique([vdcId, type, tag])
   @@unique([vdcId, displayName], map: "idx_vdc_vnets_display_name")
   @@index([vdcId])
   @@map("vdc_vnets")
+}
+
+// Stretched tenant network (#901): one logical L2 network of a tenant that
+// several of its vDCs carry at once, with one VNI and one PVE VNet id on
+// every member cluster. Each member keeps a real `vdc_vnets` row, so every
+// consumer of a VNet (scope, guest NIC picker, quota) sees an ordinary VNet;
+// this table only coordinates them.
+model TenantNetwork {
+  id          String   @id
+  tenantId    String   @map("tenant_id")
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  // Preferred 8-char PVE VNet id, reused on every member cluster where it is
+  // free (a member falls back to a nonce variant where a legacy VNet holds it).
+  pveName     String   @map("pve_name")
+  // Reserved for as long as the network exists, even with no member, so a
+  // cluster joining later cannot find it taken.
+  vni         Int      @unique
+  // Zone MTU as PVE defines it (#899); every member zone must agree.
+  mtu         Int?
+  createdBy   String?  @map("created_by")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @default(now()) @map("updated_at")
+
+  members TenantNetworkMember[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+  @@map("tenant_networks")
+}
+
+model TenantNetworkMember {
+  id              String        @id
+  tenantNetworkId String        @map("tenant_network_id")
+  tenantNetwork   TenantNetwork @relation(fields: [tenantNetworkId], references: [id], onDelete: Cascade)
+  vdcId           String        @map("vdc_id")
+  vdc             Vdc           @relation(fields: [vdcId], references: [id], onDelete: Cascade)
+  // The local VNet this membership created in the vDC's zone. Deleting the
+  // vDC cascades here through both paths: "removing a vDC deletes only its
+  // local VNet".
+  vnetId          String        @unique @map("vnet_id")
+  vnet            VdcVnet       @relation(fields: [vnetId], references: [id], onDelete: Cascade)
+  createdAt       DateTime      @default(now()) @map("created_at")
+
+  @@unique([tenantNetworkId, vdcId])
+  @@index([vdcId])
+  @@map("tenant_network_members")
 }
 
 model VdcSubnet {

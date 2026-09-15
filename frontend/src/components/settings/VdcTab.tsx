@@ -225,7 +225,7 @@ function transportPayloadFrom(f: TransportForm): Partial<VdcTransport> {
 function transportFingerprint(p: Partial<VdcTransport>): string {
   return JSON.stringify({
     mode: p.mode,
-    peers: [...new Set(p.peers ?? [])].sort(),
+    peers: [...new Set(p.peers ?? [])].sort((a, b) => a.localeCompare(b)),
     mtu: p.mtu ?? null,
     vlanId: p.vlanId ?? null,
     device: p.device ?? null,
@@ -2821,7 +2821,7 @@ export default function VdcTab() {
                                 size="small"
                                 fullWidth
                                 label={t('vdc.transportCidr')}
-                                placeholder="10.100.5.0/24"
+                                placeholder="198.51.100.0/24"
                                 value={transport.cidr}
                                 onChange={(e) => setTransport((p) => ({ ...p, cidr: e.target.value }))}
                                 error={cidrInvalid}

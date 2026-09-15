@@ -164,7 +164,7 @@ export function pickPolicyDefaultModel(
   const allowed = resolveAllowedCpuModels(policy, clusterCapabilities)
   if (!allowed) return undefined
   if (policy.cpuDefaultModel && allowed.has(policy.cpuDefaultModel)) return policy.cpuDefaultModel
-  const first = [...allowed].sort()[0]
+  const first = [...allowed].sort((a, b) => a.localeCompare(b))[0]
   return first ?? null
 }
 
@@ -193,7 +193,7 @@ export function validateCpuAgainstPolicy(
   if (isPresent(patch.cpu)) {
     const { model, flags, extra } = parseCpuProperty(String(patch.cpu))
     if (allowed && model && model !== (opts.currentModel ?? '') && !allowed.has(model)) {
-      const list = [...allowed].sort().join(', ') || 'none'
+      const list = [...allowed].sort((a, b) => a.localeCompare(b)).join(', ') || 'none'
       return { ok: false, error: `CPU model "${model}" is not allowed by the vDC compute policy. Allowed models: ${list}.` }
     }
     if (!policy.cpuAdvancedSettings && (flags.length > 0 || Object.keys(extra).length > 0)) {
@@ -204,7 +204,7 @@ export function validateCpuAgainstPolicy(
   // Dropping the `cpu` line puts the guest back on PVE's default model, which
   // is a model change like any other.
   if (allowed && removed.includes('cpu') && !allowed.has(PVE_DEFAULT_CPU_MODEL) && (opts.currentModel ?? '') !== PVE_DEFAULT_CPU_MODEL) {
-    const list = [...allowed].sort().join(', ') || 'none'
+    const list = [...allowed].sort((a, b) => a.localeCompare(b)).join(', ') || 'none'
     return { ok: false, error: `Resetting the CPU model to "${PVE_DEFAULT_CPU_MODEL}" is not allowed by the vDC compute policy. Allowed models: ${list}.` }
   }
 

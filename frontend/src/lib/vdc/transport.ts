@@ -97,7 +97,7 @@ export function parseIPv6(s: string): bigint | null {
         continue
       }
       if (!/^[0-9a-f]{1,4}$/.test(p)) return false
-      out.push(parseInt(p, 16))
+      out.push(Number.parseInt(p, 16))
     }
     return true
   }
@@ -125,8 +125,10 @@ export function formatIPv6(v: bigint): string {
   // Compress the longest run of zero groups (at least two long), RFC 5952.
   let bestStart = -1
   let bestLen = 0
-  for (let i = 0; i < 8; i++) {
-    if (groups[i] !== 0) continue
+  // Longest run of zero groups; `i` jumps to the end of each run.
+  let i = 0
+  while (i < 8) {
+    if (groups[i] !== 0) { i++; continue }
     let j = i
     while (j < 8 && groups[j] === 0) j++
     if (j - i > bestLen) { bestStart = i; bestLen = j - i }

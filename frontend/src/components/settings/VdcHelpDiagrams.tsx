@@ -110,8 +110,8 @@ function NetworkDiagram() {
       <g className="accent">
         <rect x={8} y={netY} width={112} height={netH} rx={3} fill="none" stroke="currentColor" strokeWidth={1.4} />
         <text x={64} y={netY + 11} textAnchor="middle" fontSize={7} fontWeight={600}>{t('vdc.helpDiagramTenantVnets')}</text>
-        <text x={64} y={netY + 21} textAnchor="middle" fontSize={6.5}>lan 10.1.0.0/24</text>
-        <text x={64} y={netY + 29} textAnchor="middle" fontSize={6.5}>dmz 10.1.1.0/24</text>
+        <text x={64} y={netY + 21} textAnchor="middle" fontSize={6.5}>lan 192.0.2.0/24</text>
+        <text x={64} y={netY + 29} textAnchor="middle" fontSize={6.5}>dmz 198.51.100.0/24</text>
       </g>
       {/* Uplinks and VLAN pools belong to the host: ProxCenter only grants them. */}
       <NodeBox x={128} y={netY} w={76} h={netH} label={t('vdc.helpDiagramSharedBridge')} sub="vmbr0 · WAN" dashed />
@@ -152,12 +152,12 @@ function StretchDiagram() {
             <g className="accent">
               <rect x={x + 8} y={zoneY} width={frameW - 16} height={zoneH} rx={3} fill="none" stroke="currentColor" strokeWidth={1.4} />
               <text x={cx} y={zoneY + 9} textAnchor="middle" fontSize={7} fontWeight={600}>backbone · VNI 10002</text>
-              <text x={cx} y={zoneY + 17} textAnchor="middle" fontSize={6}>10.77.0.0/24</text>
+              <text x={cx} y={zoneY + 17} textAnchor="middle" fontSize={6}>192.0.2.0/24</text>
             </g>
             <line x1={x + 34} y1={zoneY + zoneH} x2={x + 34} y2={nodeY} stroke="currentColor" strokeWidth={1} opacity={0.5} />
             <line x1={x + frameW - 34} y1={zoneY + zoneH} x2={x + frameW - 34} y2={nodeY} stroke="currentColor" strokeWidth={1} opacity={0.5} />
-            <NodeBox x={x + 8} y={nodeY} w={52} h={nodeH} label={`node${letter}1`} sub={letter === 'A' ? '10.42.0.101' : '10.42.0.111'} logo={logo} />
-            <NodeBox x={x + frameW - 60} y={nodeY} w={52} h={nodeH} label={`node${letter}2`} sub={letter === 'A' ? '10.42.0.102' : '10.42.0.112'} logo={logo} />
+            <NodeBox x={x + 8} y={nodeY} w={52} h={nodeH} label={`node${letter}1`} sub={letter === 'A' ? '203.0.113.11' : '203.0.113.21'} logo={logo} />
+            <NodeBox x={x + frameW - 60} y={nodeY} w={52} h={nodeH} label={`node${letter}2`} sub={letter === 'A' ? '203.0.113.12' : '203.0.113.22'} logo={logo} />
             <line x1={x + 34} y1={nodeY + nodeH} x2={x + 34} y2={busY} stroke="currentColor" strokeWidth={1} opacity={0.5} />
             <line x1={x + frameW - 34} y1={nodeY + nodeH} x2={x + frameW - 34} y2={busY} stroke="currentColor" strokeWidth={1} opacity={0.5} />
           </g>

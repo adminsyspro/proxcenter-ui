@@ -560,7 +560,7 @@ export default function TenantNetworksSection({ tenants, vdcs, connections }: Pr
               label={t('vdc.tenantNetworkCidr')}
               value={form.cidr}
               disabled={!!editing}
-              placeholder="10.77.0.0/24"
+              placeholder="192.0.2.0/24"
               onChange={(e) => setForm(f => ({ ...f, cidr: e.target.value }))}
             />
             <TextField
@@ -568,7 +568,7 @@ export default function TenantNetworksSection({ tenants, vdcs, connections }: Pr
               label={t('vdc.tenantNetworkGateway')}
               value={form.gateway}
               disabled={!!editing}
-              placeholder="10.77.0.1"
+              placeholder="192.0.2.1"
               onChange={(e) => setForm(f => ({ ...f, gateway: e.target.value }))}
             />
           </Stack>

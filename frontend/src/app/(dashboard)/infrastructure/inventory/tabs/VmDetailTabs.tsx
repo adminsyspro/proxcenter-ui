@@ -1939,10 +1939,9 @@ export default function VmDetailTabs(props: any) {
                                       borderRadius: 1,
                                       mb: 1,
                                       '&:last-child': { mb: 0 },
-                                      ...(isEditable && canConfigHardware && {
-                                        cursor: 'pointer',
-                                        '&:hover': { bgcolor: 'action.selected' },
-                                      }),
+                                      ...(isEditable && canConfigHardware
+                                        ? { cursor: 'pointer', '&:hover': { bgcolor: 'action.selected' } }
+                                        : {}),
                                     }}
                                     secondaryAction={isEditable && canConfigHardware ? (
                                       <MuiTooltip title={t('common.edit')}>

@@ -121,7 +121,7 @@ export async function POST(req: Request) {
     // (flags, extra options) can still 400.
     if (vdcInfo && isPolicyRestrictive(vdcInfo.computePolicy)) {
       const policy = vdcInfo.computePolicy
-      const hwCpu = body.hardware ?? (body.hardware = {})
+      const hwCpu = (body.hardware ?? (body.hardware = {} as NonNullable<typeof body.hardware>)) as { cpu?: unknown }
       const requestedCpu: string = typeof hwCpu.cpu === 'string' ? hwCpu.cpu : ''
       const caps = policy.cpuModelMode === 'custom'
         ? await getConnectionById(body.connectionId)

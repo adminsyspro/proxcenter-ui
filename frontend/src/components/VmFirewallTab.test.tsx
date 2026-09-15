@@ -25,6 +25,12 @@ import {
 } from '@/__tests__/setup/renderWithProviders'
 import { server, http, HttpResponse } from '@/__tests__/setup/msw-server'
 
+// The tab gates every mutation behind vm.config (#897); these tests exercise
+// the mutations, so they run as a user who holds it.
+vi.mock('@/contexts/RBACContext', () => ({
+  useRBAC: () => ({ hasPermission: () => true, isAdmin: true, permissions: [] }),
+}))
+
 vi.mock('@/lib/api/firewall', () => ({
   getVMOptions: vi.fn(),
   getVMRules: vi.fn(),

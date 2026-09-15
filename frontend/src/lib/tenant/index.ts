@@ -533,11 +533,17 @@ export async function addUserToTenant(userId: string, tenantId: string, isDefaul
         select: { userId: true, tenantId: true },
       })
       if (!existingDefault || (existingDefault.tenantId === 'default' && tenantId !== 'default')) {
-        const user = await tx.user.findUnique({
-          where: { id: userId },
-          select: { isSuperAdmin: true },
+        // A super admin stays on the provider tenant; the role is an RBAC
+        // grant, not a column of the user.
+        const superAdmin = await tx.rbacUserRole.findFirst({
+          where: {
+            userId,
+            roleId: 'role_super_admin',
+            OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+          },
+          select: { id: true },
         })
-        if (!user?.isSuperAdmin) markDefault = true
+        if (!superAdmin) markDefault = true
       }
     }
 

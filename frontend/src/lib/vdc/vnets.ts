@@ -95,6 +95,10 @@ function rowToSubnet(r: any): VdcSubnet | null {
 
 function rowToVnet(r: any): VdcVnet {
   const subnet = rowToSubnet(r.subnet)
+  // A member of a stretched tenant network (#901) shows the network's shared
+  // pool: its own row only mirrors the addressing.
+  const network = r.tenantNetworkMember?.tenantNetwork ?? null
+  if (subnet && network?.subnet?.id) subnet.id = network.subnet.id
   if (!subnet) {
     // The schema enforces a 1-1 between VNet and subnet now (subnet is
     // created in the same transaction as the VNet). A missing row means
@@ -114,6 +118,7 @@ function rowToVnet(r: any): VdcVnet {
     zoneName: r.zoneName ?? null,
     firewall: r.firewall !== false,
     subnet,
+    tenantNetwork: network ? { id: network.id, name: network.name } : null,
     createdBy: r.createdBy ?? null,
     createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : String(r.createdAt),
   }
@@ -122,7 +127,7 @@ function rowToVnet(r: any): VdcVnet {
 export async function listVnetsForTenant(vdcId: string): Promise<VdcVnet[]> {
   const rows = await prisma.vdcVnet.findMany({
     where: { vdcId },
-    include: { subnet: true },
+    include: { subnet: true, tenantNetworkMember: { select: { tenantNetwork: { select: { id: true, name: true, subnet: { select: { id: true } } } } } } },
     orderBy: { displayName: 'asc' },
   })
   return rows.map(rowToVnet)
@@ -132,8 +137,16 @@ export async function listVnetsForTenant(vdcId: string): Promise<VdcVnet[]> {
 async function findVnetByDisplayName(vdcId: string, displayName: string) {
   return prisma.vdcVnet.findFirst({
     where: { vdcId, displayName },
-    include: { subnet: true },
+    include: { subnet: true, tenantNetworkMember: { select: { tenantNetwork: { select: { id: true, name: true, subnet: { select: { id: true } } } } } } },
   })
+}
+
+/** A VNet a stretched tenant network created (#901) is the provider's, not the tenant's to edit or delete. */
+function assertNotTenantNetworkMember(row: any, displayName: string): void {
+  const network = row?.tenantNetworkMember?.tenantNetwork?.name
+  if (network) {
+    throw new Error(`VNet "${displayName}" belongs to tenant network "${network}" and is managed by the provider.`)
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -362,6 +375,7 @@ export async function updateVnetForTenant(
 
   const row = await findVnetByDisplayName(vdc.id, displayName)
   if (!row) throw new Error(`VNet "${displayName}" not found`)
+  assertNotTenantNetworkMember(row, displayName)
 
   const pveName: string = row.pveName
   const conn = await getConn(vdc)
@@ -418,6 +432,7 @@ export async function deleteVnetForTenant(
 
   const row = await findVnetByDisplayName(vdc.id, displayName)
   if (!row) throw new Error(`VNet "${displayName}" not found`)
+  assertNotTenantNetworkMember(row, displayName)
 
   const pveName: string = row.pveName
 
@@ -627,6 +642,7 @@ export async function resolveSubnetForBridge(
     include: {
       vdc: { select: { id: true, sdnZoneName: true, pvePoolName: true } },
       subnet: true,
+      tenantNetworkMember: { select: { tenantNetwork: { select: { subnet: { select: { id: true } } } } } },
     },
   })
   // A VLAN VNet carries its own (shared) zone; only a VXLAN VNet falls back
@@ -635,7 +651,10 @@ export async function resolveSubnetForBridge(
   return {
     vdcId: row.vdc.id,
     vnetId: row.id,
-    subnetId: row.subnet.id,
+    // A member of a stretched tenant network (#901) allocates from the
+    // network's canonical subnet, so one address is handed out once for the
+    // whole L2 domain; its own row is a mirror kept for the readers.
+    subnetId: row.tenantNetworkMember?.tenantNetwork.subnet?.id ?? row.subnet.id,
     pveName: row.pveName,
     cidr: row.subnet.cidr,
     gateway: row.subnet.gateway,

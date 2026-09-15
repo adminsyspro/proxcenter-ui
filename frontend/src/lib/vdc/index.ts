@@ -24,6 +24,8 @@ import {
   type VdcTransport,
 } from './transport'
 import { assertNoTransportConflict } from './transportOps'
+import { memberPeersForVdc, withMemberPeers } from './stretchPeers'
+import { syncNetworksOfVdc } from './tenantNetworkMembers'
 
 import type {
   Vdc,
@@ -699,8 +701,11 @@ export async function updateVdc(id: string, input: UpdateVdcInput): Promise<VdcW
       zoneConn = await getConnectionById(existing.connectionId, zoneOwner)
       const needsClusterIps = prevTransport.mode === 'cluster' || nextTransport.mode === 'cluster'
       const clusterIps = needsClusterIps ? await listClusterNodeIps(zoneConn) : []
-      const nextZone = zoneConfigFor(nextTransport, clusterIps)
-      if (!sameZoneConfig(zoneConfigFor(prevTransport, clusterIps), nextZone)) {
+      // A stretched tenant network (#901) adds the other members' peers to
+      // this zone; they ride along on both sides of the comparison.
+      const memberPeers = await memberPeersForVdc(id)
+      const nextZone = withMemberPeers(zoneConfigFor(nextTransport, clusterIps), memberPeers)
+      if (!sameZoneConfig(withMemberPeers(zoneConfigFor(prevTransport, clusterIps), memberPeers), nextZone)) {
         await updateZone(zoneConn, existing.sdnZoneName, nextZone)
         zoneChanged = true
       }
@@ -820,6 +825,10 @@ export async function updateVdc(id: string, input: UpdateVdcInput): Promise<VdcW
     }
   }
 
+  // A member of a stretched tenant network (#901) whose own peers changed
+  // must be re-learnt by the other members' zones.
+  if (zoneChanged) await syncNetworksOfVdc(id)
+
   clearVdcScopeCache(existing.tenantId)
 
   return (await getVdcById(id))!
@@ -836,6 +845,11 @@ export async function deleteVdc(id: string): Promise<void> {
     throw new Error(`vDC not found: ${id}`)
   }
   const vdc = rowToVdc(row as VdcRow)
+  // Read before the delete cascades the memberships away (#901): the other
+  // members' zones must forget this vDC's peers afterwards.
+  const stretchedNetworkIds = (await prisma.tenantNetworkMember.findMany({
+    where: { vdcId: id }, select: { tenantNetworkId: true },
+  })).map(m => m.tenantNetworkId)
 
   // 2. Check PVE pool for VMs
   const connOwnerTenantId = await getConnectionOwnerTenantId(vdc.connectionId)
@@ -986,6 +1000,7 @@ export async function deleteVdc(id: string): Promise<void> {
   })
 
   clearVdcScopeCache(vdc.tenantId)
+  if (stretchedNetworkIds.length > 0) await syncNetworksOfVdc(id, stretchedNetworkIds)
 }
 
 // ---------------------------------------------------------------------------

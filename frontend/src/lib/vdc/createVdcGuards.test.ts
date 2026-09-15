@@ -18,6 +18,7 @@ const {
     vdcVlanPool: { findMany: vi.fn() },
     connection: { findUnique: vi.fn(), findMany: vi.fn() },
     providerConnection: { findUnique: vi.fn() },
+    tenantNetworkMember: { findMany: vi.fn() },
     $transaction: vi.fn(),
   } as any,
   clearVdcScopeCacheMock: vi.fn(),
@@ -88,6 +89,7 @@ beforeEach(() => {
   prismaMock.providerConnection.findUnique.mockResolvedValue({ connectionId: 'conn-2' })
   prismaMock.vdcVlanPool.findMany.mockResolvedValue([])
   prismaMock.vdcVnet.findMany.mockResolvedValue([])
+  prismaMock.tenantNetworkMember.findMany.mockResolvedValue([])
 })
 
 describe('createVdc guards', () => {

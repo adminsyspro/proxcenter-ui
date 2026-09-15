@@ -43,6 +43,8 @@ vi.mock('./sdn', () => ({
   listClusterNodeIps: listClusterNodeIpsMock,
 }))
 vi.mock('./scope', () => ({ clearVdcScopeCache: vi.fn() }))
+vi.mock('./tenantNetworkMembers', () => ({ syncNetworksOfVdc: vi.fn().mockResolvedValue([]) }))
+vi.mock('./stretchPeers', async (importOriginal) => ({ ...(await importOriginal<any>()), memberPeersForVdc: vi.fn().mockResolvedValue([]) }))
 
 import { updateVdc } from './index'
 

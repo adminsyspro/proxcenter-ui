@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "tenantId and name are required" }, { status: 400 })
     }
     const network = await createTenantNetwork(
-      { tenantId: body.tenantId, name: body.name, description: body.description, vni: body.vni, mtu: body.mtu },
+      { tenantId: body.tenantId, name: body.name, description: body.description, vni: body.vni, mtu: body.mtu, subnet: body.subnet },
       session?.user?.id ?? null,
     )
     await audit({

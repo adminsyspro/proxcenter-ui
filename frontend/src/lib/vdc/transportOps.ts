@@ -21,6 +21,7 @@ import {
   type VdcTransport,
   type ZoneConfig,
 } from './transport'
+import { memberPeersForVdc, withMemberPeers } from './stretchPeers'
 
 /**
  * Wording of a transport conflict. Carries "is in use by vDC" so the route
@@ -121,9 +122,11 @@ export function effectiveZoneConfig(live: PveZoneLive): ZoneConfig {
   return { peers, mtu }
 }
 
-async function computeZoneStatus(conn: any, zoneName: string | null, transport: VdcTransport): Promise<VdcZoneStatus> {
+async function computeZoneStatus(conn: any, zoneName: string | null, transport: VdcTransport, vdcId: string): Promise<VdcZoneStatus> {
   const clusterIps = transport.mode === 'cluster' ? await listClusterNodeIps(conn) : []
-  const desired = zoneConfigFor(transport, clusterIps)
+  // The other members of a stretched tenant network (#901) ride on this
+  // zone too; without them a sync would strip their peers.
+  const desired = withMemberPeers(zoneConfigFor(transport, clusterIps), await memberPeersForVdc(vdcId))
   const live = zoneName ? await readZonePve(conn, zoneName) : null
   const inSync = !!live && sameZoneConfig(desired, effectiveZoneConfig(live))
   return { zoneName, desired, live, inSync }
@@ -131,7 +134,7 @@ async function computeZoneStatus(conn: any, zoneName: string | null, transport: 
 
 export async function getVdcZoneStatus(id: string): Promise<VdcZoneStatus> {
   const { row, transport, conn } = await loadVdcForTransport(id)
-  return computeZoneStatus(conn, row.sdnZoneName, transport)
+  return computeZoneStatus(conn, row.sdnZoneName, transport, row.id)
 }
 
 /**
@@ -143,7 +146,7 @@ export async function getVdcZoneStatus(id: string): Promise<VdcZoneStatus> {
 export async function syncVdcZone(id: string): Promise<VdcZoneStatus & { changed: boolean }> {
   const { row, transport, conn } = await loadVdcForTransport(id)
   if (!row.sdnZoneName) throw new Error('This vDC has no SDN zone.')
-  const before = await computeZoneStatus(conn, row.sdnZoneName, transport)
+  const before = await computeZoneStatus(conn, row.sdnZoneName, transport, row.id)
 
   if (before.inSync && !before.live?.state) return { ...before, changed: false }
 
@@ -154,7 +157,7 @@ export async function syncVdcZone(id: string): Promise<VdcZoneStatus & { changed
   }
   await applySdn(conn)
 
-  const after = await computeZoneStatus(conn, row.sdnZoneName, transport)
+  const after = await computeZoneStatus(conn, row.sdnZoneName, transport, row.id)
   return { ...after, changed: true }
 }
 

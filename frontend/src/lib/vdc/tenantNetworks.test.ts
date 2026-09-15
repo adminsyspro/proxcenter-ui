@@ -13,6 +13,7 @@ const { prismaMock, getConnectionByIdMock, listVnetsPveMock } = vi.hoisted(() =>
     vdc: { findMany: vi.fn() },
     vdcVnet: { findMany: vi.fn(), findFirst: vi.fn() },
     connection: { findMany: vi.fn(), findUnique: vi.fn() },
+    vdcSubnet: { create: vi.fn(), updateMany: vi.fn() },
   } as any,
   getConnectionByIdMock: vi.fn(),
   listVnetsPveMock: vi.fn(),
@@ -42,7 +43,7 @@ beforeEach(() => {
 
   saved = { id: 'n1', tenantId: 't1', name: 'backbone', description: null, pveName: 'v0000000', vni: 10000, mtu: null,
     createdBy: null, createdAt: new Date('2026-09-15T10:00:00Z'), updatedAt: new Date('2026-09-15T10:00:00Z'),
-    tenant: { name: 'Acme' }, members: [] }
+    tenant: { name: 'Acme' }, members: [], subnet: null }
 
   prismaMock.tenant.findUnique.mockResolvedValue({ id: 't1' })
   prismaMock.tenantNetwork.findMany.mockResolvedValue([])
@@ -51,6 +52,8 @@ beforeEach(() => {
   prismaMock.tenantNetwork.create.mockImplementation(async ({ data }: any) => { saved = { ...saved, ...data }; return data })
   prismaMock.tenantNetwork.update.mockImplementation(async ({ data }: any) => { saved = { ...saved, ...data }; return saved })
   prismaMock.tenantNetwork.delete.mockResolvedValue({})
+  prismaMock.vdcSubnet.create.mockImplementation(async ({ data }: any) => { saved.subnet = data; return data })
+  prismaMock.vdcSubnet.updateMany.mockResolvedValue({ count: 0 })
   prismaMock.vdc.findMany.mockResolvedValue([])
   prismaMock.vdcVnet.findMany.mockResolvedValue([])
   prismaMock.vdcVnet.findFirst.mockResolvedValue(null)
@@ -141,7 +144,8 @@ describe('generateTenantNetworkPveName', () => {
 })
 
 describe('createTenantNetwork', () => {
-  const input = { tenantId: 't1', name: 'backbone', mtu: 1400 }
+  const subnet = { cidr: '10.50.0.0/24', gateway: '10.50.0.1', dnsServers: ['10.50.0.2', ' 10.50.0.3 '] }
+  const input = { tenantId: 't1', name: 'backbone', mtu: 1400, subnet }
 
   it('refuses the provider tenant, an unknown tenant, a bad name, a bad MTU and a bad VNI', async () => {
     await expect(createTenantNetwork({ ...input, tenantId: 'default' }, null)).rejects.toThrow('cannot be created on the provider tenant')
@@ -168,6 +172,29 @@ describe('createTenantNetwork', () => {
     expect(created).toMatchObject({ id: data.id, tenantName: 'Acme', vni: 10005, mtu: 1400, members: [] })
   })
 
+  it('refuses a missing or invalid subnet before allocating anything', async () => {
+    await expect(createTenantNetwork({ ...input, subnet: undefined as any }, null)).rejects.toThrow('a subnet (CIDR and gateway) is required')
+    await expect(createTenantNetwork({ ...input, subnet: { cidr: '10.50.0.0', gateway: '10.50.0.1' } }, null)).rejects.toThrow('invalid CIDR "10.50.0.0"')
+    await expect(createTenantNetwork({ ...input, subnet: { cidr: '10.50.0.0/24', gateway: '10.60.0.1' } }, null)).rejects.toThrow('gateway "10.60.0.1" is not a usable host inside 10.50.0.0/24')
+    expect(prismaMock.tenantNetwork.create).not.toHaveBeenCalled()
+    expect(prismaMock.vdcSubnet.create).not.toHaveBeenCalled()
+  })
+
+  it('writes the canonical subnet owned by the network, with no VNet, and reads it back', async () => {
+    const created = await createTenantNetwork(input, null)
+    expect(prismaMock.vdcSubnet.create).toHaveBeenCalledTimes(1)
+    const data = prismaMock.vdcSubnet.create.mock.calls[0][0].data
+    expect(data).toMatchObject({ tenantNetworkId: created.id, cidr: '10.50.0.0/24', gateway: '10.50.0.1', dnsServers: '10.50.0.2,10.50.0.3', ipamEnabled: true })
+    expect(data.vnetId).toBeUndefined()
+    expect(created.subnet).toMatchObject({ cidr: '10.50.0.0/24', gateway: '10.50.0.1', dnsServers: ['10.50.0.2', '10.50.0.3'], ipamEnabled: true })
+  })
+
+  it('removes the network again when its subnet cannot be written', async () => {
+    prismaMock.vdcSubnet.create.mockRejectedValueOnce(new Error('disk full'))
+    await expect(createTenantNetwork(input, null)).rejects.toThrow('failed to write the subnet: disk full')
+    expect(prismaMock.tenantNetwork.delete).toHaveBeenCalledTimes(1)
+  })
+
   it('honours a requested VNI', async () => {
     await createTenantNetwork({ ...input, vni: 4242 }, null)
     expect(prismaMock.tenantNetwork.create.mock.calls[0][0].data.vni).toBe(4242)
@@ -192,6 +219,14 @@ describe('updateTenantNetwork', () => {
   it('refuses an unknown network', async () => {
     prismaMock.tenantNetwork.findUnique.mockResolvedValue(null)
     await expect(updateTenantNetwork('nope', { name: 'x' })).rejects.toThrow('Tenant network: not found: nope')
+  })
+
+  it('pushes a DNS change to the canonical subnet and to the mirror of every member', async () => {
+    await updateTenantNetwork('n1', { subnet: { dnsServers: ['1.1.1.1', ''] } })
+    expect(prismaMock.vdcSubnet.updateMany).toHaveBeenCalledWith({
+      where: { OR: [{ tenantNetworkId: 'n1' }, { vnet: { tenantNetworkMember: { tenantNetworkId: 'n1' } } }] },
+      data: { dnsServers: '1.1.1.1' },
+    })
   })
 })
 

@@ -66,12 +66,14 @@ export async function GET(req: Request, ctx: RouteContext) {
         select: {
           pveName: true,
           subnet: { select: { id: true, cidr: true, gateway: true, dnsServers: true } },
+          tenantNetworkMember: { select: { tenantNetwork: { select: { subnet: { select: { id: true } } } } } },
         },
       })
       for (const r of subnetRows) {
         if (!r.subnet) continue
         subnetByPveName.set(r.pveName, {
-          subnetId: r.subnet.id,
+          // Shared pool of a stretched tenant network for its members (#901).
+          subnetId: r.tenantNetworkMember?.tenantNetwork.subnet?.id ?? r.subnet.id,
           cidr: r.subnet.cidr,
           gateway: r.subnet.gateway,
           dnsServers: r.subnet.dnsServers

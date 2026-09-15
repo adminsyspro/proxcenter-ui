@@ -920,6 +920,7 @@ model TenantNetwork {
   updatedAt   DateTime @default(now()) @map("updated_at")
 
   members TenantNetworkMember[]
+  subnet  VdcSubnet?
 
   @@unique([tenantId, name])
   @@index([tenantId])
@@ -946,8 +947,15 @@ model TenantNetworkMember {
 
 model VdcSubnet {
   id          String   @id
-  vnetId      String   @unique @map("vnet_id")
-  vnet        VdcVnet  @relation(fields: [vnetId], references: [id], onDelete: Cascade)
+  vnetId      String?  @unique @map("vnet_id")
+  vnet        VdcVnet? @relation(fields: [vnetId], references: [id], onDelete: Cascade)
+  // Stretched tenant network (#901): the network owns one canonical subnet
+  // (vnet_id NULL) that every member VNet's allocations reference, so an
+  // address is handed out once for the whole L2 domain; each member also
+  // carries a mirror row for the readers that expect one subnet per VNet.
+  // Exactly one of vnet_id / tenant_network_id is set (CHECK in migration).
+  tenantNetworkId String?        @unique @map("tenant_network_id")
+  tenantNetwork   TenantNetwork? @relation(fields: [tenantNetworkId], references: [id], onDelete: Cascade)
   cidr        String
   gateway     String
   // Comma-separated list, optional.

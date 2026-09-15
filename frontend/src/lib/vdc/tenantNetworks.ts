@@ -11,6 +11,7 @@ import { getConnectionById } from '@/lib/connections/getConnection'
 import { prisma } from '@/lib/db/prisma'
 import { DEFAULT_TENANT_ID } from '@/lib/tenant'
 
+import { gatewayValidForCidr, parseCidr } from './network'
 import { listVnetsPve, VNI_BASE } from './sdn'
 import { ZONE_MTU_MAX, ZONE_MTU_MIN } from './transport'
 
@@ -36,6 +37,14 @@ export interface TenantNetworkMemberDto {
   zoneName: string | null
 }
 
+export interface TenantNetworkSubnet {
+  id: string
+  cidr: string
+  gateway: string
+  dnsServers: string[]
+  ipamEnabled: boolean
+}
+
 export interface TenantNetwork {
   id: string
   tenantId: string
@@ -45,6 +54,8 @@ export interface TenantNetwork {
   pveName: string
   vni: number
   mtu: number | null
+  /** The one IPAM pool of the whole L2 domain, shared by every member. */
+  subnet: TenantNetworkSubnet | null
   members: TenantNetworkMemberDto[]
   createdBy: string | null
   createdAt: string
@@ -58,12 +69,16 @@ export interface CreateTenantNetworkInput {
   /** An operator-chosen VNI (routers that read the tag want a known number); allocated when absent. */
   vni?: number | null
   mtu?: number | null
+  /** L3 of the whole domain, one IPAM pool shared by every member. Mandatory, like a VNet's. */
+  subnet: { cidr: string; gateway: string; dnsServers?: string[] }
 }
 
 export interface UpdateTenantNetworkInput {
   name?: string
   description?: string | null
   mtu?: number | null
+  /** Only DNS is editable: a CIDR or gateway change would invalidate the allocations. */
+  subnet?: { dnsServers?: string[] }
 }
 
 // ---------------------------------------------------------------------------
@@ -94,6 +109,24 @@ function normalizeRequestedVni(raw: unknown): number | null {
     throw new Error(`${ERR} VNI must be an integer between 1 and ${VNI_MAX}.`)
   }
   return n
+}
+
+function dnsCsv(list: string[] | undefined): string | null {
+  const clean = (list ?? []).map(s => String(s).trim()).filter(Boolean)
+  return clean.length > 0 ? clean.join(',') : null
+}
+
+function splitDns(csv: string | null | undefined): string[] {
+  return csv ? csv.split(',').map(s => s.trim()).filter(Boolean) : []
+}
+
+function normalizeSubnet(raw: CreateTenantNetworkInput['subnet'] | undefined): { cidr: string; gateway: string; dnsServers: string | null } {
+  const cidr = String(raw?.cidr ?? '').trim()
+  const gateway = String(raw?.gateway ?? '').trim()
+  if (!cidr || !gateway) throw new Error(`${ERR} a subnet (CIDR and gateway) is required, it is the one IPAM pool of the whole network.`)
+  if (!parseCidr(cidr)) throw new Error(`${ERR} invalid CIDR "${cidr}", expected IPv4 form like 10.42.0.0/24.`)
+  if (!gatewayValidForCidr(gateway, cidr)) throw new Error(`${ERR} gateway "${gateway}" is not a usable host inside ${cidr}.`)
+  return { cidr, gateway, dnsServers: dnsCsv(raw?.dnsServers) }
 }
 
 // ---------------------------------------------------------------------------
@@ -212,6 +245,7 @@ export async function generateTenantNetworkPveName(networkId: string, clusterIds
 
 const NETWORK_INCLUDE = {
   tenant: { select: { name: true } },
+  subnet: true,
   members: {
     select: {
       vdcId: true,
@@ -241,6 +275,15 @@ async function rowToNetwork(row: any): Promise<TenantNetwork> {
     pveName: row.pveName,
     vni: row.vni,
     mtu: row.mtu ?? null,
+    subnet: row.subnet
+      ? {
+          id: row.subnet.id,
+          cidr: row.subnet.cidr,
+          gateway: row.subnet.gateway,
+          dnsServers: splitDns(row.subnet.dnsServers),
+          ipamEnabled: row.subnet.ipamEnabled !== false,
+        }
+      : null,
     members: row.members.map((m: any) => ({
       vdcId: m.vdcId,
       vdcName: m.vdc.name,
@@ -284,6 +327,7 @@ export async function createTenantNetwork(input: CreateTenantNetworkInput, creat
   const name = normalizeName(input.name)
   const mtu = normalizeMtu(input.mtu)
   const requestedVni = normalizeRequestedVni(input.vni)
+  const subnet = normalizeSubnet(input.subnet)
 
   const duplicate = await prisma.tenantNetwork.findFirst({ where: { tenantId: input.tenantId, name }, select: { id: true } })
   if (duplicate) throw new Error(`${ERR} "${name}" already exists for this tenant.`)
@@ -310,6 +354,16 @@ export async function createTenantNetwork(input: CreateTenantNetworkInput, creat
       updatedAt: now,
     },
   })
+  // The canonical subnet: owned by the network, referenced by every member's
+  // allocations, so `@@unique([subnetId, ip])` holds for the whole domain.
+  try {
+    await prisma.vdcSubnet.create({
+      data: { id: randomUUID(), tenantNetworkId: id, cidr: subnet.cidr, gateway: subnet.gateway, dnsServers: subnet.dnsServers, ipamEnabled: true, createdAt: now },
+    })
+  } catch (err: any) {
+    await prisma.tenantNetwork.delete({ where: { id } }).catch(() => undefined)
+    throw new Error(`${ERR} failed to write the subnet: ${err?.message}`)
+  }
   return getTenantNetwork(id)
 }
 
@@ -340,6 +394,15 @@ export async function updateTenantNetwork(id: string, input: UpdateTenantNetwork
       throw new Error(`${ERR} the MTU cannot change while ${existing.members.length} vDC(s) carry the network. Remove the members first.`)
     }
     data.mtu = mtu
+  }
+
+  // DNS reaches the canonical subnet and the mirror of every member, they
+  // must read the same.
+  if (input.subnet?.dnsServers !== undefined) {
+    await prisma.vdcSubnet.updateMany({
+      where: { OR: [{ tenantNetworkId: id }, { vnet: { tenantNetworkMember: { tenantNetworkId: id } } }] },
+      data: { dnsServers: dnsCsv(input.subnet.dnsServers) },
+    })
   }
 
   await prisma.tenantNetwork.update({ where: { id }, data })

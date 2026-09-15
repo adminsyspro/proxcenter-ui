@@ -52,9 +52,12 @@ export function mapTenantNetworkError(e: any): { status: number; message: string
     return { status: 409, message: 'A tenant network with this name or VNI already exists.' }
   }
   if (msg.startsWith('Tenant network: not found')) return { status: 404, message: msg }
-  if (msg.startsWith('Tenant network:') && (msg.includes('already') || msg.includes('is still carried') || msg.includes('cannot change while'))) {
+  if (msg.startsWith('Tenant network:') && (msg.includes('already') || msg.includes('is still carried') || msg.includes('cannot change while') || msg.includes('still use'))) {
     return { status: 409, message: msg }
   }
+  // A Proxmox refusal while creating the member VNet or rewriting a zone.
+  if (/^Failed to (create|update|delete) SDN/.test(msg)) return { status: 502, message: msg }
+  if (msg.startsWith('vDC not found')) return { status: 404, message: msg }
   if (msg.startsWith('Tenant network:') || msg.startsWith('Tenant not found')) return { status: 400, message: msg }
   return { status: 500, message: msg }
 }

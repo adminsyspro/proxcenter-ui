@@ -143,13 +143,17 @@ export interface VdcVnet {
    *  unusable without a subnet (the IPAM is the only mechanism to allocate
    *  IPs on VXLAN, where PVE-native DHCP/IPAM is broken on PVE 9.x). */
   subnet: VdcSubnet
+  /** Set when a stretched tenant network created this VNet (#901): the
+   *  provider manages it, and `subnet.id` is the network's shared pool. */
+  tenantNetwork: { id: string; name: string } | null
   createdBy: string | null
   createdAt: string
 }
 
 export interface VdcSubnet {
   id: string
-  vnetId: string
+  /** Null for the canonical subnet of a stretched tenant network (#901). */
+  vnetId: string | null
   cidr: string
   gateway: string
   dnsServers: string[]

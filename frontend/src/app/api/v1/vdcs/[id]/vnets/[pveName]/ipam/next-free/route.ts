@@ -39,12 +39,14 @@ export async function GET(_req: Request, ctx: RouteContext) {
         pveName: true,
         subnet: { select: { id: true, cidr: true, gateway: true, dnsServers: true } },
         vdc: { select: { connectionId: true, pvePoolName: true } },
+        tenantNetworkMember: { select: { tenantNetwork: { select: { subnet: { select: { id: true } } } } } },
       },
     })
     if (!vnetRow || !vnetRow.subnet) return NextResponse.json({ error: "VNet not found" }, { status: 404 })
 
     const row = {
-      subnet_id: vnetRow.subnet.id,
+      // A stretched tenant network's member picks from the shared pool (#901).
+      subnet_id: vnetRow.tenantNetworkMember?.tenantNetwork.subnet?.id ?? vnetRow.subnet.id,
       cidr: vnetRow.subnet.cidr,
       gateway: vnetRow.subnet.gateway,
       dns_servers: vnetRow.subnet.dnsServers,

@@ -17,6 +17,7 @@ const { prismaMock, pveFetchMock, getConnectionByIdMock } = vi.hoisted(() => ({
 vi.mock('@/lib/db/prisma', () => ({ prisma: prismaMock }))
 vi.mock('@/lib/proxmox/client', () => ({ pveFetch: pveFetchMock }))
 vi.mock('@/lib/connections/getConnection', () => ({ getConnectionById: getConnectionByIdMock }))
+vi.mock('./stretchPeers', async (importOriginal) => ({ ...(await importOriginal<any>()), memberPeersForVdc: vi.fn().mockResolvedValue([]) }))
 
 import { assertNoTransportConflict, effectiveZoneConfig, getVdcTransportStatus, getVdcZoneStatus, provisionVdcTransport, syncVdcZone } from './transportOps'
 import { DEFAULT_TRANSPORT } from './transport'

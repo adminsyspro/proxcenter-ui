@@ -48,6 +48,7 @@ export async function PUT(req: Request, ctx: RouteContext) {
       name: body?.name,
       description: body?.description,
       mtu: body?.mtu,
+      subnet: body?.subnet && typeof body.subnet === 'object' ? { dnsServers: body.subnet.dnsServers } : undefined,
     })
     await audit({
       action: "update",

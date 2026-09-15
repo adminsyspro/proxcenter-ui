@@ -460,6 +460,60 @@ export function transportIfaceName(transport: Pick<VdcTransport, 'device' | 'vla
   return `${transport.device}.${transport.vlanId}`
 }
 
+/** Why the transports of two vDCs of one cluster cannot coexist (#899). */
+export interface TransportConflict {
+  reason: 'segment' | 'mtu' | 'nodeAddress' | 'addressReuse' | 'sharedSegment'
+  /** The value the other vDC holds, for the message. */
+  detail: string
+  /** The node the two disagree on, when the reason names one. */
+  node?: string
+}
+
+const sameAddress = (a: string, b: string): boolean => (normalizeIp(a) ?? a) === (normalizeIp(b) ?? b)
+
+/**
+ * Compares the transport of two vDCs of the SAME cluster. Sharing one
+ * transport segment is a legitimate montage (a single provider fabric, the
+ * tenants isolated by their VNI), so identical definitions are not a
+ * conflict. A disagreement is, because both vDCs then write the same VLAN
+ * interface on the same nodes and take the address from each other, which
+ * leaves the loser's tunnels on whatever address the route picks. Only the
+ * `transport` mode provisions an interface, the other two never conflict.
+ */
+export function transportConflict(a: VdcTransport, b: VdcTransport): TransportConflict | null {
+  if (a.mode !== 'transport' || b.mode !== 'transport') return null
+  const ifaceA = transportIfaceName(a)
+  const ifaceB = transportIfaceName(b)
+  if (!ifaceA || !ifaceB) return null
+  const cidrA = a.cidr ? parseCidr(a.cidr) : null
+  const cidrB = b.cidr ? parseCidr(b.cidr) : null
+
+  if (ifaceA !== ifaceB) {
+    // One segment reached through two interfaces: the node would hold two
+    // addresses of the same subnet and pick its source route at random.
+    if (cidrA && cidrB && cidrA.text === cidrB.text) return { reason: 'sharedSegment', detail: ifaceB }
+    return null
+  }
+
+  if (cidrA && cidrB && cidrA.text !== cidrB.text) return { reason: 'segment', detail: cidrB.text }
+  // The interface carries the zone MTU plus the VXLAN overhead, so two zone
+  // MTUs on one interface is the same fight as two addresses.
+  if ((a.mtu ?? null) !== (b.mtu ?? null)) {
+    return { reason: 'mtu', detail: b.mtu === null ? 'the Proxmox default' : String(b.mtu) }
+  }
+  for (const [node, ip] of Object.entries(a.nodeAddresses)) {
+    const other = b.nodeAddresses[node]
+    if (other && !sameAddress(other, ip)) return { reason: 'nodeAddress', node, detail: other }
+  }
+  // The same address on two different nodes is a duplicate on the segment.
+  for (const [node, ip] of Object.entries(b.nodeAddresses)) {
+    for (const [ownNode, ownIp] of Object.entries(a.nodeAddresses)) {
+      if (ownNode !== node && sameAddress(ownIp, ip)) return { reason: 'addressReuse', node, detail: ip }
+    }
+  }
+  return null
+}
+
 /** The MTU the transport interface itself must carry for a given zone MTU. */
 export function underlayMtuFor(zoneMtu: number | null): number | null {
   return zoneMtu === null ? null : zoneMtu + VXLAN_OVERHEAD

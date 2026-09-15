@@ -20,6 +20,7 @@ import {
   resolveZonePeers,
   sameZoneConfig,
   suggestNodeAddresses,
+  transportConflict,
   transportFromRow,
   transportIfaceName,
   underlayMtuFor,
@@ -232,5 +233,55 @@ describe('transportFromRow', () => {
       vxlanTransportMode: 'transport', transportVlanId: 4000, transportDevice: 'bond0',
       transportCidr: '10.100.5.0/24', transportNodeAddresses: { pve1: '10.100.5.1' },
     }).nodeAddresses).toEqual({ pve1: '10.100.5.1' })
+  })
+})
+
+describe('transportConflict', () => {
+  const seg = (over: Partial<Record<string, unknown>> = {}) => ({
+    ...DEFAULT_TRANSPORT,
+    mode: 'transport' as const,
+    vlanId: 4000,
+    device: 'vmbr0',
+    cidr: '10.100.5.0/24',
+    nodeAddresses: { pve1: '10.100.5.1', pve2: '10.100.5.2' },
+    ...over,
+  })
+
+  it('accepts two vDCs describing the same segment the same way', () => {
+    expect(transportConflict(seg(), seg())).toBeNull()
+    // Each one may describe a subset of the nodes.
+    expect(transportConflict(seg(), seg({ nodeAddresses: { pve1: '10.100.5.1' } }))).toBeNull()
+  })
+
+  it('ignores the modes that provision nothing', () => {
+    expect(transportConflict(seg(), { ...DEFAULT_TRANSPORT })).toBeNull()
+    expect(transportConflict({ ...DEFAULT_TRANSPORT, mode: 'peers', peers: ['10.100.5.1'] }, seg())).toBeNull()
+  })
+
+  it('refuses one interface claimed with two segments', () => {
+    expect(transportConflict(seg(), seg({ cidr: '10.100.6.0/24', nodeAddresses: { pve1: '10.100.6.1' } })))
+      .toEqual({ reason: 'segment', detail: '10.100.6.0/24' })
+  })
+
+  it('refuses one interface claimed with two MTUs', () => {
+    expect(transportConflict(seg({ mtu: 1400 }), seg())).toEqual({ reason: 'mtu', detail: 'the Proxmox default' })
+    expect(transportConflict(seg(), seg({ mtu: 8950 }))).toEqual({ reason: 'mtu', detail: '8950' })
+  })
+
+  it('refuses two addresses for one node, and one address for two nodes', () => {
+    expect(transportConflict(seg(), seg({ nodeAddresses: { pve1: '10.100.5.9' } })))
+      .toEqual({ reason: 'nodeAddress', node: 'pve1', detail: '10.100.5.9' })
+    expect(transportConflict(seg(), seg({ nodeAddresses: { pve3: '10.100.5.1' } })))
+      .toEqual({ reason: 'addressReuse', node: 'pve3', detail: '10.100.5.1' })
+  })
+
+  it('refuses one segment reached through two interfaces', () => {
+    expect(transportConflict(seg(), seg({ device: 'vmbr1' }))).toEqual({ reason: 'sharedSegment', detail: 'vmbr1.4000' })
+    // Different interface AND different segment is two independent fabrics.
+    expect(transportConflict(seg(), seg({ device: 'vmbr1', cidr: '10.100.6.0/24', nodeAddresses: {} }))).toBeNull()
+  })
+
+  it('leaves an incomplete transport alone, normalizeTransportInput refuses it first', () => {
+    expect(transportConflict(seg({ device: null }), seg())).toBeNull()
   })
 })

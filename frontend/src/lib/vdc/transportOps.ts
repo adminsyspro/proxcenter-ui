@@ -12,13 +12,70 @@ import {
   parseCidr,
   parseZonePeers,
   sameZoneConfig,
+  transportConflict,
   transportFromRow,
   transportIfaceName,
   underlayMtuFor,
   zoneConfigFor,
+  type TransportConflict,
   type VdcTransport,
   type ZoneConfig,
 } from './transport'
+
+/**
+ * Wording of a transport conflict. Carries "is in use by vDC" so the route
+ * layer answers 409 rather than the 400 of a malformed transport.
+ */
+function conflictMessage(conflict: TransportConflict, iface: string, cidr: string | null, otherName: string): string {
+  const head = `VXLAN transport: `
+  const owner = `is in use by vDC "${otherName}"`
+  switch (conflict.reason) {
+    case 'sharedSegment':
+      return `${head}segment ${cidr} ${owner} on interface "${conflict.detail}". A node cannot carry one segment on two interfaces.`
+    case 'segment':
+      return `${head}interface "${iface}" ${owner} with segment ${conflict.detail}. Two vDCs may share a transport segment, but only with the same definition.`
+    case 'mtu':
+      return `${head}interface "${iface}" ${owner} with ${conflict.detail === 'the Proxmox default' ? conflict.detail : `a zone MTU of ${conflict.detail}`}. The interface carries one MTU for both.`
+    case 'nodeAddress':
+      return `${head}interface "${iface}" ${owner}, which gives node "${conflict.node}" the address ${conflict.detail}.`
+    case 'addressReuse':
+      return `${head}interface "${iface}" ${owner}, which gives the address ${conflict.detail} to node "${conflict.node}".`
+  }
+}
+
+/**
+ * Refuses a transport that another vDC of the same cluster would fight over
+ * (#899). Called before any write, so a refusal leaves both Proxmox and the
+ * stored row untouched. Sharing a segment stays allowed as long as every
+ * vDC on it describes it the same way.
+ */
+export async function assertNoTransportConflict(
+  connectionId: string,
+  vdcId: string | null,
+  transport: VdcTransport,
+): Promise<void> {
+  if (transport.mode !== 'transport') return
+  const iface = transportIfaceName(transport)
+  if (!iface) return
+
+  const others = await prisma.vdc.findMany({
+    where: {
+      connectionId,
+      vxlanTransportMode: 'transport',
+      ...(vdcId ? { id: { not: vdcId } } : {}),
+    },
+    select: {
+      name: true,
+      vxlanTransportMode: true, vxlanPeers: true, vxlanMtu: true,
+      transportVlanId: true, transportDevice: true, transportCidr: true, transportNodeAddresses: true,
+    },
+  })
+
+  for (const other of others) {
+    const conflict = transportConflict(transport, transportFromRow(other))
+    if (conflict) throw new Error(conflictMessage(conflict, iface, transport.cidr, other.name))
+  }
+}
 
 export interface VdcZoneStatus {
   zoneName: string | null

@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const { prismaMock, pveFetchMock, getConnectionByIdMock } = vi.hoisted(() => ({
   prismaMock: {
-    vdc: { findUnique: vi.fn() },
+    vdc: { findUnique: vi.fn(), findMany: vi.fn() },
     connection: { findUnique: vi.fn() },
   } as any,
   pveFetchMock: vi.fn(),
@@ -18,7 +18,8 @@ vi.mock('@/lib/db/prisma', () => ({ prisma: prismaMock }))
 vi.mock('@/lib/proxmox/client', () => ({ pveFetch: pveFetchMock }))
 vi.mock('@/lib/connections/getConnection', () => ({ getConnectionById: getConnectionByIdMock }))
 
-import { effectiveZoneConfig, getVdcTransportStatus, getVdcZoneStatus, provisionVdcTransport, syncVdcZone } from './transportOps'
+import { assertNoTransportConflict, effectiveZoneConfig, getVdcTransportStatus, getVdcZoneStatus, provisionVdcTransport, syncVdcZone } from './transportOps'
+import { DEFAULT_TRANSPORT } from './transport'
 
 const conn = { baseUrl: 'https://pve', apiToken: 't' }
 
@@ -35,6 +36,8 @@ function putPaths(): string[] {
 beforeEach(() => {
   pveFetchMock.mockReset()
   prismaMock.vdc.findUnique.mockReset()
+  prismaMock.vdc.findMany.mockReset()
+  prismaMock.vdc.findMany.mockResolvedValue([])
   prismaMock.connection.findUnique.mockReset()
   getConnectionByIdMock.mockReset()
   prismaMock.connection.findUnique.mockResolvedValue({ tenantId: 'default' })
@@ -267,5 +270,60 @@ describe('provisionVdcTransport', () => {
     expect(body.get('cidr6')).toBe('fd00:5::1/64')
     expect(body.has('cidr')).toBe(false)
     expect(body.has('mtu')).toBe(false)
+  })
+})
+
+describe('assertNoTransportConflict', () => {
+  const transport = {
+    ...DEFAULT_TRANSPORT,
+    mode: 'transport' as const,
+    vlanId: 4000,
+    device: 'vmbr0',
+    cidr: '10.100.5.0/24',
+    nodeAddresses: { pve1: '10.100.5.1' },
+  }
+  const otherRow = (over: Record<string, unknown> = {}) => ({
+    name: 'Acme prod',
+    vxlanTransportMode: 'transport', vxlanPeers: [], vxlanMtu: null,
+    transportVlanId: 4000, transportDevice: 'vmbr0', transportCidr: '10.100.5.0/24',
+    transportNodeAddresses: { pve1: '10.100.5.1' },
+    ...over,
+  })
+
+  it('only looks at the transport-mode vDCs of the cluster, and never at itself', async () => {
+    await assertNoTransportConflict('c1', 'v1', transport)
+    expect(prismaMock.vdc.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { connectionId: 'c1', vxlanTransportMode: 'transport', id: { not: 'v1' } },
+    }))
+  })
+
+  it('reads nothing for a mode that provisions nothing', async () => {
+    await assertNoTransportConflict('c1', null, { ...DEFAULT_TRANSPORT })
+    expect(prismaMock.vdc.findMany).not.toHaveBeenCalled()
+  })
+
+  it('accepts a segment described identically by another vDC', async () => {
+    prismaMock.vdc.findMany.mockResolvedValue([otherRow()])
+    await expect(assertNoTransportConflict('c1', 'v1', transport)).resolves.toBeUndefined()
+  })
+
+  it('refuses a divergent segment, naming the owner, with a message the route maps to 409', async () => {
+    prismaMock.vdc.findMany.mockResolvedValue([otherRow({
+      transportCidr: '10.100.6.0/24', transportNodeAddresses: { pve1: '10.100.6.1' },
+    })])
+    await expect(assertNoTransportConflict('c1', 'v1', transport))
+      .rejects.toThrow(/VXLAN transport: interface "vmbr0.4000" is in use by vDC "Acme prod" with segment 10.100.6.0\/24/)
+  })
+
+  it('refuses an address another vDC gives to another node', async () => {
+    prismaMock.vdc.findMany.mockResolvedValue([otherRow({ transportNodeAddresses: { pve2: '10.100.5.1' } })])
+    await expect(assertNoTransportConflict('c1', 'v1', transport))
+      .rejects.toThrow(/gives the address 10.100.5.1 to node "pve2"/)
+  })
+
+  it('refuses one segment carried by two interfaces', async () => {
+    prismaMock.vdc.findMany.mockResolvedValue([otherRow({ transportDevice: 'vmbr1' })])
+    await expect(assertNoTransportConflict('c1', 'v1', transport))
+      .rejects.toThrow(/segment 10.100.5.0\/24 is in use by vDC "Acme prod" on interface "vmbr1.4000"/)
   })
 })

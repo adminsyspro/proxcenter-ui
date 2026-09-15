@@ -25,7 +25,9 @@ export function mapCreateVdcError(e: any): { status: number; message: string } {
   // the cluster or without `iso` content is a client-fixable 400.
   if (msg.includes('ISO library') || msg.includes('does not hold ISO content')) return { status: 400, message: msg }
   // VXLAN transport (#899): a malformed address, MTU, VLAN or CIDR is a 400;
-  // a zone rewrite that Proxmox refused is an upstream failure.
+  // a zone rewrite that Proxmox refused is an upstream failure. A transport
+  // another vDC already owns is a conflict, so it is matched first.
+  if (msg.startsWith('VXLAN transport') && msg.includes('is in use by vDC')) return { status: 409, message: msg }
   if (msg.startsWith('VXLAN transport')) return { status: 400, message: msg }
   if (msg.startsWith('Failed to update SDN zone')) return { status: 502, message: msg }
   if (msg.includes('is in use by vDC')) return { status: 409, message: msg }

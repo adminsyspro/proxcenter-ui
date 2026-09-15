@@ -23,6 +23,7 @@ import {
   sameZoneConfig,
   type VdcTransport,
 } from './transport'
+import { assertNoTransportConflict } from './transportOps'
 
 import type {
   Vdc,
@@ -465,8 +466,11 @@ export async function createVdc(input: CreateVdcInput, createdBy: string | null)
   const id = randomUUID()
   const now = new Date()
 
-  // VXLAN transport (#899): validated here, before any PVE side effect.
+  // VXLAN transport (#899): validated here, before any PVE side effect, and
+  // checked against the other vDCs of the cluster, which would write the same
+  // VLAN interface on the same nodes.
   const transport = normalizeTransportInput(input.transport)
+  await assertNoTransportConflict(input.connectionId, null, transport)
 
   // 4. Create PVE pool (existing behavior)
   const poolName = generatePoolName(tenantSlug, input.slug)
@@ -689,6 +693,7 @@ export async function updateVdc(id: string, input: UpdateVdcInput): Promise<VdcW
   if (input.transport !== undefined) {
     const prevTransport = rowToTransport(existing)
     nextTransport = normalizeTransportInput(input.transport, prevTransport)
+    await assertNoTransportConflict(existing.connectionId, id, nextTransport)
     if (existing.sdnZoneName) {
       const zoneOwner = await getConnectionOwnerTenantId(existing.connectionId)
       zoneConn = await getConnectionById(existing.connectionId, zoneOwner)

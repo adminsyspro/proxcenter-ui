@@ -744,6 +744,17 @@ model Vdc {
   cpuAllowedModels    String[] @default([]) @map("cpu_allowed_models")
   cpuDefaultModel     String?  @map("cpu_default_model")
   cpuAdvancedSettings Boolean  @default(true) @map("cpu_advanced_settings")
+  // VXLAN transport (#899): how the tenant zone's peers are derived and the
+  // zone MTU. `cluster` is the historical behaviour (corosync node addresses),
+  // `peers` an operator list, `transport` a dedicated VLAN segment with one
+  // address per node (extra endpoints such as tenant routers go in vxlanPeers).
+  vxlanTransportMode     String   @default("cluster") @map("vxlan_transport_mode")
+  vxlanPeers             String[] @default([]) @map("vxlan_peers")
+  vxlanMtu               Int?     @map("vxlan_mtu")
+  transportVlanId        Int?     @map("transport_vlan_id")
+  transportDevice        String?  @map("transport_device")
+  transportCidr          String?  @map("transport_cidr")
+  transportNodeAddresses Json?    @map("transport_node_addresses")
   createdBy      String?  @map("created_by")
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @default(now()) @map("updated_at")

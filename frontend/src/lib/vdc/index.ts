@@ -10,11 +10,19 @@ import { prisma } from '@/lib/db/prisma'
 import { decryptSecret } from '@/lib/crypto/secret'
 import { DEFAULT_TENANT_ID } from '@/lib/tenant'
 
-import { generateZoneName, isZoneNameTaken, createZone, deleteZone, deleteVnetPve, applySdn } from './sdn'
+import { generateZoneName, isZoneNameTaken, createZone, deleteZone, deleteVnetPve, applySdn, updateZone, listClusterNodeIps } from './sdn'
 import { clearVdcScopeCache } from './scope'
 import { validateVlanPoolsInput, assertNoCrossVdcOverlap, assertPoolShrinkSafe, type VlanPoolInput } from './vlan'
 import { getVdcStorageUsedMb } from './quota'
 import { DEFAULT_COMPUTE_POLICY, normalizeComputePolicyInput, type VdcComputePolicy } from './computePolicy'
+import {
+  normalizeTransportInput,
+  transportFromRow as rowToTransport,
+  transportToRow,
+  zoneConfigFor,
+  sameZoneConfig,
+  type VdcTransport,
+} from './transport'
 
 import type {
   Vdc,
@@ -49,6 +57,13 @@ type VdcRow = {
   cpuAllowedModels?: string[] | null
   cpuDefaultModel?: string | null
   cpuAdvancedSettings?: boolean | null
+  vxlanTransportMode?: string | null
+  vxlanPeers?: string[] | null
+  vxlanMtu?: number | null
+  transportVlanId?: number | null
+  transportDevice?: string | null
+  transportCidr?: string | null
+  transportNodeAddresses?: unknown
   createdBy: string | null
   createdAt: Date
   updatedAt: Date
@@ -75,6 +90,7 @@ function rowToVdc(row: VdcRow): Vdc {
     sdnZoneName: row.sdnZoneName ?? null,
     primaryStorage: row.primaryStorage ?? null,
     computePolicy: rowToComputePolicy(row),
+    transport: rowToTransport(row),
     enabled: row.enabled !== false,
     createdBy: row.createdBy ?? null,
     createdAt: row.createdAt.toISOString(),
@@ -449,6 +465,9 @@ export async function createVdc(input: CreateVdcInput, createdBy: string | null)
   const id = randomUUID()
   const now = new Date()
 
+  // VXLAN transport (#899): validated here, before any PVE side effect.
+  const transport = normalizeTransportInput(input.transport)
+
   // 4. Create PVE pool (existing behavior)
   const poolName = generatePoolName(tenantSlug, input.slug)
   const connOwnerTenantId = await getConnectionOwnerTenantId(input.connectionId)
@@ -485,7 +504,11 @@ export async function createVdc(input: CreateVdcInput, createdBy: string | null)
     sdnZoneName = await generateZoneName(input.connectionId, { id, slug: input.slug })
   }
   try {
-    await createZone(conn, sdnZoneName)
+    // Cluster mode reads the node addresses now; the other modes carry
+    // their peers in the transport definition.
+    const clusterIps = transport.mode === 'cluster' ? await listClusterNodeIps(conn) : []
+    const zone = zoneConfigFor(transport, clusterIps)
+    await createZone(conn, sdnZoneName, { peers: zone.peers, mtu: zone.mtu })
   } catch (err: any) {
     try {
       await pveFetch(conn, `/pools/${encodeURIComponent(poolName)}`, { method: 'DELETE' })
@@ -508,6 +531,7 @@ export async function createVdc(input: CreateVdcInput, createdBy: string | null)
           sdnZoneName,
           primaryStorage: input.primaryStorage ?? null,
           ...computePolicyToRow(normalizeComputePolicyInput(input.computePolicy)),
+          ...transportToRow(transport),
           enabled: true,
           createdBy,
           createdAt: now,
@@ -623,8 +647,10 @@ export async function updateVdc(id: string, input: UpdateVdcInput): Promise<VdcW
   const existing = await prisma.vdc.findUnique({
     where: { id },
     select: {
-      id: true, tenantId: true, connectionId: true,
+      id: true, tenantId: true, connectionId: true, sdnZoneName: true,
       cpuModelMode: true, cpuAllowedModels: true, cpuDefaultModel: true, cpuAdvancedSettings: true,
+      vxlanTransportMode: true, vxlanPeers: true, vxlanMtu: true,
+      transportVlanId: true, transportDevice: true, transportCidr: true, transportNodeAddresses: true,
     },
   })
   if (!existing) {
@@ -653,6 +679,29 @@ export async function updateVdc(id: string, input: UpdateVdcInput): Promise<VdcW
     isoLibraries = await validateIsoLibraries(libConn, input.isoLibraries)
   }
 
+  // VXLAN transport (#899): validate, then push the zone change to Proxmox
+  // BEFORE the DB write, so a refusal from PVE leaves the stored row as it
+  // was. Only a change of the resolved peers or of the MTU touches PVE: a
+  // PUT that leaves the transport alone never triggers an SDN apply.
+  let nextTransport: VdcTransport | null = null
+  let zoneConn: any = null
+  let zoneChanged = false
+  if (input.transport !== undefined) {
+    const prevTransport = rowToTransport(existing)
+    nextTransport = normalizeTransportInput(input.transport, prevTransport)
+    if (existing.sdnZoneName) {
+      const zoneOwner = await getConnectionOwnerTenantId(existing.connectionId)
+      zoneConn = await getConnectionById(existing.connectionId, zoneOwner)
+      const needsClusterIps = prevTransport.mode === 'cluster' || nextTransport.mode === 'cluster'
+      const clusterIps = needsClusterIps ? await listClusterNodeIps(zoneConn) : []
+      const nextZone = zoneConfigFor(nextTransport, clusterIps)
+      if (!sameZoneConfig(zoneConfigFor(prevTransport, clusterIps), nextZone)) {
+        await updateZone(zoneConn, existing.sdnZoneName, nextZone)
+        zoneChanged = true
+      }
+    }
+  }
+
   const now = new Date()
 
   await prisma.$transaction(async tx => {
@@ -666,6 +715,7 @@ export async function updateVdc(id: string, input: UpdateVdcInput): Promise<VdcW
       // only flips the advanced switch does not reset the mode or the list.
       Object.assign(updateData, computePolicyToRow(normalizeComputePolicyInput(input.computePolicy, rowToComputePolicy(existing))))
     }
+    if (nextTransport) Object.assign(updateData, transportToRow(nextTransport))
 
     await tx.vdc.update({ where: { id }, data: updateData })
 
@@ -754,6 +804,16 @@ export async function updateVdc(id: string, input: UpdateVdcInput): Promise<VdcW
       })
     }
   })
+
+  if (zoneChanged && zoneConn) {
+    try {
+      await applySdn(zoneConn)
+    } catch (err: any) {
+      // Staged in /etc/pve/sdn/zones.cfg already; the admin can apply from
+      // the zone panel ("Sync zone") or from Proxmox.
+      console.warn(`[vdc] applySdn failed after updating zone "${existing.sdnZoneName}": ${err?.message}`)
+    }
+  }
 
   clearVdcScopeCache(existing.tenantId)
 

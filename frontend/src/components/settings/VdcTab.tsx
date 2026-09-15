@@ -44,6 +44,20 @@ import QuotaDonut from '@/components/mydc/QuotaDonut'
 import { NodeIcon } from '@/app/(dashboard)/infrastructure/inventory/components/TreeIcons'
 import { extractCustomCpuModels, listKnownCpuTypes } from '@/lib/inventory/cpuModels'
 import type { CpuModelMode } from '@/lib/vdc/computePolicy'
+import {
+  TRANSPORT_MODES,
+  VXLAN_OVERHEAD,
+  ZONE_MTU_MAX,
+  ZONE_MTU_MIN,
+  ipFamily,
+  ipInCidr,
+  nodesWithoutPeer,
+  parseCidr,
+  suggestNodeAddresses,
+  transportIfaceName,
+  type VdcTransport,
+  type VxlanTransportMode,
+} from '@/lib/vdc/transport'
 
 const KNOWN_CPU_TYPES = listKnownCpuTypes()
 
@@ -81,6 +95,149 @@ function sanitizeDefaultModel(policy: ComputePolicyForm, customModels: string[])
   return defaultModelOptionsFor(policy, customModels).includes(policy.cpuDefaultModel)
     ? policy
     : { ...policy, cpuDefaultModel: '' }
+}
+
+// VXLAN transport (#899): the dialog keeps text fields, the API gets numbers.
+interface TransportForm {
+  mode: VxlanTransportMode
+  /** `peers` mode: the whole list. `transport` mode: the additional endpoints. */
+  peersText: string
+  mtu: string
+  vlanId: string
+  device: string
+  cidr: string
+  nodeAddresses: Record<string, string>
+}
+
+const emptyTransport: TransportForm = {
+  mode: 'cluster',
+  peersText: '',
+  mtu: '',
+  vlanId: '',
+  device: '',
+  cidr: '',
+  nodeAddresses: {},
+}
+
+const TRANSPORT_MODE_KEYS: Record<VxlanTransportMode, { label: string; hint: string; example: string }> = {
+  cluster: { label: 'vdc.transportModeCluster', hint: 'vdc.transportModeClusterHint', example: 'vdc.transportModeClusterExample' },
+  peers: { label: 'vdc.transportModePeers', hint: 'vdc.transportModePeersHint', example: 'vdc.transportModePeersExample' },
+  transport: { label: 'vdc.transportModeTransport', hint: 'vdc.transportModeTransportHint', example: 'vdc.transportModeTransportExample' },
+}
+
+type ProvisionAction = 'created' | 'updated' | 'unchanged' | 'error'
+
+const PROVISION_ACTION_KEYS: Record<ProvisionAction, { label: string; color: 'success' | 'default' | 'error' }> = {
+  created: { label: 'vdc.transportProvisionCreated', color: 'success' },
+  updated: { label: 'vdc.transportProvisionUpdated', color: 'success' },
+  unchanged: { label: 'vdc.transportProvisionUnchanged', color: 'default' },
+  error: { label: 'vdc.transportProvisionError', color: 'error' },
+}
+
+interface NodeAddressEntry {
+  name: string
+  online: boolean
+  /** Corosync link address from /cluster/status: the peer used in cluster mode. */
+  clusterIp?: string | null
+  addresses: string[]
+  ifaces: Array<{ iface: string; type: string; mtu: number | null; cidr: string | null }>
+}
+
+// A small MUI Select renders its text on a 21px line while a small input is
+// fixed at 1.4375em, so a select next to a text field is 2px taller. Align
+// the selects of this dialog on the text fields.
+// Two classes in the selector: with an end adornment MUI's own rule would
+// otherwise win on `minHeight` and the 2px come back.
+const SMALL_SELECT_SX = { '& .MuiInputBase-input.MuiSelect-select': { minHeight: '1.4375em', lineHeight: '1.4375em' } } as const
+
+interface ZoneStatus {
+  zoneName: string | null
+  desired: { peers: string[]; mtu: number | null }
+  live: { type: string; peers: string[]; mtu: number | null; state: string | null; pending: Record<string, unknown> | null } | null
+  inSync: boolean
+  changed?: boolean
+}
+
+interface ProvisionResult {
+  node: string
+  iface: string
+  action: ProvisionAction
+  message?: string
+}
+
+type TransportNodeState = 'provisioned' | 'missing' | 'drift' | 'unreachable'
+
+const TRANSPORT_STATE_KEYS: Record<TransportNodeState, { label: string; color: 'success' | 'warning' | 'error' }> = {
+  provisioned: { label: 'vdc.transportStatusProvisioned', color: 'success' },
+  missing: { label: 'vdc.transportStatusMissing', color: 'warning' },
+  drift: { label: 'vdc.transportStatusDrift', color: 'warning' },
+  unreachable: { label: 'vdc.transportStatusUnreachable', color: 'error' },
+}
+
+interface TransportNodeStatus {
+  node: string
+  iface: string
+  state: TransportNodeState
+  wanted: string
+  found: string | null
+  message?: string
+}
+
+/** Entries of a peers textarea: one per line, or comma / space separated. */
+function splitPeers(text: string): string[] {
+  return text.split(/[\s,;]+/).map((s) => s.trim()).filter(Boolean)
+}
+
+function firstInvalidAddress(entries: string[]): string | null {
+  return entries.find((e) => ipFamily(e) === null) ?? null
+}
+
+function transportFormFrom(t: VdcTransport | null | undefined): TransportForm {
+  if (!t) return emptyTransport
+  return {
+    mode: TRANSPORT_MODES.includes(t.mode) ? t.mode : 'cluster',
+    peersText: Array.isArray(t.peers) ? t.peers.join('\n') : '',
+    mtu: t.mtu != null ? String(t.mtu) : '',
+    vlanId: t.vlanId != null ? String(t.vlanId) : '',
+    device: t.device ?? '',
+    cidr: t.cidr ?? '',
+    nodeAddresses: t.nodeAddresses && typeof t.nodeAddresses === 'object' ? { ...t.nodeAddresses } : {},
+  }
+}
+
+/** The `transport` body sent with the vDC POST / PUT. */
+function transportPayloadFrom(f: TransportForm): Partial<VdcTransport> {
+  const nodeAddresses: Record<string, string> = {}
+  for (const [node, value] of Object.entries(f.nodeAddresses)) {
+    const trimmed = String(value ?? '').trim()
+    if (trimmed) nodeAddresses[node] = trimmed
+  }
+  return {
+    mode: f.mode,
+    peers: splitPeers(f.peersText),
+    mtu: f.mtu.trim() ? Number(f.mtu) : null,
+    vlanId: f.vlanId.trim() ? Number(f.vlanId) : null,
+    device: f.device.trim() || null,
+    cidr: f.cidr.trim() || null,
+    nodeAddresses,
+  }
+}
+
+/** Order-insensitive fingerprint, so Sync / Provision know the form is saved. */
+function transportFingerprint(p: Partial<VdcTransport>): string {
+  return JSON.stringify({
+    mode: p.mode,
+    peers: [...new Set(p.peers ?? [])].sort(),
+    mtu: p.mtu ?? null,
+    vlanId: p.vlanId ?? null,
+    device: p.device ?? null,
+    cidr: p.cidr ?? null,
+    nodeAddresses: Object.entries(p.nodeAddresses ?? {}).sort(([a], [b]) => a.localeCompare(b)),
+  })
+}
+
+function transportDirty(f: TransportForm, saved: VdcTransport | null | undefined): boolean {
+  return transportFingerprint(transportPayloadFrom(f)) !== transportFingerprint(transportPayloadFrom(transportFormFrom(saved)))
 }
 
 interface VdcFormState {
@@ -236,6 +393,22 @@ export default function VdcTab() {
   // among the cluster storages that advertise `iso` content.
   const [isoLibraries, setIsoLibraries] = useState<Array<{ storageId: string; allowUploads: boolean }>>([])
   const [isoStorageCandidates, setIsoStorageCandidates] = useState<Array<{ storage: string; type: string; shared: boolean }>>([])
+
+  // VXLAN transport (#899): how the vDC's zone reaches its peers, the node
+  // addresses / devices of the cluster that feed the section, and the zone
+  // status (desired vs live on Proxmox) shown in edit mode.
+  const [transport, setTransport] = useState<TransportForm>(emptyTransport)
+  const [nodeAddressInfo, setNodeAddressInfo] = useState<{ nodes: NodeAddressEntry[]; devices: string[] }>({ nodes: [], devices: [] })
+  const [zoneStatus, setZoneStatus] = useState<ZoneStatus | null>(null)
+  const [zoneLoading, setZoneLoading] = useState(false)
+  const [zoneMessage, setZoneMessage] = useState<{ severity: 'success' | 'info' | 'error'; text: string } | null>(null)
+  const [provisioning, setProvisioning] = useState(false)
+  const [provisionResults, setProvisionResults] = useState<ProvisionResult[] | null>(null)
+  const [provisionError, setProvisionError] = useState('')
+  // What each node carries on the transport interface, read when the dialog
+  // opens in transport mode and again after a provisioning.
+  const [transportStatus, setTransportStatus] = useState<TransportNodeStatus[] | null>(null)
+  const [transportStatusLoading, setTransportStatusLoading] = useState(false)
 
   // Node statuses keyed `${connectionId}|${nodeName}` -> 'online' | 'offline' | …
   // Populated once vDCs are loaded by hitting available-resources for each
@@ -567,6 +740,119 @@ export default function VdcTab() {
     return () => { cancelled = true }
   }, [form.connectionId, firstNodeName])
 
+  // Node addresses and common devices of the cluster (#899): the peer-list
+  // warning, the device suggestions and the node -> address table read them.
+  useEffect(() => {
+    if (!form.connectionId) {
+      setNodeAddressInfo({ nodes: [], devices: [] })
+      return
+    }
+    let cancelled = false
+    void (async () => {
+      try {
+        const res = await fetch(`/api/v1/admin/connections/${encodeURIComponent(form.connectionId)}/node-addresses`)
+        if (!res.ok) { if (!cancelled) setNodeAddressInfo({ nodes: [], devices: [] }); return }
+        const json = await res.json()
+        if (cancelled) return
+        setNodeAddressInfo({
+          nodes: Array.isArray(json?.data?.nodes) ? json.data.nodes : [],
+          devices: Array.isArray(json?.data?.devices) ? json.data.devices : [],
+        })
+      } catch (err) {
+        console.error('Failed to load node addresses', err)
+        if (!cancelled) setNodeAddressInfo({ nodes: [], devices: [] })
+      }
+    })()
+    return () => { cancelled = true }
+  }, [form.connectionId])
+
+  // Zone status (#899): desired peers / MTU against what Proxmox runs.
+  const loadZoneStatus = useCallback(async (vdcId: string) => {
+    setZoneLoading(true)
+    try {
+      const res = await fetch(`/api/v1/admin/vdcs/${encodeURIComponent(vdcId)}/zone`)
+      if (!res.ok) { setZoneStatus(null); return }
+      const json = await res.json()
+      setZoneStatus(json?.data ?? null)
+    } catch (err) {
+      console.error('Failed to load SDN zone status', err)
+      setZoneStatus(null)
+    } finally {
+      setZoneLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!dialogOpen || !editingVdc?.id || !editingVdc?.sdnZoneName) {
+      setZoneStatus(null)
+      return
+    }
+    void loadZoneStatus(editingVdc.id)
+  }, [dialogOpen, editingVdc?.id, editingVdc?.sdnZoneName, loadZoneStatus])
+
+  const handleSyncZone = async () => {
+    if (!editingVdc?.id) return
+    setZoneLoading(true)
+    setZoneMessage(null)
+    try {
+      const res = await fetch(`/api/v1/admin/vdcs/${encodeURIComponent(editingVdc.id)}/zone`, { method: 'POST' })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json?.error || t('vdc.zoneSyncFailed'))
+      setZoneStatus(json?.data ?? null)
+      setZoneMessage({
+        severity: json?.data?.changed ? 'success' : 'info',
+        text: json?.data?.changed ? t('vdc.zoneSyncUpdated') : t('vdc.zoneSyncAlreadyInSync'),
+      })
+    } catch (e: any) {
+      setZoneMessage({ severity: 'error', text: e?.message || String(e) })
+    } finally {
+      setZoneLoading(false)
+    }
+  }
+
+  const loadTransportStatus = useCallback(async (vdcId: string) => {
+    setTransportStatusLoading(true)
+    try {
+      const res = await fetch(`/api/v1/admin/vdcs/${encodeURIComponent(vdcId)}/transport/provision`)
+      if (!res.ok) { setTransportStatus(null); return }
+      const json = await res.json()
+      setTransportStatus(Array.isArray(json?.data?.nodes) ? json.data.nodes : [])
+    } catch (err) {
+      console.error('Failed to load transport interface status', err)
+      setTransportStatus(null)
+    } finally {
+      setTransportStatusLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!dialogOpen || !editingVdc?.id || editingVdc?.transport?.mode !== 'transport') {
+      setTransportStatus(null)
+      return
+    }
+    void loadTransportStatus(editingVdc.id)
+  }, [dialogOpen, editingVdc?.id, editingVdc?.transport?.mode, loadTransportStatus])
+
+  const handleProvisionTransport = async () => {
+    if (!editingVdc?.id) return
+    setProvisioning(true)
+    setProvisionError('')
+    setProvisionResults(null)
+    try {
+      const res = await fetch(`/api/v1/admin/vdcs/${encodeURIComponent(editingVdc.id)}/transport/provision`, { method: 'POST' })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json?.error || t('vdc.transportProvisionFailed'))
+      setProvisionResults(Array.isArray(json?.data?.results) ? json.data.results : [])
+      // The node interfaces changed: re-read them, and the live zone MTU may follow.
+      void loadTransportStatus(editingVdc.id)
+      void loadZoneStatus(editingVdc.id)
+    } catch (e: any) {
+      setProvisionError(e?.message || String(e))
+    } finally {
+      setProvisioning(false)
+    }
+  }
+
   // ------- Helpers -------
 
   const getConnectionName = (connectionId: string) => {
@@ -620,6 +906,11 @@ export default function VdcTab() {
     setVdcPolicies([])
     setComputePolicy(emptyComputePolicy)
     setIsoLibraries([])
+    setTransport(emptyTransport)
+    setZoneStatus(null)
+    setZoneMessage(null)
+    setProvisionResults(null)
+    setProvisionError('')
     setPbsDraft({ enabled: false, mode: 'auto', pbsConnectionId: '', datastore: '', namespace: '' })
     setPbsDraftDatastores([])
     setDialogTab(0)
@@ -636,6 +927,7 @@ export default function VdcTab() {
       connectionId: vdc.connectionId,
       nodes: vdc.nodes,
       primaryStorage: vdc.primaryStorage || '',
+      sdnZoneName: vdc.sdnZoneName || '',
       maxVcpus: vdc.quota?.maxVcpus ? String(vdc.quota.maxVcpus) : '',
       maxRamGb: vdc.quota?.maxRamMb ? String(Math.round(vdc.quota.maxRamMb / 1024)) : '',
       maxStorageGb: vdc.quota?.maxStorageMb ? String(Math.round(vdc.quota.maxStorageMb / 1024)) : '',
@@ -689,6 +981,11 @@ export default function VdcTab() {
             .filter((l: { storageId: string }) => l.storageId)
         : [],
     )
+    setTransport(transportFormFrom(vdc.transport))
+    setZoneStatus(null)
+    setZoneMessage(null)
+    setProvisionResults(null)
+    setProvisionError('')
 
     setDialogTab(0)
     setDialogOpen(true)
@@ -744,6 +1041,14 @@ export default function VdcTab() {
         cpuDefaultModel: computePolicy.cpuDefaultModel || null,
       }
 
+      // VXLAN transport (#899): the server validates in depth; a malformed
+      // address is caught here to spare the round trip.
+      const transportPayload = transportPayloadFrom(transport)
+      const badPeer = firstInvalidAddress(transportPayload.peers ?? [])
+      if (badPeer) throw new Error(t('vdc.transportInvalidAddress', { address: badPeer }))
+      const badNodeAddress = firstInvalidAddress(Object.values(transportPayload.nodeAddresses ?? {}))
+      if (badNodeAddress) throw new Error(t('vdc.transportInvalidAddress', { address: badNodeAddress }))
+
       // Snapshot nodes from the live resources at submit time —
       // form.nodes gets auto-filled by the resources fetch useEffect,
       // but a race (slow PVE, fetch retry, user clicking Submit right
@@ -783,6 +1088,7 @@ export default function VdcTab() {
           storagePolicies: storagePoliciesPayload,
           computePolicy: computePolicyPayload,
           isoLibraries,
+          transport: transportPayload,
           quota,
         }
 
@@ -816,6 +1122,7 @@ export default function VdcTab() {
           storagePolicies: storagePoliciesPayload,
           computePolicy: computePolicyPayload,
           isoLibraries,
+          transport: transportPayload,
           quota: Object.keys(quota).some((k) => quota[k] !== null) ? quota : undefined,
         }
 
@@ -1484,6 +1791,105 @@ export default function VdcTab() {
     }
     return availableResources ? content : null
   }
+
+  // VXLAN transport (#899): derived state of the Network section.
+  const transportDirtyFlag = !!editingVdc && transportDirty(transport, editingVdc.transport)
+  const peerEntries = splitPeers(transport.peersText)
+  const invalidPeer = firstInvalidAddress(peerEntries)
+  const validPeers = peerEntries.filter((p) => ipFamily(p) !== null)
+  const missingPeerNodes = transport.mode === 'peers' ? nodesWithoutPeer(validPeers, nodeAddressInfo.nodes) : []
+  const mtuNumber = transport.mtu.trim() ? Number(transport.mtu) : null
+  const mtuInvalid = mtuNumber !== null && (!Number.isInteger(mtuNumber) || mtuNumber < ZONE_MTU_MIN || mtuNumber > ZONE_MTU_MAX)
+  const vlanNumber = /^\d+$/.test(transport.vlanId.trim()) ? Number(transport.vlanId) : null
+  const vlanInvalid = transport.vlanId.trim() !== '' && (vlanNumber === null || vlanNumber < 1 || vlanNumber > 4094)
+  const transportCidr = parseCidr(transport.cidr)
+  const cidrInvalid = transport.cidr.trim() !== '' && !transportCidr
+  const transportIface = transportIfaceName({ device: transport.device.trim() || null, vlanId: vlanInvalid ? null : vlanNumber })
+  const deviceIsPoolBridge = !!transport.device.trim() && poolBridges.some((b) => b.iface === transport.device.trim())
+  const transportNodeNames = (() => {
+    const names = nodeAddressInfo.nodes.map((n) => n.name)
+    for (const name of Object.keys(transport.nodeAddresses)) if (!names.includes(name)) names.push(name)
+    return names
+  })()
+  const transportPoolAlreadyAdded = vlanNumber !== null && vlanPools.some(
+    (p) => p.bridge === transport.device.trim() && p.rangeStart === String(vlanNumber) && p.rangeEnd === String(vlanNumber),
+  )
+  // Nothing left to provision: every listed node already carries the
+  // interface with the wanted address and MTU. A node that did not answer,
+  // or that differs, keeps the button active for a retry.
+  const transportAllProvisioned = !!transportStatus && transportStatus.length > 0 && transportStatus.every((s) => s.state === 'provisioned')
+  // Same glyph as the vDC list: Proxmox logo with the status dot. The list's
+  // status map is preferred; the node-addresses answer is the fallback.
+  const transportNodeStatus = (name: string): string | undefined => {
+    const fromList = nodeStatuses[`${form.connectionId}|${name}`]
+    if (fromList) return fromList
+    const entry = nodeAddressInfo.nodes.find((n) => n.name === name)
+    return entry ? (entry.online ? 'online' : 'offline') : undefined
+  }
+  const renderNodeGlyph = (name: string, size = 16) => (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 0 }}>
+      <NodeIcon status={transportNodeStatus(name)} size={size} />
+      <Typography variant="body2" noWrap>{name}</Typography>
+    </Box>
+  )
+
+  const renderPeerChips = (label: string, peers: string[], mtu: number | null) => (
+    <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} alignItems={{ sm: 'flex-start' }}>
+      <Typography variant="caption" color="text.secondary" sx={{ width: { sm: 144 }, flexShrink: 0, pt: { sm: 0.25 } }}>{label}</Typography>
+      <Stack direction="row" spacing={0.75} alignItems="center" flexWrap="wrap" useFlexGap sx={{ minWidth: 0 }}>
+        {peers.length === 0 ? (
+          <Typography variant="caption" sx={{ fontStyle: 'italic' }}>{t('vdc.zoneNoPeers')}</Typography>
+        ) : (
+          peers.map((p) => <Chip key={p} size="small" variant="outlined" label={p} />)
+        )}
+        <Chip size="small" label={mtu != null ? t('vdc.zoneMtu', { mtu }) : t('vdc.zoneMtuDefault')} />
+      </Stack>
+    </Stack>
+  )
+
+  // Explanations live in tooltips (same glyph as the Storage tab); only a
+  // validation error is written under a field. The icon is offset to sit on
+  // the vertical centre of a small input whatever the helper text below.
+  const hintIcon = (title: ReactNode, offset = true, wide = false) => (
+    <Tooltip arrow placement="top" title={title} slotProps={wide ? { tooltip: { sx: { maxWidth: 460 } } } : undefined}>
+      <Box component="i" className="ri-information-line" sx={{ fontSize: 14, opacity: 0.55, cursor: 'help', flexShrink: 0, ...(offset ? { mt: '11px' } : {}) }} />
+    </Tooltip>
+  )
+  // The three modes side by side, each with its rule and a scenario, so the
+  // choice is made before the select is opened.
+  const transportModeHelp = (
+    <Stack spacing={1.25} sx={{ py: 0.5 }}>
+      {TRANSPORT_MODES.map((m) => (
+        <Box key={m}>
+          <Typography variant="caption" sx={{ display: 'block', fontWeight: 600 }}>{t(TRANSPORT_MODE_KEYS[m].label)}</Typography>
+          <Typography variant="caption" sx={{ display: 'block' }}>{t(TRANSPORT_MODE_KEYS[m].hint)}</Typography>
+          <Typography variant="caption" sx={{ display: 'block', opacity: 0.8 }}>{t(TRANSPORT_MODE_KEYS[m].example)}</Typography>
+        </Box>
+      ))}
+    </Stack>
+  )
+  // Field help as an end adornment, so every field keeps its full width and
+  // the rows of the card stay aligned on the right edge. `insideSelect`
+  // leaves room for the dropdown arrow of a Select.
+  const hintAdornment = (title: ReactNode, opts: { wide?: boolean; insideSelect?: boolean } = {}) => (
+    <InputAdornment position="end" sx={{ mr: opts.insideSelect ? 3.5 : 0, pointerEvents: 'auto' }}>
+      {hintIcon(title, false, opts.wide)}
+    </InputAdornment>
+  )
+  const renderPeersField = (label: string, hint: string) => (
+    <TextField
+      multiline
+      minRows={2}
+      fullWidth
+      size="small"
+      label={label}
+      value={transport.peersText}
+      onChange={(e) => setTransport((p) => ({ ...p, peersText: e.target.value }))}
+      error={!!invalidPeer}
+      helperText={invalidPeer ? t('vdc.transportInvalidAddress', { address: invalidPeer }) : undefined}
+      slotProps={{ input: { endAdornment: hintAdornment(hint) } }}
+    />
+  )
 
   return (
     <Box>
@@ -2252,24 +2658,376 @@ export default function VdcTab() {
           <TabPanel value={dialogTab} index={3}>
             {connectionGated(
               <>
-                  {/* SDN Network (read-only, edit mode only) */}
-                  {editingVdc?.sdnZoneName && (
-                    <Box sx={{ p: 2, border: 1, borderColor: 'divider', borderRadius: 1 }}>
-                      <Typography variant="subtitle2" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <i className="ri-share-line" />
-                        {t('vdc.sdnZoneTitle')}
+                  {/* VXLAN transport (#899): how the tenant zone reaches its peers */}
+                  <Box sx={{ p: 2, border: 1, borderColor: 'divider', borderRadius: 1 }}>
+                    <Stack direction="row" alignItems="center" justifyContent="space-between" flexWrap="wrap" useFlexGap spacing={1.5}>
+                      <Typography variant="subtitle2" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <i className="ri-route-line" />
+                        {t('vdc.transportTitle')}
+                        {hintIcon(t('vdc.transportHint'), false)}
                       </Typography>
-                      <Typography variant="caption" color="text.secondary">{t('vdc.sdnZoneHint')}</Typography>
-                      <Box sx={{ mt: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Chip label={editingVdc.sdnZoneName} size="small" variant="outlined" />
-                        {Array.isArray(editingVdc.vnets) && editingVdc.vnets.length > 0 && (
-                          <Typography variant="caption" color="text.secondary">
-                            {editingVdc.vnets.length} VNet{editingVdc.vnets.length > 1 ? 's' : ''}
-                          </Typography>
+                      {editingVdc?.sdnZoneName && (
+                        <Stack direction="row" spacing={1} alignItems="center" justifyContent="flex-end" flexWrap="wrap" useFlexGap sx={{ ml: 'auto' }}>
+                          <Tooltip arrow placement="top" title={
+                            <Stack spacing={0.5}>
+                              <Typography variant="caption">{t('vdc.sdnZoneHint')}</Typography>
+                              {Array.isArray(editingVdc.vnets) && (
+                                <Typography variant="caption">{t('vdc.zoneVnetCount', { count: editingVdc.vnets.length })}</Typography>
+                              )}
+                            </Stack>
+                          }>
+                            <Chip label={editingVdc.sdnZoneName} size="small" variant="outlined" />
+                          </Tooltip>
+                          {zoneStatus && (
+                            <Chip
+                              size="small"
+                              color={zoneStatus.live === null ? 'error' : zoneStatus.inSync ? 'success' : 'warning'}
+                              label={zoneStatus.live === null ? t('vdc.zoneNotFound') : zoneStatus.inSync ? t('vdc.zoneInSync') : t('vdc.zoneOutOfSync')}
+                            />
+                          )}
+                          {zoneStatus?.live?.state && (
+                            <Chip size="small" color="info" variant="outlined" label={t('vdc.zonePendingApply')} />
+                          )}
+                          <Tooltip arrow placement="top" title={transportDirtyFlag ? t('vdc.transportSaveFirst') : ''}>
+                            <span>
+                              <Button
+                                size="small"
+                                variant="outlined"
+                                startIcon={<i className="ri-refresh-line" />}
+                                disabled={transportDirtyFlag || zoneLoading}
+                                onClick={handleSyncZone}
+                              >
+                                {t('vdc.zoneSync')}
+                              </Button>
+                            </span>
+                          </Tooltip>
+                        </Stack>
+                      )}
+                    </Stack>
+
+                    <Stack spacing={2} sx={{ mt: 2 }}>
+                      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+                        <TextField
+                          select
+                          size="small"
+                          fullWidth
+                          sx={SMALL_SELECT_SX}
+                          label={t('vdc.transportMode')}
+                          value={transport.mode}
+                          onChange={(e) => setTransport((p) => ({ ...p, mode: e.target.value as VxlanTransportMode }))}
+                          slotProps={{ input: { endAdornment: hintAdornment(transportModeHelp, { wide: true, insideSelect: true }) } }}
+                        >
+                          {TRANSPORT_MODES.map((m) => (
+                            <MenuItem key={m} value={m}>{t(TRANSPORT_MODE_KEYS[m].label)}</MenuItem>
+                          ))}
+                        </TextField>
+                        <TextField
+                          size="small"
+                          type="number"
+                          label={t('vdc.transportMtu')}
+                          sx={{ width: { xs: '100%', sm: 240 }, flexShrink: 0 }}
+                          value={transport.mtu}
+                          placeholder={t('vdc.transportMtuDefault')}
+                          onChange={(e) => setTransport((p) => ({ ...p, mtu: e.target.value }))}
+                          error={mtuInvalid}
+                          helperText={mtuInvalid ? t('vdc.transportMtuInvalid', { min: ZONE_MTU_MIN, max: ZONE_MTU_MAX }) : undefined}
+                          slotProps={{
+                            htmlInput: { min: ZONE_MTU_MIN, max: ZONE_MTU_MAX },
+                            input: { endAdornment: hintAdornment(t('vdc.transportMtuHint')) },
+                          }}
+                        />
+                      </Stack>
+
+                      {transport.mode === 'peers' && (
+                        <>
+                          {renderPeersField(t('vdc.transportPeers'), t('vdc.transportPeersHint'))}
+                          {missingPeerNodes.length > 0 && (
+                            <Alert severity="warning" sx={{ py: 0 }}>
+                              {t('vdc.transportNodesWithoutPeer', { nodes: missingPeerNodes.join(', ') })}
+                            </Alert>
+                          )}
+                        </>
+                      )}
+
+                      {transport.mode === 'transport' && (
+                        <>
+                          <Stack spacing={0.75}>
+                            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+                              <TextField
+                                size="small"
+                                type="number"
+                                label={t('vdc.transportVlanId')}
+                                sx={{ width: { sm: 160 }, flexShrink: 0 }}
+                                value={transport.vlanId}
+                                onChange={(e) => setTransport((p) => ({ ...p, vlanId: e.target.value }))}
+                                error={vlanInvalid}
+                                helperText={vlanInvalid ? t('vdc.transportVlanInvalid') : undefined}
+                                slotProps={{ htmlInput: { min: 1, max: 4094 } }}
+                              />
+                              <Autocomplete
+                                freeSolo
+                                size="small"
+                                fullWidth
+                                options={nodeAddressInfo.devices}
+                                value={transport.device}
+                                inputValue={transport.device}
+                                onInputChange={(_e, v) => setTransport((p) => ({ ...p, device: v ?? '' }))}
+                                renderInput={(params) => (
+                                  <TextField {...params} label={t('vdc.transportDevice')} placeholder="bond0" />
+                                )}
+                              />
+                              <TextField
+                                size="small"
+                                fullWidth
+                                label={t('vdc.transportCidr')}
+                                placeholder="10.100.5.0/24"
+                                value={transport.cidr}
+                                onChange={(e) => setTransport((p) => ({ ...p, cidr: e.target.value }))}
+                                error={cidrInvalid}
+                                helperText={cidrInvalid ? t('vdc.transportCidrInvalid') : undefined}
+                              />
+                            </Stack>
+                            {/* Derived facts on the left, the router shortcut on the right: both belong to the VLAN row. */}
+                            {(transportIface || (deviceIsPoolBridge && vlanNumber !== null && !vlanInvalid)) && (
+                              <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={2} flexWrap="wrap" useFlexGap>
+                                <Typography variant="caption" color="text.secondary">
+                                  {transportIface ? t('vdc.transportIfaceOnNodes', { iface: transportIface }) : ''}
+                                  {transportIface && mtuNumber !== null && !mtuInvalid
+                                    ? ` ${t('vdc.transportIfaceMtu', { mtu: mtuNumber + VXLAN_OVERHEAD })}`
+                                    : ''}
+                                </Typography>
+                                {deviceIsPoolBridge && vlanNumber !== null && !vlanInvalid && (
+                                  <Tooltip arrow placement="top" title={t('vdc.transportAddVlanPoolHint')}>
+                                    <span style={{ marginLeft: 'auto' }}>
+                                      <Button
+                                        size="small"
+                                        variant="text"
+                                        startIcon={<i className="ri-price-tag-3-line" />}
+                                        disabled={transportPoolAlreadyAdded}
+                                        onClick={() => setVlanPools((prev) => [
+                                          ...prev,
+                                          { bridge: transport.device.trim(), rangeStart: String(vlanNumber), rangeEnd: String(vlanNumber) },
+                                        ])}
+                                      >
+                                        {t('vdc.transportAddVlanPool', { tag: vlanNumber })}
+                                      </Button>
+                                    </span>
+                                  </Tooltip>
+                                )}
+                              </Stack>
+                            )}
+                          </Stack>
+
+                          {/* Node addresses and interface status share one row per node. */}
+                          <Box sx={{ borderTop: 1, borderColor: 'divider', pt: 1.5 }}>
+                            <Stack direction="row" alignItems="center" justifyContent="space-between" flexWrap="wrap" useFlexGap spacing={1} sx={{ mb: 1.5 }}>
+                              <Typography variant="body2">{t('vdc.transportNodeAddresses')}</Typography>
+                              <Stack direction="row" spacing={1} alignItems="center" justifyContent="flex-end" flexWrap="wrap" useFlexGap sx={{ ml: 'auto' }}>
+                                <Button
+                                  size="small"
+                                  variant="text"
+                                  startIcon={<i className="ri-list-ordered" />}
+                                  disabled={!transportCidr || nodeAddressInfo.nodes.length === 0}
+                                  onClick={() => setTransport((p) => ({
+                                    ...p,
+                                    nodeAddresses: { ...p.nodeAddresses, ...suggestNodeAddresses(p.cidr, nodeAddressInfo.nodes.map((n) => n.name)) },
+                                  }))}
+                                >
+                                  {t('vdc.transportFillSequentially')}
+                                </Button>
+                                {editingVdc && (
+                                  <Tooltip
+                                    arrow
+                                    placement="top"
+                                    title={
+                                      transportDirtyFlag
+                                        ? t('vdc.transportSaveFirst')
+                                        : transportAllProvisioned
+                                          ? t('vdc.transportAllProvisioned')
+                                          : t('vdc.transportProvisionWarning')
+                                    }
+                                  >
+                                    <span>
+                                      <Button
+                                        size="small"
+                                        variant="outlined"
+                                        startIcon={<i className="ri-server-line" />}
+                                        disabled={transportDirtyFlag || provisioning || transportStatusLoading || transportAllProvisioned}
+                                        onClick={handleProvisionTransport}
+                                      >
+                                        {provisioning ? t('vdc.transportProvisioning') : t('vdc.transportProvision')}
+                                      </Button>
+                                    </span>
+                                  </Tooltip>
+                                )}
+                              </Stack>
+                            </Stack>
+                            {editingVdc && (
+                              <>
+                                {(transportStatusLoading || provisioning) && <LinearProgress sx={{ mb: 1 }} />}
+                                {provisionError && (
+                                  <Alert severity="error" sx={{ mb: 1, py: 0 }} onClose={() => setProvisionError('')}>{provisionError}</Alert>
+                                )}
+                                {transportStatus && transportStatus.length === 0 && (
+                                  <Typography variant="caption" sx={{ display: 'block', mb: 1, fontStyle: 'italic' }}>{t('vdc.transportProvisionNothing')}</Typography>
+                                )}
+                              </>
+                            )}
+                            {transportNodeNames.length === 0 ? (
+                              <Typography variant="caption" sx={{ fontStyle: 'italic' }}>{t('vdc.transportClusterPeersEmpty')}</Typography>
+                            ) : (
+                              <Box sx={{ overflowX: 'auto' }}>
+                                <Stack
+                                  role="table"
+                                  aria-label={t('vdc.transportNodeAddresses')}
+                                  spacing={1}
+                                  sx={{
+                                    minWidth: 400,
+                                    '& > [role="row"]': {
+                                      display: 'grid',
+                                      gridTemplateColumns: '128px minmax(220px, 1fr)',
+                                      gap: 1.5,
+                                      alignItems: 'start',
+                                    },
+                                  }}
+                                >
+                                  <Box role="row" sx={{ pb: 0.5 }}>
+                                    <Typography role="columnheader" variant="caption" color="text.secondary">{t('common.node')}</Typography>
+                                    <Stack role="columnheader" direction="row" spacing={0.75} alignItems="center">
+                                      <Typography variant="caption" color="text.secondary">{t('vdc.transportNodeAddress')}</Typography>
+                                      {hintIcon(t('vdc.transportNodeAddressPlaceholder'), false)}
+                                    </Stack>
+                                  </Box>
+                                  {transportNodeNames.map((name) => {
+                                    const known = nodeAddressInfo.nodes.some((n) => n.name === name)
+                                    const value = transport.nodeAddresses[name] ?? ''
+                                    const trimmed = value.trim()
+                                    const notAnAddress = !!trimmed && ipFamily(trimmed) === null
+                                    const outsideCidr = !!trimmed && !notAnAddress && !!transportCidr && !ipInCidr(trimmed, transportCidr)
+                                    const status = transportStatus?.find((s) => s.node === name)
+                                    const meta = status ? (TRANSPORT_STATE_KEYS[status.state] ?? TRANSPORT_STATE_KEYS.unreachable) : null
+                                    const last = provisionResults?.find((r) => r.node === name)
+                                    const lastMeta = last ? (PROVISION_ACTION_KEYS[last.action] ?? PROVISION_ACTION_KEYS.error) : null
+                                    // Interface state as a coloured icon inside the field; the
+                                    // tooltip carries the interface name, the drift detail and
+                                    // the last provisioning action.
+                                    // The theme forces `color: inherit` on everything inside an
+                                    // adornment, so the state colour goes on the adornment itself.
+                                    const statusAdornment = editingVdc && status && meta ? (
+                                      <InputAdornment position="end" sx={{ pointerEvents: 'auto', color: `${meta.color}.main` }}>
+                                        <Tooltip
+                                          arrow
+                                          placement="top"
+                                          title={
+                                            <Stack spacing={0.25}>
+                                              <Typography variant="caption" sx={{ fontWeight: 600 }}>
+                                                {t(meta.label)}{lastMeta ? ` (${t(lastMeta.label)})` : ''}
+                                              </Typography>
+                                              <Typography variant="caption">{status.iface}</Typography>
+                                              {status.state === 'drift' && status.found && (
+                                                <Typography variant="caption">{t('vdc.transportStatusDriftDetail', { found: status.found, wanted: status.wanted })}</Typography>
+                                              )}
+                                              {status.state === 'unreachable' && status.message && (
+                                                <Typography variant="caption">{status.message}</Typography>
+                                              )}
+                                              {last?.action === 'error' && last.message && (
+                                                <Typography variant="caption">{last.message}</Typography>
+                                              )}
+                                            </Stack>
+                                          }
+                                        >
+                                          <Box
+                                            component="i"
+                                            className={
+                                              status.state === 'provisioned'
+                                                ? 'ri-checkbox-circle-fill'
+                                                : status.state === 'unreachable'
+                                                  ? 'ri-close-circle-fill'
+                                                  : 'ri-error-warning-fill'
+                                            }
+                                            sx={{ cursor: 'help' }}
+                                          />
+                                        </Tooltip>
+                                      </InputAdornment>
+                                    ) : undefined
+                                    return (
+                                      <Box key={name} role="row">
+                                        <Box role="cell" sx={{ minWidth: 0, pt: 0.5, opacity: known ? 1 : 0.6 }}>
+                                          <Stack direction="row" spacing={0.5} alignItems="center" sx={{ minHeight: 30 }}>
+                                            {renderNodeGlyph(name)}
+                                            {!known && (
+                                              <IconButton
+                                                size="small"
+                                                sx={{ flexShrink: 0 }}
+                                                aria-label={t('vdc.transportRemoveNode', { node: name })}
+                                                onClick={() => setTransport((p) => {
+                                                  const next = { ...p.nodeAddresses }
+                                                  delete next[name]
+                                                  return { ...p, nodeAddresses: next }
+                                                })}
+                                              >
+                                                <i className="ri-delete-bin-line" />
+                                              </IconButton>
+                                            )}
+                                          </Stack>
+                                          {!known && (
+                                            <Typography variant="caption" color="text.secondary">{t('vdc.transportNodeGone')}</Typography>
+                                          )}
+                                        </Box>
+                                        <Box role="cell">
+                                          <TextField
+                                            size="small"
+                                            fullWidth
+                                            value={value}
+                                            slotProps={{
+                                              htmlInput: { 'aria-label': [name, t('vdc.transportNodeAddress')].join(': ') },
+                                              input: statusAdornment ? { endAdornment: statusAdornment } : undefined,
+                                            }}
+                                            onChange={(e) => setTransport((p) => ({ ...p, nodeAddresses: { ...p.nodeAddresses, [name]: e.target.value } }))}
+                                            error={notAnAddress || outsideCidr}
+                                            helperText={
+                                              notAnAddress
+                                                ? t('vdc.transportInvalidAddress', { address: trimmed })
+                                                : outsideCidr
+                                                  ? t('vdc.transportAddressOutsideCidr')
+                                                  : undefined
+                                            }
+                                          />
+                                        </Box>
+                                      </Box>
+                                    )
+                                  })}
+                                </Stack>
+                              </Box>
+                            )}
+                          </Box>
+
+                          {renderPeersField(t('vdc.transportExtraPeers'), t('vdc.transportExtraPeersHint'))}
+                        </>
+                      )}
+                    </Stack>
+
+                    {editingVdc?.sdnZoneName && (
+                      <Box sx={{ mt: 2, pt: 1.5, borderTop: 1, borderColor: 'divider' }}>
+                        {zoneStatus && (
+                          <Stack spacing={1}>
+                            {zoneStatus.live ? (
+                              renderPeerChips(t('vdc.zonePeersOnProxmox'), zoneStatus.live.peers ?? [], zoneStatus.live.mtu ?? null)
+                            ) : (
+                              <Typography variant="caption" color="error">{t('vdc.zoneNotFoundOnPve')}</Typography>
+                            )}
+                            {!zoneStatus.inSync && renderPeerChips(t('vdc.zoneExpected'), zoneStatus.desired?.peers ?? [], zoneStatus.desired?.mtu ?? null)}
+                          </Stack>
+                        )}
+                        {zoneLoading && <LinearProgress sx={{ mt: zoneStatus ? 1.5 : 0 }} />}
+                        {zoneMessage && (
+                          <Alert severity={zoneMessage.severity} sx={{ mt: 1, py: 0 }} onClose={() => setZoneMessage(null)}>
+                            {zoneMessage.text}
+                          </Alert>
                         )}
                       </Box>
-                    </Box>
-                  )}
+                    )}
+                  </Box>
 
                   {/* Shared Bridges */}
 
@@ -2339,7 +3097,7 @@ export default function VdcTab() {
                   </Box>
 
                   {/* VLAN pools */}
-                  <Box sx={{ p: 2, border: 1, borderColor: 'divider', borderRadius: 1 }}>
+                  <Box sx={{ mt: 2, p: 2, border: 1, borderColor: 'divider', borderRadius: 1 }}>
                     <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
                       <Typography variant="subtitle2" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                         <i className="ri-price-tag-3-line" />
@@ -2366,7 +3124,7 @@ export default function VdcTab() {
                         return (
                           <Stack key={idx} direction="row" spacing={1} alignItems="flex-start">
                             <TextField
-                              select size="small" sx={{ flex: 1, minWidth: 160 }}
+                              select size="small" sx={{ flex: 1, minWidth: 160, ...SMALL_SELECT_SX }}
                               label={t('vdc.vlanPoolBridge')}
                               value={pool.bridge}
                               onChange={(e) => setVlanPools((prev) => prev.map((p, i) => i === idx ? { ...p, bridge: e.target.value } : p))}

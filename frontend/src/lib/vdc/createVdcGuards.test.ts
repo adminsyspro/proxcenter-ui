@@ -40,6 +40,8 @@ vi.mock('./sdn', () => ({
   deleteZone: vi.fn(),
   deleteVnetPve: vi.fn(),
   applySdn: applySdnMock,
+  updateZone: vi.fn(),
+  listClusterNodeIps: vi.fn(async () => ['10.0.0.1']),
 }))
 vi.mock('./scope', () => ({ clearVdcScopeCache: clearVdcScopeCacheMock }))
 

@@ -69,6 +69,7 @@ export async function PUT(req: Request, ctx: RouteContext) {
       storagePolicies: body.storagePolicies,
       computePolicy: body.computePolicy,
       isoLibraries: Array.isArray(body.isoLibraries) ? body.isoLibraries : undefined,
+      transport: body.transport && typeof body.transport === 'object' ? body.transport : undefined,
       quota: body.quota,
     })
 

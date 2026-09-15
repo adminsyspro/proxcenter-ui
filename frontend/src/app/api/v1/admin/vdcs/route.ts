@@ -83,6 +83,7 @@ export async function POST(req: NextRequest) {
         storagePolicies: body.storagePolicies,
         computePolicy: body.computePolicy,
         isoLibraries: Array.isArray(body.isoLibraries) ? body.isoLibraries : undefined,
+        transport: body.transport && typeof body.transport === 'object' ? body.transport : undefined,
         quota: body.quota,
       },
       session?.user?.id ?? null

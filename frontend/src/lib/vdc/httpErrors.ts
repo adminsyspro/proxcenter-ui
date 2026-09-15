@@ -24,6 +24,10 @@ export function mapCreateVdcError(e: any): { status: number; message: string } {
   // ISO library grants (#894): a storage id that is malformed, absent from
   // the cluster or without `iso` content is a client-fixable 400.
   if (msg.includes('ISO library') || msg.includes('does not hold ISO content')) return { status: 400, message: msg }
+  // VXLAN transport (#899): a malformed address, MTU, VLAN or CIDR is a 400;
+  // a zone rewrite that Proxmox refused is an upstream failure.
+  if (msg.startsWith('VXLAN transport')) return { status: 400, message: msg }
+  if (msg.startsWith('Failed to update SDN zone')) return { status: 502, message: msg }
   if (msg.includes('is in use by vDC')) return { status: 409, message: msg }
   if (msg.includes('Cannot remove storage policy')) return { status: 409, message: msg }
   if (msg.startsWith('A storage policy with this name or storage')) return { status: 409, message: msg }

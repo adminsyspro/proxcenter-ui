@@ -1,4 +1,5 @@
 import type { VdcComputePolicy } from './computePolicy'
+import type { VdcTransport } from './transport'
 
 export interface Vdc {
   id: string
@@ -15,6 +16,8 @@ export interface Vdc {
    *  at a shared+images storage. */
   primaryStorage: string | null
   computePolicy: VdcComputePolicy
+  /** How the vDC's VXLAN zone reaches its peers (#899). */
+  transport: VdcTransport
   enabled: boolean
   createdBy: string | null
   createdAt: string
@@ -22,6 +25,7 @@ export interface Vdc {
 }
 
 export type { VdcComputePolicy, CpuModelMode } from './computePolicy'
+export type { VdcTransport, VxlanTransportMode } from './transport'
 
 export interface VdcWithDetails extends Vdc {
   tenantName?: string
@@ -184,6 +188,7 @@ export interface CreateVdcInput {
   storagePolicies?: Array<{ policyId: string; quotaMb: number | null }>
   computePolicy?: Partial<VdcComputePolicy>
   isoLibraries?: VdcIsoLibraryInput[]
+  transport?: Partial<VdcTransport>
 }
 
 export interface UpdateVdcInput {
@@ -198,4 +203,5 @@ export interface UpdateVdcInput {
   storagePolicies?: Array<{ policyId: string; quotaMb: number | null }>
   computePolicy?: Partial<VdcComputePolicy>
   isoLibraries?: VdcIsoLibraryInput[]
+  transport?: Partial<VdcTransport>
 }

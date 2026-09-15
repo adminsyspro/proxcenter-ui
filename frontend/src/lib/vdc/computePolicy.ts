@@ -108,10 +108,16 @@ export function resolveAllowedCpuModels(
 }
 
 /** Split a PVE `cpu` property string: `host,flags=+aes;-pcid,hidden=1`. */
+// A PVE property key: letters, digits, dashes and underscores, starting with a
+// letter. Anything else in a user-supplied `cpu` string is dropped, which also
+// keeps `__proto__` and friends out of the object built below.
+const CPU_PROPERTY_KEY = /^[a-z][a-z0-9_-]*$/i
+const FORBIDDEN_KEYS = new Set(['__proto__', 'constructor', 'prototype'])
+
 export function parseCpuProperty(raw: string): { model: string; flags: string[]; extra: Record<string, string> } {
   const parts = String(raw ?? '').split(',').map(s => s.trim()).filter(Boolean)
   let model = ''
-  const extra: Record<string, string> = {}
+  const entries: Array<[string, string]> = []
   let flags: string[] = []
   for (const part of parts) {
     const eq = part.indexOf('=')
@@ -123,9 +129,10 @@ export function parseCpuProperty(raw: string): { model: string; flags: string[];
     const value = part.slice(eq + 1)
     if (key === 'cputype') { model = value; continue }
     if (key === 'flags') { flags = value.split(';').map(f => f.trim()).filter(Boolean); continue }
-    extra[key] = value
+    if (!CPU_PROPERTY_KEY.test(key) || FORBIDDEN_KEYS.has(key.toLowerCase())) continue
+    entries.push([key, value])
   }
-  return { model, flags, extra }
+  return { model, flags, extra: Object.fromEntries(entries) }
 }
 
 export type CpuPolicyVerdict = { ok: true } | { ok: false; error: string }

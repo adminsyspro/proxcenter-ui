@@ -222,3 +222,18 @@ describe('loadCpuCapabilitiesIfNeeded', () => {
     expect(validateCpuAgainstPolicy(custom, { cpu: 'custom-foo' }, { clusterCapabilities: caps }).ok).toBe(false)
   })
 })
+
+describe('parseCpuProperty', () => {
+  it('keeps the model, the flags and the extra properties of a PVE cpu string', () => {
+    expect(parseCpuProperty('host,flags=+aes;-pcid,hidden=1')).toEqual({ model: 'host', flags: ['+aes', '-pcid'], extra: { hidden: '1' } })
+    expect(parseCpuProperty('cputype=x86-64-v2-AES,hv-vendor-id=proxmox')).toEqual({ model: 'x86-64-v2-AES', flags: [], extra: { 'hv-vendor-id': 'proxmox' } })
+  })
+
+  it('drops keys that are not PVE property names, so a user string cannot reach the prototype', () => {
+    const parsed = parseCpuProperty('host,__proto__=polluted,constructor=x,pro to=1,1bad=2,hidden=1')
+    expect(parsed.extra).toEqual({ hidden: '1' })
+    expect(Object.keys(parsed.extra)).toEqual(['hidden'])
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined()
+    expect(Object.getPrototypeOf(parsed.extra)).toBe(Object.prototype)
+  })
+})

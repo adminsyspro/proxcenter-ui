@@ -15,6 +15,8 @@ import TenantNetworksSection from '@/components/settings/TenantNetworksSection'
 const TENANTS = [
   { id: 'default', name: 'Default' },
   { id: 't1', name: 'Acme' },
+  // No vDC at all: can never carry a network, so never offered.
+  { id: 't2', name: 'Beta' },
 ]
 const CONNECTIONS = [
   { id: 'c1', name: 'paris' },
@@ -84,6 +86,19 @@ describe('TenantNetworksSection', () => {
     expect(screen.getByText('paris · Acme prod')).toBeTruthy()
     // The empty network says so instead of showing chips.
     expect(screen.getByText('no vDC yet')).toBeTruthy()
+  })
+
+  it('offers only the tenants that own a vDC with a VXLAN zone', async () => {
+    mount()
+    await waitFor(() => expect(screen.getByText('backbone')).toBeTruthy())
+    fireEvent.click(screen.getByRole('button', { name: /new tenant network/i }))
+    const dialog = await screen.findByRole('dialog')
+    // A MUI Select opens on mousedown, not on click.
+    fireEvent.mouseDown(within(dialog).getByRole('combobox'))
+    const listbox = await screen.findByRole('listbox')
+    expect(within(listbox).getByText('Acme')).toBeTruthy()
+    expect(within(listbox).queryByText('Beta')).toBeNull()
+    expect(within(listbox).queryByText('Default')).toBeNull()
   })
 
   it('creates a network with its subnet', async () => {

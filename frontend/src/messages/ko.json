@@ -7758,7 +7758,7 @@
     "tenantNetworkMemberRemoved": "vDC \"{vdc}\"이(가) 더 이상 \"{network}\"을(를) 사용하지 않습니다",
     "tenantNetworkOnVdcHint": "이 vDC가 사용하는 확장 네트워크입니다. 테넌트 네트워크 탭에서 관리합니다.",
     "tenantNetworkOnVdcNone": "없음",
-    "tenantNetworkNoTenant": "먼저 테넌트를 만드세요",
+    "tenantNetworkNoTenant": "VXLAN 존이 있는 vDC를 가진 테넌트가 아직 없습니다",
     "tenantNetworkReachability": "도달성 테스트",
     "tenantNetworkReachabilityTitle": "\"{name}\" 도달성",
     "tenantNetworkReachabilityHint": "각 멤버 클러스터의 노드가 SSH로 다른 멤버의 전송 피어에 ping을 보냅니다. 응답하는 주소는 언더레이가 라우팅한다는 뜻이며 UDP 4789가 통과함을 증명하지는 않습니다. 응답하지 않는 주소는 두 존이 동기화되어 있어도 오버레이가 조용한 이유를 설명합니다.",

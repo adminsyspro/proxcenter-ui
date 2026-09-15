@@ -7758,7 +7758,7 @@
     "tenantNetworkMemberRemoved": "El vDC \"{vdc}\" ya no lleva \"{network}\"",
     "tenantNetworkOnVdcHint": "Redes extendidas que lleva este vDC. Se gestionan desde la pestaña Redes de tenant.",
     "tenantNetworkOnVdcNone": "ninguna",
-    "tenantNetworkNoTenant": "Cree primero un tenant",
+    "tenantNetworkNoTenant": "Ningún tenant tiene aún un vDC con zona VXLAN",
     "tenantNetworkReachability": "Probar alcance",
     "tenantNetworkReachabilityTitle": "Alcance de \"{name}\"",
     "tenantNetworkReachabilityHint": "Cada nodo de un clúster miembro hace ping por SSH a los peers de transporte de los demás miembros. Una dirección que responde está enrutada por el underlay, sin probar que pase UDP 4789. Una que no responde explica un overlay mudo aunque ambas zonas estén al día.",

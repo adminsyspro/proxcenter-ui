@@ -7759,7 +7759,7 @@
     "tenantNetworkMemberRemoved": "Le vDC « {vdc} » ne porte plus « {network} »",
     "tenantNetworkOnVdcHint": "Réseaux étendus portés par ce vDC. Gérés depuis l'onglet Réseaux de tenant.",
     "tenantNetworkOnVdcNone": "aucun",
-    "tenantNetworkNoTenant": "Créez d'abord un tenant",
+    "tenantNetworkNoTenant": "Aucun tenant n'a encore de vDC avec une zone VXLAN",
     "tenantNetworkReachability": "Tester la joignabilité",
     "tenantNetworkReachabilityTitle": "Joignabilité de « {name} »",
     "tenantNetworkReachabilityHint": "Chaque nœud d'un cluster membre pingue en SSH les peers de transport des autres membres. Une adresse qui répond est routée par l'underlay, sans prouver que l'UDP 4789 passe. Une adresse qui ne répond pas explique un overlay muet alors que les deux zones sont à jour.",

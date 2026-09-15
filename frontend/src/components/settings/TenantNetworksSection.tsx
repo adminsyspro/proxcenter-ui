@@ -148,7 +148,11 @@ export default function TenantNetworksSection({ tenants, vdcs, connections }: Pr
     | null
   >(null)
 
-  const tenantOptions = useMemo(() => tenants.filter(x => x.id !== 'default'), [tenants])
+  // Only a tenant with at least one vDC that has a VXLAN zone can ever carry a network.
+  const tenantOptions = useMemo(() => {
+    const eligible = new Set(vdcs.filter(v => v.enabled !== false && !!v.sdnZoneName).map(v => v.tenantId))
+    return tenants.filter(x => x.id !== 'default' && eligible.has(x.id))
+  }, [tenants, vdcs])
   const connectionName = useCallback((id: string) => connections.find(c => c.id === id)?.name ?? id, [connections])
 
   const load = useCallback(async () => {

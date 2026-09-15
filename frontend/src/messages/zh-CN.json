@@ -7908,7 +7908,7 @@
     "tenantNetworkMemberRemoved": "vDC“{vdc}”不再承载“{network}”",
     "tenantNetworkOnVdcHint": "此 vDC 承载的跨集群网络。在“租户网络”选项卡中管理。",
     "tenantNetworkOnVdcNone": "无",
-    "tenantNetworkNoTenant": "请先创建租户",
+    "tenantNetworkNoTenant": "尚无租户拥有带 VXLAN 区域的 vDC",
     "tenantNetworkReachability": "测试可达性",
     "tenantNetworkReachabilityTitle": "“{name}”的可达性",
     "tenantNetworkReachabilityHint": "每个成员集群的节点通过 SSH 对其他成员的传输对端执行 ping。有响应的地址说明底层网络可路由到它，但不证明 UDP 4789 可通；无响应的地址则解释了为何两个区域已同步而叠加网络仍然静默。",

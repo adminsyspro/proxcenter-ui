@@ -7758,7 +7758,7 @@
     "tenantNetworkMemberRemoved": "vDC \"{vdc}\" no longer carries \"{network}\"",
     "tenantNetworkOnVdcHint": "Stretched networks this vDC carries. Managed from the Tenant networks tab.",
     "tenantNetworkOnVdcNone": "none",
-    "tenantNetworkNoTenant": "Create a tenant first",
+    "tenantNetworkNoTenant": "No tenant has a vDC with a VXLAN zone yet",
     "tenantNetworkReachability": "Test reachability",
     "tenantNetworkReachabilityTitle": "Reachability of \"{name}\"",
     "tenantNetworkReachabilityHint": "Each node of a member cluster pings the transport peers of the other members over SSH. An address that answers is routed by the underlay; it does not prove that UDP 4789 passes. One that does not answer explains an overlay that stays silent while both zones are in sync.",

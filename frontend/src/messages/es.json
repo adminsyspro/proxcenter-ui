@@ -4627,6 +4627,10 @@
       "vmName": "Nombre de VM",
       "sourceVMID": "VMID origen",
       "drVMID": "VMID DR",
+      "replicaState": "Réplica",
+      "replicaStarted": "Iniciada",
+      "replicaStopped": "Detenida",
+      "replicaStartedHint": "La réplica está encendida. PVE también informa como \"running\" un invitado en pausa, por eso dice iniciada y no en ejecución.",
       "replStatus": "Estado repl.",
       "lastSync": "Última sincronización",
       "rpo": "RPO",
@@ -4644,7 +4648,11 @@
       "vmStopped": "{name} (VMID {vmid}) detenida en el sitio DR",
       "planFailback": "Failback del plan",
       "openPlanFailback": "Abrir el failback del plan",
-      "planFailbackDisabled": "El failback abarca todo el plan, y solo una vez que el plan ha conmutado"
+      "planFailbackDisabled": "El failback abarca todo el plan, y solo una vez que el plan ha conmutado",
+      "startVMTitle": "¿Iniciar {name} en el sitio DR?",
+      "startVMBody": "La réplica (VMID {vmid}) arranca en el sitio DR desde el punto de restauración elegido.",
+      "startPausesJob": "Iniciar una réplica pausa todo su trabajo de replicación. {count, plural, =0 {Ningún otro invitado está protegido por ese trabajo.} one {Otro invitado de ese trabajo también deja de replicarse.} other {# invitados más de ese trabajo dejan de replicarse.}}",
+      "restorePointKeepsNewer": "La réplica arranca desde ese snapshot y se conservan los puntos de restauración más recientes: detenerla y reanudar la replicación devuelve la imagen al más reciente."
     },
     "simulation": {
       "title": "Simulación de fallo de nodo",

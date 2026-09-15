@@ -1,8 +1,9 @@
 /**
- * The Emergency DR tab gained a per-VM stop action and moved the failback
- * button to the plan header (issue #943). Every string those two controls
- * render must exist in the 6 served locales, or the panic screen falls back
- * to raw key paths in the middle of a disaster.
+ * The Emergency DR tab gained a per-VM stop action, a replica state column and
+ * a restore point picker on its start action, and moved the failback button to
+ * the plan header (issues #943 and #944). Every string those controls render
+ * must exist in the 6 served locales, or the panic screen falls back to raw key
+ * paths in the middle of a disaster.
  */
 
 import { describe, expect, it } from 'vitest'
@@ -26,6 +27,14 @@ const requiredKeys = [
   'siteRecovery.emergencyDR.planFailback',
   'siteRecovery.emergencyDR.openPlanFailback',
   'siteRecovery.emergencyDR.planFailbackDisabled',
+  'siteRecovery.emergencyDR.replicaState',
+  'siteRecovery.emergencyDR.replicaStarted',
+  'siteRecovery.emergencyDR.replicaStopped',
+  'siteRecovery.emergencyDR.replicaStartedHint',
+  'siteRecovery.emergencyDR.startVMTitle',
+  'siteRecovery.emergencyDR.startVMBody',
+  'siteRecovery.emergencyDR.startPausesJob',
+  'siteRecovery.emergencyDR.restorePointKeepsNewer',
 ]
 
 function get(messages: any, path: string): unknown {

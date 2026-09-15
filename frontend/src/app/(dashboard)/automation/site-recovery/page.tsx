@@ -166,6 +166,20 @@ export default function SiteRecoveryPage() {
     return m
   }, [allVMs])
 
+  // Replica power state scoped per connection (connId -> vmid -> status), for
+  // the Emergency DR rows. Same per-connection shape as vmNamesByConn: a DR
+  // replica and its source can carry the same VMID on the two clusters.
+  const vmStatesByConn = useMemo(() => {
+    const m: Record<string, Record<number, string>> = {}
+
+    for (const vm of allVMs) {
+      if (!vm.vmid || !vm.status || !vm.connId) continue
+      ;(m[vm.connId] ??= {})[vm.vmid] = vm.status
+    }
+
+    return m
+  }, [allVMs])
+
   // Selected plan for failover dialog
   const failoverPlan = useMemo(() =>
     (plans || []).find((p: RecoveryPlan) => p.id === failoverDialog.planId) || null
@@ -423,11 +437,11 @@ export default function SiteRecoveryPage() {
     }
   }, [mutatePlans])
 
-  const handleStartDRVM = useCallback(async (vmId: number, targetCluster: string, jobId: string) => {
+  const handleStartDRVM = useCallback(async (vmId: number, targetCluster: string, jobId: string, restorePoint?: string) => {
     const res = await fetch('/api/v1/orchestrator/replication/emergency/start-vm', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ vm_id: vmId, target_cluster: targetCluster, replication_job_id: jobId })
+      body: JSON.stringify({ vm_id: vmId, target_cluster: targetCluster, replication_job_id: jobId, restore_point: restorePoint })
     })
     if (!res.ok) {
       const data = await res.json().catch(() => ({}))
@@ -451,6 +465,20 @@ export default function SiteRecoveryPage() {
 
     mutateJobs()
   }, [mutateJobs, t])
+
+  // Restore points of one replicated guest, loaded when its start dialog opens
+  // (not with the tab: one probe per guest, only for the row being started).
+  const loadVMRestorePoints = useCallback(async (jobId: string, vmId: number) => {
+    const res = await fetch(`/api/v1/orchestrator/replication/jobs/${jobId}/vms/${vmId}/restore-points`)
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+
+      throw new Error(data.error || 'Failed to load restore points')
+    }
+
+    return res.json()
+  }, [])
 
   // Poll execution status every 3s while running
   useEffect(() => {
@@ -618,8 +646,10 @@ export default function SiteRecoveryPage() {
             loading={jobsLoading || plansLoading}
             connections={connections}
             vmNamesByConn={vmNamesByConn}
+            vmStatesByConn={vmStatesByConn}
             onStartVM={handleStartDRVM}
             onStopVM={handleStopDRVM}
+            loadRestorePoints={loadVMRestorePoints}
             onExecuteFailover={(planId) => openFailoverDialog(planId, 'failover')}
             onExecuteFailback={(planId) => openFailoverDialog(planId, 'failback')}
             onDeletePlan={handleDeletePlan}

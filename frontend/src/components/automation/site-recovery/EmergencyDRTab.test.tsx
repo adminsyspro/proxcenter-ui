@@ -46,7 +46,7 @@ function job(overrides: Partial<ReplicationJob> = {}): ReplicationJob {
   }
 }
 
-function renderTab(jobs: ReplicationJob[]) {
+function renderTab(jobs: ReplicationJob[], vmStatesByConn: Record<string, Record<number, string>> = {}) {
   renderWithProviders(
     <EmergencyDRTab
       jobs={jobs}
@@ -54,8 +54,10 @@ function renderTab(jobs: ReplicationJob[]) {
       loading={false}
       connections={[]}
       vmNamesByConn={{}}
+      vmStatesByConn={vmStatesByConn}
       onStartVM={vi.fn()}
       onStopVM={vi.fn()}
+      loadRestorePoints={vi.fn().mockResolvedValue({ restore_points: [] })}
       onExecuteFailover={vi.fn()}
       onExecuteFailback={vi.fn()}
     />,
@@ -88,5 +90,40 @@ describe('EmergencyDRTab: job status chip', () => {
     const chip = screen.getByText('synced').closest('.MuiChip-root')
     expect(chip).toBeInTheDocument()
     expect(chip).toHaveClass('MuiChip-colorSuccess')
+  })
+})
+
+describe('EmergencyDRTab: DR replica state column (issue #944)', () => {
+  // Column order of a standalone row: name, source VMID, DR VMID, replica.
+  const replicaCell = () => (screen.getAllByRole('row')[1] as HTMLTableRowElement).cells[3].textContent
+
+  it('says the replica is started, never "running", for a guest PVE reports as running', () => {
+    renderTab([job({ vmid_prefix: 5 })], { dst: { 5100: 'running' } })
+
+    expect(replicaCell()).toBe('Started')
+  })
+
+  it('says started for a PAUSED replica too: PVE reports it as running, and a paused guest serves nothing', () => {
+    renderTab([job({ vmid_prefix: 5 })], { dst: { 5100: 'paused' } })
+
+    expect(replicaCell()).toBe('Started')
+  })
+
+  it('renders a stopped replica as stopped', () => {
+    renderTab([job({ vmid_prefix: 5 })], { dst: { 5100: 'stopped' } })
+
+    expect(replicaCell()).toBe('Stopped')
+  })
+
+  it('falls back to a dash when the inventory knows nothing about the replica', () => {
+    renderTab([job({ vmid_prefix: 5 })], {})
+
+    expect(replicaCell()).toBe('-')
+  })
+
+  it('reads the replica state on the TARGET cluster, not the source VMID of the same number', () => {
+    renderTab([job({ vmid_prefix: 5 })], { src: { 100: 'running' }, dst: { 5100: 'stopped' } })
+
+    expect(replicaCell()).toBe('Stopped')
   })
 })

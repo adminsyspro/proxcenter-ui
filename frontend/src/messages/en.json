@@ -4627,6 +4627,10 @@
       "vmName": "VM Name",
       "sourceVMID": "Source VMID",
       "drVMID": "DR VMID",
+      "replicaState": "Replica",
+      "replicaStarted": "Started",
+      "replicaStopped": "Stopped",
+      "replicaStartedHint": "The replica is powered on. PVE reports a paused guest as running too, so this says started rather than running.",
       "replStatus": "Repl. Status",
       "lastSync": "Last Sync",
       "rpo": "RPO",
@@ -4644,7 +4648,11 @@
       "vmStopped": "{name} (VMID {vmid}) stopped on DR site",
       "planFailback": "Plan failback",
       "openPlanFailback": "Open plan failback",
-      "planFailbackDisabled": "Failback covers the whole plan, and only once the plan has failed over"
+      "planFailbackDisabled": "Failback covers the whole plan, and only once the plan has failed over",
+      "startVMTitle": "Start {name} on the DR site?",
+      "startVMBody": "The replica (VMID {vmid}) boots on the DR site from the restore point you pick.",
+      "startPausesJob": "Starting a replica pauses its whole replication job. {count, plural, =0 {No other guest is protected by that job.} one {One other guest of that job stops replicating too.} other {# other guests of that job stop replicating too.}}",
+      "restorePointKeepsNewer": "The replica boots from that snapshot and the newer restore points are kept: stopping it and resuming replication rolls the image forward to the newest one."
     },
     "simulation": {
       "title": "Node Failure Simulation",

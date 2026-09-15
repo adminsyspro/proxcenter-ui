@@ -4627,6 +4627,10 @@
       "vmName": "Nom VM",
       "sourceVMID": "VMID source",
       "drVMID": "VMID DR",
+      "replicaState": "Réplique",
+      "replicaStarted": "Démarrée",
+      "replicaStopped": "Arrêtée",
+      "replicaStartedHint": "La réplique est allumée. PVE annonce aussi une VM en pause comme « running », d'où « démarrée » plutôt que « en fonctionnement ».",
       "replStatus": "Statut répl.",
       "lastSync": "Dernière sync",
       "rpo": "RPO",
@@ -4644,7 +4648,11 @@
       "vmStopped": "{name} (VMID {vmid}) arrêtée sur le site DR",
       "planFailback": "Failback du plan",
       "openPlanFailback": "Ouvrir le failback du plan",
-      "planFailbackDisabled": "Le failback porte sur tout le plan, et seulement une fois celui-ci basculé"
+      "planFailbackDisabled": "Le failback porte sur tout le plan, et seulement une fois celui-ci basculé",
+      "startVMTitle": "Démarrer {name} sur le site DR ?",
+      "startVMBody": "La réplique (VMID {vmid}) démarre sur le site DR à partir du point de restauration choisi.",
+      "startPausesJob": "Démarrer une réplique met en pause tout son job de réplication. {count, plural, =0 {Aucune autre VM n'est protégée par ce job.} one {Une autre VM de ce job cesse aussi de répliquer.} other {# autres VM de ce job cessent aussi de répliquer.}}",
+      "restorePointKeepsNewer": "La réplique démarre sur ce snapshot et les points de restauration plus récents sont conservés : l'arrêter puis reprendre la réplication ramène l'image sur le plus récent."
     },
     "simulation": {
       "title": "Simulation de panne de nœud",

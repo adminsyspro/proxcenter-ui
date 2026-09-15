@@ -4606,6 +4606,10 @@
       "vmName": "VM-Name",
       "sourceVMID": "Quell-VMID",
       "drVMID": "DR-VMID",
+      "replicaState": "Replikat",
+      "replicaStarted": "Gestartet",
+      "replicaStopped": "Gestoppt",
+      "replicaStartedHint": "Das Replikat ist eingeschaltet. PVE meldet auch einen pausierten Gast als laufend, daher \"gestartet\" statt \"läuft\".",
       "replStatus": "Repl.-Status",
       "lastSync": "Letzte Synchronisation",
       "rpo": "RPO",
@@ -4623,7 +4627,11 @@
       "vmStopped": "{name} (VMID {vmid}) auf DR-Standort gestoppt",
       "planFailback": "Failback des Plans",
       "openPlanFailback": "Failback des Plans öffnen",
-      "planFailbackDisabled": "Failback gilt für den gesamten Plan und erst, wenn dieser umgeschaltet ist"
+      "planFailbackDisabled": "Failback gilt für den gesamten Plan und erst, wenn dieser umgeschaltet ist",
+      "startVMTitle": "{name} am DR-Standort starten?",
+      "startVMBody": "Das Replikat (VMID {vmid}) startet am DR-Standort ab dem gewählten Wiederherstellungspunkt.",
+      "startPausesJob": "Das Starten eines Replikats pausiert den gesamten Replikationsjob. {count, plural, =0 {Kein weiterer Gast wird von diesem Job geschützt.} one {Ein weiterer Gast dieses Jobs repliziert ebenfalls nicht mehr.} other {# weitere Gäste dieses Jobs replizieren ebenfalls nicht mehr.}}",
+      "restorePointKeepsNewer": "Das Replikat startet ab diesem Snapshot, neuere Wiederherstellungspunkte bleiben erhalten: Stoppen und Fortsetzen der Replikation setzt das Image wieder auf den neuesten."
     },
     "simulation": {
       "title": "Node-Ausfallsimulation",

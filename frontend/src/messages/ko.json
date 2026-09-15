@@ -4627,6 +4627,10 @@
       "vmName": "VM 이름",
       "sourceVMID": "소스 VMID",
       "drVMID": "DR VMID",
+      "replicaState": "복제본",
+      "replicaStarted": "시작됨",
+      "replicaStopped": "중지됨",
+      "replicaStartedHint": "복제본이 켜져 있습니다. PVE는 일시 중지된 게스트도 running으로 보고하므로 \"실행 중\"이 아니라 \"시작됨\"으로 표시합니다.",
       "replStatus": "복제 상태",
       "lastSync": "마지막 동기화",
       "rpo": "RPO",
@@ -4644,7 +4648,11 @@
       "vmStopped": "{name} (VMID {vmid})이(가) DR 사이트에서 중지되었습니다",
       "planFailback": "플랜 페일백",
       "openPlanFailback": "플랜 페일백 열기",
-      "planFailbackDisabled": "페일백은 플랜 전체에 적용되며, 플랜이 페일오버된 후에만 가능합니다"
+      "planFailbackDisabled": "페일백은 플랜 전체에 적용되며, 플랜이 페일오버된 후에만 가능합니다",
+      "startVMTitle": "DR 사이트에서 {name}을(를) 시작할까요?",
+      "startVMBody": "복제본(VMID {vmid})이 선택한 복원 지점에서 DR 사이트에 부팅됩니다.",
+      "startPausesJob": "복제본을 시작하면 해당 복제 작업 전체가 일시 중지됩니다. {count, plural, =0 {이 작업이 보호하는 다른 게스트는 없습니다.} other {이 작업의 다른 게스트 #대도 복제가 중단됩니다.}}",
+      "restorePointKeepsNewer": "복제본은 해당 스냅샷에서 부팅하며 더 최신 복원 지점은 유지됩니다. 복제본을 중지하고 복제를 재개하면 이미지는 가장 최신 지점으로 되돌아갑니다."
     },
     "simulation": {
       "title": "노드 장애 시뮬레이션",

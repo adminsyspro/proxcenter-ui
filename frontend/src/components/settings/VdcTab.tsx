@@ -40,6 +40,7 @@ import { useTranslations } from 'next-intl'
 
 import StoragePoliciesSection from './StoragePoliciesSection'
 import VdcPbsBindingsSection from './VdcPbsBindingsSection'
+import TransportModeDiagram, { TRANSPORT_MODE_KEYS } from './TransportModeDiagram'
 import QuotaDonut from '@/components/mydc/QuotaDonut'
 import { NodeIcon } from '@/app/(dashboard)/infrastructure/inventory/components/TreeIcons'
 import { extractCustomCpuModels, listKnownCpuTypes } from '@/lib/inventory/cpuModels'
@@ -52,6 +53,7 @@ import {
   ipFamily,
   ipInCidr,
   nodesWithoutPeer,
+  normalizeIp,
   parseCidr,
   suggestNodeAddresses,
   transportIfaceName,
@@ -117,12 +119,6 @@ const emptyTransport: TransportForm = {
   device: '',
   cidr: '',
   nodeAddresses: {},
-}
-
-const TRANSPORT_MODE_KEYS: Record<VxlanTransportMode, { label: string; hint: string; example: string }> = {
-  cluster: { label: 'vdc.transportModeCluster', hint: 'vdc.transportModeClusterHint', example: 'vdc.transportModeClusterExample' },
-  peers: { label: 'vdc.transportModePeers', hint: 'vdc.transportModePeersHint', example: 'vdc.transportModePeersExample' },
-  transport: { label: 'vdc.transportModeTransport', hint: 'vdc.transportModeTransportHint', example: 'vdc.transportModeTransportExample' },
 }
 
 type ProvisionAction = 'created' | 'updated' | 'unchanged' | 'error'
@@ -1805,15 +1801,26 @@ export default function VdcTab() {
   const transportCidr = parseCidr(transport.cidr)
   const cidrInvalid = transport.cidr.trim() !== '' && !transportCidr
   const transportIface = transportIfaceName({ device: transport.device.trim() || null, vlanId: vlanInvalid ? null : vlanNumber })
-  const deviceIsPoolBridge = !!transport.device.trim() && poolBridges.some((b) => b.iface === transport.device.trim())
   const transportNodeNames = (() => {
     const names = nodeAddressInfo.nodes.map((n) => n.name)
     for (const name of Object.keys(transport.nodeAddresses)) if (!names.includes(name)) names.push(name)
     return names
   })()
-  const transportPoolAlreadyAdded = vlanNumber !== null && vlanPools.some(
-    (p) => p.bridge === transport.device.trim() && p.rangeStart === String(vlanNumber) && p.rangeEnd === String(vlanNumber),
-  )
+  // Diagram of the section: what each node contributes as a zone peer in the
+  // current mode, and the peers that belong to no node of the cluster.
+  const sameIp = (a: string, b: string) => (normalizeIp(a) ?? a) === (normalizeIp(b) ?? b)
+  const diagramNodes = nodeAddressInfo.nodes.map((n) => ({
+    name: n.name,
+    address:
+      transport.mode === 'cluster'
+        ? n.clusterIp ?? null
+        : transport.mode === 'transport'
+          ? transport.nodeAddresses[n.name] ?? null
+          : validPeers.find((peer) => n.addresses.some((a) => sameIp(a, peer))) ?? null,
+  }))
+  const diagramExternalPeers = transport.mode === 'cluster'
+    ? []
+    : validPeers.filter((peer) => !diagramNodes.some((n) => n.address && sameIp(n.address, peer)))
   // Nothing left to provision: every listed node already carries the
   // interface with the wanted address and MTU. A node that did not answer,
   // or that differs, keeps the button active for a retry.
@@ -1854,19 +1861,6 @@ export default function VdcTab() {
     <Tooltip arrow placement="top" title={title} slotProps={wide ? { tooltip: { sx: { maxWidth: 460 } } } : undefined}>
       <Box component="i" className="ri-information-line" sx={{ fontSize: 14, opacity: 0.55, cursor: 'help', flexShrink: 0, ...(offset ? { mt: '11px' } : {}) }} />
     </Tooltip>
-  )
-  // The three modes side by side, each with its rule and a scenario, so the
-  // choice is made before the select is opened.
-  const transportModeHelp = (
-    <Stack spacing={1.25} sx={{ py: 0.5 }}>
-      {TRANSPORT_MODES.map((m) => (
-        <Box key={m}>
-          <Typography variant="caption" sx={{ display: 'block', fontWeight: 600 }}>{t(TRANSPORT_MODE_KEYS[m].label)}</Typography>
-          <Typography variant="caption" sx={{ display: 'block' }}>{t(TRANSPORT_MODE_KEYS[m].hint)}</Typography>
-          <Typography variant="caption" sx={{ display: 'block', opacity: 0.8 }}>{t(TRANSPORT_MODE_KEYS[m].example)}</Typography>
-        </Box>
-      ))}
-    </Stack>
   )
   // Field help as an end adornment, so every field keeps its full width and
   // the rows of the card stay aligned on the right edge. `insideSelect`
@@ -2715,7 +2709,6 @@ export default function VdcTab() {
                           label={t('vdc.transportMode')}
                           value={transport.mode}
                           onChange={(e) => setTransport((p) => ({ ...p, mode: e.target.value as VxlanTransportMode }))}
-                          slotProps={{ input: { endAdornment: hintAdornment(transportModeHelp, { wide: true, insideSelect: true }) } }}
                         >
                           {TRANSPORT_MODES.map((m) => (
                             <MenuItem key={m} value={m}>{t(TRANSPORT_MODE_KEYS[m].label)}</MenuItem>
@@ -2737,6 +2730,14 @@ export default function VdcTab() {
                           }}
                         />
                       </Stack>
+
+                      <TransportModeDiagram
+                        mode={transport.mode}
+                        nodes={diagramNodes}
+                        externalPeers={diagramExternalPeers}
+                        iface={transportIface}
+                        segment={transport.cidr.trim() || null}
+                      />
 
                       {transport.mode === 'peers' && (
                         <>
@@ -2787,34 +2788,13 @@ export default function VdcTab() {
                                 helperText={cidrInvalid ? t('vdc.transportCidrInvalid') : undefined}
                               />
                             </Stack>
-                            {/* Derived facts on the left, the router shortcut on the right: both belong to the VLAN row. */}
-                            {(transportIface || (deviceIsPoolBridge && vlanNumber !== null && !vlanInvalid)) && (
-                              <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={2} flexWrap="wrap" useFlexGap>
-                                <Typography variant="caption" color="text.secondary">
-                                  {transportIface ? t('vdc.transportIfaceOnNodes', { iface: transportIface }) : ''}
-                                  {transportIface && mtuNumber !== null && !mtuInvalid
-                                    ? ` ${t('vdc.transportIfaceMtu', { mtu: mtuNumber + VXLAN_OVERHEAD })}`
-                                    : ''}
-                                </Typography>
-                                {deviceIsPoolBridge && vlanNumber !== null && !vlanInvalid && (
-                                  <Tooltip arrow placement="top" title={t('vdc.transportAddVlanPoolHint')}>
-                                    <span style={{ marginLeft: 'auto' }}>
-                                      <Button
-                                        size="small"
-                                        variant="text"
-                                        startIcon={<i className="ri-price-tag-3-line" />}
-                                        disabled={transportPoolAlreadyAdded}
-                                        onClick={() => setVlanPools((prev) => [
-                                          ...prev,
-                                          { bridge: transport.device.trim(), rangeStart: String(vlanNumber), rangeEnd: String(vlanNumber) },
-                                        ])}
-                                      >
-                                        {t('vdc.transportAddVlanPool', { tag: vlanNumber })}
-                                      </Button>
-                                    </span>
-                                  </Tooltip>
-                                )}
-                              </Stack>
+                            {transportIface && (
+                              <Typography variant="caption" color="text.secondary">
+                                {t('vdc.transportIfaceOnNodes', { iface: transportIface })}
+                                {mtuNumber !== null && !mtuInvalid
+                                  ? ` ${t('vdc.transportIfaceMtu', { mtu: mtuNumber + VXLAN_OVERHEAD })}`
+                                  : ''}
+                              </Typography>
                             )}
                           </Stack>
 

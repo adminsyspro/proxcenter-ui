@@ -21,12 +21,14 @@ const pveFetchMock = vi.fn<(...args: any[]) => Promise<any>>()
 const customImageFindUniqueMock = vi.fn<(...args: any[]) => Promise<any>>()
 const getCurrentTenantIdMock = vi.fn<() => Promise<string>>()
 
+const blueprintFindUniqueMock = vi.fn<(...args: any[]) => Promise<any>>()
+
 vi.mock('next-auth', () => ({ getServerSession: vi.fn(async () => null) }))
 vi.mock('@/lib/tenant', () => ({
   getSessionPrisma: async () => ({
     customImage: { findUnique: customImageFindUniqueMock },
     deployment: { create: vi.fn(async () => ({ id: 'dep-1' })), update: vi.fn(async () => ({})) },
-    blueprint: { create: vi.fn(async () => ({})) },
+    blueprint: { create: vi.fn(async () => ({})), findUnique: (...a: any[]) => blueprintFindUniqueMock(...a) },
   }),
   getCurrentTenantId: () => getCurrentTenantIdMock(),
   DEFAULT_TENANT_ID: 'default',
@@ -381,5 +383,133 @@ describe('POST templates/deploy: read-only ISO library (#894)', () => {
     expect(res.status).toBe(403)
     const json = await readJson<{ error: string }>(res)
     expect(json?.error).toMatch(/not authorised/)
+  })
+})
+
+describe('POST templates/deploy: vDC compute policy (#893)', () => {
+  const withPolicy = (computePolicy: any) => ({ poolName: 'pool-a', quota: null, storagePolicies: [], computePolicy })
+  const SELECTED = { cpuModelMode: 'selected', cpuAllowedModels: ['x86-64-v2-AES', 'x86-64-v3'], cpuDefaultModel: 'x86-64-v3', cpuAdvancedSettings: true }
+
+  async function deploy(body: any) {
+    const POST = await loadPost()
+    return callRoute(POST, { body })
+  }
+
+  beforeEach(() => {
+    stubPveFetchForDeploy()
+    blueprintFindUniqueMock.mockReset().mockResolvedValue(null)
+    getVdcScopeMock.mockResolvedValue({
+      storagesByConnection: new Map([['conn-1', new Set(['local-lvm'])]]),
+      storagePoliciesByConnection: new Map(),
+    })
+    getImageBySlugMock.mockReturnValue({ slug: 'ubuntu-22.04', format: 'qcow2', downloadUrl: 'https://img.test/u.qcow2' })
+  })
+
+  it('replaces the wizard default model by the vDC default when it is outside the allowed set', async () => {
+    resolveVdcForTenantMock.mockResolvedValue(withPolicy(SELECTED))
+    const res = await deploy(baseBody)   // the wizard always sends `host`
+    expect(res.status).toBe(200)
+    await runAfters()
+    expect(qemuCreateParams().get('cpu')).toBe('x86-64-v3')
+  })
+
+  it('keeps a requested model the policy allows, and falls back to the first allowed one without a default', async () => {
+    resolveVdcForTenantMock.mockResolvedValue(withPolicy({ ...SELECTED, cpuDefaultModel: null }))
+    let res = await deploy({ ...baseBody, hardware: { ...baseBody.hardware, cpu: 'x86-64-v2-AES' } })
+    expect(res.status).toBe(200)
+    await runAfters()
+    expect(qemuCreateParams().get('cpu')).toBe('x86-64-v2-AES')
+
+    afterCbs.length = 0
+    stubPveFetchForDeploy()
+    res = await deploy(baseBody)
+    expect(res.status).toBe(200)
+    await runAfters()
+    expect(qemuCreateParams().get('cpu')).toBe('x86-64-v2-AES')
+  })
+
+  it('400 when the policy allows no model on this cluster', async () => {
+    resolveVdcForTenantMock.mockResolvedValue(withPolicy({ ...SELECTED, cpuAllowedModels: [], cpuDefaultModel: null }))
+    const res = await deploy(baseBody)
+    expect(res.status).toBe(400)
+    expect((await readJson<{ error: string }>(res))?.error).toBe('The vDC compute policy allows no CPU model on this cluster.')
+    expect(afterCbs).toHaveLength(0)
+  })
+
+  it('400 on CPU flags while the advanced settings are locked, even in unrestricted model mode', async () => {
+    resolveVdcForTenantMock.mockResolvedValue(withPolicy({ cpuModelMode: 'unrestricted', cpuAllowedModels: [], cpuDefaultModel: null, cpuAdvancedSettings: false }))
+    const res = await deploy({ ...baseBody, hardware: { ...baseBody.hardware, cpu: 'host,flags=+aes' } })
+    expect(res.status).toBe(400)
+    expect((await readJson<{ error: string }>(res))?.error).toBe('CPU flags and advanced CPU options are disabled by the vDC compute policy.')
+  })
+
+  it("keeps the model of a provider blueprint outside the allowed set, but not a tenant's own", async () => {
+    resolveVdcForTenantMock.mockResolvedValue(withPolicy(SELECTED))
+    blueprintFindUniqueMock.mockResolvedValue({ tenantId: 'default', hardware: { cpu: 'host' } })
+    let res = await deploy({ ...baseBody, blueprintId: 'bp-provider' })
+    expect(res.status).toBe(200)
+    await runAfters()
+    expect(qemuCreateParams().get('cpu')).toBe('host')
+    expect(blueprintFindUniqueMock).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'bp-provider' } }))
+
+    afterCbs.length = 0
+    stubPveFetchForDeploy()
+    blueprintFindUniqueMock.mockResolvedValue({ tenantId: 'tenant-1', hardware: { cpu: 'host' } })
+    res = await deploy({ ...baseBody, blueprintId: 'bp-own' })
+    expect(res.status).toBe(200)
+    await runAfters()
+    expect(qemuCreateParams().get('cpu')).toBe('x86-64-v3')
+  })
+
+  it('ignores a blueprint lookup that fails and applies the policy', async () => {
+    resolveVdcForTenantMock.mockResolvedValue(withPolicy(SELECTED))
+    blueprintFindUniqueMock.mockRejectedValue(new Error('db down'))
+    const res = await deploy({ ...baseBody, blueprintId: 'bp-gone' })
+    expect(res.status).toBe(200)
+    await runAfters()
+    expect(qemuCreateParams().get('cpu')).toBe('x86-64-v3')
+  })
+
+  /** The deploy stub plus the cluster's custom CPU models (cpu-models.conf). */
+  function stubPveFetchWithCustomModels() {
+    pveFetchMock.mockReset()
+    pveFetchMock.mockImplementation(async (_conn: any, path: string, opts?: any) => {
+      if (path === '/nodes/pve1/capabilities/qemu/cpu') return [{ name: 'gold', custom: 1 }, { name: 'silver', custom: 1 }, { name: 'host', custom: 0 }]
+      if (/^\/storage\/[^/]+$/.test(path) && !opts?.method) return { type: 'dir', content: 'images,iso,import' }
+      if (/\/content\?content=(import|iso)$/.test(path)) return []
+      if (/\/download-url$/.test(path) && opts?.method === 'POST') return 'UPID:download'
+      if (/\/qemu$/.test(path) && opts?.method === 'POST') return 'UPID:create'
+      return {}
+    })
+  }
+  const CUSTOM = { cpuModelMode: 'custom', cpuAllowedModels: [], cpuDefaultModel: 'custom-gold', cpuAdvancedSettings: true }
+
+  it('custom mode reads the cluster capabilities and keeps a custom model the cluster defines', async () => {
+    resolveVdcForTenantMock.mockResolvedValue(withPolicy(CUSTOM))
+    stubPveFetchWithCustomModels()
+    const res = await deploy({ ...baseBody, hardware: { ...baseBody.hardware, cpu: 'custom-silver' } })
+    expect(res.status).toBe(200)
+    await runAfters()
+    expect(qemuCreateParams().get('cpu')).toBe('custom-silver')
+  })
+
+  it('custom mode replaces a built-in model by the vDC default custom model', async () => {
+    resolveVdcForTenantMock.mockResolvedValue(withPolicy(CUSTOM))
+    stubPveFetchWithCustomModels()
+    const res = await deploy(baseBody)
+    expect(res.status).toBe(200)
+    await runAfters()
+    expect(qemuCreateParams().get('cpu')).toBe('custom-gold')
+  })
+
+  it('custom mode without readable capabilities allows no model: 400', async () => {
+    resolveVdcForTenantMock.mockResolvedValue(withPolicy({ cpuModelMode: 'custom', cpuAllowedModels: [], cpuDefaultModel: null, cpuAdvancedSettings: true }))
+    pveFetchMock.mockImplementation(async (_conn: any, path: string) => {
+      if (path.endsWith('/capabilities/qemu/cpu')) throw new Error('node down')
+      return {}
+    })
+    const res = await deploy(baseBody)
+    expect(res.status).toBe(400)
+    expect((await readJson<{ error: string }>(res))?.error).toBe('The vDC compute policy allows no CPU model on this cluster.')
   })
 })

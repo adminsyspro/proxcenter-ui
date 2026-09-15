@@ -175,3 +175,46 @@ describe('updateVdc VXLAN transport', () => {
     }))
   })
 })
+
+describe('updateVdc and stretched tenant networks (#901)', () => {
+  it('keeps the peers of the other members in the zone, and re-syncs those networks once the zone changed', async () => {
+    const { memberPeersForVdc } = await import('./stretchPeers')
+    const { syncNetworksOfVdc } = await import('./tenantNetworkMembers')
+    vi.mocked(memberPeersForVdc).mockResolvedValueOnce(['203.0.113.50', '10.0.0.1'])
+    const tx = trackedTx()
+    prismaMock.$transaction.mockImplementation(async (fn: any) => fn(tx.proxy))
+
+    await updateVdc('v1', { transport: { mode: 'peers', peers: ['10.0.0.1', '10.0.0.2'] } })
+
+    // Own peers first, the members' peers after, no duplicate.
+    expect(updateZoneMock).toHaveBeenCalledWith(conn, 'zacme', { peers: ['10.0.0.1', '10.0.0.2', '203.0.113.50'], mtu: null })
+    expect(syncNetworksOfVdc).toHaveBeenCalledWith('v1')
+    expect(vi.mocked(syncNetworksOfVdc).mock.invocationCallOrder[0]).toBeGreaterThan(applySdnMock.mock.invocationCallOrder[0])
+  })
+
+  it('re-syncs nothing when the zone did not change', async () => {
+    const { syncNetworksOfVdc } = await import('./tenantNetworkMembers')
+    const tx = trackedTx()
+    prismaMock.$transaction.mockImplementation(async (fn: any) => fn(tx.proxy))
+
+    await updateVdc('v1', { transport: { mode: 'cluster' } })
+
+    expect(updateZoneMock).not.toHaveBeenCalled()
+    expect(syncNetworksOfVdc).not.toHaveBeenCalled()
+  })
+
+  it('still stores the transport when the SDN apply fails after the zone rewrite', async () => {
+    applySdnMock.mockRejectedValueOnce(new Error('ifreload failed on pve2'))
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const tx = trackedTx()
+    prismaMock.$transaction.mockImplementation(async (fn: any) => fn(tx.proxy))
+
+    await updateVdc('v1', { transport: { mode: 'peers', peers: ['10.0.0.1'] } })
+
+    expect(tx.models.vdc.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ vxlanTransportMode: 'peers', vxlanPeers: ['10.0.0.1'] }),
+    }))
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('applySdn failed after updating zone "zacme"'))
+    warn.mockRestore()
+  })
+})

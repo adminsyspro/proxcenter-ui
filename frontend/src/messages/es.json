@@ -4633,11 +4633,18 @@
       "tier": "Nivel",
       "actions": "Acciones",
       "startVM": "Iniciar VM en sitio DR",
-      "failback": "Failback al sitio primario",
-      "failbackNoPlan": "Failback no disponible: la VM no forma parte de un plan de recuperación",
+      "stopVM": "Detener VM en sitio DR",
       "emergencyFailover": "Failover de emergencia",
       "standaloneTitle": "VMs independientes",
-      "vmStarted": "{name} (VMID {vmid}) iniciada en el sitio DR"
+      "vmStarted": "{name} (VMID {vmid}) iniciada en el sitio DR",
+      "stopVMTitle": "¿Detener {name} en el sitio DR?",
+      "stopVMBody": "La réplica DR (VMID {vmid}) se apaga. Su trabajo de replicación sigue en pausa salvo que lo reanude a continuación.",
+      "resumeReplication": "Reanudar la replicación de este trabajo",
+      "resumeReplicationWarning": "Todo lo que la réplica haya escrito desde la última sincronización se descarta al reanudar la replicación.",
+      "vmStopped": "{name} (VMID {vmid}) detenida en el sitio DR",
+      "planFailback": "Failback del plan",
+      "openPlanFailback": "Abrir el failback del plan",
+      "planFailbackDisabled": "El failback abarca todo el plan, y solo una vez que el plan ha conmutado"
     },
     "simulation": {
       "title": "Simulación de fallo de nodo",

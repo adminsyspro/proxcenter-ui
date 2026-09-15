@@ -16,9 +16,11 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  FormControlLabel,
   IconButton,
   Skeleton,
   Snackbar,
+  Switch,
   Table,
   TableBody,
   TableCell,
@@ -63,18 +65,24 @@ interface EmergencyDRTabProps {
   connections: Array<{ id: string; name: string }>
   vmNamesByConn: Record<string, Record<number, string>>
   onStartVM: (vmId: number, targetCluster: string, jobId: string) => Promise<void>
+  onStopVM: (vmId: number, targetCluster: string, jobId: string, resumeReplication: boolean) => Promise<void>
   onExecuteFailover: (planId: string) => void
   onExecuteFailback: (planId: string) => void
   onDeletePlan?: (planId: string) => void
 }
 
 export default function EmergencyDRTab({
-  jobs, plans, loading, connections, vmNamesByConn, onStartVM, onExecuteFailover, onExecuteFailback, onDeletePlan
+  jobs, plans, loading, connections, vmNamesByConn, onStartVM, onStopVM, onExecuteFailover, onExecuteFailback, onDeletePlan
 }: EmergencyDRTabProps) {
   const t = useTranslations('siteRecovery')
   const tc = useTranslations('common')
-  const [loadingVMs, setLoadingVMs] = useState<Record<string, 'starting'>>({})
+  const [loadingVMs, setLoadingVMs] = useState<Record<string, 'starting' | 'stopping'>>({})
   const [deletePlanId, setDeletePlanId] = useState<string | null>(null)
+  // Stop confirmation: the replica may be serving production right now, and
+  // resuming replication rolls its image back to the last mirror snapshot,
+  // so the operator confirms both the stop and the resume explicitly.
+  const [stopTarget, setStopTarget] = useState<DRReadyVM | null>(null)
+  const [resumeReplication, setResumeReplication] = useState(true)
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({
     open: false, message: '', severity: 'success'
   })
@@ -159,6 +167,24 @@ export default function EmergencyDRTab({
     }
   }
 
+  const handleStopVM = async (vm: DRReadyVM, resume: boolean) => {
+    const key = `${vm.vmId}`
+    setLoadingVMs(prev => ({ ...prev, [key]: 'stopping' }))
+    try {
+      await onStopVM(vm.vmId, vm.targetCluster, vm.jobId, resume)
+      setSnackbar({ open: true, message: t('emergencyDR.vmStopped', { name: vm.vmName, vmid: vm.targetVmId }), severity: 'success' })
+    } catch (e: any) {
+      setSnackbar({ open: true, message: e?.message || 'Failed to stop VM', severity: 'error' })
+    } finally {
+      setLoadingVMs(prev => { const n = { ...prev }; delete n[key]; return n })
+    }
+  }
+
+  const openStopDialog = (vm: DRReadyVM) => {
+    setResumeReplication(true)
+    setStopTarget(vm)
+  }
+
   const tierLabel = (tier?: number) => {
     switch (tier) {
       case 1: return t('plans.tierCritical')
@@ -174,6 +200,18 @@ export default function EmergencyDRTab({
       case 2: return 'warning'
       default: return 'default'
     }
+  }
+
+  // The plan status is a raw enum ("failed_over", "failing_back"): the same
+  // translated labels RecoveryPlansTab uses, so the panic screen never shows
+  // a key with an underscore in it. An unknown value falls back to itself.
+  const planStatusLabel = (status: string) => {
+    if (status === 'failing_back') return t('plans.statusFailingBack')
+
+    const key = `planStatus.${status}`
+    const label = t.has(key) ? t(key) : status
+
+    return label
   }
 
   const statusChip = (status: string) => {
@@ -272,15 +310,15 @@ export default function EmergencyDRTab({
                         </IconButton>
                       </span>
                     </Tooltip>
-                    <Tooltip title={vm.planId ? t('emergencyDR.failback') : t('emergencyDR.failbackNoPlan')}>
+                    <Tooltip title={t('emergencyDR.stopVM')}>
                       <span>
                         <IconButton
                           size="small"
-                          disabled={!vm.planId}
-                          onClick={() => vm.planId && onExecuteFailback(vm.planId)}
-                          sx={{ color: 'primary.main', '&:hover': { bgcolor: 'primary.main', color: 'primary.contrastText' } }}
+                          disabled={!!vmLoading}
+                          onClick={() => openStopDialog(vm)}
+                          sx={{ color: 'warning.main', '&:hover': { bgcolor: 'warning.main', color: 'white' } }}
                         >
-                          <i className="ri-arrow-turn-back-line" style={{ fontSize: 18 }} />
+                          {vmLoading === 'stopping' ? <CircularProgress size={16} /> : <i className="ri-stop-circle-line" style={{ fontSize: 18 }} />}
                         </IconButton>
                       </span>
                     </Tooltip>
@@ -327,11 +365,11 @@ export default function EmergencyDRTab({
                 <Typography variant="body2" color="text.secondary">
                   {connMap[plan.source_cluster] || plan.source_cluster} → {connMap[plan.target_cluster] || plan.target_cluster}
                 </Typography>
-                <Chip size="small" label={plan.status} color={
+                <Chip size="small" label={planStatusLabel(plan.status)} color={
                   plan.status === 'ready' ? 'success' :
                   plan.status === 'failed_over' ? 'error' :
                   plan.status === 'executing' ? 'info' : 'warning'
-                } sx={{ textTransform: 'capitalize' }} />
+                } />
                 <Chip size="small" label={`${vms.length} VMs`} variant="outlined" />
               </Box>
             }
@@ -343,10 +381,27 @@ export default function EmergencyDRTab({
                   size="small"
                   startIcon={<i className="ri-alarm-warning-line" />}
                   onClick={() => onExecuteFailover(planId)}
-                  disabled={plan.status === 'executing' || plan.status === 'failed_over'}
+                  disabled={plan.status === 'executing' || plan.status === 'failed_over' || plan.status === 'failing_back'}
                 >
                   {t('emergencyDR.emergencyFailover')}
                 </Button>
+                <Tooltip
+                  title={t('emergencyDR.planFailbackDisabled')}
+                  disableHoverListener={plan.status === 'failed_over' || plan.status === 'failing_back'}
+                  arrow
+                >
+                  <span>
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      startIcon={<i className="ri-arrow-go-back-line" />}
+                      onClick={() => onExecuteFailback(planId)}
+                      disabled={plan.status !== 'failed_over' && plan.status !== 'failing_back'}
+                    >
+                      {plan.status === 'failing_back' ? t('emergencyDR.openPlanFailback') : t('emergencyDR.planFailback')}
+                    </Button>
+                  </span>
+                </Tooltip>
                 {onDeletePlan && (
                   <IconButton
                     size="small"
@@ -400,6 +455,45 @@ export default function EmergencyDRTab({
           {snackbar.message}
         </Alert>
       </Snackbar>
+
+      {/* Stop DR VM Confirmation Dialog */}
+      <Dialog open={!!stopTarget} onClose={() => setStopTarget(null)} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <i className="ri-stop-circle-line" style={{ fontSize: 20 }} />
+          {t('emergencyDR.stopVMTitle', { name: stopTarget?.vmName || '' })}
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body2">
+            {t('emergencyDR.stopVMBody', { vmid: stopTarget?.targetVmId || 0 })}
+          </Typography>
+          <FormControlLabel
+            sx={{ mt: 1.5 }}
+            control={<Switch checked={resumeReplication} onChange={e => setResumeReplication(e.target.checked)} />}
+            label={t('emergencyDR.resumeReplication')}
+          />
+          {resumeReplication && (
+            <Alert severity="warning" sx={{ mt: 1 }}>
+              {t('emergencyDR.resumeReplicationWarning')}
+            </Alert>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setStopTarget(null)}>{tc('cancel')}</Button>
+          <Button
+            variant="contained"
+            color="warning"
+            onClick={() => {
+              const vm = stopTarget
+              const resume = resumeReplication
+
+              setStopTarget(null)
+              if (vm) handleStopVM(vm, resume)
+            }}
+          >
+            {t('emergencyDR.stopVM')}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* Delete Plan Confirmation Dialog */}
       <Dialog open={!!deletePlanId} onClose={() => setDeletePlanId(null)} maxWidth="xs" fullWidth>

@@ -55,6 +55,7 @@ function renderTab(jobs: ReplicationJob[]) {
       connections={[]}
       vmNamesByConn={{}}
       onStartVM={vi.fn()}
+      onStopVM={vi.fn()}
       onExecuteFailover={vi.fn()}
       onExecuteFailback={vi.fn()}
     />,

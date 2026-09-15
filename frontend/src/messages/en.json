@@ -4633,11 +4633,18 @@
       "tier": "Tier",
       "actions": "Actions",
       "startVM": "Start VM on DR site",
-      "failback": "Failback to primary site",
-      "failbackNoPlan": "Failback unavailable — VM is not part of a recovery plan",
+      "stopVM": "Stop VM on DR site",
       "emergencyFailover": "Emergency Failover",
       "standaloneTitle": "Standalone VMs",
-      "vmStarted": "{name} (VMID {vmid}) started on DR site"
+      "vmStarted": "{name} (VMID {vmid}) started on DR site",
+      "stopVMTitle": "Stop {name} on the DR site?",
+      "stopVMBody": "The DR replica (VMID {vmid}) is powered off. Its replication job stays paused unless you resume it below.",
+      "resumeReplication": "Resume replication for this job",
+      "resumeReplicationWarning": "Anything the replica wrote since the last sync is discarded when replication resumes.",
+      "vmStopped": "{name} (VMID {vmid}) stopped on DR site",
+      "planFailback": "Plan failback",
+      "openPlanFailback": "Open plan failback",
+      "planFailbackDisabled": "Failback covers the whole plan, and only once the plan has failed over"
     },
     "simulation": {
       "title": "Node Failure Simulation",

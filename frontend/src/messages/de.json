@@ -4612,11 +4612,18 @@
       "tier": "Tier",
       "actions": "Aktionen",
       "startVM": "VM auf DR-Standort starten",
-      "failback": "Failback zum Primärstandort",
-      "failbackNoPlan": "Failback nicht verfügbar — VM ist nicht Teil eines Wiederherstellungsplans",
+      "stopVM": "VM auf DR-Standort stoppen",
       "emergencyFailover": "Notfall-Failover",
       "standaloneTitle": "Eigenständige VMs",
-      "vmStarted": "{name} (VMID {vmid}) auf DR-Standort gestartet"
+      "vmStarted": "{name} (VMID {vmid}) auf DR-Standort gestartet",
+      "stopVMTitle": "{name} auf dem DR-Standort stoppen?",
+      "stopVMBody": "Das DR-Replikat (VMID {vmid}) wird ausgeschaltet. Sein Replikationsjob bleibt pausiert, sofern Sie ihn unten nicht fortsetzen.",
+      "resumeReplication": "Replikation dieses Jobs fortsetzen",
+      "resumeReplicationWarning": "Alles, was das Replikat seit der letzten Synchronisierung geschrieben hat, wird beim Fortsetzen der Replikation verworfen.",
+      "vmStopped": "{name} (VMID {vmid}) auf DR-Standort gestoppt",
+      "planFailback": "Failback des Plans",
+      "openPlanFailback": "Failback des Plans öffnen",
+      "planFailbackDisabled": "Failback gilt für den gesamten Plan und erst, wenn dieser umgeschaltet ist"
     },
     "simulation": {
       "title": "Node-Ausfallsimulation",

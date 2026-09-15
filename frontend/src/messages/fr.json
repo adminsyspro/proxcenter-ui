@@ -4633,11 +4633,18 @@
       "tier": "Priorité",
       "actions": "Actions",
       "startVM": "Démarrer la VM sur le site DR",
-      "failback": "Failback vers le site principal",
-      "failbackNoPlan": "Failback indisponible — la VM ne fait partie d'aucun plan de recovery",
+      "stopVM": "Arrêter la VM sur le site DR",
       "emergencyFailover": "Failover d'urgence",
       "standaloneTitle": "VMs autonomes",
-      "vmStarted": "{name} (VMID {vmid}) démarrée sur le site DR"
+      "vmStarted": "{name} (VMID {vmid}) démarrée sur le site DR",
+      "stopVMTitle": "Arrêter {name} sur le site DR ?",
+      "stopVMBody": "La réplique DR (VMID {vmid}) est éteinte. Son job de réplication reste en pause, sauf si vous le reprenez ci-dessous.",
+      "resumeReplication": "Reprendre la réplication de ce job",
+      "resumeReplicationWarning": "Tout ce que la réplique a écrit depuis la dernière synchronisation est écarté à la reprise de la réplication.",
+      "vmStopped": "{name} (VMID {vmid}) arrêtée sur le site DR",
+      "planFailback": "Failback du plan",
+      "openPlanFailback": "Ouvrir le failback du plan",
+      "planFailbackDisabled": "Le failback porte sur tout le plan, et seulement une fois celui-ci basculé"
     },
     "simulation": {
       "title": "Simulation de panne de nœud",

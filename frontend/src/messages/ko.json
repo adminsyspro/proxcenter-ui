@@ -4633,11 +4633,18 @@
       "tier": "등급",
       "actions": "작업",
       "startVM": "DR 사이트에서 VM 시작",
-      "failback": "주 사이트로 페일백",
-      "failbackNoPlan": "페일백 불가: VM이 복구 계획에 포함되어 있지 않습니다",
+      "stopVM": "DR 사이트에서 VM 중지",
       "emergencyFailover": "긴급 페일오버",
       "standaloneTitle": "독립 VM",
-      "vmStarted": "{name} (VMID {vmid})이(가) DR 사이트에서 시작되었습니다"
+      "vmStarted": "{name} (VMID {vmid})이(가) DR 사이트에서 시작되었습니다",
+      "stopVMTitle": "DR 사이트에서 {name}을(를) 중지할까요?",
+      "stopVMBody": "DR 복제본(VMID {vmid})이 종료됩니다. 아래에서 재개하지 않으면 해당 복제 작업은 일시 중지 상태로 유지됩니다.",
+      "resumeReplication": "이 작업의 복제 재개",
+      "resumeReplicationWarning": "마지막 동기화 이후 복제본이 기록한 내용은 복제를 재개할 때 모두 삭제됩니다.",
+      "vmStopped": "{name} (VMID {vmid})이(가) DR 사이트에서 중지되었습니다",
+      "planFailback": "플랜 페일백",
+      "openPlanFailback": "플랜 페일백 열기",
+      "planFailbackDisabled": "페일백은 플랜 전체에 적용되며, 플랜이 페일오버된 후에만 가능합니다"
     },
     "simulation": {
       "title": "노드 장애 시뮬레이션",

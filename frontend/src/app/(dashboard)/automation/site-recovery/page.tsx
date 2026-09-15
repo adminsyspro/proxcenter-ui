@@ -436,6 +436,22 @@ export default function SiteRecoveryPage() {
     mutateJobs()
   }, [mutateJobs, t])
 
+  const handleStopDRVM = useCallback(async (vmId: number, targetCluster: string, jobId: string, resumeReplication: boolean) => {
+    const res = await fetch('/api/v1/orchestrator/replication/emergency/stop-vm', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ vm_id: vmId, target_cluster: targetCluster, replication_job_id: jobId, resume_replication: resumeReplication })
+    })
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+
+      throw new Error(res.status === 409 ? t('siteRecovery.failover.testActiveConflict') : data.error || 'Failed to stop VM')
+    }
+
+    mutateJobs()
+  }, [mutateJobs, t])
+
   // Poll execution status every 3s while running
   useEffect(() => {
     if (!activeExecution || activeExecution.status !== 'running') return
@@ -603,6 +619,7 @@ export default function SiteRecoveryPage() {
             connections={connections}
             vmNamesByConn={vmNamesByConn}
             onStartVM={handleStartDRVM}
+            onStopVM={handleStopDRVM}
             onExecuteFailover={(planId) => openFailoverDialog(planId, 'failover')}
             onExecuteFailback={(planId) => openFailoverDialog(planId, 'failback')}
             onDeletePlan={handleDeletePlan}

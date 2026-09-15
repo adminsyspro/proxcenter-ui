@@ -4637,11 +4637,18 @@
       "tier": "层级",
       "actions": "操作",
       "startVM": "在灾备站点启动 VM",
-      "failback": "回切到主站点",
-      "failbackNoPlan": "故障回切不可用 — VM 不在任何恢复计划中",
+      "stopVM": "在灾备站点停止 VM",
       "emergencyFailover": "紧急故障转移",
       "standaloneTitle": "独立 VM",
-      "vmStarted": "{name}（VMID {vmid}）已在灾备站点启动"
+      "vmStarted": "{name}（VMID {vmid}）已在灾备站点启动",
+      "stopVMTitle": "在灾备站点停止 {name}？",
+      "stopVMBody": "灾备副本（VMID {vmid}）将被关闭。除非在下方恢复，否则其复制作业将保持暂停。",
+      "resumeReplication": "恢复该作业的复制",
+      "resumeReplicationWarning": "恢复复制时，副本自上次同步以来写入的所有内容都会被丢弃。",
+      "vmStopped": "{name}（VMID {vmid}）已在灾备站点停止",
+      "planFailback": "计划故障回切",
+      "openPlanFailback": "打开计划故障回切",
+      "planFailbackDisabled": "故障回切针对整个计划，且仅在计划已故障转移后可用"
     },
     "simulation": {
       "title": "节点故障模拟",

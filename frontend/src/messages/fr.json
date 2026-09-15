@@ -4294,7 +4294,8 @@
       "suspended": "Suspendue (test en cours)",
       "pending": "En attente",
       "noMatch": "Aucune VM correspondante",
-      "partial": "Partiellement synchronisé"
+      "partial": "Partiellement synchronisé",
+      "failedOver": "Basculé"
     },
     "planStatus": {
       "ready": "Prêt",

@@ -64,32 +64,39 @@ function renderTab(jobs: ReplicationJob[], vmStatesByConn: Record<string, Record
   )
 }
 
-describe('EmergencyDRTab: job status chip', () => {
-  it('renders a translated warning chip for a no_match job instead of the raw value', () => {
+describe('EmergencyDRTab: job status glyph', () => {
+  // The status is an icon now, its word carried by the tooltip (which MUI
+  // exposes as the accessible name). What issue #687 asked for still holds:
+  // a raw enum value must never reach the screen.
+  const statusGlyph = () => (screen.getAllByRole('row')[1] as HTMLTableRowElement).cells[4].querySelector('i')
+
+  it('renders a translated glyph for a no_match job instead of the raw value', () => {
     renderTab([job({ status: 'no_match' })])
 
-    const chipLabel = screen.getByText('No matching VMs')
-    const chip = chipLabel.closest('.MuiChip-root')
-    expect(chip).toBeInTheDocument()
-    expect(chip).toHaveClass('MuiChip-colorWarning')
+    expect(statusGlyph()).toHaveAttribute('aria-label', 'No matching VMs')
+    expect(statusGlyph()).toHaveClass('ri-filter-off-line')
     expect(screen.queryByText('no_match')).not.toBeInTheDocument()
   })
 
-  it('renders a translated warning chip for a partial job instead of the raw value', () => {
+  it('renders a translated glyph for a partial job instead of the raw value', () => {
     renderTab([job({ status: 'partial' })])
 
-    const chip = screen.getByText('Partially synced').closest('.MuiChip-root')
-    expect(chip).toBeInTheDocument()
-    expect(chip).toHaveClass('MuiChip-colorWarning')
+    expect(statusGlyph()).toHaveAttribute('aria-label', 'Partially synced')
     expect(screen.queryByText('partial')).not.toBeInTheDocument()
   })
 
-  it('keeps the existing raw labels for the other statuses', () => {
+  it('translates the ordinary statuses too, which used to render raw', () => {
     renderTab([job({ status: 'synced' })])
 
-    const chip = screen.getByText('synced').closest('.MuiChip-root')
-    expect(chip).toBeInTheDocument()
-    expect(chip).toHaveClass('MuiChip-colorSuccess')
+    expect(statusGlyph()).toHaveAttribute('aria-label', 'Synced')
+    expect(statusGlyph()).toHaveClass('ri-checkbox-circle-line')
+    expect(screen.queryByText('synced')).not.toBeInTheDocument()
+  })
+
+  it('keeps an unknown status readable rather than dropping it', () => {
+    renderTab([job({ status: 'brand-new-state' as any })])
+
+    expect(statusGlyph()).toHaveAttribute('aria-label', 'brand-new-state')
   })
 })
 

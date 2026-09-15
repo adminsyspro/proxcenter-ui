@@ -4273,7 +4273,8 @@
       "suspended": "Ausgesetzt (Test läuft)",
       "pending": "Ausstehend",
       "noMatch": "Keine passenden VMs",
-      "partial": "Teilweise synchronisiert"
+      "partial": "Teilweise synchronisiert",
+      "failedOver": "Umgeschaltet"
     },
     "planStatus": {
       "ready": "Bereit",

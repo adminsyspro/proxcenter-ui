@@ -35,6 +35,32 @@ import {
 
 import type { ReplicationJob, RecoveryPlan, VMRestorePoints } from '@/lib/orchestrator/site-recovery.types'
 
+/**
+ * Guest glyph, without the status dot the rest of the product carries: this
+ * screen is about the DR site, where every replica sits stopped by design,
+ * and the one power state that matters here already has its own column.
+ */
+const GuestGlyph = () => (
+  <Box sx={{ width: 16, height: 16, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+    <i className="ri-computer-line" style={{ fontSize: '0.9286rem', opacity: 0.8 }} />
+  </Box>
+)
+
+// The replication job state as one icon: the word lives in the tooltip, so a
+// row carries glyphs instead of a wall of chips. An unknown value keeps a
+// neutral icon and shows the raw value rather than disappearing.
+const JOB_STATUS_ICONS: Record<string, { icon: string; color: string; label: string }> = {
+  synced: { icon: 'ri-checkbox-circle-line', color: 'success.main', label: 'status.synced' },
+  syncing: { icon: 'ri-refresh-line', color: 'info.main', label: 'status.syncing' },
+  paused: { icon: 'ri-pause-circle-line', color: 'warning.main', label: 'status.paused' },
+  pending: { icon: 'ri-time-line', color: 'text.disabled', label: 'status.pending' },
+  error: { icon: 'ri-error-warning-line', color: 'error.main', label: 'status.error' },
+  partial: { icon: 'ri-error-warning-line', color: 'warning.main', label: 'status.partial' },
+  no_match: { icon: 'ri-filter-off-line', color: 'warning.main', label: 'status.noMatch' },
+  suspended: { icon: 'ri-test-tube-line', color: 'warning.main', label: 'status.suspended' },
+  failed_over: { icon: 'ri-alarm-warning-line', color: 'error.main', label: 'status.failedOver' },
+}
+
 // Mirror the Go destinationVMID logic
 function destinationVMID(prefix: number, vmid: number): number {
   if (!prefix) return vmid
@@ -271,13 +297,18 @@ export default function EmergencyDRTab({
     )
   }
 
-  const statusChip = (status: string) => {
-    const colorMap: Record<string, 'success' | 'warning' | 'error' | 'default' | 'info'> = {
-      synced: 'success', syncing: 'info', paused: 'warning', error: 'error', pending: 'default', no_match: 'warning', partial: 'warning',
-    }
-    const labelMap: Record<string, string> = { no_match: t('status.noMatch'), partial: t('status.partial') }
-    const label = labelMap[status] ?? status
-    return <Chip size="small" label={label} color={colorMap[status] || 'default'} sx={{ textTransform: 'capitalize' }} />
+  const statusIcon = (status: string) => {
+    const spec = JOB_STATUS_ICONS[status]
+
+    return (
+      <Tooltip title={spec ? t(spec.label) : status} arrow>
+        <Box
+          component="i"
+          className={spec?.icon || 'ri-question-line'}
+          sx={{ fontSize: 18, color: spec?.color || 'text.disabled', display: 'inline-flex' }}
+        />
+      </Tooltip>
+    )
   }
 
   const formatLastSync = (ls: string | null) => {
@@ -336,12 +367,15 @@ export default function EmergencyDRTab({
             return (
               <TableRow key={key} hover>
                 <TableCell>
-                  <Typography variant="body2" fontWeight={500}>{vm.vmName}</Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <GuestGlyph />
+                    <Typography variant="body2" fontWeight={500}>{vm.vmName}</Typography>
+                  </Box>
                 </TableCell>
                 <TableCell><code>{vm.vmId}</code></TableCell>
                 <TableCell><code>{vm.targetVmId}</code></TableCell>
                 <TableCell>{replicaChip(replicaState(vm))}</TableCell>
-                <TableCell>{statusChip(vm.jobStatus)}</TableCell>
+                <TableCell>{statusIcon(vm.jobStatus)}</TableCell>
                 <TableCell>
                   <Typography variant="body2" color="text.secondary">{formatLastSync(vm.lastSync)}</Typography>
                 </TableCell>

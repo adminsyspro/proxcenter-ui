@@ -4298,7 +4298,8 @@
       "suspended": "已暂停（测试进行中）",
       "pending": "等待中",
       "noMatch": "无匹配的虚拟机",
-      "partial": "部分同步"
+      "partial": "部分同步",
+      "failedOver": "已故障转移"
     },
     "planStatus": {
       "ready": "就绪",

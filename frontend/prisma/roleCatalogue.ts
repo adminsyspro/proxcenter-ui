@@ -28,7 +28,12 @@ export const ALL_PERMISSIONS: Permission[] = [
   { id: "vm.backup", name: "vm.backup", category: "vm", description: "Backup/Restore a VM" },
   { id: "vm.clone", name: "vm.clone", category: "vm", description: "Clone a VM" },
   { id: "vm.migrate", name: "vm.migrate", category: "vm", description: "Migrate a VM", isDangerous: true },
-  { id: "vm.config", name: "vm.config", category: "vm", description: "Modify VM configuration", isDangerous: true },
+  { id: "vm.config", name: "vm.config", category: "vm", description: "Modify VM configuration (implies all vm.config.* sub-rights)", isDangerous: true },
+  { id: "vm.config.media", name: "vm.config.media", category: "vm", description: "Change CD/DVD media or eject" },
+  { id: "vm.config.nic.link", name: "vm.config.nic.link", category: "vm", description: "Toggle NIC link state (up/down)" },
+  { id: "vm.config.nic", name: "vm.config.nic", category: "vm", description: "Add, remove and edit NICs (implies vm.config.nic.link)" },
+  { id: "vm.config.hardware", name: "vm.config.hardware", category: "vm", description: "Modify CPU, memory, disks, PCI and USB devices", isDangerous: true },
+  { id: "vm.config.boot", name: "vm.config.boot", category: "vm", description: "Change boot order, BIOS and machine type" },
   { id: "vm.delete", name: "vm.delete", category: "vm", description: "Delete a VM", isDangerous: true },
   { id: "vm.create", name: "vm.create", category: "vm", description: "Create a new VM", isDangerous: true },
 
@@ -196,7 +201,7 @@ export const ROLES: RoleSeed[] = [
     color: "#2563eb",
     permissions: [
       "vm.view", "vm.console", "vm.start", "vm.stop", "vm.restart", "vm.suspend",
-      "vm.snapshot", "vm.migrate",
+      "vm.snapshot", "vm.migrate", "vm.config",
       "storage.view",
       "node.view", "connection.view",
       "backup.view",

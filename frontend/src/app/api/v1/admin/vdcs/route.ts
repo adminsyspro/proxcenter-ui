@@ -77,12 +77,13 @@ export async function POST(req: NextRequest) {
         description: body.description,
         nodes: body.nodes,
         primaryStorage: body.primaryStorage.trim(),
-        // Same bug as the PUT route: the body carried sharedBridges but
-        // the call site dropped it, so a brand-new vDC was created with
-        // an empty uplink list regardless of what the form sent.
+        sdnZoneName: body.sdnZoneName || undefined,
         sharedBridges: body.sharedBridges,
         vlanPools: body.vlanPools,
         storagePolicies: body.storagePolicies,
+        computePolicy: body.computePolicy,
+        isoLibraries: Array.isArray(body.isoLibraries) ? body.isoLibraries : undefined,
+        transport: body.transport && typeof body.transport === 'object' ? body.transport : undefined,
         quota: body.quota,
       },
       session?.user?.id ?? null

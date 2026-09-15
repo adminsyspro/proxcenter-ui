@@ -3,6 +3,9 @@ import { NextResponse } from "next/server"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, buildNodeResourceId, PERMISSIONS } from "@/lib/rbac"
+import { getCurrentTenantId, DEFAULT_TENANT_ID } from "@/lib/tenant"
+import { getTenantInfrastructureScope } from "@/lib/tenant/infraScope"
+import { writableStoragesFor, readOnlyLibraryError } from "@/lib/vdc/scope"
 
 export const runtime = "nodejs"
 
@@ -30,6 +33,23 @@ export async function POST(
 
     if (!storage) {
       return NextResponse.json({ error: "Storage is required" }, { status: 400 })
+    }
+
+    const tenantId = await getCurrentTenantId()
+    if (tenantId && tenantId !== DEFAULT_TENANT_ID) {
+      const infra = await getTenantInfrastructureScope(tenantId, { ignoreVdcContext: true })
+      if (infra.kind === 'iaas' && infra.vdcScope) {
+        // A backup is a write: a read-only ISO library (#894) is visible to
+        // the tenant but never a valid destination.
+        const allowed = writableStoragesFor(infra.vdcScope, id)
+        if (!allowed.has(storage)) {
+          const visible = infra.vdcScope.storagesByConnection.get(id)?.has(storage)
+          return NextResponse.json(
+            { error: visible ? readOnlyLibraryError(storage) : `Storage "${storage}" is not authorised for this tenant.` },
+            { status: 403 },
+          )
+        }
+      }
     }
 
     const conn = await getConnectionById(id)

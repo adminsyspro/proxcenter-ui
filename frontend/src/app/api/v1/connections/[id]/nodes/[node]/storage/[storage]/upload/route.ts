@@ -6,7 +6,7 @@ import { randomUUID } from "node:crypto"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { getPrincipal } from "@/lib/auth/principal"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
-import { guardTenantStorageWrite } from "@/lib/vdc/scope"
+import { guardTenantStorageWrite, tenantUploadFilename } from "@/lib/vdc/scope"
 import { setProgress, clearProgress } from "@/lib/upload-progress"
 
 export const runtime = "nodejs"
@@ -16,6 +16,9 @@ export const maxDuration = 600
 const streamingSessions = new Map<string, {
   proxyReq: http.ClientRequest
   boundary: string
+  // Target filename of the first chunk: the finalize request carries no
+  // X-File-Name, and the write guard must judge the same name on both legs.
+  fileName: string
   bytesSent: number
   totalFormLength: number
   resolve: (value: { statusCode: number; body: string }) => void
@@ -69,13 +72,15 @@ async function handleChunk(
     const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW, "connection", id)
     if (denied) return denied
 
-    const storageBlock = await guardTenantStorageWrite(id, storage)
-    if (storageBlock) return storageBlock
-
     const chunkIndex = Number.parseInt(req.headers.get("x-chunk-index") || "0", 10)
     const totalSize = Number.parseInt(req.headers.get("x-total-size") || "0", 10)
-    const fileName = req.headers.get("x-file-name") || "upload"
+    // On an ISO library that allows uploads, a tenant's file is namespaced
+    // `custom-<slug>-*` server-side (the browser sends the raw name), and the
+    // guard then only lets the tenant write its own files (#894).
     const contentType = req.headers.get("x-content-type") || "iso"
+    const fileName = await tenantUploadFilename(id, storage, req.headers.get("x-file-name") || "upload")
+    const storageBlock = await guardTenantStorageWrite(id, storage, { filename: fileName, content: contentType })
+    if (storageBlock) return storageBlock
     const mimeType = req.headers.get("x-mime-type") || "application/octet-stream"
 
     if (!req.body) {
@@ -156,6 +161,7 @@ async function handleChunk(
       session = {
         proxyReq,
         boundary,
+        fileName,
         bytesSent: 0,
         totalFormLength,
         resolve: resolveResult,
@@ -210,7 +216,12 @@ async function handleFinalize(
     const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW, "connection", id)
     if (denied) return denied
 
-    const storageBlock = await guardTenantStorageWrite(id, storage)
+    const finalizeName = req.headers.get("x-file-name")
+    const storageBlock = await guardTenantStorageWrite(id, storage, {
+      filename: finalizeName
+        ? await tenantUploadFilename(id, storage, finalizeName)
+        : (streamingSessions.get(uploadId)?.fileName || null),
+    })
     if (storageBlock) return storageBlock
 
     const session = streamingSessions.get(uploadId)
@@ -257,7 +268,10 @@ async function handleFinalize(
       details: { node, connectionId: id, operation: "upload" },
     })
 
-    return NextResponse.json({ success: true, data, uploadId })
+    // `filename` is the name the file was stored under: on an ISO library a
+    // tenant upload is namespaced server-side, so the caller cannot assume the
+    // name it sent (#894).
+    return NextResponse.json({ success: true, data, uploadId, filename: session.fileName })
   } catch (e: any) {
     console.error("Error finalizing upload:", e)
     setProgress(uploadId, { bytesSent: 0, totalBytes: 0, status: "error", error: e?.message || String(e) })

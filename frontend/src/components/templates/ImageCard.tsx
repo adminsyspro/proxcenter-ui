@@ -12,7 +12,7 @@ interface ImageCardProps {
   versions: CloudImage[]
   /** Distribution name, shown in place of the image name when there are several. */
   title?: string
-  onDeploy: (image: CloudImage) => void
+  onDeploy?: (image: CloudImage) => void
   isCustom?: boolean
   onEdit?: (image: CloudImage) => void
   onDelete?: (image: CloudImage) => void
@@ -282,7 +282,7 @@ export default function ImageCard({ versions, title, onDeploy, isCustom, onEdit,
         </Box>
 
         {/* Deploy button */}
-        <Tooltip title={t('templates.catalog.deployTooltip')}>
+        {onDeploy && <Tooltip title={t('templates.catalog.deployTooltip')}>
           <Button
             variant="contained"
             size="small"
@@ -293,7 +293,7 @@ export default function ImageCard({ versions, title, onDeploy, isCustom, onEdit,
           >
             {t('templates.catalog.deploy')}
           </Button>
-        </Tooltip>
+        </Tooltip>}
       </CardContent>
     </Card>
   )

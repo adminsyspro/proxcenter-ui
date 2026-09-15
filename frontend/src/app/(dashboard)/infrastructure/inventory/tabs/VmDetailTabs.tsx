@@ -88,7 +88,7 @@ import { useVmDiskLatencySeries } from '@/hooks/useVmDiskLatencySeries'
 import { diskIoTooltipRow, latencyKey } from '@/lib/metrics/latencySeries'
 import { formatLatencyAxis } from '@/lib/metrics/latency'
 import NumericTextField from '@/components/ui/NumericTextField'
-import { extractCustomCpuModels, isKnownCpuType } from '@/lib/inventory/cpuModels'
+import { extractCustomCpuModels } from '@/lib/inventory/cpuModels'
 import { cpuGroupHeaderSx } from '../cpuSelectStyles'
 
 // Latency curves sit on the Disk I/O chart next to red bandwidth areas: amber
@@ -102,7 +102,15 @@ export default function VmDetailTabs(props: any) {
   const theme = useTheme()
   // Replication and HA are provider-scope operations (cluster-wide resource
   // planning, node failover policies) — hide their tabs from tenants.
-  const { isAdmin } = useRBAC()
+  const { isAdmin, hasPermission } = useRBAC()
+  const canConfig = hasPermission('vm.config')
+  const canConfigMedia = hasPermission('vm.config.media')
+  const canConfigNicLink = hasPermission('vm.config.nic.link')
+  const canConfigNic = hasPermission('vm.config.nic')
+  const canConfigHardware = hasPermission('vm.config.hardware')
+  const canConfigBoot = hasPermission('vm.config.boot')
+  const canBackup = hasPermission('vm.backup')
+  const canSnapshot = hasPermission('vm.snapshot')
   // Tenant-only: live vDC quota banner on the Hardware tab so the user
   // sees the impact of CPU/RAM tweaks before hitting Save (the server still
   // returns 409 if the projected usage exceeds the quota; this is purely
@@ -119,20 +127,33 @@ export default function VmDetailTabs(props: any) {
   // statique : sans cette liste, une VM configurée en "custom-*" affiche un
   // champ vide (#665).
   const [customCpuModels, setCustomCpuModels] = useState<string[]>([])
+  // vDC compute policy (#893), carried by the same cpu-models answer: the set
+  // of models the tenant may pick (null = unrestricted) and whether the
+  // advanced CPU controls (NUMA, limit, flags) are exposed at all.
+  const [cpuPolicy, setCpuPolicy] = useState<{ allowed: Set<string> | null; advanced: boolean } | null>(null)
   useEffect(() => {
     const { connId, node, type } = props.selection?.id ? parseVmId(props.selection.id) : { connId: '', node: '', type: '' }
-    if (!connId || !node || type !== 'qemu') { setCustomCpuModels([]); return }
+    if (!connId || !node || type !== 'qemu') { setCustomCpuModels([]); setCpuPolicy(null); return }
     let cancelled = false
     void (async () => {
       try {
         const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/cpu-models`)
         if (!res.ok) return
         const json = await res.json()
-        if (!cancelled) setCustomCpuModels(extractCustomCpuModels(json?.data))
+        if (cancelled) return
+        setCustomCpuModels(extractCustomCpuModels(json?.data))
+        const p = json?.policy
+        setCpuPolicy(p && typeof p === 'object'
+          ? {
+              allowed: Array.isArray(p.allowedModels) ? new Set<string>(p.allowedModels.map(String)) : null,
+              advanced: p.cpuAdvancedSettings !== false,
+            }
+          : { allowed: null, advanced: true })
       } catch { /* on retombe sur la liste statique */ }
     })()
     return () => { cancelled = true }
   }, [props.selection?.id])
+  const cpuAdvancedHidden = cpuPolicy?.advanced === false
 
   // Fetch vDC quota+usage for the connection that hosts this VM. Skipped
   // for the provider (no vDC mapping → API returns nothing). Refreshed
@@ -388,6 +409,72 @@ export default function VmDetailTabs(props: any) {
 
   const { hasFeature } = useLicense()
 
+  // CPU Type options as data so the vDC compute policy can filter them.
+  // Groups that end up empty are dropped; the guest's current model always
+  // stays selectable, even outside the allowed set (a template deployed with
+  // a provider model must not read as an empty select).
+  const cpuOptionGroups = useMemo(() => {
+    const groups: Array<{ header: string; items: Array<{ value: string; label: string }> }> = [
+      { header: 'Custom', items: customCpuModels.map((m: string) => ({ value: m, label: m })) },
+      { header: 'Special', items: [
+        { value: 'host', label: `host (${t('inventory.maxPerformance')})` },
+        { value: 'max', label: 'max' },
+        { value: 'kvm64', label: `kvm64 (${t('inventory.compatible')})` },
+        { value: 'kvm32', label: 'kvm32' },
+        { value: 'qemu64', label: `qemu64 (${t('inventory.emulation')})` },
+        { value: 'qemu32', label: 'qemu32' },
+      ] },
+      { header: 'x86-64 Microarchitecture Levels', items: [
+        { value: 'x86-64-v2', label: 'x86-64-v2' },
+        { value: 'x86-64-v2-AES', label: 'x86-64-v2-AES (Recommended)' },
+        { value: 'x86-64-v3', label: 'x86-64-v3' },
+        { value: 'x86-64-v4', label: 'x86-64-v4' },
+      ] },
+      { header: 'Intel', items: [
+        { value: '486', label: '486' },
+        { value: 'pentium', label: 'Pentium' },
+        { value: 'pentium2', label: 'Pentium 2' },
+        { value: 'pentium3', label: 'Pentium 3' },
+        ...['Conroe', 'Penryn', 'Nehalem', 'Nehalem-IBRS', 'Westmere', 'Westmere-IBRS',
+          'SandyBridge', 'SandyBridge-IBRS', 'IvyBridge', 'IvyBridge-IBRS',
+          'Haswell', 'Haswell-IBRS', 'Haswell-noTSX', 'Haswell-noTSX-IBRS',
+          'Broadwell', 'Broadwell-IBRS', 'Broadwell-noTSX', 'Broadwell-noTSX-IBRS',
+          'Skylake-Client', 'Skylake-Client-IBRS', 'Skylake-Client-noTSX-IBRS', 'Skylake-Client-v4',
+          'Skylake-Server', 'Skylake-Server-IBRS', 'Skylake-Server-noTSX-IBRS', 'Skylake-Server-v4', 'Skylake-Server-v5',
+          'Cascadelake-Server', 'Cascadelake-Server-noTSX', 'Cascadelake-Server-v2', 'Cascadelake-Server-v4', 'Cascadelake-Server-v5',
+          'Cooperlake', 'Cooperlake-v2',
+          'Icelake-Client', 'Icelake-Client-noTSX',
+          'Icelake-Server', 'Icelake-Server-noTSX', 'Icelake-Server-v3', 'Icelake-Server-v4', 'Icelake-Server-v5', 'Icelake-Server-v6',
+          'SapphireRapids', 'SapphireRapids-v2', 'GraniteRapids', 'KnightsMill',
+        ].map(v => ({ value: v, label: v })),
+      ] },
+      { header: 'AMD', items: [
+        { value: 'athlon', label: 'Athlon' },
+        { value: 'phenom', label: 'Phenom' },
+        { value: 'Opteron_G1', label: 'Opteron G1' },
+        { value: 'Opteron_G2', label: 'Opteron G2' },
+        { value: 'Opteron_G3', label: 'Opteron G3' },
+        { value: 'Opteron_G4', label: 'Opteron G4' },
+        { value: 'Opteron_G5', label: 'Opteron G5' },
+        ...['EPYC', 'EPYC-IBPB', 'EPYC-v3', 'EPYC-v4',
+          'EPYC-Rome', 'EPYC-Rome-v2', 'EPYC-Rome-v3', 'EPYC-Rome-v4',
+          'EPYC-Milan', 'EPYC-Milan-v2', 'EPYC-Genoa',
+        ].map(v => ({ value: v, label: v })),
+      ] },
+      { header: 'Legacy', items: [
+        { value: 'coreduo', label: 'Core Duo' },
+        { value: 'core2duo', label: 'Core 2 Duo' },
+      ] },
+    ]
+    const allowed = cpuPolicy?.allowed ?? null
+    const filtered = groups.map(g => ({ ...g, items: allowed ? g.items.filter(i => allowed.has(i.value)) : g.items }))
+    const listed = new Set(filtered.flatMap(g => g.items.map(i => i.value)))
+    if (cpuType && !listed.has(cpuType)) {
+      filtered[0].items.unshift({ value: cpuType, label: allowed ? `${cpuType} (current)` : cpuType })
+    }
+    return filtered.filter(g => g.items.length > 0)
+  }, [customCpuModels, cpuPolicy, cpuType, t])
+
   // Guest disk latency from the orchestrator, joined onto the RRD series so the
   // Disk I/O chart carries one latency curve per disk (#881). Nothing is
   // fetched on Community or for a container.
@@ -540,6 +627,7 @@ export default function VmDetailTabs(props: any) {
                   />
                 )}
                 <Tab
+                  sx={!isAdmin ? { display: 'none' } : undefined}
                   label={
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                       <i className="ri-shield-keyhole-line" style={{ fontSize: 16 }} />
@@ -864,7 +952,7 @@ export default function VmDetailTabs(props: any) {
                         // network, disks, etc.) — not just the CPU+memory subset we
                         // were manually tracking before.
                         const revertKeys = data?.pendingKeys as string[] | undefined
-                        if (!revertKeys || revertKeys.length === 0) return null
+                        if (!canConfig || !revertKeys || revertKeys.length === 0) return null
                         return (
                           <Button
                             fullWidth
@@ -948,6 +1036,7 @@ export default function VmDetailTabs(props: any) {
                               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
                                 <Typography variant="body2" fontWeight={600}>{t('inventory.sockets')}</Typography>
                                 <NumericTextField
+                                  disabled={!canConfigHardware}
                                   size="small"
                                   type="number"
                                   value={cpuSockets}
@@ -958,6 +1047,7 @@ export default function VmDetailTabs(props: any) {
                                 />
                               </Box>
                               <Slider
+                                disabled={!canConfigHardware}
                                 value={Math.min(cpuSockets, maxSockets)}
                                 onChange={(_, val) => setCpuSockets(Math.round(val as number))}
                                 min={1}
@@ -974,6 +1064,7 @@ export default function VmDetailTabs(props: any) {
                               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
                                 <Typography variant="body2" fontWeight={600}>{t('inventory.coresPerSocket')}</Typography>
                                 <NumericTextField
+                                  disabled={!canConfigHardware}
                                   size="small"
                                   type="number"
                                   value={cpuCores}
@@ -994,6 +1085,7 @@ export default function VmDetailTabs(props: any) {
                                 ]
                                 return (
                                   <Slider
+                                    disabled={!canConfigHardware}
                                     value={Math.min(cpuCores, sliderMax)}
                                     onChange={(_, val) => setCpuCores(Math.round(val as number))}
                                     min={1}
@@ -1011,113 +1103,28 @@ export default function VmDetailTabs(props: any) {
                           <FormControl fullWidth sx={{ mb: 3 }}>
                             <InputLabel>{t('inventory.cpuType')}</InputLabel>
                             <Select
+                              disabled={!canConfigHardware}
                               value={cpuType}
                               label={t('inventory.cpuType')}
                               onChange={(e) => setCpuType(e.target.value)}
                             >
-                              {(customCpuModels.length > 0 || Boolean(cpuType && !isKnownCpuType(cpuType) && !customCpuModels.includes(cpuType))) && (
-                                <ListSubheader disableSticky sx={cpuGroupHeaderSx}>Custom</ListSubheader>
-                              )}
-                              {customCpuModels.map((m: string) => (
-                                <MenuItem key={m} value={m}>{m}</MenuItem>
-                              ))}
-                              {Boolean(cpuType && !isKnownCpuType(cpuType) && !customCpuModels.includes(cpuType)) && (
-                                <MenuItem value={cpuType}>{cpuType}</MenuItem>
-                              )}
-                              <ListSubheader disableSticky sx={cpuGroupHeaderSx}>Special</ListSubheader>
-                              <MenuItem value="host">host ({t('inventory.maxPerformance')})</MenuItem>
-                              <MenuItem value="max">max</MenuItem>
-                              <MenuItem value="kvm64">kvm64 ({t('inventory.compatible')})</MenuItem>
-                              <MenuItem value="kvm32">kvm32</MenuItem>
-                              <MenuItem value="qemu64">qemu64 ({t('inventory.emulation')})</MenuItem>
-                              <MenuItem value="qemu32">qemu32</MenuItem>
-                              <ListSubheader disableSticky sx={cpuGroupHeaderSx}>x86-64 Microarchitecture Levels</ListSubheader>
-                              <MenuItem value="x86-64-v2">x86-64-v2</MenuItem>
-                              <MenuItem value="x86-64-v2-AES">x86-64-v2-AES (Recommended)</MenuItem>
-                              <MenuItem value="x86-64-v3">x86-64-v3</MenuItem>
-                              <MenuItem value="x86-64-v4">x86-64-v4</MenuItem>
-                              <ListSubheader disableSticky sx={cpuGroupHeaderSx}>Intel</ListSubheader>
-                              <MenuItem value="486">486</MenuItem>
-                              <MenuItem value="pentium">Pentium</MenuItem>
-                              <MenuItem value="pentium2">Pentium 2</MenuItem>
-                              <MenuItem value="pentium3">Pentium 3</MenuItem>
-                              <MenuItem value="Conroe">Conroe</MenuItem>
-                              <MenuItem value="Penryn">Penryn</MenuItem>
-                              <MenuItem value="Nehalem">Nehalem</MenuItem>
-                              <MenuItem value="Nehalem-IBRS">Nehalem-IBRS</MenuItem>
-                              <MenuItem value="Westmere">Westmere</MenuItem>
-                              <MenuItem value="Westmere-IBRS">Westmere-IBRS</MenuItem>
-                              <MenuItem value="SandyBridge">SandyBridge</MenuItem>
-                              <MenuItem value="SandyBridge-IBRS">SandyBridge-IBRS</MenuItem>
-                              <MenuItem value="IvyBridge">IvyBridge</MenuItem>
-                              <MenuItem value="IvyBridge-IBRS">IvyBridge-IBRS</MenuItem>
-                              <MenuItem value="Haswell">Haswell</MenuItem>
-                              <MenuItem value="Haswell-IBRS">Haswell-IBRS</MenuItem>
-                              <MenuItem value="Haswell-noTSX">Haswell-noTSX</MenuItem>
-                              <MenuItem value="Haswell-noTSX-IBRS">Haswell-noTSX-IBRS</MenuItem>
-                              <MenuItem value="Broadwell">Broadwell</MenuItem>
-                              <MenuItem value="Broadwell-IBRS">Broadwell-IBRS</MenuItem>
-                              <MenuItem value="Broadwell-noTSX">Broadwell-noTSX</MenuItem>
-                              <MenuItem value="Broadwell-noTSX-IBRS">Broadwell-noTSX-IBRS</MenuItem>
-                              <MenuItem value="Skylake-Client">Skylake-Client</MenuItem>
-                              <MenuItem value="Skylake-Client-IBRS">Skylake-Client-IBRS</MenuItem>
-                              <MenuItem value="Skylake-Client-noTSX-IBRS">Skylake-Client-noTSX-IBRS</MenuItem>
-                              <MenuItem value="Skylake-Client-v4">Skylake-Client-v4</MenuItem>
-                              <MenuItem value="Skylake-Server">Skylake-Server</MenuItem>
-                              <MenuItem value="Skylake-Server-IBRS">Skylake-Server-IBRS</MenuItem>
-                              <MenuItem value="Skylake-Server-noTSX-IBRS">Skylake-Server-noTSX-IBRS</MenuItem>
-                              <MenuItem value="Skylake-Server-v4">Skylake-Server-v4</MenuItem>
-                              <MenuItem value="Skylake-Server-v5">Skylake-Server-v5</MenuItem>
-                              <MenuItem value="Cascadelake-Server">Cascadelake-Server</MenuItem>
-                              <MenuItem value="Cascadelake-Server-noTSX">Cascadelake-Server-noTSX</MenuItem>
-                              <MenuItem value="Cascadelake-Server-v2">Cascadelake-Server-v2</MenuItem>
-                              <MenuItem value="Cascadelake-Server-v4">Cascadelake-Server-v4</MenuItem>
-                              <MenuItem value="Cascadelake-Server-v5">Cascadelake-Server-v5</MenuItem>
-                              <MenuItem value="Cooperlake">Cooperlake</MenuItem>
-                              <MenuItem value="Cooperlake-v2">Cooperlake-v2</MenuItem>
-                              <MenuItem value="Icelake-Client">Icelake-Client</MenuItem>
-                              <MenuItem value="Icelake-Client-noTSX">Icelake-Client-noTSX</MenuItem>
-                              <MenuItem value="Icelake-Server">Icelake-Server</MenuItem>
-                              <MenuItem value="Icelake-Server-noTSX">Icelake-Server-noTSX</MenuItem>
-                              <MenuItem value="Icelake-Server-v3">Icelake-Server-v3</MenuItem>
-                              <MenuItem value="Icelake-Server-v4">Icelake-Server-v4</MenuItem>
-                              <MenuItem value="Icelake-Server-v5">Icelake-Server-v5</MenuItem>
-                              <MenuItem value="Icelake-Server-v6">Icelake-Server-v6</MenuItem>
-                              <MenuItem value="SapphireRapids">SapphireRapids</MenuItem>
-                              <MenuItem value="SapphireRapids-v2">SapphireRapids-v2</MenuItem>
-                              <MenuItem value="GraniteRapids">GraniteRapids</MenuItem>
-                              <MenuItem value="KnightsMill">KnightsMill</MenuItem>
-                              <ListSubheader disableSticky sx={cpuGroupHeaderSx}>AMD</ListSubheader>
-                              <MenuItem value="athlon">Athlon</MenuItem>
-                              <MenuItem value="phenom">Phenom</MenuItem>
-                              <MenuItem value="Opteron_G1">Opteron G1</MenuItem>
-                              <MenuItem value="Opteron_G2">Opteron G2</MenuItem>
-                              <MenuItem value="Opteron_G3">Opteron G3</MenuItem>
-                              <MenuItem value="Opteron_G4">Opteron G4</MenuItem>
-                              <MenuItem value="Opteron_G5">Opteron G5</MenuItem>
-                              <MenuItem value="EPYC">EPYC</MenuItem>
-                              <MenuItem value="EPYC-IBPB">EPYC-IBPB</MenuItem>
-                              <MenuItem value="EPYC-v3">EPYC-v3</MenuItem>
-                              <MenuItem value="EPYC-v4">EPYC-v4</MenuItem>
-                              <MenuItem value="EPYC-Rome">EPYC-Rome</MenuItem>
-                              <MenuItem value="EPYC-Rome-v2">EPYC-Rome-v2</MenuItem>
-                              <MenuItem value="EPYC-Rome-v3">EPYC-Rome-v3</MenuItem>
-                              <MenuItem value="EPYC-Rome-v4">EPYC-Rome-v4</MenuItem>
-                              <MenuItem value="EPYC-Milan">EPYC-Milan</MenuItem>
-                              <MenuItem value="EPYC-Milan-v2">EPYC-Milan-v2</MenuItem>
-                              <MenuItem value="EPYC-Genoa">EPYC-Genoa</MenuItem>
-                              <ListSubheader disableSticky sx={cpuGroupHeaderSx}>Legacy</ListSubheader>
-                              <MenuItem value="coreduo">Core Duo</MenuItem>
-                              <MenuItem value="core2duo">Core 2 Duo</MenuItem>
+                              {cpuOptionGroups.flatMap((g) => [
+                                <ListSubheader key={`hdr-${g.header}`} disableSticky sx={cpuGroupHeaderSx}>{g.header}</ListSubheader>,
+                                ...g.items.map((i) => (
+                                  <MenuItem key={i.value} value={i.value}>{i.label}</MenuItem>
+                                )),
+                              ])}
                             </Select>
                           </FormControl>
 
                           {/* CPU Limit + NUMA toggles */}
+                          {!cpuAdvancedHidden && (
                           <Box sx={{ mb: 2 }}>
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
                               <FormControlLabel
                                 control={
                                   <Switch
+                                    disabled={!canConfigHardware}
                                     checked={cpuLimitEnabled}
                                     onChange={(e) => setCpuLimitEnabled(e.target.checked)}
                                   />
@@ -1127,6 +1134,7 @@ export default function VmDetailTabs(props: any) {
                               <FormControlLabel
                                 control={
                                   <Switch
+                                    disabled={!canConfigHardware}
                                     checked={numaEnabled}
                                     onChange={(e) => setNumaEnabled(e.target.checked)}
                                   />
@@ -1139,6 +1147,7 @@ export default function VmDetailTabs(props: any) {
                                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
                                   <Typography variant="body2" fontWeight={600}>{t('inventory.cpuLimit')}</Typography>
                                   <NumericTextField
+                                    disabled={!canConfigHardware}
                                     size="small"
                                     type="number"
                                     value={cpuLimit}
@@ -1150,6 +1159,7 @@ export default function VmDetailTabs(props: any) {
                                   />
                                 </Box>
                                 <Slider
+                                  disabled={!canConfigHardware}
                                   value={cpuLimit}
                                   onChange={(_, val) => setCpuLimit(val as number)}
                                   min={0}
@@ -1163,9 +1173,10 @@ export default function VmDetailTabs(props: any) {
                               </Box>
                             )}
                           </Box>
+                          )}
 
                           {/* Extra CPU Flags (collapsible) */}
-                          {(() => {
+                          {!cpuAdvancedHidden && (() => {
                             const activeCount = Object.keys(cpuFlags).length
                             return (
                             <Box sx={{ mb: 2, border: 1, borderColor: 'divider', borderRadius: 1, overflow: 'hidden' }}>
@@ -1206,6 +1217,7 @@ export default function VmDetailTabs(props: any) {
                                     <MuiTooltip key={flag} title={desc} placement="top" arrow>
                                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                         <ToggleButtonGroup
+                                          disabled={!canConfigHardware}
                                           size="small"
                                           exclusive
                                           value={val}
@@ -1260,8 +1272,8 @@ export default function VmDetailTabs(props: any) {
                           <Button
                             variant="contained"
                             fullWidth
-                            disabled={savingCpu || !cpuModified || hwQuotaBlocked}
-                            onClick={saveCpuConfig}
+                            disabled={!canConfigHardware || savingCpu || !cpuModified || hwQuotaBlocked}
+                            onClick={() => saveCpuConfig({ omitAdvanced: cpuAdvancedHidden })}
                             startIcon={savingCpu ? <CircularProgress size={16} /> : <SaveIcon />}
                           >
                             {savingCpu ? t('common.saving') : t('inventory.saveCpuChanges')}
@@ -1326,6 +1338,7 @@ export default function VmDetailTabs(props: any) {
                                   parent that re-clamped mid-keystroke would rewrite the buffer
                                   under the user's fingers. */}
                               <NumericTextField
+                                disabled={!canConfigHardware}
                                 size="small"
                                 type="number"
                                 value={memory}
@@ -1356,6 +1369,7 @@ export default function VmDetailTabs(props: any) {
                               ]
                               return (
                                 <Slider
+                                  disabled={!canConfigHardware}
                                   value={Math.min(memory / 1024, sliderMax)}
                                   onChange={(_, val) => {
                                     const newMem = Math.round(val as number) * 1024
@@ -1379,6 +1393,7 @@ export default function VmDetailTabs(props: any) {
                             <FormControlLabel
                               control={
                                 <Switch
+                                  disabled={!canConfigHardware}
                                   checked={balloonEnabled}
                                   onChange={(e) => setBalloonEnabled(e.target.checked)}
                                 />
@@ -1395,6 +1410,7 @@ export default function VmDetailTabs(props: any) {
                                       blur) instead of a Math.min in onChange: clamping in the
                                       parent would rewrite the buffer on every keystroke. */}
                                   <NumericTextField
+                                    disabled={!canConfigHardware}
                                     size="small"
                                     type="number"
                                     value={balloon}
@@ -1412,6 +1428,7 @@ export default function VmDetailTabs(props: any) {
                                   />
                                 </Box>
                                 <Slider
+                                  disabled={!canConfigHardware}
                                   value={balloon / 1024}
                                   onChange={(_, val) => setBalloon((val as number) * 1024)}
                                   min={0}
@@ -1445,6 +1462,7 @@ export default function VmDetailTabs(props: any) {
                                 {t('inventory.swap')}
                               </Typography>
                               <NumericTextField
+                                disabled={!canConfigHardware}
                                 size="small"
                                 type="number"
                                 value={swap}
@@ -1459,6 +1477,7 @@ export default function VmDetailTabs(props: any) {
                               />
                             </Box>
                             <Slider
+                              disabled={!canConfigHardware}
                               value={swap}
                               onChange={(_, val) => setSwap(val as number)}
                               min={0}
@@ -1484,7 +1503,7 @@ export default function VmDetailTabs(props: any) {
                           <Button
                             variant="contained"
                             fullWidth
-                            disabled={savingMemory || !memoryModified || hwQuotaBlocked}
+                            disabled={!canConfigHardware || savingMemory || !memoryModified || hwQuotaBlocked}
                             onClick={saveMemoryConfig}
                             startIcon={savingMemory ? <CircularProgress size={16} /> : <SaveIcon />}
                           >
@@ -1516,16 +1535,20 @@ export default function VmDetailTabs(props: any) {
                               <Chip label={data.disksInfo?.length || 0} size="small" sx={{ height: 22, fontSize: 11 }} />
                             </Typography>
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                {canConfigHardware && (
                                 <MuiTooltip title={data.optionsInfo?.scsihw || 'virtio-scsi-single'}>
                                   <IconButton size="small" onClick={(e) => { e.stopPropagation(); setEditScsiControllerDialogOpen(true) }}>
                                     <i className="ri-settings-3-line" style={{ fontSize: 16 }} />
                                   </IconButton>
                                 </MuiTooltip>
+                                )}
+                                {canConfigHardware && (
                                 <MuiTooltip title={t('common.add')}>
                                   <IconButton size="small" color="primary" onClick={(e) => { e.stopPropagation(); setAddDiskDialogOpen(true) }}>
                                     <i className="ri-add-line" style={{ fontSize: 18 }} />
                                   </IconButton>
                                 </MuiTooltip>
+                                )}
                               <i className={hwSections.has('disks') ? 'ri-subtract-line' : 'ri-add-line'} style={{ fontSize: 22, opacity: 0.5 }} />
                             </Box>
                           </Box>
@@ -1544,8 +1567,7 @@ export default function VmDetailTabs(props: any) {
                                     '&:last-child': { mb: 0 }
                                   }}
                                   onClick={() => {
-                                    // The Cloud-Init drive is generated by PVE: the ISO editor
-                                    // would overwrite it, so the row stays informative only.
+                                    if (!canConfigHardware) return
                                     if (disk.isCloudInit) return
                                     setSelectedDisk(disk)
                                     setEditDiskDialogOpen(true)
@@ -1599,7 +1621,7 @@ export default function VmDetailTabs(props: any) {
                                     }
                                   />
                                   {disk.isUnused ? (
-                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }} onClick={(e) => e.stopPropagation()}>
+                                    canConfigHardware ? <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }} onClick={(e) => e.stopPropagation()}>
                                       <MuiTooltip title={t('hardware.attach')}>
                                         <IconButton
                                           size="small"
@@ -1629,10 +1651,10 @@ export default function VmDetailTabs(props: any) {
                                           <i className="ri-delete-bin-line" style={{ fontSize: 18 }} />
                                         </IconButton>
                                       </MuiTooltip>
-                                    </Box>
+                                    </Box> : null
                                   ) : disk.isCloudInit ? null : (disk.isCdrom || disk.isEfi || disk.isTpm) ? (
-                                    <i className="ri-pencil-line" style={{ fontSize: 16, opacity: 0.5 }} />
-                                  ) : (
+                                    canConfigHardware ? <i className="ri-pencil-line" style={{ fontSize: 16, opacity: 0.5 }} /> : null
+                                  ) : canConfigHardware ? (
                                     <IconButton
                                       size="small"
                                       onClick={(e) => {
@@ -1644,7 +1666,7 @@ export default function VmDetailTabs(props: any) {
                                     >
                                       <i className="ri-more-2-fill" style={{ fontSize: 18, opacity: 0.6 }} />
                                     </IconButton>
-                                  )}
+                                  ) : null}
                                 </ListItemButton>
                               ))}
                             </List>
@@ -1748,11 +1770,13 @@ export default function VmDetailTabs(props: any) {
                               <Chip label={data.networkInfo?.length || 0} size="small" sx={{ height: 22, fontSize: 11 }} />
                             </Typography>
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                {canConfigNic && (
                                 <MuiTooltip title={t('common.add')}>
                                   <IconButton size="small" color="primary" onClick={(e) => { e.stopPropagation(); setAddNetworkDialogOpen(true) }}>
                                     <i className="ri-add-line" style={{ fontSize: 18 }} />
                                   </IconButton>
                                 </MuiTooltip>
+                                )}
                               <i className={hwSections.has('network') ? 'ri-subtract-line' : 'ri-add-line'} style={{ fontSize: 22, opacity: 0.5 }} />
                             </Box>
                           </Box>
@@ -1763,6 +1787,7 @@ export default function VmDetailTabs(props: any) {
                                 {data.networkInfo.map((net: any, idx: number) => (
                                   <ListItemButton
                                     key={idx}
+                                    disabled={!canConfigNic}
                                     sx={{
                                       bgcolor: net.linkDown ? 'rgba(245,158,11,0.08)' : 'action.hover',
                                       borderRadius: 1,
@@ -1869,11 +1894,13 @@ export default function VmDetailTabs(props: any) {
                               <Chip label={data.otherHardwareInfo?.length || 0} size="small" sx={{ height: 22, fontSize: 11 }} />
                             </Typography>
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                {canConfigHardware && (
                                 <MuiTooltip title={t('common.add')}>
                                   <IconButton size="small" color="primary" onClick={(e) => { e.stopPropagation(); setAddOtherHardwareDialogOpen(true) }}>
                                     <i className="ri-add-line" style={{ fontSize: 18 }} />
                                   </IconButton>
                                 </MuiTooltip>
+                                )}
                             <i className={hwSections.has('other') ? 'ri-subtract-line' : 'ri-add-line'} style={{ fontSize: 22, opacity: 0.5 }} />
                             </Box>
                           </Box>
@@ -1906,18 +1933,17 @@ export default function VmDetailTabs(props: any) {
                                 return (
                                   <ListItem
                                     key={idx}
-                                    onClick={isEditable ? openEdit : undefined}
+                                    onClick={isEditable && canConfigHardware ? openEdit : undefined}
                                     sx={{
                                       bgcolor: 'action.hover',
                                       borderRadius: 1,
                                       mb: 1,
                                       '&:last-child': { mb: 0 },
-                                      ...(isEditable && {
-                                        cursor: 'pointer',
-                                        '&:hover': { bgcolor: 'action.selected' },
-                                      }),
+                                      ...(isEditable && canConfigHardware
+                                        ? { cursor: 'pointer', '&:hover': { bgcolor: 'action.selected' } }
+                                        : {}),
                                     }}
-                                    secondaryAction={isEditable ? (
+                                    secondaryAction={isEditable && canConfigHardware ? (
                                       <MuiTooltip title={t('common.edit')}>
                                         <IconButton
                                           size="small"
@@ -2071,11 +2097,13 @@ export default function VmDetailTabs(props: any) {
                                         </Typography>
                                       </td>
                                       <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12, textAlign: 'center', width: 48 }}>
+                                        {canConfig && (
                                         <MuiTooltip title={t('common.edit')}>
                                           <IconButton size="small" onClick={() => setEditOptionDialog({ key: row.key, label: row.label, value: row.editValue, type: (row as any).type || 'select', options: row.options })}>
                                             <i className="ri-pencil-line" style={{ fontSize: 16 }} />
                                           </IconButton>
                                         </MuiTooltip>
+                                        )}
                                       </td>
                                     </tr>
                                   ))}
@@ -2161,11 +2189,13 @@ export default function VmDetailTabs(props: any) {
                                 </td>
                                 <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12, position: 'relative' as const }}>{data.name || data.title || 'N/A'}</td>
                                 <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12, textAlign: 'center' }}>
+                                  {canConfig && (
                                   <MuiTooltip title={t('common.edit')}>
                                     <IconButton size="small" onClick={() => setEditOptionDialog(guestNameOptionEdit(data.vmType, data.name, t))}>
                                       <i className="ri-pencil-line" style={{ fontSize: 16 }} />
                                     </IconButton>
                                   </MuiTooltip>
+                                  )}
                                 </td>
                               </tr>
                               <tr>
@@ -2185,11 +2215,13 @@ export default function VmDetailTabs(props: any) {
                                   ) : t('common.noData')}
                                 </td>
                                 <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12, textAlign: 'center' }}>
+                                  {canConfig && (
                                   <MuiTooltip title={t('common.edit')}>
                                     <IconButton size="small" onClick={() => setEditOptionDialog({ key: 'description', label: t('common.description'), value: data.description || '', type: 'text' })}>
                                       <i className="ri-pencil-line" style={{ fontSize: 16 }} />
                                     </IconButton>
                                   </MuiTooltip>
+                                  )}
                                 </td>
                               </tr>
                               <tr>
@@ -2227,11 +2259,13 @@ return (
                                   </Box>
                                 </td>
                                 <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12, textAlign: 'center' }}>
+                                  {canConfig && (
                                   <MuiTooltip title={t('common.edit')}>
                                     <IconButton size="small" onClick={() => setEditOptionDialog({ key: 'tags', label: t('inventory.tags'), value: (localTags || []).join(','), type: 'text' })}>
                                       <i className="ri-pencil-line" style={{ fontSize: 16 }} />
                                     </IconButton>
                                   </MuiTooltip>
+                                  )}
                                 </td>
                               </tr>
                               <tr>
@@ -2251,11 +2285,13 @@ return (
                                   {pendingChip('onboot')}
                                 </td>
                                 <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12, textAlign: 'center' }}>
+                                  {canConfig && (
                                   <MuiTooltip title={t('common.edit')}>
                                     <IconButton size="small" onClick={() => setEditOptionDialog({ key: 'onboot', label: t('common.enabled'), value: data.optionsInfo?.onboot ? '1' : '0', type: 'select', options: [{ value: '1', label: t('common.yes') }, { value: '0', label: t('common.no') }] })}>
                                       <i className="ri-pencil-line" style={{ fontSize: 16 }} />
                                     </IconButton>
                                   </MuiTooltip>
+                                  )}
                                 </td>
                               </tr>
                               <tr>
@@ -2270,11 +2306,13 @@ return (
                                   {pendingChip('startup')}
                                 </td>
                                 <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12, textAlign: 'center' }}>
+                                  {canConfig && (
                                   <MuiTooltip title={t('common.edit')}>
                                     <IconButton size="small" onClick={() => setEditOptionDialog({ key: 'startup', label: t('inventory.startupOrder'), value: data.optionsInfo?.startupOrder || '', type: 'text' })}>
                                       <i className="ri-pencil-line" style={{ fontSize: 16 }} />
                                     </IconButton>
                                   </MuiTooltip>
+                                  )}
                                 </td>
                               </tr>
                               <tr>
@@ -2297,7 +2335,7 @@ return (
                                         </IconButton>
                                       </span>
                                     </MuiTooltip>
-                                  ) : (
+                                  ) : canConfig ? (
                                   <MuiTooltip title={t('common.edit')}>
                                     <IconButton size="small" onClick={() => setEditOptionDialog({ key: 'ostype', label: t('inventory.osType'), value: data.optionsInfo?.ostype || 'other', type: 'select', options: [
                                       { value: 'l26', label: 'Linux 6.x - 2.6 Kernel' },
@@ -2316,7 +2354,7 @@ return (
                                       <i className="ri-pencil-line" style={{ fontSize: 16 }} />
                                     </IconButton>
                                   </MuiTooltip>
-                                  )}
+                                  ) : null}
                                 </td>
                               </tr>
                               {!isLxc && (<>
@@ -2341,6 +2379,7 @@ return (
                                   {pendingChip('boot')}
                                 </td>
                                 <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12, textAlign: 'center' }}>
+                                  {canConfigBoot && (
                                   <MuiTooltip title={t('common.edit')}>
                                     <IconButton size="small" onClick={() => {
                                       // Build device list from all disks + networks
@@ -2365,6 +2404,7 @@ return (
                                       <i className="ri-pencil-line" style={{ fontSize: 16 }} />
                                     </IconButton>
                                   </MuiTooltip>
+                                  )}
                                 </td>
                               </tr>
                               <tr>
@@ -2384,11 +2424,13 @@ return (
                                   {pendingChip('tablet')}
                                 </td>
                                 <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12, textAlign: 'center' }}>
+                                  {canConfig && (
                                   <MuiTooltip title={t('common.edit')}>
                                     <IconButton size="small" onClick={() => setEditOptionDialog({ key: 'tablet', label: t('inventory.usbTablet'), value: data.optionsInfo?.useTablet !== false ? '1' : '0', type: 'select', options: [{ value: '1', label: t('common.yes') }, { value: '0', label: t('common.no') }] })}>
                                       <i className="ri-pencil-line" style={{ fontSize: 16 }} />
                                     </IconButton>
                                   </MuiTooltip>
+                                  )}
                                 </td>
                               </tr>
                               <tr>
@@ -2418,11 +2460,13 @@ return (
                                   {pendingChip('hotplug')}
                                 </td>
                                 <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12, textAlign: 'center' }}>
+                                  {canConfig && (
                                   <MuiTooltip title={t('common.edit')}>
                                     <IconButton size="small" onClick={() => setEditOptionDialog({ key: 'hotplug', label: 'Hotplug', value: data.optionsInfo?.hotplug || 'disk,network,usb', type: 'hotplug' })}>
                                       <i className="ri-pencil-line" style={{ fontSize: 16 }} />
                                     </IconButton>
                                   </MuiTooltip>
+                                  )}
                                 </td>
                               </tr>
                               <tr>
@@ -2442,11 +2486,13 @@ return (
                                   {pendingChip('acpi')}
                                 </td>
                                 <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12, textAlign: 'center' }}>
+                                  {canConfig && (
                                   <MuiTooltip title={t('common.edit')}>
                                     <IconButton size="small" onClick={() => setEditOptionDialog({ key: 'acpi', label: 'ACPI', value: data.optionsInfo?.acpi !== false ? '1' : '0', type: 'select', options: [{ value: '1', label: t('common.yes') }, { value: '0', label: t('common.no') }] })}>
                                       <i className="ri-pencil-line" style={{ fontSize: 16 }} />
                                     </IconButton>
                                   </MuiTooltip>
+                                  )}
                                 </td>
                               </tr>
                               <tr>
@@ -2466,11 +2512,13 @@ return (
                                   {pendingChip('kvm')}
                                 </td>
                                 <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12, textAlign: 'center' }}>
+                                  {canConfig && (
                                   <MuiTooltip title={t('common.edit')}>
                                     <IconButton size="small" onClick={() => setEditOptionDialog({ key: 'kvm', label: 'KVM Hardware Virtualization', value: data.optionsInfo?.kvmEnabled !== false ? '1' : '0', type: 'select', options: [{ value: '1', label: t('common.yes') }, { value: '0', label: t('common.no') }] })}>
                                       <i className="ri-pencil-line" style={{ fontSize: 16 }} />
                                     </IconButton>
                                   </MuiTooltip>
+                                  )}
                                 </td>
                               </tr>
                               <tr>
@@ -2490,11 +2538,13 @@ return (
                                   {pendingChip('freeze')}
                                 </td>
                                 <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12, textAlign: 'center' }}>
+                                  {canConfig && (
                                   <MuiTooltip title={t('common.edit')}>
                                     <IconButton size="small" onClick={() => setEditOptionDialog({ key: 'freeze', label: t('inventory.freezeCpuOnStartup'), value: data.optionsInfo?.freezeCpu ? '1' : '0', type: 'select', options: [{ value: '1', label: t('common.yes') }, { value: '0', label: t('common.no') }] })}>
                                       <i className="ri-pencil-line" style={{ fontSize: 16 }} />
                                     </IconButton>
                                   </MuiTooltip>
+                                  )}
                                 </td>
                               </tr>
                               <tr>
@@ -2509,11 +2559,13 @@ return (
                                   {pendingChip('localtime')}
                                 </td>
                                 <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12, textAlign: 'center' }}>
+                                  {canConfig && (
                                   <MuiTooltip title={t('common.edit')}>
                                     <IconButton size="small" onClick={() => setEditOptionDialog({ key: 'localtime', label: t('inventory.rtcLocalTime'), value: data.optionsInfo?.useLocalTime || '', type: 'select', options: [{ value: '', label: t('common.default') }, { value: '1', label: t('common.yes') }, { value: '0', label: t('common.no') }] })}>
                                       <i className="ri-pencil-line" style={{ fontSize: 16 }} />
                                     </IconButton>
                                   </MuiTooltip>
+                                  )}
                                 </td>
                               </tr>
                               <tr>
@@ -2528,11 +2580,13 @@ return (
                                   {pendingChip('startdate')}
                                 </td>
                                 <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12, textAlign: 'center' }}>
+                                  {canConfig && (
                                   <MuiTooltip title={t('common.edit')}>
                                     <IconButton size="small" onClick={() => setEditOptionDialog({ key: 'startdate', label: t('inventory.rtcDate'), value: data.optionsInfo?.rtcStartDate || 'now', type: 'text' })}>
                                       <i className="ri-pencil-line" style={{ fontSize: 16 }} />
                                     </IconButton>
                                   </MuiTooltip>
+                                  )}
                                 </td>
                               </tr>
                               <tr>
@@ -2572,11 +2626,13 @@ return (
                                   {pendingChip('agent')}
                                 </td>
                                 <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12, textAlign: 'center' }}>
+                                  {canConfig && (
                                   <MuiTooltip title={t('common.edit')}>
                                     <IconButton size="small" onClick={() => setEditOptionDialog({ key: 'agent', label: 'QEMU Guest Agent', value: data.optionsInfo?.agentEnabled ? '1' : '0', type: 'select', options: [{ value: '1', label: t('common.enabled') }, { value: '0', label: t('common.disabled') }] })}>
                                       <i className="ri-pencil-line" style={{ fontSize: 16 }} />
                                     </IconButton>
                                   </MuiTooltip>
+                                  )}
                                 </td>
                               </tr>
                               </>)}
@@ -2597,14 +2653,16 @@ return (
                                   {pendingChip('protection')}
                                 </td>
                                 <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12, textAlign: 'center' }}>
+                                  {canConfig && (
                                   <MuiTooltip title={t('common.edit')}>
                                     <IconButton size="small" onClick={() => setEditOptionDialog({ key: 'protection', label: t('inventory.protection'), value: data.optionsInfo?.protection ? '1' : '0', type: 'select', options: [{ value: '1', label: t('common.yes') }, { value: '0', label: t('common.no') }] })}>
                                       <i className="ri-pencil-line" style={{ fontSize: 16 }} />
                                     </IconButton>
                                   </MuiTooltip>
+                                  )}
                                 </td>
                               </tr>
-                              {isLxc && <LxcOptionRows optionsInfo={data.optionsInfo} pendingChip={pendingChip} onEdit={setEditOptionDialog} />}
+                              {isLxc && <LxcOptionRows optionsInfo={data.optionsInfo} pendingChip={pendingChip} onEdit={canConfig ? setEditOptionDialog : undefined} />}
                               {!isLxc && (<>
                               <tr>
                                 <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12, fontWeight: 500 }}>
@@ -2618,11 +2676,13 @@ return (
                                   {pendingChip('spice_enhancements')}
                                 </td>
                                 <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12, textAlign: 'center' }}>
+                                  {canConfig && (
                                   <MuiTooltip title={t('common.edit')}>
                                     <IconButton size="small" onClick={() => setEditOptionDialog({ key: 'spice_enhancements', label: t('inventory.spiceEnhancements'), value: data.optionsInfo?.spiceEnhancements || '', type: 'text' })}>
                                       <i className="ri-pencil-line" style={{ fontSize: 16 }} />
                                     </IconButton>
                                   </MuiTooltip>
+                                  )}
                                 </td>
                               </tr>
                               <tr>
@@ -2637,11 +2697,13 @@ return (
                                   {pendingChip('vmstatestorage')}
                                 </td>
                                 <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12, textAlign: 'center' }}>
+                                  {canConfig && (
                                   <MuiTooltip title={t('common.edit')}>
                                     <IconButton size="small" onClick={() => setEditOptionDialog({ key: 'vmstatestorage', label: t('inventory.vmStateStorage'), value: data.optionsInfo?.vmStateStorage || '', type: 'text' })}>
                                       <i className="ri-pencil-line" style={{ fontSize: 16 }} />
                                     </IconButton>
                                   </MuiTooltip>
+                                  )}
                                 </td>
                               </tr>
                               <tr>
@@ -2656,6 +2718,7 @@ return (
                                   {pendingChip('amd_sev')}
                                 </td>
                                 <td style={{ padding: '6px 16px', textAlign: 'center' }}>
+                                  {canConfig && (
                                   <MuiTooltip title={t('common.edit')}>
                                     <IconButton size="small" onClick={() => setEditOptionDialog({ key: 'amd_sev', label: 'AMD SEV', value: data.optionsInfo?.amdSEV || '', type: 'select', options: [
                                       { value: '', label: t('common.default') },
@@ -2666,6 +2729,7 @@ return (
                                       <i className="ri-pencil-line" style={{ fontSize: 16 }} />
                                     </IconButton>
                                   </MuiTooltip>
+                                  )}
                                 </td>
                               </tr>
                               </>)}
@@ -2825,12 +2889,12 @@ return (
                             </Select>
                           </FormControl>
                         )}
+                        {canBackup && (
                         <Button
                           variant="contained"
                           size="small"
                           startIcon={<AddIcon />}
                           onClick={() => {
-                            // Charger les storages de backup disponibles
                             if (selection?.type === 'vm') {
                               const { connId, node } = parseVmId(selection.id)
 
@@ -2849,6 +2913,7 @@ return (
                         >
                           {t('inventory.newBackup')}
                         </Button>
+                        )}
                       </Box>
                     </Box>
                   )}
@@ -3538,7 +3603,7 @@ return (
                             </span>
                           </MuiTooltip>
                         )}
-                        {!showCreateSnapshot && snapshotFeatureAvailable !== false && (
+                        {canSnapshot && !showCreateSnapshot && snapshotFeatureAvailable !== false && (
                           <MuiTooltip title={snapshotTaskBusy ? t('inventory.snapshotTaskRunning') : t('inventory.takeSnapshot')}>
                             <span>
                               <IconButton
@@ -3816,6 +3881,7 @@ return (
                                           className="snapshot-actions"
                                           sx={{ opacity: { xs: 1, md: 0 }, transition: 'opacity 0.2s' }}
                                         >
+                                          {canSnapshot && (
                                           <MuiTooltip title={t('audit.actions.restore')}>
                                             <IconButton
                                               size="small"
@@ -3829,6 +3895,8 @@ return (
                                               <i className="ri-history-line" style={{ fontSize: 18 }} />
                                             </IconButton>
                                           </MuiTooltip>
+                                          )}
+                                          {canSnapshot && (
                                           <MuiTooltip title={t('inventory.deleteSnapshot')}>
                                             <IconButton
                                               size="small"
@@ -3842,6 +3910,7 @@ return (
                                               <i className="ri-delete-bin-line" style={{ fontSize: 18 }} />
                                             </IconButton>
                                           </MuiTooltip>
+                                          )}
                                         </Stack>
                                       </Box>
                                     </CardContent>
@@ -3867,7 +3936,7 @@ return (
                           <i className="ri-sticky-note-line" style={{ fontSize: 20 }} />
                           {t('inventory.tabs.notes')}
                         </Typography>
-                        {!notesEditing && (
+                        {canConfig && !notesEditing && (
                           <Button
                             size="small"
                             variant="outlined"
@@ -4391,11 +4460,13 @@ return (
                                   {data.cloudInitConfig.ciuser || t('common.noData')}
                                 </td>
                                 <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12, textAlign: 'center' }}>
+                                  {canConfig && (
                                   <MuiTooltip title={t('common.edit')}>
                                     <IconButton size="small" onClick={() => setEditOptionDialog({ key: 'ciuser', label: t('inventory.cloudInit.user'), value: data.cloudInitConfig.ciuser || '', type: 'text' })}>
                                       <i className="ri-pencil-line" style={{ fontSize: 16 }} />
                                     </IconButton>
                                   </MuiTooltip>
+                                  )}
                                 </td>
                               </tr>
                               {/* Password */}
@@ -4410,11 +4481,13 @@ return (
                                   {data.cloudInitConfig.cipassword ? t('inventory.cloudInit.passwordMasked') : t('common.noData')}
                                 </td>
                                 <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12, textAlign: 'center' }}>
+                                  {canConfig && (
                                   <MuiTooltip title={t('common.edit')}>
                                     <IconButton size="small" onClick={() => setEditOptionDialog({ key: 'cipassword', label: t('inventory.cloudInit.password'), value: '', type: 'text' })}>
                                       <i className="ri-pencil-line" style={{ fontSize: 16 }} />
                                     </IconButton>
                                   </MuiTooltip>
+                                  )}
                                 </td>
                               </tr>
                               {/* SSH Public Keys */}
@@ -4433,11 +4506,13 @@ return (
                                   ) : t('common.noData')}
                                 </td>
                                 <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12, textAlign: 'center' }}>
+                                  {canConfig && (
                                   <MuiTooltip title={t('common.edit')}>
                                     <IconButton size="small" onClick={() => setEditOptionDialog({ key: 'sshkeys', label: t('inventory.cloudInit.sshKeys'), value: data.cloudInitConfig.sshkeys || '', type: 'text' })}>
                                       <i className="ri-pencil-line" style={{ fontSize: 16 }} />
                                     </IconButton>
                                   </MuiTooltip>
+                                  )}
                                 </td>
                               </tr>
                               {/* IP Configurations */}
@@ -4460,11 +4535,13 @@ return (
                                     <Typography variant="caption" color="text.secondary">{t('inventory.cloudInit.ipConfigHelp')}</Typography>
                                   </td>
                                   <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12, textAlign: 'center' }}>
+                                    {canConfig && (
                                     <MuiTooltip title={t('common.edit')}>
                                       <IconButton size="small" onClick={() => setEditOptionDialog({ key, label: `${t('inventory.cloudInit.ipConfig')} (${key.replaceAll('ipconfig', '')})`, value: String(val), type: 'text' })}>
                                         <i className="ri-pencil-line" style={{ fontSize: 16 }} />
                                       </IconButton>
                                     </MuiTooltip>
+                                    )}
                                   </td>
                                 </tr>
                               ))}
@@ -4481,11 +4558,13 @@ return (
                                     {t('common.noData')}
                                   </td>
                                   <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12, textAlign: 'center' }}>
+                                    {canConfig && (
                                     <MuiTooltip title={t('common.edit')}>
                                       <IconButton size="small" onClick={() => setEditOptionDialog({ key: 'ipconfig0', label: `${t('inventory.cloudInit.ipConfig')} (0)`, value: '', type: 'text' })}>
                                         <i className="ri-pencil-line" style={{ fontSize: 16 }} />
                                       </IconButton>
                                     </MuiTooltip>
+                                    )}
                                   </td>
                                 </tr>
                               )}
@@ -4501,11 +4580,13 @@ return (
                                   {data.cloudInitConfig.nameserver || t('common.noData')}
                                 </td>
                                 <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12, textAlign: 'center' }}>
+                                  {canConfig && (
                                   <MuiTooltip title={t('common.edit')}>
                                     <IconButton size="small" onClick={() => setEditOptionDialog({ key: 'nameserver', label: t('inventory.cloudInit.nameserver'), value: data.cloudInitConfig.nameserver || '', type: 'text' })}>
                                       <i className="ri-pencil-line" style={{ fontSize: 16 }} />
                                     </IconButton>
                                   </MuiTooltip>
+                                  )}
                                 </td>
                               </tr>
                               {/* Search Domain */}
@@ -4520,11 +4601,13 @@ return (
                                   {data.cloudInitConfig.searchdomain || t('common.noData')}
                                 </td>
                                 <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12, textAlign: 'center' }}>
+                                  {canConfig && (
                                   <MuiTooltip title={t('common.edit')}>
                                     <IconButton size="small" onClick={() => setEditOptionDialog({ key: 'searchdomain', label: t('inventory.cloudInit.searchdomain'), value: data.cloudInitConfig.searchdomain || '', type: 'text' })}>
                                       <i className="ri-pencil-line" style={{ fontSize: 16 }} />
                                     </IconButton>
                                   </MuiTooltip>
+                                  )}
                                 </td>
                               </tr>
                             </tbody>

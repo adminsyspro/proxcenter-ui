@@ -145,6 +145,34 @@ describe('POST /api/v1/admin/vdcs', () => {
     expect(createVdcMock).toHaveBeenCalledWith(expect.objectContaining({ storagePolicies }), 'admin-1')
   })
 
+  it('forwards object-shaped isoLibraries ({ storageId, allowUploads }) untouched to createVdc (#894)', async () => {
+    const isoLibraries = [{ storageId: 'isolib', allowUploads: true }, 'ro-lib']
+    const res = await callRoute(POST as Parameters<typeof callRoute>[0], {
+      method: 'POST',
+      body: { ...VALID_BODY, isoLibraries },
+    })
+    expect(res.status).toBe(201)
+    expect(createVdcMock).toHaveBeenCalledWith(expect.objectContaining({ isoLibraries }), 'admin-1')
+  })
+
+  it('forwards isoLibraries to createVdc, and drops a non-array value (#894)', async () => {
+    const isoLibraries = ['isolib']
+    const res = await callRoute(POST as Parameters<typeof callRoute>[0], {
+      method: 'POST',
+      body: { ...VALID_BODY, isoLibraries },
+    })
+    expect(res.status).toBe(201)
+    expect(createVdcMock).toHaveBeenCalledWith(expect.objectContaining({ isoLibraries }), 'admin-1')
+
+    createVdcMock.mockClear()
+    const bad = await callRoute(POST as Parameters<typeof callRoute>[0], {
+      method: 'POST',
+      body: { ...VALID_BODY, isoLibraries: 'isolib' },
+    })
+    expect(bad.status).toBe(201)
+    expect(createVdcMock).toHaveBeenCalledWith(expect.objectContaining({ isoLibraries: undefined }), 'admin-1')
+  })
+
   it('maps a storage-policy cross-connection rejection from createVdc to 400', async () => {
     createVdcMock.mockRejectedValue(
       new Error('Storage policy policy-1 does not belong to this connection')
@@ -200,5 +228,20 @@ describe('POST /api/v1/admin/vdcs', () => {
 
     const res = await callRoute(POST as Parameters<typeof callRoute>[0], { method: 'POST', body: VALID_BODY })
     expect(res.status).toBe(500)
+  })
+})
+
+describe('POST /api/v1/admin/vdcs: ISO library validation errors are 400 (#894)', () => {
+  it('maps an unknown / non-ISO storage rejection from createVdc to 400', async () => {
+    createVdcMock.mockRejectedValue(new Error('Storage "nope" does not exist on this cluster or does not hold ISO content'))
+    const res = await callRoute(POST as Parameters<typeof callRoute>[0], { method: 'POST', body: { ...VALID_BODY, isoLibraries: ['nope'] } })
+    expect(res.status).toBe(400)
+    expect((await res.json()).error).toMatch(/ISO content/)
+  })
+
+  it('maps a malformed ISO library id rejection from createVdc to 400', async () => {
+    createVdcMock.mockRejectedValue(new Error('Invalid ISO library storage id "bad id"'))
+    const res = await callRoute(POST as Parameters<typeof callRoute>[0], { method: 'POST', body: { ...VALID_BODY, isoLibraries: ['bad id'] } })
+    expect(res.status).toBe(400)
   })
 })

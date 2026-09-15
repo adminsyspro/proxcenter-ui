@@ -10,10 +10,22 @@ import { prisma } from '@/lib/db/prisma'
 import { decryptSecret } from '@/lib/crypto/secret'
 import { DEFAULT_TENANT_ID } from '@/lib/tenant'
 
-import { generateZoneName, createZone, deleteZone, deleteVnetPve, applySdn } from './sdn'
+import { generateZoneName, isZoneNameTaken, createZone, deleteZone, deleteVnetPve, applySdn, updateZone, listClusterNodeIps } from './sdn'
 import { clearVdcScopeCache } from './scope'
 import { validateVlanPoolsInput, assertNoCrossVdcOverlap, assertPoolShrinkSafe, type VlanPoolInput } from './vlan'
 import { getVdcStorageUsedMb } from './quota'
+import { DEFAULT_COMPUTE_POLICY, normalizeComputePolicyInput, type VdcComputePolicy } from './computePolicy'
+import {
+  normalizeTransportInput,
+  transportFromRow as rowToTransport,
+  transportToRow,
+  zoneConfigFor,
+  sameZoneConfig,
+  type VdcTransport,
+} from './transport'
+import { assertNoTransportConflict } from './transportOps'
+import { memberPeersForVdc, withMemberPeers } from './stretchPeers'
+import { syncNetworksOfVdc } from './tenantNetworkMembers'
 
 import type {
   Vdc,
@@ -22,10 +34,12 @@ import type {
   VdcUsage,
   CreateVdcInput,
   UpdateVdcInput,
+  VdcIsoLibraryGrant,
+  VdcIsoLibraryInput,
 } from './types'
 
 // Re-export all types
-export type { Vdc, VdcWithDetails, VdcQuota, VdcUsage, CreateVdcInput, UpdateVdcInput } from './types'
+export type { Vdc, VdcWithDetails, VdcQuota, VdcUsage, CreateVdcInput, UpdateVdcInput, VdcComputePolicy } from './types'
 
 // ---------------------------------------------------------------------------
 // Row mapping helpers
@@ -42,9 +56,29 @@ type VdcRow = {
   enabled: boolean | null
   primaryStorage: string | null
   sdnZoneName: string | null
+  cpuModelMode?: string | null
+  cpuAllowedModels?: string[] | null
+  cpuDefaultModel?: string | null
+  cpuAdvancedSettings?: boolean | null
+  vxlanTransportMode?: string | null
+  vxlanPeers?: string[] | null
+  vxlanMtu?: number | null
+  transportVlanId?: number | null
+  transportDevice?: string | null
+  transportCidr?: string | null
+  transportNodeAddresses?: unknown
   createdBy: string | null
   createdAt: Date
   updatedAt: Date
+}
+
+export function rowToComputePolicy(row: Pick<VdcRow, 'cpuModelMode' | 'cpuAllowedModels' | 'cpuDefaultModel' | 'cpuAdvancedSettings'>): VdcComputePolicy {
+  return normalizeComputePolicyInput({
+    cpuModelMode: (row.cpuModelMode ?? DEFAULT_COMPUTE_POLICY.cpuModelMode) as VdcComputePolicy['cpuModelMode'],
+    cpuAllowedModels: row.cpuAllowedModels ?? [],
+    cpuDefaultModel: row.cpuDefaultModel ?? null,
+    cpuAdvancedSettings: row.cpuAdvancedSettings ?? true,
+  })
 }
 
 function rowToVdc(row: VdcRow): Vdc {
@@ -58,10 +92,56 @@ function rowToVdc(row: VdcRow): Vdc {
     pvePoolName: row.pvePoolName,
     sdnZoneName: row.sdnZoneName ?? null,
     primaryStorage: row.primaryStorage ?? null,
+    computePolicy: rowToComputePolicy(row),
+    transport: rowToTransport(row),
     enabled: row.enabled !== false,
     createdBy: row.createdBy ?? null,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
+  }
+}
+
+const STORAGE_ID_RE = /^[A-Za-z0-9_.-]{1,64}$/
+
+/**
+ * ISO library grants must name storages that exist on the cluster and
+ * advertise `iso` content: anything else would be a silent no-op for the
+ * tenant's CD/DVD picker. Accepts bare storage ids (read-only grant) or
+ * `{ storageId, allowUploads }` objects; returns the deduplicated,
+ * validated grants (a storage listed twice keeps `allowUploads` if any).
+ */
+async function validateIsoLibraries(conn: any, input: VdcIsoLibraryInput[]): Promise<VdcIsoLibraryGrant[]> {
+  const byId = new Map<string, boolean>()
+  for (const item of input) {
+    const id = String(typeof item === 'string' ? item : item?.storageId ?? '').trim()
+    if (!id) continue
+    const allow = typeof item === 'object' && item !== null && item.allowUploads === true
+    byId.set(id, (byId.get(id) ?? false) || allow)
+  }
+  if (byId.size === 0) return []
+  for (const id of byId.keys()) {
+    if (!STORAGE_ID_RE.test(id)) throw new Error(`Invalid ISO library storage id "${id}"`)
+  }
+  const defs = await pveFetch<any[]>(conn, '/storage') || []
+  const isoCapable = new Set(
+    defs
+      .filter(s => String(s?.content ?? '').split(',').map((t: string) => t.trim()).includes('iso'))
+      .map(s => String(s.storage)),
+  )
+  for (const id of byId.keys()) {
+    if (!isoCapable.has(id)) {
+      throw new Error(`Storage "${id}" does not exist on this cluster or does not hold ISO content`)
+    }
+  }
+  return [...byId.entries()].map(([storageId, allowUploads]) => ({ storageId, allowUploads }))
+}
+
+function computePolicyToRow(policy: VdcComputePolicy) {
+  return {
+    cpuModelMode: policy.cpuModelMode,
+    cpuAllowedModels: policy.cpuAllowedModels,
+    cpuDefaultModel: policy.cpuDefaultModel,
+    cpuAdvancedSettings: policy.cpuAdvancedSettings,
   }
 }
 
@@ -171,6 +251,10 @@ function buildVdcWithDetails(row: any, pbsConnNames?: Map<string, string>): VdcW
     mbpsWr: sp.policy.mbpsWr ?? null,
     quotaMb: sp.quotaMb ?? null,
   }))
+  const isoLibraries: VdcIsoLibraryGrant[] = (row.isoLibraries ?? []).map((l: any) => ({
+    storageId: l.storageId,
+    allowUploads: l.allowUploads === true,
+  }))
   const pbsBindings = row.pbsNamespaces.map((b: any) => ({
     id: b.id,
     vdcId: b.vdcId,
@@ -180,6 +264,12 @@ function buildVdcWithDetails(row: any, pbsConnNames?: Map<string, string>): VdcW
     namespace: b.namespace,
     mode: (b.mode ?? 'auto') as 'auto' | 'manual',
     createdAt: b.createdAt.toISOString(),
+    pveStorages: (b.pveStorages ?? []).map((s: any) => ({
+      id: s.id,
+      pveConnectionId: s.pveConnectionId,
+      pveStorageName: s.pveStorageName,
+      managed: !!s.managed,
+    })),
   }))
 
   return {
@@ -194,6 +284,7 @@ function buildVdcWithDetails(row: any, pbsConnNames?: Map<string, string>): VdcW
     vlanPools,
     storagePolicies,
     pbsBindings,
+    isoLibraries,
   }
 }
 
@@ -201,6 +292,7 @@ const vdcWithDetailsInclude = {
   tenant: { select: { name: true } },
   nodes: true,
   storages: true,
+  isoLibraries: { orderBy: { storageId: 'asc' as const } },
   quota: true,
   usageCache: true,
   sharedBridges: { orderBy: { bridge: 'asc' as const } },
@@ -214,7 +306,7 @@ const vdcWithDetailsInclude = {
     )[],
   },
   storagePolicies: { include: { policy: true }, orderBy: { createdAt: 'asc' as const } },
-  pbsNamespaces: true,
+  pbsNamespaces: { include: { pveStorages: true } },
 } as const
 
 // ---------------------------------------------------------------------------
@@ -354,6 +446,15 @@ export async function createVdc(input: CreateVdcInput, createdBy: string | null)
     await assertNoCrossVdcOverlap(input.connectionId, null, vlanPools)
   }
 
+  // 2ter-bis. ISO library grants (#894): checked against the cluster's
+  // storage definitions before any PVE side effect, for the same reason.
+  let isoLibraries: VdcIsoLibraryGrant[] = []
+  if (input.isoLibraries && input.isoLibraries.length > 0) {
+    const libOwner = await getConnectionOwnerTenantId(input.connectionId)
+    const libConn = await getConnectionById(input.connectionId, libOwner)
+    isoLibraries = await validateIsoLibraries(libConn, input.isoLibraries)
+  }
+
   // 2quater. Same reasoning as 2ter: validate storage-policy assignments
   // before any PVE side effect (pool/zone creation below is not rolled back
   // by a validation failure caught this early).
@@ -366,6 +467,12 @@ export async function createVdc(input: CreateVdcInput, createdBy: string | null)
   // 3. Allocate vDC id (needed for zone generation)
   const id = randomUUID()
   const now = new Date()
+
+  // VXLAN transport (#899): validated here, before any PVE side effect, and
+  // checked against the other vDCs of the cluster, which would write the same
+  // VLAN interface on the same nodes.
+  const transport = normalizeTransportInput(input.transport)
+  await assertNoTransportConflict(input.connectionId, null, transport)
 
   // 4. Create PVE pool (existing behavior)
   const poolName = generatePoolName(tenantSlug, input.slug)
@@ -389,9 +496,25 @@ export async function createVdc(input: CreateVdcInput, createdBy: string | null)
   }
 
   // 5. Create SDN zone on PVE
-  const sdnZoneName = await generateZoneName(input.connectionId, { id, slug: input.slug })
+  let sdnZoneName: string
+  if (input.sdnZoneName?.trim()) {
+    const custom = input.sdnZoneName.trim().toLowerCase()
+    if (!/^[a-z][a-z0-9]{0,7}$/.test(custom)) {
+      throw new Error('SDN zone ID must be 1-8 lowercase alphanumeric characters, starting with a letter.')
+    }
+    if (await isZoneNameTaken(input.connectionId, custom)) {
+      throw new Error(`SDN zone ID "${custom}" is already in use on this connection.`)
+    }
+    sdnZoneName = custom
+  } else {
+    sdnZoneName = await generateZoneName(input.connectionId, { id, slug: input.slug })
+  }
   try {
-    await createZone(conn, sdnZoneName)
+    // Cluster mode reads the node addresses now; the other modes carry
+    // their peers in the transport definition.
+    const clusterIps = transport.mode === 'cluster' ? await listClusterNodeIps(conn) : []
+    const zone = zoneConfigFor(transport, clusterIps)
+    await createZone(conn, sdnZoneName, { peers: zone.peers, mtu: zone.mtu })
   } catch (err: any) {
     try {
       await pveFetch(conn, `/pools/${encodeURIComponent(poolName)}`, { method: 'DELETE' })
@@ -413,6 +536,8 @@ export async function createVdc(input: CreateVdcInput, createdBy: string | null)
           pvePoolName: poolName,
           sdnZoneName,
           primaryStorage: input.primaryStorage ?? null,
+          ...computePolicyToRow(normalizeComputePolicyInput(input.computePolicy)),
+          ...transportToRow(transport),
           enabled: true,
           createdBy,
           createdAt: now,
@@ -457,6 +582,12 @@ export async function createVdc(input: CreateVdcInput, createdBy: string | null)
             label: sb.label ?? null,
             createdAt: now,
           })),
+        })
+      }
+
+      if (isoLibraries.length > 0) {
+        await tx.vdcIsoLibrary.createMany({
+          data: isoLibraries.map(l => ({ id: randomUUID(), vdcId: id, storageId: l.storageId, allowUploads: l.allowUploads, createdAt: now })),
         })
       }
 
@@ -521,7 +652,12 @@ export async function updateVdc(id: string, input: UpdateVdcInput): Promise<VdcW
   // Verify vDC exists
   const existing = await prisma.vdc.findUnique({
     where: { id },
-    select: { id: true, tenantId: true, connectionId: true },
+    select: {
+      id: true, tenantId: true, connectionId: true, sdnZoneName: true,
+      cpuModelMode: true, cpuAllowedModels: true, cpuDefaultModel: true, cpuAdvancedSettings: true,
+      vxlanTransportMode: true, vxlanPeers: true, vxlanMtu: true,
+      transportVlanId: true, transportDevice: true, transportCidr: true, transportNodeAddresses: true,
+    },
   })
   if (!existing) {
     throw new Error(`vDC not found: ${id}`)
@@ -542,6 +678,40 @@ export async function updateVdc(id: string, input: UpdateVdcInput): Promise<VdcW
     await assertPolicyUnassignSafe(id, kept, guardConn)
   }
 
+  let isoLibraries: VdcIsoLibraryGrant[] | null = null
+  if (input.isoLibraries) {
+    const libOwner = await getConnectionOwnerTenantId(existing.connectionId)
+    const libConn = await getConnectionById(existing.connectionId, libOwner)
+    isoLibraries = await validateIsoLibraries(libConn, input.isoLibraries)
+  }
+
+  // VXLAN transport (#899): validate, then push the zone change to Proxmox
+  // BEFORE the DB write, so a refusal from PVE leaves the stored row as it
+  // was. Only a change of the resolved peers or of the MTU touches PVE: a
+  // PUT that leaves the transport alone never triggers an SDN apply.
+  let nextTransport: VdcTransport | null = null
+  let zoneConn: any = null
+  let zoneChanged = false
+  if (input.transport !== undefined) {
+    const prevTransport = rowToTransport(existing)
+    nextTransport = normalizeTransportInput(input.transport, prevTransport)
+    await assertNoTransportConflict(existing.connectionId, id, nextTransport)
+    if (existing.sdnZoneName) {
+      const zoneOwner = await getConnectionOwnerTenantId(existing.connectionId)
+      zoneConn = await getConnectionById(existing.connectionId, zoneOwner)
+      const needsClusterIps = prevTransport.mode === 'cluster' || nextTransport.mode === 'cluster'
+      const clusterIps = needsClusterIps ? await listClusterNodeIps(zoneConn) : []
+      // A stretched tenant network (#901) adds the other members' peers to
+      // this zone; they ride along on both sides of the comparison.
+      const memberPeers = await memberPeersForVdc(id)
+      const nextZone = withMemberPeers(zoneConfigFor(nextTransport, clusterIps), memberPeers)
+      if (!sameZoneConfig(withMemberPeers(zoneConfigFor(prevTransport, clusterIps), memberPeers), nextZone)) {
+        await updateZone(zoneConn, existing.sdnZoneName, nextZone)
+        zoneChanged = true
+      }
+    }
+  }
+
   const now = new Date()
 
   await prisma.$transaction(async tx => {
@@ -550,6 +720,12 @@ export async function updateVdc(id: string, input: UpdateVdcInput): Promise<VdcW
     if (input.description !== undefined) updateData.description = input.description
     if (input.enabled !== undefined) updateData.enabled = input.enabled
     if (input.primaryStorage !== undefined) updateData.primaryStorage = input.primaryStorage
+    if (input.computePolicy !== undefined) {
+      // Partial input: fields left out keep their stored value, so a PUT that
+      // only flips the advanced switch does not reset the mode or the list.
+      Object.assign(updateData, computePolicyToRow(normalizeComputePolicyInput(input.computePolicy, rowToComputePolicy(existing))))
+    }
+    if (nextTransport) Object.assign(updateData, transportToRow(nextTransport))
 
     await tx.vdc.update({ where: { id }, data: updateData })
 
@@ -585,6 +761,15 @@ export async function updateVdc(id: string, input: UpdateVdcInput): Promise<VdcW
             id: randomUUID(), vdcId: id, bridge: p.bridge,
             rangeStart: p.rangeStart, rangeEnd: p.rangeEnd, createdAt: now,
           })),
+        })
+      }
+    }
+
+    if (isoLibraries !== null) {
+      await tx.vdcIsoLibrary.deleteMany({ where: { vdcId: id } })
+      if (isoLibraries.length > 0) {
+        await tx.vdcIsoLibrary.createMany({
+          data: isoLibraries.map(l => ({ id: randomUUID(), vdcId: id, storageId: l.storageId, allowUploads: l.allowUploads, createdAt: now })),
         })
       }
     }
@@ -630,6 +815,20 @@ export async function updateVdc(id: string, input: UpdateVdcInput): Promise<VdcW
     }
   })
 
+  if (zoneChanged && zoneConn) {
+    try {
+      await applySdn(zoneConn)
+    } catch (err: any) {
+      // Staged in /etc/pve/sdn/zones.cfg already; the admin can apply from
+      // the zone panel ("Sync zone") or from Proxmox.
+      console.warn(`[vdc] applySdn failed after updating zone "${existing.sdnZoneName}": ${err?.message}`)
+    }
+  }
+
+  // A member of a stretched tenant network (#901) whose own peers changed
+  // must be re-learnt by the other members' zones.
+  if (zoneChanged) await syncNetworksOfVdc(id)
+
   clearVdcScopeCache(existing.tenantId)
 
   return (await getVdcById(id))!
@@ -646,6 +845,11 @@ export async function deleteVdc(id: string): Promise<void> {
     throw new Error(`vDC not found: ${id}`)
   }
   const vdc = rowToVdc(row as VdcRow)
+  // Read before the delete cascades the memberships away (#901): the other
+  // members' zones must forget this vDC's peers afterwards.
+  const stretchedNetworkIds = (await prisma.tenantNetworkMember.findMany({
+    where: { vdcId: id }, select: { tenantNetworkId: true },
+  })).map(m => m.tenantNetworkId)
 
   // 2. Check PVE pool for VMs
   const connOwnerTenantId = await getConnectionOwnerTenantId(vdc.connectionId)
@@ -796,6 +1000,7 @@ export async function deleteVdc(id: string): Promise<void> {
   })
 
   clearVdcScopeCache(vdc.tenantId)
+  if (stretchedNetworkIds.length > 0) await syncNetworksOfVdc(id, stretchedNetworkIds)
 }
 
 // ---------------------------------------------------------------------------

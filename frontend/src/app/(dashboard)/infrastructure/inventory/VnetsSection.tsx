@@ -64,6 +64,9 @@ interface VnetRow {
   subnet: SubnetView | null
   /** IPAM allocation counts (used / usable). Always returned by the API. */
   ipamUsage: IpamUsage
+  /** Set when a stretched tenant network created the VNet (#901): the
+   *  provider manages it, the tenant only consumes it. */
+  tenantNetwork?: { id: string; name: string } | null
 }
 
 interface Props {
@@ -156,6 +159,7 @@ export default function VnetsSection({ connectionIds }: Props) {
               firewall: vnet.firewall,
               subnet,
               ipamUsage,
+              tenantNetwork: vnet.tenantNetwork ?? null,
             })
           }
         } catch { /* skip */ }
@@ -168,6 +172,18 @@ export default function VnetsSection({ connectionIds }: Props) {
   }, [connFilter, isFullClusterView])
 
   useEffect(() => { void reload() }, [reload])
+
+  // One line per stretched network, with the vDCs it reaches (#901).
+  const stretched = useMemo(() => {
+    const byId = new Map<string, { id: string; name: string; vdcs: string[] }>()
+    for (const r of rows) {
+      if (!r.tenantNetwork) continue
+      const entry = byId.get(r.tenantNetwork.id) ?? { id: r.tenantNetwork.id, name: r.tenantNetwork.name, vdcs: [] }
+      if (!entry.vdcs.includes(r.vdcName)) entry.vdcs.push(r.vdcName)
+      byId.set(entry.id, entry)
+    }
+    return [...byId.values()]
+  }, [rows])
 
   return (
     <>
@@ -194,6 +210,21 @@ export default function VnetsSection({ connectionIds }: Props) {
               </span>
             </Tooltip>
           </Stack>
+
+          {stretched.length > 0 && (
+            <Stack spacing={0.5} sx={{ mb: 2 }}>
+              <Typography variant="caption" color="text.secondary" fontWeight={700}>{t('myVdc.stretchedNetworksTitle')}</Typography>
+              {stretched.map((n) => (
+                <Stack key={n.id} direction="row" spacing={1} alignItems="center">
+                  <i className="ri-links-line" style={{ opacity: 0.6, fontSize: 14 }} />
+                  <Typography variant="body2" fontWeight={600} sx={{ fontSize: 12 }}>{n.name}</Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    {t('myVdc.stretchedNetworkReaches', { count: n.vdcs.length, list: n.vdcs.join(', ') })}
+                  </Typography>
+                </Stack>
+              ))}
+            </Stack>
+          )}
 
           {/* Only swap the table for a spinner on the initial load. Once
               we have rows, keep showing them during background refreshes
@@ -235,9 +266,23 @@ export default function VnetsSection({ connectionIds }: Props) {
                       sx={{ '&:last-child td': { border: 0 }, cursor: 'pointer' }}
                     >
                       <TableCell sx={{ py: 1 }}>
-                        <Tooltip title={`PVE ID: ${r.pveName} · vDC: ${r.vdcName}${r.tag ? ` · ${r.type === 'vlan' ? 'VLAN' : 'VNI'} ${r.tag}` : ''}`} arrow placement="top">
-                          <Typography variant="body2" fontWeight={600} sx={{ fontSize: 12 }}>{r.displayName}</Typography>
-                        </Tooltip>
+                        <Stack direction="row" spacing={1} alignItems="center">
+                          <Tooltip title={`PVE ID: ${r.pveName} · vDC: ${r.vdcName}${r.tag ? ` · ${r.type === 'vlan' ? 'VLAN' : 'VNI'} ${r.tag}` : ''}`} arrow placement="top">
+                            <Typography variant="body2" fontWeight={600} sx={{ fontSize: 12 }}>{r.displayName}</Typography>
+                          </Tooltip>
+                          {r.tenantNetwork && (
+                            <Tooltip title={t('myVdc.vnetStretchedTooltip', { network: r.tenantNetwork.name })} arrow placement="top">
+                              <Chip
+                                size="small"
+                                color="primary"
+                                variant="outlined"
+                                icon={<i className="ri-links-line" style={{ fontSize: 13 }} />}
+                                label={t('myVdc.vnetStretched')}
+                                sx={{ height: 20, fontSize: 11 }}
+                              />
+                            </Tooltip>
+                          )}
+                        </Stack>
                       </TableCell>
                       {showVdcColumn && (
                         <TableCell sx={{ py: 1, fontSize: 12, opacity: 0.85 }}>{r.vdcName}</TableCell>
@@ -289,21 +334,25 @@ export default function VnetsSection({ connectionIds }: Props) {
                         />
                       </TableCell>
                       <TableCell align="right" sx={{ py: 0.5 }}>
-                        <Stack direction="row" spacing={0.5} justifyContent="flex-end">
-                          <IconButton
-                            size="small"
-                            onClick={(e) => { e.stopPropagation(); setEditVnet({ row: r }) }}
-                          >
-                            <i className="ri-pencil-line" />
-                          </IconButton>
-                          <IconButton
-                            size="small"
-                            color="error"
-                            onClick={(e) => { e.stopPropagation(); setDeleteVnet({ row: r }) }}
-                          >
-                            <i className="ri-delete-bin-line" />
-                          </IconButton>
-                        </Stack>
+                        <Tooltip title={r.tenantNetwork ? t('myVdc.vnetStretchedManaged') : ''} arrow placement="left">
+                          <Stack direction="row" spacing={0.5} justifyContent="flex-end">
+                            <IconButton
+                              size="small"
+                              disabled={!!r.tenantNetwork}
+                              onClick={(e) => { e.stopPropagation(); setEditVnet({ row: r }) }}
+                            >
+                              <i className="ri-pencil-line" />
+                            </IconButton>
+                            <IconButton
+                              size="small"
+                              color="error"
+                              disabled={!!r.tenantNetwork}
+                              onClick={(e) => { e.stopPropagation(); setDeleteVnet({ row: r }) }}
+                            >
+                              <i className="ri-delete-bin-line" />
+                            </IconButton>
+                          </Stack>
+                        </Tooltip>
                       </TableCell>
                     </TableRow>
                     )

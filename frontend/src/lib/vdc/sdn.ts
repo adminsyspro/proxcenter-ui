@@ -6,6 +6,7 @@ import crypto from 'crypto'
 import { prisma } from '@/lib/db/prisma'
 import { pveFetch } from '@/lib/proxmox/client'
 
+import { parseZonePeers } from './transport'
 import type { SdnVnet } from './types'
 
 // ---------------------------------------------------------------------------
@@ -26,7 +27,7 @@ const ZONE_HASH_LEN = 2        // collision suffix length (hex)
 
 interface ZoneNameInput { id: string; slug: string }
 
-async function isZoneNameTaken(connectionId: string, sdnZoneName: string): Promise<boolean> {
+export async function isZoneNameTaken(connectionId: string, sdnZoneName: string): Promise<boolean> {
   const row = await prisma.vdc.findFirst({
     where: { connectionId, sdnZoneName },
     select: { id: true },
@@ -110,7 +111,7 @@ export async function generatePveVnetId(vdcId: string, displayName: string): Pro
 // VNI allocation (cluster-wide per PVE connection)
 // ---------------------------------------------------------------------------
 
-const VNI_BASE = 10000
+export const VNI_BASE = 10000
 
 export async function allocateVni(vdcId: string, conn?: any): Promise<number> {
   // VXLAN VNIs must be unique across the entire PVE cluster (transport is one
@@ -176,14 +177,23 @@ export async function applySdn(conn: any): Promise<void> {
 // Zone CRUD
 // ---------------------------------------------------------------------------
 
-async function listClusterNodeIps(conn: any): Promise<string[]> {
+/** Node addresses as `/cluster/status` reports them: the corosync link address
+ *  of each node, reported even for a node that is offline. */
+export async function listClusterNodeIps(conn: any): Promise<string[]> {
   const entries = await pveFetch<any[]>(conn, '/cluster/status')
   return (entries || [])
     .filter((e: any) => e.type === 'node' && e.ip)
     .map((e: any) => e.ip as string)
 }
 
-export interface CreateZoneOptions { type?: 'vxlan' | 'vlan'; bridge?: string }
+export interface CreateZoneOptions {
+  type?: 'vxlan' | 'vlan'
+  bridge?: string
+  /** VXLAN: explicit peer list (#899). Without it the cluster node addresses are used. */
+  peers?: string[]
+  /** VXLAN: zone MTU, the MTU of its VNets. Omitted = PVE default. */
+  mtu?: number | null
+}
 
 /**
  * Creates an SDN zone on PVE. Caller must invoke applySdn(conn) afterwards.
@@ -196,8 +206,10 @@ export async function createZone(conn: any, zoneName: string, opts: CreateZoneOp
   params.append('type', type)
   params.append('zone', zoneName)
   if (type === 'vxlan') {
-    const peers = await listClusterNodeIps(conn)
+    const peers = opts.peers ?? await listClusterNodeIps(conn)
+    if (peers.length === 0) throw new Error(`createZone: no peer address for VXLAN zone "${zoneName}"`)
     params.append('peers', peers.join(','))
+    if (opts.mtu) params.append('mtu', String(opts.mtu))
   } else {
     if (!opts.bridge) throw new Error(`createZone: bridge is required for VLAN zone "${zoneName}"`)
     params.append('bridge', opts.bridge)
@@ -211,6 +223,62 @@ export async function createZone(conn: any, zoneName: string, opts: CreateZoneOp
       throw new Error(`Failed to create SDN zone "${zoneName}": ${msg}`)
     }
     console.warn(`[vdc-sdn] SDN zone "${zoneName}" already exists, proceeding`)
+  }
+}
+
+export interface UpdateZoneOptions {
+  peers: string[]
+  /** Null removes the zone MTU so PVE falls back to its default. */
+  mtu: number | null
+}
+
+/**
+ * Rewrites the peers and MTU of a VXLAN zone (#899). PVE validates the
+ * body, so a refused address surfaces here and nothing is staged. Caller
+ * must invoke applySdn(conn) afterwards.
+ */
+export async function updateZone(conn: any, zoneName: string, opts: UpdateZoneOptions): Promise<void> {
+  if (opts.peers.length === 0) throw new Error(`updateZone: no peer address for VXLAN zone "${zoneName}"`)
+  const body = new URLSearchParams()
+  body.append('peers', opts.peers.join(','))
+  if (opts.mtu) body.append('mtu', String(opts.mtu))
+  else body.append('delete', 'mtu')
+  try {
+    await pveFetch(conn, `/cluster/sdn/zones/${encodeURIComponent(zoneName)}`, { method: 'PUT', body })
+  } catch (err: any) {
+    throw new Error(`Failed to update SDN zone "${zoneName}": ${err?.message}`)
+  }
+}
+
+export interface PveZoneLive {
+  type: string
+  /** Applied (running) peers. */
+  peers: string[]
+  mtu: number | null
+  /** `new` / `changed` / `deleted` when a staged change awaits the SDN apply. */
+  state: string | null
+  /** Staged values that differ from the running ones, keyed by property. */
+  pending: Record<string, unknown> | null
+}
+
+/** The zone as PVE runs it, with its staged changes. Null when it does not exist. */
+export async function readZonePve(conn: any, zoneName: string): Promise<PveZoneLive | null> {
+  try {
+    const z = await pveFetch<any>(conn, `/cluster/sdn/zones/${encodeURIComponent(zoneName)}?pending=1`)
+    if (!z) return null
+    return {
+      type: String(z.type ?? ''),
+      peers: parseZonePeers(z.peers),
+      mtu: z.mtu !== undefined && z.mtu !== null && z.mtu !== '' ? Number(z.mtu) : null,
+      state: z.state ? String(z.state) : null,
+      pending: z.pending && typeof z.pending === 'object' ? z.pending : null,
+    }
+  } catch (err: any) {
+    const msg = String(err?.message || '').toLowerCase()
+    if (msg.includes('not found') || msg.includes('404') || msg.includes('does not exist') || msg.includes("doesn't exist")) {
+      return null
+    }
+    throw err
   }
 }
 

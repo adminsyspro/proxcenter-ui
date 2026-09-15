@@ -17,6 +17,13 @@ vi.mock('@/lib/tenant/infraScope', () => ({
 const pveFetchMock = vi.fn<(...args: any[]) => Promise<any>>()
 vi.mock('@/lib/proxmox/client', () => ({ pveFetch: (...a: any[]) => pveFetchMock(...a) }))
 
+// CD-ROM ownership on ISO libraries (#894) resolves tenant slugs through
+// loadTenantSlugs (prisma.tenant.findMany); the caller `t1` is `acme`.
+const tenantFindManyMock = vi.fn<(...args: any[]) => Promise<any>>()
+vi.mock('@/lib/db/prisma', () => ({
+  prisma: { tenant: { findMany: (...a: any[]) => tenantFindManyMock(...a), findUnique: vi.fn() } },
+}))
+
 import { DriveScopeError, enforceTenantDrives, meterImportRefs, restampGuestDrives } from './driveGuard'
 
 const gold = { policyId: 'p-gold', name: 'Gold', iopsRd: 5000, iopsWr: 4000, mbpsRd: 500, mbpsWr: null }
@@ -34,6 +41,7 @@ function iaasScope(storages: string[], policies: Record<string, typeof gold> = {
 beforeEach(() => {
   getTenantInfrastructureScopeMock.mockReset()
   pveFetchMock.mockReset()
+  tenantFindManyMock.mockReset().mockResolvedValue([{ id: 't1', slug: 'acme' }, { id: 't2', slug: 'other' }])
 })
 
 describe('enforceTenantDrives', () => {
@@ -189,6 +197,84 @@ describe('enforceTenantDrives', () => {
     const body = { scsi0: 'gold:0' }
     const result = await enforceTenantDrives({ tenantId: 't1', connectionId: 'conn-1', type: 'qemu', body })
     expect(result).toEqual({ addStorageMbByStorage: {}, totalAddMb: 0, importRefs: [] })
+  })
+
+  describe('read-only ISO libraries (#894)', () => {
+    // Visible = ceph + isolib, writable = ceph only, isolib granted as a library.
+    const libScope = () => ({
+      kind: 'iaas',
+      vdcScope: {
+        storagesByConnection: new Map([['conn-1', new Set(['ceph', 'isolib'])]]),
+        writableStoragesByConnection: new Map([['conn-1', new Set(['ceph'])]]),
+        isoLibrariesByConnection: new Map([['conn-1', new Set(['isolib'])]]),
+        storagePoliciesByConnection: new Map([['conn-1', new Map()]]),
+      },
+    })
+
+    it('a CD/DVD drive on the library passes, unstamped and unmetered', async () => {
+      getTenantInfrastructureScopeMock.mockResolvedValue(libScope())
+      const body = { ide2: 'isolib:iso/x.iso,media=cdrom' }
+      const result = await enforceTenantDrives({ tenantId: 't1', connectionId: 'conn-1', type: 'qemu', body })
+      expect(body.ide2).toBe('isolib:iso/x.iso,media=cdrom')
+      expect(result).toEqual({ addStorageMbByStorage: {}, totalAddMb: 0, importRefs: [] })
+    })
+
+    it("a CD/DVD drive mounting another tenant's upload on the library is refused", async () => {
+      getTenantInfrastructureScopeMock.mockResolvedValue(libScope())
+      await expect(
+        enforceTenantDrives({ tenantId: 't1', connectionId: 'conn-1', type: 'qemu', body: { ide2: 'isolib:iso/custom-other-secret.iso,media=cdrom' } }),
+      ).rejects.toThrow(/custom-other-secret\.iso" is not yours to mount/)
+      // A custom- file matching no tenant is nobody's either.
+      await expect(
+        enforceTenantDrives({ tenantId: 't1', connectionId: 'conn-1', type: 'qemu', body: { ide2: 'isolib:iso/custom-nobody-x.iso,media=cdrom' } }),
+      ).rejects.toThrow(DriveScopeError)
+    })
+
+    it("a CD/DVD drive mounting the tenant's own upload or a provider ISO on the library passes", async () => {
+      getTenantInfrastructureScopeMock.mockResolvedValue(libScope())
+      const body = { ide2: 'isolib:iso/custom-acme-rescue.iso,media=cdrom', ide3: 'isolib:iso/debian.iso,media=cdrom' }
+      const result = await enforceTenantDrives({ tenantId: 't1', connectionId: 'conn-1', type: 'qemu', body })
+      expect(result).toEqual({ addStorageMbByStorage: {}, totalAddMb: 0, importRefs: [] })
+    })
+
+    it('ownership resolves on the LONGEST slug: acme may not mount custom-acme-prod-x.iso', async () => {
+      tenantFindManyMock.mockResolvedValue([{ id: 't1', slug: 'acme' }, { id: 't3', slug: 'acme-prod' }])
+      getTenantInfrastructureScopeMock.mockResolvedValue(libScope())
+      await expect(
+        enforceTenantDrives({ tenantId: 't1', connectionId: 'conn-1', type: 'qemu', body: { ide2: 'isolib:iso/custom-acme-prod-x.iso,media=cdrom' } }),
+      ).rejects.toThrow(/not yours to mount/)
+    })
+
+    it('the ownership check applies to library storages only: a custom- ISO on the writable storage is not judged', async () => {
+      getTenantInfrastructureScopeMock.mockResolvedValue(libScope())
+      const body = { ide2: 'ceph:iso/custom-other-x.iso,media=cdrom' }
+      await expect(enforceTenantDrives({ tenantId: 't1', connectionId: 'conn-1', type: 'qemu', body })).resolves.toBeTruthy()
+      expect(tenantFindManyMock).not.toHaveBeenCalled()
+    })
+
+    it('a data disk on the library throws DriveScopeError naming the read-only library', async () => {
+      getTenantInfrastructureScopeMock.mockResolvedValue(libScope())
+      await expect(
+        enforceTenantDrives({ tenantId: 't1', connectionId: 'conn-1', type: 'qemu', body: { scsi1: 'isolib:8' } }),
+      ).rejects.toThrow(DriveScopeError)
+      await expect(
+        enforceTenantDrives({ tenantId: 't1', connectionId: 'conn-1', type: 'qemu', body: { scsi1: 'isolib:8' } }),
+      ).rejects.toThrow(/read-only ISO library/)
+    })
+
+    it('a data disk on the writable storage next to a library still passes', async () => {
+      getTenantInfrastructureScopeMock.mockResolvedValue(libScope())
+      const body = { scsi1: 'ceph:8' }
+      const result = await enforceTenantDrives({ tenantId: 't1', connectionId: 'conn-1', type: 'qemu', body })
+      expect(result).toEqual({ addStorageMbByStorage: { ceph: 8192 }, totalAddMb: 8192, importRefs: [] })
+    })
+
+    it('a fixture WITHOUT the two new maps keeps the pre-#894 behaviour: every visible storage is writable', async () => {
+      getTenantInfrastructureScopeMock.mockResolvedValue(iaasScope(['ceph', 'isolib']))
+      const body = { scsi1: 'isolib:8' }
+      const result = await enforceTenantDrives({ tenantId: 't1', connectionId: 'conn-1', type: 'qemu', body })
+      expect(result).toEqual({ addStorageMbByStorage: { isolib: 8192 }, totalAddMb: 8192, importRefs: [] })
+    })
   })
 })
 

@@ -17,6 +17,7 @@ import { useHA } from './hooks/useHA'
 import { formatBytes } from '@/utils/format'
 import { getDateLocale } from '@/lib/i18n/date'
 import { useCopyToClipboard } from '@/lib/clipboard'
+import { useRBAC } from '@/contexts/RBACContext'
 
 import {
   Accordion,
@@ -237,6 +238,8 @@ export default function InventoryDetails({
   // setups. Same gate is used to funnel tenants through the template
   // catalogue instead of the bare-metal Create VM dialog.
   const { currentTenant, loading: tenantLoading, isFullClusterView } = useTenant()
+  const { hasPermission } = useRBAC()
+  const canCreate = hasPermission('vm.create')
   // connectionId → vDC name (tenant IaaS): powers the vDC chip and the vDC
   // column. Bijective per the DB unique (tenant_id, connection_id).
   const { vdcs: myVdcs } = useMyVdcs()
@@ -2255,33 +2258,37 @@ return (
   }
 
   // Sauvegarder la configuration CPU
-  const saveCpuConfig = async () => {
+  const saveCpuConfig = async (opts?: { omitAdvanced?: boolean }) => {
     if (!selection || selection.type !== 'vm') return
 
     const { connId, node, type, vmid } = parseVmId(selection.id)
     const vmTitle = data?.title
+    // The vDC compute policy can hide NUMA, CPU limit and flags from the
+    // tenant (#893). Those controls then keep whatever the guest already has,
+    // so the patch must leave them out (the server refuses truthy values) and
+    // only carry the model when the tenant actually changed it.
+    const omitAdvanced = !!(opts && typeof opts === 'object' && 'omitAdvanced' in opts && opts.omitAdvanced)
 
     setSavingCpu(true)
 
     try {
-      // Build cpu field with flags: "host,flags=+aes;-pcid"
-      const activeFlags = Object.entries(cpuFlags).filter(([, v]) => v === '+' || v === '-')
-      let cpuField = cpuType
-      if (activeFlags.length > 0) {
-        cpuField += ',flags=' + activeFlags.map(([k, v]) => `${v}${k}`).join(';')
-      }
-
       const configUpdate: any = {
         sockets: cpuSockets,
         cores: cpuCores,
-        cpu: cpuField,
-        numa: numaEnabled ? 1 : 0,
       }
 
-      if (cpuLimitEnabled && cpuLimit > 0) {
-        configUpdate.cpulimit = cpuLimit
+      if (omitAdvanced) {
+        if (cpuType !== (data?.cpuInfo?.type || 'kvm64')) configUpdate.cpu = cpuType
       } else {
-        configUpdate.cpulimit = 0
+        // Build cpu field with flags: "host,flags=+aes;-pcid"
+        const activeFlags = Object.entries(cpuFlags).filter(([, v]) => v === '+' || v === '-')
+        let cpuField = cpuType
+        if (activeFlags.length > 0) {
+          cpuField += ',flags=' + activeFlags.map(([k, v]) => `${v}${k}`).join(';')
+        }
+        configUpdate.cpu = cpuField
+        configUpdate.numa = numaEnabled ? 1 : 0
+        configUpdate.cpulimit = cpuLimitEnabled && cpuLimit > 0 ? cpuLimit : 0
       }
 
       await pushGuestConfig(connId, type, node, vmid, configUpdate)
@@ -2701,8 +2708,8 @@ return vm?.isCluster ?? false
           showIpSnap={showIpSnap}
           ipSnapLoading={ipSnapLoading}
           onLoadIpSnap={onLoadIpSnap}
-          onCreateVm={() => setCreateVmDialogOpen(true)}
-          onCreateLxc={() => setCreateLxcDialogOpen(true)}
+          onCreateVm={canCreate ? () => setCreateVmDialogOpen(true) : undefined}
+          onCreateLxc={canCreate ? () => setCreateLxcDialogOpen(true) : undefined}
           onBulkAction={handleHostBulkAction}
           clusterStorages={clusterStorages}
           externalHypervisors={externalHypervisors}
@@ -2726,6 +2733,7 @@ return vm?.isCluster ?? false
                     <i className="ri-computer-line" style={{ fontSize: 20, opacity: 0.7 }} />
                     {t('inventory.guests')} ({displayVms.length})
                   </Typography>
+                  {canCreate && (
                   <Stack direction="row" spacing={1}>
                     {allowBlankVm ? (
                       <Button
@@ -2760,6 +2768,7 @@ return vm?.isCluster ?? false
                       </Button>
                     )}
                   </Stack>
+                  )}
                 </Box>
                 <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                   <VmsTable

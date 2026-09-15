@@ -9,7 +9,7 @@ import { waitForTask } from "@/lib/proxmox/tasks"
 import { prisma } from "@/lib/db/prisma"
 import { getCurrentTenantId, DEFAULT_TENANT_ID } from "@/lib/tenant"
 import { resolveVdcForTenant } from "@/lib/vdc/quota"
-import { assertVdcPbsAccess } from "@/lib/vdc/scope"
+import { assertVdcPbsAccess, writableStoragesFor, readOnlyLibraryError } from "@/lib/vdc/scope"
 import { getTenantInfrastructureScope } from "@/lib/tenant/infraScope"
 import { safeLog } from "@/lib/log/sanitize"
 import { type DriveQosCaps } from "@/lib/vdc/drives"
@@ -66,6 +66,7 @@ export async function POST(
     // pool). Only the vDC STORAGE-allowlist scoping is iaas-only.
     const isTenant = tenantId !== DEFAULT_TENANT_ID
     let allowedStorages: Set<string> | null = null
+    let writableStorages: Set<string> | null = null
     if (infra.kind === 'iaas') {
       // Verify the target node is in the tenant's vDC. resolveVdcForTenant
       // throws NODE_NOT_AUTHORIZED when the node is outside the allow list;
@@ -92,6 +93,9 @@ export async function POST(
         return NextResponse.json({ error: 'Tenant vDC scope not resolved' }, { status: 403 })
       }
       allowedStorages = scope.storagesByConnection.get(id) ?? new Set<string>()
+      // Restored disks are WRITTEN to `storage`: judged on the writable set,
+      // so a read-only ISO library (#894) cannot be the restore target.
+      writableStorages = writableStoragesFor(scope, id)
     }
 
     // Storage-tier QoS policies (spec §5.3): resolved eagerly here, ahead of
@@ -227,9 +231,9 @@ export async function POST(
           { status: 403 },
         )
       }
-      if (typeof storage === 'string' && storage.length > 0 && !allowedStorages.has(storage)) {
+      if (typeof storage === 'string' && storage.length > 0 && !(writableStorages ?? allowedStorages).has(storage)) {
         return NextResponse.json(
-          { error: `Target storage "${storage}" is not authorised for this tenant.` },
+          { error: allowedStorages.has(storage) ? readOnlyLibraryError(storage) : `Target storage "${storage}" is not authorised for this tenant.` },
           { status: 403 },
         )
       }

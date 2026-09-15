@@ -14,6 +14,7 @@ import { releaseAllocationsForVm } from "@/lib/vdc/ipam"
 import { waitForTask } from "@/lib/proxmox/tasks"
 import { checkVmidAgainstTenantRange } from "@/lib/tenant/vmidRange"
 import { getTenantInfrastructureScope } from "@/lib/tenant/infraScope"
+import { writableStoragesFor, readOnlyLibraryError } from "@/lib/vdc/scope"
 import {
   DATA_DISK_KEY_RE, LXC_DISK_KEY_RE, parseDriveString, parsePveSizeToMb,
 } from "@/lib/vdc/drives"
@@ -80,10 +81,13 @@ export async function POST(
       return NextResponse.json({ error: 'Tenant vDC scope not resolved' }, { status: 403 })
     }
     if (isIaas && body.storage) {
-      const allowed = iaasScope!.storagesByConnection.get(id) ?? new Set<string>()
+      // Clone target: a write, so a read-only ISO library (#894) is refused
+      // even though the tenant can see it.
+      const allowed = writableStoragesFor(iaasScope!, id)
       if (!allowed.has(body.storage)) {
+        const visible = iaasScope!.storagesByConnection.get(id)?.has(body.storage)
         return NextResponse.json(
-          { error: `Storage "${body.storage}" is not authorised for this tenant.` }, { status: 403 })
+          { error: visible ? readOnlyLibraryError(body.storage) : `Storage "${body.storage}" is not authorised for this tenant.` }, { status: 403 })
       }
     }
 

@@ -7,6 +7,7 @@ import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { getCurrentTenantId } from "@/lib/tenant"
 import { getTenantInfrastructureScope, maskingScope } from "@/lib/tenant/infraScope"
 import { getAllowedJobPools, isJobOwnedByTenantPools, validateTenantJobBody, validateTenantJobInfra } from "@/lib/vdc/backupJobs"
+import { writableStoragesFor } from "@/lib/vdc/scope"
 
 export const runtime = "nodejs"
 
@@ -194,10 +195,11 @@ return job.namespace || ''
     // for picker rendering: leaking the full cluster's storage/node list
     // to a vDC tenant gives them auto-complete of names they could
     // copy-paste into a forged POST. Provider keeps the full view.
+    // Writable set on purpose: a read-only ISO library (#894) is visible to
+    // the tenant but can never be a backup target, so it stays out of the picker.
     const tenantStorageFilter = (storage: string) => {
       if (!scope) return true
-      const allowed = scope.storagesByConnection.get(id) ?? new Set<string>()
-      return allowed.has(storage)
+      return writableStoragesFor(scope, id).has(storage)
     }
     const visibleStorages = allBackupStorages.filter((s: any) => tenantStorageFilter(s.storage))
     const visibleNodes = scope

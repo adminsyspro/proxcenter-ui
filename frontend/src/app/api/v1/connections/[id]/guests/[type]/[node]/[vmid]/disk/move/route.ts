@@ -6,6 +6,7 @@ import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
 import { moveDiskSchema } from "@/lib/schemas"
 import { getCurrentTenantId } from "@/lib/tenant"
 import { getTenantInfrastructureScope } from "@/lib/tenant/infraScope"
+import { writableStoragesFor, readOnlyLibraryError } from "@/lib/vdc/scope"
 import { resolveVdcForTenant, checkVdcQuota } from "@/lib/vdc/quota"
 import { parseDriveString, parsePveSizeToMb, stampDriveQos, type DriveQosCaps } from "@/lib/vdc/drives"
 import { waitForTask } from "@/lib/proxmox/tasks"
@@ -21,9 +22,8 @@ export async function POST(
   try {
     const { id, type, node, vmid } = await ctx.params
 
-    // RBAC: Check vm.config permission
     const resourceId = buildVmResourceId(id, node, type, vmid)
-    const denied = await checkPermission(PERMISSIONS.VM_CONFIG, "vm", resourceId)
+    const denied = await checkPermission(PERMISSIONS.VM_CONFIG_HARDWARE, "vm", resourceId)
 
     if (denied) return denied
 
@@ -52,10 +52,12 @@ export async function POST(
     if (infra.kind === 'iaas') {
       const scope = infra.vdcScope
       if (!scope) return NextResponse.json({ error: 'Tenant vDC scope not resolved' }, { status: 403 })
-      const allowed = scope.storagesByConnection.get(id) ?? new Set<string>()
+      // Move target: a write, so a read-only ISO library (#894) is refused.
+      const allowed = writableStoragesFor(scope, id)
       if (!allowed.has(storage)) {
+        const visible = scope.storagesByConnection.get(id)?.has(storage)
         return NextResponse.json(
-          { error: `Storage "${storage}" is not authorised for this tenant.` }, { status: 403 })
+          { error: visible ? readOnlyLibraryError(storage) : `Storage "${storage}" is not authorised for this tenant.` }, { status: 403 })
       }
       let vdcInfo
       try {

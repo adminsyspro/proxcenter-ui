@@ -58,7 +58,13 @@ vi.mock("@/lib/vdc/quota", () => ({
   resolveVdcForTenant: (...a: any[]) => resolveVdcForTenantMock(...a),
 }))
 // Only exercised by the pbsBackup path, which none of these tests take.
-vi.mock("@/lib/vdc/scope", () => ({ assertVdcPbsAccess: vi.fn() }))
+// Spread the real module: the route also imports the pure helpers
+// writableStoragesFor / readOnlyLibraryError (#894); only the PBS access
+// guard is stubbed.
+vi.mock("@/lib/vdc/scope", async (io) => {
+  const actual = await io<typeof import("@/lib/vdc/scope")>()
+  return { ...actual, assertVdcPbsAccess: vi.fn() }
+})
 vi.mock("@/lib/proxmox/tasks", () => ({ waitForTask: (...a: any[]) => waitForTaskMock(...a) }))
 vi.mock("@/lib/vdc/ipamSync", () => ({ syncIpamForVmConfig: (...a: any[]) => syncIpamForVmConfigMock(...a) }))
 vi.mock("@/lib/vdc/ipam", () => ({ releaseAllocationsForVm: (...a: any[]) => releaseAllocationsForVmMock(...a) }))
@@ -290,5 +296,63 @@ describe("POST /api/v1/connections/[id]/nodes/[node]/restore -- post-restore QoS
     for (const cb of afterCbs) await cb()
 
     expect(restoredConfigCall()).toBeUndefined()
+  })
+})
+
+describe("POST /api/v1/connections/[id]/nodes/[node]/restore -- read-only ISO library target (#894)", () => {
+  function libraryScope() {
+    return {
+      kind: "iaas",
+      vdcScope: {
+        connectionIds: new Set(["pve-1"]),
+        pbsConnectionIds: new Set<string>(),
+        nodesByConnection: new Map<string, Set<string>>(),
+        // `local` is visible (the archive lives there) AND writable, `isolib`
+        // is visible only as an ISO library.
+        storagesByConnection: new Map([["pve-1", new Set(["local", "ceph-vdc", "isolib"])]]),
+        writableStoragesByConnection: new Map([["pve-1", new Set(["local", "ceph-vdc"])]]),
+        isoLibrariesByConnection: new Map([["pve-1", new Set(["isolib"])]]),
+        uploadLibrariesByConnection: new Map([["pve-1", new Set<string>()]]),
+        storagePoliciesByConnection: new Map<string, Map<string, any>>(),
+        poolsByConnection: new Map<string, Set<string>>(),
+        vnetsByConnection: new Map<string, Set<string>>(),
+        sharedBridgesByConnection: new Map<string, Set<string>>(),
+        pbsNamespacesByConnection: new Map<string, Array<{ datastore: string; namespace: string }>>(),
+        pbsNamespacesByPveConnection: new Map<string, Set<string>>(),
+      },
+    }
+  }
+
+  it("iaas tenant: restoring onto a library storage is refused, no PVE call emitted", async () => {
+    getCurrentTenantIdMock.mockResolvedValue("tenant-x")
+    getInfraMock.mockResolvedValue(libraryScope())
+    resolveVdcForTenantMock.mockResolvedValue({ vdcId: "vdc-1", poolName: "pool-1", quota: null })
+
+    const { POST } = await import("./route")
+    const res = await callRoute(POST, {
+      method: "POST",
+      params: { id: "pve-1", node: "node1" },
+      body: { vmid: 111, archive: VZDUMP_QEMU_VOLID, type: "qemu", storage: "isolib" },
+    })
+
+    expect(res.status).toBe(403)
+    const json = await readJson<{ error: string }>(res)
+    expect(json?.error).toMatch(/read-only ISO library/)
+    expect(pveFetchMock).not.toHaveBeenCalled()
+  })
+
+  it("iaas tenant: the archive may still be READ from a visible storage while the target is writable", async () => {
+    getCurrentTenantIdMock.mockResolvedValue("tenant-x")
+    getInfraMock.mockResolvedValue(libraryScope())
+    resolveVdcForTenantMock.mockResolvedValue({ vdcId: "vdc-1", poolName: "pool-1", quota: null })
+
+    const { POST } = await import("./route")
+    const res = await callRoute(POST, {
+      method: "POST",
+      params: { id: "pve-1", node: "node1" },
+      body: { vmid: 111, archive: VZDUMP_QEMU_VOLID, type: "qemu", storage: "ceph-vdc" },
+    })
+
+    expect(res.status).not.toBe(403)
   })
 })

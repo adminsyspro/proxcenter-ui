@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { callRoute } from '@/__tests__/setup/route-test'
 
 const checkPermissionMock = vi.fn<(...args: any[]) => Promise<Response | null>>()
+const checkPermissionsMock = vi.fn<(...args: any[]) => Promise<Response | null>>()
 const getConnectionByIdMock = vi.fn<(id: string) => Promise<any>>()
 const pveFetchMock = vi.fn<(...args: any[]) => Promise<any>>()
 const resolveVdcForTenantMock = vi.fn<(...args: any[]) => Promise<any>>()
@@ -13,8 +14,16 @@ const getTenantInfrastructureScopeMock = vi.fn<(...args: any[]) => Promise<any>>
 
 vi.mock('@/lib/rbac', () => ({
   checkPermission: checkPermissionMock,
+  checkPermissions: checkPermissionsMock,
   buildVmResourceId: () => 'res',
-  PERMISSIONS: { VM_CONFIG: 'vm.config' },
+  PERMISSIONS: {
+    VM_CONFIG: 'vm.config',
+    VM_CONFIG_MEDIA: 'vm.config.media',
+    VM_CONFIG_NIC_LINK: 'vm.config.nic.link',
+    VM_CONFIG_NIC: 'vm.config.nic',
+    VM_CONFIG_HARDWARE: 'vm.config.hardware',
+    VM_CONFIG_BOOT: 'vm.config.boot',
+  },
 }))
 vi.mock('@/lib/connections/getConnection', () => ({ getConnectionById: getConnectionByIdMock }))
 // Spread the real module: the config write path also reads
@@ -77,6 +86,7 @@ function configWriteMethod() {
 
 beforeEach(() => {
   checkPermissionMock.mockReset().mockResolvedValue(null)
+  checkPermissionsMock.mockReset().mockResolvedValue(null)
   getConnectionByIdMock.mockReset().mockResolvedValue({ id: 'conn-1' })
   resolveVdcForTenantMock.mockReset().mockResolvedValue(null)
   checkVdcQuotaMock.mockReset().mockResolvedValue({ allowed: true })
@@ -313,5 +323,62 @@ describe('PUT config: keys the Options tab edits (#566)', () => {
 
     expect(res.status).toBe(200)
     expect(configWriteBody()?.get('startup')).toBe('order=1,up=30')
+  })
+})
+
+// #893: the vDC compute policy decides which CPU models a tenant may move to.
+describe('PUT config: vDC compute policy', () => {
+  const selectedPolicy = {
+    vdcId: 'v1',
+    poolName: 'p',
+    quota: null,
+    storagePolicies: [],
+    computePolicy: {
+      cpuModelMode: 'selected',
+      cpuAllowedModels: ['x86-64-v2-AES'],
+      cpuDefaultModel: null,
+      cpuAdvancedSettings: true,
+    },
+  }
+
+  it('400: a model outside the allowed set never reaches PVE', async () => {
+    resolveVdcForTenantMock.mockResolvedValue(selectedPolicy)
+    const PUT = await loadPut()
+    const res = await callRoute(PUT, { method: 'PUT', params: baseParams, body: { cpu: 'host' } })
+
+    expect(res.status).toBe(400)
+    const json = await res.json()
+    expect(json.error).toContain('"host"')
+    expect(configWriteBody()).toBeNull()
+  })
+
+  it('200: a model inside the allowed set is written', async () => {
+    resolveVdcForTenantMock.mockResolvedValue(selectedPolicy)
+    const PUT = await loadPut()
+    const res = await callRoute(PUT, { method: 'PUT', params: baseParams, body: { cpu: 'x86-64-v2-AES' } })
+
+    expect([200, 202]).toContain(res.status)
+    expect(configWriteBody()?.get('cpu')).toBe('x86-64-v2-AES')
+  })
+
+  it('400: NUMA is refused when the advanced switch is off', async () => {
+    resolveVdcForTenantMock.mockResolvedValue({
+      ...selectedPolicy,
+      computePolicy: { ...selectedPolicy.computePolicy, cpuAdvancedSettings: false },
+    })
+    const PUT = await loadPut()
+    const res = await callRoute(PUT, { method: 'PUT', params: baseParams, body: { numa: 1 } })
+
+    expect(res.status).toBe(400)
+    expect(configWriteBody()).toBeNull()
+  })
+
+  it('200: a provider (no vDC) is never constrained', async () => {
+    resolveVdcForTenantMock.mockResolvedValue(null)
+    const PUT = await loadPut()
+    const res = await callRoute(PUT, { method: 'PUT', params: baseParams, body: { cpu: 'host,flags=+aes' } })
+
+    expect([200, 202]).toContain(res.status)
+    expect(configWriteBody()?.get('cpu')).toBe('host,flags=+aes')
   })
 })

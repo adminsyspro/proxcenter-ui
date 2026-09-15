@@ -149,6 +149,13 @@ function CreateVmDialog({
   const [connections, setConnections] = useState<any[]>([])
   const [nodes, setNodes] = useState<any[]>([])
   const [customCpuModels, setCustomCpuModels] = useState<string[]>([])
+  // vDC compute policy (#893) from the cpu-models answer: allowed models
+  // (null = unrestricted), a default model for this wizard, and whether the
+  // advanced CPU controls (units, limit, NUMA) are exposed.
+  const [cpuPolicy, setCpuPolicy] = useState<{ allowed: Set<string> | null; advanced: boolean; defaultModel: string | null } | null>(null)
+  // Set once the user picks a CPU model by hand, so a policy default arriving
+  // later does not override an explicit choice.
+  const cpuTypeTouched = React.useRef(false)
   const [storages, setStorages] = useState<any[]>([])
   const [isoImages, setIsoImages] = useState<any[]>([])
   const [networks, setNetworks] = useState<any[]>([])
@@ -308,13 +315,72 @@ function CreateVmDialog({
       if (res.ok) {
         const json = await res.json()
         setCustomCpuModels(extractCustomCpuModels(json?.data))
+        const p = json?.policy
+        setCpuPolicy(p && typeof p === 'object'
+          ? {
+              allowed: Array.isArray(p.allowedModels) ? new Set<string>(p.allowedModels.map(String)) : null,
+              advanced: p.cpuAdvancedSettings !== false,
+              defaultModel: typeof p.cpuDefaultModel === 'string' && p.cpuDefaultModel ? p.cpuDefaultModel : null,
+            }
+          : { allowed: null, advanced: true, defaultModel: null })
         return
       }
       setCustomCpuModels([])
+      setCpuPolicy(null)
     } catch {
       setCustomCpuModels([])
+      setCpuPolicy(null)
     }
   }
+  const cpuAdvancedHidden = cpuPolicy?.advanced === false
+
+  // A restrictive policy pins the wizard onto an allowed model: the vDC
+  // default when it is allowed, else the first allowed one. An explicit user
+  // pick that is already allowed is kept.
+  useEffect(() => {
+    const allowed = cpuPolicy?.allowed
+    if (!allowed || allowed.size === 0) return
+    if (cpuTypeTouched.current && allowed.has(cpuType)) return
+    const preferred = cpuPolicy?.defaultModel && allowed.has(cpuPolicy.defaultModel)
+      ? cpuPolicy.defaultModel
+      : (allowed.has(cpuType) ? cpuType : [...allowed][0])
+    if (preferred !== cpuType) setCpuType(preferred)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cpuPolicy])
+
+  // CPU Type options as data so the policy can filter them; groups left
+  // empty are dropped, and allowed models the static list does not know
+  // are still offered under "Other".
+  const cpuOptionGroups = useMemo(() => {
+    const plain = (values: string[]) => values.map(v => ({ value: v, label: v }))
+    const groups: Array<{ header: string; items: Array<{ value: string; label: string }> }> = [
+      { header: 'Custom', items: plain(customCpuModels) },
+      { header: 'Special', items: plain(['host', 'max', 'kvm64', 'kvm32', 'qemu64', 'qemu32']) },
+      { header: 'x86-64 Levels', items: [
+        { value: 'x86-64-v2', label: 'x86-64-v2' },
+        { value: 'x86-64-v2-AES', label: 'x86-64-v2-AES (Recommended)' },
+        { value: 'x86-64-v3', label: 'x86-64-v3' },
+        { value: 'x86-64-v4', label: 'x86-64-v4' },
+      ] },
+      { header: 'Intel', items: plain([
+        'Conroe', 'Penryn', 'Nehalem', 'Westmere', 'SandyBridge', 'IvyBridge', 'Haswell', 'Broadwell',
+        'Skylake-Client', 'Skylake-Server', 'Cascadelake-Server', 'Cooperlake', 'Icelake-Server',
+        'SapphireRapids', 'GraniteRapids',
+      ]) },
+      { header: 'AMD', items: [
+        { value: 'Opteron_G5', label: 'Opteron G5' },
+        ...plain(['EPYC', 'EPYC-Rome', 'EPYC-Milan', 'EPYC-Genoa']),
+      ] },
+    ]
+    const allowed = cpuPolicy?.allowed ?? null
+    const filtered = groups.map(g => ({ ...g, items: allowed ? g.items.filter(i => allowed.has(i.value)) : g.items }))
+    if (allowed) {
+      const listed = new Set(filtered.flatMap(g => g.items.map(i => i.value)))
+      const other = [...allowed].filter(v => !listed.has(v))
+      if (other.length > 0) filtered.push({ header: 'Other', items: plain(other) })
+    }
+    return filtered.filter(g => g.items.length > 0)
+  }, [customCpuModels, cpuPolicy])
 
   // Disk array helpers
   const addDisk = () => {
@@ -851,8 +917,10 @@ return
       // Nom (optionnel)
       if (vmName) payload.name = vmName
 
-      // CPU type (seulement si différent de défaut)
-      if (cpuType && cpuType !== 'kvm64') payload.cpu = cpuType
+      // CPU type (seulement si différent de défaut). Sous une policy
+      // restrictive on l'envoie toujours : le défaut PVE n'est pas forcément
+      // dans la liste autorisée.
+      if (cpuType && (cpuType !== 'kvm64' || cpuPolicy?.allowed)) payload.cpu = cpuType
 
       // Ballooning
       if (ballooning && minMemory < memorySize) {
@@ -916,10 +984,13 @@ return
         })
       }
 
-      // CPU
-      if (cpuUnits !== 1024) payload.cpuunits = cpuUnits
-      if (cpuLimit > 0) payload.cpulimit = cpuLimit
-      if (enableNuma) payload.numa = 1
+      // CPU (advanced controls are hidden by the vDC compute policy when
+      // cpuAdvancedHidden, and the server would refuse them)
+      if (!cpuAdvancedHidden) {
+        if (cpuUnits !== 1024) payload.cpuunits = cpuUnits
+        if (cpuLimit > 0) payload.cpulimit = cpuLimit
+        if (enableNuma) payload.numa = 1
+      }
 
       // Startup
       if (startupOrder || startupDelay || shutdownTimeout) {
@@ -1733,45 +1804,17 @@ return
                 />
                 <FormControl fullWidth size="small" sx={{ gridColumn: '1 / -1' }}>
                   <InputLabel>{t('inventory.createVm.cpuType')}</InputLabel>
-                  <Select value={cpuType} onChange={(e) => setCpuType(e.target.value)} label={t('inventory.createVm.cpuType')}>
-                    {customCpuModels.length > 0 && <ListSubheader disableSticky sx={cpuGroupHeaderSx}>Custom</ListSubheader>}
-                    {customCpuModels.map((m: string) => (
-                      <MenuItem key={m} value={m}>{m}</MenuItem>
-                    ))}
-                    <ListSubheader disableSticky sx={cpuGroupHeaderSx}>Special</ListSubheader>
-                    <MenuItem value="host">host</MenuItem>
-                    <MenuItem value="max">max</MenuItem>
-                    <MenuItem value="kvm64">kvm64</MenuItem>
-                    <MenuItem value="kvm32">kvm32</MenuItem>
-                    <MenuItem value="qemu64">qemu64</MenuItem>
-                    <MenuItem value="qemu32">qemu32</MenuItem>
-                    <ListSubheader disableSticky sx={cpuGroupHeaderSx}>x86-64 Levels</ListSubheader>
-                    <MenuItem value="x86-64-v2">x86-64-v2</MenuItem>
-                    <MenuItem value="x86-64-v2-AES">x86-64-v2-AES (Recommended)</MenuItem>
-                    <MenuItem value="x86-64-v3">x86-64-v3</MenuItem>
-                    <MenuItem value="x86-64-v4">x86-64-v4</MenuItem>
-                    <ListSubheader disableSticky sx={cpuGroupHeaderSx}>Intel</ListSubheader>
-                    <MenuItem value="Conroe">Conroe</MenuItem>
-                    <MenuItem value="Penryn">Penryn</MenuItem>
-                    <MenuItem value="Nehalem">Nehalem</MenuItem>
-                    <MenuItem value="Westmere">Westmere</MenuItem>
-                    <MenuItem value="SandyBridge">SandyBridge</MenuItem>
-                    <MenuItem value="IvyBridge">IvyBridge</MenuItem>
-                    <MenuItem value="Haswell">Haswell</MenuItem>
-                    <MenuItem value="Broadwell">Broadwell</MenuItem>
-                    <MenuItem value="Skylake-Client">Skylake-Client</MenuItem>
-                    <MenuItem value="Skylake-Server">Skylake-Server</MenuItem>
-                    <MenuItem value="Cascadelake-Server">Cascadelake-Server</MenuItem>
-                    <MenuItem value="Cooperlake">Cooperlake</MenuItem>
-                    <MenuItem value="Icelake-Server">Icelake-Server</MenuItem>
-                    <MenuItem value="SapphireRapids">SapphireRapids</MenuItem>
-                    <MenuItem value="GraniteRapids">GraniteRapids</MenuItem>
-                    <ListSubheader disableSticky sx={cpuGroupHeaderSx}>AMD</ListSubheader>
-                    <MenuItem value="Opteron_G5">Opteron G5</MenuItem>
-                    <MenuItem value="EPYC">EPYC</MenuItem>
-                    <MenuItem value="EPYC-Rome">EPYC-Rome</MenuItem>
-                    <MenuItem value="EPYC-Milan">EPYC-Milan</MenuItem>
-                    <MenuItem value="EPYC-Genoa">EPYC-Genoa</MenuItem>
+                  <Select
+                    value={cpuType}
+                    onChange={(e) => { cpuTypeTouched.current = true; setCpuType(e.target.value) }}
+                    label={t('inventory.createVm.cpuType')}
+                  >
+                    {cpuOptionGroups.flatMap((g) => [
+                      <ListSubheader key={`hdr-${g.header}`} disableSticky sx={cpuGroupHeaderSx}>{g.header}</ListSubheader>,
+                      ...g.items.map((i) => (
+                        <MenuItem key={i.value} value={i.value}>{i.label}</MenuItem>
+                      )),
+                    ])}
                   </Select>
                 </FormControl>
               </Box>
@@ -1793,28 +1836,32 @@ return
                       size="small"
                       disabled
                     />
-                    <NumericTextField
-                      label={t('inventory.createVm.cpuUnits')}
-                      value={cpuUnits}
-                      onChange={setCpuUnits}
-                      fallback={100}
-                      size="small"
-                      type="number"
-                    />
-                    <NumericTextField
-                      label={t('inventory.createVm.cpuLimit')}
-                      value={cpuLimit}
-                      onChange={setCpuLimit}
-                      fallback={0}
-                      parse={Number.parseFloat}
-                      format={(n) => (n === 0 ? 'unlimited' : String(n))}
-                      size="small"
-                      placeholder="unlimited"
-                    />
-                    <FormControlLabel
-                      control={<Switch checked={enableNuma} onChange={(e) => setEnableNuma(e.target.checked)} size="small" />}
-                      label={t('inventory.createVm.enableNuma')}
-                    />
+                    {!cpuAdvancedHidden && (
+                      <>
+                        <NumericTextField
+                          label={t('inventory.createVm.cpuUnits')}
+                          value={cpuUnits}
+                          onChange={setCpuUnits}
+                          fallback={100}
+                          size="small"
+                          type="number"
+                        />
+                        <NumericTextField
+                          label={t('inventory.createVm.cpuLimit')}
+                          value={cpuLimit}
+                          onChange={setCpuLimit}
+                          fallback={0}
+                          parse={Number.parseFloat}
+                          format={(n) => (n === 0 ? 'unlimited' : String(n))}
+                          size="small"
+                          placeholder="unlimited"
+                        />
+                        <FormControlLabel
+                          control={<Switch checked={enableNuma} onChange={(e) => setEnableNuma(e.target.checked)} size="small" />}
+                          label={t('inventory.createVm.enableNuma')}
+                        />
+                      </>
+                    )}
                   </Box>
                 </Collapse>
               </Box>

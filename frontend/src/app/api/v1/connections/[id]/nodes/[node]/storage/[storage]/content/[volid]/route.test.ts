@@ -9,9 +9,15 @@ vi.mock('@/lib/rbac', () => ({
   },
 }))
 
-vi.mock('@/lib/vdc/scope', () => ({
-  guardTenantStorageWrite: vi.fn<(connId: string, storage: string) => Promise<Response | null>>(),
-}))
+// Keep the real ownership helpers (loadTenantSlugs, resolveUploadOwner: they
+// run on the prisma mock below); only the write guard is stubbed.
+vi.mock('@/lib/vdc/scope', async (io) => {
+  const actual = await io<typeof import('@/lib/vdc/scope')>()
+  return {
+    ...actual,
+    guardTenantStorageWrite: vi.fn<(connId: string, storage: string, opts?: { filename?: string | null }) => Promise<Response | null>>(),
+  }
+})
 
 vi.mock('@/lib/connections/getConnection', () => ({
   getConnectionById: vi.fn<(id: string) => Promise<any>>(),
@@ -34,6 +40,7 @@ vi.mock('@/lib/db/prisma', () => ({
   prisma: {
     tenant: {
       findUnique: vi.fn<(args: any) => Promise<any>>(),
+      findMany: vi.fn<(args: any) => Promise<any>>(),
     },
   },
 }))
@@ -59,7 +66,9 @@ const pveFetchMock = pveFetch as any
 const maskingScopeMock = maskingScope as any
 const getTenantInfrastructureScopeMock = getTenantInfrastructureScope as any
 const getCurrentTenantIdMock = getCurrentTenantId as any
-const tenantFindUniqueMock = prisma.tenant.findUnique as any
+// Ownership now goes through loadTenantSlugs (prisma.tenant.findMany):
+// `mine` is the caller's row, and the longest matching slug owns a file.
+const tenantFindManyMock = prisma.tenant.findMany as any
 const auditMock = audit as any
 
 const BASE_PARAMS = {
@@ -78,7 +87,7 @@ beforeEach(() => {
   maskingScopeMock.mockReturnValue(null) // provider: no tenant restriction
   getTenantInfrastructureScopeMock.mockResolvedValue({ kind: 'provider' })
   getCurrentTenantIdMock.mockResolvedValue('provider-tenant')
-  tenantFindUniqueMock.mockResolvedValue(null)
+  tenantFindManyMock.mockResolvedValue([])
   auditMock.mockResolvedValue(undefined)
 })
 
@@ -132,7 +141,7 @@ describe('DELETE /api/v1/connections/[id]/nodes/[node]/storage/[storage]/content
     maskingScopeMock.mockReturnValue({ something: 'non-null' }) // non-null scope = tenant
     getTenantInfrastructureScopeMock.mockResolvedValue({ kind: 'iaas', vdcScope: {} })
     getCurrentTenantIdMock.mockResolvedValue('tenant-abc')
-    tenantFindUniqueMock.mockResolvedValue({ slug: 'acme' })
+    tenantFindManyMock.mockResolvedValue([{ id: 'tenant-abc', slug: 'acme' }])
 
     // volid: "local:iso/ubuntu-22.04.iso" — no custom-acme- prefix
     const res = await callRoute(DELETE as any, {
@@ -153,7 +162,7 @@ describe('DELETE /api/v1/connections/[id]/nodes/[node]/storage/[storage]/content
     maskingScopeMock.mockReturnValue({ something: 'non-null' })
     getTenantInfrastructureScopeMock.mockResolvedValue({ kind: 'iaas', vdcScope: {} })
     getCurrentTenantIdMock.mockResolvedValue('tenant-abc')
-    tenantFindUniqueMock.mockResolvedValue({ slug: 'acme' })
+    tenantFindManyMock.mockResolvedValue([{ id: 'tenant-abc', slug: 'acme' }])
 
     const res = await callRoute(DELETE as any, {
       method: 'DELETE',
@@ -184,14 +193,14 @@ describe('DELETE /api/v1/connections/[id]/nodes/[node]/storage/[storage]/content
     expect(res.status).toBe(200)
     expect(pveFetchMock).toHaveBeenCalled()
     // slug check never needed for 'backup' content type
-    expect(tenantFindUniqueMock).not.toHaveBeenCalled()
+    expect(tenantFindManyMock).not.toHaveBeenCalled()
   })
 
   it('falls back to tenantId as slug when tenant row not found', async () => {
     maskingScopeMock.mockReturnValue({ something: 'non-null' })
     getTenantInfrastructureScopeMock.mockResolvedValue({ kind: 'iaas', vdcScope: {} })
     getCurrentTenantIdMock.mockResolvedValue('acme123')
-    tenantFindUniqueMock.mockResolvedValue(null) // no slug row
+    tenantFindManyMock.mockResolvedValue([]) // no slug row
 
     // filename with matching slug derived from tenantId
     const res = await callRoute(DELETE as any, {
@@ -233,5 +242,63 @@ describe('DELETE /api/v1/connections/[id]/nodes/[node]/storage/[storage]/content
     expect(res.status).toBe(500)
     const body = await readJson<any>(res)
     expect(body.error).toContain('PVE unreachable')
+  })
+})
+
+// #894 allowUploads: the write guard judges the TARGET FILENAME (a tenant may
+// delete its own `custom-<slug>-*` files on an ISO library that allows
+// uploads), so the route must hand it the basename extracted from the volid,
+// and a guard refusal must win before any PVE call.
+describe('DELETE content: filename forwarded to guardTenantStorageWrite (#894)', () => {
+  it('passes the basename of the volid as opts.filename', async () => {
+    await callRoute(DELETE as any, { method: 'DELETE', params: BASE_PARAMS })
+    expect(guardTenantStorageWriteMock).toHaveBeenCalledWith('conn-1', 'local', { filename: 'ubuntu-22.04.iso' })
+  })
+
+  it('a tenant deleting its own upload on an upload-enabled library reaches PVE', async () => {
+    maskingScopeMock.mockReturnValue({ something: 'non-null' })
+    getTenantInfrastructureScopeMock.mockResolvedValue({ kind: 'iaas', vdcScope: {} })
+    getCurrentTenantIdMock.mockResolvedValue('tenant-abc')
+    tenantFindManyMock.mockResolvedValue([{ id: 'tenant-abc', slug: 'acme' }])
+
+    const res = await callRoute(DELETE as any, {
+      method: 'DELETE',
+      params: { ...BASE_PARAMS, storage: 'isolib', volid: encodeURIComponent('isolib:iso/custom-acme-x.iso') },
+    })
+
+    expect(res.status).toBe(200)
+    expect(guardTenantStorageWriteMock).toHaveBeenCalledWith('conn-1', 'isolib', { filename: 'custom-acme-x.iso' })
+    expect(pveFetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('resolves ownership on the LONGEST slug: acme cannot delete custom-acme-prod-x.iso, acme-prod can', async () => {
+    maskingScopeMock.mockReturnValue({ something: 'non-null' })
+    getTenantInfrastructureScopeMock.mockResolvedValue({ kind: 'iaas', vdcScope: {} })
+    tenantFindManyMock.mockResolvedValue([{ id: 'tenant-acme', slug: 'acme' }, { id: 'tenant-prod', slug: 'acme-prod' }])
+    const params = { ...BASE_PARAMS, storage: 'isolib', volid: encodeURIComponent('isolib:iso/custom-acme-prod-x.iso') }
+
+    getCurrentTenantIdMock.mockResolvedValue('tenant-acme')
+    const refused = await callRoute(DELETE as any, { method: 'DELETE', params })
+    expect(refused.status).toBe(403)
+    expect(pveFetchMock).not.toHaveBeenCalled()
+
+    getCurrentTenantIdMock.mockResolvedValue('tenant-prod')
+    const allowed = await callRoute(DELETE as any, { method: 'DELETE', params })
+    expect(allowed.status).toBe(200)
+    expect(pveFetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it("a guard refusal for another tenant's file wins before the route's own prefix check", async () => {
+    guardTenantStorageWriteMock.mockResolvedValue(
+      new Response(JSON.stringify({ error: 'Files on this ISO library must be named custom-acme-<name> to be yours' }), { status: 403 }),
+    )
+    const res = await callRoute(DELETE as any, {
+      method: 'DELETE',
+      params: { ...BASE_PARAMS, storage: 'isolib', volid: encodeURIComponent('isolib:iso/custom-other-x.iso') },
+    })
+    expect(res.status).toBe(403)
+    expect((await readJson<any>(res)).error).toMatch(/custom-acme-/)
+    expect(tenantFindManyMock).not.toHaveBeenCalled()
+    expect(pveFetchMock).not.toHaveBeenCalled()
   })
 })

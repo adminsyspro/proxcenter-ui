@@ -28,6 +28,11 @@ export function isKnownCpuType(value: string): boolean {
   return KNOWN_VM_CPU_TYPES.has(value)
 }
 
+/** Built-in QEMU model names the static "CPU Type" selects offer, in UI order. */
+export function listKnownCpuTypes(): string[] {
+  return [...KNOWN_VM_CPU_TYPES]
+}
+
 // Extrait les modèles CPU custom d'une réponse /nodes/{node}/capabilities/qemu/cpu.
 // PVE marque les modèles custom avec custom=1 ; la config VM les référence
 // toujours sous la forme préfixée "custom-<nom>", normalisée ici par sécurité.

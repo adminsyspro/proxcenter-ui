@@ -44,6 +44,8 @@ beforeEach(async () => {
   pveFetchMock.mockImplementation(async (_conn: any, path: string, init: any = {}) => {
     const method = String(init?.method || 'GET').toUpperCase()
     if (method === 'GET' && path.startsWith('/pools/')) return { members: [] }
+    // The VXLAN zone needs at least one peer since #899 (createZone refuses an empty list).
+    if (method === 'GET' && path === '/cluster/status') return [{ type: 'node', name: 'pve1', ip: '10.0.0.1' }]
     if (method === 'GET') return []
     return {}
   })

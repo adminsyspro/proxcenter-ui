@@ -29,7 +29,7 @@
 
 import { getTenantInfrastructureScope, maskingScope } from '@/lib/tenant/infraScope'
 
-import { type VdcScope } from './scope'
+import { type VdcScope, writableStoragesFor } from './scope'
 
 /**
  * Returns the set of PVE pool names a tenant is allowed to target via
@@ -107,7 +107,9 @@ export function validateTenantJobInfra(
   connectionId: string,
 ): string | null {
   const allowedNodes = scope.nodesByConnection.get(connectionId) ?? new Set<string>()
-  const allowedStorages = scope.storagesByConnection.get(connectionId) ?? new Set<string>()
+  // A backup job writes to its storage: a read-only ISO library (#894) is
+  // visible to the tenant but never a valid job target.
+  const allowedStorages = writableStoragesFor(scope, connectionId)
   // pbsNamespacesByPveConnection is the right index here: the route
   // gives us the PVE connection id, and we want the union of namespaces
   // the tenant is allowed to address from any vDC anchored on that PVE

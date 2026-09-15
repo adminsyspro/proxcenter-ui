@@ -12,13 +12,14 @@ import { customImageToCloudImage } from "@/lib/templates/cloudImages"
 import { resolveBuiltInImage } from "@/lib/templates/catalogStore"
 import { isFileBasedStorage, supportsVmDisks } from "@/lib/proxmox/storage"
 import { resolveVdcForTenant, checkVdcQuota } from "@/lib/vdc/quota"
+import { validateCpuAgainstPolicy, isPolicyRestrictive, resolveAllowedCpuModels, pickPolicyDefaultModel, parseCpuProperty } from "@/lib/vdc/computePolicy"
 import { getAllowedNetworksForTenant, validateNetAgainstScope, resolveSubnetForBridge } from "@/lib/vdc/vnets"
 import { generatePveMacAddress } from "@/lib/vdc/sdn"
 import { allocateIp, releaseIp, IpamExhaustedError } from "@/lib/vdc/ipam"
 import { scanUsedIpsForSubnet, scannedToIntSet } from "@/lib/vdc/ipamScan"
 import { parseCidr } from "@/lib/vdc/network"
 import { waitForTask } from "@/lib/proxmox/tasks"
-import { getVdcScope } from "@/lib/vdc/scope"
+import { getVdcScope, writableStoragesFor, readOnlyLibraryError } from "@/lib/vdc/scope"
 import { policyQosSuffix } from "@/lib/vdc/drives"
 import { DEFAULT_TENANT_ID } from "@/lib/tenant"
 import { checkVmidAgainstTenantRange } from "@/lib/tenant/vmidRange"
@@ -110,6 +111,46 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'No vDC on this connection — deploy not allowed' }, { status: 403 })
     }
 
+    // vDC compute policy (#893). The policy constrains what the tenant
+    // chooses, never what the PROVIDER put in a blueprint: a blueprint owned
+    // by the provider tenant keeps its model even outside the allowed set.
+    // A tenant's own blueprint is a tenant choice and gets no exemption.
+    // The wizard has no CPU picker and always submits its hidden `host`
+    // default, so a model outside the set is replaced by the vDC default
+    // (or first allowed model) rather than refused; only the advanced part
+    // (flags, extra options) can still 400.
+    if (vdcInfo && isPolicyRestrictive(vdcInfo.computePolicy)) {
+      const policy = vdcInfo.computePolicy
+      const hwCpu = (body.hardware ?? (body.hardware = {} as NonNullable<typeof body.hardware>)) as { cpu?: unknown }
+      const requestedCpu: string = typeof hwCpu.cpu === 'string' ? hwCpu.cpu : ''
+      const caps = policy.cpuModelMode === 'custom'
+        ? await getConnectionById(body.connectionId)
+            .then(capConn => pveFetch<any[]>(capConn, `/nodes/${encodeURIComponent(body.node)}/capabilities/qemu/cpu`))
+            .catch(() => undefined)
+        : undefined
+      let trustedModel: string | null = null
+      if (body.blueprintId) {
+        try {
+          const bp = await prisma.blueprint.findUnique({ where: { id: String(body.blueprintId) }, select: { hardware: true, tenantId: true } })
+          const bpHw = bp?.hardware as { cpu?: unknown } | null
+          if (bp?.tenantId === DEFAULT_TENANT_ID && typeof bpHw?.cpu === 'string') trustedModel = parseCpuProperty(bpHw.cpu).model || null
+        } catch {
+          trustedModel = null
+        }
+      }
+      const allowed = resolveAllowedCpuModels(policy, caps)
+      const requestedModel = parseCpuProperty(requestedCpu).model
+      if (allowed && requestedModel !== trustedModel && !allowed.has(requestedModel)) {
+        const fallback = pickPolicyDefaultModel(policy, caps)
+        if (!fallback) {
+          return NextResponse.json({ error: 'The vDC compute policy allows no CPU model on this cluster.' }, { status: 400 })
+        }
+        hwCpu.cpu = fallback
+      }
+      const verdict = validateCpuAgainstPolicy(policy, { cpu: hwCpu.cpu }, { clusterCapabilities: caps, currentModel: trustedModel })
+      if (verdict.ok === false) return NextResponse.json({ error: verdict.error }, { status: 400 })
+    }
+
     // QoS suffix (`,iops_rd=..,iops_wr=..,mbps_rd=..,mbps_wr=..`) stamped onto
     // the data disk (scsi0) when body.storage carries a storage policy in the
     // tenant's vDC scope. Computed once below, inside the existing
@@ -161,18 +202,28 @@ export async function POST(req: Request) {
       if (!scope) {
         return NextResponse.json({ error: 'Tenant vDC scope not resolved' }, { status: 403 })
       }
-      const allowedStorages = scope.storagesByConnection.get(body.connectionId) ?? new Set<string>()
-      if (!allowedStorages.has(body.storage)) {
+      // The data disk lands on body.storage: a write, judged on the writable
+      // set so a read-only ISO library (#894) is refused even when visible.
+      const visibleStorages = scope.storagesByConnection.get(body.connectionId) ?? new Set<string>()
+      const writableStorages = writableStoragesFor(scope, body.connectionId)
+      if (!writableStorages.has(body.storage)) {
         return NextResponse.json(
-          { error: `Storage "${body.storage}" is not authorised for this tenant.` },
+          { error: visibleStorages.has(body.storage) ? readOnlyLibraryError(body.storage) : `Storage "${body.storage}" is not authorised for this tenant.` },
           { status: 403 },
         )
       }
-      if (body.isoStorage && !allowedStorages.has(body.isoStorage)) {
-        return NextResponse.json(
-          { error: `ISO storage "${body.isoStorage}" is not authorised for this tenant.` },
-          { status: 403 },
-        )
+      // The ISO storage is only READ when the ISO already exists as a PVE
+      // volume; a URL download writes the file there first, so a library
+      // may serve an existing ISO but never receive a download.
+      if (body.isoStorage) {
+        const isoIsWrite = sourceType !== 'volume'
+        const isoAllowed = isoIsWrite ? writableStorages : visibleStorages
+        if (!isoAllowed.has(body.isoStorage)) {
+          return NextResponse.json(
+            { error: isoIsWrite && visibleStorages.has(body.isoStorage) ? readOnlyLibraryError(body.isoStorage) : `ISO storage "${body.isoStorage}" is not authorised for this tenant.` },
+            { status: 403 },
+          )
+        }
       }
 
       // Storage-policy QoS: body.storage may carry a tier's IOPS/MBPS caps in

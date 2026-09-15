@@ -109,6 +109,8 @@ export async function PUT(req: Request, ctx: RouteContext) {
       if (msg.includes("vDC not found") || (msg.includes("VNet") && msg.includes("not found"))) {
         return NextResponse.json({ error: msg }, { status: 404 })
       }
+      // A VNet of a stretched tenant network is the provider's (#901).
+      if (msg.includes("is managed by the provider")) return NextResponse.json({ error: msg }, { status: 403 })
       throw err
     }
   } catch (e: any) {
@@ -144,6 +146,8 @@ export async function DELETE(_req: Request, ctx: RouteContext) {
       if (msg.includes("vDC not found") || (msg.includes("VNet") && msg.includes("not found"))) {
         return NextResponse.json({ error: msg }, { status: 404 })
       }
+      // A VNet of a stretched tenant network is the provider's (#901).
+      if (msg.includes("is managed by the provider")) return NextResponse.json({ error: msg }, { status: 403 })
       throw err
     }
   } catch (e: any) {

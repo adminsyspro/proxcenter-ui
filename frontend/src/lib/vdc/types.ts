@@ -1,3 +1,6 @@
+import type { VdcComputePolicy } from './computePolicy'
+import type { VdcTransport } from './transport'
+
 export interface Vdc {
   id: string
   tenantId: string
@@ -12,11 +15,17 @@ export interface Vdc {
    *  storage before tenants can deploy. New vDCs are validated to point
    *  at a shared+images storage. */
   primaryStorage: string | null
+  computePolicy: VdcComputePolicy
+  /** How the vDC's VXLAN zone reaches its peers (#899). */
+  transport: VdcTransport
   enabled: boolean
   createdBy: string | null
   createdAt: string
   updatedAt: string
 }
+
+export type { VdcComputePolicy, CpuModelMode } from './computePolicy'
+export type { VdcTransport, VxlanTransportMode } from './transport'
 
 export interface VdcWithDetails extends Vdc {
   tenantName?: string
@@ -30,7 +39,17 @@ export interface VdcWithDetails extends Vdc {
   vlanPools: VdcVlanPool[]
   storagePolicies: VdcStoragePolicyDto[]
   pbsBindings: VdcPbsBinding[]
+  /** ISO storages granted to the tenant (#894): read-only catalogue, plus an
+   *  optional upload area for the tenant's own `custom-<slug>-*` files. */
+  isoLibraries: VdcIsoLibraryGrant[]
 }
+
+export interface VdcIsoLibraryGrant {
+  storageId: string
+  allowUploads: boolean
+}
+
+export type VdcIsoLibraryInput = string | { storageId: string; allowUploads?: boolean }
 
 export interface VdcPbsBinding {
   id: string
@@ -124,13 +143,17 @@ export interface VdcVnet {
    *  unusable without a subnet (the IPAM is the only mechanism to allocate
    *  IPs on VXLAN, where PVE-native DHCP/IPAM is broken on PVE 9.x). */
   subnet: VdcSubnet
+  /** Set when a stretched tenant network created this VNet (#901): the
+   *  provider manages it, and `subnet.id` is the network's shared pool. */
+  tenantNetwork: { id: string; name: string } | null
   createdBy: string | null
   createdAt: string
 }
 
 export interface VdcSubnet {
   id: string
-  vnetId: string
+  /** Null for the canonical subnet of a stretched tenant network (#901). */
+  vnetId: string | null
   cidr: string
   gateway: string
   dnsServers: string[]
@@ -162,10 +185,14 @@ export interface CreateVdcInput {
   /** Single shared storage. Validated against the connection's storage
    *  list (must be `shared=true` and advertise `content=images`). */
   primaryStorage: string
+  sdnZoneName?: string
   quota?: Partial<VdcQuota>
   sharedBridges?: Array<{ bridge: string; label?: string }>
   vlanPools?: Array<{ bridge: string; rangeStart: number; rangeEnd: number }>
   storagePolicies?: Array<{ policyId: string; quotaMb: number | null }>
+  computePolicy?: Partial<VdcComputePolicy>
+  isoLibraries?: VdcIsoLibraryInput[]
+  transport?: Partial<VdcTransport>
 }
 
 export interface UpdateVdcInput {
@@ -178,4 +205,7 @@ export interface UpdateVdcInput {
   sharedBridges?: Array<{ bridge: string; label?: string }>
   vlanPools?: Array<{ bridge: string; rangeStart: number; rangeEnd: number }>
   storagePolicies?: Array<{ policyId: string; quotaMb: number | null }>
+  computePolicy?: Partial<VdcComputePolicy>
+  isoLibraries?: VdcIsoLibraryInput[]
+  transport?: Partial<VdcTransport>
 }

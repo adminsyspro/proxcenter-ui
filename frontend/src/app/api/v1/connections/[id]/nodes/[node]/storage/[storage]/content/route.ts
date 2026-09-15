@@ -5,7 +5,7 @@ import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, guestPerimeterAllows, PERMISSIONS } from "@/lib/rbac"
 import { getCurrentTenantId } from "@/lib/tenant"
 import { getTenantInfrastructureScope, maskingScope } from "@/lib/tenant/infraScope"
-import { prisma } from "@/lib/db/prisma"
+import { isLibraryOnlyStorage, loadTenantSlugs, resolveUploadOwner } from "@/lib/vdc/scope"
 
 export const runtime = "nodejs"
 
@@ -46,16 +46,26 @@ export async function GET(
       if (!allowed || !allowed.has(storage)) {
         return NextResponse.json({ error: "Storage not accessible" }, { status: 403 })
       }
+      // A per-node storage id (`local`) exists on every node: only the vDC's
+      // own nodes may be browsed, or a tenant could read another node's copy.
+      const nodes = scope.nodesByConnection?.get(id)
+      if (nodes && nodes.size > 0 && !nodes.has(node)) {
+        return NextResponse.json({ error: "Node not accessible" }, { status: 403 })
+      }
     }
+    // ISO library (#894): the provider's catalogue (files without a
+    // `custom-` prefix) is visible to every vDC granted the storage; files
+    // uploaded by a tenant (`custom-<slug>-*`) stay visible to their owner
+    // only. A storage reached ONLY through a library grant is an ISO source
+    // and nothing else: its images, backups or templates are never listed.
+    const isIsoLibrary = !!scope?.isoLibrariesByConnection?.get(id)?.has(storage)
+    const libraryOnly = !!scope && isLibraryOnlyStorage(scope, id, storage)
 
-    // Resolve the tenant slug used as the filename prefix (`custom-<slug>-*`).
-    // Mirrors the convention applied by POST /custom-images. Super admins
-    // skip this lookup entirely — they get the unfiltered listing.
-    let tenantSlug: string | null = null
-    if (scope) {
-      const row = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { slug: true } })
-      tenantSlug = row?.slug || tenantId.replace(/[^a-z0-9-]/gi, '').toLowerCase()
-    }
+    // Ownership of tenant-prefixed files is resolved on the longest matching
+    // slug (`custom-acme-prod-x` belongs to acme-prod, never to acme). Super
+    // admins skip this entirely — they get the unfiltered listing.
+    let slugs: { mine: string; all: string[] } | null = null
+    if (scope) slugs = await loadTenantSlugs(tenantId)
 
     const conn = await getConnectionById(id)
 
@@ -84,15 +94,20 @@ export async function GET(
     // have their own ownership models handled elsewhere — VM disks via PVE
     // pool, backups via PBS namespace.
     let payload = data || []
-    if (tenantSlug) {
-      const ownPrefix = `custom-${tenantSlug}-`
+    if (slugs) {
+      const { mine, all } = slugs
       payload = payload.filter((item: any) => {
         const itemContent = String(item?.content || '')
+        if (libraryOnly && itemContent !== 'iso') return false
         if (!TENANT_FILTERED_CONTENT.has(itemContent)) return true
         const volid: string = String(item?.volid || '')
         const slash = volid.lastIndexOf('/')
         if (slash < 0) return false
-        return volid.slice(slash + 1).startsWith(ownPrefix)
+        const owner = resolveUploadOwner(volid.slice(slash + 1), all)
+        if (owner.kind === 'tenant') return owner.slug === mine
+        // Provider catalogue is visible on a library only; a `custom-` file
+        // matching no tenant is nobody's and stays hidden.
+        return isIsoLibrary && owner.kind === 'provider'
       })
     }
 

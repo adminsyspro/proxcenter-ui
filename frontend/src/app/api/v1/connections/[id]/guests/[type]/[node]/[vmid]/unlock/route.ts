@@ -38,9 +38,8 @@ export async function POST(
       return NextResponse.json({ error: "Invalid vmid" }, { status: 400 })
     }
 
-    // RBAC
     const resourceId = buildVmResourceId(id, node, type, vmid)
-    const denied = await checkPermission(PERMISSIONS.VM_CONFIG, "vm", resourceId)
+    const denied = await checkPermission(PERMISSIONS.VM_CONFIG_HARDWARE, "vm", resourceId)
     if (denied) return denied
 
     const conn = await getConnectionById(id)

@@ -6,6 +6,7 @@ import { checkPermission, buildNodeResourceId, PERMISSIONS } from "@/lib/rbac"
 import { vmDiskFormats } from "@/lib/proxmox/storage"
 import { getCurrentTenantId } from "@/lib/tenant"
 import { getTenantInfrastructureScope, maskingScope } from "@/lib/tenant/infraScope"
+import { isLibraryOnlyStorage, writableStoragesFor } from "@/lib/vdc/scope"
 
 export const runtime = "nodejs"
 
@@ -77,9 +78,14 @@ return contents.includes(contentFilter)
     const scope = maskingScope(await getTenantInfrastructureScope(tenantId))
     if (scope && storages) {
       const allowed = scope.storagesByConnection.get(id)
+      // A storage reached only through an ISO library grant (#894) is an ISO
+      // source: it is offered for `iso` listings and hidden from every other
+      // picker (disks, backups, imports), whatever else its backend can hold.
+      const wantsIso = (contentFilter ?? '').split(',').map((c: string) => c.trim()).includes('iso')
       storages = allowed
         ? storages.filter((s: any) => {
             if (!allowed.has(s.storage)) return false
+            if (isLibraryOnlyStorage(scope, id, s.storage) && !wantsIso) return false
             if (contentFilter === 'backup') return s.type === 'pbs'
             return true
           })
@@ -124,7 +130,19 @@ return contents.includes(contentFilter)
         })
       : withFormats
 
-    return NextResponse.json({ data: decorated })
+    // Upload capability for the CD/DVD pickers (#894), mirroring what
+    // guardTenantStorageWrite lets through: iaas tenants may upload to an ISO
+    // library whose grant allows it or to a writable non-shared storage;
+    // provider and MSP callers are not restricted by the guard, so every row
+    // they see is uploadable.
+    const withUpload = decorated.map((s: any) => {
+      if (!scope) return { ...s, tenantCanUpload: true }
+      const uploadLibrary = !!scope.uploadLibrariesByConnection?.get(id)?.has(s.storage)
+      const writableLocal = writableStoragesFor(scope, id).has(s.storage) && !s.shared
+      return { ...s, tenantCanUpload: uploadLibrary || writableLocal }
+    })
+
+    return NextResponse.json({ data: withUpload })
   } catch (e: any) {
     console.error('Error fetching storages:', e)
     

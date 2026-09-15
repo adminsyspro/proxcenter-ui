@@ -10,7 +10,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const {
   prismaMock, clearVdcScopeCacheMock, pveFetchMock,
   getConnectionByIdMock, generateZoneNameMock, createZoneMock, applySdnMock,
+  isZoneNameTakenMock, syncNetworksOfVdcMock,
 } = vi.hoisted(() => ({
+  isZoneNameTakenMock: vi.fn(),
+  syncNetworksOfVdcMock: vi.fn(),
   prismaMock: {
     tenant: { findUnique: vi.fn() },
     vdc: { findFirst: vi.fn(), findUnique: vi.fn() },
@@ -18,6 +21,7 @@ const {
     vdcVlanPool: { findMany: vi.fn() },
     connection: { findUnique: vi.fn(), findMany: vi.fn() },
     providerConnection: { findUnique: vi.fn() },
+    tenantNetworkMember: { findMany: vi.fn() },
     $transaction: vi.fn(),
   } as any,
   clearVdcScopeCacheMock: vi.fn(),
@@ -36,12 +40,16 @@ vi.mock('@/lib/crypto/secret', () => ({ decryptSecret: vi.fn() }))
 vi.mock('@/lib/tenant', () => ({ DEFAULT_TENANT_ID: 'default' }))
 vi.mock('./sdn', () => ({
   generateZoneName: generateZoneNameMock,
+  isZoneNameTaken: isZoneNameTakenMock,
   createZone: createZoneMock,
   deleteZone: vi.fn(),
   deleteVnetPve: vi.fn(),
   applySdn: applySdnMock,
+  updateZone: vi.fn(),
+  listClusterNodeIps: vi.fn(async () => ['10.0.0.1']),
 }))
 vi.mock('./scope', () => ({ clearVdcScopeCache: clearVdcScopeCacheMock }))
+vi.mock('./tenantNetworkMembers', () => ({ syncNetworksOfVdc: syncNetworksOfVdcMock }))
 
 import { createVdc, updateVdc, deleteVdc, getVdcById } from './index'
 
@@ -86,6 +94,7 @@ beforeEach(() => {
   prismaMock.providerConnection.findUnique.mockResolvedValue({ connectionId: 'conn-2' })
   prismaMock.vdcVlanPool.findMany.mockResolvedValue([])
   prismaMock.vdcVnet.findMany.mockResolvedValue([])
+  prismaMock.tenantNetworkMember.findMany.mockResolvedValue([])
 })
 
 describe('createVdc guards', () => {
@@ -348,5 +357,145 @@ describe('getVdcById VLAN pools ordering', () => {
         }),
       })
     )
+  })
+})
+
+describe('createVdc: custom SDN zone id', () => {
+  beforeEach(() => {
+    happyPathPve()
+    isZoneNameTakenMock.mockResolvedValue(false)
+    prismaMock.vdc.findUnique.mockResolvedValue(fullRow)
+    prismaMock.$transaction.mockImplementation(permissiveTransaction)
+  })
+
+  it('refuses a malformed id before touching Proxmox', async () => {
+    await expect(createVdc({ ...baseInput, sdnZoneName: 'Zone-1!' }, null)).rejects.toThrow(/SDN zone ID must be 1-8 lowercase/)
+    expect(createZoneMock).not.toHaveBeenCalled()
+    expect(prismaMock.$transaction).not.toHaveBeenCalled()
+  })
+
+  it('refuses an id already used on the connection', async () => {
+    isZoneNameTakenMock.mockResolvedValue(true)
+    await expect(createVdc({ ...baseInput, sdnZoneName: 'zacme' }, null)).rejects.toThrow(/"zacme" is already in use on this connection/)
+    expect(isZoneNameTakenMock).toHaveBeenCalledWith('conn-2', 'zacme')
+    expect(createZoneMock).not.toHaveBeenCalled()
+  })
+
+  it('creates the zone under the custom id, lower-cased, instead of a generated one', async () => {
+    await createVdc({ ...baseInput, sdnZoneName: ' ZAcme ' }, null)
+    expect(generateZoneNameMock).not.toHaveBeenCalled()
+    expect(createZoneMock).toHaveBeenCalledWith({ id: 'conn-2' }, 'zacme', expect.objectContaining({ peers: ['10.0.0.1'] }))
+  })
+})
+
+describe('createVdc: ISO libraries (#894)', () => {
+  const STORAGES = [
+    { storage: 'iso-lib', content: 'iso,vztmpl' },
+    { storage: 'ceph-pool', content: 'images,rootdir' },
+  ]
+
+  beforeEach(() => {
+    happyPathPve()
+    pveFetchMock.mockImplementation(async (_conn: any, path: string) => (path === '/storage' ? STORAGES : {}))
+    generateZoneNameMock.mockResolvedValue('zacme')
+    prismaMock.vdc.findUnique.mockResolvedValue(fullRow)
+  })
+
+  it('refuses a malformed storage id, and a storage that holds no ISO content, before any zone is created', async () => {
+    await expect(createVdc({ ...baseInput, isoLibraries: ['bad id!'] }, null)).rejects.toThrow(/Invalid ISO library storage id "bad id!"/)
+    await expect(createVdc({ ...baseInput, isoLibraries: [{ storageId: 'ceph-pool', allowUploads: false }] }, null))
+      .rejects.toThrow(/"ceph-pool" does not exist on this cluster or does not hold ISO content/)
+    await expect(createVdc({ ...baseInput, isoLibraries: ['nfs-old'] }, null)).rejects.toThrow(/"nfs-old" does not exist/)
+    expect(createZoneMock).not.toHaveBeenCalled()
+    expect(prismaMock.$transaction).not.toHaveBeenCalled()
+  })
+
+  it('persists the grants inside the create transaction, one row per storage, uploads allowed if any entry says so', async () => {
+    const tx = trackedTx()
+    prismaMock.$transaction.mockImplementation(async (fn: any) => fn(tx.proxy))
+
+    await createVdc({
+      ...baseInput,
+      isoLibraries: ['iso-lib', { storageId: 'iso-lib', allowUploads: true }, { storageId: '  ', allowUploads: true }],
+    }, null)
+
+    expect(tx.models.vdcIsoLibrary.createMany).toHaveBeenCalledTimes(1)
+    const { data } = (tx.models.vdcIsoLibrary.createMany.mock.calls[0] as unknown[])[0] as any
+    expect(data).toEqual([expect.objectContaining({ storageId: 'iso-lib', allowUploads: true })])
+  })
+
+  it('writes no library row when none is granted', async () => {
+    const tx = trackedTx()
+    prismaMock.$transaction.mockImplementation(async (fn: any) => fn(tx.proxy))
+    await createVdc({ ...baseInput, isoLibraries: [] }, null)
+    expect(tx.models.vdcIsoLibrary).toBeUndefined()
+  })
+})
+
+describe('updateVdc: ISO libraries (#894)', () => {
+  it('replaces the grants when the key is present, validating them against the cluster storages', async () => {
+    prismaMock.vdc.findUnique
+      .mockResolvedValueOnce({ id: 'v1', tenantId: 't1', connectionId: 'conn-2', sdnZoneName: null })
+      .mockResolvedValueOnce(fullRow)
+    prismaMock.connection.findUnique.mockResolvedValue({ tenantId: 'default' })
+    getConnectionByIdMock.mockResolvedValue({ id: 'conn-2' })
+    pveFetchMock.mockImplementation(async (_conn: any, path: string) => (path === '/storage' ? [{ storage: 'iso-lib', content: 'iso' }] : {}))
+    const tx = trackedTx()
+    prismaMock.$transaction.mockImplementation(async (fn: any) => fn(tx.proxy))
+
+    await updateVdc('v1', { isoLibraries: [{ storageId: 'iso-lib', allowUploads: false }] } as any)
+
+    expect(tx.models.vdcIsoLibrary.deleteMany).toHaveBeenCalledWith({ where: { vdcId: 'v1' } })
+    expect(tx.models.vdcIsoLibrary.createMany).toHaveBeenCalledWith({
+      data: [expect.objectContaining({ vdcId: 'v1', storageId: 'iso-lib', allowUploads: false })],
+    })
+  })
+
+  it('clears every grant on an empty list, and leaves them alone when the key is absent', async () => {
+    prismaMock.vdc.findUnique
+      .mockResolvedValueOnce({ id: 'v1', tenantId: 't1', connectionId: 'conn-2', sdnZoneName: null })
+      .mockResolvedValueOnce(fullRow)
+      .mockResolvedValueOnce({ id: 'v1', tenantId: 't1', connectionId: 'conn-2', sdnZoneName: null })
+      .mockResolvedValueOnce(fullRow)
+    // An empty list still resolves the connection, but never asks Proxmox for its storages.
+    prismaMock.connection.findUnique.mockResolvedValue({ tenantId: 'default' })
+    getConnectionByIdMock.mockResolvedValue({ id: 'conn-2' })
+    const first = trackedTx()
+    prismaMock.$transaction.mockImplementationOnce(async (fn: any) => fn(first.proxy))
+    await updateVdc('v1', { isoLibraries: [] } as any)
+    expect(first.models.vdcIsoLibrary.deleteMany).toHaveBeenCalledWith({ where: { vdcId: 'v1' } })
+    expect(first.models.vdcIsoLibrary.createMany).not.toHaveBeenCalled()
+    expect(pveFetchMock).not.toHaveBeenCalled()
+
+    const second = trackedTx()
+    prismaMock.$transaction.mockImplementationOnce(async (fn: any) => fn(second.proxy))
+    await updateVdc('v1', { name: 'ACME — Paris 2' } as any)
+    expect(second.models.vdcIsoLibrary).toBeUndefined()
+  })
+})
+
+describe('deleteVdc: stretched tenant networks (#901)', () => {
+  beforeEach(() => {
+    prismaMock.vdc.findUnique.mockReset().mockResolvedValue(fullRow)
+    prismaMock.connection.findUnique.mockResolvedValue({ tenantId: 'default' })
+    getConnectionByIdMock.mockResolvedValue({ id: 'conn-2' })
+    pveFetchMock.mockRejectedValue(new Error('unreachable'))
+    prismaMock.$transaction.mockImplementation(permissiveTransaction)
+    syncNetworksOfVdcMock.mockResolvedValue([])
+  })
+
+  it('re-syncs, after the delete, the networks the vDC carried so the other members drop its peers', async () => {
+    prismaMock.tenantNetworkMember.findMany.mockResolvedValue([{ tenantNetworkId: 'n1' }, { tenantNetworkId: 'n2' }])
+    await deleteVdc('v1')
+    expect(prismaMock.tenantNetworkMember.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { vdcId: 'v1' } }))
+    expect(syncNetworksOfVdcMock).toHaveBeenCalledWith('v1', ['n1', 'n2'])
+    // The memberships are read before the rows go, the sync runs after.
+    expect(prismaMock.tenantNetworkMember.findMany.mock.invocationCallOrder[0]).toBeLessThan(prismaMock.$transaction.mock.invocationCallOrder[0])
+    expect(syncNetworksOfVdcMock.mock.invocationCallOrder[0]).toBeGreaterThan(prismaMock.$transaction.mock.invocationCallOrder[0])
+  })
+
+  it('touches no network for a vDC that carried none', async () => {
+    await deleteVdc('v1')
+    expect(syncNetworksOfVdcMock).not.toHaveBeenCalled()
   })
 })

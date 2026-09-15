@@ -196,6 +196,7 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
     vdcId?: string | null
     displayName?: string | null
     subnet?: { cidr: string; gateway: string; dnsServers: string[]; subnetId: string } | null
+    vlanRanges?: [number, number][]
   }
   const [bridges, setBridges] = useState<BridgeChoice[]>([])
   const [agent, setAgent] = useState(true)
@@ -589,6 +590,7 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
           vdcId: c.vdcId ?? null,
           displayName: c.displayName ?? null,
           subnet: c.subnet ?? null,
+          vlanRanges: c.vlanRanges ?? undefined,
         }))
         setBridges(list)
         // Auto-pick the first VNet so the displayed picker value and the
@@ -604,9 +606,9 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
             setNetworkBridge(list.some((b: { iface: string }) => b.iface === 'vmbr0') ? 'vmbr0' : (networkBridge || 'vmbr0'))
           }
         } else {
-          const vnets = list.filter((b: { type: string }) => b.type === 'vnet')
-          if (vnets.length > 0 && !vnets.some((b: { iface: string }) => b.iface === networkBridge)) {
-            setNetworkBridge(vnets[0].iface)
+          const tenantNets = list.filter((b: { type: string }) => b.type === 'vnet' || b.type === 'shared')
+          if (tenantNets.length > 0 && !tenantNets.some((b: { iface: string }) => b.iface === networkBridge)) {
+            setNetworkBridge(tenantNets[0].iface)
           }
         }
       })
@@ -690,8 +692,19 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
 
   const handleDeploy = useCallback(async () => {
     if (!image) return
-    setDeploying(true)
     setDeployError(null)
+
+    const selBridge = bridges.find(b => b.iface === networkBridge)
+    const vlanVisible = fullClusterNet || selBridge?.type === 'shared'
+    if (vlanVisible && selBridge?.type !== 'vnet' && vlanTag.trim()) {
+      const n = Number.parseInt(vlanTag, 10)
+      if (!Number.isFinite(n) || n < 1 || n > 4094 || String(n) !== vlanTag.trim()) {
+        setDeployError(t('templates.deploy.hardware.vlanInvalid'))
+        return
+      }
+    }
+
+    setDeploying(true)
     setActiveStep(5) // Progress step
 
     try {
@@ -721,9 +734,9 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
           //    or field left empty). The deploy route applies `,tag=` only
           //    when this is truthy.
           vlanTag: (() => {
-            if (!fullClusterNet) return null
             const sel = bridges.find(b => b.iface === networkBridge)
             if (sel?.type === 'vnet') return null
+            if (!fullClusterNet && sel?.type !== 'shared') return null
             const n = Number.parseInt(vlanTag, 10)
             return Number.isFinite(n) && n >= 1 && n <= 4094 ? n : null
           })(),
@@ -1376,18 +1389,15 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
         // VNets float to the top so the friendly tenant-scoped entries stay
         // discoverable; raw bridges follow. Stable within each group.
         const vnetChoices = bridges.filter(b => b.type === 'vnet')
-        const rawChoices = bridges.filter(b => b.type !== 'vnet')
-        const ordered = fullClusterNet ? [...vnetChoices, ...rawChoices] : vnetChoices
-        // Selection value:
-        //  - full cluster: keep the user's choice if it's still in the list,
-        //    else fall back to vmbr0 / first entry (never coerce to a VNet).
-        //  - vDC tenant: legacy coercion to a VNet so the displayed value
-        //    always matches a surfaced option.
+        const sharedChoices = bridges.filter(b => b.type === 'shared')
+        const rawChoices = bridges.filter(b => b.type !== 'vnet' && b.type !== 'shared')
+        const tenantChoices = [...vnetChoices, ...sharedChoices]
+        const ordered = fullClusterNet ? [...vnetChoices, ...sharedChoices, ...rawChoices] : tenantChoices
         const selectValue = fullClusterNet
           ? (bridges.some(b => b.iface === networkBridge) ? networkBridge : '')
-          : (bridges.some(b => b.iface === networkBridge && b.type === 'vnet') ? networkBridge : (vnetChoices[0]?.iface || ''))
+          : (tenantChoices.some(b => b.iface === networkBridge) ? networkBridge : (tenantChoices[0]?.iface || ''))
         return (
-          <FormControl size="small" sx={hideInfra ? { gridColumn: '1 / -1' } : undefined}>
+          <FormControl size="small" sx={hideInfra && bridges.find(b => b.iface === networkBridge)?.type !== 'shared' ? { gridColumn: '1 / -1' } : undefined}>
             <InputLabel>{t('templates.deploy.hardware.bridge')}</InputLabel>
             <Select
               value={selectValue}
@@ -1442,17 +1452,20 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
         )
       })()}
       {/* VLAN Tag field.
-          - vDC tenant (hideInfra): hidden — the picker spans full-width.
+          - vDC tenant on a VNet: hidden (picker spans full-width).
+          - vDC tenant on a shared bridge: editable, server validates
+            against the vDC VLAN pools.
           - super-admin on a vDC connection (!hideInfra, !fullClusterNet):
             disabled field for parity with CreateVmDialog (VNet-only here).
           - full cluster view: editable when a raw bridge is selected,
             disabled (with the same VNet tooltip) when a VNet is selected. */}
-      {!hideInfra && (() => {
+      {(() => {
         const sel = bridges.find(b => b.iface === networkBridge)
-        // Disabled either because we're not in full cluster view (legacy
-        // VNet-only lock) or because the selected choice is a VNet (VXLAN
-        // VNI can't carry an 802.1Q tag).
-        const vlanDisabled = !fullClusterNet || sel?.type === 'vnet'
+        const isSharedBridge = sel?.type === 'shared'
+        if (hideInfra && !isSharedBridge) return null
+        const vlanDisabled = (!fullClusterNet && !isSharedBridge) || sel?.type === 'vnet'
+        const ranges = isSharedBridge && sel?.vlanRanges?.length ? sel.vlanRanges : null
+        const rangeLabel = ranges ? ranges.map(([s, e]) => s === e ? String(s) : `${s}-${e}`).join(', ') : null
         return (
           <Tooltip
             arrow
@@ -1466,10 +1479,10 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
                 type="number"
                 value={vlanDisabled ? '' : vlanTag}
                 onChange={e => setVlanTag(e.target.value)}
-                placeholder={vlanDisabled ? t('templates.deploy.hardware.vlanDisabledOnVnet') : t('templates.deploy.hardware.vlanPlaceholder')}
+                placeholder={vlanDisabled ? t('templates.deploy.hardware.vlanDisabledOnVnet') : rangeLabel ? rangeLabel : t('templates.deploy.hardware.vlanPlaceholder')}
                 slotProps={{ htmlInput: { min: 1, max: 4094 } }}
                 disabled={vlanDisabled}
-                helperText={vlanDisabled ? t('templates.deploy.hardware.vlanDisabledOnVnetHelp') : undefined}
+                helperText={vlanDisabled ? t('templates.deploy.hardware.vlanDisabledOnVnetHelp') : rangeLabel ? t('templates.deploy.hardware.vlanPoolHint', { ranges: rangeLabel }) : isSharedBridge ? t('templates.deploy.hardware.vlanNoPool') : undefined}
                 fullWidth
               />
             </span>
@@ -1803,6 +1816,9 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
             fullWidth
             placeholder={image.name}
           />
+        )}
+        {deployError && (
+          <Alert severity="error">{deployError}</Alert>
         )}
       </Stack>
     )

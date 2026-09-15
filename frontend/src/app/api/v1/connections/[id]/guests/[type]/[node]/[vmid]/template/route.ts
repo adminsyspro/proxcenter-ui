@@ -25,9 +25,8 @@ export async function POST(
       return NextResponse.json({ error: "Type must be 'qemu' or 'lxc'" }, { status: 400 })
     }
 
-    // RBAC: Check vm.config permission (converting to template modifies VM config)
     const resourceId = buildVmResourceId(id, node, type, vmid)
-    const denied = await checkPermission(PERMISSIONS.VM_CONFIG, "vm", resourceId)
+    const denied = await checkPermission(PERMISSIONS.VM_CONFIG_HARDWARE, "vm", resourceId)
 
     if (denied) return denied
 

@@ -9,6 +9,8 @@ import { pveFetch } from '@/lib/proxmox/client'
 import { getConnectionById } from '@/lib/connections/getConnection'
 import { prisma } from '@/lib/db/prisma'
 
+import { normalizeComputePolicyInput, type VdcComputePolicy } from './computePolicy'
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -42,6 +44,7 @@ export interface VdcResolveResult {
     maxBackups: number | null
   } | null
   storagePolicies: Array<{ policyId: string; name: string; storageId: string; quotaMb: number | null }>
+  computePolicy: VdcComputePolicy
 }
 
 // ---------------------------------------------------------------------------
@@ -89,6 +92,10 @@ export async function resolveVdcForTenant(
       id: true,
       pvePoolName: true,
       quota: true,
+      cpuModelMode: true,
+      cpuAllowedModels: true,
+      cpuDefaultModel: true,
+      cpuAdvancedSettings: true,
       nodes: { select: { nodeName: true } },
       storagePolicies: {
         select: { policyId: true, quotaMb: true, policy: { select: { name: true, storageId: true } } },
@@ -136,6 +143,12 @@ export async function resolveVdcForTenant(
     poolName: vdc.pvePoolName,
     quota,
     storagePolicies,
+    computePolicy: normalizeComputePolicyInput({
+      cpuModelMode: vdc.cpuModelMode as VdcComputePolicy['cpuModelMode'],
+      cpuAllowedModels: vdc.cpuAllowedModels,
+      cpuDefaultModel: vdc.cpuDefaultModel,
+      cpuAdvancedSettings: vdc.cpuAdvancedSettings,
+    }),
   }
 }
 

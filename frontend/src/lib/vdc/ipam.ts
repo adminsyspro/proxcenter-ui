@@ -85,7 +85,7 @@ export class IpamHintUnavailableError extends Error {
 
 interface SubnetRow {
   id: string
-  vnetId: string
+  vnetId: string | null
   cidr: string
   gateway: string
 }

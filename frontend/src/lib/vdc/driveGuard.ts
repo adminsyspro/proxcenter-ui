@@ -12,6 +12,8 @@ import { pveFetch } from '@/lib/proxmox/client'
 import { getTenantInfrastructureScope } from '@/lib/tenant/infraScope'
 import { safeLog } from '@/lib/log/sanitize'
 
+import { loadTenantSlugs, resolveUploadOwner } from './scope'
+
 import {
   DATA_DISK_KEY_RE, isTenantDiskKey, stampDriveQos, validateDriveAgainstScope, parseDriveString,
   type DriveQosCaps,
@@ -51,18 +53,43 @@ export async function enforceTenantDrives(args: {
   if (!scope) throw new DriveScopeError('Tenant vDC scope not resolved')
 
   const allowedStorages = scope.storagesByConnection.get(args.connectionId) ?? new Set<string>()
+  // Library-only storages: reachable as ISO source, refused as disk target.
+  // A scope without the writable map (older fixtures) treats every visible
+  // storage as writable, which is the pre-#894 behaviour.
+  const writable = scope.writableStoragesByConnection?.get(args.connectionId) ?? allowedStorages
+  const readOnlyStorages = new Set(
+    [...(scope.isoLibrariesByConnection?.get(args.connectionId) ?? [])].filter(s => !writable.has(s)),
+  )
   const policies = scope.storagePoliciesByConnection.get(args.connectionId) ?? new Map()
 
   const addStorageMbByStorage: Record<string, number> = {}
   let totalAddMb = 0
   const importRefs: ImportRef[] = []
 
+  // CD-ROM ownership (#894): on a library shared between tenants the listing
+  // hides other tenants' uploads, but a forged `ideN=lib:iso/custom-other-…`
+  // would still mount them with the provider's PVE token. Resolve the owner
+  // of every `custom-*` ISO the body references and refuse what is not ours.
+  const libraries = scope.isoLibrariesByConnection?.get(args.connectionId) ?? new Set<string>()
+  let slugs: { mine: string; all: string[] } | null = null
+
   for (const key of Object.keys(args.body)) {
     if (!isTenantDiskKey(key, args.type)) continue
     const raw = String(args.body[key] ?? '')
-    const verdict = validateDriveAgainstScope(key, raw, allowedStorages)
+    const verdict = validateDriveAgainstScope(key, raw, allowedStorages, readOnlyStorages)
     if (verdict.ok === false) throw new DriveScopeError(verdict.error)
     const { drive } = verdict
+
+    if (drive.isCdrom && drive.storage && libraries.has(drive.storage)) {
+      const isoName = drive.head.split('/').pop() ?? ''
+      if (isoName.startsWith('custom-')) {
+        slugs ??= await loadTenantSlugs(args.tenantId)
+        const owner = resolveUploadOwner(isoName, slugs.all)
+        if (owner.kind !== 'tenant' || owner.slug !== slugs.mine) {
+          throw new DriveScopeError(`${key}: ISO "${isoName}" is not yours to mount.`)
+        }
+      }
+    }
 
     // Stamping is deliberately NOT exempted for cdrom lines: a tenant could
     // spoof media=cdrom on a data disk key to dodge the QoS caps, and

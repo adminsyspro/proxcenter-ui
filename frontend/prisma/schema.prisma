@@ -537,6 +537,7 @@ model Tenant {
   members   UserTenant[]
   vdcs      Vdc[]
   apiTokens ApiToken[]
+  tenantNetworks TenantNetwork[]
 
   @@index([slug])
   @@map("tenants")
@@ -738,6 +739,23 @@ model Vdc {
   enabled        Boolean? @default(true)
   primaryStorage String?  @map("primary_storage")
   sdnZoneName    String?  @map("sdn_zone_name")
+  // Compute policy (#893): which CPU models a tenant may pick, and whether
+  // the advanced CPU controls (NUMA, flags, limit, units) are exposed.
+  cpuModelMode        String   @default("unrestricted") @map("cpu_model_mode")
+  cpuAllowedModels    String[] @default([]) @map("cpu_allowed_models")
+  cpuDefaultModel     String?  @map("cpu_default_model")
+  cpuAdvancedSettings Boolean  @default(true) @map("cpu_advanced_settings")
+  // VXLAN transport (#899): how the tenant zone's peers are derived and the
+  // zone MTU. `cluster` is the historical behaviour (corosync node addresses),
+  // `peers` an operator list, `transport` a dedicated VLAN segment with one
+  // address per node (extra endpoints such as tenant routers go in vxlanPeers).
+  vxlanTransportMode     String   @default("cluster") @map("vxlan_transport_mode")
+  vxlanPeers             String[] @default([]) @map("vxlan_peers")
+  vxlanMtu               Int?     @map("vxlan_mtu")
+  transportVlanId        Int?     @map("transport_vlan_id")
+  transportDevice        String?  @map("transport_device")
+  transportCidr          String?  @map("transport_cidr")
+  transportNodeAddresses Json?    @map("transport_node_addresses")
   createdBy      String?  @map("created_by")
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @default(now()) @map("updated_at")
@@ -752,6 +770,8 @@ model Vdc {
   storagePolicies    VdcStoragePolicy[]
   ipam               VdcIpamAllocation[]
   pbsNamespaces      VdcPbsNamespace[]
+  isoLibraries       VdcIsoLibrary[]
+  tenantNetworkMembers TenantNetworkMember[]
 
   @@unique([tenantId, connectionId])
   @@unique([tenantId, slug])
@@ -786,6 +806,23 @@ model VdcStorage {
   @@unique([vdcId, storageId])
   @@index([vdcId])
   @@map("vdc_storages")
+}
+
+// Read-only ISO storages a provider hands to a vDC (#894): visible to the
+// tenant's CD/DVD pickers, never writable, never a data-disk target.
+model VdcIsoLibrary {
+  id           String   @id
+  vdcId        String   @map("vdc_id")
+  vdc          Vdc      @relation(fields: [vdcId], references: [id], onDelete: Cascade)
+  storageId    String   @map("storage_id")
+  // Tenants may upload/delete their own `custom-<slug>-*` files there; the
+  // provider catalogue and other tenants' files stay untouchable either way.
+  allowUploads Boolean  @default(false) @map("allow_uploads")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@unique([vdcId, storageId])
+  @@index([vdcId])
+  @@map("vdc_iso_libraries")
 }
 
 model VdcQuota {
@@ -850,6 +887,7 @@ model VdcVnet {
 
   subnet VdcSubnet?
   ipam   VdcIpamAllocation[]
+  tenantNetworkMember TenantNetworkMember?
 
   @@unique([vdcId, pveName])
   @@unique([vdcId, type, tag])
@@ -858,10 +896,66 @@ model VdcVnet {
   @@map("vdc_vnets")
 }
 
+// Stretched tenant network (#901): one logical L2 network of a tenant that
+// several of its vDCs carry at once, with one VNI and one PVE VNet id on
+// every member cluster. Each member keeps a real `vdc_vnets` row, so every
+// consumer of a VNet (scope, guest NIC picker, quota) sees an ordinary VNet;
+// this table only coordinates them.
+model TenantNetwork {
+  id          String   @id
+  tenantId    String   @map("tenant_id")
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  // Preferred 8-char PVE VNet id, reused on every member cluster where it is
+  // free (a member falls back to a nonce variant where a legacy VNet holds it).
+  pveName     String   @map("pve_name")
+  // Reserved for as long as the network exists, even with no member, so a
+  // cluster joining later cannot find it taken.
+  vni         Int      @unique
+  // Zone MTU as PVE defines it (#899); every member zone must agree.
+  mtu         Int?
+  createdBy   String?  @map("created_by")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @default(now()) @map("updated_at")
+
+  members TenantNetworkMember[]
+  subnet  VdcSubnet?
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+  @@map("tenant_networks")
+}
+
+model TenantNetworkMember {
+  id              String        @id
+  tenantNetworkId String        @map("tenant_network_id")
+  tenantNetwork   TenantNetwork @relation(fields: [tenantNetworkId], references: [id], onDelete: Cascade)
+  vdcId           String        @map("vdc_id")
+  vdc             Vdc           @relation(fields: [vdcId], references: [id], onDelete: Cascade)
+  // The local VNet this membership created in the vDC's zone. Deleting the
+  // vDC cascades here through both paths: "removing a vDC deletes only its
+  // local VNet".
+  vnetId          String        @unique @map("vnet_id")
+  vnet            VdcVnet       @relation(fields: [vnetId], references: [id], onDelete: Cascade)
+  createdAt       DateTime      @default(now()) @map("created_at")
+
+  @@unique([tenantNetworkId, vdcId])
+  @@index([vdcId])
+  @@map("tenant_network_members")
+}
+
 model VdcSubnet {
   id          String   @id
-  vnetId      String   @unique @map("vnet_id")
-  vnet        VdcVnet  @relation(fields: [vnetId], references: [id], onDelete: Cascade)
+  vnetId      String?  @unique @map("vnet_id")
+  vnet        VdcVnet? @relation(fields: [vnetId], references: [id], onDelete: Cascade)
+  // Stretched tenant network (#901): the network owns one canonical subnet
+  // (vnet_id NULL) that every member VNet's allocations reference, so an
+  // address is handed out once for the whole L2 domain; each member also
+  // carries a mirror row for the readers that expect one subnet per VNet.
+  // Exactly one of vnet_id / tenant_network_id is set (CHECK in migration).
+  tenantNetworkId String?        @unique @map("tenant_network_id")
+  tenantNetwork   TenantNetwork? @relation(fields: [tenantNetworkId], references: [id], onDelete: Cascade)
   cidr        String
   gateway     String
   // Comma-separated list, optional.

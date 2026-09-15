@@ -121,6 +121,7 @@ export function validateDriveAgainstScope(
   key: string,
   raw: string,
   allowedStorages: Set<string>,
+  readOnlyStorages: Set<string> = new Set(),
 ): { ok: true; drive: ParsedDrive } | { ok: false; error: string } {
   const parsed = parseDriveString(raw)
   if (parsed.ok === false) return { ok: false, error: `${key}: ${parsed.error}` }
@@ -128,6 +129,10 @@ export function validateDriveAgainstScope(
 
   if (drive.storage !== null && !allowedStorages.has(drive.storage)) {
     return { ok: false, error: `${key}: storage "${drive.storage}" is not authorised for this tenant.` }
+  }
+  // A read-only ISO library (#894) may back a CD/DVD drive, never a data disk.
+  if (drive.storage !== null && readOnlyStorages.has(drive.storage) && !drive.isCdrom) {
+    return { ok: false, error: `${key}: storage "${drive.storage}" is a read-only ISO library and cannot hold a disk.` }
   }
   const impStorage = importFromStorage(drive.opts)
   if (impStorage === null) {

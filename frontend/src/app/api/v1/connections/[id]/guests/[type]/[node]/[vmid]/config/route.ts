@@ -5,9 +5,11 @@ import { writeGuestConfig, type GuestConfigWriteResult } from "@/lib/proxmox/gue
 import { mergeMemoryProperty } from "@/lib/proxmox/memoryProperty"
 import { isVmConfigNotFoundError, locateVmInCluster, type GuestType } from "@/lib/proxmox/locateVm"
 import { getConnectionById } from "@/lib/connections/getConnection"
-import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
+import { checkPermission, checkPermissions, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
+import { classifyConfigBody } from "@/lib/rbac/configClassifier"
 import { getCurrentTenantId } from "@/lib/tenant"
 import { resolveVdcForTenant, checkVdcQuota } from "@/lib/vdc/quota"
+import { validateCpuAgainstPolicy, parseCpuProperty, loadCpuCapabilitiesIfNeeded } from "@/lib/vdc/computePolicy"
 import { enforceTenantDrives, meterImportRefs, DriveScopeError } from "@/lib/vdc/driveGuard"
 import { getAllowedNetworksForTenant, validateNetAgainstScope } from "@/lib/vdc/vnets"
 import { syncIpamForVmConfig, IpamHintUnavailableError, IpamExhaustedError } from "@/lib/vdc/ipamSync"
@@ -182,11 +184,11 @@ export async function PUT(
       return NextResponse.json({ error: "Invalid type" }, { status: 400 })
     }
 
-    // RBAC: Check vm.config permission
+    // Gate on vm.view before any PVE traffic so an unauthorized caller
+    // cannot probe guest existence through error responses.
     const resourceId = buildVmResourceId(id, node, type, vmid)
-    const denied = await checkPermission(PERMISSIONS.VM_CONFIG, "vm", resourceId)
-
-    if (denied) return denied
+    const viewDenied = await checkPermission(PERMISSIONS.VM_VIEW, "vm", resourceId)
+    if (viewDenied) return viewDenied
 
     const body = await req.json().catch(() => null)
 
@@ -196,19 +198,53 @@ export async function PUT(
 
     const conn = await getConnectionById(id)
 
+    // Fetch current config once — reused by the classifier (NIC link-only
+    // detection), the quota check (CPU/RAM deltas) and the IPAM sync.
+    const currentConfig = await pveFetch<any>(
+      conn,
+      `/nodes/${encodeURIComponent(node)}/${type}/${encodeURIComponent(vmid)}/config`
+    )
+
+    // Type-aware admission: drop any key this route will never forward to
+    // PVE BEFORE classification so non-forwarded keys don't inflate the
+    // required permission set.
+    for (const key of Object.keys(body)) {
+      if (!isForwardedConfigKey(key, type as 'qemu' | 'lxc')) delete body[key]
+    }
+
+    // ── Fine-grained RBAC ──
+    // Classify every body key into its sub-right (vm.config.media, .nic,
+    // .nic.link, .hardware, .boot) and check the union. vm.config is a
+    // super-right: holding it implies every sub-right via the permission
+    // hierarchy in checkGrants.
+    const requiredPerms = classifyConfigBody(body, currentConfig)
+    const denied = requiredPerms.size > 0
+      ? await checkPermissions([...requiredPerms], "vm", resourceId)
+      : await checkPermission(PERMISSIONS.VM_CONFIG, "vm", resourceId)
+
+    if (denied) return denied
+
     // ── vDC Quota Check (CPU/RAM increases) ──
     const tenantId = await getCurrentTenantId()
     let vdcInfo: Awaited<ReturnType<typeof resolveVdcForTenant>> = null
     try {
       vdcInfo = await resolveVdcForTenant(tenantId, id, node)
 
-      if (vdcInfo && (body.cores || body.sockets || body.memory)) {
-        // Fetch current VM config from PVE to compute deltas
-        const currentConfig = await pveFetch<any>(
-          conn,
-          `/nodes/${encodeURIComponent(node)}/${type}/${encodeURIComponent(vmid)}/config`
-        )
+      // vDC compute policy (#893): a tenant may only move the CPU model
+      // inside the allowed set and may not touch NUMA / flags / limit /
+      // units when the advanced switch is off. Keeping the current model
+      // (e.g. one a provider template shipped with) always passes.
+      if (vdcInfo && type === 'qemu') {
+        const verdict = validateCpuAgainstPolicy(vdcInfo.computePolicy, body, {
+          clusterCapabilities: await loadCpuCapabilitiesIfNeeded(vdcInfo.computePolicy, body, () =>
+            pveFetch<any[]>(conn, `/nodes/${encodeURIComponent(node)}/capabilities/qemu/cpu`),
+          ),
+          currentModel: parseCpuProperty(String(currentConfig?.cpu ?? '')).model || null,
+        })
+        if (verdict.ok === false) return NextResponse.json({ error: verdict.error }, { status: 400 })
+      }
 
+      if (vdcInfo && (body.cores || body.sockets || body.memory)) {
         const currentVcpus = (currentConfig?.cores || 1) * (currentConfig?.sockets || 1)
         const newCores = body.cores ? Number.parseInt(String(body.cores)) : (currentConfig?.cores || 1)
         const newSockets = body.sockets ? Number.parseInt(String(body.sockets)) : (currentConfig?.sockets || 1)
@@ -251,16 +287,6 @@ export async function PUT(
         const verdict = validateNetAgainstScope(String(body[key] || ""), allowedNetworks)
         if (verdict.ok === false) return NextResponse.json({ error: verdict.error }, { status: 403 })
       }
-    }
-
-    // Type-aware admission: drop any key this route will never forward to
-    // PVE for this guest type BEFORE anything downstream (drive guard, IPAM
-    // after-snapshot, formData) looks at `body`. Otherwise the drive guard
-    // can validate/meter a key (e.g. lxc mp0/rootfs) that the formData loop
-    // silently drops, producing a false 403/409 for an allocation PVE never
-    // sees.
-    for (const key of Object.keys(body)) {
-      if (!isForwardedConfigKey(key, type as 'qemu' | 'lxc')) delete body[key]
     }
 
     // Disk storage allow-list + storage-policy QoS stamping + quota metering
@@ -327,28 +353,19 @@ export async function PUT(
     // bridge involved) cheaply, so this is safe to call unconditionally.
     let ipamRollback: (() => Promise<void>) | null = null
     if (type === 'qemu') {
-      const before = await pveFetch<any>(
-        conn,
-        `/nodes/${encodeURIComponent(node)}/${type}/${encodeURIComponent(vmid)}/config`
-      )
-      // PVE's `memory` key is a property string whose default key is the
-      // online amount. Our panel edits that amount alone, so put back any
-      // other segment this VM already carried instead of dropping it.
-      const mergedMemory = mergeMemoryProperty(before?.memory, formData.get('memory'))
+      const mergedMemory = mergeMemoryProperty(currentConfig?.memory, formData.get('memory'))
 
       if (mergedMemory) formData.set('memory', mergedMemory)
 
-      // Build the after-snapshot the helper compares against. body is a
-      // sparse patch — fields not in body inherit from before.
-      const after = { ...before, ...body }
+      const after = { ...currentConfig, ...body }
       try {
         const sync = await syncIpamForVmConfig({
-          before,
+          before: currentConfig,
           after,
           conn,
           connectionId: id,
           vmid: Number(vmid),
-          hostname: typeof body.name === 'string' ? body.name : (before?.name ?? null),
+          hostname: typeof body.name === 'string' ? body.name : (currentConfig?.name ?? null),
         })
         ipamRollback = sync.rollback
         // Patch the PVE PUT body with any ipconfigN corrections the

@@ -125,11 +125,13 @@ async function submitCreate(scope: ReturnType<typeof within>) {
 }
 
 describe('VdcTab — create dialog (multi-vDC)', () => {
-  it('warns about existing vDCs and only offers free provider-pool clusters', async () => {
+  it('only offers free provider-pool clusters when the tenant already has a vDC', async () => {
     const scope = await openCreateDialog()
 
-    // The tenant already has a vDC on paris — banner lists it.
-    expect(scope.getByText(/already has a vDC/i).textContent).toContain('ACME — paris (paris)')
+    // The occupied-cluster info banner was dropped (the picker already hides
+    // those clusters); only the "every cluster is taken" warning remains, and
+    // frankfurt is still free here so no alert at all.
+    expect(scope.queryByText(/already has a vDC/i)).toBeNull()
 
     // Cluster picker: paris is occupied, msp-own is not in the provider pool.
     const clusterInput = scope.getByLabelText(/^Cluster/)
@@ -178,8 +180,9 @@ describe('VdcTab — create dialog (multi-vDC)', () => {
     const scope = await openCreateDialog()
     await pickCluster(scope, 'frankfurt')
 
-    // The VLAN pools block only renders once the resources fetch resolves,
-    // same gate as the Shared Bridges block right above it.
+    // VLAN pools live in the Network tab; the block only renders once the
+    // resources fetch resolves, same gate as the Shared Bridges block above it.
+    fireEvent.click(scope.getByRole('tab', { name: /network/i }))
     await scope.findByText('VLAN pools')
 
     const addBtn = scope.getByRole('button', { name: 'Add a range' })
@@ -225,6 +228,7 @@ describe('VdcTab: edit dialog storage policy assignments', () => {
 
   it('sends storagePolicies with quotaMb converted in the PUT payload, dropping a row left without a policy', async () => {
     const scope = await openEditDialog()
+    fireEvent.click(scope.getByRole('tab', { name: /storage/i }))
     await scope.findByText('Storage policies')
     await waitFor(() => expect(scope.getByDisplayValue('50')).toBeInTheDocument())
 

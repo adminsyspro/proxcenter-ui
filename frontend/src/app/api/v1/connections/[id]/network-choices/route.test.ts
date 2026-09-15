@@ -13,7 +13,9 @@ const {
   connectionFindUniqueMock,
   vdcVnetFindManyMock,
   vdcSharedBridgeFindManyMock,
+  vdcVlanPoolFindManyMock,
 } = vi.hoisted(() => ({
+  vdcVlanPoolFindManyMock: vi.fn(),
   checkPermissionMock: vi.fn(),
   guestPerimeterAllowsMock: vi.fn(),
   getConnectionByIdMock: vi.fn(),
@@ -50,6 +52,7 @@ vi.mock("@/lib/db/prisma", () => ({
     connection: { findUnique: (...a: any[]) => connectionFindUniqueMock(...a) },
     vdcVnet: { findMany: (...a: any[]) => vdcVnetFindManyMock(...a) },
     vdcSharedBridge: { findMany: (...a: any[]) => vdcSharedBridgeFindManyMock(...a) },
+    vdcVlanPool: { findMany: (...a: any[]) => vdcVlanPoolFindManyMock(...a) },
   },
 }))
 
@@ -112,5 +115,86 @@ describe("GET /api/v1/connections/[id]/network-choices", () => {
     expect(res.status).toBe(200)
     expect(json.data).toEqual([{ kind: "bridge", name: "vmbr0", type: "bridge" }])
     expect(guestPerimeterAllowsMock).toHaveBeenCalledWith("conn-1", "connection.view")
+  })
+})
+
+describe("GET /api/v1/connections/[id]/network-choices: iaas tenant slice", () => {
+  beforeEach(() => {
+    getCurrentTenantIdMock.mockResolvedValue("t1")
+    getTenantInfrastructureScopeMock.mockResolvedValue({ kind: "iaas" })
+    maskingScopeMock.mockReturnValue({
+      vnetsByConnection: new Map([["conn-1", new Set(["v32cf5fc", "vlan100"])]]),
+      sharedBridgesByConnection: new Map([["conn-1", new Set(["vmbr1"])]]),
+    })
+    vdcVlanPoolFindManyMock.mockReset().mockResolvedValue([])
+  })
+
+  it("serves the vDC VNets, with the shared pool of a stretched network, and the shared bridges with their VLAN ranges", async () => {
+    // First read: the subnets per VNet; second: the VNet rows of the tenant.
+    vdcVnetFindManyMock.mockImplementation(async ({ select }: any) => select?.subnet
+      ? [
+          {
+            pveName: "v32cf5fc",
+            subnet: { id: "mirror-s1", cidr: "198.51.100.0/24", gateway: "198.51.100.1", dnsServers: "198.51.100.2, 198.51.100.3" },
+            // Member of a stretched network (#901): the pool is the canonical subnet.
+            tenantNetworkMember: { tenantNetwork: { subnet: { id: "canonical-s1" } } },
+          },
+          { pveName: "vlan100", subnet: { id: "s2", cidr: "192.0.2.0/24", gateway: "192.0.2.1", dnsServers: null }, tenantNetworkMember: null },
+          { pveName: "orphan", subnet: null, tenantNetworkMember: null },
+        ]
+      : [
+          { pveName: "v32cf5fc", displayName: "backbone", zoneName: "zacme", type: "vxlan", vdc: { id: "vdc-1", slug: "acme-paris", sdnZoneName: "zacme" } },
+          { pveName: "vlan100", displayName: null, zoneName: "vlanvmbr0", type: "vlan", vdc: { id: "vdc-1", slug: "acme-paris", sdnZoneName: "zacme" } },
+          // Not in the tenant's allow-list: never offered.
+          { pveName: "hidden", displayName: "hidden", zoneName: null, type: "vxlan", vdc: { id: "vdc-1", slug: "acme-paris", sdnZoneName: "zacme" } },
+        ])
+    vdcSharedBridgeFindManyMock.mockResolvedValue([{ bridge: "vmbr1", label: "DMZ", vdcId: "vdc-1" }])
+    vdcVlanPoolFindManyMock.mockResolvedValue([
+      { bridge: "vmbr1", rangeStart: 100, rangeEnd: 199 },
+      { bridge: "vmbr1", rangeStart: 300, rangeEnd: 310 },
+    ])
+
+    const GET = (await import("./route")).GET as Parameters<typeof callRoute>[0]
+    const res = await callRoute(GET, { params: PARAMS, searchParams: QUERY })
+    const json = await res.json()
+
+    expect(res.status).toBe(200)
+    expect(json.data).toEqual([
+      {
+        kind: "vnet", name: "v32cf5fc", displayName: "backbone", vdc: "acme-paris", vdcId: "vdc-1", zone: "zacme",
+        subnet: { subnetId: "canonical-s1", cidr: "198.51.100.0/24", gateway: "198.51.100.1", dnsServers: ["198.51.100.2", "198.51.100.3"] },
+      },
+      {
+        kind: "vnet", name: "vlan100", displayName: "vlan100", vdc: "acme-paris", vdcId: "vdc-1", zone: "vlanvmbr0",
+        subnet: { subnetId: "s2", cidr: "192.0.2.0/24", gateway: "192.0.2.1", dnsServers: [] },
+      },
+      { kind: "shared", name: "vmbr1", label: "DMZ", vlanRanges: [[100, 199], [300, 310]] },
+    ])
+    expect(vdcVlanPoolFindManyMock).toHaveBeenCalledWith(expect.objectContaining({
+      where: { vdcId: { in: ["vdc-1"] }, bridge: { in: ["vmbr1"] } },
+    }))
+    // The tenant slice never asks PVE for the cluster bridges.
+    expect(pveFetchMock).not.toHaveBeenCalled()
+  })
+
+  it("offers a shared bridge without label or pool as-is, and skips the pool query when no vDC declares the bridge", async () => {
+    vdcVnetFindManyMock.mockResolvedValue([])
+    vdcSharedBridgeFindManyMock.mockResolvedValue([])
+
+    const GET = (await import("./route")).GET as Parameters<typeof callRoute>[0]
+    const res = await callRoute(GET, { params: PARAMS, searchParams: QUERY })
+    const json = await res.json()
+
+    expect(res.status).toBe(200)
+    expect(json.data).toEqual([{ kind: "shared", name: "vmbr1", label: null, vlanRanges: [] }])
+    expect(vdcVlanPoolFindManyMock).not.toHaveBeenCalled()
+  })
+
+  it("404s an MSP tenant on a connection it does not own", async () => {
+    getTenantInfrastructureScopeMock.mockResolvedValue({ kind: "msp", connectionIds: new Set(["conn-9"]) })
+    const GET = (await import("./route")).GET as Parameters<typeof callRoute>[0]
+    const res = await callRoute(GET, { params: PARAMS, searchParams: QUERY })
+    expect(res.status).toBe(404)
+    expect(connectionFindUniqueMock).not.toHaveBeenCalled()
   })
 })

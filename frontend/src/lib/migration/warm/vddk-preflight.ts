@@ -15,6 +15,13 @@ export interface VddkPreflightResult {
   /** Debian major version reported by the node's /etc/os-release, when readable. */
   debianMajor?: number
   /**
+   * Real VDDK library file behind the SONAME nbdkit loads, e.g.
+   * `/usr/lib/vmware-vix-disklib/lib64/libvixDiskLib.so.9.1.0.0`. Empty when the
+   * probe resolved nothing. The generation it carries decides which source
+   * versions this node can read (see source-version.ts, #946).
+   */
+  vddkLib?: string
+  /**
    * True when the node cannot be prepared at all: something is missing AND the
    * node runs Debian < 13 (Proxmox VE < 9). Debian 13 is the first release
    * that ships nbdkit-plugin-vddk, so on an older node both the automated
@@ -51,6 +58,12 @@ export function buildPreflightCmd(libdir: string): string {
     `echo "nbd-client=$(command -v nbd-client || echo MISSING)"`,
     `echo "vddk-plugin=$(find /usr/lib /usr/lib64 -name 'nbdkit-vddk-plugin.so' 2>/dev/null | head -1)"`,
     `echo "vddk-lib=$(ls ${lib}/lib64/libvixDiskLib.so* 2>/dev/null | head -1)"`,
+    // The real file behind the SONAME, which is what decides the VDDK generation:
+    // `vddk-lib` above can only answer "something is installed", because its glob
+    // lands on the unversioned `libvixDiskLib.so` symlink, and the `.so.8` we create
+    // at provisioning time points at a `.so.9` on a VDDK 9 node. Resolving `.so.8`
+    // is the honest read: it is the SONAME nbdkit 1.42 actually dlopens.
+    `echo "vddk-real=$(readlink -f ${lib}/lib64/libvixDiskLib.so.8 2>/dev/null || readlink -f ${lib}/lib64/libvixDiskLib.so 2>/dev/null)"`,
     // Debian major version: decides whether the node can be prepared at all
     // (nbdkit-plugin-vddk only exists from Debian 13 / PVE 9 on).
     'echo "debian-major=$(. /etc/os-release 2>/dev/null; echo "$VERSION_ID" | cut -d. -f1)"',
@@ -72,7 +85,8 @@ export function parsePreflightOutput(output: string, libdir: string): VddkPrefli
   const missing = ["nbdkit", "nbd-client", "vddk-plugin", "vddk-lib"].filter(k => absent(map.get(k)))
   const parsed = Number.parseInt(map.get("debian-major") ?? "", 10)
   const debianMajor = Number.isFinite(parsed) ? parsed : undefined
-  if (missing.length === 0) return { ok: true, missing: [], debianMajor }
+  const vddkLib = map.get("vddk-real")?.trim() || undefined
+  if (missing.length === 0) return { ok: true, missing: [], debianMajor, vddkLib }
   // Debian < 13 cannot be prepared: nbdkit-plugin-vddk is not packaged there,
   // so apt dead-ends for the automated path and the manual guide alike. An
   // unreadable version deliberately falls through to the generic hints; an

@@ -6,6 +6,7 @@ import { runWarmNodePreflight } from "@/lib/migration/warm/vddk-preflight"
 import { runXcpngWarmNodePreflight } from "@/lib/migration/warm/xcpng-node-preflight"
 import { isVddkPackageTokenConfigured } from "@/lib/migration/warm/vddk-provision"
 import { checkTargetStorageSpace } from "@/lib/migration/warm/target-space"
+import { checkWarmSourceVersion, fetchSourceApiVersion, warmSourceVersionError, warmSourceVersionWarning } from "@/lib/migration/warm/source-version"
 import { prisma } from "@/lib/db/prisma"
 import { safeLog } from "@/lib/log/sanitize"
 
@@ -88,7 +89,27 @@ export async function POST(req: Request) {
         return NextResponse.json({ ...nbdResult, kind: "nbd", vddkTokenConfigured: false, space })
       }
       const result = await runWarmNodePreflight(targetConnectionId, targetNode, vddkLibdir)
-      return NextResponse.json({ ...result, kind: "vddk", vddkTokenConfigured: isVddkPackageTokenConfigured(), space })
+      // #946: the node can be perfectly provisioned and the run still be hopeless,
+      // because the VDDK reads the SOURCE and Broadcom supports each generation
+      // against its own vSphere release and the two before it. An ESXi 5.5 source
+      // used to get all the way to the copy and die on `dd` with an I/O error after
+      // zero bytes. A blocking verdict clears `ok`, which is what gates the launch.
+      const source = sourceConnectionId
+        ? checkWarmSourceVersion({
+            sourceApiVersion: await fetchSourceApiVersion(sourceConnectionId),
+            vddkLibPath: result.vddkLib,
+          })
+        : undefined
+      return NextResponse.json({
+        ...result,
+        ok: result.ok && !source?.blocked,
+        kind: "vddk",
+        vddkTokenConfigured: isVddkPackageTokenConfigured(),
+        space,
+        source: source && (source.blocked || source.warning)
+          ? { ...source, message: source.blocked ? warmSourceVersionError(source) : warmSourceVersionWarning(source) }
+          : undefined,
+      })
     }
 
     const result = await runV2vPreflight(

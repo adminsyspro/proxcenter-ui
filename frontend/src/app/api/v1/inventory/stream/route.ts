@@ -625,6 +625,10 @@ export async function GET(request: NextRequest) {
               (!rbacScope || isConnectionVisible(rbacScope, s.connId))
             )
             for (const storage of visibleStorages) {
+              // Shape guard: the tree reads nodes[] and sharedStorages[] and
+              // dies on anything else. A cache written by another producer
+              // under this key must be skipped, not forwarded.
+              if (!Array.isArray(storage?.nodes) || !Array.isArray(storage?.sharedStorages)) continue
               const scoped = scopeStorageDataForTenant(storage, mask)
               if (scoped) send('storage', scoped)
             }

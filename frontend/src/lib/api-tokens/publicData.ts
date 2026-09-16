@@ -243,7 +243,7 @@ export async function loadPublicFleetView(principal?: Principal): Promise<Public
     }))
 
   // Same TENANT BOUNDARY as clusters and PBS servers.
-  const storages: PublicStorage[] = (raw.storages ?? [])
+  const storages: PublicStorage[] = (raw.storageResources ?? [])
     .filter(entry => visible.has(entry.connId))
     .map(entry => ({
       connId: entry.connId,

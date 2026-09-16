@@ -16,13 +16,34 @@ import {
   setInflightFetch,
 } from './inventoryCache'
 
-// `storages` is required truthy by getInventoryFromCache's pre-existing
+// `storageResources` is required truthy by getInventoryFromCache's pre-existing
 // "missing required fields" guard (unrelated to context-keying) — included
 // here so that guard never masks the assertions under test.
-const payload = (tag: string) => ({ clusters: [{ id: tag }], storages: [] }) as any
+const payload = (tag: string) => ({ clusters: [{ id: tag }], storageResources: [] }) as any
 
 beforeEach(() => {
   invalidateInventoryCache() // full flush of the globalThis store
+})
+
+describe('inventory cache shape guard', () => {
+  it('an entry written by an older payload version is a MISS', () => {
+    // v1.4.10 wrote the metrics aggregate under `storages`, the very name the
+    // inventory stream reads as {nodes[], sharedStorages[]}. The tree then died
+    // on `cs.sharedStorages.length`. Entries of that vintage must be discarded
+    // rather than served, so an upgraded process never replays them.
+    const store = (globalThis as any)['__proxcenter_inventory_cache__'] as Map<string, any>
+    store.set('told::all', {
+      data: { clusters: [], storages: [{ connId: 'pve-1', storage: 'local' }] },
+      timestamp: Date.now(),
+      version: 1,
+    })
+    expect(getInventoryFromCache('told', null).status).toBe('miss')
+  })
+
+  it('an entry written by the current build is served', () => {
+    setCachedInventory({ clusters: [], storageResources: [] } as any, 'tnew', null)
+    expect(getInventoryFromCache('tnew', null).status).toBe('fresh')
+  })
 })
 
 describe('inventory cache context keying', () => {

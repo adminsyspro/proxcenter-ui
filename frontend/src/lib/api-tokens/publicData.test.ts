@@ -56,7 +56,7 @@ const RAW = {
     },
     { id: 'pve-hidden', name: 'Hidden', nodes: [{ node: 'x', status: 'online', guests: [{ vmid: 5, type: 'qemu', status: 'running' }] }] },
   ],
-  storages: [
+  storageResources: [
     {
       connId: 'pve-1', connName: 'PVE One', storage: 'CephPool', type: 'rbd', shared: true,
       used: 100, total: 1000, enabled: true,

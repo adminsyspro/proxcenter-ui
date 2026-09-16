@@ -18,11 +18,17 @@
  * Cache is keyed by tenantId to ensure tenant isolation.
  */
 
-type CachedInventory = {
+export type CachedInventory = {
   clusters: any[]
   pbsServers: any[]
   externalHypervisors: any[]
-  storages: any[]
+  // Written by the inventory stream route: StorageData[], the {connId, nodes[],
+  // sharedStorages[]} shape the inventory tree consumes.
+  storages?: any[]
+  // Written by fetchRawInventory: AggregatedStorage[], the per-storage rollup
+  // the metrics exposition reads. A different shape under a different name:
+  // the two shared the name `storages` in v1.4.10 and the tree died on it.
+  storageResources?: any[]
   stats: {
     totalClusters: number
     totalNodes: number
@@ -35,9 +41,14 @@ type CachedInventory = {
   }
 }
 
+// Version of the CachedInventory payload shape. v1 had `storages` carrying two
+// incompatible shapes depending on the writer; v2 separates them.
+const SCHEMA_VERSION = 2
+
 type CacheEntry = {
   data: CachedInventory
   timestamp: number
+  version: number
 }
 
 /** Data is considered fresh for 2 minutes — served without revalidation */
@@ -89,8 +100,10 @@ export function getInventoryFromCache(tenantId = 'default', vdcContext: string |
   const entry = store.get(cacheKey(tenantId, vdcContext))
   if (!entry) return { status: 'miss' }
 
-  // Invalidate cache entries missing required fields (e.g. storages added later)
-  if (!entry.data.storages) return { status: 'miss' }
+  // A payload shape change must never be served to a process that expects the
+  // new one: entries written by an older build are discarded here rather than
+  // waiting out their TTL. Bump SCHEMA_VERSION whenever CachedInventory changes.
+  if (entry.version !== SCHEMA_VERSION) return { status: 'miss' }
 
   const age = Date.now() - entry.timestamp
 
@@ -107,7 +120,7 @@ export function getInventoryFromCache(tenantId = 'default', vdcContext: string |
 
 export function setCachedInventory(data: CachedInventory, tenantId = 'default', vdcContext: string | null = null): void {
   const store = getCacheStore()
-  store.set(cacheKey(tenantId, vdcContext), { data, timestamp: Date.now() })
+  store.set(cacheKey(tenantId, vdcContext), { data, timestamp: Date.now(), version: SCHEMA_VERSION })
 }
 
 /**

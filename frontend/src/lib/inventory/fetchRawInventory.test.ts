@@ -31,7 +31,7 @@ const RAW = {
   clusters: [],
   pbsServers: [],
   externalHypervisors: [],
-  storages: [],
+  storageResources: [],
   stats: {
     totalClusters: 0, totalNodes: 0, totalGuests: 0, onlineNodes: 0,
     runningGuests: 0, totalPbsServers: 0, totalDatastores: 0, totalBackups: 0,
@@ -49,7 +49,7 @@ describe('getInventorySWR', () => {
     getInventoryFromCacheMock.mockReturnValue({ status: 'fresh', data: RAW })
     const out = await getInventorySWR('default', { kind: 'provider' } as any)
     expect(out.cached).toBe(true)
-    expect(out.raw).toBe(RAW)
+    expect(out.raw).toEqual(RAW)
     expect(setInflightFetchMock).not.toHaveBeenCalled()
   })
 
@@ -57,7 +57,7 @@ describe('getInventorySWR', () => {
     getInventoryFromCacheMock.mockReturnValue({ status: 'stale', data: RAW })
     const out = await getInventorySWR('default', { kind: 'provider' } as any)
     expect(out.cached).toBe(true)
-    expect(out.raw).toBe(RAW)
+    expect(out.raw).toEqual(RAW)
     expect(setInflightFetchMock).toHaveBeenCalled()
   })
 

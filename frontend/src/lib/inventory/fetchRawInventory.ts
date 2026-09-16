@@ -20,6 +20,7 @@ import {
   setCachedInventory,
   getInflightFetch,
   setInflightFetch,
+  type CachedInventory,
 } from "@/lib/cache/inventoryCache"
 import { inventoryConnectionPlan, type InfraScope } from "@/lib/tenant/infraScope"
 
@@ -150,7 +151,11 @@ export type RawInventory = {
   clusters: ClusterData[]
   pbsServers: PbsServerData[]
   externalHypervisors: ExternalHypervisor[]
-  storages: AggregatedStorage[]
+  // Per-storage aggregate for the metrics exposition. NOT the shape the
+  // inventory tree consumes: that one is {connId, nodes[], sharedStorages[]}
+  // and is built per request by the stream route. The two used to share the
+  // name `storages`, which put this shape in front of the tree and broke it.
+  storageResources: AggregatedStorage[]
   stats: { totalClusters: number; totalNodes: number; totalGuests: number; onlineNodes: number; runningGuests: number; totalPbsServers: number; totalDatastores: number; totalBackups: number }
 }
 
@@ -185,7 +190,7 @@ export async function fetchRawInventory(infra: InfraScope): Promise<RawInventory
     clusters: [] as ClusterData[],
     pbsServers: [] as PbsServerData[],
     externalHypervisors: [] as ExternalHypervisor[],
-    storages: [] as any[],
+    storageResources: [] as AggregatedStorage[],
     stats: {
       totalClusters: 0, totalNodes: 0, totalGuests: 0,
       onlineNodes: 0, runningGuests: 0,
@@ -586,7 +591,7 @@ return aId - bId
     clusters,
     pbsServers,
     externalHypervisors: externalConnections,
-    storages,
+    storageResources: storages,
     stats: {
       totalClusters: clusters.length,
       totalNodes,
@@ -695,7 +700,7 @@ function emptyRawInventory(): RawInventory {
     clusters: [],
     pbsServers: [],
     externalHypervisors: [],
-    storages: [],
+    storageResources: [],
     stats: {
       totalClusters: 0, totalNodes: 0, totalGuests: 0, onlineNodes: 0,
       runningGuests: 0, totalPbsServers: 0, totalDatastores: 0, totalBackups: 0,
@@ -723,6 +728,14 @@ function emptyRawInventory(): RawInventory {
  * the cache: the next reader for the wrong context gets someone else's slice
  * of the inventory (or a truncated one).
  */
+// A cache entry can be written by either producer: the stream route fills
+// `storages` for the inventory tree, this module fills `storageResources` for
+// the metrics exposition. Neither carries the other's field, so read them as
+// absent rather than undefined.
+function rawFromCache(data: CachedInventory): RawInventory {
+  return { ...data, storageResources: data.storageResources ?? [] } as RawInventory
+}
+
 export async function getInventorySWR(
   tenantId: string,
   infra: InfraScope,
@@ -731,21 +744,21 @@ export async function getInventorySWR(
   vdcContext: string | null = null,
 ): Promise<{ raw: RawInventory; cached: boolean }> {
   if (forceRefresh) {
-    return { raw: await blockingFetch(tenantId, infra, vdcContext), cached: false }
+    return { raw: rawFromCache(await blockingFetch(tenantId, infra, vdcContext)), cached: false }
   }
   const cacheResult = getInventoryFromCache(tenantId, vdcContext)
   if (cacheResult.status === "fresh") {
-    return { raw: cacheResult.data as RawInventory, cached: true }
+    return { raw: rawFromCache(cacheResult.data), cached: true }
   }
   if (cacheResult.status === "stale") {
     console.log('[inventory] Serving stale data, revalidating in background')
     triggerBackgroundRevalidation(tenantId, infra, vdcContext)
-    return { raw: cacheResult.data as RawInventory, cached: true }
+    return { raw: rawFromCache(cacheResult.data), cached: true }
   }
   if (nonBlocking) {
     console.log('[inventory] Cold cache, serving empty and warming in background (non-blocking caller)')
     triggerBackgroundRevalidation(tenantId, infra, vdcContext)
     return { raw: emptyRawInventory(), cached: false }
   }
-  return { raw: await blockingFetch(tenantId, infra, vdcContext), cached: false }
+  return { raw: rawFromCache(await blockingFetch(tenantId, infra, vdcContext)), cached: false }
 }

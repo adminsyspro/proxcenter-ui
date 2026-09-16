@@ -41,6 +41,15 @@ import type {
   RecoveryPlan, RecoveryExecution, StorageEngine, UpdateReplicationJobRequest, TestFailoverOptions
 } from '@/lib/orchestrator/site-recovery.types'
 
+import {
+  buildVmStatesByConn,
+  loadVMRestorePoints as loadVMRestorePointsRequest,
+  saveRecoveryPlan,
+  scheduleRefreshes,
+  startDRVM,
+  stopDRVM,
+} from '@/lib/site-recovery/emergencyActions'
+
 const fetcher = (url: string) => fetch(url).then(res => {
   if (!res.ok) throw new Error('Failed to fetch')
   return res.json()
@@ -167,19 +176,8 @@ export default function SiteRecoveryPage() {
     return m
   }, [allVMs])
 
-  // Replica power state scoped per connection (connId -> vmid -> status), for
-  // the Emergency DR rows. Same per-connection shape as vmNamesByConn: a DR
-  // replica and its source can carry the same VMID on the two clusters.
-  const vmStatesByConn = useMemo(() => {
-    const m: Record<string, Record<number, string>> = {}
-
-    for (const vm of allVMs) {
-      if (!vm.vmid || !vm.status || !vm.connId) continue
-      ;(m[vm.connId] ??= {})[vm.vmid] = vm.status
-    }
-
-    return m
-  }, [allVMs])
+  // Replica power state scoped per connection, for the Emergency DR rows.
+  const vmStatesByConn = useMemo(() => buildVmStatesByConn(allVMs), [allVMs])
 
   // Selected plan for failover dialog
   const failoverPlan = useMemo(() =>
@@ -224,28 +222,11 @@ export default function SiteRecoveryPage() {
   // mid-failback would have no vm_result and the plan would never converge),
   // so its message is surfaced rather than swallowed.
   const handleSubmitPlan = useCallback(async (data: any) => {
-    const editing = !!editPlanId
-
     try {
-      const res = await fetch(
-        editing ? `/api/v1/orchestrator/replication/plans/${editPlanId}` : '/api/v1/orchestrator/replication/plans',
-        {
-          method: editing ? 'PUT' : 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(data)
-        }
-      )
+      const { error } = await saveRecoveryPlan(data, editPlanId)
 
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}))
-
-        setOperationError(body.error || res.statusText)
-
-        return
-      }
-
-      setOperationError(null)
-      mutatePlans()
+      setOperationError(error)
+      if (!error) mutatePlans()
     } catch (e) {
       console.error('Failed to save plan:', e)
     } finally {
@@ -469,60 +450,33 @@ export default function SiteRecoveryPage() {
 
   const refreshAfterEmergencyAction = useCallback(() => {
     actionRefreshTimers.current.forEach(clearTimeout)
-    actionRefreshTimers.current = [3000, 8000, 15000, 30000, 60000].map(delay =>
-      setTimeout(() => {
-        mutateJobs()
-        mutateAllVMs()
-      }, delay)
-    )
-    mutateJobs()
-    mutateAllVMs()
+    actionRefreshTimers.current = scheduleRefreshes(() => {
+      mutateJobs()
+      mutateAllVMs()
+    })
   }, [mutateJobs, mutateAllVMs])
 
   useEffect(() => () => actionRefreshTimers.current.forEach(clearTimeout), [])
 
   const handleStartDRVM = useCallback(async (vmId: number, targetCluster: string, jobId: string, restorePoint?: string) => {
-    const res = await fetch('/api/v1/orchestrator/replication/emergency/start-vm', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ vm_id: vmId, target_cluster: targetCluster, replication_job_id: jobId, restore_point: restorePoint })
+    await startDRVM({
+      vmId, targetCluster, jobId, restorePoint,
+      conflictMessage: t('siteRecovery.failover.testActiveConflict'),
     })
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}))
-      throw new Error(res.status === 409 ? t('siteRecovery.failover.testActiveConflict') : data.error || 'Failed to start VM')
-    }
     refreshAfterEmergencyAction()
   }, [refreshAfterEmergencyAction, t])
 
   const handleStopDRVM = useCallback(async (vmId: number, targetCluster: string, jobId: string, resumeReplication: boolean) => {
-    const res = await fetch('/api/v1/orchestrator/replication/emergency/stop-vm', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ vm_id: vmId, target_cluster: targetCluster, replication_job_id: jobId, resume_replication: resumeReplication })
+    await stopDRVM({
+      vmId, targetCluster, jobId, resumeReplication,
+      conflictMessage: t('siteRecovery.failover.testActiveConflict'),
     })
-
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}))
-
-      throw new Error(res.status === 409 ? t('siteRecovery.failover.testActiveConflict') : data.error || 'Failed to stop VM')
-    }
-
     refreshAfterEmergencyAction()
   }, [refreshAfterEmergencyAction, t])
 
   // Restore points of one replicated guest, loaded when its start dialog opens
   // (not with the tab: one probe per guest, only for the row being started).
-  const loadVMRestorePoints = useCallback(async (jobId: string, vmId: number) => {
-    const res = await fetch(`/api/v1/orchestrator/replication/jobs/${jobId}/vms/${vmId}/restore-points`)
-
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}))
-
-      throw new Error(data.error || 'Failed to load restore points')
-    }
-
-    return res.json()
-  }, [])
+  const loadVMRestorePoints = useCallback((jobId: string, vmId: number) => loadVMRestorePointsRequest(jobId, vmId), [])
 
   // Poll execution status every 3s while running
   useEffect(() => {

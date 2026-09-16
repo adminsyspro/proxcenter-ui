@@ -46,6 +46,7 @@ function Harness({
   onCleanupTest,
   onHistoryCleared,
   onFailback,
+  onEditPlan,
   jobs = [],
 }: {
   plans: RecoveryPlan[]
@@ -54,6 +55,7 @@ function Harness({
   onCleanupTest: (id: string) => void
   onHistoryCleared?: () => void
   onFailback?: (id: string) => void
+  onEditPlan?: (id: string) => void
   jobs?: ReplicationJob[]
 }) {
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null)
@@ -70,7 +72,7 @@ function Harness({
       onTestFailover={onTestFailover}
       onFailover={vi.fn()}
       onFailback={onFailback || vi.fn()}
-      onEditPlan={vi.fn()}
+      onEditPlan={onEditPlan || vi.fn()}
       onDeletePlan={vi.fn()}
       onCleanupTest={onCleanupTest}
       onHistoryCleared={onHistoryCleared}
@@ -106,6 +108,7 @@ function execution(overrides: Partial<RecoveryExecution> = {}): RecoveryExecutio
     type: 'failover',
     status: 'completed',
     started_at: '2026-01-02T00:00:00Z',
+    vm_results: [],
     ...overrides,
   }
 }
@@ -265,4 +268,35 @@ it('shows the engine glyphs of the plan jobs on both ends of the route', () => {
 it('falls back to the Ceph glyph when the plan jobs are unknown', () => {
   renderWithProviders(<Harness plans={[plan()]} history={[]} onTestFailover={vi.fn()} onCleanupTest={vi.fn()} />)
   expect(screen.getAllByRole('img', { name: 'Ceph RBD' })).toHaveLength(2)
+})
+
+// A plan used to be immutable once created: changing a boot order meant
+// deleting it and starting over. The drawer now reopens it in the plan dialog,
+// except while an execution is running and the guests are moving underfoot.
+describe('RecoveryPlansTab — editing a plan', () => {
+  it('reopens the selected plan for editing', async () => {
+    const onEditPlan = vi.fn()
+
+    renderWithProviders(
+      <Harness plans={[plan()]} onTestFailover={vi.fn()} onCleanupTest={vi.fn()} onEditPlan={onEditPlan} />,
+    )
+
+    await openDrawer()
+    await userEvent.click(screen.getByRole('button', { name: 'Edit plan' }))
+
+    expect(onEditPlan).toHaveBeenCalledWith('plan-1')
+  })
+
+  it('refuses to edit a plan while it is executing', async () => {
+    const onEditPlan = vi.fn()
+
+    renderWithProviders(
+      <Harness plans={[plan({ status: 'executing' })]} onTestFailover={vi.fn()} onCleanupTest={vi.fn()} onEditPlan={onEditPlan} />,
+    )
+
+    await openDrawer()
+
+    expect(screen.getByRole('button', { name: 'Edit plan' })).toBeDisabled()
+    expect(onEditPlan).not.toHaveBeenCalled()
+  })
 })

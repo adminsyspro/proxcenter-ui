@@ -14,6 +14,7 @@ export interface SoapSession {
   propertyCollector: string  // "ha-property-collector" on ESXi, "propertyCollector" on vCenter
   rootFolder: string         // "ha-folder-root" on ESXi, "group-d1" on vCenter
   isVcenter: boolean         // true if connected to vCenter
+  apiVersion: string         // vSphere API version from ServiceContent, e.g. "5.5" or "8.0.3.0" ("" when absent)
   datacenterPath?: string    // datacenter name for vCenter (used in dcPath for file downloads)
 }
 
@@ -183,6 +184,9 @@ export async function soapLogin(
     propertyCollector: serviceContent.propertyCollector,
     rootFolder: serviceContent.rootFolder,
     isVcenter: serviceContent.isVcenter,
+    // Carried on the session so callers do not have to re-query ServiceContent:
+    // the warm engine reads it to refuse a source its VDDK cannot read (#946).
+    apiVersion: serviceContent.apiVersion,
   }
 }
 

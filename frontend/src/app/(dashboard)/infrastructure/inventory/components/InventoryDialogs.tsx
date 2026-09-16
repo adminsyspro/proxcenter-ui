@@ -769,7 +769,11 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
   // nothing to install from the Enterprise repo). It drives which remediation
   // the not-ready alert offers.
   type WarmSpace = { storage: string; availableBytes: number; requiredBytes: number; sufficient: boolean; error?: string }
-  const [warmPreflight, setWarmPreflight] = useState<{ key: string; loading: boolean; ok: boolean; missing: string[]; kind: 'nbd' | 'vddk'; error?: string; tokenConfigured?: boolean; osUnsupported?: boolean; debianMajor?: number; space?: WarmSpace } | null>(null)
+  // #946: the source's own vSphere version, checked against the VDDK generation
+  // found on the node. Values only, never the route's sentence: the wording below
+  // is composed from the catalogue so it follows the operator's language.
+  type WarmSource = { sourceVersion: string; vddkMajor?: number; minVersion: string; absoluteMin: string; blocked: boolean; warning: boolean }
+  const [warmPreflight, setWarmPreflight] = useState<{ key: string; loading: boolean; ok: boolean; missing: string[]; kind: 'nbd' | 'vddk'; error?: string; tokenConfigured?: boolean; osUnsupported?: boolean; debianMajor?: number; space?: WarmSpace; source?: WarmSource } | null>(null)
   // Bumped after a successful automated node setup so this effect re-runs and
   // the go/no-go flips to ready without the user having to reselect the node.
   const [warmPreflightRefresh, setWarmPreflightRefresh] = useState(0)
@@ -797,11 +801,11 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
       body: JSON.stringify({ targetConnectionId: migTargetConn, targetNode: migTargetNode, action: 'warm-check', sourceConnectionId: esxiMigrateVm?.connId, targetStorage: migTargetStorage || undefined, requiredDiskBytes: esxiMigrateVm?.committed || 0 }),
     })
       .then(r => r.json())
-      .then((d: { ok?: boolean; missing?: string[]; kind?: string; error?: string; vddkTokenConfigured?: boolean; osUnsupported?: boolean; debianMajor?: number; space?: WarmSpace }) => {
+      .then((d: { ok?: boolean; missing?: string[]; kind?: string; error?: string; vddkTokenConfigured?: boolean; osUnsupported?: boolean; debianMajor?: number; space?: WarmSpace; source?: WarmSource }) => {
         // vddkTokenConfigured: server-side boolean saying an Enterprise VDDK
         // package token exists, i.e. the automated "Prepare this node" action
         // can work. The token itself never reaches the client.
-        if (!cancelled) setWarmPreflight({ key, loading: false, ok: !!d.ok, missing: d.missing || [], kind: d.kind === 'nbd' ? 'nbd' : 'vddk', error: d.error, tokenConfigured: !!d.vddkTokenConfigured, osUnsupported: !!d.osUnsupported, debianMajor: d.debianMajor, space: d.space })
+        if (!cancelled) setWarmPreflight({ key, loading: false, ok: !!d.ok, missing: d.missing || [], kind: d.kind === 'nbd' ? 'nbd' : 'vddk', error: d.error, tokenConfigured: !!d.vddkTokenConfigured, osUnsupported: !!d.osUnsupported, debianMajor: d.debianMajor, space: d.space, source: d.source })
       })
       .catch(() => { if (!cancelled) setWarmPreflight({ key, loading: false, ok: false, missing: [], kind: expectedKind }) })
     return () => { cancelled = true }
@@ -2736,6 +2740,34 @@ return
                       <Alert severity="info" sx={{ fontSize: 12 }} icon={<CircularProgress size={16} />}>
                         {t('inventoryPage.esxiMigration.warmPreflightChecking')}
                       </Alert>
+                    ) : warmPreflightCurrent.source?.blocked ? (
+                      /* #946: the node can be fully provisioned and the run still be
+                         impossible, because the VDDK reads the SOURCE and is supported
+                         only against its own vSphere release and the two before it. This
+                         replaces the node alert entirely: nothing about the node is wrong,
+                         and offering to prepare it again would send the operator nowhere. */
+                      <Alert severity="error" sx={{ fontSize: 12, '& .MuiAlert-message': { width: '100%' } }} icon={<i className="ri-close-circle-line" style={{ fontSize: 18 }} />}>
+                        <Typography variant="body2" fontWeight={600} sx={{ mb: 0.5 }}>
+                          {t('inventoryPage.esxiMigration.warmSourceTooOldTitle')}
+                        </Typography>
+                        <Typography variant="body2" sx={{ mb: 0.5 }}>
+                          {t('inventoryPage.esxiMigration.warmSourceTooOld', {
+                            version: warmPreflightCurrent.source.sourceVersion,
+                            min: warmPreflightCurrent.source.absoluteMin,
+                          })}
+                        </Typography>
+                        {warmPreflightCurrent.source.vddkMajor !== undefined && (
+                          <Typography variant="body2" sx={{ mb: 0.5 }}>
+                            {t('inventoryPage.esxiMigration.warmSourceNodeVddk', {
+                              vddk: String(warmPreflightCurrent.source.vddkMajor),
+                              min: warmPreflightCurrent.source.minVersion,
+                            })}
+                          </Typography>
+                        )}
+                        <Typography variant="body2">
+                          {t('inventoryPage.esxiMigration.warmSourceUseCold')}
+                        </Typography>
+                      </Alert>
                     ) : warmPreflightCurrent.ok ? (
                       <Alert severity="success" sx={{ fontSize: 12 }} icon={<i className="ri-checkbox-circle-line" style={{ fontSize: 18 }} />}>
                         {t(warmPreflightCurrent.kind === 'nbd' ? 'inventoryPage.esxiMigration.warmPreflightReadyNbd' : 'inventoryPage.esxiMigration.warmPreflightReady')}
@@ -2856,6 +2888,16 @@ return
                   {/* Warm target too small: the engine refuses it at planning time (disks'
                       capacity plus a 10 % margin, like the cold engine), so say so while the
                       storage can still be changed, with the two figures that matter. */}
+                  {/* Outside the installed VDDK's matrix but above the absolute floor:
+                      it may well work, so it warns instead of blocking. */}
+                  {migType === 'warm' && warmPreflightCurrent?.source?.warning && (
+                    <Alert severity="warning" sx={{ fontSize: 12 }} icon={<i className="ri-error-warning-line" style={{ fontSize: 18 }} />}>
+                      {t('inventoryPage.esxiMigration.warmSourceOutsideMatrix', {
+                        version: warmPreflightCurrent.source.sourceVersion,
+                        min: warmPreflightCurrent.source.minVersion,
+                      })}
+                    </Alert>
+                  )}
                   {migType === 'warm' && warmSpaceShort && (
                     <Alert severity="error" sx={{ fontSize: 12 }} icon={<i className="ri-hard-drive-2-line" style={{ fontSize: 18 }} />}>
                       {warmSpaceShort.error

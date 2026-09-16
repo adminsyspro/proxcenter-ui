@@ -35,6 +35,21 @@ describe("buildPreflightCmd", () => {
     expect(cmd).toContain("nbdkit-vddk-plugin.so")
     expect(cmd).toContain("'/opt/vddk'/lib64/libvixDiskLib.so")
   })
+  // #946: which VDDK generation is installed decides which source versions the
+  // node can read, and the `vddk-lib` glob above cannot tell (it lands on the
+  // unversioned symlink). The probe resolves the SONAME nbdkit dlopens instead.
+  it("resolves the real VDDK library behind the so.8 SONAME", () => {
+    const cmd = buildPreflightCmd("/opt/vddk")
+    expect(cmd).toContain("vddk-real=")
+    expect(cmd).toContain("readlink -f '/opt/vddk'/lib64/libvixDiskLib.so.8")
+  })
+  it("reports the resolved VDDK library on the result", () => {
+    const out = [ALL_PRESENT, "vddk-real=/opt/vddk/lib64/libvixDiskLib.so.9.1.0.0"].join("\n")
+    expect(parsePreflightOutput(out, "/opt/vddk").vddkLib).toBe("/opt/vddk/lib64/libvixDiskLib.so.9.1.0.0")
+  })
+  it("leaves the resolved VDDK library undefined when the probe read nothing", () => {
+    expect(parsePreflightOutput([ALL_PRESENT, "vddk-real="].join("\n"), "/opt/vddk").vddkLib).toBeUndefined()
+  })
   it("probes the Debian major version alongside the four dependencies", () => {
     const cmd = buildPreflightCmd("/opt/vddk")
     expect(cmd).toContain("debian-major=")

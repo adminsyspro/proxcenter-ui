@@ -1,4 +1,5 @@
 import { pveFetch } from './client'
+import { safeLog } from '@/lib/log/sanitize'
 import type { PveConn } from '@/lib/connections/getConnection'
 
 export function sanitizeStorageName(tenantSlug: string, vdcSlug: string, prefix = 'pbs-'): string {
@@ -63,7 +64,7 @@ export async function createPbsStorage(conn: PveConn, args: CreatePbsStorageArgs
   params.append('content', 'backup')
   if (args.nodes.length) params.append('nodes', args.nodes.join(','))
   if (args.port) params.append('port', String(args.port))
-  console.log(`[pve-pbs-storage] POST /storage (form-encoded, secret redacted): storage=${args.storage} server=${args.server} datastore=${args.datastore} namespace=${args.namespace} username=${args.username} fingerprint=${args.fingerprint} nodes=${args.nodes.join(',')}`)
+  console.log(`[pve-pbs-storage] POST /storage (form-encoded, secret redacted): storage=${safeLog(args.storage)} server=${safeLog(args.server)} datastore=${safeLog(args.datastore)} namespace=${safeLog(args.namespace)} username=${safeLog(args.username)} fingerprint=${safeLog(args.fingerprint)} nodes=${safeLog(args.nodes.join(','))}`)
 
   // Retry with backoff when PVE's PBS probe fails for transient propagation
   // reasons (token / ACL / namespace just minted on PBS, PVE's CLI probe
@@ -79,7 +80,7 @@ export async function createPbsStorage(conn: PveConn, args: CreatePbsStorageArgs
       const msg = String(e?.message ?? '')
       const isProbeError = PROBE_RETRY_PATTERNS.some(rx => rx.test(msg))
       const willRetry = isProbeError && attempt < STORAGE_RETRY_DELAYS_MS.length
-      console.warn(`[pve-pbs-storage] attempt ${attempt + 1} failed: ${msg}${willRetry ? ` — retrying in ${STORAGE_RETRY_DELAYS_MS[attempt]}ms` : ''}`)
+      console.warn(`[pve-pbs-storage] attempt ${attempt + 1} failed: ${safeLog(msg)}${willRetry ? ` — retrying in ${STORAGE_RETRY_DELAYS_MS[attempt]}ms` : ''}`)
       if (!willRetry) throw e
       await new Promise(r => setTimeout(r, STORAGE_RETRY_DELAYS_MS[attempt]))
     }

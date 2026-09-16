@@ -24,6 +24,7 @@ import { startVddkReader, stopVddkReader, type VddkReaderHandle } from "./vddk-r
 import type { VddkOpts } from "./vddk-cmd"
 import { detectChangedExtentsByChecksum } from "./checksum-detector"
 import { checkVddkPreflight } from "./vddk-preflight"
+import { checkWarmSourceVersion, warmSourceVersionError, warmSourceVersionWarning } from "./source-version"
 import { parseSha1Thumbprint } from "./thumbprint"
 import type { Extent } from "./extents"
 import { startSoapKeepAlive } from "./session-keepalive"
@@ -286,6 +287,17 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
     const pf = await checkVddkPreflight(config.targetConnectionId, nodeIp, libdir)
     if (!pf.ok) throw new Error(pf.error || "VDDK preflight failed")
     await appendLog(jobId, "VDDK preflight OK on Proxmox node", "success")
+
+    // Source-side counterpart of that preflight (#946). A provisioned node says
+    // nothing about whether its VDDK can read THIS source: the generations are
+    // supported N-2 against vSphere, and an ESXi 5.5 source used to reach the
+    // copy and die on the first dd with an I/O error after zero bytes. The
+    // version has been on the session since login, so this costs no round trip.
+    // The dialog runs the same check, but a cluster-auto node choice and direct
+    // API calls arrive here unchecked.
+    const srcVersion = checkWarmSourceVersion({ sourceApiVersion: soapSession.apiVersion, vddkLibPath: pf.vddkLib })
+    if (srcVersion.blocked) throw new Error(warmSourceVersionError(srcVersion))
+    if (srcVersion.warning) await appendLog(jobId, warmSourceVersionWarning(srcVersion), "warn")
 
     // CBT eligibility: the "*" baseline is VMFS-only and needs no pre-existing snapshot.
     const elig = cbtEligibility({ hwVersion: vmConfig.vmxVersion, disks: vmConfig.disks })

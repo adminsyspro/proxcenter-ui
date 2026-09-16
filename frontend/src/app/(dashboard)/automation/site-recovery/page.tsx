@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import useSWR from 'swr'
 
@@ -58,6 +58,7 @@ export default function SiteRecoveryPage() {
   // Dialog states
   const [createJobOpen, setCreateJobOpen] = useState(false)
   const [createPlanOpen, setCreatePlanOpen] = useState(false)
+  const [editPlanId, setEditPlanId] = useState<string | null>(null)
   const [editJobId, setEditJobId] = useState<string | null>(null)
   const [failoverDialog, setFailoverDialog] = useState<{
     open: boolean
@@ -88,7 +89,7 @@ export default function SiteRecoveryPage() {
 
   // Real data: PVE connections and all VMs
   const { data: connectionsData, error: connectionsError, isLoading: connectionsLoading } = useSWR<{ data: Array<{ id: string; name: string; hasCeph: boolean }> }>('/api/v1/connections?type=pve', fetcher)
-  const { data: allVMsData } = useSWR<{ data: { vms: any[] } }>('/api/v1/vms', fetcher)
+  const { data: allVMsData, mutate: mutateAllVMs } = useSWR<{ data: { vms: any[] } }>('/api/v1/vms', fetcher)
 
   // Restore points for the plan currently open in the failover dialog (test/failover only — failback has no selector)
   const { data: restorePoints, error: restorePointsError, isLoading: restorePointsLoading, mutate: mutateRestorePoints } = useSWR(
@@ -218,18 +219,39 @@ export default function SiteRecoveryPage() {
     mutateJobs()
   }
 
-  const handleCreatePlan = useCallback(async (data: any) => {
+  // One form for both: creating posts, editing puts onto the plan being
+  // edited. The orchestrator refuses an edit during a failback (a guest added
+  // mid-failback would have no vm_result and the plan would never converge),
+  // so its message is surfaced rather than swallowed.
+  const handleSubmitPlan = useCallback(async (data: any) => {
+    const editing = !!editPlanId
+
     try {
-      await fetch('/api/v1/orchestrator/replication/plans', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
-      })
+      const res = await fetch(
+        editing ? `/api/v1/orchestrator/replication/plans/${editPlanId}` : '/api/v1/orchestrator/replication/plans',
+        {
+          method: editing ? 'PUT' : 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        }
+      )
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+
+        setOperationError(body.error || res.statusText)
+
+        return
+      }
+
+      setOperationError(null)
       mutatePlans()
     } catch (e) {
-      console.error('Failed to create plan:', e)
+      console.error('Failed to save plan:', e)
+    } finally {
+      setEditPlanId(null)
     }
-  }, [mutatePlans])
+  }, [editPlanId, mutatePlans])
 
   const handleJobAction = useCallback(async (id: string, action: 'sync' | 'resume') => {
     try {
@@ -437,6 +459,28 @@ export default function SiteRecoveryPage() {
     }
   }, [mutatePlans])
 
+  // What an emergency action changes keeps moving for about a minute: the
+  // replica's power state first, then its job walking pending -> syncing ->
+  // synced. A single mutate when the call returns catches none of it, the VM
+  // inventory has no refresh interval of its own, and the jobs list refreshes
+  // on a 15s cadence the user can switch off entirely in Appearance. So the
+  // action schedules its own short burst of refreshes.
+  const actionRefreshTimers = useRef<ReturnType<typeof setTimeout>[]>([])
+
+  const refreshAfterEmergencyAction = useCallback(() => {
+    actionRefreshTimers.current.forEach(clearTimeout)
+    actionRefreshTimers.current = [3000, 8000, 15000, 30000, 60000].map(delay =>
+      setTimeout(() => {
+        mutateJobs()
+        mutateAllVMs()
+      }, delay)
+    )
+    mutateJobs()
+    mutateAllVMs()
+  }, [mutateJobs, mutateAllVMs])
+
+  useEffect(() => () => actionRefreshTimers.current.forEach(clearTimeout), [])
+
   const handleStartDRVM = useCallback(async (vmId: number, targetCluster: string, jobId: string, restorePoint?: string) => {
     const res = await fetch('/api/v1/orchestrator/replication/emergency/start-vm', {
       method: 'POST',
@@ -447,8 +491,8 @@ export default function SiteRecoveryPage() {
       const data = await res.json().catch(() => ({}))
       throw new Error(res.status === 409 ? t('siteRecovery.failover.testActiveConflict') : data.error || 'Failed to start VM')
     }
-    mutateJobs()
-  }, [mutateJobs, t])
+    refreshAfterEmergencyAction()
+  }, [refreshAfterEmergencyAction, t])
 
   const handleStopDRVM = useCallback(async (vmId: number, targetCluster: string, jobId: string, resumeReplication: boolean) => {
     const res = await fetch('/api/v1/orchestrator/replication/emergency/stop-vm', {
@@ -463,8 +507,8 @@ export default function SiteRecoveryPage() {
       throw new Error(res.status === 409 ? t('siteRecovery.failover.testActiveConflict') : data.error || 'Failed to stop VM')
     }
 
-    mutateJobs()
-  }, [mutateJobs, t])
+    refreshAfterEmergencyAction()
+  }, [refreshAfterEmergencyAction, t])
 
   // Restore points of one replicated guest, loaded when its start dialog opens
   // (not with the tab: one probe per guest, only for the row being started).
@@ -631,6 +675,7 @@ export default function SiteRecoveryPage() {
             onTestFailover={(id) => openFailoverDialog(id, 'test')}
             onFailover={(id) => openFailoverDialog(id, 'failover')}
             onFailback={(id) => openFailoverDialog(id, 'failback')}
+            onEditPlan={setEditPlanId}
             onDeletePlan={handleDeletePlan}
             onCleanupTest={(id) => openFailoverDialog(id, 'test')}
             onHistoryCleared={() => mutateHistory()}
@@ -677,14 +722,20 @@ export default function SiteRecoveryPage() {
           onClose={() => setEditJobId(null)}
           onSubmit={handleUpdateJob}
           connections={connections}
+          allVMs={allVMs}
+          jobs={jobs || []}
         />
 
         <CreatePlanDialog
-          open={createPlanOpen}
-          onClose={() => setCreatePlanOpen(false)}
-          onSubmit={handleCreatePlan}
+          open={createPlanOpen || !!editPlanId}
+          onClose={() => {
+            setCreatePlanOpen(false)
+            setEditPlanId(null)
+          }}
+          onSubmit={handleSubmitPlan}
           connections={connections}
           jobs={jobs || []}
+          plan={editPlanId ? (plans || []).find((p: RecoveryPlan) => p.id === editPlanId) || null : null}
         />
 
         <FailoverDialog

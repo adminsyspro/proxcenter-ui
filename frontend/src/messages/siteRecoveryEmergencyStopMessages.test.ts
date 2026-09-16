@@ -35,6 +35,12 @@ const requiredKeys = [
   'siteRecovery.emergencyDR.startVMBody',
   'siteRecovery.emergencyDR.startPausesJob',
   'siteRecovery.emergencyDR.restorePointKeepsNewer',
+  'siteRecovery.emergencyDR.startVMJobSyncing',
+  'siteRecovery.emergencyDR.startVMAlreadyStarted',
+  'siteRecovery.emergencyDR.stopVMAlreadyStopped',
+  'siteRecovery.status.failedOver',
+  'siteRecovery.status.replicaStarted',
+  'siteRecovery.emergencyDR.stopVMGuestRejoins',
 ]
 
 function get(messages: any, path: string): unknown {

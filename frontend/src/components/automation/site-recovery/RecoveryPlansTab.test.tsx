@@ -70,6 +70,7 @@ function Harness({
       onTestFailover={onTestFailover}
       onFailover={vi.fn()}
       onFailback={onFailback || vi.fn()}
+      onEditPlan={vi.fn()}
       onDeletePlan={vi.fn()}
       onCleanupTest={onCleanupTest}
       onHistoryCleared={onHistoryCleared}

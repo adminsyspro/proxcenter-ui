@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useTranslations } from 'next-intl'
 
 import {
@@ -8,7 +8,7 @@ import {
   MenuItem, Select, Stack, TablePagination, TextField, Typography
 } from '@mui/material'
 
-import type { ReplicationJob, CreateRecoveryPlanRequest, StorageEngine } from '@/lib/orchestrator/site-recovery.types'
+import type { ReplicationJob, CreateRecoveryPlanRequest, RecoveryPlan, StorageEngine } from '@/lib/orchestrator/site-recovery.types'
 
 import EngineGlyph from './EngineGlyph'
 
@@ -20,6 +20,8 @@ interface CreatePlanDialogProps {
   onSubmit: (data: CreateRecoveryPlanRequest) => void
   connections: Array<{ id: string; name: string; hasCeph: boolean; engines: StorageEngine[] }>
   jobs: ReplicationJob[]
+  /** Set to edit that plan instead of creating one: same form, prefilled. */
+  plan?: RecoveryPlan | null
 }
 
 interface ReplicatedVM {
@@ -40,7 +42,7 @@ interface VMAssignment extends ReplicatedVM {
   target_cluster: string
 }
 
-export default function CreatePlanDialog({ open, onClose, onSubmit, connections, jobs }: CreatePlanDialogProps) {
+export default function CreatePlanDialog({ open, onClose, onSubmit, connections, jobs, plan = null }: CreatePlanDialogProps) {
   const t = useTranslations()
   const [page, setPage] = useState(0)
   const [name, setName] = useState('')
@@ -68,6 +70,46 @@ export default function CreatePlanDialog({ open, onClose, onSubmit, connections,
     }
     return groups
   }, [jobs])
+
+  // Editing prefills the form from the plan. The guests carry only ids, tiers
+  // and job ids, so the rest of each row (name, engine, job state) is rebuilt
+  // from the jobs list the dialog already groups.
+  useEffect(() => {
+    if (!open) return
+
+    if (!plan) {
+      setName('')
+      setDescription('')
+      setVmAssignments([])
+
+      return
+    }
+
+    setName(plan.name || '')
+    setDescription(plan.description || '')
+
+    const known = new Map<string, ReplicatedVM>()
+    for (const group of Object.values(vmsByPair)) {
+      for (const vm of group.vms) known.set(`${vm.replication_job_id}:${vm.vm_id}`, vm)
+    }
+
+    setVmAssignments((plan.vms || []).map((pv, index) => {
+      const match = known.get(`${pv.replication_job_id}:${pv.vm_id}`)
+
+      return {
+        vm_id: pv.vm_id,
+        vm_name: match?.vm_name || pv.vm_name || `VM ${pv.vm_id}`,
+        replication_job_id: pv.replication_job_id,
+        job_name: match?.job_name || pv.replication_job_id,
+        job_status: match?.job_status || 'pending',
+        storage_engine: match?.storage_engine || 'rbd',
+        tier: (pv.tier || 3) as 1 | 2 | 3,
+        boot_order: pv.boot_order || index + 1,
+        source_cluster: plan.source_cluster,
+        target_cluster: plan.target_cluster,
+      }
+    }))
+  }, [open, plan, vmsByPair])
 
   // Determine which cluster pair is locked (from first assigned VM)
   const lockedPair = useMemo(() => {
@@ -111,6 +153,8 @@ export default function CreatePlanDialog({ open, onClose, onSubmit, connections,
     handleClose()
   }
 
+  const editing = !!plan
+
   const handleClose = () => {
     setPage(0)
     setName('')
@@ -126,7 +170,9 @@ export default function CreatePlanDialog({ open, onClose, onSubmit, connections,
 
   return (
     <Dialog open={open} onClose={handleClose} maxWidth='sm' fullWidth>
-      <DialogTitle sx={{ fontWeight: 700 }}>{t('siteRecovery.createPlan.title')}</DialogTitle>
+      <DialogTitle sx={{ fontWeight: 700 }}>
+        {editing ? t('siteRecovery.createPlan.editTitle') : t('siteRecovery.createPlan.title')}
+      </DialogTitle>
       <DialogContent>
         <Stack spacing={2.5} sx={{ mt: 1 }}>
           {/* Plan Name */}
@@ -252,7 +298,7 @@ export default function CreatePlanDialog({ open, onClose, onSubmit, connections,
           onClick={handleSubmit}
           disabled={!name || vmAssignments.length === 0}
         >
-          {t('siteRecovery.createPlan.create')}
+          {editing ? t('common.save') : t('siteRecovery.createPlan.create')}
         </Button>
       </DialogActions>
     </Dialog>

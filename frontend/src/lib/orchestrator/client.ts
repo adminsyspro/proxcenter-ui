@@ -665,11 +665,19 @@ return this.get<ClusterMetrics[]>(`/metrics/${connectionId}/history${query ? `?$
   }
 
   startDRVM(body: { vm_id: number; target_cluster: string; replication_job_id: string; restore_point?: string }) {
-    return this.post<any>('/replication/emergency/start-vm', body)
+    // An emergency start waits for an in-flight sync of the job, pauses it,
+    // optionally rolls every disk back to a restore point, then boots the
+    // replica and waits for it to report running: measured at ~30s in the lab
+    // for a single-disk guest, and the 30s default expired mid-sequence,
+    // cancelling the boot AFTER the rollback had landed. Kept under the 60s
+    // nginx read timeout of a packaged install, like the test cleanup below.
+    return this.post<any>('/replication/emergency/start-vm', body, 55_000)
   }
 
   stopDRVM(body: { vm_id: number; target_cluster: string; replication_job_id: string; resume_replication?: boolean }) {
-    return this.post<any>('/replication/emergency/stop-vm', body)
+    // Same budget as the start: stopping the replica and resuming its job is
+    // shorter, but it is the same SSH round trips to the same DR node.
+    return this.post<any>('/replication/emergency/stop-vm', body, 55_000)
   }
 
   getRecoveryHistory(planId: string) {

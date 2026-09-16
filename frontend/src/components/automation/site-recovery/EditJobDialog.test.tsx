@@ -59,6 +59,14 @@ function renderDialog(overrides: Partial<ReplicationJob> = {}) {
   return { onSubmit }
 }
 
+/**
+ * The form is split across tabs (General, Schedule, Retention), so a test
+ * reaching a field opens its tab first, exactly as an operator would.
+ */
+async function openTab(name: RegExp) {
+  await userEvent.click(screen.getByRole('tab', { name }))
+}
+
 // The rate limit is the only spinbutton on the dialog while no bandwidth
 // window exists, so role alone identifies it.
 const rateLimit = () => screen.getAllByRole('spinbutton')[0] as HTMLInputElement
@@ -69,13 +77,15 @@ const retentionSource = () => screen.getByRole('spinbutton', { name: 'Keep on so
 const retentionTarget = () => screen.getByRole('spinbutton', { name: 'Keep on target (DR)' }) as HTMLInputElement
 
 describe('EditJobDialog rate limit', () => {
-  it('shows the job rate limit', () => {
+  it('shows the job rate limit', async () => {
     renderDialog()
+    await openTab(/schedule/i)
     expect(rateLimit().value).toBe('200')
   })
 
   it('lets the rate limit be cleared without snapping back to 0', async () => {
     renderDialog()
+    await openTab(/schedule/i)
     await userEvent.clear(rateLimit())
     expect(rateLimit().value).toBe('')
   })
@@ -83,6 +93,7 @@ describe('EditJobDialog rate limit', () => {
   it('submits the retyped rate limit, not the old digit glued in front', async () => {
     const { onSubmit } = renderDialog()
 
+    await openTab(/schedule/i)
     await userEvent.clear(rateLimit())
     await userEvent.type(rateLimit(), '50')
     expect(rateLimit().value).toBe('50')
@@ -94,6 +105,7 @@ describe('EditJobDialog rate limit', () => {
   it('commits the fallback of 0 when the rate limit is left empty', async () => {
     const { onSubmit } = renderDialog()
 
+    await openTab(/schedule/i)
     await userEvent.clear(rateLimit())
     await userEvent.click(save())
     expect(rateLimit().value).toBe('0')
@@ -102,20 +114,24 @@ describe('EditJobDialog rate limit', () => {
 })
 
 describe('EditJobDialog snapshot retention (issue #664)', () => {
-  it('prefills 3 when the job has no retention fields (old backend)', () => {
+  it('prefills 3 when the job has no retention fields (old backend)', async () => {
     renderDialog({ snapshot_keep_source: undefined, snapshot_keep_target: undefined })
+    await openTab(/retention/i)
     expect(retentionSource().value).toBe('3')
     expect(retentionTarget().value).toBe('3')
   })
 
-  it('prefills the job effective retention values when present', () => {
+  it('prefills the job effective retention values when present', async () => {
     renderDialog({ snapshot_keep_source: 5, snapshot_keep_target: 10 })
+    await openTab(/retention/i)
     expect(retentionSource().value).toBe('5')
     expect(retentionTarget().value).toBe('10')
   })
 
   it('submits edited retention values', async () => {
     const { onSubmit } = renderDialog({ snapshot_keep_source: 3, snapshot_keep_target: 3 })
+
+    await openTab(/retention/i)
 
     await userEvent.clear(retentionSource())
     await userEvent.type(retentionSource(), '7')
@@ -151,6 +167,8 @@ describe('EditJobDialog replica name (issue #915)', () => {
   it('loads the job affixes and submits the edited ones', async () => {
     const { onSubmit } = renderDialog({ vm_name_prefix: '', vm_name_suffix: '-DR' })
 
+    await openTab(/retention/i)
+
     expect((screen.getByLabelText('Suffix') as HTMLInputElement).value).toBe('-DR')
 
     await userEvent.type(screen.getByLabelText('Prefix'), 'DR-')
@@ -167,6 +185,8 @@ describe('EditJobDialog replica name (issue #915)', () => {
   it('refuses to save an affix PVE would reject on the replica', async () => {
     const { onSubmit } = renderDialog()
 
+    await openTab(/retention/i)
+
     await userEvent.type(screen.getByLabelText('Prefix'), '-DR')
 
     expect(await screen.findByText(/must not start or end on a hyphen/)).toBeInTheDocument()
@@ -176,6 +196,8 @@ describe('EditJobDialog replica name (issue #915)', () => {
 
   it('can clear an affix back to the source name', async () => {
     const { onSubmit } = renderDialog({ vm_name_suffix: '-DR' })
+
+    await openTab(/retention/i)
 
     await userEvent.clear(screen.getByLabelText('Suffix'))
     await userEvent.click(save())

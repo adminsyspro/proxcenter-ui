@@ -186,6 +186,7 @@ interface RecoveryPlansTabProps {
   onTestFailover: (id: string) => void
   onFailover: (id: string) => void
   onFailback: (id: string) => void
+  onEditPlan: (id: string) => void
   onDeletePlan: (id: string) => void
   onCleanupTest: (id: string) => void
   onHistoryCleared?: () => void
@@ -196,7 +197,7 @@ interface RecoveryPlansTabProps {
 export default function RecoveryPlansTab({
   plans, loading, history, historyLoading,
   selectedPlanId, onSelectPlan,
-  onTestFailover, onFailover, onFailback, onDeletePlan, onCleanupTest, onHistoryCleared,
+  onTestFailover, onFailover, onFailback, onEditPlan, onDeletePlan, onCleanupTest, onHistoryCleared,
   connections, jobs = []
 }: RecoveryPlansTabProps) {
   const t = useTranslations()
@@ -501,6 +502,22 @@ export default function RecoveryPlansTab({
                       >
                         {t('siteRecovery.plans.failback')}
                       </Button>
+                      <Tooltip
+                        title={t('siteRecovery.plans.editPlanBusyTooltip')}
+                        disableHoverListener={selected.status !== 'executing'}
+                        arrow
+                      >
+                        <span style={{ display: 'block' }}>
+                          <Button
+                            variant='outlined' size='small' fullWidth
+                            startIcon={<i className='ri-pencil-line' />}
+                            onClick={() => onEditPlan(selected.id)}
+                            disabled={selected.status === 'executing'}
+                          >
+                            {t('siteRecovery.plans.editPlan')}
+                          </Button>
+                        </span>
+                      </Tooltip>
                       <Button
                         variant='outlined' size='small' color='error' fullWidth
                         startIcon={<i className='ri-delete-bin-line' />}

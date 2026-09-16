@@ -58,6 +58,10 @@ const JOB_STATUS_ICONS: Record<string, { icon: string; color: string; label: str
   partial: { icon: 'ri-error-warning-line', color: 'warning.main', label: 'status.partial' },
   no_match: { icon: 'ri-filter-off-line', color: 'warning.main', label: 'status.noMatch' },
   suspended: { icon: 'ri-test-tube-line', color: 'warning.main', label: 'status.suspended' },
+  // Not a job state: this guest alone is out of its job's runs while its
+  // replica is up on the DR site. Showing the job's own "synced" on that line
+  // would tell the operator the opposite of what happens to that guest.
+  replica_started: { icon: 'ri-skip-forward-line', color: 'warning.main', label: 'status.replicaStarted' },
   failed_over: { icon: 'ri-alarm-warning-line', color: 'error.main', label: 'status.failedOver' },
 }
 
@@ -146,7 +150,7 @@ export default function EmergencyDRTab({
           sourceCluster: job.source_cluster,
           targetCluster: job.target_cluster,
           jobId: job.id,
-          jobStatus: job.status,
+          jobStatus: (job.suspended_vmids || []).includes(vmId) ? 'replica_started' : job.status,
           lastSync: job.last_sync || null,
           rpoTarget: job.rpo_target,
         })
@@ -219,6 +223,18 @@ export default function EmergencyDRTab({
       setLoadingVMs(prev => { const n = { ...prev }; delete n[key]; return n })
     }
   }
+
+  // The orchestrator refuses to start a replica while its job is mid-transfer
+  // (the rollback and the boot would race the import-diff writing those same
+  // disks). Read it live rather than from the row captured when the dialog
+  // opened: the jobs list refreshes underneath, so the operator sees the
+  // button unlock on its own when the sync ends.
+  const startJobSyncing = !!startTarget && jobs.find(j => j.id === startTarget.jobId)?.status === 'syncing'
+
+  // Only a job the start emptied entirely is paused, so only there does the
+  // stop have a job to resume. Everywhere else the guest simply rejoins the
+  // next run, and a switch would suggest a choice that does not exist.
+  const stopJobPaused = !!stopTarget && jobs.find(j => j.id === stopTarget.jobId)?.status === 'paused'
 
   const openStartDialog = (vm: DRReadyVM) => {
     setRestorePoint('')
@@ -364,6 +380,15 @@ export default function EmergencyDRTab({
           {vms.map(vm => {
             const key = `${vm.vmId}`
             const vmLoading = loadingVMs[key]
+            // Each action follows the replica it acts on: starting a replica
+            // that already runs does nothing but pause its job again, and
+            // stopping one that is already down is just as empty. An unknown
+            // state (the inventory has no row for that replica) leaves both
+            // enabled rather than locking the operator out during an incident.
+            const state = replicaState(vm)
+            const replicaStarted = state === 'running' || state === 'paused'
+            const replicaStopped = state === 'stopped'
+
             return (
               <TableRow key={key} hover>
                 <TableCell>
@@ -391,11 +416,11 @@ export default function EmergencyDRTab({
                 )}
                 <TableCell align="right">
                   <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'flex-end' }}>
-                    <Tooltip title={t('emergencyDR.startVM')}>
+                    <Tooltip title={replicaStarted ? t('emergencyDR.startVMAlreadyStarted') : t('emergencyDR.startVM')}>
                       <span>
                         <IconButton
                           size="small"
-                          disabled={!!vmLoading}
+                          disabled={!!vmLoading || replicaStarted}
                           onClick={() => openStartDialog(vm)}
                           sx={{ color: 'success.main', '&:hover': { bgcolor: 'success.main', color: 'white' } }}
                         >
@@ -403,11 +428,11 @@ export default function EmergencyDRTab({
                         </IconButton>
                       </span>
                     </Tooltip>
-                    <Tooltip title={t('emergencyDR.stopVM')}>
+                    <Tooltip title={replicaStopped ? t('emergencyDR.stopVMAlreadyStopped') : t('emergencyDR.stopVM')}>
                       <span>
                         <IconButton
                           size="small"
-                          disabled={!!vmLoading}
+                          disabled={!!vmLoading || replicaStopped}
                           onClick={() => openStopDialog(vm)}
                           sx={{ color: 'warning.main', '&:hover': { bgcolor: 'warning.main', color: 'white' } }}
                         >
@@ -589,6 +614,11 @@ export default function EmergencyDRTab({
             )}
           </Box>
 
+          {startJobSyncing && (
+            <Alert severity="warning" sx={{ mt: 2 }}>
+              {t('emergencyDR.startVMJobSyncing')}
+            </Alert>
+          )}
           <Alert severity="info" sx={{ mt: 2 }}>
             {t('emergencyDR.startPausesJob', { count: startTarget ? jobSiblingCount(startTarget) : 0 })}
           </Alert>
@@ -603,6 +633,7 @@ export default function EmergencyDRTab({
           <Button
             variant="contained"
             color="success"
+            disabled={startJobSyncing}
             onClick={() => {
               const vm = startTarget
               const snapshot = restorePoint
@@ -626,16 +657,22 @@ export default function EmergencyDRTab({
           <Typography variant="body2">
             {t('emergencyDR.stopVMBody', { vmid: stopTarget?.targetVmId || 0 })}
           </Typography>
-          <FormControlLabel
-            sx={{ mt: 1.5 }}
-            control={<Switch checked={resumeReplication} onChange={e => setResumeReplication(e.target.checked)} />}
-            label={t('emergencyDR.resumeReplication')}
-          />
-          {resumeReplication && (
-            <Alert severity="warning" sx={{ mt: 1 }}>
-              {t('emergencyDR.resumeReplicationWarning')}
-            </Alert>
+          {stopJobPaused ? (
+            <>
+              <FormControlLabel
+                sx={{ mt: 1.5 }}
+                control={<Switch checked={resumeReplication} onChange={e => setResumeReplication(e.target.checked)} />}
+                label={t('emergencyDR.resumeReplication')}
+              />
+            </>
+          ) : (
+            <Typography variant="body2" sx={{ mt: 1.5 }} color="text.secondary">
+              {t('emergencyDR.stopVMGuestRejoins')}
+            </Typography>
           )}
+          <Alert severity="warning" sx={{ mt: 1 }}>
+            {t('emergencyDR.resumeReplicationWarning')}
+          </Alert>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setStopTarget(null)}>{tc('cancel')}</Button>

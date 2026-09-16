@@ -62,6 +62,8 @@ export interface ReplicationJob {
   id: string
   name: string
   vm_ids: number[]
+  /** Guests this job currently skips because their replica runs on the DR site. */
+  suspended_vmids?: number[]
   vm_names: string[]
   tags: string[]            // stored tags for dynamic resolution (empty = VM-based job)
   source_cluster: string
@@ -120,6 +122,9 @@ export interface CreateReplicationJobRequest {
 }
 
 export interface UpdateReplicationJobRequest {
+  /** Replaces the guest list of a VM-based job (the tag set for a tag-based one). */
+  vm_ids?: number[]
+  tags?: string[]
   name?: string
   schedule_spec?: ScheduleSpec | null
   clear_schedule_spec?: boolean

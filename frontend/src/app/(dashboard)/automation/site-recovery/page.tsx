@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import useSWR from 'swr'
 
@@ -41,6 +41,15 @@ import type {
   RecoveryPlan, RecoveryExecution, StorageEngine, UpdateReplicationJobRequest, TestFailoverOptions
 } from '@/lib/orchestrator/site-recovery.types'
 
+import {
+  buildVmStatesByConn,
+  loadVMRestorePoints as loadVMRestorePointsRequest,
+  saveRecoveryPlan,
+  scheduleRefreshes,
+  startDRVM,
+  stopDRVM,
+} from '@/lib/site-recovery/emergencyActions'
+
 const fetcher = (url: string) => fetch(url).then(res => {
   if (!res.ok) throw new Error('Failed to fetch')
   return res.json()
@@ -58,6 +67,7 @@ export default function SiteRecoveryPage() {
   // Dialog states
   const [createJobOpen, setCreateJobOpen] = useState(false)
   const [createPlanOpen, setCreatePlanOpen] = useState(false)
+  const [editPlanId, setEditPlanId] = useState<string | null>(null)
   const [editJobId, setEditJobId] = useState<string | null>(null)
   const [failoverDialog, setFailoverDialog] = useState<{
     open: boolean
@@ -88,7 +98,7 @@ export default function SiteRecoveryPage() {
 
   // Real data: PVE connections and all VMs
   const { data: connectionsData, error: connectionsError, isLoading: connectionsLoading } = useSWR<{ data: Array<{ id: string; name: string; hasCeph: boolean }> }>('/api/v1/connections?type=pve', fetcher)
-  const { data: allVMsData } = useSWR<{ data: { vms: any[] } }>('/api/v1/vms', fetcher)
+  const { data: allVMsData, mutate: mutateAllVMs } = useSWR<{ data: { vms: any[] } }>('/api/v1/vms', fetcher)
 
   // Restore points for the plan currently open in the failover dialog (test/failover only — failback has no selector)
   const { data: restorePoints, error: restorePointsError, isLoading: restorePointsLoading, mutate: mutateRestorePoints } = useSWR(
@@ -166,6 +176,9 @@ export default function SiteRecoveryPage() {
     return m
   }, [allVMs])
 
+  // Replica power state scoped per connection, for the Emergency DR rows.
+  const vmStatesByConn = useMemo(() => buildVmStatesByConn(allVMs), [allVMs])
+
   // Selected plan for failover dialog
   const failoverPlan = useMemo(() =>
     (plans || []).find((p: RecoveryPlan) => p.id === failoverDialog.planId) || null
@@ -204,18 +217,22 @@ export default function SiteRecoveryPage() {
     mutateJobs()
   }
 
-  const handleCreatePlan = useCallback(async (data: any) => {
+  // One form for both: creating posts, editing puts onto the plan being
+  // edited. The orchestrator refuses an edit during a failback (a guest added
+  // mid-failback would have no vm_result and the plan would never converge),
+  // so its message is surfaced rather than swallowed.
+  const handleSubmitPlan = useCallback(async (data: any) => {
     try {
-      await fetch('/api/v1/orchestrator/replication/plans', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
-      })
-      mutatePlans()
+      const { error } = await saveRecoveryPlan(data, editPlanId)
+
+      setOperationError(error)
+      if (!error) mutatePlans()
     } catch (e) {
-      console.error('Failed to create plan:', e)
+      console.error('Failed to save plan:', e)
+    } finally {
+      setEditPlanId(null)
     }
-  }, [mutatePlans])
+  }, [editPlanId, mutatePlans])
 
   const handleJobAction = useCallback(async (id: string, action: 'sync' | 'resume') => {
     try {
@@ -423,18 +440,43 @@ export default function SiteRecoveryPage() {
     }
   }, [mutatePlans])
 
-  const handleStartDRVM = useCallback(async (vmId: number, targetCluster: string, jobId: string) => {
-    const res = await fetch('/api/v1/orchestrator/replication/emergency/start-vm', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ vm_id: vmId, target_cluster: targetCluster, replication_job_id: jobId })
+  // What an emergency action changes keeps moving for about a minute: the
+  // replica's power state first, then its job walking pending -> syncing ->
+  // synced. A single mutate when the call returns catches none of it, the VM
+  // inventory has no refresh interval of its own, and the jobs list refreshes
+  // on a 15s cadence the user can switch off entirely in Appearance. So the
+  // action schedules its own short burst of refreshes.
+  const actionRefreshTimers = useRef<ReturnType<typeof setTimeout>[]>([])
+
+  const refreshAfterEmergencyAction = useCallback(() => {
+    actionRefreshTimers.current.forEach(clearTimeout)
+    actionRefreshTimers.current = scheduleRefreshes(() => {
+      mutateJobs()
+      mutateAllVMs()
     })
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}))
-      throw new Error(res.status === 409 ? t('siteRecovery.failover.testActiveConflict') : data.error || 'Failed to start VM')
-    }
-    mutateJobs()
-  }, [mutateJobs, t])
+  }, [mutateJobs, mutateAllVMs])
+
+  useEffect(() => () => actionRefreshTimers.current.forEach(clearTimeout), [])
+
+  const handleStartDRVM = useCallback(async (vmId: number, targetCluster: string, jobId: string, restorePoint?: string) => {
+    await startDRVM({
+      vmId, targetCluster, jobId, restorePoint,
+      conflictMessage: t('siteRecovery.failover.testActiveConflict'),
+    })
+    refreshAfterEmergencyAction()
+  }, [refreshAfterEmergencyAction, t])
+
+  const handleStopDRVM = useCallback(async (vmId: number, targetCluster: string, jobId: string, resumeReplication: boolean) => {
+    await stopDRVM({
+      vmId, targetCluster, jobId, resumeReplication,
+      conflictMessage: t('siteRecovery.failover.testActiveConflict'),
+    })
+    refreshAfterEmergencyAction()
+  }, [refreshAfterEmergencyAction, t])
+
+  // Restore points of one replicated guest, loaded when its start dialog opens
+  // (not with the tab: one probe per guest, only for the row being started).
+  const loadVMRestorePoints = useCallback((jobId: string, vmId: number) => loadVMRestorePointsRequest(jobId, vmId), [])
 
   // Poll execution status every 3s while running
   useEffect(() => {
@@ -587,6 +629,7 @@ export default function SiteRecoveryPage() {
             onTestFailover={(id) => openFailoverDialog(id, 'test')}
             onFailover={(id) => openFailoverDialog(id, 'failover')}
             onFailback={(id) => openFailoverDialog(id, 'failback')}
+            onEditPlan={setEditPlanId}
             onDeletePlan={handleDeletePlan}
             onCleanupTest={(id) => openFailoverDialog(id, 'test')}
             onHistoryCleared={() => mutateHistory()}
@@ -602,7 +645,10 @@ export default function SiteRecoveryPage() {
             loading={jobsLoading || plansLoading}
             connections={connections}
             vmNamesByConn={vmNamesByConn}
+            vmStatesByConn={vmStatesByConn}
             onStartVM={handleStartDRVM}
+            onStopVM={handleStopDRVM}
+            loadRestorePoints={loadVMRestorePoints}
             onExecuteFailover={(planId) => openFailoverDialog(planId, 'failover')}
             onExecuteFailback={(planId) => openFailoverDialog(planId, 'failback')}
             onDeletePlan={handleDeletePlan}
@@ -630,14 +676,20 @@ export default function SiteRecoveryPage() {
           onClose={() => setEditJobId(null)}
           onSubmit={handleUpdateJob}
           connections={connections}
+          allVMs={allVMs}
+          jobs={jobs || []}
         />
 
         <CreatePlanDialog
-          open={createPlanOpen}
-          onClose={() => setCreatePlanOpen(false)}
-          onSubmit={handleCreatePlan}
+          open={createPlanOpen || !!editPlanId}
+          onClose={() => {
+            setCreatePlanOpen(false)
+            setEditPlanId(null)
+          }}
+          onSubmit={handleSubmitPlan}
           connections={connections}
           jobs={jobs || []}
+          plan={editPlanId ? (plans || []).find((p: RecoveryPlan) => p.id === editPlanId) || null : null}
         />
 
         <FailoverDialog

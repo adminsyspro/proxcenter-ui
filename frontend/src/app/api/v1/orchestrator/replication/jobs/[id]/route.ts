@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 
-import { getOrchestratorClient } from "@/lib/orchestrator/client"
+import { getOrchestratorClient, parseOrchestratorError } from "@/lib/orchestrator/client"
 import { replicationErrorResponse } from "@/lib/orchestrator/replicationError"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { getTenantConnectionIds } from "@/lib/tenant"
@@ -72,6 +72,16 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   } catch (e: any) {
     if ((e as any)?.code !== 'ORCHESTRATOR_UNAVAILABLE') {
       console.error("Error updating replication job:", e)
+    }
+
+    // The orchestrator refuses some edits for good reasons (a guest whose
+    // replica runs, one a recovery plan lists, one another job replicates):
+    // pass its own message and status through, instead of wrapping them in a
+    // 500 that reads "Orchestrator 400: {json}" in the dialog.
+    const upstream = parseOrchestratorError(e)
+
+    if (upstream) {
+      return NextResponse.json({ error: upstream.message }, { status: upstream.status })
     }
 
     return NextResponse.json(

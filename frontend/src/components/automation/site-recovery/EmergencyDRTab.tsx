@@ -16,9 +16,13 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  FormControlLabel,
   IconButton,
+  MenuItem,
+  Select,
   Skeleton,
   Snackbar,
+  Switch,
   Table,
   TableBody,
   TableCell,
@@ -29,7 +33,37 @@ import {
   Typography,
 } from '@mui/material'
 
-import type { ReplicationJob, RecoveryPlan } from '@/lib/orchestrator/site-recovery.types'
+import type { ReplicationJob, RecoveryPlan, VMRestorePoints } from '@/lib/orchestrator/site-recovery.types'
+
+/**
+ * Guest glyph, without the status dot the rest of the product carries: this
+ * screen is about the DR site, where every replica sits stopped by design,
+ * and the one power state that matters here already has its own column.
+ */
+const GuestGlyph = () => (
+  <Box sx={{ width: 16, height: 16, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+    <i className="ri-computer-line" style={{ fontSize: '0.9286rem', opacity: 0.8 }} />
+  </Box>
+)
+
+// The replication job state as one icon: the word lives in the tooltip, so a
+// row carries glyphs instead of a wall of chips. An unknown value keeps a
+// neutral icon and shows the raw value rather than disappearing.
+const JOB_STATUS_ICONS: Record<string, { icon: string; color: string; label: string }> = {
+  synced: { icon: 'ri-checkbox-circle-line', color: 'success.main', label: 'status.synced' },
+  syncing: { icon: 'ri-refresh-line', color: 'info.main', label: 'status.syncing' },
+  paused: { icon: 'ri-pause-circle-line', color: 'warning.main', label: 'status.paused' },
+  pending: { icon: 'ri-time-line', color: 'text.disabled', label: 'status.pending' },
+  error: { icon: 'ri-error-warning-line', color: 'error.main', label: 'status.error' },
+  partial: { icon: 'ri-error-warning-line', color: 'warning.main', label: 'status.partial' },
+  no_match: { icon: 'ri-filter-off-line', color: 'warning.main', label: 'status.noMatch' },
+  suspended: { icon: 'ri-test-tube-line', color: 'warning.main', label: 'status.suspended' },
+  // Not a job state: this guest alone is out of its job's runs while its
+  // replica is up on the DR site. Showing the job's own "synced" on that line
+  // would tell the operator the opposite of what happens to that guest.
+  replica_started: { icon: 'ri-skip-forward-line', color: 'warning.main', label: 'status.replicaStarted' },
+  failed_over: { icon: 'ri-alarm-warning-line', color: 'error.main', label: 'status.failedOver' },
+}
 
 // Mirror the Go destinationVMID logic
 function destinationVMID(prefix: number, vmid: number): number {
@@ -62,19 +96,37 @@ interface EmergencyDRTabProps {
   loading: boolean
   connections: Array<{ id: string; name: string }>
   vmNamesByConn: Record<string, Record<number, string>>
-  onStartVM: (vmId: number, targetCluster: string, jobId: string) => Promise<void>
+  /** connection id -> vmid -> PVE power state, for the DR replicas listed here. */
+  vmStatesByConn: Record<string, Record<number, string>>
+  onStartVM: (vmId: number, targetCluster: string, jobId: string, restorePoint?: string) => Promise<void>
+  onStopVM: (vmId: number, targetCluster: string, jobId: string, resumeReplication: boolean) => Promise<void>
+  /** Restore points of one replicated guest, loaded when its start dialog opens. */
+  loadRestorePoints: (jobId: string, vmId: number) => Promise<VMRestorePoints>
   onExecuteFailover: (planId: string) => void
   onExecuteFailback: (planId: string) => void
   onDeletePlan?: (planId: string) => void
 }
 
 export default function EmergencyDRTab({
-  jobs, plans, loading, connections, vmNamesByConn, onStartVM, onExecuteFailover, onExecuteFailback, onDeletePlan
+  jobs, plans, loading, connections, vmNamesByConn, vmStatesByConn, onStartVM, onStopVM, loadRestorePoints,
+  onExecuteFailover, onExecuteFailback, onDeletePlan
 }: EmergencyDRTabProps) {
   const t = useTranslations('siteRecovery')
   const tc = useTranslations('common')
-  const [loadingVMs, setLoadingVMs] = useState<Record<string, 'starting'>>({})
+  const [loadingVMs, setLoadingVMs] = useState<Record<string, 'starting' | 'stopping'>>({})
   const [deletePlanId, setDeletePlanId] = useState<string | null>(null)
+  // Stop confirmation: the replica may be serving production right now, and
+  // resuming replication rolls its image back to the last mirror snapshot,
+  // so the operator confirms both the stop and the resume explicitly.
+  const [stopTarget, setStopTarget] = useState<DRReadyVM | null>(null)
+  const [resumeReplication, setResumeReplication] = useState(true)
+  // Start confirmation: the operator picks the restore point to boot from and
+  // reads what starting a single replica costs the rest of its job.
+  const [startTarget, setStartTarget] = useState<DRReadyVM | null>(null)
+  const [restorePoint, setRestorePoint] = useState('')
+  const [restorePoints, setRestorePoints] = useState<{ loading: boolean; data: VMRestorePoints | null; failed: boolean }>({
+    loading: false, data: null, failed: false
+  })
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({
     open: false, message: '', severity: 'success'
   })
@@ -98,7 +150,7 @@ export default function EmergencyDRTab({
           sourceCluster: job.source_cluster,
           targetCluster: job.target_cluster,
           jobId: job.id,
-          jobStatus: job.status,
+          jobStatus: (job.suspended_vmids || []).includes(vmId) ? 'replica_started' : job.status,
           lastSync: job.last_sync || null,
           rpoTarget: job.rpo_target,
         })
@@ -146,17 +198,69 @@ export default function EmergencyDRTab({
   const healthyJobs = jobs.filter(j => j.status === 'synced' || j.status === 'syncing').length
   const totalJobs = jobs.length
 
-  const handleStartVM = async (vm: DRReadyVM) => {
+  const handleStartVM = async (vm: DRReadyVM, snapshot: string) => {
     const key = `${vm.vmId}`
     setLoadingVMs(prev => ({ ...prev, [key]: 'starting' }))
     try {
-      await onStartVM(vm.vmId, vm.targetCluster, vm.jobId)
+      await onStartVM(vm.vmId, vm.targetCluster, vm.jobId, snapshot || undefined)
       setSnackbar({ open: true, message: t('emergencyDR.vmStarted', { name: vm.vmName, vmid: vm.targetVmId }), severity: 'success' })
     } catch (e: any) {
       setSnackbar({ open: true, message: e?.message || 'Failed to start VM', severity: 'error' })
     } finally {
       setLoadingVMs(prev => { const n = { ...prev }; delete n[key]; return n })
     }
+  }
+
+  const handleStopVM = async (vm: DRReadyVM, resume: boolean) => {
+    const key = `${vm.vmId}`
+    setLoadingVMs(prev => ({ ...prev, [key]: 'stopping' }))
+    try {
+      await onStopVM(vm.vmId, vm.targetCluster, vm.jobId, resume)
+      setSnackbar({ open: true, message: t('emergencyDR.vmStopped', { name: vm.vmName, vmid: vm.targetVmId }), severity: 'success' })
+    } catch (e: any) {
+      setSnackbar({ open: true, message: e?.message || 'Failed to stop VM', severity: 'error' })
+    } finally {
+      setLoadingVMs(prev => { const n = { ...prev }; delete n[key]; return n })
+    }
+  }
+
+  // The orchestrator refuses to start a replica while its job is mid-transfer
+  // (the rollback and the boot would race the import-diff writing those same
+  // disks). Read it live rather than from the row captured when the dialog
+  // opened: the jobs list refreshes underneath, so the operator sees the
+  // button unlock on its own when the sync ends.
+  const startJobSyncing = !!startTarget && jobs.find(j => j.id === startTarget.jobId)?.status === 'syncing'
+
+  // Only a job the start emptied entirely is paused, so only there does the
+  // stop have a job to resume. Everywhere else the guest simply rejoins the
+  // next run, and a switch would suggest a choice that does not exist.
+  const stopJobPaused = !!stopTarget && jobs.find(j => j.id === stopTarget.jobId)?.status === 'paused'
+
+  const openStartDialog = (vm: DRReadyVM) => {
+    setRestorePoint('')
+    setStartTarget(vm)
+    setRestorePoints({ loading: true, data: null, failed: false })
+    loadRestorePoints(vm.jobId, vm.vmId)
+      .then(data => setRestorePoints({ loading: false, data, failed: false }))
+      .catch(() => setRestorePoints({ loading: false, data: null, failed: true }))
+  }
+
+  const openStopDialog = (vm: DRReadyVM) => {
+    setResumeReplication(true)
+    setStopTarget(vm)
+  }
+
+  // The DR replica's own power state, read from the cluster inventory the page
+  // already loads. PVE reports a PAUSED guest as "running" too, which is why
+  // the chip says started/stopped rather than running/paused.
+  const replicaState = (vm: DRReadyVM) => vmStatesByConn[vm.targetCluster]?.[vm.targetVmId]
+
+  // How many OTHER guests stop replicating while this one runs on the DR site:
+  // the emergency start pauses the job, and a job can protect many guests.
+  const jobSiblingCount = (vm: DRReadyVM) => {
+    const job = jobs.find(j => j.id === vm.jobId)
+
+    return Math.max(0, (job?.vm_ids?.length || 1) - 1)
   }
 
   const tierLabel = (tier?: number) => {
@@ -176,13 +280,51 @@ export default function EmergencyDRTab({
     }
   }
 
-  const statusChip = (status: string) => {
-    const colorMap: Record<string, 'success' | 'warning' | 'error' | 'default' | 'info'> = {
-      synced: 'success', syncing: 'info', paused: 'warning', error: 'error', pending: 'default', no_match: 'warning', partial: 'warning',
-    }
-    const labelMap: Record<string, string> = { no_match: t('status.noMatch'), partial: t('status.partial') }
-    const label = labelMap[status] ?? status
-    return <Chip size="small" label={label} color={colorMap[status] || 'default'} sx={{ textTransform: 'capitalize' }} />
+  // The plan status is a raw enum ("failed_over", "failing_back"): the same
+  // translated labels RecoveryPlansTab uses, so the panic screen never shows
+  // a key with an underscore in it. An unknown value falls back to itself.
+  const planStatusLabel = (status: string) => {
+    if (status === 'failing_back') return t('plans.statusFailingBack')
+
+    const key = `planStatus.${status}`
+    const label = t.has(key) ? t(key) : status
+
+    return label
+  }
+
+  // started / stopped / unknown, never the raw PVE word: "running" there also
+  // covers a paused guest, and an operator reading "running" on a DR row in
+  // the middle of an incident must not be told the replica is serving.
+  const replicaChip = (state?: string) => {
+    if (!state) return <Typography variant="body2" color="text.disabled">-</Typography>
+
+    const started = state === 'running' || state === 'paused'
+
+    return (
+      <Tooltip title={started ? t('emergencyDR.replicaStartedHint') : ''} disableHoverListener={!started} arrow>
+        <Chip
+          size="small"
+          variant="outlined"
+          color={started ? 'success' : 'default'}
+          icon={<i className={started ? 'ri-play-circle-line' : 'ri-stop-circle-line'} style={{ fontSize: 14 }} />}
+          label={started ? t('emergencyDR.replicaStarted') : t('emergencyDR.replicaStopped')}
+        />
+      </Tooltip>
+    )
+  }
+
+  const statusIcon = (status: string) => {
+    const spec = JOB_STATUS_ICONS[status]
+
+    return (
+      <Tooltip title={spec ? t(spec.label) : status} arrow>
+        <Box
+          component="i"
+          className={spec?.icon || 'ri-question-line'}
+          sx={{ fontSize: 18, color: spec?.color || 'text.disabled', display: 'inline-flex' }}
+        />
+      </Tooltip>
+    )
   }
 
   const formatLastSync = (ls: string | null) => {
@@ -226,6 +368,7 @@ export default function EmergencyDRTab({
             <TableCell>{t('emergencyDR.vmName')}</TableCell>
             <TableCell>{t('emergencyDR.sourceVMID')}</TableCell>
             <TableCell>{t('emergencyDR.drVMID')}</TableCell>
+            <TableCell>{t('emergencyDR.replicaState')}</TableCell>
             <TableCell>{t('emergencyDR.replStatus')}</TableCell>
             <TableCell>{t('emergencyDR.lastSync')}</TableCell>
             <TableCell>{t('emergencyDR.rpo')}</TableCell>
@@ -237,14 +380,27 @@ export default function EmergencyDRTab({
           {vms.map(vm => {
             const key = `${vm.vmId}`
             const vmLoading = loadingVMs[key]
+            // Each action follows the replica it acts on: starting a replica
+            // that already runs does nothing but pause its job again, and
+            // stopping one that is already down is just as empty. An unknown
+            // state (the inventory has no row for that replica) leaves both
+            // enabled rather than locking the operator out during an incident.
+            const state = replicaState(vm)
+            const replicaStarted = state === 'running' || state === 'paused'
+            const replicaStopped = state === 'stopped'
+
             return (
               <TableRow key={key} hover>
                 <TableCell>
-                  <Typography variant="body2" fontWeight={500}>{vm.vmName}</Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <GuestGlyph />
+                    <Typography variant="body2" fontWeight={500}>{vm.vmName}</Typography>
+                  </Box>
                 </TableCell>
                 <TableCell><code>{vm.vmId}</code></TableCell>
                 <TableCell><code>{vm.targetVmId}</code></TableCell>
-                <TableCell>{statusChip(vm.jobStatus)}</TableCell>
+                <TableCell>{replicaChip(replicaState(vm))}</TableCell>
+                <TableCell>{statusIcon(vm.jobStatus)}</TableCell>
                 <TableCell>
                   <Typography variant="body2" color="text.secondary">{formatLastSync(vm.lastSync)}</Typography>
                 </TableCell>
@@ -260,27 +416,27 @@ export default function EmergencyDRTab({
                 )}
                 <TableCell align="right">
                   <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'flex-end' }}>
-                    <Tooltip title={t('emergencyDR.startVM')}>
+                    <Tooltip title={replicaStarted ? t('emergencyDR.startVMAlreadyStarted') : t('emergencyDR.startVM')}>
                       <span>
                         <IconButton
                           size="small"
-                          disabled={!!vmLoading}
-                          onClick={() => handleStartVM(vm)}
+                          disabled={!!vmLoading || replicaStarted}
+                          onClick={() => openStartDialog(vm)}
                           sx={{ color: 'success.main', '&:hover': { bgcolor: 'success.main', color: 'white' } }}
                         >
                           {vmLoading === 'starting' ? <CircularProgress size={16} /> : <i className="ri-play-circle-line" style={{ fontSize: 18 }} />}
                         </IconButton>
                       </span>
                     </Tooltip>
-                    <Tooltip title={vm.planId ? t('emergencyDR.failback') : t('emergencyDR.failbackNoPlan')}>
+                    <Tooltip title={replicaStopped ? t('emergencyDR.stopVMAlreadyStopped') : t('emergencyDR.stopVM')}>
                       <span>
                         <IconButton
                           size="small"
-                          disabled={!vm.planId}
-                          onClick={() => vm.planId && onExecuteFailback(vm.planId)}
-                          sx={{ color: 'primary.main', '&:hover': { bgcolor: 'primary.main', color: 'primary.contrastText' } }}
+                          disabled={!!vmLoading || replicaStopped}
+                          onClick={() => openStopDialog(vm)}
+                          sx={{ color: 'warning.main', '&:hover': { bgcolor: 'warning.main', color: 'white' } }}
                         >
-                          <i className="ri-arrow-turn-back-line" style={{ fontSize: 18 }} />
+                          {vmLoading === 'stopping' ? <CircularProgress size={16} /> : <i className="ri-stop-circle-line" style={{ fontSize: 18 }} />}
                         </IconButton>
                       </span>
                     </Tooltip>
@@ -327,11 +483,11 @@ export default function EmergencyDRTab({
                 <Typography variant="body2" color="text.secondary">
                   {connMap[plan.source_cluster] || plan.source_cluster} → {connMap[plan.target_cluster] || plan.target_cluster}
                 </Typography>
-                <Chip size="small" label={plan.status} color={
+                <Chip size="small" label={planStatusLabel(plan.status)} color={
                   plan.status === 'ready' ? 'success' :
                   plan.status === 'failed_over' ? 'error' :
                   plan.status === 'executing' ? 'info' : 'warning'
-                } sx={{ textTransform: 'capitalize' }} />
+                } />
                 <Chip size="small" label={`${vms.length} VMs`} variant="outlined" />
               </Box>
             }
@@ -343,10 +499,27 @@ export default function EmergencyDRTab({
                   size="small"
                   startIcon={<i className="ri-alarm-warning-line" />}
                   onClick={() => onExecuteFailover(planId)}
-                  disabled={plan.status === 'executing' || plan.status === 'failed_over'}
+                  disabled={plan.status === 'executing' || plan.status === 'failed_over' || plan.status === 'failing_back'}
                 >
                   {t('emergencyDR.emergencyFailover')}
                 </Button>
+                <Tooltip
+                  title={t('emergencyDR.planFailbackDisabled')}
+                  disableHoverListener={plan.status === 'failed_over' || plan.status === 'failing_back'}
+                  arrow
+                >
+                  <span>
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      startIcon={<i className="ri-arrow-go-back-line" />}
+                      onClick={() => onExecuteFailback(planId)}
+                      disabled={plan.status !== 'failed_over' && plan.status !== 'failing_back'}
+                    >
+                      {plan.status === 'failing_back' ? t('emergencyDR.openPlanFailback') : t('emergencyDR.planFailback')}
+                    </Button>
+                  </span>
+                </Tooltip>
                 {onDeletePlan && (
                   <IconButton
                     size="small"
@@ -400,6 +573,124 @@ export default function EmergencyDRTab({
           {snackbar.message}
         </Alert>
       </Snackbar>
+
+      {/* Start DR VM Dialog: restore point choice and what the start costs */}
+      <Dialog open={!!startTarget} onClose={() => setStartTarget(null)} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <i className="ri-play-circle-line" style={{ fontSize: 20 }} />
+          {t('emergencyDR.startVMTitle', { name: startTarget?.vmName || '' })}
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body2">
+            {t('emergencyDR.startVMBody', { vmid: startTarget?.targetVmId || 0 })}
+          </Typography>
+
+          <Box sx={{ mt: 2, display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
+            <Typography variant="body2" fontWeight={500}>{t('failover.restorePoint')}</Typography>
+            {restorePoints.loading ? <CircularProgress size={18} /> : (
+              (restorePoints.data?.restore_points?.length || 0) === 0 ? (
+                <Typography variant="body2" color="text.secondary">
+                  {restorePoints.failed || restorePoints.data?.error
+                    ? t('failover.restorePointsLoadFailed')
+                    : t('failover.restorePointsNone')}
+                </Typography>
+              ) : (
+                <Select
+                  size="small"
+                  displayEmpty
+                  value={restorePoint}
+                  onChange={e => setRestorePoint(e.target.value)}
+                  sx={{ minWidth: 240, fontSize: '0.8rem' }}
+                >
+                  <MenuItem value="">{t('failover.restorePointLatest')}</MenuItem>
+                  {(restorePoints.data?.restore_points || []).map(rp => (
+                    <MenuItem key={rp.snapshot} value={rp.snapshot}>
+                      <i className="ri-camera-line" style={{ fontSize: 13, marginRight: 6, opacity: 0.7 }} />
+                      {rp.created_iso ? new Date(rp.created_iso).toLocaleString() : rp.snapshot}
+                    </MenuItem>
+                  ))}
+                </Select>
+              )
+            )}
+          </Box>
+
+          {startJobSyncing && (
+            <Alert severity="warning" sx={{ mt: 2 }}>
+              {t('emergencyDR.startVMJobSyncing')}
+            </Alert>
+          )}
+          <Alert severity="info" sx={{ mt: 2 }}>
+            {t('emergencyDR.startPausesJob', { count: startTarget ? jobSiblingCount(startTarget) : 0 })}
+          </Alert>
+          {!!restorePoint && (
+            <Alert severity="info" sx={{ mt: 1 }}>
+              {t('emergencyDR.restorePointKeepsNewer')}
+            </Alert>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setStartTarget(null)}>{tc('cancel')}</Button>
+          <Button
+            variant="contained"
+            color="success"
+            disabled={startJobSyncing}
+            onClick={() => {
+              const vm = startTarget
+              const snapshot = restorePoint
+
+              setStartTarget(null)
+              if (vm) handleStartVM(vm, snapshot)
+            }}
+          >
+            {t('emergencyDR.startVM')}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Stop DR VM Confirmation Dialog */}
+      <Dialog open={!!stopTarget} onClose={() => setStopTarget(null)} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <i className="ri-stop-circle-line" style={{ fontSize: 20 }} />
+          {t('emergencyDR.stopVMTitle', { name: stopTarget?.vmName || '' })}
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body2">
+            {t('emergencyDR.stopVMBody', { vmid: stopTarget?.targetVmId || 0 })}
+          </Typography>
+          {stopJobPaused ? (
+            <>
+              <FormControlLabel
+                sx={{ mt: 1.5 }}
+                control={<Switch checked={resumeReplication} onChange={e => setResumeReplication(e.target.checked)} />}
+                label={t('emergencyDR.resumeReplication')}
+              />
+            </>
+          ) : (
+            <Typography variant="body2" sx={{ mt: 1.5 }} color="text.secondary">
+              {t('emergencyDR.stopVMGuestRejoins')}
+            </Typography>
+          )}
+          <Alert severity="warning" sx={{ mt: 1 }}>
+            {t('emergencyDR.resumeReplicationWarning')}
+          </Alert>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setStopTarget(null)}>{tc('cancel')}</Button>
+          <Button
+            variant="contained"
+            color="warning"
+            onClick={() => {
+              const vm = stopTarget
+              const resume = resumeReplication
+
+              setStopTarget(null)
+              if (vm) handleStopVM(vm, resume)
+            }}
+          >
+            {t('emergencyDR.stopVM')}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* Delete Plan Confirmation Dialog */}
       <Dialog open={!!deletePlanId} onClose={() => setDeletePlanId(null)} maxWidth="xs" fullWidth>

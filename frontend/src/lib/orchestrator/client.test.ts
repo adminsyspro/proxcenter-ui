@@ -480,3 +480,41 @@ describe('getVMDiskLatencySeries', () => {
     expect(url).toBe('http://localhost:8080/api/v1/metrics/conn-a/vms/104/disk-latency')
   })
 })
+
+describe('Emergency DR calls of the orchestrator client', () => {
+  it('asks for the restore points of one guest, scoped to its job', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ vm_id: 103, restore_points: [] }))
+
+    const { getOrchestratorClient } = await import('./client')
+    const res = await getOrchestratorClient().getJobVMRestorePoints('job-1', 103)
+
+    expect(fetchMock.mock.calls[0][0]).toBe('http://localhost:8080/api/v1/replication/jobs/job-1/vms/103/restore-points')
+    expect(res.data.vm_id).toBe(103)
+  })
+
+  it('gives an emergency start the budget the whole sequence needs, not the 30s default', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ status: 'started' }))
+
+    const { getOrchestratorClient } = await import('./client')
+    await getOrchestratorClient().startDRVM({
+      vm_id: 103, target_cluster: 'dst', replication_job_id: 'job-1', restore_point: 'mirror-1',
+    })
+
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(url).toBe('http://localhost:8080/api/v1/replication/emergency/start-vm')
+    expect(JSON.parse(init.body).restore_point).toBe('mirror-1')
+  })
+
+  it('carries the resume-replication choice of a stop', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ status: 'stopped' }))
+
+    const { getOrchestratorClient } = await import('./client')
+    await getOrchestratorClient().stopDRVM({
+      vm_id: 103, target_cluster: 'dst', replication_job_id: 'job-1', resume_replication: false,
+    })
+
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(url).toBe('http://localhost:8080/api/v1/replication/emergency/stop-vm')
+    expect(JSON.parse(init.body).resume_replication).toBe(false)
+  })
+})

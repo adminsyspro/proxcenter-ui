@@ -615,6 +615,13 @@ return this.get<ClusterMetrics[]>(`/metrics/${connectionId}/history${query ? `?$
     return this.get<any>(`/replication/plans/${planId}/restore-points`)
   }
 
+  // Restore points of a single replicated guest, addressed by its job and its
+  // SOURCE vmid: the Emergency DR tab starts one replica at a time, and most
+  // of the guests it lists belong to no recovery plan.
+  getJobVMRestorePoints(jobId: string, vmId: number) {
+    return this.get<any>(`/replication/jobs/${jobId}/vms/${vmId}/restore-points`)
+  }
+
   createRecoveryPlan(body: any) {
     return this.post<any>('/replication/plans', body)
   }
@@ -657,12 +664,20 @@ return this.get<ClusterMetrics[]>(`/metrics/${connectionId}/history${query ? `?$
     return this.post<any>(`/replication/plans/${planId}/cleanup-test`, undefined, 55_000)
   }
 
-  startDRVM(body: { vm_id: number; target_cluster: string; replication_job_id: string }) {
-    return this.post<any>('/replication/emergency/start-vm', body)
+  startDRVM(body: { vm_id: number; target_cluster: string; replication_job_id: string; restore_point?: string }) {
+    // An emergency start waits for an in-flight sync of the job, pauses it,
+    // optionally rolls every disk back to a restore point, then boots the
+    // replica and waits for it to report running: measured at ~30s in the lab
+    // for a single-disk guest, and the 30s default expired mid-sequence,
+    // cancelling the boot AFTER the rollback had landed. Kept under the 60s
+    // nginx read timeout of a packaged install, like the test cleanup below.
+    return this.post<any>('/replication/emergency/start-vm', body, 55_000)
   }
 
   stopDRVM(body: { vm_id: number; target_cluster: string; replication_job_id: string; resume_replication?: boolean }) {
-    return this.post<any>('/replication/emergency/stop-vm', body)
+    // Same budget as the start: stopping the replica and resuming its job is
+    // shorter, but it is the same SSH round trips to the same DR node.
+    return this.post<any>('/replication/emergency/stop-vm', body, 55_000)
   }
 
   getRecoveryHistory(planId: string) {

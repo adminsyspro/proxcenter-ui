@@ -4094,7 +4094,7 @@ return (
             <i className="ri-database-2-fill" style={{ fontSize: 14, opacity: 0.7 }} />
             <Typography variant="body2" sx={{ fontWeight: 700 }}>STORAGE</Typography>
             <Typography variant="caption" sx={{ opacity: 0.5 }}>
-              ({clusterStorages.reduce((acc, cs) => acc + cs.sharedStorages.length + cs.nodes.reduce((a, n) => a + n.storages.length, 0), 0)})
+              ({clusterStorages.reduce((acc, cs) => acc + (cs.sharedStorages?.length ?? 0) + (cs.nodes ?? []).reduce((a, n) => a + n.storages.length, 0), 0)})
             </Typography>
           </Box>
           <Collapse in={!collapsedSections.has('storage')}>
@@ -4161,7 +4161,7 @@ return (
             // STORAGE section is flat: one root entry per node (no cluster
             // wrapper), matching native Proxmox VE storage tree. Shared
             // cluster storages are shown once, before the per-node list.
-            const sharedItems = cs.sharedStorages.map(s => (
+            const sharedItems = (cs.sharedStorages ?? []).map(s => (
               <TreeItem
                 key={`storage:${cs.connId}:${s.storage}`}
                 itemId={`storage:${cs.connId}:${s.storage}`}
@@ -4172,7 +4172,7 @@ return (
             // mode (provider view). The 'vms' mode (tenant or flat) keeps
             // shared storages only, consistent with the node abstraction.
             const nodeItems = viewMode === 'tree'
-              ? cs.nodes.filter(n => n.storages.length > 0).map(n => (
+              ? (cs.nodes ?? []).filter(n => n.storages.length > 0).map(n => (
                 <TreeItem
                   key={`storage-node:${cs.connId}:${n.node}`}
                   itemId={`storage-node:${cs.connId}:${n.node}`}

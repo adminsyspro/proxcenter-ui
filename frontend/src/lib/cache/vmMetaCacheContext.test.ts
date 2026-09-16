@@ -25,7 +25,7 @@ const inventory = (guests: any[]) =>
     clusters: [{ id: 'conn-1', name: 'C1', nodes: [{ node: 'n1', status: 'online', guests }] }],
     pbsServers: [],
     externalHypervisors: [],
-    storages: [],
+    storageResources: [],
     stats: {
       totalClusters: 1,
       totalNodes: 1,

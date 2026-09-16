@@ -101,6 +101,13 @@ export async function applyExtentsWithProgress(a: {
   }
   for (const script of buildApplyScripts(nbdDev, dev, extents, capacityBytes)) {
     const res = await executeSSH(connectionId, nodeIp, script, APPLY_TIMEOUT_MS, { inactivityMs: APPLY_INACTIVITY_MS, onData })
-    if (!res.success) throw new Error(`${label} on disk ${diskIndex}: ${res.error || res.output}`)
+    // Surface res.output first, like the thick-zero step does (#946). The apply
+    // script redirects each dd's stderr into stdout, so the real cause ("Input/output
+    // error" on the nbd source, "No space left on device" on the target) lands in
+    // output, while error is only the exit status: "Exit code N" on the ssh2 path and
+    // the orchestrator's "command failed: Process exited with status 1" wrapper on the
+    // brokered one. Preferring error meant the brokered path NEVER showed the reason,
+    // and #946 cost three round trips with the customer to recover a line we already had.
+    if (!res.success) throw new Error(`${label} on disk ${diskIndex}: ${res.output || res.error}`)
   }
 }

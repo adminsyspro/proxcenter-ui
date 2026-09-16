@@ -80,7 +80,8 @@ export async function createPbsStorage(conn: PveConn, args: CreatePbsStorageArgs
       const msg = String(e?.message ?? '')
       const isProbeError = PROBE_RETRY_PATTERNS.some(rx => rx.test(msg))
       const willRetry = isProbeError && attempt < STORAGE_RETRY_DELAYS_MS.length
-      console.warn(`[pve-pbs-storage] attempt ${attempt + 1} failed: ${safeLog(msg)}${willRetry ? ` — retrying in ${STORAGE_RETRY_DELAYS_MS[attempt]}ms` : ''}`)
+      const retryNote = willRetry ? ` — retrying in ${STORAGE_RETRY_DELAYS_MS[attempt]}ms` : ''
+      console.warn(`[pve-pbs-storage] attempt ${attempt + 1} failed: ${safeLog(msg)}${retryNote}`)
       if (!willRetry) throw e
       await new Promise(r => setTimeout(r, STORAGE_RETRY_DELAYS_MS[attempt]))
     }

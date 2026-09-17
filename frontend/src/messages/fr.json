@@ -2669,6 +2669,16 @@
     "viewRecommendations": "Voir les recommandations"
   },
   "settings": {
+    "inventoryTagStyle": {
+      "title": "Tags de l'inventaire",
+      "desc": "Affichage des tags des invités dans l'arborescence de l'inventaire et dans la liste des VM.",
+      "auto": "Automatique",
+      "full": "Complet",
+      "circle": "Pastille",
+      "dense": "Dense",
+      "none": "Masqué",
+      "autoHint": "Le mode automatique conserve la forme définie dans les options du datacenter Proxmox, connexion par connexion."
+    },
     "basemap": {
       "title": "Fond de carte",
       "desc": "Source des tuiles pour la vue topologie géographique et les cartes de datacenters.",

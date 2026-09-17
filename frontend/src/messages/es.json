@@ -2669,6 +2669,16 @@
     "viewRecommendations": "Ver recomendaciones"
   },
   "settings": {
+    "inventoryTagStyle": {
+      "title": "Etiquetas del inventario",
+      "desc": "Cómo se muestran las etiquetas de los invitados en el árbol del inventario y en la lista de VM.",
+      "auto": "Automático",
+      "full": "Completo",
+      "circle": "Punto",
+      "dense": "Denso",
+      "none": "Oculto",
+      "autoHint": "El modo automático conserva la forma definida en las opciones del centro de datos de Proxmox, conexión por conexión."
+    },
     "basemap": {
       "title": "Mapa base",
       "desc": "Origen de las teselas para la vista de topología geográfica y los mapas de centros de datos.",

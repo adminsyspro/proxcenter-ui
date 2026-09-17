@@ -2673,6 +2673,16 @@
     "viewRecommendations": "查看建议"
   },
   "settings": {
+    "inventoryTagStyle": {
+      "title": "清单标签",
+      "desc": "标签在清单树和虚拟机列表中的显示方式。",
+      "auto": "自动",
+      "full": "完整",
+      "circle": "圆点",
+      "dense": "紧凑",
+      "none": "隐藏",
+      "autoHint": "自动模式会按连接沿用 Proxmox 数据中心选项中设置的形状。"
+    },
     "basemap": {
       "title": "地图底图",
       "desc": "地理拓扑视图和数据中心地图使用的瓦片来源。",

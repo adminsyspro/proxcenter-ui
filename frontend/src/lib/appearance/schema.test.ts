@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import globalThemesConfig, { densityConfig } from '@configs/globalThemesConfig'
+import { INVENTORY_TAG_STYLES } from '@configs/inventoryTagStyleConfig'
 import lightBackgroundConfig from '@configs/lightBackgroundConfig'
 
 import { APPEARANCE_VALIDATORS, PERSISTED_APPEARANCE_KEYS, sanitizeAppearance } from './schema'
@@ -102,6 +103,14 @@ describe('sanitizeAppearance', () => {
 
   it.each(['true', 1])('rejects non-boolean semiDark value %j', semiDark => {
     expect(sanitizeAppearance({ semiDark })).toEqual({})
+  })
+
+  it.each(INVENTORY_TAG_STYLES)('accepts the inventory tag style %s', inventoryTagStyle => {
+    expect(sanitizeAppearance({ inventoryTagStyle })).toEqual({ inventoryTagStyle })
+  })
+
+  it.each(['pill', '', 3, null])('rejects the invalid inventory tag style %j', inventoryTagStyle => {
+    expect(sanitizeAppearance({ inventoryTagStyle })).toEqual({})
   })
 
   it('drops a present invalid key instead of replacing it with a default', () => {

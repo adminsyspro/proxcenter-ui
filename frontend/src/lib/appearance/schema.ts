@@ -15,6 +15,7 @@
 // next/headers) so both the API route and the browser can import it.
 
 import globalThemesConfig, { densityConfig } from '@configs/globalThemesConfig'
+import { INVENTORY_TAG_STYLES } from '@configs/inventoryTagStyleConfig'
 import lightBackgroundConfig from '@configs/lightBackgroundConfig'
 
 type Validator = (value: unknown) => unknown
@@ -83,6 +84,7 @@ export const APPEARANCE_VALIDATORS: Record<string, Validator> = {
   fontSize: intBetween(12, 18),
   uiScale: intBetween(80, 120),
   refreshInterval: numberIn([0, 5, 10, 30, 60, 300]),
+  inventoryTagStyle: enumOf(INVENTORY_TAG_STYLES),
 }
 
 export const PERSISTED_APPEARANCE_KEYS = Object.keys(APPEARANCE_VALIDATORS)

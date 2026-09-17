@@ -2669,6 +2669,23 @@
     "viewRecommendations": "Ver recomendaciones"
   },
   "settings": {
+    "basemap": {
+      "title": "Mapa base",
+      "desc": "Origen de las teselas para la vista de topología geográfica y los mapas de centros de datos.",
+      "provider": "Origen de las teselas",
+      "providerOsm": "OpenStreetMap (sin clave API)",
+      "providerCustom": "Servidor de teselas personalizado",
+      "lightUrl": "URL de teselas, tema claro",
+      "lightUrlHelp": "URL de plantilla con los marcadores z, x e y.",
+      "darkUrl": "URL de teselas, tema oscuro",
+      "darkUrlHelp": "Opcional. Si se deja vacío, las teselas claras se invierten para el tema oscuro.",
+      "attribution": "Atribución",
+      "attributionHelp": "Mención mostrada en la esquina del mapa. La mayoría de proveedores la exigen.",
+      "invalidTemplate": "Esta URL no es una plantilla de teselas: faltan los marcadores z, x e y.",
+      "readOnly": "Solo un administrador puede cambiar el mapa base.",
+      "saved": "Mapa base guardado.",
+      "saveFailed": "No se ha podido guardar el mapa base."
+    },
     "title": "Ajustes",
     "subtitle": "Ajustes de cuenta",
     "welcome": "Bienvenido a ProxCenter",

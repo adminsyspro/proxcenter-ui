@@ -2669,6 +2669,23 @@
     "viewRecommendations": "Voir les recommandations"
   },
   "settings": {
+    "basemap": {
+      "title": "Fond de carte",
+      "desc": "Source des tuiles pour la vue topologie géographique et les cartes de datacenters.",
+      "provider": "Source des tuiles",
+      "providerOsm": "OpenStreetMap (sans clé API)",
+      "providerCustom": "Serveur de tuiles personnalisé",
+      "lightUrl": "URL des tuiles, thème clair",
+      "lightUrlHelp": "URL modèle contenant les repères z, x et y.",
+      "darkUrl": "URL des tuiles, thème sombre",
+      "darkUrlHelp": "Facultatif. Laissé vide, les tuiles claires sont inversées pour le thème sombre.",
+      "attribution": "Attribution",
+      "attributionHelp": "Mention affichée dans le coin de la carte. La plupart des fournisseurs l'exigent.",
+      "invalidTemplate": "Cette URL n'est pas un modèle de tuiles : les repères z, x et y manquent.",
+      "readOnly": "Seul un administrateur peut changer le fond de carte.",
+      "saved": "Fond de carte enregistré.",
+      "saveFailed": "Impossible d'enregistrer le fond de carte."
+    },
     "title": "Paramètres",
     "subtitle": "Paramètres du compte",
     "welcome": "Bienvenue sur ProxCenter",

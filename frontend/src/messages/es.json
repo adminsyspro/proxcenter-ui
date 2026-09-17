@@ -4541,7 +4541,9 @@
       "statusFailingBack": "Failback en curso",
       "openFailback": "Abrir failback",
       "failingBackTooltip": "Cancele el failback antes de eliminar este plan.",
-      "jobColumn": "Trabajo de replicación"
+      "jobColumn": "Trabajo de replicación",
+      "sharesGuestsWith": "Comparte VMs con: {plans}",
+      "alsoInPlan": "también en {plan}"
     },
     "rpoTargetLabel": "RPO objetivo",
     "createJob": {
@@ -4691,7 +4693,8 @@
       "selectReplicatedVMs": "Seleccionar VMs replicadas",
       "noReplicatedVMs": "No se encontraron VMs replicadas. Crea primero un trabajo de replicación.",
       "assignVMs": "Orden de arranque y niveles",
-      "create": "Crear plan"
+      "create": "Crear plan",
+      "vmInOtherPlans": "También en el plan: {plans}"
     },
     "failover": {
       "testTitle": "Probar failover",
@@ -4745,7 +4748,8 @@
       "completeVMs": "VM ahora activas en el sitio DR",
       "completeLocked": "La replicación está bloqueada y el plan está conmutado — el failback lo devolverá.",
       "clonesDestroyed": "Clones eliminados, configuración restaurada",
-      "testActiveConflict": "Hay una prueba de conmutación activa. Ejecute la limpieza antes de iniciar esta operación."
+      "testActiveConflict": "Hay una prueba de conmutación activa. Ejecute la limpieza antes de iniciar esta operación.",
+      "unavailableRefreshed": "El orquestador no respondió a tiempo. El estado mostrado se ha actualizado, compruébelo antes de reintentar."
     },
     "failback": {
       "phase1Title": "Replicación inversa en curso",

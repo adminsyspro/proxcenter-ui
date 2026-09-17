@@ -237,12 +237,23 @@ export default function SiteRecoveryPage() {
     }
   }, [editPlanId, mutatePlans])
 
+  // An orchestrator that dropped the connection after 30 s has usually
+  // finished the work anyway (roadmap#8). Before such an error is shown, the
+  // plans and jobs are refetched so what is on screen is the real state, and
+  // the message says so, or the operator retries an action that completed.
+  const describeActionError = useCallback(async (data: any, fallback: string): Promise<string> => {
+    const message: string = data?.error || fallback
+    if (data?.code !== 'ORCHESTRATOR_UNAVAILABLE') return message
+    await Promise.all([mutatePlans(), mutateJobs()])
+    return `${message}. ${t('siteRecovery.failover.unavailableRefreshed')}`
+  }, [mutatePlans, mutateJobs, t])
+
   const handleJobAction = useCallback(async (id: string, action: 'sync' | 'resume') => {
     try {
       const response = await fetch(`/api/v1/orchestrator/replication/jobs/${id}/${action}`, { method: 'POST' })
       if (!response.ok) {
         const data = await response.json().catch(() => ({}))
-        setOperationError(response.status === 409 ? t('siteRecovery.failover.testActiveConflict') : data.error || response.statusText)
+        setOperationError(response.status === 409 ? t('siteRecovery.failover.testActiveConflict') : await describeActionError(data, response.statusText))
         return
       }
       setOperationError(null)
@@ -250,7 +261,7 @@ export default function SiteRecoveryPage() {
     } catch (error) {
       setOperationError(error instanceof Error ? error.message : String(error))
     }
-  }, [mutateJobs, t])
+  }, [describeActionError, mutateJobs, t])
 
   const handleSyncJob = useCallback((id: string) => handleJobAction(id, 'sync'), [handleJobAction])
 
@@ -275,7 +286,7 @@ export default function SiteRecoveryPage() {
         } else if (response.status === 409 && data.code === 'job_running') {
           setOperationError(t('siteRecovery.protection.deleteJobRunning'))
         } else {
-          setOperationError(response.status === 409 ? t('siteRecovery.failover.testActiveConflict') : data.error || response.statusText)
+          setOperationError(response.status === 409 ? t('siteRecovery.failover.testActiveConflict') : await describeActionError(data, response.statusText))
         }
         return
       }
@@ -284,14 +295,14 @@ export default function SiteRecoveryPage() {
     } catch (error) {
       setOperationError(error instanceof Error ? error.message : String(error))
     }
-  }, [mutateJobs, t])
+  }, [describeActionError, mutateJobs, t])
 
   const handleDeletePlan = useCallback(async (id: string) => {
     try {
       const response = await fetch(`/api/v1/orchestrator/replication/plans/${id}`, { method: 'DELETE' })
       if (!response.ok) {
         const data = await response.json().catch(() => ({}))
-        setOperationError(response.status === 409 ? t('siteRecovery.failover.testActiveConflict') : data.error || response.statusText)
+        setOperationError(response.status === 409 ? t('siteRecovery.failover.testActiveConflict') : await describeActionError(data, response.statusText))
         return
       }
       setOperationError(null)
@@ -299,7 +310,7 @@ export default function SiteRecoveryPage() {
     } catch (error) {
       setOperationError(error instanceof Error ? error.message : String(error))
     }
-  }, [mutatePlans, t])
+  }, [describeActionError, mutatePlans, t])
 
   const openFailoverDialog = useCallback((planId: string, type: 'test' | 'failover' | 'failback') => {
     setFailoverDialog({ open: true, planId, type })
@@ -373,7 +384,7 @@ export default function SiteRecoveryPage() {
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
         setFailoverErrorStatus(res.status)
-        setFailoverError(data?.error || t('siteRecovery.failover.testConflict'))
+        setFailoverError(await describeActionError(data, t('siteRecovery.failover.testConflict')))
         mutatePlans()
         return
       }
@@ -384,7 +395,7 @@ export default function SiteRecoveryPage() {
     } catch (e) {
       console.error('Failed to execute:', e)
     }
-  }, [failoverDialog, mutatePlans, t])
+  }, [describeActionError, failoverDialog, mutatePlans, t])
 
   const handleCleanupTest = useCallback(async () => {
     if (!failoverDialog.planId) return
@@ -404,7 +415,7 @@ export default function SiteRecoveryPage() {
       // one is exactly the right thing to do.
       if (!res.ok && res.status !== 409) {
         setCleanupLoading(false)
-        setCleanupResult({ vms_stopped: 0, disks_rolled: 0, jobs_resumed: 0, errors: data?.error ? [data.error] : [] })
+        setCleanupResult({ vms_stopped: 0, disks_rolled: 0, jobs_resumed: 0, errors: data?.error ? [await describeActionError(data, data.error)] : [] })
         return
       }
 
@@ -425,7 +436,7 @@ export default function SiteRecoveryPage() {
       setCleanupLoading(false)
       setCleanupResult({ vms_stopped: 0, disks_rolled: 0, jobs_resumed: 0, errors: [e instanceof Error ? e.message : String(e)] })
     }
-  }, [failoverDialog.planId, activeExecution, mutateJobs, mutatePlans])
+  }, [failoverDialog.planId, activeExecution, describeActionError, mutateJobs, mutatePlans])
 
   // Follow a cleanup while it runs. Stopping each DR guest and rolling its
   // replica images back takes minutes per guest on large images, far past any
@@ -479,7 +490,7 @@ export default function SiteRecoveryPage() {
       const res = await fetch(`/api/v1/orchestrator/replication/plans/${planId}/failback-cutover`, { method: 'POST' })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
-        setFailoverError(data?.error || 'Failed to execute failback cutover')
+        setFailoverError(await describeActionError(data, 'Failed to execute failback cutover'))
         mutatePlans()
         return
       }
@@ -495,14 +506,14 @@ export default function SiteRecoveryPage() {
     } catch (e) {
       console.error('Failed to execute failback cutover:', e)
     }
-  }, [activeExecution, mutatePlans])
+  }, [activeExecution, describeActionError, mutatePlans])
 
   const handleFailbackCancel = useCallback(async (planId: string) => {
     try {
       const res = await fetch(`/api/v1/orchestrator/replication/plans/${planId}/failback-cancel`, { method: 'POST' })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
-        setFailoverError(data?.error || 'Failed to cancel failback')
+        setFailoverError(await describeActionError(data, 'Failed to cancel failback'))
         mutatePlans()
         return
       }
@@ -513,7 +524,7 @@ export default function SiteRecoveryPage() {
     } catch (e) {
       console.error('Failed to cancel failback:', e)
     }
-  }, [mutatePlans])
+  }, [describeActionError, mutatePlans])
 
   // What an emergency action changes keeps moving for about a minute: the
   // replica's power state first, then its job walking pending -> syncing ->
@@ -765,6 +776,7 @@ export default function SiteRecoveryPage() {
           connections={connections}
           jobs={jobs || []}
           plan={editPlanId ? (plans || []).find((p: RecoveryPlan) => p.id === editPlanId) || null : null}
+          plans={plans || []}
         />
 
         <FailoverDialog

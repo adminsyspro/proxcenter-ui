@@ -4545,7 +4545,9 @@
       "statusFailingBack": "故障回复进行中",
       "openFailback": "打开故障回复",
       "failingBackTooltip": "删除此计划前请先取消故障回复。",
-      "jobColumn": "复制任务"
+      "jobColumn": "复制任务",
+      "sharesGuestsWith": "与以下计划共享虚拟机：{plans}",
+      "alsoInPlan": "也在 {plan} 中"
     },
     "rpoTargetLabel": "RPO 目标",
     "createJob": {
@@ -4695,7 +4697,8 @@
       "selectReplicatedVMs": "选择已复制的 VM",
       "noReplicatedVMs": "未找到已复制的 VM。请先创建复制任务。",
       "assignVMs": "启动顺序与层级",
-      "create": "创建计划"
+      "create": "创建计划",
+      "vmInOtherPlans": "也在计划中：{plans}"
     },
     "failover": {
       "testTitle": "测试故障转移",
@@ -4749,7 +4752,8 @@
       "completeVMs": "虚拟机现已在 DR 站点运行",
       "completeLocked": "复制已锁定，计划已故障转移——故障回复将恢复原状。",
       "clonesDestroyed": "克隆已销毁，配置已恢复",
-      "testActiveConflict": "测试故障转移正在进行。请先执行清理，再启动此操作。"
+      "testActiveConflict": "测试故障转移正在进行。请先执行清理，再启动此操作。",
+      "unavailableRefreshed": "编排器未及时响应。显示的状态已刷新，请在重试前检查。"
     },
     "failback": {
       "phase1Title": "反向复制进行中",

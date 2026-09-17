@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server"
 
-import { getOrchestratorClient, parseOrchestratorError } from "@/lib/orchestrator/client"
+import { getOrchestratorClient } from "@/lib/orchestrator/client"
 import { checkPlanTenantScope } from "@/lib/orchestrator/planTenantScope"
+import { replicationErrorResponse } from "@/lib/orchestrator/replicationError"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 
 type OrchestratorClient = ReturnType<typeof getOrchestratorClient>
@@ -46,15 +47,8 @@ export async function proxyPlanFailbackAction(
       console.error(logLabel, e)
     }
 
-    const upstream = parseOrchestratorError(e)
-
-    if (upstream) {
-      return NextResponse.json({ error: upstream.message }, { status: upstream.status })
-    }
-
-    return NextResponse.json(
-      { error: e?.message || fallbackMessage },
-      { status: 500 }
-    )
+    // Same passthrough as the other replication routes, including the 503 +
+    // code of a connection the orchestrator dropped while finishing the work.
+    return replicationErrorResponse(e, fallbackMessage)
   }
 }

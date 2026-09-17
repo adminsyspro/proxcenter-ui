@@ -300,3 +300,46 @@ describe('RecoveryPlansTab — editing a plan', () => {
     expect(onEditPlan).not.toHaveBeenCalled()
   })
 })
+
+// A guest may sit in several plans (roadmap#4): the details of a plan say
+// which other plans share its guests, and mark each shared guest, rather than
+// forbid a pattern that is legitimate (a broad plan plus a narrow rehearsal).
+describe('RecoveryPlansTab - guests shared with another plan', () => {
+  const guest = (vm_id: number, vm_name: string) => ({ vm_id, vm_name, replication_job_id: 'job-1', tier: 3 as const, boot_order: 1 })
+
+  it('names the other plan with the shared vmids and marks the guest in the tier list', async () => {
+    renderTab([plan(), plan({ id: 'plan-2', name: 'Rehearsal', vms: [guest(100, 'web-01'), guest(200, 'db-01')] })])
+
+    await openDrawer()
+
+    expect(screen.getByText('Shares guests with: Rehearsal (100)')).toBeInTheDocument()
+    expect(screen.getByText('also in Rehearsal')).toBeInTheDocument()
+  })
+
+  it('lists every overlapping plan, each with its own shared vmids', async () => {
+    renderTab([
+      plan({ vms: [guest(100, 'web-01'), guest(101, 'web-02')] }),
+      plan({ id: 'plan-2', name: 'Rehearsal', vms: [guest(100, 'web-01')] }),
+      plan({ id: 'plan-3', name: 'Drill', vms: [guest(100, 'web-01'), guest(101, 'web-02')] }),
+    ])
+
+    await openDrawer()
+
+    expect(screen.getByText('Shares guests with: Rehearsal (100), Drill (100, 101)')).toBeInTheDocument()
+    expect(screen.getByText('also in Rehearsal, Drill')).toBeInTheDocument()
+    expect(screen.getByText('also in Drill')).toBeInTheDocument()
+  })
+
+  it('says nothing when no other plan lists the same guest, nor for the same vmid on another source cluster', async () => {
+    renderTab([
+      plan(),
+      plan({ id: 'plan-2', name: 'Other', vms: [guest(200, 'db-01')] }),
+      plan({ id: 'plan-3', name: 'Elsewhere', source_cluster: 'src-2', vms: [guest(100, 'web-01')] }),
+    ])
+
+    await openDrawer()
+
+    expect(screen.queryByText(/Shares guests with/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/also in/)).not.toBeInTheDocument()
+  })
+})

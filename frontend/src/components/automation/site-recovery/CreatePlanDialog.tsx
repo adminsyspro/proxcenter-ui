@@ -22,6 +22,8 @@ interface CreatePlanDialogProps {
   jobs: ReplicationJob[]
   /** Set to edit that plan instead of creating one: same form, prefilled. */
   plan?: RecoveryPlan | null
+  /** Every existing plan, to say under a guest which other plans list it. */
+  plans?: RecoveryPlan[]
 }
 
 interface ReplicatedVM {
@@ -42,7 +44,7 @@ interface VMAssignment extends ReplicatedVM {
   target_cluster: string
 }
 
-export default function CreatePlanDialog({ open, onClose, onSubmit, connections, jobs, plan = null }: CreatePlanDialogProps) {
+export default function CreatePlanDialog({ open, onClose, onSubmit, connections, jobs, plan = null, plans = [] }: CreatePlanDialogProps) {
   const t = useTranslations()
   const [page, setPage] = useState(0)
   const [name, setName] = useState('')
@@ -110,6 +112,22 @@ export default function CreatePlanDialog({ open, onClose, onSubmit, connections,
       }
     }))
   }, [open, plan, vmsByPair])
+
+  // A guest may sit in several plans (a broad plan plus a narrow rehearsal
+  // one): the picker says so under the guest rather than forbid it. Keyed by
+  // cluster pair and vmid, since a vmid is only unique per cluster, and the
+  // plan being edited does not count as "another" plan.
+  const otherPlansByGuest = useMemo(() => {
+    const m = new Map<string, string[]>()
+    for (const p of plans) {
+      if (p.id === plan?.id) continue
+      for (const pv of (p.vms || [])) {
+        const key = `${p.source_cluster}→${p.target_cluster}:${pv.vm_id}`
+        m.set(key, [...(m.get(key) || []), p.name])
+      }
+    }
+    return m
+  }, [plans, plan])
 
   // Determine which cluster pair is locked (from first assigned VM)
   const lockedPair = useMemo(() => {
@@ -220,6 +238,7 @@ export default function CreatePlanDialog({ open, onClose, onSubmit, connections,
                   <Stack spacing={0.5}>
                     {group.vms.filter(vm => pageRows.has(`${key}:${vm.replication_job_id}:${vm.vm_id}`)).map(vm => {
                       const selected = !!vmAssignments.find(v => v.vm_id === vm.vm_id && v.replication_job_id === vm.replication_job_id)
+                      const otherPlans = otherPlansByGuest.get(`${key}:${vm.vm_id}`)
                       return (
                         <Box
                           key={`${vm.replication_job_id}:${vm.vm_id}`}
@@ -235,12 +254,21 @@ export default function CreatePlanDialog({ open, onClose, onSubmit, connections,
                           <Checkbox inputProps={{ 'aria-label': `${vm.vm_name} (${vm.vm_id}) · ${vm.job_name}` }} size='small' checked={selected} disabled={pairDisabled} sx={{ p: 0.5 }} />
                           <EngineGlyph engine={vm.storage_engine} size={16} />
                           <Box component='span' sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: vm.job_status === 'error' ? 'error.main' : vm.job_status === 'syncing' ? 'primary.main' : vm.job_status === 'synced' ? 'success.main' : 'text.disabled' }} />
-                          <Typography variant='body2' noWrap sx={{ fontWeight: selected ? 600 : 400 }}>
-                            {vm.vm_name}
-                          </Typography>
-                          <Typography variant='caption' sx={{ color: 'text.disabled', ml: 0.5 }}>
-                            ({vm.vm_id})
-                          </Typography>
+                          <Box sx={{ minWidth: 0 }}>
+                            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                              <Typography variant='body2' noWrap sx={{ fontWeight: selected ? 600 : 400 }}>
+                                {vm.vm_name}
+                              </Typography>
+                              <Typography variant='caption' sx={{ color: 'text.disabled', ml: 0.5 }}>
+                                ({vm.vm_id})
+                              </Typography>
+                            </Box>
+                            {otherPlans && (
+                              <Typography variant='caption' color='text.secondary' noWrap sx={{ display: 'block' }}>
+                                {t('siteRecovery.createPlan.vmInOtherPlans', { plans: otherPlans.join(', ') })}
+                              </Typography>
+                            )}
+                          </Box>
                           <Typography variant='caption' noWrap aria-label={t('siteRecovery.plans.jobColumn')} sx={{ ml: 'auto' }}>{vm.job_name}</Typography>
                         </Box>
                       )

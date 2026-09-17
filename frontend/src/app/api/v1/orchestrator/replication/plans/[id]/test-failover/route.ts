@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 
 import { getOrchestratorClient } from "@/lib/orchestrator/client"
 import { checkPlanTenantScope } from "@/lib/orchestrator/planTenantScope"
+import { replicationErrorResponse } from "@/lib/orchestrator/replicationError"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 
 export const runtime = "nodejs"
@@ -27,9 +28,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       console.error("Error executing test failover:", e)
     }
 
-    return NextResponse.json(
-      { error: e?.message || "Failed to execute test failover" },
-      { status: 500 }
-    )
+    // Keep the orchestrator's own status: its 409 (a test already active on
+    // the plan) used to be flattened to a 500 the dialog could not tell apart.
+    return replicationErrorResponse(e, "Failed to execute test failover")
   }
 }

@@ -112,6 +112,17 @@ describe.each([
     expect(await res.json()).toEqual({ error: 'a failback is already in progress for this plan' })
   })
 
+  // A connection the orchestrator dropped after 30 s usually means the work
+  // finished anyway: the page refreshes before it reports, hence the code.
+  it('answers 503 with the code when the orchestrator dropped the connection', async () => {
+    actionMock().mockRejectedValue(Object.assign(new Error('Orchestrator unavailable'), { code: 'ORCHESTRATOR_UNAVAILABLE' }))
+
+    const res = await callRoute(handler(), { params: { id: 'plan-1' } })
+
+    expect(res.status).toBe(503)
+    expect(await res.json()).toEqual({ error: 'Orchestrator unavailable', code: 'ORCHESTRATOR_UNAVAILABLE' })
+  })
+
   it('returns the upstream success payload on 200', async () => {
     const res = await callRoute(handler(), { params: { id: 'plan-1' } })
 

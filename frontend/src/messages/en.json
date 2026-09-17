@@ -8437,5 +8437,21 @@
     "timeout": "{description} - Timeout (task may still be running)",
     "error": "{description} - Error: {error}",
     "unknownError": "Unknown error"
+  },
+  "metricsRange": {
+    "custom": "Custom",
+    "from": "From",
+    "to": "To",
+    "apply": "Apply",
+    "reset": "Reset",
+    "resolution": "Resolution: {step}",
+    "invalidOrder": "The end of the range must come after its start.",
+    "tooShort": "Proxmox records one point every {step}. A shorter range holds none.",
+    "beyondRetention": "Proxmox keeps {days} days of metrics. The start of the range was moved to the oldest point it still has.",
+    "empty": "No data point in this range.",
+    "dragHint": "Drag across a chart to zoom into a range.",
+    "stepSeconds": "{n} s",
+    "stepMinutes": "{n} min",
+    "stepHours": "{n} h"
   }
 }

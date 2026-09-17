@@ -92,7 +92,9 @@ import { useLicense, Features } from '@/contexts/LicenseContext'
 import { useToast } from '@/contexts/ToastContext'
 import { useTaskTracker } from '@/hooks/useTaskTracker'
 import type { Status, InventorySelection, Kpi, KV, UtilMetric, DetailsPayload, RrdTimeframe, SeriesPoint, ActiveDialog } from './types'
-import { humanizePveError, optionSaveBody, TAG_PALETTE, hashStringToInt, parseTags, formatBps, formatTime, formatUptime, parseMarkdown, parseNodeId, parseVmId, getMetricIcon, pickNumber, buildSeriesFromRrd, fetchRrd, fetchDetails, proxmoxWebUiOrigin, proxmoxNodeWebUiOrigin } from './helpers'
+import { humanizePveError, optionSaveBody, TAG_PALETTE, hashStringToInt, parseTags, formatBps, formatTime, formatUptime, parseMarkdown, parseNodeId, parseVmId, getMetricIcon, pickNumber, buildSeriesFromRrd, fetchRrd, fetchRrdRange, fetchDetails, proxmoxWebUiOrigin, proxmoxNodeWebUiOrigin } from './helpers'
+import { timeframeForWindow, type RrdRangeMeta, type RrdWindow } from '@/lib/metrics/rrdRange'
+import type { MetricsRangeValue } from '@/components/metrics/MetricsRangeSelector'
 import { useTagColors } from '@/contexts/TagColorContext'
 import { useTenant } from '@/contexts/TenantContext'
 import { useMyVdcs } from '@/hooks/useMyVdcs'
@@ -283,6 +285,22 @@ export default function InventoryDetails({
   } = useDetailData(selection)
 
   const [tf, setTf] = useState<RrdTimeframe>('hour')
+
+  // A custom window freezes the charts on a past slice instead of the rolling
+  // window every preset gives (they all end at now). `tf` stays the archive
+  // behind it, so every tick formatter keeps working unchanged. Issue #955.
+  const [rrdWindow, setRrdWindow] = useState<RrdWindow | null>(null)
+  const [rrdMeta, setRrdMeta] = useState<RrdRangeMeta | null>(null)
+
+  const onRrdRangeChange = useCallback((value: MetricsRangeValue) => {
+    setTf(value.timeframe)
+    setRrdWindow(value.window)
+  }, [])
+
+  const onRrdWindowSelect = useCallback((next: RrdWindow) => {
+    setTf(timeframeForWindow(next))
+    setRrdWindow(next)
+  }, [])
   const [rrdLoading, setRrdLoading] = useState(false)
   const [rrdError, setRrdError] = useState<string | null>(null)
   const [series, setSeries] = useState<SeriesPoint[]>([])
@@ -1672,11 +1690,12 @@ return textExts.includes(ext) || imageExts.includes(ext) || fileName.startsWith(
           path = `/nodes/${node}/${type}/${vmid}`
         }
 
-        const raw = await fetchRrd(connectionId, path, tf)
-        const built = buildSeriesFromRrd(raw, maxMemRef.current)
+        const { rows, meta } = await fetchRrdRange(connectionId, path, { timeframe: tf, window: rrdWindow })
+        const built = buildSeriesFromRrd(rows, maxMemRef.current)
 
         if (!alive) return
         setSeries(built)
+        setRrdMeta(meta)
       } catch (e: any) {
         if (!alive) return
         if (isFirstLoad) setRrdError(e?.message || String(e))
@@ -1690,8 +1709,10 @@ return textExts.includes(ext) || imageExts.includes(ext) || fileName.startsWith(
     // Petit délai pour laisser l'UI s'afficher d'abord
     const timer = setTimeout(runRrd, 50)
 
-    // Auto-refresh every 30s with visibility pause
+    // Auto-refresh every 30s with visibility pause. A custom window is a fixed
+    // slice of the past, so refreshing it would re-fetch the same points.
     function startRefresh() {
+      if (rrdWindow) return
       if (intervalId !== null) return
       intervalId = setInterval(runRrd, 30000)
     }
@@ -1718,7 +1739,7 @@ return textExts.includes(ext) || imageExts.includes(ext) || fileName.startsWith(
       stopRefresh()
       document.removeEventListener('visibilitychange', onVis)
     }
-  }, [selection?.type, selection?.id, tf]) // Retirer data?.metrics?.ram?.max des dépendances
+  }, [selection?.type, selection?.id, tf, rrdWindow]) // Retirer data?.metrics?.ram?.max des dépendances
 
   const progress = useMemo(() => (loading ? <LinearProgress /> : null), [loading])
 
@@ -3591,7 +3612,7 @@ return vm?.isCluster ?? false
                 setNewSnapshotRam, setNotesEditing, setNumaEnabled, setReplicationComment, setReplicationLoaded, setReplicationRateLimit,
                 setReplicationSchedule, setReplicationTargetNode, setSavingReplication, setSelectedBackup, setSelectedCephCluster,
                 selectedDisk, setSelectedDisk, setEditDiskInitialTab, editDiskInitialTab, handleDetachDisk, setSelectedNetwork, setSelectedPveStorage, setShowCreateSnapshot, setTasksLoaded,
-                setTf, setVmNotes, showCreateSnapshot, snapshotActionBusy, snapshotFeatureAvailable, snapshotRowTasks, snapshots,
+                setTf, onRrdRangeChange, onRrdWindowSelect, rrdWindow, rrdMeta, setVmNotes, showCreateSnapshot, snapshotActionBusy, snapshotFeatureAvailable, snapshotRowTasks, snapshots,
                 snapshotsError, snapshotsLoading, snapshotTaskBusy, sourceCephAvailable, tags,
                 refreshData, tasks, tasksError, tasksLoading, tf, vmNotes}}
             />
@@ -3650,7 +3671,7 @@ return vm?.isCluster ?? false
                 setReplicationDialogMode, setReplicationDialogOpen, setReplicationFormData, setReplicationLogData, setReplicationLogDialogOpen,
                 setReplicationLogJob, setReplicationLogLoading, setReplicationSaving, setSubscriptionKeyDialogOpen, setSubscriptionKeyInput,
                 setSubscriptionKeySaving, setSystemReportData, setSystemReportDialogOpen, setSystemReportLoading, setSystemSaving,
-                setTf, setTimeFormData, setTimezonesList, subscriptionKeyDialogOpen, subscriptionKeyInput,
+                setTf, onRrdRangeChange, onRrdWindowSelect, rrdWindow, rrdMeta, setTimeFormData, setTimezonesList, subscriptionKeyDialogOpen, subscriptionKeyInput,
                 subscriptionKeySaving, systemReportData, systemReportDialogOpen, systemReportLoading, systemSaving,
                 tf, timeFormData, timezonesList, toggleFavorite}}
             />

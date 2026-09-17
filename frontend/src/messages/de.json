@@ -8097,5 +8097,21 @@
     "timeout": "{description} - Zeitüberschreitung (Aufgabe läuft möglicherweise noch)",
     "error": "{description} - Fehler: {error}",
     "unknownError": "Unbekannter Fehler"
+  },
+  "metricsRange": {
+    "custom": "Benutzerdefiniert",
+    "from": "Von",
+    "to": "Bis",
+    "apply": "Übernehmen",
+    "reset": "Zurücksetzen",
+    "resolution": "Auflösung: {step}",
+    "invalidOrder": "Das Ende des Zeitraums muss nach seinem Beginn liegen.",
+    "tooShort": "Proxmox zeichnet alle {step} einen Punkt auf. Ein kürzerer Zeitraum enthält keinen.",
+    "beyondRetention": "Proxmox bewahrt {days} Tage an Messwerten auf. Der Beginn des Zeitraums wurde auf den ältesten vorhandenen Punkt gesetzt.",
+    "empty": "Kein Datenpunkt in diesem Zeitraum.",
+    "dragHint": "Über ein Diagramm ziehen, um einen Zeitraum zu vergrößern.",
+    "stepSeconds": "{n} s",
+    "stepMinutes": "{n} Min.",
+    "stepHours": "{n} Std."
   }
 }

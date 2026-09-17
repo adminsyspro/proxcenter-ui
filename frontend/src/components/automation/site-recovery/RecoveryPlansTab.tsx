@@ -5,11 +5,12 @@ import { useTranslations } from 'next-intl'
 
 import {
   Alert, Box, Button, Card, CardContent, Chip, Collapse, Dialog, DialogActions, DialogContent,
-  DialogContentText, DialogTitle, Divider, Drawer,
+  DialogContentText, DialogTitle, Divider,
   IconButton, Stack, Tooltip, Typography, alpha, useTheme
 } from '@mui/material'
 
 import EmptyState from '@/components/EmptyState'
+import AppDialogTitle from '@/components/ui/AppDialogTitle'
 
 import ExecutionScreenshots from './ExecutionScreenshots'
 
@@ -297,80 +298,136 @@ export default function RecoveryPlansTab({
         </Card>
       )}
 
-      {/* Detail Drawer */}
-      <Drawer anchor='right' open={drawerOpen} onClose={closeDrawer} PaperProps={{ sx: { width: { xs: '100%', sm: 420 } } }}>
-        <Box sx={{ p: 2.5, display: 'flex', flexDirection: 'column', height: '100%' }}>
-          {!selected ? (
+      {/* Plan details. A centred dialog rather than the 420 px side drawer this
+          replaces: the guest list, the execution history and its boot
+          screenshots each want width, and stacking them in one narrow column
+          made the panel an endless scroll where nothing could be read (ui#958
+          feedback). Same shell as the replication job details. Below sm the
+          Paper takes the whole screen, where a centred box would only lose its
+          margins. */}
+      <Dialog
+        open={drawerOpen}
+        onClose={closeDrawer}
+        fullWidth
+        maxWidth='lg'
+        PaperProps={{
+          sx: {
+            m: { xs: 0, sm: 4 },
+            width: { xs: '100%', sm: 'calc(100% - 64px)' },
+            maxWidth: { xs: '100%', sm: 1180 },
+            height: { xs: '100%', sm: 'auto' },
+            maxHeight: { sm: '90vh' },
+            borderRadius: { xs: 0, sm: 1 }
+          }
+        }}
+      >
+        {!selected ? (
+          <Box sx={{ p: 2.5 }}>
             <Alert severity='info'>{t('siteRecovery.plans.selectPlan')}</Alert>
-          ) : (
-            <>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
-                <Box>
-                  <Typography variant='h6' sx={{ fontWeight: 700, mb: 0.25 }}>{selected.name}</Typography>
-                  {selected.description && (
-                    <Typography variant='caption' sx={{ color: 'text.secondary' }}>{selected.description}</Typography>
-                  )}
+          </Box>
+        ) : (
+          <>
+            {/* The shared dialog header, as everywhere else in the app. The
+                description rides with the name on one line rather than taking
+                a second: it is a subtitle, not a paragraph. */}
+            <AppDialogTitle icon={<PlanIcon />} onClose={closeDrawer}>
+              <Box component='span' sx={{ display: 'inline-flex', alignItems: 'baseline', gap: 0.75, minWidth: 0, maxWidth: '100%' }}>
+                <Box component='span' sx={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {selected.name}
                 </Box>
-                <IconButton onClick={closeDrawer} size='small'><i className='ri-close-line' /></IconButton>
+                {selected.description && (
+                  <Box component='span' sx={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'text.secondary', fontWeight: 400 }}>
+                    - {selected.description}
+                  </Box>
+                )}
               </Box>
+            </AppDialogTitle>
 
-              <PlanStatusBadge status={selected.status} t={t} />
-
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mt: 1 }}>
-                <PlanEngineGlyphs engines={planEngines(selected, jobs)} />
-                <Typography variant='caption' sx={{ color: 'text.secondary' }}>
-                  {connName(selected.source_cluster)} → {connName(selected.target_cluster)}
+            <Box sx={{ px: 2.5, pb: 1, pt: 0.5, display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+              {/* Route and status on one strip: the status chip used to be
+                  stretched edge to edge by the drawer's flex column, which
+                  turned a chip into a banner. */}
+              <Box sx={{ p: 2, borderRadius: 1, bgcolor: 'action.hover', mb: 2, display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                <PlanEngineGlyphs engines={planEngines(selected, jobs)} size={16} />
+                <Typography variant='body2' sx={{ fontWeight: 600, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {connName(selected.source_cluster)}
                 </Typography>
+                <Box aria-hidden component='i' className='ri-arrow-right-line' sx={{ color: 'text.disabled' }} />
+                <Typography variant='body2' sx={{ fontWeight: 600, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {connName(selected.target_cluster)}
+                </Typography>
+                <Box sx={{ ml: 'auto' }}>
+                  <PlanStatusBadge status={selected.status} t={t} />
+                </Box>
               </Box>
 
-              <Box sx={{ flex: 1, overflow: 'auto', mt: 2 }}>
-                {/* VMs grouped by tier */}
-                {([1, 2, 3] as const).map(tier => {
-                  const tierVms = selected.vms.filter(v => v.tier === tier)
+              {/* Two columns from md up: the guests on the left, the history on
+                  the right. Each scrolls with the body, which keeps the action
+                  footer in view however long the history gets. */}
+              <Box sx={{
+                flex: 1, minHeight: 0, overflow: 'auto',
+                display: 'grid',
+                gridTemplateColumns: { xs: 'minmax(0, 1fr)', md: 'minmax(0, 1fr) minmax(0, 1fr)' },
+                columnGap: 3, rowGap: 2, alignContent: 'start'
+              }}>
+                <Box sx={{ minWidth: 0 }}>
+                  {/* minHeight matches the history header, whose icon button
+                      makes its row taller: without it the two column titles
+                      sit on different baselines. */}
+                  <Box sx={{ display: 'flex', alignItems: 'center', minHeight: 34, mb: 0.5 }}>
+                    <Typography variant='overline' sx={{ color: 'text.secondary', fontWeight: 600, display: 'block' }}>
+                      {t('siteRecovery.dashboard.protectedVms')}
+                    </Typography>
+                  </Box>
+                  {/* VMs grouped by tier */}
+                  {([1, 2, 3] as const).map(tier => {
+                    const tierVms = selected.vms.filter(v => v.tier === tier)
 
-                  if (tierVms.length === 0) return null
+                    if (tierVms.length === 0) return null
 
-                  const tierLabels = { 1: t('siteRecovery.plans.tierCritical'), 2: t('siteRecovery.plans.tierImportant'), 3: t('siteRecovery.plans.tierStandard') }
-                  const tierColors = { 1: 'error', 2: 'warning', 3: 'default' } as const
+                    const tierLabels = { 1: t('siteRecovery.plans.tierCritical'), 2: t('siteRecovery.plans.tierImportant'), 3: t('siteRecovery.plans.tierStandard') }
+                    const tierColors = { 1: 'error', 2: 'warning', 3: 'default' } as const
 
-                  return (
-                    <Box key={tier} sx={{ mb: 1.5 }}>
-                      <Box
-                        onClick={() => toggleTier(tier)}
-                        sx={{ display: 'flex', alignItems: 'center', gap: 1, cursor: 'pointer', py: 0.75 }}
-                      >
-                        <i className={expandedTiers.has(tier) ? 'ri-arrow-down-s-line' : 'ri-arrow-right-s-line'} />
-                        <Chip size='small' label={`Tier ${tier}`} color={tierColors[tier]} variant='outlined' sx={{ height: 20, fontSize: '0.65rem' }} />
-                        <Typography variant='caption' sx={{ fontWeight: 600 }}>
-                          {tierLabels[tier]} ({tierVms.length})
-                        </Typography>
-                      </Box>
-                      <Collapse in={expandedTiers.has(tier)}>
-                        <Stack spacing={0.5} sx={{ pl: 4, pt: 0.5 }}>
-                          {tierVms.sort((a, b) => a.boot_order - b.boot_order).map(vm => (
-                            <Box key={vm.vm_id} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', py: 0.5 }}>
-                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                <Typography variant='caption' sx={{ color: 'text.secondary', width: 20, textAlign: 'center' }}>
-                                  #{vm.boot_order}
+                    return (
+                      <Box key={tier} sx={{ mb: 1.5 }}>
+                        <Box
+                          onClick={() => toggleTier(tier)}
+                          sx={{ display: 'flex', alignItems: 'center', gap: 1, cursor: 'pointer', py: 0.75 }}
+                        >
+                          <i className={expandedTiers.has(tier) ? 'ri-arrow-down-s-line' : 'ri-arrow-right-s-line'} />
+                          <Chip size='small' label={`Tier ${tier}`} color={tierColors[tier]} variant='outlined' sx={{ height: 20, fontSize: '0.65rem' }} />
+                          <Typography variant='caption' sx={{ fontWeight: 600 }}>
+                            {tierLabels[tier]} ({tierVms.length})
+                          </Typography>
+                        </Box>
+                        <Collapse in={expandedTiers.has(tier)}>
+                          <Stack spacing={0.5} sx={{ pl: 4, pt: 0.5, maxWidth: 420 }}>
+                            {tierVms.sort((a, b) => a.boot_order - b.boot_order).map(vm => (
+                              <Box key={vm.vm_id} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, py: 0.5 }}>
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
+                                  <Typography variant='caption' sx={{ color: 'text.secondary', width: 20, textAlign: 'center', flexShrink: 0 }}>
+                                    #{vm.boot_order}
+                                  </Typography>
+                                  <Typography variant='body2' sx={{ fontWeight: 500, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    {vm.vm_name}
+                                  </Typography>
+                                </Box>
+                                <Typography variant='caption' sx={{ color: 'text.secondary', flexShrink: 0 }}>
+                                  VM {vm.vm_id}
                                 </Typography>
-                                <Typography variant='body2' sx={{ fontWeight: 500 }}>{vm.vm_name}</Typography>
                               </Box>
-                              <Typography variant='caption' sx={{ color: 'text.secondary', fontFamily: 'monospace' }}>
-                                VM {vm.vm_id}
-                              </Typography>
-                            </Box>
-                          ))}
-                        </Stack>
-                      </Collapse>
-                    </Box>
-                  )
-                })}
+                            ))}
+                          </Stack>
+                        </Collapse>
+                      </Box>
+                    )
+                  })}
+                </Box>
 
                 {/* Execution History */}
                 {history && history.length > 0 && (
-                  <>
-                    <Divider sx={{ my: 2 }} />
-                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+                  <Box sx={{ minWidth: 0 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', minHeight: 34, mb: 0.5 }}>
                       <Typography variant='overline' sx={{ color: 'text.secondary', fontWeight: 600, display: 'block' }}>
                         {t('siteRecovery.plans.executionHistory')}
                       </Typography>
@@ -394,8 +451,8 @@ export default function RecoveryPlansTab({
                             theme.palette.info.main, 0.05
                           )
                         }}>
-                          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <Box>
+                          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
+                            <Box sx={{ minWidth: 0 }}>
                               <Typography variant='body2' sx={{ fontWeight: 600, fontSize: '0.8rem', textTransform: 'capitalize' }}>
                                 {exec.type}
                               </Typography>
@@ -407,7 +464,7 @@ export default function RecoveryPlansTab({
                               size='small'
                               label={exec.status}
                               color={exec.status === 'completed' ? 'success' : exec.status === 'failed' ? 'error' : 'info'}
-                              sx={{ height: 20, fontSize: '0.65rem' }}
+                              sx={{ height: 20, fontSize: '0.65rem', flexShrink: 0 }}
                             />
                           </Box>
                           {exec.type === 'test' && (
@@ -419,120 +476,117 @@ export default function RecoveryPlansTab({
                         </Box>
                       ))}
                     </Stack>
-                  </>
+                  </Box>
                 )}
+              </Box>
+            </Box>
 
-                <Divider sx={{ my: 2 }} />
-
-                {/* Actions */}
-                <Typography variant='overline' sx={{ color: 'text.secondary', fontWeight: 600, mb: 1.5, display: 'block' }}>
-                  {t('siteRecovery.plans.actions')}
-                </Typography>
-                <Stack spacing={1}>
-                  {selected.status === 'failing_back' ? (
-                    <>
+            {/* Actions keep their labels: unlike the job dialog's four icons,
+                these are the point of the screen and two of them are
+                destructive enough that a bare pictogram would be a trap. */}
+            <DialogActions sx={{ px: 2.5, pb: 2.5, pt: 1, gap: 1, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+              {selected.status === 'failing_back' ? (
+                <>
+                  <Tooltip title={t('siteRecovery.plans.failingBackTooltip')} arrow>
+                    <span>
                       <Button
-                        variant='contained' size='small' color='info' fullWidth
-                        startIcon={<i className='ri-arrow-go-back-line' />}
-                        onClick={() => onFailback(selected.id)}
-                      >
-                        {t('siteRecovery.plans.openFailback')}
-                      </Button>
-                      <Tooltip title={t('siteRecovery.plans.failingBackTooltip')} arrow>
-                        <span style={{ display: 'block' }}>
-                          <Button
-                            variant='outlined' size='small' color='error' fullWidth
-                            startIcon={<i className='ri-delete-bin-line' />}
-                            disabled
-                          >
-                            {t('common.delete')}
-                          </Button>
-                        </span>
-                      </Tooltip>
-                    </>
-                  ) : (
-                    <>
-                      {/* Cleanup only once the test finished — the orchestrator
-                          refuses it while the plan is still executing */}
-                      {selected.active_test_execution_id && selected.status !== 'executing' && (
-                        <Button
-                          variant='contained' size='small' color='warning' fullWidth
-                          startIcon={<i className='ri-eraser-line' />}
-                          onClick={() => onCleanupTest(selected.id)}
-                        >
-                          {t('siteRecovery.failover.cleanup')}
-                        </Button>
-                      )}
-                      <Tooltip
-                        title={selected.status === 'failed_over' ? t('siteRecovery.plans.failedOverTooltip') : t('siteRecovery.plans.testActiveTooltip')}
-                        disableHoverListener={!(selected.active_test_execution_id || selected.status === 'executing' || selected.status === 'failed_over')}
-                        arrow
-                      >
-                        <span style={{ display: 'block' }}>
-                          <Button
-                            variant='outlined' size='small' fullWidth
-                            startIcon={<i className='ri-test-tube-line' />}
-                            onClick={() => onTestFailover(selected.id)}
-                            disabled={!!selected.active_test_execution_id || selected.status === 'executing' || selected.status === 'failed_over'}
-                          >
-                            {t('siteRecovery.plans.testFailover')}
-                          </Button>
-                        </span>
-                      </Tooltip>
-                      <Tooltip
-                        title={t('siteRecovery.plans.failedOverTooltip')}
-                        disableHoverListener={selected.status !== 'failed_over'}
-                        arrow
-                      >
-                        <span style={{ display: 'block' }}>
-                          <Button
-                            variant='contained' size='small' color='warning' fullWidth
-                            startIcon={<i className='ri-shield-star-line' />}
-                            onClick={() => onFailover(selected.id)}
-                            disabled={selected.status === 'failed_over'}
-                          >
-                            {t('siteRecovery.plans.failover')}
-                          </Button>
-                        </span>
-                      </Tooltip>
-                      <Button
-                        variant='outlined' size='small' fullWidth
-                        startIcon={<i className='ri-arrow-go-back-line' />}
-                        onClick={() => onFailback(selected.id)}
-                      >
-                        {t('siteRecovery.plans.failback')}
-                      </Button>
-                      <Tooltip
-                        title={t('siteRecovery.plans.editPlanBusyTooltip')}
-                        disableHoverListener={selected.status !== 'executing'}
-                        arrow
-                      >
-                        <span style={{ display: 'block' }}>
-                          <Button
-                            variant='outlined' size='small' fullWidth
-                            startIcon={<i className='ri-pencil-line' />}
-                            onClick={() => onEditPlan(selected.id)}
-                            disabled={selected.status === 'executing'}
-                          >
-                            {t('siteRecovery.plans.editPlan')}
-                          </Button>
-                        </span>
-                      </Tooltip>
-                      <Button
-                        variant='outlined' size='small' color='error' fullWidth
+                        variant='outlined' size='small' color='error'
                         startIcon={<i className='ri-delete-bin-line' />}
-                        onClick={() => { onDeletePlan(selected.id); closeDrawer() }}
+                        disabled
                       >
                         {t('common.delete')}
                       </Button>
-                    </>
+                    </span>
+                  </Tooltip>
+                  <Button
+                    variant='contained' size='small' color='info'
+                    startIcon={<i className='ri-arrow-go-back-line' />}
+                    onClick={() => { onFailback(selected.id); closeDrawer() }}
+                  >
+                    {t('siteRecovery.plans.openFailback')}
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button
+                    variant='outlined' size='small' color='error'
+                    startIcon={<i className='ri-delete-bin-line' />}
+                    onClick={() => { onDeletePlan(selected.id); closeDrawer() }}
+                  >
+                    {t('common.delete')}
+                  </Button>
+                  <Tooltip
+                    title={t('siteRecovery.plans.editPlanBusyTooltip')}
+                    disableHoverListener={selected.status !== 'executing'}
+                    arrow
+                  >
+                    <span>
+                      <Button
+                        variant='outlined' size='small'
+                        startIcon={<i className='ri-pencil-line' />}
+                        onClick={() => { onEditPlan(selected.id); closeDrawer() }}
+                        disabled={selected.status === 'executing'}
+                      >
+                        {t('siteRecovery.plans.editPlan')}
+                      </Button>
+                    </span>
+                  </Tooltip>
+                  <Button
+                    variant='outlined' size='small'
+                    startIcon={<i className='ri-arrow-go-back-line' />}
+                    onClick={() => { onFailback(selected.id); closeDrawer() }}
+                  >
+                    {t('siteRecovery.plans.failback')}
+                  </Button>
+                  <Tooltip
+                    title={selected.status === 'failed_over' ? t('siteRecovery.plans.failedOverTooltip') : t('siteRecovery.plans.testActiveTooltip')}
+                    disableHoverListener={!(selected.active_test_execution_id || selected.status === 'executing' || selected.status === 'failed_over')}
+                    arrow
+                  >
+                    <span>
+                      <Button
+                        variant='outlined' size='small'
+                        startIcon={<i className='ri-test-tube-line' />}
+                        onClick={() => { onTestFailover(selected.id); closeDrawer() }}
+                        disabled={!!selected.active_test_execution_id || selected.status === 'executing' || selected.status === 'failed_over'}
+                      >
+                        {t('siteRecovery.plans.testFailover')}
+                      </Button>
+                    </span>
+                  </Tooltip>
+                  {/* Cleanup only once the test finished — the orchestrator
+                      refuses it while the plan is still executing */}
+                  {selected.active_test_execution_id && selected.status !== 'executing' && (
+                    <Button
+                      variant='contained' size='small' color='warning'
+                      startIcon={<i className='ri-eraser-line' />}
+                      onClick={() => { onCleanupTest(selected.id); closeDrawer() }}
+                    >
+                      {t('siteRecovery.failover.cleanup')}
+                    </Button>
                   )}
-                </Stack>
-              </Box>
-            </>
-          )}
-        </Box>
-      </Drawer>
+                  <Tooltip
+                    title={t('siteRecovery.plans.failedOverTooltip')}
+                    disableHoverListener={selected.status !== 'failed_over'}
+                    arrow
+                  >
+                    <span>
+                      <Button
+                        variant='contained' size='small' color='warning'
+                        startIcon={<i className='ri-shield-star-line' />}
+                        onClick={() => { onFailover(selected.id); closeDrawer() }}
+                        disabled={selected.status === 'failed_over'}
+                      >
+                        {t('siteRecovery.plans.failover')}
+                      </Button>
+                    </span>
+                  </Tooltip>
+                </>
+              )}
+            </DialogActions>
+          </>
+        )}
+      </Dialog>
 
       {/* Clear history confirmation */}
       <Dialog open={confirmClearHistory} onClose={() => setConfirmClearHistory(false)} maxWidth='sm' fullWidth>

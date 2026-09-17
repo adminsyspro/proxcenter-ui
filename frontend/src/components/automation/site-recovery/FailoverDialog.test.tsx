@@ -719,6 +719,96 @@ it('announces a completed cleanup only on the orchestrator verdict', () => {
   expect(screen.queryByRole('button', { name: 'Cleanup test' })).not.toBeInTheDocument()
 })
 
+// ui#958: the cleanup runs on the orchestrator, past any request timeout, so
+// the dialog follows it instead of waiting. While it runs it must not borrow
+// the verdict of the previous attempt in either direction — neither the green
+// "completed" nor the orange "did not complete".
+describe('FailoverDialog cleanup in flight (ui#958)', () => {
+  const cleaningExec = () => execution({
+    phase: 'cleaning',
+    vm_results: [
+      { vm_id: 100, vm_name: 'web-01', status: 'completed', progress_percent: 100, test_state: 'cleaning' },
+    ],
+  })
+
+  it('announces the cleanup as running rather than as a verdict', () => {
+    renderDialog({ execution: cleaningExec(), onCleanup: vi.fn(), cleanupLoading: true })
+
+    expect(screen.getByText('Cleanup in progress')).toBeInTheDocument()
+    expect(screen.queryByText('Cleanup completed')).not.toBeInTheDocument()
+    expect(screen.queryByText('Cleanup did not complete')).not.toBeInTheDocument()
+  })
+
+  it('reports guest-by-guest progress while it runs', () => {
+    renderDialog({
+      execution: cleaningExec(),
+      onCleanup: vi.fn(),
+      cleanupLoading: true,
+      cleanupResult: { guests_total: 3, guests_cleaned: 1, vms_stopped: 1, disks_rolled: 2, jobs_resumed: 0, errors: [] },
+    })
+
+    expect(screen.getByText('1 of 3 guests cleaned up')).toBeInTheDocument()
+  })
+
+  // The phase alone must carry it: a page reloaded mid-cleanup has no
+  // in-memory loading flag, only what the orchestrator wrote on the execution.
+  it('follows a cleanup that was already running before the page loaded', () => {
+    renderDialog({ execution: cleaningExec(), onCleanup: vi.fn() })
+
+    expect(screen.getByText('Cleanup in progress')).toBeInTheDocument()
+  })
+
+  it('keeps the retry button, disabled, while the cleanup runs', () => {
+    renderDialog({ execution: cleaningExec(), onCleanup: vi.fn(), cleanupLoading: true })
+
+    expect(screen.getByRole('button', { name: 'Cleanup test' })).toBeDisabled()
+  })
+
+  // The per-guest glyph is the only place that says WHICH guest is still up on
+  // its replica image: the banner counts, it does not name.
+  it('marks each guest with where its own cleanup stands', async () => {
+    const threeGuests = plan({
+      vms: [
+        { vm_id: 100, vm_name: 'VMTest1', replication_job_id: 'job-1', tier: 1, boot_order: 1 },
+        { vm_id: 101, vm_name: 'VMTest2', replication_job_id: 'job-1', tier: 1, boot_order: 2 },
+        { vm_id: 102, vm_name: 'VMTest3', replication_job_id: 'job-1', tier: 3, boot_order: 3 },
+      ],
+    })
+
+    renderDialog({
+      plan: threeGuests,
+      onCleanup: vi.fn(),
+      cleanupLoading: true,
+      execution: execution({
+        phase: 'cleaning',
+        vm_results: [
+          { vm_id: 100, vm_name: 'VMTest1', status: 'completed', progress_percent: 100, test_state: 'cleaned' },
+          { vm_id: 101, vm_name: 'VMTest2', status: 'completed', progress_percent: 100, test_state: 'cleaning' },
+          { vm_id: 102, vm_name: 'VMTest3', status: 'completed', progress_percent: 100, test_state: 'started' },
+        ],
+      }),
+    })
+
+    // A guest the cleanup has not reached yet is still up on its replica
+    // image, and must not wear the green check its boot status would give it.
+    const pending = await screen.findAllByLabelText('Still running on its replica image')
+    expect(pending).toHaveLength(1)
+    expect(await screen.findAllByLabelText('Cleaned up')).toHaveLength(1)
+    expect(await screen.findAllByLabelText('Cleaning up')).toHaveLength(1)
+  })
+
+  it('still reports the verdict once the phase clears', () => {
+    renderDialog({
+      execution: execution({ vm_results: [{ vm_id: 100, vm_name: 'web-01', status: 'completed', progress_percent: 100, test_state: 'cleaned' }] }),
+      onCleanup: vi.fn(),
+      cleanupResult: { all_cleaned: true, guests_total: 1, guests_cleaned: 1, vms_stopped: 1, disks_rolled: 1, jobs_resumed: 1, errors: [] },
+    })
+
+    expect(screen.getByText('Cleanup completed')).toBeInTheDocument()
+    expect(screen.getByText('1 of 1 guests cleaned up')).toBeInTheDocument()
+  })
+})
+
 it('shows an explicit cleanup-first banner for a 409', () => {
   renderDialog({ type: 'failover', errorStatus: 409, errorMessage: 'raw backend error' })
   expect(screen.getByText('A test failover is active. Run cleanup before starting this operation.')).toBeInTheDocument()

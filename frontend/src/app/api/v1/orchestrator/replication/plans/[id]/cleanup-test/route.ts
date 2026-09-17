@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 
 import { getOrchestratorClient } from "@/lib/orchestrator/client"
+import { replicationErrorResponse } from "@/lib/orchestrator/replicationError"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { getTenantConnectionIds } from "@/lib/tenant"
 
@@ -36,9 +37,9 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
       console.error("Error cleaning up test failover:", e)
     }
 
-    return NextResponse.json(
-      { error: e?.message || "Failed to cleanup test failover" },
-      { status: 500 }
-    )
+    // Keep the orchestrator's own status: a cleanup already running answers
+    // 409, and the dialog must not read that as a cleanup that failed to
+    // start — the one in flight is still doing the work.
+    return replicationErrorResponse(e, "Failed to cleanup test failover")
   }
 }

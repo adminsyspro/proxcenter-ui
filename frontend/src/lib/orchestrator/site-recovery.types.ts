@@ -247,7 +247,10 @@ export interface TestCloneRef {
 
 export interface RecoveryVMResult {
   test_point?: string
-  test_state?: 'cloning' | 'config_rewritten' | 'started' | 'cleanup_pending' | 'cleaned'
+  // 'cleaning' is the guest the cleanup is working on right now: it stops
+  // the guest and rolls every replica image back, minutes per guest on large
+  // images, so the dialog names it rather than showing a bar that sits still.
+  test_state?: 'cloning' | 'config_rewritten' | 'started' | 'cleanup_pending' | 'cleaning' | 'cleaned'
   test_clones?: TestCloneRef[]
   vm_id: number
   vm_name: string
@@ -294,6 +297,39 @@ export interface RecoveryExecution {
   // Test failover only: the stabilization delay this run asked for, in
   // seconds. Absent on runs that took the orchestrator's default.
   screenshot_delay_seconds?: number
+  // Test failover only: the last cleanup's progress and verdict, refreshed by
+  // the orchestrator after every guest. Absent until a cleanup has started.
+  // While phase === 'cleaning' it is still moving.
+  cleanup_result?: CleanupResult
+}
+
+// CleanupResult is the progress and verdict of a test failover cleanup. The
+// cleanup runs in the background (it rolls terabyte-scale replica images
+// back, far past any request timeout), so this is polled from the execution
+// rather than returned by the request that started it.
+export interface CleanupResult {
+  plan_id: string
+  vms_stopped: number
+  nics_reconnected: number
+  disks_rolled: number
+  clones_destroyed: number
+  jobs_resumed: number
+  connect_failed: boolean
+  all_cleaned: boolean
+  errors: string[]
+  guests_total: number
+  guests_cleaned: number
+  // The guest being worked on, absent when none is.
+  current_vmid?: number
+  started_at: string
+  finished_at?: string
+}
+
+// CleanupStarted is the receipt the cleanup request returns: the work itself
+// runs in the background and is watched through execution_id.
+export interface CleanupStarted {
+  plan_id: string
+  execution_id?: string
 }
 
 // ============================================

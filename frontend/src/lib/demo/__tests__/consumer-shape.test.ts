@@ -31,6 +31,23 @@ describe('demo mock: shapes the screens actually read', () => {
     }
   })
 
+  it('syslog destinations are a FLAT body with destinations and status keyed by id', () => {
+    // components/settings/SyslogDestinationsCard.tsx reads `data.destinations`
+    // and `data.status[dest.id]` straight off the response, no `data` wrapper.
+    const body = get('GET:/api/v1/settings/syslog')
+    expect(body).not.toHaveProperty('data')
+    expect(Array.isArray(body.destinations)).toBe(true)
+    expect(body.destinations.length).toBeGreaterThan(0)
+    for (const dest of body.destinations) {
+      for (const k of ['id', 'name', 'enabled', 'host', 'port', 'transport', 'format', 'framing', 'facility', 'categories', 'tls']) {
+        expect(dest, `destination ${dest.id} missing ${k}`).toHaveProperty(k)
+      }
+      expect(body.status, `status missing for ${dest.id}`).toHaveProperty(dest.id)
+      expect(typeof body.status[dest.id].sent).toBe('number')
+    }
+    expect(body.limits.maxDestinations).toBe(20)
+  })
+
   it('rbac assignments carry nested user and role objects', () => {
     // security/rbac/page.tsx:1153 builds its group key from `a.user.id` and
     // `a.role.id`; a flat userId/roleId pair throws on the first row.

@@ -73,6 +73,11 @@ const NotificationsTab = dynamic(() => import('@/components/settings/Notificatio
   loading: tabLoading
 })
 
+const SyslogTab = dynamic(() => import('@/components/settings/SyslogTab'), {
+  ssr: false,
+  loading: tabLoading
+})
+
 const AppearanceTab = dynamic(() => import('@/components/settings/AppearanceTab'), {
   ssr: false,
   loading: tabLoading
@@ -1743,7 +1748,7 @@ const FEATURE_CATEGORIES = [
   {
     key: 'security',
     icon: 'ri-shield-check-line',
-    features: ['firewall', 'microsegmentation', 'cve_scanner', 'rbac', 'ldap'],
+    features: ['firewall', 'microsegmentation', 'cve_scanner', 'rbac', 'ldap', 'syslog_forwarding'],
   },
   {
     key: 'monitoring',
@@ -1776,6 +1781,7 @@ const FEATURE_LABEL_KEYS = {
   predictive_alerts: 'settings.featureLabels.predictive_alerts',
   alerts: 'settings.featureLabels.alerts',
   notifications: 'settings.featureLabels.notifications',
+  syslog_forwarding: 'settings.featureLabels.syslog_forwarding',
   reports: 'settings.featureLabels.reports',
   green_metrics: 'settings.featureLabels.green_metrics',
   ceph_replication: 'settings.featureLabels.ceph_replication',
@@ -3075,13 +3081,14 @@ export default function SettingsPage() {
     return () => setPageInfo('', '', '')
   }, [setPageInfo, t, isOnboarding])
 
-  const allTabNames = ['connections', 'appearance', 'alert-thresholds', 'notifications', 'broadcast', 'ldap', 'oidc', 'license', 'ai', 'green', 'white-label', 'vdc', 'tenants', 'ssh-commands', 'ha', 'api']
+  const allTabNames = ['connections', 'appearance', 'alert-thresholds', 'notifications', 'syslog', 'broadcast', 'ldap', 'oidc', 'license', 'ai', 'green', 'white-label', 'vdc', 'tenants', 'ssh-commands', 'ha', 'api']
 
   const allTabs = [
     { label: t('settings.connections'), icon: 'ri-link', component: ConnectionsTab, providerOnly: true },
     { label: t('settings.appearance'), icon: 'ri-palette-line', component: AppearanceTab },
     { label: t('settings.alertThresholds.title'), icon: 'ri-alarm-warning-line', component: AlertThresholdsTab, providerOnly: true },
     { label: t('settings.notifications'), icon: 'ri-notification-3-line', component: NotificationsTab, requiredFeature: Features.NOTIFICATIONS, providerOnly: true },
+    { label: t('settings.syslog.tabLabel'), icon: 'ri-broadcast-line', component: SyslogTab, requiredFeature: Features.SYSLOG_FORWARDING, providerOnly: true },
     { label: t('settings.broadcast.tabLabel'), icon: 'ri-megaphone-line', component: BroadcastTab, providerOnly: true },
     { label: 'LDAP / Active Directory', icon: 'ri-server-line', component: LdapConfigTab, requiredFeature: Features.LDAP, providerOnly: true },
     { label: 'OIDC / SSO', icon: 'ri-shield-keyhole-line', component: OidcConfigTab, requiredFeature: Features.OIDC, providerOnly: true },

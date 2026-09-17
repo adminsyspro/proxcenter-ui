@@ -3288,7 +3288,8 @@
       "notifications": "通知",
       "reports": "报告",
       "green_metrics": "绿色指标 / RSE",
-      "ceph_replication": "站点恢复（Ceph 复制）"
+      "ceph_replication": "站点恢复（Ceph 复制）",
+      "syslog_forwarding": "Syslog / SIEM 转发"
     },
     "categoryLabels": {
       "infrastructure": "基础设施",
@@ -3360,6 +3361,98 @@
       "durationLabel": "总计 {ms} ms",
       "unavailable": "诊断不可用",
       "allOk": "所有检查均通过。"
+    },
+    "syslog": {
+      "tabLabel": "Syslog / SIEM",
+      "title": "Syslog / SIEM 转发",
+      "description": "每条审计记录都会连同执行操作的 ProxCenter 用户实时转发到下列收集器。保留与检索在您的 SIEM 中完成。",
+      "add": "添加目标",
+      "empty": "尚无目标。审计记录仅保留在 ProxCenter 中。",
+      "limitReached": "已达到 {max} 个目标的上限",
+      "loadError": "无法加载 syslog 目标。",
+      "saveError": "保存失败：",
+      "saved": "Syslog 目标已保存",
+      "columns": {
+        "name": "名称",
+        "target": "收集器",
+        "format": "格式",
+        "categories": "类别",
+        "activity": "活动"
+      },
+      "allCategories": "所有类别",
+      "categoriesCount": "{count} 个类别",
+      "neverSent": "尚未发送任何记录",
+      "lastSent": "上次发送 {time}",
+      "lastError": "上次错误：{error}",
+      "sentCount": "已发送 {count} 条",
+      "droppedCount": "已丢弃 {count} 条",
+      "test": "发送测试",
+      "testing": "发送中...",
+      "testOk": "测试行已送达 {host}:{port}",
+      "testOkUdp": "测试数据报已发送到 {host}:{port}。UDP 不提供送达确认，请检查收集器。",
+      "testFailed": "测试失败：{error}",
+      "dialog": {
+        "addTitle": "新建 syslog 目标",
+        "editTitle": "编辑 syslog 目标"
+      },
+      "fields": {
+        "name": "名称",
+        "host": "主机",
+        "port": "端口",
+        "transport": "传输方式",
+        "format": "格式",
+        "framing": "分帧",
+        "facility": "Facility",
+        "categories": "审计类别",
+        "categoriesHelper": "留空则转发所有类别。",
+        "enabled": "启用转发"
+      },
+      "transportHelper": {
+        "udp": "无送达确认，超过 8 KiB 的行会被截断。",
+        "tcp": "可靠，未加密。",
+        "tls": "已加密，会验证收集器证书。"
+      },
+      "formats": {
+        "rfc5424": "RFC 5424",
+        "rfc3164": "RFC 3164 (BSD)",
+        "cef": "CEF"
+      },
+      "framings": {
+        "newline": "换行符分隔 (Splunk, Graylog, rsyslog)",
+        "octetCounting": "八位字节计数 (RFC 5425, syslog-ng)"
+      },
+      "tls": {
+        "title": "TLS",
+        "verify": "验证收集器证书",
+        "verifyWarning": "不验证时，链路上的任何人都可以冒充收集器并读取日志流。",
+        "serverName": "服务器名称 (SNI)",
+        "serverNameHelper": "仅在通过 IP 地址访问收集器时使用。",
+        "ca": "CA 证书 (PEM)",
+        "caHelper": "留空则信任系统证书库。"
+      },
+      "deleteConfirm": {
+        "title": "移除此目标？",
+        "body": "{name} 将立即停止接收审计记录。已转发的记录仍保留在您的 SIEM 中。"
+      },
+      "categories": {
+        "auth": "认证",
+        "users": "用户",
+        "connections": "连接",
+        "vms": "VM",
+        "containers": "容器",
+        "nodes": "节点",
+        "storage": "存储",
+        "backups": "备份",
+        "settings": "设置",
+        "system": "系统",
+        "security": "安全",
+        "templates": "模板",
+        "migration": "迁移",
+        "admin": "管理",
+        "sdn": "SDN",
+        "api_tokens": "API 令牌"
+      },
+      "destinations": "目标"
     }
   },
   "green": {

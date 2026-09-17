@@ -3284,7 +3284,8 @@
       "notifications": "Notifications",
       "reports": "Rapports",
       "green_metrics": "Métriques vertes / RSE",
-      "ceph_replication": "Site Recovery (Réplication Ceph)"
+      "ceph_replication": "Site Recovery (Réplication Ceph)",
+      "syslog_forwarding": "Transfert Syslog / SIEM"
     },
     "categoryLabels": {
       "infrastructure": "Infrastructure",
@@ -3356,6 +3357,98 @@
       "durationLabel": "{ms} ms au total",
       "unavailable": "Diagnostics indisponibles",
       "allOk": "Tous les controles sont passés."
+    },
+    "syslog": {
+      "tabLabel": "Syslog / SIEM",
+      "title": "Transfert Syslog / SIEM",
+      "description": "Chaque entrée d'audit est transférée en temps réel vers les collecteurs ci-dessous, avec l'utilisateur ProxCenter à l'origine de l'action. La rétention et la recherche se font dans votre SIEM.",
+      "add": "Ajouter une destination",
+      "empty": "Aucune destination pour l'instant. Les entrées d'audit restent uniquement dans ProxCenter.",
+      "limitReached": "Maximum de {max} destinations atteint",
+      "loadError": "Impossible de charger les destinations syslog.",
+      "saveError": "Échec de l'enregistrement :",
+      "saved": "Destinations syslog enregistrées",
+      "columns": {
+        "name": "Nom",
+        "target": "Collecteur",
+        "format": "Format",
+        "categories": "Catégories",
+        "activity": "Activité"
+      },
+      "allCategories": "Toutes les catégories",
+      "categoriesCount": "{count} catégories",
+      "neverSent": "Rien d'envoyé pour l'instant",
+      "lastSent": "Dernier envoi {time}",
+      "lastError": "Dernière erreur : {error}",
+      "sentCount": "{count} envoyées",
+      "droppedCount": "{count} abandonnées",
+      "test": "Envoyer un test",
+      "testing": "Envoi...",
+      "testOk": "Ligne de test livrée à {host}:{port}",
+      "testOkUdp": "Datagramme de test envoyé à {host}:{port}. UDP ne confirme pas la livraison, vérifiez le collecteur.",
+      "testFailed": "Échec du test : {error}",
+      "dialog": {
+        "addTitle": "Nouvelle destination syslog",
+        "editTitle": "Modifier la destination syslog"
+      },
+      "fields": {
+        "name": "Nom",
+        "host": "Hôte",
+        "port": "Port",
+        "transport": "Transport",
+        "format": "Format",
+        "framing": "Délimitation",
+        "facility": "Facility",
+        "categories": "Catégories d'audit",
+        "categoriesHelper": "Laissez vide pour transférer toutes les catégories.",
+        "enabled": "Transfert activé"
+      },
+      "transportHelper": {
+        "udp": "Aucune confirmation de livraison, les lignes de plus de 8 KiB sont tronquées.",
+        "tcp": "Fiable, non chiffré.",
+        "tls": "Chiffré, le certificat du collecteur est vérifié."
+      },
+      "formats": {
+        "rfc5424": "RFC 5424",
+        "rfc3164": "RFC 3164 (BSD)",
+        "cef": "CEF"
+      },
+      "framings": {
+        "newline": "Délimité par saut de ligne (Splunk, Graylog, rsyslog)",
+        "octetCounting": "Comptage d'octets (RFC 5425, syslog-ng)"
+      },
+      "tls": {
+        "title": "TLS",
+        "verify": "Vérifier le certificat du collecteur",
+        "verifyWarning": "Sans vérification, n'importe qui sur le chemin peut se faire passer pour le collecteur et lire le flux.",
+        "serverName": "Nom du serveur (SNI)",
+        "serverNameHelper": "Uniquement lorsque le collecteur est joint par adresse IP.",
+        "ca": "Certificat CA (PEM)",
+        "caHelper": "Laissez vide pour faire confiance au magasin de certificats du système."
+      },
+      "deleteConfirm": {
+        "title": "Supprimer cette destination ?",
+        "body": "{name} cesse immédiatement de recevoir les entrées d'audit. Les entrées déjà transférées restent dans votre SIEM."
+      },
+      "categories": {
+        "auth": "Authentification",
+        "users": "Utilisateurs",
+        "connections": "Connexions",
+        "vms": "VMs",
+        "containers": "Containers",
+        "nodes": "Nodes",
+        "storage": "Stockage",
+        "backups": "Backups",
+        "settings": "Paramètres",
+        "system": "Système",
+        "security": "Sécurité",
+        "templates": "Templates",
+        "migration": "Migration",
+        "admin": "Administration",
+        "sdn": "SDN",
+        "api_tokens": "Jetons API"
+      },
+      "destinations": "Destinations"
     }
   },
   "green": {

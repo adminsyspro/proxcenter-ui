@@ -1939,6 +1939,60 @@ export const EXTRA_MOCKS: MockDataMap = {
     data: { enabled: false },
   },
 
+  // --- Syslog / SIEM destinations (#184): flat body, the card reads
+  // `destinations` and `status` directly ---
+  'GET:/api/v1/settings/syslog': {
+    destinations: [
+      {
+        id: 'demo-siem-tls',
+        name: 'Central SIEM',
+        enabled: true,
+        host: 'siem.demo.local',
+        port: 6514,
+        transport: 'tls',
+        format: 'rfc5424',
+        framing: 'octet-counting',
+        facility: 13,
+        categories: [],
+        tls: { verify: true, ca: '', serverName: '' },
+      },
+      {
+        id: 'demo-syslog-udp',
+        name: 'Site B syslog',
+        enabled: true,
+        host: '10.42.0.12',
+        port: 514,
+        transport: 'udp',
+        format: 'cef',
+        framing: 'newline',
+        facility: 13,
+        categories: ['auth', 'security', 'users'],
+        tls: { verify: true, ca: '', serverName: '' },
+      },
+    ],
+    status: {
+      'demo-siem-tls': {
+        connected: true,
+        sent: 1284,
+        dropped: 0,
+        failed: 0,
+        lastSentAt: new Date(Date.now() - 42_000).toISOString(),
+        lastError: null,
+        lastErrorAt: null,
+      },
+      'demo-syslog-udp': {
+        connected: true,
+        sent: 311,
+        dropped: 0,
+        failed: 0,
+        lastSentAt: new Date(Date.now() - 5 * 60_000).toISOString(),
+        lastError: null,
+        lastErrorAt: null,
+      },
+    },
+    limits: { maxDestinations: 20 },
+  },
+
   // --- Notification settings ---
   'GET:/api/v1/orchestrator/notifications/settings': {
     data: {

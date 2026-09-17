@@ -3271,7 +3271,8 @@
       "notifications": "Benachrichtigungen",
       "reports": "Berichte",
       "green_metrics": "Green Metrics / CSR",
-      "ceph_replication": "Site Recovery (Ceph Replikation)"
+      "ceph_replication": "Site Recovery (Ceph Replikation)",
+      "syslog_forwarding": "Syslog / SIEM-Weiterleitung"
     },
     "categoryLabels": {
       "infrastructure": "Infrastruktur",
@@ -3343,6 +3344,98 @@
       "durationLabel": "{ms} ms gesamt",
       "unavailable": "Diagnose nicht verfügbar",
       "allOk": "Alle Prüfungen bestanden."
+    },
+    "syslog": {
+      "tabLabel": "Syslog / SIEM",
+      "title": "Syslog-/SIEM-Weiterleitung",
+      "description": "Jeder Audit-Eintrag wird in Echtzeit an die unten aufgeführten Kollektoren weitergeleitet, zusammen mit dem ProxCenter-Benutzer, der die Aktion ausgelöst hat. Aufbewahrung und Suche erfolgen in Ihrem SIEM.",
+      "add": "Ziel hinzufügen",
+      "empty": "Noch kein Ziel. Audit-Einträge bleiben nur in ProxCenter.",
+      "limitReached": "Maximum von {max} Zielen erreicht",
+      "loadError": "Die Syslog-Ziele konnten nicht geladen werden.",
+      "saveError": "Speichern fehlgeschlagen:",
+      "saved": "Syslog-Ziele gespeichert",
+      "columns": {
+        "name": "Name",
+        "target": "Kollektor",
+        "format": "Format",
+        "categories": "Kategorien",
+        "activity": "Aktivität"
+      },
+      "allCategories": "Alle Kategorien",
+      "categoriesCount": "{count} Kategorien",
+      "neverSent": "Noch nichts gesendet",
+      "lastSent": "Zuletzt gesendet {time}",
+      "lastError": "Letzter Fehler: {error}",
+      "sentCount": "{count} gesendet",
+      "droppedCount": "{count} verworfen",
+      "test": "Test senden",
+      "testing": "Wird gesendet...",
+      "testOk": "Testzeile an {host}:{port} zugestellt",
+      "testOkUdp": "Testdatagramm an {host}:{port} gesendet. UDP liefert keine Zustellbestätigung, prüfen Sie den Kollektor.",
+      "testFailed": "Test fehlgeschlagen: {error}",
+      "dialog": {
+        "addTitle": "Neues Syslog-Ziel",
+        "editTitle": "Syslog-Ziel bearbeiten"
+      },
+      "fields": {
+        "name": "Name",
+        "host": "Host",
+        "port": "Port",
+        "transport": "Transport",
+        "format": "Format",
+        "framing": "Framing",
+        "facility": "Facility",
+        "categories": "Audit-Kategorien",
+        "categoriesHelper": "Leer lassen, um alle Kategorien weiterzuleiten.",
+        "enabled": "Weiterleitung aktiviert"
+      },
+      "transportHelper": {
+        "udp": "Keine Zustellbestätigung, Zeilen über 8 KiB werden abgeschnitten.",
+        "tcp": "Zuverlässig, nicht verschlüsselt.",
+        "tls": "Verschlüsselt, das Zertifikat des Kollektors wird geprüft."
+      },
+      "formats": {
+        "rfc5424": "RFC 5424",
+        "rfc3164": "RFC 3164 (BSD)",
+        "cef": "CEF"
+      },
+      "framings": {
+        "newline": "Durch Zeilenumbruch getrennt (Splunk, Graylog, rsyslog)",
+        "octetCounting": "Octet Counting (RFC 5425, syslog-ng)"
+      },
+      "tls": {
+        "title": "TLS",
+        "verify": "Zertifikat des Kollektors prüfen",
+        "verifyWarning": "Ohne Prüfung kann sich jeder auf dem Übertragungsweg als Kollektor ausgeben und den Datenstrom mitlesen.",
+        "serverName": "Servername (SNI)",
+        "serverNameHelper": "Nur wenn der Kollektor über eine IP-Adresse erreicht wird.",
+        "ca": "CA-Zertifikat (PEM)",
+        "caHelper": "Leer lassen, um dem Zertifikatspeicher des Systems zu vertrauen."
+      },
+      "deleteConfirm": {
+        "title": "Dieses Ziel entfernen?",
+        "body": "{name} erhält sofort keine Audit-Einträge mehr. Bereits weitergeleitete Einträge bleiben in Ihrem SIEM."
+      },
+      "categories": {
+        "auth": "Authentifizierung",
+        "users": "Benutzer",
+        "connections": "Verbindungen",
+        "vms": "VMs",
+        "containers": "Container",
+        "nodes": "Nodes",
+        "storage": "Storage",
+        "backups": "Backups",
+        "settings": "Einstellungen",
+        "system": "System",
+        "security": "Sicherheit",
+        "templates": "Vorlagen",
+        "migration": "Migration",
+        "admin": "Administration",
+        "sdn": "SDN",
+        "api_tokens": "API-Token"
+      },
+      "destinations": "Ziele"
     }
   },
   "green": {

@@ -3284,7 +3284,8 @@
       "notifications": "Notifications",
       "reports": "Reports",
       "green_metrics": "Green Metrics / RSE",
-      "ceph_replication": "Site Recovery (Ceph Replication)"
+      "ceph_replication": "Site Recovery (Ceph Replication)",
+      "syslog_forwarding": "Syslog / SIEM forwarding"
     },
     "categoryLabels": {
       "infrastructure": "Infrastructure",
@@ -3356,6 +3357,98 @@
       "durationLabel": "{ms} ms total",
       "unavailable": "Diagnostics unavailable",
       "allOk": "All checks passed."
+    },
+    "syslog": {
+      "tabLabel": "Syslog / SIEM",
+      "title": "Syslog / SIEM forwarding",
+      "description": "Every audit entry is forwarded in real time to the collectors below, with the ProxCenter user behind the action. Retention and search happen in your SIEM.",
+      "add": "Add destination",
+      "empty": "No destination yet. Audit entries stay in ProxCenter only.",
+      "limitReached": "Maximum of {max} destinations reached",
+      "loadError": "Unable to load the syslog destinations.",
+      "saveError": "Save failed:",
+      "saved": "Syslog destinations saved",
+      "columns": {
+        "name": "Name",
+        "target": "Collector",
+        "format": "Format",
+        "categories": "Categories",
+        "activity": "Activity"
+      },
+      "allCategories": "All categories",
+      "categoriesCount": "{count} categories",
+      "neverSent": "Nothing sent yet",
+      "lastSent": "Last sent {time}",
+      "lastError": "Last error: {error}",
+      "sentCount": "{count} sent",
+      "droppedCount": "{count} dropped",
+      "test": "Send test",
+      "testing": "Sending...",
+      "testOk": "Test line delivered to {host}:{port}",
+      "testOkUdp": "Test datagram sent to {host}:{port}. UDP gives no delivery confirmation, check the collector.",
+      "testFailed": "Test failed: {error}",
+      "dialog": {
+        "addTitle": "New syslog destination",
+        "editTitle": "Edit syslog destination"
+      },
+      "fields": {
+        "name": "Name",
+        "host": "Host",
+        "port": "Port",
+        "transport": "Transport",
+        "format": "Format",
+        "framing": "Framing",
+        "facility": "Facility",
+        "categories": "Audit categories",
+        "categoriesHelper": "Leave empty to forward every category.",
+        "enabled": "Forwarding enabled"
+      },
+      "transportHelper": {
+        "udp": "No delivery confirmation, lines over 8 KiB are truncated.",
+        "tcp": "Reliable, not encrypted.",
+        "tls": "Encrypted, the collector certificate is verified."
+      },
+      "formats": {
+        "rfc5424": "RFC 5424",
+        "rfc3164": "RFC 3164 (BSD)",
+        "cef": "CEF"
+      },
+      "framings": {
+        "newline": "Newline delimited (Splunk, Graylog, rsyslog)",
+        "octetCounting": "Octet counting (RFC 5425, syslog-ng)"
+      },
+      "tls": {
+        "title": "TLS",
+        "verify": "Verify the collector certificate",
+        "verifyWarning": "Without verification anyone on the path can impersonate the collector and read the feed.",
+        "serverName": "Server name (SNI)",
+        "serverNameHelper": "Only when the collector is reached by IP address.",
+        "ca": "CA certificate (PEM)",
+        "caHelper": "Leave empty to trust the system certificate store."
+      },
+      "deleteConfirm": {
+        "title": "Remove this destination?",
+        "body": "{name} stops receiving audit entries immediately. Entries already forwarded stay in your SIEM."
+      },
+      "categories": {
+        "auth": "Authentication",
+        "users": "Users",
+        "connections": "Connections",
+        "vms": "VMs",
+        "containers": "Containers",
+        "nodes": "Nodes",
+        "storage": "Storage",
+        "backups": "Backups",
+        "settings": "Settings",
+        "system": "System",
+        "security": "Security",
+        "templates": "Templates",
+        "migration": "Migration",
+        "admin": "Administration",
+        "sdn": "SDN",
+        "api_tokens": "API tokens"
+      },
+      "destinations": "Destinations"
     }
   },
   "green": {

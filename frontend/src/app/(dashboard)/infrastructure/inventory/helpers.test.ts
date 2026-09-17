@@ -41,6 +41,9 @@ import {
   parseDiskFormat,
   HOTPLUG_DEVICES,
   hotplugDevice,
+  fetchRrdRange,
+  fetchRrd,
+  fetchRrdBatch,
 } from './helpers'
 
 /* ------------------------------------------------------------------ */
@@ -1412,5 +1415,157 @@ describe('fetchDetails: mapped passthrough devices on the Hardware tab (#852)', 
     expect(labels.usb0).toBe('USB (mapping: tablet)')
     expect(labels.usb1).toBe('USB (046d:c52b)')
     expect(labels.hostpci0).toBe('PCI (mapping: gpu)')
+  })
+})
+
+/* ------------------------------------------------------------------ */
+/* RRD fetchers: preset timeframe vs custom window (issue #955)        */
+/* ------------------------------------------------------------------ */
+
+describe('fetchRrdRange / fetchRrd / fetchRrdBatch', () => {
+  const rows = [{ time: 1_800_000_000, cpu: 0.4 }, { time: 1_800_000_060, cpu: 0.5 }]
+
+  const meta = {
+    timeframe: 'day',
+    stepSeconds: 60,
+    from: 1_800_000_000,
+    to: 1_800_000_060,
+    points: 2,
+    truncated: false,
+  }
+
+  // Returns the mock so tests can read back the URL and the request init.
+  function stubFetch(body: any, ok = true, status = 200) {
+    const fetchMock = vi.fn(
+      async (_input?: any, _init?: any) => ({ ok, status, json: async () => body }) as unknown as Response,
+    )
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    return fetchMock
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('asks for a preset timeframe with no window bounds', async () => {
+    const fetchMock = stubFetch({ data: rows, meta })
+
+    const result = await fetchRrdRange('conn 1', '/nodes/pve1/qemu/100', { timeframe: 'hour' })
+
+    const url = String(fetchMock.mock.calls[0][0])
+
+    // The connection id and the path are both encoded into the query.
+    expect(url).toBe('/api/v1/connections/conn%201/rrd?path=%2Fnodes%2Fpve1%2Fqemu%2F100&timeframe=hour')
+    expect(url).not.toContain('from=')
+    expect(result.rows).toEqual(rows)
+    expect(result.meta).toEqual(meta)
+  })
+
+  it('carries a custom window as plain epoch seconds', async () => {
+    const fetchMock = stubFetch({ data: rows, meta })
+
+    await fetchRrdRange('conn1', '/nodes/pve1', {
+      timeframe: 'day',
+      window: { from: 1_799_999_000, to: 1_800_000_060 },
+    })
+
+    const url = new URL(String(fetchMock.mock.calls[0][0]), 'http://test.local')
+
+    expect(url.searchParams.get('from')).toBe('1799999000')
+    expect(url.searchParams.get('to')).toBe('1800000060')
+    expect(url.searchParams.get('timeframe')).toBe('day')
+  })
+
+  it('reports a missing meta as null rather than undefined', async () => {
+    stubFetch({ data: rows })
+
+    const result = await fetchRrdRange('conn1', '/nodes/pve1', { timeframe: 'hour' })
+
+    expect(result.rows).toEqual(rows)
+    expect(result.meta).toBeNull()
+  })
+
+  it('throws the API error message when the route refuses', async () => {
+    stubFetch({ error: 'Permission denied: node.view' }, false, 403)
+
+    await expect(fetchRrdRange('conn1', '/nodes/pve1', { timeframe: 'hour' }))
+      .rejects.toThrow('Permission denied: node.view')
+  })
+
+  it('falls back to the status code when the error body says nothing', async () => {
+    stubFetch({}, false, 502)
+
+    await expect(fetchRrdRange('conn1', '/nodes/pve1', { timeframe: 'hour' }))
+      .rejects.toThrow('RRD HTTP 502')
+  })
+
+  it('fetchRrd hands back the rows alone', async () => {
+    stubFetch({ data: rows, meta })
+
+    expect(await fetchRrd('conn1', '/nodes/pve1', 'hour')).toEqual(rows)
+  })
+
+  it('fetchRrdBatch short-circuits on an empty path list', async () => {
+    const fetchMock = stubFetch({ data: {} })
+
+    expect(await fetchRrdBatch('conn1', [], 'hour')).toEqual(new Map())
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('fetchRrdBatch uses the single-path endpoint for one path, window included', async () => {
+    const fetchMock = stubFetch({ data: rows, meta })
+
+    const result = await fetchRrdBatch('conn1', ['/nodes/pve1'], 'day', undefined, {
+      from: 1_799_999_000,
+      to: 1_800_000_060,
+    })
+
+    const url = String(fetchMock.mock.calls[0][0])
+
+    expect(url).not.toContain('/rrd/batch')
+    expect(url).toContain('from=1799999000')
+    expect(result.get('/nodes/pve1')).toEqual(rows)
+  })
+
+  it('fetchRrdBatch posts the paths and the timeframe for several paths', async () => {
+    const fetchMock = stubFetch({ data: { '/nodes/pve1': rows, '/nodes/pve2': [] } })
+
+    const result = await fetchRrdBatch('conn1', ['/nodes/pve1', '/nodes/pve2'], 'hour')
+
+    expect(String(fetchMock.mock.calls[0][0])).toBe('/api/v1/connections/conn1/rrd/batch')
+
+    const init = fetchMock.mock.calls[0][1] as RequestInit
+
+    expect(init.method).toBe('POST')
+    expect(JSON.parse(String(init.body))).toEqual({ paths: ['/nodes/pve1', '/nodes/pve2'], timeframe: 'hour' })
+    expect(result.get('/nodes/pve1')).toEqual(rows)
+    expect(result.get('/nodes/pve2')).toEqual([])
+  })
+
+  it('fetchRrdBatch adds the window bounds to the posted body', async () => {
+    const fetchMock = stubFetch({ data: { '/nodes/pve1': rows, '/nodes/pve2': rows } })
+
+    await fetchRrdBatch('conn1', ['/nodes/pve1', '/nodes/pve2'], 'day', undefined, {
+      from: 1_799_999_000,
+      to: 1_800_000_060,
+    })
+
+    const init = fetchMock.mock.calls[0][1] as RequestInit
+
+    expect(JSON.parse(String(init.body))).toEqual({
+      paths: ['/nodes/pve1', '/nodes/pve2'],
+      timeframe: 'day',
+      from: 1_799_999_000,
+      to: 1_800_000_060,
+    })
+  })
+
+  it('fetchRrdBatch throws when the batch route refuses', async () => {
+    stubFetch({ error: 'Too many paths (max 50)' }, false, 400)
+
+    await expect(fetchRrdBatch('conn1', ['/nodes/pve1', '/nodes/pve2'], 'hour'))
+      .rejects.toThrow('Too many paths (max 50)')
   })
 })

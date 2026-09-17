@@ -8432,5 +8432,21 @@
     "timeout": "{description} - Tiempo de espera agotado (la tarea puede seguir en curso)",
     "error": "{description} - Error: {error}",
     "unknownError": "Error desconocido"
+  },
+  "metricsRange": {
+    "custom": "Personalizado",
+    "from": "Desde",
+    "to": "Hasta",
+    "apply": "Aplicar",
+    "reset": "Restablecer",
+    "resolution": "Resolución: {step}",
+    "invalidOrder": "El fin del intervalo debe ser posterior a su inicio.",
+    "tooShort": "Proxmox registra un punto cada {step}. Un intervalo más corto no contiene ninguno.",
+    "beyondRetention": "Proxmox conserva {days} días de métricas. El inicio del intervalo se movió al punto más antiguo disponible.",
+    "empty": "Ningún punto de datos en este intervalo.",
+    "dragHint": "Arrastra sobre un gráfico para ampliar un intervalo.",
+    "stepSeconds": "{n} s",
+    "stepMinutes": "{n} min",
+    "stepHours": "{n} h"
   }
 }

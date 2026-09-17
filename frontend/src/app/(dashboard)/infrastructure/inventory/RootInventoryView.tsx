@@ -47,6 +47,8 @@ import VmsTable, { VmRow, TrendPoint } from '@/components/VmsTable'
 import { ViewMode, AllVmItem, HostItem, PoolItem, TagItem } from './InventoryTree'
 import type { InventorySelection } from './types'
 import { fetchRrd, fetchRrdBatch, buildSeriesFromRrd, formatRrdTick, formatRrdTooltipTs, formatBps } from './helpers'
+import MetricsRangeSelector, { type MetricsRangeValue } from '@/components/metrics/MetricsRangeSelector'
+import type { RrdWindow } from '@/lib/metrics/rrdRange'
 import { useResourceData } from '../resources/hooks/useResourceData'
 import { calculateImprovedPredictions } from '../resources/algorithms/improvedPrediction'
 import { calculateHealthScoreWithDetails } from '../resources/algorithms/healthScore'
@@ -335,6 +337,15 @@ function RootInventoryView({
 
   // Per-node RRD graphs for infrastructure overview
   const [infraRrdTf, setInfraRrdTf] = useState<'hour' | 'day' | 'week' | 'month' | 'year'>('hour')
+
+  // Custom window: `infraRrdTf` keeps naming the archive behind it, so the
+  // axis formatters and the gap detection below stay right (#955).
+  const [infraRrdWindow, setInfraRrdWindow] = useState<RrdWindow | null>(null)
+
+  const onInfraRrdRangeChange = useCallback((value: MetricsRangeValue) => {
+    setInfraRrdTf(value.timeframe)
+    setInfraRrdWindow(value.window)
+  }, [])
   const [infraRrdPerNode, setInfraRrdPerNode] = useState<Record<string, any[]>>({})
   const [infraRrdNodeNames, setInfraRrdNodeNames] = useState<string[]>([])
   const [infraRrdSeries, setInfraRrdSeries] = useState<any[]>([])
@@ -404,7 +415,7 @@ function RootInventoryView({
       const results = await Promise.allSettled(
         Array.from(byConn.values()).map(async ({ connId, nodes }) => {
           const paths = nodes.map(n => `/nodes/${n}`)
-          const batchResult = await fetchRrdBatch(connId, paths, infraRrdTf, abortController.signal)
+          const batchResult = await fetchRrdBatch(connId, paths, infraRrdTf, abortController.signal, infraRrdWindow)
           if (abortController.signal.aborted) return
           for (const node of nodes) {
             const raw = batchResult.get(`/nodes/${node}`) || []
@@ -483,7 +494,7 @@ function RootInventoryView({
     })()
 
     return () => { abortController.abort() }
-  }, [infraRrdNodesKey, infraRrdTf, infraRrdRefreshTick])
+  }, [infraRrdNodesKey, infraRrdTf, infraRrdRefreshTick, infraRrdWindow])
 
   // Auto-refresh RRD data every 30s
   useEffect(() => {
@@ -777,33 +788,11 @@ function RootInventoryView({
       </Card>
 
       {/* Aggregated Infrastructure Graphs */}
-      {infraRrdSeries.length > 0 && (
+      {(infraRrdSeries.length > 0 || infraRrdWindow) && (
         <Box sx={{ mb: 2 }}>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5 }}>
             <Typography fontWeight={600} fontSize={13}>{t('inventory.performances')}</Typography>
-            <Box sx={{ display: 'flex', gap: 0.5 }}>
-              {([
-                { label: '1h', value: 'hour' as const },
-                { label: '24h', value: 'day' as const },
-                { label: '7d', value: 'week' as const },
-                { label: '30d', value: 'month' as const },
-                { label: '1y', value: 'year' as const },
-              ]).map(opt => (
-                <Chip
-                  key={opt.value}
-                  label={opt.label}
-                  size="small"
-                  onClick={() => setInfraRrdTf(opt.value)}
-                  sx={{
-                    height: 24, fontSize: 11, fontWeight: 600,
-                    bgcolor: infraRrdTf === opt.value ? 'primary.main' : 'action.hover',
-                    color: infraRrdTf === opt.value ? 'primary.contrastText' : 'text.secondary',
-                    '&:hover': { bgcolor: infraRrdTf === opt.value ? 'primary.dark' : 'action.selected' },
-                    cursor: 'pointer',
-                  }}
-                />
-              ))}
-            </Box>
+            <MetricsRangeSelector timeframe={infraRrdTf} window={infraRrdWindow} onChange={onInfraRrdRangeChange} />
           </Box>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
             {/* CPU per node */}

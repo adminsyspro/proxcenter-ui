@@ -8432,5 +8432,21 @@
     "timeout": "{description} - 시간 초과 (작업이 아직 실행 중일 수 있음)",
     "error": "{description} - 오류: {error}",
     "unknownError": "알 수 없는 오류"
+  },
+  "metricsRange": {
+    "custom": "사용자 지정",
+    "from": "시작",
+    "to": "종료",
+    "apply": "적용",
+    "reset": "초기화",
+    "resolution": "해상도: {step}",
+    "invalidOrder": "종료 시각은 시작 시각보다 뒤여야 합니다.",
+    "tooShort": "Proxmox는 {step}마다 한 점을 기록합니다. 더 짧은 구간에는 데이터가 없습니다.",
+    "beyondRetention": "Proxmox는 {days}일치 메트릭만 보관합니다. 구간 시작이 남아 있는 가장 오래된 지점으로 조정되었습니다.",
+    "empty": "이 구간에는 데이터가 없습니다.",
+    "dragHint": "차트를 드래그하면 해당 구간을 확대합니다.",
+    "stepSeconds": "{n}초",
+    "stepMinutes": "{n}분",
+    "stepHours": "{n}시간"
   }
 }

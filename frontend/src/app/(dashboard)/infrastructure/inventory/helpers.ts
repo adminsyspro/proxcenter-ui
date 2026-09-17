@@ -1,4 +1,5 @@
 import { parseMemoryProperty } from '@/lib/proxmox/memoryProperty'
+import type { RrdRangeMeta, RrdWindow } from '@/lib/metrics/rrdRange'
 
 import type { InventorySelection, DetailsPayload, SeriesPoint, RrdTimeframe, Status } from './types'
 
@@ -850,8 +851,26 @@ export function buildSeriesFromRrd(raw: any[], maxMem?: number): SeriesPoint[] {
 return out
 }
 
-export async function fetchRrd(connectionId: string, path: string, timeframe: RrdTimeframe, signal?: AbortSignal) {
-  const url = `/api/v1/connections/${encodeURIComponent(connectionId)}/rrd?path=${encodeURIComponent(path)}&timeframe=${encodeURIComponent(timeframe)}`
+/**
+ * RRD fetch for a preset timeframe or a custom window. `meta` says what the
+ * route actually served (archive, resolution, whether the start had to be
+ * clamped), which the UI shows next to the range so nobody reads a 30 min
+ * average as if it were per-minute detail.
+ */
+export async function fetchRrdRange(
+  connectionId: string,
+  path: string,
+  range: { timeframe: RrdTimeframe; window?: RrdWindow | null },
+  signal?: AbortSignal
+): Promise<{ rows: any[]; meta: RrdRangeMeta | null }> {
+  const params = new URLSearchParams({ path, timeframe: range.timeframe })
+
+  if (range.window) {
+    params.set('from', String(range.window.from))
+    params.set('to', String(range.window.to))
+  }
+
+  const url = `/api/v1/connections/${encodeURIComponent(connectionId)}/rrd?${params.toString()}`
 
   const res = await fetch(url, { cache: 'no-store', signal })
   const json = await res.json()
@@ -860,7 +879,13 @@ export async function fetchRrd(connectionId: string, path: string, timeframe: Rr
     throw new Error(json?.error || `RRD HTTP ${res.status}`)
   }
 
-  return asArray<any>(safeJson<any>(json))
+  return { rows: asArray<any>(safeJson<any>(json)), meta: (json?.meta as RrdRangeMeta) ?? null }
+}
+
+export async function fetchRrd(connectionId: string, path: string, timeframe: RrdTimeframe, signal?: AbortSignal) {
+  const { rows } = await fetchRrdRange(connectionId, path, { timeframe }, signal)
+
+  return rows
 }
 
 /**
@@ -871,21 +896,23 @@ export async function fetchRrdBatch(
   connectionId: string,
   paths: string[],
   timeframe: RrdTimeframe,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  window?: RrdWindow | null
 ): Promise<Map<string, any[]>> {
   if (paths.length === 0) return new Map()
 
   // For a single path, fall back to the regular endpoint
   if (paths.length === 1) {
-    const data = await fetchRrd(connectionId, paths[0], timeframe, signal)
-    return new Map([[paths[0], data]])
+    const { rows } = await fetchRrdRange(connectionId, paths[0], { timeframe, window }, signal)
+
+    return new Map([[paths[0], rows]])
   }
 
   const url = `/api/v1/connections/${encodeURIComponent(connectionId)}/rrd/batch`
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ paths, timeframe }),
+    body: JSON.stringify(window ? { paths, timeframe, from: window.from, to: window.to } : { paths, timeframe }),
     cache: 'no-store',
     signal,
   })

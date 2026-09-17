@@ -3,11 +3,9 @@ import { NextResponse } from "next/server"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { clipRrdRows, resolveRrdRequest, stepSecondsFromRows } from "@/lib/metrics/rrdRange"
 
 export const runtime = "nodejs"
-
-// Timeframes disponibles dans Proxmox RRD
-type Timeframe = 'hour' | 'day' | 'week' | 'month' | 'year'
 
 export async function GET(req: Request, ctx: { params: Promise<{ id: string }> | { id: string } }) {
   try {
@@ -20,7 +18,14 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
     if (denied) return denied
 
     const url = new URL(req.url)
-    const timeframe = (url.searchParams.get('timeframe') || 'hour') as Timeframe
+
+    // `from`/`to` (epoch seconds) ask for a custom window: Proxmox only serves
+    // whole archives, so we fetch the finest one reaching `from` and clip.
+    const { timeframe, window } = resolveRrdRequest(
+      url.searchParams.get('timeframe') || 'hour',
+      url.searchParams.get('from'),
+      url.searchParams.get('to'),
+    )
 
     const conn = await getConnectionById(id)
 
@@ -50,11 +55,13 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
       // RRD data not available
     }
 
+    const windowed = window ? clipRrdRows(Array.isArray(rrdData) ? rrdData : [], window) : rrdData
+
     // Parser et formater les données pour les graphiques.
     // `time` reste l'epoch UTC brut : l'étiquette d'axe est fabriquée par le
     // navigateur, sinon elle sort dans le fuseau du conteneur (UTC) alors que
     // les séries temps réel de la page sortent dans celui du visiteur (#843).
-    const chartData = (Array.isArray(rrdData) ? rrdData : [])
+    const chartData = (Array.isArray(windowed) ? windowed : [])
       .filter(d => d && d.time)
       .map(d => {
         return {
@@ -188,6 +195,8 @@ return result
     return NextResponse.json({
       data: {
         timeframe,
+        stepSeconds: stepSecondsFromRows(chartData, timeframe),
+        window,
         nodeName,
 
         // Données RRD historiques du node

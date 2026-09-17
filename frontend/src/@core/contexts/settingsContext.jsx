@@ -4,6 +4,7 @@ import { createContext, useCallback, useEffect, useMemo, useRef, useState } from
 // Config Imports
 import themeConfig from '@configs/themeConfig'
 import primaryColorConfig from '@configs/primaryColorConfig'
+import { DEFAULT_INVENTORY_TAG_STYLE } from '@configs/inventoryTagStyleConfig'
 
 // Hook Imports
 import { useObjectCookie } from '@core/hooks/useObjectCookie'
@@ -37,6 +38,8 @@ const defaultSettings = {
   uiScale: 100, // UI scale percentage: 80-120
   // Data refresh interval (seconds): 5, 10, 30, 60, 300, 0 (off)
   refreshInterval: 30,
+  // Inventory tag shape: auto (follow the PVE datacenter), full, circle, dense, none
+  inventoryTagStyle: DEFAULT_INVENTORY_TAG_STYLE,
   // Login page background
   loginBackground: {
     type: 'gradient', // 'gradient' | 'image' | 'particles' | 'animated'

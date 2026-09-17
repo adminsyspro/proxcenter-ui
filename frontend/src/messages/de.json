@@ -2656,6 +2656,16 @@
     "viewRecommendations": "View Empfehlungen"
   },
   "settings": {
+    "inventoryTagStyle": {
+      "title": "Inventar-Tags",
+      "desc": "Wie Gast-Tags im Inventarbaum und in der VM-Liste dargestellt werden.",
+      "auto": "Automatisch",
+      "full": "Vollständig",
+      "circle": "Punkt",
+      "dense": "Kompakt",
+      "none": "Ausgeblendet",
+      "autoHint": "Automatisch übernimmt die in den Proxmox-Datacenter-Optionen festgelegte Form, Verbindung für Verbindung."
+    },
     "basemap": {
       "title": "Kartenhintergrund",
       "desc": "Kachelquelle für die geografische Topologieansicht und die Rechenzentrumskarten.",

@@ -37,7 +37,9 @@ import globalThemesConfig, {
   getGlobalTheme
 } from '@configs/globalThemesConfig'
 import lightBackgroundConfig from '@configs/lightBackgroundConfig'
+import { INVENTORY_TAG_STYLE_OPTIONS, DEFAULT_INVENTORY_TAG_STYLE } from '@configs/inventoryTagStyleConfig'
 import BasemapCard from '@components/settings/BasemapCard'
+import { tagColorFallback } from '@/contexts/TagColorContext'
 
 /* ==================== Theme Preview Card ==================== */
 
@@ -111,6 +113,42 @@ function ThemePreviewCard({ themeConfig, selected, onSelect, t }) {
   )
 }
 
+/* ==================== Inventory Tag Style Preview ==================== */
+
+// Two sample tags drawn the way the inventory draws them, so the shape is read
+// off the button itself rather than off its label. Sizes are copied from the
+// tree rows in inventory/components/VmItem.tsx.
+const SAMPLE_TAGS = ['prod', 'web']
+
+function TagStylePreview({ shape }) {
+  const iconFor = shape === 'auto' ? 'ri-server-line' : shape === 'none' ? 'ri-eye-off-line' : null
+
+  return (
+    <Box sx={{ height: 18, display: 'flex', alignItems: 'center', gap: 0.5, pointerEvents: 'none' }}>
+      {iconFor ? (
+        <i className={iconFor} style={{ fontSize: 15, opacity: 0.7 }} />
+      ) : (
+        SAMPLE_TAGS.map(tag => {
+          const bg = tagColorFallback(tag)
+
+          if (shape === 'circle') return <Box key={tag} sx={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: bg }} />
+
+          if (shape === 'dense') return <Box key={tag} sx={{ width: 12, height: 8, backgroundColor: bg }} />
+
+          return (
+            <Chip
+              key={tag}
+              label={tag}
+              size='small'
+              sx={{ height: 16, fontSize: 9, borderRadius: 0.5, backgroundColor: bg, color: '#fff', fontWeight: 600, '& .MuiChip-label': { px: 0.5 } }}
+            />
+          )
+        })
+      )}
+    </Box>
+  )
+}
+
 /* ==================== Main AppearanceTab Component ==================== */
 
 export default function AppearanceTab() {
@@ -176,6 +214,13 @@ return globalThemesConfig.filter(t => t.category === selectedCategory)
     updateSettings({ blurIntensity: newValue })
   }
 
+  const handleInventoryTagStyleChange = (e, newStyle) => {
+    if (newStyle !== null) {
+      updateSettings({ inventoryTagStyle: newStyle })
+      showMessage('success', t('settings.savedSuccess'))
+    }
+  }
+
   const handleReset = () => {
     resetSettings()
     showMessage('info', t('common.reset'))
@@ -234,6 +279,33 @@ return globalThemesConfig.filter(t => t.category === selectedCategory)
               <MenuItem value={0}>{t('settings.refreshOff')}</MenuItem>
             </Select>
           </FormControl>
+        </CardContent>
+      </Card>
+
+      {/* Section: Tags de l'inventaire */}
+      <Card variant='outlined' sx={{ mb: 3 }}>
+        <CardContent>
+          <Typography variant='subtitle1' fontWeight={700} sx={{ mb: 0.5, display: 'flex', alignItems: 'center', gap: 1 }}>
+            <i className='ri-price-tag-3-line' style={{ color: theme.palette.primary.main }} />
+            {t('settings.inventoryTagStyle.title')}
+          </Typography>
+          <Typography variant='caption' color='text.secondary' sx={{ display: 'block', mb: 2 }}>{t('settings.inventoryTagStyle.desc')}</Typography>
+
+          <ToggleButtonGroup
+            value={settings.inventoryTagStyle || DEFAULT_INVENTORY_TAG_STYLE}
+            exclusive
+            onChange={handleInventoryTagStyleChange}
+            sx={{ flexWrap: 'wrap' }}
+          >
+            {INVENTORY_TAG_STYLE_OPTIONS.map(option => (
+              <ToggleButton key={option.id} value={option.id} sx={{ px: 2.5, flexDirection: 'column', gap: 0.75 }}>
+                <TagStylePreview shape={option.id} />
+                <span>{t(option.labelKey)}</span>
+              </ToggleButton>
+            ))}
+          </ToggleButtonGroup>
+
+          <Typography variant='caption' color='text.secondary' sx={{ display: 'block', mt: 1.5 }}>{t('settings.inventoryTagStyle.autoHint')}</Typography>
         </CardContent>
       </Card>
 

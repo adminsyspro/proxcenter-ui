@@ -2669,6 +2669,16 @@
     "viewRecommendations": "View recommendations"
   },
   "settings": {
+    "inventoryTagStyle": {
+      "title": "Inventory tags",
+      "desc": "How guest tags are drawn in the inventory tree and in the VM list.",
+      "auto": "Automatic",
+      "full": "Full",
+      "circle": "Dot",
+      "dense": "Dense",
+      "none": "Hidden",
+      "autoHint": "Automatic keeps the shape set in the Proxmox datacenter options, connection by connection."
+    },
     "basemap": {
       "title": "Map basemap",
       "desc": "Tile source for the geographic topology view and the datacenter maps.",

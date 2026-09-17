@@ -2669,6 +2669,16 @@
     "viewRecommendations": "권장 사항 보기"
   },
   "settings": {
+    "inventoryTagStyle": {
+      "title": "인벤토리 태그",
+      "desc": "인벤토리 트리와 VM 목록에서 게스트 태그를 표시하는 방식입니다.",
+      "auto": "자동",
+      "full": "전체",
+      "circle": "점",
+      "dense": "조밀",
+      "none": "숨김",
+      "autoHint": "자동을 선택하면 연결별로 Proxmox 데이터센터 옵션에 설정된 모양을 그대로 사용합니다."
+    },
     "basemap": {
       "title": "지도 배경",
       "desc": "지리적 토폴로지 보기와 데이터센터 지도에 사용하는 타일 소스입니다.",

@@ -2,6 +2,9 @@
 
 import React, { createContext, useContext, useState, useCallback, useRef } from 'react'
 
+import { SettingsContext } from '@core/contexts/settingsContext'
+import { INVENTORY_TAG_STYLES, type InventoryTagStyle } from '@configs/inventoryTagStyleConfig'
+
 /* ------------------------------------------------------------------ */
 /* PVE tag-style color-map parsing                                    */
 /* ------------------------------------------------------------------ */
@@ -84,6 +87,24 @@ function extractShape(tagStyle: any): TagShape {
 }
 
 /* ------------------------------------------------------------------ */
+/* Per-account shape preference                                       */
+/* ------------------------------------------------------------------ */
+
+/**
+ * The stored appearance setting as a shape the renderers understand, or null
+ * when the datacenter keeps the last word. A cookie written by an older
+ * release has no such key at all, and one written by a newer one may carry a
+ * value this build does not know, so both fall back to the PVE shape.
+ */
+function readUserShape(stored: unknown): TagShape | null {
+  if (typeof stored !== 'string') return null
+  if (!(INVENTORY_TAG_STYLES as readonly string[]).includes(stored)) return null
+  const style = stored as InventoryTagStyle
+
+  return style === 'auto' ? null : style
+}
+
+/* ------------------------------------------------------------------ */
 /* Context                                                            */
 /* ------------------------------------------------------------------ */
 
@@ -108,6 +129,12 @@ const TagColorContext = createContext<TagColorContextValue>({
 })
 
 export function TagColorProvider({ children }: { children: React.ReactNode }) {
+  // Read straight from the context rather than through useSettings(), which
+  // throws outside a SettingsProvider: this provider has to keep working in a
+  // tree mounted without one, a unit test being the common case.
+  const settingsContext = useContext(SettingsContext) as { settings?: { inventoryTagStyle?: unknown } } | null
+  const userShape = readUserShape(settingsContext?.settings?.inventoryTagStyle)
+
   const [colorMaps, setColorMaps] = useState<Record<string, TagColorMap>>({})
   const [shapes, setShapes] = useState<Record<string, TagShape>>({})
   const fetchingRef = useRef<Set<string>>(new Set())
@@ -148,8 +175,12 @@ export function TagColorProvider({ children }: { children: React.ReactNode }) {
   }, [colorMaps])
 
   const getShape = useCallback((connId: string): TagShape => {
+    // The account's own choice outranks the datacenter. Left on `auto`, which
+    // is the shipped default, the PVE `tag-style` shape stays in charge.
+    if (userShape) return userShape
+
     return shapes[connId] || 'full'
-  }, [shapes])
+  }, [shapes, userShape])
 
   const isLoaded = useCallback((connId: string) => loadedRef.current.has(connId), [])
 

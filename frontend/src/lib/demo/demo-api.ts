@@ -12,6 +12,7 @@
 import { NextResponse } from 'next/server'
 
 import { aggregateStorage, normalizeStorageEntry } from '@/lib/proxmox/storage'
+import { applyRrdWindow, presetRangeMeta, resolveRrdRequest } from '@/lib/metrics/rrdRange'
 
 import mockDataJson from './mock-data.json'
 import cloudImagesJson from '@/data/cloudImages.json'
@@ -3758,18 +3759,38 @@ export function demoResponse(req: Request): NextResponse | Response | Promise<Ne
       return (async () => {
         let paths: string[] = []
         let timeframe = 'hour'
+        let from: unknown = null
+        let to: unknown = null
+
         try {
           const body = await req.json()
           if (Array.isArray(body?.paths)) paths = body.paths.filter((x: unknown) => typeof x === 'string')
           if (typeof body?.timeframe === 'string') timeframe = body.timeframe
+          from = body?.from ?? null
+          to = body?.to ?? null
         } catch {
           // No body: answer with an empty map rather than a 500.
         }
+
+        const batchRange = resolveRrdRequest(timeframe, from, to)
         const dataMap: Record<string, any[]> = {}
+        let batchMeta = null
+
         for (const path of paths) {
-          dataMap[path] = generateRrdForPath(batchConnId, path, timeframe)
+          const rows = generateRrdForPath(batchConnId, path, batchRange.timeframe)
+
+          if (!batchRange.window) {
+            dataMap[path] = rows
+            batchMeta = batchMeta ?? presetRangeMeta(rows, batchRange.timeframe)
+          } else {
+            const clipped = applyRrdWindow(rows, batchRange.window, batchRange.timeframe, batchRange.truncated)
+
+            dataMap[path] = clipped.rows
+            batchMeta = batchMeta ?? clipped.meta
+          }
         }
-        return NextResponse.json({ data: dataMap }, { headers: demoHeaders })
+
+        return NextResponse.json({ data: dataMap, meta: batchMeta }, { headers: demoHeaders })
       })()
     }
 
@@ -4245,7 +4266,20 @@ export function demoResponse(req: Request): NextResponse | Response | Promise<Ne
     }
     const rrdConnId = cleanPath.match(/\/api\/v1\/connections\/([^/]+)\//)?.[1] || DEMO_CONNECTION_ID
     const rrdPath = urlObj.searchParams.get('path') || '/'
-    return NextResponse.json({ data: generateRrdForPath(rrdConnId, rrdPath, timeframe) }, { headers: demoHeaders })
+
+    // `from`/`to` clip here exactly as the real route clips the Proxmox
+    // archive, so the custom range of the Performance cards behaves the same
+    // on the demo instance (issue #955).
+    const rrdRange = resolveRrdRequest(timeframe, urlObj.searchParams.get('from'), urlObj.searchParams.get('to'))
+    const rrdRows = generateRrdForPath(rrdConnId, rrdPath, rrdRange.timeframe)
+
+    if (!rrdRange.window) {
+      return NextResponse.json({ data: rrdRows, meta: presetRangeMeta(rrdRows, rrdRange.timeframe) }, { headers: demoHeaders })
+    }
+
+    const clippedRrd = applyRrdWindow(rrdRows, rrdRange.window, rrdRange.timeframe, rrdRange.truncated)
+
+    return NextResponse.json({ data: clippedRrd.rows, meta: clippedRrd.meta }, { headers: demoHeaders })
   }
 
   // --- Connection filtering by type ---

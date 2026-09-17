@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 import { callRoute, readJson, deniedPermissionResponse } from '@/__tests__/setup/route-test'
 
@@ -96,5 +96,86 @@ describe('GET /api/v1/connections/:id/rrd', () => {
     })
 
     expect(res.status).toBe(400)
+  })
+})
+
+describe('GET /api/v1/connections/:id/rrd with a custom window', () => {
+  const NOW = 1_800_000_000
+
+  // 24 h of one-minute points, which is exactly what PVE 9 serves for `day`.
+  const dayRows = Array.from({ length: 1440 }, (_, i) => ({ time: NOW - (1439 - i) * 60, cpu: i / 1440 }))
+
+  beforeEach(() => {
+    checkPermissionMock.mockResolvedValue(null)
+    vi.useFakeTimers()
+    vi.setSystemTime(NOW * 1000)
+    pveFetchMock.mockResolvedValue(dayRows)
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('fetches the finest archive reaching the window and clips to it', async () => {
+    const from = NOW - 7_200
+    const to = from + 600
+
+    const res = await callRoute(await importGET(), {
+      params: { id: 'conn1' },
+      searchParams: { path: '/nodes/pve1', timeframe: 'year', from: String(from), to: String(to) },
+    })
+
+    // `timeframe=year` in the query is ignored: the window is 2 h old, so the
+    // 60 s archive (24 h deep) still covers it.
+    expect(pveFetchMock).toHaveBeenCalledWith({ id: 'conn1' }, '/nodes/pve1/rrddata?timeframe=day&cf=AVERAGE')
+
+    const json = await readJson<{ data: any[]; meta: any }>(res)
+
+    expect(json?.data).toHaveLength(11)
+    expect(json?.data[0].time).toBe(from)
+    expect(json?.data[json.data.length - 1].time).toBe(to)
+    expect(json?.meta).toMatchObject({ timeframe: 'day', stepSeconds: 60, points: 11, truncated: false })
+  })
+
+  it('flags a start older than what Proxmox keeps instead of pretending', async () => {
+    const res = await callRoute(await importGET(), {
+      params: { id: 'conn1' },
+      searchParams: { path: '/nodes/pve1', from: String(NOW - 40_000_000), to: String(NOW) },
+    })
+
+    expect(pveFetchMock).toHaveBeenCalledWith({ id: 'conn1' }, '/nodes/pve1/rrddata?timeframe=year&cf=AVERAGE')
+
+    const json = await readJson<{ meta: any }>(res)
+
+    expect(json?.meta.truncated).toBe(true)
+  })
+
+  it('falls back to the preset when the window is unusable', async () => {
+    const res = await callRoute(await importGET(), {
+      params: { id: 'conn1' },
+      searchParams: { path: '/nodes/pve1', timeframe: 'week', from: String(NOW), to: String(NOW - 600) },
+    })
+
+    expect(pveFetchMock).toHaveBeenCalledWith({ id: 'conn1' }, '/nodes/pve1/rrddata?timeframe=week&cf=AVERAGE')
+
+    const json = await readJson<{ data: any[]; meta: any }>(res)
+
+    expect(json?.data).toHaveLength(1440)
+    expect(json?.meta.timeframe).toBe('week')
+  })
+
+  it('reports an empty window rather than silently widening it', async () => {
+    // Shorter than the 60 s step: there is simply nothing in between.
+    const from = NOW - 3_630
+
+    const res = await callRoute(await importGET(), {
+      params: { id: 'conn1' },
+      searchParams: { path: '/nodes/pve1', from: String(from), to: String(from + 20) },
+    })
+
+    const json = await readJson<{ data: any[]; meta: any }>(res)
+
+    expect(json?.data).toEqual([])
+    expect(json?.meta).toMatchObject({ points: 0, stepSeconds: 60 })
   })
 })

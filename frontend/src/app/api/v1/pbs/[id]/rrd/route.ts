@@ -5,6 +5,7 @@ import { pbsFetch } from "@/lib/proxmox/pbs-client"
 import { getPbsConnectionById, getPbsConnectionByIdUnscoped } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { assertVdcPbsAccess } from "@/lib/vdc/scope"
+import { clipRrdRows, resolveRrdRequest, stepSecondsFromRows } from "@/lib/metrics/rrdRange"
 
 export const runtime = "nodejs"
 
@@ -14,7 +15,13 @@ export const runtime = "nodejs"
  * Récupère les données RRD (graphiques) du serveur PBS
  * Query params:
  *   - timeframe: hour | day | week | month | year (default: hour)
+ *   - from / to: epoch seconds, for a custom window (overrides timeframe)
  *   - cf: AVERAGE | MAX (default: AVERAGE)
+ *
+ * PBS serves whole archives just like PVE, so a window is honoured by picking
+ * the archive that reaches back far enough and clipping here. The archive
+ * layout is PBS's own, hence the step reported in `meta` is measured on the
+ * points that came back rather than assumed.
  */
 export async function GET(req: Request, ctx: { params: Promise<{ id: string }> | { id: string } }) {
   const demo = demoResponse(req)
@@ -33,8 +40,13 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
     if (access instanceof Response) return access
 
     const url = new URL(req.url)
-    const timeframe = url.searchParams.get('timeframe') || 'hour'
     const cf = url.searchParams.get('cf') || 'AVERAGE'
+
+    const { timeframe, window } = resolveRrdRequest(
+      url.searchParams.get('timeframe') || 'hour',
+      url.searchParams.get('from'),
+      url.searchParams.get('to'),
+    )
 
     const conn = access.kind === 'admin'
       ? await getPbsConnectionById(id)
@@ -71,7 +83,9 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
     }
 
     // Transformer les données pour le frontend
-    const series = (rrdData || []).map((point: any) => ({
+    const windowed = window ? clipRrdRows(rrdData || [], window) : (rrdData || [])
+
+    const series = windowed.map((point: any) => ({
       time: point.time,
       // CPU
       cpu: point.cpu ? Math.round(point.cpu * 100 * 100) / 100 : 0,
@@ -101,6 +115,12 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
       data: series,
       timeframe,
       cf,
+      meta: {
+        timeframe,
+        stepSeconds: stepSecondsFromRows(series, timeframe),
+        window,
+        points: series.length,
+      },
     })
   } catch (e: any) {
     console.error("PBS RRD error:", e)

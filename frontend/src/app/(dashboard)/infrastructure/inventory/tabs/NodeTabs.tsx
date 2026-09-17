@@ -2,6 +2,9 @@
 
 import React, { Fragment, useState, useEffect, useMemo, useRef } from 'react'
 import { useTranslations } from 'next-intl'
+
+import MetricsRangeSelector from '@/components/metrics/MetricsRangeSelector'
+import useChartDragRange from '@/components/metrics/useChartDragRange'
 import DOMPurify from 'dompurify'
 import { useBranding } from '@/contexts/BrandingContext'
 import { useRBAC } from '@/contexts/RBACContext'
@@ -277,6 +280,10 @@ export default function NodeTabs(props: any) {
     setSystemReportLoading,
     setSystemSaving,
     setTf,
+    onRrdRangeChange,
+    onRrdWindowSelect,
+    rrdWindow,
+    rrdMeta,
     setTimeFormData,
     setTimezonesList,
     subscriptionKeyDialogOpen,
@@ -298,6 +305,9 @@ export default function NodeTabs(props: any) {
     rollingUpdateWizardOpen,
     setRollingUpdateWizardOpen,
   } = props
+
+  // Dragging across any chart of the card selects that window on all of them.
+  const rrdDrag = useChartDragRange(onRrdWindowSelect)
 
   const [nodeUpdateDialogOpen, setNodeUpdateDialogOpen] = React.useState(false)
 
@@ -617,31 +627,12 @@ export default function NodeTabs(props: any) {
                   <Box sx={{ p: 2 }}>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5, flexWrap: 'wrap', gap: 1 }}>
                       <Typography fontWeight={700} fontSize={14}>{t('inventory.performances')}</Typography>
-                      <Box sx={{ display: 'flex', gap: 0.5 }}>
-                        {[
-                          { label: '1h', value: 'hour' as RrdTimeframe },
-                          { label: '24h', value: 'day' as RrdTimeframe },
-                          { label: t('inventory.rrd7d'), value: 'week' as RrdTimeframe },
-                          { label: t('inventory.rrd30d'), value: 'month' as RrdTimeframe },
-                          { label: t('inventory.rrd1y'), value: 'year' as RrdTimeframe },
-                        ].map(opt => (
-                          <Chip
-                            key={opt.value}
-                            label={opt.label}
-                            size="small"
-                            onClick={() => setTf(opt.value)}
-                            sx={{
-                              height: 24,
-                              fontSize: 11,
-                              fontWeight: 600,
-                              bgcolor: tf === opt.value ? 'primary.main' : 'action.hover',
-                              color: tf === opt.value ? 'primary.contrastText' : 'text.secondary',
-                              '&:hover': { bgcolor: tf === opt.value ? 'primary.dark' : 'action.selected' },
-                              cursor: 'pointer',
-                            }}
-                          />
-                        ))}
-                      </Box>
+                      <MetricsRangeSelector
+                        timeframe={tf}
+                        window={rrdWindow}
+                        meta={rrdMeta}
+                        onChange={onRrdRangeChange}
+                      />
                     </Box>
 
                     {rrdLoading ? (
@@ -655,7 +646,7 @@ export default function NodeTabs(props: any) {
                         {/* CPU Usage */}
                         <ExpandableChart title={t('inventory.cpuUsage')} height={185}>
                           <ChartContainer>
-                            <AreaChart data={series} margin={{ top: 2, right: 4, bottom: 0, left: 4 }}>
+                            <AreaChart data={series} margin={{ top: 2, right: 4, bottom: 0, left: 4 }} {...rrdDrag.chartProps}>
                               <defs>
                                 <linearGradient id="nGradCpu" x1="0" y1="0" x2="0" y2="1">
                                   <stop offset="0%" stopColor="#2196f3" stopOpacity={0.35} />
@@ -686,6 +677,7 @@ export default function NodeTabs(props: any) {
                                 )
                               }} />
                               <Area type="monotone" dataKey="cpuPct" stroke="#2196f3" fill="url(#nGradCpu)" strokeWidth={1.5} isAnimationActive={false} />
+                              {rrdDrag.selection}
                             </AreaChart>
                           </ChartContainer>
                         </ExpandableChart>
@@ -693,7 +685,7 @@ export default function NodeTabs(props: any) {
                         {/* Memory Usage */}
                         <ExpandableChart title={t('inventory.memoryUsage')} height={185}>
                           <ChartContainer>
-                            <AreaChart data={series} margin={{ top: 2, right: 4, bottom: 0, left: 4 }}>
+                            <AreaChart data={series} margin={{ top: 2, right: 4, bottom: 0, left: 4 }} {...rrdDrag.chartProps}>
                               <defs>
                                 <linearGradient id="nGradRam" x1="0" y1="0" x2="0" y2="1">
                                   <stop offset="0%" stopColor="#10b981" stopOpacity={0.35} />
@@ -724,6 +716,7 @@ export default function NodeTabs(props: any) {
                                 )
                               }} />
                               <Area type="monotone" dataKey="ramPct" stroke="#10b981" fill="url(#nGradRam)" strokeWidth={1.5} isAnimationActive={false} />
+                              {rrdDrag.selection}
                             </AreaChart>
                           </ChartContainer>
                         </ExpandableChart>
@@ -731,7 +724,7 @@ export default function NodeTabs(props: any) {
                         {/* Network Traffic */}
                         <ExpandableChart title={t('inventory.networkTrafficChart')} height={185}>
                           <ChartContainer>
-                            <AreaChart data={series} margin={{ top: 2, right: 4, bottom: 0, left: 4 }}>
+                            <AreaChart data={series} margin={{ top: 2, right: 4, bottom: 0, left: 4 }} {...rrdDrag.chartProps}>
                               <defs>
                                 <linearGradient id="nGradNetIn" x1="0" y1="0" x2="0" y2="1">
                                   <stop offset="0%" stopColor="#06b6d4" stopOpacity={0.35} />
@@ -767,6 +760,7 @@ export default function NodeTabs(props: any) {
                               }} />
                               <Area type="monotone" dataKey="netInBps" stroke="#06b6d4" fill="url(#nGradNetIn)" strokeWidth={1.5} isAnimationActive={false} name="netInBps" connectNulls />
                               <Area type="monotone" dataKey="netOutBps" stroke="#67e8f9" fill="url(#nGradNetOut)" strokeWidth={1.5} isAnimationActive={false} name="netOutBps" connectNulls />
+                              {rrdDrag.selection}
                             </AreaChart>
                           </ChartContainer>
                         </ExpandableChart>
@@ -775,7 +769,7 @@ export default function NodeTabs(props: any) {
                         <ExpandableChart title={selection?.type === 'node' ? t('inventory.serverLoad') : t('inventory.diskIo')} height={185}>
                           <ChartContainer>
                             {selection?.type === 'node' ? (
-                              <AreaChart data={series} margin={{ top: 2, right: 4, bottom: 0, left: 4 }}>
+                              <AreaChart data={series} margin={{ top: 2, right: 4, bottom: 0, left: 4 }} {...rrdDrag.chartProps}>
                                 <defs>
                                   <linearGradient id="nGradLoad" x1="0" y1="0" x2="0" y2="1">
                                     <stop offset="0%" stopColor="#f97316" stopOpacity={0.35} />
@@ -806,9 +800,10 @@ export default function NodeTabs(props: any) {
                                   )
                                 }} />
                                 <Area type="monotone" dataKey="loadAvg" stroke="#f97316" fill="url(#nGradLoad)" strokeWidth={1.5} isAnimationActive={false} connectNulls />
+                                {rrdDrag.selection}
                               </AreaChart>
                             ) : (
-                              <AreaChart data={series} margin={{ top: 2, right: 4, bottom: 0, left: 4 }}>
+                              <AreaChart data={series} margin={{ top: 2, right: 4, bottom: 0, left: 4 }} {...rrdDrag.chartProps}>
                                 <defs>
                                   <linearGradient id="nGradDiskRead" x1="0" y1="0" x2="0" y2="1">
                                     <stop offset="0%" stopColor="#ef4444" stopOpacity={0.35} />
@@ -844,6 +839,7 @@ export default function NodeTabs(props: any) {
                                 }} />
                                 <Area type="monotone" dataKey="diskReadBps" stroke="#ef4444" fill="url(#nGradDiskRead)" strokeWidth={1.5} isAnimationActive={false} name="diskReadBps" connectNulls />
                                 <Area type="monotone" dataKey="diskWriteBps" stroke="#fca5a5" fill="url(#nGradDiskWrite)" strokeWidth={1.5} isAnimationActive={false} name="diskWriteBps" connectNulls />
+                                {rrdDrag.selection}
                               </AreaChart>
                             )}
                           </ChartContainer>
@@ -853,7 +849,7 @@ export default function NodeTabs(props: any) {
                         {selection?.type === 'node' && series.some(p => p.memAvailable != null || p.arcSize != null) && (
                           <ExpandableChart title="Memory Available / ZFS ARC" height={185}>
                             <ChartContainer>
-                              <AreaChart data={series} margin={{ top: 2, right: 4, bottom: 0, left: 4 }}>
+                              <AreaChart data={series} margin={{ top: 2, right: 4, bottom: 0, left: 4 }} {...rrdDrag.chartProps}>
                                 <defs>
                                   <linearGradient id="nGradMemAvail" x1="0" y1="0" x2="0" y2="1">
                                     <stop offset="0%" stopColor="#10b981" stopOpacity={0.35} />
@@ -889,6 +885,7 @@ export default function NodeTabs(props: any) {
                                 }} />
                                 <Area type="monotone" dataKey="memAvailable" stroke="#10b981" fill="url(#nGradMemAvail)" strokeWidth={1.5} isAnimationActive={false} name="Available" connectNulls />
                                 <Area type="monotone" dataKey="arcSize" stroke="#8b5cf6" fill="url(#nGradArc)" strokeWidth={1.5} isAnimationActive={false} name="ZFS ARC" connectNulls />
+                                {rrdDrag.selection}
                               </AreaChart>
                             </ChartContainer>
                           </ExpandableChart>
@@ -898,7 +895,7 @@ export default function NodeTabs(props: any) {
                         {selection?.type === 'node' && series.some(p => p.iowait != null) && (
                           <ExpandableChart title="IO Wait" height={185}>
                             <ChartContainer>
-                              <AreaChart data={series} margin={{ top: 2, right: 4, bottom: 0, left: 4 }}>
+                              <AreaChart data={series} margin={{ top: 2, right: 4, bottom: 0, left: 4 }} {...rrdDrag.chartProps}>
                                 <defs>
                                   <linearGradient id="nGradIoWait" x1="0" y1="0" x2="0" y2="1">
                                     <stop offset="0%" stopColor="#f59e0b" stopOpacity={0.35} />
@@ -929,6 +926,7 @@ export default function NodeTabs(props: any) {
                                   )
                                 }} />
                                 <Area type="monotone" dataKey="iowait" stroke="#f59e0b" fill="url(#nGradIoWait)" strokeWidth={1.5} isAnimationActive={false} connectNulls />
+                                {rrdDrag.selection}
                               </AreaChart>
                             </ChartContainer>
                           </ExpandableChart>
@@ -938,7 +936,7 @@ export default function NodeTabs(props: any) {
                         {selection?.type === 'node' && series.some(p => p.psiCpuSome != null) && (
                           <ExpandableChart title="Pressure Stall Information (PSI)" height={185}>
                             <ChartContainer>
-                              <AreaChart data={series} margin={{ top: 2, right: 4, bottom: 0, left: 4 }}>
+                              <AreaChart data={series} margin={{ top: 2, right: 4, bottom: 0, left: 4 }} {...rrdDrag.chartProps}>
                                 <XAxis dataKey="t" tickFormatter={v => formatRrdTick(Number(v), tf)} minTickGap={40} tick={{ fontSize: 9 }} />
                                 <YAxis domain={[0, 'auto']} tickFormatter={v => `${v}%`} tick={{ fontSize: 9 }} width={35} />
                                 <Tooltip wrapperStyle={{ backgroundColor: 'transparent', boxShadow: 'none' }} content={({ active, payload, label }) => {
@@ -970,6 +968,7 @@ export default function NodeTabs(props: any) {
                                 <Area type="monotone" dataKey="psiCpuFull" stroke="#1565c0" fill="none" strokeWidth={1} strokeDasharray="4 2" isAnimationActive={false} connectNulls />
                                 <Area type="monotone" dataKey="psiIoFull" stroke="#d97706" fill="none" strokeWidth={1} strokeDasharray="4 2" isAnimationActive={false} connectNulls />
                                 <Area type="monotone" dataKey="psiMemFull" stroke="#059669" fill="none" strokeWidth={1} strokeDasharray="4 2" isAnimationActive={false} connectNulls />
+                                {rrdDrag.selection}
                               </AreaChart>
                             </ChartContainer>
                           </ExpandableChart>

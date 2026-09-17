@@ -5,6 +5,8 @@ import { useTranslations, useLocale } from 'next-intl'
 import dynamic from 'next/dynamic'
 import DOMPurify from 'dompurify'
 import ExpandableChart from '../components/ExpandableChart'
+import MetricsRangeSelector from '@/components/metrics/MetricsRangeSelector'
+import useChartDragRange from '@/components/metrics/useChartDragRange'
 
 import {
   Alert,
@@ -388,6 +390,10 @@ export default function VmDetailTabs(props: any) {
     setShowCreateSnapshot,
     setTasksLoaded,
     setTf,
+    onRrdRangeChange,
+    onRrdWindowSelect,
+    rrdWindow,
+    rrdMeta,
     setVmNotes,
     showCreateSnapshot,
     snapshotActionBusy,
@@ -406,6 +412,9 @@ export default function VmDetailTabs(props: any) {
     tf,
     vmNotes,
   } = props
+
+  // Dragging across any chart of the card selects that window on all of them.
+  const rrdDrag = useChartDragRange(onRrdWindowSelect)
 
   const { hasFeature } = useLicense()
 
@@ -659,31 +668,12 @@ export default function VmDetailTabs(props: any) {
                             <i className="ri-line-chart-line" style={{ fontSize: 16, marginRight: 6 }} />
                             {t('inventory.performances')}
                           </Typography>
-                          <Box sx={{ display: 'flex', gap: 0.5 }}>
-                            {[
-                              { label: '1h', value: 'hour' as RrdTimeframe },
-                              { label: '24h', value: 'day' as RrdTimeframe },
-                              { label: t('inventory.rrd7d'), value: 'week' as RrdTimeframe },
-                              { label: t('inventory.rrd30d'), value: 'month' as RrdTimeframe },
-                              { label: t('inventory.rrd1y'), value: 'year' as RrdTimeframe },
-                            ].map(opt => (
-                              <Chip
-                                key={opt.value}
-                                label={opt.label}
-                                size="small"
-                                onClick={() => setTf(opt.value)}
-                                sx={{
-                                  height: 24,
-                                  fontSize: 11,
-                                  fontWeight: 600,
-                                  bgcolor: tf === opt.value ? 'primary.main' : 'action.hover',
-                                  color: tf === opt.value ? 'primary.contrastText' : 'text.secondary',
-                                  '&:hover': { bgcolor: tf === opt.value ? 'primary.dark' : 'action.selected' },
-                                  cursor: 'pointer',
-                                }}
-                              />
-                            ))}
-                          </Box>
+                          <MetricsRangeSelector
+                            timeframe={tf}
+                            window={rrdWindow}
+                            meta={rrdMeta}
+                            onChange={onRrdRangeChange}
+                          />
                         </Box>
 
                         {rrdLoading ? <LinearProgress sx={{ mb: 2 }} /> : null}
@@ -697,7 +687,7 @@ export default function VmDetailTabs(props: any) {
                           {/* CPU Usage */}
                           <ExpandableChart title={t('inventory.cpuUsage')} height={185}>
                             <ChartContainer>
-                              <AreaChart data={series} margin={{ top: 2, right: 4, bottom: 0, left: 4 }}>
+                              <AreaChart data={series} margin={{ top: 2, right: 4, bottom: 0, left: 4 }} {...rrdDrag.chartProps}>
                                 <defs>
                                   <linearGradient id="gradCpu" x1="0" y1="0" x2="0" y2="1">
                                     <stop offset="0%" stopColor="#2196f3" stopOpacity={0.35} />
@@ -728,6 +718,7 @@ export default function VmDetailTabs(props: any) {
                                   )
                                 }} />
                                 <Area type="monotone" dataKey="cpuPct" stroke="#2196f3" fill="url(#gradCpu)" strokeWidth={1.5} isAnimationActive={false} />
+                                {rrdDrag.selection}
                               </AreaChart>
                             </ChartContainer>
                           </ExpandableChart>
@@ -735,7 +726,7 @@ export default function VmDetailTabs(props: any) {
                           {/* Memory Usage */}
                           <ExpandableChart title={t('inventory.memoryUsage')} height={185}>
                             <ChartContainer>
-                              <AreaChart data={series} margin={{ top: 2, right: 4, bottom: 0, left: 4 }}>
+                              <AreaChart data={series} margin={{ top: 2, right: 4, bottom: 0, left: 4 }} {...rrdDrag.chartProps}>
                                 <defs>
                                   <linearGradient id="gradRam" x1="0" y1="0" x2="0" y2="1">
                                     <stop offset="0%" stopColor="#10b981" stopOpacity={0.35} />
@@ -766,6 +757,7 @@ export default function VmDetailTabs(props: any) {
                                   )
                                 }} />
                                 <Area type="monotone" dataKey="ramPct" stroke="#10b981" fill="url(#gradRam)" strokeWidth={1.5} isAnimationActive={false} />
+                                {rrdDrag.selection}
                               </AreaChart>
                             </ChartContainer>
                           </ExpandableChart>
@@ -773,7 +765,7 @@ export default function VmDetailTabs(props: any) {
                           {/* Network Traffic */}
                           <ExpandableChart title={t('inventoryPage.networkTraffic')} height={185}>
                             <ChartContainer>
-                              <AreaChart data={series} margin={{ top: 2, right: 4, bottom: 0, left: 4 }}>
+                              <AreaChart data={series} margin={{ top: 2, right: 4, bottom: 0, left: 4 }} {...rrdDrag.chartProps}>
                                 <defs>
                                   <linearGradient id="gradNetIn" x1="0" y1="0" x2="0" y2="1">
                                     <stop offset="0%" stopColor="#06b6d4" stopOpacity={0.35} />
@@ -809,6 +801,7 @@ export default function VmDetailTabs(props: any) {
                                 }} />
                                 <Area type="monotone" dataKey="netInBps" stroke="#06b6d4" fill="url(#gradNetIn)" strokeWidth={1.5} isAnimationActive={false} name="netInBps" connectNulls />
                                 <Area type="monotone" dataKey="netOutBps" stroke="#67e8f9" fill="url(#gradNetOut)" strokeWidth={1.5} isAnimationActive={false} name="netOutBps" connectNulls />
+                                {rrdDrag.selection}
                               </AreaChart>
                             </ChartContainer>
                           </ExpandableChart>

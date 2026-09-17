@@ -497,7 +497,9 @@ export type DetailsPayload = {
   }
 }
 
-export type RrdTimeframe = 'hour' | 'day' | 'week' | 'month' | 'year'
+// Single source of truth: the archive table and the window helpers live
+// next to it in @/lib/metrics/rrdRange.
+export type { RrdTimeframe } from '@/lib/metrics/rrdRange'
 
 export type SeriesPoint = {
   t: number

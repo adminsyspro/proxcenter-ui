@@ -8433,5 +8433,21 @@
     "timeout": "{description} - Timeout (tâche peut-être encore en cours)",
     "error": "{description} - Erreur : {error}",
     "unknownError": "Erreur inconnue"
+  },
+  "metricsRange": {
+    "custom": "Personnalisé",
+    "from": "Début",
+    "to": "Fin",
+    "apply": "Appliquer",
+    "reset": "Réinitialiser",
+    "resolution": "Résolution : {step}",
+    "invalidOrder": "La fin de la plage doit suivre son début.",
+    "tooShort": "Proxmox enregistre un point toutes les {step}. Une plage plus courte n'en contient aucun.",
+    "beyondRetention": "Proxmox conserve {days} jours de métriques. Le début de la plage a été ramené au plus ancien point disponible.",
+    "empty": "Aucun point dans cette plage.",
+    "dragHint": "Glissez sur un graphique pour zoomer sur une plage.",
+    "stepSeconds": "{n} s",
+    "stepMinutes": "{n} min",
+    "stepHours": "{n} h"
   }
 }

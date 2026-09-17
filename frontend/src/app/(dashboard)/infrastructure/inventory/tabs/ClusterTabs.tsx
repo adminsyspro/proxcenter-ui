@@ -67,7 +67,7 @@ import DetachPbsStorageDialog from '@/components/storage/DetachPbsStorageDialog'
 import RollingUpdateWizard from '@/components/RollingUpdateWizard'
 
 import type { InventorySelection, DetailsPayload, RrdTimeframe, SeriesPoint, Status } from '../types'
-import { formatBps, formatRrdTick, formatRrdTooltipTs, formatUptime, parseMarkdown, markdownSx, parseNodeId, parseVmId, cpuPct, pct, buildSeriesFromRrd, fetchRrd } from '../helpers'
+import { formatBps, formatRrdTick, formatRrdTooltipTs, formatUptime, parseMarkdown, markdownSx, parseNodeId, parseVmId, cpuPct, pct, buildSeriesFromRrd, fetchRrd, fetchRrdRange } from '../helpers'
 import { AreaPctChart, AreaBpsChart2 } from '../components/RrdCharts'
 import InventorySummary from '../components/InventorySummary'
 import HaGroupDialog from '../HaGroupDialog'
@@ -83,6 +83,9 @@ import { useDRSStatus, useDRSMetrics, useDRSSettings, useDRSRecommendations } fr
 import { useRBAC } from '@/contexts/RBACContext'
 import { computeDrsHealthScore } from '@/lib/utils/drs-health'
 import { aggregatePermissionErrors } from '@/lib/proxmox/loadNodeAptUpdates'
+import MetricsRangeSelector, { type MetricsRangeValue } from '@/components/metrics/MetricsRangeSelector'
+import useChartDragRange from '@/components/metrics/useChartDragRange'
+import { timeframeForWindow, type RrdRangeMeta, type RrdWindow } from '@/lib/metrics/rrdRange'
 
 function HaResourceChips({ resources, allVms }: { resources: string; allVms: any[] }) {
   if (!resources) return <Typography variant="body2" sx={{ opacity: 0.4 }}>-</Typography>
@@ -536,6 +539,23 @@ export default function ClusterTabs(props: any) {
   const [clusterNodeRrdLoading, setClusterNodeRrdLoading] = useState(false)
   const [clusterNodeRrdTf, setClusterNodeRrdTf] = useState<'hour' | 'day' | 'week' | 'month' | 'year'>('hour')
 
+  // Custom window over the cluster charts, same model as the node and VM
+  // Performance cards: `clusterNodeRrdTf` stays the archive behind it (#955).
+  const [clusterRrdWindow, setClusterRrdWindow] = useState<RrdWindow | null>(null)
+  const [clusterRrdMeta, setClusterRrdMeta] = useState<RrdRangeMeta | null>(null)
+
+  const onClusterRrdRangeChange = useCallback((value: MetricsRangeValue) => {
+    setClusterNodeRrdTf(value.timeframe)
+    setClusterRrdWindow(value.window)
+  }, [])
+
+  const onClusterRrdWindowSelect = useCallback((next: RrdWindow) => {
+    setClusterNodeRrdTf(timeframeForWindow(next))
+    setClusterRrdWindow(next)
+  }, [])
+
+  const clusterRrdDrag = useChartDragRange(onClusterRrdWindowSelect)
+
   useEffect(() => {
     if ((clusterTab !== 0 && clusterTab !== 1) || !connId || !data.nodesData?.length) return
     const onlineNodes = (data.nodesData as any[]).filter((n: any) => n.status === 'online')
@@ -546,20 +566,27 @@ export default function ClusterTabs(props: any) {
 
     ;(async () => {
       const result: Record<string, any[]> = {}
+      let servedMeta: RrdRangeMeta | null = null
+
       await Promise.all(onlineNodes.map(async (node: any) => {
         try {
-          const raw = await fetchRrd(connId, `/nodes/${node.node}`, clusterNodeRrdTf)
-          if (!cancelled) result[node.node] = buildSeriesFromRrd(raw)
+          const { rows, meta } = await fetchRrdRange(connId, `/nodes/${node.node}`, { timeframe: clusterNodeRrdTf, window: clusterRrdWindow })
+
+          if (!cancelled) {
+            result[node.node] = buildSeriesFromRrd(rows)
+            servedMeta = servedMeta ?? meta
+          }
         } catch { /* ignore */ }
       }))
       if (!cancelled) {
         setClusterNodeRrd(result)
+        setClusterRrdMeta(servedMeta)
         setClusterNodeRrdLoading(false)
       }
     })()
 
     return () => { cancelled = true }
-  }, [clusterTab, connId, data.nodesData?.length, clusterNodeRrdTf])
+  }, [clusterTab, connId, data.nodesData?.length, clusterNodeRrdTf, clusterRrdWindow])
 
   // Merge RRD data into unified series with per-node keys
   const clusterRrdSeries = useMemo(() => {
@@ -1366,39 +1393,22 @@ export default function ClusterTabs(props: any) {
 
                     {/* Section Nodes Table removed — now in dedicated Nodes tab */}
                     {/* Cluster RRD Charts — all nodes overlaid */}
-                    {clusterRrdSeries.length > 0 && (
+                    {(clusterRrdSeries.length > 0 || clusterRrdWindow) && (
                       <>
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 2, mb: 1.5 }}>
                         <Typography fontWeight={700} fontSize={14}>{t('inventory.performances')}</Typography>
-                        <Box sx={{ display: 'flex', gap: 0.5 }}>
-                          {([
-                            { label: '1h', value: 'hour' as const },
-                            { label: '24h', value: 'day' as const },
-                            { label: '7d', value: 'week' as const },
-                            { label: '30d', value: 'month' as const },
-                            { label: '1y', value: 'year' as const },
-                          ]).map(opt => (
-                            <Chip
-                              key={opt.value}
-                              label={opt.label}
-                              size="small"
-                              onClick={() => setClusterNodeRrdTf(opt.value)}
-                              sx={{
-                                height: 24, fontSize: 11, fontWeight: 600,
-                                bgcolor: clusterNodeRrdTf === opt.value ? 'primary.main' : 'action.hover',
-                                color: clusterNodeRrdTf === opt.value ? 'primary.contrastText' : 'text.secondary',
-                                '&:hover': { bgcolor: clusterNodeRrdTf === opt.value ? 'primary.dark' : 'action.selected' },
-                                cursor: 'pointer',
-                              }}
-                            />
-                          ))}
-                        </Box>
+                        <MetricsRangeSelector
+                          timeframe={clusterNodeRrdTf}
+                          window={clusterRrdWindow}
+                          meta={clusterRrdMeta}
+                          onChange={onClusterRrdRangeChange}
+                        />
                       </Box>
                       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2 }}>
                         {/* CPU Usage */}
                         <ExpandableChart title={t('inventory.cpuUsage')} height={185}>
                           <ChartContainer>
-                            <AreaChart data={clusterRrdSeries} margin={{ top: 2, right: 4, bottom: 0, left: 4 }}>
+                            <AreaChart data={clusterRrdSeries} margin={{ top: 2, right: 4, bottom: 0, left: 4 }} {...clusterRrdDrag.chartProps}>
                               <defs>
                                 {clusterRrdNodeNames.map(name => (
                                   <linearGradient key={name} id={`cGradCpu_${name}`} x1="0" y1="0" x2="0" y2="1">
@@ -1431,6 +1441,7 @@ export default function ClusterTabs(props: any) {
                               {clusterRrdNodeNames.map(name => (
                                 <Area key={name} type="monotone" dataKey={`cpu_${name}`} stroke={nodeColors[name]} fill={`url(#cGradCpu_${name})`} strokeWidth={1.5} isAnimationActive={false} connectNulls />
                               ))}
+                              {clusterRrdDrag.selection}
                             </AreaChart>
                           </ChartContainer>
                         </ExpandableChart>
@@ -1438,7 +1449,7 @@ export default function ClusterTabs(props: any) {
                         {/* Memory Usage */}
                         <ExpandableChart title={t('inventory.memoryUsage')} height={185}>
                           <ChartContainer>
-                            <AreaChart data={clusterRrdSeries} margin={{ top: 2, right: 4, bottom: 0, left: 4 }}>
+                            <AreaChart data={clusterRrdSeries} margin={{ top: 2, right: 4, bottom: 0, left: 4 }} {...clusterRrdDrag.chartProps}>
                               <defs>
                                 {clusterRrdNodeNames.map(name => (
                                   <linearGradient key={name} id={`cGradRam_${name}`} x1="0" y1="0" x2="0" y2="1">
@@ -1471,6 +1482,7 @@ export default function ClusterTabs(props: any) {
                               {clusterRrdNodeNames.map(name => (
                                 <Area key={name} type="monotone" dataKey={`ram_${name}`} stroke={nodeColors[name]} fill={`url(#cGradRam_${name})`} strokeWidth={1.5} isAnimationActive={false} connectNulls />
                               ))}
+                              {clusterRrdDrag.selection}
                             </AreaChart>
                           </ChartContainer>
                         </ExpandableChart>
@@ -1478,7 +1490,7 @@ export default function ClusterTabs(props: any) {
                         {/* Network Traffic */}
                         <ExpandableChart title={t('inventory.networkTrafficChart')} height={185}>
                           <ChartContainer>
-                            <AreaChart data={clusterRrdSeries} margin={{ top: 2, right: 4, bottom: 0, left: 4 }}>
+                            <AreaChart data={clusterRrdSeries} margin={{ top: 2, right: 4, bottom: 0, left: 4 }} {...clusterRrdDrag.chartProps}>
                               <defs>
                                 {clusterRrdNodeNames.map(name => (
                                   <linearGradient key={name} id={`cGradNet_${name}`} x1="0" y1="0" x2="0" y2="1">
@@ -1518,6 +1530,7 @@ export default function ClusterTabs(props: any) {
                               {clusterRrdNodeNames.map(name => (
                                 <Area key={`out_${name}`} type="monotone" dataKey={`netOut_${name}`} stroke={nodeColors[name]} fill="none" strokeWidth={1} strokeDasharray="4 2" isAnimationActive={false} connectNulls />
                               ))}
+                              {clusterRrdDrag.selection}
                             </AreaChart>
                           </ChartContainer>
                         </ExpandableChart>
@@ -1525,7 +1538,7 @@ export default function ClusterTabs(props: any) {
                         {/* Server Load */}
                         <ExpandableChart title={t('inventory.serverLoad')} height={185}>
                           <ChartContainer>
-                            <AreaChart data={clusterRrdSeries} margin={{ top: 2, right: 4, bottom: 0, left: 4 }}>
+                            <AreaChart data={clusterRrdSeries} margin={{ top: 2, right: 4, bottom: 0, left: 4 }} {...clusterRrdDrag.chartProps}>
                               <defs>
                                 {clusterRrdNodeNames.map(name => (
                                   <linearGradient key={name} id={`cGradLoad_${name}`} x1="0" y1="0" x2="0" y2="1">
@@ -1558,6 +1571,7 @@ export default function ClusterTabs(props: any) {
                               {clusterRrdNodeNames.map(name => (
                                 <Area key={name} type="monotone" dataKey={`load_${name}`} stroke={nodeColors[name]} fill={`url(#cGradLoad_${name})`} strokeWidth={1.5} isAnimationActive={false} connectNulls />
                               ))}
+                              {clusterRrdDrag.selection}
                             </AreaChart>
                           </ChartContainer>
                         </ExpandableChart>

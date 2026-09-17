@@ -8438,5 +8438,21 @@
     "timeout": "{description} - 超时（任务可能仍在运行）",
     "error": "{description} - 错误：{error}",
     "unknownError": "未知错误"
+  },
+  "metricsRange": {
+    "custom": "自定义",
+    "from": "开始",
+    "to": "结束",
+    "apply": "应用",
+    "reset": "重置",
+    "resolution": "分辨率：{step}",
+    "invalidOrder": "结束时间必须晚于开始时间。",
+    "tooShort": "Proxmox 每 {step} 记录一个数据点，更短的区间没有数据。",
+    "beyondRetention": "Proxmox 只保留 {days} 天的指标，区间起点已调整为现存最早的数据点。",
+    "empty": "此区间内没有数据点。",
+    "dragHint": "在图表上拖动即可放大到该区间。",
+    "stepSeconds": "{n} 秒",
+    "stepMinutes": "{n} 分钟",
+    "stepHours": "{n} 小时"
   }
 }

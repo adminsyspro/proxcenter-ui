@@ -2673,6 +2673,23 @@
     "viewRecommendations": "查看建议"
   },
   "settings": {
+    "basemap": {
+      "title": "地图底图",
+      "desc": "地理拓扑视图和数据中心地图使用的瓦片来源。",
+      "provider": "瓦片来源",
+      "providerOsm": "OpenStreetMap（无需 API 密钥）",
+      "providerCustom": "自定义瓦片服务器",
+      "lightUrl": "瓦片 URL（浅色主题）",
+      "lightUrlHelp": "包含 z、x、y 占位符的模板 URL。",
+      "darkUrl": "瓦片 URL（深色主题）",
+      "darkUrlHelp": "可选。留空时将反转浅色瓦片用于深色主题。",
+      "attribution": "版权信息",
+      "attributionHelp": "显示在地图角落的署名，多数瓦片服务商要求提供。",
+      "invalidTemplate": "该 URL 不是瓦片模板：缺少 z、x、y 占位符。",
+      "readOnly": "只有管理员可以更改地图底图。",
+      "saved": "已保存地图底图。",
+      "saveFailed": "无法保存地图底图。"
+    },
     "title": "设置",
     "subtitle": "账户设置",
     "welcome": "欢迎使用 ProxCenter",

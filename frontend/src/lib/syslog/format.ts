@@ -84,7 +84,6 @@ function truncate(value: string, max: number): string {
  */
 const SENSITIVE_KEY = /pass(word|wd|phrase)?|secret|token|api[_-]?key|private[_-]?key|credential|authorization|cookie|otp/i
 const HARMLESS_SUFFIX = /(id|name|prefix|method|type|enabled|count|ttl|expires?(at)?|scopes?)$/i
-const MAX_REDACT_DEPTH = 8
 
 export const REDACTED = '[redacted]'
 
@@ -92,19 +91,16 @@ export function isSensitiveKey(key: string): boolean {
   return SENSITIVE_KEY.test(key) && !HARMLESS_SUFFIX.test(key)
 }
 
-/** Deep copy of `value` with every sensitive leaf replaced by REDACTED. */
-export function redactSensitive(value: unknown, depth = 0): unknown {
-  if (value === null || typeof value !== 'object' || depth > MAX_REDACT_DEPTH) return value
-  if (Array.isArray(value)) return value.map(v => redactSensitive(v, depth + 1))
-  const out: Record<string, unknown> = {}
-  for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-    if (isSensitiveKey(k) && v !== null && v !== undefined && v !== '') {
-      out[k] = REDACTED
-    } else {
-      out[k] = redactSensitive(v, depth + 1)
-    }
-  }
-  return out
+/**
+ * JSON.stringify replacer that masks every sensitive leaf, at any depth.
+ * Redacting during serialisation rather than in a copy of `details` keeps the
+ * caller's object untouched and never writes a caller-controlled key onto an
+ * object of ours, so a `__proto__` key in the audit row stays a plain string in
+ * the line instead of reaching an assignment.
+ */
+export function redactReplacer(key: string, value: unknown): unknown {
+  if (!isSensitiveKey(key)) return value
+  return value === null || value === undefined || value === '' ? value : REDACTED
 }
 
 /** `::ffff:10.0.0.1` is how Node reports an IPv4 peer on a dual-stack socket; SIEMs want `10.0.0.1`. */
@@ -121,7 +117,7 @@ export function detailsToString(details: unknown): string | null {
     text = details
   } else {
     try {
-      text = JSON.stringify(redactSensitive(details))
+      text = JSON.stringify(details, redactReplacer)
     } catch {
       text = String(details)
     }

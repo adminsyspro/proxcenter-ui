@@ -25,7 +25,7 @@ import {
   type FormatContext,
   isSensitiveKey,
   normalizeIp,
-  redactSensitive,
+  redactReplacer,
   REDACTED,
 } from './format'
 import type { SyslogAuditEvent, SyslogDestination } from './types'
@@ -445,9 +445,13 @@ describe('formatSyslogMessage', () => {
   })
 })
 
+/** Exactly how detailsToString uses the replacer. */
+const redact = (value: unknown): Record<string, unknown> =>
+  JSON.parse(JSON.stringify(value, redactReplacer)) as Record<string, unknown>
+
 describe('redaction before leaving the box', () => {
   it('masks passwords, secrets, tokens and keys but keeps identifiers and names', () => {
-    const out = redactSensitive({
+    const out = redact({
       sshPassEnc: 'gAAAA-encrypted',
       password: 'hunter2',
       apiKey: 'sk-live',
@@ -461,7 +465,7 @@ describe('redaction before leaving the box', () => {
       nested: [{ secret: 's', prefix: 'pxc_ab' }],
       emptySecret: '',
       nullPass: null,
-    }) as Record<string, unknown>
+    })
     expect(out.sshPassEnc).toBe(REDACTED)
     expect(out.password).toBe(REDACTED)
     expect(out.apiKey).toBe(REDACTED)
@@ -497,9 +501,22 @@ describe('redaction before leaving the box', () => {
 
   it('does not touch the original details object', () => {
     const details = { password: 'p', inner: { secret: 's' } }
-    redactSensitive(details)
+    JSON.stringify(details, redactReplacer)
     expect(details.password).toBe('p')
     expect(details.inner.secret).toBe('s')
+  })
+
+  it('redacts however deep the secret sits', () => {
+    let leaf: Record<string, unknown> = { password: 'deep' }
+    for (let i = 0; i < 12; i++) leaf = { inner: leaf }
+    expect(JSON.stringify(leaf, redactReplacer)).not.toContain('deep')
+  })
+
+  it('keeps a hostile key as plain text instead of assigning it', () => {
+    const out = redact({ ['__proto__']: { polluted: true }, host: 'h' })
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined()
+    expect(out.host).toBe('h')
+    expect(formatSyslogMessage(evt({ details: { ['__proto__']: 'x' } }), dest(), ctx)).toContain('__proto__')
   })
 })
 

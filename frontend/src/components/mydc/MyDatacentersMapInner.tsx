@@ -9,6 +9,8 @@ import 'leaflet/dist/leaflet.css'
 
 import { Box, Stack, Typography, useTheme } from '@mui/material'
 
+import { useBasemapSettings } from '@/hooks/useBasemapSettings'
+import { DARK_TILE_FILTER, resolveBasemap } from '@/lib/map/basemap'
 import { countryFlagUrl } from '@/lib/utils/countries'
 import { CountryFlag } from '@/components/ui/CountryFlag'
 
@@ -105,10 +107,8 @@ interface Props {
 export default function MyDatacentersMapInner({ datacenters }: Props) {
   const theme = useTheme()
   const isDark = theme.palette.mode === 'dark'
-  const tileUrl = isDark
-    ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-    : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
-  const tileAttribution = '&copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>'
+  const { settings } = useBasemapSettings()
+  const basemap = resolveBasemap(settings, isDark)
 
   const positions: [number, number][] = datacenters
     .filter(d => d.latitude != null && d.longitude != null)
@@ -131,6 +131,9 @@ export default function MyDatacentersMapInner({ datacenters }: Props) {
         height: 320,
         borderRadius: 1,
         overflow: 'hidden',
+        // Dark basemap by inversion of the light tiles (issue #960), scoped to
+        // the tile pane so the pins and popups keep their own colours.
+        '& .leaflet-tile-pane': { filter: basemap.darkFilter ? DARK_TILE_FILTER : 'none' },
         // Theme-aware Leaflet popup. Default styling uses pure white which
         // looks broken in dark mode. We retarget the global Leaflet classes
         // here (their CSS is loaded via leaflet.css) so they pick up the
@@ -163,7 +166,7 @@ export default function MyDatacentersMapInner({ datacenters }: Props) {
         zoomControl
         scrollWheelZoom={false}
       >
-        <TileLayer url={tileUrl} attribution={tileAttribution} />
+        <TileLayer key={`${basemap.url}|${basemap.attribution}`} url={basemap.url} attribution={basemap.attribution} />
         <FitBounds positions={positions} />
         {datacenters
           .filter(d => d.latitude != null && d.longitude != null)

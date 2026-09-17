@@ -2669,6 +2669,23 @@
     "viewRecommendations": "View recommendations"
   },
   "settings": {
+    "basemap": {
+      "title": "Map basemap",
+      "desc": "Tile source for the geographic topology view and the datacenter maps.",
+      "provider": "Tile source",
+      "providerOsm": "OpenStreetMap (no API key)",
+      "providerCustom": "Custom tile server",
+      "lightUrl": "Tile URL, light theme",
+      "lightUrlHelp": "Template URL including the z, x and y tile placeholders.",
+      "darkUrl": "Tile URL, dark theme",
+      "darkUrlHelp": "Optional. Left empty, the light tiles are inverted for dark mode.",
+      "attribution": "Attribution",
+      "attributionHelp": "Credit shown in the map corner. Most tile providers require it.",
+      "invalidTemplate": "This URL is not a tile template: the z, x and y placeholders are missing.",
+      "readOnly": "Only an administrator can change the basemap.",
+      "saved": "Basemap saved.",
+      "saveFailed": "Could not save the basemap."
+    },
     "title": "Settings",
     "subtitle": "Account settings",
     "welcome": "Welcome to ProxCenter",

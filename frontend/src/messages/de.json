@@ -2656,6 +2656,23 @@
     "viewRecommendations": "View Empfehlungen"
   },
   "settings": {
+    "basemap": {
+      "title": "Kartenhintergrund",
+      "desc": "Kachelquelle für die geografische Topologieansicht und die Rechenzentrumskarten.",
+      "provider": "Kachelquelle",
+      "providerOsm": "OpenStreetMap (ohne API-Schlüssel)",
+      "providerCustom": "Eigener Kachelserver",
+      "lightUrl": "Kachel-URL, helles Design",
+      "lightUrlHelp": "Vorlagen-URL mit den Platzhaltern z, x und y.",
+      "darkUrl": "Kachel-URL, dunkles Design",
+      "darkUrlHelp": "Optional. Bleibt das Feld leer, werden die hellen Kacheln für das dunkle Design invertiert.",
+      "attribution": "Quellenangabe",
+      "attributionHelp": "Hinweis in der Kartenecke. Die meisten Anbieter verlangen ihn.",
+      "invalidTemplate": "Diese URL ist keine Kachelvorlage: die Platzhalter z, x und y fehlen.",
+      "readOnly": "Nur ein Administrator kann den Kartenhintergrund ändern.",
+      "saved": "Kartenhintergrund gespeichert.",
+      "saveFailed": "Kartenhintergrund konnte nicht gespeichert werden."
+    },
     "title": "Einstellungen",
     "subtitle": "Konto- und Anwendungseinstellungen",
     "welcome": "Willkommen bei ProxCenter",

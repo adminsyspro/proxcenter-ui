@@ -37,6 +37,7 @@ import globalThemesConfig, {
   getGlobalTheme
 } from '@configs/globalThemesConfig'
 import lightBackgroundConfig from '@configs/lightBackgroundConfig'
+import BasemapCard from '@components/settings/BasemapCard'
 
 /* ==================== Theme Preview Card ==================== */
 
@@ -453,6 +454,9 @@ return (
           <FormControlLabel control={<Switch checked={settings.semiDark || false} onChange={handleSemiDarkChange} />} label={<Box><Typography variant='body2'>{t('settings.semiDarkMenu')}</Typography><Typography variant='caption' color='text.secondary'>{t('settings.semiDarkMenuDesc')}</Typography></Box>} />
         </CardContent>
       </Card>
+
+      {/* Section: Fond de carte (issue #960) */}
+      <BasemapCard />
 
       {/* Reset */}
       <Card variant='outlined'>

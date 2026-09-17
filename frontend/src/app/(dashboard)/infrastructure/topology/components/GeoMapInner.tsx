@@ -2,11 +2,15 @@
 
 import { useEffect, useMemo } from 'react'
 
+import { Box } from '@mui/material'
 import { useTheme } from '@mui/material/styles'
 import { MapContainer, TileLayer, Marker, useMap } from 'react-leaflet'
 import L from 'leaflet'
 
 import 'leaflet/dist/leaflet.css'
+
+import { useBasemapSettings } from '@/hooks/useBasemapSettings'
+import { DARK_TILE_FILTER, resolveBasemap } from '@/lib/map/basemap'
 
 import type { InventoryCluster } from '../types'
 
@@ -188,13 +192,8 @@ export default function GeoMapInner({ connections, onSelectCluster }: GeoMapInne
   const theme = useTheme()
   const isDark = theme.palette.mode === 'dark'
 
-  const tileUrl = isDark
-    ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-    : 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
-
-  const tileAttribution = isDark
-    ? '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>'
-    : '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+  const { settings } = useBasemapSettings()
+  const basemap = resolveBasemap(settings, isDark)
 
   const positions: [number, number][] = connections
     .filter((c) => c.latitude != null && c.longitude != null)
@@ -203,37 +202,51 @@ export default function GeoMapInner({ connections, onSelectCluster }: GeoMapInne
   const groups = useMemo(() => groupByLocation(connections), [connections])
 
   return (
-    <MapContainer
-      center={positions[0] || [48.8566, 2.3522]}
-      zoom={5}
-      style={{ width: '100%', height: '100%', minHeight: 400 }}
-      zoomControl={true}
+    // The dark basemap is the light one inverted (issue #960), and the filter
+    // is scoped to the tile pane so markers, controls and the attribution keep
+    // their own colours.
+    <Box
+      sx={{
+        width: '100%',
+        height: '100%',
+        minHeight: 400,
+        '& .leaflet-tile-pane': { filter: basemap.darkFilter ? DARK_TILE_FILTER : 'none' },
+      }}
     >
-      <TileLayer url={tileUrl} attribution={tileAttribution} />
-      <FitBounds positions={positions} />
+      <MapContainer
+        center={positions[0] || [48.8566, 2.3522]}
+        zoom={5}
+        style={{ width: '100%', height: '100%', minHeight: 400 }}
+        zoomControl={true}
+      >
+        {/* Keyed on the resolved layer: Leaflet sets the attribution when the
+            layer is created, so a settings change has to remount it. */}
+        <TileLayer key={`${basemap.url}|${basemap.attribution}`} url={basemap.url} attribution={basemap.attribution} />
+        <FitBounds positions={positions} />
 
-      {groups.map((group) => (
-        <Marker
-          key={group.key}
-          position={[group.lat, group.lng]}
-          icon={createGroupedIcon(group.connections)}
-          eventHandlers={{
-            click: (e) => {
-              // Find which connection was clicked via the DOM
-              const target = e.originalEvent?.target as HTMLElement | null
-              const connEl = target?.closest?.('[data-conn-id]') as HTMLElement | null
-              const connId = connEl?.getAttribute('data-conn-id')
+        {groups.map((group) => (
+          <Marker
+            key={group.key}
+            position={[group.lat, group.lng]}
+            icon={createGroupedIcon(group.connections)}
+            eventHandlers={{
+              click: (e) => {
+                // Find which connection was clicked via the DOM
+                const target = e.originalEvent?.target as HTMLElement | null
+                const connEl = target?.closest?.('[data-conn-id]') as HTMLElement | null
+                const connId = connEl?.getAttribute('data-conn-id')
 
-              if (connId) {
-                const conn = group.connections.find(c => c.id === connId)
-                if (conn) { onSelectCluster(conn); return }
-              }
-              // Fallback: open first connection
-              onSelectCluster(group.connections[0])
-            },
-          }}
-        />
-      ))}
-    </MapContainer>
+                if (connId) {
+                  const conn = group.connections.find(c => c.id === connId)
+                  if (conn) { onSelectCluster(conn); return }
+                }
+                // Fallback: open first connection
+                onSelectCluster(group.connections[0])
+              },
+            }}
+          />
+        ))}
+      </MapContainer>
+    </Box>
   )
 }

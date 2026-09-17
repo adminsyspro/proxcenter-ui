@@ -20,6 +20,9 @@ export const Features = {
   RBAC: 'rbac',
   TASK_CENTER: 'task_center',
   NOTIFICATIONS: 'notifications',
+  // Audit log pushed to syslog / SIEM collectors (issue #184). Settings tab
+  // + routes gate on it; the forwarder itself checks it before sending.
+  SYSLOG_FORWARDING: 'syslog_forwarding',
   CVE_SCANNER: 'cve_scanner',
   COMPLIANCE: 'compliance',
   OIDC: 'oidc',
@@ -63,6 +66,7 @@ export const EDITION_FEATURES: Record<string, readonly FeatureId[]> = {
     'rbac',
     'task_center',
     'notifications',
+    'syslog_forwarding',
     'cve_scanner',
     'compliance',
     'oidc',
@@ -88,6 +92,7 @@ export const EDITION_FEATURES: Record<string, readonly FeatureId[]> = {
     'rbac',
     'task_center',
     'notifications',
+    'syslog_forwarding',
     'cve_scanner',
     'compliance',
     'oidc',

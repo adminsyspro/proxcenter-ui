@@ -3267,7 +3267,8 @@
       "notifications": "알림 전송",
       "reports": "보고서",
       "green_metrics": "Green 지표 / RSE",
-      "ceph_replication": "사이트 복구 (Ceph 복제)"
+      "ceph_replication": "사이트 복구 (Ceph 복제)",
+      "syslog_forwarding": "Syslog / SIEM 전달"
     },
     "categoryLabels": {
       "infrastructure": "인프라",
@@ -3339,6 +3340,98 @@
       "durationLabel": "총 {ms} ms",
       "unavailable": "진단을 사용할 수 없습니다",
       "allOk": "모든 검사를 통과했습니다."
+    },
+    "syslog": {
+      "tabLabel": "Syslog / SIEM",
+      "title": "Syslog / SIEM 전달",
+      "description": "모든 감사 항목은 작업을 수행한 ProxCenter 사용자 정보와 함께 아래 수집기로 실시간 전달됩니다. 보관과 검색은 SIEM에서 이루어집니다.",
+      "add": "대상 추가",
+      "empty": "아직 대상이 없습니다. 감사 항목은 ProxCenter에만 보관됩니다.",
+      "limitReached": "최대 {max}개 대상에 도달했습니다",
+      "loadError": "syslog 대상을 불러올 수 없습니다.",
+      "saveError": "저장 실패:",
+      "saved": "Syslog 대상이 저장되었습니다",
+      "columns": {
+        "name": "이름",
+        "target": "수집기",
+        "format": "형식",
+        "categories": "카테고리",
+        "activity": "활동"
+      },
+      "allCategories": "모든 카테고리",
+      "categoriesCount": "카테고리 {count}개",
+      "neverSent": "아직 전송된 항목 없음",
+      "lastSent": "마지막 전송 {time}",
+      "lastError": "마지막 오류: {error}",
+      "sentCount": "{count}개 전송",
+      "droppedCount": "{count}개 유실",
+      "test": "테스트 전송",
+      "testing": "전송 중...",
+      "testOk": "테스트 라인이 {host}:{port}에 전달되었습니다",
+      "testOkUdp": "테스트 데이터그램을 {host}:{port}로 전송했습니다. UDP는 전달을 확인하지 않으므로 수집기를 확인하세요.",
+      "testFailed": "테스트 실패: {error}",
+      "dialog": {
+        "addTitle": "새 syslog 대상",
+        "editTitle": "syslog 대상 편집"
+      },
+      "fields": {
+        "name": "이름",
+        "host": "호스트",
+        "port": "포트",
+        "transport": "전송 방식",
+        "format": "형식",
+        "framing": "프레이밍",
+        "facility": "Facility",
+        "categories": "감사 카테고리",
+        "categoriesHelper": "비워 두면 모든 카테고리를 전달합니다.",
+        "enabled": "전달 사용"
+      },
+      "transportHelper": {
+        "udp": "전달 확인 없음, 8 KiB를 넘는 라인은 잘립니다.",
+        "tcp": "신뢰성 있음, 암호화되지 않음.",
+        "tls": "암호화됨, 수집기 인증서를 검증합니다."
+      },
+      "formats": {
+        "rfc5424": "RFC 5424",
+        "rfc3164": "RFC 3164 (BSD)",
+        "cef": "CEF"
+      },
+      "framings": {
+        "newline": "줄바꿈 구분 (Splunk, Graylog, rsyslog)",
+        "octetCounting": "옥텟 카운팅 (RFC 5425, syslog-ng)"
+      },
+      "tls": {
+        "title": "TLS",
+        "verify": "수집기 인증서 검증",
+        "verifyWarning": "검증하지 않으면 경로상의 누구든 수집기를 사칭하고 로그 스트림을 읽을 수 있습니다.",
+        "serverName": "서버 이름 (SNI)",
+        "serverNameHelper": "IP 주소로 수집기에 접속하는 경우에만 사용합니다.",
+        "ca": "CA 인증서 (PEM)",
+        "caHelper": "비워 두면 시스템 인증서 저장소를 신뢰합니다."
+      },
+      "deleteConfirm": {
+        "title": "이 대상을 제거할까요?",
+        "body": "{name}은(는) 즉시 감사 항목 수신을 중단합니다. 이미 전달된 항목은 SIEM에 남아 있습니다."
+      },
+      "categories": {
+        "auth": "인증",
+        "users": "사용자",
+        "connections": "연결",
+        "vms": "VM",
+        "containers": "컨테이너",
+        "nodes": "노드",
+        "storage": "스토리지",
+        "backups": "백업",
+        "settings": "설정",
+        "system": "시스템",
+        "security": "보안",
+        "templates": "템플릿",
+        "migration": "마이그레이션",
+        "admin": "관리",
+        "sdn": "SDN",
+        "api_tokens": "API 토큰"
+      },
+      "destinations": "대상"
     }
   },
   "green": {

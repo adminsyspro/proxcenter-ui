@@ -7,6 +7,7 @@ import type { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/db/prisma"
 import { getCurrentTenantId } from "@/lib/tenant"
 import { getPrincipal, getTokenPrincipalContext } from "@/lib/auth/principal"
+import { forwardAuditEvent } from "@/lib/syslog/forwarder"
 
 export type AuditCategory =
   | "auth"           // Connexion, déconnexion, changement de mot de passe
@@ -206,6 +207,30 @@ export async function audit(entry: AuditLogEntry, tx?: Prisma.TransactionClient)
       apiTokenId: apiTokenId || null,
     },
   })
+
+  // Syslog / SIEM fan-out (#184), fire-and-forget: the row is in the database
+  // before a collector hears of it, and a slow or dead collector can never fail
+  // or delay the action the user just performed. When `tx` is set the row is
+  // not committed yet; a rolled-back transaction would leave a phantom line in
+  // the SIEM, accepted for the two token routes that use it.
+  void forwardAuditEvent({
+    id,
+    timestamp,
+    tenantId,
+    userId: userId || null,
+    userEmail: userEmail || null,
+    apiTokenId: apiTokenId || null,
+    action: entry.action,
+    category: entry.category,
+    resourceType: entry.resourceType || null,
+    resourceId: entry.resourceId || null,
+    resourceName: entry.resourceName || null,
+    details: entry.details ?? null,
+    ipAddress: ipAddress || null,
+    userAgent: userAgent || null,
+    status: entry.status || "success",
+    errorMessage: entry.errorMessage || null,
+  }).catch(() => {})
 
   return id
 }

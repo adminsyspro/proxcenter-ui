@@ -3267,7 +3267,8 @@
       "notifications": "Notificaciones",
       "reports": "Informes",
       "green_metrics": "Métricas Green / RSE",
-      "ceph_replication": "Site Recovery (replicación Ceph)"
+      "ceph_replication": "Site Recovery (replicación Ceph)",
+      "syslog_forwarding": "Reenvío Syslog / SIEM"
     },
     "categoryLabels": {
       "infrastructure": "Infraestructura",
@@ -3339,6 +3340,98 @@
       "durationLabel": "{ms} ms en total",
       "unavailable": "Diagnóstico no disponible",
       "allOk": "Todas las comprobaciones han pasado."
+    },
+    "syslog": {
+      "tabLabel": "Syslog / SIEM",
+      "title": "Reenvío Syslog / SIEM",
+      "description": "Cada entrada de auditoría se reenvía en tiempo real a los colectores siguientes, junto con el usuario de ProxCenter que realizó la acción. La retención y la búsqueda se hacen en su SIEM.",
+      "add": "Añadir destino",
+      "empty": "Aún no hay destinos. Las entradas de auditoría se quedan solo en ProxCenter.",
+      "limitReached": "Máximo de {max} destinos alcanzado",
+      "loadError": "No se pudieron cargar los destinos syslog.",
+      "saveError": "Error al guardar:",
+      "saved": "Destinos syslog guardados",
+      "columns": {
+        "name": "Nombre",
+        "target": "Colector",
+        "format": "Formato",
+        "categories": "Categorías",
+        "activity": "Actividad"
+      },
+      "allCategories": "Todas las categorías",
+      "categoriesCount": "{count} categorías",
+      "neverSent": "Aún no se ha enviado nada",
+      "lastSent": "Último envío {time}",
+      "lastError": "Último error: {error}",
+      "sentCount": "{count} enviadas",
+      "droppedCount": "{count} descartadas",
+      "test": "Enviar prueba",
+      "testing": "Enviando...",
+      "testOk": "Línea de prueba entregada a {host}:{port}",
+      "testOkUdp": "Datagrama de prueba enviado a {host}:{port}. UDP no confirma la entrega, compruebe el colector.",
+      "testFailed": "La prueba falló: {error}",
+      "dialog": {
+        "addTitle": "Nuevo destino syslog",
+        "editTitle": "Editar destino syslog"
+      },
+      "fields": {
+        "name": "Nombre",
+        "host": "Host",
+        "port": "Puerto",
+        "transport": "Transporte",
+        "format": "Formato",
+        "framing": "Delimitación",
+        "facility": "Facility",
+        "categories": "Categorías de auditoría",
+        "categoriesHelper": "Deje vacío para reenviar todas las categorías.",
+        "enabled": "Reenvío activado"
+      },
+      "transportHelper": {
+        "udp": "Sin confirmación de entrega, las líneas de más de 8 KiB se truncan.",
+        "tcp": "Fiable, sin cifrar.",
+        "tls": "Cifrado, se verifica el certificado del colector."
+      },
+      "formats": {
+        "rfc5424": "RFC 5424",
+        "rfc3164": "RFC 3164 (BSD)",
+        "cef": "CEF"
+      },
+      "framings": {
+        "newline": "Delimitado por salto de línea (Splunk, Graylog, rsyslog)",
+        "octetCounting": "Conteo de octetos (RFC 5425, syslog-ng)"
+      },
+      "tls": {
+        "title": "TLS",
+        "verify": "Verificar el certificado del colector",
+        "verifyWarning": "Sin verificación, cualquiera en la ruta puede hacerse pasar por el colector y leer el flujo.",
+        "serverName": "Nombre del servidor (SNI)",
+        "serverNameHelper": "Solo cuando se accede al colector por dirección IP.",
+        "ca": "Certificado CA (PEM)",
+        "caHelper": "Deje vacío para confiar en el almacén de certificados del sistema."
+      },
+      "deleteConfirm": {
+        "title": "¿Eliminar este destino?",
+        "body": "{name} deja de recibir entradas de auditoría de inmediato. Las entradas ya reenviadas permanecen en su SIEM."
+      },
+      "categories": {
+        "auth": "Autenticación",
+        "users": "Usuarios",
+        "connections": "Conexiones",
+        "vms": "VMs",
+        "containers": "Contenedores",
+        "nodes": "Nodos",
+        "storage": "Almacenamiento",
+        "backups": "Backups",
+        "settings": "Configuración",
+        "system": "Sistema",
+        "security": "Seguridad",
+        "templates": "Plantillas",
+        "migration": "Migración",
+        "admin": "Administración",
+        "sdn": "SDN",
+        "api_tokens": "Tokens de API"
+      },
+      "destinations": "Destinos"
     }
   },
   "green": {

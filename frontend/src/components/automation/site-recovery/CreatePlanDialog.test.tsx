@@ -146,3 +146,55 @@ describe('CreatePlanDialog editing an existing plan', () => {
     expect(screen.getByText('database · Protection zfs')).toBeInTheDocument()
   })
 })
+
+// Nothing stops a guest from sitting in two plans, and that is a legitimate
+// pattern (a broad plan plus a narrow rehearsal one). The picker says which
+// other plans already list a guest instead of forbidding it.
+describe('CreatePlanDialog surfacing guests already in another plan', () => {
+  const rehearsal: RecoveryPlan = {
+    id: 'plan-2',
+    name: 'Rehearsal',
+    description: '',
+    status: 'ready',
+    source_cluster: 'src',
+    target_cluster: 'dst',
+    vms: [{ vm_id: 100, vm_name: 'database', replication_job_id: 'job-0', tier: 3, boot_order: 1 }],
+    last_test: null,
+    last_failover: null,
+    created_at: '2026-01-01T00:00:00Z',
+    updated_at: '2026-01-01T00:00:00Z',
+  }
+
+  it('names the other plan under the guest and still lets the guest be ticked', async () => {
+    renderWithProviders(<CreatePlanDialog open onClose={vi.fn()} onSubmit={vi.fn()} connections={connections} jobs={jobs} plans={[rehearsal]} />)
+
+    // The guest is listed once per replication job, both rows on the same pair.
+    expect(screen.getAllByText('Also in plan: Rehearsal')).toHaveLength(2)
+
+    const box = screen.getByRole('checkbox', { name: /database.*Protection rbd/ })
+    expect(box).toBeEnabled()
+    await userEvent.click(box)
+    expect(box).toBeChecked()
+    expect(screen.getByText('#1')).toBeInTheDocument()
+  })
+
+  it('joins several plans in one caption', () => {
+    const drill = { ...rehearsal, id: 'plan-3', name: 'Drill' }
+    renderWithProviders(<CreatePlanDialog open onClose={vi.fn()} onSubmit={vi.fn()} connections={connections} jobs={jobs} plans={[rehearsal, drill]} />)
+
+    expect(screen.getAllByText('Also in plan: Rehearsal, Drill')).toHaveLength(2)
+  })
+
+  it('ignores the plan being edited and a plan on another cluster pair', () => {
+    const elsewhere = { ...rehearsal, id: 'plan-3', name: 'Elsewhere', target_cluster: 'dst-2' }
+    renderWithProviders(<CreatePlanDialog open onClose={vi.fn()} onSubmit={vi.fn()} connections={connections} jobs={jobs} plan={rehearsal} plans={[rehearsal, elsewhere]} />)
+
+    expect(screen.queryByText(/Also in plan/)).not.toBeInTheDocument()
+  })
+
+  it('says nothing without the plans prop', () => {
+    renderWithProviders(<CreatePlanDialog open onClose={vi.fn()} onSubmit={vi.fn()} connections={connections} jobs={jobs} />)
+
+    expect(screen.queryByText(/Also in plan/)).not.toBeInTheDocument()
+  })
+})

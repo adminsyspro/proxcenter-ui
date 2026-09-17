@@ -4541,7 +4541,9 @@
       "statusFailingBack": "페일백 진행 중",
       "openFailback": "페일백 열기",
       "failingBackTooltip": "플랜을 삭제하기 전에 페일백을 취소하세요.",
-      "jobColumn": "복제 작업"
+      "jobColumn": "복제 작업",
+      "sharesGuestsWith": "게스트를 공유하는 계획: {plans}",
+      "alsoInPlan": "{plan}에도 포함"
     },
     "rpoTargetLabel": "RPO 목표",
     "createJob": {
@@ -4691,7 +4693,8 @@
       "selectReplicatedVMs": "복제된 VM 선택",
       "noReplicatedVMs": "복제된 VM을 찾을 수 없습니다. 먼저 복제 작업을 생성하세요.",
       "assignVMs": "부팅 순서 및 등급",
-      "create": "계획 생성"
+      "create": "계획 생성",
+      "vmInOtherPlans": "다른 계획에도 포함: {plans}"
     },
     "failover": {
       "testTitle": "테스트 페일오버",
@@ -4745,7 +4748,8 @@
       "completeVMs": "VM이 DR 사이트에서 실행 중",
       "completeLocked": "복제가 잠기고 플랜이 페일오버되었습니다 — 페일백으로 복구합니다.",
       "clonesDestroyed": "클론 삭제 및 구성 복원 완료",
-      "testActiveConflict": "테스트 장애 조치가 활성 상태입니다. 이 작업을 시작하기 전에 정리를 실행하세요."
+      "testActiveConflict": "테스트 장애 조치가 활성 상태입니다. 이 작업을 시작하기 전에 정리를 실행하세요.",
+      "unavailableRefreshed": "오케스트레이터가 시간 내에 응답하지 않았습니다. 표시된 상태를 새로 고쳤으니 다시 시도하기 전에 확인하세요."
     },
     "failback": {
       "phase1Title": "역방향 복제 진행 중",

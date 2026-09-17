@@ -4520,7 +4520,9 @@
       "statusFailingBack": "Failback läuft",
       "openFailback": "Failback öffnen",
       "failingBackTooltip": "Failback abbrechen, bevor dieser Plan gelöscht wird.",
-      "jobColumn": "Replikationsjob"
+      "jobColumn": "Replikationsjob",
+      "sharesGuestsWith": "Teilt Gäste mit: {plans}",
+      "alsoInPlan": "auch in {plan}"
     },
     "rpoTargetLabel": "RPO-Ziel",
     "createJob": {
@@ -4670,7 +4672,8 @@
       "selectReplicatedVMs": "auswählen Replicated VMs",
       "noReplicatedVMs": "Keine replizierten VMs gefunden. Erstellen Sie zuerst einen Replikationsjob.",
       "assignVMs": "Startreihenfolge & Tiers",
-      "create": "erstellen Plan"
+      "create": "erstellen Plan",
+      "vmInOtherPlans": "Auch im Plan: {plans}"
     },
     "failover": {
       "testTitle": "Failover testen",
@@ -4724,7 +4727,8 @@
       "completeVMs": "VM(s) laufen jetzt am DR-Standort",
       "completeLocked": "Die Replikation ist gesperrt und der Plan ist umgeschaltet — Failback bringt ihn zurück.",
       "clonesDestroyed": "Klone gelöscht, Konfiguration wiederhergestellt",
-      "testActiveConflict": "Ein Test-Failover ist aktiv. Führen Sie die Bereinigung aus, bevor Sie diesen Vorgang starten."
+      "testActiveConflict": "Ein Test-Failover ist aktiv. Führen Sie die Bereinigung aus, bevor Sie diesen Vorgang starten.",
+      "unavailableRefreshed": "Der Orchestrator hat nicht rechtzeitig geantwortet. Der angezeigte Zustand wurde aktualisiert, prüfen Sie ihn vor einem neuen Versuch."
     },
     "failback": {
       "phase1Title": "Umgekehrte Replikation läuft",

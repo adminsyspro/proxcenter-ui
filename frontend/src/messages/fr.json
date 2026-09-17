@@ -4541,7 +4541,9 @@
       "statusFailingBack": "Retour en cours",
       "openFailback": "Ouvrir le failback",
       "failingBackTooltip": "Annulez le failback avant de supprimer ce plan.",
-      "jobColumn": "Job de réplication"
+      "jobColumn": "Job de réplication",
+      "sharesGuestsWith": "Partage des VM avec : {plans}",
+      "alsoInPlan": "aussi dans {plan}"
     },
     "rpoTargetLabel": "RPO cible",
     "createJob": {
@@ -4691,7 +4693,8 @@
       "selectReplicatedVMs": "Sélectionner les VMs répliquées",
       "noReplicatedVMs": "Aucune VM répliquée trouvée. Créez d'abord un job de réplication.",
       "assignVMs": "Ordre de démarrage & Tiers",
-      "create": "Créer le plan"
+      "create": "Créer le plan",
+      "vmInOtherPlans": "Aussi dans le plan : {plans}"
     },
     "failover": {
       "testTitle": "Test de failover",
@@ -4745,7 +4748,8 @@
       "completeVMs": "VM désormais actives sur le site DR",
       "completeLocked": "La réplication est verrouillée et le plan est basculé — le failback fera le retour.",
       "clonesDestroyed": "Clones détruits, configuration restaurée",
-      "testActiveConflict": "Un test de basculement est actif. Lancez le nettoyage avant de démarrer cette opération."
+      "testActiveConflict": "Un test de basculement est actif. Lancez le nettoyage avant de démarrer cette opération.",
+      "unavailableRefreshed": "L'orchestrateur n'a pas répondu à temps. L'état affiché a été rafraîchi, vérifiez-le avant de réessayer."
     },
     "failback": {
       "phase1Title": "Réplication inverse en cours",

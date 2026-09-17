@@ -209,6 +209,29 @@ export default function RecoveryPlansTab({
 
   const selected = useMemo(() => (plans || []).find(p => p.id === selectedPlanId), [plans, selectedPlanId])
 
+  // The other plans listing a guest of the selected one, each with the shared
+  // vmids. A guest is the same guest when it sits on the same source cluster:
+  // a vmid alone is only unique per cluster. Legitimate (a broad plan plus a
+  // narrow rehearsal one), so it is shown, not forbidden.
+  const sharedWith = useMemo(() => {
+    if (!selected) return []
+
+    const ids = new Set((selected.vms || []).map(v => v.vm_id))
+
+    return (plans || [])
+      .filter(p => p.id !== selected.id && p.source_cluster === selected.source_cluster)
+      .map(p => ({ name: p.name, vmIds: (p.vms || []).filter(v => ids.has(v.vm_id)).map(v => v.vm_id) }))
+      .filter(p => p.vmIds.length > 0)
+  }, [plans, selected])
+
+  const otherPlansByGuest = useMemo(() => {
+    const m = new Map<number, string[]>()
+
+    for (const p of sharedWith) for (const id of p.vmIds) m.set(id, [...(m.get(id) || []), p.name])
+
+    return m
+  }, [sharedWith])
+
   const connName = useMemo(() => {
     const map = new Map((connections || []).map(c => [c.id, c.name]))
     return (id: string) => map.get(id) || id
@@ -347,7 +370,7 @@ export default function RecoveryPlansTab({
               {/* Route and status on one strip: the status chip used to be
                   stretched edge to edge by the drawer's flex column, which
                   turned a chip into a banner. */}
-              <Box sx={{ p: 2, borderRadius: 1, bgcolor: 'action.hover', mb: 2, display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+              <Box sx={{ p: 2, borderRadius: 1, bgcolor: 'action.hover', mb: sharedWith.length > 0 ? 0.75 : 2, display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
                 <PlanEngineGlyphs engines={planEngines(selected, jobs)} size={16} />
                 <Typography variant='body2' sx={{ fontWeight: 600, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {connName(selected.source_cluster)}
@@ -360,6 +383,13 @@ export default function RecoveryPlansTab({
                   <PlanStatusBadge status={selected.status} t={t} />
                 </Box>
               </Box>
+
+              {/* Guests this plan shares with other plans, as "name (vmid, vmid)". */}
+              {sharedWith.length > 0 && (
+                <Typography variant='caption' color='text.secondary' sx={{ display: 'block', px: 0.5, mb: 2 }}>
+                  {t('siteRecovery.plans.sharesGuestsWith', { plans: sharedWith.map(p => `${p.name} (${p.vmIds.join(', ')})`).join(', ') })}
+                </Typography>
+              )}
 
               {/* Two columns from md up: the guests on the left, the history on
                   the right. Each scrolls with the body, which keeps the action
@@ -411,6 +441,14 @@ export default function RecoveryPlansTab({
                                   <Typography variant='body2' sx={{ fontWeight: 500, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                     {vm.vm_name}
                                   </Typography>
+                                  {otherPlansByGuest.has(vm.vm_id) && (
+                                    <Chip
+                                      size='small'
+                                      variant='outlined'
+                                      label={t('siteRecovery.plans.alsoInPlan', { plan: (otherPlansByGuest.get(vm.vm_id) || []).join(', ') })}
+                                      sx={{ height: 20, fontSize: '0.65rem', flexShrink: 0 }}
+                                    />
+                                  )}
                                 </Box>
                                 <Typography variant='caption' sx={{ color: 'text.secondary', flexShrink: 0 }}>
                                   VM {vm.vm_id}

@@ -5,12 +5,19 @@ const getRecoveryPlanMock = vi.fn()
 const testFailoverMock = vi.fn()
 const checkPermissionMock = vi.fn()
 
-vi.mock('@/lib/orchestrator/client', () => ({
-  getOrchestratorClient: () => ({
-    getRecoveryPlan: (...args: unknown[]) => getRecoveryPlanMock(...args),
-    testFailover: (...args: unknown[]) => testFailoverMock(...args),
-  }),
-}))
+// Keep the real parseOrchestratorError so the status passthrough is exercised
+// for real; only stub the network-facing client factory.
+vi.mock('@/lib/orchestrator/client', async importActual => {
+  const actual = await importActual<typeof import('@/lib/orchestrator/client')>()
+
+  return {
+    ...actual,
+    getOrchestratorClient: () => ({
+      getRecoveryPlan: (...args: unknown[]) => getRecoveryPlanMock(...args),
+      testFailover: (...args: unknown[]) => testFailoverMock(...args),
+    }),
+  }
+})
 
 vi.mock('@/lib/rbac', () => ({
   checkPermission: (...args: unknown[]) => checkPermissionMock(...args),
@@ -98,5 +105,32 @@ describe('POST /api/v1/orchestrator/replication/plans/[id]/test-failover', () =>
 
     expect(res.status).toBe(500)
     expect(await res.json()).toEqual({ error: 'boom' })
+  })
+
+  // The orchestrator answers 409 when a test is already active on the plan.
+  // Flattened to a 500, the dialog could not tell it from a real failure and
+  // never showed its "run cleanup first" hint (roadmap#2).
+  it('passes the orchestrator 409 through with its message when a test failover is already active', async () => {
+    testFailoverMock.mockRejectedValue(new Error('Orchestrator 409: {"error":"test failover active on plan X"}'))
+
+    const res = await callRoute(POST as Parameters<typeof callRoute>[0], { params: { id: 'plan-1' } })
+
+    expect(res.status).toBe(409)
+    expect(await res.json()).toEqual({ error: 'test failover active on plan X' })
+  })
+
+  // A connection the orchestrator dropped after 30 s is not a failed test:
+  // the page refreshes before it reports, so it needs the code (roadmap#8).
+  it('answers 503 with the code when the orchestrator dropped the connection', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    testFailoverMock.mockRejectedValue(Object.assign(new Error('Orchestrator unavailable'), { code: 'ORCHESTRATOR_UNAVAILABLE' }))
+
+    const res = await callRoute(POST as Parameters<typeof callRoute>[0], { params: { id: 'plan-1' } })
+
+    expect(res.status).toBe(503)
+    expect(await res.json()).toEqual({ error: 'Orchestrator unavailable', code: 'ORCHESTRATOR_UNAVAILABLE' })
+    // The unavailable case is the one the route does not log.
+    expect(errorSpy).not.toHaveBeenCalled()
+    errorSpy.mockRestore()
   })
 })

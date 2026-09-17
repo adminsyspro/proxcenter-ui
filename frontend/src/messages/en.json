@@ -4541,7 +4541,9 @@
       "statusFailingBack": "Failing back",
       "openFailback": "Open failback",
       "failingBackTooltip": "Cancel the failback before deleting this plan.",
-      "jobColumn": "Replication job"
+      "jobColumn": "Replication job",
+      "sharesGuestsWith": "Shares guests with: {plans}",
+      "alsoInPlan": "also in {plan}"
     },
     "rpoTargetLabel": "RPO target",
     "createJob": {
@@ -4691,7 +4693,8 @@
       "selectReplicatedVMs": "Select Replicated VMs",
       "noReplicatedVMs": "No replicated VMs found. Create a replication job first.",
       "assignVMs": "Boot Order & Tiers",
-      "create": "Create Plan"
+      "create": "Create Plan",
+      "vmInOtherPlans": "Also in plan: {plans}"
     },
     "failover": {
       "testTitle": "Test Failover",
@@ -4745,7 +4748,8 @@
       "completeVMs": "VM(s) now running on the DR site",
       "completeLocked": "Replication is locked and the plan is failed over — failback will bring it home.",
       "clonesDestroyed": "Clones destroyed, configuration restored",
-      "testActiveConflict": "A test failover is active. Run cleanup before starting this operation."
+      "testActiveConflict": "A test failover is active. Run cleanup before starting this operation.",
+      "unavailableRefreshed": "The orchestrator did not answer in time. The state shown has been refreshed, check it before retrying."
     },
     "failback": {
       "phase1Title": "Reverse replication in progress",

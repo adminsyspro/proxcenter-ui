@@ -85,9 +85,12 @@ export default function SiteRecoveryPage() {
   const [failoverErrorStatus, setFailoverErrorStatus] = useState<number | null>(null)
   const [operationError, setOperationError] = useState<string | null>(null)
 
-  // Cleanup state
+  // Cleanup state. The cleanup itself runs on the orchestrator, not inside
+  // the request that starts it, so cleanupExecutionId is the execution the
+  // dialog polls for progress and for the verdict.
   const [cleanupLoading, setCleanupLoading] = useState(false)
   const [cleanupResult, setCleanupResult] = useState<any>(null)
+  const [cleanupExecutionId, setCleanupExecutionId] = useState<string | null>(null)
 
   // SWR hooks
   const { data: health, isLoading: healthLoading } = useReplicationHealth(isEnterprise)
@@ -303,6 +306,7 @@ export default function SiteRecoveryPage() {
     setActiveExecution(null)
     setCleanupResult(null)
     setCleanupLoading(false)
+    setCleanupExecutionId(null)
     setFailoverError(null)
     setFailoverErrorStatus(null)
 
@@ -314,7 +318,19 @@ export default function SiteRecoveryPage() {
       if (plan?.active_test_execution_id) {
         fetch(`/api/v1/orchestrator/replication/executions/${plan.active_test_execution_id}`)
           .then(res => (res.ok ? res.json() : null))
-          .then(data => { if (data) setActiveExecution(data) })
+          .then(data => {
+            if (!data) return
+            setActiveExecution(data)
+            // A cleanup started before this reload is still running on the
+            // orchestrator: pick its progress back up instead of showing the
+            // operator an idle dialog over a live rollback.
+            if (data.phase === 'cleaning') {
+              setCleanupLoading(true)
+              setCleanupExecutionId(data.id)
+            } else if (data.cleanup_result) {
+              setCleanupResult(data.cleanup_result)
+            }
+          })
           .catch(() => { /* ignore — dialog shows the warning banner instead */ })
       }
     }
@@ -373,19 +389,32 @@ export default function SiteRecoveryPage() {
   const handleCleanupTest = useCallback(async () => {
     if (!failoverDialog.planId) return
     setCleanupLoading(true)
+    setCleanupResult(null)
     try {
       const res = await fetch(`/api/v1/orchestrator/replication/plans/${failoverDialog.planId}/cleanup-test`, { method: 'POST' })
       const data = await res.json().catch(() => ({}))
 
-      // A cleanup that never reached the orchestrator, or whose call was cut
-      // off on the way back, must never read as a finished one: the DR guests
-      // may still be running on the replica images. Feed the error through the
-      // same shape the dialog already renders, so the retry button stays.
-      // What travels here is the technical cause only; the dialog states the
-      // operator-facing consequence itself, in the operator's own language.
-      setCleanupResult(res.ok
-        ? data
-        : { vms_stopped: 0, disks_rolled: 0, jobs_resumed: 0, errors: data?.error ? [data.error] : [] })
+      // A cleanup that never reached the orchestrator must never read as a
+      // finished one: the DR guests may still be running on the replica
+      // images. Feed the error through the same shape the dialog already
+      // renders, so the retry button stays. What travels here is the
+      // technical cause only; the dialog states the operator-facing
+      // consequence itself, in the operator's own language.
+      // 409 is the exception: a cleanup is already running, and watching that
+      // one is exactly the right thing to do.
+      if (!res.ok && res.status !== 409) {
+        setCleanupLoading(false)
+        setCleanupResult({ vms_stopped: 0, disks_rolled: 0, jobs_resumed: 0, errors: data?.error ? [data.error] : [] })
+        return
+      }
+
+      const executionId: string | null = data?.execution_id || activeExecution?.id || null
+      if (!executionId) {
+        setCleanupLoading(false)
+        setCleanupResult({ vms_stopped: 0, disks_rolled: 0, jobs_resumed: 0, errors: ['The execution that tracks this cleanup no longer exists'] })
+        return
+      }
+      setCleanupExecutionId(executionId)
       mutateJobs()
       mutatePlans()
     } catch (e) {
@@ -393,11 +422,57 @@ export default function SiteRecoveryPage() {
       // so it owes the operator a banner rather than a console line and a
       // spinner that stops on its own.
       console.error('Failed to cleanup test:', e)
-      setCleanupResult({ vms_stopped: 0, disks_rolled: 0, jobs_resumed: 0, errors: [e instanceof Error ? e.message : String(e)] })
-    } finally {
       setCleanupLoading(false)
+      setCleanupResult({ vms_stopped: 0, disks_rolled: 0, jobs_resumed: 0, errors: [e instanceof Error ? e.message : String(e)] })
     }
-  }, [failoverDialog.planId, mutateJobs, mutatePlans])
+  }, [failoverDialog.planId, activeExecution, mutateJobs, mutatePlans])
+
+  // Follow a cleanup while it runs. Stopping each DR guest and rolling its
+  // replica images back takes minutes per guest on large images, far past any
+  // request timeout, so the orchestrator writes its progress onto the
+  // execution and the dialog reads it from there (ui#958). Polling stops as
+  // soon as the phase clears, whatever the verdict.
+  useEffect(() => {
+    if (!cleanupExecutionId) return
+    let cancelled = false
+
+    const poll = async () => {
+      try {
+        const res = await fetch(`/api/v1/orchestrator/replication/executions/${cleanupExecutionId}`)
+        if (!res.ok) {
+          // The execution is gone (history cleared, plan deleted): stop
+          // following it rather than poll a 404 for ever.
+          if (!cancelled) {
+            setCleanupExecutionId(null)
+            setCleanupLoading(false)
+          }
+          return
+        }
+        const data = await res.json()
+        if (cancelled) return
+        setActiveExecution(data)
+        if (data.cleanup_result) setCleanupResult(data.cleanup_result)
+        if (data.phase !== 'cleaning') {
+          setCleanupExecutionId(null)
+          setCleanupLoading(false)
+          mutateJobs()
+          mutatePlans()
+        }
+      } catch (e) {
+        // A dropped poll is not a failed cleanup: the orchestrator keeps
+        // working, so keep polling rather than declare anything.
+        console.error('Failed to poll cleanup:', e)
+      }
+    }
+
+    poll()
+    const interval = setInterval(poll, 3000)
+
+    return () => {
+      cancelled = true
+      clearInterval(interval)
+    }
+  }, [cleanupExecutionId, mutateJobs, mutatePlans])
 
   const handleFailbackCutover = useCallback(async (planId: string) => {
     try {

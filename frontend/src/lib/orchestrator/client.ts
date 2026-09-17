@@ -1,4 +1,4 @@
-import type { ReplicationCheckRequest, ReplicationHealthStatus, SnapshotIdentity, SSHConnectivityResult } from './site-recovery.types'
+import type { CleanupStarted, ReplicationCheckRequest, ReplicationHealthStatus, SnapshotIdentity, SSHConnectivityResult } from './site-recovery.types'
 
 // src/lib/orchestrator/client.ts
 // Client pour communiquer avec le backend Go d'orchestration
@@ -655,13 +655,13 @@ return this.get<ClusterMetrics[]>(`/metrics/${connectionId}/history${query ? `?$
   }
 
   cleanupTestFailover(planId: string) {
-    // A test failover cleanup stops each DR VM, waits for it to report
-    // stopped, reconnects its NICs and rolls every replica image back, one VM
-    // after another: measured at ~20s for a single-disk VM on a local cluster,
-    // so the 30s default expires on any plan with more than one guest. Kept
-    // under the 60s nginx read timeout of a packaged install, so the abort
-    // comes back as our own JSON error rather than an nginx 504 page.
-    return this.post<any>(`/replication/plans/${planId}/cleanup-test`, undefined, 55_000)
+    // The cleanup itself runs in the background on the orchestrator and this
+    // call only starts it, so the default budget is ample. It used to run
+    // inside this request: one guest costs a stop plus a per-disk rollback,
+    // ~46s measured at a customer site on terabyte-scale images, so the
+    // request was abandoned mid-rollback with guests still up and the partial
+    // result thrown away (ui#958). Progress is polled from the execution.
+    return this.post<CleanupStarted>(`/replication/plans/${planId}/cleanup-test`)
   }
 
   startDRVM(body: { vm_id: number; target_cluster: string; replication_job_id: string; restore_point?: string }) {

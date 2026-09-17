@@ -13,7 +13,7 @@ import { ScreenshotPreviewDialog, useExecutionScreenshots, type ScreenshotMeta }
 import { formatBytes } from '@/utils/format'
 
 import type {
-  RecoveryPlan, RecoveryExecution, RecoveryVMResult, PlanRestorePoints, TestFailoverOptions
+  RecoveryPlan, RecoveryExecution, RecoveryVMResult, PlanRestorePoints, TestFailoverOptions, CleanupResult
 } from '@/lib/orchestrator/site-recovery.types'
 
 // Boot-screenshot stabilization delay offered for a test failover, mirroring
@@ -39,7 +39,7 @@ interface FailoverDialogProps {
   onConfirm: (options?: TestFailoverOptions) => void
   onCleanup?: () => void
   cleanupLoading?: boolean
-  cleanupResult?: { all_cleaned?: boolean; vms_stopped: number; disks_rolled: number; jobs_resumed: number; errors: string[] } | null
+  cleanupResult?: (Partial<CleanupResult> & { errors: string[] }) | null
   execution: RecoveryExecution | null
   errorMessage?: string | null
   errorStatus?: number | null
@@ -64,6 +64,12 @@ export default function FailoverDialog({ open, onClose, plan, type, onConfirm, o
   const [screenshotPreview, setScreenshotPreview] = useState<ScreenshotMeta | null>(null)
   const hasRollbackVMs = !!execution?.vm_results?.some(vm => !vm.test_clones?.length)
   const hasTestClones = !!execution?.vm_results?.some(vm => vm.test_clones?.length)
+  // A cleanup runs on the orchestrator, not inside the request that starts
+  // it: cleanupLoading covers the moment between the click and the first
+  // poll, the phase covers everything after, including a page reloaded while
+  // the rollbacks are still going (ui#958).
+  const cleanupRunning = !!cleanupLoading || execution?.phase === 'cleaning'
+  const showCleanupState = cleanupRunning || !!cleanupResult
   const isDestructive = type === 'failover' || type === 'failback'
   const isExecuting = !!execution && execution.status === 'running'
   const [stabilizeRemainingSeconds, setStabilizeRemainingSeconds] = useState<number | null>(null)
@@ -258,11 +264,24 @@ export default function FailoverDialog({ open, onClose, plan, type, onConfirm, o
                 <Stack spacing={0.5} sx={{ maxHeight: 260, overflow: 'auto' }}>
                   {sortedVMs.map(vm => {
                     const res = resultsByVMID[vm.vm_id]
-                    const statusIcon = res
-                      ? res.status === 'completed' ? { icon: 'ri-check-line', color: 'success.main' }
-                        : res.status === 'failed' ? { icon: 'ri-close-line', color: 'error.main' }
-                        : res.status === 'running' ? { icon: 'ri-loader-4-line', color: 'primary.main' }
-                        : { icon: 'ri-time-line', color: 'text.disabled' }
+                    // Once a cleanup is in play the boot status is history:
+                    // what the operator needs on each row is whether that
+                    // guest's replica image is back on its snapshot, or
+                    // whether the guest is still up on it.
+                    const cleanupState = showCleanupState ? res?.test_state : undefined
+                    const statusIcon = cleanupState === 'cleaned'
+                      ? { icon: 'ri-check-line', color: 'success.main', title: t('siteRecovery.failover.cleanupGuestCleaned') }
+                      : cleanupState === 'cleaning'
+                      ? { icon: 'ri-loader-4-line', color: 'primary.main', title: t('siteRecovery.failover.cleanupGuestCleaning') }
+                      : cleanupState === 'cleanup_pending'
+                      ? { icon: 'ri-error-warning-line', color: 'warning.main', title: t('siteRecovery.failover.cleanupGuestPending') }
+                      : showCleanupState && res
+                      ? { icon: 'ri-time-line', color: 'text.disabled', title: t('siteRecovery.failover.cleanupGuestPending') }
+                      : res
+                      ? res.status === 'completed' ? { icon: 'ri-check-line', color: 'success.main', title: '' }
+                        : res.status === 'failed' ? { icon: 'ri-close-line', color: 'error.main', title: '' }
+                        : res.status === 'running' ? { icon: 'ri-loader-4-line', color: 'primary.main', title: '' }
+                        : { icon: 'ri-time-line', color: 'text.disabled', title: '' }
                       : null
                     const canConsole = type === 'test'
                       && targetConnId
@@ -273,10 +292,12 @@ export default function FailoverDialog({ open, onClose, plan, type, onConfirm, o
                     return (
                       <Box key={vm.vm_id} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.5, px: 0.75, borderRadius: 0.5, '&:hover': { bgcolor: 'action.hover' } }}>
                         {statusIcon && (
-                          <Box sx={{ width: 16, textAlign: 'center', color: statusIcon.color, fontSize: 14, display: 'inline-flex', justifyContent: 'center' }}>
-                            <i className={statusIcon.icon} style={{ animation: statusIcon.icon === 'ri-loader-4-line' ? 'spin 1.5s linear infinite' : 'none' }} />
-                            <Box sx={{ '@keyframes spin': { '0%': { transform: 'rotate(0deg)' }, '100%': { transform: 'rotate(360deg)' } } }} />
-                          </Box>
+                          <Tooltip title={statusIcon.title} disableHoverListener={!statusIcon.title} arrow>
+                            <Box sx={{ width: 16, textAlign: 'center', color: statusIcon.color, fontSize: 14, display: 'inline-flex', justifyContent: 'center' }}>
+                              <i className={statusIcon.icon} style={{ animation: statusIcon.icon === 'ri-loader-4-line' ? 'spin 1.5s linear infinite' : 'none' }} />
+                              <Box sx={{ '@keyframes spin': { '0%': { transform: 'rotate(0deg)' }, '100%': { transform: 'rotate(360deg)' } } }} />
+                            </Box>
+                          </Tooltip>
                         )}
                         <Chip
                           size='small'
@@ -392,37 +413,59 @@ export default function FailoverDialog({ open, onClose, plan, type, onConfirm, o
             </Box>
           )}
 
-          {/* Cleanup result */}
-          {cleanupResult && (() => {
-            const errs = cleanupResult.errors || []
+          {/* Cleanup progress and verdict */}
+          {(cleanupResult || cleanupRunning) && (() => {
+            const errs = cleanupResult?.errors || []
 
             // all_cleaned is the orchestrator's own verdict, and the only
             // field that says the run reached its end. Keying the banner on an
             // empty error list instead would call any payload without one a
             // success, including the error bodies an aborted or refused call
             // returns, while the DR guests are still up on the replica images.
-            const done = cleanupResult.all_cleaned === true && errs.length === 0
+            // A cleanup still running has no verdict yet, so it says so
+            // rather than borrowing the last one.
+            const done = !cleanupRunning && cleanupResult?.all_cleaned === true && errs.length === 0
+            const total = cleanupResult?.guests_total ?? 0
+            const cleaned = cleanupResult?.guests_cleaned ?? 0
             return (
-              <Alert severity={done ? 'success' : 'warning'}>
+              <Alert
+                severity={cleanupRunning ? 'info' : done ? 'success' : 'warning'}
+                icon={cleanupRunning ? <CircularProgress size={18} /> : undefined}
+              >
                 <Typography variant='body2' sx={{ fontWeight: 600, mb: 0.5 }}>
-                  {t(done ? 'siteRecovery.failover.cleanupDone' : 'siteRecovery.failover.cleanupIncomplete')}
+                  {t(cleanupRunning
+                    ? 'siteRecovery.failover.cleanupRunning'
+                    : done ? 'siteRecovery.failover.cleanupDone' : 'siteRecovery.failover.cleanupIncomplete')}
                 </Typography>
                 {/* What an unfinished cleanup means for the operator, said in
-                    their own language. The route's message follows below as
-                    the technical cause: on its own, a string like
-                    "Orchestrator request timeout" is untranslated and says
-                    nothing about the DR guests left running on the replicas. */}
-                {!done && (
-                  <Typography variant='caption' component='div' sx={{ mb: 0.5 }}>
+                    their own language. The technical cause follows below: on
+                    its own, a string like "Orchestrator request timeout" is
+                    untranslated and says nothing about the DR guests left
+                    running on the replicas. */}
+                {!cleanupRunning && !done && (
+                  <Typography variant='caption' component='div' sx={{ display: 'block', mb: 0.5 }}>
                     {t('siteRecovery.failover.cleanupFailed')}
                   </Typography>
                 )}
-                <Typography variant='caption' component='div'>
-                  {cleanupResult.vms_stopped > 0 && <>{cleanupResult.vms_stopped} VM(s) {t('siteRecovery.failover.stopped')}<br /></>}
-                  {hasTestClones && done && <>{t('siteRecovery.failover.clonesDestroyed')}<br /></>}
-                  {(!hasTestClones || hasRollbackVMs) && cleanupResult.disks_rolled > 0 && <>{cleanupResult.disks_rolled} {t('siteRecovery.failover.disksRolledBack')}<br /></>}
-                  {cleanupResult.jobs_resumed > 0 && <>{cleanupResult.jobs_resumed} {t('siteRecovery.failover.jobsResumed')}</>}
-                </Typography>
+                {/* Guest-by-guest progress: rolling terabyte-scale images back
+                    takes minutes each, and a cleanup that has to be run again
+                    picks up where this one stopped. */}
+                {/* display:block is explicit: the caption variant is
+                    inline-block in this theme, so two stacked captions would
+                    sit side by side and read as one scrambled line. */}
+                {total > 0 && (
+                  <Typography variant='caption' component='div' sx={{ display: 'block' }}>
+                    {t('siteRecovery.failover.cleanupProgress', { cleaned, total })}
+                  </Typography>
+                )}
+                {cleanupResult && (
+                  <Typography variant='caption' component='div' sx={{ display: 'block' }}>
+                    {(cleanupResult.vms_stopped ?? 0) > 0 && <>{cleanupResult.vms_stopped} VM(s) {t('siteRecovery.failover.stopped')}<br /></>}
+                    {hasTestClones && done && <>{t('siteRecovery.failover.clonesDestroyed')}<br /></>}
+                    {(!hasTestClones || hasRollbackVMs) && (cleanupResult.disks_rolled ?? 0) > 0 && <>{cleanupResult.disks_rolled} {t('siteRecovery.failover.disksRolledBack')}<br /></>}
+                    {(cleanupResult.jobs_resumed ?? 0) > 0 && <>{cleanupResult.jobs_resumed} {t('siteRecovery.failover.jobsResumed')}</>}
+                  </Typography>
+                )}
                 {errs.length > 0 && errs.map((err: string, i: number) => (
                   <Typography key={i} variant='caption' sx={{ color: 'error.main', display: 'block', mt: 0.5 }}>{err}</Typography>
                 ))}

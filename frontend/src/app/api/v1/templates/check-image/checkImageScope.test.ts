@@ -14,6 +14,7 @@ const getConnectionByIdMock = vi.fn<(id: string) => Promise<any>>()
 const pveFetchMock = vi.fn<(...args: any[]) => Promise<any>>()
 const getCurrentTenantIdMock = vi.fn<() => Promise<string>>()
 const getTenantInfrastructureScopeMock = vi.fn<(...args: any[]) => Promise<any>>()
+const findCustomImageForTenantMock = vi.fn<(...args: any[]) => Promise<any>>()
 
 vi.mock("@/lib/rbac", () => ({
   checkPermission: (...a: any[]) => checkPermissionMock(...a),
@@ -31,6 +32,12 @@ vi.mock("@/lib/templates/catalogStore", () => ({
       : undefined,
 }))
 vi.mock("@/lib/tenant", () => ({ getCurrentTenantId: () => getCurrentTenantIdMock() }))
+vi.mock("@/lib/templates/customImageScope", () => ({
+  findCustomImageForTenant: (...a: any[]) => findCustomImageForTenantMock(...a),
+}))
+vi.mock("@/lib/templates/cloudImages", () => ({
+  customImageToCloudImage: (row: any) => ({ slug: row.slug, downloadUrl: "https://img.test/custom.qcow2" }),
+}))
 vi.mock("@/lib/tenant/infraScope", () => ({
   getTenantInfrastructureScope: (...a: any[]) => getTenantInfrastructureScopeMock(...a),
 }))
@@ -51,6 +58,7 @@ beforeEach(() => {
   pveFetchMock.mockReset().mockResolvedValue([])
   getCurrentTenantIdMock.mockReset().mockResolvedValue("default")
   getTenantInfrastructureScopeMock.mockReset().mockResolvedValue({ kind: "provider" })
+  findCustomImageForTenantMock.mockReset().mockResolvedValue(null)
 })
 
 describe("GET /api/v1/templates/check-image -- storage scope guard (Task 13)", () => {
@@ -108,5 +116,45 @@ describe("GET /api/v1/templates/check-image -- storage scope guard (Task 13)", (
 
     expect(res.status).toBe(200)
     expect(pveFetchMock).toHaveBeenCalled()
+  })
+})
+
+// The route used to resolve built-in images only, so a custom slug, shared or
+// not, could never be probed even though the catalogue offered it and the
+// deploy route accepted it.
+describe("GET /api/v1/templates/check-image -- custom image resolution", () => {
+  it("falls back to the caller scope when the slug is not built-in", async () => {
+    findCustomImageForTenantMock.mockResolvedValue({ tenantId: "default", slug: "custom-fortigate", isShared: true })
+
+    const { GET } = await import("./route")
+    const res = await callRoute(GET, {
+      searchParams: { connectionId: "conn-1", node: "node1", storage: "any-storage", imageSlug: "custom-fortigate" },
+    })
+
+    expect(res.status).toBe(200)
+    expect(findCustomImageForTenantMock).toHaveBeenCalledWith("default", "custom-fortigate")
+  })
+
+  it("still refuses a slug that is neither built-in nor in scope", async () => {
+    findCustomImageForTenantMock.mockResolvedValue(null)
+
+    const { GET } = await import("./route")
+    const res = await callRoute(GET, {
+      searchParams: { connectionId: "conn-1", node: "node1", storage: "any-storage", imageSlug: "nope" },
+    })
+
+    expect(res.status).toBe(400)
+    const json = await readJson<{ error: string }>(res)
+    expect(json?.error).toBe("Unknown image slug")
+  })
+
+  it("does not consult the custom scope when the slug is built-in", async () => {
+    const { GET } = await import("./route")
+    const res = await callRoute(GET, {
+      searchParams: { connectionId: "conn-1", node: "node1", storage: "any-storage", imageSlug: "ubuntu-2404" },
+    })
+
+    expect(res.status).toBe(200)
+    expect(findCustomImageForTenantMock).not.toHaveBeenCalled()
   })
 })

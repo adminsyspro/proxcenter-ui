@@ -6,6 +6,7 @@ import { prisma } from "@/lib/db/prisma"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { customImageToCloudImage } from "@/lib/templates/cloudImages"
 import { getEffectiveCatalog } from "@/lib/templates/catalogStore"
+import { customImageScopeWhere } from "@/lib/templates/customImageScope"
 
 export const runtime = "nodejs"
 
@@ -29,19 +30,11 @@ export async function GET(req: Request) {
     //  - the provider sees ALL its own custom images (shared and private)
     //  - tenants see THEIR own custom images PLUS shared catalogue entries
     //    flagged isShared=true on the provider tenant.
-    // Implemented with a single OR query against the global prisma client
-    // (we don't want the tenant-scoped extension here: we deliberately reach
-    //  into the provider tenant for isShared rows).
-    const where = isProvider
-      ? { tenantId }
-      : {
-        OR: [
-          { tenantId },
-          { tenantId: DEFAULT_TENANT_ID, isShared: true },
-        ],
-      }
+    // The clause lives in lib/templates/customImageScope so the deploy route
+    // resolves a slug with exactly this scope: when the two drifted apart, a
+    // shared template was listed here and then refused at deploy.
     const customRows = await prisma.customImage.findMany({
-      where,
+      where: customImageScopeWhere(tenantId),
       orderBy: { createdAt: 'desc' },
     }).catch(() => [])
     let customImages = customRows.map(customImageToCloudImage)

@@ -19,6 +19,7 @@ const checkPermissionMock = vi.fn<(...args: any[]) => Promise<Response | null>>(
 const getConnectionByIdMock = vi.fn<(id: string) => Promise<any>>()
 const pveFetchMock = vi.fn<(...args: any[]) => Promise<any>>()
 const customImageFindUniqueMock = vi.fn<(...args: any[]) => Promise<any>>()
+const findCustomImageForTenantMock = vi.fn<(...args: any[]) => Promise<any>>()
 const getCurrentTenantIdMock = vi.fn<() => Promise<string>>()
 
 const deploymentUpdateMock = vi.fn<(...args: any[]) => Promise<any>>()
@@ -43,6 +44,7 @@ vi.mock('@/lib/proxmox/client', () => ({ pveFetch: pveFetchMock }))
 const getImageBySlugMock = vi.fn<(...args: any[]) => any>()
 vi.mock('@/lib/templates/cloudImages', () => ({ customImageToCloudImage: vi.fn() }))
 vi.mock('@/lib/templates/catalogStore', () => ({ resolveBuiltInImage: getImageBySlugMock }))
+vi.mock('@/lib/templates/customImageScope', () => ({ findCustomImageForTenant: findCustomImageForTenantMock }))
 const resolveVdcForTenantMock = vi.fn<(...args: any[]) => Promise<any>>()
 const checkVdcQuotaMock = vi.fn<(...args: any[]) => Promise<any>>()
 vi.mock('@/lib/vdc/quota', () => ({ resolveVdcForTenant: resolveVdcForTenantMock, checkVdcQuota: checkVdcQuotaMock }))
@@ -99,6 +101,7 @@ beforeEach(async () => {
   getConnectionByIdMock.mockReset().mockResolvedValue({ id: 'conn-1' })
   pveFetchMock.mockReset()
   customImageFindUniqueMock.mockReset().mockResolvedValue(null)
+  findCustomImageForTenantMock.mockReset().mockResolvedValue(null)
   checkVmidAgainstTenantRangeMock.mockReset().mockResolvedValue({ ok: true })
   getAllowedNetworksForTenantMock.mockReset().mockResolvedValue(null)
   getVdcScopeMock.mockReset().mockResolvedValue(null)
@@ -164,6 +167,27 @@ describe('POST templates/deploy — MSP VMID range enforcement', () => {
     const json = await readJson<{ error: string }>(res)
     expect(json?.error).toBe('Unknown image slug')
     expect(checkVmidAgainstTenantRangeMock).toHaveBeenCalledWith('tenant-1', 190)
+  })
+
+  // A template the provider shared with every tenant is listed by the
+  // catalogue but used to be resolved under the caller's own tenant only, so
+  // the deploy died on "Unknown image slug" while the wizard had just offered
+  // it. The resolver is now the shared-scope one, and the slug must get past
+  // this early exit for a row the caller does not own.
+  it('resolves a template shared by the provider instead of refusing the slug', async () => {
+    checkVmidAgainstTenantRangeMock.mockResolvedValue({ ok: true })
+    findCustomImageForTenantMock.mockResolvedValue({
+      tenantId: 'default',
+      slug: 'custom-fortigate',
+      isShared: true,
+      sourceType: 'volume',
+      volumeId: 'nfs-library:import/fortios.qcow2',
+    })
+    const POST = await loadPost()
+    const res = await callRoute(POST, { body: baseBody })
+    const json = await readJson<{ error: string }>(res)
+    expect(json?.error).not.toBe('Unknown image slug')
+    expect(findCustomImageForTenantMock).toHaveBeenCalledWith('tenant-1', baseBody.imageSlug)
   })
 })
 

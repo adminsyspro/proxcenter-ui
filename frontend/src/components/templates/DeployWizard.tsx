@@ -547,11 +547,18 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
         } else {
           setStorage('')
         }
+      })
+      .catch(() => setStorages([]))
 
-        // ISO-capable storages — separate selector on Target step. PVE only
-        // lets you mount an ISO from a storage advertising content=iso, so
-        // we can't just reuse the disk storage list.
-        const isoList = all.filter((s: any) => s.enabled !== 0 && s.content?.includes('iso'))
+    // ISO-capable storages: separate selector on Target step, and a SEPARATE
+    // request: an ISO library granted to a vDC read-only is only returned when
+    // the caller asks for `content=iso`, so deriving this list from the
+    // unfiltered call above hid it and told the tenant its vDC had no ISO
+    // storage at all.
+    fetch(`/api/v1/connections/${encodeURIComponent(connectionId)}/nodes/${encodeURIComponent(node)}/storages?content=iso`)
+      .then(r => r.json())
+      .then(res => {
+        const isoList = ((res.data || []) as any[]).filter((s: any) => s.enabled !== 0)
         setIsoStorages(isoList)
         if (isoList.length > 0) {
           if (hideInfra) {
@@ -564,7 +571,7 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
           setIsoStorage('')
         }
       })
-      .catch(() => { setStorages([]); setIsoStorages([]) })
+      .catch(() => setIsoStorages([]))
 
     // Try to get next available VMID
     fetch(`/api/v1/connections/${encodeURIComponent(connectionId)}/cluster/nextid`)

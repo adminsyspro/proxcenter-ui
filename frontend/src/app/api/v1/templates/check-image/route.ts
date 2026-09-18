@@ -5,6 +5,8 @@ import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { pveFetch } from "@/lib/proxmox/client"
 import { resolveBuiltInImage } from "@/lib/templates/catalogStore"
+import { customImageToCloudImage } from "@/lib/templates/cloudImages"
+import { findCustomImageForTenant } from "@/lib/templates/customImageScope"
 import { getCurrentTenantId } from "@/lib/tenant"
 import { getTenantInfrastructureScope } from "@/lib/tenant/infraScope"
 
@@ -41,7 +43,13 @@ export async function GET(req: Request) {
       }
     }
 
-    const image = await resolveBuiltInImage(imageSlug)
+    // Built-in first, then the caller's custom images and the provider's
+    // shared catalogue entries, the same scope the catalogue and the deploy
+    // route use, so a slug that deploys can always be probed here too.
+    const builtIn = await resolveBuiltInImage(imageSlug)
+    const customRow = builtIn ? null : await findCustomImageForTenant(tenantId, imageSlug)
+    const image = builtIn ?? (customRow ? customImageToCloudImage(customRow) : null)
+
     if (!image) {
       return NextResponse.json({ error: "Unknown image slug" }, { status: 400 })
     }

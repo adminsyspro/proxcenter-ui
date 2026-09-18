@@ -11,6 +11,7 @@ import { pveFetch } from "@/lib/proxmox/client"
 import { downloadToStorage } from "@/lib/proxmox/download"
 import { selectDownloadStorage } from "@/lib/templates/downloadStorage"
 import { customImageToCloudImage } from "@/lib/templates/cloudImages"
+import { findCustomImageForTenant } from "@/lib/templates/customImageScope"
 import { resolveBuiltInImage } from "@/lib/templates/catalogStore"
 import { supportsVmDisks } from "@/lib/proxmox/storage"
 import { resolveVdcForTenant, checkVdcQuota } from "@/lib/vdc/quota"
@@ -81,7 +82,10 @@ export async function POST(req: Request) {
     let volumeId: string | null = null
 
     if (!image) {
-      const customRow = await prisma.customImage.findUnique({ where: { tenantId_slug: { tenantId, slug: body.imageSlug } } })
+      // Same scope as the catalogue: the tenant's own images plus the
+      // provider's shared entries. Looking only under the caller's tenant
+      // refused every shared template with "Unknown image slug".
+      const customRow = await findCustomImageForTenant(tenantId, body.imageSlug)
       if (!customRow) {
         return NextResponse.json({ error: "Unknown image slug" }, { status: 400 })
       }

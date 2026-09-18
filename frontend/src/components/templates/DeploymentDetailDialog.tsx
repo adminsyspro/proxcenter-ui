@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import {
+  Alert,
   Box,
   Button,
   Chip,
@@ -38,7 +39,7 @@ interface Deployment {
   currentStep: string | null
   error: string | null
   taskUpid: string | null
-  config: string | null
+  config: string | { downloadStorage?: string } | null
   startedAt: string | null
   completedAt: string | null
   createdAt: string
@@ -79,12 +80,13 @@ function getLogColor(type: string) {
   }
 }
 
-function formatDuration(start: string | null, end: string | null): string {
+function formatDuration(start: string | null, end: string | null, status: string): string {
+  if (!end && ['failed', 'completed'].includes(status)) return '—'
   if (!start) return '—'
   const startDate = new Date(start)
   const endDate = end ? new Date(end) : new Date()
   const seconds = Math.floor((endDate.getTime() - startDate.getTime()) / 1000)
-  if (seconds < 0) return '—'
+  if (!Number.isFinite(seconds) || seconds < 0) return '—'
   if (seconds < 60) return `${seconds}s`
   if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${seconds % 60}s`
   return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`
@@ -144,7 +146,12 @@ export default function DeploymentDetailDialog({ open, deployment, onClose }: De
 
   if (!deployment) return null
 
-  const currentStepIndex = STEPS.indexOf(deployment.status as any)
+  // Same anchor as DeploymentProgress: "failed" is not a step, so the stepper
+  // reads the step the deployment died on from `currentStep` (#967).
+  const stepAnchor = deployment.currentStep && STEPS.includes(deployment.currentStep as any)
+    ? deployment.currentStep
+    : deployment.status
+  const currentStepIndex = STEPS.indexOf(stepAnchor as any)
   const progress = taskData?.progress ?? 0
   const logs = taskData?.logs || []
 
@@ -266,10 +273,25 @@ export default function DeploymentDetailDialog({ open, deployment, onClose }: De
                 {t('tasks.detail.duration')}
               </Typography>
               <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                {formatDuration(deployment.startedAt, deployment.completedAt)}
+                {formatDuration(deployment.startedAt, deployment.completedAt, deployment.status)}
               </Typography>
             </Box>
           </Box>
+
+          {/* Why it failed, directly under the status summary. Buried below the
+              stepper it read as a stray ribbon above the Close button, and an
+              Alert keeps it legible in both themes (#967). */}
+          {deployment.status === 'failed' && deployment.error && (
+            <Box sx={{ px: 3, pt: 2 }}>
+              <Alert severity="error">{deployment.error}</Alert>
+            </Box>
+          )}
+
+          {typeof deployment.config === 'object' && deployment.config?.downloadStorage && (
+            <Typography variant="body2" color="text.secondary" sx={{ px: 3, py: 1 }}>
+              {t('templates.deploy.target.imageStorage')}: {deployment.config.downloadStorage}
+            </Typography>
+          )}
 
           {/* Deployment steps stepper */}
           <Box sx={{ px: 3, py: 2, borderBottom: '1px solid', borderColor: 'divider' }}>
@@ -370,13 +392,6 @@ export default function DeploymentDetailDialog({ open, deployment, onClose }: De
                   '& .MuiLinearProgress-bar': { borderRadius: 1 },
                 }}
               />
-            </Box>
-          )}
-
-          {/* Error display */}
-          {deployment.status === 'failed' && deployment.error && (
-            <Box sx={{ px: 3, py: 2, bgcolor: 'error.main', color: 'error.contrastText' }}>
-              <Typography variant="body2">{deployment.error}</Typography>
             </Box>
           )}
 

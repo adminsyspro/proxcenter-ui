@@ -4970,6 +4970,7 @@
         "connection": "연결",
         "node": "노드",
         "storage": "스토리지",
+        "imageStorage": "이미지 스토리지",
         "vmid": "VM ID",
         "vmName": "VM 이름",
         "available": "사용 가능",

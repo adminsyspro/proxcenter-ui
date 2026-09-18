@@ -41,7 +41,13 @@ beforeEach(() => {
   guardMock.mockReset().mockResolvedValue(null)
   nameMock.mockReset().mockImplementation(async (_c: string, _s: string, f: string) => f)
   getConnectionByIdMock.mockReset().mockResolvedValue({ id: "conn-1" })
-  pveFetchMock.mockReset().mockResolvedValue("UPID:pve1:download")
+  pveFetchMock.mockReset().mockImplementation(async (_conn, path) => {
+    if (path.startsWith('/access/permissions?')) {
+      const key = new URLSearchParams(path.split('?')[1]).get('path')!
+      return { [key]: { 'Sys.AccessNetwork': 1, 'Datastore.AllocateTemplate': 1 } }
+    }
+    return "UPID:pve1:download"
+  })
 })
 
 describe("POST download-url: tenant write guard sees the filename", () => {
@@ -49,7 +55,7 @@ describe("POST download-url: tenant write guard sees the filename", () => {
     const res = await callRoute(POST, { method: "POST", params: PARAMS, body: BODY })
     expect(res.status).toBe(200)
     expect(guardMock).toHaveBeenCalledWith("conn-1", "isolib", { filename: "custom-acme-x.iso", content: "iso" })
-    expect(pveFetchMock).toHaveBeenCalledTimes(1)
+    expect(pveFetchMock).toHaveBeenCalledTimes(4)
   })
 
   it("the name namespaced by tenantUploadFilename is what the guard judges and what PVE receives", async () => {
@@ -60,7 +66,7 @@ describe("POST download-url: tenant write guard sees the filename", () => {
     expect(guardMock).toHaveBeenCalledWith("conn-1", "isolib", { filename: "custom-acme-x.iso", content: "iso" })
     // The PVE call carries the namespaced filename, never the raw one
     // (the source URL still ends in x.iso, so match the filename field only).
-    const sent = JSON.stringify(pveFetchMock.mock.calls[0])
+    const sent = pveFetchMock.mock.calls.find(([, path]) => path.endsWith('/download-url'))?.[2].body.toString()
     expect(sent).toMatch(/filename=custom-acme-x\.iso|"filename":"custom-acme-x\.iso"/)
     expect(sent).not.toMatch(/filename=x\.iso|"filename":"x\.iso"/)
   })
@@ -78,3 +84,14 @@ describe("POST download-url: tenant write guard sees the filename", () => {
     expect(guardMock).not.toHaveBeenCalled()
   })
 })
+
+ it("returns an actionable HTTP 403 before a PVEAdmin token can download", async () => {
+   pveFetchMock.mockImplementation(async (_conn, path) => {
+     const key = new URLSearchParams(path.split('?')[1]).get('path')!
+     return { [key]: { 'Sys.Audit': 1, 'Datastore.AllocateTemplate': 1 } }
+   })
+   const res = await callRoute(POST, { method: "POST", params: PARAMS, body: BODY })
+   expect(res.status).toBe(403)
+   expect((await res.json()).error).toContain('Sys.AccessNetwork on /nodes/pve1')
+   expect(pveFetchMock.mock.calls.some(([, , opts]) => opts?.method)).toBe(false)
+ })

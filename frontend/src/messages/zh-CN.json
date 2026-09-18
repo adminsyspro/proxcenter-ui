@@ -4974,6 +4974,7 @@
         "connection": "连接",
         "node": "节点",
         "storage": "存储",
+        "imageStorage": "镜像存储",
         "vmid": "VM ID",
         "vmName": "VM 名称",
         "available": "可用",

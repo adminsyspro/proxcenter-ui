@@ -4949,6 +4949,7 @@
         "connection": "Verbindung",
         "node": "Node",
         "storage": "Storage",
+        "imageStorage": "Image-Speicher",
         "vmid": "VM-ID",
         "vmName": "VM-Name",
         "available": "Verfügbar",

@@ -8,9 +8,11 @@ import { authOptions } from "@/lib/auth/config"
 import { deploySchema } from "@/lib/schemas"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { pveFetch } from "@/lib/proxmox/client"
+import { downloadToStorage } from "@/lib/proxmox/download"
+import { selectDownloadStorage } from "@/lib/templates/downloadStorage"
 import { customImageToCloudImage } from "@/lib/templates/cloudImages"
 import { resolveBuiltInImage } from "@/lib/templates/catalogStore"
-import { isFileBasedStorage, supportsVmDisks } from "@/lib/proxmox/storage"
+import { supportsVmDisks } from "@/lib/proxmox/storage"
 import { resolveVdcForTenant, checkVdcQuota } from "@/lib/vdc/quota"
 import { validateCpuAgainstPolicy, isPolicyRestrictive, resolveAllowedCpuModels, pickPolicyDefaultModel, parseCpuProperty } from "@/lib/vdc/computePolicy"
 import { getAllowedNetworksForTenant, validateNetAgainstScope, resolveSubnetForBridge } from "@/lib/vdc/vnets"
@@ -34,8 +36,11 @@ async function updateDeployment(id: string, status: DeploymentStatus, extra: Rec
     where: { id },
     data: {
       status,
-      currentStep: status,
-      ...(status === "completed" ? { completedAt: new Date() } : {}),
+      // A failure keeps the step it died on. Overwriting `currentStep` with
+      // "failed" — a value that is not a step — left the progress stepper with
+      // nothing to mark, so the operator saw a red bar and no reason (#967).
+      ...(status === "failed" ? {} : { currentStep: status }),
+      ...((status === "completed" || status === "failed") ? { completedAt: new Date() } : {}),
       ...extra,
     },
   })
@@ -157,6 +162,7 @@ export async function POST(req: Request) {
     // `if (isTenant)` scope block: provider deploys never fetch scope, so
     // this stays '' for them by construction.
     let dataDiskQosSuffix = ''
+    let tenantWritableStorages: Set<string> | null = null
 
     // vDC quota enforcement. Mirrors the create-VM route on
     // /connections/[id]/guests/[type]/[node] so a tenant can't bypass
@@ -206,6 +212,7 @@ export async function POST(req: Request) {
       // set so a read-only ISO library (#894) is refused even when visible.
       const visibleStorages = scope.storagesByConnection.get(body.connectionId) ?? new Set<string>()
       const writableStorages = writableStoragesFor(scope, body.connectionId)
+      tenantWritableStorages = writableStorages
       if (!writableStorages.has(body.storage)) {
         return NextResponse.json(
           { error: visibleStorages.has(body.storage) ? readOnlyLibraryError(body.storage) : `Storage "${body.storage}" is not authorised for this tenant.` },
@@ -253,6 +260,13 @@ export async function POST(req: Request) {
 
     const conn = await getConnectionById(body.connectionId)
 
+    const deploymentConfig = {
+      storage: body.storage,
+      vmName: body.vmName,
+      hardware: body.hardware,
+      cloudInit: body.cloudInit,
+    }
+
     // Create deployment record
     const deployment = await prisma.deployment.create({
       data: {
@@ -263,12 +277,7 @@ export async function POST(req: Request) {
         imageSlug: body.imageSlug,
         blueprintId: body.blueprintId || null,
         blueprintName: body.blueprintName || null,
-        config: {
-          storage: body.storage,
-          vmName: body.vmName,
-          hardware: body.hardware,
-          cloudInit: body.cloudInit,
-        },
+        config: deploymentConfig,
         status: "pending",
         currentStep: "pending",
         startedAt: new Date(),
@@ -315,6 +324,7 @@ export async function POST(req: Request) {
         if (isIsoMode) {
           await runIsoDeploy({
             deploymentId: deployment.id,
+            deploymentConfig,
             conn,
             body,
             image,
@@ -360,7 +370,6 @@ export async function POST(req: Request) {
             `/storage/${encodeURIComponent(body.storage)}`
           )
           const storageType = storageConfig?.type || "dir"
-          let downloadStorage = body.storage
 
           // Reject storages that don't support VM disk images (e.g. CephFS)
           if (!supportsVmDisks(storageType)) {
@@ -385,50 +394,21 @@ export async function POST(req: Request) {
             )
           }
 
-          // Block-based storages (zfspool, lvm, lvmthin, rbd...) do not support download-url.
-          // Use a file-based storage as staging area for the download, then import-from it.
-          if (!isFileBasedStorage(storageType)) {
-            const nodeStorages = await pveFetch<any[]>(
-              conn,
-              `/nodes/${encodeURIComponent(body.node)}/storage`
-            ).catch(() => [])
-
-            const staging = (nodeStorages || []).find((s: any) => isFileBasedStorage(s.type) && s.enabled !== 0)
-            if (!staging) {
-              throw new Error(
-                `Storage '${body.storage}' is type '${storageType}' which does not support direct image download. ` +
-                `No file-based storage (dir/NFS/CIFS) found on node '${body.node}' to use as staging area.`
-              )
-            }
-            downloadStorage = staging.storage
-          }
-
-          // Ensure download storage has 'import' content type enabled
-          if (downloadStorage !== body.storage) {
-            const dlStorageConfig = await pveFetch<any>(
-              conn,
-              `/storage/${encodeURIComponent(downloadStorage)}`
+          const nodeStorages = await pveFetch<any[]>(
+            conn,
+            `/nodes/${encodeURIComponent(body.node)}/storage`,
+          )
+          const downloadStorage = selectDownloadStorage(nodeStorages, body.storage, tenantWritableStorages)
+          if (!downloadStorage) {
+            throw new Error(
+              `No active, writable file-based storage with Import content enabled is available on node '${body.node}'. ` +
+              `Ask your Proxmox administrator to configure an import storage and, for a tenant, allow it in the vDC. ` +
+              `ProxCenter does not change storage content types automatically.`,
             )
-            const dlContent = String(dlStorageConfig?.content || "")
-            if (!dlContent.split(",").map((s: string) => s.trim()).includes("import")) {
-              const newContent = dlContent ? `${dlContent},import` : "import"
-              await pveFetch<any>(
-                conn,
-                `/storage/${encodeURIComponent(downloadStorage)}`,
-                { method: "PUT", body: new URLSearchParams({ content: newContent }) }
-              )
-            }
-          } else {
-            const currentContent = String(storageConfig?.content || "")
-            if (!currentContent.split(",").map((s: string) => s.trim()).includes("import")) {
-              const newContent = currentContent ? `${currentContent},import` : "import"
-              await pveFetch<any>(
-                conn,
-                `/storage/${encodeURIComponent(body.storage)}`,
-                { method: "PUT", body: new URLSearchParams({ content: newContent }) }
-              )
-            }
           }
+          await updateDeployment(deployment.id, "downloading", {
+            config: { ...deploymentConfig, downloadStorage },
+          })
 
           // Check if image already exists on download storage
           const storageContents = await pveFetch<any[]>(
@@ -450,11 +430,7 @@ export async function POST(req: Request) {
               "verify-certificates": "0",
             })
 
-            const downloadResult = await pveFetch<any>(
-              conn,
-              `/nodes/${encodeURIComponent(body.node)}/storage/${encodeURIComponent(downloadStorage)}/download-url`,
-              { method: "POST", body: downloadParams }
-            )
+            const downloadResult = await downloadToStorage(conn, body.node, downloadStorage, downloadParams)
 
             // If download returned a task UPID, wait for it to complete
             if (downloadResult) {
@@ -532,8 +508,8 @@ export async function POST(req: Request) {
             const msg = err instanceof IpamExhaustedError
               ? `Subnet ${subnet.cidr} is full — no free IP available`
               : `IPAM allocation failed: ${err?.message ?? String(err)}`
-            await updateDeployment(deployment.id, "failed", { errorMessage: msg })
-            throw err
+            // The outer catch persists the original IPAM message in Deployment.error.
+            throw new Error(msg)
           }
         }
 
@@ -687,6 +663,7 @@ export async function POST(req: Request) {
  */
 async function runIsoDeploy(args: {
   deploymentId: string
+  deploymentConfig: Record<string, unknown>
   conn: any
   body: any
   image: any
@@ -703,12 +680,12 @@ async function runIsoDeploy(args: {
    *  throws (waitForTask timeout, audit failure, etc.). */
   onIpamAllocation?: (alloc: { subnetId: string; ip: string }) => void
 }): Promise<void> {
-  const { deploymentId, conn, body, image, isCustom, sourceType, volumeId, vdcInfo, dataDiskQosSuffix, onIpamAllocation } = args
+  const { deploymentId, deploymentConfig, conn, body, image, isCustom, sourceType, volumeId, vdcInfo, dataDiskQosSuffix, onIpamAllocation } = args
   const hw = body.hardware
   const isoStorage: string = body.isoStorage
 
   // ── Step 1: Resolve / download the ISO ──
-  await updateDeployment(deploymentId, "downloading")
+  await updateDeployment(deploymentId, "downloading", { config: { ...deploymentConfig, downloadStorage: isoStorage } })
 
   let isoVolume: string
 
@@ -754,11 +731,7 @@ async function runIsoDeploy(args: {
         storage: isoStorage,
         "verify-certificates": "0",
       })
-      const downloadResult = await pveFetch<any>(
-        conn,
-        `/nodes/${encodeURIComponent(body.node)}/storage/${encodeURIComponent(isoStorage)}/download-url`,
-        { method: "POST", body: downloadParams }
-      )
+      const downloadResult = await downloadToStorage(conn, body.node, isoStorage, downloadParams)
       if (downloadResult) {
         await updateDeployment(deploymentId, "downloading", { taskUpid: String(downloadResult) })
         await waitForTask(conn, body.node, String(downloadResult))

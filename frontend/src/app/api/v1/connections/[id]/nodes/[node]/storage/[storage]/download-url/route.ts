@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 
-import { pveFetch } from "@/lib/proxmox/client"
+import { downloadToStorage, PveDownloadPermissionError } from "@/lib/proxmox/download"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { guardTenantStorageWrite, tenantUploadFilename } from "@/lib/vdc/scope"
@@ -47,15 +47,7 @@ export async function POST(
       "verify-certificates": "0",
     })
 
-    const result = await pveFetch<any>(
-      conn,
-      `/nodes/${encodeURIComponent(node)}/storage/${encodeURIComponent(storage)}/download-url`,
-      {
-        method: "POST",
-        body: params.toString(),
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      }
-    )
+    const result = await downloadToStorage(conn, node, storage, params)
 
     const { audit } = await import("@/lib/audit")
     await audit({
@@ -69,6 +61,6 @@ export async function POST(
     return NextResponse.json({ success: true, data: result })
   } catch (e: any) {
     console.error("Error downloading URL to storage:", e)
-    return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
+    return NextResponse.json({ error: e?.message || String(e) }, { status: e instanceof PveDownloadPermissionError ? 403 : 500 })
   }
 }

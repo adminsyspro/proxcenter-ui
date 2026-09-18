@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import {
+  Alert,
   Box,
   Chip,
   CircularProgress,
@@ -40,10 +41,12 @@ function getLogColor(type: string) {
 export default function DeploymentProgress({ deploymentId, onComplete }: DeploymentProgressProps) {
   const t = useTranslations()
   const [status, setStatus] = useState<string>('pending')
+  const [currentStep, setCurrentStep] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [connectionId, setConnectionId] = useState<string | undefined>()
   const [node, setNode] = useState<string | undefined>()
   const [taskUpid, setTaskUpid] = useState<string | undefined>()
+  const [downloadStorage, setDownloadStorage] = useState<string | undefined>()
   const [showLogs, setShowLogs] = useState(false)
   const logsEndRef = useRef<HTMLDivElement>(null)
   const logsContainerRef = useRef<HTMLDivElement>(null)
@@ -79,10 +82,12 @@ export default function DeploymentProgress({ deploymentId, onComplete }: Deploym
         if (!active || !deployment) return
 
         setStatus(deployment.status)
+        setCurrentStep(deployment.currentStep ?? null)
         setError(deployment.error)
         setConnectionId(deployment.connectionId)
         setNode(deployment.node)
         setTaskUpid(deployment.taskUpid || undefined)
+        setDownloadStorage(deployment.config?.downloadStorage)
 
         if (deployment.status === 'completed') {
           onComplete('completed')
@@ -116,7 +121,13 @@ export default function DeploymentProgress({ deploymentId, onComplete }: Deploym
     setAutoScroll(scrollHeight - scrollTop - clientHeight < 100)
   }
 
-  const currentStepIndex = STEPS.indexOf(status as any)
+  // `status` reads "failed", which is not one of STEPS, so anchoring the
+  // stepper on it left -1 and no step to mark — the reason never reached the
+  // operator (#967). `currentStep` carries the step the deployment died on;
+  // rows written before that fix stored "failed" there too and still land on
+  // -1, which the banner below covers.
+  const stepAnchor = currentStep && STEPS.includes(currentStep as any) ? currentStep : status
+  const currentStepIndex = STEPS.indexOf(stepAnchor as any)
 
   // Step-based progress (same logic as before, always visible)
   const stepProgress = status === 'completed'
@@ -144,6 +155,14 @@ export default function DeploymentProgress({ deploymentId, onComplete }: Deploym
           sx={{ height: 8, borderRadius: 4 }}
         />
       </Box>
+
+      {status === 'failed' && error && <Alert severity="error">{error}</Alert>}
+
+      {downloadStorage && (
+        <Typography variant="body2" color="text.secondary">
+          {t('templates.deploy.target.imageStorage')}: {downloadStorage}
+        </Typography>
+      )}
 
       {/* Step indicators */}
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
@@ -199,11 +218,6 @@ export default function DeploymentProgress({ deploymentId, onComplete }: Deploym
                   >
                     {t(`templates.deploy.progress.${step}` as any)}
                   </Typography>
-                  {isFailed && error && (
-                    <Typography variant="caption" color="error">
-                      {error}
-                    </Typography>
-                  )}
                 </Box>
               </Box>
 

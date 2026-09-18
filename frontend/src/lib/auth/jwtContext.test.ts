@@ -15,6 +15,7 @@ vi.mock('@/lib/db/prisma', () => ({
 }))
 
 import { loadJwtContext } from './jwtContext'
+import { sessionRowSelect } from './sessions'
 
 afterEach(() => vi.clearAllMocks())
 
@@ -26,6 +27,19 @@ const sessionRow = {
 }
 
 describe('loadJwtContext', () => {
+  it('keeps the multi-KB idToken off the per-request session read', async () => {
+    userFindUniqueMock.mockResolvedValue({
+      enabled: true, totpEnabled: true, require2faEnrollment: false,
+      tenants: [], sessions: [sessionRow],
+    })
+
+    await loadJwtContext('u1', 'sid1')
+
+    const sessions = userFindUniqueMock.mock.calls[0][0].select.sessions
+    expect(sessions).toEqual({ where: { id: 'sid1' }, take: 1, select: sessionRowSelect })
+    expect(sessions.select).not.toHaveProperty('idToken')
+  })
+
   it('reads enabled, tenant, 2FA and the session row in ONE query for an enrolled user', async () => {
     userFindUniqueMock.mockResolvedValue({
       enabled: true, totpEnabled: true, require2faEnrollment: false,

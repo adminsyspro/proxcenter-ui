@@ -379,6 +379,11 @@ model Session {
   revokedAt  DateTime? @map("revoked_at")
   ipAddress  String?   @map("ip_address")
   userAgent  String?   @map("user_agent")
+  // OIDC id_token, kept only to build the RP-initiated logout hint. It lives
+  // on the row rather than in the session cookie: carrying group claims it is
+  // several KB, and the oversized cookie is rejected on the HTTP/1.1 upgrade
+  // the consoles open, while HTTP/2 requests carrying it sail through.
+  idToken    String?   @map("id_token")
 
   @@index([userId])
   @@index([lastSeenAt])

@@ -610,17 +610,20 @@ export const authOptions: NextAuthOptions = {
         token.role = user.role
         token.authProvider = account?.provider === 'oidc' ? 'oidc' : user.authProvider
 
-        // Kept for RP-initiated logout: without an id_token_hint the IdP either
-        // refuses to end its own session or asks the user to confirm, and the
-        // local sign-out alone leaves the SSO session standing. Only stored for
-        // OIDC logins, so a local or LDAP session's cookie is unchanged.
-        if (account?.provider === 'oidc' && account.id_token) {
-          token.idToken = account.id_token
-        }
-
         try {
           const origin = await requestOrigin()
-          token.sid = await createSession({ userId: user.id, ...origin })
+          // The id_token is kept for RP-initiated logout: without an
+          // id_token_hint the IdP either refuses to end its own session or asks
+          // the user to confirm, and the local sign-out alone leaves the SSO
+          // session standing. It goes on the session ROW, never in the cookie:
+          // with group claims it weighs several KB, and a cookie that size is
+          // rejected on the HTTP/1.1 upgrade the consoles open (the same
+          // request rides HTTP/2 everywhere else, where HPACK hides it).
+          token.sid = await createSession({
+            userId: user.id,
+            ...origin,
+            idToken: account?.provider === 'oidc' ? (account.id_token ?? null) : null,
+          })
           token.authAt = Date.now()
         } catch (e: any) {
           // No sid means the next read-path evaluation refuses this token, so

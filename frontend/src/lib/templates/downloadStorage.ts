@@ -17,5 +17,5 @@ export function selectDownloadStorage(storages: NodeStorage[], target: string, w
     String(s.content || '').split(',').some(c => c.trim() === 'import'),
   )
   if (candidates.some(s => s.storage === target)) return target
-  return candidates.map(s => s.storage).sort()[0] ?? null
+  return candidates.map(s => s.storage).sort((a, b) => a.localeCompare(b))[0] ?? null
 }

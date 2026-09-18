@@ -21,13 +21,15 @@ const pveFetchMock = vi.fn<(...args: any[]) => Promise<any>>()
 const customImageFindUniqueMock = vi.fn<(...args: any[]) => Promise<any>>()
 const getCurrentTenantIdMock = vi.fn<() => Promise<string>>()
 
+const deploymentUpdateMock = vi.fn<(...args: any[]) => Promise<any>>()
+
 const blueprintFindUniqueMock = vi.fn<(...args: any[]) => Promise<any>>()
 
 vi.mock('next-auth', () => ({ getServerSession: vi.fn(async () => null) }))
 vi.mock('@/lib/tenant', () => ({
   getSessionPrisma: async () => ({
     customImage: { findUnique: customImageFindUniqueMock },
-    deployment: { create: vi.fn(async () => ({ id: 'dep-1' })), update: vi.fn(async () => ({})) },
+    deployment: { create: vi.fn(async () => ({ id: 'dep-1' })), update: deploymentUpdateMock },
     blueprint: { create: vi.fn(async () => ({})), findUnique: (...a: any[]) => blueprintFindUniqueMock(...a) },
   }),
   getCurrentTenantId: () => getCurrentTenantIdMock(),
@@ -41,7 +43,6 @@ vi.mock('@/lib/proxmox/client', () => ({ pveFetch: pveFetchMock }))
 const getImageBySlugMock = vi.fn<(...args: any[]) => any>()
 vi.mock('@/lib/templates/cloudImages', () => ({ customImageToCloudImage: vi.fn() }))
 vi.mock('@/lib/templates/catalogStore', () => ({ resolveBuiltInImage: getImageBySlugMock }))
-vi.mock('@/lib/proxmox/storage', () => ({ isFileBasedStorage: () => true, supportsVmDisks: () => true }))
 const resolveVdcForTenantMock = vi.fn<(...args: any[]) => Promise<any>>()
 const checkVdcQuotaMock = vi.fn<(...args: any[]) => Promise<any>>()
 vi.mock('@/lib/vdc/quota', () => ({ resolveVdcForTenant: resolveVdcForTenantMock, checkVdcQuota: checkVdcQuotaMock }))
@@ -89,8 +90,11 @@ const baseBody = {
   hardware: { cores: 1, sockets: 1, memory: 512, ostype: 'l26', cpu: 'host', scsihw: 'virtio-scsi-pci', diskSize: '10G', networkModel: 'virtio', networkBridge: 'vmbr0' },
 }
 
-beforeEach(() => {
+beforeEach(async () => {
+  const { resolveSubnetForBridge } = await import('@/lib/vdc/vnets')
   afterCbs.length = 0
+  deploymentUpdateMock.mockReset().mockResolvedValue({})
+  vi.mocked(resolveSubnetForBridge).mockReset().mockResolvedValue(null)
   checkPermissionMock.mockReset().mockResolvedValue(null)
   getConnectionByIdMock.mockReset().mockResolvedValue({ id: 'conn-1' })
   pveFetchMock.mockReset()
@@ -112,6 +116,11 @@ function stubPveFetchForDeploy() {
   pveFetchMock.mockReset()
   pveFetchMock.mockImplementation(async (_conn: any, path: string, opts?: any) => {
     const method = opts?.method
+    if (path.startsWith('/access/permissions?')) {
+      const key = new URLSearchParams(path.split('?')[1]).get('path')!
+      return { [key]: { 'Sys.Audit': 1, 'Sys.Modify': 1, 'Datastore.AllocateTemplate': 1 } }
+    }
+    if (path === '/nodes/pve1/storage') return [{ storage: 'local-lvm', type: 'dir', content: 'images,iso,import', active: 1, enabled: 1 }]
     if (/^\/storage\/[^/]+$/.test(path) && !method) return { type: 'dir', content: 'images,iso,import' }
     if (/\/content\?content=(import|iso)$/.test(path)) return []
     if (/\/download-url$/.test(path) && method === 'POST') return 'UPID:download'
@@ -475,6 +484,11 @@ describe('POST templates/deploy: vDC compute policy (#893)', () => {
     pveFetchMock.mockReset()
     pveFetchMock.mockImplementation(async (_conn: any, path: string, opts?: any) => {
       if (path === '/nodes/pve1/capabilities/qemu/cpu') return [{ name: 'gold', custom: 1 }, { name: 'silver', custom: 1 }, { name: 'host', custom: 0 }]
+      if (path.startsWith('/access/permissions?')) {
+        const key = new URLSearchParams(path.split('?')[1]).get('path')!
+        return { [key]: { 'Sys.Audit': 1, 'Sys.Modify': 1, 'Datastore.AllocateTemplate': 1 } }
+      }
+      if (path === '/nodes/pve1/storage') return [{ storage: 'local-lvm', type: 'dir', content: 'images,iso,import', active: 1, enabled: 1 }]
       if (/^\/storage\/[^/]+$/.test(path) && !opts?.method) return { type: 'dir', content: 'images,iso,import' }
       if (/\/content\?content=(import|iso)$/.test(path)) return []
       if (/\/download-url$/.test(path) && opts?.method === 'POST') return 'UPID:download'
@@ -511,5 +525,83 @@ describe('POST templates/deploy: vDC compute policy (#893)', () => {
     const res = await deploy(baseBody)
     expect(res.status).toBe(400)
     expect((await readJson<{ error: string }>(res))?.error).toBe('The vDC compute policy allows no CPU model on this cluster.')
+  })
+})
+
+describe('template download regressions (#967)', () => {
+  beforeEach(() => {
+    getCurrentTenantIdMock.mockResolvedValue('default')
+    getImageBySlugMock.mockReturnValue({ slug: 'debian-12', format: 'qcow2', downloadUrl: 'https://image.test/debian.qcow2' })
+    stubPveFetchForDeploy()
+  })
+
+  async function deploy(body = baseBody) {
+    const POST = await loadPost()
+    const response = await callRoute(POST, { body })
+    expect(response.status).toBe(200)
+    await runAfters()
+  }
+  const finalUpdate = () => deploymentUpdateMock.mock.calls.at(-1)?.[0].data
+  const mutations = () => pveFetchMock.mock.calls.filter(([, , options]) => options?.method)
+
+  it('records completion time and missing network rights on a failed download without writing to PVE', async () => {
+    const original = pveFetchMock.getMockImplementation()!
+    pveFetchMock.mockImplementation(async (...args) => {
+      if (args[1].startsWith('/access/permissions?')) {
+        const path = new URLSearchParams(args[1].split('?')[1]).get('path')!
+        return { [path]: { 'Datastore.AllocateTemplate': 1, 'Sys.Audit': 1 } }
+      }
+      return original(...args)
+    })
+    await deploy()
+    expect(finalUpdate()).toMatchObject({ status: 'failed', completedAt: expect.any(Date), error: expect.stringContaining('Sys.AccessNetwork on /nodes/pve1') })
+    expect(mutations()).toEqual([])
+  })
+
+  it('does not change storage configuration when no import storage exists', async () => {
+    const original = pveFetchMock.getMockImplementation()!
+    pveFetchMock.mockImplementation(async (...args) => {
+      if (args[1] === '/nodes/pve1/storage') return [{ storage: 'backup', type: 'nfs', content: 'backup', active: 1, enabled: 1 }]
+      return original(...args)
+    })
+    await deploy()
+    expect(finalUpdate()).toMatchObject({ status: 'failed', error: expect.stringContaining('Import content enabled') })
+    expect(mutations()).toEqual([])
+  })
+
+  it('reuses a cached image without needing network privileges and exposes the selected storage', async () => {
+    const original = pveFetchMock.getMockImplementation()!
+    pveFetchMock.mockImplementation(async (...args) => {
+      if (args[1].endsWith('/content?content=import')) return [{ volid: 'local-lvm:import/debian.qcow2' }]
+      return original(...args)
+    })
+    await deploy()
+    expect(pveFetchMock.mock.calls.some(([, path]) => path.startsWith('/access/permissions?') || path.endsWith('/download-url'))).toBe(false)
+    expect(qemuCreateParams().get('scsi0')).toContain('import-from=local-lvm:import/debian.qcow2')
+    expect(deploymentUpdateMock).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ config: expect.objectContaining({ downloadStorage: 'local-lvm' }) }) }))
+    expect(finalUpdate()).toMatchObject({ status: 'completed', completedAt: expect.any(Date) })
+  })
+
+  it('uses the same preflight for installer ISO downloads', async () => {
+    getImageBySlugMock.mockReturnValue({ slug: 'installer', format: 'iso', downloadUrl: 'https://image.test/installer.iso' })
+    const original = pveFetchMock.getMockImplementation()!
+    pveFetchMock.mockImplementation(async (...args) => {
+      if (args[1].startsWith('/access/permissions?')) return {}
+      return original(...args)
+    })
+    await deploy({ ...baseBody, isoStorage: 'iso-store' } as typeof baseBody)
+    expect(finalUpdate()).toMatchObject({ status: 'failed', error: expect.stringContaining('/storage/iso-store'), completedAt: expect.any(Date) })
+    expect(mutations()).toEqual([])
+  })
+
+  it('keeps IPAM exhaustion in Deployment.error instead of sending errorMessage to Prisma', async () => {
+    const { resolveSubnetForBridge } = await import('@/lib/vdc/vnets')
+    const { allocateIp, IpamExhaustedError } = await import('@/lib/vdc/ipam')
+    vi.mocked(resolveSubnetForBridge).mockResolvedValue({ subnetId: 'subnet-1', cidr: '10.1.0.0/30', dnsServers: [], gateway: '10.1.0.1', pveName: 'vnet1', pvePoolName: 'pool' } as any)
+    vi.mocked(allocateIp).mockRejectedValue(new IpamExhaustedError('full'))
+    await deploy()
+    expect(finalUpdate()).toMatchObject({ status: 'failed', error: expect.stringContaining('Subnet 10.1.0.0/30 is full'), completedAt: expect.any(Date) })
+    expect(deploymentUpdateMock.mock.calls.every(([update]) => !('errorMessage' in update.data))).toBe(true)
+    expect(qemuCreateParams()).toBeUndefined()
   })
 })

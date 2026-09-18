@@ -4970,6 +4970,7 @@
         "connection": "Conexión",
         "node": "Nodo",
         "storage": "Almacenamiento",
+        "imageStorage": "Almacenamiento de la imagen",
         "vmid": "ID de VM",
         "vmName": "Nombre de VM",
         "available": "disponible",

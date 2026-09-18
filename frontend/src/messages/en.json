@@ -4970,6 +4970,7 @@
         "connection": "Connection",
         "node": "Node",
         "storage": "Storage",
+        "imageStorage": "Image storage",
         "vmid": "VM ID",
         "vmName": "VM Name",
         "available": "available",

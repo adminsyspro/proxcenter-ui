@@ -44,6 +44,7 @@ export default function DeploymentProgress({ deploymentId, onComplete }: Deploym
   const [connectionId, setConnectionId] = useState<string | undefined>()
   const [node, setNode] = useState<string | undefined>()
   const [taskUpid, setTaskUpid] = useState<string | undefined>()
+  const [downloadStorage, setDownloadStorage] = useState<string | undefined>()
   const [showLogs, setShowLogs] = useState(false)
   const logsEndRef = useRef<HTMLDivElement>(null)
   const logsContainerRef = useRef<HTMLDivElement>(null)
@@ -83,6 +84,7 @@ export default function DeploymentProgress({ deploymentId, onComplete }: Deploym
         setConnectionId(deployment.connectionId)
         setNode(deployment.node)
         setTaskUpid(deployment.taskUpid || undefined)
+        setDownloadStorage(deployment.config?.downloadStorage)
 
         if (deployment.status === 'completed') {
           onComplete('completed')
@@ -144,6 +146,12 @@ export default function DeploymentProgress({ deploymentId, onComplete }: Deploym
           sx={{ height: 8, borderRadius: 4 }}
         />
       </Box>
+
+      {downloadStorage && (
+        <Typography variant="body2" color="text.secondary">
+          {t('templates.deploy.target.imageStorage')}: {downloadStorage}
+        </Typography>
+      )}
 
       {/* Step indicators */}
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>

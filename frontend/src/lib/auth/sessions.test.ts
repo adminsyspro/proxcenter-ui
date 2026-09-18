@@ -1,9 +1,10 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 
-const { createMock, findUniqueMock, findManyMock, countMock, updateManyMock, deleteManyMock } =
+const { createMock, findUniqueMock, findFirstMock, findManyMock, countMock, updateManyMock, deleteManyMock } =
   vi.hoisted(() => ({
     createMock: vi.fn(),
     findUniqueMock: vi.fn(),
+    findFirstMock: vi.fn(),
     findManyMock: vi.fn(),
     countMock: vi.fn(),
     updateManyMock: vi.fn(),
@@ -15,6 +16,7 @@ vi.mock('@/lib/db/prisma', () => ({
     session: {
       create: createMock,
       findUnique: findUniqueMock,
+      findFirst: findFirstMock,
       findMany: findManyMock,
       count: countMock,
       updateMany: updateManyMock,
@@ -30,6 +32,8 @@ import {
   createSession,
   touchSession,
   listSessions,
+  sessionIdToken,
+  sessionRowSelect,
   revokeSession,
   revokeAllSessions,
   revokeEverySession,
@@ -41,6 +45,7 @@ import {
 
 afterEach(() => {
   vi.clearAllMocks()
+  vi.useRealTimers()
 })
 
 const NOW = new Date('2026-08-03T12:00:00.000Z')
@@ -161,6 +166,19 @@ describe('aliveWhere and isDeadPredicate agree with evaluateSession at the exact
 })
 
 describe('createSession', () => {
+  it('stores the OIDC id_token on the session row for sign-out', async () => {
+    createMock.mockResolvedValue({})
+    const idToken = 'header.' + 'x'.repeat(8000) + '.signature'
+    await createSession({ userId: 'u1', idToken })
+    expect(createMock).toHaveBeenCalledWith({ data: expect.objectContaining({ userId: 'u1', idToken }) })
+  })
+
+  it.each([undefined, null])('stores null when no id_token is supplied (%s)', async (idToken) => {
+    createMock.mockResolvedValue({})
+    await createSession({ userId: 'u1', ...(idToken === undefined ? {} : { idToken }) })
+    expect(createMock).toHaveBeenCalledWith({ data: expect.objectContaining({ idToken: null }) })
+  })
+
   it('mints a 32-char id and stores both timestamps', async () => {
     createMock.mockResolvedValue({})
     const sid = await createSession({ userId: 'u1', ipAddress: '1.2.3.4', userAgent: 'UA' })
@@ -248,6 +266,14 @@ describe('revocation', () => {
 })
 
 describe('listSessions', () => {
+  it('excludes idToken from the select so session-list JSON cannot leak it', async () => {
+    findManyMock.mockResolvedValue([row()])
+    await expect(listSessions('u1')).resolves.toEqual([row()])
+    const select = findManyMock.mock.calls[0][0].select
+    expect(select).toEqual(sessionRowSelect)
+    expect(select).not.toHaveProperty('idToken')
+  })
+
   it('scopes to userId and the alive predicate, ordered by lastSeenAt desc', async () => {
     findManyMock.mockResolvedValue([])
     await listSessions('u1')
@@ -257,6 +283,26 @@ describe('listSessions', () => {
     expect(arg.where.lastSeenAt).toBeTruthy()
     expect(arg.where.createdAt).toBeTruthy()
     expect(arg.orderBy).toEqual({ lastSeenAt: 'desc' })
+  })
+})
+
+describe('sessionIdToken', () => {
+  it.each([
+    { name: 'a live OIDC row', stored: { idToken: 'the.row.token' }, expected: 'the.row.token' },
+    { name: 'a missing row', stored: null, expected: null },
+    { name: 'a row without an OIDC token', stored: { idToken: null }, expected: null },
+  ])('returns the hint or null for $name', async ({ stored, expected }) => {
+    vi.useFakeTimers()
+    vi.setSystemTime(NOW)
+    findFirstMock.mockResolvedValue(stored)
+
+    await expect(sessionIdToken('sid1')).resolves.toBe(expected)
+
+    // Revoked, idle and over-cap sessions have nothing left to log out of.
+    expect(findFirstMock).toHaveBeenCalledExactlyOnceWith({
+      where: { id: 'sid1', ...aliveWhere(NOW) },
+      select: { idToken: true },
+    })
   })
 })
 

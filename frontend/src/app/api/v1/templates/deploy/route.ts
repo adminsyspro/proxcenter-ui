@@ -36,7 +36,10 @@ async function updateDeployment(id: string, status: DeploymentStatus, extra: Rec
     where: { id },
     data: {
       status,
-      currentStep: status,
+      // A failure keeps the step it died on. Overwriting `currentStep` with
+      // "failed" — a value that is not a step — left the progress stepper with
+      // nothing to mark, so the operator saw a red bar and no reason (#967).
+      ...(status === "failed" ? {} : { currentStep: status }),
       ...((status === "completed" || status === "failed") ? { completedAt: new Date() } : {}),
       ...extra,
     },

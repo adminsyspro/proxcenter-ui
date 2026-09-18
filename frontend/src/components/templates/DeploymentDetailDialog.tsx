@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import {
+  Alert,
   Box,
   Button,
   Chip,
@@ -145,7 +146,12 @@ export default function DeploymentDetailDialog({ open, deployment, onClose }: De
 
   if (!deployment) return null
 
-  const currentStepIndex = STEPS.indexOf(deployment.status as any)
+  // Same anchor as DeploymentProgress: "failed" is not a step, so the stepper
+  // reads the step the deployment died on from `currentStep` (#967).
+  const stepAnchor = deployment.currentStep && STEPS.includes(deployment.currentStep as any)
+    ? deployment.currentStep
+    : deployment.status
+  const currentStepIndex = STEPS.indexOf(stepAnchor as any)
   const progress = taskData?.progress ?? 0
   const logs = taskData?.logs || []
 
@@ -272,6 +278,15 @@ export default function DeploymentDetailDialog({ open, deployment, onClose }: De
             </Box>
           </Box>
 
+          {/* Why it failed, directly under the status summary. Buried below the
+              stepper it read as a stray ribbon above the Close button, and an
+              Alert keeps it legible in both themes (#967). */}
+          {deployment.status === 'failed' && deployment.error && (
+            <Box sx={{ px: 3, pt: 2 }}>
+              <Alert severity="error">{deployment.error}</Alert>
+            </Box>
+          )}
+
           {typeof deployment.config === 'object' && deployment.config?.downloadStorage && (
             <Typography variant="body2" color="text.secondary" sx={{ px: 3, py: 1 }}>
               {t('templates.deploy.target.imageStorage')}: {deployment.config.downloadStorage}
@@ -377,13 +392,6 @@ export default function DeploymentDetailDialog({ open, deployment, onClose }: De
                   '& .MuiLinearProgress-bar': { borderRadius: 1 },
                 }}
               />
-            </Box>
-          )}
-
-          {/* Error display */}
-          {deployment.status === 'failed' && deployment.error && (
-            <Box sx={{ px: 3, py: 2, bgcolor: 'error.main', color: 'error.contrastText' }}>
-              <Typography variant="body2">{deployment.error}</Typography>
             </Box>
           )}
 

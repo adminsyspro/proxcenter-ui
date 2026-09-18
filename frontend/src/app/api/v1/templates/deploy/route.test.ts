@@ -558,6 +558,22 @@ describe('template download regressions (#967)', () => {
     expect(mutations()).toEqual([])
   })
 
+  it('keeps the step the deployment died on so the progress screen can show the reason', async () => {
+    const original = pveFetchMock.getMockImplementation()!
+    pveFetchMock.mockImplementation(async (...args) => {
+      if (args[1].startsWith('/access/permissions?')) {
+        const path = new URLSearchParams(args[1].split('?')[1]).get('path')!
+        return { [path]: { 'Datastore.AllocateTemplate': 1, 'Sys.Audit': 1 } }
+      }
+      return original(...args)
+    })
+    await deploy()
+    // Writing currentStep: 'failed' would erase the step and leave the stepper
+    // with nothing to mark, which is how the reason went missing (#967).
+    expect(finalUpdate()).not.toHaveProperty('currentStep')
+    expect(deploymentUpdateMock.mock.calls.map(([u]) => u.data.currentStep).filter(Boolean).at(-1)).toBe('downloading')
+  })
+
   it('does not change storage configuration when no import storage exists', async () => {
     const original = pveFetchMock.getMockImplementation()!
     pveFetchMock.mockImplementation(async (...args) => {

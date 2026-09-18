@@ -28,6 +28,22 @@ export interface SessionRow {
   userAgent: string | null
 }
 
+/**
+ * Every column of a session row EXCEPT `idToken`, which is a secret of several
+ * KB with exactly one reader (sessionIdToken, at sign-out). Reading a row
+ * without this select would put it on the request hot path and, worse, in the
+ * JSON of the routes that list a user their own sessions.
+ */
+export const sessionRowSelect = {
+  id: true,
+  userId: true,
+  createdAt: true,
+  lastSeenAt: true,
+  revokedAt: true,
+  ipAddress: true,
+  userAgent: true,
+} as const
+
 export type DeadReason = "missing" | "revoked" | "idle" | "absolute"
 export type SessionVerdict = { alive: true } | { alive: false; reason: DeadReason }
 
@@ -83,6 +99,8 @@ export async function createSession(args: {
   userId: string
   ipAddress?: string | null
   userAgent?: string | null
+  /** OIDC only: the id_token to hand back as `id_token_hint` at sign-out. */
+  idToken?: string | null
 }): Promise<string> {
   const id = nanoid(32)
   const now = new Date()
@@ -95,6 +113,7 @@ export async function createSession(args: {
       lastSeenAt: now,
       ipAddress: args.ipAddress ?? null,
       userAgent: args.userAgent ? args.userAgent.slice(0, USER_AGENT_MAX) : null,
+      idToken: args.idToken ?? null,
     },
   })
 
@@ -124,8 +143,22 @@ export async function touchSession(
 export async function listSessions(userId: string): Promise<SessionRow[]> {
   return prisma.session.findMany({
     where: { userId, ...aliveWhere() },
+    select: sessionRowSelect,
     orderBy: { lastSeenAt: "desc" },
   }) as unknown as Promise<SessionRow[]>
+}
+
+/**
+ * The id_token of an OIDC session, for the end-session hint. Scoped to a live
+ * row: a revoked or expired session has nothing left to log out of, and the
+ * caller falls back to the plain local sign-out.
+ */
+export async function sessionIdToken(sid: string): Promise<string | null> {
+  const row = await prisma.session.findFirst({
+    where: { id: sid, ...aliveWhere() },
+    select: { idToken: true },
+  })
+  return row?.idToken ?? null
 }
 
 export async function countActiveSessions(userId: string): Promise<number> {

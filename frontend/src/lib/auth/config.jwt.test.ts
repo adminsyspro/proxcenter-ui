@@ -31,7 +31,27 @@ const liveSession = {
 }
 
 describe('sign-in path (user present) — MUST NEVER THROW', () => {
-  it('mints a sid and authAt and records the request origin', async () => {
+  it('guards against oversized console cookies by storing the OIDC id_token only on the session row', async () => {
+    // Group claims can exceed the HTTP/1.1 WebSocket handshake header limit.
+    const idToken = 'header.' + 'x'.repeat(8000) + '.signature'
+    createSessionMock.mockResolvedValue('oidc-sid')
+    loadJwtContextMock.mockResolvedValue({ tenantId: 'default', mustEnroll2fa: false })
+    const token = await jwtCb({
+      token: {},
+      user: { id: 'u1', email: 'a@b', name: 'A', role: 'admin' },
+      account: { provider: 'oidc', id_token: idToken },
+    })
+
+    expect(token.sid).toBe('oidc-sid')
+    expect(token.authProvider).toBe('oidc')
+    expect(token).not.toHaveProperty('idToken')
+    expect(JSON.stringify(token)).not.toContain(idToken)
+    expect(createSessionMock).toHaveBeenCalledExactlyOnceWith({
+      userId: 'u1', ipAddress: '10.0.0.9', userAgent: 'UA/1', idToken,
+    })
+  })
+
+  it('mints a sid and authAt, records the origin and passes a null idToken for credentials', async () => {
     createSessionMock.mockResolvedValue('new-sid')
     const token = await jwtCb({
       token: {},
@@ -42,7 +62,7 @@ describe('sign-in path (user present) — MUST NEVER THROW', () => {
     expect(token.sid).toBe('new-sid')
     expect(typeof token.authAt).toBe('number')
     expect(createSessionMock).toHaveBeenCalledWith(
-      expect.objectContaining({ userId: 'u1', ipAddress: '10.0.0.9', userAgent: 'UA/1' }),
+      expect.objectContaining({ userId: 'u1', ipAddress: '10.0.0.9', userAgent: 'UA/1', idToken: null }),
     )
   })
 

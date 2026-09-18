@@ -12,6 +12,7 @@ import { getToken } from "next-auth/jwt"
 
 import { getOidcConfig } from "@/lib/auth/oidc"
 import { buildEndSessionUrl, discoverEndSessionEndpoint } from "@/lib/auth/oidcLogout"
+import { sessionIdToken } from "@/lib/auth/sessions"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -41,10 +42,18 @@ export async function GET(req: NextRequest) {
     const base = process.env.NEXTAUTH_URL || new URL(req.url).origin
     const postLogoutRedirectUri = new URL("/login", base).toString()
 
+    // The hint lives on the session row. `token.idToken` is the cookie-borne
+    // form this release moves away from: sessions opened before the upgrade
+    // still carry it, and would otherwise lose their IdP sign-out until they
+    // expire. Drop that fallback once no such cookie can be alive.
+    const idToken =
+      (token.sid ? await sessionIdToken(token.sid) : null) ??
+      (typeof token.idToken === "string" ? token.idToken : null)
+
     return NextResponse.json({
       url: buildEndSessionUrl({
         endSessionEndpoint,
-        idToken: typeof token.idToken === "string" ? token.idToken : null,
+        idToken,
         clientId: config.clientId,
         postLogoutRedirectUri,
       }),

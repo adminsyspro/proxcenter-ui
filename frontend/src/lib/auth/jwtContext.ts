@@ -12,7 +12,7 @@
 import { prisma } from "@/lib/db/prisma"
 import { DEFAULT_TENANT_ID } from "@/lib/tenant/constants"
 
-import type { SessionRow } from "./sessions"
+import { sessionRowSelect, type SessionRow } from "./sessions"
 
 const SUPER_ADMIN_ROLE_ID = "role_super_admin"
 
@@ -32,7 +32,7 @@ export async function loadJwtContext(userId: string, sid: string | null): Promis
       require2faEnrollment: true,
       tenants: { where: { isDefault: true }, select: { tenantId: true }, take: 1 },
       // Only ask for the session when the token actually carries one.
-      ...(sid ? { sessions: { where: { id: sid }, take: 1 } } : {}),
+      ...(sid ? { sessions: { where: { id: sid }, take: 1, select: sessionRowSelect } } : {}),
     },
   })
 

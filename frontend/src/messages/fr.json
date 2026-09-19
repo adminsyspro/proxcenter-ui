@@ -4974,7 +4974,11 @@
         "vmid": "ID de la VM",
         "vmName": "Nom de la VM",
         "available": "disponible",
-        "noFileStorage": "Aucun stockage file-based trouvé sur ce nœud. Le déploiement de templates nécessite un stockage file-based (dir, NFS, CIFS, etc.)."
+        "noFileStorage": "Aucun stockage file-based trouvé sur ce nœud. Le déploiement de templates nécessite un stockage file-based (dir, NFS, CIFS, etc.).",
+        "storageQuotaRemaining": "{remaining} Go de quota disponibles",
+        "storageQuotaUnlimited": "Aucun quota de stockage",
+        "storageQuotaUnavailable": "Quota indisponible",
+        "noWritableStorage": "Aucun stockage de disques VM accessible en écriture dans ce vDC."
       },
       "hardware": {
         "title": "Matériel",

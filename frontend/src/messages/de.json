@@ -4953,7 +4953,11 @@
         "vmid": "VM-ID",
         "vmName": "VM-Name",
         "available": "Verfügbar",
-        "noFileStorage": "Kein dateibasierter Storage auf diesem Node gefunden. Template-Bereitstellung benötigt dateibasierten Storage (Dir, NFS, CIFS usw.)."
+        "noFileStorage": "Kein dateibasierter Storage auf diesem Node gefunden. Template-Bereitstellung benötigt dateibasierten Storage (Dir, NFS, CIFS usw.).",
+        "storageQuotaRemaining": "{remaining} GB Kontingent verfügbar",
+        "storageQuotaUnlimited": "Kein Speicherkontingent",
+        "storageQuotaUnavailable": "Kontingentdaten nicht verfügbar",
+        "noWritableStorage": "In diesem vDC ist kein beschreibbarer Speicher für VM-Festplatten verfügbar."
       },
       "hardware": {
         "title": "Hardware",

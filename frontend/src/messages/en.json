@@ -4974,7 +4974,11 @@
         "vmid": "VM ID",
         "vmName": "VM Name",
         "available": "available",
-        "noFileStorage": "No file-based storage found on this node. Template deployment requires a file-based storage (dir, NFS, CIFS, etc.)."
+        "noFileStorage": "No file-based storage found on this node. Template deployment requires a file-based storage (dir, NFS, CIFS, etc.).",
+        "storageQuotaRemaining": "{remaining} GB quota remaining",
+        "storageQuotaUnlimited": "No storage quota",
+        "storageQuotaUnavailable": "Quota information unavailable",
+        "noWritableStorage": "No writable VM disk storage is available in this vDC."
       },
       "hardware": {
         "title": "Hardware",

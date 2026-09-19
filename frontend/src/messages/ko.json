@@ -4974,7 +4974,11 @@
         "vmid": "VM ID",
         "vmName": "VM 이름",
         "available": "사용 가능",
-        "noFileStorage": "이 노드에서 파일 기반 스토리지를 찾을 수 없습니다. 템플릿 배포에는 파일 기반 스토리지(dir, NFS, CIFS 등)가 필요합니다."
+        "noFileStorage": "이 노드에서 파일 기반 스토리지를 찾을 수 없습니다. 템플릿 배포에는 파일 기반 스토리지(dir, NFS, CIFS 등)가 필요합니다.",
+        "storageQuotaRemaining": "남은 할당량 {remaining} GB",
+        "storageQuotaUnlimited": "스토리지 할당량 제한 없음",
+        "storageQuotaUnavailable": "할당량 정보를 사용할 수 없습니다",
+        "noWritableStorage": "이 vDC에는 쓰기 가능한 VM 디스크 스토리지가 없습니다."
       },
       "hardware": {
         "title": "하드웨어",

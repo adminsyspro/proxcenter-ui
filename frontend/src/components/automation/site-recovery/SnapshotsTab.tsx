@@ -30,6 +30,7 @@ interface MirrorSnapshot extends SnapshotIdentity {
   vmid?: number
   job_id?: string
   is_orphan: boolean
+  orphan_reason?: string
   side?: 'source' | 'target'
 }
 
@@ -407,7 +408,7 @@ export default function SnapshotsTab({ connections, vmNamesByConn }: Props) {
                     <TableCell align='right'>{s.storage_engine === 'zfs' ? formatBytes(s.used_bytes) : '—'}</TableCell>
                     <TableCell>
                       {s.is_orphan ? (
-                        <Chip label={t('siteRecovery.snapshots.orphan')} size='small' color='warning' sx={{ height: 20, fontSize: '0.65rem' }} />
+                        <Chip label={t(s.orphan_reason === 'source_missing' ? 'siteRecovery.snapshots.sourceMissing' : 'siteRecovery.snapshots.orphan')} size='small' color='warning' sx={{ height: 20, fontSize: '0.65rem' }} />
                       ) : (
                         <Chip
                           label={s.side === 'source' ? t('siteRecovery.snapshots.activeSource') : s.side === 'target' ? t('siteRecovery.snapshots.activeTarget') : t('siteRecovery.snapshots.active')}
@@ -516,7 +517,7 @@ export default function SnapshotsTab({ connections, vmNamesByConn }: Props) {
                 <Typography variant='caption' color='text.secondary'>{t('siteRecovery.snapshots.status')}</Typography>
                 <Box sx={{ mt: 0.5 }}>
                   {detail.is_orphan ? (
-                    <Chip label={t('siteRecovery.snapshots.orphan')} size='small' color='warning' />
+                    <Chip label={t(detail.orphan_reason === 'source_missing' ? 'siteRecovery.snapshots.sourceMissing' : 'siteRecovery.snapshots.orphan')} size='small' color='warning' />
                   ) : (
                     <Chip
                       label={detail.side === 'source' ? t('siteRecovery.snapshots.activeSource') : detail.side === 'target' ? t('siteRecovery.snapshots.activeTarget') : t('siteRecovery.snapshots.active')}

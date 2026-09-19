@@ -4354,7 +4354,8 @@
         "target_health": "대상 스토리지 상태",
         "target_space": "대상 풀 용량",
         "target_storage": "대상 스토리지 가용성",
-        "reverse_ssh": "장애 복귀를 위한 역방향 SSH"
+        "reverse_ssh": "장애 복귀를 위한 역방향 SSH",
+        "backup_schedule": "백업 일정"
       }
     },
     "bandwidth": {
@@ -4380,7 +4381,7 @@
       "orphansOnly": "고아 스냅샷만",
       "deleteSelected": "선택한 {count}개 삭제",
       "cleanupOrphans": "고아 스냅샷 {count}개 정리",
-      "cleanupOrphansHint": "활성 복제 작업에 더 이상 속하지 않는 미러 스냅샷을 제거합니다",
+      "cleanupOrphansHint": "복제 작업 또는 원본 게스트가 더 이상 존재하지 않는 미러 스냅샷 제거",
       "cluster": "클러스터",
       "pool": "풀",
       "image": "이미지",
@@ -4408,7 +4409,8 @@
       "andMore": "{count}개 더",
       "engine": "엔진",
       "node": "노드",
-      "partialInventory": "일부 클러스터 또는 노드의 인벤토리를 가져올 수 없어 해당 스냅샷이 표시되지 않습니다."
+      "partialInventory": "일부 클러스터 또는 노드의 인벤토리를 가져올 수 없어 해당 스냅샷이 표시되지 않습니다.",
+      "sourceMissing": "원본 게스트 없음"
     },
     "status": {
       "all": "모든 상태",
@@ -4421,7 +4423,10 @@
       "pending": "대기 중",
       "noMatch": "일치하는 VM 없음",
       "partial": "부분 동기화",
-      "failedOver": "페일오버됨"
+      "failedOver": "페일오버됨",
+      "skipped": "건너뜀 (게스트 사용 중)",
+      "reseed_required": "재초기화 필요",
+      "source_missing": "원본 게스트 없음"
     },
     "planStatus": {
       "ready": "준비됨",
@@ -4505,7 +4510,12 @@
       "noJobsDesc": "Ceph RBD 또는 ZFS로 사이트 간에 VM을 복제하는 작업을 만드세요.",
       "noJobFound": "작업을 찾을 수 없음",
       "noJobFoundDesc": "필터를 수정하거나 새 복제 작업을 생성하세요.",
-      "selectJob": "상세 정보를 보려면 작업을 선택하세요."
+      "selectJob": "상세 정보를 보려면 작업을 선택하세요.",
+      "reseed": "재초기화",
+      "reseedTitle": "{guest} 재초기화?",
+      "reseedWarning": "이 게스트의 모든 DR 복원 지점이 영구적으로 삭제되고 복제본이 교체됩니다. Ceph RBD와 ZFS 모두에 적용됩니다. 이후 전체 복제가 대기열에 추가됩니다.",
+      "reseedQueued": "전체 복제가 대기열에 추가되었습니다.",
+      "reseedFailed": "전체 복제를 대기열에 추가하지 못했습니다."
     },
     "jobs": {
       "failedOver": "페일오버됨",

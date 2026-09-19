@@ -4354,7 +4354,8 @@
         "target_health": "Target storage health",
         "target_space": "Target pool capacity",
         "target_storage": "Target storage availability",
-        "reverse_ssh": "Reverse SSH for failback"
+        "reverse_ssh": "Reverse SSH for failback",
+        "backup_schedule": "Backup schedule"
       }
     },
     "bandwidth": {
@@ -4380,7 +4381,7 @@
       "orphansOnly": "Orphans only",
       "deleteSelected": "Delete {count} selected",
       "cleanupOrphans": "Clean up {count} orphans",
-      "cleanupOrphansHint": "Remove mirror snapshots that no longer belong to any active replication job",
+      "cleanupOrphansHint": "Remove mirror snapshots whose replication job or source guest no longer exists",
       "cluster": "Cluster",
       "pool": "Pool",
       "image": "Image",
@@ -4408,7 +4409,8 @@
       "andMore": "{count} more",
       "engine": "Engine",
       "node": "Node",
-      "partialInventory": "Some clusters or nodes could not be inventoried; their snapshots are not listed."
+      "partialInventory": "Some clusters or nodes could not be inventoried; their snapshots are not listed.",
+      "sourceMissing": "Source guest missing"
     },
     "status": {
       "all": "All statuses",
@@ -4421,7 +4423,10 @@
       "pending": "Pending",
       "noMatch": "No matching VMs",
       "partial": "Partially synced",
-      "failedOver": "Failed over"
+      "failedOver": "Failed over",
+      "skipped": "Skipped (guest busy)",
+      "reseed_required": "Re-seed required",
+      "source_missing": "Source guest missing"
     },
     "planStatus": {
       "ready": "Ready",
@@ -4505,7 +4510,12 @@
       "noJobsDesc": "Create a job to replicate VMs between sites using Ceph RBD or ZFS.",
       "noJobFound": "No job found",
       "noJobFoundDesc": "Modify your filters or create a new replication job.",
-      "selectJob": "Select a job to view details."
+      "selectJob": "Select a job to view details.",
+      "reseed": "Re-seed",
+      "reseedTitle": "Re-seed {guest}?",
+      "reseedWarning": "All DR restore points for this guest will be permanently removed and the replica will be replaced. This applies to both Ceph RBD and ZFS. A full replication will then be queued.",
+      "reseedQueued": "Full replication queued.",
+      "reseedFailed": "Failed to queue full replication."
     },
     "jobs": {
       "failedOver": "Failed over",

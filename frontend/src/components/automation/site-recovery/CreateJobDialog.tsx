@@ -211,6 +211,9 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
       target_node: targetNode, vm_ids: selectionMode === 'vms' ? selectedVMs : [],
       tags: selectionMode === 'tags' ? selectedTags : [], target_pool: targetPool, estimated_size_bytes: estimatedSizeBytes,
       vmid_prefix: vmidPrefix || 0,
+      rpo_target: scheduleValue.rpoTargetSeconds,
+      schedule_spec: scheduleValue.mode === 'scheduled' ? scheduleValue.scheduleSpec : null,
+      timezone: scheduleValue.timezone,
     }) : ''
 
   useEffect(() => {

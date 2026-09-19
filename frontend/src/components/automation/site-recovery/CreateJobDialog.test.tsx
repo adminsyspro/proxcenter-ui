@@ -405,6 +405,9 @@ describe('CreateJobDialog storage engines', () => {
     expect(screen.getByText('pve2 → dr1')).toBeInTheDocument()
     expect(screen.getByText('Reverse key is missing')).toBeInTheDocument()
     expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/replicable-vms?engine=zfs'))
+    const preflightCall = fetchMock.mock.calls.find(call => call[0].endsWith('/preflight'))
+    expect(JSON.parse(String(preflightCall?.[1]?.body))).toMatchObject({ rpo_target: 900, schedule_spec: null, timezone: expect.any(String) })
+
     await userEvent.click(screen.getByRole('button', { name: 'Create Job' }))
     expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ storage_engine: 'zfs', target_node: 'dr1', target_pool: 'local-zfs', vm_ids: [100] }))
   })
@@ -428,6 +431,22 @@ describe('CreateJobDialog storage engines', () => {
     await waitFor(() => expect(requests('/preflight')).toHaveLength(4))
     const latest = vi.mocked(fetch).mock.calls.filter(call => String(call[0]).endsWith('/preflight')).at(-1)
     expect(JSON.parse(String(latest?.[1]?.body))).toMatchObject({ storage_engine: 'zfs', target_node: 'dr2', vm_ids: [], tags: ['db'] })
+  })
+
+  it('invalidates preflight when the replication schedule changes', async () => {
+    const { fetchMock } = engineHarness()
+    await chooseEngineSource('zfs')
+    await userEvent.click(screen.getByRole('checkbox', { name: /guest-100/ }))
+    await chooseTarget()
+    const requests = () => fetchMock.mock.calls.filter(call => call[0].endsWith('/preflight'))
+    await waitFor(() => expect(requests()).toHaveLength(1))
+    await userEvent.click(screen.getByRole('button', { name: 'Scheduled' }))
+    expect(screen.getByRole('button', { name: 'Create Job' })).toBeDisabled()
+    await waitFor(() => expect(requests()).toHaveLength(2))
+    expect(JSON.parse(String(requests().at(-1)?.[1]?.body)).schedule_spec).toEqual({ mode: 'daily', times: ['03:00'], weekdays: [0, 1, 2, 3, 4, 5, 6] })
+    await userEvent.click(screen.getByRole('button', { name: 'Continuous (RPO)' }))
+    await waitFor(() => expect(requests()).toHaveLength(3))
+    expect(JSON.parse(String(requests().at(-1)?.[1]?.body))).toMatchObject({ schedule_spec: null, rpo_target: 900 })
   })
 
   it('keeps creation disabled after preflight fails', async () => {

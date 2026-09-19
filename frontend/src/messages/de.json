@@ -4333,7 +4333,8 @@
         "target_health": "Zustand des Zielspeichers",
         "target_space": "Kapazität Zielpool",
         "target_storage": "Verfügbarkeit des Zielspeichers",
-        "reverse_ssh": "Umgekehrte SSH-Verbindung für Failback"
+        "reverse_ssh": "Umgekehrte SSH-Verbindung für Failback",
+        "backup_schedule": "Backup-Zeitplan"
       }
     },
     "bandwidth": {
@@ -4359,7 +4360,7 @@
       "orphansOnly": "Nur Verwaiste",
       "deleteSelected": "{count} ausgewählte löschen",
       "cleanupOrphans": "{count} Verwaiste bereinigen",
-      "cleanupOrphansHint": "Mirror-Snapshots entfernen, die keinem aktiven Replikationsauftrag mehr zugeordnet sind",
+      "cleanupOrphansHint": "Mirror-Snapshots entfernen, deren Replikationsjob oder Quellgast nicht mehr existiert",
       "cluster": "Cluster",
       "pool": "Pool",
       "image": "Image",
@@ -4387,7 +4388,8 @@
       "andMore": "{count} weitere",
       "engine": "Engine",
       "node": "Knoten",
-      "partialInventory": "Einige Cluster oder Knoten konnten nicht inventarisiert werden; ihre Snapshots werden nicht aufgeführt."
+      "partialInventory": "Einige Cluster oder Knoten konnten nicht inventarisiert werden; ihre Snapshots werden nicht aufgeführt.",
+      "sourceMissing": "Quellgast fehlt"
     },
     "status": {
       "all": "Alle Status",
@@ -4400,7 +4402,10 @@
       "pending": "Ausstehend",
       "noMatch": "Keine passenden VMs",
       "partial": "Teilweise synchronisiert",
-      "failedOver": "Umgeschaltet"
+      "failedOver": "Umgeschaltet",
+      "skipped": "Übersprungen (Gast beschäftigt)",
+      "reseed_required": "Neuinitialisierung erforderlich",
+      "source_missing": "Quellgast fehlt"
     },
     "planStatus": {
       "ready": "Bereit",
@@ -4484,7 +4489,12 @@
       "noJobsDesc": "Erstellen Sie einen Job, um VMs mit Ceph RBD oder ZFS zwischen Standorten zu replizieren.",
       "noJobFound": "Kein Job gefunden",
       "noJobFoundDesc": "Ändern Sie Ihre Filter oder erstellen Sie einen neuen Replikationsjob.",
-      "selectJob": "Wählen Sie einen Job, um Details anzuzeigen."
+      "selectJob": "Wählen Sie einen Job, um Details anzuzeigen.",
+      "reseed": "Neu initialisieren",
+      "reseedTitle": "{guest} neu initialisieren?",
+      "reseedWarning": "Alle DR-Wiederherstellungspunkte dieses Gasts werden dauerhaft gelöscht und das Replikat wird ersetzt. Dies gilt für Ceph RBD und ZFS. Anschließend wird eine vollständige Replikation eingereiht.",
+      "reseedQueued": "Vollständige Replikation eingereiht.",
+      "reseedFailed": "Vollständige Replikation konnte nicht eingereiht werden."
     },
     "jobs": {
       "failedOver": "Umgeschaltet",

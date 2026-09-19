@@ -4354,7 +4354,8 @@
         "target_health": "Santé du stockage cible",
         "target_space": "Capacité pool cible",
         "target_storage": "Disponibilité du stockage cible",
-        "reverse_ssh": "SSH inverse pour le failback"
+        "reverse_ssh": "SSH inverse pour le failback",
+        "backup_schedule": "Planification des sauvegardes"
       }
     },
     "bandwidth": {
@@ -4380,7 +4381,7 @@
       "orphansOnly": "Orphelins uniquement",
       "deleteSelected": "Supprimer {count} sélectionné(s)",
       "cleanupOrphans": "Nettoyer {count} orphelin(s)",
-      "cleanupOrphansHint": "Supprimer les snapshots mirror qui ne correspondent à aucun job de réplication actif",
+      "cleanupOrphansHint": "Supprimer les snapshots miroir dont le job de réplication ou l’invité source n’existe plus",
       "cluster": "Cluster",
       "pool": "Pool",
       "image": "Image",
@@ -4408,7 +4409,8 @@
       "andMore": "{count} de plus",
       "engine": "Moteur",
       "node": "Nœud",
-      "partialInventory": "Certains clusters ou nœuds n'ont pas pu être inventoriés ; leurs snapshots ne sont pas listés."
+      "partialInventory": "Certains clusters ou nœuds n'ont pas pu être inventoriés ; leurs snapshots ne sont pas listés.",
+      "sourceMissing": "Invité source absent"
     },
     "status": {
       "all": "Tous les statuts",
@@ -4421,7 +4423,10 @@
       "pending": "En attente",
       "noMatch": "Aucune VM correspondante",
       "partial": "Partiellement synchronisé",
-      "failedOver": "Basculé"
+      "failedOver": "Basculé",
+      "skipped": "Ignoré (invité occupé)",
+      "reseed_required": "Réinitialisation requise",
+      "source_missing": "Invité source absent"
     },
     "planStatus": {
       "ready": "Prêt",
@@ -4505,7 +4510,12 @@
       "noJobsDesc": "Créez un job pour répliquer des VM entre sites avec Ceph RBD ou ZFS.",
       "noJobFound": "Aucun job trouvé",
       "noJobFoundDesc": "Modifiez vos filtres ou créez un nouveau job de réplication.",
-      "selectJob": "Sélectionnez un job pour voir les détails."
+      "selectJob": "Sélectionnez un job pour voir les détails.",
+      "reseed": "Réinitialiser",
+      "reseedTitle": "Réinitialiser {guest} ?",
+      "reseedWarning": "Tous les points de restauration DR de cet invité seront définitivement supprimés et la réplique sera remplacée. Cela concerne Ceph RBD et ZFS. Une réplication complète sera ensuite programmée.",
+      "reseedQueued": "Réplication complète mise en attente.",
+      "reseedFailed": "Impossible de programmer la réplication complète."
     },
     "jobs": {
       "failedOver": "Basculé",

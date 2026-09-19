@@ -1,4 +1,5 @@
 import { PERMISSIONS } from './index'
+import { isCdromMediaChange } from '@/lib/proxmox/cdrom'
 
 type ConfigPerm = typeof PERMISSIONS[keyof typeof PERMISSIONS]
 
@@ -54,8 +55,7 @@ export function classifyConfigKey(
   currentConfig?: Record<string, unknown>,
 ): ConfigPerm {
   if (DISK_RE.test(key)) {
-    const val = String(value ?? '')
-    if (val.includes('media=cdrom') || val === 'cdrom') return PERMISSIONS.VM_CONFIG_MEDIA
+    if (isCdromMediaChange(currentConfig?.[key], value)) return PERMISSIONS.VM_CONFIG_MEDIA
     return PERMISSIONS.VM_CONFIG_HARDWARE
   }
 
@@ -92,7 +92,8 @@ export function classifyConfigBody(
 
   for (const raw of [deleteStr, revertStr]) {
     for (const k of raw.split(',').map(s => s.trim()).filter(Boolean)) {
-      required.add(classifyConfigKey(k, currentConfig?.[k], currentConfig))
+      // Deleting/reverting a bus slot changes the device, not just its medium.
+      required.add(DISK_RE.test(k) ? PERMISSIONS.VM_CONFIG_HARDWARE : classifyConfigKey(k, currentConfig?.[k], currentConfig))
     }
   }
 

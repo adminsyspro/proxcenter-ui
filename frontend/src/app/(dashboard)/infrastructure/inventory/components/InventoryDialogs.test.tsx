@@ -60,7 +60,7 @@ vi.mock('@/contexts/ToastContext', () => ({
 }))
 
 vi.mock('@/contexts/RBACContext', () => ({
-  useRBAC: () => ({ isAdmin: true }),
+  useRBAC: () => ({ isAdmin: true, hasPermission: () => true }),
 }))
 
 vi.mock('@/contexts/TenantContext', () => ({

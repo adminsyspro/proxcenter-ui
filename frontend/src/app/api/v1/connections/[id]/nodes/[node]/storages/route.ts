@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
-import { checkPermission, buildNodeResourceId, PERMISSIONS } from "@/lib/rbac"
+import { checkPermission, buildNodeResourceId, getRequestGuestScopePerimeter, PERMISSIONS } from "@/lib/rbac"
 import { vmDiskFormats } from "@/lib/proxmox/storage"
 import { getCurrentTenantId } from "@/lib/tenant"
 import { getTenantInfrastructureScope, maskingScope } from "@/lib/tenant/infraScope"
@@ -28,7 +28,35 @@ export async function GET(
     const resourceId = buildNodeResourceId(id, node)
     const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW, "node", resourceId)
 
-    if (denied) return denied
+    if (denied) {
+      // A VM viewer needs the ISO sources for its CD/DVD picker, but this
+      // does not grant access to disk, backup or mixed-content pickers.
+      if (contentFilter !== 'iso') return denied
+      const vmDenied = await checkPermission(PERMISSIONS.VM_VIEW, "node", resourceId)
+      if (vmDenied) {
+        // Flat VM/tag/pool grants cannot match a node resource. Unlike the
+        // cluster-wide creation-wizard fallback, require a visible guest on
+        // this node before exposing its ISO sources.
+        const perimeter = await getRequestGuestScopePerimeter(id, PERMISSIONS.VM_VIEW)
+        if (!(perimeter?.restricted && perimeter.holdsPermission && perimeter.hasVisibleGuests && perimeter.nodes.has(node))) {
+          return vmDenied
+        }
+      }
+    }
+
+    const tenantId = await getCurrentTenantId()
+    // Provider/MSP retain their infrastructure visibility; iaas ISO sources
+    // must belong to this connection and node before resolving its client.
+    const scope = maskingScope(await getTenantInfrastructureScope(tenantId))
+    if (scope && contentFilter === 'iso') {
+      if (!scope.storagesByConnection.get(id)?.size) {
+        return NextResponse.json({ error: "Storage not accessible" }, { status: 403 })
+      }
+      const nodes = scope.nodesByConnection?.get(id)
+      if (nodes && nodes.size > 0 && !nodes.has(node)) {
+        return NextResponse.json({ error: "Node not accessible" }, { status: 403 })
+      }
+    }
 
     const conn = await getConnectionById(id)
 
@@ -73,9 +101,6 @@ return contents.includes(contentFilter)
     // tarballs on `local`, NFS-backup, …) are deliberately hidden so a
     // tenant can't dump a backup onto a non-isolated provider storage —
     // PBS namespace isolation is the only supported tenant backup path.
-    const tenantId = await getCurrentTenantId()
-    // provider + msp see the full cluster (maskingScope null); iaas = vDC slice.
-    const scope = maskingScope(await getTenantInfrastructureScope(tenantId))
     if (scope && storages) {
       const allowed = scope.storagesByConnection.get(id)
       // A storage reached only through an ISO library grant (#894) is an ISO

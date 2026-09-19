@@ -21,11 +21,37 @@ vi.mock('./index', () => ({
 import { classifyConfigBody, classifyConfigKey } from './configClassifier'
 
 describe('classifyConfigKey', () => {
-  it('files a CD-ROM drive under media and any other disk under hardware', () => {
-    expect(classifyConfigKey('ide2', 'local:iso/debian.iso,media=cdrom')).toBe('vm.config.media')
-    expect(classifyConfigKey('sata1', 'cdrom')).toBe('vm.config.media')
+  it('allows media changes only on an existing optical drive', () => {
+    for (const key of ['ide2', 'sata1', 'scsi3']) {
+      const current = { [key]: 'none,media=cdrom' }
+      expect(classifyConfigKey(key, 'local:iso/debian.iso,media=cdrom', current)).toBe('vm.config.media')
+      expect(classifyConfigKey(key, 'iso.library:iso/debian.iso,media=cdrom', current)).toBe('vm.config.media')
+      expect(classifyConfigKey(key, 'none,media=cdrom', { [key]: 'local:iso/debian.iso,media=cdrom,size=1G' })).toBe('vm.config.media')
+      expect(classifyConfigKey(key, 'local:iso/debian.iso,media=cdrom')).toBe('vm.config.hardware')
+    }
+    expect(classifyConfigKey('sata1', 'cdrom', { sata1: 'none,media=cdrom' })).toBe('vm.config.hardware')
     expect(classifyConfigKey('scsi0', 'local-lvm:vm-100-disk-0,size=32G')).toBe('vm.config.hardware')
     expect(classifyConfigKey('ide0', undefined)).toBe('vm.config.hardware')
+  })
+
+  it('never authorizes data disks, cloud-init, allocations or disk options as media', () => {
+    const old = 'local:iso/old.iso,media=cdrom,cache=none,backup=0'
+    for (const value of [
+      'local:iso/new.iso,media=cdrom,cache=writeback,backup=0',
+      'local:iso/new.iso,media=cdrom,cache=none',
+      'local:iso/new.iso,media=cdrom,cache=none,backup=0,iothread=1',
+      'local:iso/new.iso,media=cdrom,media=disk,cache=none,backup=0',
+      'local:iso/new.iso,xmedia=cdrom,cache=none,backup=0',
+      'local:vm-200-disk-0,media=cdrom,cache=none,backup=0',
+      'local:32,media=cdrom,cache=none,backup=0',
+      'local:0,import-from=local:iso/new.iso,media=cdrom,cache=none,backup=0',
+      '/dev/sda,media=cdrom,cache=none,backup=0',
+      'local:iso/../vm-200-disk-0,media=cdrom,cache=none,backup=0',
+      'local:iso/new.iso,media=cdrom,cache=none,backup=0,size=100G',
+    ]) expect(classifyConfigKey('sata0', value, { sata0: old })).toBe('vm.config.hardware')
+    expect(classifyConfigKey('sata0', 'local:iso/new.iso,media=cdrom,backup=0,cache=none', { sata0: old })).toBe('vm.config.media')
+    expect(classifyConfigKey('sata0', 'none,media=cdrom', { sata0: 'local:vm-100-disk-0' })).toBe('vm.config.hardware')
+    expect(classifyConfigKey('ide2', 'none,media=cdrom', { ide2: 'local:vm-100-cloudinit,media=cdrom' })).toBe('vm.config.hardware')
   })
 
   it('files a NIC under nic, or under nic.link when only link_down toggles', () => {
@@ -64,7 +90,6 @@ describe('classifyConfigBody', () => {
     expect([...required].sort((a, b) => a.localeCompare(b))).toEqual([
       'vm.config',
       'vm.config.hardware',
-      'vm.config.media',
       'vm.config.nic.link',
     ])
   })
@@ -74,4 +99,11 @@ describe('classifyConfigBody', () => {
     expect(classifyConfigBody({})).toEqual(new Set())
     expect(classifyConfigBody({ boot: 'order=scsi0' })).toEqual(new Set(['vm.config.boot']))
   })
+})
+
+
+it('requires hardware for deleting or reverting a CD-ROM device', () => {
+  const current = { sata0: 'none,media=cdrom' }
+  expect(classifyConfigBody({ delete: 'sata0' }, current)).toEqual(new Set(['vm.config.hardware']))
+  expect(classifyConfigBody({ revert: 'sata0' }, current)).toEqual(new Set(['vm.config.hardware']))
 })

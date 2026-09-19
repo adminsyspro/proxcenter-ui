@@ -46,7 +46,8 @@ vi.mock('@/lib/vdc/quota', () => ({
   resolveVdcForTenant: resolveVdcForTenantMock,
   checkVdcQuota: checkVdcQuotaMock,
 }))
-vi.mock('@/lib/tenant/infraScope', () => ({
+vi.mock('@/lib/tenant/infraScope', async io => ({
+  ...await io<typeof import('@/lib/tenant/infraScope')>(),
   getTenantInfrastructureScope: getTenantInfrastructureScopeMock,
 }))
 vi.mock('@/lib/vdc/vnets', async (io) => {
@@ -86,6 +87,9 @@ function iaasInfra(storages: string[], policies: Record<string, typeof gold> = {
   return {
     kind: 'iaas',
     vdcScope: {
+      connectionIds: new Set(['conn-1']),
+      nodesByConnection: new Map([['conn-1', new Set(['pve3'])]]),
+      poolsByConnection: new Map([['conn-1', new Set(['pool-1'])]]),
       storagesByConnection: new Map([['conn-1', new Set(storages)]]),
       storagePoliciesByConnection: new Map([['conn-1', new Map(Object.entries(policies))]]),
     },
@@ -103,7 +107,8 @@ beforeEach(() => {
   getTenantInfrastructureScopeMock.mockReset().mockResolvedValue({ kind: 'provider' })
   // Default: config GET reads return an empty config, the config write
   // succeeds with nothing to apply (so no task to follow).
-  pveFetchMock.mockReset().mockImplementation(async (_conn, _path, opts?: any) => {
+  pveFetchMock.mockReset().mockImplementation(async (_conn, path: string, opts?: any) => {
+    if (path === '/cluster/resources?type=vm') return [{ vmid: 100, type: 'qemu', node: 'pve3', pool: 'pool-1' }, { vmid: 100, type: 'lxc', node: 'pve3', pool: 'pool-1' }]
     if (opts?.method === 'POST' || opts?.method === 'PUT') return null
     return {}
   })
@@ -242,6 +247,7 @@ describe('PUT config: import-from metering (Finding I2 -- meter, never refuse)',
     })
     checkVdcQuotaMock.mockResolvedValue({ allowed: false, violations: ['Storage policy "Gold" (gold): over quota'] })
     pveFetchMock.mockReset().mockImplementation(async (_conn, path: string, opts?: any) => {
+      if (path === '/cluster/resources?type=vm') return [{ vmid: 100, type: 'qemu', node: 'pve3', pool: 'pool-1' }]
       if (opts?.method === 'PUT') return { data: 'ok' }
       if (String(path).endsWith('/storage/gold/content')) {
         return [{ volid: 'gold:vm-100-disk-0', size: 32 * 1024 * 1024 * 1024, content: 'images' }]
@@ -272,6 +278,7 @@ describe('PUT config: import-from metering (Finding I2 -- meter, never refuse)',
       storagePolicies: [{ policyId: 'p-gold', name: 'Gold', storageId: 'gold', quotaMb: 1024 }],
     })
     pveFetchMock.mockReset().mockImplementation(async (_conn, path: string, opts?: any) => {
+      if (path === '/cluster/resources?type=vm') return [{ vmid: 100, type: 'qemu', node: 'pve3', pool: 'pool-1' }]
       if (opts?.method === 'PUT') return { data: 'ok' }
       if (String(path).endsWith('/storage/gold/content')) throw new Error('storage unreachable')
       return {}

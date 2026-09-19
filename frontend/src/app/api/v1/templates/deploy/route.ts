@@ -12,6 +12,7 @@ import { downloadToStorage } from "@/lib/proxmox/download"
 import { selectDownloadStorage } from "@/lib/templates/downloadStorage"
 import { customImageToCloudImage } from "@/lib/templates/cloudImages"
 import { findCustomImageForTenant } from "@/lib/templates/customImageScope"
+import { authorizeImageVolume, SourceVolumeError, type ImageVolumeSource } from '@/lib/templates/sourceVolume'
 import { resolveBuiltInImage } from "@/lib/templates/catalogStore"
 import { supportsVmDisks } from "@/lib/proxmox/storage"
 import { resolveVdcForTenant, checkVdcQuota } from "@/lib/vdc/quota"
@@ -80,6 +81,7 @@ export async function POST(req: Request) {
     let isCustom = false
     let sourceType = 'url'
     let volumeId: string | null = null
+    let volumeSource: ImageVolumeSource | null = null
 
     if (!image) {
       // Same scope as the catalogue: the tenant's own images plus the
@@ -93,6 +95,7 @@ export async function POST(req: Request) {
       isCustom = true
       sourceType = customRow.sourceType
       volumeId = customRow.volumeId
+      if (sourceType === 'volume') volumeSource = customRow
     }
 
     // Resolve the tenant's vDC for this connection+node so we can pin
@@ -264,6 +267,10 @@ export async function POST(req: Request) {
 
     const conn = await getConnectionById(body.connectionId)
 
+    if (volumeSource) {
+      await authorizeImageVolume({ tenantId, source: volumeSource, target: { connectionId: body.connectionId, node: body.node }, publishedImage: volumeSource })
+    }
+
     const deploymentConfig = {
       storage: body.storage,
       vmName: body.vmName,
@@ -321,6 +328,19 @@ export async function POST(req: Request) {
       // try wouldn't be visible from the sibling catch block.
       let ipamAllocation: { subnetId: string; ip: string } | null = null
       try {
+        if (volumeSource) {
+          // Recheck before the background worker writes to PVE. A source
+          // that disappeared or changed ownership must never be imported.
+          const currentSource = await findCustomImageForTenant(tenantId, body.imageSlug)
+          if (!currentSource || currentSource.sourceType !== 'volume'
+            || currentSource.volumeId !== volumeSource.volumeId
+            || currentSource.sourceConnectionId !== volumeSource.sourceConnectionId
+            || currentSource.sourceNode !== volumeSource.sourceNode
+            || currentSource.format !== volumeSource.format) {
+            throw new SourceVolumeError('The source image changed. Start the deployment again.')
+          }
+          await authorizeImageVolume({ tenantId, source: currentSource, target: { connectionId: body.connectionId, node: body.node }, publishedImage: currentSource })
+        }
         // ─────────── ISO branch ───────────────────────────────────────
         // Stops at the "creating" step (no cloud-init, no start). The VM
         // boots from CD-ROM on first power-up and the user installs the
@@ -652,6 +672,7 @@ export async function POST(req: Request) {
     // Return immediately — the pipeline runs in after()
     return NextResponse.json({ data: { deploymentId: deployment.id, status: "pending", vmid: body.vmid } })
   } catch (e: any) {
+    if (e instanceof SourceVolumeError) return NextResponse.json({ error: e.message }, { status: e.status })
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }

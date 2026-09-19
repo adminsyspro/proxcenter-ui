@@ -4,6 +4,7 @@ import { NextResponse } from "next/server"
 import { getSessionPrisma, getCurrentTenantId, DEFAULT_TENANT_ID } from "@/lib/tenant"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { updateCustomImageSchema } from "@/lib/schemas"
+import { authorizeImageVolume, SourceVolumeError } from '@/lib/templates/sourceVolume'
 
 export const runtime = "nodejs"
 
@@ -52,6 +53,14 @@ export async function PUT(req: Request, ctx: Ctx) {
     // sharing decision in provider hands.
     const tenantId = await getCurrentTenantId()
     const data: any = { ...body }
+    const source = { ...existing, ...body }
+    if (source.sourceType === 'volume') {
+      await authorizeImageVolume({ tenantId, source })
+    } else {
+      data.sourceConnectionId = null
+      data.sourceNode = null
+      data.volumeId = null
+    }
     if (data.isShared !== undefined && tenantId !== DEFAULT_TENANT_ID) {
       delete data.isShared
     }
@@ -73,6 +82,7 @@ export async function PUT(req: Request, ctx: Ctx) {
 
     return NextResponse.json({ data: image })
   } catch (e: any) {
+    if (e instanceof SourceVolumeError) return NextResponse.json({ error: e.message }, { status: e.status })
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }

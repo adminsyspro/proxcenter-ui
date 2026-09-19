@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { useRBAC } from '@/contexts/RBACContext'
 import { useTenant } from '@/contexts/TenantContext'
+import { useNicIdentityPermissions } from '@/hooks/useNicIdentityPermissions'
 import { getOsSvgIcon } from '@/lib/utils/osIcons'
 import { extractCustomCpuModels } from '@/lib/inventory/cpuModels'
 import { vmDiskFormats } from '@/lib/proxmox/storage'
@@ -130,6 +131,7 @@ function CreateVmDialog({
   // Tenants other than the provider get the cloud abstraction: no node
   // picker, smart auto-placement on the least-loaded node.
   const { currentTenant, loading: tenantLoading, isFullClusterView } = useTenant()
+  const { canEditMac, canEditVlan } = useNicIdentityPermissions()
   const isProviderTenant = !tenantLoading && currentTenant?.id === 'default'
   const hideNodePicker = !tenantLoading && !!currentTenant && !isFullClusterView
 
@@ -975,8 +977,8 @@ return
           // isolation, tagging on top is virtually never intended.
           const skipVlanTag = selectedBridge?.type === 'vnet'
           let netStr = `${nic.model},bridge=${nic.bridge}`
-          if (nic.vlanTag && !skipVlanTag) netStr += `,tag=${nic.vlanTag}`
-          if (nic.macAddress && nic.macAddress !== 'auto') netStr += `,macaddr=${nic.macAddress}`
+          if (canEditVlan && nic.vlanTag && !skipVlanTag) netStr += `,tag=${nic.vlanTag}`
+          if (canEditMac && nic.macAddress && nic.macAddress !== 'auto') netStr += `,macaddr=${nic.macAddress}`
           if (nic.firewall) netStr += ',firewall=1'
           if (nic.rateLimit) netStr += `,rate=${nic.rateLimit}`
           if (nic.disconnect) netStr += ',link_down=1'
@@ -1993,7 +1995,7 @@ return
                     <Chip label={`net${nicIdx}`} size="small" sx={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11, fontWeight: 700, height: 24 }} />
                     <Typography variant="body2" fontSize={12} fontWeight={700}>{nic.bridge}</Typography>
                     <Typography variant="body2" fontSize={12} sx={{ opacity: 0.6 }}>{nic.model === 'virtio' ? 'VirtIO' : nic.model}</Typography>
-                    {nic.vlanTag && <Chip label={`VLAN ${nic.vlanTag}`} size="small" variant="outlined" sx={{ fontSize: 10, height: 20 }} />}
+                    {canEditVlan && nic.vlanTag && <Chip label={`VLAN ${nic.vlanTag}`} size="small" variant="outlined" sx={{ fontSize: 10, height: 20 }} />}
                     {nic.firewall && <Chip label="FW" size="small" color="success" variant="outlined" sx={{ fontSize: 10, height: 20 }} />}
                     <Box sx={{ flex: 1 }} />
                     {nics.length > 1 && (
@@ -2070,18 +2072,20 @@ return
                           return (
                             <TextField
                               label={t('inventory.createVm.vlanTag')}
-                              value={isVnet ? '' : nic.vlanTag}
+                              value={isVnet || !canEditVlan ? '' : nic.vlanTag}
                               onChange={(e) => updateNic(nicIdx, { vlanTag: e.target.value })}
                               size="small"
                               placeholder={isVnet ? t('inventory.createVm.vlanTagVnetPlaceholder') : 'no VLAN'}
-                              disabled={isVnet}
-                              helperText={isVnet ? t('inventory.createVm.vlanTagVnetHint') : undefined}
+                              disabled={isVnet || !canEditVlan}
+                              helperText={!canEditVlan ? t('hardware.nicVlanPermissionRequired') : isVnet ? t('inventory.createVm.vlanTagVnetHint') : undefined}
                             />
                           )
                         })()}
                         <TextField
                           label={t('inventory.createVm.macAddress')}
-                          value={nic.macAddress}
+                          value={canEditMac ? nic.macAddress : 'auto'}
+                          disabled={!canEditMac}
+                          helperText={!canEditMac ? t('hardware.nicMacPermissionRequired') : undefined}
                           onChange={(e) => updateNic(nicIdx, { macAddress: e.target.value })}
                           size="small"
                           placeholder="auto"
@@ -2252,7 +2256,7 @@ return
                         <Box key={i} sx={{ display: 'flex', gap: 0.75, alignItems: 'center' }}>
                           <Chip label={`net${i}`} size="small" sx={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, fontWeight: 700, height: 22 }} />
                           <Typography variant="body2" fontSize={12}>{nic.model === 'virtio' ? 'VirtIO' : nic.model} on {nic.bridge}</Typography>
-                          {nic.vlanTag && <Chip label={`VLAN ${nic.vlanTag}`} size="small" variant="outlined" sx={{ fontSize: 10, height: 20 }} />}
+                          {canEditVlan && nic.vlanTag && <Chip label={`VLAN ${nic.vlanTag}`} size="small" variant="outlined" sx={{ fontSize: 10, height: 20 }} />}
                           {nic.firewall && <Chip label="FW" size="small" color="success" variant="outlined" sx={{ fontSize: 10, height: 20 }} />}
                         </Box>
                       ))}

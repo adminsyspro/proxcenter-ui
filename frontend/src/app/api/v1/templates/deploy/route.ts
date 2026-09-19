@@ -4,6 +4,7 @@ import { getServerSession } from "next-auth"
 
 import { getSessionPrisma, getCurrentTenantId } from "@/lib/tenant"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { sensitiveNicPermissions, NicConfigError } from "@/lib/rbac/nicPermissions"
 import { authOptions } from "@/lib/auth/config"
 import { deploySchema } from "@/lib/schemas"
 import { getConnectionById } from "@/lib/connections/getConnection"
@@ -259,6 +260,15 @@ export async function POST(req: Request) {
         const netStr = `${body.hardware?.networkModel || 'virtio'},bridge=${bridge}${rawTag ? `,tag=${rawTag}` : ''}`
         const verdict = validateNetAgainstScope(netStr, allowedNetworks)
         if (verdict.ok === false) return NextResponse.json({ error: verdict.error }, { status: 403 })
+      }
+    }
+
+    if (tenantId !== DEFAULT_TENANT_ID) {
+      const hw = body.hardware
+      const requestedNet = `${hw?.networkModel || 'virtio'},bridge=${hw?.networkBridge || 'vmbr0'}${hw?.vlanTag ? `,tag=${hw.vlanTag}` : ''}`
+      for (const permission of sensitiveNicPermissions({ net0: requestedNet })) {
+        const sensitiveDenied = await checkPermission(permission, 'vm', `${body.connectionId}:${body.node}:qemu:${body.vmid}`)
+        if (sensitiveDenied) return sensitiveDenied
       }
     }
 
@@ -652,6 +662,7 @@ export async function POST(req: Request) {
     // Return immediately — the pipeline runs in after()
     return NextResponse.json({ data: { deploymentId: deployment.id, status: "pending", vmid: body.vmid } })
   } catch (e: any) {
+    if (e instanceof NicConfigError) return NextResponse.json({ error: e.message }, { status: 400 })
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }

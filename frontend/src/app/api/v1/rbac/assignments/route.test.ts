@@ -84,4 +84,13 @@ describe('POST /api/v1/rbac/assignments scope handling (issue #383)', () => {
     expect(userRoleCreateMock.mock.calls[0][0].data.scopeType).toBe('tag')
     expect(userRoleCreateMock.mock.calls[0][0].data.scopeTarget).toBe('db')
   })
+  it('refuses non-provider delegation of a role carrying sensitive NIC rights', async () => {
+    isSuperAdminMock.mockResolvedValueOnce(false).mockResolvedValue(true)
+    roleFindUniqueMock.mockResolvedValue({ id: 'role_x', name: 'NIC identity', tenantId: null,
+      permissions: [{ permissionId: 'vm.config.nic.mac' }] })
+    const res = await callRoute(POST, { body: { user_id: 'u1', role_id: 'role_x' } })
+    expect(res.status).toBe(403)
+    expect(userRoleCreateMock).not.toHaveBeenCalled()
+  })
+
 })

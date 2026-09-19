@@ -5600,7 +5600,10 @@
       "deleteIso": "Delete this ISO",
       "deleteIsoConfirm": "Delete {name} from {storage}? Guests still referencing it will fail to boot from it."
     },
-    "loadNodesError": "Unable to load the node list"
+    "loadNodesError": "Unable to load the node list",
+    "nicMacPermissionRequired": "Changing the MAC address requires provider permission.",
+    "nicVlanPermissionRequired": "Changing VLAN settings requires provider permission.",
+    "nicOriginalUnavailable": "Reload the network configuration before saving."
   },
   "ldap": {
     "description": "Configure LDAP/Active Directory authentication to allow users to sign in with their corporate credentials.",

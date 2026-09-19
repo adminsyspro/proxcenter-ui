@@ -28,6 +28,9 @@ import {
 } from '@mui/material'
 
 import AppDialogTitle from '@/components/ui/AppDialogTitle'
+import { useNicIdentityPermissions } from '@/hooks/useNicIdentityPermissions'
+import { mergeNetworkConfig } from './networkConfig'
+import { QEMU_NIC_MODELS } from '@/lib/rbac/nicPermissions'
 
 // ==================== EDIT NETWORK DIALOG ====================
 type EditNetworkDialogProps = {
@@ -44,6 +47,8 @@ type EditNetworkDialogProps = {
     bridge: string
     mac?: string
     macaddr?: string
+    rawValue?: string
+    tag?: number
     vlan?: number
     firewall?: boolean
     linkDown?: boolean
@@ -80,6 +85,8 @@ function parseIPv6(ip6: string | undefined): { mode: IPv6Mode; cidr: string } {
 
 export function EditNetworkDialog({ open, onClose, onSave, onDelete, connId, node, network, vmType = 'qemu' }: EditNetworkDialogProps) {
   const t = useTranslations()
+  const nicPermissions = useNicIdentityPermissions()
+  const { canEditMac, canEditVlan } = nicPermissions
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -162,8 +169,8 @@ export function EditNetworkDialog({ open, onClose, onSave, onDelete, connId, nod
   useEffect(() => {
     if (open && network) {
       setBridge(network.bridge || 'vmbr0')
-      setModel(network.model || 'virtio')
-      setVlanTag(network.vlan ? String(network.vlan) : '')
+      setModel(network.model || network.rawValue?.split(',').map(part => part.split('=')[0]).find(key => QEMU_NIC_MODELS.has(key)) || 'virtio')
+      setVlanTag((network.tag ?? network.vlan) ? String(network.tag ?? network.vlan) : '')
       // QEMU parser stores the MAC in `macaddr`, LXC parser in `macaddr` too,
       // but old callers may still pass `mac`.
       setMacAddress(network.macaddr || network.mac || '')
@@ -249,6 +256,12 @@ export function EditNetworkDialog({ open, onClose, onSave, onDelete, connId, nod
         if (multiqueue) netConfig += `,queues=${multiqueue}`
       }
 
+      const original = network.rawValue
+      if (!original) throw new Error(t('hardware.nicOriginalUnavailable'))
+      netConfig = mergeNetworkConfig(original, netConfig, vmType, [
+        'bridge', 'tag', 'firewall', 'link_down', 'rate', 'mtu',
+        ...(isLxc ? ['name', 'ip', 'gw', 'ip6', 'gw6', 'host-managed'] : ['queues']),
+      ], nicPermissions)
       await onSave({ [network.id]: netConfig })
       onClose()
     } catch (e: any) {
@@ -285,6 +298,7 @@ export function EditNetworkDialog({ open, onClose, onSave, onDelete, connId, nod
 
       <DialogContent>
         {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+        {!network.rawValue && <Alert severity="warning" sx={{ mb: 2 }}>{t('hardware.nicOriginalUnavailable')}</Alert>}
 
         <Stack spacing={2} sx={{ mt: 2.5 }}>
           {/* Row 1: LXC=Name+MAC | QEMU=Bridge+Model */}
@@ -302,6 +316,8 @@ export function EditNetworkDialog({ open, onClose, onSave, onDelete, connId, nod
                 label="MAC address"
                 placeholder="auto"
                 value={macAddress}
+                disabled={!canEditMac}
+                helperText={!canEditMac ? t('hardware.nicMacPermissionRequired') : undefined}
                 onChange={(e) => setMacAddress(e.target.value)}
               />
             </Box>
@@ -323,6 +339,7 @@ export function EditNetworkDialog({ open, onClose, onSave, onDelete, connId, nod
               <FormControl fullWidth size="small">
                 <InputLabel>Model</InputLabel>
                 <Select value={model} onChange={(e) => setModel(e.target.value)} label="Model">
+                  {!['virtio', 'e1000', 'e1000e', 'rtl8139', 'vmxnet3'].includes(model) && <MenuItem value={model}>{model}</MenuItem>}
                   <MenuItem value="e1000">Intel E1000</MenuItem>
                   <MenuItem value="e1000e">Intel E1000E</MenuItem>
                   <MenuItem value="virtio">VirtIO (paravirtualized)</MenuItem>
@@ -367,8 +384,8 @@ export function EditNetworkDialog({ open, onClose, onSave, onDelete, connId, nod
                 value={isSdnVnet ? '' : vlanTag}
                 onChange={(e) => setVlanTag(e.target.value)}
                 type="number"
-                disabled={isSdnVnet}
-                helperText={isSdnVnet ? 'Use a separate VNet to segment traffic' : undefined}
+                disabled={isSdnVnet || !canEditVlan}
+                helperText={!canEditVlan ? t('hardware.nicVlanPermissionRequired') : isSdnVnet ? 'Use a separate VNet to segment traffic' : undefined}
                 fullWidth={isLxc}
               />
             )
@@ -402,6 +419,8 @@ export function EditNetworkDialog({ open, onClose, onSave, onDelete, connId, nod
                   size="small"
                   label="MAC address"
                   value={macAddress}
+                  disabled={!canEditMac}
+                  helperText={!canEditMac ? t('hardware.nicMacPermissionRequired') : undefined}
                   onChange={(e) => setMacAddress(e.target.value)}
                 />
               </Box>
@@ -547,7 +566,7 @@ export function EditNetworkDialog({ open, onClose, onSave, onDelete, connId, nod
         </Button>
         <Box>
           <Button onClick={onClose} disabled={saving || deleting} sx={{ mr: 1 }}>{t('common.cancel')}</Button>
-          <Button variant="contained" onClick={handleSave} disabled={saving || deleting}>
+          <Button variant="contained" onClick={handleSave} disabled={saving || deleting || nicPermissions.loading || !network.rawValue}>
             {saving ? <CircularProgress size={20} /> : t('common.save')}
           </Button>
         </Box>

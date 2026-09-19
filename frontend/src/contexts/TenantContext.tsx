@@ -39,33 +39,49 @@ const TenantContext = createContext<TenantContextType>({
 
 export function TenantProvider({ children }: { children: React.ReactNode }) {
   const { data: session } = useSession()
+  const userId = session?.user?.id
+  const tenantId = (session?.user as any)?.tenantId ?? null
+  const identityKey = JSON.stringify([userId, tenantId])
+  const [loadedKey, setLoadedKey] = useState<string | null>(null)
   const [availableTenants, setAvailableTenants] = useState<TenantInfo[]>([])
   const [currentTenant, setCurrentTenant] = useState<TenantInfo | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    if (!session?.user?.id) {
+    let ignore = false
+    if (!userId) {
+      setAvailableTenants([])
+      setCurrentTenant(null)
       setLoading(false)
+      setLoadedKey(identityKey)
       return
     }
 
+    setLoading(true)
     fetch('/api/v1/auth/me/tenants')
       .then(r => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`)
         return r.json()
       })
       .then(data => {
+        if (ignore) return
         const tenants = data.data || []
         setAvailableTenants(tenants)
-        const currentId = (session.user as any).tenantId || data.currentTenantId || 'default'
-        const current = tenants.find((t: TenantInfo) => t.id === currentId) || tenants[0] || null
+        const currentId = tenantId || data.currentTenantId || DEFAULT_TENANT_ID
+        const current = tenants.find((t: TenantInfo) => t.id === currentId) || null
         setCurrentTenant(current)
       })
       .catch((err) => {
+        if (ignore) return
+        setAvailableTenants([])
+        setCurrentTenant(null)
         console.error('[TenantContext] Failed to fetch tenants:', err)
       })
-      .finally(() => setLoading(false))
-  }, [session?.user?.id])
+      .finally(() => {
+        if (!ignore) { setLoading(false); setLoadedKey(identityKey) }
+      })
+    return () => { ignore = true }
+  }, [userId, tenantId, identityKey])
 
   const switchTenant = useCallback(async (tenantId: string) => {
     try {
@@ -88,15 +104,17 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
-  const isProvider = (currentTenant?.id ?? DEFAULT_TENANT_ID) === DEFAULT_TENANT_ID
-  const isMsp = currentTenant?.operatingModel === 'msp'
+  const pending = loading || loadedKey !== identityKey
+  const activeTenant = pending ? null : currentTenant
+  const isProvider = activeTenant?.id === DEFAULT_TENANT_ID
+  const isMsp = activeTenant?.operatingModel === 'msp'
 
   return (
     <TenantContext.Provider value={{
-      currentTenant,
-      availableTenants,
+      currentTenant: activeTenant,
+      availableTenants: pending ? [] : availableTenants,
       switchTenant,
-      loading,
+      loading: pending,
       isMultiTenant: availableTenants.length > 1,
       isProvider,
       isMsp,

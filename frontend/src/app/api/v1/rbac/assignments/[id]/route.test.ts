@@ -113,4 +113,14 @@ describe('PATCH /api/v1/rbac/assignments/[id] scope handling (issue #383)', () =
     expect(userRoleUpdateManyMock.mock.calls[0][0].data.scopeType).toBe('tag')
     expect(userRoleUpdateManyMock.mock.calls[0][0].data.scopeTarget).toBe('web')
   })
+  it('refuses scope widening of an existing sensitive NIC grant by a non-superadmin', async () => {
+    isSuperAdminMock.mockResolvedValue(false)
+    isProtectedMock.mockResolvedValue(false)
+    userRoleFindFirstMock.mockResolvedValue({ ...existingAssignment,
+      role: { name: 'NIC identity', permissions: [{ permissionId: 'vm.config.nic.vlan' }] } })
+    const res = await callRoute(PATCH, { method: 'PATCH', params: { id: 'assign_1' }, body: { scope_type: 'global' } })
+    expect(res.status).toBe(403)
+    expect(userRoleUpdateManyMock).not.toHaveBeenCalled()
+  })
+
 })

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, cleanup, waitFor } from '@testing-library/react'
+import { render, cleanup, waitFor, act } from '@testing-library/react'
 
 const h = vi.hoisted(() => ({
   session: { data: null as unknown, status: 'unauthenticated' as string },
@@ -123,5 +123,35 @@ describe('BrandingProvider', () => {
     const { getByTestId } = renderProvider()
 
     await waitFor(() => expect(getByTestId('probe')).toHaveTextContent('ProxCenter'))
+  })
+})
+
+
+describe('branding session changes', () => {
+  it('discards a slow response from the previous tenant', async () => {
+    let finishOld!: (value: Response) => void
+    vi.mocked(fetch).mockImplementationOnce(() => new Promise(resolve => { finishOld = resolve }))
+    const view = renderProvider()
+    h.session = { data: { user: { id: 'user-b', tenantId: 'tenant-b' } }, status: 'authenticated' }
+    h.payload = { enabled: true, appName: 'Tenant B', faviconUrl: '' }
+    view.rerender(<BrandingProvider><Probe /></BrandingProvider>)
+    await waitFor(() => expect(view.getByTestId('probe')).toHaveTextContent('Tenant B'))
+    await act(async () => {
+      finishOld({ ok: true, json: async () => ({ appName: 'Tenant A', faviconUrl: '/old-logo.png' }) } as Response)
+    })
+    expect(view.getByTestId('probe')).toHaveTextContent('Tenant B')
+    expect(iconHrefs()).toEqual(['/favicon.ico?hash.ico', '/icon.svg?hash.svg'])
+  })
+
+  it('clears previous tenant branding if fetching the next tenant fails', async () => {
+    h.payload = { enabled: true, appName: 'Tenant A', faviconUrl: '/tenant-a.png', browserTitle: 'Tenant A' }
+    const view = renderProvider()
+    await waitFor(() => expect(view.getByTestId('probe')).toHaveTextContent('Tenant A'))
+    h.session = { data: { user: { id: 'user-b', tenantId: 'tenant-b' } }, status: 'authenticated' }
+    vi.mocked(fetch).mockResolvedValue({ ok: false, status: 500 } as Response)
+    view.rerender(<BrandingProvider><Probe /></BrandingProvider>)
+    await waitFor(() => expect(view.getByTestId('probe')).toHaveTextContent('ProxCenter'))
+    expect(iconHrefs()).toEqual(['/favicon.ico?hash.ico', '/icon.svg?hash.svg'])
+    expect(document.title).toBe('PROXCENTER')
   })
 })

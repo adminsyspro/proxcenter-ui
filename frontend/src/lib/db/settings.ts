@@ -26,6 +26,15 @@ export async function getSetting<T = unknown>(
   key: string,
   tenantId: string = DEFAULT_TENANT,
 ): Promise<T | null> {
+  const setting = await getSettingWithSource<T>(key, tenantId)
+  return setting ? setting.value : null
+}
+
+/** Resolve both a setting and the tenant that owns it, including inheritance. */
+export async function getSettingWithSource<T = unknown>(
+  key: string,
+  tenantId: string = DEFAULT_TENANT,
+): Promise<{ tenantId: string; value: T } | null> {
   // Try the tenant-scoped row first.
   let row = await prisma.setting.findUnique({
     where: { key_tenantId: { key, tenantId } },
@@ -39,7 +48,7 @@ export async function getSetting<T = unknown>(
     })
   }
   if (!row) return null
-  return row.value as unknown as T
+  return { tenantId: row.tenantId, value: row.value as unknown as T }
 }
 
 /**

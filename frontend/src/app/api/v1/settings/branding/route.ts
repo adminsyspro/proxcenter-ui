@@ -1,8 +1,9 @@
 export const dynamic = "force-dynamic"
 import { NextResponse } from 'next/server'
-import { getSetting, setSetting } from '@/lib/db/settings'
+import { getSettingWithSource, setSetting } from '@/lib/db/settings'
 import { requireBrandingAdmin } from '@/lib/branding/guard'
 import { getCurrentTenantId } from '@/lib/tenant'
+import { scopedBrandingUrl } from '@/lib/branding/urls'
 import { normalizeHexColor } from '@/lib/theme/hexColor'
 
 
@@ -30,12 +31,12 @@ export async function GET() {
     if (denied) return denied
 
     const tenantId = await getCurrentTenantId()
-    const stored = await getSetting<Partial<typeof DEFAULT_BRANDING>>('branding', tenantId)
-    const settings = { ...DEFAULT_BRANDING, ...(stored ?? {}) }
+    const resolved = await getSettingWithSource<Partial<typeof DEFAULT_BRANDING>>('branding', tenantId)
+    const settings = { ...DEFAULT_BRANDING, ...(resolved?.value ?? {}) }
 
     // Migrate old static paths to API serving paths
     const fixUrl = (url: string) =>
-      url ? url.replace(/^\/uploads\/branding\//, '/api/v1/settings/branding/uploads/') : url
+      scopedBrandingUrl(url, resolved?.tenantId ?? tenantId, tenantId)
     settings.logoUrl = fixUrl(settings.logoUrl)
     settings.faviconUrl = fixUrl(settings.faviconUrl)
     settings.loginLogoUrl = fixUrl(settings.loginLogoUrl)

@@ -2,11 +2,16 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const h = vi.hoisted(() => ({
   getCurrentTenantId: vi.fn(async () => 'default'),
-  getSetting: vi.fn(async () => null as any),
+  getSetting: vi.fn(async (_key?: string, _tenantId?: string) => null as any),
 }))
 
 vi.mock('@/lib/tenant', () => ({ getCurrentTenantId: h.getCurrentTenantId }))
-vi.mock('@/lib/db/settings', () => ({ getSetting: h.getSetting }))
+vi.mock('@/lib/db/settings', () => ({
+  getSettingWithSource: async (key: string, tenantId: string) => {
+    const value = await h.getSetting(key, tenantId)
+    return value === null ? null : { value, tenantId }
+  },
+}))
 
 import { GET } from './route'
 import { callRoute, readJson } from '@/__tests__/setup/route-test'
@@ -46,5 +51,26 @@ describe('GET /settings/branding/public primary colour (#754)', () => {
     h.getSetting.mockResolvedValue({ enabled: false, primaryColor: '00ECB2' })
 
     expect(await primaryColorOf()).toBe('')
+  })
+})
+
+
+describe('tenant-specific branding image URLs', () => {
+  it('changes local image URLs when the active tenant changes, keeping upload revision', async () => {
+    h.getSetting.mockResolvedValue({ enabled: true, logoUrl: '/uploads/branding/logo.png?t=12', faviconUrl: 'https://cdn.example/favicon.png' })
+    h.getCurrentTenantId.mockResolvedValue('tenant-a')
+    const first = await readJson<any>(await callRoute(GET))
+    h.getCurrentTenantId.mockResolvedValue('tenant-b')
+    const second = await readJson<any>(await callRoute(GET))
+    expect(first.logoUrl).not.toBe(second.logoUrl)
+    expect(first.logoUrl).toContain('/api/v1/settings/branding/uploads/logo.png?')
+    expect(new URL(first.logoUrl, 'http://localhost').searchParams.get('t')).toBe('12')
+    expect(first.faviconUrl).toBe('https://cdn.example/favicon.png')
+  })
+
+  it('keeps branding settings out of shared caches', async () => {
+    const response = await callRoute(GET)
+    expect(response.headers.get('Cache-Control')).toMatch(/private.*no-store/)
+    expect(response.headers.get('Vary')).toMatch(/Cookie/i)
   })
 })

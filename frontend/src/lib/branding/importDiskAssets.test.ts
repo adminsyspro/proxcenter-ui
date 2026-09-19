@@ -53,6 +53,13 @@ describe('importDiskAssets', () => {
     expect(Buffer.from(kept!.data).equals(Buffer.from([1]))).toBe(true)
   })
 
+  it('does not assign unowned legacy files to the provider', async () => {
+    mkdirSync(path.join(root, 'branding'), { recursive: true })
+    writeFileSync(path.join(root, 'branding', 'logo.png'), Buffer.from('unknown owner'))
+    expect(await importDiskAssets(root)).toEqual({ imported: 0, skipped: 0 })
+    expect(await getAsset('default', 'branding', 'logo')).toBeNull()
+  })
+
   it('returns zero counts when the root does not exist', async () => {
     const res = await importDiskAssets(path.join(root, 'does-not-exist'))
     expect(res).toEqual({ imported: 0, skipped: 0 })

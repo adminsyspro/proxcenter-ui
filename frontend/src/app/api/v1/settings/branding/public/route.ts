@@ -1,9 +1,12 @@
 import { NextResponse } from 'next/server'
-import { getSetting } from '@/lib/db/settings'
+import { getSettingWithSource } from '@/lib/db/settings'
 import { getCurrentTenantId } from '@/lib/tenant'
+import { scopedBrandingUrl } from '@/lib/branding/urls'
 import { normalizeHexColor } from '@/lib/theme/hexColor'
 
 export const dynamic = 'force-dynamic'
+
+const HEADERS = { 'Cache-Control': 'private, no-store', Vary: 'Cookie, Authorization' }
 
 const DEFAULT_BRANDING = {
   enabled: false,
@@ -26,15 +29,15 @@ export async function GET() {
   try {
     let tenantId = 'default'
     try { tenantId = await getCurrentTenantId() } catch {}
-    const stored = await getSetting<any>('branding', tenantId)
-    const settings = { ...DEFAULT_BRANDING, ...(stored ?? {}) }
+    const resolved = await getSettingWithSource<any>('branding', tenantId)
+    const settings = { ...DEFAULT_BRANDING, ...(resolved?.value ?? {}) }
 
     if (!settings.enabled) {
-      return NextResponse.json(DEFAULT_BRANDING)
+      return NextResponse.json(DEFAULT_BRANDING, { headers: HEADERS })
     }
 
     const fixUrl = (url: string) =>
-      url ? url.replace(/^\/uploads\/branding\//, '/api/v1/settings/branding/uploads/') : url
+      scopedBrandingUrl(url, resolved?.tenantId ?? tenantId, tenantId)
 
     const sanitizeHighlights = (raw: unknown): Array<{ icon: string; text: string }> => {
       if (!Array.isArray(raw)) return []
@@ -68,8 +71,8 @@ export async function GET() {
       supportUrl: typeof settings.supportUrl === 'string' ? settings.supportUrl : '',
       changelogUrl: typeof settings.changelogUrl === 'string' ? settings.changelogUrl : '',
       hideVersion: !!settings.hideVersion,
-    })
+    }, { headers: HEADERS })
   } catch {
-    return NextResponse.json(DEFAULT_BRANDING)
+    return NextResponse.json(DEFAULT_BRANDING, { headers: HEADERS })
   }
 }

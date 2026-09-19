@@ -7,6 +7,8 @@ const h = vi.hoisted(() => ({
   readFileSync: vi.fn(() => Buffer.from([])),
 }))
 
+vi.mock('@/lib/db/settings', () => ({ getSettingWithSource: async () => null }))
+
 vi.mock('@/lib/tenant', () => ({ getCurrentTenantId: h.getCurrentTenantId }))
 vi.mock('@/lib/branding/assetStore', async (orig) => {
   const actual = await orig<typeof import('@/lib/branding/assetStore')>()

@@ -13,6 +13,7 @@ const verifyConnectionOwnershipMock = vi.fn<(id: string) => Promise<Response | n
 const collectHardeningDataMock = vi.fn<(opts: any) => Promise<any>>()
 const requireEnterpriseMock = vi.fn<() => Promise<Response | null>>()
 const renderPdfMock = vi.fn<(html: string) => Promise<any>>()
+let brandingOwner = 'tenant-1'
 const getSettingMock = vi.fn<(key: string, tenantId: string) => Promise<any>>()
 const getAssetMock = vi.fn<(tenantId: string, kind: string, slot: string) => Promise<any>>()
 
@@ -26,6 +27,10 @@ vi.mock('@/lib/tenant', () => ({
 
 vi.mock('@/lib/db/settings', () => ({
   getSetting: getSettingMock,
+  getSettingWithSource: async (key: string, tenantId: string) => {
+    const value = await getSettingMock(key, tenantId)
+    return value === null ? null : { value, tenantId: brandingOwner }
+  },
 }))
 
 vi.mock('@/lib/branding/assetStore', () => ({
@@ -75,6 +80,7 @@ vi.mock('node:fs', () => ({
 describe('GET /api/v1/compliance/frameworks/[frameworkId]/report', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    brandingOwner = 'tenant-1'
     // Default: enterprise permitted, RBAC permitted, ownership OK
     requireEnterpriseMock.mockResolvedValue(null)
     checkPermissionMock.mockResolvedValue(null)
@@ -280,6 +286,21 @@ describe('GET /api/v1/compliance/frameworks/[frameworkId]/report', () => {
       expect.stringContaining('data/uploads/branding'),
     )
     expect(capturedHtml).toContain('data:image/png;base64,')
+  })
+
+  it('embeds the provider logo when the report inherits provider branding', async () => {
+    brandingOwner = 'default'
+    getSettingMock.mockResolvedValue({ enabled: true, logoUrl: '/api/v1/settings/branding/uploads/logo.png' })
+    getAssetMock.mockImplementation(async tenantId => ({
+      ext: 'png', contentType: 'image/png', data: Buffer.from(tenantId === 'default' ? 'provider' : 'stale tenant'),
+    }))
+    const { GET } = await import('./route')
+    const response = await callRoute(GET, {
+      params: { frameworkId: 'nist-800-171-r2' }, searchParams: { connectionId: 'c1' },
+    })
+    expect(response.status).toBe(200)
+    expect(renderPdfMock.mock.calls[0][0]).toContain('data:image/png;base64,cHJvdmlkZXI=')
+    expect(renderPdfMock.mock.calls[0][0]).not.toContain('c3RhbGUgdGVuYW50')
   })
 
   it('falls back to the packaged default logo when no branding asset is stored', async () => {

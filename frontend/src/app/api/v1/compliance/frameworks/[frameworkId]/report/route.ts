@@ -9,7 +9,7 @@ import { getConnectionById } from '@/lib/connections/getConnection'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { requireEnterprise } from '@/lib/auth/requireEnterprise'
 import { verifyConnectionOwnership, getSessionPrisma, getCurrentTenantId } from '@/lib/tenant'
-import { getSetting } from '@/lib/db/settings'
+import { getSettingWithSource } from '@/lib/db/settings'
 import { getAsset, slotFromFilename } from '@/lib/branding/assetStore'
 import { collectHardeningData } from '@/lib/compliance/collectHardeningData'
 import { runAllChecks } from '@/lib/compliance/hardening'
@@ -74,7 +74,8 @@ export async function GET(req: Request, ctx: { params: Promise<{ frameworkId: st
     let appName = ''
     try {
       const tenantId = await getCurrentTenantId()
-      const branding = await getSetting<any>('branding', tenantId)
+      const resolvedBranding = await getSettingWithSource<any>('branding', tenantId)
+      const branding = resolvedBranding?.value
       if (branding?.enabled && branding?.primaryColor) {
         brandColor = String(branding.primaryColor)
       }
@@ -90,7 +91,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ frameworkId: st
         // path.basename strips any traversal in the stored URL, then we map
         // the served filename back to its storage slot (logo/favicon/...).
         const filename = path.basename(String(brandingLogoUrl).split('?')[0])
-        const asset = await getAsset(tenantId, 'branding', slotFromFilename(filename))
+        const asset = await getAsset(resolvedBranding!.tenantId, 'branding', slotFromFilename(filename))
         if (asset) {
           logoDataUri = `data:${asset.contentType};base64,${Buffer.from(asset.data).toString('base64')}`
         }

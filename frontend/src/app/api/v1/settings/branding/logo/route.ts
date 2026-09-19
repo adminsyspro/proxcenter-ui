@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic"
 import { NextResponse } from 'next/server'
+import { scopedBrandingUrl } from '@/lib/branding/urls'
 import { requireBrandingAdmin } from '@/lib/branding/guard'
 import { getCurrentTenantId } from '@/lib/tenant'
 import { putAsset, deleteAsset } from '@/lib/branding/assetStore'
@@ -29,7 +30,7 @@ export async function POST(req: Request) {
     const buffer = Buffer.from(await file.arrayBuffer())
     await putAsset(tenantId, 'branding', type, ext, file.type, buffer)
 
-    const imageUrl = `${SERVE_PATH}/${type}.${ext}?t=${Date.now()}`
+    const imageUrl = scopedBrandingUrl(`${SERVE_PATH}/${type}.${ext}?t=${Date.now()}`, tenantId, tenantId)
     return NextResponse.json({ success: true, imageUrl })
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 })

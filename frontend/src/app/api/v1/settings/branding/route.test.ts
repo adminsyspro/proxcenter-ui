@@ -3,13 +3,19 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 const h = vi.hoisted(() => ({
   requireBrandingAdmin: vi.fn(async () => null as any),
   getCurrentTenantId: vi.fn(async () => 'default'),
-  getSetting: vi.fn(async () => null as any),
+  getSetting: vi.fn(async (_key?: string, _tenantId?: string) => null as any),
   setSetting: vi.fn(async (_key: string, _tenantId: string, _value: unknown) => {}),
 }))
 
 vi.mock('@/lib/branding/guard', () => ({ requireBrandingAdmin: h.requireBrandingAdmin }))
 vi.mock('@/lib/tenant', () => ({ getCurrentTenantId: h.getCurrentTenantId }))
-vi.mock('@/lib/db/settings', () => ({ getSetting: h.getSetting, setSetting: h.setSetting }))
+vi.mock('@/lib/db/settings', () => ({
+  getSettingWithSource: async (key: string, tenantId: string) => {
+    const value = await h.getSetting(key, tenantId)
+    return value === null ? null : { value, tenantId }
+  },
+  setSetting: h.setSetting,
+}))
 
 import { GET, PUT } from './route'
 import { callRoute, readJson } from '@/__tests__/setup/route-test'

@@ -425,6 +425,20 @@ describe('PUT config: existing CD-ROM media authorization', () => {
       expect(configWriteBody()).toBeNull()
     })
   }
+  it('leaves data disk edits unbound from the PVE digest', async () => {
+    mediaOperator({ sata0: 'none,media=cdrom', scsi0: 'local:vm-100-disk-0,size=32G' })
+    checkPermissionsMock.mockImplementation(async () => null)
+    const res = await callRoute(await loadPut(), { method: 'PUT', params: baseParams, body: { scsi0: 'local:vm-100-disk-0,size=32G,cache=writeback' } })
+    expect(res.status).toBe(200)
+    expect(configWriteBody()?.has('digest')).toBe(false)
+  })
+  it('binds the digest when a data slot is turned into an optical drive', async () => {
+    mediaOperator({ scsi0: 'local:vm-100-disk-0,size=32G' })
+    checkPermissionsMock.mockImplementation(async () => null)
+    const res = await callRoute(await loadPut(), { method: 'PUT', params: baseParams, body: { sata1: 'none,media=cdrom' } })
+    expect(res.status).toBe(200)
+    expect(configWriteBody()?.get('digest')).toBe('generation-1')
+  })
   it('keeps a hardware grant sufficient for existing media changes', async () => {
     mediaOperator()
     checkPermissionsMock.mockImplementation(async (permissions: string[]) => permissions.every(p => p === 'vm.config.hardware')

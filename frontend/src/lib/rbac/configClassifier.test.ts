@@ -50,6 +50,10 @@ describe('classifyConfigKey', () => {
       'local:iso/new.iso,media=cdrom,cache=none,backup=0,size=100G',
     ]) expect(classifyConfigKey('sata0', value, { sata0: old })).toBe('vm.config.hardware')
     expect(classifyConfigKey('sata0', 'local:iso/new.iso,media=cdrom,backup=0,cache=none', { sata0: old })).toBe('vm.config.media')
+    // Names PVE accepts stay media changes: the tenant scope validator, not
+    // this classifier, owns the volume charset.
+    expect(classifyConfigKey('sata0', "local:iso/Fedora & Friends (x64) O'Reilly.iso,media=cdrom,cache=none,backup=0", { sata0: old })).toBe('vm.config.media')
+    expect(classifyConfigKey('ide2', 'none,media=cdrom', { ide2: 'local:iso/cloudinit.iso,media=cdrom' })).toBe('vm.config.media')
     expect(classifyConfigKey('sata0', 'none,media=cdrom', { sata0: 'local:vm-100-disk-0' })).toBe('vm.config.hardware')
     expect(classifyConfigKey('ide2', 'none,media=cdrom', { ide2: 'local:vm-100-cloudinit,media=cdrom' })).toBe('vm.config.hardware')
   })

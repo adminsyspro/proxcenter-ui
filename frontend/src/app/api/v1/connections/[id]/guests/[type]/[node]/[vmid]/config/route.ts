@@ -7,6 +7,7 @@ import { isVmConfigNotFoundError, locateVmInCluster, type GuestType } from "@/li
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, checkPermissions, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
 import { classifyConfigBody } from "@/lib/rbac/configClassifier"
+import { isOpticalDrive } from "@/lib/proxmox/cdrom"
 import { getCurrentTenantId } from "@/lib/tenant"
 import { getTenantInfrastructureScope, maskingScope } from "@/lib/tenant/infraScope"
 import { resolveVdcForTenant, checkVdcQuota } from "@/lib/vdc/quota"
@@ -280,15 +281,20 @@ export async function PUT(
     }
     if (denied) return denied
 
+    // Only a slot that carries, or would carry, an optical drive is bound to
+    // the PVE digest: the media decision above was taken on that generation.
+    // Ordinary data disk edits keep their last-writer-wins behaviour.
+    const touchesOpticalDrive = (keys: string[]) => keys.some(key =>
+      /^(ide|sata|scsi)\d+$/.test(key) && (isOpticalDrive(currentConfig?.[key]) || isOpticalDrive(body[key])))
     const hasOpticalDriveMutation = type === 'qemu' && (
-      Object.keys(body).some(key => /^(ide|sata|scsi)\d+$/.test(key)) ||
-      [body.delete, body.revert].some(value => typeof value === 'string' && value.split(',').some(key => /^(ide|sata|scsi)\d+$/.test(key.trim())))
+      touchesOpticalDrive(Object.keys(body)) ||
+      [body.delete, body.revert].some(value => typeof value === 'string' && touchesOpticalDrive(value.split(',').map((key: string) => key.trim())))
     )
     if (hasOpticalDriveMutation && requestedDigest !== undefined) {
       if (typeof requestedDigest !== 'string' || !requestedDigest) {
         return NextResponse.json({ error: 'Invalid configuration digest' }, { status: 400 })
       }
-      if (currentConfig.digest && requestedDigest !== currentConfig.digest) {
+      if (currentConfig?.digest && requestedDigest !== currentConfig.digest) {
         return NextResponse.json({ error: 'VM configuration changed; reload before saving' }, { status: 409 })
       }
     }
@@ -417,7 +423,7 @@ export async function PUT(
 
     // Bind the permission decision to the device generation inspected above.
     // Keep a caller's matching digest; otherwise use PVE's current digest.
-    if (hasOpticalDriveMutation && (requestedDigest || currentConfig.digest)) {
+    if (hasOpticalDriveMutation && (requestedDigest || currentConfig?.digest)) {
       formData.set('digest', requestedDigest || String(currentConfig.digest))
     }
 

@@ -398,3 +398,56 @@ it('shows missing source guests without offering re-seed', async () => {
   expect(screen.getByText('Source guest no longer exists')).toBeInTheDocument()
   expect(screen.queryByRole('button', { name: 'Re-seed' })).not.toBeInTheDocument()
 })
+
+
+describe('ProtectionTab — a re-seed the orchestrator has accepted but not started', () => {
+  // The drawer re-reads /vms every time the job list refreshes (15 s upstream
+  // poll). Between the 202 and the moment the orchestrator picks the guest up,
+  // that read still reports `reseed_required`: the row must not offer the
+  // destructive wipe a second time under the green "queued" banner.
+  const reseedRequired = [{
+    vmid: 100, vm_name: 'web-01', status: 'reseed_required',
+    last_sync: null, last_error: 'Source disk was replaced', bytes_sent: 0, duration_ms: 0,
+  }]
+
+  const queueAReseed = async (requests: unknown[]) => {
+    server.use(http.post('/api/v1/orchestrator/replication/jobs/:id/vms/:vmid/reseed', async ({ request }) => {
+      requests.push(await request.json())
+
+      // An accepted re-seed may answer 202 with no body at all.
+      return new HttpResponse(null, { status: 202 })
+    }))
+    await openDrawer('100 - web-01')
+    await userEvent.click(await screen.findByRole('button', { name: 'Re-seed' }))
+    const confirmation = screen.getAllByRole('dialog').at(-1)!
+    await userEvent.click(within(confirmation).getByRole('button', { name: 'Re-seed' }))
+    expect(await screen.findByText('Full replication queued.')).toBeInTheDocument()
+  }
+
+  it('leaves the button disabled when the poll still reports reseed_required', async () => {
+    stubDrawerFetch(reseedRequired)
+    const requests: unknown[] = []
+    const { rerender } = renderWithProviders(<Harness jobs={[job()]} />)
+    await queueAReseed(requests)
+
+    // The poll lands and the orchestrator has not moved the row yet.
+    rerender(<Harness jobs={[job()]} />)
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Re-seed' })).toBeDisabled())
+    expect(screen.getByText('Full replication queued.')).toBeInTheDocument()
+    expect(requests).toHaveLength(1)
+  })
+
+  it('lifts the lock once the orchestrator takes the guest', async () => {
+    stubDrawerFetch(reseedRequired)
+    const requests: unknown[] = []
+    const { rerender } = renderWithProviders(<Harness jobs={[job()]} />)
+    await queueAReseed(requests)
+
+    stubDrawerFetch([{ ...reseedRequired[0], status: 'syncing', last_error: '' }])
+    rerender(<Harness jobs={[job()]} />)
+
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Re-seed' })).not.toBeInTheDocument())
+  })
+
+})

@@ -7,6 +7,26 @@ const NET = /^net\d+$/
 
 export class NicConfigError extends Error {}
 
+const VLAN_LIST_TOKEN = /^(\d+)(?:-(\d+))?$/
+
+/**
+ * PVE trunks grammar: ids or ranges separated by ';' (e.g. "10;20-25", as
+ * lib/vdc/vnets.ts documents). Canonicalised to the sorted id list so an
+ * equivalent spelling never reads as a VLAN change, and so a NIC PVE already
+ * accepted never becomes uneditable here.
+ */
+function canonicalVlanList(raw: string): string {
+  const ids = new Set<number>()
+  for (const token of raw.split(';').filter(Boolean)) {
+    const m = VLAN_LIST_TOKEN.exec(token)
+    const start = m ? Number(m[1]) : Number.NaN
+    const end = m?.[2] === undefined ? start : Number(m[2])
+    if (!m || start < 1 || end > 4094 || end < start) throw new NicConfigError('Invalid NIC VLAN trunks')
+    for (let id = start; id <= end; id++) ids.add(id)
+  }
+  return [...ids].sort((a, b) => a - b).join(';')
+}
+
 /** Canonicalize PVE's equivalent model=MAC, model,macaddr=MAC and LXC spellings. */
 export function normalizedNicProperties(raw: unknown): Map<string, string> {
   const result = new Map<string, string>()
@@ -27,9 +47,7 @@ export function normalizedNicProperties(raw: unknown): Map<string, string> {
       if (value && (!/^\d+$/.test(value) || Number(value) < 1 || Number(value) > 4094)) throw new NicConfigError('Invalid NIC VLAN tag')
       put(key, value ? String(Number(value)) : '')
     } else if (key === 'trunks') {
-      const tags = value.split(';').filter(Boolean)
-      if (tags.some(v => !/^\d+$/.test(v) || Number(v) < 1 || Number(v) > 4094)) throw new NicConfigError('Invalid NIC VLAN trunks')
-      put(key, [...new Set(tags.map(v => String(Number(v))))].sort().join(';'))
+      put(key, canonicalVlanList(value))
     } else {
       put(key, value)
     }

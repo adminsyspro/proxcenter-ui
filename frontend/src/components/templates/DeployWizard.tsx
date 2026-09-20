@@ -705,7 +705,13 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
 
     const selBridge = bridges.find(b => b.iface === networkBridge)
     const vlanVisible = fullClusterNet || selBridge?.type === 'shared'
-    if (canEditVlan && vlanVisible && selBridge?.type !== 'vnet' && vlanTag.trim()) {
+    if (vlanVisible && selBridge?.type !== 'vnet' && vlanTag.trim()) {
+      // A blueprint can carry a tag this caller may not set: refuse loudly
+      // rather than deploy on the native VLAN behind their back.
+      if (!canEditVlan) {
+        setDeployError(t('hardware.nicVlanPermissionRequired'))
+        return
+      }
       const n = Number.parseInt(vlanTag, 10)
       if (!Number.isFinite(n) || n < 1 || n > 4094 || String(n) !== vlanTag.trim()) {
         setDeployError(t('templates.deploy.hardware.vlanInvalid'))
@@ -743,7 +749,6 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
           //    or field left empty). The deploy route applies `,tag=` only
           //    when this is truthy.
           vlanTag: (() => {
-            if (!canEditVlan) return null
             const sel = bridges.find(b => b.iface === networkBridge)
             if (sel?.type === 'vnet') return null
             if (!fullClusterNet && sel?.type !== 'shared') return null

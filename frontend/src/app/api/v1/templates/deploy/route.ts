@@ -265,7 +265,10 @@ export async function POST(req: Request) {
 
     if (tenantId !== DEFAULT_TENANT_ID) {
       const hw = body.hardware
-      const requestedNet = `${hw?.networkModel || 'virtio'},bridge=${hw?.networkBridge || 'vmbr0'}${hw?.vlanTag ? `,tag=${hw.vlanTag}` : ''}`
+      // Mirror every NIC the pipeline can build: the ISO path pins
+      // body.staticMac into the model token (see the IPAM reservation below).
+      const requestedModel = `${hw?.networkModel || 'virtio'}${body.staticMac ? `=${body.staticMac}` : ''}`
+      const requestedNet = `${requestedModel},bridge=${hw?.networkBridge || 'vmbr0'}${hw?.vlanTag ? `,tag=${hw.vlanTag}` : ''}`
       for (const permission of sensitiveNicPermissions({ net0: requestedNet })) {
         const sensitiveDenied = await checkPermission(permission, 'vm', `${body.connectionId}:${body.node}:qemu:${body.vmid}`)
         if (sensitiveDenied) return sensitiveDenied

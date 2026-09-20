@@ -32,6 +32,9 @@ describe('classifyConfigKey', () => {
     const current = { net0: 'virtio=BC:24:11:00:00:01,bridge=vmbr0,tag=100' }
     expect(classifyConfigKey('net0', 'virtio=BC:24:11:00:00:01,bridge=vmbr0,tag=100,link_down=1', current)).toBe('vm.config.nic.link')
     expect(classifyConfigKey('net0', 'virtio=BC:24:11:00:00:01,bridge=vmbr0,tag=100', { net0: `${current.net0},link_down=1` })).toBe('vm.config.nic.link')
+    // PVE trunks accept ranges: a link toggle on such a NIC is still link-only.
+    const trunked = { net0: 'virtio=BC:24:11:00:00:01,bridge=vmbr0,trunks=100-120;305' }
+    expect(classifyConfigKey('net0', `${trunked.net0},link_down=1`, trunked)).toBe('vm.config.nic.link')
     // The bridge changes too: a full NIC edit.
     expect(classifyConfigKey('net0', 'virtio=BC:24:11:00:00:01,bridge=vmbr1,tag=100,link_down=1', current)).toBe('vm.config.nic')
     // Same value, nothing toggled: not a link change either.

@@ -30,4 +30,11 @@ describe('sensitive NIC changes', () => {
     expect(() => sensitiveNicPermissions({ net0: `virtio=${mac},macaddr=AA:BB:CC:DD:EE:02` })).toThrow()
     expect(() => sensitiveNicPermissions({ net0: 'virtio,tag=12,tag=13' })).toThrow()
   })
+  it('reads PVE trunk ranges and treats an equivalent spelling as unchanged', () => {
+    const ranged = { net0: `virtio=${mac},bridge=vmbr0,trunks=100-120;305` }
+    expect(sensitiveNicPermissions({ net0: `virtio=${mac},bridge=vmbr0,trunks=305;100-110;111-120,link_down=1` }, ranged)).toEqual([])
+    expect(sensitiveNicPermissions({ net0: `virtio=${mac},bridge=vmbr0,trunks=100-121;305` }, ranged)).toEqual([VLAN])
+    expect(() => sensitiveNicPermissions({ net0: 'virtio,bridge=vmbr0,trunks=120-100' })).toThrow()
+    expect(() => sensitiveNicPermissions({ net0: 'virtio,bridge=vmbr0,trunks=1-4095' })).toThrow()
+  })
 })

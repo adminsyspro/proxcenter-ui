@@ -9,7 +9,7 @@ import { prisma } from "@/lib/db/prisma"
 import { audit } from "@/lib/audit"
 import { hasPermission, isUserSuperAdmin, isUserProtected, PROTECTED_ROLE_IDS, PROVIDER_ONLY_ROLE_IDS } from "@/lib/rbac"
 import { roleHasSensitiveNicPermissions } from "@/lib/rbac/nicPermissions"
-import { validateAssignmentScope } from "@/lib/rbac/scope-validation"
+import { scopeBreadth, validateAssignmentScope } from "@/lib/rbac/scope-validation"
 import { DEFAULT_TENANT_ID, getCurrentTenantId } from "@/lib/tenant"
 import { demoResponse } from "@/lib/demo/demo-api"
 
@@ -267,8 +267,13 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
       )
     }
 
-    if (!callerIsSuperAdmin && roleHasSensitiveNicPermissions(assignment.role)) {
-      return NextResponse.json({ error: 'Only a super admin may change NIC identity grants' }, { status: 403 })
+    // A provider admin may still narrow or expire an existing NIC identity
+    // grant; widening or moving it stays reserved to a super admin.
+    const scopeMoves = scope_type !== undefined
+      && (scope_type !== assignment.scopeType || (scope_target ?? null) !== (assignment.scopeTarget ?? null))
+    if (!callerIsSuperAdmin && roleHasSensitiveNicPermissions(assignment.role) && scopeMoves
+      && scopeBreadth(scope_type) >= scopeBreadth(assignment.scopeType)) {
+      return NextResponse.json({ error: 'Only a super admin may widen a NIC identity grant' }, { status: 403 })
     }
 
     // Construire le payload Prisma en ne touchant que les champs fournis

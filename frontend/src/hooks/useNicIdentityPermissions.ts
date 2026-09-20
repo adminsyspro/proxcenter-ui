@@ -8,7 +8,9 @@ export function useNicIdentityPermissions() {
   const { permissions = [], isAdmin: isSuperAdmin, loading: rbacLoading } = useRBAC()
   const { currentTenant, loading: tenantLoading } = useTenant()
   const isProvider = currentTenant?.id === 'default'
-  const loading = rbacLoading || tenantLoading || !currentTenant
+  // A tenant that never resolved denies (fail closed) but must not pin the
+  // dialogs in a permanent loading state: the server enforces the rights.
+  const loading = rbacLoading || tenantLoading
   return {
     loading,
     canEditMac: !loading && (isProvider || isSuperAdmin || permissions.includes('vm.config.nic.mac')),

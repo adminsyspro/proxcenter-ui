@@ -5604,7 +5604,10 @@
       "deleteIso": "删除此 ISO",
       "deleteIsoConfirm": "从 {storage} 删除 {name}？仍在引用它的虚拟机将无法从中启动。"
     },
-    "loadNodesError": "无法加载节点列表"
+    "loadNodesError": "无法加载节点列表",
+    "nicMacPermissionRequired": "更改 MAC 地址需要提供商授权。",
+    "nicVlanPermissionRequired": "更改 VLAN 设置需要提供商授权。",
+    "nicOriginalUnavailable": "保存前请重新加载网络配置。"
   },
   "ldap": {
     "description": "配置 LDAP/Active Directory 身份验证，允许用户使用企业凭据登录。",

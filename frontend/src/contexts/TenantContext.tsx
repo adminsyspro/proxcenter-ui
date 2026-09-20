@@ -37,6 +37,11 @@ const TenantContext = createContext<TenantContextType>({
   isFullClusterView: true,
 })
 
+/** Minimal tenant built from the signed session when the tenant list is unavailable. */
+function sessionTenant(id: string): TenantInfo {
+  return { id, slug: id, name: id }
+}
+
 export function TenantProvider({ children }: { children: React.ReactNode }) {
   const { data: session } = useSession()
   const userId = session?.user?.id
@@ -68,13 +73,14 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
         const tenants = data.data || []
         setAvailableTenants(tenants)
         const currentId = tenantId || data.currentTenantId || DEFAULT_TENANT_ID
-        const current = tenants.find((t: TenantInfo) => t.id === currentId) || null
-        setCurrentTenant(current)
+        // The session names the tenant; the list only enriches it. A row
+        // missing from the list must not leave the whole UI without a tenant.
+        setCurrentTenant(tenants.find((t: TenantInfo) => t.id === currentId) || sessionTenant(currentId))
       })
       .catch((err) => {
         if (ignore) return
         setAvailableTenants([])
-        setCurrentTenant(null)
+        setCurrentTenant(sessionTenant(tenantId || DEFAULT_TENANT_ID))
         console.error('[TenantContext] Failed to fetch tenants:', err)
       })
       .finally(() => {
@@ -115,7 +121,7 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
       availableTenants: pending ? [] : availableTenants,
       switchTenant,
       loading: pending,
-      isMultiTenant: availableTenants.length > 1,
+      isMultiTenant: !pending && availableTenants.length > 1,
       isProvider,
       isMsp,
       isFullClusterView: isProvider || isMsp,

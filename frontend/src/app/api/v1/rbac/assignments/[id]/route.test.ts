@@ -116,11 +116,25 @@ describe('PATCH /api/v1/rbac/assignments/[id] scope handling (issue #383)', () =
   it('refuses scope widening of an existing sensitive NIC grant by a non-superadmin', async () => {
     isSuperAdminMock.mockResolvedValue(false)
     isProtectedMock.mockResolvedValue(false)
-    userRoleFindFirstMock.mockResolvedValue({ ...existingAssignment,
+    userRoleFindFirstMock.mockResolvedValue({ ...existingAssignment, scopeType: 'connection', scopeTarget: 'conn-1',
       role: { name: 'NIC identity', permissions: [{ permissionId: 'vm.config.nic.vlan' }] } })
     const res = await callRoute(PATCH, { method: 'PATCH', params: { id: 'assign_1' }, body: { scope_type: 'global' } })
     expect(res.status).toBe(403)
     expect(userRoleUpdateManyMock).not.toHaveBeenCalled()
+  })
+  it('lets a non-superadmin narrow or expire an existing sensitive NIC grant', async () => {
+    isSuperAdminMock.mockResolvedValue(false)
+    isProtectedMock.mockResolvedValue(false)
+    const sensitive = { ...existingAssignment,
+      role: { name: 'NIC identity', permissions: [{ permissionId: 'vm.config.nic.mac' }] } }
+    userRoleFindFirstMock.mockResolvedValueOnce(sensitive).mockResolvedValueOnce(updatedRow('connection', 'conn-1'))
+    let res = await callRoute(PATCH, { method: 'PATCH', params: { id: 'assign_1' }, body: { scope_type: 'connection', scope_target: 'conn-1' } })
+    expect(res.status).toBe(200)
+    expect(userRoleUpdateManyMock.mock.calls[0][0].data.scopeType).toBe('connection')
+    userRoleFindFirstMock.mockResolvedValueOnce(sensitive).mockResolvedValueOnce(updatedRow('global', null))
+    res = await callRoute(PATCH, { method: 'PATCH', params: { id: 'assign_1' }, body: { expires_at: '2030-01-01T00:00:00.000Z' } })
+    expect(res.status).toBe(200)
+    expect(userRoleUpdateManyMock).toHaveBeenCalledTimes(2)
   })
 
 })

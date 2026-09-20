@@ -31,6 +31,6 @@ describe('NIC identity permissions', () => {
     expect(usePermissionsUnderTest()).toMatchObject({ canEditMac: false, canEditVlan: false })
     mocks.rbac.mockReturnValue({ loading: false, permissions: ['vm.config.nic.mac'] })
     mocks.tenant.mockReturnValue({ loading: false, currentTenant: null, isProvider: true })
-    expect(usePermissionsUnderTest()).toMatchObject({ canEditMac: false, canEditVlan: false })
+    expect(usePermissionsUnderTest()).toMatchObject({ loading: false, canEditMac: false, canEditVlan: false })
   })
 })

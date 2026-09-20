@@ -24,6 +24,24 @@ export const ROLE_DEFAULT_SCOPE_TYPES = ["connection", "node", "vm", "tag", "poo
 
 const NO_TARGET = new Set<string>(["global", "inherit"])
 
+// How much of the estate a scope type reaches, for "is this change a
+// widening?" comparisons. "inherit" follows the role's default scope, which
+// is at most connection-wide, so it ranks with connection.
+const SCOPE_BREADTH: Record<string, number> = {
+  vm: 0,
+  tag: 1,
+  pool: 1,
+  node: 2,
+  connection: 3,
+  inherit: 3,
+  global: 4,
+}
+
+/** Larger means broader; an unknown type is treated as the broadest. */
+export function scopeBreadth(scopeType: string | null | undefined): number {
+  return SCOPE_BREADTH[String(scopeType)] ?? SCOPE_BREADTH.global
+}
+
 export type ScopeEntry = { scopeType: string; scopeTarget: string }
 
 /**

@@ -421,6 +421,10 @@ export default function ProtectionTab({
   const [reseedBusy, setReseedBusy] = useState(false)
   const [reseedError, setReseedError] = useState('')
   const [reseedQueued, setReseedQueued] = useState(false)
+  // Guests whose re-seed the orchestrator accepted but has not started yet:
+  // the 15 s poll still reports them reseed_required, and the button must not
+  // offer the destructive wipe a second time meanwhile.
+  const [reseedQueuedVmids, setReseedQueuedVmids] = useState<Set<number>>(new Set())
 
   const confirmReseed = async () => {
     if (!reseedGuest || reseedBusy) return
@@ -430,9 +434,12 @@ export default function ProtectionTab({
       const response = await fetch(`/api/v1/orchestrator/replication/jobs/${encodeURIComponent(reseedGuest.jobId)}/vms/${reseedGuest.vmid}/reseed`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ confirm: true }),
       })
-      const data = await response.json()
+      // An accepted 202 may carry no body, and a proxy error page is not JSON:
+      // neither must read as "the re-seed failed" and invite a retry.
+      const data = await response.json().catch(() => null)
       if (!response.ok) throw new Error(data?.error || t('siteRecovery.protection.reseedFailed'))
       setVmStatuses(rows => rows?.map(row => row.vmid === reseedGuest.vmid ? { ...row, status: 'pending', last_error: '' } : row) ?? null)
+      setReseedQueuedVmids(prev => new Set(prev).add(reseedGuest.vmid))
       setReseedGuest(null)
       setReseedQueued(true)
     } catch (error) {
@@ -556,6 +563,7 @@ export default function ProtectionTab({
     setDrawerOpen(true)
     setVmPage(0)
     setReseedQueued(false)
+    setReseedQueuedVmids(new Set())
   }
 
   // Fetch per-VM status when the drawer opens on a job that protects anything.
@@ -575,7 +583,17 @@ export default function ProtectionTab({
     setVmStatusesLoading(true)
     fetch(`/api/v1/orchestrator/replication/jobs/${selectedJobId}/vms`, { cache: 'no-store' })
       .then(r => (r.ok ? r.json() : []))
-      .then(data => { if (!cancelled) setVmStatuses(Array.isArray(data) ? data : []) })
+      .then(data => {
+        if (cancelled) return
+        const rows: VMStatusRow[] = Array.isArray(data) ? data : []
+        setVmStatuses(rows)
+        // The orchestrator confirms a queued re-seed by moving the row off
+        // reseed_required; until then the button stays locked.
+        setReseedQueuedVmids(prev => {
+          const next = new Set([...prev].filter(vmid => rows.some(row => row.vmid === vmid && row.status === 'reseed_required')))
+          return next.size === prev.size ? prev : next
+        })
+      })
       .catch(() => { if (!cancelled) setVmStatuses([]) })
       .finally(() => { if (!cancelled) setVmStatusesLoading(false) })
     return () => { cancelled = true }
@@ -1021,7 +1039,7 @@ export default function ProtectionTab({
                                 )}
                               </Typography>
                               {row.status === 'reseed_required' && (
-                                <Button size='small' color='warning' disabled={selected.status === 'syncing' || selected.status === 'failed_over'} onClick={() => {
+                                <Button size='small' color='warning' disabled={selected.status === 'syncing' || selected.status === 'failed_over' || reseedQueuedVmids.has(row.vmid)} onClick={() => {
                                   setReseedError('')
                                   setReseedGuest({ jobId: selected.id, vmid: row.vmid, name: row.vm_name ? `${row.vmid} · ${row.vm_name}` : `VM ${row.vmid}` })
                                 }} sx={{ flexShrink: 0 }}>

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import useSWR from 'swr'
 
@@ -211,15 +211,23 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
       target_node: targetNode, vm_ids: selectionMode === 'vms' ? selectedVMs : [],
       tags: selectionMode === 'tags' ? selectedTags : [], target_pool: targetPool, estimated_size_bytes: estimatedSizeBytes,
       vmid_prefix: vmidPrefix || 0,
-      rpo_target: scheduleValue.rpoTargetSeconds,
+      // Same shape as the create request below: a scheduled job has no RPO
+      // target, so the preflight must not judge a cadence the job will not have.
+      rpo_target: scheduleValue.mode === 'rpo' ? scheduleValue.rpoTargetSeconds : null,
       schedule_spec: scheduleValue.mode === 'scheduled' ? scheduleValue.scheduleSpec : null,
       timezone: scheduleValue.timezone,
     }) : ''
+  // check-ssh opens real SSH sessions on the PVE nodes: its result is kept for
+  // as long as the clusters, nodes and guests it was made for do not change.
+  const sshResult = useRef<{ key: string; value: SSHConnectivityResult } | null>(null)
+  useEffect(() => { if (!open) sshResult.current = null }, [open])
 
   useEffect(() => {
     if (!checkKey) return
     const controller = new AbortController()
-    const { target_pool, estimated_size_bytes, vmid_prefix, ...context } = JSON.parse(checkKey)
+    // The schedule only matters to the preflight.
+    const { target_pool, estimated_size_bytes, vmid_prefix, rpo_target, schedule_spec, timezone, ...context } = JSON.parse(checkKey)
+    const sshKey = JSON.stringify(context)
     const runCheck = async (endpoint: string, body: unknown) => {
       const response = await fetch(`/api/v1/orchestrator/replication/${endpoint}`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: controller.signal,
@@ -233,9 +241,13 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
     // The SSH check opens real sessions on the PVE nodes: let the selection settle
     // instead of firing on every VM toggle.
     const timer = setTimeout(() => {
+      const cachedSsh = sshResult.current?.key === sshKey ? sshResult.current.value : null
       Promise.all([
-        runCheck('check-ssh', context),
-        runCheck('preflight', { ...context, target_pool, estimated_size_bytes, vmid_prefix }),
+        cachedSsh ? Promise.resolve(cachedSsh) : runCheck('check-ssh', context).then((ssh: SSHConnectivityResult) => {
+          sshResult.current = { key: sshKey, value: ssh }
+          return ssh
+        }),
+        runCheck('preflight', { ...context, target_pool, estimated_size_bytes, vmid_prefix, rpo_target, schedule_spec, timezone }),
       ]).then(([ssh, preflight]) => {
         if (!controller.signal.aborted) setCheckResult({ key: checkKey, ssh, preflight })
       }).catch((error: unknown) => {

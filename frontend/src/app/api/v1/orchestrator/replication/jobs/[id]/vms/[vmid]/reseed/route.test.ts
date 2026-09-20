@@ -41,6 +41,14 @@ it.each(['source_cluster', 'target_cluster'])('rejects a foreign %s', async fiel
   expect((await request()).status).toBe(404)
   expect(mocks.reseed).not.toHaveBeenCalled()
 })
+it('refuses a guest the job does not carry, and keeps tag-based jobs to the orchestrator', async () => {
+  mocks.job.mockResolvedValue({ data: { source_cluster: 'src', target_cluster: 'dst', vm_ids: [100, 101] } })
+  expect((await request({ confirm: true }, '102')).status).toBe(404)
+  expect(mocks.reseed).not.toHaveBeenCalled()
+  expect((await request({ confirm: true }, '101')).status).toBe(202)
+  mocks.job.mockResolvedValue({ data: { source_cluster: 'src', target_cluster: 'dst', vm_ids: [] } })
+  expect((await request({ confirm: true }, '555')).status).toBe(202)
+})
 it('preserves upstream safety conflicts', async () => {
   mocks.reseed.mockRejectedValue(new Error('Orchestrator 409: {"error":"Recovery is active"}'))
   const response = await request()

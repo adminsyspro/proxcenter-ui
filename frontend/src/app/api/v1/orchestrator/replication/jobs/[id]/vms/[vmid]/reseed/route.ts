@@ -27,6 +27,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (!job || !tenantConnectionIds.has(job.source_cluster) || !tenantConnectionIds.has(job.target_cluster)) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 })
     }
+    // A job that names its guests only re-seeds one of them; a tag-based job
+    // (empty vm_ids) resolves its guests at run time, the orchestrator checks.
+    if (Array.isArray(job.vm_ids) && job.vm_ids.length > 0 && !job.vm_ids.includes(vmId)) {
+      return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    }
 
     const response = await client.reseedReplicationJobVM(id, vmId)
     return NextResponse.json(response.data, { status: 202 })

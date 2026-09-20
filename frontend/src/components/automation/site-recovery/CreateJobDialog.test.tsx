@@ -444,9 +444,13 @@ describe('CreateJobDialog storage engines', () => {
     expect(screen.getByRole('button', { name: 'Create Job' })).toBeDisabled()
     await waitFor(() => expect(requests()).toHaveLength(2))
     expect(JSON.parse(String(requests().at(-1)?.[1]?.body)).schedule_spec).toEqual({ mode: 'daily', times: ['03:00'], weekdays: [0, 1, 2, 3, 4, 5, 6] })
+    // A scheduled job has no RPO target: the preflight must not judge one.
+    expect(JSON.parse(String(requests().at(-1)?.[1]?.body))).toMatchObject({ rpo_target: null })
     await userEvent.click(screen.getByRole('button', { name: 'Continuous (RPO)' }))
     await waitFor(() => expect(requests()).toHaveLength(3))
     expect(JSON.parse(String(requests().at(-1)?.[1]?.body))).toMatchObject({ schedule_spec: null, rpo_target: 900 })
+    // The schedule never re-opens SSH sessions on the PVE nodes.
+    expect(fetchMock.mock.calls.filter(call => String(call[0]).endsWith('/check-ssh'))).toHaveLength(1)
   })
 
   it('keeps creation disabled after preflight fails', async () => {

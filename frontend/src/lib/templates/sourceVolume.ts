@@ -96,11 +96,13 @@ export async function authorizeImageVolume(args: {
   if (source.format === 'iso' ? kind !== 'iso' : !['images', 'import'].includes(kind)) {
     throw new SourceVolumeError('Source volume does not match the image format.', 400)
   }
+  // A published golden image commonly sits on the provider's `local:import/`,
+  // which a vDC may also hold as its ISO library: the provider's grant covers
+  // the disk source, the library rule only restricts the tenant's own images.
+  if (published) return
   if (scope && isLibraryOnlyStorage(scope, sourceConnectionId, storage) && kind !== 'iso') {
     throw new SourceVolumeError('An ISO library cannot be used as a source of VM disks.')
   }
-
-  if (published) return
 
   if (kind === 'images') {
     const vmid = Number(volume.vmid)

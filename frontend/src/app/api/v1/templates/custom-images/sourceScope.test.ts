@@ -195,6 +195,13 @@ describe('custom image source authorization', () => {
       await expect(authorizeImageVolume({ tenantId: 'tenant-a', source: golden, target: { connectionId: 'conn-a', node: 'pve1' }, publishedImage: { ...golden, isShared: false } })).rejects.toMatchObject({ status: 403 })
       await expect(authorizeImageVolume({ tenantId: 'tenant-a', source: golden, target: { connectionId: 'conn-a', node: 'pve1' }, publishedImage: { ...golden, tenantId: 'tenant-b' } })).rejects.toMatchObject({ status: 403 })
     })
+    it('lets a tenant deploy a published qcow2 from the library storage its vDC only reads (lab layout)', async () => {
+      const onLibrary = { ...golden, volumeId: 'library:import/golden.qcow2', sourceNode: 'pve1' }
+      mocks.pve.mockResolvedValue([{ volid: onLibrary.volumeId, content: 'import' }])
+      await expect(authorizeImageVolume({ tenantId: 'tenant-a', source: onLibrary, target: { connectionId: 'conn-a', node: 'pve1' }, publishedImage: onLibrary })).resolves.toBeUndefined()
+      // The tenant's own image on that library is still refused as a disk source.
+      await expect(authorizeImageVolume({ tenantId: 'tenant-a', source: { ...onLibrary, tenantId: 'tenant-a', isShared: false } })).rejects.toMatchObject({ status: 403 })
+    })
     it('keeps the node reachability check for a published image on restricted storage', async () => {
       mocks.pve.mockImplementation(async (_conn, path) => path.endsWith('/content')
         ? [{ volid: golden.volumeId, content: 'import' }]

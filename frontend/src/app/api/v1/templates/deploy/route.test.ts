@@ -741,7 +741,11 @@ describe('POST templates/deploy: source volume authorization', () => {
   })
 
   it('rejects storage scope revoked between acceptance and background execution', async () => {
-    findCustomImageForTenantMock.mockResolvedValue({ ...source, tenantId: 'default', isShared: true })
+    pveFetchMock.mockImplementation(async (_conn, path) => {
+      if (path.endsWith('/content')) return [{ volid: source.volumeId, content: 'images', vmid: 201 }]
+      if (path === '/cluster/resources?type=vm') return [{ vmid: 201, type: 'qemu', node: 'pve1', pool: 'pool-a' }]
+      return {}
+    })
     const res = await callRoute(await loadPost(), { body: baseBody })
     expect(res.status).toBe(200)
     const changedScope = await getVdcScopeMock()
@@ -749,5 +753,18 @@ describe('POST templates/deploy: source volume authorization', () => {
     await runAfters()
     expect(pveFetchMock.mock.calls.some(call => call[2]?.method === 'POST' || call[2]?.method === 'PUT')).toBe(false)
     expect(deploymentUpdateMock.mock.calls.some(call => call[0].data.status === 'failed')).toBe(true)
+  })
+
+  it('deploys a provider shared image whose source sits outside the tenant vDC (#971)', async () => {
+    const golden = { ...source, tenantId: 'default', isShared: true, volumeId: 'provider-store:import/golden.qcow2', sourceNode: 'pve3' }
+    findCustomImageForTenantMock.mockResolvedValue(golden)
+    pveFetchMock.mockImplementation(async (_conn, path) => {
+      if (path.endsWith('/content')) return [{ volid: golden.volumeId, content: 'import' }]
+      if (path.startsWith('/storage/')) return { shared: 1, type: 'nfs' }
+      return {}
+    })
+    const res = await callRoute(await loadPost(), { body: baseBody })
+    expect(res.status).toBe(200)
+    expect(afterCbs).toHaveLength(1)
   })
 })

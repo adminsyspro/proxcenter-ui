@@ -54,8 +54,13 @@ export async function PUT(req: Request, ctx: Ctx) {
     const tenantId = await getCurrentTenantId()
     const data: any = { ...body }
     const source = { ...existing, ...body }
+    const sourceTouched = ['sourceType', 'volumeId', 'sourceConnectionId', 'sourceNode', 'format']
+      .some(key => (body as Record<string, unknown>)[key] !== undefined)
     if (source.sourceType === 'volume') {
-      await authorizeImageVolume({ tenantId, source })
+      // A metadata edit (name, memory...) must not depend on the source
+      // cluster being reachable or the volume still existing: the source was
+      // authorised when it was set and is checked again at deploy time.
+      if (sourceTouched) await authorizeImageVolume({ tenantId, source })
     } else {
       data.sourceConnectionId = null
       data.sourceNode = null

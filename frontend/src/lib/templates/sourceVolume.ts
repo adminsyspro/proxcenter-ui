@@ -38,7 +38,10 @@ export async function authorizeImageVolume(args: {
   }
   // Volume IDs are interpolated into PVE property strings (import-from and
   // ide2). Reject option injection, paths and ambiguous encoded separators.
-  if (!volumeId || !/^[A-Za-z][A-Za-z0-9_-]*:[A-Za-z0-9_./+@-]+$/.test(volumeId)
+  // Storage ids may carry dots (pve-storage-id, STORAGE_ID_RE in lib/vdc) and
+  // ISO names spaces, parentheses and '+'. Only the property separators
+  // (',', '=', ';', a second ':') and path tricks are refused.
+  if (!volumeId || !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}:[A-Za-z0-9_./+@ ()-]+$/.test(volumeId)
     || volumeId.split(':')[1].split('/').some(part => !part || part === '.' || part === '..')) {
     throw new SourceVolumeError('Invalid source volume ID.', 400)
   }
@@ -46,23 +49,39 @@ export async function authorizeImageVolume(args: {
     throw new SourceVolumeError('This image belongs to another cluster. Select its source cluster for deployment.', 400)
   }
   const storage = volumeId.split(':')[0]
+  // Publishing is an explicit provider grant to this exact, bound source. The
+  // provider's golden image legitimately sits on storage and nodes outside the
+  // tenant's vDC (#971), so the scope gates below do not apply to it. A tenant
+  // cannot manufacture this exception with isShared in a request:
+  // `publishedImage` is always a server-resolved catalogue row.
+  const published = publishedImage?.tenantId === DEFAULT_TENANT_ID && !!publishedImage.isShared
+    && publishedImage.volumeId === volumeId
+    && publishedImage.sourceConnectionId === sourceConnectionId
+    && publishedImage.sourceNode === sourceNode
   const infra = await getTenantInfrastructureScope(tenantId, { ignoreVdcContext: true })
   const scope = infra.kind === 'iaas' ? infra.vdcScope : null
-  if (infra.kind === 'msp' && !infra.connectionIds.has(sourceConnectionId)) {
+  if (!published && infra.kind === 'msp' && !infra.connectionIds.has(sourceConnectionId)) {
     throw new SourceVolumeError('Source volume not accessible.')
   }
-  if (infra.kind === 'iaas' && (!scope
+  if (!published && infra.kind === 'iaas' && (!scope
     || !scope.connectionIds.has(sourceConnectionId)
     || !scope.nodesByConnection.get(sourceConnectionId)?.has(sourceNode)
     || !scope.storagesByConnection.get(sourceConnectionId)?.has(storage))) {
     throw new SourceVolumeError('Source volume not accessible.')
   }
 
-  const conn = await getConnectionById(sourceConnectionId)
+  const conn = await getConnectionById(sourceConnectionId).catch((error: unknown) => {
+    if (error instanceof Error && /not found/i.test(error.message)) {
+      throw new SourceVolumeError('Source cluster not found.', 404)
+    }
+    throw error
+  })
   if (target && target.node !== sourceNode) {
     const config = await pveFetch<any>(conn, `/storage/${encodeURIComponent(storage)}`)
-    if (!isSharedStorage(config)) {
-      throw new SourceVolumeError('This image is on local storage. Deploy it on its source node.', 400)
+    // A shared storage can still be restricted to some nodes (`nodes=`).
+    const nodes = typeof config?.nodes === 'string' && config.nodes ? config.nodes.split(',') : null
+    if (!isSharedStorage(config) || (nodes && !nodes.includes(target.node))) {
+      throw new SourceVolumeError('This image is not reachable from the target node. Deploy it on its source node.', 400)
     }
   }
   // Look up the actual content type and owning VMID from PVE. A guessed
@@ -81,13 +100,7 @@ export async function authorizeImageVolume(args: {
     throw new SourceVolumeError('An ISO library cannot be used as a source of VM disks.')
   }
 
-  // Publishing is an explicit provider grant to this exact, bound source.
-  // Storage/node grants above still apply, and a tenant cannot manufacture
-  // this exception with isShared in a create/update request.
-  if (publishedImage?.tenantId === DEFAULT_TENANT_ID && publishedImage.isShared
-    && publishedImage.volumeId === volumeId
-    && publishedImage.sourceConnectionId === sourceConnectionId
-    && publishedImage.sourceNode === sourceNode) return
+  if (published) return
 
   if (kind === 'images') {
     const vmid = Number(volume.vmid)
@@ -108,7 +121,12 @@ export async function authorizeImageVolume(args: {
   const slugs = await loadTenantSlugs(tenantId)
   const owner = resolveUploadOwner(volumeId.split('/').pop() ?? '', slugs.all)
   if (owner.kind === 'tenant' && owner.slug === slugs.mine) return
-  if (kind === 'iso' && owner.kind === 'provider'
-    && scope.isoLibrariesByConnection.get(sourceConnectionId)?.has(storage)) return
+  if (owner.kind === 'provider') {
+    // An unprefixed name is the provider catalogue on an ISO library, and the
+    // tenant's own upload on a storage it writes to: tenantUploadFilename only
+    // namespaces files on libraries, never on the vDC's own storage.
+    if (kind === 'iso' && scope.isoLibrariesByConnection.get(sourceConnectionId)?.has(storage)) return
+    if (scope.writableStoragesByConnection?.get(sourceConnectionId)?.has(storage)) return
+  }
   throw new SourceVolumeError('Source volume not accessible.')
 }

@@ -40,6 +40,18 @@ beforeEach(() => {
   document.head.replaceChildren()
 })
 
+describe('applyFavicon and detached icon links', () => {
+  it('forgets icon links Next has since removed instead of writing to detached nodes', () => {
+    renderStockIcons()
+    const [first] = Array.from(document.querySelectorAll<HTMLLinkElement>("link[rel~='icon']"))
+    const undo = applyFavicon('/api/v1/settings/branding/uploads/favicon.png?t=1')
+    first.remove()
+    undo()
+    expect(first.getAttribute('href')).toBe('/api/v1/settings/branding/uploads/favicon.png?t=1')
+    expect(iconLinks()).toEqual([{ href: '/icon.svg?icon.18odtp5qriroz.svg', type: 'image/svg+xml', sizes: 'any' }])
+  })
+})
+
 describe('faviconMimeType', () => {
   it.each([
     ['/api/v1/settings/branding/uploads/favicon.png', 'image/png'],

@@ -5,7 +5,10 @@ import { getSettingWithSource } from '@/lib/db/settings'
 import { getCurrentTenantId } from '@/lib/tenant'
 import { getAsset, slotFromFilename, type AssetKind } from '@/lib/branding/assetStore'
 
-const HEADERS = { 'Cache-Control': 'private, no-store', Vary: 'Cookie, Authorization' }
+// Private keeps the bytes out of shared caches; the URL carries the reader's
+// scope and the upload cache-buster, so an hour of browser caching is safe and
+// spares the logo, favicon and login background a download on every page.
+const HEADERS = { 'Cache-Control': 'private, max-age=3600', Vary: 'Cookie, Authorization' }
 
 export interface UploadedAssetRouteOptions {
   /** Asset family in `uploaded_assets`. */
@@ -52,18 +55,26 @@ export function createUploadedAssetRoute(options: UploadedAssetRouteOptions) {
         return NextResponse.json({ error: 'Not found' }, { status: 404, headers: HEADERS })
       }
       const ownerTenantId = requestedOwner || inheritedOwner
-      const asset = await getAsset(ownerTenantId, kind, slotFromFilename(sanitized))
-      if (asset) {
-        return new NextResponse(new Uint8Array(asset.data), {
-          headers: { ...HEADERS, 'Content-Type': asset.contentType },
-        })
+      const slot = slotFromFilename(sanitized)
+      // A tenant row carrying an upload URL without owning the bytes can only
+      // come from saving the inherited provider branding (the form sends the
+      // URLs back): the provider logo is what that tenant saw and kept. The
+      // provider is the only fallback, never another tenant.
+      const owners = kind === 'branding' && ownerTenantId !== 'default' ? [ownerTenantId, 'default'] : [ownerTenantId]
+      for (const owner of owners) {
+        const asset = await getAsset(owner, kind, slot)
+        if (asset) {
+          return new NextResponse(new Uint8Array(asset.data), {
+            headers: { ...HEADERS, 'Content-Type': asset.contentType },
+          })
+        }
       }
 
       const baseDir = path.join(process.cwd(), 'data', 'uploads', dirName)
       // Unscoped legacy files have no trustworthy owner and must never be
       // used as another tenant's branding (including the public login page).
-      const filePath = path.join(baseDir, ownerTenantId, sanitized)
-      if (!fs.existsSync(filePath)) return NextResponse.json({ error: 'Not found' }, { status: 404, headers: HEADERS })
+      const filePath = owners.map(owner => path.join(baseDir, owner, sanitized)).find(candidate => fs.existsSync(candidate))
+      if (!filePath) return NextResponse.json({ error: 'Not found' }, { status: 404, headers: HEADERS })
 
       const ext = sanitized.split('.').pop()?.toLowerCase() || ''
       const contentType = mimeTypes[ext] || 'application/octet-stream'

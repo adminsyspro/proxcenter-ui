@@ -50,13 +50,28 @@ describe('uploaded asset tenant isolation', () => {
     expect(await (await serve()).text()).toBe('tenant logo')
   })
 
-  it('does not substitute provider bytes for a tenant override with a missing upload', async () => {
-    await setSetting('branding', 'tenant-a', { enabled: true })
+  it('serves the provider bytes to a tenant override that kept the inherited logo URL, never another tenant or an unowned file', async () => {
+    // Saving the White Label form persists the URLs the tenant saw while it
+    // still inherited the provider branding: those bytes are the provider's.
+    await setSetting('branding', 'tenant-a', { enabled: true, logoUrl: '/api/v1/settings/branding/uploads/logo.png' })
     await upload('default', 'provider logo')
     await upload('tenant-b', 'other tenant logo')
     disk('data/uploads/branding/logo.png')
     disk('public/uploads/branding/logo.png')
+    expect(await (await serve()).text()).toBe('provider logo')
+  })
+
+  it('answers 404 for a tenant override when neither the tenant nor the provider owns the bytes', async () => {
+    await setSetting('branding', 'tenant-a', { enabled: true })
+    await upload('tenant-b', 'other tenant logo')
+    disk('data/uploads/branding/logo.png')
     expect((await serve()).status).toBe(404)
+  })
+
+  it('does not fall back to provider bytes for a login background', async () => {
+    await setSetting('branding', 'tenant-a', { enabled: true })
+    await putAsset('default', 'login-bg', 'background', 'png', 'image/png', Buffer.from('provider background'))
+    expect((await serve(backgroundGET, 'background.png')).status).toBe(404)
   })
 
   it.each(['data', 'public'])('never serves unowned %s branding files', async directory => {
@@ -97,8 +112,11 @@ describe('uploaded asset tenant isolation', () => {
     expect(await first.text()).toBe('A')
     expect(await second.text()).toBe('B')
     for (const response of [first, second, missing]) {
+      // Private, so no shared cache ever hands one tenant's logo to another;
+      // the scoped URL keeps per-tenant browser caching correct.
       expect(response.headers.get('Cache-Control')).toMatch(/private/)
-      expect(response.headers.get('Cache-Control')).toMatch(/no-store/)
+      expect(response.headers.get('Cache-Control')).toMatch(/max-age=\d+/)
+      expect(response.headers.get('Cache-Control')).not.toMatch(/public/)
       expect(response.headers.get('Vary')).toMatch(/Cookie/i)
     }
   })

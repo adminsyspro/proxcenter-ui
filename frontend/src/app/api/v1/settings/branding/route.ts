@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server'
 import { getSettingWithSource, setSetting } from '@/lib/db/settings'
 import { requireBrandingAdmin } from '@/lib/branding/guard'
 import { getCurrentTenantId } from '@/lib/tenant'
-import { scopedBrandingUrl } from '@/lib/branding/urls'
+import { scopedBrandingUrl, unscopedBrandingUrl } from '@/lib/branding/urls'
 import { normalizeHexColor } from '@/lib/theme/hexColor'
 
 
@@ -79,6 +79,12 @@ export async function PUT(req: Request) {
       settings.primaryColor = primaryColor
     } else {
       settings.primaryColor = ''
+    }
+
+    // The GET qualified the upload URLs for the reader (`tenant=`, `scope=`);
+    // persisting them would freeze another owner into this tenant's row.
+    for (const field of ['logoUrl', 'faviconUrl', 'loginLogoUrl'] as const) {
+      if (typeof settings[field] === 'string') settings[field] = unscopedBrandingUrl(settings[field])
     }
 
     const tenantId = await getCurrentTenantId()

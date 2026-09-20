@@ -33,17 +33,22 @@ export async function importDiskAssets(rootDir: string): Promise<{ imported: num
   for (const { dir, kind } of KIND_DIRS) {
     const kindDir = path.join(rootDir, dir)
     if (!fs.existsSync(kindDir)) continue
-    for (const tenantId of fs.readdirSync(kindDir)) {
-      const tenantDir = path.join(kindDir, tenantId)
-      if (!fs.statSync(tenantDir).isDirectory()) continue
-      for (const file of fs.readdirSync(tenantDir)) {
+    for (const entry of fs.readdirSync(kindDir)) {
+      const entryPath = path.join(kindDir, entry)
+      // A file directly under the kind directory predates multi-tenancy, when
+      // the provider was the only uploader: it is the provider's. Insert-only
+      // still applies, so a logo uploaded since through the UI always wins.
+      const files = fs.statSync(entryPath).isDirectory()
+        ? fs.readdirSync(entryPath).map(file => ({ tenantId: entry, file, filePath: path.join(entryPath, file) }))
+        : [{ tenantId: 'default', file: entry, filePath: entryPath }]
+      for (const { tenantId, file, filePath } of files) {
         const ext = (file.split('.').pop() || '').toLowerCase()
         const contentType = MIME_BY_EXT[ext]
         if (!contentType) { skipped++; continue }
         const slot = slotFromFilename(file)
         const existing = await getAsset(tenantId, kind, slot)
         if (existing) { skipped++; continue }
-        const data = fs.readFileSync(path.join(tenantDir, file))
+        const data = fs.readFileSync(filePath)
         await putAsset(tenantId, kind, slot, ext, contentType, data)
         imported++
       }

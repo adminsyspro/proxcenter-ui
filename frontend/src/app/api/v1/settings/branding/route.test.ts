@@ -84,6 +84,23 @@ describe('PUT /settings/branding primary colour (#754)', () => {
   })
 })
 
+describe('PUT /settings/branding upload URLs (roadmap #14)', () => {
+  it('stores the bare upload path, not the owner and scope the GET added for the reader', async () => {
+    h.getCurrentTenantId.mockResolvedValue('tenant-a')
+    const res = await callRoute(PUT, { method: 'PUT', body: {
+      enabled: true,
+      logoUrl: '/api/v1/settings/branding/uploads/logo.png?t=12&tenant=default&scope=tenant-a',
+      faviconUrl: '/uploads/branding/favicon.ico?tenant=default',
+      loginLogoUrl: 'https://cdn.example.test/login.png?tenant=keep',
+    } })
+    expect(res.status).toBe(200)
+    const stored = h.setSetting.mock.calls[0][2] as any
+    expect(stored.logoUrl).toBe('/api/v1/settings/branding/uploads/logo.png?t=12')
+    expect(stored.faviconUrl).toBe('/api/v1/settings/branding/uploads/favicon.ico')
+    expect(stored.loginLogoUrl).toBe('https://cdn.example.test/login.png?tenant=keep')
+  })
+})
+
 describe('GET /settings/branding primary colour (#754)', () => {
   it('repairs a colour stored before the value was validated', async () => {
     h.getSetting.mockResolvedValue({ enabled: true, primaryColor: '00ECB2' })

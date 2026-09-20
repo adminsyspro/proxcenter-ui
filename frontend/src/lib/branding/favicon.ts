@@ -80,6 +80,12 @@ export function applyFavicon(url: string): () => void {
   }
 
   const applyToLinks = () => {
+    // Next replaces its icon links on navigation: forget the detached ones so
+    // the map does not grow for the observer's lifetime, and so cleanup never
+    // writes attributes onto nodes that left the document.
+    for (const link of stock.keys()) {
+      if (!link.isConnected && link !== created) stock.delete(link)
+    }
     for (const link of document.querySelectorAll<HTMLLinkElement>(ICON_LINK_SELECTOR)) {
       if (!stock.has(link)) {
         stock.set(link, {
@@ -121,7 +127,7 @@ export function applyFavicon(url: string): () => void {
     created?.remove()
 
     for (const entry of stock.values()) {
-      if (entry.link === created) continue
+      if (entry.link === created || !entry.link.isConnected) continue
       restoreAttribute(entry.link, 'href', entry.href)
       restoreAttribute(entry.link, 'type', entry.type)
       restoreAttribute(entry.link, 'sizes', entry.sizes)

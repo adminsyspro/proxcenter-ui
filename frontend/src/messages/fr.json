@@ -4978,7 +4978,8 @@
         "storageQuotaRemaining": "{remaining} Go de quota disponibles",
         "storageQuotaUnlimited": "Aucun quota de stockage",
         "storageQuotaUnavailable": "Quota indisponible",
-        "noWritableStorage": "Aucun stockage de disques VM accessible en écriture dans ce vDC."
+        "noWritableStorage": "Aucun stockage de disques VM accessible en écriture dans ce vDC.",
+        "storagesLoadError": "La liste des stockages n’a pas pu être chargée. Réessayez ou contactez votre fournisseur."
       },
       "hardware": {
         "title": "Matériel",

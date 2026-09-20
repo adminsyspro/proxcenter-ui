@@ -126,9 +126,38 @@ describe('DeployWizard tenant target storage', () => {
     view.rerender(<DeployWizard open image={image} onClose={() => {}} />)
     await target()
     await userEvent.type(screen.getByLabelText('VM Name'), 'tenant-storage-test')
-    await screen.findByText('No writable VM disk storage is available in this vDC.')
+    // A 503 is reported as such, not as an empty vDC.
+    await screen.findByText('The storage list could not be loaded. Retry, or contact your provider.')
+    expect(screen.queryByText('No writable VM disk storage is available in this vDC.')).toBeNull()
     expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled()
     expect(screen.getByRole('combobox', { name: 'Storage' })).not.toHaveTextContent('archive')
+  })
+
+  it('offers only the storages the selected vDC grants when several vDCs share the connection', async () => {
+    const vdcC = { ...vdcA, id: 'vdc-c', name: 'DC C', storages: ['other'], storagePolicies: [{ name: 'Bronze', storageId: 'other', quotaMb: null }] }
+    seed({ vdcs: [vdcA, vdcC], disks: () => HttpResponse.json({ data: [
+      ...diskStorages, { storage: 'other', type: 'rbd', content: 'images', active: 1, enabled: 1, shared: 1, policy: { name: 'Bronze' } },
+    ] }) })
+    renderWithProviders(<DeployWizard open image={image} onClose={() => {}} />)
+    const select = await target()
+    await waitFor(() => expect(select).not.toHaveAttribute('aria-disabled', 'true'))
+    await userEvent.click(select)
+    const options = within(await screen.findByRole('listbox'))
+    expect(await options.findByRole('option', { name: /fast/ })).toBeInTheDocument()
+    expect(options.getByRole('option', { name: /archive/ })).toBeInTheDocument()
+    expect(options.queryByRole('option', { name: /other|Bronze/ })).toBeNull()
+  })
+
+  it('does not block the wizard when the quota lookup fails: the deploy route enforces it', async () => {
+    let calls = 0
+    seed()
+    server.use(http.get('*/api/v1/vdcs', () => (++calls === 1 ? HttpResponse.json({ data: [vdcA] }) : new HttpResponse(null, { status: 503 }))))
+    renderWithProviders(<DeployWizard open image={image} onClose={() => {}} />)
+    const select = await target()
+    await waitFor(() => expect(select).not.toHaveAttribute('aria-disabled', 'true'))
+    await waitFor(() => expect(select).toHaveTextContent('Quota information unavailable'))
+    await userEvent.type(screen.getByLabelText('VM Name'), 'tenant-storage-test')
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Next' })).toBeEnabled())
   })
 
   it('keeps the selected storage policy quota blocking on the hardware step', async () => {

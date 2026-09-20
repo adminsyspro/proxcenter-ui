@@ -4978,7 +4978,8 @@
         "storageQuotaRemaining": "{remaining} GB de cuota disponibles",
         "storageQuotaUnlimited": "Sin cuota de almacenamiento",
         "storageQuotaUnavailable": "Información de cuota no disponible",
-        "noWritableStorage": "No hay almacenamiento de discos de VM con acceso de escritura en este vDC."
+        "noWritableStorage": "No hay almacenamiento de discos de VM con acceso de escritura en este vDC.",
+        "storagesLoadError": "No se pudo cargar la lista de almacenamientos. Reinténtelo o contacte con su proveedor."
       },
       "hardware": {
         "title": "Hardware",

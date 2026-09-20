@@ -4978,7 +4978,12 @@
         "vmid": "VM ID",
         "vmName": "VM 名称",
         "available": "可用",
-        "noFileStorage": "此节点上未找到基于文件的存储。模板部署需要基于文件的存储（dir、NFS、CIFS 等）。"
+        "noFileStorage": "此节点上未找到基于文件的存储。模板部署需要基于文件的存储（dir、NFS、CIFS 等）。",
+        "storageQuotaRemaining": "剩余配额 {remaining} GB",
+        "storageQuotaUnlimited": "无存储配额",
+        "storageQuotaUnavailable": "配额信息不可用",
+        "noWritableStorage": "此 vDC 中没有可写的虚拟机磁盘存储。",
+        "storagesLoadError": "无法加载存储列表。请重试或联系您的提供商。"
       },
       "hardware": {
         "title": "硬件",

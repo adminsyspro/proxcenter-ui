@@ -4957,7 +4957,8 @@
         "storageQuotaRemaining": "{remaining} GB Kontingent verfügbar",
         "storageQuotaUnlimited": "Kein Speicherkontingent",
         "storageQuotaUnavailable": "Kontingentdaten nicht verfügbar",
-        "noWritableStorage": "In diesem vDC ist kein beschreibbarer Speicher für VM-Festplatten verfügbar."
+        "noWritableStorage": "In diesem vDC ist kein beschreibbarer Speicher für VM-Festplatten verfügbar.",
+        "storagesLoadError": "Die Speicherliste konnte nicht geladen werden. Versuchen Sie es erneut oder wenden Sie sich an Ihren Anbieter."
       },
       "hardware": {
         "title": "Hardware",

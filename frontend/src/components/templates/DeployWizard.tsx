@@ -133,6 +133,7 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
   const [storage, setStorage] = useState('')
   const [storagesLoading, setStoragesLoading] = useState(false)
   const [loadedStorageContext, setLoadedStorageContext] = useState('')
+  const [storagesError, setStoragesError] = useState(false)
   // ISO-mode only: storages on the node that have content=iso. The boot ISO
   // is downloaded here (separate from the disk storage above).
   const [isoStorages, setIsoStorages] = useState<StorageInfo[]>([])
@@ -143,7 +144,10 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
   // below instead of silently pinning conns[0]).
   const [tenantVdcs, setTenantVdcs] = useState<any[]>([])
   const [deployVdcId, setDeployVdcId] = useState('')
-  const storageContext = JSON.stringify([currentTenant?.id, deployVdcId, connectionId, node])
+  // The storage list is per connection+node; the vDC only filters it client
+  // side (visibleStorages), so a vDC switch must not refetch against the
+  // connection the user just left. The quota, on the other hand, is per vDC.
+  const storageContext = JSON.stringify([currentTenant?.id, connectionId, node])
   const quotaContext = JSON.stringify([currentTenant?.id, deployVdcId, connectionId])
   const [loadedQuotaContext, setLoadedQuotaContext] = useState('')
 
@@ -530,11 +534,12 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
   // Fetch storages + next VMID when node changes
   useEffect(() => {
     if (!open || !connectionId || !node) {
-      setStorages([]); setIsoStorages([]); setLoadedStorageContext(''); setStoragesLoading(false)
+      setStorages([]); setIsoStorages([]); setLoadedStorageContext(''); setStoragesLoading(false); setStoragesError(false)
       return
     }
     let cancelled = false
     setStoragesLoading(true)
+    setStoragesError(false)
 
     // The unfiltered endpoint contains writable vDC storages; library-only
     // ISO grants are intentionally resolved by the separate ISO request.
@@ -554,7 +559,9 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
         setStorage(current => stList.some((s: StorageInfo) => s.storage === current)
           ? current : (preferred || stList[0])?.storage || '')
       })
-      .catch(() => { if (!cancelled) { setStorages([]); setStorage('') } })
+      // A failed request is not an empty vDC: remember it so the step says so
+      // instead of "no writable storage".
+      .catch(() => { if (!cancelled) { setStorages([]); setStorage(''); setStoragesError(true) } })
       .finally(() => {
         if (!cancelled) { setStoragesLoading(false); setLoadedStorageContext(storageContext) }
       })
@@ -696,9 +703,36 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
     return () => { cancelled = true }
   }, [open, connectionId, deployVdcId, quotaContext])
 
-  const quotaReady = !hideInfra || !deployVdcId || (loadedQuotaContext === quotaContext && !!vdcQuota && !!vdcUsage)
+  // Aggregated view: the storages endpoint answers for the tenant's whole
+  // scope on that connection, i.e. the union of its vDCs. Keep only what the
+  // selected vDC grants, so another vDC's tier is never offered (nor its
+  // quota escaped). A vDC payload without storage details filters nothing.
+  const visibleStorages = useMemo(() => {
+    if (!hideInfra || !deployVdcId) return storages
+    const vdc = tenantVdcs.find((v: any) => v.id === deployVdcId)
+    if (!vdc) return storages
+    const granted = new Set<string>([
+      ...(Array.isArray(vdc.storages) ? vdc.storages.map(String) : []),
+      ...(Array.isArray(vdc.storagePolicies) ? vdc.storagePolicies.map((sp: any) => String(sp?.storageId ?? '')) : []),
+      ...(vdc.primaryStorage ? [String(vdc.primaryStorage)] : []),
+    ].filter(Boolean))
+    return granted.size ? storages.filter(s => granted.has(s.storage)) : storages
+  }, [hideInfra, deployVdcId, tenantVdcs, storages])
+
+  // The default picked when the list arrived may sit outside the vDC that
+  // resolved afterwards: move it onto a granted storage, shared first.
+  useEffect(() => {
+    if (!hideInfra || visibleStorages.length === 0 || visibleStorages.some(s => s.storage === storage)) return
+    const preferred = visibleStorages.find(s => [1, true, '1'].includes(s.shared!))
+    setStorage((preferred || visibleStorages[0]).storage)
+  }, [hideInfra, visibleStorages, storage])
+
+  // Wait for the quota lookup to settle, not to succeed: the figures are
+  // advisory here and the deploy route enforces the quota itself, so a failed
+  // /api/v1/vdcs must not leave Next and Deploy dead for the session.
+  const quotaReady = !hideInfra || !deployVdcId || loadedQuotaContext === quotaContext
   const storageSelectionReady = !storagesLoading && loadedStorageContext === storageContext &&
-    storages.some(s => s.storage === storage) && quotaReady
+    visibleStorages.some(s => s.storage === storage) && quotaReady
 
   const handleNext = useCallback(() => {
     setActiveStep(s => {
@@ -995,11 +1029,11 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
             <InputLabel id="tenant-deploy-storage-label">{t('templates.deploy.target.storage')}</InputLabel>
             <Select
               labelId="tenant-deploy-storage-label"
-              value={loadedStorageContext === storageContext && storages.some(s => s.storage === storage) ? storage : ''}
+              value={loadedStorageContext === storageContext && visibleStorages.some(s => s.storage === storage) ? storage : ''}
               label={t('templates.deploy.target.storage')}
               onChange={e => setStorage(e.target.value)}
             >
-              {(loadedStorageContext === storageContext ? storages : []).map(s => {
+              {(loadedStorageContext === storageContext ? visibleStorages : []).map(s => {
                 const policy = vdcTiers.find(tier => tier.storageId === s.storage)
                 const remaining: number[] = []
                 if (policy?.quotaMb != null) remaining.push(Math.max(0, policy.quotaMb - (vdcUsedByStorage[s.storage] ?? 0)))
@@ -1022,8 +1056,10 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
               })}
             </Select>
           </FormControl>
-          {node && !storagesLoading && loadedStorageContext === storageContext && storages.length === 0 && (
-            <Alert severity="warning" variant="outlined">{t('templates.deploy.target.noWritableStorage')}</Alert>
+          {node && !storagesLoading && loadedStorageContext === storageContext && (storagesError || visibleStorages.length === 0) && (
+            <Alert severity={storagesError ? 'error' : 'warning'} variant="outlined">
+              {t(storagesError ? 'templates.deploy.target.storagesLoadError' : 'templates.deploy.target.noWritableStorage')}
+            </Alert>
           )}
           {isoBlocker}
         </Stack>

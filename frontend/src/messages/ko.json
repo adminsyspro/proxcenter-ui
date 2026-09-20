@@ -4978,7 +4978,8 @@
         "storageQuotaRemaining": "남은 할당량 {remaining} GB",
         "storageQuotaUnlimited": "스토리지 할당량 제한 없음",
         "storageQuotaUnavailable": "할당량 정보를 사용할 수 없습니다",
-        "noWritableStorage": "이 vDC에는 쓰기 가능한 VM 디스크 스토리지가 없습니다."
+        "noWritableStorage": "이 vDC에는 쓰기 가능한 VM 디스크 스토리지가 없습니다.",
+        "storagesLoadError": "스토리지 목록을 불러올 수 없습니다. 다시 시도하거나 공급자에게 문의하세요."
       },
       "hardware": {
         "title": "하드웨어",

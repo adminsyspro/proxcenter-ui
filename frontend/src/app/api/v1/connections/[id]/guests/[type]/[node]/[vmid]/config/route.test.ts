@@ -159,10 +159,10 @@ describe('PUT config: vDC network allow-list guard', () => {
     const res = await callRoute(PUT, {
       method: 'PUT',
       params: baseParams,
-      body: { net0: 'virtio,bridge=vmbr0,tag=9999' },
+      body: { net0: 'virtio,bridge=vmbr0,tag=999' },
     })
     expect(res.status).toBe(200)
-    expect(configWriteBody()?.get('net0')).toBe('virtio,bridge=vmbr0,tag=9999')
+    expect(configWriteBody()?.get('net0')).toBe('virtio,bridge=vmbr0,tag=999')
   })
 })
 
@@ -568,4 +568,58 @@ describe('GET/PUT config: tenant vDC guest containment', () => {
     expect(pveFetchMock.mock.calls.some(c => String(c[1]).startsWith('/nodes/pve4/'))).toBe(false)
   })
 
+})
+
+
+describe('PUT config: tenant NIC identity authorization', () => {
+  const original = 'virtio=AA:BB:CC:DD:EE:01,bridge=vmbr0,tag=100,trunks=110;120'
+  function setConfig(running = original) {
+    pveFetchMock.mockImplementation(async (_c, path: string, opts?: any) => {
+      if (opts?.method === 'POST' || opts?.method === 'PUT') return null
+      return { net0: path.includes('current=1') ? running : original, digest: 'generation-1' }
+    })
+    checkPermissionsMock.mockImplementation(async (permissions: string[]) => permissions.some(p => ['vm.config.nic.mac', 'vm.config.nic.vlan'].includes(p))
+      ? Response.json({ error: 'Explicit NIC permission required' }, { status: 403 }) : null)
+  }
+  for (const [label, body] of [
+    ['MAC change', { net0: original.replace('EE:01', 'EE:02') }],
+    ['tag change', { net0: original.replace('tag=100', 'tag=101') }],
+    ['trunk change', { net0: original.replace('110;120', '110;130') }],
+    ['omitted identity', { net0: 'virtio,bridge=vmbr0' }],
+    ['new NIC explicit identity', { net1: original }],
+  ] as const) {
+    it(`refuses ${label} before PVE writes`, async () => {
+      setConfig()
+      const res = await callRoute(await loadPut(), { method: 'PUT', params: baseParams, body })
+      expect(res.status).toBe(403)
+      expect(configWriteBody()).toBeNull()
+    })
+  }
+  it('preserves link-only rights and binds the mutation to the PVE digest', async () => {
+    setConfig()
+    const res = await callRoute(await loadPut(), { method: 'PUT', params: baseParams, body: { net0: original + ',link_down=1' } })
+    expect(res.status).toBe(200)
+    expect(checkPermissionsMock).toHaveBeenCalledWith(['vm.config.nic.link'], 'vm', 'res')
+    expect(configWriteBody()?.get('digest')).toBe('generation-1')
+  })
+  it('refuses a revert that changes protected running values', async () => {
+    setConfig(original.replace('EE:01', 'EE:02'))
+    const res = await callRoute(await loadPut(), { method: 'PUT', params: baseParams, body: { revert: 'net0' } })
+    expect(res.status).toBe(403)
+    expect(configWriteBody()).toBeNull()
+  })
+  it('rejects duplicate protected properties with a 400', async () => {
+    setConfig()
+    const res = await callRoute(await loadPut(), { method: 'PUT', params: baseParams, body: { net0: original + ',tag=101' } })
+    expect(res.status).toBe(400)
+    expect(configWriteBody()).toBeNull()
+  })
+  it('accepts explicit rights without weakening the network allow-list', async () => {
+    setConfig()
+    checkPermissionsMock.mockResolvedValue(null)
+    getAllowedNetworksForTenantMock.mockResolvedValue(new Map([['vmbr0', { kind: 'shared', vlanRanges: [{ start: 100, end: 199 }] }]]))
+    const res = await callRoute(await loadPut(), { method: 'PUT', params: baseParams, body: { net0: original.replace('tag=100', 'tag=900') } })
+    expect(res.status).toBe(403)
+    expect(configWriteBody()).toBeNull()
+  })
 })

@@ -5605,7 +5605,10 @@
       "deleteIso": "Supprimer cette ISO",
       "deleteIsoConfirm": "Supprimer {name} de {storage} ? Les VM qui la référencent encore ne pourront plus démarrer dessus."
     },
-    "loadNodesError": "Impossible de charger la liste des nodes"
+    "loadNodesError": "Impossible de charger la liste des nodes",
+    "nicMacPermissionRequired": "La modification de l’adresse MAC nécessite l’autorisation du fournisseur.",
+    "nicVlanPermissionRequired": "La modification du VLAN nécessite l’autorisation du fournisseur.",
+    "nicOriginalUnavailable": "Rechargez la configuration réseau avant d’enregistrer."
   },
   "ldap": {
     "description": "Configurez l'authentification LDAP/Active Directory pour permettre aux utilisateurs de se connecter avec leurs identifiants d'entreprise.",

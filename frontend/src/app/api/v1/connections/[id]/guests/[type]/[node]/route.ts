@@ -3,6 +3,7 @@ import { NextResponse } from "next/server"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, getRequestGuestScopePerimeter, PERMISSIONS } from "@/lib/rbac"
+import { sensitiveNicPermissions, NicConfigError } from "@/lib/rbac/nicPermissions"
 import { getCurrentTenantId } from "@/lib/tenant"
 import { resolveVdcForTenant, checkVdcQuota } from "@/lib/vdc/quota"
 import { validateCpuAgainstPolicy, pickPolicyDefaultModel } from "@/lib/vdc/computePolicy"
@@ -95,6 +96,12 @@ export async function POST(
 
     // vDC quota enforcement
     const tenantId = await getCurrentTenantId()
+    if (tenantId !== 'default') {
+      for (const permission of sensitiveNicPermissions(body)) {
+        const sensitiveDenied = await checkPermission(permission, 'vm', `${id}:${node}:${type}:${body.vmid}`)
+        if (sensitiveDenied) return sensitiveDenied
+      }
+    }
 
     // MSP VMID range: enforced for NEW guests only (existing guests are
     // never retro-checked).
@@ -313,6 +320,7 @@ export async function POST(
       allocatedIps: allocations.map(a => a.ip),
     })
   } catch (e: any) {
+    if (e instanceof NicConfigError) return NextResponse.json({ error: e.message }, { status: 400 })
     console.error('Error creating guest:', e)
 
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })

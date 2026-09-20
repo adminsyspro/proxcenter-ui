@@ -2,6 +2,7 @@
 
 import { useRBAC } from '@/contexts/RBACContext'
 import React, { useState } from 'react'
+import { useNicIdentityPermissions } from '@/hooks/useNicIdentityPermissions'
 import dynamic from 'next/dynamic'
 import { useTranslations } from 'next-intl'
 
@@ -462,6 +463,7 @@ export default function InventoryDialogs(props: InventoryDialogsProps) {
   } = props
 
   const t = useTranslations()
+  const { canEditVlan } = useNicIdentityPermissions()
   const theme = useTheme()
   const toast = useToast()
   const { addTask: addPCTask, registerOnRestore } = useProxCenterTasks()
@@ -2614,11 +2616,12 @@ return
                       type="number"
                       label={t('inventoryPage.esxiMigration.vlanTag')}
                       placeholder={t('inventoryPage.esxiMigration.vlanTagPlaceholder')}
-                      value={migVlanTag}
+                      value={canEditVlan ? migVlanTag : ''}
+                      disabled={!canEditVlan}
                       onChange={e => setMigVlanTag(e.target.value.replaceAll(/[^0-9]/g, ''))}
                       inputProps={{ min: 1, max: 4094, inputMode: 'numeric' }}
                       error={migVlanTag !== '' && (Number(migVlanTag) < 1 || Number(migVlanTag) > 4094)}
-                      helperText={migVlanTag !== '' && (Number(migVlanTag) < 1 || Number(migVlanTag) > 4094)
+                      helperText={!canEditVlan ? t('hardware.nicVlanPermissionRequired') : migVlanTag !== '' && (Number(migVlanTag) < 1 || Number(migVlanTag) > 4094)
                         ? t('inventoryPage.esxiMigration.vlanTagInvalid')
                         : undefined}
                     />
@@ -3582,7 +3585,7 @@ return
                         // 802.1Q VLAN tag (1-4094). Empty input means untagged
                         // access port — omit from the payload so the server-side
                         // schema treats it as undefined rather than Number.NaN.
-                        ...(migVlanTag !== '' && Number(migVlanTag) >= 1 && Number(migVlanTag) <= 4094 && {
+                        ...(canEditVlan && migVlanTag !== '' && Number(migVlanTag) >= 1 && Number(migVlanTag) <= 4094 && {
                           vlanTag: Number(migVlanTag),
                         }),
                         // vCenter supports cold + warm via the v2v pipeline.
@@ -4048,11 +4051,12 @@ return
                             type="number"
                             label={t('inventoryPage.esxiMigration.vlanTag')}
                             placeholder={t('inventoryPage.esxiMigration.vlanTagPlaceholder')}
-                            value={migVlanTag}
+                            value={canEditVlan ? migVlanTag : ''}
+                            disabled={!canEditVlan}
                             onChange={e => setMigVlanTag(e.target.value.replaceAll(/[^0-9]/g, ''))}
                             inputProps={{ min: 1, max: 4094, inputMode: 'numeric' }}
                             error={migVlanTag !== '' && (Number(migVlanTag) < 1 || Number(migVlanTag) > 4094)}
-                            helperText={migVlanTag !== '' && (Number(migVlanTag) < 1 || Number(migVlanTag) > 4094)
+                            helperText={!canEditVlan ? t('hardware.nicVlanPermissionRequired') : migVlanTag !== '' && (Number(migVlanTag) < 1 || Number(migVlanTag) > 4094)
                               ? t('inventoryPage.esxiMigration.vlanTagInvalid')
                               : undefined}
                           />
@@ -4722,7 +4726,7 @@ return
                           networkBridge: migNetworkBridge,
                           // 802.1Q VLAN tag (1-4094); applied to every VM in the
                           // batch since they all land on the same target bridge.
-                          ...(migVlanTag !== '' && Number(migVlanTag) >= 1 && Number(migVlanTag) <= 4094 && {
+                          ...(canEditVlan && migVlanTag !== '' && Number(migVlanTag) >= 1 && Number(migVlanTag) <= 4094 && {
                             vlanTag: Number(migVlanTag),
                           }),
                           // vCenter supports cold + warm; Hyper-V / Nutanix still force
@@ -4790,7 +4794,7 @@ return
                     targetConnectionId: migTargetConn,
                     targetStorage: migTargetStorage,
                     networkBridge: migNetworkBridge,
-                    ...(migVlanTag !== '' && Number(migVlanTag) >= 1 && Number(migVlanTag) <= 4094 && {
+                    ...(canEditVlan && migVlanTag !== '' && Number(migVlanTag) >= 1 && Number(migVlanTag) <= 4094 && {
                       vlanTag: Number(migVlanTag),
                     }),
                     migrationType: (isHypervBulk || isNutanixBulk) ? 'cold'

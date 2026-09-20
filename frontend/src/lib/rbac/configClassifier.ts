@@ -1,5 +1,6 @@
 import { PERMISSIONS } from './index'
 import { isCdromMediaChange } from '@/lib/proxmox/cdrom'
+import { normalizedNicProperties } from './nicPermissions'
 
 type ConfigPerm = typeof PERMISSIONS[keyof typeof PERMISSIONS]
 
@@ -19,16 +20,6 @@ const DISK_RE = /^(ide|sata|scsi)\d+$/
 
 const NET_RE = /^net\d+$/
 
-function parseNicProps(raw: string): Map<string, string> {
-  const map = new Map<string, string>()
-  for (const part of raw.split(',')) {
-    const eq = part.indexOf('=')
-    if (eq >= 0) map.set(part.slice(0, eq), part.slice(eq + 1))
-    else map.set(part, '')
-  }
-  return map
-}
-
 function isLinkOnlyChange(
   key: string,
   newValue: unknown,
@@ -38,8 +29,8 @@ function isLinkOnlyChange(
   const newStr = String(newValue ?? '')
   if (!oldStr || !newStr) return false
 
-  const oldMap = parseNicProps(oldStr)
-  const newMap = parseNicProps(newStr)
+  const oldMap = normalizedNicProperties(oldStr)
+  const newMap = normalizedNicProperties(newStr)
 
   const allKeys = new Set([...oldMap.keys(), ...newMap.keys()])
   for (const k of allKeys) {

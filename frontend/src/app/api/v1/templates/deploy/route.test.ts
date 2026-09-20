@@ -216,6 +216,30 @@ describe('POST templates/deploy: vDC network allow-list', () => {
     return { ...baseBody, hardware: { ...baseBody.hardware, ...hw } }
   }
 
+  for (const hw of [{ vlanTag: 150 }, { networkModel: 'virtio=AA:BB:CC:DD:EE:01' }]) {
+    it(`requires the explicit identity grant for template NIC ${JSON.stringify(hw)}`, async () => {
+      reachTheGuard()
+      getAllowedNetworksForTenantMock.mockResolvedValue(scoped())
+      checkPermissionMock.mockImplementation(async permission => permission === 'vm.create' ? null : Response.json({ error: 'identity denied' }, { status: 403 }))
+      const res = await callRoute(await loadPost(), { body: bodyWith(hw) })
+      expect(res.status).toBe(403)
+      expect((await readJson<any>(res))?.error).toBe('identity denied')
+      expect(pveFetchMock).not.toHaveBeenCalled()
+      expect(afterCbs).toHaveLength(0)
+    })
+  }
+
+  it('requires the explicit MAC grant for a tenant-chosen ISO MAC (body.staticMac)', async () => {
+    reachTheGuard()
+    getAllowedNetworksForTenantMock.mockResolvedValue(scoped())
+    checkPermissionMock.mockImplementation(async permission => permission === 'vm.config.nic.mac' ? Response.json({ error: 'mac denied' }, { status: 403 }) : null)
+    const res = await callRoute(await loadPost(), { body: { ...bodyWith({}), staticMac: 'AA:BB:CC:DD:EE:01' } })
+    expect(res.status).toBe(403)
+    expect((await readJson<any>(res))?.error).toBe('mac denied')
+    expect(pveFetchMock).not.toHaveBeenCalled()
+    expect(afterCbs).toHaveLength(0)
+  })
+
   it('403: a VLAN tag outside the vDC pools never reaches PVE', async () => {
     reachTheGuard()
     getAllowedNetworksForTenantMock.mockResolvedValue(scoped())

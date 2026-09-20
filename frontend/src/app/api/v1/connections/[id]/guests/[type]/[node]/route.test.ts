@@ -220,3 +220,20 @@ describe('POST guests create: vDC network allow-list', () => {
     expect(json?.error).toContain('is not authorized')
   })
 })
+
+
+describe('POST guests: explicit tenant NIC identity', () => {
+  for (const net0 of ['virtio=AA:BB:CC:DD:EE:01,bridge=vmbr0', 'virtio,bridge=vmbr0,tag=100', 'virtio,bridge=vmbr0,trunks=100;101']) {
+    it(`requires a separate right for ${net0}`, async () => {
+      checkPermissionMock.mockImplementation(async permission => permission === 'vm.create' ? null : Response.json({ error: 'denied' }, { status: 403 }))
+      const res = await callRoute(await loadPost(), { params: baseParams, body: { vmid: 190, net0 } })
+      expect(res.status).toBe(403)
+      expect(pveFetchMock).not.toHaveBeenCalled()
+    })
+  }
+  it('allows PVE to generate a MAC without an identity grant', async () => {
+    checkPermissionMock.mockImplementation(async permission => permission === 'vm.create' ? null : Response.json({ error: 'denied' }, { status: 403 }))
+    const res = await callRoute(await loadPost(), { params: baseParams, body: { vmid: 190, net0: 'virtio,bridge=vmbr0' } })
+    expect(res.status).toBe(200)
+  })
+})

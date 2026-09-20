@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth"
 
 import { getSessionPrisma, getCurrentTenantId, getTenantPrisma } from "@/lib/tenant"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { sensitiveNicPermissions, NicConfigError } from "@/lib/rbac/nicPermissions"
 import { authOptions } from "@/lib/auth/config"
 import { runMigrationPipeline } from "@/lib/migration/pipeline"
 import { runXcpngMigrationPipeline } from "@/lib/migration/xcpng-pipeline"
@@ -90,6 +91,17 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: "vlanTag must be an integer between 1 and 4094" }, { status: 400 })
       }
       vlanTag = n
+    }
+
+    const tenantId = await getCurrentTenantId()
+    if (tenantId !== 'default') {
+      const requestedNet = `virtio,bridge=${networkBridge}${vlanTag ? `,tag=${vlanTag}` : ''}`
+      for (const permission of sensitiveNicPermissions({ net0: requestedNet })) {
+        const identityDenied = await checkPermission(permission,
+          targetVmid === undefined ? 'connection' : 'vm',
+          targetVmid === undefined ? targetConnectionId : `${targetConnectionId}:${targetNode}:qemu:${targetVmid}`)
+        if (identityDenied) return identityDenied
+      }
     }
 
     // Optional warm-migration cutover downtime budget (seconds). Validate up
@@ -239,7 +251,6 @@ export async function POST(req: Request) {
     }
 
     // Run appropriate pipeline in background after response (pass tenantId for scoped DB access)
-    const tenantId = await getCurrentTenantId()
     after(async () => {
       // Warm (CBT) is routed explicitly BEFORE any fall-through: a "warm" value
       // must never reach the cold/live/v2v branches below, which power off the
@@ -369,6 +380,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ data: { jobId: job.id, status: "pending" } })
   } catch (e: any) {
+    if (e instanceof NicConfigError) return NextResponse.json({ error: e.message }, { status: 400 })
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }

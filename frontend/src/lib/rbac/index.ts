@@ -9,6 +9,8 @@
 
 import { NextResponse } from "next/server"
 
+import { SENSITIVE_NIC_PERMISSIONS } from './nicPermissions'
+
 import { prisma } from "@/lib/db/prisma"
 import { getPrincipal, rejectionToResponse, type Principal } from "@/lib/auth/principal"
 import { resolveVmMeta } from "@/lib/cache/vmMetaCache"
@@ -186,12 +188,13 @@ async function loadUserGrants(userId: string, tenantId: string): Promise<LoadedG
 
 /**
  * Whether `grantedSet` satisfies `requested`, including the permission
- * hierarchy: holding a parent right (e.g. `vm.config`) implies every child
- * (`vm.config.media`, `vm.config.nic.link`, …). The walk is O(depth),
+ * hierarchy: holding a parent right (e.g. `vm.config`) implies ordinary children
+ * (`vm.config.media`, `vm.config.nic.link`, …), excluding explicit MAC/VLAN grants. The walk is O(depth),
  * which is at most 2-3 for the deepest permission (`vm.config.nic.link`).
  */
 function grantsPermission(grantedSet: Set<string>, requested: string): boolean {
   if (grantedSet.has(requested)) return true
+  if ((SENSITIVE_NIC_PERMISSIONS as readonly string[]).includes(requested)) return false
   const parts = requested.split('.')
   for (let i = parts.length - 1; i >= 2; i--) {
     if (grantedSet.has(parts.slice(0, i).join('.'))) return true
@@ -486,6 +489,8 @@ export const PERMISSIONS = {
   VM_CONFIG_MEDIA: "vm.config.media",
   VM_CONFIG_NIC_LINK: "vm.config.nic.link",
   VM_CONFIG_NIC: "vm.config.nic",
+  VM_CONFIG_NIC_MAC: "vm.config.nic.mac",
+  VM_CONFIG_NIC_VLAN: "vm.config.nic.vlan",
   VM_CONFIG_HARDWARE: "vm.config.hardware",
   VM_CONFIG_BOOT: "vm.config.boot",
   VM_DELETE: "vm.delete",

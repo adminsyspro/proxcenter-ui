@@ -1,3 +1,4 @@
+import { QEMU_NIC_MODELS } from '@/lib/rbac/nicPermissions'
 import { parseMemoryProperty } from '@/lib/proxmox/memoryProperty'
 import type { RrdRangeMeta, RrdWindow } from '@/lib/metrics/rrdRange'
 
@@ -1525,7 +1526,7 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
             const netStr = config[key]
 
             const parts = String(netStr).split(',')
-            const netInfoItem: any = { id: key }
+            const netInfoItem: any = { id: key, rawValue: String(netStr) }
 
             parts.forEach(part => {
               const [k, v] = part.split('=')
@@ -1539,7 +1540,7 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
               else if (k === 'mtu') netInfoItem.mtu = Number(v)
               // QEMU-only
               else if (k === 'queues') netInfoItem.queues = Number(v)
-              else if (['virtio', 'e1000', 'e1000e', 'rtl8139', 'vmxnet3'].includes(k)) {
+              else if (QEMU_NIC_MODELS.has(k)) {
                 netInfoItem.model = k
                 netInfoItem.macaddr = v
               }

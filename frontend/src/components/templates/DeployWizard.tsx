@@ -44,6 +44,7 @@ import DeploymentProgress from './DeploymentProgress'
 import VendorLogo from './VendorLogo'
 import IsoNetworkReservation from './IsoNetworkReservation'
 import { useTenant } from '@/contexts/TenantContext'
+import { useNicIdentityPermissions } from '@/hooks/useNicIdentityPermissions'
 import VdcQuotaBanner from '@/components/inventory/VdcQuotaBanner'
 import { readVdcContextCookie } from '@/lib/vdc/contextCookie'
 
@@ -110,6 +111,7 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
   // resolved in the background (first allowed connection, least-loaded
   // node, first shared storage, /cluster/nextid).
   const { currentTenant, loading: tenantLoading, isFullClusterView } = useTenant()
+  const { canEditVlan } = useNicIdentityPermissions()
   const hideInfra = !tenantLoading && !!currentTenant && currentTenant.id !== 'default'
   // Full cluster view = provider OR MSP tenant (mirrors CreateVmDialog). In
   // that mode the bridge picker exposes the whole PVE bridge list and the
@@ -759,6 +761,12 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
     const selBridge = bridges.find(b => b.iface === networkBridge)
     const vlanVisible = fullClusterNet || selBridge?.type === 'shared'
     if (vlanVisible && selBridge?.type !== 'vnet' && vlanTag.trim()) {
+      // A blueprint can carry a tag this caller may not set: refuse loudly
+      // rather than deploy on the native VLAN behind their back.
+      if (!canEditVlan) {
+        setDeployError(t('hardware.nicVlanPermissionRequired'))
+        return
+      }
       const n = Number.parseInt(vlanTag, 10)
       if (!Number.isFinite(n) || n < 1 || n > 4094 || String(n) !== vlanTag.trim()) {
         setDeployError(t('templates.deploy.hardware.vlanInvalid'))
@@ -875,7 +883,7 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
     }
   }, [
     image, connectionId, node, storage, storageSelectionReady, quotaBlocked, isoStorage, vmid, vmName, cores, sockets, memory,
-    diskSize, scsihw, networkModel, networkBridge, vlanTag, fullClusterNet, cpu, agent,
+    diskSize, scsihw, networkModel, networkBridge, vlanTag, fullClusterNet, canEditVlan, cpu, agent,
     bios, ostypeOverride, isIsoMode, isoNeedsReservation, staticIp, staticMac,
     ciuser, cipassword, sshKeys, ipOverride, nameserver, searchdomain,
     bridges,
@@ -1562,14 +1570,14 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
         const sel = bridges.find(b => b.iface === networkBridge)
         const isSharedBridge = sel?.type === 'shared'
         if (hideInfra && !isSharedBridge) return null
-        const vlanDisabled = (!fullClusterNet && !isSharedBridge) || sel?.type === 'vnet'
+        const vlanDisabled = !canEditVlan || (!fullClusterNet && !isSharedBridge) || sel?.type === 'vnet'
         const ranges = isSharedBridge && sel?.vlanRanges?.length ? sel.vlanRanges : null
         const rangeLabel = ranges ? ranges.map(([s, e]) => s === e ? String(s) : `${s}-${e}`).join(', ') : null
         return (
           <Tooltip
             arrow
             placement="top"
-            title={vlanDisabled ? t('templates.deploy.hardware.vlanDisabledOnVnetTooltip') : ''}
+            title={!canEditVlan ? t('hardware.nicVlanPermissionRequired') : vlanDisabled ? t('templates.deploy.hardware.vlanDisabledOnVnetTooltip') : ''}
           >
             <span>
               <TextField
@@ -1581,7 +1589,7 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
                 placeholder={vlanDisabled ? t('templates.deploy.hardware.vlanDisabledOnVnet') : rangeLabel ? rangeLabel : t('templates.deploy.hardware.vlanPlaceholder')}
                 slotProps={{ htmlInput: { min: 1, max: 4094 } }}
                 disabled={vlanDisabled}
-                helperText={vlanDisabled ? t('templates.deploy.hardware.vlanDisabledOnVnetHelp') : rangeLabel ? t('templates.deploy.hardware.vlanPoolHint', { ranges: rangeLabel }) : isSharedBridge ? t('templates.deploy.hardware.vlanNoPool') : undefined}
+                helperText={!canEditVlan ? t('hardware.nicVlanPermissionRequired') : vlanDisabled ? t('templates.deploy.hardware.vlanDisabledOnVnetHelp') : rangeLabel ? t('templates.deploy.hardware.vlanPoolHint', { ranges: rangeLabel }) : isSharedBridge ? t('templates.deploy.hardware.vlanNoPool') : undefined}
                 fullWidth
               />
             </span>

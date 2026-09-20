@@ -5605,7 +5605,10 @@
       "deleteIso": "Eliminar esta ISO",
       "deleteIsoConfirm": "¿Eliminar {name} de {storage}? Las máquinas que aún la referencien no podrán arrancar desde ella."
     },
-    "loadNodesError": "No se pudo cargar la lista de nodos"
+    "loadNodesError": "No se pudo cargar la lista de nodos",
+    "nicMacPermissionRequired": "Cambiar la dirección MAC requiere permiso del proveedor.",
+    "nicVlanPermissionRequired": "Cambiar la configuración VLAN requiere permiso del proveedor.",
+    "nicOriginalUnavailable": "Vuelva a cargar la configuración de red antes de guardar."
   },
   "ldap": {
     "description": "Configure la autenticación LDAP/Active Directory para permitir que los usuarios inicien sesión con sus credenciales corporativas.",

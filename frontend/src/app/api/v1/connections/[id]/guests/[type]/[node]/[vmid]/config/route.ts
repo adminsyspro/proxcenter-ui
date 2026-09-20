@@ -6,6 +6,7 @@ import { mergeMemoryProperty } from "@/lib/proxmox/memoryProperty"
 import { isVmConfigNotFoundError, locateVmInCluster, type GuestType } from "@/lib/proxmox/locateVm"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, checkPermissions, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
+import { sensitiveNicPermissions, hasNicMutation, hasNicRevert, NicConfigError } from "@/lib/rbac/nicPermissions"
 import { classifyConfigBody } from "@/lib/rbac/configClassifier"
 import { isOpticalDrive } from "@/lib/proxmox/cdrom"
 import { getCurrentTenantId } from "@/lib/tenant"
@@ -263,10 +264,20 @@ export async function PUT(
 
     // ── Fine-grained RBAC ──
     // Classify every body key into its sub-right (vm.config.media, .nic,
-    // .nic.link, .hardware, .boot) and check the union. vm.config is a
-    // super-right: holding it implies every sub-right via the permission
-    // hierarchy in checkGrants.
+    // .nic.link, .hardware, .boot) and check the union. Tenant MAC and VLAN
+    // changes add explicit rights that broad vm.config / vm.config.nic cannot grant.
+    let runningConfig: Record<string, unknown> | undefined
+    if (tenantId !== 'default' && hasNicRevert(body)) {
+      runningConfig = await pveFetch<Record<string, unknown>>(conn,
+        `/nodes/${encodeURIComponent(node)}/${type}/${encodeURIComponent(vmid)}/config?current=1`)
+      if (currentConfig.digest && runningConfig.digest !== currentConfig.digest) {
+        return NextResponse.json({ error: 'VM configuration changed; reload before saving' }, { status: 409 })
+      }
+    }
     const requiredPerms = classifyConfigBody(body, currentConfig)
+    if (tenantId !== 'default') {
+      for (const permission of sensitiveNicPermissions(body, currentConfig, runningConfig)) requiredPerms.add(permission)
+    }
     let denied = requiredPerms.size > 0
       ? await checkPermissions([...requiredPerms], "vm", resourceId)
       : await checkPermission(PERMISSIONS.VM_CONFIG, "vm", resourceId)
@@ -355,10 +366,16 @@ export async function PUT(
 
     // Phase 4b: enforce the network allow-list (bridge name + VLAN tag/trunks)
     const allowedNetworks = await getAllowedNetworksForTenant(tenantId, id)
+    const networkChanges = { ...body }
+    if (runningConfig && typeof body.revert === 'string') {
+      for (const key of body.revert.split(',').map((k: string) => k.trim())) {
+        if (/^net\d+$/.test(key) && runningConfig[key]) networkChanges[key] = runningConfig[key]
+      }
+    }
     if (allowedNetworks !== null) {
-      for (const key of Object.keys(body || {})) {
+      for (const key of Object.keys(networkChanges)) {
         if (!/^net\d+$/.test(key)) continue
-        const verdict = validateNetAgainstScope(String(body[key] || ""), allowedNetworks)
+        const verdict = validateNetAgainstScope(String(networkChanges[key] || ""), allowedNetworks)
         if (verdict.ok === false) return NextResponse.json({ error: verdict.error }, { status: 403 })
       }
     }
@@ -401,6 +418,8 @@ export async function PUT(
 
     // Construire les données à envoyer à Proxmox
     const formData = new URLSearchParams()
+    // Bind the authorization comparison to the exact PVE config generation.
+    if (hasNicMutation(body) && currentConfig.digest) formData.set('digest', String(currentConfig.digest))
     
     for (const [key, value] of Object.entries(body)) {
       // body was already prefiltered to isForwardedConfigKey above; this
@@ -507,6 +526,7 @@ export async function PUT(
 
     return NextResponse.json({ data: write.upid, success: true })
   } catch (e: any) {
+    if (e instanceof NicConfigError) return NextResponse.json({ error: e.message }, { status: 400 })
     console.error("[PUT config] Error:", e)
 
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })

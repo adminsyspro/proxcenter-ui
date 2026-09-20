@@ -8,7 +8,8 @@ import { authOptions } from "@/lib/auth/config"
 import { prisma } from "@/lib/db/prisma"
 import { audit } from "@/lib/audit"
 import { hasPermission, isUserSuperAdmin, isUserProtected, PROTECTED_ROLE_IDS, PROVIDER_ONLY_ROLE_IDS } from "@/lib/rbac"
-import { validateAssignmentScope } from "@/lib/rbac/scope-validation"
+import { roleHasSensitiveNicPermissions } from "@/lib/rbac/nicPermissions"
+import { scopeBreadth, validateAssignmentScope } from "@/lib/rbac/scope-validation"
 import { DEFAULT_TENANT_ID, getCurrentTenantId } from "@/lib/tenant"
 import { demoResponse } from "@/lib/demo/demo-api"
 
@@ -218,7 +219,7 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
       where: buildAssignmentWhere(id, tenantId),
       include: {
         user: { select: { email: true } },
-        role: { select: { name: true } },
+        role: { select: { name: true, permissions: { select: { permissionId: true } } } },
       },
     })
 
@@ -266,14 +267,26 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
       )
     }
 
+    // A provider admin may still narrow or expire an existing NIC identity
+    // grant; widening or moving it stays reserved to a super admin.
+    const scopeMoves = scope_type !== undefined
+      && (scope_type !== assignment.scopeType || (scope_target ?? null) !== (assignment.scopeTarget ?? null))
+    if (!callerIsSuperAdmin && roleHasSensitiveNicPermissions(assignment.role) && scopeMoves
+      && scopeBreadth(scope_type) >= scopeBreadth(assignment.scopeType)) {
+      return NextResponse.json({ error: 'Only a super admin may widen a NIC identity grant' }, { status: 403 })
+    }
+
     // Construire le payload Prisma en ne touchant que les champs fournis
     const data: Record<string, unknown> = {}
 
     if (role_id !== undefined) {
       // Vérifier que le rôle existe
-      const role = await prisma.rbacRole.findUnique({ where: { id: role_id }, select: { id: true } })
+      const role = await prisma.rbacRole.findUnique({ where: { id: role_id }, select: { id: true, permissions: { select: { permissionId: true } } } })
       if (!role) {
         return NextResponse.json({ error: "Rôle non trouvé" }, { status: 404 })
+      }
+      if (!callerIsSuperAdmin && roleHasSensitiveNicPermissions(role)) {
+        return NextResponse.json({ error: 'Only a super admin may grant NIC identity permissions' }, { status: 403 })
       }
       data.roleId = role_id
     }

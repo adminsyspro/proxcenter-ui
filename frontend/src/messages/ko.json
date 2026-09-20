@@ -5605,7 +5605,10 @@
       "deleteIso": "이 ISO 삭제",
       "deleteIsoConfirm": "{storage}에서 {name}을(를) 삭제할까요? 이 파일을 참조하는 게스트는 더 이상 부팅할 수 없습니다."
     },
-    "loadNodesError": "노드 목록을 불러올 수 없습니다"
+    "loadNodesError": "노드 목록을 불러올 수 없습니다",
+    "nicMacPermissionRequired": "MAC 주소를 변경하려면 공급자의 권한이 필요합니다.",
+    "nicVlanPermissionRequired": "VLAN 설정을 변경하려면 공급자의 권한이 필요합니다.",
+    "nicOriginalUnavailable": "저장하기 전에 네트워크 구성을 다시 불러오세요."
   },
   "ldap": {
     "description": "사용자가 회사 자격 증명으로 로그인할 수 있도록 LDAP/Active Directory 인증을 구성합니다.",

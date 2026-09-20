@@ -1791,6 +1791,7 @@ export default function VmDetailTabs(props: any) {
                                     onClick={() => {
                                       setSelectedNetwork({
                                         id: net.id,
+                                        rawValue: net.rawValue,
                                         model: net.model,
                                         bridge: net.bridge,
                                         mac: net.macaddr,

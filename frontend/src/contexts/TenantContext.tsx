@@ -37,35 +37,57 @@ const TenantContext = createContext<TenantContextType>({
   isFullClusterView: true,
 })
 
+/** Minimal tenant built from the signed session when the tenant list is unavailable. */
+function sessionTenant(id: string): TenantInfo {
+  return { id, slug: id, name: id }
+}
+
 export function TenantProvider({ children }: { children: React.ReactNode }) {
   const { data: session } = useSession()
+  const userId = session?.user?.id
+  const tenantId = (session?.user as any)?.tenantId ?? null
+  const identityKey = JSON.stringify([userId, tenantId])
+  const [loadedKey, setLoadedKey] = useState<string | null>(null)
   const [availableTenants, setAvailableTenants] = useState<TenantInfo[]>([])
   const [currentTenant, setCurrentTenant] = useState<TenantInfo | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    if (!session?.user?.id) {
+    let ignore = false
+    if (!userId) {
+      setAvailableTenants([])
+      setCurrentTenant(null)
       setLoading(false)
+      setLoadedKey(identityKey)
       return
     }
 
+    setLoading(true)
     fetch('/api/v1/auth/me/tenants')
       .then(r => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`)
         return r.json()
       })
       .then(data => {
+        if (ignore) return
         const tenants = data.data || []
         setAvailableTenants(tenants)
-        const currentId = (session.user as any).tenantId || data.currentTenantId || 'default'
-        const current = tenants.find((t: TenantInfo) => t.id === currentId) || tenants[0] || null
-        setCurrentTenant(current)
+        const currentId = tenantId || data.currentTenantId || DEFAULT_TENANT_ID
+        // The session names the tenant; the list only enriches it. A row
+        // missing from the list must not leave the whole UI without a tenant.
+        setCurrentTenant(tenants.find((t: TenantInfo) => t.id === currentId) || sessionTenant(currentId))
       })
       .catch((err) => {
+        if (ignore) return
+        setAvailableTenants([])
+        setCurrentTenant(sessionTenant(tenantId || DEFAULT_TENANT_ID))
         console.error('[TenantContext] Failed to fetch tenants:', err)
       })
-      .finally(() => setLoading(false))
-  }, [session?.user?.id])
+      .finally(() => {
+        if (!ignore) { setLoading(false); setLoadedKey(identityKey) }
+      })
+    return () => { ignore = true }
+  }, [userId, tenantId, identityKey])
 
   const switchTenant = useCallback(async (tenantId: string) => {
     try {
@@ -88,16 +110,18 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
-  const isProvider = (currentTenant?.id ?? DEFAULT_TENANT_ID) === DEFAULT_TENANT_ID
-  const isMsp = currentTenant?.operatingModel === 'msp'
+  const pending = loading || loadedKey !== identityKey
+  const activeTenant = pending ? null : currentTenant
+  const isProvider = activeTenant?.id === DEFAULT_TENANT_ID
+  const isMsp = activeTenant?.operatingModel === 'msp'
 
   return (
     <TenantContext.Provider value={{
-      currentTenant,
-      availableTenants,
+      currentTenant: activeTenant,
+      availableTenants: pending ? [] : availableTenants,
       switchTenant,
-      loading,
-      isMultiTenant: availableTenants.length > 1,
+      loading: pending,
+      isMultiTenant: !pending && availableTenants.length > 1,
       isProvider,
       isMsp,
       isFullClusterView: isProvider || isMsp,

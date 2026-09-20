@@ -5579,7 +5579,10 @@
       "usePhysical": "Physisches CD/DVD-Laufwerk verwenden",
       "noMedia": "Kein Medium verwenden"
     },
-    "loadNodesError": "Node-Liste konnte nicht geladen werden"
+    "loadNodesError": "Node-Liste konnte nicht geladen werden",
+    "nicMacPermissionRequired": "Zum Ändern der MAC-Adresse ist eine Freigabe des Anbieters erforderlich.",
+    "nicVlanPermissionRequired": "Zum Ändern der VLAN-Einstellungen ist eine Freigabe des Anbieters erforderlich.",
+    "nicOriginalUnavailable": "Laden Sie die Netzwerkkonfiguration vor dem Speichern neu."
   },
   "ldap": {
     "description": "Konfigurieren Sie LDAP/Active Directory-Authentifizierung, damit Benutzer sich mit ihren Unternehmensanmeldedaten anmelden können.",

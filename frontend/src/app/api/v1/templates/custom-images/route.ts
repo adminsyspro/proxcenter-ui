@@ -7,6 +7,7 @@ import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { authOptions } from "@/lib/auth/config"
 import { createCustomImageSchema } from "@/lib/schemas"
 import { prisma as basePrisma } from "@/lib/db/prisma"
+import { authorizeImageVolume, SourceVolumeError } from '@/lib/templates/sourceVolume'
 
 export const runtime = "nodejs"
 
@@ -56,6 +57,10 @@ export async function POST(req: Request) {
 
     const tenantId = await getCurrentTenantId()
 
+    if (body.sourceType === 'volume') {
+      await authorizeImageVolume({ tenantId, source: body })
+    }
+
     // Only the provider (tenant 'default') can publish a shared catalogue
     // entry. For any other tenant we silently force isShared=false.
     const wantShared = !!(body as any).isShared
@@ -95,6 +100,8 @@ export async function POST(req: Request) {
         downloadUrl: body.downloadUrl || null,
         checksumUrl: body.checksumUrl || null,
         volumeId: body.volumeId || null,
+        sourceConnectionId: body.sourceType === 'volume' ? body.sourceConnectionId : null,
+        sourceNode: body.sourceType === 'volume' ? body.sourceNode : null,
         defaultDiskSize: body.defaultDiskSize,
         minMemory: body.minMemory,
         recommendedMemory: body.recommendedMemory,
@@ -121,6 +128,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ data: image }, { status: 201 })
   } catch (e: any) {
+    if (e instanceof SourceVolumeError) return NextResponse.json({ error: e.message }, { status: e.status })
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }

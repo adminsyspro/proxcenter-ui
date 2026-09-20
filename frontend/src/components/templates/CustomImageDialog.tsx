@@ -77,6 +77,9 @@ export default function CustomImageDialog({ open, onClose, editData }: CustomIma
     if (!open) return
     setError(null)
     setSaving(false)
+    setSelectedConn(editData?.sourceConnectionId || '')
+    setSelectedNode(editData?.sourceNode || '')
+    setSelectedStorage(editData?.volumeId?.split(':')[0] || '')
 
     if (editData) {
       setName(editData.name || '')
@@ -125,7 +128,7 @@ export default function CustomImageDialog({ open, onClose, editData }: CustomIma
       .then(res => {
         const conns = res.data || []
         setConnections(conns)
-        if (conns.length === 1) setSelectedConn(conns[0].id)
+        if (conns.length === 1) setSelectedConn(current => current || conns[0].id)
       })
       .catch(() => {})
   }, [open, sourceType])
@@ -138,7 +141,7 @@ export default function CustomImageDialog({ open, onClose, editData }: CustomIma
       .then(res => {
         const nodeList = (res.data || []).filter((n: any) => n.status === 'online')
         setNodes(nodeList)
-        if (nodeList.length === 1) setSelectedNode(nodeList[0].node)
+        if (nodeList.length === 1) setSelectedNode(current => current || nodeList[0].node)
       })
       .catch(() => setNodes([]))
   }, [selectedConn])
@@ -182,6 +185,8 @@ export default function CustomImageDialog({ open, onClose, editData }: CustomIma
       downloadUrl: sourceType === 'url' ? downloadUrl : null,
       checksumUrl: sourceType === 'url' && checksumUrl ? checksumUrl : null,
       volumeId: sourceType === 'volume' ? volumeId : null,
+      sourceConnectionId: sourceType === 'volume' ? selectedConn : null,
+      sourceNode: sourceType === 'volume' ? selectedNode : null,
       defaultDiskSize, minMemory, recommendedMemory, minCores, recommendedCores,
       ostype, tags: tags || null,
       isShared,
@@ -211,11 +216,11 @@ export default function CustomImageDialog({ open, onClose, editData }: CustomIma
   }, [
     name, vendor, version, arch, format, sourceType, downloadUrl, checksumUrl,
     volumeId, defaultDiskSize, minMemory, recommendedMemory, minCores,
-    recommendedCores, ostype, tags, isEdit, editData, onClose,
+    recommendedCores, ostype, tags, isEdit, editData, onClose, isShared, selectedConn, selectedNode,
   ])
 
   const canSave = name.trim() &&
-    (sourceType === 'url' ? downloadUrl.trim() : volumeId.trim()) &&
+    (sourceType === 'url' ? downloadUrl.trim() : volumeId.trim() && selectedConn && selectedNode) &&
     defaultDiskSize.match(/^\d+G$/)
 
   return (

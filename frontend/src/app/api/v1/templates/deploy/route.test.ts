@@ -36,7 +36,7 @@ vi.mock('@/lib/tenant', () => ({
   getCurrentTenantId: () => getCurrentTenantIdMock(),
   DEFAULT_TENANT_ID: 'default',
 }))
-vi.mock('@/lib/rbac', () => ({ checkPermission: checkPermissionMock, PERMISSIONS: { VM_CREATE: 'vm.create' } }))
+vi.mock('@/lib/rbac', () => ({ checkPermission: checkPermissionMock, PERMISSIONS: { VM_CREATE: 'vm.create', VM_CLONE: 'vm.clone' }, buildVmResourceId: (...parts: string[]) => parts.join(':') }))
 vi.mock('@/lib/auth/config', () => ({ authOptions: {} }))
 vi.mock('@/lib/schemas', () => ({ deploySchema: { safeParse: (b: any) => ({ success: true, data: b }) } }))
 vi.mock('@/lib/connections/getConnection', () => ({ getConnectionById: getConnectionByIdMock }))
@@ -70,8 +70,9 @@ const getVdcScopeMock = vi.fn<(...args: any[]) => Promise<any>>()
 // scope loader is stubbed.
 vi.mock('@/lib/vdc/scope', async (io) => {
   const actual = await io<typeof import('@/lib/vdc/scope')>()
-  return { ...actual, getVdcScope: getVdcScopeMock }
+  return { ...actual, getVdcScope: getVdcScopeMock, loadTenantSlugs: async () => ({ mine: 'acme', all: ['acme', 'acme-prod'] }) }
 })
+vi.mock('@/lib/tenant/infraScope', () => ({ getTenantInfrastructureScope: async () => ({ kind: 'iaas', vdcScope: await getVdcScopeMock() }) }))
 const auditMock = vi.fn<(...args: any[]) => Promise<any>>()
 vi.mock('@/lib/audit', () => ({ audit: (...a: any[]) => auditMock(...a) }))
 
@@ -643,5 +644,127 @@ describe('template download regressions (#967)', () => {
     expect(finalUpdate()).toMatchObject({ status: 'failed', error: expect.stringContaining('Subnet 10.1.0.0/30 is full'), completedAt: expect.any(Date) })
     expect(deploymentUpdateMock.mock.calls.every(([update]) => !('errorMessage' in update.data))).toBe(true)
     expect(qemuCreateParams()).toBeUndefined()
+  })
+})
+
+describe('POST templates/deploy: source volume authorization', () => {
+  const source = {
+    tenantId: 'tenant-1', isShared: false, sourceType: 'volume', format: 'qcow2',
+    volumeId: 'local-lvm:vm-201-disk-0', sourceConnectionId: 'conn-1', sourceNode: 'pve1',
+  }
+  beforeEach(async () => {
+    const { customImageToCloudImage } = await import('@/lib/templates/cloudImages')
+    vi.mocked(customImageToCloudImage).mockImplementation((row: any) => row)
+    findCustomImageForTenantMock.mockResolvedValue({ ...source })
+    resolveVdcForTenantMock.mockResolvedValue({ poolName: 'pool-a', quota: null })
+    getVdcScopeMock.mockResolvedValue({
+      connectionIds: new Set(['conn-1']),
+      nodesByConnection: new Map([['conn-1', new Set(['pve1'])]]),
+      storagesByConnection: new Map([['conn-1', new Set(['local-lvm', 'library'])]]),
+      writableStoragesByConnection: new Map([['conn-1', new Set(['local-lvm'])]]),
+      poolsByConnection: new Map([['conn-1', new Set(['pool-a'])]]),
+      isoLibrariesByConnection: new Map([['conn-1', new Set(['library'])]]),
+    })
+    pveFetchMock.mockImplementation(async (_conn, path) => {
+      if (path.endsWith('/content')) return [{ volid: source.volumeId, content: 'images', vmid: 201 }]
+      if (path === '/cluster/resources?type=vm') return [{ vmid: 201, type: 'qemu', node: 'pve1', pool: 'pool-b' }]
+      return {}
+    })
+  })
+
+  it('rejects a legacy malicious row even when its destination is writable', async () => {
+    const res = await callRoute(await loadPost(), { body: baseBody })
+    expect(res.status).toBe(403)
+    expect(afterCbs).toHaveLength(0)
+  })
+
+  it('rejects a source storage removed from the tenant scope since image creation', async () => {
+    findCustomImageForTenantMock.mockResolvedValue({ ...source, volumeId: 'foreign:vm-201-disk-0' })
+    const res = await callRoute(await loadPost(), { body: baseBody })
+    expect(res.status).toBe(403)
+    expect(afterCbs).toHaveLength(0)
+  })
+
+  it('requires an origin for old unbound images instead of guessing a cluster', async () => {
+    findCustomImageForTenantMock.mockResolvedValue({ ...source, sourceConnectionId: null, sourceNode: null })
+    const res = await callRoute(await loadPost(), { body: baseBody })
+    expect(res.status).toBe(409)
+    expect(afterCbs).toHaveLength(0)
+  })
+
+  it('preserves a provider shared image with an explicit source', async () => {
+    findCustomImageForTenantMock.mockResolvedValue({ ...source, tenantId: 'default', isShared: true })
+    const res = await callRoute(await loadPost(), { body: baseBody })
+    expect(res.status).toBe(200)
+    expect(afterCbs).toHaveLength(1)
+  })
+
+  it('does not let a forged isShared in the deployment body confer source access', async () => {
+    const res = await callRoute(await loadPost(), { body: { ...baseBody, isShared: true, tenantId: 'default' } })
+    expect(res.status).toBe(403)
+    expect(afterCbs).toHaveLength(0)
+  })
+
+  it('rejects another tenant ISO despite a permitted isoStorage decoy', async () => {
+    findCustomImageForTenantMock.mockResolvedValue({ ...source, format: 'iso', volumeId: 'library:iso/custom-acme-prod-private.iso' })
+    pveFetchMock.mockResolvedValue([{ volid: 'library:iso/custom-acme-prod-private.iso', content: 'iso' }])
+    const res = await callRoute(await loadPost(), { body: { ...baseBody, isoStorage: 'library' } })
+    expect(res.status).toBe(403)
+    expect(afterCbs).toHaveLength(0)
+  })
+
+  it('imports a tenant-owned disk through the background deployment pipeline', async () => {
+    pveFetchMock.mockImplementation(async (_conn, path, opts) => {
+      if (path.endsWith('/content')) return [{ volid: source.volumeId, content: 'images', vmid: 201 }]
+      if (path === '/cluster/resources?type=vm') return [{ vmid: 201, type: 'qemu', node: 'pve1', pool: 'pool-a' }]
+      if (path.endsWith('/qemu') && opts?.method === 'POST') return 'UPID:create'
+      return {}
+    })
+    const res = await callRoute(await loadPost(), { body: baseBody })
+    expect(res.status).toBe(200)
+    await runAfters()
+    expect(String(qemuCreateParams().get('scsi0'))).toContain('import-from=local-lvm:vm-201-disk-0')
+    expect(deploymentUpdateMock.mock.calls.some(call => call[0].data.status === 'completed')).toBe(true)
+  })
+
+  it.each(['removed', 'changed', 'unpublished'])('fails before PVE writes when a shared source is %s after the response', async change => {
+    findCustomImageForTenantMock.mockResolvedValue({ ...source, tenantId: 'default', isShared: true })
+    const res = await callRoute(await loadPost(), { body: baseBody })
+    expect(res.status).toBe(200)
+    findCustomImageForTenantMock.mockResolvedValue(change === 'removed' ? null : {
+      ...source, tenantId: 'default', isShared: change !== 'unpublished',
+      volumeId: change === 'changed' ? 'local-lvm:vm-999-disk-0' : source.volumeId,
+    })
+    await runAfters()
+    expect(pveFetchMock.mock.calls.some(call => call[2]?.method === 'POST' || call[2]?.method === 'PUT')).toBe(false)
+    expect(deploymentUpdateMock.mock.calls.some(call => call[0].data.status === 'failed' && call[0].data.completedAt instanceof Date)).toBe(true)
+  })
+
+  it('rejects storage scope revoked between acceptance and background execution', async () => {
+    pveFetchMock.mockImplementation(async (_conn, path) => {
+      if (path.endsWith('/content')) return [{ volid: source.volumeId, content: 'images', vmid: 201 }]
+      if (path === '/cluster/resources?type=vm') return [{ vmid: 201, type: 'qemu', node: 'pve1', pool: 'pool-a' }]
+      return {}
+    })
+    const res = await callRoute(await loadPost(), { body: baseBody })
+    expect(res.status).toBe(200)
+    const changedScope = await getVdcScopeMock()
+    changedScope.storagesByConnection.get('conn-1').delete('local-lvm')
+    await runAfters()
+    expect(pveFetchMock.mock.calls.some(call => call[2]?.method === 'POST' || call[2]?.method === 'PUT')).toBe(false)
+    expect(deploymentUpdateMock.mock.calls.some(call => call[0].data.status === 'failed')).toBe(true)
+  })
+
+  it('deploys a provider shared image whose source sits outside the tenant vDC (#971)', async () => {
+    const golden = { ...source, tenantId: 'default', isShared: true, volumeId: 'provider-store:import/golden.qcow2', sourceNode: 'pve3' }
+    findCustomImageForTenantMock.mockResolvedValue(golden)
+    pveFetchMock.mockImplementation(async (_conn, path) => {
+      if (path.endsWith('/content')) return [{ volid: golden.volumeId, content: 'import' }]
+      if (path.startsWith('/storage/')) return { shared: 1, type: 'nfs' }
+      return {}
+    })
+    const res = await callRoute(await loadPost(), { body: baseBody })
+    expect(res.status).toBe(200)
+    expect(afterCbs).toHaveLength(1)
   })
 })

@@ -1,5 +1,6 @@
 'use client'
 
+import { useRBAC } from '@/contexts/RBACContext'
 import React, { useState } from 'react'
 import dynamic from 'next/dynamic'
 import { useTranslations } from 'next-intl'
@@ -404,6 +405,9 @@ function CopyableCommand({ command }: { command: string }) {
 }
 
 export default function InventoryDialogs(props: InventoryDialogsProps) {
+  const { hasPermission } = useRBAC()
+  const canEditHardware = hasPermission('vm.config.hardware')
+  const canChangeMedia = hasPermission('vm.config.media')
   const {
     selection, data, allVms, hosts,
     nodeActionDialog, setNodeActionDialog, nodeActionBusy, setNodeActionBusy, nodeActionStep, setNodeActionStep,
@@ -1500,6 +1504,8 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
             />
             
             <EditDiskDialog
+              canEditHardware={canEditHardware}
+              canChangeMedia={canChangeMedia}
               open={editDiskDialogOpen}
               onClose={() => {
                 setEditDiskDialogOpen(false)

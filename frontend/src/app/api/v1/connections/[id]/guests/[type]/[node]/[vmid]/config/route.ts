@@ -7,7 +7,9 @@ import { isVmConfigNotFoundError, locateVmInCluster, type GuestType } from "@/li
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, checkPermissions, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
 import { classifyConfigBody } from "@/lib/rbac/configClassifier"
+import { isOpticalDrive } from "@/lib/proxmox/cdrom"
 import { getCurrentTenantId } from "@/lib/tenant"
+import { getTenantInfrastructureScope, maskingScope } from "@/lib/tenant/infraScope"
 import { resolveVdcForTenant, checkVdcQuota } from "@/lib/vdc/quota"
 import { validateCpuAgainstPolicy, parseCpuProperty, loadCpuCapabilitiesIfNeeded } from "@/lib/vdc/computePolicy"
 import { enforceTenantDrives, meterImportRefs, DriveScopeError } from "@/lib/vdc/driveGuard"
@@ -94,6 +96,42 @@ function isForwardedConfigKey(key: string, type: 'qemu' | 'lxc'): boolean {
     key === 'rng0'                 // VirtIO RNG
 }
 
+/** VM grants remain inside the tenant's live vDC node/pool boundary. */
+async function checkTenantGuestScope(
+  tenantId: string,
+  conn: Parameters<typeof pveFetch>[0],
+  id: string,
+  type: string,
+  node: string,
+  vmid: string,
+  allowMovedNode = false,
+): Promise<NextResponse | null> {
+  const infra = await getTenantInfrastructureScope(tenantId, { ignoreVdcContext: true })
+  if (infra.kind !== 'iaas') return null
+  const scope = maskingScope(infra)
+  const nodes = scope?.nodesByConnection.get(id)
+  const pools = scope?.poolsByConnection.get(id)
+  if (!scope?.connectionIds.has(id) || !nodes?.has(node) || !pools?.size) {
+    return NextResponse.json({ error: 'Guest outside your vDC scope' }, { status: 403 })
+  }
+
+  let resources: unknown
+  try {
+    resources = await pveFetch<unknown>(conn, '/cluster/resources?type=vm')
+  } catch {
+    return NextResponse.json({ error: 'Unable to verify guest vDC scope' }, { status: 503 })
+  }
+  if (!Array.isArray(resources)) {
+    return NextResponse.json({ error: 'Unable to verify guest vDC scope' }, { status: 503 })
+  }
+  const guest = resources.find(row => row?.type === type && String(row.vmid) === vmid)
+  if (!guest || !nodes.has(guest.node) || !guest.pool || !pools.has(guest.pool) ||
+    (!allowMovedNode && guest.node !== node)) {
+    return NextResponse.json({ error: 'Guest outside your vDC scope' }, { status: 403 })
+  }
+  return null
+}
+
 // GET: Récupérer la configuration de la VM
 export async function GET(
   req: Request,
@@ -113,6 +151,9 @@ export async function GET(
     if (denied) return denied
 
     const conn = await getConnectionById(id)
+    const tenantId = await getCurrentTenantId()
+    const scopeDenied = await checkTenantGuestScope(tenantId, conn, id, type, node, vmid, true)
+    if (scopeDenied) return scopeDenied
 
     // Resolve via the original node first; on "config does not exist"
     // (post-intra-cluster-migration, source .conf already removed by PVE),
@@ -130,6 +171,10 @@ export async function GET(
       if (!isVmConfigNotFoundError(err)) throw err
       const located = await locateVmInCluster(conn, vmid, type as GuestType)
       if (!located || located.node === node) throw err
+      const destinationDenied = await checkPermission(PERMISSIONS.VM_VIEW, "vm", buildVmResourceId(id, located.node, type, vmid))
+      if (destinationDenied) return destinationDenied
+      const destinationScopeDenied = await checkTenantGuestScope(tenantId, conn, id, type, located.node, vmid)
+      if (destinationScopeDenied) return destinationScopeDenied
       resolvedNode = located.node
       movedTo = located.node
       configEffective = await pveFetch<any>(
@@ -192,11 +237,15 @@ export async function PUT(
 
     const body = await req.json().catch(() => null)
 
-    if (!body || typeof body !== 'object') {
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
       return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 })
     }
 
+    const requestedDigest = body.digest
     const conn = await getConnectionById(id)
+    const tenantId = await getCurrentTenantId()
+    const scopeDenied = await checkTenantGuestScope(tenantId, conn, id, type, node, vmid)
+    if (scopeDenied) return scopeDenied
 
     // Fetch current config once — reused by the classifier (NIC link-only
     // detection), the quota check (CPU/RAM deltas) and the IPAM sync.
@@ -218,14 +267,39 @@ export async function PUT(
     // super-right: holding it implies every sub-right via the permission
     // hierarchy in checkGrants.
     const requiredPerms = classifyConfigBody(body, currentConfig)
-    const denied = requiredPerms.size > 0
+    let denied = requiredPerms.size > 0
       ? await checkPermissions([...requiredPerms], "vm", resourceId)
       : await checkPermission(PERMISSIONS.VM_CONFIG, "vm", resourceId)
 
+    // Hardware operators retain access to their existing optical drives;
+    // a media-only grant never satisfies any other required hardware right.
+    if (denied && requiredPerms.has(PERMISSIONS.VM_CONFIG_MEDIA)) {
+      const hardwarePerms = new Set(requiredPerms)
+      hardwarePerms.delete(PERMISSIONS.VM_CONFIG_MEDIA)
+      hardwarePerms.add(PERMISSIONS.VM_CONFIG_HARDWARE)
+      denied = await checkPermissions([...hardwarePerms], "vm", resourceId)
+    }
     if (denied) return denied
 
+    // Only a slot that carries, or would carry, an optical drive is bound to
+    // the PVE digest: the media decision above was taken on that generation.
+    // Ordinary data disk edits keep their last-writer-wins behaviour.
+    const touchesOpticalDrive = (keys: string[]) => keys.some(key =>
+      /^(ide|sata|scsi)\d+$/.test(key) && (isOpticalDrive(currentConfig?.[key]) || isOpticalDrive(body[key])))
+    const hasOpticalDriveMutation = type === 'qemu' && (
+      touchesOpticalDrive(Object.keys(body)) ||
+      [body.delete, body.revert].some(value => typeof value === 'string' && touchesOpticalDrive(value.split(',').map((key: string) => key.trim())))
+    )
+    if (hasOpticalDriveMutation && requestedDigest !== undefined) {
+      if (typeof requestedDigest !== 'string' || !requestedDigest) {
+        return NextResponse.json({ error: 'Invalid configuration digest' }, { status: 400 })
+      }
+      if (currentConfig?.digest && requestedDigest !== currentConfig.digest) {
+        return NextResponse.json({ error: 'VM configuration changed; reload before saving' }, { status: 409 })
+      }
+    }
+
     // ── vDC Quota Check (CPU/RAM increases) ──
-    const tenantId = await getCurrentTenantId()
     let vdcInfo: Awaited<ReturnType<typeof resolveVdcForTenant>> = null
     try {
       vdcInfo = await resolveVdcForTenant(tenantId, id, node)
@@ -345,6 +419,12 @@ export async function PUT(
 
     if (formData.toString() === '') {
       return NextResponse.json({ error: "No valid fields to update" }, { status: 400 })
+    }
+
+    // Bind the permission decision to the device generation inspected above.
+    // Keep a caller's matching digest; otherwise use PVE's current digest.
+    if (hasOpticalDriveMutation && (requestedDigest || currentConfig?.digest)) {
+      formData.set('digest', requestedDigest || String(currentConfig.digest))
     }
 
     // ── IPAM sync (qemu only) ──

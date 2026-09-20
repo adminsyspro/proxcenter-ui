@@ -43,6 +43,7 @@ import {
   parseIpconfigLine,
   scanUsedIpsForSubnet,
   scannedToIntSet,
+  type ScannedIp,
 } from './ipamScan'
 import { resolveSubnetForBridge, type SubnetForBridge } from './vnets'
 import { ipInCidrUsable, parseCidr } from './network'
@@ -171,12 +172,14 @@ function buildIpconfigValue(ip: string, cidr: string, gateway: string): string {
 }
 
 /** Cache scan results inside one sync call so we don't refetch for slots
- *  that share a subnet. The module-level cache in ipamScan.ts already
- *  handles cross-call caching (60s TTL); this is a per-invocation memo. */
+ *  that share a subnet. The rows are memoised as scanned — who holds each
+ *  address is what lets the caller tell its own NIC apart. The module-level
+ *  cache in ipamScan.ts already handles cross-call caching (60s TTL); this is
+ *  a per-invocation memo. */
 async function scanSubnetOnce(
-  memo: Map<string, Set<number>>,
+  memo: Map<string, ScannedIp[]>,
   args: { conn: ProxmoxClientOptions; connectionId: string; subnet: SubnetForBridge },
-): Promise<Set<number>> {
+): Promise<ScannedIp[]> {
   const key = args.subnet.subnetId
   const hit = memo.get(key)
   if (hit) return hit
@@ -187,9 +190,30 @@ async function scanSubnetOnce(
     subnetId: args.subnet.subnetId,
     connectionId: args.connectionId,
   })
-  const set = scannedToIntSet(scanned)
-  memo.set(key, set)
-  return set
+  memo.set(key, scanned)
+  return scanned
+}
+
+/**
+ * The scanned addresses that actually stand in this NIC's way.
+ *
+ * The scan walks the whole vDC pool, so it reports the very NIC being
+ * reconciled. A guest PVE already addresses but that owns no allocation row —
+ * created outside ProxCenter, restored from a backup, or predating the IPAM —
+ * would otherwise have its own ipconfigN read as "already taken", and every
+ * config PUT on it, a CD-ROM swap included, would answer 409 "IP unavailable"
+ * naming the guest's own address.
+ *
+ * Only that one NIC is dropped, matched on (vmid, MAC): another NIC of the
+ * same guest keeps its address reserved, and an unreadable MAC keeps the
+ * pre-existing, conservative behaviour.
+ */
+function externalIpsFacing(scanned: ScannedIp[], vmid: number, mac: string | null): Set<number> {
+  const own = mac?.toUpperCase() ?? null
+  if (own === null) return scannedToIntSet(scanned)
+  return scannedToIntSet(
+    scanned.filter(entry => !(entry.vmid === vmid && (entry.mac?.toUpperCase() ?? null) === own)),
+  )
 }
 
 // ---------------------------------------------------------------------------
@@ -218,7 +242,7 @@ export async function syncIpamForVmConfig(args: SyncIpamArgs): Promise<SyncIpamR
 
   // Memoise per-subnet scan results across slots to avoid double-fetching
   // when two NICs sit on the same VNet.
-  const scanMemo = new Map<string, Set<number>>()
+  const scanMemo = new Map<string, ScannedIp[]>()
 
   // Snapshot the VM's existing allocations so a release-by-MAC has the
   // metadata it needs to rollback (vdcId, vnetId, etc. aren't in the
@@ -294,11 +318,12 @@ export async function syncIpamForVmConfig(args: SyncIpamArgs): Promise<SyncIpamR
 
       // === Allocate path ===
       if (afterSubnet && macAfter) {
-        const externalIps = await scanSubnetOnce(scanMemo, {
+        const scanned = await scanSubnetOnce(scanMemo, {
           conn: args.conn,
           connectionId: args.connectionId,
           subnet: afterSubnet,
         })
+        const externalIps = externalIpsFacing(scanned, args.vmid, macAfter)
 
         // If the slot is unchanged at the netN level but the user changed
         // ipconfigN.ip, we honour the new IP by releasing the existing

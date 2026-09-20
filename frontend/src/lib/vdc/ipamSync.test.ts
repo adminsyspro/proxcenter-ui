@@ -6,8 +6,9 @@ import {
   allocateIp,
   findAllocationByMac,
   findAllocationsForVm,
+  IpamHintUnavailableError,
 } from './ipam'
-import { __clearScanCacheForTests } from './ipamScan'
+import { __clearScanCacheForTests, scanUsedIpsForSubnet } from './ipamScan'
 import { syncIpamForVmConfig } from './ipamSync'
 
 // Stub the IPAM scanner — these tests only care about reconciliation
@@ -351,5 +352,68 @@ describe('syncIpamForVmConfig — unrelated VM, no allocations', () => {
       hostname: null,
     })
     expect(await findAllocationsForVm('conn-1', 100)).toEqual([])
+  })
+})
+
+describe('syncIpamForVmConfig — a guest PVE already addresses, with no IPAM row', () => {
+  // Regression: a guest created outside ProxCenter (CLI, restore, pre-IPAM
+  // install) carries its static ipconfigN in PVE but owns no allocation. The
+  // pool scan reports that very NIC, the set fed to the allocator dropped the
+  // vmid, and the guest's own address then read as "already taken" — so every
+  // config PUT on it, a CD-ROM swap included, answered 409 "IP unavailable".
+  it('takes its own address as the hint instead of refusing it', async () => {
+    vi.mocked(scanUsedIpsForSubnet).mockResolvedValue([
+      { vmid: 100, mac: 'AA:00:00:00:00:01', ip: '10.42.0.7' },
+    ])
+
+    const result = await syncIpamForVmConfig({
+      before: { net0: 'virtio=AA:00:00:00:00:01,bridge=tenantA', ipconfig0: 'ip=10.42.0.7/24,gw=10.42.0.254' },
+      after: { net0: 'virtio=AA:00:00:00:00:01,bridge=tenantA', ipconfig0: 'ip=10.42.0.7/24,gw=10.42.0.254' },
+      conn: fakeConn,
+      connectionId: 'conn-1',
+      vmid: 100,
+      hostname: null,
+    })
+
+    expect((await findAllocationByMac('subnet-1', 'AA:00:00:00:00:01'))?.ip).toBe('10.42.0.7')
+    expect(result.bodyOverrides.ipconfig0).toBeUndefined()
+  })
+
+  it('still refuses an address another guest holds', async () => {
+    vi.mocked(scanUsedIpsForSubnet).mockResolvedValue([
+      { vmid: 999, mac: 'BB:00:00:00:00:09', ip: '10.42.0.7' },
+    ])
+
+    await expect(syncIpamForVmConfig({
+      before: {},
+      after: { net0: 'virtio=AA:00:00:00:00:01,bridge=tenantA', ipconfig0: 'ip=10.42.0.7/24,gw=10.42.0.254' },
+      conn: fakeConn,
+      connectionId: 'conn-1',
+      vmid: 100,
+      hostname: null,
+    })).rejects.toThrow(IpamHintUnavailableError)
+  })
+
+  it('does not hand a second NIC the address the first one already carries', async () => {
+    vi.mocked(scanUsedIpsForSubnet).mockResolvedValue([
+      { vmid: 100, mac: 'AA:00:00:00:00:01', ip: '10.42.0.7' },
+    ])
+
+    const result = await syncIpamForVmConfig({
+      before: { net0: 'virtio=AA:00:00:00:00:01,bridge=tenantA', ipconfig0: 'ip=10.42.0.7/24,gw=10.42.0.254' },
+      after: {
+        net0: 'virtio=AA:00:00:00:00:01,bridge=tenantA', ipconfig0: 'ip=10.42.0.7/24,gw=10.42.0.254',
+        net1: 'virtio=AA:00:00:00:00:02,bridge=tenantA',
+      },
+      conn: fakeConn,
+      connectionId: 'conn-1',
+      vmid: 100,
+      hostname: null,
+    })
+
+    expect((await findAllocationByMac('subnet-1', 'AA:00:00:00:00:01'))?.ip).toBe('10.42.0.7')
+    const second = await findAllocationByMac('subnet-1', 'AA:00:00:00:00:02')
+    expect(second?.ip).not.toBe('10.42.0.7')
+    expect(result.bodyOverrides.ipconfig1).toBe(`ip=${second?.ip}/24,gw=10.42.0.254`)
   })
 })

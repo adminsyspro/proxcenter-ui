@@ -79,6 +79,7 @@ export function v2vConfigFromJobConfig(
     migrationType,
     ...(config.targetVmid !== undefined && { targetVmid: config.targetVmid }),
     ...(config.v2vRoot !== undefined && { v2vRoot: config.v2vRoot }),
+    ...(typeof config.cpuType === "string" && { cpuType: config.cpuType }),
     ...(Number.isInteger(config.nfcConcurrency) && { nfcConcurrency: config.nfcConcurrency }),
   }
 }

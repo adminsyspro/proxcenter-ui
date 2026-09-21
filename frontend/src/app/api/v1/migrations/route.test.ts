@@ -5,7 +5,7 @@ const h = vi.hoisted(() => ({
   afterCbs: [] as Array<() => Promise<void>>,
   prisma: {
     connection: { findUnique: vi.fn() },
-    migrationJob: { create: vi.fn(async () => ({ id: "job-1" })) },
+    migrationJob: { create: vi.fn(async () => ({ id: "job-1" })), findFirst: vi.fn(async () => null) },
   },
 }))
 
@@ -29,6 +29,7 @@ vi.mock("@/lib/migration/xcpng-pipeline", () => ({ runXcpngMigrationPipeline: vi
 vi.mock("@/lib/vmware/soap", () => ({ soapLogin: vi.fn(), soapLogout: vi.fn(), soapGetVmConfig: vi.fn(), parseVmConfig: vi.fn() }))
 vi.mock("@/lib/crypto/secret", () => ({ decryptSecret: vi.fn(() => "root:pass") }))
 vi.mock("@/lib/migration/orphan-sweep", () => ({ resolveInstanceId: vi.fn(() => "inst-1") }))
+vi.mock("@/lib/tasks/sharedTask", () => ({ TERMINAL_STATUSES: ["completed", "failed", "cancelled"] }))
 
 import { POST } from "./route"
 import { callRoute, readJson } from "@/__tests__/setup/route-test"
@@ -59,6 +60,7 @@ beforeEach(() => {
   warm.mockReset(); xcpngWarm.mockReset(); cold.mockReset(); v2v.mockReset()
   h.prisma.connection.findUnique.mockReset()
   h.prisma.migrationJob.create.mockReset().mockResolvedValue({ id: "job-1" })
+  h.prisma.migrationJob.findFirst.mockReset().mockResolvedValue(null)
 })
 
 describe("POST /api/v1/migrations — warm routing", () => {
@@ -378,5 +380,69 @@ describe('tenant migration VLAN identity', () => {
     expect(res.status).toBe(403)
     expect(h.prisma.migrationJob.create).not.toHaveBeenCalled()
     expect(h.afterCbs).toHaveLength(0)
+  })
+})
+
+describe("POST /api/v1/migrations, one job per source VM (roadmap#23)", () => {
+  function mockConnections() {
+    h.prisma.connection.findUnique
+      .mockResolvedValueOnce({ id: "src", type: "vmware", subType: null, name: "esxi", baseUrl: "https://esxi" })
+      .mockResolvedValueOnce({ id: "tgt", type: "pve", name: "pve" })
+  }
+
+  it("refuses with 409 while a job for the same source VM is still running, and creates nothing", async () => {
+    mockConnections()
+    h.prisma.migrationJob.findFirst.mockResolvedValueOnce({ id: "job-0", status: "transferring" })
+
+    const res = await callRoute(POST, { body })
+    expect(res.status).toBe(409)
+    const json = await readJson<any>(res)
+    expect(json.error).toContain("already in progress")
+    expect(json.jobId).toBe("job-0")
+    expect(h.prisma.migrationJob.create).not.toHaveBeenCalled()
+    await runAfters()
+    expect(warm).not.toHaveBeenCalled()
+  })
+
+  it("only looks at non-terminal jobs of that very source VM", async () => {
+    mockConnections()
+    const res = await callRoute(POST, { body })
+    expect(res.status).toBe(200)
+    expect(h.prisma.migrationJob.findFirst.mock.calls[0][0].where).toMatchObject({
+      sourceConnectionId: "src", sourceVmId: "vm-1", status: { notIn: ["completed", "failed", "cancelled"] },
+    })
+  })
+})
+
+describe("POST /api/v1/migrations, CPU type of the created VM (roadmap#24)", () => {
+  function mockConnections() {
+    h.prisma.connection.findUnique
+      .mockResolvedValueOnce({ id: "src", type: "vmware", subType: null, name: "esxi", baseUrl: "https://esxi" })
+      .mockResolvedValueOnce({ id: "tgt", type: "pve", name: "pve" })
+  }
+
+  it("defaults to x86-64-v2-AES, forwards it to the pipeline and persists it for retries", async () => {
+    mockConnections()
+    const res = await callRoute(POST, { body })
+    expect(res.status).toBe(200)
+    expect(createdJobData().config.cpuType).toBe("x86-64-v2-AES")
+    await runAfters()
+    expect(warm.mock.calls[0][1]).toMatchObject({ cpuType: "x86-64-v2-AES" })
+  })
+
+  it("forwards an offered model such as host as is", async () => {
+    mockConnections()
+    const res = await callRoute(POST, { body: { ...body, cpuType: "host" } })
+    expect(res.status).toBe(200)
+    expect(createdJobData().config.cpuType).toBe("host")
+    await runAfters()
+    expect(warm.mock.calls[0][1]).toMatchObject({ cpuType: "host" })
+  })
+
+  it("rejects a model outside the offered list before creating a job", async () => {
+    const res = await callRoute(POST, { body: { ...body, cpuType: "host,flags=+aes" } })
+    expect(res.status).toBe(400)
+    expect((await readJson<any>(res)).error).toContain("cpuType")
+    expect(h.prisma.migrationJob.create).not.toHaveBeenCalled()
   })
 })

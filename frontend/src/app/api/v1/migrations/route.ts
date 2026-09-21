@@ -17,6 +17,8 @@ import { assertStorageName } from "@/lib/ssh/validate"
 import { sanitizeV2vRoot } from "@/lib/migration/v2v-root-select"
 import { persistedV2vInputs } from "@/lib/migration/retry-dispatch"
 import { parseNfcConcurrency, NFC_CONCURRENCY_MIN, NFC_CONCURRENCY_MAX } from "@/lib/migration/nfc-progress"
+import { MIGRATION_CPU_TYPES, resolveMigrationCpuType } from "@/lib/migration/cpu-type"
+import { TERMINAL_STATUSES } from "@/lib/tasks/sharedTask"
 
 export const runtime = "nodejs"
 
@@ -91,6 +93,14 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: "vlanTag must be an integer between 1 and 4094" }, { status: 400 })
       }
       vlanTag = n
+    }
+
+    // CPU type of the created VM (roadmap#24). Absent means the Proxmox default;
+    // anything outside the offered models is refused here, since the value ends
+    // up in `qm create` on the node.
+    const cpuType = resolveMigrationCpuType(body.cpuType)
+    if (cpuType === null) {
+      return NextResponse.json({ error: `cpuType must be one of ${MIGRATION_CPU_TYPES.join(", ")}` }, { status: 400 })
     }
 
     const tenantId = await getCurrentTenantId()
@@ -200,6 +210,26 @@ export async function POST(req: Request) {
       return NextResponse.json({ error }, { status: 400 })
     }
 
+    // One migration per source VM at a time (roadmap#23). The warm engine already
+    // refuses a second run through its in-memory lock, but only after the job row
+    // exists, so a client that posts twice (the bulk dispatcher did, on a slow
+    // POST) leaves a failed phantom job behind and may follow it instead of the
+    // real one. Refuse here, before any row is written, for every pipeline.
+    const inFlight = await prisma.migrationJob.findFirst({
+      where: { sourceConnectionId, sourceVmId, status: { notIn: TERMINAL_STATUSES as unknown as string[] } },
+      select: { id: true, status: true },
+      orderBy: { startedAt: "desc" },
+    })
+    if (inFlight) {
+      return NextResponse.json(
+        {
+          error: `A migration of this source VM is already in progress (job ${inFlight.id}, ${inFlight.status}). Wait for it to finish or cancel it before starting another.`,
+          jobId: inFlight.id,
+        },
+        { status: 409 },
+      )
+    }
+
     // Create job record
     const job = await prisma.migrationJob.create({
       data: {
@@ -216,7 +246,7 @@ export async function POST(req: Request) {
         // Warm-only options (vddkLibdir, downtimeBudgetSec) are persisted here so a
         // retry — which rebuilds the config from job.config — keeps them instead of
         // silently reverting to the defaults.
-        config: { sourceConnectionId, sourceVmId, sourceVmName: body.sourceVmName, targetConnectionId, targetNode, targetStorage, networkBridge, vlanTag, startAfterMigration, convertDisksToQcow2, migrationType, transferMode, ...(targetVmid !== undefined && { targetVmid }), ...(body.vddkLibdir && { vddkLibdir: body.vddkLibdir }), ...(downtimeBudgetSec !== undefined && { downtimeBudgetSec }), ...(cutoverMode !== undefined && { cutoverMode }),
+        config: { sourceConnectionId, sourceVmId, sourceVmName: body.sourceVmName, targetConnectionId, targetNode, targetStorage, networkBridge, vlanTag, startAfterMigration, convertDisksToQcow2, cpuType, migrationType, transferMode, ...(targetVmid !== undefined && { targetVmid }), ...(body.vddkLibdir && { vddkLibdir: body.vddkLibdir }), ...(downtimeBudgetSec !== undefined && { downtimeBudgetSec }), ...(cutoverMode !== undefined && { cutoverMode }),
           // Source type and virt-v2v inputs (disk paths, vCenter placement, temp
           // storage, root override): persisted so a retry rebuilds the same job.
           sourceType: effectiveSourceType,
@@ -241,6 +271,7 @@ export async function POST(req: Request) {
       vlanTag,
       startAfterMigration,
       convertDisksToQcow2,
+      cpuType,
       migrationType: migrationType as "cold" | "live" | "sshfs_boot",
       transferMode: transferMode as "https" | "sshfs",
       // Pass through the user-selected Temporary Storage so the direct-ESXi pipeline
@@ -259,7 +290,7 @@ export async function POST(req: Request) {
       if ((effectiveSourceType === "vmware" || effectiveSourceType === "vcenter") && migrationType === "warm") {
         await runWarmMigration(job.id, {
           sourceConnectionId, sourceVmId, targetConnectionId, targetNode, targetStorage,
-          networkBridge, vlanTag, startAfterMigration, convertDisksToQcow2,
+          networkBridge, vlanTag, startAfterMigration, convertDisksToQcow2, cpuType,
           ...(targetVmid !== undefined && { targetVmid }),
           ...(body.vddkLibdir && { vddkLibdir: body.vddkLibdir as string }),
           ...(downtimeBudgetSec !== undefined && { downtimeBudgetSec }),
@@ -273,7 +304,7 @@ export async function POST(req: Request) {
       if (effectiveSourceType === "xcpng" && migrationType === "warm") {
         await runXcpngWarmMigration(job.id, {
           sourceConnectionId, sourceVmId, targetConnectionId, targetNode, targetStorage,
-          networkBridge, vlanTag, startAfterMigration, convertDisksToQcow2,
+          networkBridge, vlanTag, startAfterMigration, convertDisksToQcow2, cpuType,
           ...(targetVmid !== undefined && { targetVmid }),
           ...(downtimeBudgetSec !== undefined && { downtimeBudgetSec }),
           ...(cutoverMode !== undefined && { cutoverMode }),
@@ -290,7 +321,7 @@ export async function POST(req: Request) {
         await runV2vMigrationPipeline(job.id, {
           sourceConnectionId, sourceVmId, sourceVmName,
           sourceType: effectiveSourceType as "vcenter" | "hyperv" | "nutanix",
-          targetConnectionId, targetNode, targetStorage, networkBridge, vlanTag, startAfterMigration, convertDisksToQcow2,
+          targetConnectionId, targetNode, targetStorage, networkBridge, vlanTag, startAfterMigration, convertDisksToQcow2, cpuType,
           vcenterDatacenter, vcenterCluster, vcenterHost, diskPaths, tempStorage,
           migrationType: v2vMigrationType,
           ...(targetVmid !== undefined && { targetVmid }),
@@ -359,7 +390,7 @@ export async function POST(req: Request) {
             await runV2vMigrationPipeline(job.id, {
               sourceConnectionId, sourceVmId, sourceVmName: body.sourceVmName || "",
               sourceType: "esxi-direct",
-              targetConnectionId, targetNode, targetStorage, networkBridge, vlanTag, startAfterMigration, convertDisksToQcow2,
+              targetConnectionId, targetNode, targetStorage, networkBridge, vlanTag, startAfterMigration, convertDisksToQcow2, cpuType,
               tempStorage: body.tempStorage,
               migrationType: "cold",
               vmxPath: posixVmxPath,

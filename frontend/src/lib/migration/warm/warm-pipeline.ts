@@ -318,7 +318,7 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
     if (useCbt) { await soapEnableCbt(soapSession, config.sourceVmId); await appendLog(jobId, "CBT enabled on source", "success") }
 
     if (targetVmid == null) targetVmid = Number(await pveFetch<number | string>(pveConn as any, "/cluster/nextid"))
-    const pveParams = mapEsxiToPveConfig(vmConfig, targetVmid, config.targetStorage, config.networkBridge, config.vlanTag)
+    const pveParams = mapEsxiToPveConfig(vmConfig, targetVmid, config.targetStorage, config.networkBridge, config.vlanTag, config.cpuType)
     const shellConf = await createTargetVmShell(pveConn, config.targetNode, pveParams)
     await updateJob(jobId, "enabling_cbt", { targetVmid })
     await appendLog(jobId, `Target VM ${targetVmid} created on ${config.targetNode}`, "success")

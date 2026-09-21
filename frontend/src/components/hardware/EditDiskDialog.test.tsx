@@ -188,6 +188,10 @@ describe('EditDiskDialog, storage policy locks QoS fields (regular disk)', () =>
 
 
 describe('existing CD-ROM media permission', () => {
+  // No RTL auto-cleanup here (vitest runs without globals): a dialog left
+  // mounted past the last case keeps scheduling React work after the jsdom
+  // environment is gone, and that lands as an unhandled "window is not defined".
+  afterEach(cleanup)
   const cdrom = { id: 'sata0', storage: 'local', size: '-', isCdrom: true,
     rawValue: 'local:iso/old.iso,media=cdrom,cache=none,backup=0,size=1G' }
 

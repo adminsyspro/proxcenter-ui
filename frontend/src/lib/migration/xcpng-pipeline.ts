@@ -58,6 +58,11 @@ interface MigrationConfig {
    * conversion can never fail the migration.
    */
   convertDisksToQcow2?: boolean
+  /**
+   * CPU type of the created VM (roadmap#24). One of MIGRATION_CPU_TYPES, validated
+   * by the route; absent means the Proxmox default, x86-64-v2-AES.
+   */
+  cpuType?: string
   migrationType?: "cold"
   // User-selected scratch directory on the PVE node for VHD download +
   // qemu-img conversion. When set, overrides the default heuristic that picks
@@ -372,7 +377,7 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
     }
     await updateJob(jobId, "creating_vm", { targetVmid })
 
-    const pveParams = mapXoToPveConfig(vmConfig, targetVmid, config.targetStorage, config.networkBridge, config.vlanTag)
+    const pveParams = mapXoToPveConfig(vmConfig, targetVmid, config.targetStorage, config.networkBridge, config.vlanTag, config.cpuType)
     await appendLog(jobId, `Creating VM: ${pveParams.name} (${pveParams.ostype}, ${pveParams.bios}, ${pveParams.scsihw})...`)
 
     const createBody = new URLSearchParams({

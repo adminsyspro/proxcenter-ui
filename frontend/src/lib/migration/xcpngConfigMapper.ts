@@ -4,6 +4,7 @@
 
 import type { XoVmConfig } from "@/lib/xcpng/client"
 import type { PveVmCreateParams } from "./configMapper"
+import { MIGRATION_CPU_TYPE_DEFAULT } from "./cpu-type"
 
 /** Map XO guest OS string to Proxmox ostype */
 function mapOsType(guestOS: string): string {
@@ -38,6 +39,7 @@ export function mapXoToPveConfig(
   targetStorage: string,
   networkBridge: string = "vmbr0",
   vlanTag?: number,
+  cpuType: string = MIGRATION_CPU_TYPE_DEFAULT,
 ): PveVmCreateParams {
   const isEfi = xoConfig.firmware === "uefi"
   const isWin = isWindowsXoVm(xoConfig)
@@ -65,7 +67,7 @@ export function mapXoToPveConfig(
     cores: xoConfig.numCPU,
     sockets: 1,
     memory: xoConfig.memoryMB,
-    cpu: "host",
+    cpu: cpuType,
     scsihw,
     bios: isEfi ? "ovmf" : "seabios",
     machine: "q35",

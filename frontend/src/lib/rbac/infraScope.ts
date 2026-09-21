@@ -159,22 +159,38 @@ export function filterCandidateConnections<T extends { id: string }>(
  * grant keeps every node; otherwise we keep the granted nodes unioned with the
  * nodes that still host a visible guest when the scope is guest-derived. A
  * non-visible connection on a non-guest-derived scope is emptied.
+ *
+ * `cluster.pools` (the declared pool list, issue #978) follows the same rule
+ * as GET /connections/{id}/pools: the whole list for a connection- or
+ * node-scoped caller, and only the pools their surviving guests sit in for a
+ * guest-derived (tag/pool) one, so a flat-scoped user never learns the names
+ * of pools they hold nothing in.
  */
 export function applyRbacInfraFilter<
-  C extends { id: string; nodes: Array<{ node: string; guests?: ReadonlyArray<unknown> }> },
+  C extends {
+    id: string
+    nodes: Array<{ node: string; guests?: ReadonlyArray<unknown> }>
+    pools?: ReadonlyArray<{ poolid: string }>
+  },
 >(cluster: C, scope: RbacInfraScope | null): C {
   if (scope === null) return cluster
   const connId = cluster.id
   if (scope.fullConnections.has(connId)) return cluster
   const allowed = scope.nodesByConnection.get(connId)
   if (!scope.guestDerived) {
-    if (!allowed) return { ...cluster, nodes: [] }
+    if (!allowed) return { ...cluster, nodes: [], ...(cluster.pools ? { pools: [] } : {}) }
     return { ...cluster, nodes: cluster.nodes.filter(n => allowed.has(n.node)) }
   }
-  return {
-    ...cluster,
-    nodes: cluster.nodes.filter(n => (allowed && allowed.has(n.node)) || (n.guests?.length ?? 0) > 0),
+  const nodes = cluster.nodes.filter(n => (allowed && allowed.has(n.node)) || (n.guests?.length ?? 0) > 0)
+  if (!cluster.pools) return { ...cluster, nodes }
+  const reachable = new Set<string>()
+  for (const node of nodes) {
+    for (const guest of node.guests ?? []) {
+      const pool = (guest as { pool?: string })?.pool
+      if (pool) reachable.add(pool)
+    }
   }
+  return { ...cluster, nodes, pools: cluster.pools.filter(p => reachable.has(p.poolid)) }
 }
 
 /**

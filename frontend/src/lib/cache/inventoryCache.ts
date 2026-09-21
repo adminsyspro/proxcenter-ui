@@ -42,8 +42,10 @@ export type CachedInventory = {
 }
 
 // Version of the CachedInventory payload shape. v1 had `storages` carrying two
-// incompatible shapes depending on the writer; v2 separates them.
-const SCHEMA_VERSION = 2
+// incompatible shapes depending on the writer; v2 separates them. v3 adds
+// `pools` on every cluster (issue #978): a v2 entry carries none, and serving
+// it would keep hiding the empty pools until its TTL runs out.
+const SCHEMA_VERSION = 3
 
 type CacheEntry = {
   data: CachedInventory

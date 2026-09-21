@@ -207,6 +207,9 @@ type TreeCluster = {
   isCluster: boolean  // true si cluster multi-nodes, false si standalone
   cephHealth?: string // HEALTH_OK, HEALTH_WARN, HEALTH_ERR ou undefined
   sshEnabled?: boolean
+  // Pools déclarés par Proxmox, ceux sans aucun invité compris (issue #978).
+  // Sans eux la vue Pools ne connaîtrait que les pools cités par une VM.
+  pools: string[]
   nodes: {
     node: string
     status?: string
@@ -1535,6 +1538,9 @@ return next
     isCluster: cluster.isCluster,
     cephHealth: cluster.cephHealth,
     sshEnabled: cluster.sshEnabled,
+    pools: (cluster.pools || [])
+      .map((p: any) => (typeof p === 'string' ? p : p?.poolid))
+      .filter((poolid: any): poolid is string => typeof poolid === 'string' && poolid !== ''),
     nodes: (cluster.nodes || []).map((node: any) => ({
       node: node.node,
       status: node.status,
@@ -2297,9 +2303,27 @@ return vms
       .sort((a, b) => a.node.localeCompare(b.node))
   }, [displayVms, filteredClusters])
 
+  // Pools déclarés côté Proxmox, tous clusters confondus. Un pool vide n'est
+  // cité par aucune VM : sans cette liste il n'existe pour aucune vue (#978).
+  const declaredPools = useMemo(() => {
+    const names = new Set<string>()
+
+    clusters.forEach(clu => clu.pools?.forEach(pool => names.add(pool)))
+
+    return names
+  }, [clusters])
+
   // Liste des pools uniques avec leurs VMs (filtrées, sans templates)
   const poolsList = useMemo(() => {
     const poolsMap = new Map<string, typeof displayVms>()
+    const q = search.trim().toLowerCase()
+
+    // Les pools déclarés en premier, pour qu'un pool sans invité ait sa ligne.
+    // Sous recherche, seul son nom peut le retenir : il n'a aucune VM à faire
+    // correspondre à la requête.
+    declaredPools.forEach(pool => {
+      if (!q || pool.toLowerCase().includes(q)) poolsMap.set(pool, [])
+    })
 
     displayVms.forEach(vm => {
       const poolName = vm.pool || `(${t('common.none')})`
@@ -2320,7 +2344,7 @@ return vms
 
 return a.pool.localeCompare(b.pool)
       })
-  }, [displayVms])
+  }, [displayVms, declaredPools, search, t])
 
   // Arbre hiérarchique des pools : PVE 8.1+ imbrique les pools via '/' dans leur ID.
   // Les pools intermédiaires sans VM directe sont synthétisés depuis les segments du chemin.

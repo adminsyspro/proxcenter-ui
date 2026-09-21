@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { readNodeStatus, readStorageResources } from './proxmoxProjections'
+import { readNodeStatus, readPools, readStorageResources } from './proxmoxProjections'
 
 /** Copied from a real PVE 9.2.11 node on 2026-09-11, trimmed to what is read. */
 const NODE_STATUS = {
@@ -156,5 +156,47 @@ describe('readStorageResources', () => {
     expect(row.used).toBe(0)
     expect(row.total).toBe(0)
     expect(row.node).toBe('')
+  })
+})
+
+/**
+ * Shape of `GET /pools` on PVE 9.2. `infra-shared` holds nothing: that is the
+ * whole point of issue #978, no other endpoint ever mentions it.
+ */
+const POOL_ROWS = [
+  { poolid: 'tenant-b', comment: 'Tenant B' },
+  { poolid: 'infra-shared' },
+  { poolid: 'tenant-a', comment: 'Tenant A', members: [] },
+]
+
+describe('readPools', () => {
+  it('keeps a pool that holds nothing, which is the only list that names it', () => {
+    expect(readPools(POOL_ROWS).map(p => p.poolid)).toEqual(['infra-shared', 'tenant-a', 'tenant-b'])
+  })
+
+  it('carries the comment and omits it when Proxmox sends none or an empty one', () => {
+    const byId = new Map(readPools(POOL_ROWS).map(p => [p.poolid, p]))
+    expect(byId.get('tenant-b')!.comment).toBe('Tenant B')
+    expect(byId.get('infra-shared')).not.toHaveProperty('comment')
+    expect(readPools([{ poolid: 'p', comment: '' }])[0]).not.toHaveProperty('comment')
+  })
+
+  it('sorts by poolid, because GET /pools answers in no promised order', () => {
+    expect(readPools([{ poolid: 'z' }, { poolid: 'a' }]).map(p => p.poolid)).toEqual(['a', 'z'])
+  })
+
+  it('keeps a nested pool under its full path, the id PVE 8.1+ gives it', () => {
+    expect(readPools([{ poolid: 'parent/child' }])[0].poolid).toBe('parent/child')
+  })
+
+  it('drops a nameless row rather than emitting an unselectable pool', () => {
+    expect(readPools([{ comment: 'orphan' }, { poolid: '' }, { poolid: 'ok' }]).map(p => p.poolid))
+      .toEqual(['ok'])
+  })
+
+  it('answers an empty list for anything that is not an array', () => {
+    for (const payload of [null, undefined, {}, 'nope']) {
+      expect(readPools(payload)).toEqual([])
+    }
   })
 })

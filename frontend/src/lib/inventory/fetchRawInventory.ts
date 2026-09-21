@@ -12,7 +12,8 @@ import { prisma as globalPrisma } from "@/lib/db/prisma"
 import { getConnectionById, getPbsConnectionById } from "@/lib/connections/getConnection"
 import { pveFetch } from "@/lib/proxmox/client"
 import { aggregateStorage, type AggregatedStorage } from "@/lib/proxmox/storage"
-import { readNodeStatus, readStorageResources } from "./proxmoxProjections"
+import type { PoolFacts } from "./proxmoxProjections"
+import { readNodeStatus, readPools, readStorageResources } from "./proxmoxProjections"
 import { pbsFetch } from "@/lib/proxmox/pbs-client"
 import { collectNodeAddresses, resolveManagementIp } from "@/lib/proxmox/resolveManagementIp"
 import {
@@ -93,6 +94,14 @@ export type HaResource = {
   max_relocate?: number
 }
 
+/**
+ * A resource pool as Proxmox declares it, NOT as its members imply it. Every
+ * pool list in this app used to be derived from the guests carrying a `pool`
+ * field, so a pool with no guest existed nowhere (issue #978). `/pools` is the
+ * only endpoint that answers for empty ones.
+ */
+export type PoolData = PoolFacts
+
 export type ClusterData = {
   id: string
   name: string
@@ -104,6 +113,8 @@ export type ClusterData = {
   longitude?: number | null
   locationLabel?: string | null
   sshEnabled?: boolean
+  /** Declared pools of the cluster, empty ones included (issue #978). */
+  pools?: PoolData[]
   nodes: Array<NodeData & { guests: GuestData[] }>
 }
 
@@ -207,7 +218,7 @@ export async function fetchRawInventory(infra: InfraScope): Promise<RawInventory
     try {
       const connConfig = await getConnectionById(conn.id, (conn as any).tenantId)
 
-      const [nodesResult, guestsResult, haResult, cephResult, nodeResourcesResult, storagesResult] = await Promise.allSettled([
+      const [nodesResult, guestsResult, haResult, cephResult, nodeResourcesResult, storagesResult, poolsResult] = await Promise.allSettled([
         pveFetch<NodeData[]>(connConfig, '/nodes'),
         pveFetch<GuestData[]>(connConfig, '/cluster/resources?type=vm'),
         pveFetch<HaResource[]>(connConfig, '/cluster/ha/resources'),
@@ -218,12 +229,18 @@ export async function fetchRawInventory(infra: InfraScope): Promise<RawInventory
         // inventoryCache.ts treats a missing one as a cache miss, so filling it
         // is the direction that was always intended.
         pveFetch<any[]>(connConfig, '/cluster/resources?type=storage'),
+        // #978: the pool list has to come from Proxmox. `/cluster/resources`
+        // only ever names a pool through a member, so an empty pool is absent
+        // from every type= projection above.
+        pveFetch<any[]>(connConfig, '/pools'),
       ])
 
       const nodes: NodeData[] = nodesResult.status === 'fulfilled' ? nodesResult.value || [] : []
       const guests: GuestData[] = guestsResult.status === 'fulfilled' ? guestsResult.value || [] : []
       const haResources: HaResource[] = haResult.status === 'fulfilled' ? haResult.value || [] : []
       const nodeResources: any[] = nodeResourcesResult.status === 'fulfilled' ? nodeResourcesResult.value || [] : []
+
+      const pools = readPools(poolsResult.status === 'fulfilled' ? poolsResult.value : null)
 
       const nodeHastateMap = new Map<string, string>()
       for (const nr of nodeResources) {
@@ -408,6 +425,7 @@ return aId - bId
         latitude: conn.latitude,
         longitude: conn.longitude,
         locationLabel: conn.locationLabel,
+        pools,
         nodes: nodesArray.sort((a, b) => a.node.localeCompare(b.node)),
         },
         storages: aggregateStorage(rawStorages),
@@ -426,6 +444,7 @@ return aId - bId
         latitude: conn.latitude,
         longitude: conn.longitude,
         locationLabel: conn.locationLabel,
+        pools: [],
         nodes: [],
         },
         storages: [],

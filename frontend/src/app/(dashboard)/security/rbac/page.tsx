@@ -22,7 +22,7 @@ import { useRBAC } from '@/contexts/RBACContext'
 import { CardsSkeleton, TableSkeleton } from '@/components/skeletons'
 import { WIDGET_REGISTRY, WIDGET_CATEGORIES } from '@/components/dashboard/widgetRegistry'
 import RoleDefaultScopeEditor from './RoleDefaultScopeEditor'
-import { formatScopeTarget, buildVdcScopeOptions, buildVdcNameByPool } from './scope-options'
+import { formatScopeTarget, buildVdcScopeOptions, buildVdcNameByPool, collectPoolCounts } from './scope-options'
 
 // Types
 interface Permission { id: string; name: string; category: string; description: string; is_dangerous: boolean }
@@ -475,19 +475,9 @@ function AssignmentDialog({ open, onClose, roles, users, assignments = [], tenan
       }
 
       case 'pool': {
-        const poolMap = new Map<string, number>()
-
-        inventory.clusters.forEach((c: any) => {
-          c.nodes?.forEach((n: any) => {
-            n.guests?.forEach((g: any) => {
-              if (g.pool) {
-                poolMap.set(g.pool, (poolMap.get(g.pool) || 0) + 1)
-              }
-            })
-          })
-        })
-
-        return Array.from(poolMap.entries())
+        // collectPoolCounts seeds the pools Proxmox declares before counting
+        // guests, so a pool with no guest is still selectable (issue #978).
+        return Array.from(collectPoolCounts(inventory).entries())
           .sort((a, b) => a[0].localeCompare(b[0]))
           .map(([pool, count]) => ({
             id: pool,
@@ -1559,19 +1549,9 @@ function EditAssignmentDialog({ open, onClose, assignmentGroup, roles, enableTen
       }
 
       case 'pool': {
-        const poolMap = new Map<string, number>()
-
-        inventory.clusters.forEach((c: any) => {
-          c.nodes?.forEach((n: any) => {
-            n.guests?.forEach((g: any) => {
-              if (g.pool) {
-                poolMap.set(g.pool, (poolMap.get(g.pool) || 0) + 1)
-              }
-            })
-          })
-        })
-
-        return Array.from(poolMap.entries())
+        // collectPoolCounts seeds the pools Proxmox declares before counting
+        // guests, so a pool with no guest is still selectable (issue #978).
+        return Array.from(collectPoolCounts(inventory).entries())
           .sort((a, b) => a[0].localeCompare(b[0]))
           .map(([pool, count]) => ({
             id: pool,

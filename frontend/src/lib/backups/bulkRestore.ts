@@ -4,7 +4,7 @@
 // component, so this module must never import prisma, pveFetch or anything
 // else that drags a server value into a `'use client'` bundle. That is also
 // why the range allocator below is not `findNextFreeVmid` from
-// `@/lib/tenant/vmidRange` — that module imports prisma at top level.
+// `@/lib/tenant/vmidRange`, because that module imports prisma at top level.
 //
 // The unit of work is a GUEST, not a snapshot: the PBS listing is flat (one
 // row per snapshot), the wizard restores "one backup per VM", so the first
@@ -63,7 +63,7 @@ export function guestKey(datastore: string, namespace: string, backupType: strin
  * `host` backups are dropped: they are file-level host backups, there is no
  * qmrestore/vzrestore for them (the per-backup drawer already disables its
  * Restore button for that type). Rows whose backupId is not a positive
- * integer are dropped too — a VMID is what every downstream PVE call needs.
+ * integer are dropped too, since a VMID is what every downstream PVE call needs.
  */
 export function groupBackupsByGuest(rows: RawBackupRow[]): GuestBackupGroup[] {
   const groups = new Map<string, GuestBackupGroup>()
@@ -315,7 +315,7 @@ export interface RestoreRequest {
  * Body for POST /api/v1/connections/{id}/nodes/{node}/restore.
  *
  * `name` is deliberately never sent for a container: the route forwards it as
- * PVE's `name` parameter, which only `POST /nodes/{node}/qemu` accepts — the
+ * PVE's `name` parameter, which only `POST /nodes/{node}/qemu` accepts. The
  * lxc endpoint spells it `hostname` and rejects the unknown key.
  */
 export function buildRestoreRequest(

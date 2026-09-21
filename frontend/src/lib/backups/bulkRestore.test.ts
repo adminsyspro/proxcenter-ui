@@ -136,7 +136,7 @@ describe('filterGuestsByVmidRange', () => {
   })
 })
 
-describe('planTargets — range mode', () => {
+describe('planTargets: range mode', () => {
   it('hands out the lowest free VMIDs of the range, in order', () => {
     const plan = planTargets({
       guests: [guest({ vmid: 100 }), guest({ vmid: 101 }), guest({ vmid: 102 })],
@@ -221,7 +221,7 @@ describe('planTargets — range mode', () => {
   })
 })
 
-describe('planTargets — source mode', () => {
+describe('planTargets: source mode', () => {
   it('restores onto the original VMID when it is free', () => {
     const plan = planTargets({ guests: [guest({ vmid: 100 })], mode: 'source', usedVmIds: new Set([999]) })
 
@@ -246,7 +246,7 @@ describe('planTargets — source mode', () => {
   })
 })
 
-describe('planTargets — restore point selection', () => {
+describe('planTargets: restore point selection', () => {
   it('defaults to the newest point and honours an explicit choice', () => {
     const g = guest({ vmid: 100 })
 

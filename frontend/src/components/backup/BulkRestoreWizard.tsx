@@ -5,8 +5,8 @@
 //
 // Why a wizard and not "the per-VM dialog in a loop": the per-VM dialog asks
 // for a target VMID, and a batch needs a VMID *policy* (a free range, or the
-// source VMIDs with an explicit overwrite), plus a dispatch queue — PVE has
-// no batch restore endpoint and a restore saturates both the PBS read and the
+// source VMIDs with an explicit overwrite), plus a dispatch queue: PVE has no
+// batch restore endpoint and a restore saturates both the PBS read and the
 // target storage write, so they are fired a few at a time and tracked
 // individually.
 //
@@ -173,7 +173,7 @@ export default function BulkRestoreWizard({
   const [pointByKey, setPointByKey] = useState<Record<string, string>>({})
   // Live state of the guest each backup came from, so a row carries the same
   // status dot as everywhere else. A backup whose guest no longer exists
-  // anywhere keeps the neutral dot — which is precisely the common case here.
+  // anywhere keeps the neutral dot, which is precisely the common case here.
   const [liveGuests, setLiveGuests] = useState<Record<number, { status: string; cluster: string }>>({})
 
   // ── Step 2: target ──

@@ -992,7 +992,7 @@ return () => clearTimeout(timer)
               )}
               {/* Bulk restore (#983): provider-side only. The wizard drives
                   target cluster / node / storage / VMID, which a vDC tenant
-                  never picks — the per-backup Restore in the drawer stays
+                  never picks. The per-backup Restore in the drawer stays
                   their entry point. */}
               {!isVdcTenant && (
                 <Button

@@ -1,8 +1,8 @@
 /**
  * Component tests for BulkRestoreWizard.tsx (issue #983).
  *
- * What they cover that bulkRestore.test.ts cannot: the wizard's own wiring —
- * the flat PBS listing folded into guests on screen, the step guards, and the
+ * What they cover that bulkRestore.test.ts cannot: the wizard's own wiring.
+ * The flat PBS listing folded into guests on screen, the step guards, and the
  * dispatch loop (one POST per guest, the next one only when a slot frees up,
  * the PVE task status driving the row).
  *
@@ -131,7 +131,7 @@ async function gotoTargetStep() {
 beforeEach(() => { seedHandlers() })
 afterEach(() => { cleanup() })
 
-describe('BulkRestoreWizard — guest list', () => {
+describe('BulkRestoreWizard: guest list', () => {
   it('folds the flat snapshot list into one row per guest, host backups excluded', async () => {
     renderWizard()
 
@@ -160,7 +160,7 @@ describe('BulkRestoreWizard — guest list', () => {
   })
 })
 
-describe('BulkRestoreWizard — target step', () => {
+describe('BulkRestoreWizard: target step', () => {
   it('blocks the original-VMID policy while a target VMID is taken, and unblocks it after an explicit overwrite confirm', async () => {
     renderWizard()
     await screen.findByText('web-01')
@@ -197,7 +197,7 @@ describe('BulkRestoreWizard — target step', () => {
   })
 })
 
-describe('BulkRestoreWizard — dispatch queue', () => {
+describe('BulkRestoreWizard: dispatch queue', () => {
   it('starts one restore at a time and only frees the slot when the task ends', async () => {
     renderWizard()
     await screen.findByText('web-01')

@@ -3155,6 +3155,10 @@
     "testSshConnection": "测试 SSH 连接",
     "sshTestSuccess": "SSH 连接成功！",
     "sshTestFailed": "SSH 测试失败",
+    "sshRetrustHost": "重新信任",
+    "sshRetrustHostHelper": "清除为该节点固定的 SSH 主机密钥，然后重新测试。仅在刚刚重装该节点或更换其密钥时执行。",
+    "sshRetrustFailed": "重新信任失败：{error}",
+    "sshRetrustOrchestratorUnavailable": "编排器不可用：它为该主机固定的密钥仍然存在。",
     "editPveServer": "编辑 PVE 服务器",
     "editPbsServer": "编辑 PBS 服务器",
     "addVmwareServer": "添加 VMware ESXi 主机",
@@ -3307,6 +3311,34 @@
       "security": "安全与访问控制",
       "monitoring": "监控与智能",
       "disaster_recovery": "灾难恢复"
+    },
+    "sshHostKeys": {
+      "heading": "已固定的 SSH 主机密钥",
+      "description": "ProxCenter 在首次连接时固定主机的 SSH 主机密钥，此后一旦密钥变化便拒绝所有连接。在重装主机或更换其密钥之后，请清除已固定的密钥。",
+      "loadError": "无法加载已固定的 SSH 主机密钥。",
+      "empty": "尚未固定任何 SSH 主机密钥。",
+      "orchestratorUnavailable": "编排器不可用：它固定的密钥未出现在此列表中，目前也无法清除。",
+      "columns": {
+        "host": "主机",
+        "keyTypes": "密钥类型",
+        "pinnedAt": "固定时间",
+        "sources": "固定位置",
+        "actions": "操作"
+      },
+      "sources": {
+        "orchestrator": "编排器",
+        "frontend": "Web 界面"
+      },
+      "forget": "清除",
+      "forgetTitle": "清除 {host} 的已固定密钥？",
+      "forgetWarning": "下一次连接 {host} 时，将信任该地址出示的任意主机密钥，并重新固定它。",
+      "forgetWhen": "仅对刚刚由您重装或更换密钥的主机执行。否则密钥变化意味着该地址后面已换成了别人。",
+      "forgetFailed": "无法清除已固定的密钥：{error}",
+      "forgetOrchestratorUnavailable": "编排器不可用：它为 {host} 固定的密钥仍然存在。请在编排器恢复后重试。",
+      "forgetNotFound": "{host} 已经没有固定的密钥。",
+      "forgetSuccess": "已清除 {host} 的固定密钥。下一次连接将固定所出示的密钥。",
+      "cancel": "取消",
+      "confirm": "清除密钥"
     },
     "sshCommands": {
       "tabLabel": "SSH 命令",

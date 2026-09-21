@@ -49,6 +49,9 @@ export interface SSHExecOpts {
  */
 export function buildConnectConfig(opts: {
   host: string; port: number; user: string; key?: string; password?: string; passphrase?: string
+  /** Called with a human-readable reason when the pinned host key no longer
+   *  matches, so the caller can replace ssh2's opaque handshake error. */
+  onMismatch?: (message: string) => void
 }): Record<string, unknown> {
   const cfg: Record<string, unknown> = {
     host: opts.host,
@@ -60,7 +63,7 @@ export function buildConnectConfig(opts: {
     // TOFU host-key verification. Pin on first contact, refuse any later
     // connection whose server key differs. Closes the MITM gap that ssh2's
     // default "trust everything" behaviour leaves open.
-    hostVerifier: makeHostVerifier(opts.host, opts.port),
+    hostVerifier: makeHostVerifier(opts.host, opts.port, opts.onMismatch),
   }
   if (opts.key) {
     cfg.privateKey = opts.key
@@ -269,6 +272,13 @@ export function executeSSHDirect(opts: {
     // transfer long before this fires.
     const overallTimeoutMs = opts.timeoutMs ?? 30_000
 
+    // Set by the host-key verifier when the pinned key no longer matches.
+    // ssh2 reports that rejection as a bare "Handshake failed" on the error
+    // event, so without this the caller only sees a generic failure and the
+    // operator has no way to tell a rotated host key from a network problem
+    // (adminsyspro/proxcenter-ui#979).
+    let hostKeyMismatch: string | null = null
+
     // Single-settle guard: whichever of close/error/timeout/inactivity happens
     // first wins and tears down both timers + the connection.
     let settled = false
@@ -335,7 +345,7 @@ export function executeSSHDirect(opts: {
       })
     })
 
-    conn.on("error", (err) => settle({ success: false, error: err.message }))
+    conn.on("error", (err) => settle({ success: false, error: hostKeyMismatch ?? err.message }))
 
     // Handle keyboard-interactive auth (used by ESXi and some other hosts)
     conn.on("keyboard-interactive", (_name, _instructions, _instructionsLang, prompts, finish) => {
@@ -346,6 +356,9 @@ export function executeSSHDirect(opts: {
       }
     })
 
-    conn.connect(buildConnectConfig(opts) as any)
+    conn.connect(buildConnectConfig({
+      ...opts,
+      onMismatch: (message) => { hostKeyMismatch = message },
+    }) as any)
   })
 }

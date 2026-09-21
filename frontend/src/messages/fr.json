@@ -3151,6 +3151,10 @@
     "testSshConnection": "Tester la connexion SSH",
     "sshTestSuccess": "Connexion SSH réussie !",
     "sshTestFailed": "Échec du test SSH",
+    "sshRetrustHost": "Refaire confiance",
+    "sshRetrustHostHelper": "Oublier la clé d'hôte SSH épinglée pour ce nœud, puis relancer le test. À ne faire que si vous venez de réinstaller ce nœud ou de regénérer ses clés.",
+    "sshRetrustFailed": "Échec de la remise en confiance : {error}",
+    "sshRetrustOrchestratorUnavailable": "Orchestrateur injoignable : la clé qu'il a épinglée pour cet hôte est toujours en place.",
     "editPveServer": "Modifier le serveur PVE",
     "editPbsServer": "Modifier le serveur PBS",
     "addVmwareServer": "Ajouter un hôte VMware ESXi",
@@ -3303,6 +3307,34 @@
       "security": "Sécurité & Contrôle d'accès",
       "monitoring": "Monitoring & Intelligence",
       "disaster_recovery": "Reprise après sinistre"
+    },
+    "sshHostKeys": {
+      "heading": "Clés d'hôte SSH épinglées",
+      "description": "ProxCenter épingle la clé d'hôte SSH d'une machine à la première connexion et refuse toute connexion ultérieure si cette clé change. Oubliez la clé épinglée après avoir réinstallé l'hôte ou regénéré ses clés.",
+      "loadError": "Impossible de charger les clés d'hôte SSH épinglées.",
+      "empty": "Aucune clé d'hôte SSH épinglée pour l'instant.",
+      "orchestratorUnavailable": "Orchestrateur injoignable : les clés qu'il a épinglées n'apparaissent pas dans cette liste et ne peuvent pas être oubliées pour le moment.",
+      "columns": {
+        "host": "Hôte",
+        "keyTypes": "Types de clé",
+        "pinnedAt": "Épinglée le",
+        "sources": "Épinglée dans",
+        "actions": "Actions"
+      },
+      "sources": {
+        "orchestrator": "Orchestrateur",
+        "frontend": "Interface web"
+      },
+      "forget": "Oublier",
+      "forgetTitle": "Oublier la clé épinglée pour {host} ?",
+      "forgetWarning": "La prochaine connexion à {host} fera confiance à la clé d'hôte que cette adresse présentera, quelle qu'elle soit, et l'épinglera à son tour.",
+      "forgetWhen": "À ne faire que pour un hôte que vous venez de réinstaller vous-même ou dont vous venez de regénérer les clés. Ailleurs, une clé qui change signifie que quelqu'un d'autre répond à cette adresse.",
+      "forgetFailed": "Impossible d'oublier la clé épinglée : {error}",
+      "forgetOrchestratorUnavailable": "Orchestrateur injoignable : la clé qu'il a épinglée pour {host} est toujours en place. Réessayez une fois l'orchestrateur revenu.",
+      "forgetNotFound": "Plus aucune clé n'était épinglée pour {host}.",
+      "forgetSuccess": "Clé épinglée oubliée pour {host}. La prochaine connexion épinglera la clé présentée.",
+      "cancel": "Annuler",
+      "confirm": "Oublier la clé"
     },
     "sshCommands": {
       "tabLabel": "Commandes SSH",

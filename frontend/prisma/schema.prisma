@@ -1326,10 +1326,13 @@ model NodeGreenConfig {
 }
 
 // TOFU host-key store for the frontend ssh2 path. Mirrors the backend
-// orchestrator's /app/data/known_hosts store. Keyed by host (lowercased,
-// without port — same host is assumed to present the same key on every
-// SSH port we use). The first successful connection pins the key; every
-// subsequent connection verifies it matches.
+// orchestrator's ssh_known_hosts table, which pins the same hosts for the
+// Go paths (and keys them WITHOUT the port, unlike this one). Keyed by
+// "host:port", so two SSH endpoints behind one hostname (NAT, a bastion
+// port-forward) pin separately. The first successful connection pins the
+// key; every subsequent connection verifies it matches. Clearing a pin is
+// the "re-trust" action in Settings > SSH commands, which wipes both
+// stores for a host, every port included.
 model SshHostKey {
   id          String   @id @default(cuid())
   host        String   @unique

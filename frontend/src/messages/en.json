@@ -3151,6 +3151,10 @@
     "testSshConnection": "Test SSH Connection",
     "sshTestSuccess": "SSH connection successful!",
     "sshTestFailed": "SSH test failed",
+    "sshRetrustHost": "Re-trust",
+    "sshRetrustHostHelper": "Forget the SSH host key pinned for this node, then test again. Only do this if you have just reinstalled or rekeyed the node.",
+    "sshRetrustFailed": "Re-trust failed: {error}",
+    "sshRetrustOrchestratorUnavailable": "The orchestrator was unreachable: the key it pinned for this host is still in place.",
     "editPveServer": "Edit PVE Server",
     "editPbsServer": "Edit PBS Server",
     "addVmwareServer": "Add VMware ESXi Host",
@@ -3303,6 +3307,34 @@
       "security": "Security & Access Control",
       "monitoring": "Monitoring & Intelligence",
       "disaster_recovery": "Disaster Recovery"
+    },
+    "sshHostKeys": {
+      "heading": "Pinned SSH host keys",
+      "description": "ProxCenter pins the SSH host key of a host the first time it connects, and refuses every later connection if that key changes. Forget a pin once you have reinstalled or rekeyed the host.",
+      "loadError": "Unable to load the pinned SSH host keys.",
+      "empty": "No SSH host key pinned yet.",
+      "orchestratorUnavailable": "The orchestrator is unreachable: the keys it pinned are missing from this list and cannot be forgotten right now.",
+      "columns": {
+        "host": "Host",
+        "keyTypes": "Key types",
+        "pinnedAt": "Pinned on",
+        "sources": "Pinned in",
+        "actions": "Actions"
+      },
+      "sources": {
+        "orchestrator": "Orchestrator",
+        "frontend": "Web interface"
+      },
+      "forget": "Forget",
+      "forgetTitle": "Forget the pinned key for {host}?",
+      "forgetWarning": "The next connection to {host} will trust whatever host key that address presents, and pin it in turn.",
+      "forgetWhen": "Only do this for a host you have just reinstalled or rekeyed yourself. Anywhere else, a key that changed means someone else is answering at that address.",
+      "forgetFailed": "Could not forget the pinned key: {error}",
+      "forgetOrchestratorUnavailable": "The orchestrator was unreachable: the key it pinned for {host} is still in place. Try again once the orchestrator is back.",
+      "forgetNotFound": "No key was pinned for {host} any more.",
+      "forgetSuccess": "Pinned key forgotten for {host}. The next connection pins the key it is presented.",
+      "cancel": "Cancel",
+      "confirm": "Forget the key"
     },
     "sshCommands": {
       "tabLabel": "SSH Commands",

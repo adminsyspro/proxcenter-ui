@@ -11,6 +11,35 @@ export type ScopeOption = {
   status?: string
 }
 
+/**
+ * Pool name -> number of guests it holds, over the whole inventory payload.
+ *
+ * The declared pools of every cluster are seeded at zero FIRST: a pool holding
+ * no guest is named by no guest, so deriving the list from `guest.pool` alone
+ * made empty pools impossible to grant as a scope (issue #978). `cluster.pools`
+ * is absent from an inventory payload older than that fix, and the function
+ * then degrades to the guest-derived list it used to return.
+ */
+export function collectPoolCounts(inventory: any): Map<string, number> {
+  const poolMap = new Map<string, number>()
+
+  inventory?.clusters?.forEach((c: any) => {
+    c.pools?.forEach((p: any) => {
+      if (p?.poolid) poolMap.set(p.poolid, poolMap.get(p.poolid) || 0)
+    })
+  })
+
+  inventory?.clusters?.forEach((c: any) => {
+    c.nodes?.forEach((n: any) => {
+      n.guests?.forEach((g: any) => {
+        if (g.pool) poolMap.set(g.pool, (poolMap.get(g.pool) || 0) + 1)
+      })
+    })
+  })
+
+  return poolMap
+}
+
 export function buildScopeOptions(inventory: any, scopeType: string, t: any): ScopeOption[] {
   if (!inventory?.clusters) return []
 
@@ -81,15 +110,7 @@ export function buildScopeOptions(inventory: any, scopeType: string, t: any): Sc
     }
 
     case 'pool': {
-      const poolMap = new Map<string, number>()
-      inventory.clusters.forEach((c: any) => {
-        c.nodes?.forEach((n: any) => {
-          n.guests?.forEach((g: any) => {
-            if (g.pool) poolMap.set(g.pool, (poolMap.get(g.pool) || 0) + 1)
-          })
-        })
-      })
-      return Array.from(poolMap.entries())
+      return Array.from(collectPoolCounts(inventory).entries())
         .sort((a, b) => a[0].localeCompare(b[0]))
         .map(([pool, count]) => ({
           id: pool,

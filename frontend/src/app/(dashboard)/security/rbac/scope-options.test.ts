@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 
 import {
   buildScopeOptions,
+  collectPoolCounts,
   resolveScopeTargetLabel,
   formatScopeTarget,
   buildVdcScopeOptions,
@@ -43,6 +44,16 @@ describe('buildScopeOptions', () => {
 
   it('extracts pools (only non-null)', () => {
     expect(buildScopeOptions(inventory, 'pool', t).map(o => o.id)).toEqual(['dbpool'])
+  })
+
+  // Issue #978: the guest-derived list could not name a pool holding nothing,
+  // so an empty pool was impossible to grant as a scope.
+  it('offers a declared pool that holds no guest at all', () => {
+    const withEmpty = {
+      clusters: [{ ...inventory.clusters[0], pools: [{ poolid: 'dbpool' }, { poolid: 'brandnew' }] }],
+    }
+
+    expect(buildScopeOptions(withEmpty, 'pool', t).map(o => o.id)).toEqual(['brandnew', 'dbpool'])
   })
 
   it('builds node ids as connId:node', () => {
@@ -126,5 +137,30 @@ describe('buildVdcNameByPool', () => {
   it('maps pvePoolName to the display name', () => {
     expect(buildVdcNameByPool([{ pvePoolName: 'vdc-acme-paris', name: 'ACME — Paris' }]).get('vdc-acme-paris'))
       .toBe('ACME — Paris')
+  })
+})
+
+describe('collectPoolCounts', () => {
+  it('counts the guests of each pool', () => {
+    expect(collectPoolCounts(inventory).get('dbpool')).toBe(1)
+  })
+
+  it('seeds a declared pool at zero without erasing a count already found', () => {
+    const withEmpty = {
+      clusters: [{ ...inventory.clusters[0], pools: [{ poolid: 'dbpool' }, { poolid: 'brandnew' }] }],
+    }
+    const counts = collectPoolCounts(withEmpty)
+
+    expect(counts.get('brandnew')).toBe(0)
+    expect(counts.get('dbpool')).toBe(1)
+  })
+
+  it('still answers the guest-derived list when the payload carries no pools key', () => {
+    expect([...collectPoolCounts(inventory).keys()]).toEqual(['dbpool'])
+  })
+
+  it('answers an empty map on a missing inventory rather than throwing', () => {
+    expect(collectPoolCounts(null).size).toBe(0)
+    expect(collectPoolCounts({}).size).toBe(0)
   })
 })

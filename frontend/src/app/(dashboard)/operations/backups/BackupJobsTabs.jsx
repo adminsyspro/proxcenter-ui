@@ -587,7 +587,7 @@ return '—'
             tenants). Single-cluster tenants keep the auto-selected
             pveConnections[0] with no picker. */}
         {(!isVdcTenant || pveConnections.length > 1) ? (
-          <FormControl size="small" sx={{ minWidth: 250 }}>
+          <FormControl size="small" sx={{ minWidth: 250, ...SMALL_SELECT_SX }}>
             <InputLabel>{t('backups.pveCluster')}</InputLabel>
             <Select
               value={selectedConnection}
@@ -606,6 +606,8 @@ return '—'
         <Box sx={{ display: 'flex', gap: 1 }}>
           <Button
             variant="contained"
+            size="small"
+            sx={TOOLBAR_CONTROL_SX}
             startIcon={<i className="ri-add-line" />}
             onClick={handleCreate}
             disabled={!selectedConnection}
@@ -614,7 +616,13 @@ return '—'
           </Button>
           <Tooltip title={t('common.refresh')}>
             <span>
-              <IconButton aria-label={t('common.refresh')} onClick={loadJobs} disabled={loading || !selectedConnection}>
+              <IconButton
+                aria-label={t('common.refresh')}
+                onClick={loadJobs}
+                disabled={loading || !selectedConnection}
+                size="small"
+                sx={{ ...TOOLBAR_CONTROL_SX, width: 35.86 }}
+              >
                 <i className={`ri-refresh-line ${loading ? 'ri-spin' : ''}`} />
               </IconButton>
             </span>
@@ -1811,6 +1819,11 @@ function PbsJobsTab({ pbsConnections = [], isVdcTenant = false }) {
 /* -----------------------------
   Main Component with Tabs
 ------------------------------ */
+
+// Same toolbar metrics as the Backups list below: a small Select is 38px and a
+// small input 35.86px, so the two rows of this page would not line up.
+const SMALL_SELECT_SX = { '& .MuiInputBase-input.MuiSelect-select': { minHeight: '1.4375em', lineHeight: '1.4375em' } }
+const TOOLBAR_CONTROL_SX = { height: 35.86 }
 
 export default function BackupJobsTabs({ pveConnections = [], pbsConnections = [] }) {
   const theme = useTheme()

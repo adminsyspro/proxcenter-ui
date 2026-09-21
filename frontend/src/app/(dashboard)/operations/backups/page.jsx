@@ -47,12 +47,19 @@ import BackupTrendsChart from './BackupTrendsChart'
 import EmptyState from '@/components/EmptyState'
 import { TableSkeleton } from '@/components/skeletons'
 import RestoreVmDialog from '@/components/backup/RestoreVmDialog'
+import BulkRestoreWizard from '@/components/backup/BulkRestoreWizard'
 import { useTenant } from '@/contexts/TenantContext'
 import { useToast } from '@/contexts/ToastContext'
 
 /* -----------------------------
   Helpers
 ------------------------------ */
+
+// A MUI `Select size="small"` renders 38px while a text input renders 35.86px,
+// so a toolbar mixing both looks ragged. These two bring every control onto
+// the input's height. See the vDC dialog, same fix.
+const SMALL_SELECT_SX = { '& .MuiInputBase-input.MuiSelect-select': { minHeight: '1.4375em', lineHeight: '1.4375em' } }
+const TOOLBAR_CONTROL_SX = { height: 35.86 }
 
 function useTimeAgo(t) {
   return (date) => {
@@ -224,6 +231,7 @@ return () => setPageInfo('', '', '')
 
   // Restore dialog (cross-PVE — user picks target cluster + node).
   const [restoreOpen, setRestoreOpen] = useState(false)
+  const [bulkRestoreOpen, setBulkRestoreOpen] = useState(false)
 
   // Verify (single snapshot re-check) + Delete (with double-click guard
   // to prevent accidental destruction of a backup).
@@ -909,7 +917,7 @@ return () => clearTimeout(timer)
                   (multi-vDC/multi-PBS tenants). Single-PBS tenants keep the
                   auto-selected pbsConnections[0] with no picker. */}
               {(!isVdcTenant || pbsConnections.length > 1) && (
-                <FormControl size='small' sx={{ minWidth: 200 }}>
+                <FormControl size='small' sx={{ minWidth: 200, ...SMALL_SELECT_SX }}>
                   <InputLabel>{t('backups.pbsServer')}</InputLabel>
                   <Select
                     value={selectedPbs}
@@ -928,7 +936,7 @@ return () => clearTimeout(timer)
                 </FormControl>
               )}
               {availableNamespaces.length > 1 && (
-                <FormControl size='small' sx={{ minWidth: 200 }}>
+                <FormControl size='small' sx={{ minWidth: 200, ...SMALL_SELECT_SX }}>
                   <InputLabel>Namespace</InputLabel>
                   <Select
                     value={namespaceFilter}
@@ -982,18 +990,22 @@ return () => clearTimeout(timer)
                   </Select>
                 </FormControl>
               )}
-              <Tooltip title={t('common.refresh')}>
-                <span>
-                  <IconButton
-                    aria-label={t('common.refresh')}
-                    size='small'
-                    onClick={handleRefresh}
-                    disabled={loading || !selectedPbs}
-                  >
-                    {loading ? <CircularProgress size={18} /> : <i className='ri-refresh-line' />}
-                  </IconButton>
-                </span>
-              </Tooltip>
+              {/* Bulk restore (#983): provider-side only. The wizard drives
+                  target cluster / node / storage / VMID, which a vDC tenant
+                  never picks. The per-backup Restore in the drawer stays
+                  their entry point. */}
+              {!isVdcTenant && (
+                <Button
+                  size='small'
+                  variant='outlined'
+                  startIcon={<i className='ri-inbox-unarchive-line' />}
+                  onClick={() => setBulkRestoreOpen(true)}
+                  disabled={loading || !selectedPbs}
+                  sx={TOOLBAR_CONTROL_SX}
+                >
+                  {t('backups.bulkRestore.button')}
+                </Button>
+              )}
 
               <Box sx={{ flex: 1 }} />
 
@@ -1015,12 +1027,12 @@ return () => clearTimeout(timer)
 
                 <Select
                   size='small'
+                  sx={{ minWidth: 140, ...SMALL_SELECT_SX }}
                   value={datastoreFilter}
                   onChange={e => {
                     setDatastoreFilter(e.target.value)
                     setPaginationModel(prev => ({ ...prev, page: 0 }))
                   }}
-                  sx={{ minWidth: 140 }}
                 >
                   <MenuItem value='all'>{t('backups.allDatastores')}</MenuItem>
                   {datastores.map(ds => (
@@ -1030,12 +1042,12 @@ return () => clearTimeout(timer)
 
                 <Select
                   size='small'
+                  sx={{ minWidth: 100, ...SMALL_SELECT_SX }}
                   value={typeFilter}
                   onChange={e => {
                     setTypeFilter(e.target.value)
                     setPaginationModel(prev => ({ ...prev, page: 0 }))
                   }}
-                  sx={{ minWidth: 100 }}
                 >
                   <MenuItem value='all'>{t('backups.allTypesFilter')}</MenuItem>
                   <MenuItem value='vm'>VM</MenuItem>
@@ -1046,6 +1058,7 @@ return () => clearTimeout(timer)
                 <Button
                   size='small'
                   variant='outlined'
+                  sx={TOOLBAR_CONTROL_SX}
                   onClick={() => {
                     setSearchInput('')
                     setSearch('')
@@ -1444,6 +1457,16 @@ return () => clearTimeout(timer)
           )}
         </Box>
       </Drawer>
+
+      {bulkRestoreOpen && selectedPbs && (
+        <BulkRestoreWizard
+          open
+          onClose={() => { setBulkRestoreOpen(false); handleRefresh() }}
+          pbsId={selectedPbs}
+          initialDatastore={datastoreFilter}
+          initialNamespace={namespaceFilter}
+        />
+      )}
 
       {restoreOpen && selectedBackup && (() => {
         // Compose backupPath from the row fields. The /api/v1/pbs/[id]/backups

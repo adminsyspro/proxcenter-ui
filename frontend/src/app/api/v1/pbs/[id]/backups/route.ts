@@ -246,9 +246,20 @@ async function handler(req: Request, ctx: GuardedRouteContext) {
     const startIndex = (page - 1) * pageSize
     const paginatedBackups = filteredBackups.slice(startIndex, startIndex + pageSize)
 
+    // `slim=1` drops the two fat per-snapshot fields (the file list and the
+    // full verification record). The bulk restore wizard pulls EVERY snapshot
+    // of the server in one page to fold them into guests, and those two
+    // fields alone are most of the payload; it only needs the identity, the
+    // date, the size and the verified flag. Filtering, stats and pagination
+    // are untouched, so the contract stays the same for every other caller.
+    const slim = url.searchParams.get('slim') === '1'
+    const responseBackups = slim
+      ? paginatedBackups.map(({ files, verification, ...rest }) => rest)
+      : paginatedBackups
+
     return NextResponse.json({
       data: {
-        backups: paginatedBackups,
+        backups: responseBackups,
         namespaces,
         bindings,
         stats,

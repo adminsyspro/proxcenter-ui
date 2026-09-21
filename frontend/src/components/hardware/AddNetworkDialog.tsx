@@ -26,6 +26,7 @@ import {
 } from '@mui/material'
 
 import AppDialogTitle from '@/components/ui/AppDialogTitle'
+import { useNicIdentityPermissions } from '@/hooks/useNicIdentityPermissions'
 
 // ==================== ADD NETWORK DIALOG ====================
 type AddNetworkDialogProps = {
@@ -44,6 +45,7 @@ type IPv6Mode = 'static' | 'dhcp' | 'auto'
 
 export function AddNetworkDialog({ open, onClose, onSave, connId, node, vmid, vmType = 'qemu', existingNets }: AddNetworkDialogProps) {
   const t = useTranslations()
+  const { canEditMac, canEditVlan, loading: nicPermissionsLoading } = useNicIdentityPermissions()
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showAdvanced, setShowAdvanced] = useState(false)
@@ -154,8 +156,8 @@ return match ? Number.parseInt(match[1]) : -1
         const parts: string[] = []
         if (ifname) parts.push(`name=${ifname}`)
         parts.push(`bridge=${bridge}`)
-        if (macAddress) parts.push(`hwaddr=${macAddress}`)
-        if (vlanTag) parts.push(`tag=${vlanTag}`)
+        if (canEditMac && macAddress) parts.push(`hwaddr=${macAddress}`)
+        if (canEditVlan && vlanTag) parts.push(`tag=${vlanTag}`)
         parts.push(`firewall=${firewall ? 1 : 0}`)
         if (ipv4Mode === 'dhcp') {
           parts.push('ip=dhcp')
@@ -178,8 +180,8 @@ return match ? Number.parseInt(match[1]) : -1
         netConfig = parts.join(',')
       } else {
         netConfig = `${model},bridge=${bridge}`
-        if (macAddress) netConfig += `,macaddr=${macAddress}`
-        if (vlanTag) netConfig += `,tag=${vlanTag}`
+        if (canEditMac && macAddress) netConfig += `,macaddr=${macAddress}`
+        if (canEditVlan && vlanTag) netConfig += `,tag=${vlanTag}`
         if (firewall) netConfig += ',firewall=1'
         if (disconnect) netConfig += ',link_down=1'
         if (rateLimit) netConfig += `,rate=${rateLimit}`
@@ -220,7 +222,9 @@ return match ? Number.parseInt(match[1]) : -1
                 size="small"
                 label="MAC address"
                 placeholder="auto"
-                value={macAddress}
+                value={canEditMac ? macAddress : ''}
+                disabled={!canEditMac}
+                helperText={!canEditMac ? t('hardware.nicMacPermissionRequired') : undefined}
                 onChange={(e) => setMacAddress(e.target.value)}
               />
             </Box>
@@ -275,7 +279,9 @@ return match ? Number.parseInt(match[1]) : -1
               size="small"
               label="VLAN Tag"
               placeholder="no VLAN"
-              value={vlanTag}
+              value={canEditVlan ? vlanTag : ''}
+              disabled={!canEditVlan}
+              helperText={!canEditVlan ? t('hardware.nicVlanPermissionRequired') : undefined}
               onChange={(e) => setVlanTag(e.target.value)}
               type="number"
               inputProps={{ min: 1, max: 4094 }}
@@ -287,7 +293,9 @@ return match ? Number.parseInt(match[1]) : -1
                 size="small"
                 label="VLAN Tag"
                 placeholder="no VLAN"
-                value={vlanTag}
+                value={canEditVlan ? vlanTag : ''}
+                disabled={!canEditVlan}
+                helperText={!canEditVlan ? t('hardware.nicVlanPermissionRequired') : undefined}
                 onChange={(e) => setVlanTag(e.target.value)}
                 type="number"
                 inputProps={{ min: 1, max: 4094 }}
@@ -296,7 +304,9 @@ return match ? Number.parseInt(match[1]) : -1
                 size="small"
                 label="MAC address"
                 placeholder="auto"
-                value={macAddress}
+                value={canEditMac ? macAddress : ''}
+                disabled={!canEditMac}
+                helperText={!canEditMac ? t('hardware.nicMacPermissionRequired') : undefined}
                 onChange={(e) => setMacAddress(e.target.value)}
               />
             </Box>
@@ -435,7 +445,7 @@ return match ? Number.parseInt(match[1]) : -1
 
       <DialogActions sx={{ px: 3, pb: 2 }}>
         <Button onClick={onClose} disabled={saving}>{t('common.cancel')}</Button>
-        <Button variant="contained" onClick={handleSave} disabled={saving}>
+        <Button variant="contained" onClick={handleSave} disabled={saving || nicPermissionsLoading}>
           {saving ? <CircularProgress size={20} /> : t('common.add')}
         </Button>
       </DialogActions>

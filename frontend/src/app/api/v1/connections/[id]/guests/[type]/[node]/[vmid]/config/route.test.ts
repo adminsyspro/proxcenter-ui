@@ -39,7 +39,8 @@ vi.mock('@/lib/vdc/quota', () => ({
   resolveVdcForTenant: resolveVdcForTenantMock,
   checkVdcQuota: checkVdcQuotaMock,
 }))
-vi.mock('@/lib/tenant/infraScope', () => ({
+vi.mock('@/lib/tenant/infraScope', async io => ({
+  ...await io<typeof import('@/lib/tenant/infraScope')>(),
   getTenantInfrastructureScope: getTenantInfrastructureScopeMock,
 }))
 vi.mock('@/lib/vdc/vnets', async (io) => {
@@ -158,10 +159,10 @@ describe('PUT config: vDC network allow-list guard', () => {
     const res = await callRoute(PUT, {
       method: 'PUT',
       params: baseParams,
-      body: { net0: 'virtio,bridge=vmbr0,tag=9999' },
+      body: { net0: 'virtio,bridge=vmbr0,tag=999' },
     })
     expect(res.status).toBe(200)
-    expect(configWriteBody()?.get('net0')).toBe('virtio,bridge=vmbr0,tag=9999')
+    expect(configWriteBody()?.get('net0')).toBe('virtio,bridge=vmbr0,tag=999')
   })
 })
 
@@ -380,5 +381,245 @@ describe('PUT config: vDC compute policy', () => {
 
     expect([200, 202]).toContain(res.status)
     expect(configWriteBody()?.get('cpu')).toBe('host,flags=+aes')
+  })
+})
+
+
+describe('PUT config: existing CD-ROM media authorization', () => {
+  function mediaOperator(current: Record<string, unknown> = { sata0: 'none,media=cdrom', scsi0: 'local:vm-100-disk-0' }) {
+    pveFetchMock.mockImplementation(async (_c, path: string, opts?: any) => {
+      if (path === '/cluster/resources?type=vm') return [{ vmid: 100, type: 'qemu', node: 'pve3', pool: 'pool-a' }]
+      return opts?.method === 'POST' || opts?.method === 'PUT' ? null : { ...current, digest: 'generation-1' }
+    })
+    checkPermissionsMock.mockImplementation(async (permissions: string[]) => permissions.every(p => p === 'vm.config.media')
+      ? null : Response.json({ error: 'Hardware permission required' }, { status: 403 }))
+  }
+  it('mounts an ISO on an existing empty SATA optical drive and binds the PVE digest', async () => {
+    mediaOperator()
+    const res = await callRoute(await loadPut(), { method: 'PUT', params: baseParams, body: { sata0: 'local:iso/debian.iso,media=cdrom' } })
+    expect(res.status).toBe(200)
+    expect(configWriteBody()?.get('sata0')).toBe('local:iso/debian.iso,media=cdrom')
+    expect(configWriteBody()?.get('digest')).toBe('generation-1')
+  })
+  it('ejects a mounted ISO without deleting the drive', async () => {
+    mediaOperator({ sata0: 'local:iso/debian.iso,media=cdrom,size=1G' })
+    const res = await callRoute(await loadPut(), { method: 'PUT', params: baseParams, body: { sata0: 'none,media=cdrom' } })
+    expect(res.status).toBe(200)
+    expect(configWriteBody()?.get('sata0')).toBe('none,media=cdrom')
+    expect(configWriteBody()?.has('delete')).toBe(false)
+  })
+  for (const body of [
+    { sata1: 'local:iso/debian.iso,media=cdrom' },
+    { scsi0: 'local:iso/debian.iso,media=cdrom' },
+    { sata0: 'local:vm-200-disk-0,media=cdrom' },
+    { sata0: 'local:32,media=cdrom' },
+    { sata0: 'local:iso/debian.iso,media=cdrom,cache=writeback' },
+    { sata0: 'local:iso/debian.iso,media=cdrom', cores: 16 },
+    { sata0: 'local:iso/debian.iso,media=cdrom', memory: 16384 },
+    { delete: 'sata0' }, { revert: 'sata0' },
+  ]) {
+    it(`refuses forged hardware changes ${JSON.stringify(body)}`, async () => {
+      mediaOperator()
+      const res = await callRoute(await loadPut(), { method: 'PUT', params: baseParams, body })
+      expect(res.status).toBe(403)
+      expect(configWriteBody()).toBeNull()
+    })
+  }
+  it('leaves data disk edits unbound from the PVE digest', async () => {
+    mediaOperator({ sata0: 'none,media=cdrom', scsi0: 'local:vm-100-disk-0,size=32G' })
+    checkPermissionsMock.mockImplementation(async () => null)
+    const res = await callRoute(await loadPut(), { method: 'PUT', params: baseParams, body: { scsi0: 'local:vm-100-disk-0,size=32G,cache=writeback' } })
+    expect(res.status).toBe(200)
+    expect(configWriteBody()?.has('digest')).toBe(false)
+  })
+  it('binds the digest when a data slot is turned into an optical drive', async () => {
+    mediaOperator({ scsi0: 'local:vm-100-disk-0,size=32G' })
+    checkPermissionsMock.mockImplementation(async () => null)
+    const res = await callRoute(await loadPut(), { method: 'PUT', params: baseParams, body: { sata1: 'none,media=cdrom' } })
+    expect(res.status).toBe(200)
+    expect(configWriteBody()?.get('digest')).toBe('generation-1')
+  })
+  it('keeps a hardware grant sufficient for existing media changes', async () => {
+    mediaOperator()
+    checkPermissionsMock.mockImplementation(async (permissions: string[]) => permissions.every(p => p === 'vm.config.hardware')
+      ? null : Response.json({ error: 'Media permission absent' }, { status: 403 }))
+    const res = await callRoute(await loadPut(), { method: 'PUT', params: baseParams, body: { sata0: 'local:iso/debian.iso,media=cdrom' } })
+    expect(res.status).toBe(200)
+  })
+  it('does not bypass vDC storage scope with a media grant', async () => {
+    mediaOperator()
+    getTenantInfrastructureScopeMock.mockResolvedValue({ kind: 'iaas', vdcScope: {
+      connectionIds: new Set(['conn-1']),
+      nodesByConnection: new Map([['conn-1', new Set(['pve3'])]]),
+      poolsByConnection: new Map([['conn-1', new Set(['pool-a'])]]),
+      storagesByConnection: new Map([['conn-1', new Set(['local'])]]),
+      storagePoliciesByConnection: new Map(),
+    } })
+    const res = await callRoute(await loadPut(), { method: 'PUT', params: baseParams, body: { sata0: 'foreign:iso/debian.iso,media=cdrom' } })
+    expect(res.status).toBe(403)
+    expect(configWriteBody()).toBeNull()
+  })
+  it('rejects a stale client digest and preserves a matching one', async () => {
+    mediaOperator()
+    const stale = await callRoute(await loadPut(), { method: 'PUT', params: baseParams, body: { sata0: 'none,media=cdrom', digest: 'stale-generation' } })
+    expect(stale.status).toBe(409)
+    expect(configWriteBody()).toBeNull()
+    const current = await callRoute(await loadPut(), { method: 'PUT', params: baseParams, body: { sata0: 'none,media=cdrom', digest: 'generation-1' } })
+    expect(current.status).toBe(200)
+    expect(configWriteBody()?.get('digest')).toBe('generation-1')
+  })
+})
+
+
+describe('GET/PUT config: tenant vDC guest containment', () => {
+  function tenantScope(nodes = ['pve3']) {
+    return { kind: 'iaas', vdcScope: {
+      connectionIds: new Set(['conn-1']),
+      nodesByConnection: new Map([['conn-1', new Set(nodes)]]),
+      poolsByConnection: new Map([['conn-1', new Set(['pool-a'])]]),
+      storagesByConnection: new Map([['conn-1', new Set(['local'])]]),
+      storagePoliciesByConnection: new Map(),
+    } }
+  }
+  function inventory(resources: unknown) {
+    pveFetchMock.mockImplementation(async (_conn, path: string, opts?: any) => {
+      if (path === '/cluster/resources?type=vm') {
+        if (resources instanceof Error) throw resources
+        return resources
+      }
+      if (opts?.method === 'POST' || opts?.method === 'PUT') return null
+      return { sata0: 'none,media=cdrom', digest: 'generation-1' }
+    })
+  }
+  const mine = { vmid: 100, type: 'qemu', node: 'pve3', pool: 'pool-a' }
+  async function request(method: 'GET' | 'PUT') {
+    const routes = await import('./route')
+    return callRoute(routes[method] as Parameters<typeof callRoute>[0], {
+      method, params: baseParams, ...(method === 'PUT' ? { body: { sata0: 'local:iso/debian.iso,media=cdrom' } } : {}),
+    })
+  }
+  for (const method of ['GET', 'PUT'] as const) {
+    it(`${method}: allows the tenant's pool using the full authorization union`, async () => {
+      getTenantInfrastructureScopeMock.mockResolvedValue(tenantScope())
+      inventory([mine])
+      expect((await request(method)).status).toBe(200)
+      expect(getTenantInfrastructureScopeMock).toHaveBeenCalledWith('tenant-1', { ignoreVdcContext: true })
+    })
+    for (const [label, resources] of [
+      ['another tenant pool', [{ ...mine, pool: 'pool-b' }]],
+      ['no pool', [{ ...mine, pool: '' }]],
+      ['foreign node on the same connection', [{ ...mine, node: 'pve9' }]],
+      ['wrong guest type', [{ ...mine, type: 'lxc' }]],
+      ['unknown VM', [{ ...mine, vmid: 101 }]],
+    ] as const) {
+      it(`${method}: refuses ${label} before reading or writing config`, async () => {
+        getTenantInfrastructureScopeMock.mockResolvedValue(tenantScope())
+        inventory(resources)
+        expect((await request(method)).status).toBe(403)
+        expect(pveFetchMock.mock.calls.some(c => String(c[1]).includes('/config'))).toBe(false)
+      })
+    }
+    for (const resources of [new Error('PVE unavailable'), { data: 'unexpected' }]) {
+      it(`${method}: fails closed when live ownership cannot be determined`, async () => {
+        getTenantInfrastructureScopeMock.mockResolvedValue(tenantScope())
+        inventory(resources)
+        expect((await request(method)).status).toBe(503)
+        expect(pveFetchMock.mock.calls.some(c => String(c[1]).includes('/config'))).toBe(false)
+      })
+    }
+    it(`${method}: rejects an unauthorized requested node before cluster access`, async () => {
+      getTenantInfrastructureScopeMock.mockResolvedValue(tenantScope(['pve9']))
+      inventory([{ ...mine, node: 'pve9' }])
+      expect((await request(method)).status).toBe(403)
+      expect(pveFetchMock).not.toHaveBeenCalled()
+    })
+    it(`${method}: keeps provider/MSP access free of vDC pool masking`, async () => {
+      for (const scope of [{ kind: 'provider' }, { kind: 'msp', connectionIds: new Set(['conn-1']) }]) {
+        getTenantInfrastructureScopeMock.mockResolvedValue(scope)
+        inventory([])
+        expect((await request(method)).status).toBe(200)
+        expect(pveFetchMock.mock.calls.some(c => c[1] === '/cluster/resources?type=vm')).toBe(false)
+      }
+    })
+  }
+  it('GET: rechecks ownership on the authorized destination after a migration', async () => {
+    getTenantInfrastructureScopeMock.mockResolvedValue(tenantScope(['pve3', 'pve4']))
+    pveFetchMock.mockImplementation(async (_conn, path: string) => {
+      if (path === '/cluster/resources?type=vm') return [{ ...mine, node: 'pve4' }]
+      if (path.startsWith('/nodes/pve3/')) throw new Error('Configuration file does not exist')
+      return { sata0: 'none,media=cdrom' }
+    })
+    const res = await request('GET')
+    expect(res.status).toBe(200)
+    expect(pveFetchMock.mock.calls.some(c => String(c[1]).startsWith('/nodes/pve4/'))).toBe(true)
+  })
+  it('GET: refuses a VM moved outside the tenant pool before the fallback config read', async () => {
+    getTenantInfrastructureScopeMock.mockResolvedValue(tenantScope(['pve3', 'pve4']))
+    let lookups = 0
+    pveFetchMock.mockImplementation(async (_conn, path: string) => {
+      if (path === '/cluster/resources?type=vm') {
+        lookups++
+        return [{ ...mine, node: 'pve4', pool: lookups < 3 ? 'pool-a' : 'pool-b' }]
+      }
+      if (path.startsWith('/nodes/pve3/')) throw new Error('Configuration file does not exist')
+      return { sata0: 'none,media=cdrom' }
+    })
+    expect((await request('GET')).status).toBe(403)
+    expect(pveFetchMock.mock.calls.some(c => String(c[1]).startsWith('/nodes/pve4/'))).toBe(false)
+  })
+
+})
+
+
+describe('PUT config: tenant NIC identity authorization', () => {
+  const original = 'virtio=AA:BB:CC:DD:EE:01,bridge=vmbr0,tag=100,trunks=110;120'
+  function setConfig(running = original) {
+    pveFetchMock.mockImplementation(async (_c, path: string, opts?: any) => {
+      if (opts?.method === 'POST' || opts?.method === 'PUT') return null
+      return { net0: path.includes('current=1') ? running : original, digest: 'generation-1' }
+    })
+    checkPermissionsMock.mockImplementation(async (permissions: string[]) => permissions.some(p => ['vm.config.nic.mac', 'vm.config.nic.vlan'].includes(p))
+      ? Response.json({ error: 'Explicit NIC permission required' }, { status: 403 }) : null)
+  }
+  for (const [label, body] of [
+    ['MAC change', { net0: original.replace('EE:01', 'EE:02') }],
+    ['tag change', { net0: original.replace('tag=100', 'tag=101') }],
+    ['trunk change', { net0: original.replace('110;120', '110;130') }],
+    ['omitted identity', { net0: 'virtio,bridge=vmbr0' }],
+    ['new NIC explicit identity', { net1: original }],
+  ] as const) {
+    it(`refuses ${label} before PVE writes`, async () => {
+      setConfig()
+      const res = await callRoute(await loadPut(), { method: 'PUT', params: baseParams, body })
+      expect(res.status).toBe(403)
+      expect(configWriteBody()).toBeNull()
+    })
+  }
+  it('preserves link-only rights and binds the mutation to the PVE digest', async () => {
+    setConfig()
+    const res = await callRoute(await loadPut(), { method: 'PUT', params: baseParams, body: { net0: original + ',link_down=1' } })
+    expect(res.status).toBe(200)
+    expect(checkPermissionsMock).toHaveBeenCalledWith(['vm.config.nic.link'], 'vm', 'res')
+    expect(configWriteBody()?.get('digest')).toBe('generation-1')
+  })
+  it('refuses a revert that changes protected running values', async () => {
+    setConfig(original.replace('EE:01', 'EE:02'))
+    const res = await callRoute(await loadPut(), { method: 'PUT', params: baseParams, body: { revert: 'net0' } })
+    expect(res.status).toBe(403)
+    expect(configWriteBody()).toBeNull()
+  })
+  it('rejects duplicate protected properties with a 400', async () => {
+    setConfig()
+    const res = await callRoute(await loadPut(), { method: 'PUT', params: baseParams, body: { net0: original + ',tag=101' } })
+    expect(res.status).toBe(400)
+    expect(configWriteBody()).toBeNull()
+  })
+  it('accepts explicit rights without weakening the network allow-list', async () => {
+    setConfig()
+    checkPermissionsMock.mockResolvedValue(null)
+    getAllowedNetworksForTenantMock.mockResolvedValue(new Map([['vmbr0', { kind: 'shared', vlanRanges: [{ start: 100, end: 199 }] }]]))
+    const res = await callRoute(await loadPut(), { method: 'PUT', params: baseParams, body: { net0: original.replace('tag=100', 'tag=900') } })
+    expect(res.status).toBe(403)
+    expect(configWriteBody()).toBeNull()
   })
 })

@@ -53,6 +53,16 @@ describe('importDiskAssets', () => {
     expect(Buffer.from(kept!.data).equals(Buffer.from([1]))).toBe(true)
   })
 
+  it('imports a pre-multi-tenancy flat file as the provider asset, never over a newer upload', async () => {
+    mkdirSync(path.join(root, 'branding'), { recursive: true })
+    writeFileSync(path.join(root, 'branding', 'logo.png'), Buffer.from('legacy provider logo'))
+    writeFileSync(path.join(root, 'branding', 'favicon.ico'), Buffer.from('legacy favicon'))
+    await putAsset('default', 'branding', 'favicon', 'png', 'image/png', Buffer.from('uploaded since'))
+    expect(await importDiskAssets(root)).toEqual({ imported: 1, skipped: 1 })
+    expect(Buffer.from((await getAsset('default', 'branding', 'logo'))!.data).toString()).toBe('legacy provider logo')
+    expect(Buffer.from((await getAsset('default', 'branding', 'favicon'))!.data).toString()).toBe('uploaded since')
+  })
+
   it('returns zero counts when the root does not exist', async () => {
     const res = await importDiskAssets(path.join(root, 'does-not-exist'))
     expect(res).toEqual({ imported: 0, skipped: 0 })

@@ -40,7 +40,7 @@ describe('POST /settings/branding/logo', () => {
     const body = await readJson<any>(res)
     expect(res.status).toBe(200)
     expect(body.success).toBe(true)
-    expect(body.imageUrl).toMatch(/^\/api\/v1\/settings\/branding\/uploads\/logo\.png\?t=\d+$/)
+    expect(body.imageUrl).toMatch(/^\/api\/v1\/settings\/branding\/uploads\/logo\.png\?t=\d+&tenant=default&scope=default$/)
     expect(h.putAsset).toHaveBeenCalledWith('default', 'branding', 'logo', 'png', 'image/png', expect.any(Buffer))
   })
 

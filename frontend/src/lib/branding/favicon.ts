@@ -59,32 +59,75 @@ export function applyFavicon(url: string): () => void {
     created = document.createElement('link')
     created.rel = 'icon'
     document.head.appendChild(created)
-    links.push(created)
   }
 
-  const stock: StockIcon[] = links.map(link => ({
-    link,
-    href: link.getAttribute('href'),
-    type: link.getAttribute('type'),
-    sizes: link.getAttribute('sizes'),
-  }))
+  const stock = new Map<HTMLLinkElement, StockIcon>()
+  const attributes = ['href', 'type', 'sizes'] as const
+  const branded = { href: url, type: type || null, sizes: null }
+  let stopped = false
 
-  for (const { link } of stock) {
-    link.setAttribute('href', url)
-    link.removeAttribute('sizes')
+  const rememberMetadataChanges = (records: MutationRecord[]) => {
+    for (const record of records) {
+      if (record.type !== 'attributes') continue
+      const link = record.target as HTMLLinkElement
+      const entry = stock.get(link)
+      const name = record.attributeName as typeof attributes[number]
 
-    if (type) link.setAttribute('type', type)
-    else link.removeAttribute('type')
+      // Metadata can update a link in place. Keep the latest stock value for
+      // cleanup, rather than restoring the value from an earlier navigation.
+      if (entry && link !== created) entry[name] = link.getAttribute(name)
+    }
   }
+
+  const applyToLinks = () => {
+    // Next replaces its icon links on navigation: forget the detached ones so
+    // the map does not grow for the observer's lifetime, and so cleanup never
+    // writes attributes onto nodes that left the document.
+    for (const link of stock.keys()) {
+      if (!link.isConnected && link !== created) stock.delete(link)
+    }
+    for (const link of document.querySelectorAll<HTMLLinkElement>(ICON_LINK_SELECTOR)) {
+      if (!stock.has(link)) {
+        stock.set(link, {
+          link,
+          href: link.getAttribute('href'),
+          type: link.getAttribute('type'),
+          sizes: link.getAttribute('sizes'),
+        })
+      }
+      for (const name of attributes) {
+        if (link.getAttribute(name) !== branded[name]) restoreAttribute(link, name, branded[name])
+      }
+    }
+  }
+
+  const observe = () => observer.observe(document.head, {
+    childList: true,
+    subtree: true,
+    attributes: true,
+    attributeFilter: [...attributes],
+  })
+  const observer = new MutationObserver(records => {
+    rememberMetadataChanges(records)
+    // Our own attribute writes must not become metadata changes or schedule
+    // another observer pass. Next remains free to insert or replace its links.
+    observer.disconnect()
+    applyToLinks()
+    observe()
+  })
+
+  applyToLinks()
+  observe()
 
   return () => {
-    if (created) {
-      created.remove()
+    if (stopped) return
+    stopped = true
+    rememberMetadataChanges(observer.takeRecords())
+    observer.disconnect()
+    created?.remove()
 
-      return
-    }
-
-    for (const entry of stock) {
+    for (const entry of stock.values()) {
+      if (entry.link === created || !entry.link.isConnected) continue
       restoreAttribute(entry.link, 'href', entry.href)
       restoreAttribute(entry.link, 'type', entry.type)
       restoreAttribute(entry.link, 'sizes', entry.sizes)

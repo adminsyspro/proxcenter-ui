@@ -366,3 +366,17 @@ describe("POST /api/v1/migrations, NFC concurrency (#807)", () => {
     expect(createdJobData().config).not.toHaveProperty("nfcConcurrency")
   })
 })
+
+
+describe('tenant migration VLAN identity', () => {
+  it('requires an explicit VLAN grant before scheduling a migration', async () => {
+    const { getCurrentTenantId } = await import('@/lib/tenant')
+    const { checkPermission } = await import('@/lib/rbac')
+    vi.mocked(getCurrentTenantId).mockResolvedValueOnce('tenant-1')
+    vi.mocked(checkPermission).mockImplementationOnce(async () => null).mockImplementationOnce(async () => Response.json({ error: 'denied' }, { status: 403 }) as any)
+    const res = await callRoute(POST, { body: { ...body, vlanTag: 100 } })
+    expect(res.status).toBe(403)
+    expect(h.prisma.migrationJob.create).not.toHaveBeenCalled()
+    expect(h.afterCbs).toHaveLength(0)
+  })
+})

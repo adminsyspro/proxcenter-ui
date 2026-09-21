@@ -4358,7 +4358,8 @@
         "target_health": "目标存储健康状态",
         "target_space": "目标池容量",
         "target_storage": "目标存储可用性",
-        "reverse_ssh": "故障恢复所需的反向 SSH"
+        "reverse_ssh": "故障恢复所需的反向 SSH",
+        "backup_schedule": "备份计划"
       }
     },
     "bandwidth": {
@@ -4384,7 +4385,7 @@
       "orphansOnly": "仅孤立",
       "deleteSelected": "删除选中的 {count} 项",
       "cleanupOrphans": "清理 {count} 个孤立快照",
-      "cleanupOrphansHint": "删除不属于任何活动复制任务的 mirror 快照",
+      "cleanupOrphansHint": "删除复制任务或源客户机已不存在的镜像快照",
       "cluster": "集群",
       "pool": "池",
       "image": "镜像",
@@ -4412,7 +4413,8 @@
       "andMore": "还有 {count} 个",
       "engine": "引擎",
       "node": "节点",
-      "partialInventory": "部分集群或节点无法清点，其快照未列出。"
+      "partialInventory": "部分集群或节点无法清点，其快照未列出。",
+      "sourceMissing": "源客户机不存在"
     },
     "status": {
       "all": "所有状态",
@@ -4425,7 +4427,10 @@
       "pending": "等待中",
       "noMatch": "无匹配的虚拟机",
       "partial": "部分同步",
-      "failedOver": "已故障转移"
+      "failedOver": "已故障转移",
+      "skipped": "已跳过（客户机忙碌）",
+      "reseed_required": "需要重新初始化",
+      "source_missing": "源客户机不存在"
     },
     "planStatus": {
       "ready": "就绪",
@@ -4509,7 +4514,12 @@
       "noJobsDesc": "创建任务，通过 Ceph RBD 或 ZFS 在站点之间复制虚拟机。",
       "noJobFound": "未找到任务",
       "noJobFoundDesc": "修改您的过滤条件或创建新的复制任务。",
-      "selectJob": "选择一个任务以查看详情。"
+      "selectJob": "选择一个任务以查看详情。",
+      "reseed": "重新初始化",
+      "reseedTitle": "重新初始化 {guest}？",
+      "reseedWarning": "此客户机的所有 DR 还原点将被永久删除，副本将被替换。这适用于 Ceph RBD 和 ZFS。随后将排队执行完整复制。",
+      "reseedQueued": "完整复制已加入队列。",
+      "reseedFailed": "无法将完整复制加入队列。"
     },
     "jobs": {
       "failedOver": "已故障转移",
@@ -4978,7 +4988,12 @@
         "vmid": "VM ID",
         "vmName": "VM 名称",
         "available": "可用",
-        "noFileStorage": "此节点上未找到基于文件的存储。模板部署需要基于文件的存储（dir、NFS、CIFS 等）。"
+        "noFileStorage": "此节点上未找到基于文件的存储。模板部署需要基于文件的存储（dir、NFS、CIFS 等）。",
+        "storageQuotaRemaining": "剩余配额 {remaining} GB",
+        "storageQuotaUnlimited": "无存储配额",
+        "storageQuotaUnavailable": "配额信息不可用",
+        "noWritableStorage": "此 vDC 中没有可写的虚拟机磁盘存储。",
+        "storagesLoadError": "无法加载存储列表。请重试或联系您的提供商。"
       },
       "hardware": {
         "title": "硬件",
@@ -5604,7 +5619,10 @@
       "deleteIso": "删除此 ISO",
       "deleteIsoConfirm": "从 {storage} 删除 {name}？仍在引用它的虚拟机将无法从中启动。"
     },
-    "loadNodesError": "无法加载节点列表"
+    "loadNodesError": "无法加载节点列表",
+    "nicMacPermissionRequired": "更改 MAC 地址需要提供商授权。",
+    "nicVlanPermissionRequired": "更改 VLAN 设置需要提供商授权。",
+    "nicOriginalUnavailable": "保存前请重新加载网络配置。"
   },
   "ldap": {
     "description": "配置 LDAP/Active Directory 身份验证，允许用户使用企业凭据登录。",

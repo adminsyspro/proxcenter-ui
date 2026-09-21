@@ -46,7 +46,7 @@ const SNAPSHOTS = [
 const JSON_HEADERS = { 'content-type': 'application/json' }
 
 const CLEANUP_LABEL = 'Clean up 1 orphans'
-const CLEANUP_HINT = 'Remove mirror snapshots that no longer belong to any active replication job'
+const CLEANUP_HINT = 'Remove mirror snapshots whose replication job or source guest no longer exists'
 
 // GET returns the fixture; POST (the per-snapshot deletion) either resolves or
 // hangs forever so `deleting` stays true for the duration of the test.
@@ -187,4 +187,12 @@ it('lists inventory warnings in a banner instead of rendering them as snapshot r
   expect(banner).toHaveTextContent('Cluster A · dr3: ssh: connect timed out')
   expect(screen.getAllByRole('row')).toHaveLength(2)
   expect(screen.queryByText('dr3', { selector: 'td' })).not.toBeInTheDocument()
+})
+
+
+it('identifies snapshots whose source guest is missing even while their job exists', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify([{ ...SNAPSHOTS[0], job_id: 'job-1', orphan_reason: 'source_missing' }]), { headers: JSON_HEADERS })))
+  renderWithProviders(<SnapshotsTab connections={CONNECTIONS} />)
+  expect(await screen.findByText('Source guest missing')).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: CLEANUP_LABEL })).toBeEnabled()
 })

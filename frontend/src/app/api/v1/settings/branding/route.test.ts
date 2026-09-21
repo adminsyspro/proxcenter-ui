@@ -3,13 +3,19 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 const h = vi.hoisted(() => ({
   requireBrandingAdmin: vi.fn(async () => null as any),
   getCurrentTenantId: vi.fn(async () => 'default'),
-  getSetting: vi.fn(async () => null as any),
+  getSetting: vi.fn(async (_key?: string, _tenantId?: string) => null as any),
   setSetting: vi.fn(async (_key: string, _tenantId: string, _value: unknown) => {}),
 }))
 
 vi.mock('@/lib/branding/guard', () => ({ requireBrandingAdmin: h.requireBrandingAdmin }))
 vi.mock('@/lib/tenant', () => ({ getCurrentTenantId: h.getCurrentTenantId }))
-vi.mock('@/lib/db/settings', () => ({ getSetting: h.getSetting, setSetting: h.setSetting }))
+vi.mock('@/lib/db/settings', () => ({
+  getSettingWithSource: async (key: string, tenantId: string) => {
+    const value = await h.getSetting(key, tenantId)
+    return value === null ? null : { value, tenantId }
+  },
+  setSetting: h.setSetting,
+}))
 
 import { GET, PUT } from './route'
 import { callRoute, readJson } from '@/__tests__/setup/route-test'
@@ -75,6 +81,23 @@ describe('PUT /settings/branding primary colour (#754)', () => {
 
     expect(res.status).toBe(403)
     expect(h.setSetting).not.toHaveBeenCalled()
+  })
+})
+
+describe('PUT /settings/branding upload URLs (roadmap #14)', () => {
+  it('stores the bare upload path, not the owner and scope the GET added for the reader', async () => {
+    h.getCurrentTenantId.mockResolvedValue('tenant-a')
+    const res = await callRoute(PUT, { method: 'PUT', body: {
+      enabled: true,
+      logoUrl: '/api/v1/settings/branding/uploads/logo.png?t=12&tenant=default&scope=tenant-a',
+      faviconUrl: '/uploads/branding/favicon.ico?tenant=default',
+      loginLogoUrl: 'https://cdn.example.test/login.png?tenant=keep',
+    } })
+    expect(res.status).toBe(200)
+    const stored = h.setSetting.mock.calls[0][2] as any
+    expect(stored.logoUrl).toBe('/api/v1/settings/branding/uploads/logo.png?t=12')
+    expect(stored.faviconUrl).toBe('/api/v1/settings/branding/uploads/favicon.ico')
+    expect(stored.loginLogoUrl).toBe('https://cdn.example.test/login.png?tenant=keep')
   })
 })
 

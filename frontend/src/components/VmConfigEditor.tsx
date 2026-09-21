@@ -1,6 +1,9 @@
 'use client'
 
 import React, { useState, useEffect, useCallback } from 'react'
+import { useNicIdentityPermissions } from '@/hooks/useNicIdentityPermissions'
+import { mergeNetworkConfig } from '@/components/hardware/networkConfig'
+import { QEMU_NIC_MODELS } from '@/lib/rbac/nicPermissions'
 import { useTranslations } from 'next-intl'
 
 import {
@@ -288,10 +291,11 @@ function parseNetworkConfig(netStr: string): Partial<NetworkInfo> {
     const [key, val] = part.split('=')
 
     if (key === 'bridge') result.bridge = val
+    else if (key === 'macaddr' || key === 'hwaddr') result.macaddr = val
     else if (key === 'tag') result.tag = Number(val)
     else if (key === 'firewall') result.firewall = val === '1'
     else if (key === 'rate') result.rate = Number(val)
-    else if (['virtio', 'e1000', 'rtl8139', 'vmxnet3'].includes(key)) {
+    else if (QEMU_NIC_MODELS.has(key)) {
       result.model = key
       result.macaddr = val
     }
@@ -300,10 +304,12 @@ function parseNetworkConfig(netStr: string): Partial<NetworkInfo> {
   return result
 }
 
-function buildNetworkConfig(net: Partial<NetworkInfo>): string {
+function buildNetworkConfig(net: Partial<NetworkInfo>, type: 'qemu' | 'lxc'): string {
   const parts: string[] = []
 
-  if (net.model && net.macaddr) parts.push(`${net.model}=${net.macaddr}`)
+  if (type === 'lxc') {
+    if (net.macaddr) parts.push(`hwaddr=${net.macaddr}`)
+  } else if (net.model) parts.push(net.macaddr ? `${net.model}=${net.macaddr}` : net.model)
   if (net.bridge) parts.push(`bridge=${net.bridge}`)
   if (net.tag) parts.push(`tag=${net.tag}`)
   if (net.firewall) parts.push('firewall=1')
@@ -342,6 +348,8 @@ export default function VmConfigEditor({
 }: VmConfigEditorProps) {
   const theme = useTheme()
   const t = useTranslations()
+  const nicPermissions = useNicIdentityPermissions()
+  const { canEditMac, canEditVlan } = nicPermissions
   const [tabIndex, setTabIndex] = useState(0)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -443,6 +451,7 @@ export default function VmConfigEditor({
   /* ------------------------------------------------------------------ */
   
   const handleSave = async () => {
+    if (nicPermissions.loading) return
     setSaving(true)
     setError(null)
     setSuccess(false)
@@ -458,9 +467,13 @@ export default function VmConfigEditor({
       }
       
       // Update network configs
-      networks.forEach((net, idx) => {
-        const netKey = `net${idx}`
-        const newVal = buildNetworkConfig(net)
+      networks.forEach((net) => {
+        const netKey = net.id
+        const parsed = parseNetworkConfig(String(originalConfig[netKey] || ''))
+        if (net.model === (parsed.model || 'virtio') && net.bridge === (parsed.bridge || 'vmbr0') &&
+          net.macaddr === parsed.macaddr && net.tag === parsed.tag && net.firewall === parsed.firewall && net.rate === parsed.rate) return
+        const newVal = mergeNetworkConfig(String(originalConfig[netKey] || ''), buildNetworkConfig(net, type), type,
+          ['bridge', 'tag', 'firewall', 'rate'], nicPermissions)
 
         if (newVal !== originalConfig[netKey as keyof VmConfig]) {
           changes[netKey] = newVal
@@ -877,6 +890,8 @@ return
                           label="VLAN Tag"
                           type="number"
                           value={net.tag || ''}
+                          disabled={!canEditVlan}
+                          helperText={!canEditVlan ? t('hardware.nicVlanPermissionRequired') : undefined}
                           onChange={(e) => {
                             const newNets = [...networks]
 
@@ -910,6 +925,8 @@ return
                           size="small"
                           label="MAC Address"
                           value={net.macaddr || ''}
+                          disabled={!canEditMac}
+                          helperText={!canEditMac ? t('hardware.nicMacPermissionRequired') : undefined}
                           onChange={(e) => {
                             const newNets = [...networks]
 

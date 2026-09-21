@@ -1,4 +1,4 @@
-import type { CleanupStarted, ReplicationCheckRequest, ReplicationHealthStatus, SnapshotIdentity, SSHConnectivityResult } from './site-recovery.types'
+import type { CleanupStarted, ReplicationJob, ReplicationCheckRequest, ReplicationHealthStatus, SnapshotIdentity, SSHConnectivityResult } from './site-recovery.types'
 
 // src/lib/orchestrator/client.ts
 // Client pour communiquer avec le backend Go d'orchestration
@@ -587,11 +587,15 @@ return this.get<ClusterMetrics[]>(`/metrics/${connectionId}/history${query ? `?$
     return this.get<any[]>(`/replication/jobs/${id}/vms`)
   }
 
+  reseedReplicationJobVM(id: string, vmid: number) {
+    return this.post<{ status: string }>(`/replication/jobs/${encodeURIComponent(id)}/vms/${vmid}/reseed`, { confirm: true })
+  }
+
   getReplicationJobThroughput(id: string, window: string) {
     return this.get<any[]>(`/replication/jobs/${id}/throughput?window=${encodeURIComponent(window)}`)
   }
 
-  preflightReplication(body: ReplicationCheckRequest & { target_pool: string; estimated_size_bytes: number }) {
+  preflightReplication(body: ReplicationCheckRequest & { target_pool: string; estimated_size_bytes: number; rpo_target?: number; schedule_spec?: ReplicationJob['schedule_spec']; timezone?: string }) {
     return this.post<any>('/replication/preflight', body)
   }
 

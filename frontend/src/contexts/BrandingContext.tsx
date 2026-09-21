@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useState, useCallback, useRef, type ReactNode } from 'react'
 
 import { useSession } from 'next-auth/react'
 
@@ -68,8 +68,6 @@ const BrandingContext = createContext<BrandingContextValue>({
 })
 
 export function BrandingProvider({ children }: { children: ReactNode }) {
-  const [branding, setBranding] = useState<BrandingConfig>(DEFAULT_BRANDING)
-  const [loading, setLoading] = useState(true)
   // The branding API resolves the tenant from the session JWT
   // (getCurrentTenantId on the server). Tracking session here lets us
   // refetch when login/logout or tenant-switch changes the answer — without
@@ -80,21 +78,38 @@ export function BrandingProvider({ children }: { children: ReactNode }) {
   const sessionUserId = (session as any)?.user?.id || null
   const sessionTenantId = (session as any)?.user?.tenantId || null
 
+  const identity = JSON.stringify([status, sessionUserId, sessionTenantId])
+  const [state, setState] = useState<{ identity: string; branding: BrandingConfig } | null>(null)
+  const branding = state?.identity === identity ? state.branding : DEFAULT_BRANDING
+  const loading = status === 'loading' || state?.identity !== identity
+  const activeRequest = useRef<{ active: boolean } | null>(null)
+
   const fetchBranding = useCallback(async () => {
+    if (activeRequest.current) activeRequest.current.active = false
+    const request = { active: true }
+
+    activeRequest.current = request
+    let nextBranding: BrandingConfig | null = null
+
     try {
       const res = await fetch(`/api/v1/settings/branding/public?_t=${Date.now()}`)
       if (res.ok) {
         const data = await res.json()
-        setBranding(prev => ({ ...prev, ...data }))
+        nextBranding = { ...DEFAULT_BRANDING, ...data }
       } else {
         console.warn('[branding] fetch failed:', res.status)
       }
     } catch (err) {
       console.warn('[branding] fetch error:', err)
     } finally {
-      setLoading(false)
+      if (request.active) {
+        setState(previous => ({
+          identity,
+          branding: nextBranding ?? (previous?.identity === identity ? previous.branding : DEFAULT_BRANDING),
+        }))
+      }
     }
-  }, [])
+  }, [identity])
 
   // Initial fetch + refetch on session identity change. `status` flips to
   // 'authenticated' / 'unauthenticated' once NextAuth has resolved, and
@@ -102,8 +117,11 @@ export function BrandingProvider({ children }: { children: ReactNode }) {
   // switch — all three cases want a fresh branding payload.
   useEffect(() => {
     if (status === 'loading') return
-    fetchBranding()
-  }, [fetchBranding, status, sessionUserId, sessionTenantId])
+    void fetchBranding()
+    const request = activeRequest.current
+
+    return () => { if (request) request.active = false }
+  }, [fetchBranding, status])
 
   // Update favicon dynamically. applyFavicon repoints EVERY icon link Next
   // rendered, not just the first one, and hands back the undo that restores
@@ -117,7 +135,10 @@ export function BrandingProvider({ children }: { children: ReactNode }) {
   // Update browser title dynamically
   useEffect(() => {
     if (branding.browserTitle) {
+      const previousTitle = document.title
+
       document.title = branding.browserTitle
+      return () => { document.title = previousTitle }
     }
   }, [branding.browserTitle])
 

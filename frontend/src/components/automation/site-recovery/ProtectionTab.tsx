@@ -51,7 +51,10 @@ function vmStatusIcon(status: string): string {
   switch (status) {
     case 'synced': return 'ri-checkbox-circle-line'
     case 'syncing': return 'ri-refresh-line'
-    case 'error': return 'ri-error-warning-line'
+    case 'error':
+    case 'reseed_required':
+    case 'source_missing': return 'ri-error-warning-line'
+    case 'skipped': return 'ri-pause-circle-line'
     case 'suspended': return 'ri-pause-circle-line'
     default: return 'ri-time-line'
   }
@@ -406,7 +409,7 @@ export default function ProtectionTab({
     vm_name?: string
     // suspended: a test failover is running on this guest's replica, so the job
     // skips it and keeps replicating its siblings.
-    status: 'pending' | 'syncing' | 'synced' | 'error' | 'suspended'
+    status: 'pending' | 'syncing' | 'synced' | 'error' | 'suspended' | 'skipped' | 'reseed_required' | 'source_missing'
     last_sync?: string | null
     last_error?: string
     bytes_sent: number
@@ -414,6 +417,37 @@ export default function ProtectionTab({
     updated_at: string
   }
   const [vmStatuses, setVmStatuses] = useState<VMStatusRow[] | null>(null)
+  const [reseedGuest, setReseedGuest] = useState<{ jobId: string; vmid: number; name: string } | null>(null)
+  const [reseedBusy, setReseedBusy] = useState(false)
+  const [reseedError, setReseedError] = useState('')
+  const [reseedQueued, setReseedQueued] = useState(false)
+  // Guests whose re-seed the orchestrator accepted but has not started yet:
+  // the 15 s poll still reports them reseed_required, and the button must not
+  // offer the destructive wipe a second time meanwhile.
+  const [reseedQueuedVmids, setReseedQueuedVmids] = useState<Set<number>>(new Set())
+
+  const confirmReseed = async () => {
+    if (!reseedGuest || reseedBusy) return
+    setReseedBusy(true)
+    setReseedError('')
+    try {
+      const response = await fetch(`/api/v1/orchestrator/replication/jobs/${encodeURIComponent(reseedGuest.jobId)}/vms/${reseedGuest.vmid}/reseed`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ confirm: true }),
+      })
+      // An accepted 202 may carry no body, and a proxy error page is not JSON:
+      // neither must read as "the re-seed failed" and invite a retry.
+      const data = await response.json().catch(() => null)
+      if (!response.ok) throw new Error(data?.error || t('siteRecovery.protection.reseedFailed'))
+      setVmStatuses(rows => rows?.map(row => row.vmid === reseedGuest.vmid ? { ...row, status: 'pending', last_error: '' } : row) ?? null)
+      setReseedQueuedVmids(prev => new Set(prev).add(reseedGuest.vmid))
+      setReseedGuest(null)
+      setReseedQueued(true)
+    } catch (error) {
+      setReseedError(error instanceof Error ? error.message : t('siteRecovery.protection.reseedFailed'))
+    } finally {
+      setReseedBusy(false)
+    }
+  }
   // Five rows a page keeps the block a fixed height, so the dialog itself
   // never scrolls however many guests a tag-based job ends up carrying.
   const VM_ROWS_PER_PAGE = 5
@@ -528,6 +562,8 @@ export default function ProtectionTab({
     onSelectJob(id)
     setDrawerOpen(true)
     setVmPage(0)
+    setReseedQueued(false)
+    setReseedQueuedVmids(new Set())
   }
 
   // Fetch per-VM status when the drawer opens on a job that protects anything.
@@ -547,7 +583,17 @@ export default function ProtectionTab({
     setVmStatusesLoading(true)
     fetch(`/api/v1/orchestrator/replication/jobs/${selectedJobId}/vms`, { cache: 'no-store' })
       .then(r => (r.ok ? r.json() : []))
-      .then(data => { if (!cancelled) setVmStatuses(Array.isArray(data) ? data : []) })
+      .then(data => {
+        if (cancelled) return
+        const rows: VMStatusRow[] = Array.isArray(data) ? data : []
+        setVmStatuses(rows)
+        // The orchestrator confirms a queued re-seed by moving the row off
+        // reseed_required; until then the button stays locked.
+        setReseedQueuedVmids(prev => {
+          const next = new Set([...prev].filter(vmid => rows.some(row => row.vmid === vmid && row.status === 'reseed_required')))
+          return next.size === prev.size ? prev : next
+        })
+      })
       .catch(() => { if (!cancelled) setVmStatuses([]) })
       .finally(() => { if (!cancelled) setVmStatusesLoading(false) })
     return () => { cancelled = true }
@@ -933,6 +979,7 @@ export default function ProtectionTab({
                     <Typography variant='overline' sx={{ color: 'text.secondary', fontWeight: 600, mb: 1, display: 'block' }}>
                       {t('siteRecovery.protection.perVmTitle')}
                     </Typography>
+                    {reseedQueued && <Alert severity='success' sx={{ mb: 1 }}>{t('siteRecovery.protection.reseedQueued')}</Alert>}
                     {vmStatusesLoading && !vmStatuses && <LinearProgress sx={{ mb: 1 }} />}
                     {vmStatuses && vmStatuses.length === 0 ? (
                       <Typography variant='caption' sx={{ color: 'text.disabled', fontStyle: 'italic' }}>
@@ -944,7 +991,7 @@ export default function ProtectionTab({
                           // A suspended guest is not failing, but it is not
                           // being protected right now either, so it reads as a
                           // warning rather than a neutral state.
-                          const color = row.status === 'synced' ? 'success' : row.status === 'syncing' ? 'primary' : row.status === 'error' ? 'error' : row.status === 'suspended' ? 'warning' : 'default'
+                          const color = row.status === 'synced' ? 'success' : row.status === 'syncing' ? 'primary' : row.status === 'error' ? 'error' : ['suspended', 'skipped', 'reseed_required', 'source_missing'].includes(row.status) ? 'warning' : 'default'
                           return (
                             /* One line per guest, built like every other list row
                                in the app: type glyph carrying a state dot, then
@@ -981,9 +1028,9 @@ export default function ProtectionTab({
                               </Typography>
                               <Typography
                                 variant='caption'
-                                sx={{ ml: 'auto', pl: 1, color: row.status === 'error' && row.last_error ? 'error.main' : 'text.secondary', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                                sx={{ ml: 'auto', pl: 1, color: ['error', 'skipped', 'reseed_required', 'source_missing'].includes(row.status) && row.last_error ? (row.status === 'error' ? 'error.main' : 'warning.main') : 'text.secondary', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
                               >
-                                {row.status === 'error' && row.last_error ? row.last_error : (
+                                {['error', 'skipped', 'reseed_required', 'source_missing'].includes(row.status) && row.last_error ? row.last_error : (
                                   <>
                                     {row.last_sync ? new Date(row.last_sync).toLocaleString() : '—'}
                                     {row.bytes_sent > 0 && ` · ${formatBytes(row.bytes_sent)}`}
@@ -991,6 +1038,14 @@ export default function ProtectionTab({
                                   </>
                                 )}
                               </Typography>
+                              {row.status === 'reseed_required' && (
+                                <Button size='small' color='warning' disabled={selected.status === 'syncing' || selected.status === 'failed_over' || reseedQueuedVmids.has(row.vmid)} onClick={() => {
+                                  setReseedError('')
+                                  setReseedGuest({ jobId: selected.id, vmid: row.vmid, name: row.vm_name ? `${row.vmid} · ${row.vm_name}` : `VM ${row.vmid}` })
+                                }} sx={{ flexShrink: 0 }}>
+                                  {t('siteRecovery.protection.reseed')}
+                                </Button>
+                              )}
                               <Box
                                 component='span'
                                 aria-hidden
@@ -1138,6 +1193,18 @@ export default function ProtectionTab({
             </Box>
           </>
         )}
+      </Dialog>
+
+      <Dialog open={!!reseedGuest} onClose={() => { if (!reseedBusy) setReseedGuest(null) }} maxWidth='sm' fullWidth>
+        <DialogTitle>{t('siteRecovery.protection.reseedTitle', { guest: reseedGuest?.name || '' })}</DialogTitle>
+        <DialogContent>
+          <Alert severity='warning'>{t('siteRecovery.protection.reseedWarning')}</Alert>
+          {reseedError && <Alert severity='error' sx={{ mt: 2 }}>{reseedError}</Alert>}
+        </DialogContent>
+        <DialogActions>
+          <Button disabled={reseedBusy} onClick={() => setReseedGuest(null)}>{t('common.cancel')}</Button>
+          <Button variant='contained' color='warning' disabled={reseedBusy} onClick={confirmReseed}>{t('siteRecovery.protection.reseed')}</Button>
+        </DialogActions>
       </Dialog>
 
       {/* Delete confirmation */}

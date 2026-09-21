@@ -1,6 +1,17 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 
-import { applyFavicon, faviconMimeType } from './favicon'
+import { applyFavicon as applyFaviconEffect, faviconMimeType } from './favicon'
+
+const undoEffects: Array<() => void> = []
+const applyFavicon = (url: string) => {
+  const undo = applyFaviconEffect(url)
+  undoEffects.push(undo)
+  return undo
+}
+
+afterEach(() => {
+  for (const undo of undoEffects.splice(0).reverse()) undo()
+})
 
 // What Next actually renders for this tree, verified against the running app:
 // src/app ships both favicon.ico and icon.svg, so there are two icon links and
@@ -27,6 +38,18 @@ const iconLinks = () =>
 
 beforeEach(() => {
   document.head.replaceChildren()
+})
+
+describe('applyFavicon and detached icon links', () => {
+  it('forgets icon links Next has since removed instead of writing to detached nodes', () => {
+    renderStockIcons()
+    const [first] = Array.from(document.querySelectorAll<HTMLLinkElement>("link[rel~='icon']"))
+    const undo = applyFavicon('/api/v1/settings/branding/uploads/favicon.png?t=1')
+    first.remove()
+    undo()
+    expect(first.getAttribute('href')).toBe('/api/v1/settings/branding/uploads/favicon.png?t=1')
+    expect(iconLinks()).toEqual([{ href: '/icon.svg?icon.18odtp5qriroz.svg', type: 'image/svg+xml', sizes: 'any' }])
+  })
 })
 
 describe('faviconMimeType', () => {
@@ -114,5 +137,70 @@ describe('applyFavicon', () => {
     undo()
 
     expect(iconLinks()).toEqual([{ href: '/favicon.ico', type: null, sizes: null }])
+  })
+})
+
+
+describe('favicon metadata arriving after the branding effect', () => {
+  it('repoints late stock links and restores them while removing only its own link', async () => {
+    const undo = applyFavicon('/tenant-a.png')
+    renderStockIcons()
+    await new Promise(resolve => setTimeout(resolve, 0))
+    expect(iconLinks()).toEqual([
+      { href: '/tenant-a.png', type: 'image/png', sizes: null },
+      { href: '/tenant-a.png', type: 'image/png', sizes: null },
+      { href: '/tenant-a.png', type: 'image/png', sizes: null },
+    ])
+    undo()
+    expect(iconLinks()).toEqual([
+      { href: '/favicon.ico?favicon.00623ddsq5-0w.ico', type: 'image/x-icon', sizes: '48x48' },
+      { href: '/icon.svg?icon.18odtp5qriroz.svg', type: 'image/svg+xml', sizes: 'any' },
+    ])
+  })
+
+  it('follows replacement metadata across tenant changes and stops observing on reset', async () => {
+    renderStockIcons()
+    const undoA = applyFavicon('/tenant-a.png')
+    document.head.replaceChildren()
+    appendIcon({ href: '/replacement.svg', type: 'image/svg+xml', sizes: 'any' })
+    await new Promise(resolve => setTimeout(resolve, 0))
+    expect(iconLinks()).toEqual([{ href: '/tenant-a.png', type: 'image/png', sizes: null }])
+    undoA()
+    const undoB = applyFavicon('/tenant-b.webp')
+    await new Promise(resolve => setTimeout(resolve, 0))
+    expect(iconLinks()).toEqual([{ href: '/tenant-b.webp', type: 'image/webp', sizes: null }])
+    undoB()
+    appendIcon({ href: '/late-after-reset.ico' })
+    await new Promise(resolve => setTimeout(resolve, 0))
+    expect(iconLinks()).toEqual([
+      { href: '/replacement.svg', type: 'image/svg+xml', sizes: 'any' },
+      { href: '/late-after-reset.ico', type: null, sizes: null },
+    ])
+  })
+
+  it('preserves a metadata update still queued when cleanup runs', () => {
+    renderStockIcons()
+    const undo = applyFavicon('/tenant-a.png')
+    const link = document.head.querySelector('link')!
+    link.setAttribute('href', '/next-stock.ico')
+    undo()
+    expect(link.getAttribute('href')).toBe('/next-stock.ico')
+    expect(link.getAttribute('type')).toBe('image/x-icon')
+    expect(link.getAttribute('sizes')).toBe('48x48')
+  })
+
+  it('reapplies branding when metadata rewrites an existing link and restores the new stock values', async () => {
+    renderStockIcons()
+    const undo = applyFavicon('/tenant-a.png')
+    const link = document.head.querySelector('link')!
+    link.setAttribute('href', '/updated-stock.ico')
+    link.setAttribute('type', 'image/x-icon')
+    link.setAttribute('sizes', '32x32')
+    await new Promise(resolve => setTimeout(resolve, 0))
+    expect(link.getAttribute('href')).toBe('/tenant-a.png')
+    undo()
+    expect(link.getAttribute('href')).toBe('/updated-stock.ico')
+    expect(link.getAttribute('type')).toBe('image/x-icon')
+    expect(link.getAttribute('sizes')).toBe('32x32')
   })
 })

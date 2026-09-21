@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useContext, useEffect, useState, useCallback } from 'react'
+import { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react'
 
 import { useSession } from 'next-auth/react'
 
@@ -28,11 +28,15 @@ const RBACContext = createContext({
 export function RBACProvider({ children }) {
   const { data: session, status } = useSession()
 
-  // Reload permissions when the user changes, not when the session object is
+  // Reload permissions when the user or tenant changes, not when the session object is
   // re-created: SessionProvider refetches /api/auth/session every 60 s and on
   // every window focus, and each refetch used to drag a full
   // /api/v1/rbac/effective round trip behind it.
   const userId = session?.user?.id ?? session?.user?.email ?? null
+  const tenantId = session?.user?.tenantId ?? 'default'
+  const identityKey = JSON.stringify([userId, tenantId, status])
+  const [loadedKey, setLoadedKey] = useState(null)
+  const requestSequence = useRef(0)
   const [permissions, setPermissions] = useState([])
   const [roles, setRoles] = useState([])
   const [isAdmin, setIsAdmin] = useState(false)
@@ -42,6 +46,13 @@ export function RBACProvider({ children }) {
 
   // Charger les permissions de l'utilisateur
   const loadPermissions = useCallback(async () => {
+    const requestId = ++requestSequence.current
+    setLoading(true)
+    setPermissions([])
+    setRoles([])
+    setIsAdmin(false)
+    setScopeTypes([])
+    setHiddenWidgets([])
     if (status !== 'authenticated' || !userId) {
       setPermissions([])
       setRoles([])
@@ -49,13 +60,16 @@ export function RBACProvider({ children }) {
       setScopeTypes([])
       setHiddenWidgets([])
       setLoading(false)
+      setLoadedKey(identityKey)
 
 return
     }
 
     try {
       const res = await fetch('/api/v1/rbac/effective')
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const json = await res.json()
+      if (requestId !== requestSequence.current) return
 
       if (json.data) {
         setPermissions(json.data.permissions || [])
@@ -65,47 +79,59 @@ return
         setHiddenWidgets(json.data.hidden_widgets || [])
       }
     } catch (e) {
+      if (requestId !== requestSequence.current) return
       console.error('Failed to load RBAC permissions:', e)
     } finally {
-      setLoading(false)
+      if (requestId === requestSequence.current) {
+        setLoading(false)
+        setLoadedKey(identityKey)
+      }
     }
-  }, [userId, status])
+  }, [userId, status, identityKey])
 
   useEffect(() => {
     loadPermissions()
+    return () => { requestSequence.current++ }
   }, [loadPermissions])
+
+  const pending = loading || loadedKey !== identityKey || status === 'loading'
+  const accessReady = !pending && status === 'authenticated'
+
 
   // Vérifier si l'utilisateur a une permission spécifique
   const hasPermission = useCallback((permission) => {
+    if (!accessReady) return false
     if (isAdmin) return true
 
 return permissions.includes(permission)
-  }, [permissions, isAdmin])
+  }, [permissions, isAdmin, accessReady])
 
   // Vérifier si l'utilisateur a au moins une des permissions
   const hasAnyPermission = useCallback((perms) => {
+    if (!accessReady) return false
     if (isAdmin) return true
     if (!perms || perms.length === 0) return true
 
 return perms.some(p => permissions.includes(p))
-  }, [permissions, isAdmin])
+  }, [permissions, isAdmin, accessReady])
 
   // Vérifier si l'utilisateur a toutes les permissions
   const hasAllPermissions = useCallback((perms) => {
+    if (!accessReady) return false
     if (isAdmin) return true
     if (!perms || perms.length === 0) return true
 
 return perms.every(p => permissions.includes(p))
-  }, [permissions, isAdmin])
+  }, [permissions, isAdmin, accessReady])
 
   return (
     <RBACContext.Provider value={{
-      permissions,
-      roles,
-      isAdmin,
-      scopeTypes,
-      hiddenWidgets,
-      loading,
+      permissions: accessReady ? permissions : [],
+      roles: accessReady ? roles : [],
+      isAdmin: accessReady && isAdmin,
+      scopeTypes: accessReady ? scopeTypes : [],
+      hiddenWidgets: accessReady ? hiddenWidgets : [],
+      loading: pending,
       hasPermission,
       hasAnyPermission,
       hasAllPermissions,

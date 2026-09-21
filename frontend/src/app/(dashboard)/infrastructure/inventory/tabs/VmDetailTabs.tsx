@@ -1560,7 +1560,7 @@ export default function VmDetailTabs(props: any) {
                                     '&:last-child': { mb: 0 }
                                   }}
                                   onClick={() => {
-                                    if (!canConfigHardware) return
+                                    if (!(canConfigHardware || (disk.isCdrom && canConfigMedia && !disk.isUnused))) return
                                     if (disk.isCloudInit) return
                                     setSelectedDisk(disk)
                                     setEditDiskDialogOpen(true)
@@ -1646,7 +1646,7 @@ export default function VmDetailTabs(props: any) {
                                       </MuiTooltip>
                                     </Box> : null
                                   ) : disk.isCloudInit ? null : (disk.isCdrom || disk.isEfi || disk.isTpm) ? (
-                                    canConfigHardware ? <i className="ri-pencil-line" style={{ fontSize: 16, opacity: 0.5 }} /> : null
+                                    (canConfigHardware || (disk.isCdrom && canConfigMedia)) ? <i className="ri-pencil-line" style={{ fontSize: 16, opacity: 0.5 }} /> : null
                                   ) : canConfigHardware ? (
                                     <IconButton
                                       size="small"
@@ -1791,6 +1791,7 @@ export default function VmDetailTabs(props: any) {
                                     onClick={() => {
                                       setSelectedNetwork({
                                         id: net.id,
+                                        rawValue: net.rawValue,
                                         model: net.model,
                                         bridge: net.bridge,
                                         mac: net.macaddr,

@@ -4354,7 +4354,8 @@
         "target_health": "Santé du stockage cible",
         "target_space": "Capacité pool cible",
         "target_storage": "Disponibilité du stockage cible",
-        "reverse_ssh": "SSH inverse pour le failback"
+        "reverse_ssh": "SSH inverse pour le failback",
+        "backup_schedule": "Planification des sauvegardes"
       }
     },
     "bandwidth": {
@@ -4380,7 +4381,7 @@
       "orphansOnly": "Orphelins uniquement",
       "deleteSelected": "Supprimer {count} sélectionné(s)",
       "cleanupOrphans": "Nettoyer {count} orphelin(s)",
-      "cleanupOrphansHint": "Supprimer les snapshots mirror qui ne correspondent à aucun job de réplication actif",
+      "cleanupOrphansHint": "Supprimer les snapshots miroir dont le job de réplication ou l’invité source n’existe plus",
       "cluster": "Cluster",
       "pool": "Pool",
       "image": "Image",
@@ -4408,7 +4409,8 @@
       "andMore": "{count} de plus",
       "engine": "Moteur",
       "node": "Nœud",
-      "partialInventory": "Certains clusters ou nœuds n'ont pas pu être inventoriés ; leurs snapshots ne sont pas listés."
+      "partialInventory": "Certains clusters ou nœuds n'ont pas pu être inventoriés ; leurs snapshots ne sont pas listés.",
+      "sourceMissing": "Invité source absent"
     },
     "status": {
       "all": "Tous les statuts",
@@ -4421,7 +4423,10 @@
       "pending": "En attente",
       "noMatch": "Aucune VM correspondante",
       "partial": "Partiellement synchronisé",
-      "failedOver": "Basculé"
+      "failedOver": "Basculé",
+      "skipped": "Ignoré (invité occupé)",
+      "reseed_required": "Réinitialisation requise",
+      "source_missing": "Invité source absent"
     },
     "planStatus": {
       "ready": "Prêt",
@@ -4505,7 +4510,12 @@
       "noJobsDesc": "Créez un job pour répliquer des VM entre sites avec Ceph RBD ou ZFS.",
       "noJobFound": "Aucun job trouvé",
       "noJobFoundDesc": "Modifiez vos filtres ou créez un nouveau job de réplication.",
-      "selectJob": "Sélectionnez un job pour voir les détails."
+      "selectJob": "Sélectionnez un job pour voir les détails.",
+      "reseed": "Réinitialiser",
+      "reseedTitle": "Réinitialiser {guest} ?",
+      "reseedWarning": "Tous les points de restauration DR de cet invité seront définitivement supprimés et la réplique sera remplacée. Cela concerne Ceph RBD et ZFS. Une réplication complète sera ensuite programmée.",
+      "reseedQueued": "Réplication complète mise en attente.",
+      "reseedFailed": "Impossible de programmer la réplication complète."
     },
     "jobs": {
       "failedOver": "Basculé",
@@ -4974,7 +4984,12 @@
         "vmid": "ID de la VM",
         "vmName": "Nom de la VM",
         "available": "disponible",
-        "noFileStorage": "Aucun stockage file-based trouvé sur ce nœud. Le déploiement de templates nécessite un stockage file-based (dir, NFS, CIFS, etc.)."
+        "noFileStorage": "Aucun stockage file-based trouvé sur ce nœud. Le déploiement de templates nécessite un stockage file-based (dir, NFS, CIFS, etc.).",
+        "storageQuotaRemaining": "{remaining} Go de quota disponibles",
+        "storageQuotaUnlimited": "Aucun quota de stockage",
+        "storageQuotaUnavailable": "Quota indisponible",
+        "noWritableStorage": "Aucun stockage de disques VM accessible en écriture dans ce vDC.",
+        "storagesLoadError": "La liste des stockages n’a pas pu être chargée. Réessayez ou contactez votre fournisseur."
       },
       "hardware": {
         "title": "Matériel",
@@ -5600,7 +5615,10 @@
       "deleteIso": "Supprimer cette ISO",
       "deleteIsoConfirm": "Supprimer {name} de {storage} ? Les VM qui la référencent encore ne pourront plus démarrer dessus."
     },
-    "loadNodesError": "Impossible de charger la liste des nodes"
+    "loadNodesError": "Impossible de charger la liste des nodes",
+    "nicMacPermissionRequired": "La modification de l’adresse MAC nécessite l’autorisation du fournisseur.",
+    "nicVlanPermissionRequired": "La modification du VLAN nécessite l’autorisation du fournisseur.",
+    "nicOriginalUnavailable": "Rechargez la configuration réseau avant d’enregistrer."
   },
   "ldap": {
     "description": "Configurez l'authentification LDAP/Active Directory pour permettre aux utilisateurs de se connecter avec leurs identifiants d'entreprise.",

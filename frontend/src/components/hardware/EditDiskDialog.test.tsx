@@ -36,6 +36,8 @@ function makeProps(overrides: Record<string, unknown> = {}) {
     onSave: vi.fn().mockResolvedValue(undefined),
     onDelete: vi.fn().mockResolvedValue(undefined),
     disk: unusedDisk,
+    canEditHardware: true,
+    canChangeMedia: true,
     ...overrides,
   }
 }
@@ -181,5 +183,37 @@ describe('EditDiskDialog, storage policy locks QoS fields (regular disk)', () =>
     const saved = props.onSave.mock.calls[0][0] as string
 
     expect(saved).toContain('mbps_rd=50')
+  })
+})
+
+
+describe('existing CD-ROM media permission', () => {
+  const cdrom = { id: 'sata0', storage: 'local', size: '-', isCdrom: true,
+    rawValue: 'local:iso/old.iso,media=cdrom,cache=none,backup=0,size=1G' }
+
+  it('lets a media-only user eject while preserving hardware options and hiding deletion', async () => {
+    const props = makeProps({ disk: cdrom, canEditHardware: false, canChangeMedia: true })
+    renderWithProviders(<EditDiskDialog {...props} />)
+    expect(screen.queryByRole('button', { name: /^delete$/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: /physical/i })).toBeDisabled()
+    await userEvent.click(screen.getByRole('radio', { name: /do not use any media/i }))
+    await userEvent.click(screen.getByRole('button', { name: /^save$/i }))
+    await waitFor(() => expect(props.onSave).toHaveBeenCalledWith('none,media=cdrom,cache=none,backup=0'))
+    expect(props.onDelete).not.toHaveBeenCalled()
+  })
+
+  it('blocks saves and deletion without either right', async () => {
+    const props = makeProps({ disk: { ...cdrom, storage: 'none', rawValue: 'none,media=cdrom' }, canEditHardware: false, canChangeMedia: false })
+    renderWithProviders(<EditDiskDialog {...props} />)
+    expect(screen.getByRole('button', { name: /^save$/i })).toBeDisabled()
+    expect(screen.queryByRole('button', { name: /^delete$/i })).not.toBeInTheDocument()
+  })
+
+  it('retains hardware-only access to ordinary media operations and device removal', async () => {
+    const props = makeProps({ disk: { ...cdrom, storage: 'none', rawValue: 'none,media=cdrom' }, canEditHardware: true, canChangeMedia: false })
+    renderWithProviders(<EditDiskDialog {...props} />)
+    expect(screen.getByRole('button', { name: /^delete$/i })).toBeEnabled()
+    await userEvent.click(screen.getByRole('button', { name: /^save$/i }))
+    await waitFor(() => expect(props.onSave).toHaveBeenCalledWith('none,media=cdrom'))
   })
 })

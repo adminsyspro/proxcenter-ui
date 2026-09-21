@@ -29,6 +29,7 @@ import {
   RadioGroup,
 } from '@mui/material'
 
+import { replaceCdromMedia } from '@/lib/proxmox/cdrom'
 import { formatBytes } from '@/utils/format'
 import { vmDiskFormats } from '@/lib/proxmox/storage'
 import AppDialogTitle from '@/components/ui/AppDialogTitle'
@@ -47,6 +48,8 @@ type EditDiskDialogProps = {
   onClose: () => void
   onSave: (config: any) => Promise<void>
   onDelete: () => Promise<void>
+  canEditHardware: boolean
+  canChangeMedia: boolean
   onResize?: (newSize: string) => Promise<void>
   onMoveStorage?: (targetStorage: string, deleteSource: boolean, format?: string) => Promise<void>
   connId?: string
@@ -77,7 +80,7 @@ type EditDiskDialogProps = {
   initialTab?: number
 }
 
-export function EditDiskDialog({ open, onClose, onSave, onDelete, onResize, onMoveStorage, connId, node, disk, existingDisks, availableStorages, initialTab }: EditDiskDialogProps) {
+export function EditDiskDialog({ open, onClose, onSave, onDelete, canEditHardware, canChangeMedia, onResize, onMoveStorage, connId, node, disk, existingDisks, availableStorages, initialTab }: EditDiskDialogProps) {
   const t = useTranslations()
   const [tab, setTab] = useState(initialTab ?? 0)
 
@@ -422,17 +425,17 @@ return
   }
 
   const handleCdromSave = async () => {
-    if (!disk) return
+    if (!disk || !(canChangeMedia || canEditHardware) || (cdromMode === 'physical' && !canEditHardware)) return
     setCdromSaving(true)
     setError(null)
     try {
       let value: string
       if (cdromMode === 'iso' && isoStorage && isoImage) {
-        value = `${isoStorage}:iso/${isoImage},media=cdrom`
+        value = replaceCdromMedia(disk.rawValue || 'none,media=cdrom', `${isoStorage}:iso/${isoImage}`)
       } else if (cdromMode === 'physical') {
         value = 'cdrom'
       } else {
-        value = 'none,media=cdrom'
+        value = replaceCdromMedia(disk.rawValue || 'none,media=cdrom', 'none')
       }
       await onSave(value)
       onClose()
@@ -489,11 +492,12 @@ return
   const [confirmDetachOpen, setConfirmDetachOpen] = useState(false)
 
   const handleDeleteClick = useCallback(() => {
-    if (!disk) return
+    if (!disk || !canEditHardware) return
     setConfirmDeleteOpen(true)
-  }, [disk])
+  }, [disk, canEditHardware])
 
   const handleDeleteConfirm = useCallback(async () => {
+    if (!canEditHardware) return
     setConfirmDeleteOpen(false)
     setDeleting(true)
     setError(null)
@@ -506,7 +510,7 @@ return
     } finally {
       setDeleting(false)
     }
-  }, [onDelete, onClose, t])
+  }, [onDelete, onClose, t, canEditHardware])
 
   // Replaces the native confirm() that was here before. Using a MUI Dialog
   // is required by our codebase conventions (feedback_modals_mui.md) and also
@@ -530,7 +534,7 @@ return
   // Rendered as a sibling to every main dialog variant below via a Fragment.
   const deleteConfirmDialog = (
     <Dialog
-      open={confirmDeleteOpen}
+      open={confirmDeleteOpen && canEditHardware}
       onClose={() => setConfirmDeleteOpen(false)}
       maxWidth="xs"
       fullWidth
@@ -625,7 +629,7 @@ return
             )}
 
             {/* Option 2: Physical drive */}
-            <FormControlLabel value="physical" control={<Radio />} label={
+            <FormControlLabel value="physical" disabled={!canEditHardware} control={<Radio />} label={
               <Typography variant="body2" fontWeight={500}>
                 {t('hardware.cdrom.usePhysical')}
               </Typography>
@@ -641,20 +645,22 @@ return
         </DialogContent>
 
         <DialogActions sx={{ px: 3, pb: 2, justifyContent: 'space-between' }}>
-          <Button
-            color="error"
-            onClick={handleDelete}
-            disabled={isWorking}
-            startIcon={deleting ? <CircularProgress size={16} /> : <i className="ri-delete-bin-line" />}
-          >
-            {t('common.delete')}
-          </Button>
+          {canEditHardware && (
+            <Button
+              color="error"
+              onClick={handleDelete}
+              disabled={isWorking}
+              startIcon={deleting ? <CircularProgress size={16} /> : <i className="ri-delete-bin-line" />}
+            >
+              {t('common.delete')}
+            </Button>
+          )}
           <Box>
             <Button onClick={onClose} disabled={isWorking} sx={{ mr: 1 }}>{t('common.cancel')}</Button>
             <Button
               variant="contained"
               onClick={handleCdromSave}
-              disabled={isWorking || (cdromMode === 'iso' && (!isoStorage || !isoImage))}
+              disabled={isWorking || !(canChangeMedia || canEditHardware) || (cdromMode === 'physical' && !canEditHardware) || (cdromMode === 'iso' && (!isoStorage || !isoImage))}
             >
               {cdromSaving ? <CircularProgress size={20} /> : t('common.save')}
             </Button>
@@ -714,14 +720,16 @@ return
         </DialogContent>
 
         <DialogActions sx={{ px: 3, pb: 2, justifyContent: 'space-between' }}>
-          <Button
-            color="error"
-            onClick={handleDelete}
-            disabled={isWorking}
-            startIcon={deleting ? <CircularProgress size={16} /> : <i className="ri-delete-bin-line" />}
-          >
-            {t('common.delete')}
-          </Button>
+          {canEditHardware && (
+            <Button
+              color="error"
+              onClick={handleDelete}
+              disabled={isWorking}
+              startIcon={deleting ? <CircularProgress size={16} /> : <i className="ri-delete-bin-line" />}
+            >
+              {t('common.delete')}
+            </Button>
+          )}
           <Box>
             <Button onClick={onClose} disabled={isWorking} sx={{ mr: 1 }}>{t('common.cancel')}</Button>
             <Button

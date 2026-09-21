@@ -10,6 +10,7 @@ import { authOptions } from "@/lib/auth/config"
 import { prisma } from "@/lib/db/prisma"
 import { audit } from "@/lib/audit"
 import { hasPermission, isUserSuperAdmin, isUserProtected, PROTECTED_ROLE_IDS, PROVIDER_ONLY_ROLE_IDS } from "@/lib/rbac"
+import { roleHasSensitiveNicPermissions } from "@/lib/rbac/nicPermissions"
 import { validateAssignmentScope } from "@/lib/rbac/scope-validation"
 import { DEFAULT_TENANT_ID, getCurrentTenantId } from "@/lib/tenant"
 import { demoResponse } from "@/lib/demo/demo-api"
@@ -339,10 +340,14 @@ export async function POST(req: NextRequest) {
     // Vérifier que le rôle existe et qu'il est accessible depuis le tenant
     // cible. Un rôle custom appartenant au tenant B ne doit pas être
     // assignable depuis le tenant A même en connaissant son id.
-    const role = await prisma.rbacRole.findUnique({ where: { id: role_id }, select: { id: true, name: true, tenantId: true } })
+    const role = await prisma.rbacRole.findUnique({ where: { id: role_id }, select: { id: true, name: true, tenantId: true, permissions: { select: { permissionId: true } } } })
 
     if (!role || (role.tenantId !== null && role.tenantId !== targetTenantId)) {
       return NextResponse.json({ error: "Rôle non trouvé" }, { status: 404 })
+    }
+
+    if (!callerIsSuperAdmin && roleHasSensitiveNicPermissions(role)) {
+      return NextResponse.json({ error: 'Only a super admin may grant NIC identity permissions' }, { status: 403 })
     }
 
     // Vérifier si l'utilisateur a déjà un rôle différent assigné (within target tenant)

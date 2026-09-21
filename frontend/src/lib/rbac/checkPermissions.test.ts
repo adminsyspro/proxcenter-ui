@@ -138,3 +138,25 @@ describe('checkPermissions: session user', () => {
     expect(m.rejectionToResponse).toHaveBeenCalledWith('expired')
   })
 })
+
+
+describe('sensitive NIC permissions require explicit grants', () => {
+  for (const permission of ['vm.config.nic.mac', 'vm.config.nic.vlan']) {
+    it(`does not inherit ${permission} for sessions or tokens`, async () => {
+      m.getPrincipal.mockResolvedValue(userPrincipal)
+      grantRole(['vm.config', 'vm.config.nic'])
+      expect((await checkPermissions([permission], 'vm', VM))?.status).toBe(403)
+      m.getPrincipal.mockResolvedValue(tokenPrincipal(['vm.config', 'vm.config.nic']))
+      expect((await checkPermissions([permission], 'vm', VM))?.status).toBe(403)
+      m.getPrincipal.mockResolvedValue(tokenPrincipal([permission]))
+      expect(await checkPermissions([permission], 'vm', VM)).toBeNull()
+      expect(expandPermissionHierarchy(new Set(['vm.config']))).not.toContain(permission)
+    })
+    it(`keeps explicit ${permission} scoped to its VM`, async () => {
+      m.getPrincipal.mockResolvedValue(userPrincipal)
+      grantRole([permission], 'vm', VM)
+      expect(await checkPermissions([permission], 'vm', VM)).toBeNull()
+      expect((await checkPermissions([permission], 'vm', 'conn-1:pve1:qemu:101'))?.status).toBe(403)
+    })
+  }
+})

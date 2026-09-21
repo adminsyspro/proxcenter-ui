@@ -62,6 +62,11 @@ interface MigrationConfig {
    * conversion can never fail the migration.
    */
   convertDisksToQcow2?: boolean
+  /**
+   * CPU type of the created VM (roadmap#24). One of MIGRATION_CPU_TYPES, validated
+   * by the route; absent means the Proxmox default, x86-64-v2-AES.
+   */
+  cpuType?: string
   migrationType?: "cold" | "live" | "sshfs_boot"
   transferMode?: "https" | "sshfs" | "auto"
   // User-selected temp directory on the PVE node for large intermediate files
@@ -400,7 +405,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
     }
     await updateJob(jobId, "creating_vm", { targetVmid })
 
-    const pveParams = mapEsxiToPveConfig(vmConfig, targetVmid, config.targetStorage, config.networkBridge, config.vlanTag)
+    const pveParams = mapEsxiToPveConfig(vmConfig, targetVmid, config.targetStorage, config.networkBridge, config.vlanTag, config.cpuType)
     await appendLog(jobId, `Creating VM: ${pveParams.name} (${pveParams.ostype}, ${pveParams.bios}, ${pveParams.scsihw})...`)
 
     // Build URLSearchParams for VM creation (without disks — we import them separately)

@@ -167,3 +167,13 @@ describe("mapEsxiToPveConfig — disk bus follows the source controller", () => 
     expect(none.bootDiskSlot).toBe("scsi0")
   })
 })
+
+describe("mapEsxiToPveConfig — CPU type (roadmap#24)", () => {
+  it("defaults the created VM to the Proxmox default, x86-64-v2-AES, not host", () => {
+    expect(mapEsxiToPveConfig(makeConfig(), 100, "local-lvm", "vmbr0").cpu).toBe("x86-64-v2-AES")
+  })
+
+  it("applies the CPU type the operator picked", () => {
+    expect(mapEsxiToPveConfig(makeConfig(), 100, "local-lvm", "vmbr0", undefined, "host").cpu).toBe("host")
+  })
+})

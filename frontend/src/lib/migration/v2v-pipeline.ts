@@ -57,6 +57,7 @@ import {
 import type { SoapSession, EsxiVmConfig } from "@/lib/vmware/soap"
 import { pveSetVmConfig, destroyPveVm } from "./pve-vm-config"
 import { startJobHeartbeat } from "./job-heartbeat"
+import { MIGRATION_CPU_TYPE_DEFAULT } from "./cpu-type"
 import { sanitizeV2vRoot, planV2vRootRetry } from "./v2v-root-select"
 import type { V2vRootCandidate } from "./v2v-root-select"
 
@@ -86,6 +87,11 @@ export interface V2vMigrationConfig {
    * conversion can never fail the migration.
    */
   convertDisksToQcow2?: boolean
+  /**
+   * CPU type of the created VM (roadmap#24). One of MIGRATION_CPU_TYPES, validated
+   * by the route; absent means the Proxmox default, x86-64-v2-AES.
+   */
+  cpuType?: string
   /** vCenter datacenter name (libvirt vpx URI: vpx://VC/{datacenter}/...). Required for vcenter source. */
   vcenterDatacenter?: string
   /**
@@ -2360,7 +2366,7 @@ export async function runV2vMigrationPipeline(
         await appendLog(jobId, applySourceSizing(vmConfig, sourceSizing), "info")
       }
 
-      createParams = buildPveCreateParams(vmConfig, targetVmid, config.networkBridge, config.vlanTag)
+      createParams = buildPveCreateParams(vmConfig, targetVmid, config.networkBridge, config.vlanTag, config.cpuType)
     } else {
       // Fallback config
       const fallbackTagSuffix =
@@ -2374,7 +2380,7 @@ export async function runV2vMigrationPipeline(
         cores: 2,
         sockets: 1,
         memory: 2048,
-        cpu: "x86-64-v2-AES",
+        cpu: config.cpuType || MIGRATION_CPU_TYPE_DEFAULT,
         scsihw: "virtio-scsi-single",
         bios: "seabios",
         machine: "q35",

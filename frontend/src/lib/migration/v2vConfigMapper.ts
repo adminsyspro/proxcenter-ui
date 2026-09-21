@@ -2,6 +2,8 @@
  * Parse libvirt domain XML (virt-v2v output) and map to Proxmox VE VM creation parameters
  */
 
+import { MIGRATION_CPU_TYPE_DEFAULT } from "./cpu-type"
+
 export interface V2vVmConfig {
   name: string
   memory: number // MB
@@ -243,6 +245,7 @@ export function buildPveCreateParams(
   vmid: number,
   networkBridge: string,
   vlanTag?: number,
+  cpuType: string = MIGRATION_CPU_TYPE_DEFAULT,
 ): Record<string, any> {
   const params: Record<string, any> = {
     vmid,
@@ -251,7 +254,7 @@ export function buildPveCreateParams(
     cores: config.cores,
     sockets: config.sockets,
     memory: config.memory,
-    cpu: 'x86-64-v2-AES',
+    cpu: cpuType,
     scsihw: config.scsihw,
     bios: config.firmware === 'efi' ? 'ovmf' : 'seabios',
     machine: config.machine,

@@ -44,6 +44,7 @@ import {
 import { NodeRow, BulkAction } from '@/components/NodesTable'
 import NumericTextField from '@/components/ui/NumericTextField'
 import { NFC_CONCURRENCY_MIN, NFC_CONCURRENCY_MAX } from '@/lib/migration/nfc-progress'
+import { MIGRATION_CPU_TYPES, MIGRATION_CPU_TYPE_DEFAULT, type MigrationCpuType } from '@/lib/migration/cpu-type'
 import { usedVmidsOnConnection, nextVmidOnConnection } from '@/components/hardware/utils'
 import { tooltipSlotProps } from '@/components/settings/ha/tooltipSlotProps'
 // Dependency-free eligibility check (NOT ./cbt, which pulls the server-only SOAP client).
@@ -288,6 +289,8 @@ export interface InventoryDialogsProps {
   migDowntimeBudget: string
   setMigDowntimeBudget: (v: string) => void
   setMigConvertToQcow2: (v: boolean) => void
+  migCpuType: MigrationCpuType
+  setMigCpuType: (v: MigrationCpuType) => void
   migDiskPaths: string
   setMigDiskPaths: (v: string) => void
   migTempStorage: string
@@ -334,7 +337,7 @@ export interface InventoryDialogsProps {
   setBulkMigLogsExpanded: (v: React.SetStateAction<boolean>) => void
   bulkMigLogsFilter: string | null
   setBulkMigLogsFilter: (v: string | null) => void
-  bulkMigConfigRef: React.MutableRefObject<{ sourceConnectionId: string; targetConnectionId: string; targetStorage: string; networkBridge: string; vlanTag?: number; migrationType: string; transferMode: string; startAfterMigration: boolean; convertDisksToQcow2: boolean; sourceType: string; tempStorage?: string; v2vRoot?: string; nfcConcurrency?: number } | null>
+  bulkMigConfigRef: React.MutableRefObject<{ sourceConnectionId: string; targetConnectionId: string; targetStorage: string; networkBridge: string; vlanTag?: number; migrationType: string; transferMode: string; startAfterMigration: boolean; convertDisksToQcow2: boolean; sourceType: string; tempStorage?: string; v2vRoot?: string; nfcConcurrency?: number; cpuType?: string } | null>
   bulkMigHostInfo: any
 
   // Upgrade dialog
@@ -447,6 +450,7 @@ export default function InventoryDialogs(props: InventoryDialogsProps) {
     migTargetVmid, setMigTargetVmid, migTargetVmidStatus, setMigTargetVmidStatus,
     migNetworkBridge, setMigNetworkBridge, migVlanTag, setMigVlanTag, migBridges,
     migStartAfter, setMigStartAfter, migConvertToQcow2, setMigConvertToQcow2,
+    migCpuType, setMigCpuType,
     migManualCutover, setMigManualCutover,
     migDowntimeBudget, setMigDowntimeBudget,
     migDiskPaths, setMigDiskPaths, migTempStorage, setMigTempStorage, migV2vRoot, setMigV2vRoot,
@@ -926,6 +930,35 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
         </Box>
       }
     />
+  )
+
+  // CPU type of the created VM (roadmap#24), shared by both dialogs like the
+  // qcow2 switch. The Proxmox default keeps the VM movable between nodes with
+  // different CPUs; `host` stays offered, with its coupling spelled out.
+  const renderCpuTypeSelect = () => (
+    <FormControl fullWidth size="small">
+      <InputLabel>{t('inventoryPage.esxiMigration.cpuType')}</InputLabel>
+      <Select
+        value={migCpuType}
+        onChange={e => setMigCpuType(e.target.value as MigrationCpuType)}
+        label={t('inventoryPage.esxiMigration.cpuType')}
+      >
+        {MIGRATION_CPU_TYPES.map(model => (
+          <MenuItem key={model} value={model}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <i className="ri-cpu-line" style={{ fontSize: 14, opacity: 0.7 }} />
+              <Typography variant="body2" fontWeight={500}>{model}</Typography>
+              {model === MIGRATION_CPU_TYPE_DEFAULT && (
+                <Typography variant="caption" sx={{ opacity: 0.5 }}>({t('inventoryPage.esxiMigration.cpuTypeDefault')})</Typography>
+              )}
+            </Box>
+          </MenuItem>
+        ))}
+      </Select>
+      <FormHelperText>
+        {t(migCpuType === 'host' ? 'inventoryPage.esxiMigration.cpuTypeHostHint' : 'inventoryPage.esxiMigration.cpuTypeHint')}
+      </FormHelperText>
+    </FormControl>
   )
 
   // Single-VM dialog only. A batch held for the operator would need one cutover
@@ -3270,6 +3303,8 @@ return
                     </Box>
                   )}
 
+                  {renderCpuTypeSelect()}
+
                   <FormControlLabel
                     control={<Switch size="small" checked={migStartAfter} onChange={(_, v) => setMigStartAfter(v)} />}
                     label={<Typography variant="body2">{t('inventoryPage.esxiMigration.startAfterMigration')}</Typography>}
@@ -3598,6 +3633,8 @@ return
                         // LVM storage was selected never leaks into a run against
                         // a storage the option is hidden for.
                         convertDisksToQcow2: migConvertToQcow2 && migTargetIsThickLvm,
+                        // CPU type of the created VM (roadmap#24).
+                        cpuType: migCpuType,
                         // Warm only, and single-VM only: the switch is hidden
                         // everywhere else, so the payload is gated on the type too
                         // rather than trusting the UI state.
@@ -4373,6 +4410,8 @@ return
 
                 {renderNfcConcurrencyField(bulkMigHostInfo?.hostType === 'vcenter')}
 
+                {renderCpuTypeSelect()}
+
                 <FormControlLabel
                   control={<Switch size="small" checked={migStartAfter} onChange={(_, v) => setMigStartAfter(v)} />}
                   label={<Typography variant="body2">{t('inventoryPage.esxiMigration.startAfterMigration')}</Typography>}
@@ -4738,6 +4777,8 @@ return
                           startAfterMigration: migStartAfter,
                           // Same storage-type gate as the single-VM payload.
                           convertDisksToQcow2: migConvertToQcow2 && migTargetIsThickLvm,
+                          // CPU type of the created VM (roadmap#24), same for the whole batch.
+                          cpuType: migCpuType,
                           // vCenter inventory path required by libvirt vpx URI (auto-discovered
                           // server-side via SOAP). Bulk jobs may target different ESXi hosts
                           // inside the same vCenter, so the path is per-VM. Same rationale
@@ -4803,6 +4844,7 @@ return
                     startAfterMigration: migStartAfter,
                     convertDisksToQcow2: migConvertToQcow2 && migTargetIsThickLvm,
                     sourceType,
+                    cpuType: migCpuType,
                     // Persisted across the queued-job poller so retries use the
                     // same temp storage the user selected when starting the batch.
                     // Applies to every source type (virt-v2v and direct-ESXi both honour it).

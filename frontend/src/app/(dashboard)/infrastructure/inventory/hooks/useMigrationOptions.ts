@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 
 import { DOWNTIME_BUDGET_DEFAULT_SEC } from '../components/migrationGuards'
 import { NFC_CONCURRENCY_DEFAULT } from '@/lib/migration/nfc-progress'
+import { MIGRATION_CPU_TYPE_DEFAULT, type MigrationCpuType } from '@/lib/migration/cpu-type'
 
 /**
  * Minimal shape of the VM the single-migration dialog was opened for. Only the
@@ -73,6 +74,9 @@ export function useMigrationOptions({
   // rewrites every migrated disk in the background and transiently doubles
   // the space used on the target storage.
   const [migConvertToQcow2, setMigConvertToQcow2] = useState(false)
+  // CPU type of the created VM (roadmap#24). Starts on the Proxmox default so a
+  // `host` chosen for one appliance never leaks into the next run.
+  const [migCpuType, setMigCpuType] = useState<MigrationCpuType>(MIGRATION_CPU_TYPE_DEFAULT)
   // Warm only (#443). Off by default: the automatic budget stays the norm, and a
   // hold left on from an earlier run would park a migration nobody is watching.
   const [migManualCutover, setMigManualCutover] = useState(false)
@@ -94,6 +98,7 @@ export function useMigrationOptions({
     setMigType('cold')
     setMigTransferMode('auto')
     setMigConvertToQcow2(false)
+    setMigCpuType(MIGRATION_CPU_TYPE_DEFAULT)
     setMigManualCutover(false)
     setMigDowntimeBudget(String(DOWNTIME_BUDGET_DEFAULT_SEC))
   }, [esxiMigrateVm, bulkMigOpen])
@@ -119,6 +124,8 @@ export function useMigrationOptions({
     setMigTransferMode,
     migConvertToQcow2,
     setMigConvertToQcow2,
+    migCpuType,
+    setMigCpuType,
     migManualCutover,
     setMigManualCutover,
     migDowntimeBudget,

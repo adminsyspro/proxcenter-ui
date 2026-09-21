@@ -19,6 +19,11 @@ export interface WarmMigrationConfig {
    * conversion can never fail the migration.
    */
   convertDisksToQcow2?: boolean
+  /**
+   * CPU type of the created VM (roadmap#24). One of MIGRATION_CPU_TYPES, validated
+   * by the route; absent means the Proxmox default, x86-64-v2-AES.
+   */
+  cpuType?: string
   targetVmid?: number
   /** Extracted VDDK distribution dir on the PVE node (libdir=). */
   vddkLibdir?: string

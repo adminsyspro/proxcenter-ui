@@ -399,6 +399,7 @@ export default function InventoryDetails({
     migConvertToQcow2, setMigConvertToQcow2,
     migManualCutover, setMigManualCutover,
     migDowntimeBudget, setMigDowntimeBudget,
+    migCpuType, setMigCpuType,
   } = useMigrationOptions({ esxiMigrateVm, bulkMigOpen })
   // Shared with InventoryDialogs.tsx — see bulkMigrationConfig.ts. Used here
   // by the queued-job poller below to decide how many slots are free; must
@@ -410,7 +411,14 @@ export default function InventoryDetails({
   const [bulkMigLogsFilter, setBulkMigLogsFilter] = useState<string | null>(null)
   const bulkMigJobsRef = useRef(bulkMigJobs)
   bulkMigJobsRef.current = bulkMigJobs
-  const bulkMigConfigRef = useRef<{ sourceConnectionId: string; targetConnectionId: string; targetStorage: string; networkBridge: string; vlanTag?: number; migrationType: string; transferMode: string; startAfterMigration: boolean; convertDisksToQcow2: boolean; sourceType: string; tempStorage?: string; v2vRoot?: string; nfcConcurrency?: number } | null>(null)
+  // One poller tick at a time (roadmap#23). A tick awaits the POST that starts
+  // the next queued guest while the interval keeps firing, so every extra tick
+  // posted the same guest again as long as the first POST had not answered: the
+  // duplicates failed on the engine's per-VM lock and the modal followed the last
+  // of them. A ref, not a closure flag, because a state update restarts the
+  // effect and its interval while the previous tick is still in flight.
+  const bulkMigTickInFlightRef = useRef(false)
+  const bulkMigConfigRef = useRef<{ sourceConnectionId: string; targetConnectionId: string; targetStorage: string; networkBridge: string; vlanTag?: number; migrationType: string; transferMode: string; startAfterMigration: boolean; convertDisksToQcow2: boolean; sourceType: string; tempStorage?: string; v2vRoot?: string; nfcConcurrency?: number; cpuType?: string } | null>(null)
   // Snapshot of host info when bulk dialog opens (avoids null data when selection changes)
   const [bulkMigHostInfo, setBulkMigHostInfo] = useState<any>(null)
   const [extHostMigrations, setExtHostMigrations] = useState<any[]>([])
@@ -1004,9 +1012,10 @@ export default function InventoryDetails({
   // Poll bulk migration jobs
   useEffect(() => {
     if (bulkMigJobs.length === 0) return
-    const hasWork = bulkMigJobs.some(j => j.status === 'queued' || (j.jobId && !['completed', 'failed', 'cancelled'].includes(j.status)))
+    const hasWork = bulkMigJobs.some(j => j.status === 'queued' || j.status === 'starting' || (j.jobId && !['completed', 'failed', 'cancelled'].includes(j.status)))
     if (!hasWork) return
-    const interval = setInterval(async () => {
+    // Body of one tick. Resolves true once nothing is left to poll or to start.
+    const tick = async (): Promise<boolean> => {
       const updates = [...bulkMigJobsRef.current]
       let changed = false
 
@@ -1045,9 +1054,14 @@ export default function InventoryDetails({
         const runningCount = updates.filter(j => j.jobId && !['completed', 'failed', 'cancelled', 'queued'].includes(j.status)).length
         const slotsAvailable = BULK_MIG_CONCURRENCY - runningCount
         if (slotsAvailable > 0) {
-          const queued = updates.filter(j => j.status === 'queued')
+          // A guest that already has a job is never posted again, whatever its status.
+          const queued = updates.filter(j => j.status === 'queued' && !j.jobId)
           for (let i = 0; i < Math.min(slotsAvailable, queued.length); i++) {
             const job = queued[i]
+            // Claimed before the POST is awaited, so a concurrent reader of the
+            // shared job objects never sees this guest as still queued.
+            job.status = 'starting'
+            changed = true
             try {
               const res = await fetch('/api/v1/migrations', {
                 method: 'POST',
@@ -1076,6 +1090,8 @@ export default function InventoryDetails({
                   ...(cfg.v2vRoot && { v2vRoot: cfg.v2vRoot }),
                   // Parallel NFC downloads (#807), captured with the batch like the other options.
                   ...(typeof cfg.nfcConcurrency === 'number' && { nfcConcurrency: cfg.nfcConcurrency }),
+                  // CPU type of the created VM (roadmap#24), captured with the batch.
+                  ...(cfg.cpuType && { cpuType: cfg.cpuType }),
                 }),
               })
               const d = await res.json()
@@ -1108,8 +1124,15 @@ export default function InventoryDetails({
 
       if (changed) setBulkMigJobs([...updates])
       // Stop polling only when no active or queued jobs remain
-      if (updates.every(j => j.status !== 'queued' && (!j.jobId || ['completed', 'failed', 'cancelled'].includes(j.status)))) {
-        clearInterval(interval)
+      return updates.every(j => j.status !== 'queued' && j.status !== 'starting' && (!j.jobId || ['completed', 'failed', 'cancelled'].includes(j.status)))
+    }
+    const interval = setInterval(async () => {
+      if (bulkMigTickInFlightRef.current) return
+      bulkMigTickInFlightRef.current = true
+      try {
+        if (await tick()) clearInterval(interval)
+      } finally {
+        bulkMigTickInFlightRef.current = false
       }
     }, 3000)
     return () => clearInterval(interval)
@@ -4661,6 +4684,8 @@ return vm?.isCluster ?? false
         migDowntimeBudget={migDowntimeBudget}
         setMigDowntimeBudget={setMigDowntimeBudget}
         setMigConvertToQcow2={setMigConvertToQcow2}
+        migCpuType={migCpuType}
+        setMigCpuType={setMigCpuType}
         migDiskPaths={migDiskPaths}
         setMigDiskPaths={setMigDiskPaths}
         migTempStorage={migTempStorage}

@@ -4,6 +4,7 @@
 
 import type { EsxiVmConfig, EsxiDiskInfo } from "@/lib/vmware/soap"
 import { vmwareToolsState } from "@/lib/vmware/soap"
+import { MIGRATION_CPU_TYPE_DEFAULT } from "./cpu-type"
 
 export interface PveVmCreateParams {
   vmid: number
@@ -162,6 +163,7 @@ export function mapEsxiToPveConfig(
   targetStorage: string,
   networkBridge: string = "vmbr0",
   vlanTag?: number,
+  cpuType: string = MIGRATION_CPU_TYPE_DEFAULT,
 ): PveVmCreateParams {
   const isEfi = esxiConfig.firmware === "efi"
   const isWin = isWindowsVm(esxiConfig)
@@ -212,7 +214,7 @@ export function mapEsxiToPveConfig(
     cores: esxiConfig.numCoresPerSocket || esxiConfig.numCPU,
     sockets: esxiConfig.sockets,
     memory: esxiConfig.memoryMB,
-    cpu: "host",
+    cpu: cpuType,
     scsihw,
     bios: isEfi ? "ovmf" : "seabios",
     machine,

@@ -47,3 +47,13 @@ describe("mapXoToPveConfig — controller and boot disk bus (#653)", () => {
     expect(p.efidisk0).toBeDefined()
   })
 })
+
+describe("mapXoToPveConfig — CPU type (roadmap#24)", () => {
+  it("defaults the created VM to the Proxmox default, x86-64-v2-AES, not host", () => {
+    expect(mapXoToPveConfig(makeConfig(), 100, "local-lvm", "vmbr0").cpu).toBe("x86-64-v2-AES")
+  })
+
+  it("applies the CPU type the operator picked", () => {
+    expect(mapXoToPveConfig(makeConfig(), 100, "local-lvm", "vmbr0", undefined, "x86-64-v3").cpu).toBe("x86-64-v3")
+  })
+})

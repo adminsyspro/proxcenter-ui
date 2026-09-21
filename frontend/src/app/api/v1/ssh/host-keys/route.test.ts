@@ -157,6 +157,63 @@ describe('GET /api/v1/ssh/host-keys', () => {
     expect(listPinnedHostKeysMock).not.toHaveBeenCalled()
   })
 
+  it('treats an orchestrator answer with no hosts key as simply empty, not as a failure', async () => {
+    orchestratorFetchMock.mockResolvedValue({})
+    listPinnedHostKeysMock.mockResolvedValue([frontendRow('10.42.0.101:22', 'ssh-ed25519', '2026-09-03T10:00:00Z')])
+
+    const res = await callRoute(GET as Parameters<typeof callRoute>[0])
+    const body = await readJson<any>(res)
+
+    expect(body.orchestratorUnavailable).toBe(false)
+    expect(body.hosts).toEqual([
+      { host: '10.42.0.101', keyTypes: ['ssh-ed25519'], pinnedAt: '2026-09-03T10:00:00.000Z', sources: ['frontend'] },
+    ])
+  })
+
+  // Rows arriving without a host, without a key type or without a usable pin
+  // date are the shapes a store can legitimately hold: skipping the first two
+  // and still listing the host is what keeps one bad row from hiding a pin.
+  it('skips hostless rows, lists a host whose key type is missing and empties an unparseable pin date', async () => {
+    orchestratorFetchMock.mockResolvedValue({
+      hosts: [
+        { key_type: 'ssh-rsa', pinned_at: '2026-09-02T16:54:00Z' },
+        { host: '10.42.0.101', key_type: '', pinned_at: null },
+        { host: '   ', key_type: 'ssh-rsa', pinned_at: '2026-09-02T16:54:00Z' },
+      ],
+    })
+    listPinnedHostKeysMock.mockResolvedValue([
+      { host: '', keyType: 'ssh-rsa', firstSeenAt: new Date('2026-09-03T10:00:00Z'), lastUsedAt: new Date() },
+    ])
+
+    const res = await callRoute(GET as Parameters<typeof callRoute>[0])
+    const body = await readJson<any>(res)
+
+    expect(body.hosts).toEqual([
+      { host: '10.42.0.101', keyTypes: [], pinnedAt: '', sources: ['orchestrator'] },
+    ])
+  })
+
+  it('degrades and logs when the orchestrator fails for any reason other than being unreachable', async () => {
+    orchestratorFetchMock.mockRejectedValue(new Error('Orchestrator 500: boom'))
+    listPinnedHostKeysMock.mockResolvedValue([frontendRow('10.42.0.101:22', 'ssh-ed25519', '2026-09-03T10:00:00Z')])
+
+    const res = await callRoute(GET as Parameters<typeof callRoute>[0])
+    const body = await readJson<any>(res)
+
+    expect(res.status).toBe(200)
+    expect(body.orchestratorUnavailable).toBe(true)
+    expect(body.hosts[0].sources).toEqual(['frontend'])
+  })
+
+  it('falls back to a generic message when the failure carries none', async () => {
+    listPinnedHostKeysMock.mockRejectedValue({})
+
+    const res = await callRoute(GET as Parameters<typeof callRoute>[0])
+
+    expect(res.status).toBe(500)
+    expect(await readJson(res)).toEqual({ error: 'Failed to list SSH host keys' })
+  })
+
   it('returns 500 when the frontend store itself fails', async () => {
     listPinnedHostKeysMock.mockRejectedValue(new Error('db down'))
 

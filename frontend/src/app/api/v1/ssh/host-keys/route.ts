@@ -119,9 +119,9 @@ export async function GET() {
     const hosts: MergedHostKey[] = Array.from(rows.entries())
       .map(([host, entry]) => ({
         host,
-        keyTypes: Array.from(entry.keyTypes).sort(),
+        keyTypes: Array.from(entry.keyTypes).sort((a, b) => a.localeCompare(b)),
         pinnedAt: Number.isFinite(entry.pinnedAt) ? new Date(entry.pinnedAt).toISOString() : "",
-        sources: Array.from(entry.sources).sort(),
+        sources: Array.from(entry.sources).sort((a, b) => a.localeCompare(b)),
       }))
       .sort((a, b) => a.host.localeCompare(b.host))
 

@@ -172,6 +172,31 @@ describe('DELETE /api/v1/ssh/host-keys/[host]', () => {
     expect(forgetHostKeyMock).not.toHaveBeenCalled()
   })
 
+  it('rejects a host that is not a string at all with 400', async () => {
+    const res = await callRoute(DELETE as Parameters<typeof callRoute>[0], { method: 'DELETE', params: { host: 22 as any } })
+
+    expect(res.status).toBe(400)
+    expect(forgetHostKeyMock).not.toHaveBeenCalled()
+  })
+
+  it('answers 500 with the reason when the frontend store itself fails', async () => {
+    forgetHostKeyMock.mockRejectedValue(new Error('db down'))
+
+    const res = await call('10.42.0.101')
+
+    expect(res.status).toBe(500)
+    expect(await readJson(res)).toEqual({ error: 'db down' })
+  })
+
+  it('falls back to a generic message when that failure carries none', async () => {
+    forgetHostKeyMock.mockRejectedValue({})
+
+    const res = await call('10.42.0.101')
+
+    expect(res.status).toBe(500)
+    expect(await readJson(res)).toEqual({ error: 'Failed to forget SSH host key' })
+  })
+
   it('lower-cases the host before clearing either store', async () => {
     const res = await call('PVE-Node1.Lab')
 

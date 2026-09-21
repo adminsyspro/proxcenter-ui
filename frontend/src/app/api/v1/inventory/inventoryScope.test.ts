@@ -291,6 +291,9 @@ function makePooledInventory() {
         type: "pve",
         isCluster: true,
         status: "online" as const,
+        // Declared pools as `/pools` answers them (issue #978). `poolEmpty`
+        // holds no guest, which is the whole case: nothing else names it.
+        pools: [{ poolid: "poolA" }, { poolid: "poolB" }, { poolid: "poolEmpty" }],
         nodes: [
           {
             node: "n1",
@@ -870,5 +873,74 @@ describe("GET /api/v1/inventory/stream cached burst", () => {
 
     expect(clusterIds(events)).toEqual([])
     expect(events.find(e => e.event === "init")!.data.totalPve).toBe(0)
+  })
+})
+
+/**
+ * Issue #978: a pool holding no guest showed up nowhere, because every pool
+ * list was derived from `guest.pool`. The declared list now rides on the
+ * cluster, so both routes must carry it AND mask it like the rest.
+ */
+describe("declared pools travel with the cluster and stay scoped", () => {
+  /** Same driver as the burst suite above, which scopes its own copy. */
+  async function callStream() {
+    const { GET } = await import("./stream/route")
+    const req = new NextRequest("http://test.local/api/v1/inventory/stream")
+    return readSse(await GET(req))
+  }
+
+  beforeEach(() => {
+    getInventoryFromCacheMock.mockReturnValue({ status: "fresh", data: makePooledInventory() })
+  })
+
+  it("GET /inventory: an admin gets the empty pool, which no guest could have named", async () => {
+    getRBACContextMock.mockResolvedValue({ userId: "admin", isAdmin: true, tenantId: "default" })
+
+    const { GET } = await import("./route")
+    const res = await callGet(GET)
+    const body = await readJson<any>(res)
+    const data = body?.data ?? body
+
+    const connA = data.clusters.find((c: any) => c.id === "connA")
+    expect(connA.pools.map((p: any) => p.poolid)).toEqual(["poolA", "poolB", "poolEmpty"])
+  })
+
+  it("GET /inventory: a vDC tenant only gets the pools its vDC owns", async () => {
+    getRBACContextMock.mockResolvedValue({ userId: "u1", isAdmin: true, tenantId: "tenant-a" })
+    getInfraMock.mockResolvedValue(poolAVdcScope())
+
+    const { GET } = await import("./route")
+    const res = await callGet(GET)
+    const body = await readJson<any>(res)
+    const data = body?.data ?? body
+
+    expect(data.clusters[0].pools.map((p: any) => p.poolid)).toEqual(["poolA"])
+  })
+
+  it("stream: the cached burst carries the empty pool too", async () => {
+    getRBACContextMock.mockResolvedValue({ userId: "admin", isAdmin: true, tenantId: "default" })
+
+    const events = await callStream()
+    const connA = events.find(e => e.event === "cluster" && e.data.id === "connA")!.data
+
+    expect(connA.pools.map((p: any) => p.poolid)).toEqual(["poolA", "poolB", "poolEmpty"])
+  })
+
+  it("stream: a guest-derived grant never learns a pool it holds nothing in", async () => {
+    getRBACContextMock.mockResolvedValue({ userId: "u1", isAdmin: false, tenantId: "default" })
+    getRbacInfraScopeMock.mockResolvedValue({
+      fullConnections: new Set<string>(),
+      nodesByConnection: new Map<string, Set<string>>(),
+      guestDerived: true,
+    })
+    // Only vm100 survives, and it sits in poolA.
+    filterVmsByPermissionMock.mockImplementation((_p: any, vms: any[]) =>
+      Promise.resolve(vms.filter(vm => String(vm.vmid) === "100")),
+    )
+
+    const events = await callStream()
+    const connA = events.find(e => e.event === "cluster" && e.data.id === "connA")!.data
+
+    expect(connA.pools.map((p: any) => p.poolid)).toEqual(["poolA"])
   })
 })

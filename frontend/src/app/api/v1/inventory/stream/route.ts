@@ -10,6 +10,7 @@ import { pbsFetch } from "@/lib/proxmox/pbs-client"
 import { isSharedStorage } from "@/lib/proxmox/storage"
 import { getRBACContext, filterVmsByPermission, PERMISSIONS, checkPermission, getRbacInfraScope, applyRbacInfraFilter, filterVisibleConnections, filterCandidateConnections, isConnectionVisible, mayHaveVisibleGuests, pruneEmptyConnections, type RbacInfraScope } from "@/lib/rbac"
 import { resolveManagementIp } from "@/lib/proxmox/resolveManagementIp"
+import { readPools, type PoolFacts } from "@/lib/inventory/proxmoxProjections"
 import {
   getInventoryFromCache,
   setCachedInventory,
@@ -80,6 +81,9 @@ type HaResource = {
   group?: string
 }
 
+/** A pool as Proxmox declares it, empty ones included (issue #978). */
+type PoolData = PoolFacts
+
 type ClusterData = {
   id: string
   name: string
@@ -91,6 +95,7 @@ type ClusterData = {
   longitude?: number | null
   locationLabel?: string | null
   sshEnabled?: boolean
+  pools?: PoolData[]
   nodes: Array<NodeData & { guests: GuestData[] }>
 }
 
@@ -176,16 +181,21 @@ async function fetchOneCluster(conn: {
       }
     }
 
-    const [guestsResult, haResult, cephResult, nodeResourcesResult] = await Promise.allSettled([
+    const [guestsResult, haResult, cephResult, nodeResourcesResult, poolsResult] = await Promise.allSettled([
       pveFetch<GuestData[]>(connConfig, '/cluster/resources?type=vm'),
       pveFetch<HaResource[]>(connConfig, '/cluster/ha/resources'),
       pveFetch<any>(connConfig, '/cluster/ceph/status'),
       pveFetch<any[]>(connConfig, '/cluster/resources?type=node'),
+      // #978: an empty pool is named by no member, so no `type=` projection
+      // above ever mentions it. `/pools` is the only list that does.
+      pveFetch<any[]>(connConfig, '/pools'),
     ])
 
     const guests: GuestData[] = guestsResult.status === 'fulfilled' ? guestsResult.value || [] : []
     const haResources: HaResource[] = haResult.status === 'fulfilled' ? haResult.value || [] : []
     const nodeResources: any[] = nodeResourcesResult.status === 'fulfilled' ? nodeResourcesResult.value || [] : []
+
+    const pools = readPools(poolsResult.status === 'fulfilled' ? poolsResult.value : null)
 
     const nodeHastateMap = new Map<string, string>()
     for (const nr of nodeResources) {
@@ -305,6 +315,7 @@ async function fetchOneCluster(conn: {
       latitude: conn.latitude,
       longitude: conn.longitude,
       locationLabel: conn.locationLabel,
+      pools,
       nodes: nodesArray.sort((a, b) => a.node.localeCompare(b.node)),
     }
   } catch (e: any) {
@@ -319,6 +330,7 @@ async function fetchOneCluster(conn: {
       latitude: conn.latitude,
       longitude: conn.longitude,
       locationLabel: conn.locationLabel,
+      pools: [],
       nodes: [],
     }
   }

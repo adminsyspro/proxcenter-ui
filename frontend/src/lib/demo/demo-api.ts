@@ -2687,6 +2687,10 @@ export const EXTRA_MOCKS: MockDataMap = {
 
     const clusters = pveConns.map((c: any) => ({
       id: c.id, name: c.name, type: 'pve', status: 'online',
+      // Declared pools, as the real route now carries them (#978): without
+      // them the demo would keep deriving the pool list from the guests and
+      // silently hide `infra-shared`, which holds none.
+      pools: (EXTRA_MOCKS as any)[`GET:/api/v1/connections/${c.id}/pools`]?.data || [],
       nodes: nodesData.map((n: any) => ({
         ...n,
         guests: resources.filter((r: any) => r.node === n.node),
@@ -3491,6 +3495,9 @@ function buildInventorySSE(): Response {
       longitude: conn.longitude || null,
       locationLabel: conn.locationLabel || null,
       sshEnabled: conn.sshEnabled || false,
+      // Same list the real stream now sends (#978), so the demo Pools view
+      // shows `infra-shared` even though no demo guest sits in it.
+      pools: dataFor(`/api/v1/connections/${conn.id}/pools`),
       nodes: nodesWithGuests,
     }
   }

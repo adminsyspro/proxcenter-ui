@@ -123,6 +123,50 @@ describe('applyRbacInfraFilter', () => {
   })
 })
 
+// Issue #978: the declared pool list rides on the cluster, so this filter has
+// to answer for it too. A pool holding nothing is exactly the case the old
+// guest-derived list could not express, so every case below carries one.
+describe('applyRbacInfraFilter pool masking', () => {
+  const withPools = {
+    id: 'connB',
+    pools: [{ poolid: 'owned' }, { poolid: 'foreign' }, { poolid: 'empty' }],
+    nodes: [
+      { node: 'n1', guests: [{ vmid: '100', pool: 'owned' }] },
+      { node: 'n2', guests: [{ vmid: '200', pool: 'foreign' }] },
+    ],
+  }
+
+  it('keeps every pool for a full-connection grant, empty ones included', () => {
+    const s = { fullConnections: new Set(['connB']), nodesByConnection: new Map(), guestDerived: false }
+    expect(applyRbacInfraFilter(withPools, s).pools.map(p => p.poolid))
+      .toEqual(['owned', 'foreign', 'empty'])
+  })
+
+  it('keeps every pool for a node-scoped grant: pools are cluster-wide, not per node', () => {
+    const s = { fullConnections: new Set<string>(), nodesByConnection: new Map([['connB', new Set(['n1'])]]), guestDerived: false }
+    const out = applyRbacInfraFilter(withPools, s)
+    expect(out.nodes.map(n => n.node)).toEqual(['n1'])
+    expect(out.pools.map(p => p.poolid)).toEqual(['owned', 'foreign', 'empty'])
+  })
+
+  it('empties the pools of a connection the caller may not see at all', () => {
+    const s = { fullConnections: new Set<string>(), nodesByConnection: new Map([['connOther', new Set(['x'])]]), guestDerived: false }
+    expect(applyRbacInfraFilter(withPools, s).pools).toEqual([])
+  })
+
+  it('a guest-derived scope only learns the pools its surviving guests sit in', () => {
+    const s = { fullConnections: new Set<string>(), nodesByConnection: new Map(), guestDerived: true }
+    const onlyOwned = { ...withPools, nodes: [withPools.nodes[0], { node: 'n2', guests: [] }] }
+    expect(applyRbacInfraFilter(onlyOwned, s).pools.map(p => p.poolid)).toEqual(['owned'])
+  })
+
+  it('leaves a cluster carrying no pool list untouched', () => {
+    const noPools = { id: 'connB', nodes: [{ node: 'n1' }, { node: 'n2' }] }
+    const s = { fullConnections: new Set<string>(), nodesByConnection: new Map([['connB', new Set(['n1'])]]), guestDerived: false }
+    expect(applyRbacInfraFilter(noPools, s)).not.toHaveProperty('pools')
+  })
+})
+
 describe('mayHaveVisibleGuests', () => {
   it('is true for a guest-derived scope on any connection', () => {
     const s = { fullConnections: new Set<string>(), nodesByConnection: new Map(), guestDerived: true }

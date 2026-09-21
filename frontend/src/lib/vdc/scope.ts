@@ -325,6 +325,10 @@ async function buildVdcScope(tenantId: string, vdcContext: string | null = null)
  *
  * VMs without a `pool` (undefined / empty string) are hidden for vDC-scoped
  * tenants because they don't belong to any vDC pool.
+ *
+ * `cluster.pools` (the declared pool list, issue #978) is masked the same way:
+ * a vDC-scoped tenant may only ever see the pools its vDC owns, empty ones
+ * included.
  */
 export function applyVdcFilter(cluster: any, scope: VdcScope | null): any {
   // No scope means no vDC restrictions - return as-is
@@ -335,7 +339,7 @@ export function applyVdcFilter(cluster: any, scope: VdcScope | null): any {
 
   // Tenant has no vDC on this connection - hide everything
   if (!allowedNodes) {
-    return { ...cluster, nodes: [] }
+    return { ...cluster, nodes: [], ...(cluster.pools ? { pools: [] } : {}) }
   }
 
   const allowedPools = scope.poolsByConnection.get(connId) ?? new Set<string>()
@@ -355,7 +359,11 @@ export function applyVdcFilter(cluster: any, scope: VdcScope | null): any {
       return { ...node, guests: filteredGuests }
     })
 
-  return { ...cluster, nodes: filteredNodes }
+  const filteredPools = cluster.pools
+    ? { pools: (cluster.pools as any[]).filter((p: any) => allowedPools.has(p?.poolid)) }
+    : {}
+
+  return { ...cluster, nodes: filteredNodes, ...filteredPools }
 }
 
 // ---------------------------------------------------------------------------

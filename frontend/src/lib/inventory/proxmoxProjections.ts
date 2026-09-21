@@ -79,6 +79,33 @@ export function readNodeStatus(status: unknown): NodeStatusFacts {
   return facts
 }
 
+/** A pool as Proxmox declares it, whatever it holds. */
+export type PoolFacts = {
+  poolid: string
+  comment?: string
+}
+
+/**
+ * Reads `/pools`, the only Proxmox list that names a pool holding nothing.
+ *
+ * Every `/cluster/resources?type=...` projection names a pool only through a
+ * member carrying it, so an empty pool is absent from all of them and used to
+ * exist nowhere in this app (issue #978). Sorted here because
+ * `GET /pools` answers in an order Proxmox does not promise, the same trap the
+ * node storage list carries.
+ */
+export function readPools(rows: unknown): PoolFacts[] {
+  if (!Array.isArray(rows)) return []
+
+  return rows
+    .filter((row: any) => typeof row?.poolid === "string" && row.poolid !== "")
+    .map((row: any) => ({
+      poolid: String(row.poolid),
+      ...(row.comment ? { comment: String(row.comment) } : {}),
+    }))
+    .sort((a, b) => a.poolid.localeCompare(b.poolid))
+}
+
 /**
  * Turns `/cluster/resources?type=storage` rows into the shape
  * `aggregateStorage` consumes.

@@ -3151,6 +3151,10 @@
     "testSshConnection": "SSH 연결 테스트",
     "sshTestSuccess": "SSH 연결 성공!",
     "sshTestFailed": "SSH 테스트 실패",
+    "sshRetrustHost": "다시 신뢰",
+    "sshRetrustHostHelper": "이 노드에 고정된 SSH 호스트 키를 삭제한 뒤 다시 테스트합니다. 노드를 방금 재설치했거나 키를 새로 만든 경우에만 실행하세요.",
+    "sshRetrustFailed": "다시 신뢰 실패: {error}",
+    "sshRetrustOrchestratorUnavailable": "오케스트레이터에 연결할 수 없었습니다. 이 호스트에 대해 오케스트레이터가 고정한 키는 그대로 남아 있습니다.",
     "editPveServer": "PVE 서버 편집",
     "editPbsServer": "PBS 서버 편집",
     "addVmwareServer": "VMware ESXi 호스트 추가",
@@ -3303,6 +3307,34 @@
       "security": "보안 및 액세스 제어",
       "monitoring": "모니터링 및 인텔리전스",
       "disaster_recovery": "재해 복구"
+    },
+    "sshHostKeys": {
+      "heading": "고정된 SSH 호스트 키",
+      "description": "ProxCenter는 호스트에 처음 연결할 때 SSH 호스트 키를 고정하고, 이후 그 키가 바뀌면 모든 연결을 거부합니다. 호스트를 재설치했거나 키를 새로 만든 뒤에는 고정된 키를 삭제하세요.",
+      "loadError": "고정된 SSH 호스트 키를 불러올 수 없습니다.",
+      "empty": "아직 고정된 SSH 호스트 키가 없습니다.",
+      "orchestratorUnavailable": "오케스트레이터에 연결할 수 없습니다. 오케스트레이터가 고정한 키는 이 목록에 없으며 지금은 삭제할 수 없습니다.",
+      "columns": {
+        "host": "호스트",
+        "keyTypes": "키 종류",
+        "pinnedAt": "고정 일시",
+        "sources": "고정 위치",
+        "actions": "작업"
+      },
+      "sources": {
+        "orchestrator": "오케스트레이터",
+        "frontend": "웹 인터페이스"
+      },
+      "forget": "삭제",
+      "forgetTitle": "{host}에 고정된 키를 삭제할까요?",
+      "forgetWarning": "{host}에 대한 다음 연결은 해당 주소가 제시하는 호스트 키를 그대로 신뢰하고 다시 고정합니다.",
+      "forgetWhen": "방금 직접 재설치했거나 키를 새로 만든 호스트에만 실행하세요. 그 밖의 경우, 키가 바뀌었다는 것은 다른 누군가가 그 주소에서 응답하고 있다는 뜻입니다.",
+      "forgetFailed": "고정된 키를 삭제하지 못했습니다: {error}",
+      "forgetOrchestratorUnavailable": "오케스트레이터에 연결할 수 없었습니다. {host}에 대해 고정된 키가 그대로 남아 있습니다. 오케스트레이터가 복구된 뒤 다시 시도하세요.",
+      "forgetNotFound": "{host}에 고정된 키가 이미 없습니다.",
+      "forgetSuccess": "{host}의 고정된 키를 삭제했습니다. 다음 연결에서 제시된 키를 고정합니다.",
+      "cancel": "취소",
+      "confirm": "키 삭제"
     },
     "sshCommands": {
       "tabLabel": "SSH 명령",

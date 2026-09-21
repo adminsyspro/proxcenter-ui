@@ -3,6 +3,8 @@ import { describe, expect, it, vi, beforeEach } from 'vitest'
 const findUniqueMock = vi.fn()
 const createMock = vi.fn()
 const updateMock = vi.fn()
+const findManyMock = vi.fn()
+const deleteManyMock = vi.fn()
 
 vi.mock('@/lib/db/prisma', () => ({
   prisma: {
@@ -10,11 +12,13 @@ vi.mock('@/lib/db/prisma', () => ({
       findUnique: (...args: unknown[]) => findUniqueMock(...args),
       create: (...args: unknown[]) => createMock(...args),
       update: (...args: unknown[]) => updateMock(...args),
+      findMany: (...args: unknown[]) => findManyMock(...args),
+      deleteMany: (...args: unknown[]) => deleteManyMock(...args),
     },
   },
 }))
 
-import { verifyOrPin, makeHostVerifier } from './host-key-store'
+import { verifyOrPin, makeHostVerifier, listPinnedHostKeys, forgetHostKey } from './host-key-store'
 
 // Build a fake ssh2 public-key buffer: <4-byte BE length><algo name><payload>.
 // We never inspect the payload bytes for verification (those are compared
@@ -32,6 +36,8 @@ beforeEach(() => {
   findUniqueMock.mockReset()
   createMock.mockReset()
   updateMock.mockReset()
+  findManyMock.mockReset()
+  deleteManyMock.mockReset()
 })
 
 describe('verifyOrPin', () => {
@@ -217,5 +223,94 @@ describe('makeHostVerifier', () => {
     expect(err).toHaveBeenCalledTimes(1)
     expect(err.mock.calls[0]?.[0]).toContain('db down')
     err.mockRestore()
+  })
+})
+
+describe('listPinnedHostKeys', () => {
+  it('lists the pins in host order without the key material', async () => {
+    const rows = [
+      { host: '10.42.0.101:22', keyType: 'ssh-ed25519', firstSeenAt: new Date(0), lastUsedAt: new Date(0) },
+    ]
+    findManyMock.mockResolvedValueOnce(rows)
+
+    await expect(listPinnedHostKeys()).resolves.toEqual(rows)
+    expect(findManyMock).toHaveBeenCalledWith({
+      select: { host: true, keyType: true, firstSeenAt: true, lastUsedAt: true },
+      orderBy: { host: 'asc' },
+    })
+    // keyData never leaves the store: the UI has no use for it and it is
+    // the one column worth not shipping to a browser.
+    expect(findManyMock.mock.calls[0]?.[0]?.select?.keyData).toBeUndefined()
+  })
+})
+
+describe('forgetHostKey', () => {
+  it('clears every port pinned for the host and reports the row count', async () => {
+    deleteManyMock.mockResolvedValueOnce({ count: 2 })
+
+    await expect(forgetHostKey('10.42.0.101')).resolves.toBe(2)
+    expect(deleteManyMock).toHaveBeenCalledWith({
+      where: { OR: [{ host: '10.42.0.101' }, { host: { startsWith: '10.42.0.101:' } }] },
+    })
+  })
+
+  it('anchors the prefix on the colon so a longer sibling address is left alone', async () => {
+    deleteManyMock.mockResolvedValueOnce({ count: 1 })
+
+    await forgetHostKey('10.42.0.1')
+
+    // Without the trailing colon this would also wipe 10.42.0.10 and
+    // 10.42.0.111, silently un-pinning hosts nobody asked about.
+    const where = deleteManyMock.mock.calls[0]?.[0]?.where
+    expect(where.OR[1].host.startsWith).toBe('10.42.0.1:')
+  })
+
+  it('normalizes case and surrounding blanks like the verifier does', async () => {
+    deleteManyMock.mockResolvedValueOnce({ count: 1 })
+
+    await forgetHostKey('  PVE1.Example  ')
+
+    expect(deleteManyMock.mock.calls[0]?.[0]?.where.OR[0].host).toBe('pve1.example')
+  })
+
+  it('returns 0 on an empty host without issuing a delete', async () => {
+    await expect(forgetHostKey('   ')).resolves.toBe(0)
+    expect(deleteManyMock).not.toHaveBeenCalled()
+  })
+})
+
+describe('makeHostVerifier mismatch reporting', () => {
+  function drive(verifier: (key: Buffer, cb: (ok: boolean) => void) => void, key: Buffer): Promise<boolean> {
+    return new Promise((resolve) => verifier(key, resolve))
+  }
+
+  it('hands the caller a reason naming both algorithms and the way out', async () => {
+    const pinned = fakeKey('ssh-ed25519', 'original')
+    const presented = fakeKey('ecdsa-sha2-nistp256', 'reinstalled')
+    findUniqueMock.mockResolvedValueOnce({ keyType: 'ssh-ed25519', keyData: Uint8Array.from(pinned) })
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const onMismatch = vi.fn()
+
+    const ok = await drive(makeHostVerifier('pve1.example', 22, onMismatch), presented)
+
+    expect(ok).toBe(false)
+    expect(onMismatch).toHaveBeenCalledTimes(1)
+    const message = onMismatch.mock.calls[0]?.[0] as string
+    expect(message).toContain('pve1.example')
+    expect(message).toContain('ssh-ed25519')
+    expect(message).toContain('ecdsa-sha2-nistp256')
+    expect(message).toContain('re-trust')
+    warn.mockRestore()
+  })
+
+  it('never fires the callback when the key matches', async () => {
+    const key = fakeKey('ssh-ed25519', 'pinned')
+    findUniqueMock.mockResolvedValueOnce({ keyType: 'ssh-ed25519', keyData: Uint8Array.from(key) })
+    updateMock.mockResolvedValueOnce({})
+    const onMismatch = vi.fn()
+
+    await drive(makeHostVerifier('pve1.example', 22, onMismatch), key)
+
+    expect(onMismatch).not.toHaveBeenCalled()
   })
 })

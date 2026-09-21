@@ -3138,6 +3138,10 @@
     "testSshConnection": "SSH-Verbindung testen",
     "sshTestSuccess": "SSH connection Erfolgful!",
     "sshTestFailed": "SSH test fehlgeschlagen",
+    "sshRetrustHost": "Neu vertrauen",
+    "sshRetrustHostHelper": "Den für diesen Knoten gespeicherten SSH-Hostschlüssel verwerfen und erneut testen. Nur tun, wenn Sie den Knoten gerade neu installiert oder dessen Schlüssel erneuert haben.",
+    "sshRetrustFailed": "Neu vertrauen fehlgeschlagen: {error}",
+    "sshRetrustOrchestratorUnavailable": "Der Orchestrator war nicht erreichbar: Der von ihm für diesen Host gespeicherte Schlüssel besteht weiterhin.",
     "editPveServer": "bearbeiten PVE Server",
     "editPbsServer": "bearbeiten PBS Server",
     "addVmwareServer": "hinzufügen VMware ESXi Host",
@@ -3290,6 +3294,34 @@
       "security": "Sicherheit & Access Control",
       "monitoring": "Überwachung & Intelligence",
       "disaster_recovery": "Notfallwiederherstellung"
+    },
+    "sshHostKeys": {
+      "heading": "Gespeicherte SSH-Hostschlüssel",
+      "description": "ProxCenter speichert den SSH-Hostschlüssel eines Hosts bei der ersten Verbindung und lehnt jede spätere Verbindung ab, wenn sich dieser Schlüssel ändert. Verwerfen Sie den Eintrag, nachdem Sie den Host neu installiert oder dessen Schlüssel erneuert haben.",
+      "loadError": "Die gespeicherten SSH-Hostschlüssel konnten nicht geladen werden.",
+      "empty": "Noch kein SSH-Hostschlüssel gespeichert.",
+      "orchestratorUnavailable": "Der Orchestrator ist nicht erreichbar: Die von ihm gespeicherten Schlüssel fehlen in dieser Liste und können derzeit nicht verworfen werden.",
+      "columns": {
+        "host": "Host",
+        "keyTypes": "Schlüsseltypen",
+        "pinnedAt": "Gespeichert am",
+        "sources": "Gespeichert in",
+        "actions": "Aktionen"
+      },
+      "sources": {
+        "orchestrator": "Orchestrator",
+        "frontend": "Weboberfläche"
+      },
+      "forget": "Verwerfen",
+      "forgetTitle": "Gespeicherten Schlüssel für {host} verwerfen?",
+      "forgetWarning": "Die nächste Verbindung zu {host} vertraut jedem Hostschlüssel, den diese Adresse vorlegt, und speichert ihn seinerseits.",
+      "forgetWhen": "Nur für einen Host durchführen, den Sie gerade selbst neu installiert oder dessen Schlüssel Sie erneuert haben. Sonst bedeutet ein geänderter Schlüssel, dass jemand anderes unter dieser Adresse antwortet.",
+      "forgetFailed": "Der gespeicherte Schlüssel konnte nicht verworfen werden: {error}",
+      "forgetOrchestratorUnavailable": "Der Orchestrator war nicht erreichbar: Der von ihm für {host} gespeicherte Schlüssel besteht weiterhin. Versuchen Sie es erneut, sobald der Orchestrator wieder läuft.",
+      "forgetNotFound": "Für {host} war kein Schlüssel mehr gespeichert.",
+      "forgetSuccess": "Gespeicherter Schlüssel für {host} verworfen. Die nächste Verbindung speichert den vorgelegten Schlüssel.",
+      "cancel": "Abbrechen",
+      "confirm": "Schlüssel verwerfen"
     },
     "sshCommands": {
       "tabLabel": "SSH-Befehle",

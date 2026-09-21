@@ -44,6 +44,7 @@ import NumericTextField from '@/components/ui/NumericTextField'
 import { useTenant } from '@/contexts/TenantContext'
 import { useCopyToClipboard } from '@/lib/clipboard'
 import { isPartialIPv4Cidr, isValidCidr } from '@/lib/net/cidr'
+import { isHostKeyMismatch } from './hostKeyMismatch'
 
 export type ConnectionFormData = {
   name: string
@@ -192,6 +193,15 @@ export default function ConnectionDialog({
     nodes?: { node: string; ip: string; status: string; error?: string }[]
     error?: string
   } | null>(null)
+
+  // Re-trust: drop the pinned SSH host key of one node, then re-run the test.
+  // `retrustingHost` doubles as the "one at a time" lock -- the row spinner and
+  // the guard in handleRetrustHost read the same value, so a double click (or a
+  // click on a second row while the first is in flight) cannot fire two DELETEs.
+  const [retrustingHost, setRetrustingHost] = useState<string | null>(null)
+  const [retrustFeedback, setRetrustFeedback] = useState<
+    Record<string, { error?: string; orchestratorUnavailable?: boolean }>
+  >({})
 
   // Reset form when dialog opens
   useEffect(() => {
@@ -392,6 +402,51 @@ export default function ConnectionDialog({
       setSshTestResult({ success: false, error: e.message || 'Connection error' })
     } finally {
       setTestingSSH(false)
+    }
+  }
+
+  // Forget the pinned host key of a single node and immediately re-run the SSH
+  // test, so the row the operator clicked turns green on its own instead of
+  // asking them to press "Test SSH connection" again. The route takes the bare
+  // host, which is exactly what the row carries (no port).
+  const handleRetrustHost = async (host: string) => {
+    if (retrustingHost) return
+
+    setRetrustingHost(host)
+    setRetrustFeedback(prev => {
+      const next = { ...prev }
+      delete next[host]
+      return next
+    })
+
+    try {
+      const res = await fetch(`/api/v1/ssh/host-keys/${encodeURIComponent(host)}`, {
+        method: 'DELETE',
+      })
+      const json = await res.json().catch(() => ({}))
+
+      if (!res.ok) {
+        setRetrustFeedback(prev => ({
+          ...prev,
+          [host]: { error: json?.error || `HTTP ${res.status}` },
+        }))
+        return
+      }
+
+      // The pin is gone frontend-side but the orchestrator kept its own: say so,
+      // otherwise the next failure looks like the button did nothing.
+      if (json?.orchestratorUnavailable) {
+        setRetrustFeedback(prev => ({ ...prev, [host]: { orchestratorUnavailable: true } }))
+      }
+
+      await handleTestSSH()
+    } catch (e: any) {
+      setRetrustFeedback(prev => ({
+        ...prev,
+        [host]: { error: e?.message || String(e) },
+      }))
+    } finally {
+      setRetrustingHost(null)
     }
   }
 
@@ -1219,20 +1274,63 @@ export default function ConnectionDialog({
                           misconfigured node fails the whole test; the user needs to see
                           WHICH node failed and why instead of a bare "SSH test failed"
                           (issue #492). */}
-                      {sshTestResult.nodes?.map(node => (
-                        <Box key={node.node} sx={{ display: 'flex', alignItems: 'center', gap: 1, ml: 1 }}>
-                          <i className={node.status === 'ok' ? "ri-check-line" : "ri-close-line"}
-                             style={{ color: node.status === 'ok' ? '#22c55e' : '#ef4444' }} />
-                          <Typography variant="body2">
-                            {node.node} ({node.ip})
-                          </Typography>
-                          {node.error && (
-                            <Typography variant="caption" color="error">
-                              - {node.error}
-                            </Typography>
-                          )}
-                        </Box>
-                      ))}
+                      {sshTestResult.nodes?.map(node => {
+                        // Only a pinned-key mismatch is curable from here. Every
+                        // other failure (auth, timeout, unreachable) survives
+                        // dropping the pin, and offering the button anyway would
+                        // teach the operator to clear pins on any red row.
+                        const canRetrust = node.status !== 'ok' && isHostKeyMismatch(node.error)
+                        const feedback = retrustFeedback[node.ip]
+                        const busy = retrustingHost === node.ip
+
+                        return (
+                          <Box key={node.node} sx={{ ml: 1 }}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                              <i className={node.status === 'ok' ? "ri-check-line" : "ri-close-line"}
+                                 style={{ color: node.status === 'ok' ? '#22c55e' : '#ef4444' }} />
+                              <Typography variant="body2">
+                                {node.node} ({node.ip})
+                              </Typography>
+                              {node.error && (
+                                <Typography variant="caption" color="error">
+                                  - {node.error}
+                                </Typography>
+                              )}
+                              {canRetrust && (
+                                <Tooltip title={t('settings.sshRetrustHostHelper')}>
+                                  <span>
+                                    <Button
+                                      size="small"
+                                      variant="outlined"
+                                      color="warning"
+                                      onClick={() => handleRetrustHost(node.ip)}
+                                      disabled={retrustingHost !== null || testingSSH}
+                                      startIcon={busy
+                                        ? <CircularProgress size={14} />
+                                        : <i className="ri-shield-keyhole-line" />}
+                                      sx={{ py: 0, minHeight: 26 }}
+                                    >
+                                      {t('settings.sshRetrustHost')}
+                                    </Button>
+                                  </span>
+                                </Tooltip>
+                              )}
+                            </Box>
+                            {/* Two stacked MUI captions sit side by side unless
+                                each one is told to be a block. */}
+                            {feedback?.error && (
+                              <Typography variant="caption" color="error" sx={{ display: 'block', ml: 3 }}>
+                                {t('settings.sshRetrustFailed', { error: feedback.error })}
+                              </Typography>
+                            )}
+                            {feedback?.orchestratorUnavailable && (
+                              <Typography variant="caption" color="warning.main" sx={{ display: 'block', ml: 3 }}>
+                                {t('settings.sshRetrustOrchestratorUnavailable')}
+                              </Typography>
+                            )}
+                          </Box>
+                        )
+                      })}
                     </Alert>
                   </Box>
                 )}

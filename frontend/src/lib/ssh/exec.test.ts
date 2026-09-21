@@ -28,6 +28,18 @@ const h = vi.hoisted(() => {
 })
 vi.mock("ssh2", () => ({ Client: h.Client }))
 
+// The verifier itself is exercised in host-key-store.test.ts (and it would pull
+// Prisma in here). What matters on this side is the callback executeSSHDirect
+// hands it: ssh2 turns a rejected host key into a bare handshake error, so
+// without that callback the caller never learns the real reason (#979).
+const hk = vi.hoisted(() => ({ onMismatch: undefined as undefined | ((message: string) => void) }))
+vi.mock("@/lib/ssh/host-key-store", () => ({
+  makeHostVerifier: (_host: string, _port: number, onMismatch?: (message: string) => void) => {
+    hk.onMismatch = onMismatch
+    return () => {}
+  },
+}))
+
 import { buildConnectConfig, isOrchestratorTimeoutError, createInactivityTimer, executeSSHDirect } from "./exec"
 
 const flush = () => new Promise<void>((r) => setTimeout(r, 0))
@@ -145,6 +157,15 @@ describe("executeSSHDirect (ssh2 wiring)", () => {
     const r = await p
     expect(r.success).toBe(false)
     expect(r.error).toMatch(/inactivity/i)
+  })
+
+  it("replaces ssh2's opaque handshake error with the host-key mismatch reason (#979)", async () => {
+    const p = executeSSHDirect({ host: "h", port: 22, user: "root", key: "KEY", command: "x" })
+    await flush()
+    const mismatch = 'SSH host-key mismatch for h: pinned ssh-ed25519, presented ssh-rsa. Refusing to connect.'
+    hk.onMismatch!(mismatch)
+    h.clients.at(-1)!.emit("error", new Error("Handshake failed"))
+    await expect(p).resolves.toEqual({ success: false, error: mismatch })
   })
 
   it("resolves with the error when ssh2 emits a connection error", async () => {

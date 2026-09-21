@@ -3151,6 +3151,10 @@
     "testSshConnection": "Probar conexión SSH",
     "sshTestSuccess": "Conexión SSH correcta",
     "sshTestFailed": "Prueba SSH fallida",
+    "sshRetrustHost": "Volver a confiar",
+    "sshRetrustHostHelper": "Olvidar la clave de host SSH fijada para este nodo y volver a probar. Hágalo solo si acaba de reinstalar el nodo o de regenerar sus claves.",
+    "sshRetrustFailed": "No se ha podido volver a confiar: {error}",
+    "sshRetrustOrchestratorUnavailable": "El orquestador no estaba disponible: la clave que fijó para este host sigue vigente.",
     "editPveServer": "Editar PVE Servidor",
     "editPbsServer": "Editar PBS Servidor",
     "addVmwareServer": "Añadir host VMware ESXi",
@@ -3303,6 +3307,34 @@
       "security": "Seguridad & Access Control",
       "monitoring": "Monitorización e inteligencia",
       "disaster_recovery": "Disaster Recovery"
+    },
+    "sshHostKeys": {
+      "heading": "Claves de host SSH fijadas",
+      "description": "ProxCenter fija la clave de host SSH de una máquina en la primera conexión y rechaza cualquier conexión posterior si esa clave cambia. Olvide la clave fijada después de reinstalar el host o de regenerar sus claves.",
+      "loadError": "No se han podido cargar las claves de host SSH fijadas.",
+      "empty": "Todavía no hay ninguna clave de host SSH fijada.",
+      "orchestratorUnavailable": "El orquestador no está disponible: las claves que fijó no aparecen en esta lista y no se pueden olvidar ahora mismo.",
+      "columns": {
+        "host": "Host",
+        "keyTypes": "Tipos de clave",
+        "pinnedAt": "Fijada el",
+        "sources": "Fijada en",
+        "actions": "Acciones"
+      },
+      "sources": {
+        "orchestrator": "Orquestador",
+        "frontend": "Interfaz web"
+      },
+      "forget": "Olvidar",
+      "forgetTitle": "¿Olvidar la clave fijada para {host}?",
+      "forgetWarning": "La próxima conexión a {host} confiará en la clave de host que presente esa dirección, sea cual sea, y la fijará a su vez.",
+      "forgetWhen": "Hágalo solo con un host que acabe de reinstalar usted mismo o cuyas claves acabe de regenerar. En cualquier otro caso, una clave que cambia significa que otro responde en esa dirección.",
+      "forgetFailed": "No se ha podido olvidar la clave fijada: {error}",
+      "forgetOrchestratorUnavailable": "El orquestador no estaba disponible: la clave que fijó para {host} sigue vigente. Vuelva a intentarlo cuando el orquestador esté operativo.",
+      "forgetNotFound": "Ya no había ninguna clave fijada para {host}.",
+      "forgetSuccess": "Clave fijada olvidada para {host}. La próxima conexión fijará la clave que se presente.",
+      "cancel": "Cancelar",
+      "confirm": "Olvidar la clave"
     },
     "sshCommands": {
       "tabLabel": "Comandos SSH",

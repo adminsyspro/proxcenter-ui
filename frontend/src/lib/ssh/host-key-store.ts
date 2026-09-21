@@ -20,6 +20,14 @@ export type VerifyResult =
   | { status: "pinned-existing"; keyType: string }
   | { status: "mismatch"; expectedKeyType: string; presentedKeyType: string }
 
+/** One pinned entry, as the settings screen and the re-trust route list them. */
+export interface PinnedHostKey {
+  host: string
+  keyType: string
+  firstSeenAt: Date
+  lastUsedAt: Date
+}
+
 function normalizeHost(host: string, port: number): string {
   const h = host.trim().toLowerCase()
   if (!h) return ""
@@ -133,6 +141,37 @@ async function touchLastUsed(host: string): Promise<void> {
   }
 }
 
+/** Lowercased host with no port, matching what the orchestrator stores. */
+function normalizeHostOnly(host: string): string {
+  return host.trim().toLowerCase()
+}
+
+/** Every pinned key, host order. Used by the SSH host keys settings table. */
+export async function listPinnedHostKeys(): Promise<PinnedHostKey[]> {
+  return prisma.sshHostKey.findMany({
+    select: { host: true, keyType: true, firstSeenAt: true, lastUsedAt: true },
+    orderBy: { host: "asc" },
+  })
+}
+
+/**
+ * Drop every pin held for `host`, whatever port it was pinned on, so the
+ * next connection re-pins the key the host presents now. Rows written
+ * before the store was keyed by port carry the bare host, hence the
+ * exact match alongside the "host:" prefix.
+ *
+ * Returns the number of rows removed: the caller answers 404 on 0 rather
+ * than claiming it cleared something.
+ */
+export async function forgetHostKey(host: string): Promise<number> {
+  const h = normalizeHostOnly(host)
+  if (!h) return 0
+  const { count } = await prisma.sshHostKey.deleteMany({
+    where: { OR: [{ host: h }, { host: { startsWith: `${h}:` } }] },
+  })
+  return count
+}
+
 type VerifyCallback = (ok: boolean) => void
 
 /**
@@ -143,15 +182,18 @@ type VerifyCallback = (ok: boolean) => void
  * js/log-injection rule treats anything reachable from network input
  * as tainted until a known sanitiser is applied.
  */
-export function makeHostVerifier(host: string, port: number) {
+export function makeHostVerifier(host: string, port: number, onMismatch?: (message: string) => void) {
   return (key: Buffer, verify: VerifyCallback): void => {
     const safeHost = safeLog(host)
     verifyOrPin(host, port, key)
       .then((result) => {
         if (result.status === "mismatch") {
-          console.warn(
-            `[ssh] host-key mismatch for ${safeHost}: pinned ${safeLog(result.expectedKeyType)}, presented ${safeLog(result.presentedKeyType)}. Refusing to connect. Remove the row in ssh_host_keys to re-pin.`,
-          )
+          const message = `SSH host-key mismatch for ${safeHost}: pinned ${safeLog(result.expectedKeyType)}, presented ${safeLog(result.presentedKeyType)}. Refusing to connect. If the node was reinstalled or its host key rotated, re-trust it from Settings > SSH host keys and retry.`
+          console.warn(`[ssh] ${message}`)
+          // ssh2 turns a rejected hostVerifier into a bare handshake
+          // error, so the reason never reaches the caller. Hand it over
+          // here and let executeSSHDirect surface it (#979).
+          onMismatch?.(message)
           verify(false)
           return
         }

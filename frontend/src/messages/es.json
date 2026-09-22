@@ -7625,6 +7625,8 @@
     "nodename": "Nombre de nodo",
     "votes": "Votos",
     "ipAddress": "Dirección IP",
+    "managementAddress": "IP de gestión",
+    "corosyncLinks": "Enlaces Corosync",
     "clusterJoinInformation": "Información de unión al cluster",
     "copyJoinInfoDescription": "Copia aquí la información de unión y úsala en el nodo que quieres añadir.",
     "fingerprint": "Huella",

@@ -3,9 +3,12 @@ import { NextResponse } from "next/server"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { resolveManagementIp } from "@/lib/proxmox/resolveManagementIp"
+import { corosyncLinksOf } from "@/lib/proxmox/corosyncLinks"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 
 export const runtime = "nodejs"
+
+type CorosyncNodeConfig = { votes: number | null; links: string[]; fingerprint: string }
 
 // GET - Récupérer les informations de join du cluster
 export async function GET(req: Request, ctx: { params: Promise<{ id: string }> | { id: string } }) {
@@ -35,11 +38,12 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
         clusterName = clusterRow.name || ''
       }
 
-      // Récupérer les nodes du cluster
+      // Récupérer les nodes du cluster. `ip` here is the address corosync
+      // resolves the node name to (link 0), not the one the API answers on.
       nodes = status.filter((x) => x?.type === "node").map(n => ({
         name: n.name,
         id: n.nodeid,
-        ip: n.ip, // corosync IP — will be enriched with management IP below
+        corosyncIp: n.ip || null,
         online: n.online === 1,
         local: n.local === 1,
         maintenance: false,
@@ -54,7 +58,30 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
       // Standalone node
     }
 
-    // Enrich nodes with management IPs (vmbr0) and maintenance status
+    // corosync.conf, per node: quorum votes and the link addresses. Only a
+    // cluster has one; a standalone node has no corosync at all.
+    const corosyncConfig = new Map<string, CorosyncNodeConfig>()
+    if (isCluster) {
+      try {
+        const configNodes = await pveFetch<any[]>(conn, "/cluster/config/nodes")
+        for (const entry of configNodes || []) {
+          const name = entry?.name || entry?.node
+          if (!name) continue
+          const votes = Number(entry.quorum_votes)
+          corosyncConfig.set(name, {
+            votes: Number.isFinite(votes) ? votes : null,
+            links: corosyncLinksOf(entry),
+            fingerprint: typeof entry.pve_fp === 'string' ? entry.pve_fp : '',
+          })
+        }
+      } catch {
+        // Non-critical: the table falls back to the corosync IP of /cluster/status
+      }
+    }
+
+    // Enrich nodes with their management IP (roadmap#29: kept apart from the
+    // corosync addresses, a cluster routinely runs them on separate networks)
+    // and maintenance status.
     if (nodes.length > 0) {
       // Fetch hastate for maintenance detection
       let nodeHastateMap = new Map<string, string>()
@@ -70,14 +97,29 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
         const hastate = nodeHastateMap.get(node.name)
         const maintenance = hastate === 'maintenance'
 
-        // Try to get management IP from node network interfaces
-        let managementIp = node.ip
+        // The management IP comes from the node's own interfaces (gateway,
+        // then vmbr0). Left null when it cannot be read: the UI must say so
+        // rather than show the corosync address under a management label.
+        let managementIp: string | null = null
         try {
           const networks = await pveFetch<any[]>(conn, `/nodes/${encodeURIComponent(node.name)}/network`)
-          managementIp = resolveManagementIp(networks) || node.ip
+          managementIp = resolveManagementIp(networks) || null
         } catch {}
 
-        return { ...node, ip: managementIp, maintenance }
+        const cfg = corosyncConfig.get(node.name)
+        const corosyncLinks = cfg?.links.length
+          ? cfg.links
+          : (isCluster && node.corosyncIp ? [node.corosyncIp] : [])
+
+        return {
+          ...node,
+          // Legacy field, the address ProxCenter reaches the node on.
+          ip: managementIp || node.corosyncIp || null,
+          managementIp,
+          corosyncLinks,
+          votes: cfg?.votes ?? null,
+          maintenance,
+        }
       }))
 
       nodes = enriched
@@ -89,66 +131,47 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
       try {
         // L'API /cluster/config/join retourne les informations de join
         const join = await pveFetch<any>(conn, "/cluster/config/join")
-        
-        // Construire l'IP Address depuis le premier node local
+
+        // The join information describes ONE node: the one a new member will
+        // contact (PVE calls it preferred_node, it is the node that answered
+        // this call). Its API address, its fingerprint and its corosync links
+        // must all come from that same nodelist entry.
         const localNode = nodes.find(n => n.local)
-        const ipAddress = localNode?.ip || ''
-        
-        // Le fingerprint peut être à différents endroits selon la version de PVE
-        // Essayer plusieurs chemins possibles
+        const nodelist: any[] = Array.isArray(join?.nodelist) ? join.nodelist : []
+        const target =
+          nodelist.find((n: any) => n?.name && n.name === join?.preferred_node)
+          || nodelist.find((n: any) => n?.name && n.name === localNode?.name)
+          || nodelist[0]
+          || null
+
+        const ipAddress: string = target?.pve_addr || localNode?.managementIp || localNode?.ip || ''
+
         let fingerprint = ''
-        if (join?.fingerprint) {
+        if (typeof join?.fingerprint === 'string' && join.fingerprint) {
           fingerprint = join.fingerprint
-        } else if (join?.totem?.config_version && join?.nodelist?.[0]?.pve_fp) {
-          // PVE 8+ peut avoir le fingerprint dans nodelist
-          fingerprint = join.nodelist[0].pve_fp
+        } else if (target?.pve_fp) {
+          fingerprint = target.pve_fp
+        } else if (target?.name && corosyncConfig.get(target.name)?.fingerprint) {
+          fingerprint = corosyncConfig.get(target.name)!.fingerprint
         }
-        
-        // Si toujours pas de fingerprint, essayer de le récupérer depuis /cluster/config/nodes
-        if (!fingerprint) {
-          try {
-            const configNodes = await pveFetch<any[]>(conn, "/cluster/config/nodes")
-            const localConfigNode = configNodes?.find((n: any) => n.name === localNode?.name)
-            if (localConfigNode?.pve_fp) {
-              fingerprint = localConfigNode.pve_fp
-            }
-          } catch (e) {
-            // Failed to get nodes config, non-critical
-          }
-        }
-        
-        // Construire les peerLinks depuis la nodelist
+
+        // Corosync links of that node, keyed by link number as PVE's own join
+        // dialog encodes them. Never the management address: when the
+        // nodelist carries no link, fall back to the corosync IP of
+        // /cluster/status, and only then to the API address.
+        const linkAddrs = corosyncLinksOf(target)
         const peerLinks: Record<string, string> = {}
-        const ringAddr: string[] = []
-        
-        if (join?.nodelist && Array.isArray(join.nodelist)) {
-          join.nodelist.forEach((node: any, idx: number) => {
-            // ring0_addr pour les anciens clusters
-            if (node.ring0_addr) {
-              peerLinks[String(idx)] = node.ring0_addr
-              ringAddr.push(node.ring0_addr)
-            }
-            // pve_addr0, pve_addr1, etc. pour les nouveaux clusters
-            for (let i = 0; i <= 7; i++) {
-              const linkKey = `pve_addr${i}`
-              if (node[linkKey]) {
-                if (!peerLinks[String(i)]) {
-                  peerLinks[String(i)] = node[linkKey]
-                }
-                if (!ringAddr.includes(node[linkKey])) {
-                  ringAddr.push(node[linkKey])
-                }
-              }
-            }
-          })
-        }
-        
+        linkAddrs.forEach((addr, i) => { peerLinks[String(i)] = addr })
+        const ringAddr = linkAddrs.length > 0
+          ? linkAddrs
+          : [localNode?.corosyncIp || ipAddress].filter(Boolean)
+
         // Construire l'objet join information complet
         const joinData = {
           ipAddress,
           fingerprint,
           peerLinks,
-          ring_addr: ringAddr.length > 0 ? ringAddr : [ipAddress],
+          ring_addr: ringAddr,
           totem: join?.totem || {}
         }
         
@@ -158,6 +181,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
         joinInfo = {
           ipAddress,
           fingerprint,
+          corosyncLinks: linkAddrs,
           encoded: joinInfoEncoded,
           // Données brutes pour debug
           raw: join

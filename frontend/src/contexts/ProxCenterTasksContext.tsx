@@ -4,7 +4,7 @@ import React, { createContext, useCallback, useContext, useEffect, useRef, useSt
 
 // ---- Types ----
 
-export type PCTaskStatus = 'running' | 'done' | 'error'
+export type PCTaskStatus = 'running' | 'done' | 'error' | 'cancelled'
 
 export interface PCTask {
   id: string
@@ -15,6 +15,13 @@ export interface PCTask {
   status: PCTaskStatus
   error?: string
   createdAt: number
+  /**
+   * Endpoint that stops this task server-side, sent a DELETE with the task id
+   * in X-Upload-Id (#974). Stored on the task, not in a callback map, so a row
+   * is still stoppable after a reload: the browser leg is gone by then, the
+   * transfer to Proxmox is not.
+   */
+  cancelUrl?: string
 }
 
 interface ProxCenterTasksContextValue {
@@ -26,6 +33,10 @@ interface ProxCenterTasksContextValue {
   registerOnRestore: (id: string, cb: () => void) => void
   unregisterOnRestore: (id: string) => void
   restoreTask: (id: string) => void
+  /** Stop the browser side of a task (the chunk loop of an upload). */
+  registerOnCancel: (id: string, cb: () => void) => void
+  unregisterOnCancel: (id: string) => void
+  cancelTask: (id: string) => Promise<{ ok: boolean; error?: string }>
 }
 
 const STORAGE_KEY = 'proxcenter-tasks'
@@ -55,6 +66,10 @@ function saveTasks(tasks: PCTask[]) {
 export function ProxCenterTasksProvider({ children }: { children: React.ReactNode }) {
   const [tasks, setTasks] = useState<PCTask[]>([])
   const restoreCallbacks = useRef<Map<string, () => void>>(new Map())
+  const cancelCallbacks = useRef<Map<string, () => void>>(new Map())
+  // Mirror of `tasks` for cancelTask, which must read the list it is called
+  // with rather than the one captured when it was created.
+  const tasksRef = useRef<PCTask[]>([])
   const hydrated = useRef(false)
 
   // Hydrate from sessionStorage on mount
@@ -83,6 +98,7 @@ export function ProxCenterTasksProvider({ children }: { children: React.ReactNod
 
   // Persist to sessionStorage whenever tasks change (after hydration)
   useEffect(() => {
+    tasksRef.current = tasks
     if (hydrated.current) {
       saveTasks(tasks)
     }
@@ -109,6 +125,11 @@ export function ProxCenterTasksProvider({ children }: { children: React.ReactNod
           clearInterval(poll)
           setTasks(prev => prev.map(t =>
             t.id === uploadId ? { ...t, progress: 100, status: 'done' } : t
+          ))
+        } else if (data.status === 'cancelled') {
+          clearInterval(poll)
+          setTasks(prev => prev.map(t =>
+            t.id === uploadId ? { ...t, status: 'cancelled' } : t
           ))
         } else if (data.status === 'error') {
           clearInterval(poll)
@@ -172,8 +193,52 @@ export function ProxCenterTasksProvider({ children }: { children: React.ReactNod
     if (cb) cb()
   }, [])
 
+  const registerOnCancel = useCallback((id: string, cb: () => void) => {
+    cancelCallbacks.current.set(id, cb)
+  }, [])
+
+  const unregisterOnCancel = useCallback((id: string) => {
+    cancelCallbacks.current.delete(id)
+  }, [])
+
+  /**
+   * Stop a task from its row (#974). Two legs, and both matter: the browser
+   * one stops sending (the callback aborts the chunk loop), the server one
+   * drops the half-written connection to Proxmox. After a reload only the
+   * second is left, which is why the URL travels on the task itself.
+   */
+  const cancelTask = useCallback(async (id: string): Promise<{ ok: boolean; error?: string }> => {
+    const stopBrowserLeg = cancelCallbacks.current.get(id)
+    if (stopBrowserLeg) stopBrowserLeg()
+
+    const task = tasksRef.current.find(t => t.id === id)
+    if (!task?.cancelUrl) {
+      // Nothing server-side to stop: the browser leg was the whole task.
+      setTasks(prev => prev.map(t => (t.id === id ? { ...t, status: 'cancelled' } : t)))
+
+      return { ok: true }
+    }
+
+    try {
+      const res = await fetch(task.cancelUrl, { method: 'DELETE', headers: { 'X-Upload-Id': id } })
+      if (!res.ok && res.status !== 404) {
+        const data = await res.json().catch(() => ({}))
+
+        return { ok: false, error: data?.error || `Failed to stop the upload (HTTP ${res.status})` }
+      }
+    } catch (e: any) {
+      return { ok: false, error: e?.message || 'Failed to stop the upload' }
+    }
+
+    // A 404 counts: the transfer had already finished or been dropped, and the
+    // row must not stay "running" because of a race with its own end.
+    setTasks(prev => prev.map(t => (t.id === id ? { ...t, status: 'cancelled' } : t)))
+
+    return { ok: true }
+  }, [])
+
   return (
-    <ProxCenterTasksContext.Provider value={{ tasks, addTask, updateTask, removeTask, clearDone, registerOnRestore, unregisterOnRestore, restoreTask }}>
+    <ProxCenterTasksContext.Provider value={{ tasks, addTask, updateTask, removeTask, clearDone, registerOnRestore, unregisterOnRestore, restoreTask, registerOnCancel, unregisterOnCancel, cancelTask }}>
       {children}
     </ProxCenterTasksContext.Provider>
   )

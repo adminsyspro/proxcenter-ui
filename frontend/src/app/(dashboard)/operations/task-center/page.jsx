@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState, useEffect } from 'react'
+import { useCallback, useMemo, useState, useEffect } from 'react'
 
 import { useTranslations } from 'next-intl'
 
@@ -16,6 +16,7 @@ import {
   LinearProgress,
   MenuItem,
   Select,
+  Snackbar,
   TextField,
   Tooltip,
   Typography
@@ -31,9 +32,13 @@ import { useJobs } from '@/hooks/useJobs'
 import EmptyState from '@/components/EmptyState'
 import { CardsSkeleton, TableSkeleton } from '@/components/skeletons'
 
-import { runJobAction } from '@/lib/tasks/jobActions'
+import { jobActionPermission, jobActions, runJobAction } from '@/lib/tasks/jobActions'
 import JobDetailDialog from '@/components/tasks/JobDetailDialog'
+import StopTaskButton from '@/components/tasks/StopTaskButton'
+import StopTaskConfirmDialog from '@/components/tasks/StopTaskConfirmDialog'
 import { StatusChip, TypeChip } from '@/components/tasks/JobChips'
+import { useStopTask } from '@/hooks/useStopTask'
+import { useRBAC } from '@/contexts/RBACContext'
 
 /* --------------------------------
    Helpers
@@ -158,6 +163,31 @@ export default function JobsPage() {
     if (fresh) setSelectedJob(fresh)
   }
 
+  // Stop from the row itself (#974), instead of opening the dialog to reach
+  // the same action. Shares its confirmation and its wording with the taskbar.
+  const rbac = useRBAC()
+  const stop = useStopTask(async () => { await mutate() })
+  const { ask: askStop, isStopping } = stop
+
+  const hasPermission = rbac?.hasPermission
+
+  // useCallback: the columns memo below depends on it, and a new function on
+  // every render would rebuild every column on every poll.
+  const stopTargetForJob = useCallback(job => {
+    if (!isEnterprise) return null
+    if (!jobActions(job).includes('cancel')) return null
+
+    const permission = jobActionPermission(job)
+    if (permission && !(hasPermission?.(permission) ?? false)) return null
+
+    return {
+      id: job.id,
+      run: () => runJobAction(job, 'cancel'),
+      body: job.type === 'migration' ? t('tasks.shared.cancelConfirmStop') : t('tasks.stop.confirmBodyJob'),
+      warning: job.type === 'migration' ? t('tasks.shared.cancelConfirmLeftovers') : undefined,
+    }
+  }, [isEnterprise, hasPermission, t])
+
   // Handle row double-click
   const handleRowDoubleClick = (params) => {
     setActionError(null)
@@ -264,9 +294,25 @@ export default function JobsPage() {
             {params.row.detail}
           </Typography>
         )
+      },
+      {
+        field: 'stop',
+        headerName: '',
+        width: 56,
+        sortable: false,
+        filterable: false,
+        disableColumnMenu: true,
+        align: 'center',
+        headerAlign: 'center',
+        renderCell: params => {
+          const target = stopTargetForJob(params.row)
+          if (!target) return null
+
+          return <StopTaskButton stopping={isStopping(target.id)} onClick={() => askStop(target)} />
+        }
       }
     ],
-    [timeAgo, t]
+    [timeAgo, t, askStop, isStopping, stopTargetForJob]
   )
 
   return (
@@ -531,6 +577,22 @@ export default function JobsPage() {
           </Box>
         </Box>
       </Card>
+
+      <StopTaskConfirmDialog
+        open={!!stop.target}
+        busy={stop.busy}
+        body={stop.target?.body}
+        warning={stop.target?.warning}
+        onKeep={stop.dismiss}
+        onConfirm={stop.confirm}
+      />
+      <Snackbar
+        open={!!stop.error}
+        autoHideDuration={6000}
+        onClose={stop.clearError}
+        message={stop.error}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      />
 
       {/* Job Detail Dialog */}
       <JobDetailDialog

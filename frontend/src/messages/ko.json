@@ -4091,6 +4091,16 @@
     "failed": "실패"
   },
   "tasks": {
+    "stop": {
+      "action": "중지",
+      "confirmTitle": "이 작업을 중지할까요?",
+      "confirmBody": "작업을 실행 중인 노드에서 중지됩니다. 이미 수행된 부분은 되돌려지지 않습니다.",
+      "confirmBodyUpload": "전송이 지금 중지됩니다. 이미 Proxmox로 보낸 부분은 폐기됩니다. 업로드는 전부 도착한 뒤에만 배치되므로 스토리지에는 아무것도 남지 않습니다.",
+      "confirmBodyJob": "다른 사용자가 시작한 작업이라도 즉시 중지됩니다.",
+      "keep": "계속 실행",
+      "confirm": "작업 중지",
+      "stopping": "중지하는 중..."
+    },
     "title": "작업",
     "showTasks": "작업 표시",
     "hideTasks": "숨기기",

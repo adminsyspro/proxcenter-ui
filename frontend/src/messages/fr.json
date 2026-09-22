@@ -4091,6 +4091,16 @@
     "failed": "Échoué"
   },
   "tasks": {
+    "stop": {
+      "action": "Arrêter",
+      "confirmTitle": "Arrêter cette tâche ?",
+      "confirmBody": "La tâche est arrêtée sur le nœud qui l'exécute. Ce qu'elle a déjà fait n'est pas annulé.",
+      "confirmBodyUpload": "Le transfert s'arrête maintenant. Ce qui est déjà parti vers Proxmox est jeté : un envoi n'est mis en place qu'une fois arrivé en entier, donc rien ne reste sur le stockage.",
+      "confirmBodyJob": "Le job s'arrête immédiatement, même s'il a été lancé par un autre utilisateur.",
+      "keep": "Laisser tourner",
+      "confirm": "Arrêter la tâche",
+      "stopping": "Arrêt en cours..."
+    },
     "title": "Tâches",
     "showTasks": "Afficher les tâches",
     "hideTasks": "Masquer",

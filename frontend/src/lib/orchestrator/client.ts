@@ -579,6 +579,25 @@ return this.get<ClusterMetrics[]>(`/metrics/${connectionId}/history${query ? `?$
     return this.post<{ status: string }>(`/replication/jobs/${id}/resume`)
   }
 
+  /**
+   * Stop the sync a job is running right now (#974). Not the same thing as
+   * pausing it: a pause only clears the schedule and lets the run in flight
+   * finish. Answers 409 when no run is in flight on the instance that takes
+   * the call, which in HA can mean another one owns it.
+   */
+  cancelReplicationJob(id: string) {
+    return this.post<{ status: string }>(`/replication/jobs/${id}/cancel`)
+  }
+
+  /**
+   * Stop a recovery execution: a test failover at any point, a failback still
+   * in its reverse sync, a real failover only before it has fenced its first
+   * guest. Answers 409 with the reason otherwise.
+   */
+  cancelRecoveryExecution(id: string) {
+    return this.post<{ status: string }>(`/replication/executions/${id}/cancel`)
+  }
+
   getReplicationJobLogs(id: string) {
     return this.get<any[]>(`/replication/jobs/${id}/logs`)
   }

@@ -12,6 +12,7 @@ import {
   LinearProgress,
   Paper,
   Skeleton,
+  Snackbar,
   Tooltip,
   Typography,
   alpha,
@@ -32,7 +33,17 @@ import { mergeTaskbarRows } from '@/lib/tasks/orchestratorTaskRows'
 import TaskDetailDialog from './TaskDetailDialog'
 import SharedTaskDetailDialog from '@/components/SharedTaskDetailDialog'
 import JobDetailDialog from '@/components/tasks/JobDetailDialog'
-import { runJobAction } from '@/lib/tasks/jobActions'
+import {
+  PVE_TASK_STOP_PERMISSION,
+  jobActionPermission,
+  jobActions,
+  runJobAction,
+  runPveTaskStop
+} from '@/lib/tasks/jobActions'
+import StopTaskButton from '@/components/tasks/StopTaskButton'
+import StopTaskConfirmDialog from '@/components/tasks/StopTaskConfirmDialog'
+import { useStopTask, type StopTaskTarget } from '@/hooks/useStopTask'
+import { useRBAC } from '@/contexts/RBACContext'
 import {
   TASKBAR_HEADER_HEIGHT,
   TASKBAR_MIN_PANEL_HEIGHT,
@@ -183,8 +194,8 @@ export default function TasksFooter({
   const [activeTab, setActiveTab] = useState<'proxmox' | 'proxcenter'>('proxmox')
 
   // ProxCenter tasks
-  const { tasks: pcTasks, clearDone: clearPCDone, restoreTask } = useProxCenterTasks()
-  const { data: sharedResp } = useSharedTasks()
+  const { tasks: pcTasks, clearDone: clearPCDone, restoreTask, cancelTask } = useProxCenterTasks()
+  const { data: sharedResp, mutate: mutateSharedTasks } = useSharedTasks()
 
   // Task Center jobs (rolling updates, DRS, replication, Site Recovery) belong
   // on this tab too: they are ProxCenter tasks, not Proxmox ones. Enterprise
@@ -241,6 +252,78 @@ export default function TasksFooter({
 
   // SWR hook for task events
   const { data: tasksRaw, mutate: mutateTasks, isLoading: loading } = useTaskEvents(50)
+
+  // Stop straight from the row (#974). Both tabs share one confirmation and
+  // one error snackbar; a successful stop refreshes every list the footer
+  // shows, since a single row can be sourced from any of the three.
+  const rbac = useRBAC()
+  const hasPermission = (permission: string) => rbac?.hasPermission?.(permission) ?? false
+  const stop = useStopTask(async () => {
+    await Promise.all([mutateTasks(), mutateJobs(), mutateSharedTasks()])
+  })
+
+  /**
+   * What stopping a ProxCenter row would really do, or null when nothing can
+   * be stopped: a finished row, an upload (the browser still owns that one),
+   * a replication or a Site Recovery run, or a job the operator may not stop.
+   */
+  const stopTargetForPcTask = (task: MergedPCTask): StopTaskTarget | null => {
+    if (task.status !== 'running') return null
+
+    const job = task.jobId ? jobsById.get(task.jobId) : null
+
+    if (job) {
+      if (!jobActions(job).includes('cancel')) return null
+      const permission = jobActionPermission(job)
+      if (permission && !hasPermission(permission)) return null
+
+      return {
+        id: task.id,
+        run: () => runJobAction(job, 'cancel'),
+        body: job.type === 'migration' ? t('tasks.shared.cancelConfirmStop') : t('tasks.stop.confirmBodyJob'),
+        warning: job.type === 'migration' ? t('tasks.shared.cancelConfirmLeftovers') : undefined,
+      }
+    }
+
+    // An upload this browser is running: stopping it takes the chunk loop down
+    // and drops the server's half-written connection to Proxmox. No permission
+    // check: it is this user's own transfer, started from this tab.
+    if (!task.shared && task.type === 'upload' && task.cancelUrl) {
+      return {
+        id: task.id,
+        run: () => cancelTask(task.id),
+        body: t('tasks.stop.confirmBodyUpload'),
+      }
+    }
+
+    // A shared migration row with no job behind it: the Task Center jobs are
+    // Enterprise, this footer is not, so in Community the shared list is the
+    // only source of that row. Same cancel route all the same.
+    if (task.shared && task.jobId && !hasPermission('vm.migrate')) return null
+    if (task.shared && task.jobId) {
+      const migration = { id: task.jobId, type: 'migration', metadata: { cancellable: true } }
+
+      return {
+        id: task.id,
+        run: () => runJobAction(migration, 'cancel'),
+        body: t('tasks.shared.cancelConfirmStop'),
+        warning: t('tasks.shared.cancelConfirmLeftovers'),
+      }
+    }
+
+    return null
+  }
+
+  /** Same, for a Proxmox task row: one DELETE on the task itself. */
+  const stopTargetForTask = (task: TaskEvent): StopTaskTarget | null => {
+    if (task.status !== 'running') return null
+    if (!hasPermission(PVE_TASK_STOP_PERMISSION)) return null
+
+    return {
+      id: task.upid,
+      run: () => runPveTaskStop(task.connectionId, task.node, task.upid),
+    }
+  }
 
   // Derive tasks from SWR data. Memoised so the DataGrid is not handed brand-new
   // row objects on every render (it keys its internal state on row identity).
@@ -575,6 +658,25 @@ export default function TasksFooter({
           />
         )
       }
+    },
+    {
+      // Stop, on the row itself (#974): the same DELETE the detail dialog has
+      // always sent, without making the operator open it first. Only a running
+      // task shows it, and only for someone the route would not answer 403.
+      field: 'stop',
+      headerName: '',
+      width: 56,
+      sortable: false,
+      filterable: false,
+      disableColumnMenu: true,
+      align: 'center',
+      headerAlign: 'center',
+      renderCell: (params) => {
+        const target = stopTargetForTask(params.row)
+        if (!target) return null
+
+        return <StopTaskButton stopping={stop.isStopping(target.id)} onClick={() => stop.ask(target)} />
+      }
     }
   ]
 
@@ -906,14 +1008,29 @@ export default function TasksFooter({
                       {/* Status */}
                       <Chip
                         size="small"
-                        label={task.status === 'running' ? t('tasks.status.running') : task.rawStatus === 'cancelled' ? t('tasks.status.cancelled') : task.status === 'done' ? 'Done' : 'Error'}
-                        color={task.status === 'running' ? 'primary' : task.status === 'done' ? 'success' : 'error'}
+                        label={
+                          task.status === 'running' ? t('tasks.status.running')
+                            : task.status === 'cancelled' || task.rawStatus === 'cancelled' ? t('tasks.status.cancelled')
+                            : task.status === 'done' ? 'Done'
+                            : 'Error'
+                        }
+                        color={task.status === 'running' ? 'primary' : task.status === 'done' ? 'success' : task.status === 'cancelled' ? 'default' : 'error'}
                         variant={task.status === 'running' ? 'outlined' : 'filled'}
                         icon={task.status === 'running' ? (
                           <i className="ri-loader-4-line" style={{ fontSize: 12, animation: 'spin 1s linear infinite' }} />
                         ) : undefined}
                         sx={{ height: 20, fontSize: '0.7rem', '& .MuiChip-icon': { ml: 0.5, mr: -0.25 }, '& .MuiChip-label': { px: 1 } }}
                       />
+                      {/* Stop (#974). The width is held whatever the row can
+                          do, so the status chips stay aligned in the column. */}
+                      <Box sx={{ width: 30, flexShrink: 0, display: 'flex', justifyContent: 'flex-end' }}>
+                        {(() => {
+                          const target = stopTargetForPcTask(task)
+                          if (!target) return null
+
+                          return <StopTaskButton stopping={stop.isStopping(target.id)} onClick={() => stop.ask(target)} />
+                        })()}
+                      </Box>
                     </Box>
                   ))}
                   {mergedPcTasks.some(t => t.status !== 'running' && !t.shared) && (
@@ -1012,6 +1129,24 @@ return ''
         }
       `}</style>
     </ThemeProvider>
+
+    {/* Stop confirmation and its failures: outside the dark ThemeProvider, like
+        the dialogs below, so they follow the user's theme. */}
+    <StopTaskConfirmDialog
+      open={!!stop.target}
+      busy={stop.busy}
+      body={stop.target?.body}
+      warning={stop.target?.warning}
+      onKeep={stop.dismiss}
+      onConfirm={stop.confirm}
+    />
+    <Snackbar
+      open={!!stop.error}
+      autoHideDuration={6000}
+      onClose={stop.clearError}
+      message={stop.error}
+      anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+    />
 
     {/* Shared Task Detail Dialog - outside dark ThemeProvider so it follows user theme */}
     <SharedTaskDetailDialog jobId={detailJobId} onClose={() => setDetailJobId(null)} />

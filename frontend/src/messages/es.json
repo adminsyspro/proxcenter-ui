@@ -7013,7 +7013,7 @@
     "maxParallelMigrationsHint": "Número máximo de migraciones de VM ejecutadas a la vez durante la evacuación de un nodo. Un valor mayor acorta la evacuación pero aumenta la carga de red y almacenamiento.",
     "migrationTimeoutHint": "Tiempo máximo de espera por cada migración de VM, gestionada por HA o no, antes de considerar el nodo fallido. 600 segundos por defecto; auméntelo para VM grandes o redes de migración lentas.",
     "rebootTimeoutHint": "Tras un reinicio, tiempo máximo de espera hasta que el nodo vuelva a ser accesible por SSH y por la API de Proxmox antes de considerarlo fallido. 300 segundos por defecto.",
-    "minHealthyNodesHint": "Número de nodos que deben permanecer en línea y sanos mientras se actualiza uno. La comprobación previa se niega a empezar si el clúster tiene menos de este valor más un nodo sano. 2 por defecto.",
+    "minHealthyNodesHint": "Número de nodos que deben permanecer en línea y sanos mientras se actualiza uno. 1 por defecto. El mantenimiento del quórum se comprueba aparte, a partir de los votos de corosync y del QDevice.",
     "shutdownLocalVmsRollingHint": "Las VM con discos en almacenamiento local no pueden migrarse. Activado, se apagan limpiamente antes de la actualización; ProxCenter no las vuelve a arrancar, solo las marcadas Iniciar al arrancar vuelven con el nodo. Desactivado, se omiten y un reinicio del nodo, si hace falta, las detendrá de todos modos.",
     "waitCephHealthyHint": "Cuando un nodo vuelve, espera hasta 5 minutos a que Ceph informe HEALTH_OK antes de pasar al siguiente, para no apagar nunca un segundo nodo mientras el clúster aún se recupera. Un tiempo de espera agotado solo registra una advertencia.",
     "setCephNoout": "Establecer la flag Ceph noout durante el mantenimiento",
@@ -7140,7 +7140,15 @@
     "pkgDownloading": "Descargando paquetes {count}",
     "pkgUnpacking": "Desempaquetando paquetes {count}",
     "pkgConfiguring": "Configurando paquetes {count}",
-    "pkgDone": "{count} paquete(s) configurado(s)"
+    "pkgDone": "{count} paquete(s) configurado(s)",
+    "finding": {
+      "quorum_would_be_lost": "Dejar un nodo fuera de línea dejaría {remaining} de {online} votos, y el quórum necesita {required}.",
+      "not_enough_healthy_nodes": "Solo {healthy} nodos están sanos, y hacen falta {required} para mantener {remaining} en línea mientras se actualiza uno.",
+      "cluster_unhealthy": "El clúster no está sano.",
+      "qdevice_offline": "El QDevice está configurado pero no conectado, por lo que ya no vota."
+    },
+    "healthVotes": "Votos, quórum {required}",
+    "healthVotesQDevice": "Votos con QDevice, quórum {required}"
   },
   "replication": {
     "title": "Replicación",

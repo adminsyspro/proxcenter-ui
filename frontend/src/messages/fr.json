@@ -7008,7 +7008,7 @@
     "maxParallelMigrationsHint": "Nombre maximal de migrations de VM menées en parallèle pendant l'évacuation d'un nœud. Une valeur plus élevée raccourcit l'évacuation mais charge davantage le réseau et le stockage.",
     "migrationTimeoutHint": "Durée maximale d'attente de chaque migration de VM, gérée par la HA ou non, avant de considérer le nœud en échec. 600 secondes par défaut ; augmentez-la pour de grosses VM ou un réseau de migration lent.",
     "rebootTimeoutHint": "Après un redémarrage, durée maximale d'attente pour que le nœud soit de nouveau joignable en SSH et par l'API Proxmox avant de le considérer en échec. 300 secondes par défaut.",
-    "minHealthyNodesHint": "Nombre de nœuds qui doivent rester en ligne et sains pendant la mise à jour d'un nœud. Le préflight refuse de démarrer si le cluster compte moins de cette valeur plus un nœud sain. 2 par défaut.",
+    "minHealthyNodesHint": "Nombre de nœuds qui doivent rester en ligne et sains pendant la mise à jour d'un nœud. 1 par défaut. Le maintien du quorum est vérifié à part, à partir des voix corosync et du QDevice.",
     "shutdownLocalVmsRollingHint": "Les VM dont les disques sont sur un stockage local ne peuvent pas être migrées. Activé, elles sont arrêtées proprement avant la mise à jour ; ProxCenter ne les redémarre pas, seules celles marquées Démarrer au boot reviennent avec le nœud. Désactivé, elles sont ignorées et un redémarrage du nœud, s'il est nécessaire, les arrêtera de toute façon.",
     "waitCephHealthyHint": "Une fois un nœud revenu, attend jusqu'à 5 minutes que Ceph annonce HEALTH_OK avant de passer au nœud suivant, pour ne jamais couper un second nœud pendant que le cluster se rétablit. Un dépassement ne produit qu'un avertissement.",
     "setCephNoout": "Définir le flag Ceph noout pendant la maintenance",
@@ -7135,7 +7135,15 @@
     "pkgDownloading": "Téléchargement des paquets {count}",
     "pkgUnpacking": "Décompression des paquets {count}",
     "pkgConfiguring": "Configuration des paquets {count}",
-    "pkgDone": "{count} paquet(s) configuré(s)"
+    "pkgDone": "{count} paquet(s) configuré(s)",
+    "finding": {
+      "quorum_would_be_lost": "Sortir un nœud laisserait {remaining} voix sur {online}, et le quorum en exige {required}.",
+      "not_enough_healthy_nodes": "Seuls {healthy} nœuds sont sains, et il en faut {required} pour en garder {remaining} en ligne pendant la mise à jour d'un nœud.",
+      "cluster_unhealthy": "Le cluster n'est pas sain.",
+      "qdevice_offline": "Le QDevice est configuré mais non connecté : il ne vote plus."
+    },
+    "healthVotes": "Voix, quorum {required}",
+    "healthVotesQDevice": "Voix avec QDevice, quorum {required}"
   },
   "replication": {
     "title": "Réplication",

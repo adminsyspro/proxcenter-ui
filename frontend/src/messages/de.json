@@ -6955,7 +6955,7 @@
     "maxParallelMigrationsHint": "Maximale Anzahl gleichzeitiger VM-Migrationen während der Räumung eines Knotens. Ein höherer Wert verkürzt die Räumung, belastet aber Netzwerk und Speicher stärker.",
     "migrationTimeoutHint": "Maximale Wartezeit pro VM-Migration, HA-verwaltet oder nicht, bevor der Knoten als fehlgeschlagen gilt. Standard 600 Sekunden; für große VMs oder langsame Migrationsnetze erhöhen.",
     "rebootTimeoutHint": "Maximale Wartezeit nach einem Neustart, bis der Knoten wieder per SSH und Proxmox-API erreichbar ist, bevor er als fehlgeschlagen gilt. Standard 300 Sekunden.",
-    "minHealthyNodesHint": "Anzahl der Knoten, die während der Aktualisierung eines Knotens online und gesund bleiben müssen. Der Preflight startet nicht, wenn der Cluster weniger als diesen Wert plus einen gesunden Knoten hat. Standard 2.",
+    "minHealthyNodesHint": "Anzahl der Knoten, die während der Aktualisierung eines Knotens online und gesund bleiben müssen. Standard 1. Ob der Cluster das Quorum behält, wird separat anhand der corosync-Stimmen und des QDevice geprüft.",
     "shutdownLocalVmsRollingHint": "VMs mit Festplatten auf lokalem Speicher können nicht migriert werden. Aktiviert werden sie vor der Aktualisierung sauber heruntergefahren; ProxCenter startet sie nicht erneut, nur die mit Beim Booten starten kommen mit dem Knoten zurück. Deaktiviert werden sie übersprungen, und ein nötiger Neustart des Knotens stoppt sie ohnehin.",
     "waitCephHealthyHint": "Sobald ein Knoten zurück ist, wird bis zu 5 Minuten gewartet, bis Ceph HEALTH_OK meldet, bevor der nächste Knoten folgt, damit nie ein zweiter Knoten ausfällt, während sich der Cluster noch erholt. Eine Zeitüberschreitung erzeugt nur eine Warnung.",
     "setCephNoout": "Ceph-noout-Flag während Wartung setzen",
@@ -6965,8 +6965,8 @@
     "maxParallelMigrations": "maximal parallel Migrations",
     "migrationTimeout": "Migrations-Timeout (Sekunden)",
     "rebootTimeoutSeconds": "Neustart-Timeout (Sekunden)",
-    "minHealthyNodes": "minimal healthy Nodes",
-    "minHealthyNodesHelper": "Mindestanzahl der Nodes, die online bleiben müssen",
+    "minHealthyNodes": "Mindestanzahl gesunder Knoten",
+    "minHealthyNodesHelper": "Mindestanzahl der Knoten, die online bleiben müssen",
     "shutdownLocalVms": "VMs mit lokalem Storage herunterfahren (wenn nicht migrierbar)",
     "waitCephHealthy": "Auf Ceph HEALTH_OK zwischen jedem Node warten",
     "allChecksOk": "Alle Prüfungen bestanden",
@@ -7082,7 +7082,15 @@
     "pkgDownloading": "Pakete werden heruntergeladen: {count}",
     "pkgUnpacking": "Pakete werden entpackt: {count}",
     "pkgConfiguring": "Pakete werden konfiguriert: {count}",
-    "pkgDone": "{count} Paket(e) konfiguriert"
+    "pkgDone": "{count} Paket(e) konfiguriert",
+    "finding": {
+      "quorum_would_be_lost": "Einen Knoten offline zu nehmen ließe {remaining} von {online} Stimmen übrig, das Quorum verlangt {required}.",
+      "not_enough_healthy_nodes": "Nur {healthy} Knoten sind gesund, benötigt werden {required}, damit {remaining} online bleiben, während ein Knoten aktualisiert wird.",
+      "cluster_unhealthy": "Der Cluster ist nicht gesund.",
+      "qdevice_offline": "Das QDevice ist konfiguriert, aber nicht verbunden, und stimmt daher nicht mehr mit ab."
+    },
+    "healthVotes": "Stimmen, Quorum {required}",
+    "healthVotesQDevice": "Stimmen mit QDevice, Quorum {required}"
   },
   "replication": {
     "title": "Replikation",

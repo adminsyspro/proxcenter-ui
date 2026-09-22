@@ -83,6 +83,33 @@ const HintLabel = ({ label, hint }: { label: React.ReactNode; hint: string }) =>
   </Box>
 )
 
+// Codes the wizard has a message for. An unknown code, a missing context or a
+// failing lookup falls back to the orchestrator's English sentence: a
+// half-interpolated message reads worse than a foreign one.
+const TRANSLATED_FINDINGS = new Set(['quorum_would_be_lost', 'not_enough_healthy_nodes', 'cluster_unhealthy', 'qdevice_offline'])
+
+const findingText = (finding: PreflightFinding, t: (key: string, values?: Record<string, any>) => string): string => {
+  if (!finding.code || !TRANSLATED_FINDINGS.has(finding.code)) return finding.message
+  try {
+    return t(`updates.finding.${finding.code}`, finding.context || {})
+  } catch {
+    return finding.message
+  }
+}
+
+// Findings mirror the plain lists one for one. An orchestrator that predates
+// them sends only the lists, hence the fallback.
+const findingsOf = (
+  result: PreflightResult,
+  severity: 'error' | 'warning',
+  t: (key: string, values?: Record<string, any>) => string
+): string[] => {
+  if (result.findings?.length) {
+    return result.findings.filter(f => f.severity === severity).map(f => findingText(f, t))
+  }
+  return (severity === 'error' ? result.errors : result.warnings) || []
+}
+
 const hintAdornment = (hint: string) => (
   <InputAdornment position="end">
     <HintIcon hint={hint} />
@@ -198,10 +225,21 @@ interface NodeEstimate {
   total_minutes: number
 }
 
+// One pre-flight verdict. The orchestrator sends the values in `context` next
+// to its English `message` so the wizard can write the finding in the
+// operator's language; `message` stays the fallback.
+interface PreflightFinding {
+  severity: 'error' | 'warning'
+  code: string
+  message: string
+  context?: Record<string, string | number | boolean>
+}
+
 interface PreflightResult {
   can_proceed: boolean
   warnings: string[]
   errors: string[]
+  findings?: PreflightFinding[]
   repo_issues: Array<{
     node: string
     message: string
@@ -211,6 +249,13 @@ interface PreflightResult {
     quorum_ok: boolean
     total_nodes: number
     online_nodes: number
+    // Votes, not nodes: a QDevice votes without being a node, which is what
+    // makes a two-node cluster updatable.
+    expected_votes?: number
+    online_votes?: number
+    required_votes?: number
+    qdevice?: boolean
+    qdevice_votes?: number
     ceph_healthy?: boolean
     issues: string[]
   }
@@ -325,7 +370,7 @@ function buildDefaultConfig(hasCeph: boolean): RollingUpdateConfig {
     auto_reboot: true,
     reboot_timeout: 300,
     require_manual_approval: false,
-    min_healthy_nodes: 2,
+    min_healthy_nodes: 1,
     abort_on_failure: true,
     set_ceph_noout: hasCeph,
     wait_ceph_healthy: hasCeph,
@@ -1110,7 +1155,7 @@ export default function RollingUpdateWizard({
                         size="small"
                         value={config.min_healthy_nodes}
                         onChange={(min_healthy_nodes) => setConfig(c => ({ ...c, min_healthy_nodes }))}
-                        fallback={2}
+                        fallback={1}
                         min={1}
                         max={10}
                         InputProps={{ inputProps: { min: 1, max: 10 }, endAdornment: hintAdornment(t('updates.minHealthyNodesHint')) }}
@@ -1175,23 +1220,27 @@ export default function RollingUpdateWizard({
             </Alert>
             
             {/* Errors */}
-            {preflightResult.errors && preflightResult.errors.length > 0 && (
-              <Card variant="outlined" sx={{ borderColor: 'error.main' }}>
-                <CardContent>
-                  <Typography variant="subtitle2" color="error" fontWeight={700} gutterBottom>
-                    <ErrorIcon sx={{ fontSize: 18, mr: 1, verticalAlign: 'text-bottom' }} />
-                    {t('updates.errorsCount', { count: preflightResult.errors.length })}
-                  </Typography>
-                  <List dense>
-                    {preflightResult.errors.map((err, i) => (
-                      <ListItem key={i}>
-                        <ListItemText primary={err} />
-                      </ListItem>
-                    ))}
-                  </List>
-                </CardContent>
-              </Card>
-            )}
+            {(() => {
+              const errors = findingsOf(preflightResult, 'error', t)
+
+              return errors.length > 0 && (
+                <Card variant="outlined" sx={{ borderColor: 'error.main' }}>
+                  <CardContent>
+                    <Typography variant="subtitle2" color="error" fontWeight={700} gutterBottom>
+                      <ErrorIcon sx={{ fontSize: 18, mr: 1, verticalAlign: 'text-bottom' }} />
+                      {t('updates.errorsCount', { count: errors.length })}
+                    </Typography>
+                    <List dense>
+                      {errors.map((err, i) => (
+                        <ListItem key={i}>
+                          <ListItemText primary={err} />
+                        </ListItem>
+                      ))}
+                    </List>
+                  </CardContent>
+                </Card>
+              )
+            })()}
             
             {/* Repository Issues */}
             {preflightResult.repo_issues && preflightResult.repo_issues.length > 0 && (
@@ -1223,23 +1272,27 @@ export default function RollingUpdateWizard({
             )}
 
             {/* Warnings */}
-            {preflightResult.warnings && preflightResult.warnings.length > 0 && (
-              <Card variant="outlined" sx={{ borderColor: 'warning.main' }}>
-                <CardContent>
-                  <Typography variant="subtitle2" color="warning.main" fontWeight={700} gutterBottom>
-                    <WarningIcon sx={{ fontSize: 18, mr: 1, verticalAlign: 'text-bottom' }} />
-                    {t('updates.warningsCount', { count: preflightResult.warnings.length })}
-                  </Typography>
-                  <List dense>
-                    {preflightResult.warnings.map((warn, i) => (
-                      <ListItem key={i}>
-                        <ListItemText primary={warn} />
-                      </ListItem>
-                    ))}
-                  </List>
-                </CardContent>
-              </Card>
-            )}
+            {(() => {
+              const warnings = findingsOf(preflightResult, 'warning', t)
+
+              return warnings.length > 0 && (
+                <Card variant="outlined" sx={{ borderColor: 'warning.main' }}>
+                  <CardContent>
+                    <Typography variant="subtitle2" color="warning.main" fontWeight={700} gutterBottom>
+                      <WarningIcon sx={{ fontSize: 18, mr: 1, verticalAlign: 'text-bottom' }} />
+                      {t('updates.warningsCount', { count: warnings.length })}
+                    </Typography>
+                    <List dense>
+                      {warnings.map((warn, i) => (
+                        <ListItem key={i}>
+                          <ListItemText primary={warn} />
+                        </ListItem>
+                      ))}
+                    </List>
+                  </CardContent>
+                </Card>
+              )
+            })()}
             
             {/* Cluster health */}
             {preflightResult.cluster_health && (
@@ -1270,6 +1323,25 @@ export default function RollingUpdateWizard({
                         label: t('updates.healthNodesOnline'),
                       },
                     ]
+                    // Votes are what decides whether a node can be taken out,
+                    // and a QDevice votes without being a node. An
+                    // orchestrator that predates the vote arithmetic sends no
+                    // expected_votes, and the tile stays out.
+                    const expectedVotes = ch.expected_votes || 0
+                    const onlineVotes = ch.online_votes || 0
+                    const requiredVotes = ch.required_votes || 0
+
+                    if (expectedVotes > 0) {
+                      tiles.splice(1, 0, {
+                        key: 'votes',
+                        icon: ch.qdevice ? 'ri-scales-3-line' : 'ri-scales-line',
+                        tone: onlineVotes - 1 >= requiredVotes ? 'success' : 'warning',
+                        value: `${onlineVotes}/${expectedVotes}`,
+                        label: ch.qdevice
+                          ? t('updates.healthVotesQDevice', { required: requiredVotes })
+                          : t('updates.healthVotes', { required: requiredVotes }),
+                      })
+                    }
                     if (ch.ceph_healthy !== undefined) {
                       tiles.push({
                         key: 'ceph',

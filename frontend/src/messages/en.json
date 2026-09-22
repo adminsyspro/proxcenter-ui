@@ -7000,7 +7000,7 @@
     "maxParallelMigrationsHint": "Maximum number of VM migrations run at the same time while a node is being evacuated. A higher value shortens the evacuation but increases network and storage load.",
     "migrationTimeoutHint": "Maximum time to wait for each VM migration, HA-managed or not, before the node is considered failed. Default 600 seconds; raise it for large VMs or slow migration networks.",
     "rebootTimeoutHint": "After a reboot, maximum time to wait for the node to be reachable again over SSH and the Proxmox API before the node is considered failed. Default 300 seconds.",
-    "minHealthyNodesHint": "Number of nodes that must stay online and healthy while one node is being updated. The pre-flight refuses to start if the cluster has fewer than this value plus one healthy node. Default 2.",
+    "minHealthyNodesHint": "Number of nodes that must stay online and healthy while one node is being updated. Default 1. Whether the cluster keeps quorum is checked separately, from the corosync votes and the QDevice.",
     "shutdownLocalVmsRollingHint": "VMs whose disks live on local storage cannot be migrated. When enabled they are shut down cleanly before the update; ProxCenter does not start them again, only those flagged Start at boot come back with the node. When disabled they are skipped and a node reboot, if needed, will stop them anyway.",
     "waitCephHealthyHint": "Once a node is back, waits up to 5 minutes for Ceph to report HEALTH_OK before moving to the next node, so a second node is never taken down while the cluster is still recovering. A timeout only logs a warning.",
     "setCephNoout": "Set Ceph noout flag during maintenance",
@@ -7127,7 +7127,15 @@
     "pkgDownloading": "Downloading packages {count}",
     "pkgUnpacking": "Unpacking packages {count}",
     "pkgConfiguring": "Configuring packages {count}",
-    "pkgDone": "{count} package(s) configured"
+    "pkgDone": "{count} package(s) configured",
+    "finding": {
+      "quorum_would_be_lost": "Taking a node offline would leave {remaining} of {online} votes, and quorum needs {required}.",
+      "not_enough_healthy_nodes": "Only {healthy} nodes are healthy, and {required} are needed to keep {remaining} online while one is updated.",
+      "cluster_unhealthy": "The cluster is not healthy.",
+      "qdevice_offline": "The QDevice is configured but not connected, so it no longer votes."
+    },
+    "healthVotes": "Votes, quorum {required}",
+    "healthVotesQDevice": "Votes with QDevice, quorum {required}"
   },
   "replication": {
     "title": "Replication",

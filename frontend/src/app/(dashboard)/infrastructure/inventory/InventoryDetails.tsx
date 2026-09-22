@@ -3575,6 +3575,7 @@ return vm?.isCluster ?? false
             disksInfo={selection?.type === 'vm' ? data.disksInfo : undefined}
             cpuInfo={selection?.type === 'vm' ? data.cpuInfo : undefined}
             sensors={nodeSensors}
+            nodeVms={selection?.type === 'node' ? data.vmsData : undefined}
           />
           </Box>
           </>)}

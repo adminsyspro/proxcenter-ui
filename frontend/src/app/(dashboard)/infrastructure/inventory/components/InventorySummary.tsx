@@ -38,6 +38,9 @@ import type { NodeSensors } from '@/lib/sensors/hwmon'
 
 import type { Status, Kpi, DetailsPayload, SeriesPoint } from '../types'
 import { formatBps, formatUptime } from '../helpers'
+import { computeNodeProvisioning, describeNodeProvisioning, type ProvisioningLabels } from '../nodeProvisioning'
+import { ProvisioningChip, ProvisioningTooltip } from './ProvisioningInfo'
+import { hostSideBlockSx, hostSideHandleSx } from './hostSideBlock'
 import { SensorTemp } from './SensorTemp'
 import UsageBar from './UsageBar'
 import ConsolePreview from './ConsolePreview'
@@ -232,6 +235,7 @@ function InventorySummary({
   disksInfo,
   cpuInfo,
   sensors,
+  nodeVms,
 }: {
   sensors?: NodeSensors | null
   kindLabel: string
@@ -263,6 +267,8 @@ function InventorySummary({
   vmNotes?: string | null
   disksInfo?: { id: string; storage: string; size: string; format?: string; isCdrom?: boolean; isUnused?: boolean; isEfi?: boolean; isTpm?: boolean }[]
   cpuInfo?: { sockets?: number; cores?: number }
+  /** Guests of the selected node, for the provisioned totals on its gauges (#969). */
+  nodeVms?: DetailsPayload['vmsData']
 }) {
   const t = useTranslations()
   const { branding } = useBranding()
@@ -292,6 +298,28 @@ function InventorySummary({
 
   const consoleWidth = { xs: '100%', md: 360 }
   const { isAdmin } = useRBAC()
+
+  // Provisioned vCPU / RAM for the selected node (#969). The figures ride on
+  // the node's own gauges without adding a line to the card: the fill stays
+  // real usage, the dashed marker is what the running guests hold, a chip by
+  // the label carries the overcommit ratio and the marker's tooltip holds the
+  // breakdown. Nothing renders for a node without guests.
+  //
+  // Admin only, and not for tidiness: /cluster/resources hands a non-admin only
+  // the guests they may see, so their totals would describe their own share of
+  // the node while reading as the node's overcommit. No figure beats a wrong one.
+  const provisioning = React.useMemo(() => {
+    if (!isAdmin) return null
+
+    const totals = computeNodeProvisioning(nodeVms, { logicalCpus: hostInfo?.cpuTotal, memBytes: memCap })
+
+    return totals ? describeNodeProvisioning(totals, { t, formatBytes }) : null
+  }, [isAdmin, nodeVms, hostInfo?.cpuTotal, memCap, t])
+
+  const markerFor = (labels?: ProvisioningLabels) =>
+    labels?.markerPct != null
+      ? { pct: labels.markerPct, label: labels.markerLabel, tooltip: <ProvisioningTooltip labels={labels} /> }
+      : undefined
   // HA management is provider-only — tenant admins see HA state but
   // can't change it (cluster-level concern, not vDC-scoped).
   const { currentTenant, loading: tenantLoading } = useTenant()
@@ -572,7 +600,13 @@ return `${mins}m`
                 used={cpuNowPct}
                 capacity={100}
                 mode="pct"
-                extra={<SensorTemp sensors={sensors} role="cpu" />}
+                extra={
+                  <>
+                    <SensorTemp sensors={sensors} role="cpu" />
+                    {provisioning ? <ProvisioningChip labels={provisioning.cpu} /> : null}
+                  </>
+                }
+                marker={markerFor(provisioning?.cpu)}
               />
               {hostInfo.loadAvg ? (
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5 }}>
@@ -591,7 +625,13 @@ return `${mins}m`
                 used={memUsed}
                 capacity={memCap}
                 mode="bytes"
-                extra={<SensorTemp sensors={sensors} role="memory" />}
+                extra={
+                  <>
+                    <SensorTemp sensors={sensors} role="memory" />
+                    {provisioning ? <ProvisioningChip labels={provisioning.memory} /> : null}
+                  </>
+                }
+                marker={markerFor(provisioning?.memory)}
               />
               {swapCap > 0 ? (
                 <UsageBar themeColor={primaryColor} label="SWAP usage" used={swapUsed} capacity={swapCap} mode="bytes" />
@@ -685,9 +725,7 @@ return `${mins}m`
             {isAdmin && hostInfo.updates && hostInfo.updates.length > 0 && (
               <Box
                 sx={{
-                  flex: hostBlocksCollapsed.updates ? '0 0 auto' : 1,
-                  width: hostBlocksCollapsed.updates ? 44 : 'auto',
-                  minWidth: hostBlocksCollapsed.updates ? 44 : undefined,
+                  ...hostSideBlockSx(hostBlocksCollapsed.updates),
                   border: '1px solid',
                   borderColor: 'warning.main',
                   borderRadius: 2,
@@ -701,13 +739,7 @@ return `${mins}m`
                   <Box
                     onClick={() => setHostBlocksCollapsed(prev => ({ ...prev, updates: false }))}
                     sx={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      height: '100%',
-                      minHeight: 150,
-                      cursor: 'pointer',
+                      ...hostSideHandleSx(),
                       '&:hover': { bgcolor: 'rgba(255, 152, 0, 0.1)' }
                     }}
                   >
@@ -716,9 +748,13 @@ return `${mins}m`
                       size="small"
                       label={hostInfo.updates.length}
                       color="warning"
-                      sx={{ height: 18, fontSize: 11, fontWeight: 500, mt: 1 }}
+                      sx={{ height: 18, fontSize: 11, fontWeight: 500, mt: { xs: 0, xl: 1 } }}
                     />
-                    <i className="ri-arrow-right-s-line" style={{ fontSize: 16, opacity: 0.5, marginTop: 8 }} />
+                    <Box
+                      component="i"
+                      className="ri-arrow-right-s-line"
+                      sx={{ fontSize: 16, opacity: 0.5, mt: { xs: 0, xl: 1 } }}
+                    />
                   </Box>
                 ) : (
                   // Mode étendu
@@ -827,9 +863,7 @@ return `${mins}m`
               return (
               <Box
                 sx={{
-                  flex: hostBlocksCollapsed.subscription ? '0 0 auto' : 1,
-                  width: hostBlocksCollapsed.subscription ? 44 : 'auto',
-                  minWidth: hostBlocksCollapsed.subscription ? 44 : undefined,
+                  ...hostSideBlockSx(hostBlocksCollapsed.subscription),
                   border: '1px solid',
                   borderColor: statusColor,
                   borderRadius: 2,
@@ -843,13 +877,7 @@ return `${mins}m`
                   <Box
                     onClick={() => setHostBlocksCollapsed(prev => ({ ...prev, subscription: false }))}
                     sx={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      height: '100%',
-                      minHeight: 150,
-                      cursor: 'pointer',
+                      ...hostSideHandleSx(),
                       '&:hover': { bgcolor: statusHoverBgColor }
                     }}
                   >
@@ -858,9 +886,13 @@ return `${mins}m`
                       size="small"
                       label={isExpired ? '✗' : isExpiringSoon ? '!' : '✓'}
                       color={chipColor}
-                      sx={{ height: 18, fontSize: 11, fontWeight: 500, mt: 1 }}
+                      sx={{ height: 18, fontSize: 11, fontWeight: 500, mt: { xs: 0, xl: 1 } }}
                     />
-                    <i className="ri-arrow-right-s-line" style={{ fontSize: 16, opacity: 0.5, marginTop: 8 }} />
+                    <Box
+                      component="i"
+                      className="ri-arrow-right-s-line"
+                      sx={{ fontSize: 16, opacity: 0.5, mt: { xs: 0, xl: 1 } }}
+                    />
                   </Box>
                 ) : (
                   // Mode étendu

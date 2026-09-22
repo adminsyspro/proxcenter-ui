@@ -14,6 +14,7 @@ import { usePVEConnections } from '@/hooks/useConnections'
 import { useSWRFetch } from '@/hooks/useSWRFetch'
 import { extractTaskVmid } from '@/lib/tasks/scope'
 
+import { hasDeepLinkSelection } from './deepLink'
 import InventoryTree, { InventorySelection, ViewMode, AllVmItem, HostItem, PoolItem, TagItem, TreePbsServer, TreeClusterStorage } from './InventoryTree'
 import InventoryDetails from './InventoryDetails'
 
@@ -107,16 +108,22 @@ export default function InventoryPage() {
   const [rawVms, setRawVms] = useState<AllVmItem[]>([])
   const [enrichedData, setEnrichedData] = useState<Record<string, { ip?: string | null; snapshots?: number; uptime?: string | null; osInfo?: { type: 'linux' | 'windows' | 'other'; name: string | null; version: string | null; kernel: string | null } | null }>>({})
 
+  // A node/cluster/pbs deep-link owns both the view and the selection, and it
+  // runs at mount. The RBAC effect below settles later on a cold load — a
+  // pasted link, a new tab, a refresh — so without this it would land the user
+  // back on the tree root instead of what the link pointed at.
+  const deepLinked = hasDeepLinkSelection(searchParams)
+
   // Apply RBAC-aware default view mode — re-apply when defaultViewMode changes
   // (RBAC may initially return 'vms' before roles load, then settle to 'tree' for admins)
   useEffect(() => {
-    if (rbacLoading) return
+    if (rbacLoading || deepLinked) return
     setViewMode(defaultViewMode)
 
     if (defaultViewMode === 'tree') {
       setSelection({ type: 'root', id: 'root' })
     }
-  }, [rbacLoading, defaultViewMode])
+  }, [rbacLoading, defaultViewMode, deepLinked])
 
   // Deep-link: auto-select VM from URL search params (?vmid=123&connId=...&node=...&type=qemu)
   // Also handles ?selectType=node&selectId=connId:nodeName and ?selectType=pbs&selectId=pbsId

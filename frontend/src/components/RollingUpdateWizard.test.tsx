@@ -48,7 +48,9 @@ describe('RollingUpdateWizard advanced numeric settings', () => {
     await renderWizard()
     expect(field('Migration timeout (seconds)').value).toBe('600')
     expect(field('Reboot timeout (seconds)').value).toBe('300')
-    expect(field('Minimum healthy nodes').value).toBe('2')
+    // One, not two: quorum decides whether the cluster survives the node
+    // going down, this field is only the operator's own floor on top.
+    expect(field('Minimum healthy nodes').value).toBe('1')
   })
 
   it('lets the migration timeout be cleared and retyped', async () => {
@@ -61,7 +63,7 @@ describe('RollingUpdateWizard advanced numeric settings', () => {
     expect(input.value).toBe('900')
     // The sibling settings in the same config object are untouched.
     expect(field('Reboot timeout (seconds)').value).toBe('300')
-    expect(field('Minimum healthy nodes').value).toBe('2')
+    expect(field('Minimum healthy nodes').value).toBe('1')
   })
 
   it('commits the migration timeout fallback of 600 when left empty', async () => {
@@ -104,12 +106,12 @@ describe('RollingUpdateWizard advanced numeric settings', () => {
     expect(input.value).toBe('10')
   })
 
-  it('commits the minimum healthy nodes fallback of 2 when left empty', async () => {
+  it('commits the minimum healthy nodes fallback of 1 when left empty', async () => {
     await renderWizard()
     const input = field('Minimum healthy nodes')
 
     await userEvent.clear(input)
     await userEvent.tab()
-    expect(input.value).toBe('2')
+    expect(input.value).toBe('1')
   })
 })

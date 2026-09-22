@@ -7004,7 +7004,7 @@
     "maxParallelMigrationsHint": "疏散节点时同时运行的虚拟机迁移最大数量。数值越大疏散越快，但网络和存储负载也越高。",
     "migrationTimeoutHint": "等待每个虚拟机迁移（无论是否由 HA 管理）的最长时间，超时则视为该节点失败。默认 600 秒；虚拟机较大或迁移网络较慢时请调高。",
     "rebootTimeoutHint": "重启后等待节点重新可通过 SSH 和 Proxmox API 访问的最长时间，超时则视为该节点失败。默认 300 秒。",
-    "minHealthyNodesHint": "更新一个节点期间必须保持在线且健康的节点数量。如果集群的健康节点少于该值加一，预检将拒绝开始。默认 2。",
+    "minHealthyNodesHint": "更新一个节点期间必须保持在线且健康的节点数量。默认 1。集群是否保持仲裁会根据 corosync 票数和 QDevice 单独检查。",
     "shutdownLocalVmsRollingHint": "磁盘位于本地存储的虚拟机无法迁移。开启后，它们会在更新前被正常关闭；ProxCenter 不会重新启动它们，只有标记为开机自启的虚拟机会随节点恢复。关闭后，它们会被跳过，如需重启节点，它们无论如何都会被停止。",
     "waitCephHealthyHint": "节点恢复后，在转到下一个节点之前最多等待 5 分钟，直到 Ceph 报告 HEALTH_OK，以免在集群仍在恢复时关闭第二个节点。超时仅记录一条警告。",
     "setCephNoout": "维护期间设置 Ceph noout 标志",
@@ -7131,7 +7131,15 @@
     "pkgDownloading": "正在下载软件包 {count}",
     "pkgUnpacking": "正在解包软件包 {count}",
     "pkgConfiguring": "正在配置软件包 {count}",
-    "pkgDone": "已配置 {count} 个软件包"
+    "pkgDone": "已配置 {count} 个软件包",
+    "finding": {
+      "quorum_would_be_lost": "让一个节点下线后只剩 {online} 票中的 {remaining} 票，而仲裁需要 {required} 票。",
+      "not_enough_healthy_nodes": "只有 {healthy} 个健康节点，更新一个节点期间要保持 {remaining} 个在线则需要 {required} 个。",
+      "cluster_unhealthy": "集群不健康。",
+      "qdevice_offline": "QDevice 已配置但未连接，因此不再参与投票。"
+    },
+    "healthVotes": "票数，仲裁 {required}",
+    "healthVotesQDevice": "含 QDevice 的票数，仲裁 {required}"
   },
   "replication": {
     "title": "复制",

@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 import { resolveLdapRole } from './ldap'
 import type { LdapConfig } from './ldap'
+import type { GroupRoleEntry } from './groupMapping'
 
 // vi.hoisted : le module est importé statiquement en tête de fichier, donc la
 // fabrique de mock s'exécute avant une simple const.
@@ -13,7 +14,14 @@ vi.mock('@/lib/db/prisma', () => ({
 
 vi.mock('@/lib/crypto/secret', () => ({ decryptSecret: (v: string) => v.replace(/^enc:/, '') }))
 
-function makeConfig(mapping: Record<string, string>): LdapConfig {
+// The mapping is an ordered list; an object literal is still accepted here for
+// the tests that do not care about order (JS keeps its insertion order, so the
+// entries come out in the order they were written).
+function makeConfig(mapping: Record<string, string> | GroupRoleEntry[]): LdapConfig {
+  const entries: GroupRoleEntry[] = Array.isArray(mapping)
+    ? mapping
+    : Object.entries(mapping).map(([group, role]) => ({ group, role }))
+
   return {
     enabled: true,
     url: 'ldap://example.com',
@@ -26,7 +34,7 @@ function makeConfig(mapping: Record<string, string>): LdapConfig {
     tlsInsecure: false,
     caCert: null,
     groupAttribute: 'memberOf',
-    groupRoleMapping: mapping,
+    groupRoleMapping: entries,
     defaultRole: 'role_viewer',
     requireGroup: false,
     allowedGroups: [],
@@ -74,6 +82,35 @@ describe('resolveLdapRole', () => {
     const cfg = makeConfig({ admin: 'role_admin' })
     expect(resolveLdapRole(['unknown'], cfg)).toBeNull()
   })
+
+  // Issue #992: for a user in several mapped groups the winner used to be
+  // whichever group the directory listed first, which no admin can influence.
+  // The mapping rows decide now, so the order shown in the form is the order
+  // that applies.
+  it('reads the mapping from the top down, whatever order the directory returns', () => {
+    const cfg = makeConfig([
+      { group: 'admins', role: 'role_admin' },
+      { group: 'devs', role: 'role_operator' },
+    ])
+    expect(resolveLdapRole(['devs', 'admins'], cfg)).toBe('role_admin')
+    expect(resolveLdapRole(['admins', 'devs'], cfg)).toBe('role_admin')
+  })
+
+  it('follows the rows when they are reordered', () => {
+    const cfg = makeConfig([
+      { group: 'devs', role: 'role_operator' },
+      { group: 'admins', role: 'role_admin' },
+    ])
+    expect(resolveLdapRole(['devs', 'admins'], cfg)).toBe('role_operator')
+  })
+
+  it('matches a row written as a CN against a member listed by its full DN', () => {
+    const cfg = makeConfig([
+      { group: 'CN=nobody,OU=Groups,DC=example,DC=com', role: 'role_viewer' },
+      { group: 'admins', role: 'role_admin' },
+    ])
+    expect(resolveLdapRole(['CN=admins,OU=Groups,DC=example,DC=com'], cfg)).toBe('role_admin')
+  })
 })
 
 /**
@@ -93,7 +130,7 @@ const ROW = {
   tlsInsecure: false,
   caCert: '-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----',
   groupAttribute: 'memberOf',
-  groupRoleMapping: {},
+  groupRoleMapping: [],
   defaultRole: 'role_viewer',
   requireGroup: false,
   allowedGroups: [],

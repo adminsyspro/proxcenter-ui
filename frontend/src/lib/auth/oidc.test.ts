@@ -22,6 +22,7 @@ function makeConfig(mapping: Record<string, string>, defaultRole = 'role_default
     defaultRole,
     groupRoleMapping: mapping,
     groupGrants: normalizeGroupGrantMapping(mapping),
+    groupMappingStrategy: 'first_match',
     showLocalLogin: true,
     forceSsoRedirect: false,
   }
@@ -60,9 +61,12 @@ describe('resolveOidcRole', () => {
     expect(resolveOidcRole(['unknown', 'other'], cfg)).toBe('role_default')
   })
 
-  it('first match wins (mapping order, not lookup order)', () => {
+  // Issue #992: the mapping decides, not the claim. The form says "first match
+  // wins" about rows the admin can see and reorder; before the fix the winner
+  // was whichever group the IdP happened to list first.
+  it('first match wins on the mapping order, not the claim order', () => {
     const cfg = makeConfig({ admin: 'role_admin', ops: 'role_ops' })
-    // 'ops' comes first in the groups list, so its role wins.
-    expect(resolveOidcRole(['ops', 'admin'], cfg)).toBe('role_ops')
+    expect(resolveOidcRole(['ops', 'admin'], cfg)).toBe('role_admin')
+    expect(resolveOidcRole(['admin', 'ops'], cfg)).toBe('role_admin')
   })
 })

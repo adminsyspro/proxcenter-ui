@@ -97,7 +97,9 @@
     "done": "Done",
     "tags": "Tags",
     "created": "Created",
-    "errorWithMessage": "Error: {error}"
+    "errorWithMessage": "Error: {error}",
+    "moveUp": "Move up",
+    "moveDown": "Move down"
   },
   "whatsNew": {
     "title": "What's New"
@@ -5786,7 +5788,8 @@
     "accessRestrictionDesc": "When enabled, only users who belong to at least one allowed group can log in. Users not in any allowed group will be denied access.",
     "requireGroup": "Require group membership to log in",
     "allowedGroup": "Allowed group",
-    "addAllowedGroup": "Add allowed group"
+    "addAllowedGroup": "Add allowed group",
+    "groupMappingOrderDesc": "The rows are read from top to bottom: the first group the user belongs to gives their role."
   },
   "oidc": {
     "description": "Configure OIDC/SSO authentication to allow users to sign in with their corporate identity provider (Keycloak, Azure AD, Okta, Google, Auth0, etc.).",
@@ -5838,8 +5841,8 @@
     "defaultRole": "Default role",
     "defaultRoleHelper": "Role assigned to auto-provisioned users when no group mapping matches",
     "groupMapping": "Group-to-role mapping",
-    "groupMappingDesc": "Map IdP group names to ProxCenter roles. First match wins.",
-    "groupMappingScopedDesc": "Map IdP group names to a ProxCenter role, in a tenant and optionally inside a single vDC. A group can appear on several rows to grant access in several tenants. First match wins per tenant and vDC.",
+    "groupMappingDesc": "Map IdP group names to ProxCenter roles. The rows are read from top to bottom.",
+    "groupMappingScopedDesc": "Map IdP group names to a ProxCenter role, in a tenant and optionally inside a single vDC. A group can appear on several rows to grant access in several tenants. The rows are read from top to bottom.",
     "tenant": "Tenant",
     "vdc": "vDC",
     "vdcWholeTenant": "Whole tenant",
@@ -5852,7 +5855,12 @@
     "save": "Save",
     "testing": "Testing...",
     "testDiscovery": "Test Discovery",
-    "reset": "Reset"
+    "reset": "Reset",
+    "mappingStrategy": "Users in several groups",
+    "mappingStrategyFirstMatch": "Keep the first matching role",
+    "mappingStrategyCumulative": "Combine every matching role",
+    "mappingStrategyFirstMatchHelper": "The topmost row the user matches wins, one role per tenant and vDC.",
+    "mappingStrategyCumulativeHelper": "The user receives every role they match, and their permissions are the union of those roles."
   },
   "ceph": {
     "clusterHealth": "Cluster Health",

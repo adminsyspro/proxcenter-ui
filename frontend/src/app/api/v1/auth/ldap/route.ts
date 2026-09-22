@@ -1,7 +1,7 @@
 // src/app/api/v1/auth/ldap/route.ts
 import { NextResponse } from "next/server"
 
-import { normalizeGroupRoleMapping } from "@/lib/auth/groupMapping"
+import { normalizeGroupRoleEntries } from "@/lib/auth/groupMapping"
 import { prisma } from "@/lib/db/prisma"
 import { encryptSecret } from "@/lib/crypto/secret"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
@@ -30,8 +30,8 @@ export async function GET() {
           ca_cert: "",
           group_attribute: "memberOf",
           // Frontend expects a string here (it does JSON.parse with a string|object guard).
-          // Returning the canonical empty-object string keeps the response shape stable.
-          group_role_mapping: "{}",
+          // Returning the canonical empty-list string keeps the response shape stable.
+          group_role_mapping: "[]",
           default_role: "role_viewer",
           require_group: false,
           allowed_groups: [],
@@ -39,15 +39,12 @@ export async function GET() {
       })
     }
 
-    // group_role_mapping is JSONB on Postgres → an object at the JS level.
-    // Frontend handles both, but stringify here so the wire shape stays
-    // identical to the legacy SQLite response.
-    const groupRoleMappingStr =
-      config.groupRoleMapping == null
-        ? "{}"
-        : typeof config.groupRoleMapping === "string"
-          ? (config.groupRoleMapping as string)
-          : JSON.stringify(config.groupRoleMapping)
+    // Always answer the ordered entry list, whatever the row holds: a config
+    // written before v1.5 is still a flat { group: role } object and must reach
+    // the form as entries so its order stops moving on every save (issue #992).
+    const groupRoleMappingStr = JSON.stringify(
+      normalizeGroupRoleEntries(config.groupRoleMapping),
+    )
 
     const allowedGroupsArr: string[] = Array.isArray(config.allowedGroups)
       ? (config.allowedGroups as string[])
@@ -125,7 +122,7 @@ export async function PUT(req: Request) {
       )
     }
 
-    const mappingObj = normalizeGroupRoleMapping(group_role_mapping)
+    const mappingEntries = normalizeGroupRoleEntries(group_role_mapping)
 
     const allowedGroupsArr: string[] = Array.isArray(allowed_groups)
       ? allowed_groups.map((g: unknown) => String(g).trim()).filter(Boolean)
@@ -143,7 +140,7 @@ export async function PUT(req: Request) {
       tlsInsecure: !!tls_insecure,
       caCert: caCert || null,
       groupAttribute: group_attribute || "memberOf",
-      groupRoleMapping: mappingObj,
+      groupRoleMapping: mappingEntries,
       defaultRole: default_role || "role_viewer",
       requireGroup: !!require_group,
       allowedGroups: allowedGroupsArr,

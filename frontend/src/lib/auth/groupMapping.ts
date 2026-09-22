@@ -111,6 +111,89 @@ export function normalizeGroupRoleMapping(input: unknown): Record<string, string
 }
 
 // ---------------------------------------------------------------------------
+// Ordered mapping (both providers)
+// ---------------------------------------------------------------------------
+//
+// The mapping is a LIST, never an object. A `{ group: role }` object stored in
+// a jsonb column comes back with its keys re-sorted (by length, then bytewise),
+// so the row order an admin types in the SSO form could not survive a single
+// save (issue #992). That order is what decides which role a user in several
+// mapped groups ends up with, so it has to be durable.
+
+/** How several matching rows combine for one user. */
+export type MappingStrategy = "first_match" | "cumulative"
+
+export const MAPPING_STRATEGIES: readonly MappingStrategy[] = ["first_match", "cumulative"]
+
+/** Anything unknown (including a null column on an old row) means first match. */
+export function normalizeMappingStrategy(input: unknown): MappingStrategy {
+  const value = typeof input === "string" ? input.trim() : ""
+  return (MAPPING_STRATEGIES as readonly string[]).includes(value)
+    ? (value as MappingStrategy)
+    : "first_match"
+}
+
+/** One row of the LDAP mapping form. */
+export type GroupRoleEntry = { group: string; role: string }
+
+/**
+ * Parse an LDAP group->role payload into an ordered entry list. Accepts the
+ * list form, the legacy flat object, or a JSON string of either (the config
+ * form posts a string). Order is preserved for the list form; a legacy object
+ * is read in whatever order jsonb hands its keys back, which is the best that
+ * can be done for a mapping whose order was never stored.
+ */
+export function normalizeGroupRoleEntries(input: unknown): GroupRoleEntry[] {
+  let raw: unknown = input
+  if (typeof input === "string") {
+    try {
+      raw = JSON.parse(input || "[]")
+    } catch {
+      return []
+    }
+  }
+
+  const out: GroupRoleEntry[] = []
+  const push = (rawGroup: unknown, rawRole: unknown) => {
+    const group = String(rawGroup ?? "").trim()
+    const role = String(rawRole ?? "").trim()
+    // A half-filled row must not silently become a grant.
+    if (!group || PROTOTYPE_POLLUTION_KEYS.has(group) || !role) return
+    out.push({ group, role })
+  }
+
+  if (Array.isArray(raw)) {
+    for (const item of raw) {
+      if (!item || typeof item !== "object" || Array.isArray(item)) continue
+      const entry = item as Record<string, unknown>
+      push(entry.group, entry.role)
+    }
+    return out
+  }
+
+  for (const [group, role] of Object.entries(normalizeGroupRoleMapping(raw))) {
+    push(group, role)
+  }
+  return out
+}
+
+/**
+ * Project an entry list back onto the flat `{ group: role }` shape. The topmost
+ * entry of a repeated group wins, mirroring what the login path resolves.
+ */
+export function projectEntriesToRoleMapping(
+  entries: readonly GroupRoleEntry[],
+): Record<string, string> {
+  const out: Record<string, string> = Object.create(null)
+  for (const entry of entries) {
+    if (PROTOTYPE_POLLUTION_KEYS.has(entry.group)) continue
+    if (out[entry.group]) continue
+    out[entry.group] = entry.role
+  }
+  return out
+}
+
+// ---------------------------------------------------------------------------
 // Tenant / vDC aware mapping (OIDC only)
 // ---------------------------------------------------------------------------
 //

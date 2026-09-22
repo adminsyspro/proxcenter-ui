@@ -4,6 +4,9 @@ import { useEffect, useState } from 'react'
 
 import { useTranslations } from 'next-intl'
 
+import MappingOrderButtons from './MappingOrderButtons'
+import { moveMappingRow } from '@/lib/settings/mappingOrder'
+
 import {
   Alert,
   Box,
@@ -82,13 +85,17 @@ export default function LdapConfigTab() {
       const data = await res.json()
 
       if (data.data) {
-        // Parse group_role_mapping JSON into array
+        // The route answers the ordered entry list, but a flat { group: role }
+        // object is still accepted so a stale cached payload cannot wipe the
+        // mapping on the next save.
         let mappings = []
         try {
-          const mappingObj = typeof data.data.group_role_mapping === 'string'
-            ? JSON.parse(data.data.group_role_mapping || '{}')
-            : (data.data.group_role_mapping || {})
-          mappings = Object.entries(mappingObj).map(([group, role]) => ({ group, role }))
+          const parsed = typeof data.data.group_role_mapping === 'string'
+            ? JSON.parse(data.data.group_role_mapping || '[]')
+            : (data.data.group_role_mapping || [])
+          mappings = Array.isArray(parsed)
+            ? parsed.map(m => ({ group: m.group || '', role: m.role || '' }))
+            : Object.entries(parsed).map(([group, role]) => ({ group, role }))
         } catch {}
         setGroupMappings(mappings)
 
@@ -123,13 +130,14 @@ export default function LdapConfigTab() {
     setTestResult(null)
 
     try {
-      // Build group_role_mapping JSON from array. Trim group names so a
+      // Build the ordered group_role_mapping list. Trim group names so a
       // copy-paste from AD with a stray leading space doesn't silently
-      // break the mapping at login time.
-      const mappingObj = {}
+      // break the mapping at login time. The order is meaningful: the login
+      // path reads the rows from the top down (issue #992).
+      const mappingEntries = []
       for (const m of groupMappings) {
         const key = (m.group || '').trim()
-        if (key && m.role) mappingObj[key] = m.role
+        if (key && m.role) mappingEntries.push({ group: key, role: m.role })
       }
 
       const res = await fetch('/api/v1/auth/ldap', {
@@ -137,7 +145,7 @@ export default function LdapConfigTab() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...config,
-          group_role_mapping: JSON.stringify(mappingObj),
+          group_role_mapping: JSON.stringify(mappingEntries),
         }),
       })
 
@@ -430,9 +438,20 @@ export default function LdapConfigTab() {
           <Typography variant='body2' fontWeight={600} sx={{ mb: 1.5 }}>
             {t('ldap.groupMapping')}
           </Typography>
+          <Typography variant='body2' sx={{ opacity: 0.6, mb: 2 }}>
+            {t('ldap.groupMappingOrderDesc')}
+          </Typography>
 
           {groupMappings.map((mapping, index) => (
             <Box key={index} sx={{ display: 'flex', gap: 1.5, mb: 1.5, alignItems: 'center' }}>
+              <MappingOrderButtons
+                index={index}
+                count={groupMappings.length}
+                disabled={!config.enabled}
+                onMove={(i, delta) => setGroupMappings(rows => moveMappingRow(rows, i, delta))}
+                upLabel={t('common.moveUp')}
+                downLabel={t('common.moveDown')}
+              />
               <TextField
                 size='small'
                 label={t('ldap.groupName')}

@@ -3,7 +3,10 @@ import { describe, it, expect } from 'vitest'
 import {
   extractGroupsFromClaim,
   isLdapGroupAllowed,
+  normalizeGroupRoleEntries,
   normalizeGroupRoleMapping,
+  normalizeMappingStrategy,
+  projectEntriesToRoleMapping,
   readGroupsClaim,
 } from './groupMapping'
 
@@ -148,5 +151,86 @@ describe('readGroupsClaim (issue #442)', () => {
       .toEqual({ groups: ['ops'], groupsClaimIsArray: true })
     expect(readGroupsClaim({ groups: ['ops'] }, null))
       .toEqual({ groups: ['ops'], groupsClaimIsArray: true })
+  })
+})
+
+/**
+ * Issue #992: the mapping is stored as an ordered LIST, because jsonb re-sorts
+ * an object's keys and the row order is what decides a user's role.
+ */
+describe('normalizeGroupRoleEntries', () => {
+  it('returns an empty list for missing / null / unparseable inputs', () => {
+    expect(normalizeGroupRoleEntries(undefined)).toEqual([])
+    expect(normalizeGroupRoleEntries(null)).toEqual([])
+    expect(normalizeGroupRoleEntries('')).toEqual([])
+    expect(normalizeGroupRoleEntries('{not json')).toEqual([])
+    expect(normalizeGroupRoleEntries(42)).toEqual([])
+  })
+
+  it('keeps the list order exactly as submitted', () => {
+    const entries = [
+      { group: 'zzz', role: 'role_admin' },
+      { group: 'aaa', role: 'role_viewer' },
+      { group: 'mmm', role: 'role_operator' },
+    ]
+    expect(normalizeGroupRoleEntries(entries)).toEqual(entries)
+    expect(normalizeGroupRoleEntries(JSON.stringify(entries))).toEqual(entries)
+  })
+
+  it('reads a legacy flat object as one entry per key', () => {
+    expect(normalizeGroupRoleEntries({ admins: 'role_admin', devs: 'role_operator' })).toEqual([
+      { group: 'admins', role: 'role_admin' },
+      { group: 'devs', role: 'role_operator' },
+    ])
+  })
+
+  it('trims both sides and drops half-filled rows', () => {
+    expect(
+      normalizeGroupRoleEntries([
+        { group: '  admins  ', role: '  role_admin  ' },
+        { group: '', role: 'role_viewer' },
+        { group: 'devs', role: '' },
+        { group: 'ops' },
+        'nonsense',
+        null,
+      ]),
+    ).toEqual([{ group: 'admins', role: 'role_admin' }])
+  })
+
+  it('refuses a prototype-polluting group name', () => {
+    expect(
+      normalizeGroupRoleEntries([
+        { group: '__proto__', role: 'role_admin' },
+        { group: 'constructor', role: 'role_admin' },
+        { group: 'admins', role: 'role_admin' },
+      ]),
+    ).toEqual([{ group: 'admins', role: 'role_admin' }])
+  })
+})
+
+describe('projectEntriesToRoleMapping', () => {
+  it('keeps the topmost entry of a repeated group', () => {
+    expect(
+      projectEntriesToRoleMapping([
+        { group: 'admins', role: 'role_admin' },
+        { group: 'admins', role: 'role_viewer' },
+      ]),
+    ).toEqual({ admins: 'role_admin' })
+  })
+})
+
+describe('normalizeMappingStrategy', () => {
+  it('accepts the two known strategies', () => {
+    expect(normalizeMappingStrategy('first_match')).toBe('first_match')
+    expect(normalizeMappingStrategy('cumulative')).toBe('cumulative')
+    expect(normalizeMappingStrategy(' cumulative ')).toBe('cumulative')
+  })
+
+  it('falls back to first_match on anything else, including a null column', () => {
+    expect(normalizeMappingStrategy(null)).toBe('first_match')
+    expect(normalizeMappingStrategy(undefined)).toBe('first_match')
+    expect(normalizeMappingStrategy('')).toBe('first_match')
+    expect(normalizeMappingStrategy('union')).toBe('first_match')
+    expect(normalizeMappingStrategy(7)).toBe('first_match')
   })
 })

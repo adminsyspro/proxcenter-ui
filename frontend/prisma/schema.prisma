@@ -477,8 +477,11 @@ model LdapConfig {
   caCert           String?  @map("ca_cert")
   startTls         Boolean  @default(false) @map("start_tls")
   groupAttribute   String?  @default("memberOf") @map("group_attribute")
-  // JSON object: { "<group_dn>": "<role_id>", ... }. Empty default '{}'.
-  groupRoleMapping Json     @default("{}") @map("group_role_mapping")
+  // Ordered JSON array: [{ "group": "<group_dn>", "role": "<role_id>" }, ...].
+  // A list, not an object: jsonb re-sorts an object's keys, so the row order the
+  // admin sees could never survive a save (issue #992). A config written before
+  // v1.5 is still a flat object and reads back as one entry per key.
+  groupRoleMapping Json     @default("[]") @map("group_role_mapping")
   defaultRole      String?  @default("role_viewer") @map("default_role")
   requireGroup     Boolean  @default(false) @map("require_group")
   // JSON array of group DNs allowed to authenticate. Empty default '[]'.
@@ -513,8 +516,12 @@ model OidcConfig {
   // forceSsoRedirect=true sends /login straight to the IdP.
   showLocalLogin   Boolean  @default(true)  @map("show_local_login")
   forceSsoRedirect Boolean  @default(false) @map("force_sso_redirect")
-  // JSON object mapping IdP group claims to internal role names.
-  groupRoleMapping Json     @default("{}") @map("group_role_mapping")
+  // Ordered JSON array of grants: [{ group, tenant, vdc, role }, ...], read top
+  // to bottom at login time. Legacy flat objects still read back as entries.
+  groupRoleMapping Json     @default("[]") @map("group_role_mapping")
+  // How several matching rows combine: "first_match" keeps the topmost row per
+  // tenant/vDC, "cumulative" grants every matching role (issue #992).
+  groupMappingStrategy String @default("first_match") @map("group_mapping_strategy")
   createdAt        DateTime @map("created_at")
   updatedAt        DateTime @map("updated_at")
 

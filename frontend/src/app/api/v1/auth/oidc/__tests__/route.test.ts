@@ -32,7 +32,8 @@ vi.mock("@/lib/db/prisma", () => ({
 
 vi.mock("@/lib/crypto/secret", () => ({ encryptSecret: encryptSecretMock }))
 
-vi.mock("@/lib/auth/groupMapping", () => ({
+vi.mock("@/lib/auth/groupMapping", async importOriginal => ({
+  ...(await importOriginal<typeof import("@/lib/auth/groupMapping")>()),
   normalizeGroupGrantMapping: normalizeGroupGrantMappingMock,
 }))
 
@@ -323,5 +324,80 @@ describe("PUT /api/v1/auth/oidc — group mapping targets", () => {
     const arg = upsertMock.mock.calls[0][0]
     expect(arg.update.groupRoleMapping).toEqual(grants)
     expect(arg.create.groupRoleMapping).toEqual(grants)
+  })
+})
+
+// ─── Mapping strategy (issue #992) ──────────────────────────────────────────
+
+describe("/api/v1/auth/oidc — group mapping strategy", () => {
+  const validBody = {
+    enabled: true,
+    issuer_url: "https://idp.example.com",
+    client_id: "cid",
+  }
+
+  it("persists the submitted strategy", async () => {
+    const { PUT } = await importRoute()
+    const res = await callRoute(PUT as any, {
+      method: "PUT",
+      body: { ...validBody, group_mapping_strategy: "cumulative" },
+    })
+    expect(res.status).toBe(200)
+    const arg = upsertMock.mock.calls[0][0]
+    expect(arg.update.groupMappingStrategy).toBe("cumulative")
+    expect(arg.create.groupMappingStrategy).toBe("cumulative")
+  })
+
+  it("falls back to first_match on a missing or unknown strategy", async () => {
+    const { PUT } = await importRoute()
+    await callRoute(PUT as any, { method: "PUT", body: validBody })
+    expect(upsertMock.mock.calls[0][0].update.groupMappingStrategy).toBe("first_match")
+
+    upsertMock.mockClear()
+    await callRoute(PUT as any, {
+      method: "PUT",
+      body: { ...validBody, group_mapping_strategy: "whatever" },
+    })
+    expect(upsertMock.mock.calls[0][0].update.groupMappingStrategy).toBe("first_match")
+  })
+
+  it("serves the stored strategy, and first_match for a row written before v1.5", async () => {
+    findUniqueMock.mockResolvedValue({
+      enabled: true,
+      providerName: "Okta",
+      issuerUrl: "https://idp.example.com",
+      clientId: "cid",
+      claimGroups: "groups",
+      defaultRole: "viewer",
+      showLocalLogin: true,
+      forceSsoRedirect: false,
+      groupRoleMapping: [],
+      groupMappingStrategy: "cumulative",
+    })
+    const { GET } = await importRoute()
+    const res = await callRoute(GET as any, { method: "GET" })
+    expect(await readJson<any>(res).then(b => b.data.group_mapping_strategy)).toBe("cumulative")
+
+    findUniqueMock.mockResolvedValue({
+      enabled: true,
+      providerName: "Okta",
+      issuerUrl: "https://idp.example.com",
+      clientId: "cid",
+      claimGroups: "groups",
+      defaultRole: "viewer",
+      showLocalLogin: true,
+      forceSsoRedirect: false,
+      groupRoleMapping: {},
+      groupMappingStrategy: null,
+    })
+    const res2 = await callRoute(GET as any, { method: "GET" })
+    expect(await readJson<any>(res2).then(b => b.data.group_mapping_strategy)).toBe("first_match")
+  })
+
+  it("answers first_match when no config row exists yet", async () => {
+    findUniqueMock.mockResolvedValue(null)
+    const { GET } = await importRoute()
+    const res = await callRoute(GET as any, { method: "GET" })
+    expect(await readJson<any>(res).then(b => b.data.group_mapping_strategy)).toBe("first_match")
   })
 })

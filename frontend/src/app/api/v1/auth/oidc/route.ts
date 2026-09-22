@@ -1,7 +1,11 @@
 // src/app/api/v1/auth/oidc/route.ts
 import { NextResponse } from "next/server"
 
-import { normalizeGroupGrantMapping, type GroupGrant } from "@/lib/auth/groupMapping"
+import {
+  normalizeGroupGrantMapping,
+  normalizeMappingStrategy,
+  type GroupGrant,
+} from "@/lib/auth/groupMapping"
 import { prisma } from "@/lib/db/prisma"
 import { encryptSecret } from "@/lib/crypto/secret"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
@@ -51,6 +55,7 @@ export async function GET(req: Request) {
           force_sso_redirect: false,
           // Frontend expects a string here (it does JSON.parse with a string|object guard).
           group_role_mapping: "[]",
+          group_mapping_strategy: "first_match",
           hasClientSecret: false,
           tenants: await listMappingTenants(),
           vdcs: await listMappingVdcs(),
@@ -84,6 +89,7 @@ export async function GET(req: Request) {
         show_local_login: config.showLocalLogin,
         force_sso_redirect: config.forceSsoRedirect,
         group_role_mapping: groupRoleMappingStr,
+        group_mapping_strategy: normalizeMappingStrategy(config.groupMappingStrategy),
         hasClientSecret: !!config.clientSecretEnc,
         tenants: await listMappingTenants(),
         vdcs: await listMappingVdcs(),
@@ -200,6 +206,7 @@ export async function PUT(req: Request) {
       show_local_login,
       force_sso_redirect,
       group_role_mapping,
+      group_mapping_strategy,
     } = body
 
     if (enabled) {
@@ -242,6 +249,7 @@ export async function PUT(req: Request) {
       showLocalLogin: persistShowLocalLogin,
       forceSsoRedirect: persistForceSsoRedirect,
       groupRoleMapping: grants,
+      groupMappingStrategy: normalizeMappingStrategy(group_mapping_strategy),
       updatedAt: now,
     }
 

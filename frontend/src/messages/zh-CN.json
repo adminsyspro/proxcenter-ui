@@ -97,7 +97,9 @@
     "done": "完成",
     "tags": "标签",
     "created": "已创建",
-    "errorWithMessage": "错误：{error}"
+    "errorWithMessage": "错误：{error}",
+    "moveUp": "上移",
+    "moveDown": "下移"
   },
   "whatsNew": {
     "title": "最新动态"
@@ -5790,7 +5792,8 @@
     "accessRestrictionDesc": "启用后，只有属于至少一个允许组的用户才能登录。不属于任何允许组的用户将被拒绝访问。",
     "requireGroup": "登录时要求组成员资格",
     "allowedGroup": "允许的组",
-    "addAllowedGroup": "添加允许的组"
+    "addAllowedGroup": "添加允许的组",
+    "groupMappingOrderDesc": "各行自上而下读取：用户所属的第一个组决定其角色。"
   },
   "oidc": {
     "description": "配置 OIDC/SSO 身份验证，允许用户使用企业身份提供商（Keycloak、Azure AD、Okta、Google、Auth0 等）登录。",
@@ -5842,8 +5845,8 @@
     "defaultRole": "默认角色",
     "defaultRoleHelper": "当没有组映射匹配时分配给自动创建用户的角色",
     "groupMapping": "组到角色映射",
-    "groupMappingDesc": "将身份提供商组名映射到 ProxCenter 角色。优先匹配第一个。",
-    "groupMappingScopedDesc": "将 IdP 组映射到 ProxCenter 角色，可指定租户，也可进一步限定到单个 vDC。同一个组可以出现在多行中，以便在多个租户中授予访问权限。按租户和 vDC 各自取首个匹配项。",
+    "groupMappingDesc": "将身份提供商组名映射到 ProxCenter 角色。各行自上而下读取。",
+    "groupMappingScopedDesc": "将 IdP 组映射到 ProxCenter 角色，可指定租户，也可进一步限定到单个 vDC。同一个组可以出现在多行中，以便在多个租户中授予访问权限。各行自上而下读取。",
     "tenant": "租户",
     "vdc": "vDC",
     "vdcWholeTenant": "整个租户",
@@ -5856,7 +5859,12 @@
     "save": "保存",
     "testing": "测试中...",
     "testDiscovery": "测试发现",
-    "reset": "重置"
+    "reset": "重置",
+    "mappingStrategy": "属于多个组的用户",
+    "mappingStrategyFirstMatch": "采用第一个匹配的角色",
+    "mappingStrategyCumulative": "合并所有匹配的角色",
+    "mappingStrategyFirstMatchHelper": "最靠上的匹配行优先，每个租户和 vDC 只保留一个角色。",
+    "mappingStrategyCumulativeHelper": "用户将获得所有匹配的角色，其权限为这些角色的并集。"
   },
   "ceph": {
     "clusterHealth": "集群健康状态",

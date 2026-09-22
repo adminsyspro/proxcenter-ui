@@ -6,6 +6,7 @@
 import { prisma } from "@/lib/db/prisma"
 import { decryptSecret } from "@/lib/crypto/secret"
 import { syncProviderRoleAssignment, type ProviderSyncDb } from "./roleSync"
+import { normalizeGroupRoleEntries, type GroupRoleEntry } from "./groupMapping"
 
 export interface LdapUser {
   dn: string
@@ -27,7 +28,8 @@ export interface LdapConfig {
   tlsInsecure: boolean
   caCert: string | null
   groupAttribute: string
-  groupRoleMapping: Record<string, string>
+  /** Ordered mapping rows; the topmost match wins at login time. */
+  groupRoleMapping: GroupRoleEntry[]
   defaultRole: string
   requireGroup: boolean
   allowedGroups: string[]
@@ -63,13 +65,10 @@ export async function getLdapConfig(): Promise<LdapConfig | null> {
     }
   }
 
-  // group_role_mapping is now a JSONB column, so Prisma returns the parsed
-  // object directly. Coerce to Record<string,string> defensively in case a
-  // legacy row somehow still holds an array or unrelated shape.
-  const groupRoleMapping: Record<string, string> =
-    row.groupRoleMapping && typeof row.groupRoleMapping === "object" && !Array.isArray(row.groupRoleMapping)
-      ? (row.groupRoleMapping as Record<string, string>)
-      : {}
+  // group_role_mapping is a JSONB column holding the ordered entry list, or,
+  // on a config written before v1.5, the legacy flat { group: role } object.
+  // normalizeGroupRoleEntries absorbs both, so no data migration is required.
+  const groupRoleMapping = normalizeGroupRoleEntries(row.groupRoleMapping)
 
   // allowed_groups is JSONB string[] — defensive cast for the same reason.
   const allowedGroups: string[] = Array.isArray(row.allowedGroups)
@@ -172,29 +171,35 @@ export async function authenticateLdap(
 }
 
 /**
- * Resolve a ProxCenter role from LDAP group membership. Tries an exact-DN
- * match first, then falls back to extracting the CN. First match wins.
+ * Resolve a ProxCenter role from LDAP group membership. The mapping rows are
+ * read from the top down and the first one the user belongs to wins, so the
+ * order shown in the LDAP form is the order that decides (issue #992): before
+ * that the outer loop was the directory's group list, which put the winner
+ * beyond the admin's reach. Each row matches an exact DN, or the CN extracted
+ * from the user's DN, so either spelling works on both sides.
+ *
  * Returns null when no group matches so the caller can preserve manually
  * assigned roles instead of forcing the defaultRole.
  */
 export function resolveLdapRole(groups: string[], config: LdapConfig): string | null {
-  if (!groups || groups.length === 0 || !config.groupRoleMapping || Object.keys(config.groupRoleMapping).length === 0) {
+  const mapping = config.groupRoleMapping || []
+  if (!groups || groups.length === 0 || mapping.length === 0) {
     return null
   }
 
+  // Both spellings of every group the user holds, so a row can be tested once.
+  const claimed = new Set<string>()
   for (const rawGroup of groups) {
     const group = String(rawGroup).trim()
     if (!group) continue
-    if (config.groupRoleMapping[group]) {
-      return config.groupRoleMapping[group]
-    }
+    claimed.add(group)
     const cnMatch = group.match(/^CN=([^,]+)/i)
-    if (cnMatch) {
-      const cn = cnMatch[1].trim()
-      if (cn && config.groupRoleMapping[cn]) {
-        return config.groupRoleMapping[cn]
-      }
-    }
+    const cn = cnMatch ? cnMatch[1].trim() : ""
+    if (cn) claimed.add(cn)
+  }
+
+  for (const entry of mapping) {
+    if (entry.role && claimed.has(entry.group)) return entry.role
   }
 
   return null

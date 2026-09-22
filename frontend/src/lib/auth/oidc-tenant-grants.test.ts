@@ -6,9 +6,17 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 import { syncOidcRoleAssignment, resolveOidcGrants, oidcSeedRoleId } from './oidc'
 import type { OidcConfig } from './oidc'
-import { normalizeGroupGrantMapping, projectGrantsToRoleMapping } from './groupMapping'
+import {
+  normalizeGroupGrantMapping,
+  projectGrantsToRoleMapping,
+  type MappingStrategy,
+} from './groupMapping'
 
-function makeConfig(mapping: unknown, defaultRole = 'role_viewer'): OidcConfig {
+function makeConfig(
+  mapping: unknown,
+  defaultRole = 'role_viewer',
+  groupMappingStrategy: MappingStrategy = 'first_match',
+): OidcConfig {
   const groupGrants = normalizeGroupGrantMapping(mapping)
   return {
     enabled: true,
@@ -27,6 +35,7 @@ function makeConfig(mapping: unknown, defaultRole = 'role_viewer'): OidcConfig {
     defaultRole,
     groupRoleMapping: projectGrantsToRoleMapping(groupGrants),
     groupGrants,
+    groupMappingStrategy,
     showLocalLogin: true,
     forceSsoRedirect: false,
   }
@@ -117,6 +126,89 @@ describe('resolveOidcGrants', () => {
       { tenantId: 'default', vdcId: null, roleId: 'role_viewer' },
     ])
   })
+
+  // ── Issue #992: the mapping order decides, and it can be cumulative ──────
+
+  it('keeps the topmost row whatever order the IdP lists the groups in', () => {
+    const config = makeConfig([
+      { group: 'admins', role: 'role_admin' },
+      { group: 'devs', role: 'role_operator' },
+    ])
+    expect(resolveOidcGrants(['devs', 'admins'], config)).toEqual([
+      { tenantId: 'default', vdcId: null, roleId: 'role_admin' },
+    ])
+    expect(resolveOidcGrants(['admins', 'devs'], config)).toEqual([
+      { tenantId: 'default', vdcId: null, roleId: 'role_admin' },
+    ])
+  })
+
+  it('follows the rows once they are reordered', () => {
+    const config = makeConfig([
+      { group: 'devs', role: 'role_operator' },
+      { group: 'admins', role: 'role_admin' },
+    ])
+    expect(resolveOidcGrants(['devs', 'admins'], config)).toEqual([
+      { tenantId: 'default', vdcId: null, roleId: 'role_operator' },
+    ])
+  })
+
+  it('grants every matching role in the same scope under the cumulative strategy', () => {
+    const config = makeConfig(
+      [
+        { group: 'admins', role: 'role_admin' },
+        { group: 'devs', role: 'role_operator' },
+        { group: 'oncall', role: 'role_viewer' },
+      ],
+      'role_viewer',
+      'cumulative',
+    )
+    expect(resolveOidcGrants(['devs', 'admins'], config)).toEqual([
+      { tenantId: 'default', vdcId: null, roleId: 'role_admin' },
+      { tenantId: 'default', vdcId: null, roleId: 'role_operator' },
+    ])
+  })
+
+  it('drops the exact duplicate two rows would produce for the same user', () => {
+    const config = makeConfig(
+      [
+        { group: 'admins', role: 'role_admin' },
+        { group: 'devs', role: 'role_admin' },
+      ],
+      'role_viewer',
+      'cumulative',
+    )
+    expect(resolveOidcGrants(['admins', 'devs'], config)).toEqual([
+      { tenantId: 'default', vdcId: null, roleId: 'role_admin' },
+    ])
+  })
+
+  it('cumulates inside each scope separately', () => {
+    const config = makeConfig(
+      [
+        { group: 'admins', tenant: 't_acme', role: 'role_admin' },
+        { group: 'devs', tenant: 't_acme', vdc: 'vdc_prod', role: 'role_operator' },
+        { group: 'devs', tenant: 't_acme', role: 'role_viewer' },
+      ],
+      'role_viewer',
+      'cumulative',
+    )
+    expect(resolveOidcGrants(['admins', 'devs'], config)).toEqual([
+      { tenantId: 't_acme', vdcId: null, roleId: 'role_admin' },
+      { tenantId: 't_acme', vdcId: 'vdc_prod', roleId: 'role_operator' },
+      { tenantId: 't_acme', vdcId: null, roleId: 'role_viewer' },
+    ])
+  })
+
+  it('still falls back to the default role under the cumulative strategy', () => {
+    const config = makeConfig(
+      [{ group: 'admins', role: 'role_admin' }],
+      'viewer',
+      'cumulative',
+    )
+    expect(resolveOidcGrants(['nobody'], config)).toEqual([
+      { tenantId: 'default', vdcId: null, roleId: 'role_viewer' },
+    ])
+  })
 })
 
 describe('oidcSeedRoleId', () => {
@@ -131,6 +223,18 @@ describe('oidcSeedRoleId', () => {
   it('falls back to the first grant when the mapping targets no provider tenant', () => {
     const config = makeConfig([{ group: 'ops', tenant: 't_acme', role: 'role_operator' }])
     expect(oidcSeedRoleId(['ops'], config)).toBe('role_operator')
+  })
+
+  it('shows the topmost provider-tenant row when several roles are cumulated', () => {
+    const config = makeConfig(
+      [
+        { group: 'admins', role: 'role_admin' },
+        { group: 'devs', role: 'role_operator' },
+      ],
+      'role_viewer',
+      'cumulative',
+    )
+    expect(oidcSeedRoleId(['devs', 'admins'], config)).toBe('role_admin')
   })
 })
 

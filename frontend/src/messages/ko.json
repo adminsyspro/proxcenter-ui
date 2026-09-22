@@ -97,7 +97,9 @@
     "done": "완료",
     "tags": "태그",
     "created": "생성됨",
-    "errorWithMessage": "오류: {error}"
+    "errorWithMessage": "오류: {error}",
+    "moveUp": "위로 이동",
+    "moveDown": "아래로 이동"
   },
   "whatsNew": {
     "title": "새로운 기능"
@@ -5786,7 +5788,8 @@
     "accessRestrictionDesc": "활성화하면 허용된 그룹 중 하나 이상에 속한 사용자만 로그인할 수 있습니다. 허용된 그룹에 속하지 않은 사용자는 접근이 거부됩니다.",
     "requireGroup": "로그인에 그룹 멤버십 필수",
     "allowedGroup": "허용된 그룹",
-    "addAllowedGroup": "허용 그룹 추가"
+    "addAllowedGroup": "허용 그룹 추가",
+    "groupMappingOrderDesc": "행은 위에서 아래로 읽습니다. 사용자가 속한 첫 번째 그룹이 역할을 결정합니다."
   },
   "oidc": {
     "description": "사용자가 회사 ID 공급자(Keycloak, Azure AD, Okta, Google, Auth0 등)로 로그인할 수 있도록 OIDC/SSO 인증을 구성합니다.",
@@ -5838,8 +5841,8 @@
     "defaultRole": "기본 역할",
     "defaultRoleHelper": "일치하는 그룹 매핑이 없을 때 자동 프로비저닝된 사용자에게 할당되는 역할",
     "groupMapping": "그룹-역할 매핑",
-    "groupMappingDesc": "IdP 그룹 이름을 ProxCenter 역할에 매핑합니다. 첫 번째로 일치하는 항목이 적용됩니다.",
-    "groupMappingScopedDesc": "IdP 그룹을 ProxCenter 역할에 매핑합니다. 테넌트를 지정할 수 있고 필요하면 단일 vDC로 한정할 수도 있습니다. 하나의 그룹을 여러 행에 넣어 여러 테넌트에 접근 권한을 부여할 수 있습니다. 테넌트와 vDC별로 첫 번째 일치 항목이 적용됩니다.",
+    "groupMappingDesc": "IdP 그룹 이름을 ProxCenter 역할에 매핑합니다. 행은 위에서 아래로 읽습니다.",
+    "groupMappingScopedDesc": "IdP 그룹을 ProxCenter 역할에 매핑합니다. 테넌트를 지정할 수 있고 필요하면 단일 vDC로 한정할 수도 있습니다. 하나의 그룹을 여러 행에 넣어 여러 테넌트에 접근 권한을 부여할 수 있습니다. 행은 위에서 아래로 읽습니다.",
     "tenant": "테넌트",
     "vdc": "vDC",
     "vdcWholeTenant": "테넌트 전체",
@@ -5852,7 +5855,12 @@
     "save": "저장",
     "testing": "테스트 중...",
     "testDiscovery": "디스커버리 테스트",
-    "reset": "초기화"
+    "reset": "초기화",
+    "mappingStrategy": "여러 그룹에 속한 사용자",
+    "mappingStrategyFirstMatch": "일치하는 첫 번째 역할 사용",
+    "mappingStrategyCumulative": "일치하는 모든 역할 결합",
+    "mappingStrategyFirstMatchHelper": "가장 위에 있는 일치 행이 적용되며, 테넌트와 vDC마다 역할은 하나입니다.",
+    "mappingStrategyCumulativeHelper": "사용자는 일치하는 모든 역할을 받으며, 권한은 해당 역할들의 합집합입니다."
   },
   "ceph": {
     "clusterHealth": "클러스터 상태",

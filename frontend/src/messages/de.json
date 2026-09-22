@@ -99,7 +99,9 @@
     "overview": "Übersicht",
     "configuration": "Konfiguration",
     "created": "Erstellt",
-    "errorWithMessage": "Fehler: {error}"
+    "errorWithMessage": "Fehler: {error}",
+    "moveUp": "Nach oben",
+    "moveDown": "Nach unten"
   },
   "whatsNew": {
     "title": "Neuigkeiten"
@@ -5760,7 +5762,8 @@
     "accessRestrictionDesc": "Wenn aktiviert, können sich nur Benutzer anmelden, die mindestens einer erlaubten Gruppe angehören. Benutzern, die keiner erlaubten Gruppe angehören, wird der Zugriff verweigert.",
     "requireGroup": "Gruppenmitgliedschaft für Anmeldung erforderlich",
     "allowedGroup": "Erlaubte Gruppe",
-    "addAllowedGroup": "Erlaubte Gruppe hinzufügen"
+    "addAllowedGroup": "Erlaubte Gruppe hinzufügen",
+    "groupMappingOrderDesc": "Die Zeilen werden von oben nach unten gelesen: Die erste Gruppe, der der Benutzer angehört, bestimmt seine Rolle."
   },
   "oidc": {
     "description": "Konfigurieren Sie OIDC/SSO-Authentifizierung, damit Benutzer sich mit ihrem Unternehmens-Identity-Provider anmelden können (Keycloak, Azure AD, Okta, Google, Auth0 usw.).",
@@ -5812,8 +5815,8 @@
     "defaultRole": "Standard role",
     "defaultRoleHelper": "Rolle, die automatisch bereitgestellten Benutzern zugewiesen wird, wenn keine Gruppenzuordnung passt",
     "groupMapping": "Gruppen-zu-Rollen-Mapping",
-    "groupMappingDesc": "IdP-Gruppennamen auf ProxCenter-Rollen abbilden. Erster Treffer gewinnt.",
-    "groupMappingScopedDesc": "Ordnen Sie IdP-Gruppen einer ProxCenter-Rolle zu, in einem Tenant und optional innerhalb eines einzelnen vDC. Eine Gruppe kann in mehreren Zeilen stehen, um Zugriff in mehreren Tenants zu gewähren. Der erste Treffer gewinnt, je Tenant und vDC.",
+    "groupMappingDesc": "IdP-Gruppennamen auf ProxCenter-Rollen abbilden. Die Zeilen werden von oben nach unten gelesen.",
+    "groupMappingScopedDesc": "Ordnen Sie IdP-Gruppen einer ProxCenter-Rolle zu, in einem Tenant und optional innerhalb eines einzelnen vDC. Eine Gruppe kann in mehreren Zeilen stehen, um Zugriff in mehreren Tenants zu gewähren. Die Zeilen werden von oben nach unten gelesen.",
     "tenant": "Tenant",
     "vdc": "vDC",
     "vdcWholeTenant": "Gesamter Tenant",
@@ -5826,7 +5829,12 @@
     "save": "Speichern",
     "testing": "Testen...",
     "testDiscovery": "Discovery testen",
-    "reset": "Zurücksetzen"
+    "reset": "Zurücksetzen",
+    "mappingStrategy": "Benutzer in mehreren Gruppen",
+    "mappingStrategyFirstMatch": "Erste passende Rolle übernehmen",
+    "mappingStrategyCumulative": "Alle passenden Rollen kombinieren",
+    "mappingStrategyFirstMatchHelper": "Die oberste passende Zeile gewinnt, eine Rolle je Tenant und vDC.",
+    "mappingStrategyCumulativeHelper": "Der Benutzer erhält alle passenden Rollen, seine Berechtigungen sind die Vereinigung dieser Rollen."
   },
   "ceph": {
     "clusterHealth": "Cluster-Gesundheit",

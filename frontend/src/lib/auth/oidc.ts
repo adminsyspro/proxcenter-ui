@@ -9,8 +9,10 @@ import { syncProviderGrants, type ProviderGrantsDb, type MembershipPort } from "
 import {
   DEFAULT_TENANT_ID,
   normalizeGroupGrantMapping,
+  normalizeMappingStrategy,
   projectGrantsToRoleMapping,
   type GroupGrant,
+  type MappingStrategy,
 } from "./groupMapping"
 import { loadVdcScopes, toProviderGrantRows, type ResolvedGrant, type VdcScopeDb } from "./vdcScope"
 
@@ -36,6 +38,8 @@ export interface OidcConfig {
   groupRoleMapping: Record<string, string>
   /** Full tenant/vDC aware mapping, the authoritative shape since v1.5. */
   groupGrants: GroupGrant[]
+  /** How several matching mapping rows combine for one login. */
+  groupMappingStrategy: MappingStrategy
   showLocalLogin: boolean
   forceSsoRedirect: boolean
 }
@@ -86,6 +90,7 @@ export async function getOidcConfig(): Promise<OidcConfig | null> {
     defaultRole: row.defaultRole || "viewer",
     groupRoleMapping,
     groupGrants,
+    groupMappingStrategy: normalizeMappingStrategy(row.groupMappingStrategy),
     showLocalLogin: row.showLocalLogin,
     forceSsoRedirect: row.forceSsoRedirect,
   }
@@ -93,9 +98,10 @@ export async function getOidcConfig(): Promise<OidcConfig | null> {
 
 /**
  * Resolve the ProxCenter role from an OIDC ID-token's groups claim.
- * First match wins; falls back to config.defaultRole when no group matches.
- * (LDAP and OIDC differ here: OIDC always returns the default, while LDAP
- * returns null to preserve manually-assigned roles.)
+ * The topmost matching mapping row wins (the flat projection keeps the grants
+ * in the admin's row order); falls back to config.defaultRole when no group
+ * matches. (LDAP and OIDC differ here: OIDC always returns the default, while
+ * LDAP returns null to preserve manually-assigned roles.)
  */
 export function resolveOidcRole(
   groups: string[] | undefined,
@@ -105,13 +111,14 @@ export function resolveOidcRole(
     return config.defaultRole
   }
 
+  const claimed = new Set<string>()
   for (const rawGroup of groups) {
     const group = String(rawGroup).trim()
-    if (!group) continue
-    const mappedRole = config.groupRoleMapping[group]
-    if (mappedRole) {
-      return mappedRole
-    }
+    if (group) claimed.add(group)
+  }
+
+  for (const [group, role] of Object.entries(config.groupRoleMapping)) {
+    if (role && claimed.has(group)) return role
   }
 
   return config.defaultRole
@@ -137,12 +144,20 @@ export function oidcRoleId(groups: string[] | undefined, config: OidcConfig): st
 }
 
 /**
- * Resolve every grant an OIDC login is entitled to, in claim order.
+ * Resolve every grant an OIDC login is entitled to, walking the mapping from
+ * the top row down.
  *
- * A group may appear in several mapping entries, so one login can produce a
- * role in the provider tenant AND a vDC-scoped role in a customer tenant. Only
- * the first entry per (tenant, vDC) pair is kept, which is the multi-tenant
- * reading of the historical "first match wins".
+ * ⚠️ The mapping drives the loop, NOT the groups claim (issue #992). Until
+ * v1.5 the outer loop was the claim, so for a user in several mapped groups the
+ * winner was whichever group the IdP happened to list first: an admin could not
+ * influence it, and the "first match wins" the form promises was not true of
+ * anything they could see. Reading the rows in order makes that promise real.
+ *
+ * `first_match` keeps the topmost matching row per (tenant, vDC) pair, the
+ * multi-tenant reading of the historical behaviour. `cumulative` keeps every
+ * matching row instead, so someone in several teams collects the roles of all
+ * of them; permissions are a union across assignments (see lib/rbac
+ * loadUserGrants), so the extra rows widen access and never narrow it.
  *
  * When nothing matches, the configured default role is granted in the provider
  * tenant, preserving the pre-v1.5 behaviour where leaving every mapped group
@@ -155,18 +170,26 @@ export function resolveOidcGrants(
   const mapping = config.groupGrants || []
   const resolved: ResolvedGrant[] = []
   const seen = new Set<string>()
+  const cumulative = config.groupMappingStrategy === "cumulative"
 
   if (groups && groups.length > 0 && mapping.length > 0) {
+    const claimed = new Set<string>()
     for (const rawGroup of groups) {
       const group = String(rawGroup).trim()
-      if (!group) continue
-      for (const entry of mapping) {
-        if (entry.group !== group) continue
-        const key = `${entry.tenantId}\u0000${entry.vdcId ?? ""}`
-        if (seen.has(key)) continue
-        seen.add(key)
-        resolved.push({ tenantId: entry.tenantId, vdcId: entry.vdcId, roleId: toRoleId(entry.role) })
-      }
+      if (group) claimed.add(group)
+    }
+
+    for (const entry of mapping) {
+      if (!claimed.has(entry.group)) continue
+      const roleId = toRoleId(entry.role)
+      const scope = `${entry.tenantId}\u0000${entry.vdcId ?? ""}`
+      // first_match dedupes on the scope, so one role per tenant/vDC survives.
+      // cumulative dedupes on the scope AND the role, which only drops the
+      // exact duplicate two rows would produce for the same user.
+      const key = cumulative ? `${scope}\u0000${roleId}` : scope
+      if (seen.has(key)) continue
+      seen.add(key)
+      resolved.push({ tenantId: entry.tenantId, vdcId: entry.vdcId, roleId })
     }
   }
 
@@ -179,7 +202,9 @@ export function resolveOidcGrants(
 /**
  * Role id for the denormalised `users.role` display column at auto-provision
  * time. The column has no tenant, so the provider-tenant grant wins when there
- * is one, otherwise the first resolved grant.
+ * is one, otherwise the first resolved grant. Under `cumulative` a user can
+ * hold several roles in the provider tenant: the column then shows the topmost
+ * mapping row, while the real access is the union of every assignment.
  */
 export function oidcSeedRoleId(groups: string[] | undefined, config: OidcConfig): string {
   const grants = resolveOidcGrants(groups, config)

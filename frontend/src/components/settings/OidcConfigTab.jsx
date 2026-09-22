@@ -4,6 +4,9 @@ import { useEffect, useState } from 'react'
 
 import { useTranslations } from 'next-intl'
 
+import MappingOrderButtons from './MappingOrderButtons'
+import { moveMappingRow } from '@/lib/settings/mappingOrder'
+
 import {
   Accordion,
   AccordionDetails,
@@ -53,6 +56,7 @@ export default function OidcConfigTab() {
     show_local_login: true,
     force_sso_redirect: false,
     group_role_mapping: '[]',
+    group_mapping_strategy: 'first_match',
   })
 
   const [loading, setLoading] = useState(true)
@@ -170,6 +174,7 @@ export default function OidcConfigTab() {
         body: JSON.stringify({
           ...config,
           group_role_mapping: JSON.stringify(mapping),
+          group_mapping_strategy: config.group_mapping_strategy || 'first_match',
         }),
       })
 
@@ -234,6 +239,12 @@ export default function OidcConfigTab() {
 
   const removeGroupMapping = (index) => {
     setGroupMappings(groupMappings.filter((_, i) => i !== index))
+  }
+
+  // The rows are read from the top down at login time, so their order is part
+  // of the configuration and has to be editable (issue #992).
+  const moveGroupMapping = (index, delta) => {
+    setGroupMappings(rows => moveMappingRow(rows, index, delta))
   }
 
   const updateGroupMapping = (index, field, value) => {
@@ -606,6 +617,23 @@ export default function OidcConfigTab() {
             {showScopePickers ? t('oidc.groupMappingScopedDesc') : t('oidc.groupMappingDesc')}
           </Typography>
 
+          <FormControl size='small' sx={{ mb: 2, maxWidth: 420 }} disabled={!config.enabled}>
+            <InputLabel>{t('oidc.mappingStrategy')}</InputLabel>
+            <Select
+              value={config.group_mapping_strategy || 'first_match'}
+              label={t('oidc.mappingStrategy')}
+              onChange={e => setConfig({ ...config, group_mapping_strategy: e.target.value })}
+            >
+              <MenuItem value='first_match'>{t('oidc.mappingStrategyFirstMatch')}</MenuItem>
+              <MenuItem value='cumulative'>{t('oidc.mappingStrategyCumulative')}</MenuItem>
+            </Select>
+            <Typography variant='caption' sx={{ mt: 0.5, opacity: 0.6, display: 'block' }}>
+              {config.group_mapping_strategy === 'cumulative'
+                ? t('oidc.mappingStrategyCumulativeHelper')
+                : t('oidc.mappingStrategyFirstMatchHelper')}
+            </Typography>
+          </FormControl>
+
           {groupMappings.map((mapping, index) => {
             const rowTenant = mapping.tenant || 'default'
             const tenantVdcs = vdcs.filter(v => v.tenantId === rowTenant)
@@ -617,6 +645,14 @@ export default function OidcConfigTab() {
 
             return (
               <Box key={index} sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 1, alignItems: 'center' }}>
+                <MappingOrderButtons
+                  index={index}
+                  count={groupMappings.length}
+                  disabled={!config.enabled}
+                  onMove={moveGroupMapping}
+                  upLabel={t('common.moveUp')}
+                  downLabel={t('common.moveDown')}
+                />
                 <TextField
                   size='small'
                   label={t('oidc.groupName')}

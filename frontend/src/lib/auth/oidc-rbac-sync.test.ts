@@ -22,6 +22,7 @@ function makeConfig(mapping: Record<string, string>, defaultRole = 'role_viewer'
     defaultRole,
     groupRoleMapping: mapping,
     groupGrants: normalizeGroupGrantMapping(mapping),
+    groupMappingStrategy: 'first_match',
     showLocalLogin: true,
     forceSsoRedirect: false,
   }

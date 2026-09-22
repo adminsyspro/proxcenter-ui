@@ -185,6 +185,178 @@ describe('GET /api/v1/connections/[id]/cluster/config', () => {
     expect(pveFetchMock).not.toHaveBeenCalledWith(expect.anything(), '/cluster/config/nodes')
   })
 
+  it('rejects a call without a connection id', async () => {
+    const GET = await importGET()
+    const res = await callRoute(GET, { params: {} })
+
+    expect(res.status).toBe(400)
+    expect(pveFetchMock).not.toHaveBeenCalled()
+  })
+
+  it('takes the fingerprint from the join data first, then from the preferred node, then from corosync.conf', async () => {
+    const GET = await importGET()
+
+    answerByPath({ '/cluster/config/join': () => ({ ...joinData, fingerprint: 'FP:TOP' }) })
+    expect((await readJson<any>(await callRoute(GET, { params: { id: 'c1' } }))).data.joinInfo.fingerprint).toBe('FP:TOP')
+
+    // No fingerprint on the nodelist entry: corosync.conf carries one for that node.
+    answerByPath({
+      '/cluster/config/join': () => ({ preferred_node: 'pve1', nodelist: [{ name: 'pve1', pve_addr: '172.16.253.1', ring0_addr: '10.10.10.1' }], totem: {} }),
+      '/cluster/config/nodes': () => [{ name: 'pve1', quorum_votes: '1', ring0_addr: '10.10.10.1', pve_fp: 'FP:CFG1' }],
+    })
+    expect((await readJson<any>(await callRoute(GET, { params: { id: 'c1' } }))).data.joinInfo.fingerprint).toBe('FP:CFG1')
+
+    // Nothing anywhere: an empty fingerprint, not a made-up one.
+    answerByPath({
+      '/cluster/config/join': () => ({ preferred_node: 'pve1', nodelist: [{ name: 'pve1', pve_addr: '172.16.253.1' }], totem: {} }),
+      '/cluster/config/nodes': () => [{ name: 'pve1', quorum_votes: '1' }],
+    })
+    expect((await readJson<any>(await callRoute(GET, { params: { id: 'c1' } }))).data.joinInfo.fingerprint).toBe('')
+  })
+
+  it('falls back to the local node, then to the first nodelist entry, when the preferred node is not listed', async () => {
+    const GET = await importGET()
+
+    answerByPath({ '/cluster/config/join': () => ({ ...joinData, preferred_node: 'pve9' }) })
+    let join = (await readJson<any>(await callRoute(GET, { params: { id: 'c1' } }))).data.joinInfo
+    expect(join.ipAddress).toBe('172.16.253.1')
+    expect(join.fingerprint).toBe('FP:PVE1')
+
+    answerByPath({ '/cluster/config/join': () => ({ ...joinData, preferred_node: 'pve9', nodelist: [joinData.nodelist[0]] }) })
+    join = (await readJson<any>(await callRoute(GET, { params: { id: 'c1' } }))).data.joinInfo
+    expect(join.ipAddress).toBe('172.16.253.2')
+    expect(join.fingerprint).toBe('FP:PVE2')
+    expect(join.corosyncLinks).toEqual(['10.10.10.2', '10.10.11.2'])
+
+    // A nodelist that is not a list, and no totem: the local node's management IP is the
+    // only address left for the join, its corosync IP the only ring address.
+    answerByPath({ '/cluster/config/join': () => ({ preferred_node: 'pve9', nodelist: 'garbage' }) })
+    join = (await readJson<any>(await callRoute(GET, { params: { id: 'c1' } }))).data.joinInfo
+    expect(join.ipAddress).toBe('172.16.253.1')
+    expect(join.fingerprint).toBe('')
+    expect(join.corosyncLinks).toEqual([])
+    expect(decodeJoin(join.encoded)).toMatchObject({ peerLinks: {}, ring_addr: ['10.10.10.1'], totem: {} })
+  })
+
+  it('addresses the join to the management IP, then the corosync IP, when the nodelist entry has no pve_addr', async () => {
+    const GET = await importGET()
+    const bareNodelist = () => ({ preferred_node: 'pve1', nodelist: [{ name: 'pve1', pve_fp: 'FP:PVE1' }], totem: {} })
+
+    answerByPath({ '/cluster/config/join': bareNodelist })
+    expect((await readJson<any>(await callRoute(GET, { params: { id: 'c1' } }))).data.joinInfo.ipAddress).toBe('172.16.253.1')
+
+    answerByPath({ '/cluster/config/join': bareNodelist, '/nodes/pve1/network': () => { throw new Error('timeout') } })
+    expect((await readJson<any>(await callRoute(GET, { params: { id: 'c1' } }))).data.joinInfo.ipAddress).toBe('10.10.10.1')
+
+    // No management IP and no corosync IP either: the join carries no address at all.
+    answerByPath({
+      '/cluster/config/join': bareNodelist,
+      '/nodes/pve1/network': () => [],
+      '/cluster/status': () => [clusterStatus[0], { id: 'node/pve1', type: 'node', name: 'pve1', nodeid: 1, online: 1, local: 1 }],
+    })
+    const body = await readJson<any>(await callRoute(GET, { params: { id: 'c1' } }))
+    expect(body.data.nodes[0]).toMatchObject({ managementIp: null, corosyncIp: null, ip: null })
+    expect(body.data.joinInfo.ipAddress).toBe('')
+    expect(decodeJoin(body.data.joinInfo.encoded).ring_addr).toEqual([])
+  })
+
+  it('skips malformed rows in the cluster status, the resources and corosync.conf', async () => {
+    answerByPath({
+      '/cluster/status': () => [
+        null,
+        { id: 'cluster', type: 'cluster', quorate: 0 },
+        { id: 'node/pve1', type: 'node', name: 'pve1', nodeid: 1, online: 1, local: 1 },
+        { id: 'node/pve2', type: 'node', name: 'pve2', nodeid: 2, ip: '10.10.10.2', online: 0, local: 0 },
+      ],
+      '/cluster/config/nodes': () => [null, {}, { node: 'pve1', quorum_votes: 'abc', ring0_addr: '10.10.10.1' }, { name: 'pve2', quorum_votes: '1' }],
+      '/cluster/resources?type=node': () => [null, { node: 'pve1' }, { node: 'pve2', hastate: 'online' }, { hastate: 'maintenance' }],
+    })
+    const GET = await importGET()
+    const body = await readJson<any>(await callRoute(GET, { params: { id: 'c1' } }))
+
+    expect(body.data.isCluster).toBe(true)
+    expect(body.data.clusterName).toBe('')
+    expect(body.data.clusterStatus).toMatchObject({ quorate: false })
+    const byName = Object.fromEntries(body.data.nodes.map((n: any) => [n.name, n]))
+    // Named by its `node` key, votes unreadable, links from corosync.conf.
+    expect(byName.pve1).toMatchObject({ votes: null, corosyncIp: null, corosyncLinks: ['10.10.10.1'], maintenance: false })
+    // No link in corosync.conf: the /cluster/status address stands in.
+    expect(byName.pve2).toMatchObject({ votes: 1, corosyncLinks: ['10.10.10.2'], online: false, maintenance: false })
+  })
+
+  it('treats an empty corosync.conf answer like an unreadable one', async () => {
+    answerByPath({ '/cluster/config/nodes': () => null })
+    const GET = await importGET()
+    const body = await readJson<any>(await callRoute(GET, { params: { id: 'c1' } }))
+
+    for (const n of body.data.nodes) {
+      expect(n.votes).toBeNull()
+      expect(n.corosyncLinks).toEqual([n.corosyncIp])
+    }
+  })
+
+  it('reports no cluster when /cluster/status itself fails', async () => {
+    answerByPath({
+      '/cluster/status': () => { throw new Error('501') },
+      '/nodes': () => [{ node: 'solo' }],
+      '/nodes/solo/network': () => [{ iface: 'vmbr0', type: 'bridge', address: '192.168.1.10', gateway: '192.168.1.1', active: 1 }],
+    })
+    const GET = await importGET()
+    const body = await readJson<any>(await callRoute(GET, { params: { id: 'c1' } }))
+
+    expect(body.data).toMatchObject({ isCluster: false, clusterName: '', clusterStatus: null, nodes: [], joinInfo: null })
+    expect(body.data.networks).toEqual([{ iface: 'vmbr0', address: '192.168.1.10', cidr: '192.168.1.10/24', type: 'bridge', active: 1, comments: '' }])
+    expect(pveFetchMock).not.toHaveBeenCalledWith(expect.anything(), '/cluster/config/nodes')
+  })
+
+  it('lists only the active, addressed bridge, ethernet, bond and VLAN interfaces for cluster creation', async () => {
+    const GET = await importGET()
+
+    answerByPath({
+      '/nodes': () => [{ node: 'pve1' }],
+      '/nodes/pve1/network': () => [
+        { iface: 'vmbr0', type: 'bridge', address: '172.16.253.1', cidr: '172.16.253.1/24', gateway: '172.16.253.254', active: 1, comments: 'mgmt' },
+        { iface: 'eno1', type: 'eth', active: 1 },
+        { iface: 'bond0', type: 'bond', address: '10.10.10.1', netmask: '16', active: 1 },
+        { iface: 'bond0.20', type: 'vlan', address: '10.10.11.1', active: 1 },
+        { iface: 'vmbr1', type: 'OVSBridge', address: '10.20.0.1', active: 1 },
+        { iface: 'vmbr2', type: 'bridge', address: '10.30.0.1', active: 0 },
+      ],
+    })
+    let body = await readJson<any>(await callRoute(GET, { params: { id: 'c1' } }))
+    expect(body.data.networks).toEqual([
+      { iface: 'vmbr0', address: '172.16.253.1', cidr: '172.16.253.1/24', type: 'bridge', active: 1, comments: 'mgmt' },
+      { iface: 'bond0', address: '10.10.10.1', cidr: '10.10.10.1/16', type: 'bond', active: 1, comments: '' },
+      { iface: 'bond0.20', address: '10.10.11.1', cidr: '10.10.11.1/24', type: 'vlan', active: 1, comments: '' },
+    ])
+
+    answerByPath({ '/nodes': () => [] })
+    body = await readJson<any>(await callRoute(GET, { params: { id: 'c1' } }))
+    expect(body.data.networks).toEqual([])
+
+    answerByPath({ '/nodes': () => [{ node: 'pve1' }], '/nodes/pve1/network': () => null })
+    body = await readJson<any>(await callRoute(GET, { params: { id: 'c1' } }))
+    expect(body.data.networks).toEqual([])
+
+    answerByPath({ '/nodes': () => { throw new Error('503') } })
+    body = await readJson<any>(await callRoute(GET, { params: { id: 'c1' } }))
+    expect(body.data.networks).toEqual([])
+  })
+
+  it('answers 500 with the error message, or its string form', async () => {
+    const GET = await importGET()
+
+    getConnectionByIdMock.mockRejectedValue(new Error('db down'))
+    let res = await callRoute(GET, { params: { id: 'c1' } })
+    expect(res.status).toBe(500)
+    expect(await readJson<any>(res)).toEqual({ error: 'db down' })
+
+    getConnectionByIdMock.mockRejectedValue('boom')
+    res = await callRoute(GET, { params: { id: 'c1' } })
+    expect(res.status).toBe(500)
+    expect(await readJson<any>(res)).toEqual({ error: 'boom' })
+  })
+
   it('returns the RBAC denial untouched', async () => {
     const denied = new Response(JSON.stringify({ error: 'Permission denied' }), { status: 403 })
     checkPermissionMock.mockResolvedValue(denied)

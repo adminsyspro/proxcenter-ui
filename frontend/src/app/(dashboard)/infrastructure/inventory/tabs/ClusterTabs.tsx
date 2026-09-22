@@ -57,6 +57,7 @@ import ClusterSdnTab from '@/components/cluster-sdn/ClusterSdnTab'
 import BackupJobsPanel from '../BackupJobsPanel'
 import CveTab from '@/components/CveTab'
 import ChangeTrackingTab from './ChangeTrackingTab'
+import CorosyncLinksCell from './CorosyncLinksCell'
 import ComplianceTab from '@/components/ComplianceTab'
 import DatacenterSettingsTab from '@/components/datacenter-settings'
 import MetricServerTab from '@/components/MetricServerTab'
@@ -4208,18 +4209,7 @@ export default function ClusterTabs(props: any) {
                                     <Typography variant="body2" sx={{ fontFamily: 'monospace', fontSize: 12 }}>
                                       {node.managementIp || '—'}
                                     </Typography>
-                                    <Box sx={{ fontFamily: 'monospace', fontSize: 12, lineHeight: 1.6 }}>
-                                      {Array.isArray(node.corosyncLinks) && node.corosyncLinks.length > 0
-                                        ? node.corosyncLinks.map((addr: string, linkIdx: number) => (
-                                            <Box key={`${addr}-${linkIdx}`} component="div">
-                                              {node.corosyncLinks.length > 1 && (
-                                                <Box component="span" sx={{ opacity: 0.6, mr: 0.75 }}>link{linkIdx}</Box>
-                                              )}
-                                              {addr}
-                                            </Box>
-                                          ))
-                                        : '—'}
-                                    </Box>
+                                    <CorosyncLinksCell links={node.corosyncLinks} />
                                   </Box>
                                 ))}
                               </Box>

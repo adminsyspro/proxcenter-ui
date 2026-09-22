@@ -1569,3 +1569,65 @@ describe('fetchRrdRange / fetchRrd / fetchRrdBatch', () => {
       .rejects.toThrow('Too many paths (max 50)')
   })
 })
+
+/* ------------------------------------------------------------------ */
+/* fetchDetails — node payload feeds the provisioned totals (issue #969) */
+/* ------------------------------------------------------------------ */
+
+describe('fetchDetails — node provisioning inputs (#969)', () => {
+  const jsonRes = (body: any, ok = true) => ({ ok, json: async () => body }) as Response
+
+  function stubNodeFetch(cpuinfo: any) {
+    vi.stubGlobal('fetch', vi.fn((input: any) => {
+      const url = String(input)
+
+      if (url.includes('/nodes/pve1/status')) {
+        return Promise.resolve(jsonRes({ data: { cpuinfo, memory: {}, swap: {} } }))
+      }
+
+      if (url.includes('/resources')) {
+        return Promise.resolve(jsonRes({ data: [
+          { node: 'pve1', vmid: 100, type: 'qemu', name: 'web', status: 'running', maxcpu: 4, maxmem: 8589934592 },
+          { node: 'pve1', vmid: 101, type: 'lxc', name: 'db', status: 'stopped', maxcpu: 2, maxmem: 4294967296 },
+          { node: 'pve2', vmid: 200, type: 'qemu', name: 'elsewhere', status: 'running', maxcpu: 64, maxmem: 99 },
+        ] }))
+      }
+
+      if (url.includes('/nodes')) {
+        return Promise.resolve(jsonRes({ data: [{ node: 'pve1', status: 'online', maxcpu: 32, mem: 1, maxmem: 137438953472 }] }))
+      }
+
+      return Promise.resolve(jsonRes({ data: {} }))
+    }))
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('reports the logical CPUs the node exposes, the reference the vCPU ratio divides by', async () => {
+    stubNodeFetch({ cpus: 32, cores: 16, sockets: 2, model: 'AMD EPYC 7302P' })
+
+    const payload = await fetchDetails({ type: 'node', id: 'conn1:pve1' } as any)
+
+    expect(payload?.hostInfo?.cpuTotal).toBe(32)
+  })
+
+  it('falls back to the node capacity when the status route omits the CPU count', async () => {
+    stubNodeFetch({ cores: 16, sockets: 2, model: 'AMD EPYC 7302P' })
+
+    const payload = await fetchDetails({ type: 'node', id: 'conn1:pve1' } as any)
+
+    expect(payload?.hostInfo?.cpuTotal).toBe(32)
+  })
+
+  it('carries each guest allocation on vmsData, for this node only', async () => {
+    stubNodeFetch({ cpus: 32 })
+
+    const payload = await fetchDetails({ type: 'node', id: 'conn1:pve1' } as any)
+
+    expect(payload?.vmsData).toHaveLength(2)
+    expect(payload?.vmsData?.map(vm => vm.maxcpu)).toEqual([4, 2])
+    expect(payload?.vmsData?.map(vm => vm.maxmem)).toEqual([8589934592, 4294967296])
+  })
+})

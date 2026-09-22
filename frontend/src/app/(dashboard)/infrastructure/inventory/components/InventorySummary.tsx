@@ -38,6 +38,8 @@ import type { NodeSensors } from '@/lib/sensors/hwmon'
 
 import type { Status, Kpi, DetailsPayload, SeriesPoint } from '../types'
 import { formatBps, formatUptime } from '../helpers'
+import { computeNodeProvisioning, describeNodeProvisioning, type ProvisioningLabels } from '../nodeProvisioning'
+import { ProvisioningChip, ProvisioningTooltip } from './ProvisioningInfo'
 import { SensorTemp } from './SensorTemp'
 import UsageBar from './UsageBar'
 import ConsolePreview from './ConsolePreview'
@@ -232,6 +234,7 @@ function InventorySummary({
   disksInfo,
   cpuInfo,
   sensors,
+  nodeVms,
 }: {
   sensors?: NodeSensors | null
   kindLabel: string
@@ -263,6 +266,8 @@ function InventorySummary({
   vmNotes?: string | null
   disksInfo?: { id: string; storage: string; size: string; format?: string; isCdrom?: boolean; isUnused?: boolean; isEfi?: boolean; isTpm?: boolean }[]
   cpuInfo?: { sockets?: number; cores?: number }
+  /** Guests of the selected node, for the provisioned totals on its gauges (#969). */
+  nodeVms?: DetailsPayload['vmsData']
 }) {
   const t = useTranslations()
   const { branding } = useBranding()
@@ -292,6 +297,28 @@ function InventorySummary({
 
   const consoleWidth = { xs: '100%', md: 360 }
   const { isAdmin } = useRBAC()
+
+  // Provisioned vCPU / RAM for the selected node (#969). The figures ride on
+  // the node's own gauges without adding a line to the card: the fill stays
+  // real usage, the dashed marker is what the running guests hold, a chip by
+  // the label carries the overcommit ratio and the marker's tooltip holds the
+  // breakdown. Nothing renders for a node without guests.
+  //
+  // Admin only, and not for tidiness: /cluster/resources hands a non-admin only
+  // the guests they may see, so their totals would describe their own share of
+  // the node while reading as the node's overcommit. No figure beats a wrong one.
+  const provisioning = React.useMemo(() => {
+    if (!isAdmin) return null
+
+    const totals = computeNodeProvisioning(nodeVms, { logicalCpus: hostInfo?.cpuTotal, memBytes: memCap })
+
+    return totals ? describeNodeProvisioning(totals, { t, formatBytes }) : null
+  }, [isAdmin, nodeVms, hostInfo?.cpuTotal, memCap, t])
+
+  const markerFor = (labels?: ProvisioningLabels) =>
+    labels?.markerPct != null
+      ? { pct: labels.markerPct, label: labels.markerLabel, tooltip: <ProvisioningTooltip labels={labels} /> }
+      : undefined
   // HA management is provider-only — tenant admins see HA state but
   // can't change it (cluster-level concern, not vDC-scoped).
   const { currentTenant, loading: tenantLoading } = useTenant()
@@ -572,7 +599,13 @@ return `${mins}m`
                 used={cpuNowPct}
                 capacity={100}
                 mode="pct"
-                extra={<SensorTemp sensors={sensors} role="cpu" />}
+                extra={
+                  <>
+                    <SensorTemp sensors={sensors} role="cpu" />
+                    {provisioning ? <ProvisioningChip labels={provisioning.cpu} /> : null}
+                  </>
+                }
+                marker={markerFor(provisioning?.cpu)}
               />
               {hostInfo.loadAvg ? (
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5 }}>
@@ -591,7 +624,13 @@ return `${mins}m`
                 used={memUsed}
                 capacity={memCap}
                 mode="bytes"
-                extra={<SensorTemp sensors={sensors} role="memory" />}
+                extra={
+                  <>
+                    <SensorTemp sensors={sensors} role="memory" />
+                    {provisioning ? <ProvisioningChip labels={provisioning.memory} /> : null}
+                  </>
+                }
+                marker={markerFor(provisioning?.memory)}
               />
               {swapCap > 0 ? (
                 <UsageBar themeColor={primaryColor} label="SWAP usage" used={swapUsed} capacity={swapCap} mode="bytes" />

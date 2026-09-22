@@ -176,6 +176,8 @@ export type DetailsPayload = {
     cpuModel?: string
     cpuCores?: number
     cpuSockets?: number
+    /** Logical CPUs (threads) the node reports — the reference for #969's vCPU ratio. */
+    cpuTotal?: number
     kernelVersion?: string
     pveVersion?: string
     bootMode?: string
@@ -221,8 +223,12 @@ export type DetailsPayload = {
     type: 'qemu' | 'lxc'
     status: string
     cpu?: number
+    /** vCPUs configured on the guest, summed into the node's provisioned totals (#969). */
+    maxcpu?: number
     ram?: number
+    mem?: number
     maxmem?: number
+    disk?: number
     maxdisk?: number
     uptime?: number
     tags?: string[]

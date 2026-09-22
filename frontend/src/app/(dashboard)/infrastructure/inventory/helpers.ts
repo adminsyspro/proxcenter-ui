@@ -1233,6 +1233,11 @@ export async function fetchDetails(sel: InventorySelection): Promise<DetailsPayl
     const cpuCoresVal = cpuInfoData.cores
     const cpuSocketsVal = cpuInfoData.sockets
 
+    // Logical CPUs (threads), the denominator the provisioned-vCPU ratio is
+    // stated against on the summary — #969. /cluster/resources' maxcpu says the
+    // same thing for a node, so it covers a status route that omits cpuinfo.
+    const cpuTotalVal = Number(cpuInfoData.cpus ?? n.maxcpu ?? 0) || undefined
+
     const kernelVersion = statusData?.kversion || statusData?.['kernel-version'] || null
 
     let pveVersionRaw = statusData?.pveversion || versionData?.version || null
@@ -1305,6 +1310,7 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
         cpuModel: cpuModel,
         cpuCores: cpuCoresVal,
         cpuSockets: cpuSocketsVal,
+        cpuTotal: cpuTotalVal,
         kernelVersion,
         pveVersion,
         bootMode,

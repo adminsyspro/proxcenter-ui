@@ -46,6 +46,7 @@ export default function LdapConfigTab() {
     email_attribute: 'mail',
     name_attribute: 'cn',
     tls_insecure: false,
+    ca_cert: '',
     group_attribute: 'memberOf',
     default_role: 'role_viewer',
   })
@@ -318,6 +319,27 @@ export default function LdapConfigTab() {
               label={t('ldap.tlsInsecure')}
             />
           </Box>
+
+          {/* CA privée (#981) : sans elle, un LDAPS signé en interne n'était
+              joignable qu'en désactivant la vérification du certificat. Le champ
+              disparaît quand cette vérification est coupée, puisque la CA ne
+              servirait alors à rien. La valeur saisie reste en mémoire et est
+              réaffichée dès que l'interrupteur repasse à off. */}
+          {!config.tls_insecure && (
+            <TextField
+              fullWidth
+              multiline
+              minRows={4}
+              maxRows={12}
+              label={t('ldap.caCert')}
+              value={config.ca_cert || ''}
+              onChange={e => setConfig({ ...config, ca_cert: e.target.value })}
+              placeholder={t('ldap.caCertPlaceholder')}
+              disabled={!config.enabled}
+              helperText={t('ldap.caCertHelper')}
+              sx={{ mt: 2, '& .MuiInputBase-input': { fontFamily: 'monospace', fontSize: '0.8125rem' } }}
+            />
+          )}
         </CardContent>
       </Card>
 

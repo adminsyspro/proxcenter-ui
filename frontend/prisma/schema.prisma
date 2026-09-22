@@ -471,6 +471,10 @@ model LdapConfig {
   emailAttribute   String   @default("mail") @map("email_attribute")
   nameAttribute    String   @default("cn") @map("name_attribute")
   tlsInsecure      Boolean  @default(false) @map("tls_insecure")
+  // PEM bundle of the CA that signed the LDAPS server certificate. A private CA
+  // is absent from the container trust store, and without this the only way to
+  // reach such a server was tlsInsecure (issue #981).
+  caCert           String?  @map("ca_cert")
   startTls         Boolean  @default(false) @map("start_tls")
   groupAttribute   String?  @default("memberOf") @map("group_attribute")
   // JSON object: { "<group_dn>": "<role_id>", ... }. Empty default '{}'.

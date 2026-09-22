@@ -92,8 +92,10 @@ export async function DELETE(
 
     streamingSessions.delete(uploadId)
     session.proxyReq.destroy(new Error("Upload stopped by the operator"))
-    // The finalize leg is waiting on this promise; reject it so it stops
-    // waiting for a Proxmox answer that is never coming.
+    // A finalize leg already waiting is released here rather than left hanging
+    // on a Proxmox answer that is never coming. When none is waiting, the
+    // handler attached at session creation is what keeps this from surfacing
+    // as an unhandled rejection.
     session.reject(new Error("Upload stopped by the operator"))
     setProgress(uploadId, {
       bytesSent: session.bytesSent,
@@ -177,6 +179,13 @@ async function handleChunk(
         resolveResult = res
         rejectResult = rej
       })
+
+      // Only the finalize leg awaits this promise, and on a stopped or failed
+      // upload that leg never runs: the rejection would then reach the process
+      // as an unhandled one. This handler makes it handled without swallowing
+      // anything, since an awaiting finalize still sees the rejection through
+      // its own await.
+      resultPromise.catch(() => { /* nobody left to tell */ })
 
       const proxyReq = transport.request(
         {

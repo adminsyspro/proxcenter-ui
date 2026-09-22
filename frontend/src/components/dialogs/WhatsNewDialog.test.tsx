@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { renderHook, act } from '@testing-library/react'
+import { renderHook, act, cleanup, waitFor } from '@testing-library/react'
 import { renderWithProviders, screen, userEvent } from '@/__tests__/setup/renderWithProviders'
 import WhatsNewDialog, { useWhatsNew } from './WhatsNewDialog'
 import changelog from '@/data/changelog.json'
@@ -17,6 +17,11 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  // No RTL auto-cleanup here (vitest runs without globals): a dialog left
+  // mounted past its case keeps its MUI exit transition timer alive, and that
+  // timer fires once the jsdom window is gone, as an unhandled
+  // "window is not defined" that fails the whole CI run with every test green.
+  cleanup()
   localStorage.clear()
 })
 
@@ -84,32 +89,16 @@ describe('WhatsNewDialog component', () => {
     expect(screen.getByText(latestVersion)).toBeInTheDocument()
   })
 
-  it('hides dialog from accessibility tree after transition to open=false', () => {
-    // NOTE: WhatsNewDialog keeps its subtree mounted even when rendered with
-    // open=false from the start (it uses MUI keepMounted or an equivalent
-    // pattern). The fresh-render content-absence strategy therefore does not
-    // apply here. Closure is verified via the aria-hidden="true" attribute that
-    // MUI places on the MuiModal-root, which removes the whole dialog from the
-    // accessibility tree while leaving the DOM nodes present.
+  it('removes the dialog once the close transition has run after open=false', async () => {
+    // The Dialog is not keepMounted: once its exit transition ends, MUI
+    // unmounts the portal. MUI never marks a closing modal's own root
+    // aria-hidden (only the siblings of an open one), so the absence of the
+    // dialog role is the observable end state.
     const { rerender } = renderWithProviders(<WhatsNewDialog open={true} onClose={vi.fn()} />)
-    // When open, the accessible dialog is present.
-    const dialogEl = screen.getByRole('dialog')
-    expect(dialogEl).toBeInTheDocument()
-    // Find the portal container: the body-level div that MUI injects to host
-    // the dialog portal. This parent is stable across rerenders.
-    const modalRoot = dialogEl.closest('.MuiModal-root') as Element
-    expect(modalRoot).not.toBeNull()
-    const portalContainer = modalRoot.parentElement as Element
-    expect(portalContainer).not.toBeNull()
-    // The wrapper for this open dialog must not be aria-hidden.
-    expect(modalRoot.getAttribute('aria-hidden')).toBeNull()
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
 
     rerender(<WhatsNewDialog open={false} onClose={vi.fn()} />)
-    // After closing, MUI marks the modal root aria-hidden="true". Re-query
-    // from the stable portal container to get the current (possibly new) node.
-    const modalRootAfter = portalContainer.querySelector('.MuiModal-root') as Element
-    expect(modalRootAfter).not.toBeNull()
-    expect(modalRootAfter.getAttribute('aria-hidden')).toBe('true')
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
   })
 
   it('calls onClose when the close IconButton is clicked', async () => {

@@ -40,6 +40,7 @@ import type { Status, Kpi, DetailsPayload, SeriesPoint } from '../types'
 import { formatBps, formatUptime } from '../helpers'
 import { computeNodeProvisioning, describeNodeProvisioning, type ProvisioningLabels } from '../nodeProvisioning'
 import { ProvisioningChip, ProvisioningTooltip } from './ProvisioningInfo'
+import { hostSideBlockSx, hostSideHandleSx } from './hostSideBlock'
 import { SensorTemp } from './SensorTemp'
 import UsageBar from './UsageBar'
 import ConsolePreview from './ConsolePreview'
@@ -724,9 +725,7 @@ return `${mins}m`
             {isAdmin && hostInfo.updates && hostInfo.updates.length > 0 && (
               <Box
                 sx={{
-                  flex: hostBlocksCollapsed.updates ? '0 0 auto' : 1,
-                  width: hostBlocksCollapsed.updates ? 44 : 'auto',
-                  minWidth: hostBlocksCollapsed.updates ? 44 : undefined,
+                  ...hostSideBlockSx(hostBlocksCollapsed.updates),
                   border: '1px solid',
                   borderColor: 'warning.main',
                   borderRadius: 2,
@@ -740,13 +739,7 @@ return `${mins}m`
                   <Box
                     onClick={() => setHostBlocksCollapsed(prev => ({ ...prev, updates: false }))}
                     sx={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      height: '100%',
-                      minHeight: 150,
-                      cursor: 'pointer',
+                      ...hostSideHandleSx(),
                       '&:hover': { bgcolor: 'rgba(255, 152, 0, 0.1)' }
                     }}
                   >
@@ -755,9 +748,13 @@ return `${mins}m`
                       size="small"
                       label={hostInfo.updates.length}
                       color="warning"
-                      sx={{ height: 18, fontSize: 11, fontWeight: 500, mt: 1 }}
+                      sx={{ height: 18, fontSize: 11, fontWeight: 500, mt: { xs: 0, xl: 1 } }}
                     />
-                    <i className="ri-arrow-right-s-line" style={{ fontSize: 16, opacity: 0.5, marginTop: 8 }} />
+                    <Box
+                      component="i"
+                      className="ri-arrow-right-s-line"
+                      sx={{ fontSize: 16, opacity: 0.5, mt: { xs: 0, xl: 1 } }}
+                    />
                   </Box>
                 ) : (
                   // Mode étendu
@@ -866,9 +863,7 @@ return `${mins}m`
               return (
               <Box
                 sx={{
-                  flex: hostBlocksCollapsed.subscription ? '0 0 auto' : 1,
-                  width: hostBlocksCollapsed.subscription ? 44 : 'auto',
-                  minWidth: hostBlocksCollapsed.subscription ? 44 : undefined,
+                  ...hostSideBlockSx(hostBlocksCollapsed.subscription),
                   border: '1px solid',
                   borderColor: statusColor,
                   borderRadius: 2,
@@ -882,13 +877,7 @@ return `${mins}m`
                   <Box
                     onClick={() => setHostBlocksCollapsed(prev => ({ ...prev, subscription: false }))}
                     sx={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      height: '100%',
-                      minHeight: 150,
-                      cursor: 'pointer',
+                      ...hostSideHandleSx(),
                       '&:hover': { bgcolor: statusHoverBgColor }
                     }}
                   >
@@ -897,9 +886,13 @@ return `${mins}m`
                       size="small"
                       label={isExpired ? '✗' : isExpiringSoon ? '!' : '✓'}
                       color={chipColor}
-                      sx={{ height: 18, fontSize: 11, fontWeight: 500, mt: 1 }}
+                      sx={{ height: 18, fontSize: 11, fontWeight: 500, mt: { xs: 0, xl: 1 } }}
                     />
-                    <i className="ri-arrow-right-s-line" style={{ fontSize: 16, opacity: 0.5, marginTop: 8 }} />
+                    <Box
+                      component="i"
+                      className="ri-arrow-right-s-line"
+                      sx={{ fontSize: 16, opacity: 0.5, mt: { xs: 0, xl: 1 } }}
+                    />
                   </Box>
                 ) : (
                   // Mode étendu

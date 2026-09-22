@@ -1,6 +1,6 @@
 'use client'
 
-import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 
 // ---- Types ----
 
@@ -237,8 +237,41 @@ export function ProxCenterTasksProvider({ children }: { children: React.ReactNod
     return { ok: true }
   }, [])
 
+  // Every function below is a stable useCallback, so the value only changes
+  // when the task list does — without this, each provider render handed every
+  // consumer (the taskbar, the Task Center table, the storage browser) a new
+  // object and re-rendered them all.
+  const value = useMemo(
+    () => ({
+      tasks,
+      addTask,
+      updateTask,
+      removeTask,
+      clearDone,
+      registerOnRestore,
+      unregisterOnRestore,
+      restoreTask,
+      registerOnCancel,
+      unregisterOnCancel,
+      cancelTask,
+    }),
+    [
+      tasks,
+      addTask,
+      updateTask,
+      removeTask,
+      clearDone,
+      registerOnRestore,
+      unregisterOnRestore,
+      restoreTask,
+      registerOnCancel,
+      unregisterOnCancel,
+      cancelTask,
+    ]
+  )
+
   return (
-    <ProxCenterTasksContext.Provider value={{ tasks, addTask, updateTask, removeTask, clearDone, registerOnRestore, unregisterOnRestore, restoreTask, registerOnCancel, unregisterOnCancel, cancelTask }}>
+    <ProxCenterTasksContext.Provider value={value}>
       {children}
     </ProxCenterTasksContext.Provider>
   )

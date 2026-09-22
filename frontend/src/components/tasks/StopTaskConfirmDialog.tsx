@@ -22,7 +22,7 @@ export default function StopTaskConfirmDialog({
   busyLabel,
   onKeep,
   onConfirm,
-}: {
+}: Readonly<{
   open: boolean
   busy?: boolean
   title?: string
@@ -33,7 +33,7 @@ export default function StopTaskConfirmDialog({
   busyLabel?: string
   onKeep: () => void
   onConfirm: () => void
-}) {
+}>) {
   const t = useTranslations()
 
   return (

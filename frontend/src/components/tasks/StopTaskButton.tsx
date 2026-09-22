@@ -12,11 +12,11 @@ export default function StopTaskButton({
   onClick,
   stopping = false,
   size = 16,
-}: {
+}: Readonly<{
   onClick: () => void
   stopping?: boolean
   size?: number
-}) {
+}>) {
   const t = useTranslations()
 
   return (

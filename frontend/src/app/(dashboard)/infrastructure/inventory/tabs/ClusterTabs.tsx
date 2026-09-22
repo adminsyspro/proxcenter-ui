@@ -4149,7 +4149,7 @@ export default function ClusterTabs(props: any) {
                                 {/* Header */}
                                 <Box sx={{
                                   display: 'grid',
-                                  gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr',
+                                  gridTemplateColumns: '2fr 0.5fr 0.9fr 0.5fr 1.3fr 1.5fr',
                                   gap: 2,
                                   px: 2,
                                   py: 1,
@@ -4161,7 +4161,8 @@ export default function ClusterTabs(props: any) {
                                   <Typography variant="caption" fontWeight={600}>{t('inventory.id')}</Typography>
                                   <Typography variant="caption" fontWeight={600}>{t('common.status')}</Typography>
                                   <Typography variant="caption" fontWeight={600}>{t('cluster.votes')}</Typography>
-                                  <Typography variant="caption" fontWeight={600}>{t('cluster.ipAddress')}</Typography>
+                                  <Typography variant="caption" fontWeight={600}>{t('cluster.managementAddress')}</Typography>
+                                  <Typography variant="caption" fontWeight={600}>{t('cluster.corosyncLinks')}</Typography>
                                 </Box>
                                 {/* Rows */}
                                 {clusterConfig.nodes.map((node: any) => (
@@ -4169,7 +4170,7 @@ export default function ClusterTabs(props: any) {
                                     key={node.name}
                                     sx={{
                                       display: 'grid',
-                                      gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr',
+                                      gridTemplateColumns: '2fr 0.5fr 0.9fr 0.5fr 1.3fr 1.5fr',
                                       gap: 2,
                                       px: 2,
                                       py: 1.5,
@@ -4201,10 +4202,24 @@ export default function ClusterTabs(props: any) {
                                         <Chip size="small" color="error" label="DOWN" sx={{ height: 20, fontSize: '0.7rem' }} />
                                       )}
                                     </Typography>
-                                    <Typography variant="body2">1</Typography>
+                                    <Typography variant="body2">{node.votes ?? '—'}</Typography>
+                                    {/* Management and corosync are two networks on many clusters
+                                        (roadmap#29): never show one under the other's label. */}
                                     <Typography variant="body2" sx={{ fontFamily: 'monospace', fontSize: 12 }}>
-                                      {node.ip || '—'}
+                                      {node.managementIp || '—'}
                                     </Typography>
+                                    <Box sx={{ fontFamily: 'monospace', fontSize: 12, lineHeight: 1.6 }}>
+                                      {Array.isArray(node.corosyncLinks) && node.corosyncLinks.length > 0
+                                        ? node.corosyncLinks.map((addr: string, linkIdx: number) => (
+                                            <Box key={`${addr}-${linkIdx}`} component="div">
+                                              {node.corosyncLinks.length > 1 && (
+                                                <Box component="span" sx={{ opacity: 0.6, mr: 0.75 }}>link{linkIdx}</Box>
+                                              )}
+                                              {addr}
+                                            </Box>
+                                          ))
+                                        : '—'}
+                                    </Box>
                                   </Box>
                                 ))}
                               </Box>

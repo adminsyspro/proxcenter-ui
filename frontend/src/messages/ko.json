@@ -7625,6 +7625,8 @@
     "nodename": "노드 이름",
     "votes": "투표 수",
     "ipAddress": "IP 주소",
+    "managementAddress": "관리 IP",
+    "corosyncLinks": "Corosync 링크",
     "clusterJoinInformation": "클러스터 조인 정보",
     "copyJoinInfoDescription": "여기에서 조인 정보를 복사하여 추가하려는 노드에서 사용하세요.",
     "fingerprint": "핑거프린트",

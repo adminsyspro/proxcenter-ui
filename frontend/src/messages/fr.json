@@ -7626,6 +7626,8 @@
     "nodename": "Nom du nœud",
     "votes": "Votes",
     "ipAddress": "Adresse IP",
+    "managementAddress": "IP de management",
+    "corosyncLinks": "Liens Corosync",
     "clusterJoinInformation": "Informations de jonction du cluster",
     "copyJoinInfoDescription": "Copiez les informations de jonction ici et utilisez-les sur le nœud que vous souhaitez ajouter.",
     "fingerprint": "Empreinte",

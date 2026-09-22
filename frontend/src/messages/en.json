@@ -7625,6 +7625,8 @@
     "nodename": "Nodename",
     "votes": "Votes",
     "ipAddress": "IP Address",
+    "managementAddress": "Management IP",
+    "corosyncLinks": "Corosync links",
     "clusterJoinInformation": "Cluster Join Information",
     "copyJoinInfoDescription": "Copy the Join Information here and use it on the node you want to add.",
     "fingerprint": "Fingerprint",

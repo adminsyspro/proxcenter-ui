@@ -7631,6 +7631,8 @@
     "nodename": "节点名",
     "votes": "投票",
     "ipAddress": "IP 地址",
+    "managementAddress": "管理 IP",
+    "corosyncLinks": "Corosync 链路",
     "clusterJoinInformation": "集群加入信息",
     "copyJoinInfoDescription": "复制此处的加入信息并在要添加的节点上使用。",
     "fingerprint": "指纹",

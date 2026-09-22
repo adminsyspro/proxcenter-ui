@@ -25,6 +25,7 @@ export interface LdapConfig {
   emailAttribute: string
   nameAttribute: string
   tlsInsecure: boolean
+  caCert: string | null
   groupAttribute: string
   groupRoleMapping: Record<string, string>
   defaultRole: string
@@ -85,6 +86,7 @@ export async function getLdapConfig(): Promise<LdapConfig | null> {
     emailAttribute: row.emailAttribute,
     nameAttribute: row.nameAttribute,
     tlsInsecure: row.tlsInsecure,
+    caCert: row.caCert || null,
     groupAttribute: row.groupAttribute || "memberOf",
     groupRoleMapping,
     defaultRole: row.defaultRole || "role_viewer",
@@ -136,6 +138,9 @@ export async function authenticateLdap(
           email_attribute: config.emailAttribute,
           name_attribute: config.nameAttribute,
           tls_insecure: config.tlsInsecure,
+          // PEM of the CA that signed the LDAPS certificate. The orchestrator
+          // adds it to the system pool; empty means system store only.
+          ca_cert: config.caCert || "",
           group_attribute: config.groupAttribute,
         },
       }),

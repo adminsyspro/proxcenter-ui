@@ -27,6 +27,7 @@ export async function GET() {
           email_attribute: "mail",
           name_attribute: "cn",
           tls_insecure: false,
+          ca_cert: "",
           group_attribute: "memberOf",
           // Frontend expects a string here (it does JSON.parse with a string|object guard).
           // Returning the canonical empty-object string keeps the response shape stable.
@@ -62,6 +63,9 @@ export async function GET() {
         email_attribute: config.emailAttribute,
         name_attribute: config.nameAttribute,
         tls_insecure: config.tlsInsecure,
+        // A CA certificate is public material, so unlike the bind password it
+        // goes back to the form as-is and can be re-submitted on a test.
+        ca_cert: config.caCert || "",
         hasBindPassword: !!config.bindPasswordEnc,
         group_attribute: config.groupAttribute || "memberOf",
         group_role_mapping: groupRoleMappingStr,
@@ -94,6 +98,7 @@ export async function PUT(req: Request) {
       email_attribute,
       name_attribute,
       tls_insecure,
+      ca_cert,
       group_attribute,
       group_role_mapping,
       default_role,
@@ -108,6 +113,16 @@ export async function PUT(req: Request) {
       if (!base_dn) {
         return NextResponse.json({ error: "Base DN requise" }, { status: 400 })
       }
+    }
+
+    // Reject anything that is not a PEM certificate bundle before it reaches
+    // the orchestrator, where a bad paste would only show up as a failed bind.
+    const caCert = typeof ca_cert === "string" ? ca_cert.trim() : ""
+    if (caCert && !/-----BEGIN CERTIFICATE-----/.test(caCert)) {
+      return NextResponse.json(
+        { error: "Le certificat CA doit être au format PEM (-----BEGIN CERTIFICATE-----)" },
+        { status: 400 },
+      )
     }
 
     const mappingObj = normalizeGroupRoleMapping(group_role_mapping)
@@ -126,6 +141,7 @@ export async function PUT(req: Request) {
       emailAttribute: email_attribute || "mail",
       nameAttribute: name_attribute || "cn",
       tlsInsecure: !!tls_insecure,
+      caCert: caCert || null,
       groupAttribute: group_attribute || "memberOf",
       groupRoleMapping: mappingObj,
       defaultRole: default_role || "role_viewer",
@@ -168,6 +184,7 @@ export async function PUT(req: Request) {
         url: url || null,
         base_dn: base_dn || null,
         bindPasswordChanged: !!bind_password,
+        caCert: !!caCert,
       },
       status: "success",
     })

@@ -1,0 +1,1 @@
+ALTER TABLE "ldap_config" ADD COLUMN IF NOT EXISTS "ca_cert" TEXT;

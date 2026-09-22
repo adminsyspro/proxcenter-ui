@@ -32,6 +32,7 @@ export async function POST(req: Request) {
       base_dn,
       user_filter,
       tls_insecure,
+      ca_cert,
     } = body
 
     // Validation basique
@@ -65,6 +66,7 @@ export async function POST(req: Request) {
       base_dn,
       user_filter,
       tls_insecure,
+      ca_cert,
     })
 
     // Audit
@@ -117,6 +119,7 @@ async function testLdapViaOrchestrator(config: {
   base_dn?: string
   user_filter?: string
   tls_insecure?: boolean
+  ca_cert?: string
 }): Promise<{ success: boolean; message: string }> {
   try {
     const headers: Record<string, string> = {
@@ -137,6 +140,7 @@ async function testLdapViaOrchestrator(config: {
         base_dn: config.base_dn,
         user_filter: config.user_filter,
         tls_insecure: config.tls_insecure,
+        ca_cert: config.ca_cert || "",
       }),
       signal: AbortSignal.timeout(15000),
     })

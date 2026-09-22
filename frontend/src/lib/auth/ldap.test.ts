@@ -14,6 +14,7 @@ function makeConfig(mapping: Record<string, string>): LdapConfig {
     emailAttribute: 'mail',
     nameAttribute: 'cn',
     tlsInsecure: false,
+    caCert: null,
     groupAttribute: 'memberOf',
     groupRoleMapping: mapping,
     defaultRole: 'role_viewer',

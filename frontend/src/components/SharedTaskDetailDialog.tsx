@@ -8,6 +8,7 @@ import { useSWRConfig } from 'swr'
 import { useSWRFetch } from '@/hooks/useSWRFetch'
 import type { SharedTask } from '@/lib/tasks/sharedTask'
 import { parseSpeedMBps, etaSeconds, formatEta, stepLabelKey } from '@/lib/tasks/taskProgressDisplay'
+import StopTaskConfirmDialog from '@/components/tasks/StopTaskConfirmDialog'
 
 type DetailResponse = { data: SharedTask & { logs?: unknown[] } }
 
@@ -125,29 +126,21 @@ export default function SharedTaskDetailDialog({ jobId, onClose }: { jobId: stri
       )}
     </Dialog>
 
-    {/* Confirm Cancel: destructive on a possibly shared job, always ask. */}
-    <Dialog open={confirmOpen} onClose={() => { if (!cancelling) setConfirmOpen(false) }} maxWidth="xs" fullWidth>
-      <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'error.main' }}>
-        <i className="ri-error-warning-line" style={{ fontSize: 20 }} />
-        {t('tasks.shared.cancelConfirmTitle')}
-      </DialogTitle>
-      <DialogContent>
-        <Typography sx={{ mb: 1.5 }}>
-          {t('tasks.shared.cancelConfirmStop')}
-        </Typography>
-        <Alert severity="warning">
-          {t('tasks.shared.cancelConfirmLeftovers')}
-        </Alert>
-      </DialogContent>
-      <DialogActions sx={{ px: 3, pb: 2 }}>
-        <Button onClick={() => setConfirmOpen(false)} disabled={cancelling}>
-          {t('tasks.shared.cancelConfirmKeep')}
-        </Button>
-        <Button variant="contained" color="error" onClick={cancelJob} disabled={cancelling}>
-          {cancelling ? t('tasks.shared.cancelling') : t('tasks.shared.cancelMigration')}
-        </Button>
-      </DialogActions>
-    </Dialog>
+    {/* Confirm Cancel: destructive on a possibly shared job, always ask. The
+        modal itself is the one every stop in the product goes through (#974),
+        with this dialog's own migration wording. */}
+    <StopTaskConfirmDialog
+      open={confirmOpen}
+      busy={cancelling}
+      title={t('tasks.shared.cancelConfirmTitle')}
+      body={t('tasks.shared.cancelConfirmStop')}
+      warning={t('tasks.shared.cancelConfirmLeftovers')}
+      keepLabel={t('tasks.shared.cancelConfirmKeep')}
+      confirmLabel={t('tasks.shared.cancelMigration')}
+      busyLabel={t('tasks.shared.cancelling')}
+      onKeep={() => setConfirmOpen(false)}
+      onConfirm={cancelJob}
+    />
     </>
   )
 }

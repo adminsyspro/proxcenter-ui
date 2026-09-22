@@ -4091,6 +4091,16 @@
     "failed": "Fallido"
   },
   "tasks": {
+    "stop": {
+      "action": "Detener",
+      "confirmTitle": "¿Detener esta tarea?",
+      "confirmBody": "La tarea se detiene en el nodo que la ejecuta. Lo que ya ha hecho no se deshace.",
+      "confirmBodyUpload": "La transferencia se detiene ahora. Lo que ya ha llegado a Proxmox se descarta: una subida solo se coloca cuando ha llegado entera, así que no queda nada en el almacenamiento.",
+      "confirmBodyJob": "El trabajo se detiene de inmediato, aunque lo haya iniciado otro usuario.",
+      "keep": "Dejar en curso",
+      "confirm": "Detener la tarea",
+      "stopping": "Deteniendo..."
+    },
     "title": "Tareas",
     "showTasks": "Mostrar tareas",
     "hideTasks": "Ocultar",

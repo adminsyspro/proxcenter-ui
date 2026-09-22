@@ -9,7 +9,10 @@
 export type UploadProgress = {
   bytesSent: number
   totalBytes: number
-  status: "transferring" | "done" | "error"
+  // "cancelled" is what an operator caused from the task row (#974): the
+  // browser stopped sending and the connection to Proxmox was destroyed. It
+  // is deliberately not "error", so nothing reports it as a failure.
+  status: "transferring" | "done" | "error" | "cancelled"
   error?: string
 }
 
@@ -30,6 +33,13 @@ const uploads = new Map<string, UploadEntry>()
  */
 export function setProgress(uploadId: string, progress: UploadProgress, ownerId?: string | null) {
   const existing = uploads.get(uploadId)
+
+  // A transfer that has ended cannot go back to "transferring". A stop (#974)
+  // is written by the DELETE request while the chunk loop is still inside an
+  // await, and that loop's next tick would otherwise erase the outcome: a
+  // browser that had reloaded and is polling this entry would then wait for a
+  // transfer nobody is running any more.
+  if (existing && progress.status === "transferring" && existing.progress.status !== "transferring") return
 
   uploads.set(uploadId, {
     progress,

@@ -4070,6 +4070,16 @@
     "failed": "Fehlgeschlagen"
   },
   "tasks": {
+    "stop": {
+      "action": "Stoppen",
+      "confirmTitle": "Diese Aufgabe stoppen?",
+      "confirmBody": "Die Aufgabe wird auf dem Knoten gestoppt, der sie ausführt. Bereits Erledigtes wird nicht rückgängig gemacht.",
+      "confirmBodyUpload": "Die Übertragung wird jetzt gestoppt. Was Proxmox bereits erreicht hat, wird verworfen: ein Upload wird erst abgelegt, wenn er vollständig angekommen ist, es bleibt also nichts auf dem Speicher zurück.",
+      "confirmBodyJob": "Der Job wird sofort gestoppt, auch wenn ihn ein anderer Benutzer gestartet hat.",
+      "keep": "Weiterlaufen lassen",
+      "confirm": "Aufgabe stoppen",
+      "stopping": "Wird gestoppt..."
+    },
     "title": "Aufgaben",
     "showTasks": "Aufgaben anzeigen",
     "hideTasks": "Ausblenden",

@@ -308,7 +308,7 @@ export function UploadDialog({ open, onClose, onOpen, connId, node, storage, con
   contentTypes: string[]
   onUploaded: () => void
 }) {
-  const { addTask, updateTask, registerOnRestore, unregisterOnRestore } = useProxCenterTasks()
+  const { addTask, updateTask, registerOnRestore, unregisterOnRestore, registerOnCancel, unregisterOnCancel } = useProxCenterTasks()
   const [mode, setMode] = useState<'file' | 'url'>('file')
   const [file, setFile] = useState<File | null>(null)
   const [contentType, setContentType] = useState('')
@@ -376,6 +376,12 @@ export function UploadDialog({ open, onClose, onOpen, connId, node, storage, con
 
     let pollInterval: ReturnType<typeof setInterval> | null = null
 
+    // Stopping the upload from its row (#974) has two legs: this controller
+    // stops the browser sending chunks, and cancelUrl below lets the row drop
+    // the server's half-written connection to Proxmox, which survives a reload.
+    const abort = new AbortController()
+    const uploadUrl = `/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/storage/${encodeURIComponent(storage)}/upload`
+
     try {
       // Register in ProxCenter tasks
       addTask({
@@ -386,6 +392,7 @@ export function UploadDialog({ open, onClose, onOpen, connId, node, storage, con
         progress: 0,
         status: 'running',
         createdAt: Date.now(),
+        cancelUrl: uploadUrl,
       })
 
       // Allow reopening the dialog from the taskbar
@@ -393,6 +400,8 @@ export function UploadDialog({ open, onClose, onOpen, connId, node, storage, con
         setMinimized(false)
         onOpen()
       })
+
+      registerOnCancel(uploadId, () => abort.abort())
 
       // Phase 1 streams the chunks, phase 2 finalizes; both legs live in the
       // shared client so the CD/DVD dialogs speak the exact same protocol.
@@ -403,6 +412,7 @@ export function UploadDialog({ open, onClose, onOpen, connId, node, storage, con
         file,
         contentType,
         uploadId,
+        signal: abort.signal,
         onProgress: (pct) => {
           setProgress(pct)
           updateTask(uploadId, { progress: Math.round(pct / 2) })
@@ -434,10 +444,17 @@ export function UploadDialog({ open, onClose, onOpen, connId, node, storage, con
         onClose()
       }, 1500)
     } catch (e: any) {
-      updateTask(uploadId, { status: 'error', error: e?.message || String(e) })
-      setError(e?.message || String(e))
+      // An abort is what the operator asked for, not a failure to report as
+      // one: the row was already flipped to cancelled by cancelTask.
+      if (e?.name === 'AbortError' || abort.signal.aborted) {
+        setError(null)
+      } else {
+        updateTask(uploadId, { status: 'error', error: e?.message || String(e) })
+        setError(e?.message || String(e))
+      }
     } finally {
       if (pollInterval) clearInterval(pollInterval)
+      unregisterOnCancel(uploadId)
       setUploading(false)
     }
   }

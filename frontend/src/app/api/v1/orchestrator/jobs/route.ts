@@ -411,7 +411,9 @@ export async function GET(req: Request) {
             for (const exec of executions) {
               let jobStatus = exec.status
               if (exec.status === "completed") jobStatus = "success"
-              else if (exec.status === "cancelled") jobStatus = "failed"
+              // cancelled stays cancelled: an execution an operator stopped is
+              // not a failure, and since #974 it is an outcome they can cause
+              // from the task row, so the chip has to say so.
 
               const typeLabel = exec.type === "failover" ? "Failover" : exec.type === "failback" ? "Failback" : "Test Failover"
 

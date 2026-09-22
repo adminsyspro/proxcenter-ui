@@ -58,7 +58,7 @@ const { fakeHttps } = vi.hoisted(() => {
 })
 vi.mock("node:https", () => ({ default: fakeHttps, ...fakeHttps }))
 
-import { POST } from "./route"
+import { DELETE, POST } from "./route"
 
 const PARAMS = { id: "conn-1", node: "pve1", storage: "isolib" }
 
@@ -167,5 +167,82 @@ describe("POST upload: tenant write guard sees the filename on both legs", () =>
     const res = await callRoute(POST, { method: "POST", params: PARAMS, headers: { "x-upload-id": "u-3" } })
     expect(res.status).toBe(400)
     expect(guardMock).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * DELETE .../upload: stopping an upload from its task row (#974). The browser
+ * stops sending on its own; what this leg owns is the half-written connection
+ * to Proxmox, which would otherwise sit open until its 600 s timeout.
+ */
+describe("DELETE upload: stopping a transfer in flight", () => {
+  const startChunk = async () =>
+    callRoute(DELETE as any, {
+      params: PARAMS,
+      method: "DELETE",
+      headers: { "X-Upload-Id": "up-del" },
+    })
+
+  it("400s without an upload id, so a stray call cannot match a session by accident", async () => {
+    const res = await callRoute(DELETE as any, { params: PARAMS, method: "DELETE" })
+
+    expect(res.status).toBe(400)
+  })
+
+  it("refuses without the connection permission", async () => {
+    checkPermissionMock.mockResolvedValue(new Response(JSON.stringify({ error: "denied" }), { status: 403 }))
+
+    expect((await startChunk()).status).toBe(403)
+  })
+
+  it("404s on an id with nothing in flight, which is also what a finished upload gives", async () => {
+    const res = await startChunk()
+
+    expect(res.status).toBe(404)
+    expect((await res.json()).error).toMatch(/no upload in flight/i)
+  })
+
+  it("destroys the open Proxmox request of a transfer that IS in flight", async () => {
+    const destroy = vi.fn()
+    fakeHttps.request.mockImplementationOnce((_opts: any, _onResponse: any) => {
+      const { EventEmitter } = require("node:events")
+      const req: any = new EventEmitter()
+      req.write = (_d: any, cb?: (e?: any) => void) => { cb?.(); return true }
+      req.destroy = destroy
+      req.end = () => {}
+
+      return req
+    })
+
+    // First chunk opens the session and streams one byte to Proxmox.
+    const chunk = await callRoute(POST as any, {
+      params: PARAMS,
+      body: "x",
+      headers: {
+        "X-Upload-Id": "up-live",
+        "X-Chunk-Index": "0",
+        "X-Total-Size": "1",
+        "X-File-Name": "big.iso",
+      },
+    })
+    expect(chunk.status).toBe(200)
+
+    const res = await callRoute(DELETE as any, {
+      params: PARAMS,
+      method: "DELETE",
+      headers: { "X-Upload-Id": "up-live" },
+    })
+
+    expect(res.status).toBe(200)
+    expect(destroy).toHaveBeenCalled()
+
+    // The session is gone: a second stop finds nothing, so a double click
+    // cannot destroy a request that a later upload has since opened.
+    const again = await callRoute(DELETE as any, {
+      params: PARAMS,
+      method: "DELETE",
+      headers: { "X-Upload-Id": "up-live" },
+    })
+    expect(again.status).toBe(404)
   })
 })

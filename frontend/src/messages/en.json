@@ -4091,6 +4091,16 @@
     "failed": "Failed"
   },
   "tasks": {
+    "stop": {
+      "action": "Stop",
+      "confirmTitle": "Stop this task?",
+      "confirmBody": "The task is stopped on the node that runs it. What it has already done is not undone.",
+      "confirmBodyUpload": "The transfer stops now. What has already reached Proxmox is discarded: an upload is only put in place once it has arrived in full, so nothing is left on the storage.",
+      "confirmBodyJob": "The job stops immediately, even if another user started it.",
+      "keep": "Keep running",
+      "confirm": "Stop the task",
+      "stopping": "Stopping..."
+    },
     "title": "Tasks",
     "showTasks": "Show tasks",
     "hideTasks": "Hide",

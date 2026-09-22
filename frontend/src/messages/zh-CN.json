@@ -4095,6 +4095,16 @@
     "failed": "失败"
   },
   "tasks": {
+    "stop": {
+      "action": "停止",
+      "confirmTitle": "停止此任务？",
+      "confirmBody": "任务将在运行它的节点上停止，已完成的部分不会回滚。",
+      "confirmBodyUpload": "传输立即停止。已经发送到 Proxmox 的部分会被丢弃：上传只有在完整到达后才会落盘，因此存储上不会留下任何内容。",
+      "confirmBodyJob": "该作业将立即停止，即使它由其他用户启动。",
+      "keep": "继续运行",
+      "confirm": "停止任务",
+      "stopping": "正在停止..."
+    },
     "title": "任务",
     "showTasks": "显示任务",
     "hideTasks": "隐藏",

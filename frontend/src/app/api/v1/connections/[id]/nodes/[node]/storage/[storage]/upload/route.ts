@@ -60,6 +60,60 @@ export async function POST(
   return NextResponse.json({ error: "Missing X-Chunk-Index or X-Finalize header" }, { status: 400 })
 }
 
+// DELETE /api/v1/connections/{id}/nodes/{node}/storage/{storage}/upload
+//
+// Stop an upload in flight from its task row (#974). The browser stops sending
+// chunks on its own (it holds the AbortController), but the half-written
+// connection to Proxmox is ours: without this, it sits there until the 600 s
+// timeout with a Content-Length it will never satisfy. Destroying it makes
+// Proxmox drop the partial multipart body, and PVE only moves an upload into
+// place once it has received all of it, so nothing is left on the storage.
+export async function DELETE(
+  req: Request,
+  ctx: { params: Promise<{ id: string; node: string; storage: string }> }
+) {
+  const uploadId = req.headers.get("x-upload-id")
+
+  try {
+    const { id } = await ctx.params
+
+    const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW, "connection", id)
+    if (denied) return denied
+
+    if (!uploadId) {
+      return NextResponse.json({ error: "Missing X-Upload-Id header" }, { status: 400 })
+    }
+
+    const session = streamingSessions.get(uploadId)
+    if (!session) {
+      // Already finished, already cancelled, or the id belongs to nothing.
+      return NextResponse.json({ error: "No upload in flight for this id" }, { status: 404 })
+    }
+
+    streamingSessions.delete(uploadId)
+    session.proxyReq.destroy(new Error("Upload stopped by the operator"))
+    // A finalize leg already waiting is released here rather than left hanging
+    // on a Proxmox answer that is never coming. When none is waiting, the
+    // handler attached at session creation is what keeps this from surfacing
+    // as an unhandled rejection.
+    session.reject(new Error("Upload stopped by the operator"))
+    setProgress(uploadId, {
+      bytesSent: session.bytesSent,
+      totalBytes: session.totalFormLength,
+      status: "cancelled",
+    })
+    setTimeout(() => clearProgress(uploadId), 30_000)
+
+    console.log(`[upload] Cancelled uploadId=${uploadId} after ${session.bytesSent} bytes`)
+
+    return NextResponse.json({ success: true, uploadId, bytesSent: session.bytesSent })
+  } catch (e: any) {
+    console.error("Error cancelling upload:", e)
+
+    return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
+  }
+}
+
 // ── Chunk handler: open connection on first chunk, stream data directly ──
 async function handleChunk(
   req: Request,
@@ -126,6 +180,13 @@ async function handleChunk(
         rejectResult = rej
       })
 
+      // Only the finalize leg awaits this promise, and on a stopped or failed
+      // upload that leg never runs: the rejection would then reach the process
+      // as an unhandled one. This handler makes it handled without swallowing
+      // anything, since an awaiting finalize still sees the rejection through
+      // its own await.
+      resultPromise.catch(() => { /* nobody left to tell */ })
+
       const proxyReq = transport.request(
         {
           hostname: targetUrl.hostname,
@@ -178,6 +239,17 @@ async function handleChunk(
     while (true) {
       const { done, value } = await reader.read()
       if (done) break
+
+      // A stop (#974) drops the session. Leave immediately: one more loop
+      // would write "transferring" over the cancelled progress entry, and a
+      // browser that reloaded and is polling it would never learn the
+      // transfer was stopped.
+      if (streamingSessions.get(uploadId) !== session) {
+        await reader.cancel().catch(() => { /* the body is going away anyway */ })
+
+        return NextResponse.json({ cancelled: true, uploadId }, { status: 409 })
+      }
+
       if (value) {
         await new Promise<void>((resolve, reject) => {
           session!.proxyReq.write(value, (err: any) => (err ? reject(err) : resolve()))
@@ -193,13 +265,19 @@ async function handleChunk(
       bytesSent: session.bytesSent,
     })
   } catch (e: any) {
-    console.error("Error streaming chunk:", e)
-    // Clean up on error
     const session = streamingSessions.get(uploadId)
-    if (session) {
-      session.proxyReq.destroy()
-      streamingSessions.delete(uploadId)
+
+    // No session left means a stop destroyed the request under this write
+    // ("Cannot call write after a stream was destroyed"). That is the outcome
+    // the operator asked for, not a server error to log and report as one.
+    if (!session) {
+      return NextResponse.json({ cancelled: true, uploadId }, { status: 409 })
     }
+
+    console.error("Error streaming chunk:", e)
+    session.proxyReq.destroy()
+    streamingSessions.delete(uploadId)
+
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }

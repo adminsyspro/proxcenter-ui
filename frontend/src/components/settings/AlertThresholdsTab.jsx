@@ -281,6 +281,8 @@ export default function AlertThresholdsTab() {
           max={Math.max(1000, thresholds.disk_latency_peak_critical || 0)}
           step={5}
           unit=' ms'
+          // The default middle mark, (5 + 1000) / 2, would print 503 ms.
+          marks={[5, 500, Math.max(1000, thresholds.disk_latency_peak_critical || 0)].map(v => ({ value: v, label: `${v} ms` }))}
           enabled={thresholds.disk_latency_peak_warning > 0}
           onToggle={(checked) => setThresholds(th => (checked
             ? { ...th, disk_latency_peak_warning: 100, disk_latency_peak_critical: Math.max(100, th.disk_latency_peak_critical || 500) }

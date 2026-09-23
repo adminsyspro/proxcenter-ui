@@ -2057,6 +2057,8 @@ export const EXTRA_MOCKS: MockDataMap = {
     disk_latency_warning: 30,
     disk_latency_critical: 100,
     disk_latency_window_minutes: 5,
+    disk_latency_peak_warning: 0,
+    disk_latency_peak_critical: 500,
     disk_latency_retention_days: 7,
     disk_latency_collection: 1,
     metrics_interval_seconds: 60,

@@ -164,6 +164,19 @@ describe('GET /api/v1/internal/alert-config', () => {
     expect(body.thresholds.replication_rpo_grace_percent).toBe(25)
   })
 
+  it('ships the disk latency peak thresholds unrounded, disabled by default (#881)', async () => {
+    findManyMock.mockResolvedValue([])
+    getSettingMock.mockResolvedValueOnce({ disk_latency_peak_warning: 12.5, disk_latency_peak_critical: 650.5 })
+    let body = await (await GET(makeReq({ 'X-API-Key': 'secret-key' }))).json()
+    expect(body.thresholds.disk_latency_peak_warning).toBe(12.5)
+    expect(body.thresholds.disk_latency_peak_critical).toBe(650.5)
+
+    getSettingMock.mockResolvedValueOnce({ memory_warning: 90 })
+    body = await (await GET(makeReq({ 'X-API-Key': 'secret-key' }))).json()
+    expect(body.thresholds.disk_latency_peak_warning).toBe(0)
+    expect(body.thresholds.disk_latency_peak_critical).toBe(500)
+  })
+
   it('preserves an explicit 0 for the disable-the-check convention', async () => {
     // 0 means "check disabled" for both families, exactly like
     // snapshot_max_age_days. A falsy-guarded merge would silently re-enable them.

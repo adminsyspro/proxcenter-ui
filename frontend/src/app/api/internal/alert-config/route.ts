@@ -31,6 +31,9 @@ const DEFAULT_THRESHOLDS = {
   disk_latency_warning: 0,
   disk_latency_critical: 100,
   disk_latency_window_minutes: 5,
+  // Peak check, float64 on the Go side like the average thresholds.
+  disk_latency_peak_warning: 0,
+  disk_latency_peak_critical: 500,
   disk_latency_retention_days: 7,
   disk_latency_collection: 1,
   // Metrics collection cadence in seconds (#881), an int on the Go side too.

@@ -55,8 +55,10 @@ describe('AlertThresholdsTab guest disk latency', () => {
     expect(card.getByText('Disabled')).toBeInTheDocument()
     expect(alertSwitch(card)).not.toBeChecked()
     expect(card.queryByRole('slider')).not.toBeInTheDocument()
-    // Only the retention field of the foot remains: the window field goes with the slider.
-    expect(card.getAllByRole('spinbutton')).toHaveLength(1)
+    // The window also frames the peak check and the max figures of the lists,
+    // so it sits in the foot with the retention, whatever the alert toggle.
+    expect(card.getAllByRole('spinbutton')).toHaveLength(2)
+    expect(windowField(card)).toHaveValue(5)
     expect(retentionField(card)).toHaveValue(7)
   })
 
@@ -131,6 +133,44 @@ describe('AlertThresholdsTab guest disk latency', () => {
     const put = fetchMock.mock.calls.find(([, options]) => options?.method === 'PUT')
     expect(JSON.parse(put[1].body)).toMatchObject({
       disk_latency_collection: 0, disk_latency_retention_days: 45, disk_latency_warning: 0,
+    })
+  })
+})
+
+async function peakCard() {
+  await openSection('Performance & replication')
+  const title = await screen.findByText('Guest disk latency peak')
+
+  return within(title.closest('.MuiCard-root') as HTMLElement)
+}
+
+describe('AlertThresholdsTab guest disk latency peak', () => {
+  it('is disabled by default, independently of the average check', async () => {
+    renderWithProviders(<AlertThresholdsTab />)
+    const card = await peakCard()
+
+    expect(card.getByText('Disabled')).toBeInTheDocument()
+    expect(card.getByRole('switch')).not.toBeChecked()
+    expect(card.queryByRole('slider')).not.toBeInTheDocument()
+  })
+
+  it('offers 100 / 500 ms once enabled, says a peak is one collection interval, and saves only the peak pair', async () => {
+    const user = userEvent.setup()
+
+    renderWithProviders(<AlertThresholdsTab />)
+    const card = await peakCard()
+
+    await user.click(card.getByRole('switch'))
+
+    expect(card.getAllByRole('slider').map(slider => slider.getAttribute('aria-valuenow'))).toEqual(['100', '500'])
+    expect(card.getByText(/worst collection interval of the window/)).toBeInTheDocument()
+    expect(card.getByText('A peak is the latency of one collection interval (every 1 min), not of a single I/O')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(fetchMock.mock.calls.some(([, options]) => options?.method === 'PUT')).toBe(true))
+    const put = fetchMock.mock.calls.find(([, options]) => options?.method === 'PUT')
+    expect(JSON.parse(put[1].body)).toMatchObject({
+      disk_latency_peak_warning: 100, disk_latency_peak_critical: 500, disk_latency_warning: 0,
     })
   })
 })

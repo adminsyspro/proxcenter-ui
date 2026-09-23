@@ -37,6 +37,11 @@ const DEFAULT_THRESHOLDS = {
   disk_latency_warning: 0,
   disk_latency_critical: 100,
   disk_latency_window_minutes: 5,
+  // The peak check (#881 follow-up) compares the worst collection interval of
+  // the same window, the spikes an average smooths out. 0 disables it on its
+  // own, whatever the average check does.
+  disk_latency_peak_warning: 0,
+  disk_latency_peak_critical: 500,
   // Days of per-disk latency history kept for the charts, and the collection
   // switch itself (1 = on): one PVE call per running VM per collection.
   disk_latency_retention_days: 7,

@@ -787,6 +787,7 @@ export interface Alert {
     | 'snapshot_stale'
     | 'osd_latency'
     | 'disk_latency'
+    | 'disk_latency_peak'
     | 'replication_rpo'
     | 'replication_failed'
     | 'custom'
@@ -847,6 +848,10 @@ export interface AlertThresholds {
   disk_latency_critical: number
   /** Minutes a disk must stay above a threshold before it alerts (#881). */
   disk_latency_window_minutes: number
+  /** Worst single collection interval of the window, in ms, that raises a warning (#881). 0 disables the peak check. */
+  disk_latency_peak_warning: number
+  /** Worst single collection interval of the window, in ms, that raises a critical alert (#881). */
+  disk_latency_peak_critical: number
   /** Days of per-disk latency history kept for the Disk I/O charts (#881). */
   disk_latency_retention_days: number
   /** 1 = the orchestrator reads QEMU block statistics of every running VM (#881); 0 stops the collection, charts and alert included. */

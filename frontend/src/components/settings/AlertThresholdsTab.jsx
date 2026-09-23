@@ -37,6 +37,8 @@ const DEFAULTS = {
   disk_latency_warning: 0,
   disk_latency_critical: 100,
   disk_latency_window_minutes: 5,
+  disk_latency_peak_warning: 0,
+  disk_latency_peak_critical: 500,
   disk_latency_retention_days: 7,
   disk_latency_collection: 1,
   metrics_interval_seconds: 60,
@@ -223,6 +225,21 @@ export default function AlertThresholdsTab() {
           tDisabled={t('alerts.snapshotDisabled')}
           footer={(
             <Box sx={{ mt: 2, pt: 1.5, borderTop: '1px solid', borderColor: 'divider' }}>
+              {/* The window frames the peak card and the max figures of the
+                  lists too, so it outlives this card's toggle. */}
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1.5 }}>
+                <NumericTextField
+                  type='number'
+                  size='small'
+                  value={thresholds.disk_latency_window_minutes}
+                  onChange={(minutes) => setThresholds(th => ({ ...th, disk_latency_window_minutes: Math.min(60, Math.max(1, Math.trunc(minutes))) }))}
+                  fallback={5}
+                  min={1}
+                  slotProps={{ htmlInput: { min: 1, max: 60 } }}
+                  sx={{ width: 80 }}
+                />
+                <Typography variant='body2' color='text.secondary'>{t('alerts.diskLatencyWindow')}</Typography>
+              </Box>
               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
                 <Typography variant='caption' color='text.secondary'>{t('alerts.diskLatencyCollection')}</Typography>
                 <Switch
@@ -249,20 +266,36 @@ export default function AlertThresholdsTab() {
               </Box>
             </Box>
           )}
+        />
+
+        <ThresholdCard
+          icon='ri-pulse-line'
+          label={t('alerts.diskLatencyPeak')}
+          description={t('alerts.diskLatencyPeakDesc')}
+          warning={thresholds.disk_latency_peak_warning || 100}
+          critical={thresholds.disk_latency_peak_critical}
+          onChange={(w, c) => setThresholds(th => ({ ...th, disk_latency_peak_warning: w, disk_latency_peak_critical: c }))}
+          tWarning={t('alerts.warning')}
+          tCritical={t('alerts.critical')}
+          min={5}
+          max={Math.max(1000, thresholds.disk_latency_peak_critical || 0)}
+          step={5}
+          unit=' ms'
+          // The default middle mark, (5 + 1000) / 2, would print 503 ms.
+          marks={[5, 500, Math.max(1000, thresholds.disk_latency_peak_critical || 0)].map(v => ({ value: v, label: `${v} ms` }))}
+          enabled={thresholds.disk_latency_peak_warning > 0}
+          onToggle={(checked) => setThresholds(th => (checked
+            ? { ...th, disk_latency_peak_warning: 100, disk_latency_peak_critical: Math.max(100, th.disk_latency_peak_critical || 500) }
+            : { ...th, disk_latency_peak_warning: 0 }
+          ))}
+          tDisabled={t('alerts.snapshotDisabled')}
         >
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mt: 1 }}>
-            <NumericTextField
-              type='number'
-              size='small'
-              value={thresholds.disk_latency_window_minutes}
-              onChange={(minutes) => setThresholds(th => ({ ...th, disk_latency_window_minutes: Math.min(60, Math.max(1, Math.trunc(minutes))) }))}
-              fallback={5}
-              min={1}
-              slotProps={{ htmlInput: { min: 1, max: 60 } }}
-              sx={{ width: 80 }}
-            />
-            <Typography variant='body2' color='text.secondary'>{t('alerts.diskLatencyWindow')}</Typography>
-          </Box>
+          {/* QEMU only exposes cumulative counters: the finest figure is the
+              average of one collection interval, so a stall shorter than the
+              interval shows diluted. Said here, where the threshold is set. */}
+          <Typography variant='caption' color='text.secondary' display='block' sx={{ mt: 1 }}>
+            {t('alerts.diskLatencyPeakInterval', { interval: formatSeconds(thresholds.metrics_interval_seconds) })}
+          </Typography>
         </ThresholdCard>
 
         <SingleThresholdCard
@@ -474,9 +507,9 @@ function CardShell({ icon, label, enabled, onToggle, children }) {
  * `onToggle` is optional: a card that can be switched off renders the disabled
  * caption in place of its slider, exactly like the stale-snapshot card.
  * `children` render under the slider while the card is enabled, for a setting
- * that qualifies the two thresholds (the disk latency window, #881). `footer`
+ * that qualifies the two thresholds (the peak interval caption, #881). `footer`
  * renders whatever the toggle says, for settings that outlive the alert (the
- * latency collection switch and its history retention).
+ * latency window, the collection switch and its history retention).
  */
 function ThresholdCard({
   icon, label, description, warning, critical, onChange, tWarning, tCritical,

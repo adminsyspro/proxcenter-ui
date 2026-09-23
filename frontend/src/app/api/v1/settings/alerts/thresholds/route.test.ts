@@ -66,6 +66,25 @@ describe('GET /api/v1/settings/alerts/thresholds', () => {
   })
 })
 
+describe('guest disk latency peak thresholds (#881)', () => {
+  it('defaults to a disabled peak check with a 500 ms critical level', async () => {
+    const body = await (await callRoute(GET as any)).json()
+    expect(body.disk_latency_peak_warning).toBe(0)
+    expect(body.disk_latency_peak_critical).toBe(500)
+  })
+
+  it('pushes the peak thresholds to the orchestrator and stores them', async () => {
+    const res = await callRoute(PUT as any, {
+      method: 'PUT',
+      body: { disk_latency_peak_warning: 150, disk_latency_peak_critical: 400 },
+    })
+    expect(res.status).toBe(200)
+    const expected = expect.objectContaining({ disk_latency_peak_warning: 150, disk_latency_peak_critical: 400 })
+    expect(updateThresholdsMock).toHaveBeenCalledWith(expected)
+    expect(setSettingMock).toHaveBeenCalledWith('alert_thresholds', 'tenant-1', expected)
+  })
+})
+
 describe('PUT /api/v1/settings/alerts/thresholds', () => {
   it('trims the pattern, pushes it to the orchestrator and stores it', async () => {
     const res = await callRoute(PUT as any, {

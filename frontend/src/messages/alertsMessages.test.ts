@@ -67,6 +67,10 @@ describe('alerts message namespace', () => {
       'diskLatency',
       'diskLatencyDesc',
       'diskLatencyWindow',
+      // #881 follow-up: the peak check next to the average one.
+      'diskLatencyPeak',
+      'diskLatencyPeakDesc',
+      'diskLatencyPeakInterval',
     ]) {
       expect(reference).toContain(required)
     }

@@ -55,8 +55,10 @@ describe('AlertThresholdsTab guest disk latency', () => {
     expect(card.getByText('Disabled')).toBeInTheDocument()
     expect(alertSwitch(card)).not.toBeChecked()
     expect(card.queryByRole('slider')).not.toBeInTheDocument()
-    // Only the retention field of the foot remains: the window field goes with the slider.
-    expect(card.getAllByRole('spinbutton')).toHaveLength(1)
+    // The window also frames the peak check and the max figures of the lists,
+    // so it sits in the foot with the retention, whatever the alert toggle.
+    expect(card.getAllByRole('spinbutton')).toHaveLength(2)
+    expect(windowField(card)).toHaveValue(5)
     expect(retentionField(card)).toHaveValue(7)
   })
 
@@ -72,7 +74,7 @@ describe('AlertThresholdsTab guest disk latency', () => {
     expect(card.queryByText('Disabled')).not.toBeInTheDocument()
     expect(card.getAllByRole('slider').map(slider => slider.getAttribute('aria-valuenow'))).toEqual(['30', '100'])
     expect(card.getByText('Alert when a virtual disk, or a whole storage, stays slower than these values for the window below')).toBeInTheDocument()
-    expect(card.getByText('minutes of sustained latency before alerting')).toBeInTheDocument()
+    expect(card.getByText('minutes of window: how long the average must hold, and how long a peak is remembered')).toBeInTheDocument()
     expect(windowField(card)).toHaveValue(5)
   })
 
@@ -131,6 +133,46 @@ describe('AlertThresholdsTab guest disk latency', () => {
     const put = fetchMock.mock.calls.find(([, options]) => options?.method === 'PUT')
     expect(JSON.parse(put[1].body)).toMatchObject({
       disk_latency_collection: 0, disk_latency_retention_days: 45, disk_latency_warning: 0,
+    })
+  })
+})
+
+async function peakCard() {
+  await openSection('Performance & replication')
+  const title = await screen.findByText('Guest disk latency peak')
+
+  return within(title.closest('.MuiCard-root') as HTMLElement)
+}
+
+describe('AlertThresholdsTab guest disk latency peak', () => {
+  it('is disabled by default, independently of the average check', async () => {
+    renderWithProviders(<AlertThresholdsTab />)
+    const card = await peakCard()
+
+    expect(card.getByText('Disabled')).toBeInTheDocument()
+    expect(card.getByRole('switch')).not.toBeChecked()
+    expect(card.queryByRole('slider')).not.toBeInTheDocument()
+  })
+
+  it('offers 100 / 500 ms on a 5 / 500 / 1000 ms scale once enabled, says a peak is one collection interval, and leaves the average pair alone', async () => {
+    const user = userEvent.setup()
+
+    renderWithProviders(<AlertThresholdsTab />)
+    const card = await peakCard()
+
+    await user.click(card.getByRole('switch'))
+
+    expect(card.getAllByRole('slider').map(slider => slider.getAttribute('aria-valuenow'))).toEqual(['100', '500'])
+    expect(card.getByText(/worst collection interval of the window/)).toBeInTheDocument()
+    expect(card.getByText('A peak is the latency of one collection interval (1 min), not of a single I/O')).toBeInTheDocument()
+    expect(['5 ms', '500 ms', '1000 ms'].every(mark => card.getAllByText(mark).length > 0)).toBe(true)
+    expect(card.queryByText('503 ms')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(fetchMock.mock.calls.some(([, options]) => options?.method === 'PUT')).toBe(true))
+    const put = fetchMock.mock.calls.find(([, options]) => options?.method === 'PUT')
+    expect(JSON.parse(put[1].body)).toMatchObject({
+      disk_latency_peak_warning: 100, disk_latency_peak_critical: 500, disk_latency_warning: 0, disk_latency_critical: 100,
     })
   })
 })

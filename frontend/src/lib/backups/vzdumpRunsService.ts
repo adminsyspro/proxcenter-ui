@@ -187,7 +187,7 @@ export async function loadBackupRunsRaw(
   if (!opts.noCache && hit && now - hit.at < hit.ttlMs) return hit.value
 
   const pending = caches.inFlight.get(key)
-  if (pending) return pending
+  if (pending !== undefined) return pending
 
   const generation = caches.generations.get(connectionId) ?? 0
   const scan = scanBackupRuns(conn, connectionId, opts.days, now)

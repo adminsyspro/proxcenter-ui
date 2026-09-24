@@ -129,4 +129,34 @@ describe('GET …/backup-jobs/runs/[node]/[upid]', () => {
     expect((await get('pve1', MINE, { days: '90' })).status).toBe(404)
     expect(loadRawMock).toHaveBeenCalledTimes(1)
   })
+
+  // #1003 residual R2: the served log is checked too, not only the history.
+  const liveDetail = (status: string, commandLine: string, vmids: number[]) => ({
+    task: { node: 'pve1', upid: MINE, status },
+    log: { commandLine: `INFO: starting new backup job: vzdump ${commandLine}`, guests: vmids.map(vmid => ({ vmid })), jobLines: [] },
+    totalLines: 3,
+  })
+
+  it('answers 404 to a tenant when the served log holds a foreign guest', async () => {
+    allowedPoolsMock.mockResolvedValue(new Set(['vdc-a']))
+    detailMock.mockResolvedValue(liveDetail('OK', '105 --storage local', [105, 100]))
+    expect((await get('pve1', MINE)).status).toBe(404)
+  })
+
+  it('answers 404 to a tenant for a running --all task even if its first guest is theirs', async () => {
+    allowedPoolsMock.mockResolvedValue(new Set(['vdc-a']))
+    detailMock.mockResolvedValue(liveDetail('running', '--all 1 --storage local', [105]))
+    expect((await get('pve1', MINE)).status).toBe(404)
+  })
+
+  it('serves a tenant the live log of its own running pool task', async () => {
+    allowedPoolsMock.mockResolvedValue(new Set(['vdc-a']))
+    detailMock.mockResolvedValue(liveDetail('running', '--pool vdc-a --storage local', [105]))
+    expect((await get('pve1', MINE)).status).toBe(200)
+  })
+
+  it('never applies the tenant check to the provider', async () => {
+    detailMock.mockResolvedValue(liveDetail('running', '--all 1 --storage local', [105, 100]))
+    expect((await get('pve1', MINE)).status).toBe(200)
+  })
 })

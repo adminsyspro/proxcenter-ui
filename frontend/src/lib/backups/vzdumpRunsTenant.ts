@@ -10,23 +10,57 @@ import type { PveConn } from '@/lib/connections/getConnection'
 import { pveFetch } from '@/lib/proxmox/client'
 import { isJobOwnedByTenantPools } from '@/lib/vdc/backupJobs'
 
+import { parseVzdumpCommandLine, type VzdumpInvocation } from './vzdumpCommandLine'
 import { buildBackupRunsResult, type BackupRunsRaw, type BackupRunsResult } from './vzdumpRunsService'
-import { taskVmids, type RunSummary, type TaskFacts } from './vzdumpRuns'
+import { isTaskRunning, taskVmids, type RunSummary, type TaskFacts } from './vzdumpRuns'
 
 /**
  * A task is the tenant's when it backed up at least one guest and every guest
- * it backed up is in one of the tenant's pools.
+ * it backed up is in one of the tenant's pools. A RUNNING `--all` or `--pool`
+ * task only lists the guests started so far, so it is the tenant's only when
+ * it is `--pool` of one of the tenant's pools; otherwise not until it ends.
  */
 export function tenantOwnsTask(allowedPools: Set<string>, poolByVmid: Map<number, string>) {
-  const owns = (vmid: number) => {
-    const pool = poolByVmid.get(vmid)
-    return pool !== undefined && allowedPools.has(pool)
-  }
+  const owns = ownsVmid(allowedPools, poolByVmid)
 
   return (facts: TaskFacts): boolean => {
+    if (isTaskRunning(facts.task) && !runningSelectionIsTenants(facts.invocation, allowedPools)) return false
     const vmids = taskVmids(facts)
     return vmids.length > 0 && vmids.every(owns)
   }
+}
+
+function ownsVmid(allowedPools: Set<string>, poolByVmid: Map<number, string>) {
+  return (vmid: number) => {
+    const pool = poolByVmid.get(vmid)
+    return pool !== undefined && allowedPools.has(pool)
+  }
+}
+
+/** A running task's selection is safe to judge by its guests so far: a vmid list, or one of the tenant's pools. */
+function runningSelectionIsTenants(invocation: VzdumpInvocation | null, allowedPools: Set<string>): boolean {
+  if (!invocation || invocation.all) return false
+  if (invocation.pool !== null) return allowedPools.has(invocation.pool)
+
+  return true
+}
+
+/**
+ * Last check on the log the detail route is about to serve a tenant (the
+ * history may be seconds old): every guest in it must be the tenant's, and a
+ * running task must not be `--all` or another pool's.
+ */
+export function tenantMaySeeTaskDetail(
+  detail: { task: { status: string }; log: { commandLine: string | null; guests: Array<{ vmid: number }> } },
+  allowedPools: Set<string>,
+  poolByVmid: Map<number, string>,
+): boolean {
+  const owns = ownsVmid(allowedPools, poolByVmid)
+  if (!detail.log.guests.every(g => owns(g.vmid))) return false
+  if (detail.task.status !== 'running') return true
+  const invocation = detail.log.commandLine ? parseVzdumpCommandLine(detail.log.commandLine) : null
+
+  return runningSelectionIsTenants(invocation, allowedPools)
 }
 
 function withoutSharedWith(run: RunSummary): RunSummary {

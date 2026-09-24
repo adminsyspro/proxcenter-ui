@@ -4,7 +4,7 @@ import { parseVzdumpCommandLine } from './vzdumpCommandLine'
 import type { TaskLogSummary } from './vzdumpLog'
 import type { TaskFacts } from './vzdumpRuns'
 import { buildBackupRunsResult, type BackupRunsRaw } from './vzdumpRunsService'
-import { filterBackupRunsForTenant, isTaskVisible, tenantOwnsTask } from './vzdumpRunsTenant'
+import { filterBackupRunsForTenant, isTaskVisible, tenantMaySeeTaskDetail, tenantOwnsTask } from './vzdumpRunsTenant'
 
 const PREFIX = 'INFO: starting new backup job: vzdump '
 
@@ -142,5 +142,57 @@ describe('filterBackupRunsForTenant — per-task job run scoping', () => {
     ], mineOnly), MINE, POOLS)
     expect(isTaskVisible(out, 'pve4', 'MIX-B')).toBe(false)
     expect(isTaskVisible(out, 'pve1', 'MIX-A')).toBe(true)
+  })
+})
+
+// #1003 residual R2: a running --all / foreign --pool task only lists the
+// guests started so far; its first guest being the tenant's proves nothing.
+describe('tenant ownership of a running task', () => {
+  const owns = tenantOwnsTask(MINE, POOLS)
+  const started105: TaskLogSummary = { guests: [{ vmid: 105, status: 'running', step: null, reason: null }], taskError: null }
+  const running = (line: string, log: TaskLogSummary | null = started105) => {
+    const f = task('R', 'pve1', line, { start: 1 }, log)
+    return { ...f, task: { ...f.task, status: undefined, endtime: undefined } }
+  }
+
+  it('does not own a running --all task, whatever guest came first', () => {
+    expect(owns(running('--all 1 --storage x'))).toBe(false)
+  })
+
+  it('does not own a running --pool task of another pool', () => {
+    expect(owns(running('--pool infra --storage x'))).toBe(false)
+  })
+
+  it('owns a running --pool task of its own pool once its known guests are its own', () => {
+    expect(owns(running('--pool vdc-a --storage x'))).toBe(true)
+  })
+
+  it('owns a running vmid-list task of its own guests', () => {
+    expect(owns(running('105 --storage x', null))).toBe(true)
+  })
+
+  it('owns the same --all task once it finished with only its guests', () => {
+    expect(owns(task('F', 'pve1', '--all 1 --storage x', { start: 1 }, { ...started105, guests: [{ ...started105.guests[0], status: 'ok' }] }))).toBe(true)
+  })
+})
+
+describe('tenantMaySeeTaskDetail', () => {
+  const may = (detail: any) => tenantMaySeeTaskDetail(detail, MINE, POOLS)
+  const guest = (vmid: number) => ({ vmid })
+  const detail = (status: string, commandLine: string, vmids: number[]) =>
+    ({ task: { status }, log: { commandLine: `INFO: starting new backup job: vzdump ${commandLine}`, guests: vmids.map(guest) } })
+
+  it('serves a task whose every guest is the tenant’s', () => {
+    expect(may(detail('OK', '105 --storage x', [105]))).toBe(true)
+    expect(may(detail('running', '--pool vdc-a --storage x', [105]))).toBe(true)
+  })
+
+  it('refuses a log holding a foreign guest', () => {
+    expect(may(detail('OK', '--pool vdc-a --storage x', [105, 100]))).toBe(false)
+  })
+
+  it('refuses a running --all task or a running task of a foreign pool', () => {
+    expect(may(detail('running', '--all 1 --storage x', [105]))).toBe(false)
+    expect(may(detail('running', '--pool infra --storage x', [105]))).toBe(false)
   })
 })

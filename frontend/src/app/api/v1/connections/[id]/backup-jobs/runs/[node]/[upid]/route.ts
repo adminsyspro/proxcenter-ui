@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 
 import { clampDays, loadBackupRunsRaw, loadRunTaskDetail, MAX_DAYS } from '@/lib/backups/vzdumpRunsService'
-import { filterBackupRunsForTenant, isTaskVisible, loadPoolByVmid } from '@/lib/backups/vzdumpRunsTenant'
+import { filterBackupRunsForTenant, isTaskVisible, loadPoolByVmid, tenantMaySeeTaskDetail } from '@/lib/backups/vzdumpRunsTenant'
 import { getConnectionById } from '@/lib/connections/getConnection'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { getCurrentTenantId } from '@/lib/tenant'
@@ -52,6 +52,14 @@ export async function GET(req: Request, ctx: RouteContext) {
 
       const visible = (await visibleIn(days)) || (days < MAX_DAYS && (await visibleIn(MAX_DAYS)))
       if (!visible) return NextResponse.json({ error: 'Task not found' }, { status: 404 })
+
+      // The history can be seconds old: check the log actually served too.
+      const detail = await loadRunTaskDetail(conn, node, decodedUpid)
+      if (!tenantMaySeeTaskDetail(detail, allowedPools, poolByVmid)) {
+        return NextResponse.json({ error: 'Task not found' }, { status: 404 })
+      }
+
+      return NextResponse.json({ data: detail })
     }
 
     return NextResponse.json({ data: await loadRunTaskDetail(conn, node, decodedUpid) })

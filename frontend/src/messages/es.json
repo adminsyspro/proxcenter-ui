@@ -2704,7 +2704,8 @@
       "noRuns": "Ninguna ejecución en los últimos {days} días",
       "drawerTitle": "Ejecuciones de {job}",
       "runsTitle": "Ejecuciones",
-      "window": "Últimos {days} días. Las ejecuciones más antiguas salieron del índice de tareas de Proxmox.",
+      "window": "Últimos {days} días, hasta donde llega el índice de tareas de Proxmox.",
+      "truncated": "Lista de tareas truncada a 1000 en {nodes}: no se muestran las ejecuciones más antiguas de este periodo.",
       "unreachable": "Nodos no consultados: {nodes}",
       "logUnavailable": "El log ya no está disponible en el nodo",
       "origin": {
@@ -2724,6 +2725,7 @@
       "jobSection": "Trabajo",
       "selectRun": "Seleccione una ejecución para ver el detalle",
       "loadError": "No se pudieron cargar las ejecuciones",
+      "logLoadError": "No se pudo cargar el log",
       "status": {
         "ok": "OK",
         "warning": "Advertencias",

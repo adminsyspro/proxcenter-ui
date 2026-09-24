@@ -9,7 +9,7 @@ import { useTenant } from '@/contexts/TenantContext'
 import NumericTextField from '@/components/ui/NumericTextField'
 import BackupSchedulePicker from './BackupSchedulePicker'
 import { useSWRFetch } from '@/hooks/useSWRFetch'
-import { formatDurationSec, runStatusChip } from '@/lib/backups/runDisplay'
+import { formatDurationSec, runStatusChip, runsPollIntervalMs } from '@/lib/backups/runDisplay'
 import BackupJobRunsDrawer from './BackupJobRunsDrawer'
 
 import {
@@ -175,12 +175,17 @@ function PveJobsTab({ pveConnections = [], isVdcTenant = false }) {
 
   // Run history (#1003): loaded apart from the jobs so the table never waits on it.
   const [runsDrawer, setRunsDrawer] = useState(null) // { key: jobId | MANUAL_RUNS_KEY, focusUpid }
-  const [pollRuns, setPollRuns] = useState(false)
   const runsUrl = selectedConnection
-    ? `/api/v1/connections/${encodeURIComponent(selectedConnection)}/backup-jobs/runs${pollRuns ? '?noCache=1' : ''}`
+    ? `/api/v1/connections/${encodeURIComponent(selectedConnection)}/backup-jobs/runs`
     : null
-  const { data: runsJson, isLoading: runsLoading, error: runsError } = useSWRFetch(runsUrl, {
-    refreshInterval: pollRuns ? 5000 : 30000,
+  // Poll fast while a run is in progress or a Run now has not shown up yet.
+  // A stable key (the server cache is short while a task runs) keeps the table
+  // and the drawer on screen between polls.
+  const awaitedUpid = runsDrawer?.focusUpid ?? null
+  const runsRefreshInterval = useCallback(json => runsPollIntervalMs(json?.data, awaitedUpid), [awaitedUpid])
+  const { data: runsJson, isLoading: runsLoading, error: runsError, mutate: reloadRuns } = useSWRFetch(runsUrl, {
+    refreshInterval: runsRefreshInterval,
+    keepPreviousData: true,
   })
   const runsData = runsJson?.data
   const runsByJob = useMemo(() => new Map((runsData?.jobs || []).map(j => [j.jobId, j])), [runsData])
@@ -190,13 +195,6 @@ function PveJobsTab({ pveConnections = [], isVdcTenant = false }) {
       ? (runsDrawer.key === MANUAL_RUNS_KEY ? runsData?.manual?.runs : runsByJob.get(runsDrawer.key)?.runs) || []
       : []
   ), [runsDrawer, runsData, runsByJob])
-
-  // Poll fast while a run is in progress or a Run now has not shown up yet.
-  useEffect(() => {
-    const anyRunning = [...(runsData?.jobs || []).map(j => j.lastRun), runsData?.manual?.lastRun].some(r => r?.status === 'running')
-    const waiting = !!runsDrawer?.focusUpid && !drawerRuns.some(r => r.tasks.some(tk => tk.upid === runsDrawer.focusUpid))
-    setPollRuns(anyRunning || waiting)
-  }, [runsData, runsDrawer, drawerRuns])
 
   const loadJobs = useCallback(async () => {
     if (!selectedConnection) return
@@ -484,6 +482,7 @@ function PveJobsTab({ pveConnections = [], isVdcTenant = false }) {
         setError(json.error)
       } else {
         setRunsDrawer({ key: job.id, focusUpid: json.data?.tasks?.[0]?.upid ?? null })
+        reloadRuns() // the run route invalidated the server cache
       }
     } catch (e) {
       setError(e.message || t('common.error'))
@@ -541,7 +540,8 @@ return '—'
       sortable: false,
       renderCell: (params) => {
         const run = runsByJob.get(params.row.id)?.lastRun
-        if (runsLoading && !runsData) return <Skeleton width={120} />
+        // No history yet (loading, or the runs route failed): unknown, not "Never".
+        if (!runsData) return runsLoading ? <Skeleton width={120} /> : '—'
         if (!run) return <Typography sx={{ opacity: 0.5, fontSize: '0.8rem' }}>{t('backups.runs.never')}</Typography>
 
         return formatDateTime(run.start * 1000, locale, { dateStyle: 'short', timeStyle: 'short' })
@@ -714,6 +714,12 @@ return '—'
       {loading && <LinearProgress sx={{ mb: 2 }} />}
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
       
+      {runsData?.unreachableNodes?.length > 0 && (
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          {t('backups.runs.unreachable', { nodes: runsData.unreachableNodes.join(', ') })}
+        </Alert>
+      )}
+
       {/* Table */}
       <DataGrid
         rows={jobs}
@@ -753,17 +759,19 @@ return '—'
           <Tooltip title={t('backups.runs.manualBackupsHint')}>
             <Typography variant="body2" sx={{ fontWeight: 600 }}>{t('backups.runs.manualBackups')}</Typography>
           </Tooltip>
-          <Typography variant="body2" color="text.secondary">
-            {runsData?.manual?.lastRun
-              ? formatDateTime(runsData.manual.lastRun.start * 1000, locale, { dateStyle: 'short', timeStyle: 'short' })
-              : t('backups.runs.never')}
+          <Typography variant="body2" color="text.secondary" component="div">
+            {!runsData
+              ? (runsLoading ? <Skeleton width={100} /> : '—')
+              : runsData.manual.lastRun
+                ? formatDateTime(runsData.manual.lastRun.start * 1000, locale, { dateStyle: 'short', timeStyle: 'short' })
+                : t('backups.runs.never')}
           </Typography>
           {runsData?.manual?.lastRun && (() => {
             const chip = runStatusChip(runsData.manual.lastRun)
             return <Chip size="small" color={chip.color} label={t(chip.key)} />
           })()}
           <Box sx={{ flex: 1 }} />
-          <Typography variant="caption" color="text.secondary">{runsData?.manual?.runs?.length ?? 0}</Typography>
+          <Typography variant="caption" color="text.secondary">{runsData ? runsData.manual.runs.length : '—'}</Typography>
         </Box>
       )}
 
@@ -780,6 +788,7 @@ return '—'
         focusUpid={runsDrawer?.focusUpid ?? null}
         days={runsData?.window?.days ?? 30}
         unreachableNodes={runsData?.unreachableNodes ?? []}
+        truncatedNodes={runsData?.truncatedNodes ?? []}
       />
 
       {/* Create/Edit Dialog */}

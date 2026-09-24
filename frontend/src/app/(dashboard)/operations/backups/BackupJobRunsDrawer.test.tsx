@@ -20,7 +20,7 @@ const detail = {
   totalLines: pruneFailed.length,
 }
 
-const swrMock = vi.fn((url: string | null) => ({ data: url ? { data: detail } : undefined, error: undefined, isLoading: false }))
+const swrMock = vi.fn((url: string | null): any => ({ data: url ? { data: detail } : undefined, error: undefined, isLoading: false }))
 vi.mock('@/hooks/useSWRFetch', () => ({ useSWRFetch: (url: string | null) => swrMock(url) }))
 
 const RUNS = [
@@ -41,10 +41,16 @@ afterEach(() => {
   swrMock.mockClear()
 })
 
+// The detail URL carries the drawer's window and the task state (#1003 final review F2/F7).
+const detailUrl = (upid: string, query = '?days=30&state=done') =>
+  `/api/v1/connections/conn-1/backup-jobs/runs/pve1/${encodeURIComponent(upid)}${query}`
+
+function drawer(props: Record<string, any> = {}) {
+  return <BackupJobRunsDrawer open onClose={() => {}} connectionId="conn-1" title="e2e-1003-probe" subtitle="15:28 · pbs" runs={RUNS} days={30} {...props} />
+}
+
 function renderDrawer(props: Record<string, any> = {}) {
-  return render(
-    <BackupJobRunsDrawer open onClose={() => {}} connectionId="conn-1" title="e2e-1003-probe" subtitle="15:28 · pbs" runs={RUNS} days={30} {...props} />,
-  )
+  return render(drawer(props))
 }
 
 describe('BackupJobRunsDrawer', () => {
@@ -52,7 +58,7 @@ describe('BackupJobRunsDrawer', () => {
     renderDrawer()
     expect(screen.getAllByText('backups.runs.status.post.prune').length).toBeGreaterThan(0)
     expect(screen.getByText('backups.runs.status.ok')).toBeInTheDocument()
-    expect(swrMock).toHaveBeenCalledWith(`/api/v1/connections/conn-1/backup-jobs/runs/pve1/${encodeURIComponent(UPID)}`)
+    expect(swrMock).toHaveBeenCalledWith(detailUrl(UPID))
   })
 
   it('opens the failed guest section and shows the prune error line', () => {
@@ -62,17 +68,55 @@ describe('BackupJobRunsDrawer', () => {
 
   it('selects the run of the focused UPID (after Run now)', () => {
     renderDrawer({ focusUpid: OK_UPID })
-    expect(swrMock).toHaveBeenCalledWith(`/api/v1/connections/conn-1/backup-jobs/runs/pve1/${encodeURIComponent(OK_UPID)}`)
+    expect(swrMock).toHaveBeenCalledWith(detailUrl(OK_UPID))
   })
 
   it('switches run on click', async () => {
     renderDrawer()
     await userEvent.click(screen.getByText('backups.runs.status.ok'))
-    expect(swrMock).toHaveBeenLastCalledWith(`/api/v1/connections/conn-1/backup-jobs/runs/pve1/${encodeURIComponent(OK_UPID)}`)
+    expect(swrMock).toHaveBeenLastCalledWith(detailUrl(OK_UPID))
   })
 
   it('shows the empty state', () => {
     renderDrawer({ runs: [] })
     expect(screen.getByText('backups.runs.noRuns')).toBeInTheDocument()
+  })
+
+  // #1003 final review
+  it('keeps the clicked run selected when a poll brings a new runs array', async () => {
+    const { rerender } = renderDrawer({ focusUpid: UPID })
+    await userEvent.click(screen.getByText('backups.runs.status.ok'))
+    swrMock.mockClear()
+    rerender(drawer({ focusUpid: UPID, runs: RUNS.map(r => ({ ...r })) }))
+    expect(swrMock).toHaveBeenLastCalledWith(detailUrl(OK_UPID))
+    expect(swrMock).not.toHaveBeenCalledWith(detailUrl(UPID))
+  })
+
+  it('fetches the log once more when a running task ends', () => {
+    const running = [{ ...RUNS[0], status: 'running', tasks: [{ ...RUNS[0].tasks[0], status: 'running', end: null }] }]
+    const { rerender } = renderDrawer({ runs: running })
+    expect(swrMock).toHaveBeenCalledWith(detailUrl(UPID, '?days=30&state=running'))
+    rerender(drawer({ runs: RUNS }))
+    expect(swrMock).toHaveBeenLastCalledWith(detailUrl(UPID))
+  })
+
+  it('passes its window to the detail route', () => {
+    renderDrawer({ days: 7 })
+    expect(swrMock).toHaveBeenCalledWith(detailUrl(UPID, '?days=7&state=done'))
+  })
+
+  it('says when a node task list was truncated', () => {
+    renderDrawer({ truncatedNodes: ['pve1'] })
+    expect(screen.getByText('backups.runs.truncated')).toBeInTheDocument()
+  })
+
+  it('reports a log that failed to load as such', () => {
+    swrMock.mockImplementation(() => ({ data: undefined, error: new Error('API error: 500'), isLoading: false }))
+    try {
+      renderDrawer()
+      expect(screen.getByText('backups.runs.logLoadError')).toBeInTheDocument()
+    } finally {
+      swrMock.mockImplementation((url: string | null) => ({ data: url ? { data: detail } : undefined, error: undefined, isLoading: false }))
+    }
   })
 })

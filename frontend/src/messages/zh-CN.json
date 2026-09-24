@@ -2708,7 +2708,8 @@
       "noRuns": "最近 {days} 天内没有运行",
       "drawerTitle": "{job} 的运行记录",
       "runsTitle": "运行记录",
-      "window": "最近 {days} 天。更早的运行已从 Proxmox 任务索引中轮转移除。",
+      "window": "最近 {days} 天，以 Proxmox 任务索引保留的范围为限。",
+      "truncated": "{nodes} 上的任务列表在 1000 条处被截断：此时间段内较早的运行未显示。",
       "unreachable": "未查询的节点：{nodes}",
       "logUnavailable": "节点上已无此日志",
       "origin": {
@@ -2728,6 +2729,7 @@
       "jobSection": "作业",
       "selectRun": "选择一次运行以查看详情",
       "loadError": "无法加载运行记录",
+      "logLoadError": "无法加载日志",
       "status": {
         "ok": "正常",
         "warning": "警告",

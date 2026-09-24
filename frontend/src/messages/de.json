@@ -2691,7 +2691,8 @@
       "noRuns": "Kein Lauf in den letzten {days} Tagen",
       "drawerTitle": "Läufe von {job}",
       "runsTitle": "Läufe",
-      "window": "Letzte {days} Tage. Ältere Läufe sind aus dem Proxmox-Aufgabenindex rotiert.",
+      "window": "Letzte {days} Tage, soweit der Proxmox-Aufgabenindex reicht.",
+      "truncated": "Aufgabenliste auf {nodes} bei 1000 Aufgaben abgeschnitten: ältere Läufe dieses Zeitraums werden nicht angezeigt.",
       "unreachable": "Nicht abgefragte Knoten: {nodes}",
       "logUnavailable": "Log auf dem Knoten nicht mehr verfügbar",
       "origin": {
@@ -2711,6 +2712,7 @@
       "jobSection": "Job",
       "selectRun": "Lauf auswählen, um Details zu sehen",
       "loadError": "Läufe konnten nicht geladen werden",
+      "logLoadError": "Log konnte nicht geladen werden",
       "status": {
         "ok": "OK",
         "warning": "Warnungen",

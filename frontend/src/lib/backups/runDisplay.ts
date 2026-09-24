@@ -1,7 +1,8 @@
 /** Presentation mapping of the backup run history (issue #1003), kept out of JSX so it is tested. */
 
 import type { GuestStatus, PostStep } from './vzdumpLog'
-import type { RunSummary } from './vzdumpRuns'
+import type { RunSummary, RunTask } from './vzdumpRuns'
+import type { BackupRunsResult } from './vzdumpRunsService'
 
 export type ChipColor = 'success' | 'warning' | 'error' | 'info'
 
@@ -67,4 +68,43 @@ export function logLineKind(text: string): 'error' | 'warning' | 'info' {
 
 export function isProgressLine(text: string): boolean {
   return /^INFO:\s+\d+% \(/.test(text)
+}
+
+export const RUNS_POLL_FAST_MS = 5000
+export const RUNS_POLL_SLOW_MS = 30_000
+
+type RunsLists = Pick<BackupRunsResult, 'jobs' | 'manual'>
+type RunLike = Pick<RunSummary, 'id' | 'status'> & { tasks: Array<Pick<RunTask, 'upid'>> }
+
+/**
+ * How often the jobs tab reloads the run history: fast while a run is going
+ * or a Run now's task has not shown up yet, slow otherwise. Read by SWR from
+ * the latest data (`refreshInterval` as a function), so the key never changes.
+ */
+export function runsPollIntervalMs(data: RunsLists | undefined, awaitedUpid: string | null): number {
+  if (!data) return RUNS_POLL_SLOW_MS
+  const runs: RunLike[] = [...data.jobs.flatMap(j => j.runs), ...data.manual.runs]
+  if (runs.some(run => run.status === 'running')) return RUNS_POLL_FAST_MS
+  if (awaitedUpid && !runs.some(run => run.tasks.some(t => t.upid === awaitedUpid))) return RUNS_POLL_FAST_MS
+
+  return RUNS_POLL_SLOW_MS
+}
+
+/** The run the drawer shows: the user's pick while listed, else the focused task's run, else the newest. */
+export function selectRunId(runs: RunLike[], userChoice: string | null, focusUpid: string | null): string | null {
+  if (userChoice && runs.some(run => run.id === userChoice)) return userChoice
+  const focused = focusUpid ? runs.find(run => run.tasks.some(t => t.upid === focusUpid)) : undefined
+
+  return focused?.id ?? runs[0]?.id ?? null
+}
+
+/**
+ * The detail route of one task. `days` lets the route check a tenant's
+ * visibility in the drawer's own window; `state` is in the key so the log is
+ * fetched once more when a running task ends.
+ */
+export function runTaskDetailUrl(connectionId: string, task: Pick<RunTask, 'node' | 'upid' | 'status'>, days: number): string {
+  const path = `/api/v1/connections/${encodeURIComponent(connectionId)}/backup-jobs/runs/${encodeURIComponent(task.node)}/${encodeURIComponent(task.upid)}`
+
+  return `${path}?days=${days}&state=${task.status === 'running' ? 'running' : 'done'}`
 }

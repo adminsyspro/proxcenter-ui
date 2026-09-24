@@ -2704,7 +2704,8 @@
       "noRuns": "최근 {days}일 동안 실행 없음",
       "drawerTitle": "{job} 실행 기록",
       "runsTitle": "실행 기록",
-      "window": "최근 {days}일. 더 오래된 실행은 Proxmox 작업 인덱스에서 삭제되었습니다.",
+      "window": "최근 {days}일, Proxmox 작업 인덱스가 보관하는 범위까지.",
+      "truncated": "{nodes}의 작업 목록이 1000개에서 잘렸습니다. 이 기간의 이전 실행은 표시되지 않습니다.",
       "unreachable": "조회하지 못한 노드: {nodes}",
       "logUnavailable": "노드에서 더 이상 로그를 사용할 수 없음",
       "origin": {
@@ -2724,6 +2725,7 @@
       "jobSection": "작업",
       "selectRun": "실행을 선택하면 세부 정보가 표시됩니다",
       "loadError": "실행 기록을 불러올 수 없습니다",
+      "logLoadError": "로그를 불러올 수 없습니다",
       "status": {
         "ok": "OK",
         "warning": "경고",

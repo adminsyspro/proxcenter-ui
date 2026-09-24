@@ -2704,7 +2704,8 @@
       "noRuns": "Aucun run sur les {days} derniers jours",
       "drawerTitle": "Runs de {job}",
       "runsTitle": "Runs",
-      "window": "{days} derniers jours. Les runs plus anciens ont quitté l'index des tâches Proxmox.",
+      "window": "{days} derniers jours, dans la limite de l'index des tâches Proxmox.",
+      "truncated": "Liste des tâches tronquée à 1000 sur {nodes} : les runs plus anciens de cette période ne sont pas affichés.",
       "unreachable": "Nœuds non interrogés : {nodes}",
       "logUnavailable": "Le log n'est plus disponible sur le nœud",
       "origin": {
@@ -2724,6 +2725,7 @@
       "jobSection": "Job",
       "selectRun": "Sélectionnez un run pour voir son détail",
       "loadError": "Impossible de charger les runs",
+      "logLoadError": "Impossible de charger le log",
       "status": {
         "ok": "OK",
         "warning": "Avertissements",

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 
 import { useLocale, useTranslations } from 'next-intl'
 import {
@@ -9,7 +9,7 @@ import {
 } from '@mui/material'
 
 import { useSWRFetch } from '@/hooks/useSWRFetch'
-import { formatDurationSec, guestStatusChip, runStatusChip } from '@/lib/backups/runDisplay'
+import { formatDurationSec, guestStatusChip, runStatusChip, runTaskDetailUrl, selectRunId } from '@/lib/backups/runDisplay'
 import { formatDateTime } from '@/lib/i18n/date'
 import { formatBytes } from '@/utils/format'
 
@@ -23,17 +23,18 @@ function StatusLabel({ chip }) {
   return <Chip size="small" color={chip.color} label={chip.count ? `${t(chip.key)} (${chip.count})` : t(chip.key)} />
 }
 
-function RunTaskDetail({ connectionId, task }) {
+function RunTaskDetail({ connectionId, task, days }) {
   const t = useTranslations()
   const locale = useLocale()
-  const url = task.logUnavailable
-    ? null
-    : `/api/v1/connections/${encodeURIComponent(connectionId)}/backup-jobs/runs/${encodeURIComponent(task.node)}/${encodeURIComponent(task.upid)}`
-  const { data, error, isLoading } = useSWRFetch(url, { refreshInterval: task.status === 'running' ? 5000 : 0 })
+  const url = task.logUnavailable ? null : runTaskDetailUrl(connectionId, task, days)
+  const { data, error, isLoading } = useSWRFetch(url, {
+    refreshInterval: task.status === 'running' ? 5000 : 0,
+    keepPreviousData: true,
+  })
   const detail = data?.data
 
   if (task.logUnavailable) return <Alert severity="info">{task.node}: {t('backups.runs.logUnavailable')}</Alert>
-  if (error) return <Alert severity="error">{t('backups.runs.loadError')}</Alert>
+  if (error) return <Alert severity="error">{t('backups.runs.logLoadError')}</Alert>
   if (isLoading || !detail) return <LinearProgress />
 
   return (
@@ -75,32 +76,36 @@ function RunTaskDetail({ connectionId, task }) {
 
 export default function BackupJobRunsDrawer({
   open, onClose, connectionId, title, subtitle, runs = [], focusUpid = null, days = 30, unreachableNodes = [],
+  truncatedNodes = [],
 }) {
   const t = useTranslations()
   const locale = useLocale()
-  const [selectedId, setSelectedId] = useState(null)
-
-  useEffect(() => {
-    if (!open) return
-    const focused = focusUpid ? runs.find(r => r.tasks.some(tk => tk.upid === focusUpid)) : null
-    setSelectedId(prev => focused?.id ?? (runs.some(r => r.id === prev) ? prev : runs[0]?.id ?? null))
-  }, [open, runs, focusUpid])
-
+  // The user's click survives the polls; see selectRunId for the fallbacks.
+  const [userChoice, setUserChoice] = useState(null)
+  const selectedId = selectRunId(runs, userChoice, focusUpid)
   const selected = runs.find(r => r.id === selectedId) ?? null
 
+  const close = () => {
+    setUserChoice(null)
+    onClose()
+  }
+
   return (
-    <Drawer anchor="right" open={open} onClose={onClose} PaperProps={{ sx: { width: { xs: '100%', md: 960 }, p: 3 } }}>
+    <Drawer anchor="right" open={open} onClose={close} PaperProps={{ sx: { width: { xs: '100%', md: 960 }, p: 3 } }}>
       <Stack direction="row" alignItems="center" sx={{ mb: 1 }}>
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Typography variant="h6" noWrap>{t('backups.runs.drawerTitle', { job: title })}</Typography>
           {subtitle && <Typography variant="body2" color="text.secondary" noWrap>{subtitle}</Typography>}
         </Box>
-        <IconButton aria-label="close" onClick={onClose}><i className="ri-close-line" /></IconButton>
+        <IconButton aria-label="close" onClick={close}><i className="ri-close-line" /></IconButton>
       </Stack>
 
       <Typography variant="caption" color="text.secondary">{t('backups.runs.window', { days })}</Typography>
       {unreachableNodes.length > 0 && (
         <Alert severity="warning" sx={{ mt: 1 }}>{t('backups.runs.unreachable', { nodes: unreachableNodes.join(', ') })}</Alert>
+      )}
+      {truncatedNodes.length > 0 && (
+        <Alert severity="info" sx={{ mt: 1 }}>{t('backups.runs.truncated', { nodes: truncatedNodes.join(', ') })}</Alert>
       )}
 
       <Typography variant="subtitle2" sx={{ mt: 2 }}>{t('backups.runs.runsTitle')}</Typography>
@@ -109,7 +114,7 @@ export default function BackupJobRunsDrawer({
       ) : (
         <List dense sx={{ maxHeight: 260, overflow: 'auto', border: 1, borderColor: 'divider', borderRadius: 1 }}>
           {runs.map(r => (
-            <ListItemButton key={r.id} selected={r.id === selectedId} onClick={() => setSelectedId(r.id)}>
+            <ListItemButton key={r.id} selected={r.id === selectedId} onClick={() => setUserChoice(r.id)}>
               <Stack direction="row" spacing={2} alignItems="center" sx={{ width: '100%' }}>
                 <Typography variant="body2" sx={{ minWidth: 300 }}>
                   {dt(r.start, locale)} → {r.end ? dt(r.end, locale) : '…'}
@@ -130,7 +135,7 @@ export default function BackupJobRunsDrawer({
 
       <Divider sx={{ my: 2 }} />
       {selected ? (
-        selected.tasks.map(task => <RunTaskDetail key={task.upid} connectionId={connectionId} task={task} />)
+        selected.tasks.map(task => <RunTaskDetail key={task.upid} connectionId={connectionId} task={task} days={days} />)
       ) : (
         runs.length > 0 && <Typography variant="body2" color="text.secondary">{t('backups.runs.selectRun')}</Typography>
       )}

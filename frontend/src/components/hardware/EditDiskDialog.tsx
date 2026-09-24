@@ -34,9 +34,8 @@ import { formatBytes } from '@/utils/format'
 import { vmDiskFormats } from '@/lib/proxmox/storage'
 import AppDialogTitle from '@/components/ui/AppDialogTitle'
 import NumericTextField from '@/components/ui/NumericTextField'
-import { useDiskSnapshotRefs } from '@/hooks/useDiskSnapshotRefs'
 import { DetachConfirmDialog } from './DetachConfirmDialog'
-import { DiskSnapshotRefsAlert } from './DiskSnapshotRefsAlert'
+import { useDiskSnapshotGuard } from './DiskSnapshotRefsAlert'
 import { IsoUploadControls, type IsoStorageRow } from './IsoUploadControls'
 import type { StoragePolicyCaps } from './utils'
 
@@ -86,7 +85,7 @@ type EditDiskDialogProps = {
   initialTab?: number
 }
 
-export function EditDiskDialog({ open, onClose, onSave, onDelete, canEditHardware, canChangeMedia, onResize, onMoveStorage, connId, node, guestType, vmid, canDeleteSnapshots = false, disk, existingDisks, availableStorages, initialTab }: EditDiskDialogProps) {
+export function EditDiskDialog({ open, onClose, onSave, onDelete, canEditHardware, canChangeMedia, onResize, onMoveStorage, connId, node, guestType, vmid, canDeleteSnapshots = false, disk, existingDisks, availableStorages, initialTab }: Readonly<EditDiskDialogProps>) {
   const t = useTranslations()
   const [tab, setTab] = useState(initialTab ?? 0)
 
@@ -112,21 +111,10 @@ export function EditDiskDialog({ open, onClose, onSave, onDelete, canEditHardwar
 
   // Snapshots still holding this disk's volume (#1004): PVE then refuses a
   // move with "delete source" and the removal of the disk once unused.
-  const guestRef = connId && node && guestType && vmid ? { connId, type: guestType, node, vmid } : null
-  const { snapshots: snapshotRefs, recheck: recheckSnapshotRefs } = useDiskSnapshotRefs(
-    open ? guestRef : null,
-    disk && !disk.isCdrom ? disk.id : null,
-  )
-  const heldBySnapshots = (snapshotRefs?.length ?? 0) > 0
-  const snapshotRefsAlert = (mode: 'move' | 'delete') => heldBySnapshots && guestRef ? (
-    <DiskSnapshotRefsAlert
-      snapshots={snapshotRefs!}
-      mode={mode}
-      vmKey={`${guestRef.connId}:${guestRef.type}:${guestRef.node}:${guestRef.vmid}`}
-      canDeleteSnapshots={canDeleteSnapshots}
-      onDeleted={recheckSnapshotRefs}
-    />
-  ) : null
+  const { held: heldBySnapshots, renderAlert: snapshotRefsAlert } = useDiskSnapshotGuard({
+    open, connId, type: guestType, node, vmid, canDeleteSnapshots,
+    diskId: disk?.isCdrom ? null : disk?.id,
+  })
 
   // Disk config (éditable)
   const [cache, setCache] = useState('none')

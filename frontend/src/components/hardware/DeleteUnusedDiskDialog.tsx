@@ -7,8 +7,8 @@ import {
   Box, Typography, Button, CircularProgress, Alert
 } from '@mui/material'
 
-import { useDiskSnapshotRefs, type GuestRef } from '@/hooks/useDiskSnapshotRefs'
-import { DiskSnapshotRefsAlert } from './DiskSnapshotRefsAlert'
+import type { GuestRef } from '@/hooks/useDiskSnapshotRefs'
+import { useDiskSnapshotGuard } from './DiskSnapshotRefsAlert'
 
 interface DeleteUnusedDiskDialogProps {
   open: boolean
@@ -21,13 +21,12 @@ interface DeleteUnusedDiskDialogProps {
   canDeleteSnapshots?: boolean
 }
 
-export function DeleteUnusedDiskDialog({ open, diskId, volume, onClose, onConfirm, guest, canDeleteSnapshots = false }: DeleteUnusedDiskDialogProps) {
+export function DeleteUnusedDiskDialog({ open, diskId, volume, onClose, onConfirm, guest, canDeleteSnapshots = false }: Readonly<DeleteUnusedDiskDialogProps>) {
   const t = useTranslations()
   const [working, setWorking] = useState(false)
   const [error, setError] = useState<string | null>(null)
   // PVE refuses to remove a volume a snapshot still references.
-  const { snapshots, recheck } = useDiskSnapshotRefs(open ? guest : null, diskId)
-  const heldBySnapshots = (snapshots?.length ?? 0) > 0
+  const { held: heldBySnapshots, renderAlert } = useDiskSnapshotGuard({ ...guest, open, diskId, canDeleteSnapshots })
 
   useEffect(() => {
     if (open) {
@@ -65,17 +64,7 @@ export function DeleteUnusedDiskDialog({ open, diskId, volume, onClose, onConfir
         <Typography variant="caption" color="text.secondary">
           {diskId}
         </Typography>
-        {heldBySnapshots && guest && (
-          <Box sx={{ mt: 2 }}>
-            <DiskSnapshotRefsAlert
-              snapshots={snapshots!}
-              mode="delete"
-              vmKey={`${guest.connId}:${guest.type}:${guest.node}:${guest.vmid}`}
-              canDeleteSnapshots={canDeleteSnapshots}
-              onDeleted={recheck}
-            />
-          </Box>
-        )}
+        {heldBySnapshots && <Box sx={{ mt: 2 }}>{renderAlert('delete')}</Box>}
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 2 }}>
         <Button onClick={onClose} disabled={working}>{t('common.cancel')}</Button>

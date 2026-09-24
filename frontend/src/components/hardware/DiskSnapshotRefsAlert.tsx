@@ -7,6 +7,7 @@ import {
   List, ListItem, ListItemIcon, ListItemText, Typography,
 } from '@mui/material'
 
+import { useDiskSnapshotRefs } from '@/hooks/useDiskSnapshotRefs'
 import { deleteSnapshotsSequential } from '@/lib/migration/deleteSnapshotsSequential'
 
 type DiskSnapshotRefsAlertProps = {
@@ -26,7 +27,7 @@ type DiskSnapshotRefsAlertProps = {
  * the way the cross-cluster migration dialog does: the button never deletes
  * directly, it opens a confirmation naming every snapshot first.
  */
-export function DiskSnapshotRefsAlert({ snapshots, mode, vmKey, canDeleteSnapshots, onDeleted }: DiskSnapshotRefsAlertProps) {
+export function DiskSnapshotRefsAlert({ snapshots, mode, vmKey, canDeleteSnapshots, onDeleted }: Readonly<DiskSnapshotRefsAlertProps>) {
   const t = useTranslations()
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -97,4 +98,38 @@ export function DiskSnapshotRefsAlert({ snapshots, mode, vmKey, canDeleteSnapsho
       </Dialog>
     </>
   )
+}
+
+type DiskSnapshotGuardInput = {
+  /** The check only runs while the dialog is open. */
+  open: boolean
+  connId?: string
+  type?: string
+  node?: string
+  vmid?: string
+  /** Config key of the disk; null skips the check (e.g. a CD-ROM). */
+  diskId?: string | null
+  canDeleteSnapshots: boolean
+}
+
+/**
+ * What a disk dialog needs from the snapshot check: whether snapshots hold the
+ * disk, and the warning to render where the blocked action sits.
+ */
+export function useDiskSnapshotGuard({ open, connId, type, node, vmid, diskId, canDeleteSnapshots }: DiskSnapshotGuardInput) {
+  const guest = open && connId && type && node && vmid ? { connId, type, node, vmid } : null
+  const { snapshots, recheck } = useDiskSnapshotRefs(guest, diskId)
+  const held = guest !== null && (snapshots?.length ?? 0) > 0
+
+  const renderAlert = (mode: 'move' | 'delete') => held && guest ? (
+    <DiskSnapshotRefsAlert
+      snapshots={snapshots!}
+      mode={mode}
+      vmKey={`${guest.connId}:${guest.type}:${guest.node}:${guest.vmid}`}
+      canDeleteSnapshots={canDeleteSnapshots}
+      onDeleted={recheck}
+    />
+  ) : null
+
+  return { held, renderAlert }
 }

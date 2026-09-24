@@ -82,4 +82,11 @@ describe('GET /api/v1/connections/[id]/backup-jobs/runs', () => {
     expect(status).toBe(500)
     expect(body.error).toBe('PVE down')
   })
+
+  // #1003 residual R4: only the provider / MSP may force an uncached scan.
+  it('ignores noCache for a vDC tenant', async () => {
+    allowedPoolsMock.mockResolvedValue(new Set(['vdc-a']))
+    await get({ noCache: '1' })
+    expect(loadRawMock).toHaveBeenCalledWith({ id: 'conn-1' }, 'conn-1', { days: 30, noCache: false })
+  })
 })

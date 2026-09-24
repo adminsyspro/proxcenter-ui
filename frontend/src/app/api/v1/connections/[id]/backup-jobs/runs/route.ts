@@ -19,7 +19,8 @@ type RouteContext = {
  * Run history of every PVE backup job of the connection, plus the "manual"
  * row of vzdump runs no job accounts for (issue #1003). Read live from the
  * node task indexes; see lib/backups/vzdumpRunsService.ts. The UI never sends
- * noCache (the server cache already lives 5 s while a task runs).
+ * noCache (the server cache already lives 5 s while a task runs); it is
+ * honoured for the provider and MSP only, never for a vDC tenant.
  */
 export async function GET(req: Request, ctx: RouteContext) {
   try {
@@ -31,10 +32,10 @@ export async function GET(req: Request, ctx: RouteContext) {
 
     const url = new URL(req.url)
     const days = clampDays(url.searchParams.get('days'))
-    const noCache = url.searchParams.get('noCache') === '1'
 
     const conn = await getConnectionById(id)
     const allowedPools = await getAllowedJobPools(await getCurrentTenantId(), id)
+    const noCache = allowedPools === null && url.searchParams.get('noCache') === '1'
     const raw = await loadBackupRunsRaw(conn, id, { days, noCache })
 
     if (allowedPools === null) return NextResponse.json({ data: buildBackupRunsResult(raw) })

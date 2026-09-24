@@ -179,13 +179,12 @@ function PveJobsTab({ pveConnections = [], isVdcTenant = false }) {
     ? `/api/v1/connections/${encodeURIComponent(selectedConnection)}/backup-jobs/runs`
     : null
   // Poll fast while a run is in progress or a Run now has not shown up yet.
-  // A stable key (the server cache is short while a task runs) keeps the table
-  // and the drawer on screen between polls.
+  // The key stays the same across polls (the server cache is short while a
+  // task runs), so the table and the drawer stay on screen between them.
   const awaitedUpid = runsDrawer?.focusUpid ?? null
   const runsRefreshInterval = useCallback(json => runsPollIntervalMs(json?.data, awaitedUpid), [awaitedUpid])
   const { data: runsJson, isLoading: runsLoading, error: runsError, mutate: reloadRuns } = useSWRFetch(runsUrl, {
     refreshInterval: runsRefreshInterval,
-    keepPreviousData: true,
   })
   const runsData = runsJson?.data
   const runsByJob = useMemo(() => new Map((runsData?.jobs || []).map(j => [j.jobId, j])), [runsData])

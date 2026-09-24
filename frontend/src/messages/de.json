@@ -2679,6 +2679,51 @@
       "sectionOptions": "Wiederhergestellte Gäste",
       "sourceHelp": "Jeder Gast wird auf der VMID wiederhergestellt, die er zum Zeitpunkt der Sicherung hatte.",
       "bandwidthHelp": "Leer bedeutet keine Begrenzung."
+    },
+    "runs": {
+      "colLastRun": "Letzter Lauf",
+      "colDuration": "Dauer",
+      "colStatus": "Letzter Status",
+      "colNextRun": "Nächster Lauf",
+      "manualBackups": "Manuelle Backups",
+      "manualBackupsHint": "vzdump-Läufe ohne aktuellen Job: Gast-Backups, CLI-Läufe, gelöschte oder geänderte Jobs",
+      "never": "Nie",
+      "noRuns": "Kein Lauf in den letzten {days} Tagen",
+      "drawerTitle": "Läufe von {job}",
+      "runsTitle": "Läufe",
+      "window": "Letzte {days} Tage. Ältere Läufe sind aus dem Proxmox-Aufgabenindex rotiert.",
+      "unreachable": "Nicht abgefragte Knoten: {nodes}",
+      "logUnavailable": "Log auf dem Knoten nicht mehr verfügbar",
+      "origin": {
+        "scheduled": "Geplant",
+        "manual": "Manuell"
+      },
+      "shared": "Gleiche Konfiguration wie {jobs}",
+      "guest": "Gast",
+      "node": "Knoten",
+      "start": "Start",
+      "transferred": "Verarbeitet",
+      "reused": "Wiederverwendet",
+      "archive": "Archiv",
+      "rawLog": "Rohlog",
+      "copyLog": "Log kopieren",
+      "showProgress": "Fortschrittszeilen anzeigen",
+      "jobSection": "Job",
+      "selectRun": "Lauf auswählen, um Details zu sehen",
+      "loadError": "Läufe konnten nicht geladen werden",
+      "status": {
+        "ok": "OK",
+        "warning": "Warnungen",
+        "running": "Läuft",
+        "failed": "Fehlgeschlagen",
+        "partial": "Teilweise fehlgeschlagen",
+        "post": {
+          "prune": "Backup OK, Prune fehlgeschlagen",
+          "protected": "Backup OK, Schutz fehlgeschlagen",
+          "hook": "Backup OK, Hook-Skript fehlgeschlagen",
+          "other": "Backup OK, letzter Schritt fehlgeschlagen"
+        }
+      }
     }
   },
   "backup": {

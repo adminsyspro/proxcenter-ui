@@ -2692,6 +2692,51 @@
       "sectionOptions": "Invités restaurés",
       "sourceHelp": "Chaque invité est restauré sur le VMID qu'il avait au moment de la sauvegarde.",
       "bandwidthHelp": "Vide = aucune limite."
+    },
+    "runs": {
+      "colLastRun": "Dernier run",
+      "colDuration": "Durée",
+      "colStatus": "Dernier statut",
+      "colNextRun": "Prochain run",
+      "manualBackups": "Sauvegardes manuelles",
+      "manualBackupsHint": "Runs vzdump rattachés à aucun job actuel : sauvegardes de guest, CLI, jobs supprimés ou modifiés",
+      "never": "Jamais",
+      "noRuns": "Aucun run sur les {days} derniers jours",
+      "drawerTitle": "Runs de {job}",
+      "runsTitle": "Runs",
+      "window": "{days} derniers jours. Les runs plus anciens ont quitté l'index des tâches Proxmox.",
+      "unreachable": "Nœuds non interrogés : {nodes}",
+      "logUnavailable": "Log plus disponible sur le nœud",
+      "origin": {
+        "scheduled": "Planifié",
+        "manual": "Manuel"
+      },
+      "shared": "Même configuration que {jobs}",
+      "guest": "Guest",
+      "node": "Nœud",
+      "start": "Début",
+      "transferred": "Traité",
+      "reused": "Réutilisé",
+      "archive": "Archive",
+      "rawLog": "Log brut",
+      "copyLog": "Copier le log",
+      "showProgress": "Afficher la progression",
+      "jobSection": "Job",
+      "selectRun": "Sélectionnez un run pour voir son détail",
+      "loadError": "Impossible de charger les runs",
+      "status": {
+        "ok": "OK",
+        "warning": "Avertissements",
+        "running": "En cours",
+        "failed": "Échec",
+        "partial": "Échec partiel",
+        "post": {
+          "prune": "Backup OK, prune KO",
+          "protected": "Backup OK, protection KO",
+          "hook": "Backup OK, hook script KO",
+          "other": "Backup OK, étape finale KO"
+        }
+      }
     }
   },
   "backup": {

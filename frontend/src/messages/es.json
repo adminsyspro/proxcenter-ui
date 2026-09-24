@@ -2692,6 +2692,51 @@
       "sectionOptions": "Invitados restaurados",
       "sourceHelp": "Cada invitado se restaura en el VMID que tenía cuando se hizo la copia.",
       "bandwidthHelp": "Vacío significa sin límite."
+    },
+    "runs": {
+      "colLastRun": "Última ejecución",
+      "colDuration": "Duración",
+      "colStatus": "Último estado",
+      "colNextRun": "Próxima ejecución",
+      "manualBackups": "Copias manuales",
+      "manualBackupsHint": "Ejecuciones vzdump sin trabajo actual: copias de invitados, CLI, trabajos eliminados o modificados",
+      "never": "Nunca",
+      "noRuns": "Ninguna ejecución en los últimos {days} días",
+      "drawerTitle": "Ejecuciones de {job}",
+      "runsTitle": "Ejecuciones",
+      "window": "Últimos {days} días. Las ejecuciones más antiguas salieron del índice de tareas de Proxmox.",
+      "unreachable": "Nodos no consultados: {nodes}",
+      "logUnavailable": "El log ya no está disponible en el nodo",
+      "origin": {
+        "scheduled": "Programada",
+        "manual": "Manual"
+      },
+      "shared": "Misma configuración que {jobs}",
+      "guest": "Invitado",
+      "node": "Nodo",
+      "start": "Inicio",
+      "transferred": "Procesado",
+      "reused": "Reutilizado",
+      "archive": "Archivo",
+      "rawLog": "Log sin formato",
+      "copyLog": "Copiar log",
+      "showProgress": "Mostrar líneas de progreso",
+      "jobSection": "Trabajo",
+      "selectRun": "Seleccione una ejecución para ver el detalle",
+      "loadError": "No se pudieron cargar las ejecuciones",
+      "status": {
+        "ok": "OK",
+        "warning": "Advertencias",
+        "running": "En curso",
+        "failed": "Fallida",
+        "partial": "Fallo parcial",
+        "post": {
+          "prune": "Copia OK, prune fallido",
+          "protected": "Copia OK, protección fallida",
+          "hook": "Copia OK, hook script fallido",
+          "other": "Copia OK, paso final fallido"
+        }
+      }
     }
   },
   "backup": {

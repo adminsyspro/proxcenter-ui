@@ -1505,6 +1505,9 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
             disksInfo.push({
               id: key,
               storage: storagePart[0] || 'unknown',
+              // Whole volume ID (`storage:vm-100-disk-0`), shown as the PVE GUI
+              // does so disks sharing a storage can be told apart.
+              volume: parts[0],
               size: isCdrom ? '-' : (sizeMatch ? sizeMatch[1] : 'unknown'),
               format: isCdrom ? 'cdrom' : parseDiskFormat(String(diskStr)),
               cache: diskStr.match(/cache=(\w+)/)?.[1],
@@ -1587,6 +1590,7 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
             disksInfo.push({
               id: key,
               storage: storagePart[0] || 'unknown',
+              volume: val.split(',')[0],
               size: sizeMatch ? sizeMatch[1] : '4M',
               format: 'EFI',
               isEfi: true,
@@ -1598,6 +1602,7 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
             disksInfo.push({
               id: key,
               storage: storagePart[0] || 'unknown',
+              volume: val.split(',')[0],
               size: '4M',
               format: versionMatch ? `TPM v${versionMatch[1]}` : 'TPM',
               isTpm: true,

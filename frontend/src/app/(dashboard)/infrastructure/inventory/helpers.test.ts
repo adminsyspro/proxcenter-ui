@@ -1095,6 +1095,29 @@ describe('fetchDetails: disk format on the Hardware tab', () => {
     expect(disk?.format).toBe('qcow2')
   })
 
+  // The Hardware tab shows the whole volume ID, as the PVE GUI does, so two
+  // disks on the same storage can be told apart (issue #1005).
+  it('keeps the full volume ID next to the storage name', async () => {
+    stubFetch({
+      name: 'vm500',
+      scsi0: 'jdss-pool-0:vm-500-disk-0,discard=on,size=30G,ssd=1',
+      scsi1: 'FC-LAB01:500/vm-500-disk-1.qcow2,size=15G',
+      ide2: 'local:iso/debian-13.iso,media=cdrom,size=600M',
+      efidisk0: 'local-lvm:vm-500-disk-2,efitype=4m,size=4M',
+      tpmstate0: 'local-lvm:vm-500-disk-3,size=4M,version=v2.0',
+    })
+
+    const payload = await fetchDetails({ type: 'vm', id: 'conn1:pve1:qemu:500' } as any)
+    const volumeOf = (id: string) => (payload?.disksInfo?.find(d => d.id === id) as any)?.volume
+
+    expect(payload?.disksInfo?.find(d => d.id === 'scsi0')?.storage).toBe('jdss-pool-0')
+    expect(volumeOf('scsi0')).toBe('jdss-pool-0:vm-500-disk-0')
+    expect(volumeOf('scsi1')).toBe('FC-LAB01:500/vm-500-disk-1.qcow2')
+    expect(volumeOf('ide2')).toBe('local:iso/debian-13.iso')
+    expect(volumeOf('efidisk0')).toBe('local-lvm:vm-500-disk-2')
+    expect(volumeOf('tpmstate0')).toBe('local-lvm:vm-500-disk-3')
+  })
+
   it('still labels a block-storage volume raw and a CDROM cdrom', async () => {
     stubFetch({
       name: 'vm500',

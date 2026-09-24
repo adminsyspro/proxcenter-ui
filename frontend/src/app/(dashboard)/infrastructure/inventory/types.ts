@@ -91,6 +91,7 @@ export type DetailsPayload = {
   disksInfo?: Array<{
     id: string
     storage: string
+    volume?: string
     size: string
     format?: string
     cache?: string

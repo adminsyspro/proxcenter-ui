@@ -7,18 +7,27 @@ import {
   Box, Typography, Button, CircularProgress, Alert
 } from '@mui/material'
 
+import { useDiskSnapshotRefs, type GuestRef } from '@/hooks/useDiskSnapshotRefs'
+import { DiskSnapshotRefsAlert } from './DiskSnapshotRefsAlert'
+
 interface DeleteUnusedDiskDialogProps {
   open: boolean
   diskId: string
   volume: string
   onClose: () => void
   onConfirm: () => Promise<void>
+  /** The guest owning the disk: lets the dialog warn when snapshots still hold it (#1004). */
+  guest?: GuestRef | null
+  canDeleteSnapshots?: boolean
 }
 
-export function DeleteUnusedDiskDialog({ open, diskId, volume, onClose, onConfirm }: DeleteUnusedDiskDialogProps) {
+export function DeleteUnusedDiskDialog({ open, diskId, volume, onClose, onConfirm, guest, canDeleteSnapshots = false }: DeleteUnusedDiskDialogProps) {
   const t = useTranslations()
   const [working, setWorking] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // PVE refuses to remove a volume a snapshot still references.
+  const { snapshots, recheck } = useDiskSnapshotRefs(open ? guest : null, diskId)
+  const heldBySnapshots = (snapshots?.length ?? 0) > 0
 
   useEffect(() => {
     if (open) {
@@ -56,6 +65,17 @@ export function DeleteUnusedDiskDialog({ open, diskId, volume, onClose, onConfir
         <Typography variant="caption" color="text.secondary">
           {diskId}
         </Typography>
+        {heldBySnapshots && guest && (
+          <Box sx={{ mt: 2 }}>
+            <DiskSnapshotRefsAlert
+              snapshots={snapshots!}
+              mode="delete"
+              vmKey={`${guest.connId}:${guest.type}:${guest.node}:${guest.vmid}`}
+              canDeleteSnapshots={canDeleteSnapshots}
+              onDeleted={recheck}
+            />
+          </Box>
+        )}
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 2 }}>
         <Button onClick={onClose} disabled={working}>{t('common.cancel')}</Button>
@@ -63,7 +83,7 @@ export function DeleteUnusedDiskDialog({ open, diskId, volume, onClose, onConfir
           variant="contained"
           color="error"
           onClick={handleConfirm}
-          disabled={working}
+          disabled={working || heldBySnapshots}
           startIcon={working ? <CircularProgress size={16} color="inherit" /> : <i className="ri-delete-bin-line" />}
         >
           {t('common.delete')}

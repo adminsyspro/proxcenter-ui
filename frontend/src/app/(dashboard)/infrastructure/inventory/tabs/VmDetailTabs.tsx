@@ -1739,6 +1739,8 @@ export default function VmDetailTabs(props: any) {
                             open={Boolean(deleteUnusedTarget)}
                             diskId={deleteUnusedTarget.id}
                             volume={deleteUnusedTarget.rawValue || ''}
+                            guest={selection?.id ? parseVmId(selection.id) : null}
+                            canDeleteSnapshots={canSnapshot}
                             onClose={() => setDeleteUnusedTarget(null)}
                             onConfirm={async () => { await handleDetachDisk() }}
                           />

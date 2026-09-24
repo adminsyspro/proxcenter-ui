@@ -24,8 +24,13 @@ export interface VzdumpInvocation {
 
 const START_MARKER = 'starting new backup job: '
 
-/** Job metadata PVE strips before calling vzdump (never part of a run). */
-const JOB_ONLY_KEYS = ['id', 'type', 'enabled', 'schedule', 'comment', 'repeat-missed', 'next-run', 'job-id']
+/**
+ * Job metadata PVE strips before calling vzdump (never part of a run), with the
+ * legacy `starttime`/`dow` schedule and `stdout` older jobs may still carry.
+ */
+const JOB_ONLY_KEYS = [
+  'id', 'type', 'enabled', 'schedule', 'comment', 'repeat-missed', 'next-run', 'job-id', 'starttime', 'dow', 'stdout',
+]
 
 /** Selection and placement: compared on their own, not as options. */
 const SELECTION_KEYS = ['all', 'vmid', 'pool', 'exclude', 'node', 'quiet']

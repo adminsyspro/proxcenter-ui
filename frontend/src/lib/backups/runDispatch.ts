@@ -138,6 +138,24 @@ export function buildSharedVzdumpParams(job: Record<string, any>): Record<string
   return p
 }
 
+/** vzdump options that take a list, sent as one form key per value. */
+const LIST_KEYS = new Set(['exclude-path'])
+
+/**
+ * The form body of one node's vzdump POST: the shared params plus that node's
+ * selection. A list option (exclude-path, which normalizeVzdumpValue joins
+ * with newlines) goes as repeated keys, as PVE parses it.
+ */
+export function vzdumpRunBody(shared: Record<string, string>, selection: Record<string, string>): URLSearchParams {
+  const body = new URLSearchParams()
+  for (const [key, value] of Object.entries({ ...shared, ...selection })) {
+    if (LIST_KEYS.has(key)) for (const item of value.split('\n')) body.append(key, item)
+    else body.set(key, value)
+  }
+
+  return body
+}
+
 export function planBackupRunDispatch(input: PlanRunInput): RunDispatchPlan {
   const { job, vmLocations, onlineNodes, poolVmids } = input
 

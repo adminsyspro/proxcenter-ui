@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 
-import { buildSharedVzdumpParams, planBackupRunDispatch, type VmLocation } from './runDispatch'
+import { buildSharedVzdumpParams, planBackupRunDispatch, vzdumpRunBody, type VmLocation } from './runDispatch'
 import { jobInvocation, parseVzdumpCommandLine } from './vzdumpCommandLine'
 import { jobMatches } from './vzdumpRuns'
 
@@ -167,5 +167,39 @@ describe('buildSharedVzdumpParams', () => {
   it('never forwards the deprecated mailnotification (rejected by PVE 9)', () => {
     const p = buildSharedVzdumpParams({ storage: 'PBS', mailnotification: 'always' } as any)
     expect(p).not.toHaveProperty('mailnotification')
+  })
+})
+
+describe('vzdumpRunBody (#1003 final review)', () => {
+  it('sends every exclude-path as its own form key, as PVE expects a list', () => {
+    const job = { id: 'j', vmid: '100', storage: 'PBS', 'exclude-path': ['/tmp/?*', '/var/cache'] }
+    const body = vzdumpRunBody(buildSharedVzdumpParams(job), { vmid: '100' })
+    expect(body.getAll('exclude-path')).toEqual(['/tmp/?*', '/var/cache'])
+    expect(body.get('vmid')).toBe('100')
+    expect(body.get('storage')).toBe('PBS')
+  })
+
+  it('round-trips: the task PVE prints for that body matches its job', () => {
+    const job = { id: 'j', type: 'vzdump', vmid: '100', storage: 'PBS', 'exclude-path': ['/tmp/?*', '/var/cache'] }
+    const body = vzdumpRunBody(buildSharedVzdumpParams(job), { vmid: '100' })
+    const quote = (v: string) => (/^[\w\-.\/:@,=+]+$/.test(v) ? v : `'${v}'`)
+    const line = 'INFO: starting new backup job: vzdump 100 ' +
+      [...body.entries()].filter(([k]) => k !== 'vmid').map(([k, v]) => `--${k} ${quote(v)}`).join(' ')
+    expect(line).toContain("--exclude-path '/tmp/?*' --exclude-path /var/cache")
+    expect(jobMatches(jobInvocation(job), parseVzdumpCommandLine(line)!)).toBe(true)
+  })
+
+  it('lets the per-node selection override a shared key', () => {
+    expect(vzdumpRunBody({ storage: 'PBS', vmid: '1' }, { vmid: '100,101' }).getAll('vmid')).toEqual(['100,101'])
+  })
+})
+
+describe('job-only keys (#1003 final review)', () => {
+  it('a job carrying starttime, dow and stdout still matches its runs, and Run now does not send them', () => {
+    const job = { id: 'old', type: 'vzdump', vmid: '100', storage: 'PBS', mode: 'snapshot', starttime: '02:00', dow: 'mon,tue', stdout: 0 }
+    const p = buildSharedVzdumpParams(job)
+    expect(p).toEqual({ storage: 'PBS', mode: 'snapshot' })
+    const task = parseVzdumpCommandLine('INFO: starting new backup job: vzdump 100 --storage PBS --mode snapshot --quiet 1')!
+    expect(jobMatches(jobInvocation(job), task)).toBe(true)
   })
 })

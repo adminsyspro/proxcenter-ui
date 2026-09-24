@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 
 import { pveFetch } from '@/lib/proxmox/client'
 import { isVmConfigNotFoundError } from '@/lib/proxmox/locateVm'
+import { fetchTaskLog } from '@/lib/proxmox/taskLog'
 import { getConnectionById, type PveConn } from '@/lib/connections/getConnection'
 import { formatBytes as formatSize } from '@/utils/format'
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
@@ -563,25 +564,7 @@ return NextResponse.json({ error: `Failed to fetch task status: ${e.message}` },
     let logs: TaskLogEntry[] = []
 
     try {
-      // Fetch logs in batches to handle long-running tasks (e.g. multi-TiB migrations)
-      const BATCH_SIZE = 5000
-      let start = 0
-
-      while (true) {
-        const batch = await pveFetch<TaskLogEntry[]>(
-          connection,
-          `/nodes/${encodeURIComponent(node)}/tasks/${encodeURIComponent(decodedUpid)}/log?start=${start}&limit=${BATCH_SIZE}`
-        )
-
-        if (!Array.isArray(batch) || batch.length === 0) break
-        logs = logs.concat(batch)
-
-        if (batch.length < BATCH_SIZE) break
-        start += batch.length
-
-        // Safety cap: 100K lines max to prevent infinite loops
-        if (logs.length >= 100000) break
-      }
+      logs = await fetchTaskLog(connection, node, decodedUpid) as TaskLogEntry[]
     } catch (e: any) {
       console.warn('Failed to fetch task logs:', e.message)
     }

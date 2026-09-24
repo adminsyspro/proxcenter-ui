@@ -1599,13 +1599,13 @@ export default function VmDetailTabs(props: any) {
                                       </Box>
                                     }
                                     secondary={
-                                      <Typography variant="caption" sx={{ opacity: 0.7 }}>
+                                      <Typography variant="caption" sx={{ opacity: 0.7, overflowWrap: 'anywhere' }}>
                                         {disk.isUnused
                                           ? disk.rawValue
                                           : disk.isCdrom
-                                            ? (disk.storage === 'none' ? t('inventory.noDiskInserted') : disk.storage)
+                                            ? (disk.storage === 'none' ? t('inventory.noDiskInserted') : (disk.volume || disk.storage))
                                             : <>
-                                                {disk.storage} • {disk.format || 'raw'}
+                                                {disk.volume || disk.storage} • {disk.format || 'raw'}
                                                 {disk.cache && ` • Cache: ${disk.cache}`}
                                                 {disk.iothread && ' • IOThread'}
                                               </>

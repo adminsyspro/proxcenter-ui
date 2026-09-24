@@ -185,9 +185,11 @@ function PveJobsTab({ pveConnections = [], isVdcTenant = false }) {
   const runsData = runsJson?.data
   const runsByJob = useMemo(() => new Map((runsData?.jobs || []).map(j => [j.jobId, j])), [runsData])
 
-  const drawerRuns = runsDrawer
-    ? (runsDrawer.key === MANUAL_RUNS_KEY ? runsData?.manual?.runs : runsByJob.get(runsDrawer.key)?.runs) || []
-    : []
+  const drawerRuns = useMemo(() => (
+    runsDrawer
+      ? (runsDrawer.key === MANUAL_RUNS_KEY ? runsData?.manual?.runs : runsByJob.get(runsDrawer.key)?.runs) || []
+      : []
+  ), [runsDrawer, runsData, runsByJob])
 
   // Poll fast while a run is in progress or a Run now has not shown up yet.
   useEffect(() => {

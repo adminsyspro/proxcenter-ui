@@ -4,10 +4,13 @@ import { useEffect, useMemo, useState, useCallback } from 'react'
 
 import { useLocale, useTranslations } from 'next-intl'
 
-import { getDateLocale } from '@/lib/i18n/date'
+import { formatDateTime, getDateLocale } from '@/lib/i18n/date'
 import { useTenant } from '@/contexts/TenantContext'
 import NumericTextField from '@/components/ui/NumericTextField'
 import BackupSchedulePicker from './BackupSchedulePicker'
+import { useSWRFetch } from '@/hooks/useSWRFetch'
+import { formatDurationSec, runStatusChip } from '@/lib/backups/runDisplay'
+import BackupJobRunsDrawer from './BackupJobRunsDrawer'
 
 import {
   Alert,
@@ -32,6 +35,7 @@ import {
   LinearProgress,
   MenuItem,
   Select,
+  Skeleton,
   Stack,
   Switch,
   Tab,
@@ -115,9 +119,12 @@ const StatusChip = ({ state, t }) => {
   PVE Backup Jobs Tab
 ------------------------------ */
 
+const MANUAL_RUNS_KEY = '__manual__'
+
 function PveJobsTab({ pveConnections = [], isVdcTenant = false }) {
   const theme = useTheme()
   const t = useTranslations()
+  const locale = useLocale()
 
   const [selectedConnection, setSelectedConnection] = useState('')
   const [jobs, setJobs] = useState([])
@@ -165,6 +172,29 @@ function PveJobsTab({ pveConnections = [], isVdcTenant = false }) {
     maxfiles: 1,
     namespace: ''
   })
+
+  // Run history (#1003): loaded apart from the jobs so the table never waits on it.
+  const [runsDrawer, setRunsDrawer] = useState(null) // { key: jobId | MANUAL_RUNS_KEY, focusUpid }
+  const [pollRuns, setPollRuns] = useState(false)
+  const runsUrl = selectedConnection
+    ? `/api/v1/connections/${encodeURIComponent(selectedConnection)}/backup-jobs/runs${pollRuns ? '?noCache=1' : ''}`
+    : null
+  const { data: runsJson, isLoading: runsLoading, error: runsError } = useSWRFetch(runsUrl, {
+    refreshInterval: pollRuns ? 5000 : 30000,
+  })
+  const runsData = runsJson?.data
+  const runsByJob = useMemo(() => new Map((runsData?.jobs || []).map(j => [j.jobId, j])), [runsData])
+
+  const drawerRuns = runsDrawer
+    ? (runsDrawer.key === MANUAL_RUNS_KEY ? runsData?.manual?.runs : runsByJob.get(runsDrawer.key)?.runs) || []
+    : []
+
+  // Poll fast while a run is in progress or a Run now has not shown up yet.
+  useEffect(() => {
+    const anyRunning = [...(runsData?.jobs || []).map(j => j.lastRun), runsData?.manual?.lastRun].some(r => r?.status === 'running')
+    const waiting = !!runsDrawer?.focusUpid && !drawerRuns.some(r => r.tasks.some(tk => tk.upid === runsDrawer.focusUpid))
+    setPollRuns(anyRunning || waiting)
+  }, [runsData, runsDrawer, drawerRuns])
 
   const loadJobs = useCallback(async () => {
     if (!selectedConnection) return
@@ -445,11 +475,13 @@ function PveJobsTab({ pveConnections = [], isVdcTenant = false }) {
         `/api/v1/connections/${encodeURIComponent(selectedConnection)}/backup-jobs/${encodeURIComponent(job.id)}?action=run`,
         { method: 'POST' }
       )
-      
+
       const json = await res.json()
-      
+
       if (json.error) {
         setError(json.error)
+      } else {
+        setRunsDrawer({ key: job.id, focusUpid: json.data?.tasks?.[0]?.upid ?? null })
       }
     } catch (e) {
       setError(e.message || t('common.error'))
@@ -487,6 +519,7 @@ return '—'
         <Switch
           size="small"
           checked={params.value}
+          onClick={(e) => e.stopPropagation()}
           onChange={() => handleToggleEnabled(params.row)}
         />
       )
@@ -498,6 +531,52 @@ return '—'
       renderCell: (params) => (
         <Chip size="small" label={params.value} variant="outlined" />
       )
+    },
+    {
+      field: 'lastRun',
+      headerName: t('backups.runs.colLastRun'),
+      width: 170,
+      sortable: false,
+      renderCell: (params) => {
+        const run = runsByJob.get(params.row.id)?.lastRun
+        if (runsLoading && !runsData) return <Skeleton width={120} />
+        if (!run) return <Typography sx={{ opacity: 0.5, fontSize: '0.8rem' }}>{t('backups.runs.never')}</Typography>
+
+        return formatDateTime(run.start * 1000, locale, { dateStyle: 'short', timeStyle: 'short' })
+      }
+    },
+    {
+      field: 'lastDuration',
+      headerName: t('backups.runs.colDuration'),
+      width: 100,
+      sortable: false,
+      renderCell: (params) => formatDurationSec(runsByJob.get(params.row.id)?.lastRun?.durationSec)
+    },
+    {
+      field: 'lastStatus',
+      headerName: t('backups.runs.colStatus'),
+      width: 210,
+      sortable: false,
+      renderCell: (params) => {
+        const run = runsByJob.get(params.row.id)?.lastRun
+        if (!run) return null
+        const chip = runStatusChip(run)
+
+        return (
+          <Tooltip title={run.statusDetail.reason || ''}>
+            <Chip size="small" color={chip.color} label={chip.count ? `${t(chip.key)} (${chip.count})` : t(chip.key)} />
+          </Tooltip>
+        )
+      }
+    },
+    {
+      field: 'nextRun',
+      headerName: t('backups.runs.colNextRun'),
+      width: 150,
+      sortable: false,
+      renderCell: (params) => params.row.enabled && params.row.nextRun
+        ? formatDateTime(params.row.nextRun * 1000, locale, { dateStyle: 'short', timeStyle: 'short' })
+        : <Typography sx={{ opacity: 0.5 }}>—</Typography>
     },
     {
       field: 'storage',
@@ -551,17 +630,17 @@ return '—'
       renderCell: (params) => (
         <Stack direction="row" spacing={0.5}>
           <Tooltip title={t('backups.runNow')}>
-            <IconButton size="small" onClick={() => handleRunNow(params.row)}>
+            <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleRunNow(params.row) }}>
               <i className="ri-play-line" style={{ fontSize: 16 }} />
             </IconButton>
           </Tooltip>
           <Tooltip title={t('common.edit')}>
-            <IconButton size="small" onClick={() => handleEdit(params.row)}>
+            <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleEdit(params.row) }}>
               <i className="ri-edit-line" style={{ fontSize: 16 }} />
             </IconButton>
           </Tooltip>
           <Tooltip title={t('common.delete')}>
-            <IconButton size="small" color="error" onClick={() => handleDeleteClick(params.row)}>
+            <IconButton size="small" color="error" onClick={(e) => { e.stopPropagation(); handleDeleteClick(params.row) }}>
               <i className="ri-delete-bin-line" style={{ fontSize: 16 }} />
             </IconButton>
           </Tooltip>
@@ -644,15 +723,61 @@ return '—'
         }}
         disableRowSelectionOnClick
         autoHeight
+        onRowClick={(params) => setRunsDrawer({ key: params.row.id, focusUpid: null })}
+        getRowClassName={() => 'backup-job-row'}
         sx={{
           border: 'none',
           '& .MuiDataGrid-cell': { borderColor: 'divider' },
-          '& .MuiDataGrid-columnHeaders': { bgcolor: 'action.hover', borderRadius: 1 }
+          '& .MuiDataGrid-columnHeaders': { bgcolor: 'action.hover', borderRadius: 1 },
+          '& .backup-job-row': { cursor: 'pointer' }
         }}
         localeText={{
           noRowsLabel: t('backups.noJobConfigured'),
           MuiTablePagination: { labelRowsPerPage: t('backups.rowsPerPage') }
         }}
+      />
+
+      {runsError && <Alert severity="warning" sx={{ mt: 1 }}>{t('backups.runs.loadError')}</Alert>}
+
+      {selectedConnection && (
+        <Box
+          role="button"
+          tabIndex={0}
+          onClick={() => setRunsDrawer({ key: MANUAL_RUNS_KEY, focusUpid: null })}
+          onKeyDown={(e) => { if (e.key === 'Enter') setRunsDrawer({ key: MANUAL_RUNS_KEY, focusUpid: null }) }}
+          sx={{ mt: 1, px: 2, py: 1, display: 'flex', alignItems: 'center', gap: 2, borderRadius: 1, bgcolor: 'action.hover', cursor: 'pointer' }}
+        >
+          <i className="ri-hand-coin-line" />
+          <Tooltip title={t('backups.runs.manualBackupsHint')}>
+            <Typography variant="body2" sx={{ fontWeight: 600 }}>{t('backups.runs.manualBackups')}</Typography>
+          </Tooltip>
+          <Typography variant="body2" color="text.secondary">
+            {runsData?.manual?.lastRun
+              ? formatDateTime(runsData.manual.lastRun.start * 1000, locale, { dateStyle: 'short', timeStyle: 'short' })
+              : t('backups.runs.never')}
+          </Typography>
+          {runsData?.manual?.lastRun && (() => {
+            const chip = runStatusChip(runsData.manual.lastRun)
+            return <Chip size="small" color={chip.color} label={t(chip.key)} />
+          })()}
+          <Box sx={{ flex: 1 }} />
+          <Typography variant="caption" color="text.secondary">{runsData?.manual?.runs?.length ?? 0}</Typography>
+        </Box>
+      )}
+
+      <BackupJobRunsDrawer
+        open={!!runsDrawer}
+        onClose={() => setRunsDrawer(null)}
+        connectionId={selectedConnection}
+        title={runsDrawer?.key === MANUAL_RUNS_KEY ? t('backups.runs.manualBackups') : runsDrawer?.key}
+        subtitle={(() => {
+          const job = jobs.find(j => j.id === runsDrawer?.key)
+          return job ? [job.schedule, job.storage, formatSelection(job, t)].filter(Boolean).join(' · ') : null
+        })()}
+        runs={drawerRuns}
+        focusUpid={runsDrawer?.focusUpid ?? null}
+        days={runsData?.window?.days ?? 30}
+        unreachableNodes={runsData?.unreachableNodes ?? []}
       />
 
       {/* Create/Edit Dialog */}

@@ -8,6 +8,7 @@
 
 import type { PveConn } from '@/lib/connections/getConnection'
 import { pveFetch } from '@/lib/proxmox/client'
+import { isJobOwnedByTenantPools } from '@/lib/vdc/backupJobs'
 
 import type { BackupRunsResult } from './vzdumpRunsService'
 import type { RunSummary } from './vzdumpRuns'
@@ -21,15 +22,40 @@ export function filterBackupRunsForTenant(
     const pool = poolByVmid.get(vmid)
     return pool !== undefined && allowedPools.has(pool)
   }
-  const runs = result.manual.runs.filter(r => {
-    const vmids = r.tasks.flatMap(t => t.vmids)
-    return vmids.length > 0 && vmids.every(owns)
-  })
+
+  // jobMatches (vzdumpRuns.ts) attaches a task to a job by comparing vzdump
+  // *options*, not by checking who the guests belong to: a foreign vmid-list
+  // task (another tenant, the provider, a "Run now" replay of a pool job)
+  // can land in a run of a job this tenant owns. So scope every run — job or
+  // manual — per task, the same way: drop a task unless it has at least one
+  // vmid and every vmid is the tenant's, then drop the run if nothing is
+  // left. sharedWith is stripped too: it can name another tenant's job id.
+  // Nothing else in a surviving RunSummary is recomputed (status/duration
+  // still reflect the pre-scoping task set).
+  const scopeRun = (run: RunSummary): RunSummary | null => {
+    const tasks = run.tasks.filter(t => t.vmids.length > 0 && t.vmids.every(owns))
+    if (tasks.length === 0) return null
+
+    const { sharedWith: _sharedWith, ...rest } = run
+
+    return { ...rest, tasks }
+  }
+  const scopeRuns = (runs: RunSummary[]): RunSummary[] =>
+    runs.map(scopeRun).filter((r): r is RunSummary => r !== null)
+
+  const manualRuns = scopeRuns(result.manual.runs)
+  const jobs = result.jobs
+    .filter(j => isJobOwnedByTenantPools(j, allowedPools))
+    .map(j => {
+      const runs = scopeRuns(j.runs)
+
+      return { ...j, runs, lastRun: runs[0] ?? null }
+    })
 
   return {
     ...result,
-    jobs: result.jobs.filter(j => j.pool !== null && allowedPools.has(j.pool)),
-    manual: { lastRun: runs[0] ?? null, runs },
+    jobs,
+    manual: { lastRun: manualRuns[0] ?? null, runs: manualRuns },
     unreachableNodes: [],
   }
 }

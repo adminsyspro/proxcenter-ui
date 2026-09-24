@@ -11,7 +11,12 @@ const poolByVmidMock = vi.fn<(...args: any[]) => Promise<Map<number, string>>>()
 vi.mock('@/lib/rbac', () => ({ checkPermission: checkPermissionMock, PERMISSIONS: { BACKUP_JOB_VIEW: 'backup_job.view' } }))
 vi.mock('@/lib/connections/getConnection', () => ({ getConnectionById: async (id: string) => ({ id }) }))
 vi.mock('@/lib/tenant', () => ({ getCurrentTenantId: async () => 'tenant-x' }))
-vi.mock('@/lib/vdc/backupJobs', () => ({ getAllowedJobPools: allowedPoolsMock }))
+vi.mock('@/lib/vdc/backupJobs', () => ({
+  getAllowedJobPools: allowedPoolsMock,
+  // Real semantics needed here: vzdumpRunsTenant's filterBackupRunsForTenant
+  // (kept real via the vzdumpRunsTenant mock below) imports this.
+  isJobOwnedByTenantPools: (job: { pool?: string | null }, pools: Set<string>) => !!job.pool && pools.has(job.pool),
+}))
 vi.mock('@/lib/proxmox/client', () => ({ pveFetch: vi.fn() }))
 vi.mock('@/lib/backups/vzdumpRunsService', async () => ({
   collectBackupRuns: collectMock,

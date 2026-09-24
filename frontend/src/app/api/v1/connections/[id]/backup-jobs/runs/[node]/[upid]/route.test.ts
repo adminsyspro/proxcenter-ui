@@ -10,7 +10,12 @@ const allowedPoolsMock = vi.fn<(...args: any[]) => Promise<Set<string> | null>>(
 vi.mock('@/lib/rbac', () => ({ checkPermission: checkPermissionMock, PERMISSIONS: { BACKUP_JOB_VIEW: 'backup_job.view' } }))
 vi.mock('@/lib/connections/getConnection', () => ({ getConnectionById: async (id: string) => ({ id }) }))
 vi.mock('@/lib/tenant', () => ({ getCurrentTenantId: async () => 'tenant-x' }))
-vi.mock('@/lib/vdc/backupJobs', () => ({ getAllowedJobPools: allowedPoolsMock }))
+vi.mock('@/lib/vdc/backupJobs', () => ({
+  getAllowedJobPools: allowedPoolsMock,
+  // Real semantics needed here: vzdumpRunsTenant's filterBackupRunsForTenant
+  // (kept real via the vzdumpRunsTenant mock below) imports this.
+  isJobOwnedByTenantPools: (job: { pool?: string | null }, pools: Set<string>) => !!job.pool && pools.has(job.pool),
+}))
 vi.mock('@/lib/proxmox/client', () => ({ pveFetch: vi.fn() }))
 vi.mock('@/lib/backups/vzdumpRunsService', () => ({
   collectBackupRuns: collectMock,
@@ -33,6 +38,13 @@ const run = (upid: string, vmids: number[]) => ({
 async function get(node: string, upid: string) {
   const { GET } = await import('./route')
   const res = await callRoute(GET as any, { params: { id: 'conn-1', node, upid: encodeURIComponent(upid) }, method: 'GET' })
+  return { status: res.status, body: await readJson<any>(res) }
+}
+
+/** Like get(), but passes the upid param through as-is (no encodeURIComponent). */
+async function getRaw(node: string, upid: string) {
+  const { GET } = await import('./route')
+  const res = await callRoute(GET as any, { params: { id: 'conn-1', node, upid }, method: 'GET' })
   return { status: res.status, body: await readJson<any>(res) }
 }
 
@@ -72,5 +84,26 @@ describe('GET …/backup-jobs/runs/[node]/[upid]', () => {
     const { status } = await get('pve1', FOREIGN)
     expect(status).toBe(404)
     expect(detailMock).not.toHaveBeenCalled()
+  })
+
+  it("answers 404 when the UPID sits under the tenant's own job but backs up a foreign vmid", async () => {
+    // #1003 review: jobMatches can attach a foreign-vmid task to a
+    // tenant-owned job's run (same options / Run now replay). Job/pool
+    // ownership alone must not be enough to serve it.
+    allowedPoolsMock.mockResolvedValue(new Set(['vdc-a']))
+    collectMock.mockResolvedValue({
+      jobs: [{ jobId: 'mine', pool: 'vdc-a', nextRun: null, lastRun: null, runs: [run(FOREIGN, [100])] }],
+      manual: { lastRun: null, runs: [] },
+      unreachableNodes: [],
+      window: { since: 0, days: 30 },
+    })
+    const { status } = await get('pve1', FOREIGN)
+    expect(status).toBe(404)
+    expect(detailMock).not.toHaveBeenCalled()
+  })
+
+  it('answers 400 on a malformed UPID escape sequence instead of 500', async () => {
+    const { status } = await getRaw('pve1', '%E0')
+    expect(status).toBe(400)
   })
 })

@@ -23,7 +23,14 @@ type RouteContext = {
 export async function GET(_req: Request, ctx: RouteContext) {
   try {
     const { id, node, upid } = await ctx.params
-    const decodedUpid = decodeURIComponent(upid)
+
+    let decodedUpid: string
+    try {
+      decodedUpid = decodeURIComponent(upid)
+    } catch {
+      return NextResponse.json({ error: 'Malformed UPID' }, { status: 400 })
+    }
+
     const parts = decodedUpid.split(':')
     if (parts[0] !== 'UPID' || parts[1] !== node || parts[5] !== 'vzdump') {
       return NextResponse.json({ error: 'Not a vzdump task of this node' }, { status: 400 })

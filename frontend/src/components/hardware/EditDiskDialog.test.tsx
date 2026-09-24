@@ -221,3 +221,15 @@ describe('existing CD-ROM media permission', () => {
     await waitFor(() => expect(props.onSave).toHaveBeenCalledWith('none,media=cdrom'))
   })
 })
+
+describe('EditDiskDialog — unused disk volume', () => {
+  afterEach(cleanup)
+
+  it('shows the volume as a labelled line, not inside an info alert', () => {
+    renderWithProviders(<EditDiskDialog {...makeProps()} />)
+
+    const volume = screen.getByText('local:vm-100-disk-1')
+    expect(screen.getByText('Volume')).toBeInTheDocument()
+    expect(volume.closest('[role="alert"]')).toBeNull()
+  })
+})

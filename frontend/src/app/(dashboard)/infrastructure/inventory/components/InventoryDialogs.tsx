@@ -412,6 +412,7 @@ export default function InventoryDialogs(props: InventoryDialogsProps) {
   const { hasPermission } = useRBAC()
   const canEditHardware = hasPermission('vm.config.hardware')
   const canChangeMedia = hasPermission('vm.config.media')
+  const canSnapshot = hasPermission('vm.snapshot')
   const {
     selection, data, allVms, hosts,
     nodeActionDialog, setNodeActionDialog, nodeActionBusy, setNodeActionBusy, nodeActionStep, setNodeActionStep,
@@ -1552,6 +1553,9 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
               onMoveStorage={handleMoveDisk}
               connId={connId}
               node={node}
+              guestType={type}
+              vmid={vmid}
+              canDeleteSnapshots={canSnapshot}
               disk={selectedDisk}
               existingDisks={data?.disksInfo?.map((d: any) => d.id) || []}
               initialTab={editDiskInitialTab}

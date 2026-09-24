@@ -35,6 +35,7 @@ import { vmDiskFormats } from '@/lib/proxmox/storage'
 import AppDialogTitle from '@/components/ui/AppDialogTitle'
 import NumericTextField from '@/components/ui/NumericTextField'
 import { DetachConfirmDialog } from './DetachConfirmDialog'
+import { useDiskSnapshotGuard } from './DiskSnapshotRefsAlert'
 import { IsoUploadControls, type IsoStorageRow } from './IsoUploadControls'
 import type { StoragePolicyCaps } from './utils'
 
@@ -54,6 +55,10 @@ type EditDiskDialogProps = {
   onMoveStorage?: (targetStorage: string, deleteSource: boolean, format?: string) => Promise<void>
   connId?: string
   node?: string
+  /** qemu | lxc, with vmid: needed to check which snapshots hold the disk (#1004). */
+  guestType?: string
+  vmid?: string
+  canDeleteSnapshots?: boolean
   disk: {
     id: string
     size: string
@@ -80,7 +85,7 @@ type EditDiskDialogProps = {
   initialTab?: number
 }
 
-export function EditDiskDialog({ open, onClose, onSave, onDelete, canEditHardware, canChangeMedia, onResize, onMoveStorage, connId, node, disk, existingDisks, availableStorages, initialTab }: EditDiskDialogProps) {
+export function EditDiskDialog({ open, onClose, onSave, onDelete, canEditHardware, canChangeMedia, onResize, onMoveStorage, connId, node, guestType, vmid, canDeleteSnapshots = false, disk, existingDisks, availableStorages, initialTab }: Readonly<EditDiskDialogProps>) {
   const t = useTranslations()
   const [tab, setTab] = useState(initialTab ?? 0)
 
@@ -103,6 +108,13 @@ export function EditDiskDialog({ open, onClose, onSave, onDelete, canEditHardwar
   const [targetFormat, setTargetFormat] = useState('')
   const [storages, setStorages] = useState<Array<{ storage: string; type: string; avail?: number; total?: number; used?: number; formats?: string[]; defaultFormat?: string; policy?: StoragePolicyCaps }>>([])
   const [storagesLoading, setStoragesLoading] = useState(false)
+
+  // Snapshots still holding this disk's volume (#1004): PVE then refuses a
+  // move with "delete source" and the removal of the disk once unused.
+  const { held: heldBySnapshots, renderAlert: snapshotRefsAlert } = useDiskSnapshotGuard({
+    open, connId, type: guestType, node, vmid, canDeleteSnapshots,
+    diskId: disk?.isCdrom ? null : disk?.id,
+  })
 
   // Disk config (éditable)
   const [cache, setCache] = useState('none')
@@ -371,7 +383,7 @@ return
     setError(null)
 
     try {
-      await onMoveStorage(targetStorage, deleteSource, targetFormat || undefined)
+      await onMoveStorage(targetStorage, deleteSource && !heldBySnapshots, targetFormat || undefined)
       onClose()
     } catch (e: any) {
       setError(e.message || t('errors.moveError'))
@@ -682,11 +694,12 @@ return
         <DialogContent>
           {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
-          <Alert severity="info" sx={{ mb: 2 }} icon={<i className="ri-information-line" />}>
-            <Typography variant="body2" sx={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>
-              {disk.rawValue}
-            </Typography>
-          </Alert>
+          <Box sx={{ mt: 1, mb: 2, display: 'flex', alignItems: 'baseline', gap: 1 }}>
+            <Typography variant="body2" color="text.secondary" sx={{ flexShrink: 0 }}>{t('hardware.volume')}</Typography>
+            <Typography variant="body2" sx={{ overflowWrap: 'anywhere' }}>{disk.rawValue}</Typography>
+          </Box>
+
+          {heldBySnapshots && <Box sx={{ mb: 2 }}>{snapshotRefsAlert('delete')}</Box>}
 
           <Typography variant="body2" fontWeight={600} sx={{ mb: 1.5 }}>
             {t('hardware.reassignTo')}
@@ -724,7 +737,7 @@ return
             <Button
               color="error"
               onClick={handleDelete}
-              disabled={isWorking}
+              disabled={isWorking || heldBySnapshots}
               startIcon={deleting ? <CircularProgress size={16} /> : <i className="ri-delete-bin-line" />}
             >
               {t('common.delete')}
@@ -993,7 +1006,8 @@ return
                 <FormControlLabel
                   control={
                     <Checkbox
-                      checked={deleteSource}
+                      checked={deleteSource && !heldBySnapshots}
+                      disabled={heldBySnapshots}
                       onChange={(e) => setDeleteSource(e.target.checked)}
                       size="small"
                     />
@@ -1004,6 +1018,8 @@ return
                     </Typography>
                   }
                 />
+
+                {snapshotRefsAlert('move')}
 
                 <Button
                   variant="contained"

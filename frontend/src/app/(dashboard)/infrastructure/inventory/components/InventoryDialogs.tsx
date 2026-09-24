@@ -408,6 +408,28 @@ function CopyableCommand({ command }: { command: string }) {
   )
 }
 
+// Guests listed by the node reboot/shutdown dialog, drawn like the inventory
+// tree: type icon with its status dot, name, then the vmid.
+type NodeActionGuest = { connId: string; vmid: string; name: string; type: string; status?: string; error?: string }
+
+function NodeActionGuestList({ vms, limit = 8 }: { vms: NodeActionGuest[]; limit?: number }) {
+  return (
+    <Box sx={{ mt: 1, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+      {vms.slice(0, limit).map(vm => {
+        const row = (
+          <Box key={`${vm.connId}:${vm.vmid}`} sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+            <StatusIcon status={vm.status} type="vm" vmType={vm.type} />
+            <Typography variant="body2">{vm.name}</Typography>
+            <Typography variant="caption" sx={{ opacity: 0.5 }}>{vm.vmid}</Typography>
+          </Box>
+        )
+        return vm.error ? <MuiTooltip key={`${vm.connId}:${vm.vmid}`} title={vm.error}>{row}</MuiTooltip> : row
+      })}
+      {vms.length > limit && <Typography variant="caption" sx={{ opacity: 0.7 }}>+{vms.length - limit}</Typography>}
+    </Box>
+  )
+}
+
 export default function InventoryDialogs(props: InventoryDialogsProps) {
   const { hasPermission } = useRBAC()
   const canEditHardware = hasPermission('vm.config.hardware')
@@ -1183,7 +1205,7 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
                   </DialogTitle>
                   <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                     <DialogContentText>
-                      <strong>{nodeActionDialog?.nodeName}</strong> &mdash;{' '}
+                      <strong>{nodeActionDialog?.nodeName}</strong>{': '}
                       {nodeActionDialog?.action === 'reboot'
                         ? t('inventory.confirmNodeReboot')
                         : t('inventory.confirmNodeShutdown')}
@@ -1208,14 +1230,7 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
                           <Typography variant="body2" fontWeight={600}>
                             {t('inventory.nodeActionSharedVms', { count: sharedVms.length })}
                           </Typography>
-                          <Box sx={{ mt: 1, display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                            {sharedVms.slice(0, 8).map(vm => (
-                              <Chip key={`${vm.connId}:${vm.vmid}`} size="small" label={`${vm.vmid} ${vm.name}`}
-                                icon={<i className={vm.type === 'lxc' ? 'ri-instance-line' : 'ri-computer-line'} style={{ fontSize: 14 }} />}
-                                variant="outlined" color="success" />
-                            ))}
-                            {sharedVms.length > 8 && <Chip size="small" label={`+${sharedVms.length - 8}`} variant="outlined" />}
-                          </Box>
+                          <NodeActionGuestList vms={sharedVms} />
                         </Alert>
                       )}
 
@@ -1232,14 +1247,7 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
                               ? t('inventory.nodeActionLocalVmsDesc')
                               : t('inventory.nodeActionStandaloneShutdownDesc')}
                           </Typography>
-                          <Box sx={{ mt: 1, display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                            {localVms.slice(0, 8).map(vm => (
-                              <Chip key={`${vm.connId}:${vm.vmid}`} size="small" label={`${vm.vmid} ${vm.name}`}
-                                icon={<i className={vm.type === 'lxc' ? 'ri-instance-line' : 'ri-computer-line'} style={{ fontSize: 14 }} />}
-                                variant="outlined" color="warning" />
-                            ))}
-                            {localVms.length > 8 && <Chip size="small" label={`+${localVms.length - 8}`} variant="outlined" />}
-                          </Box>
+                          <NodeActionGuestList vms={localVms} />
                           {isClusterNode && (
                             <Box
                               onClick={() => !nodeActionBusy && setNodeActionShutdownLocal(!nodeActionShutdownLocal)}
@@ -1286,13 +1294,7 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
                           <Typography variant="body2" sx={{ mt: 0.5, opacity: 0.85 }}>
                             {t('inventory.nodeActionMigrateFailedDesc')}
                           </Typography>
-                          <Box sx={{ mt: 1, display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                            {nodeActionFailedVms.map(vm => (
-                              <MuiTooltip key={vm.vmid} title={vm.error}>
-                                <Chip size="small" label={`${vm.vmid} ${vm.name}`} variant="outlined" color="error" />
-                              </MuiTooltip>
-                            ))}
-                          </Box>
+                          <NodeActionGuestList vms={nodeActionFailedVms.map(vm => ({ ...vm, status: 'running' }))} limit={nodeActionFailedVms.length} />
                           <Box
                             onClick={() => !nodeActionBusy && setNodeActionShutdownFailed(!nodeActionShutdownFailed)}
                               sx={{ mt: 1.5, display: 'flex', alignItems: 'center', gap: 1, cursor: nodeActionBusy ? 'default' : 'pointer' }}
@@ -1302,6 +1304,13 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
                             </Box>
                           </Alert>
                         )}
+
+                      {/* Guests that stay on the node are stopped by PVE, ProxCenter's own included */}
+                      {!nodeActionStorageLoading && (localVms.length > 0 || nodeActionFailedVms.length > 0) && (
+                        <Alert severity="warning" icon={<i className="ri-alert-line" style={{ fontSize: 20 }} />}>
+                          <Typography variant="body2">{t('inventory.nodeActionSelfHostedWarning')}</Typography>
+                        </Alert>
+                      )}
                     </>)
                     })() : (
                       <Alert severity="success" icon={<i className="ri-checkbox-circle-line" style={{ fontSize: 20 }} />}>
@@ -1354,12 +1363,10 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
                         const node = resolvedNode
   
                         try {
-                          // Step 1: Handle running VMs
+                          // Step 1: Migrate the shared-storage VMs off a cluster node
                           if (runningVmsOnNode.length > 0) {
                             if (isClusterNode) {
-                              // Migrate shared-storage VMs
                               const sharedVms = runningVmsOnNode.filter(vm => !nodeActionLocalVms.has(`${vm.connId}:${vm.vmid}`))
-                              const localVms = runningVmsOnNode.filter(vm => nodeActionLocalVms.has(`${vm.connId}:${vm.vmid}`))
 
                               if (sharedVms.length > 0 && nodeActionMigrateTarget && nodeActionFailedVms.length === 0) {
                                 setNodeActionStep(t('inventory.nodeActionMigratingStep', { done: 0, total: sharedVms.length }))
@@ -1393,50 +1400,13 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
                                   setNodeActionBusy(false)
                                   return
                                 }
-                              } else if (nodeActionFailedVms.length > 0 && nodeActionShutdownFailed) {
-                                // Shutdown VMs that failed migration
-                                setNodeActionStep(t('inventory.nodeActionShutdownVmsStep', { done: 0, total: nodeActionFailedVms.length }))
-                                let done = 0
-                                for (const vm of nodeActionFailedVms) {
-                                  const url = `/api/v1/connections/${encodeURIComponent(vm.connId)}/guests/${vm.type}/${encodeURIComponent(vm.node)}/${encodeURIComponent(vm.vmid)}/shutdown`
-                                  await fetch(url, { method: 'POST' }).catch(() => {})
-                                  done++
-                                  setNodeActionStep(t('inventory.nodeActionShutdownVmsStep', { done, total: nodeActionFailedVms.length }))
-                                }
-                                setNodeActionStep(t('inventory.nodeActionWaitingVmsStop'))
-                                await new Promise(resolve => setTimeout(resolve, 5000))
                               }
-
-                              // Shutdown local-storage VMs (user checked the option)
-                              if (localVms.length > 0 && nodeActionShutdownLocal) {
-                                setNodeActionStep(t('inventory.nodeActionShutdownVmsStep', { done: 0, total: localVms.length }))
-                                let done = 0
-                                for (const vm of localVms) {
-                                  const url = `/api/v1/connections/${encodeURIComponent(vm.connId)}/guests/${vm.type}/${encodeURIComponent(vm.node)}/${encodeURIComponent(vm.vmid)}/shutdown`
-                                  await fetch(url, { method: 'POST' }).catch(() => {})
-                                  done++
-                                  setNodeActionStep(t('inventory.nodeActionShutdownVmsStep', { done, total: localVms.length }))
-                                }
-                                setNodeActionStep(t('inventory.nodeActionWaitingVmsStop'))
-                                await new Promise(resolve => setTimeout(resolve, 5000))
-                              }
-                            } else {
-                              // Standalone: shutdown all VMs
-                              setNodeActionStep(t('inventory.nodeActionShutdownVmsStep', { done: 0, total: runningVmsOnNode.length }))
-                              let done = 0
-                              const batchSize = 5
-                              for (let i = 0; i < runningVmsOnNode.length; i += batchSize) {
-                                const batch = runningVmsOnNode.slice(i, i + batchSize)
-                                await Promise.all(batch.map(async (vm) => {
-                                  const url = `/api/v1/connections/${encodeURIComponent(vm.connId)}/guests/${vm.type}/${encodeURIComponent(vm.node)}/${encodeURIComponent(vm.vmid)}/shutdown`
-                                  await fetch(url, { method: 'POST' }).catch(() => {})
-                                  done++
-                                  setNodeActionStep(t('inventory.nodeActionShutdownVmsStep', { done, total: runningVmsOnNode.length }))
-                                }))
-                              }
-                              setNodeActionStep(t('inventory.nodeActionWaitingVmsStop'))
-                              await new Promise(resolve => setTimeout(resolve, 5000))
                             }
+                            // Guests that stay on the node (standalone node, local storage,
+                            // failed migration) are left to PVE: the node command stops them
+                            // through pve-guests.service. Stopping them from here first would
+                            // also stop ProxCenter when it runs in one of them, and the node
+                            // command below would never be sent (#1001).
                           }
   
                           // Step 2: Enter maintenance mode (cluster only)

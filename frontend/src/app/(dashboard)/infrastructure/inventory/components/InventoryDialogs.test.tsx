@@ -46,6 +46,7 @@ import {
 
 import InventoryDialogs, { type InventoryDialogsProps } from './InventoryDialogs'
 import { useMigrationOptions } from '../hooks/useMigrationOptions'
+import type { AllVmItem, HostItem } from '../InventoryTree'
 
 // ------------------------------------------------------------------ //
 // Context mocks
@@ -403,6 +404,137 @@ describe('InventoryDialogs', () => {
 
     expect(screen.getByText('Shutdown node')).toBeInTheDocument()
     expect(screen.getByText('pve2')).toBeInTheDocument()
+  })
+
+  // 3b. nodeActionDialog - the guests are left to PVE (#1001): ProxCenter may run
+  // inside one of them, and stopping it first kills the call that powers the node off.
+  describe('nodeActionDialog execution', () => {
+    const runningVm = (vmid: string): AllVmItem => ({
+      connId: CONN_ID, connName: 'Cluster', node: NODE_NAME, vmid, name: `vm${vmid}`, type: 'qemu', status: 'running', template: false,
+    })
+    const host = (node: string): HostItem => ({ key: `${CONN_ID}:${node}`, connId: CONN_ID, connName: 'Cluster', node, vms: [] })
+
+    function recordRequests() {
+      const guestShutdowns: string[] = []
+      const nodeCommands: string[] = []
+      server.use(
+        http.post('*/api/v1/connections/:id/guests/:type/:node/:vmid/shutdown', ({ params }) => {
+          guestShutdowns.push(String(params.vmid))
+          return HttpResponse.json({ data: 'UPID' })
+        }),
+        http.post('*/api/v1/connections/:id/nodes/:node/status', async ({ request }) => {
+          const body = await request.json() as { command: string }
+          nodeCommands.push(body.command)
+          return HttpResponse.json({ data: null })
+        }),
+        http.post('*/api/v1/connections/:id/nodes/:node/maintenance', () => HttpResponse.json({ data: null })),
+        http.post('*/api/v1/inventory/poll', () => HttpResponse.json({ data: null })),
+      )
+      return { guestShutdowns, nodeCommands }
+    }
+
+    const SELF_HOSTED = /if ProxCenter runs in one of these guests/i
+
+    it('warns that ProxCenter goes down with the guests of a standalone node', () => {
+      renderWithProviders(<InventoryDialogs {...makeProps({
+        nodeActionDialog: { action: 'shutdown', nodeName: NODE_NAME, connId: CONN_ID, node: NODE_NAME },
+        allVms: [runningVm('100')],
+        hosts: [host(NODE_NAME)],
+      })} />)
+
+      expect(screen.getByText(SELF_HOSTED)).toBeInTheDocument()
+    })
+
+    it('lists the guests as tree rows (status dot, name, vmid), not as chips', () => {
+      renderWithProviders(<InventoryDialogs {...makeProps({
+        nodeActionDialog: { action: 'shutdown', nodeName: NODE_NAME, connId: CONN_ID, node: NODE_NAME },
+        allVms: [runningVm('100')],
+        hosts: [host(NODE_NAME)],
+      })} />)
+
+      const dialog = screen.getByRole('dialog')
+      expect(within(dialog).getByText('vm100')).toBeInTheDocument()
+      expect(within(dialog).getByText('100')).toBeInTheDocument()
+      expect(dialog.querySelector('.MuiChip-root')).toBeNull()
+      expect(dialog.textContent).not.toContain('—')
+    })
+
+    it('warns about the local-storage guests of a cluster node', () => {
+      renderWithProviders(<InventoryDialogs {...makeProps({
+        nodeActionDialog: { action: 'reboot', nodeName: NODE_NAME, connId: CONN_ID, node: NODE_NAME },
+        allVms: [runningVm('100')],
+        hosts: [host(NODE_NAME), host('pve2')],
+        nodeActionLocalVms: new Set([`${CONN_ID}:100`]),
+      })} />)
+
+      expect(screen.getByText(SELF_HOSTED)).toBeInTheDocument()
+    })
+
+    it('does not warn when every guest of a cluster node is live-migrated away', () => {
+      renderWithProviders(<InventoryDialogs {...makeProps({
+        nodeActionDialog: { action: 'reboot', nodeName: NODE_NAME, connId: CONN_ID, node: NODE_NAME },
+        allVms: [runningVm('100')],
+        hosts: [host(NODE_NAME), host('pve2')],
+      })} />)
+
+      expect(screen.queryByText(SELF_HOSTED)).not.toBeInTheDocument()
+    })
+
+    it('standalone shutdown sends the node command without stopping the guests itself', async () => {
+      const calls = recordRequests()
+      const setNodeActionDialog = vi.fn()
+      renderWithProviders(<InventoryDialogs {...makeProps({
+        nodeActionDialog: { action: 'shutdown', nodeName: NODE_NAME, connId: CONN_ID, node: NODE_NAME },
+        setNodeActionDialog,
+        allVms: [runningVm('100'), runningVm('101')],
+        hosts: [host(NODE_NAME)],
+      })} />)
+
+      fireEvent.click(screen.getByRole('button', { name: /confirm/i }))
+
+      await waitFor(() => expect(setNodeActionDialog).toHaveBeenCalledWith(null))
+      expect(calls.nodeCommands).toEqual(['shutdown'])
+      expect(calls.guestShutdowns).toEqual([])
+    })
+
+    it('cluster shutdown leaves the local-storage guests to PVE once the user agreed to stop them', async () => {
+      const calls = recordRequests()
+      const setNodeActionDialog = vi.fn()
+      renderWithProviders(<InventoryDialogs {...makeProps({
+        nodeActionDialog: { action: 'shutdown', nodeName: NODE_NAME, connId: CONN_ID, node: NODE_NAME },
+        setNodeActionDialog,
+        allVms: [runningVm('100')],
+        hosts: [host(NODE_NAME), host('pve2')],
+        nodeActionLocalVms: new Set([`${CONN_ID}:100`]),
+        nodeActionShutdownLocal: true,
+      })} />)
+
+      fireEvent.click(screen.getByRole('button', { name: /confirm/i }))
+
+      await waitFor(() => expect(setNodeActionDialog).toHaveBeenCalledWith(null))
+      expect(calls.nodeCommands).toEqual(['shutdown'])
+      expect(calls.guestShutdowns).toEqual([])
+    })
+
+    it('cluster reboot leaves the guests whose migration failed to PVE', async () => {
+      const calls = recordRequests()
+      const setNodeActionDialog = vi.fn()
+      renderWithProviders(<InventoryDialogs {...makeProps({
+        nodeActionDialog: { action: 'reboot', nodeName: NODE_NAME, connId: CONN_ID, node: NODE_NAME },
+        setNodeActionDialog,
+        allVms: [runningVm('100')],
+        hosts: [host(NODE_NAME), host('pve2')],
+        nodeActionMigrateTarget: 'pve2',
+        nodeActionFailedVms: [{ vmid: '100', name: 'vm100', connId: CONN_ID, type: 'qemu', node: NODE_NAME, error: 'boom' }],
+        nodeActionShutdownFailed: true,
+      })} />)
+
+      fireEvent.click(screen.getByRole('button', { name: /confirm/i }))
+
+      await waitFor(() => expect(setNodeActionDialog).toHaveBeenCalledWith(null))
+      expect(calls.nodeCommands).toEqual(['reboot'])
+      expect(calls.guestShutdowns).toEqual([])
+    })
   })
 
   // 4. editOptionDialog - text

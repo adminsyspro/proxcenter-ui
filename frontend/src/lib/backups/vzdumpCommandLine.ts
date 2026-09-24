@@ -50,44 +50,62 @@ const IGNORED = new Set(NOT_REPLAYED_KEYS)
 /** vzdump options PVE stores as property strings (`k=v,k=v`), printed with sorted keys. */
 const PROPERTY_STRING_KEYS = new Set(['prune-backups', 'fleecing', 'performance'])
 
+interface SplitState {
+  out: string[]
+  cur: string
+  inToken: boolean
+  quote: "'" | '"' | null
+}
+
+/** One character while inside a quoted run; returns the index to resume from (past an escaped char). */
+function consumeQuotedChar(state: SplitState, input: string, i: number): number {
+  const c = input[i]
+
+  if (c === state.quote) state.quote = null
+  else if (c === '\\' && state.quote === '"' && i + 1 < input.length) state.cur += input[++i]
+  else state.cur += c
+
+  return i
+}
+
+/** One character outside a quoted run; returns the index to resume from (past an escaped char). */
+function consumeUnquotedChar(state: SplitState, input: string, i: number): number {
+  const c = input[i]
+
+  if (c === "'" || c === '"') {
+    state.quote = c
+    state.inToken = true
+  } else if (c === '\\' && i + 1 < input.length) {
+    state.cur += input[++i]
+    state.inToken = true
+  } else if (/\s/.test(c)) {
+    if (state.inToken) state.out.push(state.cur)
+    state.cur = ''
+    state.inToken = false
+  } else {
+    state.cur += c
+    state.inToken = true
+  }
+
+  return i
+}
+
 /**
  * Split a shell-quoted line the way /bin/sh would for the subset PVE emits:
  * blanks separate words, '…' and "…" quote, adjacent quoted parts join
  * (PVE quotes an embedded ' as '"'"').
  */
 export function shellSplit(input: string): string[] {
-  const out: string[] = []
-  let cur = ''
-  let inToken = false
-  let quote: "'" | '"' | null = null
+  const state: SplitState = { out: [], cur: '', inToken: false, quote: null }
 
-  for (let i = 0; i < input.length; i++) {
-    const c = input[i]
-
-    if (quote) {
-      if (c === quote) quote = null
-      else if (c === '\\' && quote === '"' && i + 1 < input.length) cur += input[++i]
-      else cur += c
-      continue
-    }
-    if (c === "'" || c === '"') {
-      quote = c
-      inToken = true
-    } else if (c === '\\' && i + 1 < input.length) {
-      cur += input[++i]
-      inToken = true
-    } else if (/\s/.test(c)) {
-      if (inToken) out.push(cur)
-      cur = ''
-      inToken = false
-    } else {
-      cur += c
-      inToken = true
-    }
+  let i = 0
+  while (i < input.length) {
+    const consumed = state.quote ? consumeQuotedChar(state, input, i) : consumeUnquotedChar(state, input, i)
+    i = consumed + 1
   }
-  if (inToken) out.push(cur)
+  if (state.inToken) state.out.push(state.cur)
 
-  return out
+  return state.out
 }
 
 function scalar(value: unknown): string {
@@ -124,7 +142,7 @@ export function normalizeVzdumpValue(key: string, value: unknown): string {
         : parsePropertyString(String(value))
 
     return Object.keys(map)
-      .sort()
+      .sort((a, b) => a.localeCompare(b))
       .map(k => (map[k] === '' ? k : `${k}=${map[k]}`))
       .join(',')
   }

@@ -92,8 +92,6 @@ const RE_DATA_WRITTEN = /transferred [\d.]+ \w+ in \d+ seconds|archive file size
 const RE_TASK_ERROR = /^TASK ERROR: (.*)$/
 const RE_TASK_WARNINGS = /^TASK WARNINGS: (\d+)/
 const RE_WARN = /^WARN(?:ING)?: /
-const RE_ERROR = /^ERROR: /
-const RE_PRUNE_ERROR = /^ERROR: prune '/
 
 const UNIT: Record<string, number> = {
   B: 1,
@@ -156,54 +154,84 @@ function add(a: number | null, b: number | null): number | null {
 
 function readMetrics(d: Draft, t: string): void {
   const s = d.section
-  let m: RegExpMatchArray | null
 
-  if ((m = t.match(RE_NAME)) && s.name === null) s.name = m[1].trim()
-  if ((m = t.match(RE_PBS_ARCHIVE))) s.archive = m[1]
-  if ((m = t.match(RE_LOCAL_ARCHIVE))) s.archive = m[1]
-  if ((m = t.match(RE_NAMESPACE))) s.namespace = m[1] || null
-  if ((m = t.match(RE_TRANSFERRED))) s.transferredBytes = parseSize(m[1], m[2])
-  if ((m = t.match(RE_PXAR))) d.pxarTotal = add(d.pxarTotal, parseSize(m[1], m[2]))
-  if ((m = t.match(RE_REUSED))) {
-    s.reusedBytes = add(s.reusedBytes, parseSize(m[1], m[2]))
+  const name = t.match(RE_NAME)
+  if (name && s.name === null) s.name = name[1].trim()
+
+  const pbsArchive = t.match(RE_PBS_ARCHIVE)
+  if (pbsArchive) s.archive = pbsArchive[1]
+
+  const localArchive = t.match(RE_LOCAL_ARCHIVE)
+  if (localArchive) s.archive = localArchive[1]
+
+  const namespace = t.match(RE_NAMESPACE)
+  if (namespace) s.namespace = namespace[1] || null
+
+  const transferred = t.match(RE_TRANSFERRED)
+  if (transferred) s.transferredBytes = parseSize(transferred[1], transferred[2])
+
+  const pxar = t.match(RE_PXAR)
+  if (pxar) d.pxarTotal = add(d.pxarTotal, parseSize(pxar[1], pxar[2]))
+
+  const reused = t.match(RE_REUSED)
+  if (reused) {
+    s.reusedBytes = add(s.reusedBytes, parseSize(reused[1], reused[2]))
     d.reusedLines++
-    d.reusedPercentLine = Number(m[3])
+    d.reusedPercentLine = Number(reused[3])
   }
-  if ((m = t.match(RE_ZERO))) s.zeroBytes = parseSize(m[1], m[2])
-  if ((m = t.match(RE_ARCHIVE_SIZE))) s.archiveSizeBytes = parseSize(m[1], m[2])
-  if ((m = t.match(RE_TOTAL_WRITTEN))) s.transferredBytes = Number(m[1])
-  if ((m = t.match(RE_STARTED_AT))) d.naiveStart = naiveEpoch(m[1])
+
+  const zero = t.match(RE_ZERO)
+  if (zero) s.zeroBytes = parseSize(zero[1], zero[2])
+
+  const archiveSize = t.match(RE_ARCHIVE_SIZE)
+  if (archiveSize) s.archiveSizeBytes = parseSize(archiveSize[1], archiveSize[2])
+
+  const totalWritten = t.match(RE_TOTAL_WRITTEN)
+  if (totalWritten) s.transferredBytes = Number(totalWritten[1])
+
+  const startedAt = t.match(RE_STARTED_AT)
+  if (startedAt) d.naiveStart = naiveEpoch(startedAt[1])
+
   if (RE_DATA_WRITTEN.test(t)) d.dataWritten = true
   if (RE_WARN.test(t)) s.warnings.push(t)
-  if (RE_ERROR.test(t)) s.errors.push(t)
+  if (t.startsWith('ERROR: ')) s.errors.push(t)
 }
 
 function postStep(reason: string, errors: string[]): PostStep {
-  if (reason.includes('error pruning backups') || errors.some(e => RE_PRUNE_ERROR.test(e))) return 'prune'
+  if (reason.includes('error pruning backups') || errors.some(e => e.startsWith("ERROR: prune '"))) return 'prune'
   if (reason.includes('protected flag')) return 'protected'
   if (/hook/i.test(reason)) return 'hook'
 
   return 'other'
 }
 
-function finalise(d: Draft, offset: number | null, opts: ParseOptions): GuestSection {
+function applyDerivedMetrics(d: Draft): void {
   const s = d.section
 
   if (s.transferredBytes === null && d.pxarTotal !== null) s.transferredBytes = d.pxarTotal
-  if (s.reusedBytes !== null) {
-    if (d.reusedLines === 1 && d.reusedPercentLine !== null) s.reusedPercent = d.reusedPercentLine
-    else if (s.transferredBytes) s.reusedPercent = Math.round((s.reusedBytes / s.transferredBytes) * 1000) / 10
-  }
+  if (s.reusedBytes === null) return
+  if (d.reusedLines === 1 && d.reusedPercentLine !== null) s.reusedPercent = d.reusedPercentLine
+  else if (s.transferredBytes) s.reusedPercent = Math.round((s.reusedBytes / s.transferredBytes) * 1000) / 10
+}
+
+function applyTimes(d: Draft, offset: number | null): void {
+  const s = d.section
 
   if (offset !== null) {
     if (d.naiveStart !== null) s.start = d.naiveStart - offset
     if (d.naiveEnd !== null) s.end = d.naiveEnd - offset
   }
   if (s.durationSec === null && s.start !== null && s.end !== null) s.durationSec = s.end - s.start
+}
+
+function deriveStatus(d: Draft, opts: ParseOptions): void {
+  const s = d.section
 
   if (d.closed === 'finished') {
     s.status = s.warnings.length > 0 ? 'ok_warnings' : 'ok'
-  } else if (d.closed === 'failed') {
+    return
+  }
+  if (d.closed === 'failed') {
     const reason = s.reason ?? ''
     if (d.dataWritten) {
       s.status = 'post_step_failed'
@@ -211,90 +239,138 @@ function finalise(d: Draft, offset: number | null, opts: ParseOptions): GuestSec
     } else {
       s.status = 'failed'
     }
-  } else if (opts.running) {
+    return
+  }
+  if (opts.running) {
     s.status = 'running'
-  } else {
-    s.status = 'failed'
-    s.reason = opts.exitStatus || 'unknown'
+    return
+  }
+  s.status = 'failed'
+  s.reason = opts.exitStatus || 'unknown'
+}
+
+function finalise(d: Draft, offset: number | null, opts: ParseOptions): GuestSection {
+  applyDerivedMetrics(d)
+  applyTimes(d, offset)
+  deriveStatus(d, opts)
+
+  return d.section
+}
+
+interface ParseCursor {
+  drafts: Draft[]
+  jobLines: TaskLogLine[]
+  commandLine: string | null
+  taskError: string | null
+  taskWarnings: number
+  current: Draft | null
+  last: Draft | null
+}
+
+/** A guest's first log line ("Starting Backup of VM …"); true when this line was one. */
+function tryStart(cursor: ParseCursor, line: TaskLogLine, t: string): boolean {
+  const m = t.match(RE_START)
+  if (!m) return false
+
+  cursor.current = newDraft(Number(m[1]), m[2] as 'qemu' | 'lxc')
+  cursor.drafts.push(cursor.current)
+  cursor.current.section.lines.push(line)
+
+  return true
+}
+
+/** A guest's failure line; true when this line was one. */
+function tryFail(cursor: ParseCursor, line: TaskLogLine, t: string): boolean {
+  const m = t.match(RE_FAIL)
+  if (!m) return false
+
+  const vmid = Number(m[1])
+  // A guest that never started (unknown vmid, lock) only has this line.
+  const d: Draft = cursor.current && cursor.current.section.vmid === vmid ? cursor.current : newDraft(vmid, null)
+  if (d !== cursor.current) cursor.drafts.push(d)
+  d.section.lines.push(line)
+  d.section.errors.push(t)
+  d.section.reason = m[2].trim()
+  d.closed = 'failed'
+  cursor.last = d
+  cursor.current = null
+
+  return true
+}
+
+/** The current guest's finish line; true when this line was one. */
+function tryFinish(cursor: ParseCursor, line: TaskLogLine, t: string): boolean {
+  const m = t.match(RE_FINISH)
+  if (!m || !cursor.current || cursor.current.section.vmid !== Number(m[1])) return false
+
+  cursor.current.section.lines.push(line)
+  cursor.current.section.durationSec = Number(m[2]) * 3600 + Number(m[3]) * 60 + Number(m[4])
+  cursor.current.closed = 'finished'
+  cursor.last = cursor.current
+  cursor.current = null
+
+  return true
+}
+
+/** The last-closed guest's end time, printed after its finish/fail line; true when this line was one. */
+function tryEndedAt(cursor: ParseCursor, line: TaskLogLine, t: string): boolean {
+  const m = t.match(RE_ENDED_AT)
+  if (!m || cursor.current || !cursor.last) return false
+
+  cursor.last.section.lines.push(line)
+  cursor.last.naiveEnd = naiveEpoch(m[1])
+
+  return true
+}
+
+/** A line outside any guest section: task-level output. */
+function readJobLine(cursor: ParseCursor, line: TaskLogLine, t: string): void {
+  cursor.jobLines.push(line)
+  const err = t.match(RE_TASK_ERROR)
+  if (err) cursor.taskError = err[1].trim()
+  const warn = t.match(RE_TASK_WARNINGS)
+  if (warn) cursor.taskWarnings = Number(warn[1])
+}
+
+function processLine(cursor: ParseCursor, line: TaskLogLine): void {
+  const t = line.t ?? ''
+
+  if (cursor.commandLine === null && RE_COMMAND.test(t)) cursor.commandLine = t
+
+  if (tryStart(cursor, line, t)) return
+  if (tryFail(cursor, line, t)) return
+  if (tryFinish(cursor, line, t)) return
+  if (tryEndedAt(cursor, line, t)) return
+
+  if (cursor.current) {
+    cursor.current.section.lines.push(line)
+    readMetrics(cursor.current, t)
+
+    return
   }
 
-  return s
+  readJobLine(cursor, line, t)
 }
 
 /** Parse a whole vzdump task log (the `{n, t}` array PVE returns). */
 export function parseVzdumpLog(lines: TaskLogLine[], opts: ParseOptions = {}): ParsedVzdumpLog {
-  const drafts: Draft[] = []
-  const jobLines: TaskLogLine[] = []
-  let commandLine: string | null = null
-  let taskError: string | null = null
-  let taskWarnings = 0
-  let current: Draft | null = null
-  let last: Draft | null = null
-
-  for (const line of lines) {
-    const t = line.t ?? ''
-    let m: RegExpMatchArray | null
-
-    if (commandLine === null && RE_COMMAND.test(t)) commandLine = t
-
-    if ((m = t.match(RE_START))) {
-      current = newDraft(Number(m[1]), m[2] as 'qemu' | 'lxc')
-      drafts.push(current)
-      current.section.lines.push(line)
-      continue
-    }
-
-    if ((m = t.match(RE_FAIL))) {
-      const vmid = Number(m[1])
-      // A guest that never started (unknown vmid, lock) only has this line.
-      const d: Draft = current && current.section.vmid === vmid ? current : newDraft(vmid, null)
-      if (d !== current) drafts.push(d)
-      d.section.lines.push(line)
-      d.section.errors.push(t)
-      d.section.reason = m[2].trim()
-      d.closed = 'failed'
-      last = d
-      current = null
-      continue
-    }
-
-    if ((m = t.match(RE_FINISH)) && current && current.section.vmid === Number(m[1])) {
-      current.section.lines.push(line)
-      current.section.durationSec = Number(m[2]) * 3600 + Number(m[3]) * 60 + Number(m[4])
-      current.closed = 'finished'
-      last = current
-      current = null
-      continue
-    }
-
-    if ((m = t.match(RE_ENDED_AT)) && !current && last) {
-      last.section.lines.push(line)
-      last.naiveEnd = naiveEpoch(m[1])
-      continue
-    }
-
-    if (current) {
-      current.section.lines.push(line)
-      readMetrics(current, t)
-      continue
-    }
-
-    jobLines.push(line)
-    if ((m = t.match(RE_TASK_ERROR))) taskError = m[1].trim()
-    if ((m = t.match(RE_TASK_WARNINGS))) taskWarnings = Number(m[1])
+  const cursor: ParseCursor = {
+    drafts: [], jobLines: [], commandLine: null, taskError: null, taskWarnings: 0, current: null, last: null,
   }
 
-  const firstNaive = drafts.find(d => d.naiveStart !== null)?.naiveStart ?? null
+  for (const line of lines) processLine(cursor, line)
+
+  const firstNaive = cursor.drafts.find(d => d.naiveStart !== null)?.naiveStart ?? null
   let offset: number | null = null
   if (typeof opts.utcOffsetSec === 'number' && Number.isFinite(opts.utcOffsetSec)) offset = opts.utcOffsetSec
   else if (opts.taskStart && firstNaive !== null) offset = Math.floor((firstNaive - opts.taskStart) / 900) * 900
 
   return {
-    commandLine,
-    guests: drafts.map(d => finalise(d, offset, opts)),
-    jobLines,
-    taskError,
-    taskWarnings,
+    commandLine: cursor.commandLine,
+    guests: cursor.drafts.map(d => finalise(d, offset, opts)),
+    jobLines: cursor.jobLines,
+    taskError: cursor.taskError,
+    taskWarnings: cursor.taskWarnings,
   }
 }
 

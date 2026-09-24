@@ -92,29 +92,47 @@ export function needsFullLog(task: VzdumpTaskEntry, invocation: VzdumpInvocation
   return invocation.vmids.length === 0
 }
 
+type RunCaches = ReturnType<typeof getVzdumpRunCaches>
+
+/** The task's first log line, from cache or read once and cached. */
+async function loadFirstLine(caches: RunCaches, conn: PveConn, key: string, task: VzdumpTaskEntry): Promise<string | null> {
+  const cached = caches.firstLines.get(key) ?? null
+  if (cached !== null) return cached
+
+  const first = await fetchTaskFirstLine(conn, task.node, task.upid).catch(() => null)
+  if (first) caches.firstLines.set(key, first)
+
+  return first
+}
+
+/** The task's compact log summary, from cache (a finished task only) or read once and cached. */
+async function loadLogSummary(
+  caches: RunCaches,
+  conn: PveConn,
+  key: string,
+  task: VzdumpTaskEntry,
+  running: boolean,
+): Promise<TaskLogSummary | null> {
+  const cached = running ? null : caches.summaries.get(key) ?? null
+  if (cached) return cached
+
+  const lines = await fetchTaskLog(conn, task.node, task.upid).catch(() => null)
+  if (!lines) return null
+
+  const log = summarizeVzdumpLog(parseVzdumpLog(lines, { taskStart: task.starttime, running, exitStatus: running ? null : task.status ?? null }))
+  if (!running) caches.summaries.set(key, log)
+
+  return log
+}
+
 async function loadTaskFacts(conn: PveConn, connectionId: string, task: VzdumpTaskEntry): Promise<TaskFacts> {
   const caches = getVzdumpRunCaches()
   const key = `${connectionId}:${task.upid}`
   const running = isTaskRunning(task)
 
-  let first = caches.firstLines.get(key) ?? null
-  if (first === null) {
-    first = await fetchTaskFirstLine(conn, task.node, task.upid).catch(() => null)
-    if (first) caches.firstLines.set(key, first)
-  }
+  const first = await loadFirstLine(caches, conn, key, task)
   const invocation = first ? parseVzdumpCommandLine(first) : null
-
-  let log: TaskLogSummary | null = null
-  if (needsFullLog(task, invocation)) {
-    log = running ? null : caches.summaries.get(key) ?? null
-    if (!log) {
-      const lines = await fetchTaskLog(conn, task.node, task.upid).catch(() => null)
-      if (lines) {
-        log = summarizeVzdumpLog(parseVzdumpLog(lines, { taskStart: task.starttime, running, exitStatus: running ? null : task.status ?? null }))
-        if (!running) caches.summaries.set(key, log)
-      }
-    }
-  }
+  const log = needsFullLog(task, invocation) ? await loadLogSummary(caches, conn, key, task, running) : null
 
   return { task, invocation, log }
 }
@@ -193,8 +211,8 @@ export async function loadBackupRunsRaw(
 export function invalidateBackupRuns(connectionId: string): void {
   const caches = getVzdumpRunCaches()
   const prefix = `${connectionId}:`
-  for (const key of [...caches.results.keys()]) if (key.startsWith(prefix)) caches.results.delete(key)
-  for (const key of [...caches.inFlight.keys()]) if (key.startsWith(prefix)) caches.inFlight.delete(key)
+  for (const key of caches.results.keys()) if (key.startsWith(prefix)) caches.results.delete(key)
+  for (const key of caches.inFlight.keys()) if (key.startsWith(prefix)) caches.inFlight.delete(key)
   caches.generations.set(connectionId, (caches.generations.get(connectionId) ?? 0) + 1)
 }
 

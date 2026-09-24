@@ -189,11 +189,12 @@ function PveJobsTab({ pveConnections = [], isVdcTenant = false }) {
   const runsData = runsJson?.data
   const runsByJob = useMemo(() => new Map((runsData?.jobs || []).map(j => [j.jobId, j])), [runsData])
 
-  const drawerRuns = useMemo(() => (
-    runsDrawer
-      ? (runsDrawer.key === MANUAL_RUNS_KEY ? runsData?.manual?.runs : runsByJob.get(runsDrawer.key)?.runs) || []
-      : []
-  ), [runsDrawer, runsData, runsByJob])
+  const drawerRuns = useMemo(() => {
+    if (!runsDrawer) return []
+    const runs = runsDrawer.key === MANUAL_RUNS_KEY ? runsData?.manual?.runs : runsByJob.get(runsDrawer.key)?.runs
+
+    return runs || []
+  }, [runsDrawer, runsData, runsByJob])
 
   const loadJobs = useCallback(async () => {
     if (!selectedConnection) return
@@ -759,11 +760,12 @@ return '—'
             <Typography variant="body2" sx={{ fontWeight: 600 }}>{t('backups.runs.manualBackups')}</Typography>
           </Tooltip>
           <Typography variant="body2" color="text.secondary" component="div">
-            {!runsData
-              ? (runsLoading ? <Skeleton width={100} /> : '—')
-              : runsData.manual.lastRun
-                ? formatDateTime(runsData.manual.lastRun.start * 1000, locale, { dateStyle: 'short', timeStyle: 'short' })
-                : t('backups.runs.never')}
+            {(() => {
+              if (!runsData) return runsLoading ? <Skeleton width={100} /> : '—'
+              if (!runsData.manual.lastRun) return t('backups.runs.never')
+
+              return formatDateTime(runsData.manual.lastRun.start * 1000, locale, { dateStyle: 'short', timeStyle: 'short' })
+            })()}
           </Typography>
           {runsData?.manual?.lastRun && (() => {
             const chip = runStatusChip(runsData.manual.lastRun)

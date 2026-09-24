@@ -7,7 +7,7 @@ import pbsMulti from './__fixtures__/vzdump/pbs-multi-lxc-qemu.json'
 import pbsQemu from './__fixtures__/vzdump/pbs-qemu-running.json'
 import notFound from './__fixtures__/vzdump/scheduled-guest-not-found.json'
 import pruneFailed from './__fixtures__/vzdump/scheduled-pbs-prune-failed.json'
-import { parseSize, parseVzdumpLog, rawLines, type TaskLogLine } from './vzdumpLog'
+import { parseSize, parseVzdumpLog, rawLines, zoneOffsetAt, type TaskLogLine } from './vzdumpLog'
 
 const MiB = 1024 ** 2
 const GiB = 1024 ** 3
@@ -189,5 +189,19 @@ describe('parseVzdumpLog — node UTC offset (#1003 final review)', () => {
     // 12:50:49Z = 08:50:49 EDT (-4h); the guest starts 8 minutes later.
     const edt = lockWait.map(l => ({ ...l, t: l.t.replace('14:58:49', '08:58:49').replace('14:59:19', '08:59:19') }))
     expect(parseVzdumpLog(edt, { taskStart: T }).guests[0].start).toBe(T + 480)
+  })
+})
+
+describe('zoneOffsetAt (#1003 residual R1)', () => {
+  it('gives the offset of a zone at a given instant, DST included', () => {
+    expect(zoneOffsetAt('Europe/Paris', Date.UTC(2026, 6, 1, 12) / 1000)).toBe(7200) // summer
+    expect(zoneOffsetAt('Europe/Paris', Date.UTC(2026, 0, 15, 12) / 1000)).toBe(3600) // winter
+    expect(zoneOffsetAt('America/New_York', Date.UTC(2026, 0, 15, 12) / 1000)).toBe(-18000)
+    expect(zoneOffsetAt('UTC', 1790254249)).toBe(0)
+  })
+
+  it('is null for an unknown or empty zone', () => {
+    expect(zoneOffsetAt('Not/AZone', 1790254249)).toBeNull()
+    expect(zoneOffsetAt('', 1790254249)).toBeNull()
   })
 })

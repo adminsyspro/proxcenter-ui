@@ -303,6 +303,28 @@ export function rawLines(log: ParsedVzdumpLog): TaskLogLine[] {
   return [...log.jobLines, ...log.guests.flatMap(g => g.lines)].sort((a, b) => a.n - b.n)
 }
 
+/**
+ * UTC offset (seconds, local − UTC) of an IANA zone at an instant, so a log
+ * written before a DST change is read with the offset it was written with.
+ * Null for an unknown zone.
+ */
+export function zoneOffsetAt(timeZone: string, epochSec: number): number | null {
+  if (!timeZone || !Number.isFinite(epochSec)) return null
+  try {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+    }).formatToParts(new Date(epochSec * 1000))
+    const n = (type: string) => Number(parts.find(p => p.type === type)?.value)
+    const wall = Date.UTC(n('year'), n('month') - 1, n('day'), n('hour'), n('minute'), n('second')) / 1000
+    const offset = wall - Math.floor(epochSec)
+
+    return Number.isFinite(offset) ? offset : null
+  } catch {
+    return null
+  }
+}
+
 /** The compact part of a parsed log the run history works from. */
 export function summarizeVzdumpLog(log: TaskLogSummary): TaskLogSummary {
   return {

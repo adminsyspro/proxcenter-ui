@@ -17,7 +17,7 @@ import { pveFetch } from '@/lib/proxmox/client'
 import { fetchTaskFirstLine, fetchTaskLog } from '@/lib/proxmox/taskLog'
 
 import { parseVzdumpCommandLine, type VzdumpInvocation } from './vzdumpCommandLine'
-import { parseVzdumpLog, summarizeVzdumpLog, type ParsedVzdumpLog, type TaskLogSummary } from './vzdumpLog'
+import { parseVzdumpLog, summarizeVzdumpLog, zoneOffsetAt, type ParsedVzdumpLog, type TaskLogSummary } from './vzdumpLog'
 import { getVzdumpRunCaches } from './vzdumpRunCache'
 import { buildRunHistory, isTaskRunning, type RunSummary, type TaskFacts, type VzdumpTaskEntry } from './vzdumpRuns'
 
@@ -234,23 +234,27 @@ export async function collectBackupRuns(
   return buildBackupRunsResult(await loadBackupRunsRaw(conn, connectionId, opts))
 }
 
-/** The node's UTC offset (local − UTC, seconds), or null when PVE does not tell. */
-async function nodeUtcOffset(conn: PveConn, node: string): Promise<number | null> {
-  try {
-    const time = await pveFetch<any>(conn, `/nodes/${encodeURIComponent(node)}/time`)
-    const offset = Number(time?.localtime) - Number(time?.time)
+/**
+ * The node's UTC offset when the task started (local − UTC, seconds), from
+ * GET /nodes/{node}/time: its time zone at that instant (DST-safe), else its
+ * current localtime − time, else null (the parser then falls back to its
+ * task-start heuristic).
+ */
+function nodeUtcOffsetAt(time: any, taskStart: number | null): number | null {
+  const zoned = taskStart !== null && typeof time?.timezone === 'string' ? zoneOffsetAt(time.timezone, taskStart) : null
+  if (zoned !== null) return zoned
+  if (time?.localtime === undefined || time?.time === undefined) return null
+  const offset = Number(time.localtime) - Number(time.time)
 
-    return Number.isFinite(offset) ? offset : null
-  } catch {
-    return null
-  }
+  return Number.isFinite(offset) ? offset : null
 }
 
 export async function loadRunTaskDetail(conn: PveConn, node: string, upid: string): Promise<RunTaskDetail> {
-  const [status, utcOffsetSec] = await Promise.all([
+  const [status, time] = await Promise.all([
     pveFetch<any>(conn, `/nodes/${encodeURIComponent(node)}/tasks/${encodeURIComponent(upid)}/status`),
-    nodeUtcOffset(conn, node),
+    pveFetch<any>(conn, `/nodes/${encodeURIComponent(node)}/time`).catch(() => null),
   ])
+  const utcOffsetSec = nodeUtcOffsetAt(time, typeof status?.starttime === 'number' ? status.starttime : null)
   const running = status?.status === 'running'
   const lines = await fetchTaskLog(conn, node, upid)
 

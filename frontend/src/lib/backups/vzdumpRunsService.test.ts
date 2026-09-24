@@ -286,4 +286,36 @@ describe('loadRunTaskDetail', () => {
     const d = await loadRunTaskDetail(conn, 'pve1', SCHED_UPID)
     expect(d.log.guests[0].start).toBe(1790256602)
   })
+
+  // #1003 residual R1: the offset is the zone's AT THE TASK START, not today's.
+  it('uses the node time zone at the task start (a winter task read in summer)', async () => {
+    const { loadRunTaskDetail } = await import('./vzdumpRunsService')
+    const base = pveFetchMock.getMockImplementation()!
+    const winterStart = Date.UTC(2026, 0, 15, 12) / 1000
+    pveFetchMock.mockImplementation(async (c: any, path: string, ...rest: any[]) => {
+      if (path.endsWith('/status')) return { status: 'stopped', exitstatus: 'OK', starttime: winterStart, endtime: winterStart + 60 }
+      // Today is summer: localtime - time says +2 h, the task ran at +1 h.
+      if (path === '/nodes/pve1/time') return { time: 1790256700, localtime: 1790256700 + 7200, timezone: 'Europe/Paris' }
+      if (path.includes('/log?')) return [
+        { n: 1, t: 'INFO: starting new backup job: vzdump 100 --storage local' },
+        { n: 2, t: 'INFO: Starting Backup of VM 100 (qemu)' },
+        { n: 3, t: 'INFO: Backup started at 2026-01-15 13:00:00' },
+      ]
+      return base(c, path, ...rest)
+    })
+    const d = await loadRunTaskDetail(conn, 'pve1', SCHED_UPID)
+    expect(d.log.guests[0].start).toBe(winterStart)
+  })
+
+  it('falls back to localtime - time when the zone is unknown', async () => {
+    const { loadRunTaskDetail } = await import('./vzdumpRunsService')
+    const base = pveFetchMock.getMockImplementation()!
+    pveFetchMock.mockImplementation(async (c: any, path: string, ...rest: any[]) => {
+      if (path.endsWith('/status')) return { status: 'stopped', exitstatus: 'job errors', starttime: 1790256602, endtime: 1790256604 }
+      if (path === '/nodes/pve1/time') return { time: 1790256700, localtime: 1790256700, timezone: 'Not/AZone' }
+      return base(c, path, ...rest)
+    })
+    const d = await loadRunTaskDetail(conn, 'pve1', SCHED_UPID)
+    expect(d.log.guests[0].start).toBe(1790256602 + 7200)
+  })
 })

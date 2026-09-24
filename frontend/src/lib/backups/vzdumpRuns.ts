@@ -68,9 +68,13 @@ export interface RunHistory {
   manual: RunSummary[]
 }
 
-/** A task PVE still runs has neither status nor end time in the task list. */
+/**
+ * A task PVE still runs: the task list reports it as status 'RUNNING'
+ * (PVE/API2/Tasks.pm sets it when the index has no status yet); an entry with
+ * neither status nor end time is running too.
+ */
 export function isTaskRunning(task: VzdumpTaskEntry): boolean {
-  return !task.status && !task.endtime
+  return task.status === 'RUNNING' || (!task.status && !task.endtime)
 }
 
 function sameOptions(a: Record<string, string>, b: Record<string, string>): boolean {

@@ -110,7 +110,7 @@ async function loadTaskFacts(conn: PveConn, connectionId: string, task: VzdumpTa
     if (!log) {
       const lines = await fetchTaskLog(conn, task.node, task.upid).catch(() => null)
       if (lines) {
-        log = summarizeVzdumpLog(parseVzdumpLog(lines, { taskStart: task.starttime, running, exitStatus: task.status ?? null }))
+        log = summarizeVzdumpLog(parseVzdumpLog(lines, { taskStart: task.starttime, running, exitStatus: running ? null : task.status ?? null }))
         if (!running) caches.summaries.set(key, log)
       }
     }

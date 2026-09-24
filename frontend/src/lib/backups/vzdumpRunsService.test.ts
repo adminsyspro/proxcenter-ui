@@ -193,6 +193,27 @@ describe('collectBackupRuns', () => {
   })
 })
 
+describe('collectBackupRuns — a task PVE lists as RUNNING (lab E2E)', () => {
+  it('is treated as running: full log read each time, summary never cached', async () => {
+    const { collectBackupRuns } = await import('./vzdumpRunsService')
+    const { getVzdumpRunCaches } = await import('./vzdumpRunCache')
+    const base = pveFetchMock.getMockImplementation()!
+    pveFetchMock.mockImplementation(async (c: any, path: string, ...rest: any[]) => {
+      const out = await base(c, path, ...rest)
+      return path.startsWith('/nodes/pve2/tasks?')
+        ? out.map((t: any) => (t.upid === RUNNING_UPID ? { ...t, status: 'RUNNING' } : t))
+        : out
+    })
+    const r = await collectBackupRuns(conn, 'conn-1', { days: 30, now: NOW })
+    const run = r.manual.runs.find(x => x.id === RUNNING_UPID)!
+    expect(run.status).toBe('running')
+    expect(run.tasks[0].status).toBe('running')
+    expect(getVzdumpRunCaches().summaries.get(`conn-1:${RUNNING_UPID}`)).toBeUndefined()
+    await collectBackupRuns(conn, 'conn-1', { days: 30, now: NOW, noCache: true })
+    expect(logCalls.filter(c => c === `${RUNNING_UPID}:5000`)).toHaveLength(2)
+  })
+})
+
 describe('collectBackupRuns — cache coordination (#1003 final review)', () => {
   const clusterBackupCalls = () => pveFetchMock.mock.calls.filter(c => c[1] === '/cluster/backup').length
 

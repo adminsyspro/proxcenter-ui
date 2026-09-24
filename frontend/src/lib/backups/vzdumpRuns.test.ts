@@ -3,7 +3,7 @@ import { describe, it, expect } from 'vitest'
 import pruneFailed from './__fixtures__/vzdump/scheduled-pbs-prune-failed.json'
 import { jobInvocation, parseVzdumpCommandLine } from './vzdumpCommandLine'
 import { parseVzdumpLog, summarizeVzdumpLog, type ParsedVzdumpLog, type TaskLogLine, type TaskLogSummary } from './vzdumpLog'
-import { buildRunHistory, jobMatches, type TaskFacts, type VzdumpTaskEntry } from './vzdumpRuns'
+import { buildRunHistory, isTaskRunning, jobMatches, type TaskFacts, type VzdumpTaskEntry } from './vzdumpRuns'
 
 const PREFIX = 'INFO: starting new backup job: vzdump '
 
@@ -192,5 +192,22 @@ describe('buildRunHistory — keepTask (#1003 final review)', () => {
     const fromSummary = buildRunHistory([], [{ ...f, log: summarizeVzdumpLog(log) }]).manual[0]
     expect(fromSummary).toEqual(fromParsed)
     expect(fromSummary.status).toBe('post_step_failed')
+  })
+})
+
+// Lab E2E: PVE's task list sets status 'RUNNING' on an active task
+// (PVE/API2/Tasks.pm: `$task->{status} = 'RUNNING' if !$task->{status}`).
+describe('a task PVE lists as RUNNING', () => {
+  it('makes its run running, not failed with reason "RUNNING"', () => {
+    const run = buildRunHistory([], [facts('100 --storage pbs', { starttime: 1, status: 'RUNNING', endtime: undefined })]).manual[0]
+    expect(run).toMatchObject({ status: 'running', end: null, durationSec: null })
+    expect(run.statusDetail.reason).toBeUndefined()
+    expect(run.tasks[0].status).toBe('running')
+  })
+
+  it('isTaskRunning: RUNNING, or neither status nor end time', () => {
+    expect(isTaskRunning({ upid: 'U', node: 'n', starttime: 1, status: 'RUNNING' })).toBe(true)
+    expect(isTaskRunning({ upid: 'U', node: 'n', starttime: 1 })).toBe(true)
+    expect(isTaskRunning({ upid: 'U', node: 'n', starttime: 1, endtime: 2, status: 'OK' })).toBe(false)
   })
 })

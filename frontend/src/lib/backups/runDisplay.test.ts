@@ -28,6 +28,8 @@ describe('guestStatusChip', () => {
     expect(guestStatusChip({ status: 'post_step_failed', step: 'prune' }).key).toBe('backups.runs.status.post.prune')
     expect(guestStatusChip({ status: 'ok_warnings', step: null })).toEqual({ color: 'warning', key: 'backups.runs.status.warning', count: null })
     expect(guestStatusChip({ status: 'failed', step: null }).color).toBe('error')
+    expect(guestStatusChip({ status: 'ok', step: null })).toEqual({ color: 'success', key: 'backups.runs.status.ok', count: null })
+    expect(guestStatusChip({ status: 'running', step: null })).toEqual(expect.objectContaining({ color: 'info', key: 'backups.runs.status.running' }))
   })
 })
 

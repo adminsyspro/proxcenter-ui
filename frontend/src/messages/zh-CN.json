@@ -2696,6 +2696,53 @@
       "sectionOptions": "恢复后的虚拟机",
       "sourceHelp": "每个虚拟机恢复到备份时所用的 VMID。",
       "bandwidthHelp": "留空表示不限速。"
+    },
+    "runs": {
+      "colLastRun": "上次运行",
+      "colDuration": "耗时",
+      "colStatus": "上次状态",
+      "colNextRun": "下次运行",
+      "manualBackups": "手动备份",
+      "manualBackupsHint": "不属于任何当前作业的 vzdump 运行：客户机备份、命令行运行、已删除或已修改的作业",
+      "never": "从未",
+      "noRuns": "最近 {days} 天内没有运行",
+      "drawerTitle": "{job} 的运行记录",
+      "runsTitle": "运行记录",
+      "window": "最近 {days} 天，以 Proxmox 任务索引保留的范围为限。",
+      "truncated": "{nodes} 上的任务列表在 1000 条处被截断：此时间段内较早的运行未显示。",
+      "unreachable": "未查询的节点：{nodes}",
+      "logUnavailable": "节点上已无此日志",
+      "origin": {
+        "scheduled": "计划",
+        "manual": "手动"
+      },
+      "shared": "与 {jobs} 配置相同",
+      "guest": "客户机",
+      "node": "节点",
+      "start": "开始",
+      "transferred": "已处理",
+      "reused": "已复用",
+      "archive": "归档",
+      "rawLog": "原始日志",
+      "copyLog": "复制日志",
+      "showProgress": "显示进度行",
+      "jobSection": "作业",
+      "selectRun": "选择一次运行以查看详情",
+      "loadError": "无法加载运行记录",
+      "logLoadError": "无法加载日志",
+      "status": {
+        "ok": "正常",
+        "warning": "警告",
+        "running": "运行中",
+        "failed": "失败",
+        "partial": "部分失败",
+        "post": {
+          "prune": "备份成功，清理（prune）失败",
+          "protected": "备份成功，保护设置失败",
+          "hook": "备份成功，钩子脚本失败",
+          "other": "备份成功，最后一步失败"
+        }
+      }
     }
   },
   "backup": {

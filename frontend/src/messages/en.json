@@ -2692,6 +2692,53 @@
       "sectionOptions": "Restored guests",
       "sourceHelp": "Each guest is restored onto the VMID it had when the backup was taken.",
       "bandwidthHelp": "Empty means no limit."
+    },
+    "runs": {
+      "colLastRun": "Last run",
+      "colDuration": "Duration",
+      "colStatus": "Last status",
+      "colNextRun": "Next run",
+      "manualBackups": "Manual backups",
+      "manualBackupsHint": "vzdump runs no current job accounts for: guest backups, CLI runs, deleted or edited jobs",
+      "never": "Never",
+      "noRuns": "No run in the last {days} days",
+      "drawerTitle": "Runs of {job}",
+      "runsTitle": "Runs",
+      "window": "Last {days} days, as far as the Proxmox task index goes.",
+      "truncated": "Task list truncated at 1000 tasks on {nodes}: older runs of this window are not shown.",
+      "unreachable": "Nodes not queried: {nodes}",
+      "logUnavailable": "Log no longer available on the node",
+      "origin": {
+        "scheduled": "Scheduled",
+        "manual": "Manual"
+      },
+      "shared": "Same configuration as {jobs}",
+      "guest": "Guest",
+      "node": "Node",
+      "start": "Start",
+      "transferred": "Processed",
+      "reused": "Reused",
+      "archive": "Archive",
+      "rawLog": "Raw log",
+      "copyLog": "Copy log",
+      "showProgress": "Show progress lines",
+      "jobSection": "Job",
+      "selectRun": "Select a run to see its details",
+      "loadError": "Could not load the runs",
+      "logLoadError": "Could not load the log",
+      "status": {
+        "ok": "OK",
+        "warning": "Warnings",
+        "running": "Running",
+        "failed": "Failed",
+        "partial": "Partly failed",
+        "post": {
+          "prune": "Backup OK, prune failed",
+          "protected": "Backup OK, protection failed",
+          "hook": "Backup OK, hook script failed",
+          "other": "Backup OK, final step failed"
+        }
+      }
     }
   },
   "backup": {

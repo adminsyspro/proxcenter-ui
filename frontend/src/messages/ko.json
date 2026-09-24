@@ -2692,6 +2692,53 @@
       "sectionOptions": "복원된 게스트",
       "sourceHelp": "각 게스트는 백업 당시의 VMID로 복원됩니다.",
       "bandwidthHelp": "비워 두면 제한이 없습니다."
+    },
+    "runs": {
+      "colLastRun": "마지막 실행",
+      "colDuration": "소요 시간",
+      "colStatus": "마지막 상태",
+      "colNextRun": "다음 실행",
+      "manualBackups": "수동 백업",
+      "manualBackupsHint": "현재 작업에 속하지 않는 vzdump 실행: 게스트 백업, CLI 실행, 삭제되거나 수정된 작업",
+      "never": "없음",
+      "noRuns": "최근 {days}일 동안 실행 없음",
+      "drawerTitle": "{job} 실행 기록",
+      "runsTitle": "실행 기록",
+      "window": "최근 {days}일, Proxmox 작업 인덱스가 보관하는 범위까지.",
+      "truncated": "{nodes}의 작업 목록이 1000개에서 잘렸습니다. 이 기간의 이전 실행은 표시되지 않습니다.",
+      "unreachable": "조회하지 못한 노드: {nodes}",
+      "logUnavailable": "노드에서 더 이상 로그를 사용할 수 없음",
+      "origin": {
+        "scheduled": "예약",
+        "manual": "수동"
+      },
+      "shared": "{jobs}와(과) 동일한 구성",
+      "guest": "게스트",
+      "node": "노드",
+      "start": "시작",
+      "transferred": "처리됨",
+      "reused": "재사용",
+      "archive": "아카이브",
+      "rawLog": "원본 로그",
+      "copyLog": "로그 복사",
+      "showProgress": "진행률 줄 표시",
+      "jobSection": "작업",
+      "selectRun": "실행을 선택하면 세부 정보가 표시됩니다",
+      "loadError": "실행 기록을 불러올 수 없습니다",
+      "logLoadError": "로그를 불러올 수 없습니다",
+      "status": {
+        "ok": "OK",
+        "warning": "경고",
+        "running": "실행 중",
+        "failed": "실패",
+        "partial": "일부 실패",
+        "post": {
+          "prune": "백업 성공, 정리(prune) 실패",
+          "protected": "백업 성공, 보호 설정 실패",
+          "hook": "백업 성공, 훅 스크립트 실패",
+          "other": "백업 성공, 마지막 단계 실패"
+        }
+      }
     }
   },
   "backup": {

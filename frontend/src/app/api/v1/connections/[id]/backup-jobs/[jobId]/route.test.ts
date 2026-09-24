@@ -7,8 +7,10 @@ const pveFetchMock = vi.fn<(...args: any[]) => Promise<any>>()
 const getConnectionByIdMock = vi.fn<(id: string) => Promise<any>>()
 const getAllowedJobPoolsMock = vi.fn<(...args: any[]) => Promise<any>>()
 const maskingScopeMock = vi.fn<(...args: any[]) => any>()
+const invalidateMock = vi.fn<(id: string) => void>()
 
 vi.mock('@/lib/proxmox/client', () => ({ pveFetch: pveFetchMock }))
+vi.mock('@/lib/backups/vzdumpRunsService', () => ({ invalidateBackupRuns: invalidateMock }))
 vi.mock('@/lib/connections/getConnection', () => ({ getConnectionById: getConnectionByIdMock }))
 vi.mock('@/lib/rbac', () => ({
   checkPermission: checkPermissionMock,
@@ -77,6 +79,7 @@ beforeEach(() => {
   getConnectionByIdMock.mockReset().mockResolvedValue({ id: 'conn-1', apiToken: 't' })
   getAllowedJobPoolsMock.mockReset().mockResolvedValue(null) // provider (full view)
   maskingScopeMock.mockReset().mockReturnValue(null)
+  invalidateMock.mockReset()
   job = { id: 'backup-1', storage: 'PBS', vmid: '105', mode: 'snapshot', compress: 'zstd' }
   wirePveFetch()
 })
@@ -125,5 +128,23 @@ describe('POST /api/v1/connections/[id]/backup-jobs/[jobId]?action=run', () => {
     const { status } = await run()
     expect(status).toBe(403)
     expect(vzdumpCalls).toHaveLength(0)
+  })
+
+  // #1003 final review
+  it('sends each exclude-path as its own form key', async () => {
+    job['exclude-path'] = ['/tmp/?*', '/var/cache']
+    await run()
+    expect(new URLSearchParams(vzdumpCalls[0].body).getAll('exclude-path')).toEqual(['/tmp/?*', '/var/cache'])
+  })
+
+  it('invalidates the cached run history of the connection once a run started', async () => {
+    await run()
+    expect(invalidateMock).toHaveBeenCalledWith('conn-1')
+  })
+
+  it('leaves the run history cache alone when nothing started', async () => {
+    job.vmid = '999'
+    await run()
+    expect(invalidateMock).not.toHaveBeenCalled()
   })
 })

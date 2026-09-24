@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server"
 
 import { applyMaxfilesTranslation } from "@/lib/backups/prune"
-import { buildSharedVzdumpParams, planBackupRunDispatch, type VmLocation } from "@/lib/backups/runDispatch"
+import { buildSharedVzdumpParams, planBackupRunDispatch, vzdumpRunBody, type VmLocation } from "@/lib/backups/runDispatch"
+import { invalidateBackupRuns } from "@/lib/backups/vzdumpRunsService"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
@@ -380,8 +381,7 @@ export async function POST(req: Request, ctx: RouteContext) {
       const tasks: Array<{ node: string; upid: any }> = []
       const errors: Array<{ node: string; error: string }> = []
       for (const entry of entries) {
-        const params = new URLSearchParams(shared)
-        for (const [k, v] of Object.entries(entry.selection)) params.set(k, v)
+        const params = vzdumpRunBody(shared, entry.selection)
         try {
           const upid = await pveFetch<any>(conn, `/nodes/${encodeURIComponent(entry.node)}/vzdump`, {
             method: 'POST',
@@ -393,6 +393,9 @@ export async function POST(req: Request, ctx: RouteContext) {
           errors.push({ node: entry.node, error: err?.message || String(err) })
         }
       }
+
+      // The run history must show the new tasks on the next poll (#1003).
+      if (tasks.length > 0) invalidateBackupRuns(id)
 
       // Nothing started — surface the failure instead of silently doing nothing.
       if (tasks.length === 0) {

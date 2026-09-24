@@ -23,6 +23,8 @@
  * in `unresolved` so the caller can decide how to surface them.
  */
 
+import { NOT_REPLAYED_KEYS, normalizeVzdumpValue } from './vzdumpCommandLine'
+
 /** One VM's current location, from `/cluster/resources?type=vm`. */
 export interface VmLocation {
   vmid: number
@@ -113,40 +115,45 @@ function groupVmidsByNode(
 /**
  * The vzdump params shared by every node in an immediate run, replayed from the
  * job's own configuration so a manual run produces the SAME backup as the
- * schedule (retention, fleecing, notes, notifications, ...).
+ * schedule — and prints the same command line, which is how the run history
+ * attaches it to its job (issue #1003).
  *
- * Only options that `vzdump` itself accepts are emitted (see `man vzdump`);
- * selection (all/vmid/pool/exclude) is added per-node by the caller. Fields
- * that PVE may return as an object rather than a string (`prune-backups`,
- * `fleecing`) are only forwarded when already a plain string, so we never send
- * a malformed `[object Object]`. The PBS namespace is deliberately NOT sent:
- * it is a property of the storage config, not a vzdump option.
+ * Every key of the job is forwarded except what PVE itself strips before
+ * calling vzdump (id, schedule, comment, …), the selection and node (added per
+ * node by the caller), the options restricted to root@pam (tmpdir, dumpdir,
+ * script: an API token cannot send them) and the deprecated mailnotification
+ * that PVE 9 rejects. Property strings PVE returns as objects (prune-backups,
+ * fleecing, performance) are printed with sorted keys, as PVE prints them.
+ * The PBS namespace is not a job key (it lives in the storage config).
  */
 export function buildSharedVzdumpParams(job: Record<string, any>): Record<string, string> {
+  const skip = new Set(NOT_REPLAYED_KEYS)
   const p: Record<string, string> = {}
 
-  if (job.storage) p.storage = String(job.storage)
-  if (job.mode) p.mode = String(job.mode)
-  if (job.compress) p.compress = String(job.compress)
-
-  if (typeof job['prune-backups'] === 'string' && job['prune-backups']) {
-    p['prune-backups'] = job['prune-backups']
+  for (const [key, value] of Object.entries(job)) {
+    if (skip.has(key) || value === undefined || value === null || value === '') continue
+    p[key] = normalizeVzdumpValue(key, value)
   }
-  if (job['notes-template']) p['notes-template'] = String(job['notes-template'])
-  if (typeof job.fleecing === 'string' && job.fleecing) p.fleecing = job.fleecing
-  if (job['pbs-change-detection-mode']) {
-    p['pbs-change-detection-mode'] = String(job['pbs-change-detection-mode'])
-  }
-  if (job.bwlimit) p.bwlimit = String(job.bwlimit)
-  if (job.zstd) p.zstd = String(job.zstd)
-  if (job.protected === 1 || job.protected === true) p.protected = '1'
-
-  // Notifications: prefer the modern `notification-mode`; skip the deprecated
-  // `mailnotification` which newer PVE (9.x) may reject.
-  if (job['notification-mode']) p['notification-mode'] = String(job['notification-mode'])
-  if (job.mailto) p.mailto = String(job.mailto)
 
   return p
+}
+
+/** vzdump options that take a list, sent as one form key per value. */
+const LIST_KEYS = new Set(['exclude-path'])
+
+/**
+ * The form body of one node's vzdump POST: the shared params plus that node's
+ * selection. A list option (exclude-path, which normalizeVzdumpValue joins
+ * with newlines) goes as repeated keys, as PVE parses it.
+ */
+export function vzdumpRunBody(shared: Record<string, string>, selection: Record<string, string>): URLSearchParams {
+  const body = new URLSearchParams()
+  for (const [key, value] of Object.entries({ ...shared, ...selection })) {
+    if (LIST_KEYS.has(key)) for (const item of value.split('\n')) body.append(key, item)
+    else body.set(key, value)
+  }
+
+  return body
 }
 
 export function planBackupRunDispatch(input: PlanRunInput): RunDispatchPlan {

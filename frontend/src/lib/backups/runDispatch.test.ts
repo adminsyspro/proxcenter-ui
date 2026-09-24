@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest'
 
 import { buildSharedVzdumpParams, planBackupRunDispatch, type VmLocation } from './runDispatch'
+import { jobInvocation, parseVzdumpCommandLine } from './vzdumpCommandLine'
+import { jobMatches } from './vzdumpRuns'
 
 const LOCATIONS: VmLocation[] = [
   { vmid: 105, node: 'pve-r730-01', status: 'running' },
@@ -122,14 +124,39 @@ describe('buildSharedVzdumpParams', () => {
     })
   })
 
-  it('skips object-typed prune-backups/fleecing so we never send [object Object]', () => {
+  it('prints object-typed property strings the way PVE does (sorted keys)', () => {
     const p = buildSharedVzdumpParams({
       storage: 'PBS',
-      'prune-backups': { 'keep-last': 3 },
+      'prune-backups': { 'keep-last': '3', 'keep-daily': '2' },
       fleecing: { enabled: 1, storage: 'local' },
+      performance: { 'max-workers': 4 },
     })
-    expect(p['prune-backups']).toBeUndefined()
-    expect(p.fleecing).toBeUndefined()
+    expect(p['prune-backups']).toBe('keep-daily=2,keep-last=3')
+    expect(p.fleecing).toBe('enabled=1,storage=local')
+    expect(p.performance).toBe('max-workers=4')
+  })
+
+  it('never sends job metadata, selection, node or restricted keys', () => {
+    const p = buildSharedVzdumpParams({
+      id: 'j', type: 'vzdump', enabled: 1, schedule: '02:00', comment: 'c', 'repeat-missed': 1, 'next-run': 1,
+      all: 1, vmid: '100', pool: 'p', exclude: '1', node: 'pve1', tmpdir: '/t', dumpdir: '/d', script: '/s',
+      storage: 'PBS', 'notification-target': 'ops', remove: 1,
+    } as any)
+    expect(p).toEqual({ storage: 'PBS', 'notification-target': 'ops', remove: '1' })
+  })
+
+  it('a Run now built from these params matches its job (#1003)', () => {
+    const job = {
+      id: 'backup-x', type: 'vzdump', schedule: '02:00', enabled: 1, vmid: '100,103', storage: 'PBS', mode: 'snapshot',
+      compress: 'zstd', 'prune-backups': { 'keep-last': '3' }, 'notes-template': "{{guestname}} it's", protected: 1,
+      'notification-mode': 'notification-system',
+    }
+    const quote = (v: string) => (/^[\w\-.\/:@,=+]+$/.test(v) ? v : `'${v.replace(/'/g, `'"'"'`)}'`)
+    const params = { ...buildSharedVzdumpParams(job), node: 'pve2' }
+    const line =
+      'INFO: starting new backup job: vzdump 103 ' +
+      Object.entries(params).map(([k, v]) => `--${k} ${quote(v)}`).join(' ')
+    expect(jobMatches(jobInvocation(job), parseVzdumpCommandLine(line)!)).toBe(true)
   })
 
   it('forwards string-typed fleecing as-is', () => {

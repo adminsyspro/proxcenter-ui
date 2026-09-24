@@ -1,9 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 import { callRoute, readJson } from '@/__tests__/setup/route-test'
+import { parseVzdumpCommandLine } from '@/lib/backups/vzdumpCommandLine'
 
 const checkPermissionMock = vi.fn<(...args: any[]) => Promise<Response | null>>()
-const collectMock = vi.fn<(...args: any[]) => Promise<any>>()
+const loadRawMock = vi.fn<(...args: any[]) => Promise<any>>()
 const detailMock = vi.fn<(...args: any[]) => Promise<any>>()
 const allowedPoolsMock = vi.fn<(...args: any[]) => Promise<Set<string> | null>>()
 
@@ -17,10 +18,10 @@ vi.mock('@/lib/vdc/backupJobs', () => ({
   isJobOwnedByTenantPools: (job: { pool?: string | null }, pools: Set<string>) => !!job.pool && pools.has(job.pool),
 }))
 vi.mock('@/lib/proxmox/client', () => ({ pveFetch: vi.fn() }))
-vi.mock('@/lib/backups/vzdumpRunsService', () => ({
-  collectBackupRuns: collectMock,
+vi.mock('@/lib/backups/vzdumpRunsService', async (orig) => ({
+  ...(await orig<typeof import('@/lib/backups/vzdumpRunsService')>()),
+  loadBackupRunsRaw: loadRawMock,
   loadRunTaskDetail: detailMock,
-  MAX_DAYS: 90,
 }))
 vi.mock('@/lib/backups/vzdumpRunsTenant', async (orig) => ({
   ...(await orig<typeof import('@/lib/backups/vzdumpRunsTenant')>()),
@@ -30,14 +31,17 @@ vi.mock('@/lib/backups/vzdumpRunsTenant', async (orig) => ({
 const MINE = 'UPID:pve1:0001:0002:6AB525DA:vzdump:105:root@pam!root:'
 const FOREIGN = 'UPID:pve1:0003:0004:6AB525DB:vzdump:100:root@pam:'
 
-const run = (upid: string, vmids: number[]) => ({
-  id: upid, start: 1, end: 2, durationSec: 1, origin: 'manual', status: 'ok', statusDetail: { failed: 0, total: 1 },
-  tasks: [{ node: 'pve1', upid, status: 'OK', start: 1, end: 2, vmids, logUnavailable: false }],
+const fact = (upid: string, vmids: number[], opts = '--node pve1 --storage local --mode stop') => ({
+  task: { upid, node: 'pve1', starttime: 1, endtime: 2, status: 'OK' },
+  invocation: parseVzdumpCommandLine(`INFO: starting new backup job: vzdump ${vmids.join(' ')} ${opts}`),
+  log: null,
 })
 
-async function get(node: string, upid: string) {
+const raw = (facts: any[], jobs: any[] = []) => ({ jobs, facts, unreachableNodes: [], truncatedNodes: [], since: 0, days: 30 })
+
+async function get(node: string, upid: string, searchParams?: Record<string, string>) {
   const { GET } = await import('./route')
-  const res = await callRoute(GET as any, { params: { id: 'conn-1', node, upid: encodeURIComponent(upid) }, method: 'GET' })
+  const res = await callRoute(GET as any, { params: { id: 'conn-1', node, upid: encodeURIComponent(upid) }, method: 'GET', searchParams })
   return { status: res.status, body: await readJson<any>(res) }
 }
 
@@ -52,12 +56,10 @@ beforeEach(() => {
   checkPermissionMock.mockReset().mockResolvedValue(null)
   allowedPoolsMock.mockReset().mockResolvedValue(null)
   detailMock.mockReset().mockResolvedValue({ task: { upid: MINE }, log: { guests: [] }, totalLines: 3 })
-  collectMock.mockReset().mockResolvedValue({
-    jobs: [{ jobId: 'other', pool: 'infra', nextRun: null, lastRun: null, runs: [run(FOREIGN, [100])] }],
-    manual: { lastRun: null, runs: [run(MINE, [105])] },
-    unreachableNodes: [],
-    window: { since: 0, days: 30 },
-  })
+  // FOREIGN (vmid 100, infra) is a run of the provider's job; MINE (105) is manual.
+  loadRawMock.mockReset().mockResolvedValue(raw([fact(FOREIGN, [100], '--node pve1 --storage pbs'), fact(MINE, [105])], [
+    { id: 'other', type: 'vzdump', vmid: '100', storage: 'pbs' },
+  ]))
 })
 
 describe('GET …/backup-jobs/runs/[node]/[upid]', () => {
@@ -70,7 +72,7 @@ describe('GET …/backup-jobs/runs/[node]/[upid]', () => {
     const { status, body } = await get('pve1', FOREIGN)
     expect(status).toBe(200)
     expect(body.data.totalLines).toBe(3)
-    expect(collectMock).not.toHaveBeenCalled()
+    expect(loadRawMock).not.toHaveBeenCalled()
     expect(detailMock).toHaveBeenCalledWith({ id: 'conn-1' }, 'pve1', FOREIGN)
   })
 
@@ -91,12 +93,10 @@ describe('GET …/backup-jobs/runs/[node]/[upid]', () => {
     // tenant-owned job's run (same options / Run now replay). Job/pool
     // ownership alone must not be enough to serve it.
     allowedPoolsMock.mockResolvedValue(new Set(['vdc-a']))
-    collectMock.mockResolvedValue({
-      jobs: [{ jobId: 'mine', pool: 'vdc-a', nextRun: null, lastRun: null, runs: [run(FOREIGN, [100])] }],
-      manual: { lastRun: null, runs: [] },
-      unreachableNodes: [],
-      window: { since: 0, days: 30 },
-    })
+    // A "Run now" replay (vmid list) of the tenant's pool job, backing up 100.
+    loadRawMock.mockResolvedValue(raw([fact(FOREIGN, [100], '--node pve1 --storage pbs')], [
+      { id: 'mine', type: 'vzdump', pool: 'vdc-a', storage: 'pbs' },
+    ]))
     const { status } = await get('pve1', FOREIGN)
     expect(status).toBe(404)
     expect(detailMock).not.toHaveBeenCalled()
@@ -105,5 +105,28 @@ describe('GET …/backup-jobs/runs/[node]/[upid]', () => {
   it('answers 400 on a malformed UPID escape sequence instead of 500', async () => {
     const { status } = await getRaw('pve1', '%E0')
     expect(status).toBe(400)
+  })
+
+  // #1003 final review (F2): the drawer passes its window; the route checks
+  // visibility in that window first (same cache entry as the list), and only
+  // scans the widest one when the task is not in it.
+  it("checks a tenant's visibility in the drawer's window first", async () => {
+    allowedPoolsMock.mockResolvedValue(new Set(['vdc-a']))
+    expect((await get('pve1', MINE, { days: '7' })).status).toBe(200)
+    expect(loadRawMock.mock.calls.map(c => c[2])).toEqual([{ days: 7 }])
+  })
+
+  it('falls back to the widest window when the task is not in the drawer’s', async () => {
+    allowedPoolsMock.mockResolvedValue(new Set(['vdc-a']))
+    loadRawMock.mockResolvedValueOnce(raw([])).mockResolvedValueOnce(raw([fact(MINE, [105])]))
+    expect((await get('pve1', MINE, { days: '7' })).status).toBe(200)
+    expect(loadRawMock.mock.calls.map(c => c[2])).toEqual([{ days: 7 }, { days: 90 }])
+  })
+
+  it('does not rescan when the drawer already shows the widest window', async () => {
+    allowedPoolsMock.mockResolvedValue(new Set(['vdc-a']))
+    loadRawMock.mockResolvedValue(raw([]))
+    expect((await get('pve1', MINE, { days: '90' })).status).toBe(404)
+    expect(loadRawMock).toHaveBeenCalledTimes(1)
   })
 })

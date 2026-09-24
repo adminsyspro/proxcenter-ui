@@ -12,7 +12,7 @@
  */
 
 import { jobInvocation, type VzdumpInvocation } from './vzdumpCommandLine'
-import type { GuestStatus, ParsedVzdumpLog, PostStep } from './vzdumpLog'
+import type { GuestStatus, PostStep, TaskLogSummary } from './vzdumpLog'
 
 export const RUN_GROUP_WINDOW_SEC = 600
 
@@ -29,7 +29,8 @@ export interface VzdumpTaskEntry {
 export interface TaskFacts {
   task: VzdumpTaskEntry
   invocation: VzdumpInvocation | null
-  log: ParsedVzdumpLog | null
+  /** Read only when the task list cannot tell (see needsFullLog); a ParsedVzdumpLog fits too. */
+  log: TaskLogSummary | null
 }
 
 export type RunStatus = 'ok' | 'warning' | 'post_step_failed' | 'partial' | 'failed' | 'running'
@@ -105,7 +106,8 @@ function taskOrigin(f: TaskFacts): RunOrigin {
   return f.invocation?.quiet && !f.task.tokenid ? 'scheduled' : 'manual'
 }
 
-function taskVmids(f: TaskFacts): number[] {
+/** The guests a task backed up: from its log when read, else its command line. */
+export function taskVmids(f: TaskFacts): number[] {
   if (f.log && f.log.guests.length > 0) return f.log.guests.map(g => g.vmid)
 
   return f.invocation?.vmids ?? []
@@ -204,8 +206,19 @@ function groupByWindow(facts: TaskFacts[], windowSec: number): TaskFacts[][] {
 
 const newestFirst = (a: RunSummary, b: RunSummary) => b.start - a.start
 
-/** Attach every task to its job (or the manual row) and group them into runs. */
-export function buildRunHistory(jobs: JobRef[], facts: TaskFacts[], windowSec = RUN_GROUP_WINDOW_SEC): RunHistory {
+/**
+ * Attach every task to its job (or the manual row) and group them into runs.
+ * `keepTask` drops tasks before anything is matched or grouped, so a run's
+ * id, times, status and reason are computed over the kept tasks only (tenant
+ * scoping, vzdumpRunsTenant.ts).
+ */
+export function buildRunHistory(
+  jobs: JobRef[],
+  allFacts: TaskFacts[],
+  windowSec = RUN_GROUP_WINDOW_SEC,
+  keepTask?: (facts: TaskFacts) => boolean,
+): RunHistory {
+  const facts = keepTask ? allFacts.filter(keepTask) : allFacts
   const candidates = jobs
     .map(j => ({ id: j.id, inv: jobInvocation(j.raw) }))
     .sort((a, b) => a.id.localeCompare(b.id))

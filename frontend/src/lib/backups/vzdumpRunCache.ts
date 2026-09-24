@@ -1,13 +1,18 @@
 /**
  * In-process caches for the backup run history (issue #1003), on globalThis so
  * Next dev reloads and route modules share them. A finished task never changes,
- * so its first log line and parsed log are cached without expiry (bounded by
- * LRU); the assembled result per connection lives RESULT_TTL_MS.
- * Every HA replica keeps its own copy, which only costs a few extra PVE reads.
+ * so its first log line and the compact summary of its log are cached without
+ * expiry (bounded by LRU, sized for a large cluster's 90 days of tasks); the
+ * raw material of a connection's history (jobs, task facts, node health) lives
+ * a few seconds (see vzdumpRunsService.ts), and one scan per connection+days
+ * is in flight at a time. Every HA replica keeps its own copy, which only
+ * costs a few extra PVE reads.
  */
 
-import type { ParsedVzdumpLog } from './vzdumpLog'
-import type { BackupRunsResult } from './vzdumpRunsService'
+import type { TaskLogSummary } from './vzdumpLog'
+import type { BackupRunsRaw } from './vzdumpRunsService'
+
+export const TASK_CACHE_SIZE = 50_000
 
 export class LruCache<V> {
   private readonly map = new Map<string, V>()
@@ -36,14 +41,23 @@ export class LruCache<V> {
 
 interface VzdumpRunCaches {
   firstLines: LruCache<string>
-  parsed: LruCache<ParsedVzdumpLog>
-  results: Map<string, { at: number; value: BackupRunsResult }>
+  summaries: LruCache<TaskLogSummary>
+  results: Map<string, { at: number; ttlMs: number; value: BackupRunsRaw }>
+  inFlight: Map<string, Promise<BackupRunsRaw>>
+  /** Bumped by invalidateBackupRuns so a scan started before it is not cached. */
+  generations: Map<string, number>
 }
 
 const KEY = '__proxcenterVzdumpRunCaches'
 
 function create(): VzdumpRunCaches {
-  return { firstLines: new LruCache(5000), parsed: new LruCache(500), results: new Map() }
+  return {
+    firstLines: new LruCache(TASK_CACHE_SIZE),
+    summaries: new LruCache(TASK_CACHE_SIZE),
+    results: new Map(),
+    inFlight: new Map(),
+    generations: new Map(),
+  }
 }
 
 export function getVzdumpRunCaches(): VzdumpRunCaches {

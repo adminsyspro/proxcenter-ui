@@ -54,6 +54,16 @@ export interface ParsedVzdumpLog {
   taskWarnings: number
 }
 
+/**
+ * What the run history needs from a parsed log: per guest its vmid and derived
+ * status, plus the task error. Small enough to cache for every task of a
+ * cluster; a ParsedVzdumpLog is one too.
+ */
+export interface TaskLogSummary {
+  guests: Array<Pick<GuestSection, 'vmid' | 'status' | 'step' | 'reason'>>
+  taskError: string | null
+}
+
 export interface ParseOptions {
   taskStart?: number | null
   running?: boolean
@@ -291,4 +301,12 @@ export function parseVzdumpLog(lines: TaskLogLine[], opts: ParseOptions = {}): P
 /** Every line of a parsed log back in its original order. */
 export function rawLines(log: ParsedVzdumpLog): TaskLogLine[] {
   return [...log.jobLines, ...log.guests.flatMap(g => g.lines)].sort((a, b) => a.n - b.n)
+}
+
+/** The compact part of a parsed log the run history works from. */
+export function summarizeVzdumpLog(log: TaskLogSummary): TaskLogSummary {
+  return {
+    guests: log.guests.map(g => ({ vmid: g.vmid, status: g.status, step: g.step, reason: g.reason })),
+    taskError: log.taskError,
+  }
 }

@@ -123,16 +123,64 @@ describe('collectBackupRuns', () => {
     expect(logCalls.filter(c => c === `${RUNNING_UPID}:5000`)).toHaveLength(2)
   })
 
-  it('caches finished logs and the whole result for 30 s', async () => {
+  it('caches finished log summaries and the whole result for 30 s when nothing runs', async () => {
+    const { collectBackupRuns } = await import('./vzdumpRunsService')
+    const base = pveFetchMock.getMockImplementation()!
+    pveFetchMock.mockImplementation(async (c: any, path: string, ...rest: any[]) => {
+      const out = await base(c, path, ...rest)
+      return path.startsWith('/nodes/pve2/tasks?') ? out.filter((t: any) => t.upid !== RUNNING_UPID) : out
+    })
+    await collectBackupRuns(conn, 'conn-1', { days: 30, now: NOW })
+    const calls = pveFetchMock.mock.calls.length
+    await collectBackupRuns(conn, 'conn-1', { days: 30, now: NOW + 29_000 })
+    expect(pveFetchMock.mock.calls.length).toBe(calls) // result cache hit
+    await collectBackupRuns(conn, 'conn-1', { days: 30, now: NOW + 31_000 })
+    expect(pveFetchMock.mock.calls.length).toBeGreaterThan(calls)
+    expect(logCalls.filter(c => c === `${SCHED_UPID}:5000`)).toHaveLength(1) // summary cached
+  })
+
+  // #1003 final review (F2/F5): the list path caches a compact summary per
+  // task, never the parsed log with its lines; the result lives 5 s while a
+  // task runs so the UI poll sees it progress without noCache.
+  it('keeps only a compact summary of a finished log', async () => {
+    const { collectBackupRuns } = await import('./vzdumpRunsService')
+    const { getVzdumpRunCaches } = await import('./vzdumpRunCache')
+    await collectBackupRuns(conn, 'conn-1', { days: 30, now: NOW })
+    const summary = getVzdumpRunCaches().summaries.get(`conn-1:${SCHED_UPID}`)
+    expect(summary).toEqual({
+      guests: [{ vmid: 9882, status: 'post_step_failed', step: 'prune', reason: 'error pruning backups - check log' }],
+      taskError: 'job errors',
+    })
+  })
+
+  it('caches the result only 5 s while a task is running', async () => {
     const { collectBackupRuns } = await import('./vzdumpRunsService')
     await collectBackupRuns(conn, 'conn-1', { days: 30, now: NOW })
     const calls = pveFetchMock.mock.calls.length
-    await collectBackupRuns(conn, 'conn-1', { days: 30, now: NOW + 10_000 })
-    expect(pveFetchMock.mock.calls.length).toBe(calls) // result cache hit
-    await collectBackupRuns(conn, 'conn-1', { days: 30, now: NOW + 31_000 })
-    expect(logCalls.filter(c => c === `${SCHED_UPID}:5000`)).toHaveLength(1) // parsed log cached
+    await collectBackupRuns(conn, 'conn-1', { days: 30, now: NOW + 4_000 })
+    expect(pveFetchMock.mock.calls.length).toBe(calls)
+    await collectBackupRuns(conn, 'conn-1', { days: 30, now: NOW + 6_000 })
+    expect(pveFetchMock.mock.calls.length).toBeGreaterThan(calls)
   })
 
+  it('reads the full log of an OK task that backed up --all or --pool (guests only in the log)', async () => {
+    const { collectBackupRuns, needsFullLog } = await import('./vzdumpRunsService')
+    const { parseVzdumpCommandLine } = await import('./vzdumpCommandLine')
+    const ok = { upid: 'U', node: 'pve1', starttime: 1, endtime: 2, status: 'OK' }
+    const inv = (l: string) => parseVzdumpCommandLine(`INFO: starting new backup job: vzdump ${l}`)
+    expect(needsFullLog(ok, inv('--all 1 --storage local'))).toBe(true)
+    expect(needsFullLog(ok, inv('--pool p --storage local'))).toBe(true)
+    expect(needsFullLog(ok, inv('100 --storage local'))).toBe(false)
+    expect(needsFullLog({ ...ok, status: 'WARNINGS: 1' }, inv('--all 1 --storage local'))).toBe(true)
+
+    FIRST[MANUAL_UPID] = 'INFO: starting new backup job: vzdump --all 1 --node pve2 --storage local --mode stop'
+    try {
+      await collectBackupRuns(conn, 'conn-1', { days: 30, now: NOW })
+      expect(logCalls.filter(c => c.startsWith(MANUAL_UPID))).toEqual([`${MANUAL_UPID}:1`, `${MANUAL_UPID}:5000`])
+    } finally {
+      FIRST[MANUAL_UPID] = 'INFO: starting new backup job: vzdump 111 --compress zstd --node pve2 --mode stop --storage pbs-msp-msppveprod'
+    }
+  })
   it('reports offline and failing nodes as unreachable', async () => {
     const { collectBackupRuns } = await import('./vzdumpRunsService')
     const base = pveFetchMock.getMockImplementation()!
@@ -142,6 +190,55 @@ describe('collectBackupRuns', () => {
     })
     const r = await collectBackupRuns(conn, 'conn-1', { days: 30, now: NOW })
     expect(r.unreachableNodes.sort()).toEqual(['pve2', 'pve3'])
+  })
+})
+
+describe('collectBackupRuns — cache coordination (#1003 final review)', () => {
+  const clusterBackupCalls = () => pveFetchMock.mock.calls.filter(c => c[1] === '/cluster/backup').length
+
+  it('shares one scan between concurrent cold calls', async () => {
+    const { collectBackupRuns } = await import('./vzdumpRunsService')
+    const [a, b] = await Promise.all([
+      collectBackupRuns(conn, 'conn-1', { days: 30, now: NOW }),
+      collectBackupRuns(conn, 'conn-1', { days: 30, now: NOW }),
+    ])
+    expect(clusterBackupCalls()).toBe(1)
+    expect(b).toEqual(a)
+  })
+
+  it('rescans after invalidateBackupRuns, and never caches a scan started before it', async () => {
+    const { collectBackupRuns, invalidateBackupRuns } = await import('./vzdumpRunsService')
+    await collectBackupRuns(conn, 'conn-1', { days: 30, now: NOW })
+    invalidateBackupRuns('conn-1')
+    await collectBackupRuns(conn, 'conn-1', { days: 30, now: NOW + 1000 })
+    expect(clusterBackupCalls()).toBe(2)
+
+    const stale = collectBackupRuns(conn, 'conn-1', { days: 7, now: NOW, noCache: true })
+    invalidateBackupRuns('conn-1')
+    await stale
+    await collectBackupRuns(conn, 'conn-1', { days: 7, now: NOW + 1000 })
+    expect(clusterBackupCalls()).toBe(4)
+  })
+
+  it('leaves other connections cached on invalidation', async () => {
+    const { collectBackupRuns, invalidateBackupRuns } = await import('./vzdumpRunsService')
+    await collectBackupRuns(conn, 'conn-2', { days: 30, now: NOW })
+    invalidateBackupRuns('conn-1')
+    await collectBackupRuns(conn, 'conn-2', { days: 30, now: NOW + 1000 })
+    expect(clusterBackupCalls()).toBe(1)
+  })
+
+  it('flags a node whose task list hit the limit as truncated', async () => {
+    const { collectBackupRuns, TASK_LIST_LIMIT } = await import('./vzdumpRunsService')
+    const base = pveFetchMock.getMockImplementation()!
+    pveFetchMock.mockImplementation(async (c: any, path: string, ...rest: any[]) => {
+      if (path.startsWith('/nodes/pve1/tasks?')) {
+        return Array.from({ length: TASK_LIST_LIMIT }, (_, i) => ({ ...tasksByNode.pve1[0], upid: `${SCHED_UPID}${i}` }))
+      }
+      return base(c, path, ...rest)
+    })
+    const r = await collectBackupRuns(conn, 'conn-1', { days: 30, now: NOW })
+    expect(r.truncatedNodes).toEqual(['pve1'])
   })
 })
 

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 
-import { collectBackupRuns, clampDays } from '@/lib/backups/vzdumpRunsService'
+import { buildBackupRunsResult, clampDays, loadBackupRunsRaw } from '@/lib/backups/vzdumpRunsService'
 import { filterBackupRunsForTenant, loadPoolByVmid } from '@/lib/backups/vzdumpRunsTenant'
 import { getConnectionById } from '@/lib/connections/getConnection'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
@@ -18,7 +18,8 @@ type RouteContext = {
  *
  * Run history of every PVE backup job of the connection, plus the "manual"
  * row of vzdump runs no job accounts for (issue #1003). Read live from the
- * node task indexes; see lib/backups/vzdumpRunsService.ts.
+ * node task indexes; see lib/backups/vzdumpRunsService.ts. The UI never sends
+ * noCache (the server cache already lives 5 s while a task runs).
  */
 export async function GET(req: Request, ctx: RouteContext) {
   try {
@@ -34,11 +35,11 @@ export async function GET(req: Request, ctx: RouteContext) {
 
     const conn = await getConnectionById(id)
     const allowedPools = await getAllowedJobPools(await getCurrentTenantId(), id)
-    const result = await collectBackupRuns(conn, id, { days, noCache })
+    const raw = await loadBackupRunsRaw(conn, id, { days, noCache })
 
-    if (allowedPools === null) return NextResponse.json({ data: result })
+    if (allowedPools === null) return NextResponse.json({ data: buildBackupRunsResult(raw) })
 
-    return NextResponse.json({ data: filterBackupRunsForTenant(result, allowedPools, await loadPoolByVmid(conn)) })
+    return NextResponse.json({ data: filterBackupRunsForTenant(raw, allowedPools, await loadPoolByVmid(conn)) })
   } catch (e: any) {
     console.error('[backup-jobs/runs] GET Error:', e)
 

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 
-import { collectBackupRuns, MAX_DAYS, loadRunTaskDetail } from '@/lib/backups/vzdumpRunsService'
+import { clampDays, loadBackupRunsRaw, loadRunTaskDetail, MAX_DAYS } from '@/lib/backups/vzdumpRunsService'
 import { filterBackupRunsForTenant, isTaskVisible, loadPoolByVmid } from '@/lib/backups/vzdumpRunsTenant'
 import { getConnectionById } from '@/lib/connections/getConnection'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
@@ -14,13 +14,15 @@ type RouteContext = {
 }
 
 /**
- * GET /api/v1/connections/[id]/backup-jobs/runs/[node]/[upid]
+ * GET /api/v1/connections/[id]/backup-jobs/runs/[node]/[upid]?days=30
  *
  * One vzdump task of a backup run: status and log split per guest (#1003).
  * Unlike the generic task route (CONNECTION_VIEW only), a vDC tenant only gets
- * a task that belongs to a run it can see, otherwise 404.
+ * a task that belongs to a run it can see, otherwise 404. Visibility is checked
+ * against the window the drawer shows (`days`, same cache entry as the list),
+ * then the widest one if the task is not in it.
  */
-export async function GET(_req: Request, ctx: RouteContext) {
+export async function GET(req: Request, ctx: RouteContext) {
   try {
     const { id, node, upid } = await ctx.params
 
@@ -43,12 +45,13 @@ export async function GET(_req: Request, ctx: RouteContext) {
     const allowedPools = await getAllowedJobPools(await getCurrentTenantId(), id)
 
     if (allowedPools !== null) {
-      // The widest window the list route serves, so every run a tenant can see is found.
-      const all = await collectBackupRuns(conn, id, { days: MAX_DAYS })
-      const visible = filterBackupRunsForTenant(all, allowedPools, await loadPoolByVmid(conn))
-      if (!isTaskVisible(visible, node, decodedUpid)) {
-        return NextResponse.json({ error: 'Task not found' }, { status: 404 })
-      }
+      const days = clampDays(new URL(req.url).searchParams.get('days'))
+      const poolByVmid = await loadPoolByVmid(conn)
+      const visibleIn = async (window: number) =>
+        isTaskVisible(filterBackupRunsForTenant(await loadBackupRunsRaw(conn, id, { days: window }), allowedPools, poolByVmid), node, decodedUpid)
+
+      const visible = (await visibleIn(days)) || (days < MAX_DAYS && (await visibleIn(MAX_DAYS)))
+      if (!visible) return NextResponse.json({ error: 'Task not found' }, { status: 404 })
     }
 
     return NextResponse.json({ data: await loadRunTaskDetail(conn, node, decodedUpid) })

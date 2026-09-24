@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 
 import pruneFailed from './__fixtures__/vzdump/scheduled-pbs-prune-failed.json'
 import { jobInvocation, parseVzdumpCommandLine } from './vzdumpCommandLine'
-import { parseVzdumpLog, type ParsedVzdumpLog, type TaskLogLine } from './vzdumpLog'
+import { parseVzdumpLog, summarizeVzdumpLog, type ParsedVzdumpLog, type TaskLogLine, type TaskLogSummary } from './vzdumpLog'
 import { buildRunHistory, jobMatches, type TaskFacts, type VzdumpTaskEntry } from './vzdumpRuns'
 
 const PREFIX = 'INFO: starting new backup job: vzdump '
@@ -11,7 +11,7 @@ let seq = 0
 function facts(
   line: string,
   task: Partial<VzdumpTaskEntry> & { starttime: number },
-  log: ParsedVzdumpLog | null = null,
+  log: TaskLogSummary | null = null,
 ): TaskFacts {
   seq++
   const full: VzdumpTaskEntry = {
@@ -163,5 +163,34 @@ describe('buildRunHistory', () => {
     const running = buildRunHistory([], [facts('100 --storage pbs', { starttime: 1, status: undefined, endtime: undefined })]).manual[0]
     expect(running).toMatchObject({ status: 'running', end: null, durationSec: null })
     expect(running.tasks[0].status).toBe('running')
+  })
+})
+
+describe('buildRunHistory — keepTask (#1003 final review)', () => {
+  const line = '--all 1 --exclude 9000 --storage pbs --mode snapshot --compress zstd --quiet 1'
+  const guest = (vmid: number, status: 'ok' | 'failed', reason: string | null = null) =>
+    ({ vmid, status, step: null, reason })
+
+  it('drops tasks before grouping, so the run is computed over the kept ones only', () => {
+    const foreign = facts(line, { node: 'pve1', starttime: 1000, endtime: 1500, status: 'job errors' }, {
+      guests: [guest(100, 'failed', 'foreign failure')], taskError: 'job errors',
+    })
+    const own = facts(line, { node: 'pve2', starttime: 1010, endtime: 1100, status: 'OK' }, {
+      guests: [guest(105, 'ok')], taskError: null,
+    })
+    const h = buildRunHistory(JOBS, [foreign, own], undefined, f => f.task.upid === own.task.upid)
+    const [run] = h.byJob.get('backup-daily')!
+    expect(run).toMatchObject({ id: own.task.upid, start: 1010, end: 1100, status: 'ok', statusDetail: { failed: 0, total: 1 } })
+    expect(run.statusDetail.reason).toBeUndefined()
+    expect(run.tasks.map(t => t.upid)).toEqual([own.task.upid])
+  })
+
+  it('works from a compact log summary exactly as from a parsed log', () => {
+    const log = parseVzdumpLog(pruneFailed as TaskLogLine[], { taskStart: 1790256602 })
+    const f = facts('9882 --storage pbs --mode snapshot', { starttime: 1790256602, status: 'job errors' }, log)
+    const fromParsed = buildRunHistory([], [f]).manual[0]
+    const fromSummary = buildRunHistory([], [{ ...f, log: summarizeVzdumpLog(log) }]).manual[0]
+    expect(fromSummary).toEqual(fromParsed)
+    expect(fromSummary.status).toBe('post_step_failed')
   })
 })

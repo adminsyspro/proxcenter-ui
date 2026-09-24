@@ -8,9 +8,12 @@
  * "Backup OK, <step> failed" instead of a plain failure.
  *
  * Times in the log are node-local ("Backup started at 2026-09-24 15:30:02") and
- * carry no zone; they are converted with the offset between the first of them
- * and the task start epoch, rounded to 15 minutes. Without a task start they
- * stay null.
+ * carry no zone. They are converted with the node's UTC offset when the caller
+ * knows it (`utcOffsetSec`, from GET /nodes/{node}/time); otherwise with the
+ * offset between the first of them and the task start epoch, floored to 15
+ * minutes — floored, not rounded, because the first guest can start minutes
+ * after the task (vzdump waits for its global lock), never before. Without
+ * either they stay null.
  */
 
 export interface TaskLogLine {
@@ -55,6 +58,8 @@ export interface ParseOptions {
   taskStart?: number | null
   running?: boolean
   exitStatus?: string | null
+  /** The node's UTC offset (local − UTC, seconds); wins over the task-start heuristic. */
+  utcOffsetSec?: number | null
 }
 
 const RE_COMMAND = /starting new backup job: /
@@ -270,8 +275,9 @@ export function parseVzdumpLog(lines: TaskLogLine[], opts: ParseOptions = {}): P
   }
 
   const firstNaive = drafts.find(d => d.naiveStart !== null)?.naiveStart ?? null
-  const offset =
-    opts.taskStart && firstNaive !== null ? Math.round((firstNaive - opts.taskStart) / 900) * 900 : null
+  let offset: number | null = null
+  if (typeof opts.utcOffsetSec === 'number' && Number.isFinite(opts.utcOffsetSec)) offset = opts.utcOffsetSec
+  else if (opts.taskStart && firstNaive !== null) offset = Math.floor((firstNaive - opts.taskStart) / 900) * 900
 
   return {
     commandLine,

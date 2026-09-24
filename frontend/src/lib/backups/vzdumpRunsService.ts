@@ -162,8 +162,23 @@ export async function collectBackupRuns(
   return value
 }
 
+/** The node's UTC offset (local − UTC, seconds), or null when PVE does not tell. */
+async function nodeUtcOffset(conn: PveConn, node: string): Promise<number | null> {
+  try {
+    const time = await pveFetch<any>(conn, `/nodes/${encodeURIComponent(node)}/time`)
+    const offset = Number(time?.localtime) - Number(time?.time)
+
+    return Number.isFinite(offset) ? offset : null
+  } catch {
+    return null
+  }
+}
+
 export async function loadRunTaskDetail(conn: PveConn, node: string, upid: string): Promise<RunTaskDetail> {
-  const status = await pveFetch<any>(conn, `/nodes/${encodeURIComponent(node)}/tasks/${encodeURIComponent(upid)}/status`)
+  const [status, utcOffsetSec] = await Promise.all([
+    pveFetch<any>(conn, `/nodes/${encodeURIComponent(node)}/tasks/${encodeURIComponent(upid)}/status`),
+    nodeUtcOffset(conn, node),
+  ])
   const running = status?.status === 'running'
   const lines = await fetchTaskLog(conn, node, upid)
 
@@ -176,7 +191,12 @@ export async function loadRunTaskDetail(conn: PveConn, node: string, upid: strin
       end: status?.endtime ?? null,
       user: status?.user ?? null,
     },
-    log: parseVzdumpLog(lines, { taskStart: status?.starttime ?? null, running, exitStatus: status?.exitstatus ?? null }),
+    log: parseVzdumpLog(lines, {
+      taskStart: status?.starttime ?? null,
+      running,
+      exitStatus: status?.exitstatus ?? null,
+      utcOffsetSec,
+    }),
     totalLines: lines.length,
   }
 }

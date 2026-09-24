@@ -160,4 +160,33 @@ describe('loadRunTaskDetail', () => {
     expect(d.log.guests[0]).toMatchObject({ vmid: 9882, status: 'post_step_failed', step: 'prune', start: 1790256602 })
     expect(d.totalLines).toBe((pruneFailed as any[]).length)
   })
+
+  it("converts the guest times with the node's own UTC offset (not the lock-wait heuristic)", async () => {
+    const { loadRunTaskDetail } = await import('./vzdumpRunsService')
+    const base = pveFetchMock.getMockImplementation()!
+    const paths: string[] = []
+    pveFetchMock.mockImplementation(async (c: any, path: string, ...rest: any[]) => {
+      paths.push(path)
+      if (path.endsWith('/status')) return { status: 'stopped', exitstatus: 'job errors', starttime: 1790256602, endtime: 1790256604 }
+      // A node in UTC: the log's naive times are UTC already.
+      if (path === '/nodes/pve1/time') return { time: 1790256700, localtime: 1790256700, timezone: 'UTC' }
+      return base(c, path, ...rest)
+    })
+    const d = await loadRunTaskDetail(conn, 'pve1', SCHED_UPID)
+    expect(paths).toContain('/nodes/pve1/time')
+    // The fixture logs CEST (UTC+2): read as UTC, the guest starts 2 h "later".
+    expect(d.log.guests[0].start).toBe(1790256602 + 7200)
+  })
+
+  it('falls back to the task-start heuristic when the node time cannot be read', async () => {
+    const { loadRunTaskDetail } = await import('./vzdumpRunsService')
+    const base = pveFetchMock.getMockImplementation()!
+    pveFetchMock.mockImplementation(async (c: any, path: string, ...rest: any[]) => {
+      if (path.endsWith('/status')) return { status: 'stopped', exitstatus: 'job errors', starttime: 1790256602, endtime: 1790256604 }
+      if (path.endsWith('/time')) throw new Error('403 Permission check failed')
+      return base(c, path, ...rest)
+    })
+    const d = await loadRunTaskDetail(conn, 'pve1', SCHED_UPID)
+    expect(d.log.guests[0].start).toBe(1790256602)
+  })
 })

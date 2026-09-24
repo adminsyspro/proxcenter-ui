@@ -155,3 +155,39 @@ describe('parseVzdumpLog — derived status', () => {
     expect(() => parseVzdumpLog([{ n: 1, t: '???' }, { n: 2, t: '' }])).not.toThrow()
   })
 })
+
+describe('parseVzdumpLog — node UTC offset (#1003 final review)', () => {
+  // 2026-09-24T12:50:49Z = 14:50:49 CEST.
+  const T = 1790254249
+  const lockWait: TaskLogLine[] = [
+    { n: 1, t: 'INFO: starting new backup job: vzdump 100 --storage local --mode snapshot' },
+    { n: 2, t: 'INFO: trying to get global lock - waiting...' },
+    { n: 3, t: 'INFO: got global lock' },
+    { n: 4, t: 'INFO: Starting Backup of VM 100 (qemu)' },
+    { n: 5, t: 'INFO: Backup started at 2026-09-24 14:58:49' },
+    { n: 6, t: 'INFO: Finished Backup of VM 100 (00:00:30)' },
+    { n: 7, t: 'INFO: Backup finished at 2026-09-24 14:59:19' },
+  ]
+
+  it('uses an explicit node offset over the task-start heuristic', () => {
+    const log = parseVzdumpLog(pbsMulti as TaskLogLine[], { taskStart: T, utcOffsetSec: 0 })
+    expect(log.guests[0].start).toBe(T + 7200)
+  })
+
+  it('applies an explicit node offset even without a task start', () => {
+    const log = parseVzdumpLog(pbsMulti as TaskLogLine[], { utcOffsetSec: 7200 })
+    expect(log.guests[0].start).toBe(T)
+  })
+
+  it('keeps an 8-minute global lock wait from shifting the times (heuristic floors)', () => {
+    const vm = parseVzdumpLog(lockWait, { taskStart: T }).guests[0]
+    expect(vm.start).toBe(T + 480)
+    expect(vm.end).toBe(T + 510)
+  })
+
+  it('also floors below UTC (negative offsets)', () => {
+    // 12:50:49Z = 08:50:49 EDT (-4h); the guest starts 8 minutes later.
+    const edt = lockWait.map(l => ({ ...l, t: l.t.replace('14:58:49', '08:58:49').replace('14:59:19', '08:59:19') }))
+    expect(parseVzdumpLog(edt, { taskStart: T }).guests[0].start).toBe(T + 480)
+  })
+})

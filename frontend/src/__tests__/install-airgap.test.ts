@@ -111,6 +111,32 @@ describe('bundle', () => {
     expect(r.status, r.stdout + r.stderr).toBe(0)
     expect(sb.argv()).toContain('compose config env COMPOSE_FILE=docker-compose.yml REGISTRY=ghcr.io/adminsyspro POSTGRES_IMAGE=postgres:16-alpine')
   })
+
+  it('packs images already present locally with --no-pull, skipping docker pull', () => {
+    const out = join(sb.dir, 'dist')
+    mkdirSync(out)
+    const compose = join(sb.dir, 'docker-compose.community.yml')
+    spawnSync('bash', ['-c', `printf '%s' "$FAKE_COMPOSE_BODY" > ${compose}`], { env: sb.env })
+    const r = runAirgap(sb, ['bundle', '--edition', 'community', '--version', '1.4.10', '--compose', compose, '--output', out, '--no-pull'], sb.dir)
+    expect(r.status, r.stdout + r.stderr).toBe(0)
+    expect(sb.argv().some(a => a.startsWith('docker pull'))).toBe(false)
+    expect(existsSync(join(out, 'proxcenter-community-1.4.10.tar.gz'))).toBe(true)
+  })
+
+  it('refuses --no-pull when a resolved image is not present locally', () => {
+    const out = join(sb.dir, 'dist')
+    mkdirSync(out)
+    const compose = join(sb.dir, 'docker-compose.community.yml')
+    spawnSync('bash', ['-c', `printf '%s' "$FAKE_COMPOSE_BODY" > ${compose}`], { env: sb.env })
+    const r = runAirgap(
+      sb,
+      ['bundle', '--edition', 'community', '--version', '1.4.10', '--compose', compose, '--output', out, '--no-pull'],
+      sb.dir,
+      { FAKE_MISSING_IMAGES: 'postgres:16-alpine' },
+    )
+    expect(r.status).toBe(1)
+    expect(r.stderr).toMatch(/postgres:16-alpine is not present locally/)
+  })
 })
 
 describe('install', () => {

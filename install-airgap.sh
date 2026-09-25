@@ -5,7 +5,7 @@
 # Builds a self-contained bundle on a connected host, and installs or
 # upgrades ProxCenter from it on a host with no internet access (ui#956).
 #
-#   ./install-airgap.sh bundle --edition <community|enterprise> --version <X.Y.Z> [--compose <file>] [--output <dir>]
+#   ./install-airgap.sh bundle --edition <community|enterprise> --version <X.Y.Z> [--compose <file>] [--output <dir>] [--no-pull]
 #   sudo ./install-airgap.sh install [--license <key or .key path>] [--install-dir /opt/proxcenter] [--registry <host/namespace>]
 #   sudo ./install-airgap.sh upgrade [--install-dir /opt/proxcenter] [--skip-db-backup]
 #
@@ -70,11 +70,14 @@ trap on_error ERR
 usage() {
     cat <<USAGE
 Usage:
-  $0 bundle  --edition <community|enterprise> --version <X.Y.Z> [--compose <file>] [--output <dir>]
+  $0 bundle  --edition <community|enterprise> --version <X.Y.Z> [--compose <file>] [--output <dir>] [--no-pull]
   $0 install [--license <key or .key path>] [--install-dir <dir>] [--registry <host/namespace>] [--health-timeout <s>]
   $0 upgrade [--install-dir <dir>] [--skip-db-backup] [--health-timeout <s>]
 
 bundle runs on a connected host already logged in to ghcr.io (Enterprise).
+--no-pull packs the images already present in the local Docker daemon
+instead of pulling them (CI build jobs, or a local build with no registry
+token at hand).
 install and upgrade run as root from the extracted bundle directory, on the
 air-gapped host, and never touch the network.
 USAGE
@@ -208,13 +211,14 @@ BANNER
 # ---------- bundle ----------
 
 cmd_bundle() {
-    local edition="" version="" compose="" output="."
+    local edition="" version="" compose="" output="." no_pull=false
     while [[ $# -gt 0 ]]; do
         case $1 in
             --edition) edition="$2"; shift 2 ;;
             --version) version="$2"; shift 2 ;;
             --compose) compose="$2"; shift 2 ;;
             --output) output="$2"; shift 2 ;;
+            --no-pull) no_pull=true; shift ;;
             -h|--help) usage ;;
             *) log_error "Unknown option: $1" ;;
         esac
@@ -248,7 +252,7 @@ cmd_bundle() {
         log_success "Downloaded docker-compose.$edition.yml at tag v$version"
     fi
 
-    step 2 "Resolving and pulling images"
+    if [ "$no_pull" = true ]; then step 2 "Resolving images already present locally"; else step 2 "Resolving and pulling images"; fi
     # The compose declares ${POSTGRES_PASSWORD:?...}: give config a throwaway value.
     # No -f: run from $stage, where the file is already named docker-compose.yml
     # (compose auto-detects it), so the resolution matches what install/upgrade
@@ -264,8 +268,12 @@ cmd_bundle() {
     [ -n "$images" ] || log_error "docker compose config --images returned nothing"
     local img entries=""
     while IFS= read -r img; do
-        log_info "Pulling $img"
-        docker pull "$img" >/dev/null || log_error "docker pull $img failed (Enterprise images need docker login ghcr.io first)"
+        if [ "$no_pull" = true ]; then
+            docker image inspect "$img" >/dev/null 2>&1 || log_error "Image $img is not present locally and --no-pull was given"
+        else
+            log_info "Pulling $img"
+            docker pull "$img" >/dev/null || log_error "docker pull $img failed (Enterprise images need docker login ghcr.io first)"
+        fi
         local digest size
         # `|| true`: under -e/pipefail a failing `inspect` would otherwise abort
         # the script here instead of falling back to unknown/0 below.
@@ -273,7 +281,7 @@ cmd_bundle() {
         size=$(docker image inspect --format '{{.Size}}' "$img" 2>/dev/null) || true
         entries+="    { \"name\": \"$img\", \"digest\": \"${digest:-unknown}\", \"size\": ${size:-0} },"$'\n'
     done <<< "$images"
-    log_success "$(echo "$images" | wc -l) images pulled"
+    if [ "$no_pull" = true ]; then log_success "$(echo "$images" | wc -l) images present locally"; else log_success "$(echo "$images" | wc -l) images pulled"; fi
 
     step 3 "Saving images"
     # shellcheck disable=SC2086

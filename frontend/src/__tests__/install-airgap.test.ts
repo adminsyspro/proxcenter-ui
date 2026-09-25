@@ -280,6 +280,14 @@ describe('install', () => {
     expect(r.stderr).toMatch(/postgres:16-alpine is listed in manifest\.json but is not present/)
   })
 
+  it('fails before any docker run when manifest.json lists no image', () => {
+    const bdir = makeFakeBundle(sb, { edition: 'community', images: [] })
+    const r = runAirgap(sb, ['install', '--install-dir', sb.installDir, '--health-timeout', '5'], bdir)
+    expect(r.status).toBe(1)
+    expect(r.stderr).toMatch(/manifest\.json lists no image/)
+    expect(sb.argv().some(a => a.startsWith('docker run'))).toBe(false)
+  })
+
   it('--registry retags and pushes every image and writes REGISTRY and POSTGRES_IMAGE', () => {
     const bdir = makeFakeBundle(sb, { edition: 'enterprise' })
     const r = runAirgap(sb, ['install', '--install-dir', sb.installDir, '--registry', 'harbor.lan/proxcenter/', '--health-timeout', '5'], bdir)
@@ -461,5 +469,68 @@ describe('upgrade', () => {
     expect(r.status, r.stdout + r.stderr).toBe(0)
     expect(r.stdout).toMatch(/set VERSION to your previous version/)
     expect(r.stdout).not.toMatch(/VERSION=PREVIOUS/)
+  })
+})
+
+describe('round trip', () => {
+  // The regression this whole task is about: cmd_bundle writes each manifest
+  // image entry on ONE line (`    { "name": "...", ... },`), which the old
+  // line-anchored manifest_images() never matched. Every other test in this
+  // file goes through makeFakeBundle, a fixture; this one runs `bundle` for
+  // real and installs from what it actually produces, so a regression back
+  // to a line-anchored (or otherwise real-shape-blind) manifest_images()
+  // fails here even if every fixture-based test above stays green.
+  it('installs from a bundle it just built: the manifest images are read back and the frontend image reaches the volume init', () => {
+    const compose = join(sb.dir, 'docker-compose.enterprise.yml')
+    writeFileSync(compose, [
+      'services:',
+      '  frontend:',
+      '    image: ${REGISTRY:-ghcr.io/adminsyspro}/proxcenter-frontend:${VERSION:-latest}',
+      '  orchestrator:',
+      '    image: ${REGISTRY:-ghcr.io/adminsyspro}/proxcenter-orchestrator:${VERSION:-latest}',
+      '  weasyprint:',
+      '    image: ${REGISTRY:-ghcr.io/adminsyspro}/proxcenter-weasyprint:${VERSION:-latest}',
+      '  postgres:',
+      '    image: ${POSTGRES_IMAGE:-postgres:16-alpine}',
+      '',
+    ].join('\n'))
+    const fakeImages = [
+      'ghcr.io/adminsyspro/proxcenter-frontend:1.4.10',
+      'ghcr.io/adminsyspro/proxcenter-orchestrator:1.4.10',
+      'ghcr.io/adminsyspro/proxcenter-weasyprint:1.4.10',
+      'postgres:16-alpine',
+    ]
+    const out = join(sb.dir, 'dist')
+    mkdirSync(out)
+    const bundleR = runAirgap(
+      sb,
+      ['bundle', '--edition', 'enterprise', '--version', '1.4.10', '--compose', compose, '--output', out, '--no-pull'],
+      sb.dir,
+      { FAKE_IMAGES: fakeImages.join('\n') },
+    )
+    expect(bundleR.status, bundleR.stdout + bundleR.stderr).toBe(0)
+
+    const tarball = join(out, 'proxcenter-enterprise-1.4.10.tar.gz')
+    expect(existsSync(tarball)).toBe(true)
+    const extract = join(sb.dir, 'extracted')
+    mkdirSync(extract)
+    expect(spawnSync('tar', ['xzf', tarball, '-C', extract]).status).toBe(0)
+    const bdir = join(extract, 'proxcenter-enterprise-1.4.10')
+
+    const r = runAirgap(sb, ['install', '--install-dir', sb.installDir, '--health-timeout', '5'], bdir)
+    expect(r.status, r.stdout + r.stderr).toBe(0)
+
+    const argv = sb.argv()
+    expect(argv).toContain(`docker load -i ${join(bdir, 'images.tar')}`)
+    for (const img of fakeImages) expect(argv, img).toContain(`docker image inspect ${img}`)
+    expect(argv.some(a => a.startsWith(
+      'docker run --rm --user root --entrypoint  -v proxcenter_data:/app/data ghcr.io/adminsyspro/proxcenter-frontend:1.4.10 sh -c',
+    ))).toBe(true)
+    // The bug: an empty frontend_image_of() left the image argument blank,
+    // so the chown container ran against "" instead of the frontend image.
+    expect(argv.some(a => a.includes('-v proxcenter_data:/app/data  sh -c'))).toBe(false)
+
+    const env = readEnvFile(join(sb.installDir, '.env'))
+    expect(env.VERSION).toBe('1.4.10')
   })
 })

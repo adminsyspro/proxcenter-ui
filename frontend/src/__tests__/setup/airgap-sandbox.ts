@@ -160,10 +160,28 @@ export function makeFakeBundle(sb: AirgapSandbox, opts: FakeBundleOptions = {}):
     : `services:\n  frontend:\n    image: \${REGISTRY:-ghcr.io/adminsyspro}/proxcenter-frontend:\${VERSION:-latest}\n  postgres:\n    image: \${POSTGRES_IMAGE:-postgres:16-alpine}\n`)
   writeFileSync(join(dir, 'images.tar'), 'fake docker archive\n')
   writeFileSync(join(dir, 'README.txt'), 'fake readme\n')
-  writeFileSync(join(dir, 'manifest.json'), JSON.stringify({
-    schema: 1, edition, version, created_at: '2026-09-25T10:00:00Z', compose: `docker-compose.${edition}.yml`,
-    images: images.map(name => ({ name, digest: 'sha256:' + '0'.repeat(64), size: 123456 })),
-  }, null, 2) + '\n')
+  // Built by hand, one image per line, the way cmd_bundle's own `entries`
+  // loop writes manifest.json: `JSON.stringify(..., null, 2)` puts "name" at
+  // the start of its own line, which is not what the real artefact looks
+  // like and let manifest_images()'s old line-anchored sed pass every test
+  // while failing on every real bundle.
+  const entries = images
+    .map(name => `    { "name": "${name}", "digest": "sha256:${'0'.repeat(64)}", "size": 123456 },`)
+    .join('\n')
+    .replace(/,$/, '')
+  writeFileSync(join(dir, 'manifest.json'), [
+    '{',
+    '  "schema": 1,',
+    `  "edition": "${edition}",`,
+    `  "version": "${version}",`,
+    '  "created_at": "2026-09-25T10:00:00Z",',
+    `  "compose": "docker-compose.${edition}.yml",`,
+    '  "images": [',
+    entries,
+    '  ]',
+    '}',
+    '',
+  ].join('\n'))
   const sums = spawnSync('sha256sum', ['install-airgap.sh', 'docker-compose.yml', 'images.tar', 'manifest.json', 'README.txt'], { cwd: dir, encoding: 'utf8' })
   writeFileSync(join(dir, 'SHA256SUMS'), sums.stdout)
   return dir

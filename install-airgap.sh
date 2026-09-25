@@ -122,11 +122,19 @@ manifest_get() {
     sed -n "s/^[[:space:]]*\"$1\":[[:space:]]*\"\([^\"]*\)\".*/\1/p" "${2:-$SCRIPT_DIR/manifest.json}" | head -1
 }
 
-# manifest_images [FILE]: every image name of the manifest, one per line.
+# manifest_images [FILE]: every image name of the manifest, one per line, in
+# file order. Not anchored to the start of the line: cmd_bundle writes each
+# image entry on ONE line (`    { "name": "...", "digest": ..., "size": ... },`),
+# so a sed anchored on ^[[:space:]]*"name": (the previous implementation)
+# never matched a real manifest.json and silently returned nothing.
 # shellcheck disable=SC2120 # optional FILE: install/upgrade (B6/B7) call this
 # against an arbitrary manifest.json; this file's own callers use the default.
 manifest_images() {
-    sed -n 's/^[[:space:]]*"name":[[:space:]]*"\([^"]*\)".*/\1/p' "${1:-$SCRIPT_DIR/manifest.json}"
+    # `|| true`: under pipefail, grep matching nothing (an empty images
+    # array) makes the pipeline return 1, which would trip `set -e` at
+    # `images_list=$(manifest_images)` in load_images() before that call
+    # gets to check the count itself.
+    grep -o '"name":[[:space:]]*"[^"]*"' "${1:-$SCRIPT_DIR/manifest.json}" | sed 's/.*"name":[[:space:]]*"\([^"]*\)"/\1/' || true
 }
 
 # image_basename ghcr.io/adminsyspro/proxcenter-frontend:1.4.11 -> proxcenter-frontend:1.4.11
@@ -158,13 +166,15 @@ verify_checksums() {
 load_images() {
     log_info "Loading images from images.tar (this takes a minute)..."
     docker load -i "$SCRIPT_DIR/images.tar" >> "${LOG_FILE:-/dev/null}" 2>&1 || log_error "docker load failed. See $LOG_FILE"
+    local images_list; images_list=$(manifest_images)
+    [ -n "$images_list" ] || log_error "manifest.json lists no image; the bundle is corrupt"
     local img
     while IFS= read -r img; do
         [ -z "$img" ] && continue
         if ! docker image inspect "$img" >/dev/null 2>&1; then
             log_error "Image $img is listed in manifest.json but is not present after docker load."
         fi
-    done < <(manifest_images)
+    done <<< "$images_list"
     log_success "Images loaded"
 }
 
@@ -404,16 +414,32 @@ YAML
 
 create_volumes() {
     local edition=$1 frontend_image=$2
-    docker volume create proxcenter_data >/dev/null 2>&1 || true
-    docker volume create postgres_data >/dev/null 2>&1 || true
+    # Errors go to the log instead of /dev/null: a volume that already exists
+    # still exits 0, so `|| true` stays right, but a real Docker daemon error
+    # here must be diagnosable after the fact rather than thrown away.
+    docker volume create proxcenter_data >> "${LOG_FILE:-/dev/null}" 2>&1 || true
+    docker volume create postgres_data >> "${LOG_FILE:-/dev/null}" 2>&1 || true
     if [ "$edition" = "enterprise" ]; then
-        docker volume create orchestrator_data >/dev/null 2>&1 || true
+        docker volume create orchestrator_data >> "${LOG_FILE:-/dev/null}" 2>&1 || true
     fi
-    # The frontend runs as uid 1001 and must own /app/data.
-    docker run --rm --user root --entrypoint "" \
+    # The frontend runs as uid 1001 and must own /app/data. Unlike the volume
+    # creates above, this one-shot's failure is fatal, so its stderr is kept
+    # (in the log, and its last line in the error itself) instead of being
+    # discarded to /dev/null: an empty frontend_image, a bad image reference
+    # or a permission error inside the container must be visible, not just
+    # "Could not initialise the proxcenter_data volume" with no reason why.
+    local chown_err
+    if ! chown_err=$(docker run --rm --user root --entrypoint "" \
         -v proxcenter_data:/app/data \
         "$frontend_image" \
-        sh -c "mkdir -p /app/data && chown -R 1001:1001 /app/data" >/dev/null 2>&1 || log_error "Could not initialise the proxcenter_data volume"
+        sh -c "mkdir -p /app/data && chown -R 1001:1001 /app/data" 2>&1); then
+        log_line "$chown_err"
+        log_error "Could not initialise the proxcenter_data volume: $(printf '%s\n' "$chown_err" | tail -1)"
+    fi
+    # A bare `[ -n "$chown_err" ] && log_line ...` here would trip `set -e`
+    # on the success path (no output): under errexit a failing test outside
+    # an if/while is fatal even on the left of `&&`.
+    if [ -n "$chown_err" ]; then log_line "$chown_err"; fi
 }
 
 start_stack() {

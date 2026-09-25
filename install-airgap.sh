@@ -97,6 +97,10 @@ require_docker() {
     if ! docker compose version >/dev/null 2>&1; then
         log_error "The Docker Compose plugin (docker compose) is missing. Install docker-compose-plugin from your package mirror."
     fi
+    # docker/docker compose version only need the CLI: they never contact the daemon.
+    if ! docker info >/dev/null 2>&1; then
+        log_error "The Docker daemon is not running. Start it (systemctl start docker) and retry."
+    fi
 }
 
 gen_secret() {
@@ -137,7 +141,7 @@ env_set() {
 }
 
 verify_checksums() {
-    if [ ! -f "$SCRIPT_DIR/SHA256SUMS" ]; then log_error "SHA256SUMS is missing next to $SCRIPT_PATH. Run this command from the extracted bundle directory."; fi
+    if [ ! -f "$SCRIPT_DIR/SHA256SUMS" ]; then log_error "SHA256SUMS is missing next to $SCRIPT_PATH. Run the install-airgap.sh shipped inside the extracted bundle."; fi
     local out
     if ! out=$(cd "$SCRIPT_DIR" && sha256sum -c --strict SHA256SUMS 2>&1); then
         log_error "Checksum verification failed, the bundle is corrupt or incomplete:\n$out"
@@ -319,6 +323,9 @@ write_env_file() {
     local edition=$1 version=$2 license=$3 ip=$4
     local app_secret nextauth_secret pg_pass
     app_secret=$(gen_secret 32); nextauth_secret=$(gen_secret 32); pg_pass=$(gen_secret 24)
+    # Created with a private umask first: the secrets below must never be
+    # briefly readable at the file's default (often group/world-readable) mode.
+    ( umask 077; : > "$INSTALL_DIR/.env" )
     {
         echo "# ProxCenter ${edition^} Edition, air-gapped installation"
         echo "# Generated on $(date -Iseconds) by install-airgap.sh"
@@ -415,7 +422,7 @@ read_license_arg() {
 
 server_ip() {
     local ip
-    ip=$(hostname -I 2>/dev/null | awk '{print $1}' | head -1)
+    ip=$(hostname -I 2>/dev/null | awk '{print $1}' | head -1) || ip=""
     echo "${ip:-localhost}"
 }
 
@@ -427,22 +434,25 @@ cmd_install() {
     local license="" registry=""
     while [[ $# -gt 0 ]]; do
         case $1 in
-            --license) license="$2"; shift 2 ;;
-            --install-dir) INSTALL_DIR="$2"; shift 2 ;;
-            --registry) registry="${2%/}"; shift 2 ;;
-            --health-timeout) HEALTH_TIMEOUT="$2"; shift 2 ;;
+            --license) [ $# -ge 2 ] || log_error "--license needs a value"; license="$2"; shift 2 ;;
+            --install-dir) [ $# -ge 2 ] || log_error "--install-dir needs a value"; INSTALL_DIR="$2"; shift 2 ;;
+            --registry) [ $# -ge 2 ] || log_error "--registry needs a value"; registry="${2%/}"; shift 2 ;;
+            --health-timeout)
+                [ $# -ge 2 ] || log_error "--health-timeout needs a value"
+                [[ "$2" =~ ^[0-9]+$ ]] || log_error "--health-timeout needs a number of seconds"
+                HEALTH_TIMEOUT="$2"; shift 2 ;;
             -h|--help) usage ;;
             *) log_error "Unknown option: $1" ;;
         esac
     done
     require_root
     require_docker
-    [ -f "$SCRIPT_DIR/manifest.json" ] || log_error "manifest.json not found next to $SCRIPT_PATH. Run this command from the extracted bundle directory."
+    [ -f "$SCRIPT_DIR/manifest.json" ] || log_error "manifest.json not found next to $SCRIPT_PATH. Run the install-airgap.sh shipped inside the extracted bundle."
     local edition version
     edition=$(manifest_get edition); version=$(manifest_get version)
     [ -n "$edition" ] && [ -n "$version" ] || log_error "manifest.json has no edition/version"
     if [ -f "$INSTALL_DIR/.env" ]; then
-        log_error "An installation already exists at $INSTALL_DIR. Use: sudo $SCRIPT_PATH upgrade --install-dir $INSTALL_DIR"
+        log_error "An installation already exists at $INSTALL_DIR. To upgrade it, run the upgrade subcommand from a newer bundle. To retry a failed first install, run: cd $INSTALL_DIR && docker compose up -d, or remove $INSTALL_DIR/.env to start over."
     fi
     mkdir -p "$INSTALL_DIR"
     init_log "$INSTALL_DIR/install-airgap.log" install "$@"
@@ -457,8 +467,11 @@ cmd_install() {
     step 1 "Verifying the bundle"
     verify_checksums
     local root_dir free_kb
-    root_dir=$(docker info -f '{{.DockerRootDir}}' 2>/dev/null || echo /var/lib/docker)
-    free_kb=$(df -Pk "$root_dir" 2>/dev/null | awk 'NR==2 {print $4}')
+    # Advisory only: keep only the last line (a failed `docker info` can still
+    # print a blank one first) and never let this step abort the install.
+    root_dir=$(docker info -f '{{.DockerRootDir}}' 2>/dev/null | tail -n1)
+    root_dir="${root_dir:-/var/lib/docker}"
+    free_kb=$(df -Pk "$root_dir" 2>/dev/null | awk 'NR==2 {print $4}') || free_kb=""
     if [ -n "$free_kb" ] && [ "$free_kb" -lt $((5 * 1024 * 1024)) ]; then
         log_warning "Less than 5 GB free under $root_dir; docker load may run out of space"
     fi
@@ -499,7 +512,7 @@ cmd_install() {
 
 print_install_summary() {
     local edition=$1 version=$2 license=$3 ip
-    ip=$(server_ip)
+    ip=$(server_ip) || ip="localhost"
     echo ""
     echo -e "${GREEN}${BOLD}  ProxCenter ${edition^} $version is ready (air-gapped)${NC}"
     echo ""

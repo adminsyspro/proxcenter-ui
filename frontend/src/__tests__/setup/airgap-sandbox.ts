@@ -48,7 +48,10 @@ case "$1 $2" in
     out=""; while [ $# -gt 0 ]; do case "$1" in -o) out="$2"; shift 2 ;; *) shift ;; esac; done
     echo "fake docker archive" > "$out"; exit 0 ;;
   "load -i") exit \${FAKE_LOAD_RC:-0} ;;
-  "info -f"|"info --format") echo "$FAKE_DOCKER_ROOT"; exit 0 ;;
+  "info "*)
+    if [ "\${FAKE_DOCKER_INFO_RC:-0}" != "0" ]; then echo "Cannot connect to the Docker daemon" >&2; exit "$FAKE_DOCKER_INFO_RC"; fi
+    case "$2" in --format|-f) echo "$FAKE_DOCKER_ROOT" ;; esac
+    exit 0 ;;
   "inspect --format="*|"inspect --format") echo "healthy"; exit 0 ;;
   *) exit 0 ;;
 esac
@@ -64,6 +67,7 @@ exit \${FAKE_CURL_RC:-0}
 
 const FAKE_HOSTNAME = `#!/bin/bash
 echo "hostname $*" >> "$FAKE_ARGV_LOG"
+if [ "\${FAKE_HOSTNAME_RC:-0}" != "0" ]; then exit "$FAKE_HOSTNAME_RC"; fi
 if [ "$1" = "-I" ]; then echo "10.42.0.55 172.17.0.1 "; else echo "airgap-test"; fi
 `
 
@@ -112,12 +116,16 @@ export interface RunResult { status: number | null; stdout: string; stderr: stri
  * from any directory. `makeFakeBundle` writes a fresh copy of the script into
  * the fake bundle for exactly this reason, so run that copy when `cwd` holds
  * one; `bundle` runs from a `cwd` with no copy, so it keeps using `SCRIPT`.
+ *
+ * `script` overrides which copy is actually invoked (default: the bundle's
+ * own copy next to `cwd` when present, else `SCRIPT`) — pass it explicitly to
+ * prove the invoked script's own directory is what matters, not `cwd`.
  */
-export function runAirgap(sb: AirgapSandbox, args: string[], cwd: string, extraEnv: Record<string, string> = {}): RunResult {
+export function runAirgap(sb: AirgapSandbox, args: string[], cwd: string, extraEnv: Record<string, string> = {}, script?: string): RunResult {
   const bundleScript = join(cwd, 'install-airgap.sh')
-  const script = existsSync(bundleScript) ? bundleScript : SCRIPT
+  const resolvedScript = script ?? (existsSync(bundleScript) ? bundleScript : SCRIPT)
   // /bin/bash on purpose: the missing-docker test hands in a PATH without bash.
-  const r = spawnSync('/bin/bash', [script, ...args], { cwd, env: { ...sb.env, ...extraEnv }, encoding: 'utf8', timeout: 60_000 })
+  const r = spawnSync('/bin/bash', [resolvedScript, ...args], { cwd, env: { ...sb.env, ...extraEnv }, encoding: 'utf8', timeout: 60_000 })
   return { status: r.status, stdout: r.stdout, stderr: r.stderr }
 }
 

@@ -169,6 +169,7 @@ describe('install', () => {
     writeFileSync(keyPath, 'FILE-KEY-CONTENT\n')
     const r = runAirgap(sb, ['install', '--install-dir', sb.installDir, '--license', keyPath, '--health-timeout', '5'], bdir)
     expect(r.status, r.stdout + r.stderr).toBe(0)
+    expect(r.stdout).toMatch(/--license is ignored on the Community edition/)
     const env = readEnvFile(join(sb.installDir, '.env'))
     expect(env.LICENSE_KEY).toBeUndefined()
     expect(env.ORCHESTRATOR_URL).toBeUndefined()
@@ -181,6 +182,35 @@ describe('install', () => {
     const r = runAirgap(sb, ['install', '--install-dir', sb.installDir], sb.dir)
     expect(r.status).toBe(1)
     expect(r.stderr).toMatch(/manifest\.json not found next to/)
+  })
+
+  it('resolves bundle files next to the invoked script, not the current directory', () => {
+    const bdir = makeFakeBundle(sb, { edition: 'enterprise', version: '1.4.10' })
+    const r = runAirgap(sb, ['install', '--install-dir', sb.installDir, '--health-timeout', '5'], sb.dir, {}, join(bdir, 'install-airgap.sh'))
+    expect(r.status, r.stdout + r.stderr).toBe(0)
+  })
+
+  it('fails early with a clear message when the Docker daemon is not running', () => {
+    const bdir = makeFakeBundle(sb)
+    const r = runAirgap(sb, ['install', '--install-dir', sb.installDir], bdir, { FAKE_DOCKER_INFO_RC: '1' })
+    expect(r.status).toBe(1)
+    expect(r.stderr).toMatch(/Docker daemon is not running/)
+    expect(sb.argv().some(a => a.startsWith('docker load'))).toBe(false)
+  })
+
+  it('falls back to localhost for NEXTAUTH_URL when hostname -I fails', () => {
+    const bdir = makeFakeBundle(sb, { edition: 'enterprise', version: '1.4.10' })
+    const r = runAirgap(sb, ['install', '--install-dir', sb.installDir, '--health-timeout', '5'], bdir, { FAKE_HOSTNAME_RC: '1' })
+    expect(r.status, r.stdout + r.stderr).toBe(0)
+    const env = readEnvFile(join(sb.installDir, '.env'))
+    expect(env.NEXTAUTH_URL).toBe('http://localhost:3000')
+  })
+
+  it('validates --health-timeout is a number of seconds', () => {
+    const bdir = makeFakeBundle(sb)
+    const r = runAirgap(sb, ['install', '--install-dir', sb.installDir, '--health-timeout', 'abc'], bdir)
+    expect(r.status).toBe(1)
+    expect(r.stderr).toMatch(/--health-timeout/)
   })
 
   it('refuses a tampered images.tar before loading anything', () => {

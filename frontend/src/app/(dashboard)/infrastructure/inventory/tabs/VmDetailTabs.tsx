@@ -5,6 +5,8 @@ import { useTranslations, useLocale } from 'next-intl'
 import dynamic from 'next/dynamic'
 import DOMPurify from 'dompurify'
 import ExpandableChart from '../components/ExpandableChart'
+import ChartSeriesToggles, { useHiddenSeries } from '../components/ChartSeriesToggles'
+import IoPressureChart from '../components/IoPressureChart'
 import MetricsRangeSelector from '@/components/metrics/MetricsRangeSelector'
 import useChartDragRange from '@/components/metrics/useChartDragRange'
 
@@ -89,6 +91,7 @@ import VdcQuotaBanner from '@/components/inventory/VdcQuotaBanner'
 import { useVmDiskLatencySeries } from '@/hooks/useVmDiskLatencySeries'
 import { diskIoTooltipRow, latencyKey } from '@/lib/metrics/latencySeries'
 import { formatLatencyAxis } from '@/lib/metrics/latency'
+import { diskIoLegendSeries, hasIoPressureSeries } from '@/lib/metrics/diskIoChart'
 import NumericTextField from '@/components/ui/NumericTextField'
 import { extractCustomCpuModels } from '@/lib/inventory/cpuModels'
 import { cpuGroupHeaderSx } from '../cpuSelectStyles'
@@ -495,6 +498,16 @@ export default function VmDetailTabs(props: any) {
     type: latencyTarget?.type ?? '',
     series,
   })
+
+  // Which Disk I/O series the operator hid from the chart's legend (#1011).
+  // The two bandwidth areas and one latency line per disk share the chart,
+  // and three disks' worth of lines bury the write curve they sit on.
+  const [hiddenDiskIoKeys, toggleDiskIoKey] = useHiddenSeries()
+  const diskIoSeries = useMemo(
+    () => diskIoLegendSeries(diskIo.disks, { read: t('inventory.diskRead'), write: t('inventory.diskWrite') }, LATENCY_LINE_COLORS),
+    [diskIo.disks, t],
+  )
+  const hasIoPressure = useMemo(() => hasIoPressureSeries(series), [series])
   const changeTrackingAvailable = hasFeature(Features.CHANGE_TRACKING)
 
   // Namespaces seen in the loaded backup snapshots, sorted alphabetically with
@@ -807,7 +820,11 @@ export default function VmDetailTabs(props: any) {
                           </ExpandableChart>
 
                           {/* Disk I/O (VMs), with the orchestrator's latency per disk on a right axis (#881) */}
-                          <ExpandableChart title={t('inventory.diskIo')} height={185}>
+                          <ExpandableChart
+                            title={t('inventory.diskIo')}
+                            height={185}
+                            header={<ChartSeriesToggles title={t('inventory.diskIo')} series={diskIoSeries} hidden={hiddenDiskIoKeys} onToggle={toggleDiskIoKey} />}
+                          >
                             <ChartContainer>
                               <ComposedChart data={diskIo.data} margin={{ top: 2, right: 4, bottom: 0, left: 4 }}>
                                 <defs>
@@ -850,14 +867,25 @@ export default function VmDetailTabs(props: any) {
                                     </Box>
                                   )
                                 }} />
-                                <Area type="monotone" dataKey="diskReadBps" stroke="#ef4444" fill="url(#gradDiskRead)" strokeWidth={1.5} isAnimationActive={false} name="diskReadBps" connectNulls />
-                                <Area type="monotone" dataKey="diskWriteBps" stroke="#fca5a5" fill="url(#gradDiskWrite)" strokeWidth={1.5} isAnimationActive={false} name="diskWriteBps" connectNulls />
+                                <Area type="monotone" dataKey="diskReadBps" stroke="#ef4444" fill="url(#gradDiskRead)" strokeWidth={1.5} isAnimationActive={false} name="diskReadBps" connectNulls hide={hiddenDiskIoKeys.has('diskReadBps')} />
+                                <Area type="monotone" dataKey="diskWriteBps" stroke="#fca5a5" fill="url(#gradDiskWrite)" strokeWidth={1.5} isAnimationActive={false} name="diskWriteBps" connectNulls hide={hiddenDiskIoKeys.has('diskWriteBps')} />
                                 {diskIo.disks.map((disk, i) => (
-                                  <Line key={disk} yAxisId="latency" type="monotone" dataKey={latencyKey(disk)} name={latencyKey(disk)} stroke={LATENCY_LINE_COLORS[i % LATENCY_LINE_COLORS.length]} strokeWidth={1.5} dot={false} isAnimationActive={false} connectNulls />
+                                  <Line key={disk} yAxisId="latency" type="monotone" dataKey={latencyKey(disk)} name={latencyKey(disk)} stroke={LATENCY_LINE_COLORS[i % LATENCY_LINE_COLORS.length]} strokeWidth={1.5} dot={false} isAnimationActive={false} connectNulls hide={hiddenDiskIoKeys.has(latencyKey(disk))} />
                                 ))}
                               </ComposedChart>
                             </ChartContainer>
                           </ExpandableChart>
+
+                          {/* IO pressure stall (VMs on PVE 9): the share of the last 10 s the guest's tasks waited on disk I/O (#1011) */}
+                          {hasIoPressure && (
+                            <IoPressureChart
+                              series={series}
+                              tf={tf}
+                              labels={{ title: t('inventory.ioPressureChart'), heading: t('inventory.ioPressure'), some: t('inventory.ioPressureSome'), full: t('inventory.ioPressureFull') }}
+                              dragProps={rrdDrag.chartProps}
+                              dragSelection={rrdDrag.selection}
+                            />
+                          )}
                         </Box>
                       </CardContent>
                     </Card>

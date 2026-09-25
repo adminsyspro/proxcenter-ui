@@ -70,8 +70,11 @@ export function LicenseProvider({ children }: { children: ReactNode }) {
         setStatus(data)
         setError(null)
       } else {
+        // The status route carries `offline` on its error answers too: keep
+        // it, so an air-gapped instance stays offline with the orchestrator down.
+        const body = await res.json().catch(() => null)
         setError('Failed to load license status')
-        setStatus({ ...COMMUNITY_FALLBACK })
+        setStatus({ ...COMMUNITY_FALLBACK, ...(body?.offline === true ? { offline: true } : {}) })
       }
     } catch (e: any) {
       console.error('Failed to load license status:', e)

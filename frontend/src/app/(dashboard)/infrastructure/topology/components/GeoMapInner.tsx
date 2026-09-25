@@ -194,7 +194,7 @@ export default function GeoMapInner({ connections, onSelectCluster }: GeoMapInne
   const isDark = theme.palette.mode === 'dark'
 
   const { settings } = useBasemapSettings()
-  const { offline } = useLicense()
+  const { offline, loading: licenseLoading } = useLicense()
   const basemap = resolveBasemap(settings, isDark, { offline })
 
   const positions: [number, number][] = connections
@@ -202,6 +202,12 @@ export default function GeoMapInner({ connections, onSelectCluster }: GeoMapInne
     .map((c) => [c.latitude!, c.longitude!])
 
   const groups = useMemo(() => groupByLocation(connections), [connections])
+
+  // `offline` reads false until the license status is known: requesting tiles
+  // meanwhile would reach the tile server from an air-gapped browser.
+  if (licenseLoading) {
+    return <Box sx={{ width: '100%', height: '100%', minHeight: 400 }} />
+  }
 
   if (basemap.unavailable) {
     return (

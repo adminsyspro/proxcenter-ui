@@ -109,12 +109,18 @@ export default function MyDatacentersMapInner({ datacenters }: Props) {
   const theme = useTheme()
   const isDark = theme.palette.mode === 'dark'
   const { settings } = useBasemapSettings()
-  const { offline } = useLicense()
+  const { offline, loading: licenseLoading } = useLicense()
   const basemap = resolveBasemap(settings, isDark, { offline })
 
   const positions: [number, number][] = datacenters
     .filter(d => d.latitude != null && d.longitude != null)
     .map(d => [d.latitude!, d.longitude!])
+
+  // `offline` reads false until the license status is known: requesting tiles
+  // meanwhile would reach the tile server from an air-gapped browser.
+  if (licenseLoading) {
+    return <Box sx={{ height: 320 }} />
+  }
 
   if (basemap.unavailable) {
     return (

@@ -30,7 +30,7 @@ export async function GET() {
 
     if (!res.ok) {
       return NextResponse.json(
-        { error: data?.error || `HTTP ${res.status}` },
+        { error: data?.error || `HTTP ${res.status}`, offline },
         { status: res.status }
       )
     }
@@ -48,7 +48,7 @@ export async function GET() {
     console.error("License status fetch failed:", e?.message)
 
     return NextResponse.json(
-      { error: e?.message || "Failed to fetch license status" },
+      { error: e?.message || "Failed to fetch license status", offline },
       { status: 500 }
     )
   }

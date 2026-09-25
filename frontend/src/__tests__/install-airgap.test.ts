@@ -153,18 +153,34 @@ describe('install', () => {
     expect(existsSync(join(sb.installDir, 'install-airgap.log'))).toBe(true)
   })
 
-  it('reads --license from a .key file and writes a community .env without orchestrator settings', () => {
-    const bdir = makeFakeBundle(sb, { edition: 'community' })
+  it('reads --license from a .key file path (enterprise)', () => {
+    const bdir = makeFakeBundle(sb, { edition: 'enterprise' })
     const keyPath = join(sb.dir, 'lic.key')
     writeFileSync(keyPath, 'FILE-KEY-CONTENT\n')
     const r = runAirgap(sb, ['install', '--install-dir', sb.installDir, '--license', keyPath, '--health-timeout', '5'], bdir)
     expect(r.status, r.stdout + r.stderr).toBe(0)
     const env = readEnvFile(join(sb.installDir, '.env'))
     expect(env.LICENSE_KEY).toBe('FILE-KEY-CONTENT')
+  })
+
+  it('community edition ignores --license and writes a .env without orchestrator settings', () => {
+    const bdir = makeFakeBundle(sb, { edition: 'community' })
+    const keyPath = join(sb.dir, 'lic.key')
+    writeFileSync(keyPath, 'FILE-KEY-CONTENT\n')
+    const r = runAirgap(sb, ['install', '--install-dir', sb.installDir, '--license', keyPath, '--health-timeout', '5'], bdir)
+    expect(r.status, r.stdout + r.stderr).toBe(0)
+    const env = readEnvFile(join(sb.installDir, '.env'))
+    expect(env.LICENSE_KEY).toBeUndefined()
     expect(env.ORCHESTRATOR_URL).toBeUndefined()
     expect(existsSync(join(sb.installDir, 'config', 'orchestrator.yaml'))).toBe(false)
     expect(sb.argv()).not.toContain('docker volume create orchestrator_data')
     expect(sb.argv().some(a => a.startsWith('docker inspect'))).toBe(false)
+  })
+
+  it('fails outside an extracted bundle directory with a manifest.json not found message', () => {
+    const r = runAirgap(sb, ['install', '--install-dir', sb.installDir], sb.dir)
+    expect(r.status).toBe(1)
+    expect(r.stderr).toMatch(/manifest\.json not found next to/)
   })
 
   it('refuses a tampered images.tar before loading anything', () => {

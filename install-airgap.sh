@@ -337,10 +337,10 @@ write_env_file() {
         echo "# Air-gapped site: no outbound call from the product"
         echo "PROXCENTER_OFFLINE=true"
         echo "TEMPLATE_CATALOG_AUTO_UPDATE=false"
-        echo ""
-        echo "# License (optional here, can be activated in Settings > License)"
-        echo "LICENSE_KEY=$license"
         if [ "$edition" = "enterprise" ]; then
+            echo ""
+            echo "# License (optional here, can be activated in Settings > License)"
+            echo "LICENSE_KEY=$license"
             echo ""
             echo "# Orchestrator"
             echo "ORCHESTRATOR_URL=http://orchestrator:8080"
@@ -435,13 +435,6 @@ cmd_install() {
             *) log_error "Unknown option: $1" ;;
         esac
     done
-    # install/upgrade are meant to be run from within the extracted bundle
-    # directory (see the usage banner); anchor every bundle-file lookup on the
-    # current directory rather than on wherever this particular copy of the
-    # script happens to live, so an operator invoking it by a different path
-    # (or a test harness invoking a canonical copy against a fixture
-    # directory) still resolves manifest.json/images.tar/SHA256SUMS from cwd.
-    SCRIPT_DIR="$PWD"
     require_root
     require_docker
     [ -f "$SCRIPT_DIR/manifest.json" ] || log_error "manifest.json not found next to $SCRIPT_PATH. Run this command from the extracted bundle directory."
@@ -456,6 +449,9 @@ cmd_install() {
     TOTAL_STEPS=6
     if [ -n "$registry" ]; then TOTAL_STEPS=7; fi
     print_banner "${edition^} Edition" "install $version"
+    if [ "$edition" = "community" ] && [ -n "$license" ]; then
+        log_warning "--license is ignored on the Community edition"
+    fi
     license=$(read_license_arg "$license")
 
     step 1 "Verifying the bundle"

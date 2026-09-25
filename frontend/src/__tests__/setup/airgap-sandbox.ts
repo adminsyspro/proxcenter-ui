@@ -102,10 +102,22 @@ export function removeAirgapSandbox(sb: AirgapSandbox): void {
 
 export interface RunResult { status: number | null; stdout: string; stderr: string }
 
-/** Runs `bash install-airgap.sh <args>` from `cwd` with the sandbox stubs first in PATH. */
+/**
+ * Runs `bash install-airgap.sh <args>` from `cwd` with the sandbox stubs first in PATH.
+ *
+ * install/upgrade locate the bundle's own files (manifest.json, images.tar,
+ * SHA256SUMS, docker-compose.yml) next to the running script (`SCRIPT_DIR`,
+ * derived from the script's own path), not next to `cwd` — this is what lets
+ * `sudo /mnt/usb/proxcenter-enterprise-1.4.11/install-airgap.sh install` work
+ * from any directory. `makeFakeBundle` writes a fresh copy of the script into
+ * the fake bundle for exactly this reason, so run that copy when `cwd` holds
+ * one; `bundle` runs from a `cwd` with no copy, so it keeps using `SCRIPT`.
+ */
 export function runAirgap(sb: AirgapSandbox, args: string[], cwd: string, extraEnv: Record<string, string> = {}): RunResult {
+  const bundleScript = join(cwd, 'install-airgap.sh')
+  const script = existsSync(bundleScript) ? bundleScript : SCRIPT
   // /bin/bash on purpose: the missing-docker test hands in a PATH without bash.
-  const r = spawnSync('/bin/bash', [SCRIPT, ...args], { cwd, env: { ...sb.env, ...extraEnv }, encoding: 'utf8', timeout: 60_000 })
+  const r = spawnSync('/bin/bash', [script, ...args], { cwd, env: { ...sb.env, ...extraEnv }, encoding: 'utf8', timeout: 60_000 })
   return { status: r.status, stdout: r.stdout, stderr: r.stderr }
 }
 

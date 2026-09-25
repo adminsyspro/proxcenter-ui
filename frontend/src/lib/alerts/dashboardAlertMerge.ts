@@ -48,6 +48,59 @@ export interface DashboardAlert {
 const SEVERITY_ORDER: Record<string, number> = { crit: 0, warn: 1, info: 2 }
 
 /**
+ * The orchestrator names some node metrics differently from the dashboard's
+ * own evaluation (`memory` vs `ram`, `node_down` vs `status`). Without this
+ * the two shapes of the same alert never matched, so each node alert showed
+ * twice and an acknowledgment could not reach the local copy (#1012).
+ */
+const ORCH_TYPE_TO_DASHBOARD_METRIC: Record<string, string> = {
+  memory: 'ram',
+  node_down: 'status',
+}
+
+function toDashboardSeverity(severity?: string): string {
+  if (severity === 'critical') return 'crit'
+  if (severity === 'warning') return 'warn'
+  return severity || 'info'
+}
+
+function orchAlertIdentity(oa: RawOrchestratorAlert): string {
+  const metric = (oa.type && ORCH_TYPE_TO_DASHBOARD_METRIC[oa.type]) || oa.type
+  return `${oa.resource_type}:${oa.resource_id || oa.resource}:${metric}`
+}
+
+function dashboardAlertIdentity(a: DashboardAlert): string {
+  return `${a.entityType}:${a.entityId}:${a.metric}`
+}
+
+/**
+ * Drop the dashboard-evaluated alerts an operator acknowledged in the
+ * orchestrator. The acknowledgment covers its severity and below: a local
+ * critical stays visible over an acknowledged warning. Both sides carry the
+ * connection id, which tells two clusters with the same node name apart.
+ */
+function dropAcknowledged(alerts: DashboardAlert[], acknowledged: RawOrchestratorAlert[]): DashboardAlert[] {
+  if (acknowledged.length === 0) return alerts
+
+  const acked = acknowledged.map(oa => ({
+    identity: orchAlertIdentity(oa),
+    connId: oa.connection_id,
+    rank: SEVERITY_ORDER[toDashboardSeverity(oa.severity)] ?? 2,
+  }))
+
+  return alerts.filter(a => {
+    const identity = dashboardAlertIdentity(a)
+    const rank = SEVERITY_ORDER[a.severity] ?? 2
+
+    return !acked.some(k =>
+      k.identity === identity &&
+      (!k.connId || !a.connId || k.connId === a.connId) &&
+      rank >= k.rank,
+    )
+  })
+}
+
+/**
  * Merge orchestrator alerts into the locally-evaluated dashboard alerts and
  * filter out everything that is muted by an active silence. Single source of
  * truth for the dashboard route's alert pipeline so it stays testable without
@@ -56,6 +109,8 @@ const SEVERITY_ORDER: Record<string, number> = { crit: 0, warn: 1, info: 2 }
  * - `baseAlerts` are the dashboard-evaluated alerts (already in dashboard shape).
  * - `orchAlerts` are the raw orchestrator alerts; if omitted the merge step
  *   is skipped (Community edition / orchestrator unreachable).
+ * - `acknowledgedAlerts` are the orchestrator alerts in `acknowledged` status;
+ *   the local copies of those alerts are dropped (#1012).
  * - `silencedFingerprints` comes from `loadActiveSilenceFingerprints`.
  *
  * Two distinct silence checks because the mute UI in /operations/alerts stores
@@ -67,6 +122,7 @@ const SEVERITY_ORDER: Record<string, number> = { crit: 0, warn: 1, info: 2 }
 export function mergeAndFilterDashboardAlerts(params: {
   baseAlerts: DashboardAlert[]
   orchAlerts?: RawOrchestratorAlert[]
+  acknowledgedAlerts?: RawOrchestratorAlert[]
   connectionNameById: Map<string, string>
   visibleNodeNames: Set<string>
   hasVisibleNodes: boolean
@@ -75,17 +131,18 @@ export function mergeAndFilterDashboardAlerts(params: {
   const {
     baseAlerts,
     orchAlerts,
+    acknowledgedAlerts,
     connectionNameById,
     visibleNodeNames,
     hasVisibleNodes,
     silencedFingerprints,
   } = params
 
-  const merged: DashboardAlert[] = [...baseAlerts]
+  const merged: DashboardAlert[] = dropAcknowledged(baseAlerts, acknowledgedAlerts || [])
 
   if (orchAlerts && orchAlerts.length > 0) {
     const existingKeys = new Set(
-      merged.map(a => `${a.entityType}:${a.entityId}:${a.metric}:${a.severity}`),
+      merged.map(a => `${dashboardAlertIdentity(a)}:${a.severity}`),
     )
 
     for (const oa of orchAlerts) {
@@ -93,12 +150,13 @@ export function mergeAndFilterDashboardAlerts(params: {
       // the SHA-256 fingerprint contract reads orchestrator-native fields.
       if (isOrchestratorAlertSilenced(oa, silencedFingerprints)) continue
 
-      const key = `${oa.resource_type}:${oa.resource_id || oa.resource}:${oa.type}:${oa.severity}`
+      const severity = toDashboardSeverity(oa.severity)
+      const key = `${orchAlertIdentity(oa)}:${severity}`
       if (existingKeys.has(key)) continue
       existingKeys.add(key)
 
       merged.push({
-        severity: oa.severity === 'critical' ? 'crit' : oa.severity === 'warning' ? 'warn' : (oa.severity || 'info'),
+        severity,
         message: oa.message || '',
         source: (oa.connection_id && connectionNameById.get(oa.connection_id)) || oa.resource || 'Orchestrator',
         sourceType: 'pve',

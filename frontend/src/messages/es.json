@@ -7448,6 +7448,7 @@
     "latestVersion": "Última versión",
     "updateAvailable": "Actualización disponible",
     "upToDate": "Actualizado",
+    "updateCheckOffline": "La comprobación de actualizaciones está desactivada en esta instancia aislada de la red",
     "newVersionAvailable": "Hay una nueva versión v{version} disponible",
     "newCommitAvailable": "Hay una nueva actualización disponible ({count} commit(s) por detrás)",
     "commitsBehind": "{count} commit(s) por detrás",

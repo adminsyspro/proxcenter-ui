@@ -166,6 +166,11 @@ export default function AboutDialog({ open, onClose }: AboutDialogProps) {
                   sx={{ fontWeight: 600 }}
                 />
               )}
+              {!loading && versionInfo?.error === 'offline' && (
+                <Typography variant='caption' color='text.secondary'>
+                  {t('about.updateCheckOffline')}
+                </Typography>
+              )}
             </Box>
           </Box>
 

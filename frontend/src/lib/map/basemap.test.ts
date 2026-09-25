@@ -50,8 +50,8 @@ describe('basemap resolution', () => {
     const light = resolveBasemap(DEFAULT_BASEMAP_SETTINGS, false)
     const dark = resolveBasemap(DEFAULT_BASEMAP_SETTINGS, true)
 
-    expect(light).toEqual({ url: OSM_TILE_URL, attribution: OSM_ATTRIBUTION, darkFilter: false })
-    expect(dark).toEqual({ url: OSM_TILE_URL, attribution: OSM_ATTRIBUTION, darkFilter: true })
+    expect(light).toEqual({ url: OSM_TILE_URL, attribution: OSM_ATTRIBUTION, darkFilter: false, unavailable: false })
+    expect(dark).toEqual({ url: OSM_TILE_URL, attribution: OSM_ATTRIBUTION, darkFilter: true, unavailable: false })
   })
 
   it('never points at a keyless CARTO basemap, which is watermarked', () => {
@@ -71,6 +71,7 @@ describe('basemap resolution', () => {
       url: 'https://tiles.lan/{z}/{x}/{y}.png',
       attribution: 'Internal tiles',
       darkFilter: true,
+      unavailable: false,
     })
   })
 
@@ -86,6 +87,7 @@ describe('basemap resolution', () => {
       url: 'https://tiles.lan/dark/{z}/{x}/{y}.png',
       attribution: 'Internal tiles',
       darkFilter: false,
+      unavailable: false,
     })
   })
 
@@ -93,5 +95,33 @@ describe('basemap resolution', () => {
     const settings = normalizeBasemapSettings({ provider: 'custom', lightUrl: 'https://tiles.lan/preview.png' })
 
     expect(resolveBasemap(settings, false).url).toBe(OSM_TILE_URL)
+  })
+})
+
+describe('resolveBasemap on an air-gapped instance', () => {
+  it('flags the OSM default as unavailable', () => {
+    const r = resolveBasemap(DEFAULT_BASEMAP_SETTINGS, false, { offline: true })
+    expect(r.unavailable).toBe(true)
+    expect(r.url).toBe(OSM_TILE_URL)
+  })
+
+  it('keeps a custom internal tile server usable', () => {
+    const r = resolveBasemap(
+      { provider: 'custom', lightUrl: 'https://tiles.lan/{z}/{x}/{y}.png', darkUrl: '', attribution: 'Internal' },
+      true,
+      { offline: true },
+    )
+    expect(r.unavailable).toBe(false)
+    expect(r.url).toBe('https://tiles.lan/{z}/{x}/{y}.png')
+  })
+
+  it('treats a custom provider with a broken template like OSM, hence unavailable', () => {
+    const r = resolveBasemap({ provider: 'custom', lightUrl: 'nope', darkUrl: '', attribution: '' }, false, { offline: true })
+    expect(r.unavailable).toBe(true)
+  })
+
+  it('is never unavailable on a connected instance', () => {
+    expect(resolveBasemap(DEFAULT_BASEMAP_SETTINGS, false).unavailable).toBe(false)
+    expect(resolveBasemap(DEFAULT_BASEMAP_SETTINGS, false, {}).unavailable).toBe(false)
   })
 })

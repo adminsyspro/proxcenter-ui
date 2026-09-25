@@ -53,7 +53,21 @@ export interface ResolvedBasemap {
   attribution: string
   /** True when the tiles must be inverted by CSS to read as a dark basemap. */
   darkFilter: boolean
+  /**
+   * True on an air-gapped instance still pointed at the public OSM tiles:
+   * the map would render a grey canvas. The two map components show a
+   * message instead (ui#956).
+   */
+  unavailable: boolean
 }
+
+export interface ResolveBasemapOptions {
+  offline?: boolean
+}
+
+/** Shown by both maps when `unavailable` is set. Hard-coded English, like the neighbouring empty states. */
+export const MAP_UNAVAILABLE_OFFLINE =
+  'Map tiles are not reachable on an air-gapped instance. Set a custom tile server in Settings > Map.'
 
 /** A usable raster template has the three Leaflet placeholders. */
 export function isTileTemplate(url: string): boolean {
@@ -86,7 +100,11 @@ export function normalizeBasemapSettings(raw: unknown): BasemapSettings {
  * than to a blank map: a half-filled form must never cost the operator the
  * whole screen.
  */
-export function resolveBasemap(settings: BasemapSettings, isDark: boolean): ResolvedBasemap {
+export function resolveBasemap(
+  settings: BasemapSettings,
+  isDark: boolean,
+  options: ResolveBasemapOptions = {},
+): ResolvedBasemap {
   if (settings.provider === 'custom' && isTileTemplate(settings.lightUrl)) {
     const hasDark = isTileTemplate(settings.darkUrl)
 
@@ -96,8 +114,9 @@ export function resolveBasemap(settings: BasemapSettings, isDark: boolean): Reso
 
       // A dedicated dark template is already dark; a single template is not.
       darkFilter: isDark && !hasDark,
+      unavailable: false,
     }
   }
 
-  return { url: OSM_TILE_URL, attribution: OSM_ATTRIBUTION, darkFilter: isDark }
+  return { url: OSM_TILE_URL, attribution: OSM_ATTRIBUTION, darkFilter: isDark, unavailable: options.offline === true }
 }

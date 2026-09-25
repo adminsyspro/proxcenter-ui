@@ -763,7 +763,9 @@ rollback_commands() {
     echo "cd $INSTALL_DIR && docker compose stop $app_services"
     if [ -n "$dump" ]; then
         pg_user=$(env_get POSTGRES_USER "$INSTALL_DIR/.env"); pg_db=$(env_get POSTGRES_DB "$INSTALL_DIR/.env")
-        echo "gunzip -c $dump | docker compose exec -T postgres psql -U ${pg_user:-proxcenter} -d ${pg_db:-proxcenter}"
+        echo "# the two lines below put the database back exactly as it was before the upgrade"
+        echo "cd $INSTALL_DIR && docker compose exec -T postgres psql -U ${pg_user:-proxcenter} -d ${pg_db:-proxcenter} -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;'"
+        echo "cd $INSTALL_DIR && gunzip -c $dump | docker compose exec -T postgres psql -U ${pg_user:-proxcenter} -d ${pg_db:-proxcenter}"
     fi
     if [ -n "$old" ]; then
         echo "sed -i 's/^VERSION=.*/VERSION=$old/' $INSTALL_DIR/.env"
@@ -771,7 +773,7 @@ rollback_commands() {
         echo "# set VERSION to your previous version in $INSTALL_DIR/.env"
     fi
     echo "cp $INSTALL_DIR/docker-compose.yml.bak.$stamp $INSTALL_DIR/docker-compose.yml"
-    echo "docker compose up -d"
+    echo "cd $INSTALL_DIR && docker compose up -d"
 }
 
 print_rollback_hint() {

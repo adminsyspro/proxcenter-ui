@@ -456,10 +456,11 @@ describe('upgrade', () => {
     const dumpPath = join(sb.installDir, 'backups', dump as string)
     const seq = [
       `cd ${sb.installDir} && docker compose stop frontend orchestrator`,
-      `gunzip -c ${dumpPath} | docker compose exec -T postgres psql -U proxcenter -d proxcenter`,
+      `cd ${sb.installDir} && docker compose exec -T postgres psql -U proxcenter -d proxcenter -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;'`,
+      `cd ${sb.installDir} && gunzip -c ${dumpPath} | docker compose exec -T postgres psql -U proxcenter -d proxcenter`,
       `sed -i 's/^VERSION=.*/VERSION=1.4.9/' ${sb.installDir}/.env`,
       `cp ${sb.installDir}/docker-compose.yml.bak.`,
-      'docker compose up -d',
+      `cd ${sb.installDir} && docker compose up -d`,
     ]
     const tail = r.stdout.slice(r.stdout.lastIndexOf('Rollback to the previous version'))
     let at = 0
@@ -591,8 +592,9 @@ describe('upgrade', () => {
     expect(r.status, r.stdout + r.stderr).toBe(0)
     expect(r.stdout).toMatch(/set VERSION to your previous version/)
     expect(r.stdout).not.toMatch(/VERSION=PREVIOUS/)
-    // --skip-db-backup: no restore line; community: no orchestrator to stop.
+    // --skip-db-backup: no restore line, and no schema-recreate line either; community: no orchestrator to stop.
     expect(r.stdout).not.toMatch(/gunzip -c/)
+    expect(r.stdout).not.toMatch(/DROP SCHEMA/)
     expect(r.stdout).toMatch(/docker compose stop frontend(?! orchestrator)/)
   })
 })

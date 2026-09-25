@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 
 import { APP_VERSION, GIT_SHA, GITHUB_REPO } from '@/config/version'
+import { isOfflineMode } from '@/lib/offline'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -40,6 +41,12 @@ export async function GET() {
     releaseNotes: null,
     releaseDate: null,
     error: null
+  }
+
+  // Air-gapped instance: GitHub is unreachable by design, say so instead of
+  // timing out on every navbar poll.
+  if (isOfflineMode()) {
+    return NextResponse.json({ ...base, error: 'offline' })
   }
 
   // Dev build — no version to compare, skip check

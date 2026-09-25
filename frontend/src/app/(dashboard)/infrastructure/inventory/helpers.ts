@@ -818,13 +818,15 @@ export function buildSeriesFromRrd(raw: any[], maxMem?: number): SeriesPoint[] {
     const memAvailable = pickNumber(p, ['memavailable', 'mem_available'])
     const arcSize = pickNumber(p, ['arcsize', 'arc_size', 'zfs_arcsize'])
 
-    // PSI (Pressure Stall Information) - values are percentages (0-100)
-    const psiCpuSome = pickNumber(p, ['cpu_some', 'psi_cpu_some']) ?? undefined
-    const psiCpuFull = pickNumber(p, ['cpu_full', 'psi_cpu_full']) ?? undefined
-    const psiIoSome = pickNumber(p, ['io_some', 'psi_io_some']) ?? undefined
-    const psiIoFull = pickNumber(p, ['io_full', 'psi_io_full']) ?? undefined
-    const psiMemSome = pickNumber(p, ['mem_some', 'psi_mem_some']) ?? undefined
-    const psiMemFull = pickNumber(p, ['mem_full', 'psi_mem_full']) ?? undefined
+    // PSI (Pressure Stall Information), percentages (0-100). PVE 9 records
+    // them in its rrddata for nodes and guests under `pressure<res><kind>`
+    // (#1011); the other spellings are kept for the sources that used them.
+    const psiCpuSome = pickNumber(p, ['pressurecpusome', 'cpu_some', 'psi_cpu_some']) ?? undefined
+    const psiCpuFull = pickNumber(p, ['pressurecpufull', 'cpu_full', 'psi_cpu_full']) ?? undefined
+    const psiIoSome = pickNumber(p, ['pressureiosome', 'io_some', 'psi_io_some']) ?? undefined
+    const psiIoFull = pickNumber(p, ['pressureiofull', 'io_full', 'psi_io_full']) ?? undefined
+    const psiMemSome = pickNumber(p, ['pressurememorysome', 'mem_some', 'psi_mem_some']) ?? undefined
+    const psiMemFull = pickNumber(p, ['pressurememoryfull', 'mem_full', 'psi_mem_full']) ?? undefined
 
     out.push({
       t,

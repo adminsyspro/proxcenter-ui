@@ -67,7 +67,7 @@ export interface ResolveBasemapOptions {
 
 /** Shown by both maps when `unavailable` is set. Hard-coded English, like the neighbouring empty states. */
 export const MAP_UNAVAILABLE_OFFLINE =
-  'Map tiles are not reachable on an air-gapped instance. Set a custom tile server in Settings > Map.'
+  'Map tiles are not reachable on an air-gapped instance. Set a custom tile server in Settings > Appearance (Map basemap).'
 
 /** A usable raster template has the three Leaflet placeholders. */
 export function isTileTemplate(url: string): boolean {

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   DEFAULT_BASEMAP_SETTINGS,
+  MAP_UNAVAILABLE_OFFLINE,
   OSM_ATTRIBUTION,
   OSM_TILE_URL,
   isTileTemplate,
@@ -118,6 +119,12 @@ describe('resolveBasemap on an air-gapped instance', () => {
   it('treats a custom provider with a broken template like OSM, hence unavailable', () => {
     const r = resolveBasemap({ provider: 'custom', lightUrl: 'nope', darkUrl: '', attribution: '' }, false, { offline: true })
     expect(r.unavailable).toBe(true)
+  })
+
+  it('points the offline message at the card that actually holds the setting', () => {
+    expect(MAP_UNAVAILABLE_OFFLINE).toBe(
+      'Map tiles are not reachable on an air-gapped instance. Set a custom tile server in Settings > Appearance (Map basemap).',
+    )
   })
 
   it('is never unavailable on a connected instance', () => {

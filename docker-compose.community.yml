@@ -8,7 +8,7 @@ services:
   # Frontend (Next.js + WebSocket Proxy)
   # ========================================
   frontend:
-    image: ghcr.io/adminsyspro/proxcenter-frontend:${VERSION:-latest}
+    image: ${REGISTRY:-ghcr.io/adminsyspro}/proxcenter-frontend:${VERSION:-latest}
     container_name: proxcenter-frontend
     restart: unless-stopped
     ports:
@@ -38,6 +38,10 @@ services:
       # or set TEMPLATE_CATALOG_AUTO_UPDATE=false on an air-gapped install.
       - TEMPLATE_CATALOG_URL=${TEMPLATE_CATALOG_URL:-}
       - TEMPLATE_CATALOG_AUTO_UPDATE=${TEMPLATE_CATALOG_AUTO_UPDATE:-}
+      # Air-gapped instance: no version check, no GitHub badge, no catalog
+      # refresh, and the maps say why they cannot show tiles. Written by
+      # install-airgap.sh; leave empty on a connected site.
+      - PROXCENTER_OFFLINE=${PROXCENTER_OFFLINE:-}
       # Shared secret for the first-run setup endpoint, which is reachable
       # without authentication for as long as no account exists. Empty keeps
       # the historical behaviour. Set it when the first boot happens on a
@@ -79,7 +83,7 @@ services:
   # enterprise orchestrator, if running) connect to this instance over
   # the internal network.
   postgres:
-    image: postgres:16-alpine
+    image: ${POSTGRES_IMAGE:-postgres:16-alpine}
     container_name: proxcenter-postgres
     restart: unless-stopped
     environment:

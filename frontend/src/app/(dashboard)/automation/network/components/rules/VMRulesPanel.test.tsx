@@ -266,6 +266,21 @@ describe('VMRulesPanel', () => {
     expect(api.updateVMRule.mock.calls[0][5]).toMatchObject({ enable: 0, log: 'warning' })
   })
 
+  it('shows a rule PVE returned without enable as off, and turns it on (#1015)', async () => {
+    renderPanel()
+    expandTo('web-01', 'VLAN 20')
+
+    const bareRow = screen.getAllByRole('row').filter(r => within(r).queryByRole('button', { name: 'Edit' }))[1]
+    const toggle = within(bareRow).getByRole('switch')
+
+    expect(toggle).not.toBeChecked()
+    fireEvent.click(toggle)
+
+    await waitFor(() => expect(api.updateVMRule).toHaveBeenCalledTimes(1))
+    expect(api.updateVMRule.mock.calls[0][4]).toBe(1)
+    expect(api.updateVMRule.mock.calls[0][5]).toMatchObject({ enable: 1 })
+  })
+
   it('pre-fills the edit dialog from the rule, log level included', async () => {
     renderPanel()
     expandTo('web-01', 'VLAN 20')

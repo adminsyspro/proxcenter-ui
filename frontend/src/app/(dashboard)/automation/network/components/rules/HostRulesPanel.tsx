@@ -11,6 +11,8 @@ import {
 } from '@mui/material'
 
 import * as firewallAPI from '@/lib/api/firewall'
+import { isRuleEnabled } from './shared/isRuleEnabled'
+import { ruleToFormData } from './shared/ruleToFormData'
 import { useToast } from '@/contexts/ToastContext'
 import LogLevelSelect from '@/components/firewall/LogLevelSelect'
 import { DEFAULT_LOG_LEVEL } from '@/components/firewall/logLevels'
@@ -94,7 +96,7 @@ export default function HostRulesPanel({ hostRulesByNode, nodesList, securityGro
   // ── Toggle rule enable ──
   const handleToggleHostRuleEnable = async (node: string, rule: firewallAPI.FirewallRule) => {
     if (!selectedConnection) return
-    const newEnable = rule.enable === 1 ? 0 : 1
+    const newEnable = isRuleEnabled(rule) ? 0 : 1
     try {
       await fetch(`/api/v1/firewall/nodes/${selectedConnection}/${node}/rules/${rule.pos}`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...rule, enable: newEnable })
@@ -321,7 +323,7 @@ export default function HostRulesPanel({ hostRulesByNode, nodesList, securityGro
                           <RuleRowLeadingCells
                             rule={rule}
                             isGroupRule={isGroupRule}
-                            enabled={rule.enable !== 0}
+                            enabled={isRuleEnabled(rule)}
                             onToggleEnable={() => handleToggleHostRuleEnable(node, rule)}
                           />
                           <RuleTrafficCells rule={rule} isGroupRule={isGroupRule} />
@@ -330,12 +332,7 @@ export default function HostRulesPanel({ hostRulesByNode, nodesList, securityGro
                           <RuleRowActionsCell
                             onEdit={() => {
                               setEditingHostRule({ node, rule, isNew: false })
-                              setNewHostRule({
-                                type: rule.type || 'in', action: rule.action || 'ACCEPT', enable: rule.enable ?? 1,
-                                proto: rule.proto || '', dport: rule.dport || '', sport: rule.sport || '',
-                                source: rule.source || '', dest: rule.dest || '', macro: rule.macro || '',
-                                iface: rule.iface || '', log: rule.log || DEFAULT_LOG_LEVEL, comment: rule.comment || ''
-                              })
+                              setNewHostRule(ruleToFormData(rule))
                               setHostRuleDialogOpen(true)
                             }}
                             onDelete={() => setDeleteHostRuleConfirm({ node, pos: rule.pos })}

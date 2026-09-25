@@ -1,5 +1,5 @@
 // Test harness for install-airgap.sh: the script runs for real under bash,
-// with docker, curl and hostname replaced by stubs that record their argv
+// with docker, curl (bundle's compose download only) and hostname replaced by stubs that record their argv
 // and answer from FAKE_* variables. No root, no daemon, no network.
 import { spawnSync } from 'node:child_process'
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
@@ -49,7 +49,23 @@ case "$1 $2" in
   "save "*)
     out=""; while [ $# -gt 0 ]; do case "$1" in -o) out="$2"; shift 2 ;; *) shift ;; esac; done
     echo "fake docker archive" > "$out"; exit 0 ;;
-  "load -i") exit \${FAKE_LOAD_RC:-0} ;;
+  "load -i")
+    if [ "\${FAKE_LOAD_RC:-0}" != "0" ]; then echo "Error processing tar file(exit status 1): write /var/lib/docker/tmp/x: no space left on device" >&2; exit "$FAKE_LOAD_RC"; fi
+    exit 0 ;;
+  "volume inspect")
+    case " $FAKE_VOLUME_EXISTS " in *" $3 "*) echo "[]"; exit 0 ;; esac
+    echo "Error response from daemon: get $3: no such volume" >&2; exit 1 ;;
+  "run "*)
+    # The license one-shot streams the .key on stdin (docker run -i): keep
+    # what it received so a test can check the content went through intact.
+    case " $* " in
+      *" -i "*) cat > "$FAKE_ARGV_LOG.stdin" ;;
+    esac
+    case "$*" in
+      *license.key*) if [ "\${FAKE_LICENSE_COPY_RC:-0}" != "0" ]; then echo "sh: can't create /app/data/license.key: Permission denied" >&2; exit "$FAKE_LICENSE_COPY_RC"; fi ;;
+      *"chown -R 1001:1001"*) if [ "\${FAKE_CHOWN_RC:-0}" != "0" ]; then echo "chown: /app/data: Operation not permitted" >&2; exit "$FAKE_CHOWN_RC"; fi ;;
+    esac
+    exit 0 ;;
   "info "*)
     if [ "\${FAKE_DOCKER_INFO_RC:-0}" != "0" ]; then echo "Cannot connect to the Docker daemon" >&2; exit "$FAKE_DOCKER_INFO_RC"; fi
     case "$2" in --format|-f) echo "$FAKE_DOCKER_ROOT" ;; esac
@@ -61,7 +77,7 @@ esac
 
 const FAKE_CURL = `#!/bin/bash
 echo "curl $*" >> "$FAKE_ARGV_LOG"
-# health probe: succeed unless told otherwise; compose download: write FAKE_COMPOSE_BODY
+# bundle's compose download: write FAKE_COMPOSE_BODY (install/upgrade never call curl)
 out=""; while [ $# -gt 0 ]; do case "$1" in -o) out="$2"; shift 2 ;; *) shift ;; esac; done
 if [ -n "$out" ]; then printf '%s' "$FAKE_COMPOSE_BODY" > "$out"; fi
 exit \${FAKE_CURL_RC:-0}

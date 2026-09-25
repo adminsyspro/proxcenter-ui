@@ -8,10 +8,13 @@
 #   ./install-airgap.sh bundle --edition <community|enterprise> --version <X.Y.Z> [--compose <file>] [--output <dir>] [--no-pull]
 #   sudo ./install-airgap.sh install [--license <path to .key file>] [--install-dir /opt/proxcenter] [--registry <host/namespace>]
 #   sudo ./install-airgap.sh upgrade [--install-dir /opt/proxcenter] [--skip-db-backup]
+#   (or `sudo bash install-airgap.sh ...` when the bundle sits on media without the exec bit)
 #
 # install and upgrade run from the extracted bundle directory and find the
-# other files next to this script. They need Docker Engine 24+ with the
-# compose plugin already installed: nothing is downloaded on the isolated host.
+# other files next to this script. They need bash, coreutils, gzip,
+# sha256sum and Docker Engine 24+ with the compose plugin already installed
+# (openssl optional): no curl, no jq, nothing is downloaded on the isolated
+# host. bundle also needs curl when --compose is not given.
 # ============================================
 set -Eeuo pipefail
 
@@ -50,9 +53,12 @@ format_duration() {
     if [ "$secs" -lt 60 ]; then echo "${secs}s"; else echo "$((secs / 60))m $((secs % 60))s"; fi
 }
 
+# init_log FILE ARGS...: ARGS are the subcommand and the options exactly as
+# invoked (never a file's content: --license logs its path only).
 init_log() {
-    mkdir -p "$(dirname "$1")"
-    LOG_FILE="$1"
+    local file=$1; shift
+    mkdir -p "$(dirname "$file")"
+    LOG_FILE="$file"
     : >> "$LOG_FILE"
     chmod 600 "$LOG_FILE" 2>/dev/null || true
     log_line "install-airgap.sh $*"
@@ -140,7 +146,14 @@ manifest_images() {
 # image_basename ghcr.io/adminsyspro/proxcenter-frontend:1.4.11 -> proxcenter-frontend:1.4.11
 image_basename() { echo "${1##*/}"; }
 
-env_get() { sed -n "s/^$1=//p" "$2" | head -1; }
+# env_get KEY FILE: the value, with one pair of surrounding "..." or '...'
+# stripped (a hand-edited REGISTRY="harbor/x" must not reach docker tag quoted).
+env_get() {
+    local v
+    v=$(sed -n "s/^$1=//p" "$2" | head -1)
+    if [[ "$v" =~ ^\"(.*)\"$ ]] || [[ "$v" =~ ^\'(.*)\'$ ]]; then v="${BASH_REMATCH[1]}"; fi
+    printf '%s\n' "$v"
+}
 
 # env_set KEY VALUE FILE: replace the line or append it.
 env_set() {
@@ -165,7 +178,12 @@ verify_checksums() {
 
 load_images() {
     log_info "Loading images from images.tar (this takes a minute)..."
-    docker load -i "$SCRIPT_DIR/images.tar" >> "${LOG_FILE:-/dev/null}" 2>&1 || log_error "docker load failed. See $LOG_FILE"
+    local load_out
+    if ! load_out=$(docker load -i "$SCRIPT_DIR/images.tar" 2>&1); then
+        log_line "$load_out"
+        log_error "docker load failed: $(printf '%s\n' "$load_out" | tail -1). See $LOG_FILE"
+    fi
+    if [ -n "$load_out" ]; then log_line "$load_out"; fi
     local images_list; images_list=$(manifest_images)
     [ -n "$images_list" ] || log_error "manifest.json lists no image; the bundle is corrupt"
     local img
@@ -200,8 +218,11 @@ wait_for_health() {
     log_error "$what did not become healthy within ${HEALTH_TIMEOUT}s. Check: docker compose -f $INSTALL_DIR/docker-compose.yml logs"
 }
 
-frontend_probe() { echo "curl -sf --noproxy '*' http://localhost:3000/api/health"; }
-orchestrator_probe() { echo "[ \"\$(docker inspect --format='{{.State.Health.Status}}' proxcenter-orchestrator 2>/dev/null)\" = healthy ]"; }
+# Both probes read the container healthcheck the compose files define, so
+# install/upgrade need no curl on the isolated host.
+container_health_probe() { echo "[ \"\$(docker inspect --format='{{.State.Health.Status}}' $1 2>/dev/null)\" = healthy ]"; }
+frontend_probe() { container_health_probe proxcenter-frontend; }
+orchestrator_probe() { container_health_probe proxcenter-orchestrator; }
 
 print_banner() {
     echo ""
@@ -313,13 +334,19 @@ cmd_bundle() {
         echo "  ]"
         echo "}"
     } > "$stage/manifest.json"
+    local install_line="sudo ./install-airgap.sh install"
+    if [ "$edition" = "enterprise" ]; then install_line="sudo ./install-airgap.sh install --license /path/to/license.key"; fi
     cat > "$stage/README.txt" <<README
 ProxCenter $edition $version, air-gapped bundle
 
-On the isolated host (Docker Engine 24+ and the compose plugin already installed):
+On the isolated host (Docker Engine 24+ and the compose plugin already installed),
+from this directory:
 
-  sudo ./install-airgap.sh install --license /path/to/license.key     # fresh install
-  sudo ./install-airgap.sh upgrade                                     # upgrade an existing /opt/proxcenter
+  $install_line     # fresh install
+  sudo ./install-airgap.sh upgrade     # upgrade an existing /opt/proxcenter
+
+On media without the exec bit (FAT, noexec mount), run the same commands as
+"sudo bash install-airgap.sh ..." instead of "sudo ./install-airgap.sh ...".
 
 Verify before installing:   sha256sum -c SHA256SUMS
 Documentation:              https://docs.proxcenter.io/getting-started/air-gapped-installation
@@ -413,15 +440,28 @@ YAML
     chmod 644 "$INSTALL_DIR/config/orchestrator.yaml"
 }
 
+# create_volume NAME: creates NAME unless it already exists, and records it
+# in CREATED_VOLUMES when this run created it, so a failed install removes
+# only what it made (install_exit_cleanup), never a volume that was there.
+create_volume() {
+    local name=$1 out
+    if docker volume inspect "$name" >/dev/null 2>&1; then
+        log_info "Reusing the existing $name volume"
+        return 0
+    fi
+    if ! out=$(docker volume create "$name" 2>&1); then
+        log_line "$out"
+        log_error "Could not create the $name volume: $(printf '%s\n' "$out" | tail -1)"
+    fi
+    CREATED_VOLUMES+=("$name")
+}
+
 create_volumes() {
     local edition=$1 frontend_image=$2
-    # Errors go to the log instead of /dev/null: a volume that already exists
-    # still exits 0, so `|| true` stays right, but a real Docker daemon error
-    # here must be diagnosable after the fact rather than thrown away.
-    docker volume create proxcenter_data >> "${LOG_FILE:-/dev/null}" 2>&1 || true
-    docker volume create postgres_data >> "${LOG_FILE:-/dev/null}" 2>&1 || true
+    create_volume proxcenter_data
+    create_volume postgres_data
     if [ "$edition" = "enterprise" ]; then
-        docker volume create orchestrator_data >> "${LOG_FILE:-/dev/null}" 2>&1 || true
+        create_volume orchestrator_data
     fi
     # The frontend runs as uid 1001 and must own /app/data. Unlike the volume
     # creates above, this one-shot's failure is fatal, so its stderr is kept
@@ -470,31 +510,65 @@ orchestrator_image_of() {
 # install_license_file LICENSE_PATH ORCHESTRATOR_IMAGE: copies the (already
 # validated) .key file into orchestrator_data as /app/data/license.key with a
 # one-shot container of the orchestrator image, so BackfillPrimary picks it up
-# on the orchestrator's next boot. Intact: no newline-stripping, unlike the
+# on the orchestrator's first boot. Intact: no newline-stripping, unlike the
 # old LICENSE_KEY env value this replaces (the PEM-like license block needs
 # its real newlines to parse).
+# The key is streamed on stdin, not bind-mounted: this script runs as root
+# and can read a 600/640 root:root key, the container's non-root appuser
+# could not. The one-shot runs as root so the chown to the volume owner
+# (the orchestrator's user) actually takes effect.
 install_license_file() {
-    local license=$1 orchestrator_image=$2 abs_license
-    abs_license="$(cd "$(dirname "$license")" && pwd)/$(basename "$license")"
+    local license=$1 orchestrator_image=$2
     # Same style as create_volumes' chown one-shot: stderr is kept (in the
     # log, and its last line in the error itself) instead of /dev/null, since
     # a bad image reference or a permission error inside the container must
     # be diagnosable, not just "Could not install the license file".
     local err
-    if ! err=$(docker run --rm --entrypoint sh \
+    # shellcheck disable=SC2016 # $(stat ...) is expanded by the container's sh
+    if ! err=$(docker run -i --rm --user root --entrypoint sh \
         -v orchestrator_data:/app/data \
-        -v "$abs_license:/tmp/license.key:ro" \
         "$orchestrator_image" \
-        -c 'cp /tmp/license.key /app/data/license.key && chown "$(stat -c %u:%g /app/data)" /app/data/license.key && chmod 600 /app/data/license.key' 2>&1); then
+        -c 'cat > /app/data/license.key && chown "$(stat -c %u:%g /app/data)" /app/data/license.key && chmod 600 /app/data/license.key' \
+        < "$license" 2>&1); then
         log_line "$err"
         log_error "Could not install the license file: $(printf '%s\n' "$err" | tail -1)"
     fi
     if [ -n "$err" ]; then log_line "$err"; fi
-    log_success "License file installed"
+    log_success "License file copied; the orchestrator imports it at its first start (check Settings > License)"
+}
+
+# install_exit_cleanup RC: EXIT trap of cmd_install. It runs on every exit,
+# log_error's `exit 1` included (which the ERR trap never sees). A failure
+# after the configuration was written but before start_stack began removes
+# the files and the volumes this run created, so the next run starts clean
+# (a kept postgres_data would hold the OLD POSTGRES_PASSWORD while a re-run
+# writes a new one). Once start_stack has begun, everything is kept.
+CREATED_FILES=()
+CREATED_VOLUMES=()
+INSTALL_PHASE=""
+install_exit_cleanup() {
+    local rc=$1 f v
+    [ "$rc" -ne 0 ] || return 0
+    case "$INSTALL_PHASE" in
+        configuring)
+            [ ${#CREATED_FILES[@]} -gt 0 ] || [ ${#CREATED_VOLUMES[@]} -gt 0 ] || return 0
+            for f in "${CREATED_FILES[@]+"${CREATED_FILES[@]}"}"; do rm -f "$f" || true; done
+            rmdir "$INSTALL_DIR/config" 2>/dev/null || true
+            for v in "${CREATED_VOLUMES[@]+"${CREATED_VOLUMES[@]}"}"; do
+                docker volume rm "$v" >> "${LOG_FILE:-/dev/null}" 2>&1 || true
+            done
+            log_line "Cleanup: removed ${CREATED_FILES[*]+"${CREATED_FILES[*]}"} ${CREATED_VOLUMES[*]+"${CREATED_VOLUMES[*]}"}"
+            echo -e "    ${DIM}Removed the configuration and the volumes this run created (${CREATED_VOLUMES[*]+"${CREATED_VOLUMES[*]}"}): fix the cause and run the same install command again.${NC}" >&2
+            ;;
+        starting)
+            echo -e "    ${DIM}The installation is in place at $INSTALL_DIR. Fix the cause, then retry with: cd $INSTALL_DIR && docker compose up -d${NC}" >&2
+            ;;
+    esac
 }
 
 cmd_install() {
     local license="" registry=""
+    local invoked_args=("$@")
     while [[ $# -gt 0 ]]; do
         case $1 in
             --license)
@@ -518,10 +592,17 @@ cmd_install() {
     edition=$(manifest_get edition); version=$(manifest_get version)
     [ -n "$edition" ] && [ -n "$version" ] || log_error "manifest.json has no edition/version"
     if [ -f "$INSTALL_DIR/.env" ]; then
-        log_error "An installation already exists at $INSTALL_DIR. To upgrade it, run the upgrade subcommand from a newer bundle. To retry a failed first install, run: cd $INSTALL_DIR && docker compose up -d, or remove $INSTALL_DIR/.env to start over."
+        log_error "An installation already exists at $INSTALL_DIR. To upgrade it, run the upgrade subcommand from a newer bundle. To retry a failed first install, run: cd $INSTALL_DIR && docker compose up -d. To start over, remove the installation and its volumes: cd $INSTALL_DIR && docker compose down && docker volume rm postgres_data proxcenter_data orchestrator_data, then delete $INSTALL_DIR."
+    fi
+    # A postgres_data left by an earlier install (failed air-gapped run, or an
+    # online install) was initialised with ANOTHER POSTGRES_PASSWORD than the
+    # one this run would generate: the frontend could never authenticate.
+    if docker volume inspect postgres_data >/dev/null 2>&1; then
+        log_error "A postgres_data volume already exists from a previous ProxCenter installation. Either upgrade that installation, or remove it first: cd <install dir> && docker compose down; docker volume rm postgres_data proxcenter_data orchestrator_data"
     fi
     mkdir -p "$INSTALL_DIR"
-    init_log "$INSTALL_DIR/install-airgap.log" install "$@"
+    init_log "$INSTALL_DIR/install-airgap.log" install "${invoked_args[@]+"${invoked_args[@]}"}"
+    trap 'install_exit_cleanup $?' EXIT
     TOTAL_STEPS=6
     if [ -n "$registry" ]; then TOTAL_STEPS=7; fi
     print_banner "${edition^} Edition" "install $version"
@@ -553,13 +634,17 @@ cmd_install() {
     fi
 
     step $n "Configuring ProxCenter"; n=$((n + 1))
+    INSTALL_PHASE=configuring
+    if [ ! -e "$INSTALL_DIR/docker-compose.yml" ]; then CREATED_FILES+=("$INSTALL_DIR/docker-compose.yml"); fi
     cp "$SCRIPT_DIR/docker-compose.yml" "$INSTALL_DIR/docker-compose.yml"
+    CREATED_FILES+=("$INSTALL_DIR/.env")
     write_env_file "$edition" "$version" "$(server_ip)"
     if [ -n "$registry" ]; then
         env_set REGISTRY "$registry" "$INSTALL_DIR/.env"
         env_set POSTGRES_IMAGE "$registry/$(image_basename "$(manifest_images | grep '^postgres' | head -1)")" "$INSTALL_DIR/.env"
     fi
     if [ "$edition" = "enterprise" ]; then
+        if [ ! -e "$INSTALL_DIR/config/orchestrator.yaml" ]; then CREATED_FILES+=("$INSTALL_DIR/config/orchestrator.yaml"); fi
         write_orchestrator_config "$(env_get APP_SECRET "$INSTALL_DIR/.env")"
     fi
     log_success "Compose, .env and configuration written to $INSTALL_DIR"
@@ -572,6 +657,7 @@ cmd_install() {
     log_success "Volumes ready"
 
     step $n "Starting ProxCenter"; n=$((n + 1))
+    INSTALL_PHASE=starting
     start_stack "$edition"
 
     step $n "Done"
@@ -590,7 +676,7 @@ print_install_summary() {
     echo ""
     if [ "$edition" = "enterprise" ]; then
         if [ -n "$license" ]; then
-            echo -e "    ${GREEN}${BOLD}✓${NC} License installed from ${BOLD}$license${NC}"
+            echo -e "    ${GREEN}${BOLD}✓${NC} License file copied from ${BOLD}$license${NC}; the orchestrator imports it at its first start (check ${BOLD}Settings > License${NC})"
         else
             echo -e "    ${YELLOW}${BOLD}!${NC} ${YELLOW}No license key provided${NC}: upload your .key in ${BOLD}Settings > License${NC}"
         fi
@@ -598,6 +684,7 @@ print_install_summary() {
     fi
     echo -e "    ${DIM}Upgrade: extract the next bundle, then from its directory:${NC}"
     echo -e "      ${DIM}sudo ./install-airgap.sh upgrade --install-dir $INSTALL_DIR${NC}"
+    echo -e "      ${DIM}(or sudo bash install-airgap.sh upgrade --install-dir $INSTALL_DIR on media without the exec bit)${NC}"
     echo -e "    ${DIM}Logs:    docker compose -f $INSTALL_DIR/docker-compose.yml logs -f${NC}"
     echo ""
 }
@@ -608,6 +695,7 @@ installed_edition() {
     if grep -qE '^\s+orchestrator:\s*$' "$INSTALL_DIR/docker-compose.yml"; then echo enterprise; else echo community; fi
 }
 
+DUMP_FILE=""
 backup_database() {
     local old_version=$1 stamp=$2 pg_user pg_db out services
     # Capture stdout+stderr and the exit code separately: a `ps` failure (older
@@ -625,11 +713,15 @@ backup_database() {
     chmod 700 "$INSTALL_DIR/backups"
     out="$INSTALL_DIR/backups/pre-upgrade-$old_version-$stamp.sql.gz"
     # umask 077: the dump must never be briefly world-readable while it is written.
-    if ! (umask 077; cd "$INSTALL_DIR" && docker compose exec -T postgres pg_dump -U "${pg_user:-proxcenter}" "${pg_db:-proxcenter}" | gzip_cmd > "$out"); then
+    # --clean --if-exists: the dump drops each object before recreating it, so
+    # it restores into the already-migrated database (a plain dump fails there
+    # on "relation already exists") as well as into an empty one.
+    if ! (umask 077; cd "$INSTALL_DIR" && docker compose exec -T postgres pg_dump --clean --if-exists -U "${pg_user:-proxcenter}" "${pg_db:-proxcenter}" | gzip_cmd > "$out"); then
         rm -f "$out"
         log_error "Database backup failed (pg_dump). Nothing was changed. Retry, or pass --skip-db-backup if you have your own backup."
     fi
     chmod 600 "$out"
+    DUMP_FILE="$out"
     log_success "Database backed up to $out"
 }
 
@@ -658,32 +750,42 @@ backfill_env() {
     grep -q '^TEMPLATE_CATALOG_AUTO_UPDATE=' "$envf" || printf 'TEMPLATE_CATALOG_AUTO_UPDATE=false\n' >> "$envf"
 }
 
-# rollback_commands OLD_VERSION STAMP: the exact shell commands to go back to
-# OLD_VERSION using the docker-compose.yml.bak.STAMP taken this run. OLD_VERSION
-# can be empty (a first-ever upgrade with no VERSION recorded yet): naming a
-# literal placeholder version there would be actively misleading, so this
-# spells out what to do by hand instead of a copy-pastable sed.
+# rollback_commands EDITION OLD_VERSION STAMP DUMP: the exact shell commands,
+# one per line, to go back to OLD_VERSION using the docker-compose.yml.bak.STAMP
+# taken this run and, when one was taken, the pg_dump DUMP (restored while
+# the app containers are stopped: Prisma migrations only go forward).
+# OLD_VERSION can be empty (a first-ever upgrade with no VERSION recorded
+# yet): naming a literal placeholder version there would be actively
+# misleading, so this spells out what to do by hand instead of a sed.
 rollback_commands() {
-    local old=$1 stamp=$2
-    if [ -n "$old" ]; then
-        echo "sed -i 's/^VERSION=.*/VERSION=$old/' $INSTALL_DIR/.env && cp $INSTALL_DIR/docker-compose.yml.bak.$stamp $INSTALL_DIR/docker-compose.yml && cd $INSTALL_DIR && docker compose up -d"
-    else
-        echo "set VERSION to your previous version in $INSTALL_DIR/.env, then: cp $INSTALL_DIR/docker-compose.yml.bak.$stamp $INSTALL_DIR/docker-compose.yml && cd $INSTALL_DIR && docker compose up -d"
+    local edition=$1 old=$2 stamp=$3 dump=$4 app_services="frontend" pg_user pg_db
+    if [ "$edition" = "enterprise" ]; then app_services="frontend orchestrator"; fi
+    echo "cd $INSTALL_DIR && docker compose stop $app_services"
+    if [ -n "$dump" ]; then
+        pg_user=$(env_get POSTGRES_USER "$INSTALL_DIR/.env"); pg_db=$(env_get POSTGRES_DB "$INSTALL_DIR/.env")
+        echo "gunzip -c $dump | docker compose exec -T postgres psql -U ${pg_user:-proxcenter} -d ${pg_db:-proxcenter}"
     fi
+    if [ -n "$old" ]; then
+        echo "sed -i 's/^VERSION=.*/VERSION=$old/' $INSTALL_DIR/.env"
+    else
+        echo "# set VERSION to your previous version in $INSTALL_DIR/.env"
+    fi
+    echo "cp $INSTALL_DIR/docker-compose.yml.bak.$stamp $INSTALL_DIR/docker-compose.yml"
+    echo "docker compose up -d"
 }
 
 print_rollback_hint() {
-    local label=$1 old=$2 stamp=$3 skip=$4
+    local label=$1 edition=$2 old=$3 stamp=$4 dump=$5 line
     echo ""
     echo -e "    ${DIM}$label${NC}"
-    echo -e "      ${DIM}$(rollback_commands "$old" "$stamp")${NC}"
-    if [ "$skip" != true ]; then
-        echo -e "    ${DIM}If the new version migrated the database, restore the dump from $INSTALL_DIR/backups/ first.${NC}"
-    fi
+    while IFS= read -r line; do
+        echo -e "      ${DIM}$line${NC}"
+    done < <(rollback_commands "$edition" "$old" "$stamp" "$dump")
 }
 
 cmd_upgrade() {
     local skip_backup=false
+    local invoked_args=("$@")
     while [[ $# -gt 0 ]]; do
         case $1 in
             --install-dir) [ $# -ge 2 ] || log_error "--install-dir needs a value"; INSTALL_DIR="$2"; shift 2 ;;
@@ -712,7 +814,7 @@ cmd_upgrade() {
     if [ "$old_version" = "$version" ]; then
         log_error "$INSTALL_DIR is already at VERSION=$version; a previous upgrade may have failed only at the restart step. Retry the restart with: cd $INSTALL_DIR && docker compose up -d. To roll back instead, restore the newest docker-compose.yml.bak.* in $INSTALL_DIR, set VERSION back in .env, then run that same command."
     fi
-    init_log "$INSTALL_DIR/install-airgap.log" upgrade "$@"
+    init_log "$INSTALL_DIR/install-airgap.log" upgrade "${invoked_args[@]+"${invoked_args[@]}"}"
     TOTAL_STEPS=6
     print_banner "${edition^} Edition" "upgrade ${old_version:-?} → $version"
     local stamp; stamp=$(date +%Y%m%d-%H%M%S)
@@ -736,7 +838,7 @@ cmd_upgrade() {
     log_success "docker-compose.yml replaced (backup: docker-compose.yml.bak.$stamp), VERSION=$version"
     # Printed before the restart is attempted: if step 5 fails, this is still
     # in the transcript, and by then the compose/VERSION are already changed.
-    print_rollback_hint "If the restart below fails, roll back with:" "$old_version" "$stamp" "$skip_backup"
+    print_rollback_hint "If the restart below fails, roll back with:" "$edition" "$old_version" "$stamp" "$DUMP_FILE"
 
     step 5 "Restarting ProxCenter"
     start_stack "$edition"
@@ -746,7 +848,11 @@ cmd_upgrade() {
     echo -e "${GREEN}${BOLD}  ProxCenter ${edition^} upgraded to $version${NC}"
     echo ""
     echo -e "    ${BOLD}Duration${NC}    $(format_duration $(( $(date +%s) - START_TIME )))"
-    print_rollback_hint "Rollback to the previous version, if ever needed:" "$old_version" "$stamp" "$skip_backup"
+    print_rollback_hint "Rollback to the previous version, if ever needed:" "$edition" "$old_version" "$stamp" "$DUMP_FILE"
+    echo ""
+    echo -e "    ${DIM}Once the rollback is no longer needed, reclaim the disk space of the previous images with:${NC}"
+    echo -e "      ${DIM}docker image prune -a    (removes every image no container uses on this host)${NC}"
+    echo ""
 }
 
 # ---------- main ----------

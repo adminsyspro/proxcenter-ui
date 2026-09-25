@@ -66,6 +66,10 @@ describe('bundle', () => {
     expect(manifest.images.map((i: any) => i.name)).toEqual(['ghcr.io/adminsyspro/proxcenter-frontend:1.4.10', 'postgres:16-alpine'])
     expect(manifest.images[0].digest).toMatch(/^sha256:[0-9a-f]{64}$/)
     expect(readFileSync(join(bdir, 'install-airgap.sh'), 'utf8')).toBe(readFileSync(SCRIPT, 'utf8'))
+    const readme = readFileSync(join(bdir, 'README.txt'), 'utf8')
+    expect(readme).toContain('sudo ./install-airgap.sh install ')
+    expect(readme).toContain('sudo bash install-airgap.sh')
+    expect(readme).not.toContain('--license') // Community has no license
   })
 
   it('downloads the compose file at the tag when --compose is absent', () => {
@@ -152,10 +156,14 @@ describe('install', () => {
     for (const v of ['proxcenter_data', 'orchestrator_data', 'postgres_data']) expect(argv).toContain(`docker volume create ${v}`)
     expect(argv.some(a => a.startsWith('docker run --rm --user root --entrypoint  -v proxcenter_data:/app/data ghcr.io/adminsyspro/proxcenter-frontend:1.4.10'))).toBe(true)
     expect(argv).toContain('docker compose up -d')
-    expect(argv.some(a => a.startsWith('curl') && a.includes('--noproxy') && a.includes('http://localhost:3000/api/health'))).toBe(true)
+    // Both health probes read the compose healthcheck: install needs no curl.
+    expect(argv.some(a => a.startsWith('docker inspect') && a.includes('proxcenter-frontend'))).toBe(true)
     expect(argv.some(a => a.startsWith('docker inspect') && a.includes('proxcenter-orchestrator'))).toBe(true)
+    expect(argv.some(a => a.startsWith('curl'))).toBe(false)
+    // The preflight looked for a leftover postgres_data before writing anything.
+    expect(argv).toContain('docker volume inspect postgres_data')
     // no license given: no one-shot copy into orchestrator_data
-    expect(argv.some(a => a.includes('/tmp/license.key'))).toBe(false)
+    expect(argv.some(a => a.includes('license.key'))).toBe(false)
     // nothing pulled, nothing pushed, no registry login
     expect(argv.some(a => /^docker (pull|push|login|tag) /.test(a))).toBe(false)
 
@@ -192,18 +200,29 @@ describe('install', () => {
     expect(r.status, r.stdout + r.stderr).toBe(0)
 
     const argv = sb.argv()
-    const copyLine = argv.find(a => a.startsWith('docker run --rm --entrypoint sh'))
+    const copyLine = argv.find(a => a.startsWith('docker run') && a.includes('license.key'))
     expect(copyLine, argv.join('\n')).toBeDefined()
-    expect(copyLine).toContain('-v orchestrator_data:/app/data')
-    expect(copyLine).toContain(`-v ${keyPath}:/tmp/license.key:ro`)
+    // Streamed on stdin as root: a 600 root:root key is unreadable to the
+    // image's non-root user through a bind mount, and its chown a no-op.
+    expect(copyLine).toMatch(/^docker run -i --rm --user root --entrypoint sh /)
+    expect(copyLine?.match(/ -v /g)).toHaveLength(1)
+    expect(copyLine).toContain('-v orchestrator_data:/app/data ')
+    expect(copyLine).not.toContain('/tmp/license.key')
+    expect(copyLine).not.toContain(keyPath)
     expect(copyLine).toContain('ghcr.io/adminsyspro/proxcenter-orchestrator:1.4.10')
+    expect(copyLine).toContain('cat > /app/data/license.key')
+    expect(readFileSync(`${sb.argvLog}.stdin`, 'utf8')).toBe(readFileSync(keyPath, 'utf8'))
 
     const env = readEnvFile(join(sb.installDir, '.env'))
     expect(env.LICENSE_KEY).toBe('')
     const yaml = readFileSync(join(sb.installDir, 'config', 'orchestrator.yaml'), 'utf8')
     expect(yaml).toContain('key: ""')
 
-    expect(r.stdout).toMatch(new RegExp(`License installed from.*${keyPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`))
+    expect(r.stdout).toMatch(new RegExp(`License file copied from.*${keyPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}.*imports it at its first start`))
+    // The invoked arguments are on record (the path, never the key's content).
+    const log = readFileSync(join(sb.installDir, 'install-airgap.log'), 'utf8')
+    expect(log).toContain(`install-airgap.sh install --install-dir ${sb.installDir} --license ${keyPath} --health-timeout 5`)
+    expect(log).not.toContain('QUJD')
   })
 
   it('refuses a --license value that is not a readable file', () => {
@@ -226,8 +245,9 @@ describe('install', () => {
     expect(env.ORCHESTRATOR_URL).toBeUndefined()
     expect(existsSync(join(sb.installDir, 'config', 'orchestrator.yaml'))).toBe(false)
     expect(sb.argv()).not.toContain('docker volume create orchestrator_data')
-    expect(sb.argv().some(a => a.startsWith('docker inspect'))).toBe(false)
-    expect(sb.argv().some(a => a.includes('/tmp/license.key'))).toBe(false)
+    expect(sb.argv().some(a => a.startsWith('docker inspect') && a.includes('proxcenter-orchestrator'))).toBe(false)
+    expect(sb.argv().some(a => a.startsWith('docker inspect') && a.includes('proxcenter-frontend'))).toBe(true)
+    expect(sb.argv().some(a => a.includes('license.key'))).toBe(false)
   })
 
   it('fails outside an extracted bundle directory with a manifest.json not found message', () => {
@@ -283,6 +303,64 @@ describe('install', () => {
     const r = runAirgap(sb, ['install', '--install-dir', sb.installDir], bdir)
     expect(r.status).toBe(1)
     expect(r.stderr).toMatch(/already exists.*upgrade/)
+    expect(r.stderr).toMatch(/docker volume rm postgres_data proxcenter_data orchestrator_data, then delete/)
+    expect(r.stderr).not.toMatch(/remove .*\.env to start over/)
+  })
+
+  it('refuses, before writing anything, when a postgres_data volume is left from a previous installation', () => {
+    const bdir = makeFakeBundle(sb)
+    const r = runAirgap(sb, ['install', '--install-dir', sb.installDir, '--health-timeout', '5'], bdir, { FAKE_VOLUME_EXISTS: 'postgres_data' })
+    expect(r.status).toBe(1)
+    expect(r.stderr).toMatch(/A postgres_data volume already exists from a previous ProxCenter installation/)
+    expect(r.stderr).toMatch(/docker compose down; docker volume rm postgres_data proxcenter_data orchestrator_data/)
+    expect(existsSync(sb.installDir)).toBe(false)
+    expect(sb.argv().some(a => a.startsWith('docker load'))).toBe(false)
+    expect(sb.argv().some(a => a.startsWith('docker volume create'))).toBe(false)
+  })
+
+  it('removes the configuration and the volumes it created when it fails while initialising volumes', () => {
+    const bdir = makeFakeBundle(sb)
+    const keyPath = join(sb.dir, 'lic.key')
+    writeFileSync(keyPath, 'KEY\n')
+    const r = runAirgap(sb, ['install', '--install-dir', sb.installDir, '--license', keyPath, '--health-timeout', '5'], bdir, { FAKE_LICENSE_COPY_RC: '1' })
+    expect(r.status).toBe(1)
+    expect(r.stderr).toMatch(/Could not install the license file: sh: can't create/)
+    expect(r.stderr).toMatch(/Removed the configuration and the volumes this run created/)
+    expect(existsSync(join(sb.installDir, '.env'))).toBe(false)
+    expect(existsSync(join(sb.installDir, 'config', 'orchestrator.yaml'))).toBe(false)
+    expect(existsSync(join(sb.installDir, 'docker-compose.yml'))).toBe(false)
+    const argv = sb.argv()
+    for (const v of ['postgres_data', 'proxcenter_data', 'orchestrator_data']) expect(argv, v).toContain(`docker volume rm ${v}`)
+    expect(argv).not.toContain('docker compose up -d')
+  })
+
+  it('removes only the volumes this run created when the chown one-shot fails', () => {
+    const bdir = makeFakeBundle(sb)
+    const r = runAirgap(sb, ['install', '--install-dir', sb.installDir, '--health-timeout', '5'], bdir, { FAKE_CHOWN_RC: '1', FAKE_VOLUME_EXISTS: 'proxcenter_data' })
+    expect(r.status).toBe(1)
+    expect(r.stderr).toMatch(/Could not initialise the proxcenter_data volume: chown/)
+    expect(existsSync(join(sb.installDir, '.env'))).toBe(false)
+    const argv = sb.argv()
+    expect(argv).not.toContain('docker volume create proxcenter_data')
+    expect(argv).not.toContain('docker volume rm proxcenter_data')
+    expect(argv).toContain('docker volume rm postgres_data')
+    expect(argv).toContain('docker volume rm orchestrator_data')
+  })
+
+  it('keeps everything, with the retry hint, when it fails once the stack is starting', () => {
+    const bdir = makeFakeBundle(sb)
+    const r = runAirgap(sb, ['install', '--install-dir', sb.installDir, '--health-timeout', '5'], bdir, { FAKE_COMPOSE_UP_RC: '1' })
+    expect(r.status).toBe(1)
+    expect(existsSync(join(sb.installDir, '.env'))).toBe(true)
+    expect(sb.argv().some(a => a.startsWith('docker volume rm'))).toBe(false)
+    expect(r.stderr).toMatch(/retry with: cd .* && docker compose up -d/)
+  })
+
+  it('shows the last line of docker load output when the load fails', () => {
+    const bdir = makeFakeBundle(sb)
+    const r = runAirgap(sb, ['install', '--install-dir', sb.installDir, '--health-timeout', '5'], bdir, { FAKE_LOAD_RC: '1' })
+    expect(r.status).toBe(1)
+    expect(r.stderr).toMatch(/docker load failed: .*no space left on device/)
   })
 
   it('fails early with a clear message when docker is missing', () => {
@@ -350,7 +428,7 @@ describe('upgrade', () => {
     expect(r.status, r.stdout + r.stderr).toBe(0)
 
     const argv = sb.argv()
-    const pgDumpIdx = argv.findIndex(a => a.startsWith('docker compose exec -T postgres pg_dump'))
+    const pgDumpIdx = argv.findIndex(a => a.startsWith('docker compose exec -T postgres pg_dump --clean --if-exists -U proxcenter proxcenter'))
     const loadIdx = argv.findIndex(a => a.startsWith('docker load -i '))
     expect(pgDumpIdx).toBeGreaterThan(-1)
     expect(loadIdx).toBeGreaterThan(-1)
@@ -373,6 +451,24 @@ describe('upgrade', () => {
     expect(after.PROXCENTER_OFFLINE).toBe('true')
     expect(after.TEMPLATE_CATALOG_AUTO_UPDATE).toBe('false')
     expect(r.stdout).toMatch(/VERSION=1\.4\.9/) // rollback hint names the previous version
+    // The exact rollback sequence: stop the apps, restore the dump, then
+    // VERSION, the compose backup and the restart, in that order.
+    const dumpPath = join(sb.installDir, 'backups', dump as string)
+    const seq = [
+      `cd ${sb.installDir} && docker compose stop frontend orchestrator`,
+      `gunzip -c ${dumpPath} | docker compose exec -T postgres psql -U proxcenter -d proxcenter`,
+      `sed -i 's/^VERSION=.*/VERSION=1.4.9/' ${sb.installDir}/.env`,
+      `cp ${sb.installDir}/docker-compose.yml.bak.`,
+      'docker compose up -d',
+    ]
+    const tail = r.stdout.slice(r.stdout.lastIndexOf('Rollback to the previous version'))
+    let at = 0
+    for (const line of seq) {
+      const i = tail.indexOf(line, at)
+      expect(i, line).toBeGreaterThan(-1)
+      at = i + line.length
+    }
+    expect(r.stdout).toMatch(/docker image prune -a/)
 
     // Every pre-existing line (including the "# old install" comment), in the
     // same order, is untouched: only VERSION/ORCHESTRATOR_API_KEY change in
@@ -421,7 +517,7 @@ describe('upgrade', () => {
   })
 
   it('pushes the new images to REGISTRY when the install uses one', () => {
-    installedEnv('REGISTRY=harbor.lan/pc')
+    installedEnv('REGISTRY="harbor.lan/pc"')
     writeFileSync(join(sb.installDir, 'docker-compose.yml'), 'services:\n  orchestrator:\n    image: x\n')
     const bdir = makeFakeBundle(sb, { edition: 'enterprise' })
     const r = runAirgap(sb, ['upgrade', '--install-dir', sb.installDir, '--skip-db-backup', '--health-timeout', '5'], bdir)
@@ -495,6 +591,9 @@ describe('upgrade', () => {
     expect(r.status, r.stdout + r.stderr).toBe(0)
     expect(r.stdout).toMatch(/set VERSION to your previous version/)
     expect(r.stdout).not.toMatch(/VERSION=PREVIOUS/)
+    // --skip-db-backup: no restore line; community: no orchestrator to stop.
+    expect(r.stdout).not.toMatch(/gunzip -c/)
+    expect(r.stdout).toMatch(/docker compose stop frontend(?! orchestrator)/)
   })
 })
 

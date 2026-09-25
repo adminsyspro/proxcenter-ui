@@ -49,7 +49,7 @@ case "$1 $2" in
     echo "fake docker archive" > "$out"; exit 0 ;;
   "load -i") exit \${FAKE_LOAD_RC:-0} ;;
   "info -f"|"info --format") echo "$FAKE_DOCKER_ROOT"; exit 0 ;;
-  "inspect --format=*"|"inspect --format") echo "healthy"; exit 0 ;;
+  "inspect --format="*|"inspect --format") echo "healthy"; exit 0 ;;
   *) exit 0 ;;
 esac
 `

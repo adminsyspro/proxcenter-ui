@@ -312,9 +312,217 @@ README
     echo ""
 }
 
-# ---------- install / upgrade: added in the next tasks ----------
+# ---------- install ----------
 
-cmd_install() { log_error "install: not implemented yet"; }
+write_env_file() {
+    # $1 edition, $2 version, $3 license, $4 server ip
+    local edition=$1 version=$2 license=$3 ip=$4
+    local app_secret nextauth_secret pg_pass
+    app_secret=$(gen_secret 32); nextauth_secret=$(gen_secret 32); pg_pass=$(gen_secret 24)
+    {
+        echo "# ProxCenter ${edition^} Edition, air-gapped installation"
+        echo "# Generated on $(date -Iseconds) by install-airgap.sh"
+        echo ""
+        echo "# Version of the loaded images (upgrade rewrites it)"
+        echo "VERSION=$version"
+        echo ""
+        echo "# Secrets"
+        echo "APP_SECRET=$app_secret"
+        echo "NEXTAUTH_SECRET=$nextauth_secret"
+        echo "NEXTAUTH_URL=http://$ip:3000"
+        echo ""
+        echo "# Postgres"
+        echo "POSTGRES_PASSWORD=$pg_pass"
+        echo ""
+        echo "# Air-gapped site: no outbound call from the product"
+        echo "PROXCENTER_OFFLINE=true"
+        echo "TEMPLATE_CATALOG_AUTO_UPDATE=false"
+        echo ""
+        echo "# License (optional here, can be activated in Settings > License)"
+        echo "LICENSE_KEY=$license"
+        if [ "$edition" = "enterprise" ]; then
+            echo ""
+            echo "# Orchestrator"
+            echo "ORCHESTRATOR_URL=http://orchestrator:8080"
+            echo "ORCHESTRATOR_API_KEY=$(gen_secret 32)"
+            echo ""
+            echo "# No registry access on this host: the warm-migration VDDK package needs a mirror"
+            echo "GHCR_TOKEN="
+        fi
+    } > "$INSTALL_DIR/.env"
+    chmod 600 "$INSTALL_DIR/.env"
+}
+
+write_orchestrator_config() {
+    local app_secret=$1 license=$2
+    mkdir -p "$INSTALL_DIR/config"
+    cat > "$INSTALL_DIR/config/orchestrator.yaml" <<YAML
+# ProxCenter Orchestrator Configuration (air-gapped install)
+api:
+  address: ":8080"
+  read_timeout: 30s
+  write_timeout: 30s
+
+database:
+  # The compose file overrides these through PROXCENTER_DATABASE_* env vars.
+  driver: postgres
+  dsn: "postgres://proxcenter:\${POSTGRES_PASSWORD}@postgres:5432/proxcenter?sslmode=disable"
+
+proxmox:
+  # Must match APP_SECRET from .env
+  app_secret: "$app_secret"
+  shared_data_path: /app/shared_data
+
+license:
+  key: "$license"
+
+logging:
+  level: info
+  format: json
+YAML
+    # The orchestrator runs as a non-root user: 600 makes it die on "permission denied".
+    chmod 644 "$INSTALL_DIR/config/orchestrator.yaml"
+}
+
+create_volumes() {
+    local edition=$1 frontend_image=$2
+    docker volume create proxcenter_data >/dev/null 2>&1 || true
+    docker volume create postgres_data >/dev/null 2>&1 || true
+    if [ "$edition" = "enterprise" ]; then
+        docker volume create orchestrator_data >/dev/null 2>&1 || true
+    fi
+    # The frontend runs as uid 1001 and must own /app/data.
+    docker run --rm --user root --entrypoint "" \
+        -v proxcenter_data:/app/data \
+        "$frontend_image" \
+        sh -c "mkdir -p /app/data && chown -R 1001:1001 /app/data" >/dev/null 2>&1 || log_error "Could not initialise the proxcenter_data volume"
+}
+
+start_stack() {
+    local edition=$1
+    (cd "$INSTALL_DIR" && docker compose up -d >> "${LOG_FILE:-/dev/null}" 2>&1) || log_error "docker compose up failed. See $LOG_FILE"
+    log_success "Containers started"
+    wait_for_health "frontend" "$(frontend_probe)"
+    if [ "$edition" = "enterprise" ]; then
+        wait_for_health "orchestrator" "$(orchestrator_probe)"
+    fi
+}
+
+read_license_arg() {
+    # A path to a .key file, or the key string itself.
+    if [ -n "$1" ] && [ -f "$1" ]; then tr -d '\r\n' < "$1"; else printf '%s' "$1"; fi
+}
+
+server_ip() {
+    local ip
+    ip=$(hostname -I 2>/dev/null | awk '{print $1}' | head -1)
+    echo "${ip:-localhost}"
+}
+
+frontend_image_of() {
+    manifest_images | grep '/proxcenter-frontend:' | head -1
+}
+
+cmd_install() {
+    local license="" registry=""
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --license) license="$2"; shift 2 ;;
+            --install-dir) INSTALL_DIR="$2"; shift 2 ;;
+            --registry) registry="${2%/}"; shift 2 ;;
+            --health-timeout) HEALTH_TIMEOUT="$2"; shift 2 ;;
+            -h|--help) usage ;;
+            *) log_error "Unknown option: $1" ;;
+        esac
+    done
+    # install/upgrade are meant to be run from within the extracted bundle
+    # directory (see the usage banner); anchor every bundle-file lookup on the
+    # current directory rather than on wherever this particular copy of the
+    # script happens to live, so an operator invoking it by a different path
+    # (or a test harness invoking a canonical copy against a fixture
+    # directory) still resolves manifest.json/images.tar/SHA256SUMS from cwd.
+    SCRIPT_DIR="$PWD"
+    require_root
+    require_docker
+    [ -f "$SCRIPT_DIR/manifest.json" ] || log_error "manifest.json not found next to $SCRIPT_PATH. Run this command from the extracted bundle directory."
+    local edition version
+    edition=$(manifest_get edition); version=$(manifest_get version)
+    [ -n "$edition" ] && [ -n "$version" ] || log_error "manifest.json has no edition/version"
+    if [ -f "$INSTALL_DIR/.env" ]; then
+        log_error "An installation already exists at $INSTALL_DIR. Use: sudo $SCRIPT_PATH upgrade --install-dir $INSTALL_DIR"
+    fi
+    mkdir -p "$INSTALL_DIR"
+    init_log "$INSTALL_DIR/install-airgap.log" install "$@"
+    TOTAL_STEPS=6
+    if [ -n "$registry" ]; then TOTAL_STEPS=7; fi
+    print_banner "${edition^} Edition" "install $version"
+    license=$(read_license_arg "$license")
+
+    step 1 "Verifying the bundle"
+    verify_checksums
+    local root_dir free_kb
+    root_dir=$(docker info -f '{{.DockerRootDir}}' 2>/dev/null || echo /var/lib/docker)
+    free_kb=$(df -Pk "$root_dir" 2>/dev/null | awk 'NR==2 {print $4}')
+    if [ -n "$free_kb" ] && [ "$free_kb" -lt $((5 * 1024 * 1024)) ]; then
+        log_warning "Less than 5 GB free under $root_dir; docker load may run out of space"
+    fi
+
+    step 2 "Loading images"
+    load_images
+
+    local n=3
+    if [ -n "$registry" ]; then
+        step $n "Pushing images to $registry"
+        retag_and_push "$registry"
+        log_success "Images available from $registry"
+        n=$((n + 1))
+    fi
+
+    step $n "Configuring ProxCenter"; n=$((n + 1))
+    cp "$SCRIPT_DIR/docker-compose.yml" "$INSTALL_DIR/docker-compose.yml"
+    write_env_file "$edition" "$version" "$license" "$(server_ip)"
+    if [ -n "$registry" ]; then
+        env_set REGISTRY "$registry" "$INSTALL_DIR/.env"
+        env_set POSTGRES_IMAGE "$registry/$(image_basename "$(manifest_images | grep '^postgres' | head -1)")" "$INSTALL_DIR/.env"
+    fi
+    if [ "$edition" = "enterprise" ]; then
+        write_orchestrator_config "$(env_get APP_SECRET "$INSTALL_DIR/.env")" "$license"
+    fi
+    log_success "Compose, .env and configuration written to $INSTALL_DIR"
+
+    step $n "Initialising volumes"; n=$((n + 1))
+    create_volumes "$edition" "$(frontend_image_of)"
+    log_success "Volumes ready"
+
+    step $n "Starting ProxCenter"; n=$((n + 1))
+    start_stack "$edition"
+
+    step $n "Done"
+    print_install_summary "$edition" "$version" "$license"
+}
+
+print_install_summary() {
+    local edition=$1 version=$2 license=$3 ip
+    ip=$(server_ip)
+    echo ""
+    echo -e "${GREEN}${BOLD}  ProxCenter ${edition^} $version is ready (air-gapped)${NC}"
+    echo ""
+    echo -e "    ${BOLD}URL${NC}         ${CYAN}http://$ip:3000${NC}"
+    echo -e "    ${BOLD}Install${NC}     $INSTALL_DIR"
+    echo -e "    ${BOLD}Duration${NC}    $(format_duration $(( $(date +%s) - START_TIME )))"
+    echo ""
+    if [ "$edition" = "enterprise" ] && [ -z "$license" ]; then
+        echo -e "    ${YELLOW}${BOLD}!${NC} ${YELLOW}No license key provided${NC}: upload your .key in ${BOLD}Settings > License${NC}"
+        echo ""
+    fi
+    echo -e "    ${DIM}Upgrade: extract the next bundle, then from its directory:${NC}"
+    echo -e "      ${DIM}sudo ./install-airgap.sh upgrade --install-dir $INSTALL_DIR${NC}"
+    echo -e "    ${DIM}Logs:    docker compose -f $INSTALL_DIR/docker-compose.yml logs -f${NC}"
+    echo ""
+}
+
+# ---------- upgrade: added in a later task ----------
+
 cmd_upgrade() { log_error "upgrade: not implemented yet"; }
 
 # ---------- main ----------

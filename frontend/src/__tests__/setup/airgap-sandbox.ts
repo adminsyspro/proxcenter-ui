@@ -2,7 +2,7 @@
 // with docker, curl and hostname replaced by stubs that record their argv
 // and answer from FAKE_* variables. No root, no daemon, no network.
 import { spawnSync } from 'node:child_process'
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -22,6 +22,10 @@ echo "docker $*" >> "$FAKE_ARGV_LOG"
 case "$1 $2" in
   "compose version") echo "Docker Compose version v2.29.7"; exit 0 ;;
   "compose config")
+    # Record the inline env this call was made with, so a test can assert
+    # COMPOSE_FILE/REGISTRY/POSTGRES_IMAGE are pinned rather than inherited.
+    echo "compose config env COMPOSE_FILE=$COMPOSE_FILE REGISTRY=$REGISTRY POSTGRES_IMAGE=$POSTGRES_IMAGE" >> "$FAKE_ARGV_LOG"
+    if [ "\${FAKE_COMPOSE_CONFIG_RC:-0}" != "0" ]; then echo "fake compose config failure (rc=\$FAKE_COMPOSE_CONFIG_RC)" >&2; exit "$FAKE_COMPOSE_CONFIG_RC"; fi
     # Real compose refuses: the enterprise file requires POSTGRES_PASSWORD.
     if [ -z "$POSTGRES_PASSWORD" ]; then echo "error while interpolating services.postgres.environment: required variable POSTGRES_PASSWORD is missing a value" >&2; exit 1; fi
     # --images: print what FAKE_IMAGES holds, one per line
@@ -89,6 +93,11 @@ export function makeAirgapSandbox(): AirgapSandbox {
     dir, bin, installDir, argvLog, env,
     argv: () => (existsSync(argvLog) ? readFileSync(argvLog, 'utf8').trim().split('\n') : []),
   }
+}
+
+/** Removes a sandbox's temp directory. Call from `afterEach` so runs don't pile up on disk. */
+export function removeAirgapSandbox(sb: AirgapSandbox): void {
+  rmSync(sb.dir, { recursive: true, force: true })
 }
 
 export interface RunResult { status: number | null; stdout: string; stderr: string }

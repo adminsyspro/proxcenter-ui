@@ -2,12 +2,13 @@ import { spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import { SCRIPT, makeAirgapSandbox, makeFakeBundle, readEnvFile, runAirgap, type AirgapSandbox } from './setup/airgap-sandbox'
+import { SCRIPT, makeAirgapSandbox, makeFakeBundle, readEnvFile, removeAirgapSandbox, runAirgap, type AirgapSandbox } from './setup/airgap-sandbox'
 
 let sb: AirgapSandbox
 beforeEach(() => { sb = makeAirgapSandbox() })
+afterEach(() => { removeAirgapSandbox(sb) })
 
 describe('install-airgap.sh syntax and usage', () => {
   it('is valid bash', () => {
@@ -78,5 +79,36 @@ describe('bundle', () => {
   it('refuses a version that is not X.Y.Z and an unknown edition', () => {
     expect(runAirgap(sb, ['bundle', '--edition', 'enterprise', '--version', 'latest'], sb.dir).status).toBe(1)
     expect(runAirgap(sb, ['bundle', '--edition', 'pro', '--version', '1.4.10'], sb.dir).status).toBe(1)
+  })
+
+  it('fails loudly when docker compose config fails, without calling docker pull', () => {
+    const out = join(sb.dir, 'dist')
+    mkdirSync(out)
+    const compose = join(sb.dir, 'docker-compose.community.yml')
+    spawnSync('bash', ['-c', `printf '%s' "$FAKE_COMPOSE_BODY" > ${compose}`], { env: sb.env })
+    const r = runAirgap(
+      sb,
+      ['bundle', '--edition', 'community', '--version', '1.4.10', '--compose', compose, '--output', out],
+      sb.dir,
+      { FAKE_COMPOSE_CONFIG_RC: '15' },
+    )
+    expect(r.status).toBe(1)
+    expect(r.stderr).toMatch(/✗.*docker compose config/)
+    expect(sb.argv().some(a => a.startsWith('docker pull'))).toBe(false)
+  })
+
+  it('pins COMPOSE_FILE, REGISTRY and POSTGRES_IMAGE for compose config, ignoring exported overrides', () => {
+    const out = join(sb.dir, 'dist')
+    mkdirSync(out)
+    const compose = join(sb.dir, 'docker-compose.community.yml')
+    spawnSync('bash', ['-c', `printf '%s' "$FAKE_COMPOSE_BODY" > ${compose}`], { env: sb.env })
+    const r = runAirgap(
+      sb,
+      ['bundle', '--edition', 'community', '--version', '1.4.10', '--compose', compose, '--output', out],
+      sb.dir,
+      { COMPOSE_FILE: '/etc/should-not-be-used.yml', REGISTRY: 'evil.example.com', POSTGRES_IMAGE: 'evil:latest' },
+    )
+    expect(r.status, r.stdout + r.stderr).toBe(0)
+    expect(sb.argv()).toContain('compose config env COMPOSE_FILE=docker-compose.yml REGISTRY=ghcr.io/adminsyspro POSTGRES_IMAGE=postgres:16-alpine')
   })
 })

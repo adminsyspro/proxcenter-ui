@@ -13,7 +13,7 @@
 # other files next to this script. They need Docker Engine 24+ with the
 # compose plugin already installed: nothing is downloaded on the isolated host.
 # ============================================
-set -euo pipefail
+set -Eeuo pipefail
 
 SCRIPT_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
 SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
@@ -243,20 +243,27 @@ cmd_bundle() {
 
     step 2 "Resolving and pulling images"
     # The compose declares ${POSTGRES_PASSWORD:?...}: give config a throwaway value.
-    local images
     # No -f: run from $stage, where the file is already named docker-compose.yml
     # (compose auto-detects it), so the resolution matches what install/upgrade
-    # run against on the isolated host later.
-    images=$(cd "$stage" && VERSION="$version" POSTGRES_PASSWORD=bundle APP_SECRET=bundle NEXTAUTH_SECRET=bundle ORCHESTRATOR_API_KEY=bundle \
-        docker compose config --images 2>/dev/null | sed '/^[[:space:]]*$/d' | sort -u)
+    # run against on the isolated host later. COMPOSE_FILE/REGISTRY/POSTGRES_IMAGE
+    # are pinned so an operator's shell (or a CI runner) exporting any of them
+    # can't silently change which file or images get resolved and bundled.
+    local images images_err="$work/compose-config.err"
+    if ! images=$(cd "$stage" && COMPOSE_FILE=docker-compose.yml REGISTRY=ghcr.io/adminsyspro POSTGRES_IMAGE=postgres:16-alpine \
+            VERSION="$version" POSTGRES_PASSWORD=bundle APP_SECRET=bundle NEXTAUTH_SECRET=bundle ORCHESTRATOR_API_KEY=bundle \
+            docker compose config --images 2>"$images_err" | sed '/^[[:space:]]*$/d' | sort -u); then
+        log_error "docker compose config failed: $(tr '\n' ' ' < "$images_err")"
+    fi
     [ -n "$images" ] || log_error "docker compose config --images returned nothing"
     local img entries=""
     while IFS= read -r img; do
         log_info "Pulling $img"
         docker pull "$img" >/dev/null || log_error "docker pull $img failed (Enterprise images need docker login ghcr.io first)"
         local digest size
-        digest=$(docker image inspect --format '{{index .RepoDigests 0}}' "$img" 2>/dev/null | sed 's/.*@//')
-        size=$(docker image inspect --format '{{.Size}}' "$img" 2>/dev/null)
+        # `|| true`: under -e/pipefail a failing `inspect` would otherwise abort
+        # the script here instead of falling back to unknown/0 below.
+        digest=$(docker image inspect --format '{{index .RepoDigests 0}}' "$img" 2>/dev/null | sed 's/.*@//') || true
+        size=$(docker image inspect --format '{{.Size}}' "$img" 2>/dev/null) || true
         entries+="    { \"name\": \"$img\", \"digest\": \"${digest:-unknown}\", \"size\": ${size:-0} },"$'\n'
     done <<< "$images"
     log_success "$(echo "$images" | wc -l) images pulled"

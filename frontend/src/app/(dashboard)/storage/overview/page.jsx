@@ -39,7 +39,7 @@ import { CardsSkeleton, TableSkeleton } from '@/components/skeletons'
 import StorageContentBrowser from '@/components/storage/StorageContentBrowser'
 import { filterStorages } from '@/lib/storage/filterStorages'
 import { useDiskLatency } from '@/hooks/useDiskLatency'
-import { StorageLatencyCell } from '@/components/inventory/DiskLatencyCell'
+import { StorageBandwidthCell, StorageLatencyCell } from '@/components/inventory/DiskLatencyCell'
 
 // Sentinel MenuItem value for the "select all / clear selection" toggle in the
 // tenant selector (issue #609). MUI's Select clones every child with its own
@@ -264,8 +264,9 @@ return () => setPageInfo('', '', '')
   const [tenantIds, setTenantIds] = useState(null)
   const [unavailable, setUnavailable] = useState([])
 
-  // Guest disk latency per storage from the orchestrator (#881); the column
-  // only appears once a cluster reports one, so Community sees no change.
+  // Guest disk latency (#881) and bandwidth (#1011) per storage from the
+  // orchestrator; the columns only appear once a cluster reports a latency,
+  // so Community sees no change.
   const latency = useDiskLatency()
 
   // Charger tous les storages en une seule requête
@@ -492,7 +493,27 @@ return (
           />
         )
       }
-    }] : []),
+    },
+    // Bandwidth of the guest disks on the storage over the last collection
+    // (#1011), one column per direction so each can be sorted on its own.
+    ...['read', 'write'].map(direction => ({
+      field: `${direction}Bps`,
+      headerName: t(`storageOverview.${direction}`),
+      description: t(`storageOverview.${direction}Tooltip`),
+      width: 100,
+      valueGetter: (_value, row) => latency.storages.get(`${row.connId}:${row.storage}`)?.[`${direction}_bps`] ?? null,
+      renderCell: params => {
+        const s = latency.storages.get(`${params.row.connId}:${params.row.storage}`)
+
+        return (
+          <StorageBandwidthCell
+            entry={s}
+            direction={direction}
+            tooltip={s ? t('storageOverview.bandwidthTooltip', { vms: s.vms, disks: s.disks }) : ''}
+          />
+        )
+      }
+    }))] : []),
     {
       field: 'totalFormatted',
       headerName: t('storage.capacity'),

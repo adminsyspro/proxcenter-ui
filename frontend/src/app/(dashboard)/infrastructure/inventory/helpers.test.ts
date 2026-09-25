@@ -726,6 +726,26 @@ describe('buildSeriesFromRrd', () => {
     const result = buildSeriesFromRrd([{ time: 1, loadavg: 2.5 }])
     expect(result[0].loadAvg).toBe(2.5)
   })
+
+  it('extracts the pressure stall fields under the names PVE 9 rrddata uses (#1011)', () => {
+    const result = buildSeriesFromRrd([{
+      time: 1,
+      pressurecpusome: 0.5, pressurecpufull: 0.1,
+      pressureiosome: 2.5, pressureiofull: 1.25,
+      pressurememorysome: 0.3, pressurememoryfull: 0.2,
+    }])
+    expect(result[0]).toMatchObject({
+      psiCpuSome: 0.5, psiCpuFull: 0.1,
+      psiIoSome: 2.5, psiIoFull: 1.25,
+      psiMemSome: 0.3, psiMemFull: 0.2,
+    })
+  })
+
+  it('leaves the pressure fields undefined when the archive predates them', () => {
+    const result = buildSeriesFromRrd([{ time: 1, cpu: 0.1 }])
+    expect(result[0].psiIoSome).toBeUndefined()
+    expect(result[0].psiIoFull).toBeUndefined()
+  })
 })
 
 /* ------------------------------------------------------------------ */

@@ -8,7 +8,7 @@ import { vmIconOpacity } from '@/app/(dashboard)/infrastructure/inventory/helper
 import { NodeIcon } from '@/app/(dashboard)/infrastructure/inventory/components/TreeIcons'
 import { useTenant } from '@/contexts/TenantContext'
 import { useDiskLatency } from '@/hooks/useDiskLatency'
-import { GuestLatencyCell } from '@/components/inventory/DiskLatencyCell'
+import { GuestBandwidthCell, GuestIoPressureCell, GuestLatencyCell } from '@/components/inventory/DiskLatencyCell'
 
 import { createPortal } from 'react-dom'
 import {
@@ -849,6 +849,14 @@ return { id: vm.id, data }
     const headerIconOnly = (icon: string) => () => (
       <i className={icon} style={{ fontSize: 14, opacity: 0.7 }} />
     )
+
+    // Icon-only header that says what its figure is on hover (#1011): a timer
+    // or an arrow alone does not tell latency from bandwidth.
+    const headerIconTooltip = (icon: string, title: string) => () => (
+      <Tooltip title={title}>
+        <i className={icon} style={{ fontSize: 14, opacity: 0.7 }} />
+      </Tooltip>
+    )
     
     const cols: GridColDef[] = [
       // ID - peut être masqué via le menu des colonnes
@@ -1145,9 +1153,44 @@ return (
           field: 'latency',
           headerName: t('inventory.diskLatency'),
           width: 70,
-          renderHeader: headerIconOnly('ri-timer-line'),
+          renderHeader: headerIconTooltip('ri-timer-line', t('inventory.diskLatencyTooltip')),
           valueGetter: (_value, row) => diskLatency.guests.get(`${row.connId}:${row.vmid}`)?.latencyMs ?? null,
           renderCell: (params) => <GuestLatencyCell entry={diskLatency.guests.get(`${params.row.connId}:${params.row.vmid}`)} />
+        })
+
+        // Bandwidth over the last collection (#1011), one column per direction
+        // so the list sorts by reads or by writes on their own.
+        for (const direction of ['read', 'write'] as const) {
+          cols.push({
+            field: direction === 'read' ? 'diskRead' : 'diskWrite',
+            headerName: t(direction === 'read' ? 'inventory.diskRead' : 'inventory.diskWrite'),
+            width: 72,
+            renderHeader: headerIconTooltip(direction === 'read' ? 'ri-download-2-line' : 'ri-upload-2-line', t(direction === 'read' ? 'inventory.diskReadTooltip' : 'inventory.diskWriteTooltip')),
+            valueGetter: (_value, row) => diskLatency.guests.get(`${row.connId}:${row.vmid}`)?.[direction === 'read' ? 'readBps' : 'writeBps'] ?? null,
+            renderCell: (params) => <GuestBandwidthCell entry={diskLatency.guests.get(`${params.row.connId}:${params.row.vmid}`)} direction={direction} />
+          })
+        }
+      }
+
+      // IO pressure stall (#1011), a PVE 9 reading of the guest's cgroup: the
+      // column only exists once a guest reports one.
+      if (diskLatency.pressureAvailable) {
+        cols.push({
+          field: 'ioPressure',
+          headerName: t('inventory.ioPressure'),
+          width: 64,
+          renderHeader: headerIconTooltip('ri-pulse-line', t('inventory.ioPressureHeaderTooltip')),
+          valueGetter: (_value, row) => diskLatency.pressures.get(`${row.connId}:${row.vmid}`)?.some ?? null,
+          renderCell: (params) => {
+            const pressure = diskLatency.pressures.get(`${params.row.connId}:${params.row.vmid}`)
+
+            return (
+              <GuestIoPressureCell
+                pressure={pressure}
+                tooltip={pressure ? t('inventory.ioPressureTooltip', { some: pressure.some.toFixed(1), full: pressure.full.toFixed(1) }) : ''}
+              />
+            )
+          }
         })
       }
       
@@ -1870,7 +1913,12 @@ return true
                 { field: 'ram', label: 'RAM' },
                 { field: 'maxmem', label: t('common.memory') },
                 { field: 'disk', label: t('vms.disk') },
-                ...(diskLatency.available ? [{ field: 'latency', label: t('inventory.diskLatency') }] : []),
+                ...(diskLatency.available ? [
+                  { field: 'latency', label: t('inventory.diskLatency') },
+                  { field: 'diskRead', label: t('inventory.diskRead') },
+                  { field: 'diskWrite', label: t('inventory.diskWrite') },
+                ] : []),
+                ...(diskLatency.pressureAvailable ? [{ field: 'ioPressure', label: t('inventory.ioPressure') }] : []),
                 { field: 'tags', label: t('common.tags') },
                 { field: 'ip', label: 'IP' },
                 { field: 'snapshots', label: t('vms.snapshots') },

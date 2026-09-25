@@ -218,6 +218,9 @@ export interface DiskLatency {
   latency_ms: number
   read_ops: number
   write_ops: number
+  /** Bytes per second over the last interval (#1011); absent from an orchestrator that predates them. */
+  read_bps?: number
+  write_bps?: number
   window_avg_ms: number
   window_max_ms: number
   window_full: boolean
@@ -247,6 +250,9 @@ export interface StorageLatency {
   read_ms: number
   write_ms: number
   latency_ms: number
+  /** Bytes per second summed over the storage's measured guest disks (#1011); absent from an older orchestrator. */
+  read_bps?: number
+  write_bps?: number
   window_avg_ms: number
   window_max_ms: number
   window_full: boolean
@@ -288,6 +294,21 @@ export interface VMMetrics {
   /** Worst disk's max per-collection latency over the window (#881). */
   disk_latency_window_max_ms?: number
   disk_latency?: DiskLatency[]
+  /** Bytes per second summed over the disks above (#1011); absent from an older orchestrator. */
+  disk_read_bps?: number
+  disk_write_bps?: number
+  /** Only for guests whose PVE reports one (PVE 9): absent is "not reported", not 0 % (#1011). */
+  io_pressure?: IoPressure
+}
+
+/**
+ * IO pressure stall of a guest (#1011): the kernel's PSI avg10 of its cgroup,
+ * in percent of the last ten seconds. `some`: at least one task waited on
+ * I/O; `full`: all of them did.
+ */
+export interface IoPressure {
+  some: number
+  full: number
 }
 
 export interface ClusterSummary {

@@ -11,6 +11,7 @@ import {
 } from '@mui/material'
 
 import * as firewallAPI from '@/lib/api/firewall'
+import { isRuleEnabled } from './shared/isRuleEnabled'
 import { useToast } from '@/contexts/ToastContext'
 import { PolicySection } from '../../types'
 import RuleFormDialog, { RuleFormData } from './RuleFormDialog'
@@ -90,7 +91,7 @@ export default function FirewallPolicyTable({
     rules: clusterRules,
     appliedTo: [],
     ruleCount: clusterRules.length,
-    activeRuleCount: clusterRules.filter(r => r.enable !== 0).length,
+    activeRuleCount: clusterRules.filter(isRuleEnabled).length,
   }), [clusterRules, t])
 
   // ── Cluster rule reload ──
@@ -116,7 +117,7 @@ export default function FirewallPolicyTable({
     setRuleDialogIsNew(false)
     setRuleDialogEditPos(rule.pos)
     setRuleForm({
-      type: rule.type || 'in', action: rule.action || 'ACCEPT', enable: rule.enable ?? 1,
+      type: rule.type || 'in', action: rule.action || 'ACCEPT', enable: isRuleEnabled(rule) ? 1 : 0,
       proto: rule.proto || '', dport: rule.dport || '', sport: rule.sport || '',
       source: rule.source || '', dest: rule.dest || '', macro: rule.macro || '',
       iface: rule.iface || '', log: rule.log || 'nolog', comment: rule.comment || ''
@@ -146,7 +147,7 @@ export default function FirewallPolicyTable({
   // ── Toggle enable ──
   const handleToggleEnable = async (rule: firewallAPI.FirewallRule) => {
     if (!selectedConnection) return
-    const newEnable = rule.enable === 1 ? 0 : 1
+    const newEnable = isRuleEnabled(rule) ? 0 : 1
     try {
       await fetch(`/api/v1/firewall/cluster/${selectedConnection}/rules/${rule.pos}`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...rule, enable: newEnable })
@@ -234,7 +235,7 @@ export default function FirewallPolicyTable({
         <RuleRowLeadingCells
           rule={rule}
           isGroupRule={isGroupRule}
-          enabled={rule.enable !== 0}
+          enabled={isRuleEnabled(rule)}
           onToggleEnable={() => handleToggleEnable(rule)}
         />
         <RuleTrafficCells rule={rule} isGroupRule={isGroupRule} />

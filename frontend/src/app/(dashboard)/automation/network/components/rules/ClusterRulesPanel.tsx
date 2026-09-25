@@ -11,6 +11,7 @@ import {
 } from '@mui/material'
 
 import * as firewallAPI from '@/lib/api/firewall'
+import { isRuleEnabled } from './shared/isRuleEnabled'
 import { useToast } from '@/contexts/ToastContext'
 import { DEFAULT_RULE } from '../../types'
 
@@ -130,8 +131,8 @@ export default function ClusterRulesPanel({ clusterRules, securityGroups, select
           <Typography variant="h6" sx={{ fontWeight: 700 }}>{t('network.clusterRules')}</Typography>
           <Chip
             label={clusterRules.length > 1
-              ? t('networkPage.rulesAndActiveCount', { count: clusterRules.length, active: clusterRules.filter(r => r.enable !== 0).length })
-              : t('networkPage.ruleAndActiveCount', { count: clusterRules.length, active: clusterRules.filter(r => r.enable !== 0).length })}
+              ? t('networkPage.rulesAndActiveCount', { count: clusterRules.length, active: clusterRules.filter(isRuleEnabled).length })
+              : t('networkPage.ruleAndActiveCount', { count: clusterRules.length, active: clusterRules.filter(isRuleEnabled).length })}
             size="small"
           />
         </Box>
@@ -193,7 +194,7 @@ export default function ClusterRulesPanel({ clusterRules, securityGroups, select
                     </TableCell>
                     <TableCell sx={{ fontSize: 11 }}>{rule.pos}</TableCell>
                     <TableCell>
-                      <Chip label={rule.enable === 0 ? 'Off' : 'On'} size="small" sx={{ height: 18, fontSize: 9, bgcolor: rule.enable === 0 ? alpha('#888', 0.15) : alpha('#22c55e', 0.15), color: rule.enable === 0 ? '#888' : '#22c55e' }} />
+                      <Chip label={isRuleEnabled(rule) ? 'On' : 'Off'} size="small" sx={{ height: 18, fontSize: 9, bgcolor: isRuleEnabled(rule) ? alpha('#22c55e', 0.15) : alpha('#888', 0.15), color: isRuleEnabled(rule) ? '#22c55e' : '#888' }} />
                     </TableCell>
                     <TableCell>
                       <Chip label={isGroupRule ? 'GROUP' : rule.type?.toUpperCase() || '-'} size="small" sx={{ height: 18, fontSize: 9, bgcolor: isGroupRule ? alpha('#8b5cf6', 0.15) : rule.type === 'in' ? alpha('#3b82f6', 0.15) : alpha('#ec4899', 0.15), color: isGroupRule ? '#8b5cf6' : rule.type === 'in' ? '#3b82f6' : '#ec4899' }} />
@@ -216,7 +217,7 @@ export default function ClusterRulesPanel({ clusterRules, securityGroups, select
                           <IconButton size="small" onClick={() => {
                             setEditingClusterRule({ rule, isNew: false })
                             setNewClusterRule({
-                              type: rule.type || 'in', action: rule.action || 'ACCEPT', enable: rule.enable ?? 1,
+                              type: rule.type || 'in', action: rule.action || 'ACCEPT', enable: isRuleEnabled(rule) ? 1 : 0,
                               proto: rule.proto || '', dport: rule.dport || '', sport: rule.sport || '',
                               source: rule.source || '', dest: rule.dest || '', macro: rule.macro || '',
                               iface: rule.iface || '', log: rule.log || 'nolog', comment: rule.comment || ''

@@ -11,6 +11,7 @@ import {
 } from '@mui/material'
 
 import * as firewallAPI from '@/lib/api/firewall'
+import { isRuleEnabled } from './shared/isRuleEnabled'
 import { VMFirewallInfo } from '@/hooks/useVMFirewallRules'
 import { useToast } from '@/contexts/ToastContext'
 import LogLevelSelect from '@/components/firewall/LogLevelSelect'
@@ -172,7 +173,7 @@ export default function VMRulesPanel({ vmFirewallData, securityGroups, loadingVM
     setEditingVMRule({ vm, rule, isNew: !rule })
     if (rule) {
       setNewVMRule({
-        type: rule.type || 'in', action: rule.action || 'ACCEPT', enable: rule.enable ?? 1,
+        type: rule.type || 'in', action: rule.action || 'ACCEPT', enable: isRuleEnabled(rule) ? 1 : 0,
         proto: rule.proto || '', dport: rule.dport || '', sport: rule.sport || '',
         source: rule.source || '', dest: rule.dest || '', macro: rule.macro || '',
         iface: rule.iface || '', log: rule.log || DEFAULT_LOG_LEVEL, comment: rule.comment || ''
@@ -217,8 +218,8 @@ export default function VMRulesPanel({ vmFirewallData, securityGroups, loadingVM
 
   const handleToggleVMRuleEnable = async (vm: VMFirewallInfo, rule: firewallAPI.FirewallRule) => {
     try {
-      await firewallAPI.updateVMRule(selectedConnection, vm.node, vm.type, vm.vmid, rule.pos, { ...rule, enable: rule.enable === 1 ? 0 : 1 })
-      showToast(rule.enable === 1 ? t('network.ruleDisabled') : t('network.ruleEnabled'), 'success')
+      await firewallAPI.updateVMRule(selectedConnection, vm.node, vm.type, vm.vmid, rule.pos, { ...rule, enable: isRuleEnabled(rule) ? 0 : 1 })
+      showToast(isRuleEnabled(rule) ? t('network.ruleDisabled') : t('network.ruleEnabled'), 'success')
       reloadVMFirewallRules(vm)
     } catch (err: any) {
       showToast(err.message || t('networkPage.error'), 'error')
@@ -445,7 +446,7 @@ export default function VMRulesPanel({ vmFirewallData, securityGroups, loadingVM
                           onDragLeave={handleDragLeave}
                           onDrop={e => handleDrop(e, vm, rule.pos)}
                           sx={{
-                            cursor: 'grab', opacity: isDragging ? 0.5 : (rule.enable === 0 ? 0.5 : 1),
+                            cursor: 'grab', opacity: isDragging ? 0.5 : (isRuleEnabled(rule) ? 1 : 0.5),
                             borderTop: isDragOver ? `2px solid ${theme.palette.primary.main}` : undefined,
                             '&:active': { cursor: 'grabbing' }
                           }}
@@ -453,7 +454,7 @@ export default function VMRulesPanel({ vmFirewallData, securityGroups, loadingVM
                           <RuleRowLeadingCells
                             rule={rule}
                             isGroupRule={isGroupRule}
-                            enabled={rule.enable === 1}
+                            enabled={isRuleEnabled(rule)}
                             onToggleEnable={() => handleToggleVMRuleEnable(vm, rule)}
                           />
                           <RuleTrafficCells rule={rule} isGroupRule={isGroupRule} />

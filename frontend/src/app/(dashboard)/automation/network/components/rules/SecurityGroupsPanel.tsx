@@ -11,6 +11,7 @@ import {
 } from '@mui/material'
 
 import * as firewallAPI from '@/lib/api/firewall'
+import { isRuleEnabled } from './shared/isRuleEnabled'
 import { VMFirewallInfo } from '@/hooks/useVMFirewallRules'
 import { useToast } from '@/contexts/ToastContext'
 import { PolicySection } from '../../types'
@@ -118,7 +119,7 @@ export default function SecurityGroupsPanel({
         rules,
         appliedTo: computeAppliedTo(sg.group, vmFirewallData),
         ruleCount: rules.length,
-        activeRuleCount: rules.filter(r => r.enable !== 0).length,
+        activeRuleCount: rules.filter(isRuleEnabled).length,
       }
     })
   }, [securityGroups, vmFirewallData])
@@ -160,7 +161,7 @@ export default function SecurityGroupsPanel({
     setRuleDialogIsNew(false)
     setRuleDialogEditPos(rule.pos)
     setRuleForm({
-      type: rule.type || 'in', action: rule.action || 'ACCEPT', enable: rule.enable ?? 1,
+      type: rule.type || 'in', action: rule.action || 'ACCEPT', enable: isRuleEnabled(rule) ? 1 : 0,
       proto: rule.proto || '', dport: rule.dport || '', sport: rule.sport || '',
       source: rule.source || '', dest: rule.dest || '', macro: rule.macro || '',
       iface: rule.iface || '', log: rule.log || 'nolog', comment: rule.comment || ''
@@ -189,7 +190,7 @@ export default function SecurityGroupsPanel({
   // ── Toggle enable ──
   const handleToggleEnable = async (section: PolicySection, rule: firewallAPI.FirewallRule) => {
     if (!selectedConnection) return
-    const newEnable = rule.enable === 1 ? 0 : 1
+    const newEnable = isRuleEnabled(rule) ? 0 : 1
     try {
       await firewallAPI.updateSecurityGroupRule(selectedConnection, section.id, rule.pos, { ...rule, enable: newEnable })
       showToast(newEnable === 1 ? t('network.ruleEnabled') : t('network.ruleDisabled'), 'success')
@@ -303,7 +304,7 @@ export default function SecurityGroupsPanel({
             dashed-out source/destination. */}
         <RuleRowLeadingCells
           rule={rule}
-          enabled={rule.enable !== 0}
+          enabled={isRuleEnabled(rule)}
           onToggleEnable={() => handleToggleEnable(section, rule)}
         />
         <RuleTrafficCells rule={rule} />

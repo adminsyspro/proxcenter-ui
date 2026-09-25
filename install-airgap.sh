@@ -6,7 +6,7 @@
 # upgrades ProxCenter from it on a host with no internet access (ui#956).
 #
 #   ./install-airgap.sh bundle --edition <community|enterprise> --version <X.Y.Z> [--compose <file>] [--output <dir>] [--no-pull]
-#   sudo ./install-airgap.sh install [--license <key or .key path>] [--install-dir /opt/proxcenter] [--registry <host/namespace>]
+#   sudo ./install-airgap.sh install [--license <path to .key file>] [--install-dir /opt/proxcenter] [--registry <host/namespace>]
 #   sudo ./install-airgap.sh upgrade [--install-dir /opt/proxcenter] [--skip-db-backup]
 #
 # install and upgrade run from the extracted bundle directory and find the
@@ -71,7 +71,7 @@ usage() {
     cat <<USAGE
 Usage:
   $0 bundle  --edition <community|enterprise> --version <X.Y.Z> [--compose <file>] [--output <dir>] [--no-pull]
-  $0 install [--license <key or .key path>] [--install-dir <dir>] [--registry <host/namespace>] [--health-timeout <s>]
+  $0 install [--license <path to .key file>] [--install-dir <dir>] [--registry <host/namespace>] [--health-timeout <s>]
   $0 upgrade [--install-dir <dir>] [--skip-db-backup] [--health-timeout <s>]
 
 bundle runs on a connected host already logged in to ghcr.io (Enterprise).
@@ -340,8 +340,8 @@ README
 # ---------- install ----------
 
 write_env_file() {
-    # $1 edition, $2 version, $3 license, $4 server ip
-    local edition=$1 version=$2 license=$3 ip=$4
+    # $1 edition, $2 version, $3 server ip
+    local edition=$1 version=$2 ip=$3
     local app_secret nextauth_secret pg_pass
     app_secret=$(gen_secret 32); nextauth_secret=$(gen_secret 32); pg_pass=$(gen_secret 24)
     # Created with a private umask first: the secrets below must never be
@@ -367,8 +367,9 @@ write_env_file() {
         echo "TEMPLATE_CATALOG_AUTO_UPDATE=false"
         if [ "$edition" = "enterprise" ]; then
             echo ""
-            echo "# License (optional here, can be activated in Settings > License)"
-            echo "LICENSE_KEY=$license"
+            echo "# License: installed as a file in the orchestrator data volume (see"
+            echo "# the install summary), or activate one later in Settings > License."
+            echo "LICENSE_KEY="
             echo ""
             echo "# Orchestrator"
             echo "ORCHESTRATOR_URL=http://orchestrator:8080"
@@ -382,7 +383,7 @@ write_env_file() {
 }
 
 write_orchestrator_config() {
-    local app_secret=$1 license=$2
+    local app_secret=$1
     mkdir -p "$INSTALL_DIR/config"
     cat > "$INSTALL_DIR/config/orchestrator.yaml" <<YAML
 # ProxCenter Orchestrator Configuration (air-gapped install)
@@ -402,7 +403,7 @@ proxmox:
   shared_data_path: /app/shared_data
 
 license:
-  key: "$license"
+  key: ""
 
 logging:
   level: info
@@ -452,11 +453,6 @@ start_stack() {
     fi
 }
 
-read_license_arg() {
-    # A path to a .key file, or the key string itself.
-    if [ -n "$1" ] && [ -f "$1" ]; then tr -d '\r\n' < "$1"; else printf '%s' "$1"; fi
-}
-
 server_ip() {
     local ip
     ip=$(hostname -I 2>/dev/null | awk '{print $1}' | head -1) || ip=""
@@ -467,11 +463,44 @@ frontend_image_of() {
     manifest_images | grep '/proxcenter-frontend:' | head -1
 }
 
+orchestrator_image_of() {
+    manifest_images | grep '/proxcenter-orchestrator:' | head -1
+}
+
+# install_license_file LICENSE_PATH ORCHESTRATOR_IMAGE: copies the (already
+# validated) .key file into orchestrator_data as /app/data/license.key with a
+# one-shot container of the orchestrator image, so BackfillPrimary picks it up
+# on the orchestrator's next boot. Intact: no newline-stripping, unlike the
+# old LICENSE_KEY env value this replaces (the PEM-like license block needs
+# its real newlines to parse).
+install_license_file() {
+    local license=$1 orchestrator_image=$2 abs_license
+    abs_license="$(cd "$(dirname "$license")" && pwd)/$(basename "$license")"
+    # Same style as create_volumes' chown one-shot: stderr is kept (in the
+    # log, and its last line in the error itself) instead of /dev/null, since
+    # a bad image reference or a permission error inside the container must
+    # be diagnosable, not just "Could not install the license file".
+    local err
+    if ! err=$(docker run --rm --entrypoint sh \
+        -v orchestrator_data:/app/data \
+        -v "$abs_license:/tmp/license.key:ro" \
+        "$orchestrator_image" \
+        -c 'cp /tmp/license.key /app/data/license.key && chown "$(stat -c %u:%g /app/data)" /app/data/license.key && chmod 600 /app/data/license.key' 2>&1); then
+        log_line "$err"
+        log_error "Could not install the license file: $(printf '%s\n' "$err" | tail -1)"
+    fi
+    if [ -n "$err" ]; then log_line "$err"; fi
+    log_success "License file installed"
+}
+
 cmd_install() {
     local license="" registry=""
     while [[ $# -gt 0 ]]; do
         case $1 in
-            --license) [ $# -ge 2 ] || log_error "--license needs a value"; license="$2"; shift 2 ;;
+            --license)
+                [ $# -ge 2 ] || log_error "--license needs a value"
+                [ -f "$2" ] && [ -r "$2" ] || log_error "--license must be the path to your .key file (got: $2)"
+                license="$2"; shift 2 ;;
             --install-dir) [ $# -ge 2 ] || log_error "--install-dir needs a value"; INSTALL_DIR="$2"; shift 2 ;;
             --registry) [ $# -ge 2 ] || log_error "--registry needs a value"; registry="${2%/}"; shift 2 ;;
             --health-timeout)
@@ -499,7 +528,6 @@ cmd_install() {
     if [ "$edition" = "community" ] && [ -n "$license" ]; then
         log_warning "--license is ignored on the Community edition"
     fi
-    license=$(read_license_arg "$license")
 
     step 1 "Verifying the bundle"
     verify_checksums
@@ -526,18 +554,21 @@ cmd_install() {
 
     step $n "Configuring ProxCenter"; n=$((n + 1))
     cp "$SCRIPT_DIR/docker-compose.yml" "$INSTALL_DIR/docker-compose.yml"
-    write_env_file "$edition" "$version" "$license" "$(server_ip)"
+    write_env_file "$edition" "$version" "$(server_ip)"
     if [ -n "$registry" ]; then
         env_set REGISTRY "$registry" "$INSTALL_DIR/.env"
         env_set POSTGRES_IMAGE "$registry/$(image_basename "$(manifest_images | grep '^postgres' | head -1)")" "$INSTALL_DIR/.env"
     fi
     if [ "$edition" = "enterprise" ]; then
-        write_orchestrator_config "$(env_get APP_SECRET "$INSTALL_DIR/.env")" "$license"
+        write_orchestrator_config "$(env_get APP_SECRET "$INSTALL_DIR/.env")"
     fi
     log_success "Compose, .env and configuration written to $INSTALL_DIR"
 
     step $n "Initialising volumes"; n=$((n + 1))
     create_volumes "$edition" "$(frontend_image_of)"
+    if [ "$edition" = "enterprise" ] && [ -n "$license" ]; then
+        install_license_file "$license" "$(orchestrator_image_of)"
+    fi
     log_success "Volumes ready"
 
     step $n "Starting ProxCenter"; n=$((n + 1))
@@ -557,8 +588,12 @@ print_install_summary() {
     echo -e "    ${BOLD}Install${NC}     $INSTALL_DIR"
     echo -e "    ${BOLD}Duration${NC}    $(format_duration $(( $(date +%s) - START_TIME )))"
     echo ""
-    if [ "$edition" = "enterprise" ] && [ -z "$license" ]; then
-        echo -e "    ${YELLOW}${BOLD}!${NC} ${YELLOW}No license key provided${NC}: upload your .key in ${BOLD}Settings > License${NC}"
+    if [ "$edition" = "enterprise" ]; then
+        if [ -n "$license" ]; then
+            echo -e "    ${GREEN}${BOLD}✓${NC} License installed from ${BOLD}$license${NC}"
+        else
+            echo -e "    ${YELLOW}${BOLD}!${NC} ${YELLOW}No license key provided${NC}: upload your .key in ${BOLD}Settings > License${NC}"
+        fi
         echo ""
     fi
     echo -e "    ${DIM}Upgrade: extract the next bundle, then from its directory:${NC}"

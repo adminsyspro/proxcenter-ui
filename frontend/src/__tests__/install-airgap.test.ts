@@ -142,7 +142,7 @@ describe('bundle', () => {
 describe('install', () => {
   it('verifies, loads, configures, starts and waits (enterprise)', () => {
     const bdir = makeFakeBundle(sb, { edition: 'enterprise', version: '1.4.10' })
-    const r = runAirgap(sb, ['install', '--install-dir', sb.installDir, '--license', 'LIC-KEY-STRING', '--health-timeout', '5'], bdir)
+    const r = runAirgap(sb, ['install', '--install-dir', sb.installDir, '--health-timeout', '5'], bdir)
     expect(r.status, r.stdout + r.stderr).toBe(0)
 
     const argv = sb.argv()
@@ -154,6 +154,8 @@ describe('install', () => {
     expect(argv).toContain('docker compose up -d')
     expect(argv.some(a => a.startsWith('curl') && a.includes('--noproxy') && a.includes('http://localhost:3000/api/health'))).toBe(true)
     expect(argv.some(a => a.startsWith('docker inspect') && a.includes('proxcenter-orchestrator'))).toBe(true)
+    // no license given: no one-shot copy into orchestrator_data
+    expect(argv.some(a => a.includes('/tmp/license.key'))).toBe(false)
     // nothing pulled, nothing pushed, no registry login
     expect(argv.some(a => /^docker (pull|push|login|tag) /.test(a))).toBe(false)
 
@@ -162,7 +164,7 @@ describe('install', () => {
     expect(env.VERSION).toBe('1.4.10')
     expect(env.PROXCENTER_OFFLINE).toBe('true')
     expect(env.TEMPLATE_CATALOG_AUTO_UPDATE).toBe('false')
-    expect(env.LICENSE_KEY).toBe('LIC-KEY-STRING')
+    expect(env.LICENSE_KEY).toBe('')
     expect(env.NEXTAUTH_URL).toBe('http://10.42.0.55:3000')
     expect(env.ORCHESTRATOR_URL).toBe('http://orchestrator:8080')
     expect(env.GHCR_TOKEN).toBe('')
@@ -172,24 +174,47 @@ describe('install', () => {
 
     const yaml = readFileSync(join(sb.installDir, 'config', 'orchestrator.yaml'), 'utf8')
     expect(yaml).toContain(`app_secret: "${env.APP_SECRET}"`)
-    expect(yaml).toContain('key: "LIC-KEY-STRING"')
+    expect(yaml).toContain('key: ""')
     const mode = (statSync(join(sb.installDir, 'config', 'orchestrator.yaml')).mode & 0o777).toString(8)
     expect(mode).toBe('644')
     expect((statSync(join(sb.installDir, '.env')).mode & 0o777).toString(8)).toBe('600')
     expect(existsSync(join(sb.installDir, 'install-airgap.log'))).toBe(true)
+
+    // No license was given: the summary points at Settings > License.
+    expect(r.stdout).toMatch(/No license key provided.*Settings > License/s)
   })
 
-  it('reads --license from a .key file path (enterprise)', () => {
-    const bdir = makeFakeBundle(sb, { edition: 'enterprise' })
+  it('copies the .key file into the orchestrator data volume (enterprise)', () => {
+    const bdir = makeFakeBundle(sb, { edition: 'enterprise', version: '1.4.10' })
     const keyPath = join(sb.dir, 'lic.key')
-    writeFileSync(keyPath, 'FILE-KEY-CONTENT\n')
+    writeFileSync(keyPath, '-----BEGIN PROXCENTER LICENSE-----\nQUJD\n-----BEGIN SIGNATURE-----\nWFla\n-----END PROXCENTER LICENSE-----\n')
     const r = runAirgap(sb, ['install', '--install-dir', sb.installDir, '--license', keyPath, '--health-timeout', '5'], bdir)
     expect(r.status, r.stdout + r.stderr).toBe(0)
+
+    const argv = sb.argv()
+    const copyLine = argv.find(a => a.startsWith('docker run --rm --entrypoint sh'))
+    expect(copyLine, argv.join('\n')).toBeDefined()
+    expect(copyLine).toContain('-v orchestrator_data:/app/data')
+    expect(copyLine).toContain(`-v ${keyPath}:/tmp/license.key:ro`)
+    expect(copyLine).toContain('ghcr.io/adminsyspro/proxcenter-orchestrator:1.4.10')
+
     const env = readEnvFile(join(sb.installDir, '.env'))
-    expect(env.LICENSE_KEY).toBe('FILE-KEY-CONTENT')
+    expect(env.LICENSE_KEY).toBe('')
+    const yaml = readFileSync(join(sb.installDir, 'config', 'orchestrator.yaml'), 'utf8')
+    expect(yaml).toContain('key: ""')
+
+    expect(r.stdout).toMatch(new RegExp(`License installed from.*${keyPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`))
   })
 
-  it('community edition ignores --license and writes a .env without orchestrator settings', () => {
+  it('refuses a --license value that is not a readable file', () => {
+    const bdir = makeFakeBundle(sb, { edition: 'enterprise' })
+    const r = runAirgap(sb, ['install', '--install-dir', sb.installDir, '--license', 'NOT-A-FILE', '--health-timeout', '5'], bdir)
+    expect(r.status).toBe(1)
+    expect(r.stderr).toMatch(/--license must be the path/)
+    expect(sb.argv().some(a => a.startsWith('docker load'))).toBe(false)
+  })
+
+  it('community edition ignores --license (no copy) and writes a .env without orchestrator settings', () => {
     const bdir = makeFakeBundle(sb, { edition: 'community' })
     const keyPath = join(sb.dir, 'lic.key')
     writeFileSync(keyPath, 'FILE-KEY-CONTENT\n')
@@ -202,6 +227,7 @@ describe('install', () => {
     expect(existsSync(join(sb.installDir, 'config', 'orchestrator.yaml'))).toBe(false)
     expect(sb.argv()).not.toContain('docker volume create orchestrator_data')
     expect(sb.argv().some(a => a.startsWith('docker inspect'))).toBe(false)
+    expect(sb.argv().some(a => a.includes('/tmp/license.key'))).toBe(false)
   })
 
   it('fails outside an extracted bundle directory with a manifest.json not found message', () => {

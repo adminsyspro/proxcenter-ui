@@ -469,7 +469,7 @@ cmd_install() {
     local root_dir free_kb
     # Advisory only: keep only the last line (a failed `docker info` can still
     # print a blank one first) and never let this step abort the install.
-    root_dir=$(docker info -f '{{.DockerRootDir}}' 2>/dev/null | tail -n1)
+    root_dir=$(docker info -f '{{.DockerRootDir}}' 2>/dev/null | tail -n1) || root_dir=""
     root_dir="${root_dir:-/var/lib/docker}"
     free_kb=$(df -Pk "$root_dir" 2>/dev/null | awk 'NR==2 {print $4}') || free_kb=""
     if [ -n "$free_kb" ] && [ "$free_kb" -lt $((5 * 1024 * 1024)) ]; then
@@ -530,9 +530,117 @@ print_install_summary() {
     echo ""
 }
 
-# ---------- upgrade: added in a later task ----------
+# ---------- upgrade ----------
 
-cmd_upgrade() { log_error "upgrade: not implemented yet"; }
+installed_edition() {
+    if grep -qE '^\s+orchestrator:\s*$' "$INSTALL_DIR/docker-compose.yml"; then echo enterprise; else echo community; fi
+}
+
+backup_database() {
+    local old_version=$1 stamp=$2 pg_user pg_db out
+    if ! (cd "$INSTALL_DIR" && docker compose ps --status running --services 2>/dev/null | grep -qx postgres); then
+        log_warning "postgres is not running, skipping the database backup"
+        return 0
+    fi
+    pg_user=$(env_get POSTGRES_USER "$INSTALL_DIR/.env"); pg_db=$(env_get POSTGRES_DB "$INSTALL_DIR/.env")
+    mkdir -p "$INSTALL_DIR/backups"
+    out="$INSTALL_DIR/backups/pre-upgrade-$old_version-$stamp.sql.gz"
+    if ! (cd "$INSTALL_DIR" && docker compose exec -T postgres pg_dump -U "${pg_user:-proxcenter}" "${pg_db:-proxcenter}" | gzip_cmd > "$out"); then
+        rm -f "$out"
+        log_error "Database backup failed (pg_dump). Nothing was changed. Retry, or pass --skip-db-backup if you have your own backup."
+    fi
+    chmod 600 "$out"
+    log_success "Database backed up to $out"
+}
+
+backfill_env() {
+    local envf="$INSTALL_DIR/.env"
+    if ! grep -q '^POSTGRES_PASSWORD=' "$envf"; then
+        printf '\n# Postgres (added by upgrade)\nPOSTGRES_PASSWORD=%s\n' "$(gen_secret 24)" >> "$envf"
+        log_info "Added POSTGRES_PASSWORD to .env"
+    fi
+    if [ "$(installed_edition)" = "enterprise" ]; then
+        if ! grep -q '^ORCHESTRATOR_API_KEY=' "$envf"; then
+            printf '\n# Orchestrator (added by upgrade)\nORCHESTRATOR_API_KEY=%s\n' "$(gen_secret 32)" >> "$envf"
+            log_info "Added ORCHESTRATOR_API_KEY to .env"
+        elif grep -q '^ORCHESTRATOR_API_KEY=your-orchestrator-api-key-change-me' "$envf"; then
+            env_set ORCHESTRATOR_API_KEY "$(gen_secret 32)" "$envf"
+            log_info "Replaced the placeholder ORCHESTRATOR_API_KEY in .env"
+        fi
+    fi
+    grep -q '^PROXCENTER_OFFLINE=' "$envf" || printf '\n# Air-gapped site (added by upgrade)\nPROXCENTER_OFFLINE=true\n' >> "$envf"
+    grep -q '^TEMPLATE_CATALOG_AUTO_UPDATE=' "$envf" || printf 'TEMPLATE_CATALOG_AUTO_UPDATE=false\n' >> "$envf"
+}
+
+cmd_upgrade() {
+    local skip_backup=false
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --install-dir) [ $# -ge 2 ] || log_error "--install-dir needs a value"; INSTALL_DIR="$2"; shift 2 ;;
+            --skip-db-backup) skip_backup=true; shift ;;
+            --health-timeout)
+                [ $# -ge 2 ] || log_error "--health-timeout needs a value"
+                [[ "$2" =~ ^[0-9]+$ ]] || log_error "--health-timeout needs a number of seconds"
+                HEALTH_TIMEOUT="$2"; shift 2 ;;
+            -h|--help) usage ;;
+            *) log_error "Unknown option: $1" ;;
+        esac
+    done
+    require_root
+    require_docker
+    [ -f "$SCRIPT_DIR/manifest.json" ] || log_error "manifest.json not found next to $SCRIPT_PATH. Run the install-airgap.sh shipped inside the extracted bundle."
+    if [ ! -f "$INSTALL_DIR/.env" ] || [ ! -f "$INSTALL_DIR/docker-compose.yml" ]; then
+        log_error "No existing installation at $INSTALL_DIR (.env or docker-compose.yml missing). Use: sudo $SCRIPT_PATH install"
+    fi
+    local edition version old_version installed
+    edition=$(manifest_get edition); version=$(manifest_get version)
+    installed=$(installed_edition)
+    if [ "$installed" != "$edition" ]; then
+        log_error "This is a ${installed^} installation and the bundle is an $edition bundle. Use the matching bundle."
+    fi
+    old_version=$(env_get VERSION "$INSTALL_DIR/.env")
+    init_log "$INSTALL_DIR/install-airgap.log" upgrade "$@"
+    TOTAL_STEPS=6
+    print_banner "${edition^} Edition" "upgrade ${old_version:-?} → $version"
+    local stamp; stamp=$(date +%Y%m%d-%H%M%S)
+
+    step 1 "Verifying the bundle"
+    verify_checksums
+
+    step 2 "Backing up the database"
+    if [ "$skip_backup" = true ]; then log_warning "--skip-db-backup: no pg_dump taken"; else backup_database "${old_version:-unknown}" "$stamp"; fi
+
+    step 3 "Loading images"
+    load_images
+    local registry; registry=$(env_get REGISTRY "$INSTALL_DIR/.env")
+    if [ -n "$registry" ]; then retag_and_push "$registry"; log_success "Images pushed to $registry"; fi
+
+    step 4 "Updating compose and .env"
+    cp -p "$INSTALL_DIR/docker-compose.yml" "$INSTALL_DIR/docker-compose.yml.bak.$stamp"
+    # backfill_env reads the still-old compose (via installed_edition) to decide
+    # whether to touch ORCHESTRATOR_API_KEY: it must run before the compose file
+    # below is replaced by the new bundle's, whose services can differ in shape.
+    backfill_env
+    cp "$SCRIPT_DIR/docker-compose.yml" "$INSTALL_DIR/docker-compose.yml"
+    env_set VERSION "$version" "$INSTALL_DIR/.env"
+    log_success "docker-compose.yml replaced (backup: docker-compose.yml.bak.$stamp), VERSION=$version"
+
+    step 5 "Restarting ProxCenter"
+    start_stack "$edition"
+
+    step 6 "Done"
+    echo ""
+    echo -e "${GREEN}${BOLD}  ProxCenter ${edition^} upgraded to $version${NC}"
+    echo ""
+    echo -e "    ${BOLD}Duration${NC}    $(format_duration $(( $(date +%s) - START_TIME )))"
+    echo ""
+    echo -e "    ${DIM}Rollback to ${old_version:-the previous version} (its images are still loaded):${NC}"
+    echo -e "      ${DIM}sed -i 's/^VERSION=.*/VERSION=${old_version:-PREVIOUS}/' $INSTALL_DIR/.env && cp $INSTALL_DIR/docker-compose.yml.bak.$stamp $INSTALL_DIR/docker-compose.yml && cd $INSTALL_DIR && docker compose up -d${NC}"
+    if [ "$skip_backup" != true ]; then
+        echo -e "    ${DIM}If the new version migrated the database, restore the dump from $INSTALL_DIR/backups/ first.${NC}"
+    fi
+    echo ""
+}
 
 # ---------- main ----------
 

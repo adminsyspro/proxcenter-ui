@@ -608,6 +608,10 @@ jobs:
             echo "docker pull ghcr.io/adminsyspro/proxcenter-orchestrator:${TAG}"
             echo "docker pull ghcr.io/adminsyspro/proxcenter-weasyprint:${TAG}"
             echo '```'
+            echo ''
+            echo '## Air-gapped bundle'
+            echo ''
+            echo "Community: the \`proxcenter-community-${TAG#v}.tar.gz\` asset below. Enterprise: your account on proxcenter.io, Air-gapped tab. Guide: https://docs.proxcenter.io/getting-started/air-gapped-installation"
           } >> /tmp/release-body.md
           echo "body_path=/tmp/release-body.md" >> "$GITHUB_OUTPUT"
 
@@ -620,3 +624,79 @@ jobs:
           draft: false
           prerelease: false
           make_latest: true
+
+  # ========================================
+  # Air-gapped bundles (on version tags)
+  # ========================================
+  # install-airgap.sh bundle saves the images the compose resolves to at this
+  # tag, with the compose, the script, a manifest and checksums (ui#956). The
+  # Community bundle is a public release asset; the Enterprise one goes to the
+  # private R2 bucket the customer portal serves. The R2 step is skipped, with
+  # a warning, until the three R2_* secrets exist.
+  bundle:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [release]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: read
+    strategy:
+      fail-fast: false
+      matrix:
+        edition: [community, enterprise]
+    env:
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build the ${{ matrix.edition }} bundle
+        env:
+          EDITION: ${{ matrix.edition }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          VERSION="${TAG#v}"
+          chmod +x install-airgap.sh
+          ./install-airgap.sh bundle --edition "$EDITION" --version "$VERSION" --compose "docker-compose.$EDITION.yml" --output dist
+          ls -la dist
+
+      - name: Attach the Community bundle to the release
+        if: matrix.edition == 'community'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: gh release upload "$TAG" dist/proxcenter-community-*.tar.gz dist/proxcenter-community-*.tar.gz.sha256 --clobber
+
+      - name: Upload the Enterprise bundle to R2
+        if: matrix.edition == 'enterprise' && env.R2_ACCESS_KEY_ID != ''
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          VERSION="${TAG#v}"
+          ENDPOINT="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
+          DEST="s3://proxcenter-bundles/enterprise/${VERSION}"
+          SHA=$(cut -d' ' -f1 "dist/proxcenter-enterprise-${VERSION}.tar.gz.sha256")
+          aws s3 cp "dist/proxcenter-enterprise-${VERSION}.tar.gz" "${DEST}/proxcenter-enterprise-${VERSION}.tar.gz" --endpoint-url "$ENDPOINT" --metadata "sha256=${SHA}" --content-type application/gzip
+          aws s3 cp "dist/proxcenter-enterprise-${VERSION}.tar.gz.sha256" "${DEST}/proxcenter-enterprise-${VERSION}.tar.gz.sha256" --endpoint-url "$ENDPOINT" --content-type text/plain
+          mkdir -p x && tar xzf "dist/proxcenter-enterprise-${VERSION}.tar.gz" -C x
+          aws s3 cp "x/proxcenter-enterprise-${VERSION}/SHA256SUMS" "${DEST}/SHA256SUMS" --endpoint-url "$ENDPOINT" --content-type text/plain
+          aws s3 cp "x/proxcenter-enterprise-${VERSION}/manifest.json" "${DEST}/manifest.json" --endpoint-url "$ENDPOINT" --content-type application/json
+
+      - name: Enterprise bundle not uploaded
+        if: matrix.edition == 'enterprise' && env.R2_ACCESS_KEY_ID == ''
+        run: echo "::warning::R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY / R2_ACCOUNT_ID are not set; the Enterprise bundle was built but not uploaded."

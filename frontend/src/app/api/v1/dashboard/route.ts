@@ -18,7 +18,7 @@ import { authOptions } from "@/lib/auth/config"
 import { filterVmsByPermission, filterNodesByPermission, getCurrentRbacInfraScope, PERMISSIONS } from "@/lib/rbac"
 import { filterCandidateConnections, filterVisibleConnections, hasInfraGrant } from "@/lib/rbac/infraScope"
 import { isAlertInRbacScope } from "@/lib/alerts/visibility"
-import { alertsApi } from "@/lib/orchestrator/client"
+import { fetchDashboardOrchAlerts } from "@/lib/alerts/dashboardOrchAlerts"
 import { demoResponse } from "@/lib/demo/demo-api"
 import { getSetting } from "@/lib/db/settings"
 
@@ -870,29 +870,9 @@ return null
 
     // Merge orchestrator alerts in (Enterprise only) + drop muted entries.
     // All logic lives in lib/alerts/dashboardAlertMerge.ts for testability.
-    let orchAlerts: any[] | undefined
-    let acknowledgedAlerts: any[] | undefined
-    if (process.env.ORCHESTRATOR_URL) {
-      const fetchOrchAlerts = async (status: 'active' | 'acknowledged', limit: number) => {
-        const orchResponse = await alertsApi.getAlerts({ status, limit })
-        const orchData = orchResponse.data as any
-        const list: any[] = orchData?.data || (Array.isArray(orchData) ? orchData : [])
-        // Same RBAC gate as /api/v1/orchestrator/alerts: the merge below only
-        // knows node NAMES, which cannot tell two clusters apart.
-        return rbacScope ? list.filter((a: any) => isAlertInRbacScope(a, rbacScope, tenantId)) : list
-      }
-      try {
-        // The acknowledged ones hide their locally evaluated copy (#1012).
-        const [active, acknowledged] = await Promise.all([
-          fetchOrchAlerts('active', 100),
-          fetchOrchAlerts('acknowledged', 500),
-        ])
-        orchAlerts = active
-        acknowledgedAlerts = acknowledged
-      } catch {
-        // Silently ignore orchestrator errors — not critical for dashboard
-      }
-    }
+    const { active: orchAlerts, acknowledged: acknowledgedAlerts } = process.env.ORCHESTRATOR_URL
+      ? await fetchDashboardOrchAlerts(rbacScope ? (a: any) => isAlertInRbacScope(a, rbacScope, tenantId) : undefined)
+      : {}
     const visibleNodeNames = new Set<string>(filteredNodes.map((n: any) => n.name))
     const filteredAlerts = mergeAndFilterDashboardAlerts({
       baseAlerts: alerts,

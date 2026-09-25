@@ -154,6 +154,16 @@ describe('mergeAndFilterDashboardAlerts', () => {
       expect(merge([cpu, otherNode], [ackedRam]).map(a => `${a.entityId}:${a.metric}`)).toEqual(['pve-1:cpu', 'pve-2:ram'])
     })
 
+    it('reads a missing severity or type as the lowest rank and a raw metric', () => {
+      const info = { ...baseLocalAlert, severity: 'info', metric: undefined, connId: 'conn-1' }
+      expect(merge([info], [{ connection_id: 'conn-1', resource_type: 'node', resource: 'pve-1' }])).toEqual([])
+    })
+
+    it('ranks an unknown severity like info', () => {
+      const odd = { ...baseLocalAlert, severity: 'notice', connId: 'conn-1' }
+      expect(merge([odd], [{ ...ackedRam, severity: 'notice' }])).toEqual([])
+    })
+
     it('still shows an active orchestrator alert of the same key', () => {
       const active = { ...ackedRam, severity: 'warning', message: 'active again' }
       const result = merge([{ ...baseLocalAlert, connId: 'conn-1' }], [ackedRam], [active])

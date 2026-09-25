@@ -1,10 +1,10 @@
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { callRoute } from "../../../../__tests__/setup/route-test"
 import { vmScope } from "@/__tests__/setup/rbacScope"
 
 // Hoist mocks so they can be referenced in vi.mock factories
-const { globalFindMany, sessionFindMany, alertFindUniqueMock, alertUpdateManyMock, getInfraMock, mockGetServerSession, mockListSnapshotsInNamespace, mockPbsFetch, rbacScopeMock } = vi.hoisted(() => ({
+const { globalFindMany, sessionFindMany, alertFindUniqueMock, alertUpdateManyMock, getInfraMock, mockGetServerSession, mockListSnapshotsInNamespace, mockPbsFetch, rbacScopeMock, fetchOrchAlertsMock } = vi.hoisted(() => ({
   globalFindMany: vi.fn(),
   sessionFindMany: vi.fn(),
   alertFindUniqueMock: vi.fn().mockResolvedValue(null),
@@ -14,6 +14,7 @@ const { globalFindMany, sessionFindMany, alertFindUniqueMock, alertUpdateManyMoc
   mockListSnapshotsInNamespace: vi.fn(),
   mockPbsFetch: vi.fn(),
   rbacScopeMock: vi.fn(),
+  fetchOrchAlertsMock: vi.fn(),
 }))
 
 // Keep REAL inventoryConnectionPlan + maskingScope; only mock getTenantInfrastructureScope
@@ -92,6 +93,9 @@ vi.mock("@/lib/alerts/visibility", () => ({
 vi.mock("@/lib/orchestrator/client", () => ({
   alertsApi: { getAlerts: vi.fn().mockRejectedValue(new Error("no orch")) },
 }))
+vi.mock("@/lib/alerts/dashboardOrchAlerts", () => ({
+  fetchDashboardOrchAlerts: (...a: any[]) => fetchOrchAlertsMock(...a),
+}))
 vi.mock("@/lib/alerts/silenceFilter", () => ({
   loadActiveSilenceFingerprints: vi.fn().mockResolvedValue(new Set()),
 }))
@@ -120,6 +124,7 @@ beforeEach(() => {
   mockPbsFetch.mockResolvedValue([])
   // Default namespace snapshot fetch: return empty
   mockListSnapshotsInNamespace.mockResolvedValue([])
+  fetchOrchAlertsMock.mockResolvedValue({})
 })
 
 describe("RBAC infra scope (issue #525)", () => {
@@ -480,5 +485,52 @@ describe("GET /api/v1/dashboard scope routing", () => {
 
     const body = await res.clone().json()
     expect(body.data?.pbs?.datastores).toBe(0)
+  })
+})
+
+describe("orchestrator alerts (#1012)", () => {
+  const active = [{ connection_id: "p1", type: "cpu", resource: "n1" }]
+  const acknowledged = [{ connection_id: "p1", type: "memory", resource: "n1" }]
+
+  beforeEach(() => {
+    getInfraMock.mockResolvedValue({ kind: "provider" })
+    vi.stubEnv("ORCHESTRATOR_URL", "http://orchestrator:8080")
+    fetchOrchAlertsMock.mockResolvedValue({ active, acknowledged })
+  })
+
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
+  it("hands the active and acknowledged alerts to the merge", async () => {
+    const { mergeAndFilterDashboardAlerts } = await import("@/lib/alerts/dashboardAlertMerge")
+    const { GET } = await import("./route")
+    const res = await callRoute(GET, { method: "GET" })
+    expect(res.status).toBe(200)
+
+    expect(fetchOrchAlertsMock).toHaveBeenCalledWith(undefined)
+    expect(vi.mocked(mergeAndFilterDashboardAlerts)).toHaveBeenCalledWith(
+      expect.objectContaining({ orchAlerts: active, acknowledgedAlerts: acknowledged }),
+    )
+  })
+
+  it("gates both lists by the caller's RBAC scope", async () => {
+    rbacScopeMock.mockResolvedValue(vmScope("p1", "n1", "100"))
+    const { isAlertInRbacScope } = await import("@/lib/alerts/visibility")
+    const { GET } = await import("./route")
+    await callRoute(GET, { method: "GET" })
+
+    const gate = fetchOrchAlertsMock.mock.calls[0][0]
+    expect(gate).toEqual(expect.any(Function))
+    gate(active[0])
+    expect(vi.mocked(isAlertInRbacScope)).toHaveBeenCalledWith(active[0], expect.anything(), "default")
+  })
+
+  it("skips the orchestrator when it is not configured", async () => {
+    vi.stubEnv("ORCHESTRATOR_URL", "")
+    const { GET } = await import("./route")
+    await callRoute(GET, { method: "GET" })
+
+    expect(fetchOrchAlertsMock).not.toHaveBeenCalled()
   })
 })

@@ -871,16 +871,24 @@ return null
     // Merge orchestrator alerts in (Enterprise only) + drop muted entries.
     // All logic lives in lib/alerts/dashboardAlertMerge.ts for testability.
     let orchAlerts: any[] | undefined
+    let acknowledgedAlerts: any[] | undefined
     if (process.env.ORCHESTRATOR_URL) {
-      try {
-        const orchResponse = await alertsApi.getAlerts({ status: 'active', limit: 100 })
+      const fetchOrchAlerts = async (status: 'active' | 'acknowledged', limit: number) => {
+        const orchResponse = await alertsApi.getAlerts({ status, limit })
         const orchData = orchResponse.data as any
-        orchAlerts = orchData?.data || (Array.isArray(orchData) ? orchData : [])
+        const list: any[] = orchData?.data || (Array.isArray(orchData) ? orchData : [])
         // Same RBAC gate as /api/v1/orchestrator/alerts: the merge below only
         // knows node NAMES, which cannot tell two clusters apart.
-        if (rbacScope && Array.isArray(orchAlerts)) {
-          orchAlerts = orchAlerts.filter((a: any) => isAlertInRbacScope(a, rbacScope, tenantId))
-        }
+        return rbacScope ? list.filter((a: any) => isAlertInRbacScope(a, rbacScope, tenantId)) : list
+      }
+      try {
+        // The acknowledged ones hide their locally evaluated copy (#1012).
+        const [active, acknowledged] = await Promise.all([
+          fetchOrchAlerts('active', 100),
+          fetchOrchAlerts('acknowledged', 500),
+        ])
+        orchAlerts = active
+        acknowledgedAlerts = acknowledged
       } catch {
         // Silently ignore orchestrator errors — not critical for dashboard
       }
@@ -889,6 +897,7 @@ return null
     const filteredAlerts = mergeAndFilterDashboardAlerts({
       baseAlerts: alerts,
       orchAlerts,
+      acknowledgedAlerts,
       connectionNameById: new Map(allConnections.map(c => [c.id, c.name])),
       visibleNodeNames,
       hasVisibleNodes: filteredNodes.length > 0,

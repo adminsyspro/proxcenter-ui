@@ -101,6 +101,66 @@ describe('mergeAndFilterDashboardAlerts', () => {
     expect(result[0].message).toBe(baseLocalAlert.message)
   })
 
+  it('dedups the real orchestrator shape of a local node alert (memory/warning vs ram/warn)', () => {
+    const result = mergeAndFilterDashboardAlerts({
+      baseAlerts: [baseLocalAlert],
+      orchAlerts: [{ connection_id: 'conn-1', type: 'memory', severity: 'warning', resource_type: 'node', resource: 'pve-1', message: 'Memory 85%' }],
+      connectionNameById: new Map(),
+      visibleNodeNames: visibleNodes(['pve-1']),
+      hasVisibleNodes: true,
+      silencedFingerprints: new Set(),
+    })
+    expect(result).toHaveLength(1)
+    expect(result[0].message).toBe(baseLocalAlert.message)
+  })
+
+  describe('acknowledged orchestrator alerts (#1012)', () => {
+    const ackedRam = { connection_id: 'conn-1', type: 'memory', severity: 'warning', resource_type: 'node', resource: 'pve-1' }
+    const merge = (baseAlerts: any[], acknowledgedAlerts: any[], orchAlerts?: any[]) => mergeAndFilterDashboardAlerts({
+      baseAlerts,
+      orchAlerts,
+      acknowledgedAlerts,
+      connectionNameById: new Map(),
+      visibleNodeNames: visibleNodes(['pve-1', 'pve-2']),
+      hasVisibleNodes: true,
+      silencedFingerprints: new Set(),
+    })
+
+    it('drops the local copy of an acknowledged alert', () => {
+      expect(merge([{ ...baseLocalAlert, connId: 'conn-1' }], [ackedRam])).toEqual([])
+    })
+
+    it('drops a node offline alert acknowledged as node_down', () => {
+      const offline = { ...baseLocalAlert, severity: 'crit', metric: 'status', connId: 'conn-1' }
+      expect(merge([offline], [{ ...ackedRam, type: 'node_down', severity: 'critical' }])).toEqual([])
+    })
+
+    it('keeps a local critical over an acknowledged warning', () => {
+      const critical = { ...baseLocalAlert, severity: 'crit', connId: 'conn-1' }
+      expect(merge([critical], [ackedRam])).toHaveLength(1)
+    })
+
+    it('drops a local warning under an acknowledged critical', () => {
+      expect(merge([{ ...baseLocalAlert, connId: 'conn-1' }], [{ ...ackedRam, severity: 'critical' }])).toEqual([])
+    })
+
+    it('keeps the same node name on another connection', () => {
+      expect(merge([{ ...baseLocalAlert, connId: 'conn-2' }], [ackedRam])).toHaveLength(1)
+    })
+
+    it('keeps other metrics and other nodes of the acknowledged one', () => {
+      const cpu = { ...baseLocalAlert, metric: 'cpu', connId: 'conn-1' }
+      const otherNode = { ...baseLocalAlert, entityId: 'pve-2', connId: 'conn-1' }
+      expect(merge([cpu, otherNode], [ackedRam]).map(a => `${a.entityId}:${a.metric}`)).toEqual(['pve-1:cpu', 'pve-2:ram'])
+    })
+
+    it('still shows an active orchestrator alert of the same key', () => {
+      const active = { ...ackedRam, severity: 'warning', message: 'active again' }
+      const result = merge([{ ...baseLocalAlert, connId: 'conn-1' }], [ackedRam], [active])
+      expect(result.map(a => a.message)).toEqual(['active again'])
+    })
+  })
+
   it('drops orchestrator alerts whose SHA-256 fingerprint is silenced', () => {
     const orchAlert = {
       connection_id: 'conn-1',

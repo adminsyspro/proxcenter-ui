@@ -283,17 +283,27 @@ describe('upgrade', () => {
   it('backs up the database and compose, backfills, bumps VERSION and keeps the secrets byte-identical', () => {
     installedEnv('ORCHESTRATOR_API_KEY=your-orchestrator-api-key-change-me')
     const before = readEnvFile(join(sb.installDir, '.env'))
+    const beforeRaw = readFileSync(join(sb.installDir, '.env'), 'utf8')
+    const oldCompose = readFileSync(join(sb.installDir, 'docker-compose.yml'), 'utf8')
     const bdir = makeFakeBundle(sb, { edition: 'enterprise', version: '1.4.10' })
     const r = runAirgap(sb, ['upgrade', '--install-dir', sb.installDir, '--health-timeout', '5'], bdir)
     expect(r.status, r.stdout + r.stderr).toBe(0)
 
     const argv = sb.argv()
-    expect(argv.some(a => a.startsWith('docker compose exec -T postgres pg_dump'))).toBe(true)
+    const pgDumpIdx = argv.findIndex(a => a.startsWith('docker compose exec -T postgres pg_dump'))
+    const loadIdx = argv.findIndex(a => a.startsWith('docker load -i '))
+    expect(pgDumpIdx).toBeGreaterThan(-1)
+    expect(loadIdx).toBeGreaterThan(-1)
+    expect(pgDumpIdx).toBeLessThan(loadIdx) // the dump is taken before anything is loaded/replaced
     const backups = readdirSync(join(sb.installDir, 'backups'))
-    expect(backups.some(f => /^pre-upgrade-1\.4\.9-\d{8}-\d{6}\.sql\.gz$/.test(f))).toBe(true)
-    expect(readdirSync(sb.installDir).some(f => /^docker-compose\.yml\.bak\.\d{8}-\d{6}$/.test(f))).toBe(true)
+    const dump = backups.find(f => /^pre-upgrade-1\.4\.9-\d{8}-\d{6}\.sql\.gz$/.test(f))
+    expect(dump).toBeDefined()
+    expect((statSync(join(sb.installDir, 'backups', dump as string)).mode & 0o777).toString(8)).toBe('600')
+    expect((statSync(join(sb.installDir, 'backups')).mode & 0o777).toString(8)).toBe('700')
+    const bak = readdirSync(sb.installDir).find(f => /^docker-compose\.yml\.bak\.\d{8}-\d{6}$/.test(f))
+    expect(bak).toBeDefined()
+    expect(readFileSync(join(sb.installDir, bak as string), 'utf8')).toBe(oldCompose)
     expect(readFileSync(join(sb.installDir, 'docker-compose.yml'), 'utf8')).toBe(readFileSync(join(bdir, 'docker-compose.yml'), 'utf8'))
-    expect(argv.some(a => a.startsWith('docker load -i '))).toBe(true)
     expect(argv).toContain('docker compose up -d')
 
     const after = readEnvFile(join(sb.installDir, '.env'))
@@ -303,6 +313,14 @@ describe('upgrade', () => {
     expect(after.PROXCENTER_OFFLINE).toBe('true')
     expect(after.TEMPLATE_CATALOG_AUTO_UPDATE).toBe('false')
     expect(r.stdout).toMatch(/VERSION=1\.4\.9/) // rollback hint names the previous version
+
+    // Every pre-existing line (including the "# old install" comment), in the
+    // same order, is untouched: only VERSION/ORCHESTRATOR_API_KEY change in
+    // place and PROXCENTER_OFFLINE/TEMPLATE_CATALOG_AUTO_UPDATE/comments are
+    // appended — nothing else is rewritten, reordered or duplicated.
+    const stripChanging = (s: string) => s.split('\n').filter(l => l !== '' &&
+      !/^(VERSION=|ORCHESTRATOR_API_KEY=|PROXCENTER_OFFLINE=|TEMPLATE_CATALOG_AUTO_UPDATE=|# (Orchestrator|Postgres|Air-gapped site))/.test(l))
+    expect(stripChanging(readFileSync(join(sb.installDir, '.env'), 'utf8'))).toEqual(stripChanging(beforeRaw))
   })
 
   it('refuses when there is no installation, and when the edition differs', () => {
@@ -328,13 +346,18 @@ describe('upgrade', () => {
 
     sb = makeAirgapSandbox()
     installedEnv()
-    writeFileSync(join(sb.installDir, 'docker-compose.yml'), 'services:\n  orchestrator:\n    image: x\n')
+    const oldCompose = 'services:\n  orchestrator:\n    image: x\n'
+    writeFileSync(join(sb.installDir, 'docker-compose.yml'), oldCompose)
     const bdir2 = makeFakeBundle(sb, { edition: 'enterprise' })
     r = runAirgap(sb, ['upgrade', '--install-dir', sb.installDir], bdir2, { FAKE_PG_DUMP_RC: '3' })
     expect(r.status).toBe(1)
     expect(r.stderr).toMatch(/Database backup failed/)
     expect(sb.argv()).not.toContain('docker compose up -d')
+    expect(sb.argv().some(a => a.startsWith('docker load'))).toBe(false)
     expect(readEnvFile(join(sb.installDir, '.env')).VERSION).toBe('1.4.9')
+    expect(readFileSync(join(sb.installDir, 'docker-compose.yml'), 'utf8')).toBe(oldCompose)
+    const backupsDir = join(sb.installDir, 'backups')
+    if (existsSync(backupsDir)) expect(readdirSync(backupsDir).filter(f => f.endsWith('.sql.gz'))).toHaveLength(0)
   })
 
   it('pushes the new images to REGISTRY when the install uses one', () => {
@@ -344,5 +367,73 @@ describe('upgrade', () => {
     const r = runAirgap(sb, ['upgrade', '--install-dir', sb.installDir, '--skip-db-backup', '--health-timeout', '5'], bdir)
     expect(r.status, r.stdout + r.stderr).toBe(0)
     expect(sb.argv()).toContain('docker push harbor.lan/pc/proxcenter-frontend:1.4.10')
+  })
+
+  it('refuses to run again once .env VERSION already matches the bundle (a previous run only failed to restart)', () => {
+    installedEnv()
+    writeFileSync(join(sb.installDir, '.env'), readFileSync(join(sb.installDir, '.env'), 'utf8').replace('VERSION=1.4.9', 'VERSION=1.4.10'))
+    writeFileSync(join(sb.installDir, 'docker-compose.yml'), 'services:\n  orchestrator:\n    image: x\n')
+    const bdir = makeFakeBundle(sb, { edition: 'enterprise', version: '1.4.10' })
+    const r = runAirgap(sb, ['upgrade', '--install-dir', sb.installDir], bdir)
+    expect(r.status).toBe(1)
+    expect(r.stderr).toMatch(/1\.4\.10/)
+    expect(r.stderr).toMatch(/docker compose up -d/)
+    expect(sb.argv().some(a => a.startsWith('docker load'))).toBe(false)
+  })
+
+  it('prints the rollback commands before restarting, so they are on record even if the restart fails', () => {
+    installedEnv()
+    writeFileSync(join(sb.installDir, 'docker-compose.yml'), 'services:\n  orchestrator:\n    image: x\n')
+    const bdir = makeFakeBundle(sb, { edition: 'enterprise', version: '1.4.10' })
+    const r = runAirgap(sb, ['upgrade', '--install-dir', sb.installDir, '--skip-db-backup', '--health-timeout', '5'], bdir, { FAKE_COMPOSE_UP_RC: '1' })
+    expect(r.status).toBe(1)
+    expect(r.stdout).toMatch(/roll back with/i)
+    expect(r.stdout).toMatch(/docker-compose\.yml\.bak\.\d{8}-\d{6}/)
+    expect(r.stdout).toMatch(/VERSION=1\.4\.9/)
+  })
+
+  it('aborts before loading anything when docker compose ps itself fails, instead of assuming postgres is down', () => {
+    installedEnv()
+    writeFileSync(join(sb.installDir, 'docker-compose.yml'), 'services:\n  orchestrator:\n    image: x\n')
+    const bdir = makeFakeBundle(sb, { edition: 'enterprise' })
+    const r = runAirgap(sb, ['upgrade', '--install-dir', sb.installDir], bdir, { FAKE_COMPOSE_PS_RC: '1' })
+    expect(r.status).toBe(1)
+    expect(r.stderr).toMatch(/docker compose ps/)
+    expect(sb.argv().some(a => a.startsWith('docker load'))).toBe(false)
+    expect(readEnvFile(join(sb.installDir, '.env')).VERSION).toBe('1.4.9')
+  })
+
+  it('warns and proceeds without a dump when postgres is not among the running services', () => {
+    installedEnv()
+    writeFileSync(join(sb.installDir, 'docker-compose.yml'), 'services:\n  orchestrator:\n    image: x\n')
+    const bdir = makeFakeBundle(sb, { edition: 'enterprise' })
+    const r = runAirgap(sb, ['upgrade', '--install-dir', sb.installDir, '--health-timeout', '5'], bdir, { FAKE_RUNNING_SERVICES: 'frontend' })
+    expect(r.status, r.stdout + r.stderr).toBe(0)
+    expect(r.stdout).toMatch(/postgres is not running/)
+    expect(sb.argv().some(a => a.includes('pg_dump'))).toBe(false)
+  })
+
+  it('keeps the last pre-existing line intact when .env has no trailing newline', () => {
+    mkdirSync(sb.installDir, { recursive: true })
+    writeFileSync(join(sb.installDir, '.env'), ['VERSION=1.4.9', 'LICENSE_KEY=LIC'].join('\n')) // no final \n
+    writeFileSync(join(sb.installDir, 'docker-compose.yml'), 'services:\n  frontend:\n    image: x\n# no orchestrator: community\n')
+    const bdir = makeFakeBundle(sb, { edition: 'community' })
+    const r = runAirgap(sb, ['upgrade', '--install-dir', sb.installDir, '--skip-db-backup', '--health-timeout', '5'], bdir)
+    expect(r.status, r.stdout + r.stderr).toBe(0)
+    const after = readEnvFile(join(sb.installDir, '.env'))
+    expect(after.LICENSE_KEY).toBe('LIC') // not glued to the next appended key
+    expect(after.PROXCENTER_OFFLINE).toBe('true')
+    expect(after.TEMPLATE_CATALOG_AUTO_UPDATE).toBe('false')
+  })
+
+  it('spells out setting VERSION by hand in the rollback hint when there was no previous VERSION', () => {
+    mkdirSync(sb.installDir, { recursive: true })
+    writeFileSync(join(sb.installDir, '.env'), 'APP_SECRET=' + 'a'.repeat(64) + '\n')
+    writeFileSync(join(sb.installDir, 'docker-compose.yml'), 'services:\n  frontend:\n    image: x\n# no orchestrator: community\n')
+    const bdir = makeFakeBundle(sb, { edition: 'community' })
+    const r = runAirgap(sb, ['upgrade', '--install-dir', sb.installDir, '--skip-db-backup', '--health-timeout', '5'], bdir)
+    expect(r.status, r.stdout + r.stderr).toBe(0)
+    expect(r.stdout).toMatch(/set VERSION to your previous version/)
+    expect(r.stdout).not.toMatch(/VERSION=PREVIOUS/)
   })
 })

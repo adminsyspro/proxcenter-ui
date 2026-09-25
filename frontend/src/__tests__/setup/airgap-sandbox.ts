@@ -30,8 +30,10 @@ case "$1 $2" in
     if [ -z "$POSTGRES_PASSWORD" ]; then echo "error while interpolating services.postgres.environment: required variable POSTGRES_PASSWORD is missing a value" >&2; exit 1; fi
     # --images: print what FAKE_IMAGES holds, one per line
     printf '%s\\n' $FAKE_IMAGES; exit 0 ;;
-  "compose up"|"compose down") echo " Container proxcenter-frontend Started"; exit 0 ;;
-  "compose ps") printf '%s\\n' $FAKE_RUNNING_SERVICES; exit 0 ;;
+  "compose up"|"compose down") echo " Container proxcenter-frontend Started"; exit \${FAKE_COMPOSE_UP_RC:-0} ;;
+  "compose ps")
+    if [ "\${FAKE_COMPOSE_PS_RC:-0}" != "0" ]; then echo "fake compose ps failure (rc=\$FAKE_COMPOSE_PS_RC)" >&2; exit "$FAKE_COMPOSE_PS_RC"; fi
+    printf '%s\\n' $FAKE_RUNNING_SERVICES; exit 0 ;;
   "compose exec") echo "-- fake pg_dump"; exit \${FAKE_PG_DUMP_RC:-0} ;;
   "image inspect")
     shift 2
@@ -149,7 +151,13 @@ export function makeFakeBundle(sb: AirgapSandbox, opts: FakeBundleOptions = {}):
   mkdirSync(dir, { recursive: true })
   writeFileSync(join(dir, 'install-airgap.sh'), readFileSync(SCRIPT))
   chmodSync(join(dir, 'install-airgap.sh'), 0o755)
-  writeFileSync(join(dir, 'docker-compose.yml'), `services:\n  frontend:\n    image: \${REGISTRY:-ghcr.io/adminsyspro}/proxcenter-frontend:\${VERSION:-latest}\n  postgres:\n    image: \${POSTGRES_IMAGE:-postgres:16-alpine}\n`)
+  // Enterprise includes an orchestrator: service, like the real compose files
+  // do, so installed_edition() (grepped against the post-upgrade compose too)
+  // is exercised against realistic shapes rather than a fixture that never
+  // has the line either way.
+  writeFileSync(join(dir, 'docker-compose.yml'), edition === 'enterprise'
+    ? `services:\n  frontend:\n    image: \${REGISTRY:-ghcr.io/adminsyspro}/proxcenter-frontend:\${VERSION:-latest}\n  orchestrator:\n    image: \${REGISTRY:-ghcr.io/adminsyspro}/proxcenter-orchestrator:\${VERSION:-latest}\n  postgres:\n    image: \${POSTGRES_IMAGE:-postgres:16-alpine}\n`
+    : `services:\n  frontend:\n    image: \${REGISTRY:-ghcr.io/adminsyspro}/proxcenter-frontend:\${VERSION:-latest}\n  postgres:\n    image: \${POSTGRES_IMAGE:-postgres:16-alpine}\n`)
   writeFileSync(join(dir, 'images.tar'), 'fake docker archive\n')
   writeFileSync(join(dir, 'README.txt'), 'fake readme\n')
   writeFileSync(join(dir, 'manifest.json'), JSON.stringify({

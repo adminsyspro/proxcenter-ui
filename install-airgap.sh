@@ -136,6 +136,9 @@ env_set() {
     if grep -q "^$1=" "$3"; then
         sed -i "s|^$1=.*|$1=$2|" "$3"
     else
+        # A file with no trailing newline would otherwise get its last line
+        # glued to this append (e.g. "LICENSE_KEY=LICTEMPLATE_CATALOG_...").
+        [ -s "$3" ] && [ -n "$(tail -c1 "$3")" ] && printf '\n' >> "$3"
         printf '%s=%s\n' "$1" "$2" >> "$3"
     fi
 }
@@ -537,15 +540,23 @@ installed_edition() {
 }
 
 backup_database() {
-    local old_version=$1 stamp=$2 pg_user pg_db out
-    if ! (cd "$INSTALL_DIR" && docker compose ps --status running --services 2>/dev/null | grep -qx postgres); then
+    local old_version=$1 stamp=$2 pg_user pg_db out services
+    # Capture stdout+stderr and the exit code separately: a `ps` failure (older
+    # compose plugin without --status, daemon hiccup, ...) must abort loudly,
+    # not be read as "postgres is not running" and silently skip the backup.
+    if ! services=$(cd "$INSTALL_DIR" && docker compose ps --status running --services 2>&1); then
+        log_error "docker compose ps failed, cannot tell whether postgres is running: $(printf '%s' "$services" | tr '\n' ' ')"
+    fi
+    if ! printf '%s\n' "$services" | grep -qx postgres; then
         log_warning "postgres is not running, skipping the database backup"
         return 0
     fi
     pg_user=$(env_get POSTGRES_USER "$INSTALL_DIR/.env"); pg_db=$(env_get POSTGRES_DB "$INSTALL_DIR/.env")
     mkdir -p "$INSTALL_DIR/backups"
+    chmod 700 "$INSTALL_DIR/backups"
     out="$INSTALL_DIR/backups/pre-upgrade-$old_version-$stamp.sql.gz"
-    if ! (cd "$INSTALL_DIR" && docker compose exec -T postgres pg_dump -U "${pg_user:-proxcenter}" "${pg_db:-proxcenter}" | gzip_cmd > "$out"); then
+    # umask 077: the dump must never be briefly world-readable while it is written.
+    if ! (umask 077; cd "$INSTALL_DIR" && docker compose exec -T postgres pg_dump -U "${pg_user:-proxcenter}" "${pg_db:-proxcenter}" | gzip_cmd > "$out"); then
         rm -f "$out"
         log_error "Database backup failed (pg_dump). Nothing was changed. Retry, or pass --skip-db-backup if you have your own backup."
     fi
@@ -553,13 +564,19 @@ backup_database() {
     log_success "Database backed up to $out"
 }
 
+# backfill_env EDITION: EDITION is the already-validated installed edition
+# (never re-derived from the compose file here, which by the time this runs
+# in cmd_upgrade may already be the new bundle's).
 backfill_env() {
-    local envf="$INSTALL_DIR/.env"
+    local edition=$1 envf="$INSTALL_DIR/.env"
+    # A file with no trailing newline would otherwise get its last line glued
+    # to the first append below (e.g. "LICENSE_KEY=LICTEMPLATE_CATALOG_...").
+    [ -n "$(tail -c1 "$envf")" ] && echo >> "$envf"
     if ! grep -q '^POSTGRES_PASSWORD=' "$envf"; then
         printf '\n# Postgres (added by upgrade)\nPOSTGRES_PASSWORD=%s\n' "$(gen_secret 24)" >> "$envf"
         log_info "Added POSTGRES_PASSWORD to .env"
     fi
-    if [ "$(installed_edition)" = "enterprise" ]; then
+    if [ "$edition" = "enterprise" ]; then
         if ! grep -q '^ORCHESTRATOR_API_KEY=' "$envf"; then
             printf '\n# Orchestrator (added by upgrade)\nORCHESTRATOR_API_KEY=%s\n' "$(gen_secret 32)" >> "$envf"
             log_info "Added ORCHESTRATOR_API_KEY to .env"
@@ -570,6 +587,30 @@ backfill_env() {
     fi
     grep -q '^PROXCENTER_OFFLINE=' "$envf" || printf '\n# Air-gapped site (added by upgrade)\nPROXCENTER_OFFLINE=true\n' >> "$envf"
     grep -q '^TEMPLATE_CATALOG_AUTO_UPDATE=' "$envf" || printf 'TEMPLATE_CATALOG_AUTO_UPDATE=false\n' >> "$envf"
+}
+
+# rollback_commands OLD_VERSION STAMP: the exact shell commands to go back to
+# OLD_VERSION using the docker-compose.yml.bak.STAMP taken this run. OLD_VERSION
+# can be empty (a first-ever upgrade with no VERSION recorded yet): naming a
+# literal placeholder version there would be actively misleading, so this
+# spells out what to do by hand instead of a copy-pastable sed.
+rollback_commands() {
+    local old=$1 stamp=$2
+    if [ -n "$old" ]; then
+        echo "sed -i 's/^VERSION=.*/VERSION=$old/' $INSTALL_DIR/.env && cp $INSTALL_DIR/docker-compose.yml.bak.$stamp $INSTALL_DIR/docker-compose.yml && cd $INSTALL_DIR && docker compose up -d"
+    else
+        echo "set VERSION to your previous version in $INSTALL_DIR/.env, then: cp $INSTALL_DIR/docker-compose.yml.bak.$stamp $INSTALL_DIR/docker-compose.yml && cd $INSTALL_DIR && docker compose up -d"
+    fi
+}
+
+print_rollback_hint() {
+    local label=$1 old=$2 stamp=$3 skip=$4
+    echo ""
+    echo -e "    ${DIM}$label${NC}"
+    echo -e "      ${DIM}$(rollback_commands "$old" "$stamp")${NC}"
+    if [ "$skip" != true ]; then
+        echo -e "    ${DIM}If the new version migrated the database, restore the dump from $INSTALL_DIR/backups/ first.${NC}"
+    fi
 }
 
 cmd_upgrade() {
@@ -599,6 +640,9 @@ cmd_upgrade() {
         log_error "This is a ${installed^} installation and the bundle is an $edition bundle. Use the matching bundle."
     fi
     old_version=$(env_get VERSION "$INSTALL_DIR/.env")
+    if [ "$old_version" = "$version" ]; then
+        log_error "$INSTALL_DIR is already at VERSION=$version; a previous upgrade may have failed only at the restart step. Retry the restart with: cd $INSTALL_DIR && docker compose up -d. To roll back instead, restore the newest docker-compose.yml.bak.* in $INSTALL_DIR, set VERSION back in .env, then run that same command."
+    fi
     init_log "$INSTALL_DIR/install-airgap.log" upgrade "$@"
     TOTAL_STEPS=6
     print_banner "${edition^} Edition" "upgrade ${old_version:-?} → $version"
@@ -617,13 +661,13 @@ cmd_upgrade() {
 
     step 4 "Updating compose and .env"
     cp -p "$INSTALL_DIR/docker-compose.yml" "$INSTALL_DIR/docker-compose.yml.bak.$stamp"
-    # backfill_env reads the still-old compose (via installed_edition) to decide
-    # whether to touch ORCHESTRATOR_API_KEY: it must run before the compose file
-    # below is replaced by the new bundle's, whose services can differ in shape.
-    backfill_env
     cp "$SCRIPT_DIR/docker-compose.yml" "$INSTALL_DIR/docker-compose.yml"
+    backfill_env "$edition"
     env_set VERSION "$version" "$INSTALL_DIR/.env"
     log_success "docker-compose.yml replaced (backup: docker-compose.yml.bak.$stamp), VERSION=$version"
+    # Printed before the restart is attempted: if step 5 fails, this is still
+    # in the transcript, and by then the compose/VERSION are already changed.
+    print_rollback_hint "If the restart below fails, roll back with:" "$old_version" "$stamp" "$skip_backup"
 
     step 5 "Restarting ProxCenter"
     start_stack "$edition"
@@ -633,13 +677,7 @@ cmd_upgrade() {
     echo -e "${GREEN}${BOLD}  ProxCenter ${edition^} upgraded to $version${NC}"
     echo ""
     echo -e "    ${BOLD}Duration${NC}    $(format_duration $(( $(date +%s) - START_TIME )))"
-    echo ""
-    echo -e "    ${DIM}Rollback to ${old_version:-the previous version} (its images are still loaded):${NC}"
-    echo -e "      ${DIM}sed -i 's/^VERSION=.*/VERSION=${old_version:-PREVIOUS}/' $INSTALL_DIR/.env && cp $INSTALL_DIR/docker-compose.yml.bak.$stamp $INSTALL_DIR/docker-compose.yml && cd $INSTALL_DIR && docker compose up -d${NC}"
-    if [ "$skip_backup" != true ]; then
-        echo -e "    ${DIM}If the new version migrated the database, restore the dump from $INSTALL_DIR/backups/ first.${NC}"
-    fi
-    echo ""
+    print_rollback_hint "Rollback to the previous version, if ever needed:" "$old_version" "$stamp" "$skip_backup"
 }
 
 # ---------- main ----------

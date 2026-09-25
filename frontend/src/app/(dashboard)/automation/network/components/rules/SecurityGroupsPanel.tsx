@@ -12,6 +12,7 @@ import {
 
 import * as firewallAPI from '@/lib/api/firewall'
 import { isRuleEnabled } from './shared/isRuleEnabled'
+import { ruleToFormData } from './shared/ruleToFormData'
 import { VMFirewallInfo } from '@/hooks/useVMFirewallRules'
 import { useToast } from '@/contexts/ToastContext'
 import { PolicySection } from '../../types'
@@ -160,12 +161,7 @@ export default function SecurityGroupsPanel({
     setRuleDialogScope({ type: 'security-group', name: sgName })
     setRuleDialogIsNew(false)
     setRuleDialogEditPos(rule.pos)
-    setRuleForm({
-      type: rule.type || 'in', action: rule.action || 'ACCEPT', enable: isRuleEnabled(rule) ? 1 : 0,
-      proto: rule.proto || '', dport: rule.dport || '', sport: rule.sport || '',
-      source: rule.source || '', dest: rule.dest || '', macro: rule.macro || '',
-      iface: rule.iface || '', log: rule.log || 'nolog', comment: rule.comment || ''
-    })
+    setRuleForm(ruleToFormData(rule))
     setRuleDialogOpen(true)
   }
 

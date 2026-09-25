@@ -12,6 +12,7 @@ import {
 
 import * as firewallAPI from '@/lib/api/firewall'
 import { isRuleEnabled } from './shared/isRuleEnabled'
+import { ruleToFormData } from './shared/ruleToFormData'
 import { VMFirewallInfo } from '@/hooks/useVMFirewallRules'
 import { useToast } from '@/contexts/ToastContext'
 import LogLevelSelect from '@/components/firewall/LogLevelSelect'
@@ -172,12 +173,7 @@ export default function VMRulesPanel({ vmFirewallData, securityGroups, loadingVM
   const openVMRuleDialog = (vm: VMFirewallInfo, rule: firewallAPI.FirewallRule | null = null) => {
     setEditingVMRule({ vm, rule, isNew: !rule })
     if (rule) {
-      setNewVMRule({
-        type: rule.type || 'in', action: rule.action || 'ACCEPT', enable: isRuleEnabled(rule) ? 1 : 0,
-        proto: rule.proto || '', dport: rule.dport || '', sport: rule.sport || '',
-        source: rule.source || '', dest: rule.dest || '', macro: rule.macro || '',
-        iface: rule.iface || '', log: rule.log || DEFAULT_LOG_LEVEL, comment: rule.comment || ''
-      })
+      setNewVMRule(ruleToFormData(rule))
     } else {
       setNewVMRule({ ...DEFAULT_RULE })
     }

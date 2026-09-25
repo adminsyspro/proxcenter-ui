@@ -12,6 +12,7 @@ import {
 
 import * as firewallAPI from '@/lib/api/firewall'
 import { isRuleEnabled } from './shared/isRuleEnabled'
+import { ruleToFormData } from './shared/ruleToFormData'
 import { useToast } from '@/contexts/ToastContext'
 import LogLevelSelect from '@/components/firewall/LogLevelSelect'
 import { DEFAULT_LOG_LEVEL } from '@/components/firewall/logLevels'
@@ -331,12 +332,7 @@ export default function HostRulesPanel({ hostRulesByNode, nodesList, securityGro
                           <RuleRowActionsCell
                             onEdit={() => {
                               setEditingHostRule({ node, rule, isNew: false })
-                              setNewHostRule({
-                                type: rule.type || 'in', action: rule.action || 'ACCEPT', enable: isRuleEnabled(rule) ? 1 : 0,
-                                proto: rule.proto || '', dport: rule.dport || '', sport: rule.sport || '',
-                                source: rule.source || '', dest: rule.dest || '', macro: rule.macro || '',
-                                iface: rule.iface || '', log: rule.log || DEFAULT_LOG_LEVEL, comment: rule.comment || ''
-                              })
+                              setNewHostRule(ruleToFormData(rule))
                               setHostRuleDialogOpen(true)
                             }}
                             onDelete={() => setDeleteHostRuleConfirm({ node, pos: rule.pos })}

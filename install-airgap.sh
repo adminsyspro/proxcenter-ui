@@ -713,9 +713,7 @@ backup_database() {
     chmod 700 "$INSTALL_DIR/backups"
     out="$INSTALL_DIR/backups/pre-upgrade-$old_version-$stamp.sql.gz"
     # umask 077: the dump must never be briefly world-readable while it is written.
-    # --clean --if-exists: the dump drops each object before recreating it, so
-    # it restores into the already-migrated database (a plain dump fails there
-    # on "relation already exists") as well as into an empty one.
+    # --clean --if-exists: the rollback hint recreates the public schema before feeding this dump, so the restore is exact even after the newer version's migrations.
     if ! (umask 077; cd "$INSTALL_DIR" && docker compose exec -T postgres pg_dump --clean --if-exists -U "${pg_user:-proxcenter}" "${pg_db:-proxcenter}" | gzip_cmd > "$out"); then
         rm -f "$out"
         log_error "Database backup failed (pg_dump). Nothing was changed. Retry, or pass --skip-db-backup if you have your own backup."

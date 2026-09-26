@@ -62,7 +62,9 @@ const WEB_RULE: firewallAPIType.FirewallRule = {
   proto: 'tcp', dport: '443', source: '10.0.0.0/8', log: 'warning', comment: 'https in',
 }
 
-const DISABLED_RULE: firewallAPIType.FirewallRule = { pos: 1, type: 'in', action: 'DROP', enable: 0 }
+// Wire shape of a disabled rule: the orchestrator's omitempty drops enable: 0
+// on the way, so the key is absent rather than 0 (#1015).
+const DISABLED_RULE: firewallAPIType.FirewallRule = { pos: 1, type: 'in', action: 'DROP' }
 
 const GROUPS: firewallAPIType.SecurityGroup[] = [
   { group: 'sg-web', comment: 'front tier', rules: [WEB_RULE, DISABLED_RULE] },

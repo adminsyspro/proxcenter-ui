@@ -242,6 +242,29 @@ describe('HostRulesPanel', () => {
     expect(await requests[0].json()).toMatchObject({ pos: 0, enable: 0, log: 'warning' })
   })
 
+  it('shows a rule PVE returned without enable as off, and turns it on (#1015)', async () => {
+    await renderPanel()
+    expandNode(NODE)
+
+    const bareRow = screen.getAllByRole('row').filter(r => within(r).queryByRole('button', { name: 'Edit' }))[1]
+    const toggle = within(bareRow).getByRole('switch')
+    const requests: Request[] = []
+
+    server.use(
+      http.put(`*/api/v1/firewall/nodes/${CONN}/${NODE}/rules/1`, ({ request }) => {
+        requests.push(request.clone())
+
+        return HttpResponse.json({})
+      }),
+    )
+
+    expect(toggle).not.toBeChecked()
+    fireEvent.click(toggle)
+
+    await waitFor(() => expect(requests).toHaveLength(1))
+    expect(await requests[0].json()).toMatchObject({ pos: 1, enable: 1 })
+  })
+
   it('pre-fills the edit dialog from the rule, log level included', async () => {
     await renderPanel()
     expandNode(NODE)

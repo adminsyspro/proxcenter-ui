@@ -50,9 +50,9 @@ interface RuleCellsProps {
 
 interface RuleLeadingCellsProps extends RuleCellsProps {
   /**
-   * Whether the rule's Active switch reads as on. Passed in rather than
-   * derived: the VM/CT table treats only `enable === 1` as enabled while the
-   * others treat anything but `0` as enabled.
+   * Whether the rule's Active switch reads as on. Every table passes
+   * `isRuleEnabled(rule)`: a disabled rule reaches the UI without `enable`,
+   * so "anything but 0" would read it as on (#1015).
    */
   enabled: boolean
   onToggleEnable: () => void

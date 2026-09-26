@@ -204,6 +204,27 @@ describe('FirewallPolicyTable', () => {
     await waitFor(() => expect(api.getClusterRules).toHaveBeenCalledWith(CONN))
   })
 
+  it('shows a rule PVE returned without enable as off, and turns it on (#1015)', async () => {
+    renderTable({ clusterRules: [FULL_RULE, { pos: 1, type: 'in', action: 'DROP', comment: 'telnet off' }] })
+
+    const toggle = within(ruleRow('telnet off')).getByRole('switch')
+    const requests: Request[] = []
+
+    server.use(
+      http.put(`*/api/v1/firewall/cluster/${CONN}/rules/1`, ({ request }) => {
+        requests.push(request.clone())
+
+        return HttpResponse.json({})
+      }),
+    )
+
+    expect(toggle).not.toBeChecked()
+    fireEvent.click(toggle)
+
+    await waitFor(() => expect(requests).toHaveLength(1))
+    expect(await requests[0].json()).toMatchObject({ pos: 1, enable: 1 })
+  })
+
   it('pre-fills the edit dialog from the rule, log level included', async () => {
     renderTable()
 

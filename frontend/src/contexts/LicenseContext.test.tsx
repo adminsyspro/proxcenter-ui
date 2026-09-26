@@ -57,4 +57,25 @@ describe('LicenseContext', () => {
     await waitFor(() => expect(result.current.isLicensed).toBe(false))
     expect(result.current.status?.edition).toBe('community')
   })
+
+  it('exposes the offline flag the status route sends', async () => {
+    server.use(http.get(LICENSE_STATUS_URL, () => HttpResponse.json({ ...ENTERPRISE_WITH_OPTION, offline: true })))
+    const { result } = renderHook(() => useLicense(), { wrapper })
+    await waitFor(() => expect(result.current.offline).toBe(true))
+  })
+
+  it('keeps the offline flag of a non-ok answer, with the community fallback', async () => {
+    server.use(http.get(LICENSE_STATUS_URL, () => HttpResponse.json({ error: 'x', offline: true }, { status: 503 })))
+    const { result } = renderHook(() => useLicense(), { wrapper })
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    expect(result.current.offline).toBe(true)
+    expect(result.current.status?.edition).toBe('community')
+    expect(result.current.isLicensed).toBe(false)
+  })
+
+  it('defaults offline to false when the status does not say', async () => {
+    const { result } = renderHook(() => useLicense(), { wrapper })
+    await waitFor(() => expect(result.current.isLicensed).toBe(true))
+    expect(result.current.offline).toBe(false)
+  })
 })

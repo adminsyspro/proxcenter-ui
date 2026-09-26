@@ -8,7 +8,7 @@ services:
   # Frontend (Next.js + WebSocket Proxy)
   # ========================================
   frontend:
-    image: ghcr.io/adminsyspro/proxcenter-frontend:${VERSION:-latest}
+    image: ${REGISTRY:-ghcr.io/adminsyspro}/proxcenter-frontend:${VERSION:-latest}
     container_name: proxcenter-frontend
     restart: unless-stopped
     ports:
@@ -39,6 +39,10 @@ services:
       # or set TEMPLATE_CATALOG_AUTO_UPDATE=false on an air-gapped install.
       - TEMPLATE_CATALOG_URL=${TEMPLATE_CATALOG_URL:-}
       - TEMPLATE_CATALOG_AUTO_UPDATE=${TEMPLATE_CATALOG_AUTO_UPDATE:-}
+      # Air-gapped instance: no version check, no GitHub badge, no catalog
+      # refresh, and the maps say why they cannot show tiles. Written by
+      # install-airgap.sh; leave empty on a connected site.
+      - PROXCENTER_OFFLINE=${PROXCENTER_OFFLINE:-}
       # Shared secret for the first-run setup endpoint, which is reachable
       # without authentication for as long as no account exists. Empty keeps
       # the historical behaviour. Set it when the first boot happens on a
@@ -104,7 +108,7 @@ services:
   # Single source of truth for ProxCenter data. Both the frontend and the
   # Go orchestrator connect to this instance over the internal network.
   postgres:
-    image: postgres:16-alpine
+    image: ${POSTGRES_IMAGE:-postgres:16-alpine}
     container_name: proxcenter-postgres
     restart: unless-stopped
     environment:
@@ -132,7 +136,7 @@ services:
   # Orchestrator (Go Backend)
   # ========================================
   orchestrator:
-    image: ghcr.io/adminsyspro/proxcenter-orchestrator:${VERSION:-latest}
+    image: ${REGISTRY:-ghcr.io/adminsyspro}/proxcenter-orchestrator:${VERSION:-latest}
     container_name: proxcenter-orchestrator
     restart: unless-stopped
     ports:
@@ -152,6 +156,11 @@ services:
       - PROXCENTER_SFLOW_LISTEN_ADDRESS=0.0.0.0:6343
       # PDF report renderer (WeasyPrint sidecar — see weasyprint service below).
       - PROXCENTER_REPORTING_URL=http://weasyprint:5000
+      # CVE scanner sources. Empty keeps the public Debian hosts; an
+      # air-gapped site points both at internal mirrors (see the air-gapped
+      # installation guide).
+      - PROXCENTER_CVE_FEED_URL=${CVE_FEED_URL:-}
+      - PROXCENTER_CVE_DEBIAN_MIRROR=${CVE_DEBIAN_MIRROR:-}
       #
       # Docker Secrets support (Swarm / file-based):
       # - APP_SECRET_FILE=/run/secrets/app_secret
@@ -188,7 +197,7 @@ services:
   # into PDF documents. Built from `weasyprint/Dockerfile`. Without it, the
   # orchestrator boots fine but PDF generation is disabled.
   weasyprint:
-    image: ghcr.io/adminsyspro/proxcenter-weasyprint:${VERSION:-latest}
+    image: ${REGISTRY:-ghcr.io/adminsyspro}/proxcenter-weasyprint:${VERSION:-latest}
     # Uncomment to rebuild from source instead of pulling the pinned image
     # (useful when iterating on weasyprint/server.py or the Dockerfile).
     # build:

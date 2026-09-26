@@ -13,6 +13,7 @@ interface LicenseStatus {
   features?: string[]
   options?: string[]
   is_nfr?: boolean
+  offline?: boolean
   [key: string]: any
 }
 
@@ -32,6 +33,7 @@ interface LicenseContextValue {
   features: Feature[]
   hasFeature: (featureId: FeatureId | string) => boolean
   refresh: () => Promise<void>
+  offline: boolean
 }
 
 const LicenseContext = createContext<LicenseContextValue>({
@@ -44,6 +46,7 @@ const LicenseContext = createContext<LicenseContextValue>({
   features: [],
   hasFeature: () => false,
   refresh: async () => {},
+  offline: false,
 })
 
 const COMMUNITY_FALLBACK: LicenseStatus = {
@@ -67,8 +70,11 @@ export function LicenseProvider({ children }: { children: ReactNode }) {
         setStatus(data)
         setError(null)
       } else {
+        // The status route carries `offline` on its error answers too: keep
+        // it, so an air-gapped instance stays offline with the orchestrator down.
+        const body = await res.json().catch(() => null)
         setError('Failed to load license status')
-        setStatus({ ...COMMUNITY_FALLBACK })
+        setStatus({ ...COMMUNITY_FALLBACK, ...(body?.offline === true ? { offline: true } : {}) })
       }
     } catch (e: any) {
       console.error('Failed to load license status:', e)
@@ -113,6 +119,7 @@ export function LicenseProvider({ children }: { children: ReactNode }) {
       features,
       hasFeature,
       refresh,
+      offline: status?.offline === true,
     }}>
       {children}
     </LicenseContext.Provider>

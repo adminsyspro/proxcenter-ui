@@ -7406,6 +7406,7 @@
     "latestCommit": "Letzter Commit",
     "updateAvailable": "aktualisieren verfügbar",
     "upToDate": "Auf dem neuesten Stand",
+    "updateCheckOffline": "Die Update-Prüfung ist auf dieser netzwerkisolierten Instanz deaktiviert",
     "newCommitAvailable": "Ein neues Update ist verfügbar ({count} Commit(s) hinter dem aktuellen Stand)",
     "commitsBehind": "{count} Commit(s) im Rückstand",
     "viewChanges": "Änderungen anzeigen",

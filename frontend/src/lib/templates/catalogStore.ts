@@ -11,6 +11,7 @@
 
 import { APP_VERSION } from '@/config/version'
 import { getSetting, setSetting } from '@/lib/db/settings'
+import { isOfflineMode } from '@/lib/offline'
 import { DEFAULT_TENANT_ID } from '@/lib/tenant/constants'
 
 import { readCatalogBuilds } from './catalogBuilds'
@@ -71,6 +72,7 @@ export function resolveCatalogUrl(env: EnvLike = process.env): string {
 }
 
 export function isCatalogAutoUpdateEnabled(env: EnvLike = process.env): boolean {
+  if (isOfflineMode(env)) return false
   const raw = (env.TEMPLATE_CATALOG_AUTO_UPDATE ?? '').trim().toLowerCase()
   return !(raw === 'false' || raw === '0' || raw === 'no' || raw === 'off')
 }

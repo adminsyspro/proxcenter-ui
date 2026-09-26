@@ -7464,6 +7464,7 @@
     "latestVersion": "최신 버전",
     "updateAvailable": "업데이트 사용 가능",
     "upToDate": "최신 상태",
+    "updateCheckOffline": "네트워크가 격리된 이 인스턴스에서는 업데이트 확인이 비활성화되어 있습니다",
     "newVersionAvailable": "새 버전 v{version}이(가) 사용 가능합니다",
     "newCommitAvailable": "새 업데이트가 있습니다 (커밋 {count}개 뒤처짐)",
     "commitsBehind": "커밋 {count}개 뒤처짐",

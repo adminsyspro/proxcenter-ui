@@ -3,7 +3,7 @@
  * Leaflet itself is stubbed: the point is the URL, the attribution and the
  * dark-mode inversion, not the rendering engine.
  */
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup } from '@testing-library/react'
 import { ThemeProvider, createTheme } from '@mui/material/styles'
 import { SWRConfig } from 'swr'
@@ -14,6 +14,14 @@ import { renderWithProviders, screen, waitFor, fireEvent } from '@/__tests__/set
 // Tailwind plugin for nothing; the stylesheet has no bearing on these
 // assertions.
 vi.mock('leaflet/dist/leaflet.css', () => ({}))
+
+// Resolved and online by default, like every existing test in this file
+// expects; individual tests override `licenseState` for the loading/offline
+// cases.
+let licenseState = { offline: false, loading: false }
+vi.mock('@/contexts/LicenseContext', () => ({
+  useLicense: () => licenseState,
+}))
 
 vi.mock('react-leaflet', () => ({
   MapContainer: ({ children }: any) => <div data-testid='map'>{children}</div>,
@@ -41,6 +49,7 @@ vi.mock('leaflet', () => ({
 
 import GeoMapInner from './GeoMapInner'
 import type { InventoryCluster } from '../types'
+import { MAP_UNAVAILABLE_OFFLINE } from '@/lib/map/basemap'
 
 const CONNECTIONS = [
   {
@@ -71,6 +80,10 @@ function renderMap(mode: 'light' | 'dark', onSelectCluster: (c: unknown) => void
     </SWRConfig>,
   )
 }
+
+beforeEach(() => {
+  licenseState = { offline: false, loading: false }
+})
 
 afterEach(() => {
   cleanup()
@@ -147,5 +160,45 @@ describe('GeoMapInner tile layer', () => {
     fireEvent.click(await screen.findByTestId('marker'))
 
     expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ id: 'c1' }))
+  })
+
+  it('draws nothing while the license status is still loading', async () => {
+    mockFetch({ provider: 'osm', lightUrl: '', darkUrl: '', attribution: '' })
+    licenseState = { offline: false, loading: true }
+
+    renderMap('light')
+
+    await waitFor(() => expect(screen.queryByTestId('map')).not.toBeInTheDocument())
+    expect(screen.queryByTestId('tile-layer')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('marker')).not.toBeInTheDocument()
+  })
+
+  it('explains the map is unavailable on an air-gapped instance with no custom tile server', async () => {
+    mockFetch({ provider: 'osm', lightUrl: '', darkUrl: '', attribution: '' })
+    licenseState = { offline: true, loading: false }
+
+    renderMap('light')
+
+    expect(await screen.findByText(MAP_UNAVAILABLE_OFFLINE)).toBeInTheDocument()
+    expect(screen.queryByTestId('tile-layer')).not.toBeInTheDocument()
+  })
+
+  it('stays usable offline once a custom tile server is configured', async () => {
+    mockFetch({
+      provider: 'custom',
+      lightUrl: 'https://tiles.lan/{z}/{x}/{y}.png',
+      darkUrl: '',
+      attribution: 'Internal tiles',
+    })
+    licenseState = { offline: true, loading: false }
+
+    renderMap('light')
+
+    await waitFor(() =>
+      expect(screen.getByTestId('tile-layer').getAttribute('data-url')).toBe(
+        'https://tiles.lan/{z}/{x}/{y}.png',
+      ),
+    )
+    expect(screen.queryByText(MAP_UNAVAILABLE_OFFLINE)).not.toBeInTheDocument()
   })
 })

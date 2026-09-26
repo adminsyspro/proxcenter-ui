@@ -10,9 +10,10 @@ import 'leaflet/dist/leaflet.css'
 import { Box, Stack, Typography, useTheme } from '@mui/material'
 
 import { useBasemapSettings } from '@/hooks/useBasemapSettings'
-import { DARK_TILE_FILTER, resolveBasemap } from '@/lib/map/basemap'
+import { DARK_TILE_FILTER, MAP_UNAVAILABLE_OFFLINE, resolveBasemap } from '@/lib/map/basemap'
 import { countryFlagUrl } from '@/lib/utils/countries'
 import { CountryFlag } from '@/components/ui/CountryFlag'
+import { useLicense } from '@/contexts/LicenseContext'
 
 export interface DcEntryNode {
   name: string
@@ -108,11 +109,29 @@ export default function MyDatacentersMapInner({ datacenters }: Props) {
   const theme = useTheme()
   const isDark = theme.palette.mode === 'dark'
   const { settings } = useBasemapSettings()
-  const basemap = resolveBasemap(settings, isDark)
+  const { offline, loading: licenseLoading } = useLicense()
+  const basemap = resolveBasemap(settings, isDark, { offline })
 
   const positions: [number, number][] = datacenters
     .filter(d => d.latitude != null && d.longitude != null)
     .map(d => [d.latitude!, d.longitude!])
+
+  // `offline` reads false until the license status is known: requesting tiles
+  // meanwhile would reach the tile server from an air-gapped browser.
+  if (licenseLoading) {
+    return <Box sx={{ height: 320 }} />
+  }
+
+  if (basemap.unavailable) {
+    return (
+      <Box sx={{ height: 280, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 1, opacity: 0.6 }}>
+        <i className="ri-map-2-line" style={{ fontSize: 32 }} />
+        <Typography variant="caption" color="text.secondary" sx={{ textAlign: 'center', px: 2 }}>
+          {MAP_UNAVAILABLE_OFFLINE}
+        </Typography>
+      </Box>
+    )
+  }
 
   if (positions.length === 0) {
     return (

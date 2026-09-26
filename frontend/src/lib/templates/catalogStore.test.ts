@@ -53,6 +53,10 @@ describe('configuration', () => {
     expect(isCatalogAutoUpdateEnabled({ TEMPLATE_CATALOG_AUTO_UPDATE: 'FALSE' })).toBe(false)
     expect(isCatalogAutoUpdateEnabled({ TEMPLATE_CATALOG_AUTO_UPDATE: '0' })).toBe(false)
     expect(isCatalogAutoUpdateEnabled({ TEMPLATE_CATALOG_AUTO_UPDATE: 'true' })).toBe(true)
+
+    // An air-gapped instance never refreshes, even when the switch says so.
+    expect(isCatalogAutoUpdateEnabled({ PROXCENTER_OFFLINE: 'true' })).toBe(false)
+    expect(isCatalogAutoUpdateEnabled({ PROXCENTER_OFFLINE: 'true', TEMPLATE_CATALOG_AUTO_UPDATE: 'true' })).toBe(false)
   })
 })
 

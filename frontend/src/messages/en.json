@@ -7464,6 +7464,7 @@
     "latestVersion": "Latest version",
     "updateAvailable": "Update available",
     "upToDate": "Up to date",
+    "updateCheckOffline": "Update checks are disabled on this air-gapped instance",
     "newVersionAvailable": "A new version v{version} is available",
     "newCommitAvailable": "A new update is available ({count} commit(s) behind)",
     "commitsBehind": "{count} commit(s) behind",

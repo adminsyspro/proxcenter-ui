@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo } from 'react'
 
-import { Box } from '@mui/material'
+import { Box, Typography } from '@mui/material'
 import { useTheme } from '@mui/material/styles'
 import { MapContainer, TileLayer, Marker, useMap } from 'react-leaflet'
 import L from 'leaflet'
@@ -10,7 +10,8 @@ import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 
 import { useBasemapSettings } from '@/hooks/useBasemapSettings'
-import { DARK_TILE_FILTER, resolveBasemap } from '@/lib/map/basemap'
+import { DARK_TILE_FILTER, MAP_UNAVAILABLE_OFFLINE, resolveBasemap } from '@/lib/map/basemap'
+import { useLicense } from '@/contexts/LicenseContext'
 
 import type { InventoryCluster } from '../types'
 
@@ -193,13 +194,31 @@ export default function GeoMapInner({ connections, onSelectCluster }: GeoMapInne
   const isDark = theme.palette.mode === 'dark'
 
   const { settings } = useBasemapSettings()
-  const basemap = resolveBasemap(settings, isDark)
+  const { offline, loading: licenseLoading } = useLicense()
+  const basemap = resolveBasemap(settings, isDark, { offline })
 
   const positions: [number, number][] = connections
     .filter((c) => c.latitude != null && c.longitude != null)
     .map((c) => [c.latitude!, c.longitude!])
 
   const groups = useMemo(() => groupByLocation(connections), [connections])
+
+  // `offline` reads false until the license status is known: requesting tiles
+  // meanwhile would reach the tile server from an air-gapped browser.
+  if (licenseLoading) {
+    return <Box sx={{ width: '100%', height: '100%', minHeight: 400 }} />
+  }
+
+  if (basemap.unavailable) {
+    return (
+      <Box sx={{ width: '100%', minHeight: 400, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 1, opacity: 0.6 }}>
+        <i className="ri-map-2-line" style={{ fontSize: 32 }} />
+        <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', px: 2 }}>
+          {MAP_UNAVAILABLE_OFFLINE}
+        </Typography>
+      </Box>
+    )
+  }
 
   return (
     // The dark basemap is the light one inverted (issue #960), and the filter

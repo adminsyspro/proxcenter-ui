@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 
 import { orchestratorHeaders } from "@/lib/orchestrator/headers"
+import { isOfflineMode } from "@/lib/offline"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -17,6 +18,8 @@ const DEFAULT_COMMUNITY_STATUS = {
 }
 
 export async function GET() {
+  const offline = isOfflineMode()
+
   try {
     const res = await fetch(`${ORCHESTRATOR_URL}/api/v1/license/status`, {
       headers: orchestratorHeaders(),
@@ -27,25 +30,25 @@ export async function GET() {
 
     if (!res.ok) {
       return NextResponse.json(
-        { error: data?.error || `HTTP ${res.status}` },
+        { error: data?.error || `HTTP ${res.status}`, offline },
         { status: res.status }
       )
     }
 
-    return NextResponse.json(data)
+    return NextResponse.json({ ...data, offline })
   } catch (e: any) {
     // Return default community license when orchestrator is unavailable (silent)
     if (e?.message?.includes('ECONNREFUSED') ||
         e?.message?.includes('fetch failed') ||
         e?.message?.includes('timeout')) {
-      return NextResponse.json(DEFAULT_COMMUNITY_STATUS)
+      return NextResponse.json({ ...DEFAULT_COMMUNITY_STATUS, offline })
     }
 
     // Log only unexpected errors
     console.error("License status fetch failed:", e?.message)
 
     return NextResponse.json(
-      { error: e?.message || "Failed to fetch license status" },
+      { error: e?.message || "Failed to fetch license status", offline },
       { status: 500 }
     )
   }

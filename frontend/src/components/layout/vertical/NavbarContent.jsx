@@ -79,14 +79,21 @@ import { APP_VERSION } from '@/config/version'
 // GitHub Stars badge
 function GitHubStars() {
   const [stars, setStars] = useState(null)
+  const { offline, loading } = useLicense()
 
+  // Not before the license status is known: `offline` defaults to false
+  // while it loads, which would let an air-gapped browser call GitHub once.
   useEffect(() => {
+    if (loading || offline) return
     fetch('https://api.github.com/repos/adminsyspro/proxcenter-ui', { next: { revalidate: 3600 } })
       .then(r => r.ok ? r.json() : null)
       .then(data => { if (data?.stargazers_count != null) setStars(data.stargazers_count) })
       .catch(() => {})
-  }, [])
+  }, [loading, offline])
 
+  // Air-gapped instance: the browser cannot reach GitHub either, hide the
+  // badge instead of showing "--" forever (and render nothing while loading).
+  if (loading || offline) return null
   if (stars === null) return <span style={{ fontSize: '0.75rem' }}>--</span>
 
   const formatted = stars >= 1000 ? `${(stars / 1000).toFixed(1)}k` : String(stars)

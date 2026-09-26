@@ -20,6 +20,7 @@ import {
 
 import { VERSION_NAME, APP_VERSION, GITHUB_URL, GITHUB_REPO } from '@/config/version'
 import { LogoIcon } from '@/components/layout/shared/Logo'
+import { useLicense } from '@/contexts/LicenseContext'
 
 interface VersionInfo {
   currentVersion: string
@@ -49,13 +50,22 @@ export default function AboutDialog({ open, onClose }: AboutDialogProps) {
   const [releases, setReleases] = useState<GHRelease[]>([])
   const [loading, setLoading] = useState(false)
   const [loadingReleases, setLoadingReleases] = useState(false)
+  const { offline, loading: licenseLoading } = useLicense()
 
   useEffect(() => {
     if (open) {
       fetchVersionInfo()
-      fetchReleases()
     }
   }, [open])
+
+  // The release history comes from api.github.com, straight from the browser:
+  // never on an air-gapped instance, and not before the license status says
+  // whether this is one (the dialog then simply shows no history).
+  useEffect(() => {
+    if (open && !licenseLoading && !offline) {
+      fetchReleases()
+    }
+  }, [open, licenseLoading, offline])
 
   const fetchVersionInfo = async () => {
     setLoading(true)
@@ -165,6 +175,11 @@ export default function AboutDialog({ open, onClose }: AboutDialogProps) {
                   size="small"
                   sx={{ fontWeight: 600 }}
                 />
+              )}
+              {!loading && versionInfo?.error === 'offline' && (
+                <Typography variant='caption' color='text.secondary'>
+                  {t('about.updateCheckOffline')}
+                </Typography>
               )}
             </Box>
           </Box>

@@ -7469,6 +7469,7 @@
     "latestCommit": "最新提交",
     "updateAvailable": "有可用更新",
     "upToDate": "已是最新",
+    "updateCheckOffline": "此离线隔离实例已禁用更新检查",
     "newVersionAvailable": "新版本 v{version} 可用",
     "newCommitAvailable": "有新的更新可用（落后 {count} 个提交）",
     "commitsBehind": "落后 {count} 个提交",

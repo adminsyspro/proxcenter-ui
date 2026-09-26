@@ -38,4 +38,19 @@ describe('GET /api/v1/license/status carries the offline flag', () => {
     expect(res.status).toBe(500)
     expect(await res.json()).toEqual({ error: 'boom', offline: true })
   })
+
+  it('falls back to the HTTP status when the orchestrator error carries no message', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{}', { status: 502 })))
+    const res = await GET()
+    expect(res.status).toBe(502)
+    expect(await res.json()).toEqual({ error: 'HTTP 502', offline: false })
+  })
+
+  it('names the failure itself when the thrown error has no message', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue({}))
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const res = await GET()
+    expect(res.status).toBe(500)
+    expect(await res.json()).toEqual({ error: 'Failed to fetch license status', offline: false })
+  })
 })

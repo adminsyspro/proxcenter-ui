@@ -108,6 +108,7 @@ export function useLicenseManagement() {
 
   // Downloads the signed license request file (Settings > License > Generate).
   const downloadLicenseRequest = useCallback(async () => {
+    setActivating(true)
     try {
       const res = await fetch('/api/v1/license/request', { cache: 'no-store' })
       if (!res.ok) {
@@ -127,6 +128,8 @@ export function useLicenseManagement() {
       return { success: true } as const
     } catch (e: any) {
       return { success: false, error: e?.message || 'Request failed' } as const
+    } finally {
+      setActivating(false)
     }
   }, [])
 

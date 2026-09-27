@@ -3419,7 +3419,7 @@
     "licenseCopyFingerprint": "지문 복사",
     "licenseFingerprintCopied": "지문이 복사되었습니다",
     "licenseBindingInstall": "이 설치에 바인딩됨",
-    "licenseBindingFloating": "플로팅",
+    "licenseBindingFloating": "유동",
     "licenseGenerateRequest": "라이선스 요청 생성",
     "licenseGenerateRequestHint": "서명된 요청 파일을 다운로드하여 proxcenter.io(내 계정 또는 파트너)에 업로드한 뒤, 받은 키를 여기에 붙여넣으세요.",
     "licenseRequestDownloaded": "라이선스 요청을 다운로드했습니다",

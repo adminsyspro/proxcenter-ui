@@ -1828,6 +1828,7 @@ function FingerprintRow({ label, value, t }) {
 function LicenseTab() {
   const t = useTranslations()
   const theme = useTheme()
+  const { refresh: refreshLicenseContext } = useLicense()
   const [licenseKey, setLicenseKey] = useState('')
   const [deactivateDialogOpen, setDeactivateDialogOpen] = useState(false)
 
@@ -1865,8 +1866,12 @@ function LicenseTab() {
     setResetIdentityOpen(false)
     setError(null); setSuccess(null)
     const result = await resetInstallIdentity()
-    if (result.success) setSuccess(t('settings.licenseIdentityReset'))
-    else setError(result.error || t('settings.licenseIdentityResetFailed'))
+    if (result.success) {
+      setSuccess(t('settings.licenseIdentityReset'))
+      await refreshLicenseContext()
+    } else {
+      setError(result.error || t('settings.licenseIdentityResetFailed'))
+    }
   }
 
   const handleActivate = async () => {
@@ -2068,7 +2073,7 @@ function LicenseTab() {
             <FingerprintRow label={t('settings.licenseBindingExpected')} value={bindingMismatch?.expected || licenseStatus?.bound_fingerprint || ''} t={t} />
             <FingerprintRow label={t('settings.licenseBindingActual')} value={bindingMismatch?.actual || install?.fingerprint || ''} t={t} />
           </Box>
-          <Box component='ol' sx={{ m: 0, pl: 2.5, '& li': { mb: 0.25 } }}>
+          <Box component='ol' sx={{ m: 0, pl: 2.5, listStyle: 'decimal', '& li': { mb: 0.25 } }}>
             <li><Typography variant='body2'>{t('settings.licenseBindingErrorStep1')}</Typography></li>
             <li><Typography variant='body2'>{t('settings.licenseBindingErrorStep2')}</Typography></li>
             <li><Typography variant='body2'>{t('settings.licenseBindingErrorStep3')}</Typography></li>
@@ -2642,7 +2647,7 @@ function LicenseTab() {
               label={t('settings.licenseKey')}
               placeholder={t('settings.licenseKeyPlaceholder')}
               value={licenseKey}
-              onChange={e => setLicenseKey(e.target.value)}
+              onChange={e => { setLicenseKey(e.target.value); setBindingMismatch(null) }}
               sx={{ mb: 2 }}
               InputProps={{
                 sx: { fontFamily: 'JetBrains Mono, monospace', fontSize: '0.85rem' }

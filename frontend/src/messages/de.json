@@ -3406,7 +3406,7 @@
     "licenseCopyFingerprint": "Fingerabdruck kopieren",
     "licenseFingerprintCopied": "Fingerabdruck kopiert",
     "licenseBindingInstall": "An diese Installation gebunden",
-    "licenseBindingFloating": "Ungebunden",
+    "licenseBindingFloating": "Schwebend",
     "licenseGenerateRequest": "Lizenzanforderung erzeugen",
     "licenseGenerateRequestHint": "Laden Sie eine signierte Anforderungsdatei herunter, laden Sie sie auf proxcenter.io hoch (Ihr Konto oder Ihr Partner) und fügen Sie den erhaltenen Schlüssel hier ein.",
     "licenseRequestDownloaded": "Lizenzanforderung heruntergeladen",

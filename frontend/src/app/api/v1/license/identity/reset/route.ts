@@ -20,7 +20,10 @@ export async function POST() {
     const data = await res.json().catch(() => null)
 
     if (!res.ok) {
-      return NextResponse.json({ success: false, error: data?.error || `HTTP ${res.status}` }, { status: res.status })
+      return NextResponse.json(
+        { success: false, error: data?.error || `HTTP ${res.status}`, ...(data?.code ? { code: data.code } : {}) },
+        { status: res.status }
+      )
     }
     return NextResponse.json(data)
   } catch (e: any) {

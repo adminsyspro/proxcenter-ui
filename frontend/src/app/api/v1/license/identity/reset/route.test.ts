@@ -31,10 +31,25 @@ describe('POST /api/v1/license/identity/reset', () => {
     expect(fetchMock.mock.calls[0][1].method).toBe('POST')
   })
 
-  it('forwards an orchestrator error with its status', async () => {
+  it('forwards an orchestrator error and code with its status', async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ error: 'boom', code: 'IDENTITY_SIGNING_UNAVAILABLE' }), { status: 409 }))
+    const res = await (await resetPOST())()
+    expect(res.status).toBe(409)
+    expect(await res.json()).toEqual({ success: false, error: 'boom', code: 'IDENTITY_SIGNING_UNAVAILABLE' })
+  })
+
+  it('forwards an orchestrator error without a code', async () => {
     fetchMock.mockResolvedValue(new Response(JSON.stringify({ error: 'boom' }), { status: 500 }))
     const res = await (await resetPOST())()
     expect(res.status).toBe(500)
     expect(await res.json()).toEqual({ success: false, error: 'boom' })
+  })
+
+  it('503s with ORCHESTRATOR_UNAVAILABLE when the orchestrator is down', async () => {
+    fetchMock.mockRejectedValue(new Error('fetch failed'))
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const res = await (await resetPOST())()
+    expect(res.status).toBe(503)
+    expect((await res.json()).code).toBe('ORCHESTRATOR_UNAVAILABLE')
   })
 })

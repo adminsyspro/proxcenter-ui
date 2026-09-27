@@ -29,7 +29,13 @@ export async function POST(req: Request) {
 
     if (!res.ok) {
       return NextResponse.json(
-        { success: false, error: data?.error || `HTTP ${res.status}` },
+        {
+          success: false,
+          error: data?.error || `HTTP ${res.status}`,
+          ...(data?.code ? { code: data.code } : {}),
+          ...(data?.expected_fingerprint ? { expected_fingerprint: data.expected_fingerprint } : {}),
+          ...(data?.actual_fingerprint ? { actual_fingerprint: data.actual_fingerprint } : {}),
+        },
         { status: res.status }
       )
     }

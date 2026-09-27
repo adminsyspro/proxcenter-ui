@@ -1795,6 +1795,25 @@ const CATEGORY_LABEL_KEYS = {
   disaster_recovery: 'settings.categoryLabels.disaster_recovery',
 }
 
+function FingerprintRow({ label, value, copied, onCopy, t }) {
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 0.75, borderRadius: 1, bgcolor: 'action.hover', minWidth: 0 }}>
+      <i className='ri-fingerprint-2-line' style={{ fontSize: 16, opacity: 0.6 }} />
+      {label && <Typography variant='caption' sx={{ opacity: 0.7, whiteSpace: 'nowrap' }}>{label}:</Typography>}
+      <Typography variant='caption' sx={{ fontFamily: 'JetBrains Mono, monospace', letterSpacing: 0.5, wordBreak: 'break-all', flex: 1 }}>
+        {value}
+      </Typography>
+      {onCopy && (
+        <Tooltip title={copied ? t('settings.licenseFingerprintCopied') : t('settings.licenseCopyFingerprint')}>
+          <IconButton size='small' onClick={onCopy} aria-label={t('settings.licenseCopyFingerprint')}>
+            <i className={copied ? 'ri-check-line' : 'ri-file-copy-line'} style={{ fontSize: 16 }} />
+          </IconButton>
+        </Tooltip>
+      )}
+    </Box>
+  )
+}
+
 function LicenseTab() {
   const t = useTranslations()
   const theme = useTheme()
@@ -1813,14 +1832,51 @@ function LicenseTab() {
     handleActivate: hookActivate,
     handleDeactivate: hookDeactivate,
     loadLicenseStatus,
+    downloadLicenseRequest,
+    resetInstallIdentity,
   } = useLicenseManagement()
 
+  const [resetIdentityOpen, setResetIdentityOpen] = useState(false)
+  const [bindingMismatch, setBindingMismatch] = useState(null) // { expected, actual } from a refused activation
+  const [copied, setCopied] = useState(false)
+
+  const install = licenseStatus?.install || null
+  const canSign = install?.can_sign !== false
+  const bindingError = licenseStatus?.binding_error || null
+
+  const handleCopyFingerprint = async () => {
+    if (!install?.fingerprint) return
+    try {
+      await navigator.clipboard.writeText(install.fingerprint)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    } catch { /* clipboard unavailable (http origin): the text stays selectable */ }
+  }
+
+  const handleGenerateRequest = async () => {
+    setError(null); setSuccess(null)
+    const result = await downloadLicenseRequest()
+    if (result.success) setSuccess(t('settings.licenseRequestDownloaded'))
+    else setError(result.code === 'IDENTITY_SIGNING_UNAVAILABLE' ? t('settings.licenseSigningUnavailable') : (result.error || t('settings.licenseRequestFailed')))
+  }
+
+  const handleResetIdentity = async () => {
+    setResetIdentityOpen(false)
+    const result = await resetInstallIdentity()
+    if (result.success) setSuccess(t('settings.licenseIdentityReset'))
+    else setError(result.error || t('settings.licenseIdentityResetFailed'))
+  }
+
   const handleActivate = async () => {
+    setBindingMismatch(null)
     const result = await hookActivate(licenseKey)
 
     if (result.success) {
       setSuccess(t('settings.licenseActivated'))
       setLicenseKey('')
+    } else if (result.code === 'LICENSE_BINDING_MISMATCH') {
+      setBindingMismatch({ expected: result.expected, actual: result.actual })
+      setError(t('settings.licenseBindingErrorTitle'))
     } else {
       setError(result.error || t('settings.activationFailed'))
     }
@@ -2000,6 +2056,24 @@ function LicenseTab() {
       {error && <Alert severity='error' sx={{ mb: 2 }}>{error}</Alert>}
       {success && <Alert severity='success' sx={{ mb: 2 }}>{success}</Alert>}
 
+      {(bindingError || bindingMismatch) && (
+        <Alert severity='error' icon={<i className='ri-lock-2-line' />} sx={{ mb: 3, '& .MuiAlert-message': { width: '100%' } }}>
+          <Typography variant='subtitle2' fontWeight={700} sx={{ mb: 0.5 }}>{t('settings.licenseBindingErrorTitle')}</Typography>
+          <Typography variant='body2' sx={{ mb: 1.5 }}>
+            {t('settings.licenseBindingErrorBody', { licenseId: licenseStatus?.license_id || 'n/a' })}
+          </Typography>
+          <Box sx={{ display: 'grid', gap: 0.75, mb: 1.5 }}>
+            <FingerprintRow label={t('settings.licenseBindingExpected')} value={bindingMismatch?.expected || licenseStatus?.bound_fingerprint || ''} t={t} />
+            <FingerprintRow label={t('settings.licenseBindingActual')} value={bindingMismatch?.actual || install?.fingerprint || ''} copied={copied} onCopy={handleCopyFingerprint} t={t} />
+          </Box>
+          <Box component='ol' sx={{ m: 0, pl: 2.5, '& li': { mb: 0.25 } }}>
+            <li><Typography variant='body2'>{t('settings.licenseBindingErrorStep1')}</Typography></li>
+            <li><Typography variant='body2'>{t('settings.licenseBindingErrorStep2')}</Typography></li>
+            <li><Typography variant='body2'>{t('settings.licenseBindingErrorStep3')}</Typography></li>
+          </Box>
+        </Alert>
+      )}
+
       {/* ── License Header Card (fallback when multi-license data is unavailable, e.g. Community / no orchestrator) ── */}
       {!mlEnabled && (
       <Card variant='outlined' sx={{ mb: 3, overflow: 'visible' }}>
@@ -2037,6 +2111,13 @@ function LicenseTab() {
                   ) : (
                     <Chip label={t('settings.activeLicense')} color='success' size='small' icon={<i className='ri-checkbox-circle-line' />} />
                   )}
+                  <Chip
+                    size='small'
+                    variant='outlined'
+                    sx={{ ml: 1 }}
+                    icon={<i className={licenseStatus.binding === 'install' ? 'ri-links-line' : 'ri-cloud-line'} />}
+                    label={licenseStatus.binding === 'install' ? t('settings.licenseBindingInstall') : t('settings.licenseBindingFloating')}
+                  />
                   {licenseStatus.expires_at && (
                     <Typography variant='caption' display='block' sx={{ opacity: 0.6, mt: 0.5 }}>
                       {t('settings.expiresOn')}: {new Date(licenseStatus.expires_at).toLocaleDateString()}
@@ -2063,6 +2144,15 @@ function LicenseTab() {
               <i className='ri-fingerprint-line' style={{ fontSize: 16, opacity: 0.5 }} />
               <Typography variant='caption' sx={{ opacity: 0.5, fontFamily: 'JetBrains Mono, monospace', letterSpacing: 0.5 }}>
                 {licenseStatus.license_id}
+              </Typography>
+            </Box>
+          )}
+
+          {install?.fingerprint && (
+            <Box sx={{ mb: 2 }}>
+              <FingerprintRow label={t('settings.licenseInstallFingerprint')} value={install.fingerprint} copied={copied} onCopy={handleCopyFingerprint} t={t} />
+              <Typography variant='caption' display='block' sx={{ opacity: 0.6, mt: 0.5, ml: 0.5 }}>
+                {t('settings.licenseInstallFingerprintHint')}
               </Typography>
             </Box>
           )}
@@ -2183,6 +2273,20 @@ function LicenseTab() {
             {/* All-licenses table */}
             <Box sx={{ display: 'flex', alignItems: 'center', mb: 1.5 }}>
               <Typography variant='subtitle1' fontWeight={700} sx={{ flex: 1 }}>{t('settings.licensesTableTitle')}</Typography>
+              <Tooltip title={canSign ? '' : t('settings.licenseSigningUnavailable')}>
+                <span>
+                  <Button
+                    size='small'
+                    variant='outlined'
+                    onClick={handleGenerateRequest}
+                    disabled={!canSign || activating}
+                    startIcon={<i className='ri-file-shield-2-line' />}
+                    sx={{ mr: 1 }}
+                  >
+                    {t('settings.licenseGenerateRequest')}
+                  </Button>
+                </span>
+              </Tooltip>
               <Button size='small' variant='contained' startIcon={<i className='ri-add-line' />} onClick={() => { setImportBlob(''); setImportConnId(''); setImportOpen(true) }}>
                 {t('settings.licenseImportBtn')}
               </Button>
@@ -2293,6 +2397,24 @@ function LicenseTab() {
               >
                 {t('settings.manageSubscription')}
               </Button>
+              <Tooltip title={canSign ? '' : t('settings.licenseSigningUnavailable')}>
+                <span>
+                  <Button
+                    variant='outlined'
+                    size='small'
+                    onClick={handleGenerateRequest}
+                    disabled={!canSign || activating}
+                    startIcon={<i className='ri-file-shield-2-line' />}
+                  >
+                    {t('settings.licenseGenerateRequest')}
+                  </Button>
+                </span>
+              </Tooltip>
+              {!canSign && (
+                <Button variant='outlined' color='warning' size='small' onClick={() => setResetIdentityOpen(true)} disabled={activating} startIcon={<i className='ri-refresh-line' />}>
+                  {t('settings.licenseResetIdentity')}
+                </Button>
+              )}
               <Box sx={{ flex: 1 }} />
               <Button
                 variant='outlined'
@@ -2339,6 +2461,19 @@ function LicenseTab() {
             startIcon={<i className='ri-delete-bin-line' />}
           >
             {t('settings.deactivateLicense')}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={resetIdentityOpen} onClose={() => setResetIdentityOpen(false)} maxWidth='sm' fullWidth>
+        <DialogTitle>{t('settings.licenseResetIdentityConfirmTitle')}</DialogTitle>
+        <DialogContent>
+          <Typography variant='body2'>{t('settings.licenseResetIdentityConfirm')}</Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setResetIdentityOpen(false)}>{t('common.cancel')}</Button>
+          <Button color='warning' variant='contained' onClick={handleResetIdentity} disabled={activating}>
+            {t('settings.licenseResetIdentity')}
           </Button>
         </DialogActions>
       </Dialog>
@@ -2452,6 +2587,29 @@ function LicenseTab() {
               <i className='ri-vip-crown-line' style={{ marginRight: 8, color: '#e57000' }} />
               {t('settings.activateProLicense')}
             </Typography>
+
+            {install?.fingerprint && (
+              <Box sx={{ mb: 2.5, p: 2, borderRadius: 1, border: 1, borderColor: 'divider' }}>
+                <Typography variant='body2' sx={{ mb: 1.5 }}>{t('settings.licenseGenerateRequestHint')}</Typography>
+                <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <Tooltip title={canSign ? '' : t('settings.licenseSigningUnavailable')}>
+                    <span>
+                      <Button variant='contained' size='small' onClick={handleGenerateRequest} disabled={!canSign || activating} startIcon={<i className='ri-file-shield-2-line' />}>
+                        {t('settings.licenseGenerateRequest')}
+                      </Button>
+                    </span>
+                  </Tooltip>
+                  {!canSign && (
+                    <Button variant='outlined' color='warning' size='small' onClick={() => setResetIdentityOpen(true)} disabled={activating} startIcon={<i className='ri-refresh-line' />}>
+                      {t('settings.licenseResetIdentity')}
+                    </Button>
+                  )}
+                </Box>
+                <Box sx={{ mt: 1.5 }}>
+                  <FingerprintRow label={t('settings.licenseInstallFingerprint')} value={install.fingerprint} copied={copied} onCopy={handleCopyFingerprint} t={t} />
+                </Box>
+              </Box>
+            )}
 
             <TextField
               fullWidth

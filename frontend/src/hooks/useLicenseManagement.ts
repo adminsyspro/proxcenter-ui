@@ -64,6 +64,9 @@ export function useLicenseManagement() {
       const data = await res.json()
 
       if (!res.ok || !data.success) {
+        if (data?.code === 'LICENSE_BINDING_MISMATCH') {
+          return { success: false, error: data.error, code: data.code, expected: data.expected_fingerprint, actual: data.actual_fingerprint } as const
+        }
         throw new Error(data.error || 'Activation failed')
       }
 
@@ -103,6 +106,49 @@ export function useLicenseManagement() {
     }
   }, [loadLicenseStatus, loadFeatures])
 
+  // Downloads the signed license request file (Settings > License > Generate).
+  const downloadLicenseRequest = useCallback(async () => {
+    try {
+      const res = await fetch('/api/v1/license/request', { cache: 'no-store' })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        return { success: false, error: data?.error || `HTTP ${res.status}`, code: data?.code } as const
+      }
+      const blob = await res.blob()
+      const match = /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') || '')
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = match?.[1] || 'proxcenter-license-request.json'
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+      return { success: true } as const
+    } catch (e: any) {
+      return { success: false, error: e?.message || 'Request failed' } as const
+    }
+  }, [])
+
+  // Regenerates the install identity; a license bound to the previous
+  // fingerprint then shows a binding error until rebound.
+  const resetInstallIdentity = useCallback(async () => {
+    setActivating(true)
+    try {
+      const res = await fetch('/api/v1/license/identity/reset', { method: 'POST' })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data.success) {
+        return { success: false, error: data?.error || `HTTP ${res.status}` } as const
+      }
+      await loadLicenseStatus()
+      return { success: true } as const
+    } catch (e: any) {
+      return { success: false, error: e?.message || 'Reset failed' } as const
+    } finally {
+      setActivating(false)
+    }
+  }, [loadLicenseStatus])
+
   return {
     licenseStatus,
     features,
@@ -116,5 +162,7 @@ export function useLicenseManagement() {
     loadFeatures,
     handleActivate,
     handleDeactivate,
+    downloadLicenseRequest,
+    resetInstallIdentity,
   }
 }

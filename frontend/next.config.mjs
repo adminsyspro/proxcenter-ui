@@ -41,6 +41,10 @@ const nextConfig = {
         // Since 16.3 the build type check covers every file in tsconfig
         // include, tests included; keep the build scope free of them.
         tsconfigPath: 'tsconfig.build.json',
+        // The type check needs about 3 GB of heap. Builds from a released
+        // tag (LXC install scripts, small build hosts) can skip it: CI has
+        // already type checked that commit.
+        ignoreBuildErrors: process.env.PROXCENTER_SKIP_TYPECHECK === '1',
     },
     serverExternalPackages: ['ssh2', 'undici'],
     experimental: {

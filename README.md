@@ -153,6 +153,50 @@ docker compose restart          # Restart the stack
 
 ---
 
+## Build from source
+
+The Docker install above is the supported path. Building by hand suits hosts without Docker, such as an LXC container, and covers the Community Edition only: the Enterprise features need the closed-source orchestrator.
+
+You need Node.js 22.12 or later, PostgreSQL 16 or later with an empty database, and **4 GB of RAM for the build**. The running application needs far less, around 300 MB.
+
+```bash
+VERSION=vX.Y.Z    # the release to install
+mkdir -p /opt/proxcenter && cd /opt/proxcenter
+curl -fsSL https://github.com/adminsyspro/proxcenter-ui/archive/refs/tags/$VERSION.tar.gz | tar xz --strip-components=1
+cd frontend
+
+npm ci --legacy-peer-deps --ignore-scripts
+npm run build:icons
+npx prisma generate
+PROXCENTER_SKIP_TYPECHECK=1 npm run build
+```
+
+`PROXCENTER_SKIP_TYPECHECK=1` skips the TypeScript check of `next build`. That check needs about 3 GB of heap on top of the compiler, and CI has already run it on every released tag. Keep it on when you build modified sources, with about 8 GB of RAM and `NODE_OPTIONS=--max-old-space-size=4096`.
+
+Create the environment file, for example `/opt/proxcenter_data/.env`, readable by root only:
+
+```bash
+NODE_ENV=production
+DATABASE_URL=postgresql://proxcenter:PASSWORD@localhost:5432/proxcenter?schema=public
+APP_SECRET=...        # openssl rand -base64 32
+NEXTAUTH_SECRET=...   # openssl rand -base64 32
+NEXTAUTH_URL=http://your-server:3000
+APP_URL=http://your-server:3000
+```
+
+Apply the schema, seed the default tenant and roles, then start the server from the `frontend` directory:
+
+```bash
+set -a && . /opt/proxcenter_data/.env && set +a
+npx prisma migrate deploy
+npx prisma db seed
+node start.js           # listens on 0.0.0.0:3000, override with PORT and HOSTNAME
+```
+
+Run `node start.js` under a service manager, such as a systemd unit with `WorkingDirectory=/opt/proxcenter/frontend` and `EnvironmentFile=/opt/proxcenter_data/.env`. To upgrade, fetch the new tag, repeat the build, run `npx prisma migrate deploy` and restart the service. The seed is idempotent and safe to run again.
+
+---
+
 ## Requirements
 
 - **Host**: Linux with Docker Engine 24+ and Docker Compose v2

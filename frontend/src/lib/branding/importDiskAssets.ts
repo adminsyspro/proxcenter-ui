@@ -25,21 +25,24 @@ const KIND_DIRS: Array<{ dir: string; kind: AssetKind }> = [
   { dir: 'login-bg', kind: 'login-bg' },
 ]
 
+// The paths are only known at runtime (rootDir comes from the caller), so the
+// joins opt out of Turbopack's file tracing, which would otherwise pull the
+// whole project into the standalone output.
 export async function importDiskAssets(rootDir: string): Promise<{ imported: number; skipped: number }> {
   let imported = 0
   let skipped = 0
   if (!fs.existsSync(rootDir)) return { imported, skipped }
 
   for (const { dir, kind } of KIND_DIRS) {
-    const kindDir = path.join(rootDir, dir)
+    const kindDir = path.join(/*turbopackIgnore: true*/ rootDir, dir)
     if (!fs.existsSync(kindDir)) continue
     for (const entry of fs.readdirSync(kindDir)) {
-      const entryPath = path.join(kindDir, entry)
+      const entryPath = path.join(/*turbopackIgnore: true*/ kindDir, entry)
       // A file directly under the kind directory predates multi-tenancy, when
       // the provider was the only uploader: it is the provider's. Insert-only
       // still applies, so a logo uploaded since through the UI always wins.
       const files = fs.statSync(entryPath).isDirectory()
-        ? fs.readdirSync(entryPath).map(file => ({ tenantId: entry, file, filePath: path.join(entryPath, file) }))
+        ? fs.readdirSync(entryPath).map(file => ({ tenantId: entry, file, filePath: path.join(/*turbopackIgnore: true*/ entryPath, file) }))
         : [{ tenantId: 'default', file: entry, filePath: entryPath }]
       for (const { tenantId, file, filePath } of files) {
         const ext = (file.split('.').pop() || '').toLowerCase()

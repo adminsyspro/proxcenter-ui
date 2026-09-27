@@ -309,6 +309,16 @@ const NavbarContent = ({ targetLayout } = {}) => {
     isNodeLimitNotif: true
   } : null
 
+  // License bound to another install (provider only): the tab explains,
+  // the bell makes sure the amputated UI is never mistaken for Community.
+  const bindingNotif = isProviderTenant && canViewAdmin && licenseStatus?.binding_error ? {
+    id: 'license-binding-mismatch',
+    message: t('license.bindingMismatch'),
+    severity: 'crit',
+    source: 'License',
+    isLicenseNotif: true
+  } : null
+
   // Update available notification (provider only)
   const updateNotif = isProviderTenant && canViewAdmin && updateInfo?.updateAvailable ? {
     id: 'version-update',
@@ -351,17 +361,18 @@ const NavbarContent = ({ targetLayout } = {}) => {
     ...(nodeLimitNotif ? [nodeLimitNotif] : []),
     ...(updateNotif ? [updateNotif] : []),
     ...(licenseExpirationNotif ? [licenseExpirationNotif] : []),
+    ...(bindingNotif ? [bindingNotif] : []),
     ...drsNotifications,
     ...notifications
   ]
 
   // Combined count
   const drsCount = drsNotifications.length
-  const totalNotifCount = notifCount + (licenseExpirationNotif ? 1 : 0) + (updateNotif ? 1 : 0) + (nodeLimitNotif ? 1 : 0) + drsCount
+  const totalNotifCount = notifCount + (licenseExpirationNotif ? 1 : 0) + (updateNotif ? 1 : 0) + (nodeLimitNotif ? 1 : 0) + (bindingNotif ? 1 : 0) + drsCount
 
   // Combined stats
   const totalNotifStats = {
-    crit: notifStats.crit + (licenseExpirationNotif?.severity === 'crit' ? 1 : 0) + (nodeLimitNotif ? 1 : 0) + drsNotifications.filter(d => d.severity === 'crit').length,
+    crit: notifStats.crit + (licenseExpirationNotif?.severity === 'crit' ? 1 : 0) + (nodeLimitNotif ? 1 : 0) + (bindingNotif ? 1 : 0) + drsNotifications.filter(d => d.severity === 'crit').length,
     warn: notifStats.warn + (licenseExpirationNotif?.severity === 'warn' ? 1 : 0) + drsNotifications.filter(d => d.severity === 'warn').length,
     info: (updateNotif ? 1 : 0) + drsNotifications.filter(d => d.severity === 'info').length,
     drs: drsCount

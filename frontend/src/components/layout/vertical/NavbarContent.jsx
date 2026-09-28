@@ -319,6 +319,29 @@ const NavbarContent = ({ targetLayout } = {}) => {
     isLicenseNotif: true
   } : null
 
+  // Portal connection (provider only): failing check-ins warn, a lease that
+  // ends soon, a moved license or an ended lease are critical.
+  const conn = licenseStatus?.connection
+  const connectionNotif = isProviderTenant && canViewAdmin && conn?.available && (conn.status === 'disconnected') && (conn.consecutive_failures || 0) >= 3 ? {
+    id: 'license-connection-failing',
+    message: t('license.connectionFailing', { count: conn.consecutive_failures }),
+    severity: 'warn',
+    source: 'License',
+    isLicenseNotif: true
+  } : null
+  const lostHeld = conn?.held?.find(h => h.lost)
+  const leaseNotif = isProviderTenant && canViewAdmin && (licenseStatus?.lease_error || lostHeld || (conn?.available && conn.lease_warn)) ? {
+    id: 'license-lease',
+    message: licenseStatus?.lease_error
+      ? t('settings.licenseLeaseExpiredTitle')
+      : lostHeld
+        ? t('license.licenseLost', { days: Math.max(0, Math.ceil((new Date(lostHeld.grace_until ?? 0).getTime() - Date.now()) / 86400000)) })
+        : t('license.leaseExpiring', { days: conn.lease_days_remaining }),
+    severity: 'crit',
+    source: 'License',
+    isLicenseNotif: true
+  } : null
+
   // Update available notification (provider only)
   const updateNotif = isProviderTenant && canViewAdmin && updateInfo?.updateAvailable ? {
     id: 'version-update',
@@ -362,18 +385,20 @@ const NavbarContent = ({ targetLayout } = {}) => {
     ...(updateNotif ? [updateNotif] : []),
     ...(licenseExpirationNotif ? [licenseExpirationNotif] : []),
     ...(bindingNotif ? [bindingNotif] : []),
+    ...(connectionNotif ? [connectionNotif] : []),
+    ...(leaseNotif ? [leaseNotif] : []),
     ...drsNotifications,
     ...notifications
   ]
 
   // Combined count
   const drsCount = drsNotifications.length
-  const totalNotifCount = notifCount + (licenseExpirationNotif ? 1 : 0) + (updateNotif ? 1 : 0) + (nodeLimitNotif ? 1 : 0) + (bindingNotif ? 1 : 0) + drsCount
+  const totalNotifCount = notifCount + (licenseExpirationNotif ? 1 : 0) + (updateNotif ? 1 : 0) + (nodeLimitNotif ? 1 : 0) + (bindingNotif ? 1 : 0) + (connectionNotif ? 1 : 0) + (leaseNotif ? 1 : 0) + drsCount
 
   // Combined stats
   const totalNotifStats = {
-    crit: notifStats.crit + (licenseExpirationNotif?.severity === 'crit' ? 1 : 0) + (nodeLimitNotif ? 1 : 0) + (bindingNotif ? 1 : 0) + drsNotifications.filter(d => d.severity === 'crit').length,
-    warn: notifStats.warn + (licenseExpirationNotif?.severity === 'warn' ? 1 : 0) + drsNotifications.filter(d => d.severity === 'warn').length,
+    crit: notifStats.crit + (licenseExpirationNotif?.severity === 'crit' ? 1 : 0) + (nodeLimitNotif ? 1 : 0) + (bindingNotif ? 1 : 0) + (leaseNotif ? 1 : 0) + drsNotifications.filter(d => d.severity === 'crit').length,
+    warn: notifStats.warn + (licenseExpirationNotif?.severity === 'warn' ? 1 : 0) + (connectionNotif ? 1 : 0) + drsNotifications.filter(d => d.severity === 'warn').length,
     info: (updateNotif ? 1 : 0) + drsNotifications.filter(d => d.severity === 'info').length,
     drs: drsCount
   }

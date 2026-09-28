@@ -6486,6 +6486,7 @@
     }
   },
   "networkPage": {
+    "loadError": "Some firewall data could not be loaded, so the lists below may be incomplete: {error}",
     "devNoticeTitle": "Feature under active development",
     "devNoticeDesc": "This module is still being developed. Some features may not work as expected and are subject to change.",
     "vmFirewallCoverage": "VM Firewall Coverage",

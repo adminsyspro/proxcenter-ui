@@ -301,4 +301,46 @@ describe('useVMFirewallRules', () => {
     expect(getVMRules).toHaveBeenCalledTimes(2)
     expect(fetchMock.mock.calls.filter(([input]) => String(input).startsWith('/api/v1/vms?'))).toHaveLength(2)
   })
+
+  it('reports failed rule and option fetches instead of passing them off as no rules', async () => {
+    mockGuestScan([guest(300), guest(301)])
+    getVMRules.mockImplementation(async (_conn, _node, _type, vmid) => {
+      if (Number(vmid) === 300) throw new Error('Orchestrator 500: {"error":"failed to parse VM rules"}')
+
+      return [rule(0)]
+    })
+    getVMOptions.mockRejectedValue(new Error('HTTP 502'))
+
+    const { result } = renderHook(() => useVMFirewallRules('conn-1'))
+
+    await act(async () => {
+      await result.current.loadVMFirewallData()
+    })
+
+    expect(result.current.vmFirewallData.find(v => v.vmid === 300)?.rules).toEqual([])
+    expect(result.current.vmFirewallData.find(v => v.vmid === 301)?.rules).toEqual([rule(0)])
+    expect(result.current.vmRulesError).toBe('failed to parse VM rules · HTTP 502')
+  })
+
+  it('reports an inventory failure and clears the error on the next clean scan', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('inventory down') }))
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    const { result } = renderHook(() => useVMFirewallRules('conn-1'))
+
+    await act(async () => {
+      await result.current.loadVMFirewallData()
+    })
+
+    expect(result.current.vmFirewallData).toEqual([])
+    expect(result.current.vmRulesError).toBe('inventory down')
+
+    mockGuestScan([guest(400)])
+    act(() => result.current.setVMFirewallData([]))
+    await act(async () => {
+      await result.current.loadVMFirewallData()
+    })
+
+    expect(result.current.vmRulesError).toBeNull()
+  })
 })

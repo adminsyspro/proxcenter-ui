@@ -49,21 +49,22 @@ export default function NetworkAutomationPage() {
   const {
     aliases, ipsets, securityGroups, clusterOptions, clusterRules,
     nodeOptions, nodeRules, firewallMode, connectionInfo, nodesList,
-    loading, reload: loadFirewallData, setClusterRules, setClusterOptions,
+    loading, loadError, reload: loadFirewallData, setClusterRules, setClusterOptions,
   } = useFirewallData(isEnterprise ? selectedConnection || null : null, isEnterprise)
 
   const {
-    vmFirewallData, loadingVMRules, guestsNotScanned, loadVMFirewallData, reloadVMFirewallRules, setVMFirewallData,
+    vmFirewallData, loadingVMRules, vmRulesError, guestsNotScanned, loadVMFirewallData, reloadVMFirewallRules, setVMFirewallData,
   } = useVMFirewallRules(isEnterprise ? selectedConnection || null : null)
 
   const {
-    hostRulesByNode, loadingHostRules, loadHostRules, reloadHostRulesForNode, setHostRulesByNode,
+    hostRulesByNode, loadingHostRules, hostRulesError, loadHostRules, reloadHostRulesForNode, setHostRulesByNode,
   } = useHostFirewallRules(isEnterprise ? selectedConnection || null : null, nodesList)
 
   // ── Derived values ──
   const currentOptions = firewallMode === 'cluster' ? clusterOptions : nodeOptions
   const totalRules = clusterRules.length + securityGroups.reduce((acc, g) => acc + (g.rules?.length || 0), 0)
   const totalIPSetEntries = ipsets.reduce((acc, s) => acc + (s.members?.length || 0), 0)
+  const firewallLoadError = [...new Set([loadError, hostRulesError, vmRulesError].filter(Boolean))].join(' · ')
 
   // ── Effects ──
   useEffect(() => {
@@ -129,6 +130,12 @@ export default function NetworkAutomationPage() {
         {!selectedConnection && (
           <Alert severity="info" sx={{ mb: 3 }}>
             {t('networkPage.noPveConnection')}
+          </Alert>
+        )}
+
+        {selectedConnection && firewallLoadError && (
+          <Alert severity="error" sx={{ mb: 3 }}>
+            {t('networkPage.loadError', { error: firewallLoadError })}
           </Alert>
         )}
 

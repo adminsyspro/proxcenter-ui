@@ -6486,6 +6486,7 @@
     }
   },
   "networkPage": {
+    "loadError": "일부 방화벽 데이터를 불러오지 못해 아래 목록이 불완전할 수 있습니다: {error}",
     "devNoticeTitle": "활발히 개발 중인 기능",
     "devNoticeDesc": "이 모듈은 아직 개발 중입니다. 일부 기능이 예상대로 작동하지 않을 수 있으며 변경될 수 있습니다.",
     "vmFirewallCoverage": "VM 방화벽 적용률",

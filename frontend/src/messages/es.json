@@ -6486,6 +6486,7 @@
     }
   },
   "networkPage": {
+    "loadError": "No se pudieron cargar algunos datos del cortafuegos, por lo que las listas siguientes pueden estar incompletas: {error}",
     "devNoticeTitle": "Función en desarrollo activo",
     "devNoticeDesc": "Este módulo aún está en desarrollo. Algunas funciones pueden no funcionar como se espera y están sujetas a cambios.",
     "vmFirewallCoverage": "Cobertura de firewall de VM",

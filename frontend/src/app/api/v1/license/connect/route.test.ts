@@ -2,14 +2,17 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const checkPermissionMock = vi.fn<(...a: any[]) => Promise<Response | null>>()
 const fetchMock = vi.fn()
+const requireProviderTenantMock = vi.fn<() => Promise<Response | null>>()
 
 vi.mock('@/lib/rbac', () => ({ checkPermission: checkPermissionMock, PERMISSIONS: { ADMIN_SETTINGS: 'admin.settings' } }))
+vi.mock('@/lib/tenant', () => ({ requireProviderTenant: requireProviderTenantMock }))
 vi.mock('@/lib/orchestrator/headers', () => ({ orchestratorHeaders: (x: any) => ({ ...x }) }))
 
 async function routes() { const mod = await import('./route'); return { POST: mod.POST, DELETE: mod.DELETE } }
 
 beforeEach(() => {
   checkPermissionMock.mockReset().mockResolvedValue(null)
+  requireProviderTenantMock.mockReset().mockResolvedValue(null)
   fetchMock.mockReset()
   vi.stubGlobal('fetch', fetchMock)
 })
@@ -21,6 +24,18 @@ describe('/api/v1/license/connect', () => {
     const { POST, DELETE } = await routes()
     expect((await POST()).status).toBe(403)
     expect((await DELETE()).status).toBe(403)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('refuses a caller outside the provider tenant before the permission check, on both verbs', async () => {
+    const { NextResponse } = await import('next/server')
+    requireProviderTenantMock.mockImplementation(async () => NextResponse.json({ error: 'This operation is only available from the provider tenant' }, { status: 403 }))
+    const { POST, DELETE } = await routes()
+    for (const res of [await POST(), await DELETE()]) {
+      expect(res.status).toBe(403)
+      expect(await res.json()).toEqual({ error: 'This operation is only available from the provider tenant' })
+    }
+    expect(checkPermissionMock).not.toHaveBeenCalled()
     expect(fetchMock).not.toHaveBeenCalled()
   })
 

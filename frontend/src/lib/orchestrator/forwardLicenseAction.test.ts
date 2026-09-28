@@ -1,18 +1,21 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { checkPermissionMock, fetchMock, headersMock } = vi.hoisted(() => ({
+const { checkPermissionMock, fetchMock, headersMock, requireProviderTenantMock } = vi.hoisted(() => ({
   checkPermissionMock: vi.fn(),
+  requireProviderTenantMock: vi.fn(),
   fetchMock: vi.fn(),
   headersMock: vi.fn(() => ({ 'X-API-Key': 'test-key' })),
 }))
 
 vi.mock('@/lib/rbac', () => ({ checkPermission: checkPermissionMock, PERMISSIONS: { ADMIN_SETTINGS: 'admin.settings' } }))
+vi.mock('@/lib/tenant', () => ({ requireProviderTenant: requireProviderTenantMock }))
 vi.mock('@/lib/orchestrator/headers', () => ({ orchestratorHeaders: headersMock }))
 
 import { forwardLicenseAction } from './forwardLicenseAction'
 
 beforeEach(() => {
   checkPermissionMock.mockReset().mockResolvedValue(null)
+  requireProviderTenantMock.mockReset().mockResolvedValue(null)
   fetchMock.mockReset()
   headersMock.mockClear()
   vi.stubGlobal('fetch', fetchMock)
@@ -25,6 +28,29 @@ afterEach(() => {
 })
 
 describe('forwardLicenseAction compatibility', () => {
+  it('skips the provider-tenant gate unless providerOnly is set', async () => {
+    fetchMock.mockResolvedValue(new Response('{"success":true}', { status: 200 }))
+    await forwardLicenseAction('/api/v1/license/request', 'GET', 'request generation')
+    expect(requireProviderTenantMock).not.toHaveBeenCalled()
+  })
+
+  it('answers the provider-tenant refusal as-is when providerOnly is set', async () => {
+    const refusal = Response.json({ error: 'This operation is only available from the provider tenant' }, { status: 403 })
+    requireProviderTenantMock.mockResolvedValue(refusal)
+    const res = await forwardLicenseAction('/api/v1/license/connect', 'POST', 'connect', { providerOnly: true })
+    expect(res).toBe(refusal)
+    expect(checkPermissionMock).not.toHaveBeenCalled()
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('runs the permission check after a passing provider-tenant gate', async () => {
+    fetchMock.mockResolvedValue(new Response('{"success":true}', { status: 200 }))
+    const res = await forwardLicenseAction('/api/v1/license/connect', 'POST', 'connect', { providerOnly: true })
+    expect(requireProviderTenantMock).toHaveBeenCalledOnce()
+    expect(checkPermissionMock).toHaveBeenCalledWith('admin.settings')
+    expect(res.status).toBe(200)
+  })
+
   it('checks admin.settings and sends authenticated, uncached requests', async () => {
     fetchMock.mockResolvedValue(new Response('{"success":true}', { status: 201 }))
     const res = await forwardLicenseAction('/api/v1/license/connect', 'POST', 'connect')

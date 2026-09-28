@@ -8,6 +8,9 @@ type ForwardLicenseActionOptions = {
   keepUpstreamStatus?: boolean
   downloadDisposition?: string
   fallbackError?: string
+  // Refuse the action outside the provider tenant, as license/import does:
+  // the connection and its leases belong to the whole instance.
+  providerOnly?: boolean
 }
 
 // Keep authorization and proxy failures identical across license actions.
@@ -18,6 +21,13 @@ export async function forwardLicenseAction(
   action: string,
   options: ForwardLicenseActionOptions = {},
 ) {
+  if (options.providerOnly) {
+    // Loaded on demand so the actions without the gate never pull the tenant
+    // module (and its database client) in.
+    const { requireProviderTenant } = await import("@/lib/tenant")
+    const providerGate = await requireProviderTenant()
+    if (providerGate) return providerGate
+  }
   try {
     const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
     if (denied) return denied

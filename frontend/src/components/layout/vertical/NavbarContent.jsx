@@ -321,21 +321,23 @@ const NavbarContent = ({ targetLayout } = {}) => {
 
   // Portal connection (provider only): failing check-ins warn, a lease that
   // ends soon, a moved license or an ended lease are critical.
+  // An air-gapped instance has no portal connection to warn about.
   const conn = licenseStatus?.connection
-  const connectionNotif = isProviderTenant && canViewAdmin && conn?.available && (conn.status === 'disconnected') && (conn.consecutive_failures || 0) >= 3 ? {
+  const portalReachable = !licenseStatus?.offline && conn?.available
+  const connectionNotif = isProviderTenant && canViewAdmin && portalReachable && (conn.status === 'disconnected') && (conn.consecutive_failures || 0) >= 3 ? {
     id: 'license-connection-failing',
     message: t('license.connectionFailing', { count: conn.consecutive_failures }),
     severity: 'warn',
     source: 'License',
     isLicenseNotif: true
   } : null
-  const lostHeld = conn?.held?.find(h => h.lost)
-  const leaseNotif = isProviderTenant && canViewAdmin && (licenseStatus?.lease_error || lostHeld || (conn?.available && conn.lease_warn)) ? {
+  const lostHeld = portalReachable ? conn.held?.find(h => h.lost) : undefined
+  const leaseNotif = isProviderTenant && canViewAdmin && (licenseStatus?.lease_error || lostHeld || (portalReachable && conn.lease_warn)) ? {
     id: 'license-lease',
     message: licenseStatus?.lease_error
       ? t('settings.licenseLeaseExpiredTitle')
       : lostHeld
-        ? t('license.licenseLost', { days: Math.max(0, Math.ceil((new Date(lostHeld.grace_until ?? 0).getTime() - Date.now()) / 86400000)) })
+        ? t('license.licenseLost', { days: Math.max(0, Math.floor((new Date(lostHeld.grace_until ?? 0).getTime() - Date.now()) / 86400000)) })
         : t('license.leaseExpiring', { days: conn.lease_days_remaining }),
     severity: 'crit',
     source: 'License',

@@ -1825,14 +1825,17 @@ function FingerprintRow({ label, value, t }) {
   )
 }
 
-function ConnectionCard({ connection, t, busy, onConnect, onCancel, onDisconnect, onCheckin }) {
+function ConnectionCard({ connection, offline, t, busy, onConnect, onCancel, onDisconnect, onCheckin }) {
   const status = connection?.status || 'none'
   const fmt = (v) => (v ? new Date(v).toLocaleString() : t('settings.licenseConnectionNever'))
-  const daysLeft = (v) => (v ? Math.max(0, Math.ceil((new Date(v).getTime() - Date.now()) / 86400000)) : 0)
+  // Whole days, rounded down like the backend's lease_days_remaining.
+  const daysLeft = (v) => (v ? Math.max(0, Math.floor((new Date(v).getTime() - Date.now()) / 86400000)) : 0)
   const minutesLeft = connection?.pairing_expires_at ? Math.max(0, Math.ceil((new Date(connection.pairing_expires_at).getTime() - Date.now()) / 60000)) : 0
   const skewMinutes = Math.round(Math.abs(connection?.server_skew_seconds || 0) / 60)
 
-  if (!connection?.available) {
+  // An air-gapped instance never talks to the portal, whatever the
+  // orchestrator reports (it may run without PROXCENTER_OFFLINE).
+  if (offline || !connection?.available) {
     return null
   }
 
@@ -1865,9 +1868,11 @@ function ConnectionCard({ connection, t, busy, onConnect, onCancel, onDisconnect
             <Typography variant='body2' sx={{ mb: 1.5 }}>{t('settings.licenseConnectionPairingHint')}</Typography>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap', mb: 1.5 }}>
               <Typography variant='h4' sx={{ fontFamily: 'JetBrains Mono, monospace', letterSpacing: 4 }}>{connection.user_code}</Typography>
-              <Button variant='outlined' size='small' href={`${connection.verification_url}?code=${encodeURIComponent(connection.user_code || '')}`} target='_blank' rel='noopener noreferrer' startIcon={<i className='ri-external-link-line' />}>
-                {t('settings.licenseConnectionOpenPortal')}
-              </Button>
+              {connection.verification_url && (
+                <Button variant='outlined' size='small' href={`${connection.verification_url}?code=${encodeURIComponent(connection.user_code || '')}`} target='_blank' rel='noopener noreferrer' startIcon={<i className='ri-external-link-line' />}>
+                  {t('settings.licenseConnectionOpenPortal')}
+                </Button>
+              )}
               <Button variant='text' size='small' color='inherit' onClick={onCancel} disabled={busy}>{t('settings.licenseConnectionCancel')}</Button>
             </Box>
             <Typography variant='caption' sx={{ opacity: 0.7 }}>{t('settings.licenseConnectionPairingExpires', { minutes: minutesLeft })}</Typography>
@@ -1927,6 +1932,22 @@ function ConnectionCard({ connection, t, busy, onConnect, onCancel, onDisconnect
   )
 }
 
+const CHECKIN_POLL_MS = 5000
+const CHECKIN_POLL_MAX = 15
+
+// What the rest of the app derives from the license: when a check-in brings
+// or takes away a key, the feature gates and the imports list must follow.
+function licenseSignature(status) {
+  if (!status) return null
+  return JSON.stringify([
+    !!status.licensed,
+    status.license_id || '',
+    status.lease_error || '',
+    status.lease_until || '',
+    (status.connection?.held || []).map(h => `${h.license_id}:${h.lost ? 1 : 0}`),
+  ])
+}
+
 function bindingChip(binding, t) {
   if (binding === 'connected') return { icon: <i className='ri-plug-line' />, label: t('settings.licenseBindingConnected') }
   if (binding === 'install') return { icon: <i className='ri-links-line' />, label: t('settings.licenseBindingInstall') }
@@ -1971,16 +1992,24 @@ function LicenseTab() {
   const [connectBusy, setConnectBusy] = useState(false)
   const [disconnectOpen, setDisconnectOpen] = useState(false)
   const prevConnStatus = useRef(connection?.status)
-  const checkinRefreshTimeout = useRef(null)
+  const checkinPoll = useRef(null)
+  const lastCheckinAt = useRef(connection?.last_checkin_at ?? null)
   const connectionMounted = useRef(true)
+
+  const stopCheckinPoll = () => {
+    clearInterval(checkinPoll.current)
+    checkinPoll.current = null
+  }
 
   useEffect(() => {
     connectionMounted.current = true
     return () => {
       connectionMounted.current = false
-      clearTimeout(checkinRefreshTimeout.current)
+      stopCheckinPoll()
     }
   }, [])
+
+  useEffect(() => { lastCheckinAt.current = connection?.last_checkin_at ?? null }, [connection?.last_checkin_at])
 
   // Poll every 3 s while a pairing is pending; nobody else polls the status.
   useEffect(() => {
@@ -1995,25 +2024,44 @@ function LicenseTab() {
     prevConnStatus.current = connection?.status
     if ((previous === 'pairing' || previous === 'disconnected') && connection?.status === 'connected') {
       refreshLicenseContext()
-      loadLicenseStatus()
+      refreshLicenseStatus()
     }
-  }, [connection?.status, refreshLicenseContext, loadLicenseStatus])
+  }, [connection?.status, refreshLicenseContext, refreshLicenseStatus])
 
   const runConnect = async (fn, okMessage) => {
     setConnectBusy(true); setError(null); setSuccess(null)
     const result = await fn()
-    if (!connectionMounted.current) return
+    if (!connectionMounted.current) return result
     setConnectBusy(false)
     if (result.success) { if (okMessage) setSuccess(okMessage) }
-    else setError(result.code === 'CONNECT_DISABLED' ? t('settings.licenseConnectionUnavailable') : result.code === 'IDENTITY_SIGNING_UNAVAILABLE' ? t('settings.licenseSigningUnavailable') : (result.error || t('settings.licenseConnectionFailed')))
+    else setError(connectErrorMessage(result))
+    return result
+  }
+  const connectErrorMessage = (result) => {
+    if (result.code === 'CONNECT_DISABLED') return t('settings.licenseConnectionUnavailable')
+    if (result.code === 'IDENTITY_SIGNING_UNAVAILABLE') return t('settings.licenseSigningUnavailable')
+    if (result.code === 'PORTAL_UNREACHABLE') return result.error ? `${t('settings.licenseConnectionFailed')}: ${result.error}` : t('settings.licenseConnectionFailed')
+    return result.error || t('settings.licenseConnectionFailed')
   }
   const handleConnect = () => runConnect(startConnection)
   const handleCancelPairing = () => runConnect(cancelConnection)
-  const handleCheckinNow = () => runConnect(checkinNow, t('settings.licenseConnectionCheckinQueued')).then(() => {
-    if (!connectionMounted.current) return
-    clearTimeout(checkinRefreshTimeout.current)
-    checkinRefreshTimeout.current = setTimeout(refreshLicenseStatus, 5000)
-  })
+  // The check-in runs at the leader's next tick (up to a minute away on an HA
+  // follower): poll quietly until last_checkin_at moves, for about 75 s.
+  const handleCheckinNow = async () => {
+    const before = connection?.last_checkin_at ?? null
+    const result = await runConnect(checkinNow, t('settings.licenseConnectionCheckinQueued'))
+    if (!connectionMounted.current || !result?.success) return
+    stopCheckinPoll()
+    let polls = 0
+    checkinPoll.current = setInterval(() => {
+      if (lastCheckinAt.current !== before || polls >= CHECKIN_POLL_MAX) {
+        stopCheckinPoll()
+        return
+      }
+      polls += 1
+      refreshLicenseStatus()
+    }, CHECKIN_POLL_MS)
+  }
   const handleDisconnect = async () => { setDisconnectOpen(false); await runConnect(cancelConnection); await refreshLicenseContext() }
 
   const handleGenerateRequest = async () => {
@@ -2111,6 +2159,16 @@ function LicenseTab() {
   }
 
   useEffect(() => { loadImports() }, [])
+
+  const signature = licenseSignature(licenseStatus)
+  const prevSignature = useRef(signature)
+  useEffect(() => {
+    const previous = prevSignature.current
+    prevSignature.current = signature
+    if (previous === null || signature === null || previous === signature) return
+    refreshLicenseContext()
+    loadImports()
+  }, [signature, refreshLicenseContext])
   useEffect(() => {
     if (!mlEnabled) return
     fetch('/api/v1/connections')
@@ -2635,7 +2693,7 @@ function LicenseTab() {
         </Card>
       )}
 
-      <ConnectionCard connection={connection} t={t} busy={connectBusy || activating}
+      <ConnectionCard connection={connection} offline={!!licenseStatus?.offline} t={t} busy={connectBusy || activating}
         onConnect={handleConnect} onCancel={handleCancelPairing} onDisconnect={() => setDisconnectOpen(true)} onCheckin={handleCheckinNow} />
 
       {/* Deactivate Confirmation Dialog */}

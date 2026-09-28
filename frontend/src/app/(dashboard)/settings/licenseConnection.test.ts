@@ -64,6 +64,23 @@ describe('ConnectionCard', () => {
     const { container } = render(React.createElement(ConnectionCard, { connection: { available: false, status: 'none' }, t }))
     expect(container.innerHTML).toBe('')
   })
+  it('renders nothing on an air-gapped instance, even when the orchestrator offers the connection', () => {
+    const { container } = render(React.createElement(ConnectionCard, { connection: { ...connected, status: 'none' }, offline: true, t }))
+    expect(container.innerHTML).toBe('')
+  })
+  it('hides the portal link while the verification URL is unknown', () => {
+    render(React.createElement(ConnectionCard, { t, ...callbacks(), connection: { ...connected, status: 'pairing', verification_url: '' } }))
+    expect(screen.queryByRole('link')).toBeNull()
+    expect(screen.getByRole('button', { name: 'settings.licenseConnectionCancel' })).toBeTruthy()
+  })
+  it('counts the grace days left like the backend, rounding down', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2030-01-01T00:00:00Z'))
+    const { container } = render(React.createElement(ConnectionCard, { t, connection: {
+      ...connected, held: [{ license_id: 'lost-1', lost: true, grace_until: '2030-01-03T12:00:00Z' }],
+    } }))
+    expect(container.textContent).toContain('settings.licenseConnectionLost {"days":2}')
+  })
   it.each(['none', 'pairing', 'connected', 'disconnected', 'revoked', 'identity_changed'])('renders %s and the appropriate actions', status => {
     const actions = callbacks()
     render(React.createElement(ConnectionCard, {
@@ -147,7 +164,9 @@ describe('LicenseTab connection integration', () => {
     management.licenseStatus = { connection: connected }
     await act(async () => view.rerender(React.createElement(LicenseTab)))
     expect(refreshContext).toHaveBeenCalledOnce()
-    expect(management.loadLicenseStatus).toHaveBeenCalledOnce()
+    // Silent: the tab keeps its content instead of flashing to a spinner.
+    expect(management.refreshLicenseStatus).toHaveBeenCalledOnce()
+    expect(management.loadLicenseStatus).not.toHaveBeenCalled()
     await act(async () => view.rerender(React.createElement(LicenseTab)))
     expect(refreshContext).toHaveBeenCalledOnce()
   })
@@ -159,26 +178,59 @@ describe('LicenseTab connection integration', () => {
     expect(management.refreshLicenseStatus).toHaveBeenCalledTimes(2)
     management.licenseStatus.connection = connected
     await act(async () => view.rerender(React.createElement(LicenseTab)))
+    // pairing -> connected reloads once, silently, then the polling stops.
+    expect(management.refreshLicenseStatus).toHaveBeenCalledTimes(3)
     await act(async () => vi.advanceTimersByTime(6000))
-    expect(management.refreshLicenseStatus).toHaveBeenCalledTimes(2)
+    expect(management.refreshLicenseStatus).toHaveBeenCalledTimes(3)
     management.licenseStatus.connection = { ...connected, status: 'pairing' }
     await act(async () => view.rerender(React.createElement(LicenseTab)))
     view.unmount()
     await act(async () => vi.advanceTimersByTime(6000))
-    expect(management.refreshLicenseStatus).toHaveBeenCalledTimes(2)
+    expect(management.refreshLicenseStatus).toHaveBeenCalledTimes(3)
   })
-  it('refreshes 5 seconds after a check-in and clears pending refreshes on unmount', async () => {
+  it('polls every 5 seconds after a check-in until last_checkin_at changes', async () => {
     vi.useFakeTimers()
+    management.licenseStatus.connection = { ...connected, last_checkin_at: '2030-01-01T00:00:00Z' }
     const view = await mountTab()
     await act(async () => fireEvent.click(screen.getByRole('button', { name: 'settings.licenseConnectionCheckinNow' })))
     expect(management.checkinNow).toHaveBeenCalledOnce()
     await act(async () => vi.advanceTimersByTime(4999))
     expect(management.refreshLicenseStatus).not.toHaveBeenCalled()
     await act(async () => vi.advanceTimersByTime(1))
-    expect(management.refreshLicenseStatus).toHaveBeenCalledOnce()
+    expect(management.refreshLicenseStatus).toHaveBeenCalledTimes(1)
+    // An HA follower: the leader runs the check-in at its next tick, later.
+    await act(async () => vi.advanceTimersByTime(25000))
+    expect(management.refreshLicenseStatus).toHaveBeenCalledTimes(6)
+    management.licenseStatus = { ...management.licenseStatus, connection: { ...connected, last_checkin_at: '2030-01-01T00:00:40Z' } }
+    await act(async () => view.rerender(React.createElement(LicenseTab)))
+    await act(async () => vi.advanceTimersByTime(30000))
+    expect(management.refreshLicenseStatus).toHaveBeenCalledTimes(6)
+  })
+  it('gives up polling after about 75 seconds without a check-in', async () => {
+    vi.useFakeTimers()
+    await mountTab()
     await act(async () => fireEvent.click(screen.getByRole('button', { name: 'settings.licenseConnectionCheckinNow' })))
-    view.unmount()
+    await act(async () => vi.advanceTimersByTime(75000))
+    expect(management.refreshLicenseStatus).toHaveBeenCalledTimes(15)
+    await act(async () => vi.advanceTimersByTime(60000))
+    expect(management.refreshLicenseStatus).toHaveBeenCalledTimes(15)
+  })
+  it('does not poll when the check-in request is refused', async () => {
+    vi.useFakeTimers()
+    management.checkinNow.mockResolvedValue({ success: false, code: 'NOT_CONNECTED', error: 'not connected' })
+    await mountTab()
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'settings.licenseConnectionCheckinNow' })))
+    await act(async () => vi.advanceTimersByTime(30000))
+    expect(management.refreshLicenseStatus).not.toHaveBeenCalled()
+  })
+  it('stops the check-in polling on unmount', async () => {
+    vi.useFakeTimers()
+    const view = await mountTab()
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'settings.licenseConnectionCheckinNow' })))
     await act(async () => vi.advanceTimersByTime(5000))
+    expect(management.refreshLicenseStatus).toHaveBeenCalledOnce()
+    view.unmount()
+    await act(async () => vi.advanceTimersByTime(30000))
     expect(management.refreshLicenseStatus).toHaveBeenCalledOnce()
   })
   it('does not schedule a refresh if the check-in finishes after unmount', async () => {
@@ -210,5 +262,45 @@ describe('LicenseTab connection integration', () => {
     await act(async () => fireEvent.click(screen.getAllByRole('button', { name: 'settings.licenseConnectionDisconnect' }).at(-1)!))
     expect(management.cancelConnection).toHaveBeenCalledOnce()
     expect(refreshContext).toHaveBeenCalledOnce()
+  })
+  it('refreshes the license context and the imports when a check-in brings a new key, not on mount', async () => {
+    multiLicense = true
+    const view = await mountTab()
+    const importsCalls = () => (fetch as any).mock.calls.filter(([u]: [string]) => u === '/api/v1/license/imports').length
+    expect(refreshContext).not.toHaveBeenCalled()
+    expect(importsCalls()).toBe(1)
+    management.licenseStatus = { ...management.licenseStatus, connection: { ...connected } }
+    await act(async () => view.rerender(React.createElement(LicenseTab)))
+    expect(refreshContext).not.toHaveBeenCalled()
+    management.licenseStatus = { ...management.licenseStatus, license_id: 'L2', connection: { ...connected, held: [{ license_id: 'L2', lost: false }] } }
+    await act(async () => view.rerender(React.createElement(LicenseTab)))
+    expect(refreshContext).toHaveBeenCalledOnce()
+    expect(importsCalls()).toBe(2)
+    management.licenseStatus = { ...management.licenseStatus, connection: { ...connected, held: [{ license_id: 'L2', lost: true }] } }
+    await act(async () => view.rerender(React.createElement(LicenseTab)))
+    expect(refreshContext).toHaveBeenCalledTimes(2)
+    management.licenseStatus = { ...management.licenseStatus, lease_error: 'expired' }
+    await act(async () => view.rerender(React.createElement(LicenseTab)))
+    expect(refreshContext).toHaveBeenCalledTimes(3)
+    expect(importsCalls()).toBe(4)
+  })
+  it('does not treat the first status load as a license change', async () => {
+    management.licenseStatus = null
+    const view = await mountTab()
+    management.licenseStatus = { licensed: true, license_id: 'L1', connection: connected }
+    await act(async () => view.rerender(React.createElement(LicenseTab)))
+    expect(refreshContext).not.toHaveBeenCalled()
+  })
+  it('hides the connection card on an air-gapped instance', async () => {
+    management.licenseStatus = { ...management.licenseStatus, offline: true, connection: { ...connected, status: 'none' } }
+    await mountTab()
+    expect(screen.queryByText('settings.licenseConnectionTitle')).toBeNull()
+  })
+  it('names the portal failure with the server detail on PORTAL_UNREACHABLE', async () => {
+    management.licenseStatus.connection = { ...connected, status: 'none' }
+    management.startConnection.mockResolvedValue({ success: false, code: 'PORTAL_UNREACHABLE', error: 'portal answered 503' })
+    await mountTab()
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'settings.licenseConnectionConnect' })))
+    expect(management.setError).toHaveBeenLastCalledWith('settings.licenseConnectionFailed: portal answered 503')
   })
 })

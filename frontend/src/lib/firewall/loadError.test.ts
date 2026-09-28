@@ -21,4 +21,15 @@ describe('errorMessage', () => {
     expect(errorMessage(new Error('Orchestrator 500: not json'))).toBe('Orchestrator 500: not json')
     expect(errorMessage('boom')).toBe('boom')
   })
+
+  it('keeps the whole message when the body carries no usable error', () => {
+    expect(errorMessage(new Error('Orchestrator 500: {"code":"X"}'))).toBe('Orchestrator 500: {"code":"X"}')
+    expect(errorMessage(new Error('Orchestrator 500: {"error":""}'))).toBe('Orchestrator 500: {"error":""}')
+    expect(errorMessage(new Error('Orchestrator 500: {not json}'))).toBe('Orchestrator 500: {not json}')
+  })
+
+  it('names an error that carries nothing', () => {
+    expect(errorMessage(undefined)).toBe('Unknown error')
+    expect(errorMessage(new Error(''))).toBe('Error')
+  })
 })

@@ -15,6 +15,19 @@ function read(name: string): string {
   return readFileSync(join(ROOT, name), 'utf8')
 }
 
+// The environment block of one service: from its `  name:` line to the next
+// service at the same indentation.
+function serviceBlock(text: string, name: string): string {
+  const lines = text.split('\n')
+  const start = lines.findIndex(l => l === `  ${name}:`)
+
+  if (start < 0) return ''
+  const rest = lines.slice(start + 1)
+  const end = rest.findIndex(l => /^  [a-z][\w-]*:\s*$/.test(l) || /^[a-z]/.test(l))
+
+  return rest.slice(0, end < 0 ? rest.length : end).join('\n')
+}
+
 function imageLines(text: string): string[] {
   return text.split('\n').filter(l => /^\s+image:\s/.test(l)).map(l => l.trim())
 }
@@ -28,6 +41,15 @@ describe('compose files are registry-overridable', () => {
 
   it.each(files)('%s exposes PROXCENTER_OFFLINE to the frontend', file => {
     expect(read(file)).toMatch(/PROXCENTER_OFFLINE[=:]\s*\$\{PROXCENTER_OFFLINE:-\}/)
+  })
+
+  // The orchestrator reads PROXCENTER_OFFLINE itself to disable the portal
+  // connection; without it an air-gapped site offers a Connect that times out.
+  it.each(['docker-compose.enterprise.yml', 'docker-compose.ha.yml'])('%s exposes PROXCENTER_OFFLINE to the orchestrator', file => {
+    const block = serviceBlock(read(file), 'orchestrator')
+
+    expect(block).toContain('proxcenter-orchestrator')
+    expect(block).toMatch(/PROXCENTER_OFFLINE[=:]\s*\$\{PROXCENTER_OFFLINE:-\}/)
   })
 
   it.each(['docker-compose.enterprise.yml', 'docker-compose.ha.yml'])('%s exposes the CVE mirrors to the orchestrator', file => {

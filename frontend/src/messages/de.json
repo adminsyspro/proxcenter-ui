@@ -6428,6 +6428,7 @@
     }
   },
   "networkPage": {
+    "loadError": "Einige Firewall-Daten konnten nicht geladen werden, die folgenden Listen sind möglicherweise unvollständig: {error}",
     "devNoticeTitle": "Feature under aktiv development",
     "devNoticeDesc": "Dieses Modul befindet sich noch in Entwicklung. Einige Funktionen funktionieren möglicherweise nicht wie erwartet und können sich ändern.",
     "vmFirewallCoverage": "VM-Firewall-Abdeckung",

@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react'
 import * as firewallAPI from '@/lib/api/firewall'
+import { errorMessage } from '@/lib/firewall/loadError'
 
 export interface VMFirewallInfo {
   vmid: number
@@ -40,6 +41,8 @@ function extractVLANs(config: Record<string, any>): number[] {
 interface UseVMFirewallRulesReturn {
   vmFirewallData: VMFirewallInfo[]
   loadingVMRules: boolean
+  /** What failed on the last scan, null when every guest loaded. */
+  vmRulesError: string | null
   /**
    * Guests left out by the scan cap. Anything reading `vmFirewallData` as a
    * count — security group membership, firewall coverage — is partial when this
@@ -63,6 +66,7 @@ const SCAN_CONCURRENCY = 8
 export function useVMFirewallRules(connectionId: string | null): UseVMFirewallRulesReturn {
   const [vmFirewallData, setVMFirewallData] = useState<VMFirewallInfo[]>([])
   const [loadingVMRules, setLoadingVMRules] = useState(false)
+  const [vmRulesError, setVMRulesError] = useState<string | null>(null)
   const [guestsNotScanned, setGuestsNotScanned] = useState(0)
   const [loaded, setLoaded] = useState(false)
 
@@ -70,6 +74,15 @@ export function useVMFirewallRules(connectionId: string | null): UseVMFirewallRu
     if (!connectionId || loaded) return
 
     setLoadingVMRules(true)
+
+    // A failed rules or options fetch still degrades to an empty value for
+    // that guest, but is reported instead of passing for "no rules" (#1022).
+    const errors = new Set<string>()
+    const keep = <T,>(fallback: T) => (err: unknown): T => {
+      errors.add(errorMessage(err))
+
+      return fallback
+    }
 
     try {
       // Get all VMs for this connection using the correct API
@@ -94,8 +107,8 @@ export function useVMFirewallRules(connectionId: string | null): UseVMFirewallRu
         try {
           // Fetch rules, options, and VM config (for NIC firewall status)
           const [rulesData, optionsData, configResp] = await Promise.all([
-            firewallAPI.getVMRules(connectionId, guest.node, guest.type, guest.vmid).catch(() => []),
-            firewallAPI.getVMOptions(connectionId, guest.node, guest.type, guest.vmid).catch(() => null),
+            firewallAPI.getVMRules(connectionId, guest.node, guest.type, guest.vmid).catch(keep([])),
+            firewallAPI.getVMOptions(connectionId, guest.node, guest.type, guest.vmid).catch(keep(null)),
             fetch(`/api/v1/connections/${connectionId}/guests/${guest.type}/${guest.node}/${guest.vmid}/config`).then(r => r.json()).catch(() => null)
           ])
 
@@ -110,7 +123,9 @@ export function useVMFirewallRules(connectionId: string | null): UseVMFirewallRu
             options: optionsData,
             vlans,
           }
-        } catch {
+        } catch (err) {
+          errors.add(errorMessage(err))
+
           return { ...base, firewallEnabled: false, rules: [], options: null, vlans: [] }
         }
       }
@@ -134,8 +149,10 @@ export function useVMFirewallRules(connectionId: string | null): UseVMFirewallRu
       setVMFirewallData(vmData)
     } catch (err) {
       console.error('Failed to load VM firewall data:', err)
+      errors.add(errorMessage(err))
       setVMFirewallData([])
     } finally {
+      setVMRulesError(errors.size > 0 ? [...errors].join(' · ') : null)
       setLoadingVMRules(false)
       setLoaded(true)
     }
@@ -177,6 +194,7 @@ export function useVMFirewallRules(connectionId: string | null): UseVMFirewallRu
   return {
     vmFirewallData,
     loadingVMRules,
+    vmRulesError,
     guestsNotScanned,
     loadVMFirewallData,
     reloadVMFirewallRules,

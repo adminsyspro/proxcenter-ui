@@ -6486,6 +6486,7 @@
     }
   },
   "networkPage": {
+    "loadError": "Une partie des données du pare-feu n'a pas pu être chargée, les listes ci-dessous peuvent être incomplètes : {error}",
     "devNoticeTitle": "Fonctionnalité en cours de développement",
     "devNoticeDesc": "Ce module est encore en cours de développement. Certaines fonctionnalités peuvent ne pas fonctionner comme prévu et sont susceptibles de changer.",
     "vmFirewallCoverage": "Couverture Firewall des VMs",

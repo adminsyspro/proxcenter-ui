@@ -6490,6 +6490,7 @@
     }
   },
   "networkPage": {
+    "loadError": "部分防火墙数据无法加载，下方列表可能不完整：{error}",
     "devNoticeTitle": "功能正在开发中",
     "devNoticeDesc": "此模块仍在开发中。部分功能可能无法按预期运行，并可能会发生变更。",
     "vmFirewallCoverage": "VM 防火墙覆盖率",

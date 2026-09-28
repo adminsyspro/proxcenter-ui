@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from 'react'
 import * as firewallAPI from '@/lib/api/firewall'
+import { errorMessage } from '@/lib/firewall/loadError'
 
 export interface Connection {
   id: string
@@ -20,6 +21,8 @@ interface UseFirewallDataReturn {
   connectionInfo: firewallAPI.ConnectionFirewallInfo | null
   nodesList: string[]
   loading: boolean
+  /** What failed on the last load, null when everything loaded. */
+  loadError: string | null
   reload: () => void
   setClusterRules: React.Dispatch<React.SetStateAction<firewallAPI.FirewallRule[]>>
   setClusterOptions: React.Dispatch<React.SetStateAction<firewallAPI.ClusterOptions | null>>
@@ -37,6 +40,7 @@ export function useFirewallData(connectionId: string | null, isEnterprise: boole
   const [connectionInfo, setConnectionInfo] = useState<firewallAPI.ConnectionFirewallInfo | null>(null)
   const [nodesList, setNodesList] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   const loadFirewallData = useCallback(async () => {
     if (!connectionId) return
@@ -46,13 +50,23 @@ export function useFirewallData(connectionId: string | null, isEnterprise: boole
     // Clear previous data first
     setNodesList([])
 
+    // Each fetch still degrades to an empty value so the rest of the page
+    // loads, but the failure is kept and shown: swallowing it rendered a
+    // broken backend as "firewall OFF, 0 rules" (#1022).
+    const errors = new Set<string>()
+    const keep = <T,>(fallback: T) => (err: unknown): T => {
+      errors.add(errorMessage(err))
+
+      return fallback
+    }
+
     try {
       const [aliasesData, ipsetsData, groupsData, clusterOpts, clusterRulesData] = await Promise.all([
-        firewallAPI.getAliases(connectionId).catch(() => []),
-        firewallAPI.getIPSets(connectionId).catch(() => []),
-        firewallAPI.getSecurityGroups(connectionId).catch(() => []),
-        firewallAPI.getClusterOptions(connectionId).catch(() => null),
-        firewallAPI.getClusterRules(connectionId).catch(() => []),
+        firewallAPI.getAliases(connectionId).catch(keep([])),
+        firewallAPI.getIPSets(connectionId).catch(keep([])),
+        firewallAPI.getSecurityGroups(connectionId).catch(keep([])),
+        firewallAPI.getClusterOptions(connectionId).catch(keep(null)),
+        firewallAPI.getClusterRules(connectionId).catch(keep([])),
       ])
 
       setAliases(Array.isArray(aliasesData) ? aliasesData : [])
@@ -111,8 +125,8 @@ export function useFirewallData(connectionId: string | null, isEnterprise: boole
             const nodeRulesData = await firewallAPI.getNodeRules(connectionId, standaloneNode)
 
             setNodeRules(Array.isArray(nodeRulesData) ? nodeRulesData : [])
-          } catch {
-            // Node firewall might not be configured
+          } catch (err) {
+            errors.add(errorMessage(err))
             setNodeOptions(null)
             setNodeRules([])
           }
@@ -120,7 +134,9 @@ export function useFirewallData(connectionId: string | null, isEnterprise: boole
       }
     } catch (err: any) {
       console.error('Failed to load firewall data:', err)
+      errors.add(errorMessage(err))
     } finally {
+      setLoadError(errors.size > 0 ? [...errors].join(' · ') : null)
       setLoading(false)
     }
   }, [connectionId])
@@ -137,6 +153,7 @@ export function useFirewallData(connectionId: string | null, isEnterprise: boole
     setNodesList([])
     setFirewallMode('cluster')
     setConnectionInfo(null)
+    setLoadError(null)
   }, [connectionId])
 
   // Load firewall data when connection changes
@@ -158,6 +175,7 @@ export function useFirewallData(connectionId: string | null, isEnterprise: boole
     connectionInfo,
     nodesList,
     loading,
+    loadError,
     reload: loadFirewallData,
     setClusterRules,
     setClusterOptions,

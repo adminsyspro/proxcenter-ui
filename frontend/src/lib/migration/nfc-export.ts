@@ -73,6 +73,13 @@ const POLL_MS = 5000
 const MAX_STALL_POLLS = 60 // 60 * 5 s = 5 min without growth = stalled
 const KEEPALIVE_MS = 30_000
 const MIN_STREAM_BYTES = 65536
+// Once curl exits, the node can stay unresponsive for a while: closing a
+// multi-TB file on NFS flushes it to the server (#1021, 35 h of download lost
+// to one 30 s SSH timeout). The checks after the download get a long timeout
+// and a few attempts before they give up.
+const FINAL_CHECK_TIMEOUT_MS = 300_000
+const FINAL_CHECK_ATTEMPTS = 3
+const FINAL_CHECK_RETRY_MS = 30_000
 export const NFC_PROBE_SCRIPT_NAME = "nfc-probe.pl"
 
 /**
@@ -302,9 +309,13 @@ async function downloadDiskViaNfc(d: DiskDownload): Promise<void> {
 
   let probeUsable = d.probeScriptPath !== null
   let probe: NfcStreamProbe | null = null
-  const observe = async (): Promise<Observation> => {
+  // The probe only reports a capacity behind a KDMV header: once seen, the
+  // stream is known to be a sparse extent, whatever a later read says.
+  const headerSeen = () => (probe?.capacity ?? 0) > 0
+  /** Null when the node did not answer: nothing is learnt, nothing is disabled. */
+  const observe = async (run: typeof ssh = ssh): Promise<Observation | null> => {
     if (probeUsable) {
-      const res = await ssh(probeCommand(d.probeScriptPath!, localPath, probe?.pos ?? 0, probe?.position ?? 0))
+      const res = await run(probeCommand(d.probeScriptPath!, localPath, probe?.pos ?? 0, probe?.position ?? 0))
       const parsed = parseNfcStreamProbe(res.output || "")
       if (parsed) {
         probe = parsed
@@ -312,6 +323,7 @@ async function downloadDiskViaNfc(d: DiskDownload): Promise<void> {
         if (parsed.capacity > 0) capacity = parsed.capacity
         return { size: parsed.size, position: parsed.capacity > 0 ? parsed.position : null, eos: parsed.eos }
       }
+      if (!res.success) return null
       probeUsable = false
       await io.appendLog(
         jobId,
@@ -319,9 +331,21 @@ async function downloadDiskViaNfc(d: DiskDownload): Promise<void> {
         "warn",
       )
     }
-    const stat = await ssh(`stat -c '%s' ${shellEscape(localPath)} 2>/dev/null || echo 0`)
+    const stat = await run(`stat -c '%s' ${shellEscape(localPath)} 2>/dev/null || echo 0`)
+    if (!stat.success) return null
     return { size: Number.parseInt(stat.output?.trim() || "0", 10), position: null, eos: false }
   }
+  const sshFinal = (cmd: string) => executeSSH(d.targetConnectionId, d.nodeIp, cmd, FINAL_CHECK_TIMEOUT_MS)
+  const withRetries = async <T>(attempt: () => Promise<T | null>): Promise<T | null> => {
+    for (let i = 0; i < FINAL_CHECK_ATTEMPTS; i++) {
+      if (i > 0) await new Promise(r => setTimeout(r, FINAL_CHECK_RETRY_MS))
+      const res = await attempt()
+      if (res !== null) return res
+    }
+    return null
+  }
+  const unreachable = `the node did not answer the checks after the download ` +
+    `(${FINAL_CHECK_ATTEMPTS} attempts of up to ${FINAL_CHECK_TIMEOUT_MS / 60000} min)`
 
   const flush = async () => {
     const s = tracker.summary()
@@ -384,10 +408,11 @@ async function downloadDiskViaNfc(d: DiskDownload): Promise<void> {
       // vCenter does occasionally end a stream early. Three checks: a minimum
       // size, the KDMV sparse-stream magic, and the end-of-stream marker when
       // the probe could read the stream.
-      const final = await observe()
-      const got = final.size
+      const final = await withRetries(() => observe(sshFinal))
       const diagSuffix = ` [curl: ${(curlStats || "(no stats)").replaceAll("\n", " ")}]` +
         (curlStderr ? ` [stderr: ${curlStderr.slice(0, 200)}]` : "")
+      // Without a final read, the last size polled during the download stands in.
+      const got = final?.size ?? lastSize
 
       if (got < MIN_STREAM_BYTES) {
         await cleanupCtrl()
@@ -398,11 +423,23 @@ async function downloadDiskViaNfc(d: DiskDownload): Promise<void> {
       }
       let validStream: boolean
       let magicDump = ""
-      if (probeUsable && probe) {
-        validStream = probe.capacity > 0 // the probe only reports a capacity behind a KDMV header
+      if (final && probeUsable) {
+        validStream = headerSeen()
+      } else if (headerSeen()) {
+        validStream = true
       } else {
-        const magicRes = await ssh(`head -c 4 ${shellEscape(localPath)} 2>/dev/null | od -An -c | tr -d ' \\n\\t' || echo missing`)
-        magicDump = (magicRes.output || "").trim()
+        const magic = await withRetries(async () => {
+          const res = await sshFinal(`head -c 4 ${shellEscape(localPath)} 2>/dev/null | od -An -c | tr -d ' \\n\\t' || echo missing`)
+          return res.success ? (res.output || "").trim() : null
+        })
+        if (magic === null) {
+          await cleanupCtrl()
+          throw new Error(
+            `Could not verify the NFC disk download at ${localPath}: ${unreachable}. ` +
+            `Check the node and its storage, then retry the migration.${diagSuffix}`,
+          )
+        }
+        magicDump = magic
         validStream = /K[^K]{0,10}D[^D]{0,10}M[^M]{0,10}V/.test(magicDump)
       }
       if (!validStream) {
@@ -413,7 +450,14 @@ async function downloadDiskViaNfc(d: DiskDownload): Promise<void> {
           `vCenter likely returned an error body instead of the disk stream.${diagSuffix}`,
         )
       }
-      if (probeUsable && !final.eos) {
+      if (!final) {
+        await io.appendLog(
+          jobId,
+          `${tag} The stream header was valid but ${unreachable}; keeping the ${wire(got)} downloaded, ` +
+          `virt-v2v will reject the stream during conversion if it is truncated`,
+          "warn",
+        )
+      } else if (probeUsable && !final.eos) {
         await io.appendLog(
           jobId,
           `${tag} Stream ended without its end-of-stream marker: the download may be truncated, ` +
@@ -434,7 +478,7 @@ async function downloadDiskViaNfc(d: DiskDownload): Promise<void> {
 
       await cleanupCtrl()
       tracker.update(diskIndex, {
-        positionBytes: capacity > 0 ? capacity : final.position,
+        positionBytes: capacity > 0 ? capacity : (final?.position ?? null),
         wireBytes: got,
         capacityBytes: capacity > 0 ? capacity : undefined,
         done: true,
@@ -450,45 +494,49 @@ async function downloadDiskViaNfc(d: DiskDownload): Promise<void> {
     }
 
     const obs = await observe()
-    if (obs.size === lastSize) {
-      stallCounter++
-      if (stallCounter >= MAX_STALL_POLLS) {
-        await killAndClean()
-        throw new Error(
-          `NFC disk download stalled: no progress for ${(MAX_STALL_POLLS * POLL_MS / 60000).toFixed(0)} min ` +
-          `at ${gb(obs.size)} GB on the wire (disk ${diskLabel()})`,
-        )
-      }
-    } else {
-      stallCounter = 0
-      lastSize = obs.size
-    }
-
-    tracker.update(diskIndex, {
-      positionBytes: obs.position,
-      wireBytes: obs.size,
-      capacityBytes: capacity > 0 ? capacity : undefined,
-    })
-    const pct = tracker.diskPercent(diskIndex) ?? 0
-    if (pct >= lastLoggedPct + 10) {
-      const wireRate = tracker.summary().wireMBps
-      const rate = wireRate == null ? "" : `, ${wireRate.toFixed(1)} MB/s on the wire`
-      let where: string
-      if (obs.position != null && capacity > 0) {
-        where = `${gb(obs.position)} GB of ${gb(capacity)} GB, ${wire(obs.size)} on the wire${rate}`
-      } else if (capacity > 0) {
-        where = `${wire(obs.size)} on the wire for a ~${gb(capacity)} GB disk${rate}`
+    // A poll the node did not answer teaches nothing: no stall counted, no
+    // progress moved back, but the lease below still gets its keep-alive.
+    if (obs) {
+      if (obs.size === lastSize) {
+        stallCounter++
+        if (stallCounter >= MAX_STALL_POLLS) {
+          await killAndClean()
+          throw new Error(
+            `NFC disk download stalled: no progress for ${(MAX_STALL_POLLS * POLL_MS / 60000).toFixed(0)} min ` +
+            `at ${gb(obs.size)} GB on the wire (disk ${diskLabel()})`,
+          )
+        }
       } else {
-        where = `${wire(obs.size)} on the wire${rate}`
+        stallCounter = 0
+        lastSize = obs.size
       }
-      await io.appendLog(jobId, `${tag} ${pct}% (${where})`)
-      lastLoggedPct = pct
+
+      tracker.update(diskIndex, {
+        positionBytes: obs.position,
+        wireBytes: obs.size,
+        capacityBytes: capacity > 0 ? capacity : undefined,
+      })
+      const pct = tracker.diskPercent(diskIndex) ?? 0
+      if (pct >= lastLoggedPct + 10) {
+        const wireRate = tracker.summary().wireMBps
+        const rate = wireRate == null ? "" : `, ${wireRate.toFixed(1)} MB/s on the wire`
+        let where: string
+        if (obs.position != null && capacity > 0) {
+          where = `${gb(obs.position)} GB of ${gb(capacity)} GB, ${wire(obs.size)} on the wire${rate}`
+        } else if (capacity > 0) {
+          where = `${wire(obs.size)} on the wire for a ~${gb(capacity)} GB disk${rate}`
+        } else {
+          where = `${wire(obs.size)} on the wire${rate}`
+        }
+        await io.appendLog(jobId, `${tag} ${pct}% (${where})`)
+        lastLoggedPct = pct
+      }
+      await flush()
     }
-    await flush()
 
     // Keep the lease alive; a failure here is not fatal, curl will surface a dead lease itself.
     if (Date.now() - lastKeepAliveAt >= KEEPALIVE_MS) {
-      await soapNfcLeaseProgress(session, d.leaseMor, pct).catch(() => {})
+      await soapNfcLeaseProgress(session, d.leaseMor, tracker.diskPercent(diskIndex) ?? 0).catch(() => {})
       lastKeepAliveAt = Date.now()
     }
   }

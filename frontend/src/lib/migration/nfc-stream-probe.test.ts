@@ -136,6 +136,18 @@ describe('NFC_STREAM_PROBE_SCRIPT against a synthetic stream', () => {
     expect(resumed.eos).toBe(true)
   })
 
+  it('still reports the end of stream when resuming from a walk that already reached it', () => {
+    // A poll can land after curl wrote the last byte but before it exited: the
+    // final check then resumes from where that poll stopped (#1021).
+    const file = join(dir, 'resume-eos.vmdk')
+    writeFileSync(file, buildStream({ capacitySectors, grains, withEnd: true }))
+    const first = run(file)!
+    expect(first.eos).toBe(true)
+    const again = run(file, first.pos, first.position)!
+    expect(again.eos).toBe(true)
+    expect(again.position).toBe(first.position)
+  })
+
   it('reports zero position and no capacity before the header is complete', () => {
     const file = join(dir, 'empty.vmdk')
     writeFileSync(file, Buffer.alloc(100, 0))

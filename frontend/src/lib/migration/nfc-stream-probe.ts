@@ -52,8 +52,8 @@ if ($size >= 512 && open($fh, '<:raw', $file)) {
           $position = $end if $end > $position;
           $pos = $next;
         } elsif ($type == 0) {
+          # Stay on the marker: a later call resuming from here must see it too.
           $eos = 1;
-          $pos += 512;
           last;
         } else {
           my $next = $pos + 512 + $val * 512;

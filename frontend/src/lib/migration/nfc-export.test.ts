@@ -53,6 +53,10 @@ let downloads: Map<string, FakeDownload>
 let plans: Map<string, Step[]>
 let capacities: Map<string, number>
 let probeMode: "ok" | "fail"
+/** The node stops answering (SSH timeout) once curl has exited, as a slow NFS flush does (#1021). */
+let nodeDownAfterExit: boolean
+/** Probe polls that time out before the node answers again. */
+let probeTimeouts: number
 let running: number
 let peakRunning: number
 let removed: string[]
@@ -61,6 +65,9 @@ let launchOrder: string[]
 function ok(output = "") {
   return { success: true as const, output }
 }
+
+const TIMEOUT = { success: false as const, error: "orchestrator SSH timeout (30s)" }
+const anyExited = () => [...downloads.values()].some(d => d.exit !== null)
 
 /** Reverse shellEscape's single-quote wrapping (one level). */
 function unq(s: string): string {
@@ -112,7 +119,12 @@ async function sshRouter(_connId: string, _host: string, command: string) {
     }
     return ok(d.exit === null ? "RUNNING" : String(d.exit))
   }
+  if (nodeDownAfterExit && anyExited() && /^(perl|stat|head) /.test(command)) return TIMEOUT
   if (command.startsWith("perl ")) {
+    if (probeTimeouts > 0) {
+      probeTimeouts--
+      return TIMEOUT
+    }
     if (probeMode === "fail") return ok("PROBE_FAILED")
     const file = unq(command.split(" ")[2])
     const d = downloads.get(file)!
@@ -208,6 +220,8 @@ beforeEach(() => {
   plans = new Map()
   capacities = new Map()
   probeMode = "ok"
+  nodeDownAfterExit = false
+  probeTimeouts = 0
   running = 0
   peakRunning = 0
   removed = []
@@ -344,6 +358,53 @@ describe("runVcenterNfcExport", () => {
     await runToEnd(exportWith(io, config, 1))
 
     expect(logs.some(l => l.level === "success" && l.msg.includes("Download complete") && l.msg.includes("0.1 MB on the wire for a 8.0 GB disk"))).toBe(true)
+  })
+
+  it("keeps a finished download whose header was valid when the node stops answering afterwards (#1021)", async () => {
+    const { io, logs } = makeIo()
+    const config = setupDisks([5000 * GiB])
+    nodeDownAfterExit = true
+
+    const paths = await runToEnd(exportWith(io, config, 1))
+
+    expect(paths).toEqual([`${OUT}/disk-0.vmdk`])
+    expect(removed).not.toContain(`${OUT}/disk-0.vmdk`)
+    expect(logs.some(l => l.level === "warn" && l.msg.includes("header was valid") && l.msg.includes("did not answer"))).toBe(true)
+    expect(logs.some(l => l.msg.includes("perl missing"))).toBe(false)
+    // The checks after the download get the long timeout, three attempts of it.
+    const finalProbes = vi.mocked(executeSSH).mock.calls.filter(c => c[2].startsWith("perl ") && c[3] === 300_000)
+    expect(finalProbes).toHaveLength(3)
+  })
+
+  it("does not give up on the probe when a poll times out", async () => {
+    const { io, logs, updates } = makeIo()
+    const config = setupDisks([100 * GiB])
+    probeTimeouts = 1
+    plans.set(`${OUT}/disk-0.vmdk`, [
+      { size: 10 * GiB, position: 30 * GiB },
+      { size: 15 * GiB, position: 50 * GiB },
+      { size: 20 * GiB, position: 100 * GiB, exit: 0, eos: true },
+    ])
+
+    await runToEnd(exportWith(io, config, 1))
+
+    expect(logs.some(l => l.msg.includes("perl missing"))).toBe(false)
+    expect(updates.some(u => u.progress === 25)).toBe(true)
+    expect(logs.some(l => l.level === "warn")).toBe(false)
+  })
+
+  it("blames the node, not vCenter, when it cannot verify a stream it never saw a header for", async () => {
+    const { io } = makeIo()
+    const config = setupDisks([100 * GiB])
+    probeMode = "fail"
+    nodeDownAfterExit = true
+    plans.set(`${OUT}/disk-0.vmdk`, [
+      { size: 30 * GiB, position: 0 },
+      { size: 45 * GiB, position: 0, exit: 0 },
+    ])
+
+    const run = exportWith(io, config, 1)
+    await expect(runToEnd(run)).rejects.toThrow(/Could not verify the NFC disk download .* the node did not answer/)
   })
 
   it("exports from the snapshot when a snapshot MOR is given", async () => {

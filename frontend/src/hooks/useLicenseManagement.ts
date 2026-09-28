@@ -8,19 +8,19 @@ export function useLicenseManagement() {
   const [success, setSuccess] = useState<string | null>(null)
   const [activating, setActivating] = useState(false)
 
-  const loadLicenseStatus = useCallback(async () => {
+  const loadLicenseStatus = useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
     try {
-      setLoading(true)
-      const res = await fetch('/api/v1/license/status')
+      if (!silent) setLoading(true)
+      const res = await fetch('/api/v1/license/status', { cache: 'no-store' })
 
       if (res.ok) {
         const data = await res.json()
         setLicenseStatus(data)
       }
     } catch (e) {
-      console.error('Failed to load license status', e)
+      if (!silent) console.error('Failed to load license status', e)
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
   }, [])
 
@@ -152,6 +152,27 @@ export function useLicenseManagement() {
     }
   }, [loadLicenseStatus])
 
+  // Silent refresh: no loading flip, so polling never blanks the tab.
+  const refreshLicenseStatus = useCallback(() => loadLicenseStatus({ silent: true }), [loadLicenseStatus])
+
+  const connectAction = useCallback(async (url: string, method: 'POST' | 'DELETE') => {
+    try {
+      const res = await fetch(url, { method })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || data?.success === false) {
+        return { success: false, error: data?.error || `HTTP ${res.status}`, code: data?.code } as const
+      }
+      await refreshLicenseStatus()
+      return { success: true } as const
+    } catch (e: any) {
+      return { success: false, error: e?.message || 'Request failed' } as const
+    }
+  }, [refreshLicenseStatus])
+
+  const startConnection = useCallback(() => connectAction('/api/v1/license/connect', 'POST'), [connectAction])
+  const cancelConnection = useCallback(() => connectAction('/api/v1/license/connect', 'DELETE'), [connectAction])
+  const checkinNow = useCallback(() => connectAction('/api/v1/license/checkin', 'POST'), [connectAction])
+
   return {
     licenseStatus,
     features,
@@ -167,5 +188,9 @@ export function useLicenseManagement() {
     handleDeactivate,
     downloadLicenseRequest,
     resetInstallIdentity,
+    refreshLicenseStatus,
+    startConnection,
+    cancelConnection,
+    checkinNow,
   }
 }

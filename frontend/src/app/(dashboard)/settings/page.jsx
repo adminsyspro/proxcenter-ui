@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 import dynamic from 'next/dynamic'
 import { useSearchParams, useRouter } from 'next/navigation'
@@ -1825,6 +1825,114 @@ function FingerprintRow({ label, value, t }) {
   )
 }
 
+function ConnectionCard({ connection, t, busy, onConnect, onCancel, onDisconnect, onCheckin }) {
+  const status = connection?.status || 'none'
+  const fmt = (v) => (v ? new Date(v).toLocaleString() : t('settings.licenseConnectionNever'))
+  const daysLeft = (v) => (v ? Math.max(0, Math.ceil((new Date(v).getTime() - Date.now()) / 86400000)) : 0)
+  const minutesLeft = connection?.pairing_expires_at ? Math.max(0, Math.ceil((new Date(connection.pairing_expires_at).getTime() - Date.now()) / 60000)) : 0
+  const skewMinutes = Math.round(Math.abs(connection?.server_skew_seconds || 0) / 60)
+
+  if (!connection?.available) {
+    return null
+  }
+
+  return (
+    <Card variant='outlined' sx={{ mb: 3 }}>
+      <CardContent sx={{ p: 3 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2, flexWrap: 'wrap' }}>
+          <Typography variant='subtitle1' fontWeight={700} sx={{ flex: 1 }}>
+            <i className='ri-plug-line' style={{ marginRight: 8, opacity: 0.6 }} />
+            {t('settings.licenseConnectionTitle')}
+          </Typography>
+          {status === 'connected' && <Chip size='small' color='success' icon={<i className='ri-checkbox-circle-line' />} label={t('settings.licenseConnectionConnected')} />}
+          {status === 'disconnected' && <Chip size='small' color='warning' icon={<i className='ri-wifi-off-line' />} label={t('settings.licenseConnectionDisconnected')} />}
+          {status === 'pairing' && <Chip size='small' color='info' icon={<i className='ri-time-line' />} label={t('settings.licenseConnectionPairingTitle')} />}
+        </Box>
+
+        {status === 'none' && (
+          <>
+            <Typography variant='body2' sx={{ mb: 1 }}>{t('settings.licenseConnectionNotConnected')}</Typography>
+            {connection.last_error && <Alert severity='warning' sx={{ mb: 1.5 }}>{t('settings.licenseConnectionEnded', { error: connection.last_error })}</Alert>}
+            <Typography variant='caption' display='block' sx={{ opacity: 0.7, mb: 2 }}>{t('settings.licenseConnectionOptIn')}</Typography>
+            <Button variant='contained' size='small' onClick={onConnect} disabled={busy} startIcon={<i className='ri-plug-line' />}>
+              {t('settings.licenseConnectionConnect')}
+            </Button>
+          </>
+        )}
+
+        {status === 'pairing' && (
+          <>
+            <Typography variant='body2' sx={{ mb: 1.5 }}>{t('settings.licenseConnectionPairingHint')}</Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap', mb: 1.5 }}>
+              <Typography variant='h4' sx={{ fontFamily: 'JetBrains Mono, monospace', letterSpacing: 4 }}>{connection.user_code}</Typography>
+              <Button variant='outlined' size='small' href={`${connection.verification_url}?code=${encodeURIComponent(connection.user_code || '')}`} target='_blank' rel='noopener noreferrer' startIcon={<i className='ri-external-link-line' />}>
+                {t('settings.licenseConnectionOpenPortal')}
+              </Button>
+              <Button variant='text' size='small' color='inherit' onClick={onCancel} disabled={busy}>{t('settings.licenseConnectionCancel')}</Button>
+            </Box>
+            <Typography variant='caption' sx={{ opacity: 0.7 }}>{t('settings.licenseConnectionPairingExpires', { minutes: minutesLeft })}</Typography>
+          </>
+        )}
+
+        {(status === 'connected' || status === 'disconnected') && (
+          <>
+            {status === 'disconnected' && (
+              <Alert severity='warning' sx={{ mb: 2 }}>
+                {t('settings.licenseConnectionFailures', { count: connection.consecutive_failures })}. {t('settings.licenseConnectionLastError')}: {connection.last_error || '—'}. {t('settings.licenseConnectionNextTry')}: {fmt(connection.next_checkin_at)}
+              </Alert>
+            )}
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 1, mb: 2 }}>
+              <Typography variant='body2'><strong>{t('settings.licenseConnectionInstance')}:</strong> {connection.instance_name || connection.instance_id || '—'}</Typography>
+              <Typography variant='body2'><strong>{t('settings.licenseConnectionCustomer')}:</strong> {connection.customer_name || '—'}</Typography>
+              <Typography variant='body2'><strong>{t('settings.licenseConnectionLastCheckin')}:</strong> {fmt(connection.last_ok_at)}</Typography>
+              <Typography variant='body2'><strong>{t('settings.licenseConnectionNextCheckin')}:</strong> {fmt(connection.next_checkin_at)}</Typography>
+            </Box>
+            {connection.lease_until && (
+              <Typography variant='body2' color={connection.lease_warn ? 'error' : 'text.secondary'} sx={{ mb: 1 }}>
+                {t('settings.licenseConnectionLeaseRemaining', { days: connection.lease_days_remaining })}
+              </Typography>
+            )}
+            {skewMinutes >= 5 && <Alert severity='warning' sx={{ mb: 2 }}>{t('settings.licenseConnectionClockSkew', { minutes: skewMinutes })}</Alert>}
+            <Typography variant='subtitle2' sx={{ mb: 0.5 }}>{t('settings.licenseConnectionHeldTitle')}</Typography>
+            {(!connection.held || connection.held.length === 0) ? (
+              <Typography variant='body2' sx={{ opacity: 0.7, mb: 2 }}>{t('settings.licenseConnectionHeldNone')}</Typography>
+            ) : (
+              <Box component='ul' sx={{ m: 0, mb: 2, pl: 2.5 }}>
+                {connection.held.map(h => (
+                  <li key={h.license_id}>
+                    <Typography variant='body2'>
+                      {h.label || h.license_id} {h.lost
+                        ? <Chip size='small' color='error' variant='outlined' sx={{ ml: 1 }} label={t('settings.licenseConnectionLost', { days: daysLeft(h.grace_until) })} />
+                        : <Chip size='small' color='success' variant='outlined' sx={{ ml: 1 }} label={`${t('settings.licenseConnectionHeld')} · ${t('settings.licenseLeaseUntil')} ${new Date(h.lease_until).toLocaleDateString()}`} />}
+                    </Typography>
+                  </li>
+                ))}
+              </Box>
+            )}
+            <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
+              <Button variant='outlined' size='small' onClick={onCheckin} disabled={busy} startIcon={<i className='ri-refresh-line' />}>{t('settings.licenseConnectionCheckinNow')}</Button>
+              <Button variant='outlined' color='error' size='small' onClick={onDisconnect} disabled={busy} startIcon={<i className='ri-plug-2-line' />}>{t('settings.licenseConnectionDisconnect')}</Button>
+            </Box>
+          </>
+        )}
+
+        {(status === 'revoked' || status === 'identity_changed') && (
+          <>
+            <Alert severity='error' sx={{ mb: 2 }}>{status === 'revoked' ? t('settings.licenseConnectionRevoked') : t('settings.licenseConnectionIdentityChanged')}</Alert>
+            <Button variant='contained' size='small' onClick={onConnect} disabled={busy} startIcon={<i className='ri-plug-line' />}>{t('settings.licenseConnectionReconnect')}</Button>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+function bindingChip(binding, t) {
+  if (binding === 'connected') return { icon: <i className='ri-plug-line' />, label: t('settings.licenseBindingConnected') }
+  if (binding === 'install') return { icon: <i className='ri-links-line' />, label: t('settings.licenseBindingInstall') }
+  return { icon: <i className='ri-cloud-line' />, label: t('settings.licenseBindingFloating') }
+}
+
 function LicenseTab() {
   const t = useTranslations()
   const theme = useTheme()
@@ -1846,6 +1954,10 @@ function LicenseTab() {
     loadLicenseStatus,
     downloadLicenseRequest,
     resetInstallIdentity,
+    refreshLicenseStatus,
+    startConnection,
+    cancelConnection,
+    checkinNow,
   } = useLicenseManagement()
 
   const [resetIdentityOpen, setResetIdentityOpen] = useState(false)
@@ -1854,6 +1966,55 @@ function LicenseTab() {
   const install = licenseStatus?.install || null
   const canSign = install?.can_sign !== false
   const bindingError = licenseStatus?.binding_error || null
+  const leaseError = licenseStatus?.lease_error || null
+  const connection = licenseStatus?.connection || null
+  const [connectBusy, setConnectBusy] = useState(false)
+  const [disconnectOpen, setDisconnectOpen] = useState(false)
+  const prevConnStatus = useRef(connection?.status)
+  const checkinRefreshTimeout = useRef(null)
+  const connectionMounted = useRef(true)
+
+  useEffect(() => {
+    connectionMounted.current = true
+    return () => {
+      connectionMounted.current = false
+      clearTimeout(checkinRefreshTimeout.current)
+    }
+  }, [])
+
+  // Poll every 3 s while a pairing is pending; nobody else polls the status.
+  useEffect(() => {
+    if (connection?.status !== 'pairing') return undefined
+    const id = setInterval(() => { refreshLicenseStatus() }, 3000)
+    return () => clearInterval(id)
+  }, [connection?.status, refreshLicenseStatus])
+
+  // Unlock app-wide features only after pairing or recovery succeeds.
+  useEffect(() => {
+    const previous = prevConnStatus.current
+    prevConnStatus.current = connection?.status
+    if ((previous === 'pairing' || previous === 'disconnected') && connection?.status === 'connected') {
+      refreshLicenseContext()
+      loadLicenseStatus()
+    }
+  }, [connection?.status, refreshLicenseContext, loadLicenseStatus])
+
+  const runConnect = async (fn, okMessage) => {
+    setConnectBusy(true); setError(null); setSuccess(null)
+    const result = await fn()
+    if (!connectionMounted.current) return
+    setConnectBusy(false)
+    if (result.success) { if (okMessage) setSuccess(okMessage) }
+    else setError(result.code === 'CONNECT_DISABLED' ? t('settings.licenseConnectionUnavailable') : result.code === 'IDENTITY_SIGNING_UNAVAILABLE' ? t('settings.licenseSigningUnavailable') : (result.error || t('settings.licenseConnectionFailed')))
+  }
+  const handleConnect = () => runConnect(startConnection)
+  const handleCancelPairing = () => runConnect(cancelConnection)
+  const handleCheckinNow = () => runConnect(checkinNow, t('settings.licenseConnectionCheckinQueued')).then(() => {
+    if (!connectionMounted.current) return
+    clearTimeout(checkinRefreshTimeout.current)
+    checkinRefreshTimeout.current = setTimeout(refreshLicenseStatus, 5000)
+  })
+  const handleDisconnect = async () => { setDisconnectOpen(false); await runConnect(cancelConnection); await refreshLicenseContext() }
 
   const handleGenerateRequest = async () => {
     setError(null); setSuccess(null)
@@ -2067,7 +2228,7 @@ function LicenseTab() {
         <Alert severity='error' icon={<i className='ri-lock-2-line' />} sx={{ mb: 3, '& .MuiAlert-message': { width: '100%' } }}>
           <Typography variant='subtitle2' fontWeight={700} sx={{ mb: 0.5 }}>{t('settings.licenseBindingErrorTitle')}</Typography>
           <Typography variant='body2' sx={{ mb: 1.5 }}>
-            {t('settings.licenseBindingErrorBody', { licenseId: licenseStatus?.license_id || 'n/a' })}
+            {t('settings.licenseBindingErrorBody', { licenseId: licenseStatus?.license_id || '—' })}
           </Typography>
           <Box sx={{ display: 'grid', gap: 0.75, mb: 1.5 }}>
             <FingerprintRow label={t('settings.licenseBindingExpected')} value={bindingMismatch?.expected || licenseStatus?.bound_fingerprint || ''} t={t} />
@@ -2077,6 +2238,19 @@ function LicenseTab() {
             <li><Typography variant='body2'>{t('settings.licenseBindingErrorStep1')}</Typography></li>
             <li><Typography variant='body2'>{t('settings.licenseBindingErrorStep2')}</Typography></li>
             <li><Typography variant='body2'>{t('settings.licenseBindingErrorStep3')}</Typography></li>
+          </Box>
+        </Alert>
+      )}
+
+      {leaseError && (
+        <Alert severity='error' icon={<i className='ri-timer-flash-line' />} sx={{ mb: 3, '& .MuiAlert-message': { width: '100%' } }}>
+          <Typography variant='subtitle2' fontWeight={700} sx={{ mb: 0.5 }}>{t('settings.licenseLeaseExpiredTitle')}</Typography>
+          <Typography variant='body2' sx={{ mb: 1 }}>
+            {t('settings.licenseLeaseExpiredBody', { licenseId: licenseStatus?.license_id || '—', leaseUntil: licenseStatus?.lease_until ? new Date(licenseStatus.lease_until).toLocaleString() : '—' })}
+          </Typography>
+          <Box component='ol' sx={{ m: 0, pl: 2.5, listStyle: 'decimal' }}>
+            <li><Typography variant='body2'>{t('settings.licenseLeaseExpiredStep1')}</Typography></li>
+            <li><Typography variant='body2'>{t('settings.licenseLeaseExpiredStep2')}</Typography></li>
           </Box>
         </Alert>
       )}
@@ -2122,13 +2296,15 @@ function LicenseTab() {
                     size='small'
                     variant='outlined'
                     sx={{ ml: 1 }}
-                    icon={<i className={licenseStatus.binding === 'install' ? 'ri-links-line' : 'ri-cloud-line'} />}
-                    label={licenseStatus.binding === 'install' ? t('settings.licenseBindingInstall') : t('settings.licenseBindingFloating')}
+                    {...bindingChip(licenseStatus.binding, t)}
                   />
                   {licenseStatus.expires_at && (
                     <Typography variant='caption' display='block' sx={{ opacity: 0.6, mt: 0.5 }}>
                       {t('settings.expiresOn')}: {new Date(licenseStatus.expires_at).toLocaleDateString()}
                     </Typography>
+                  )}
+                  {licenseStatus.lease_until && (
+                    <Typography variant='caption' display='block' sx={{ opacity: 0.6 }}>{t('settings.licenseLeaseUntil')}: {new Date(licenseStatus.lease_until).toLocaleDateString()}</Typography>
                   )}
                 </>
               ) : (
@@ -2293,8 +2469,7 @@ function LicenseTab() {
                 <Chip
                   size='small'
                   variant='outlined'
-                  icon={<i className={licenseStatus.binding === 'install' ? 'ri-links-line' : 'ri-cloud-line'} />}
-                  label={licenseStatus.binding === 'install' ? t('settings.licenseBindingInstall') : t('settings.licenseBindingFloating')}
+                  {...bindingChip(licenseStatus.binding, t)}
                 />
               </Box>
               <Tooltip title={canSign ? '' : t('settings.licenseSigningUnavailable')}>
@@ -2460,6 +2635,9 @@ function LicenseTab() {
         </Card>
       )}
 
+      <ConnectionCard connection={connection} t={t} busy={connectBusy || activating}
+        onConnect={handleConnect} onCancel={handleCancelPairing} onDisconnect={() => setDisconnectOpen(true)} onCheckin={handleCheckinNow} />
+
       {/* Deactivate Confirmation Dialog */}
       <Dialog
         open={deactivateDialogOpen}
@@ -2504,6 +2682,15 @@ function LicenseTab() {
           <Button color='warning' variant='contained' onClick={handleResetIdentity} disabled={activating}>
             {t('settings.licenseResetIdentity')}
           </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={disconnectOpen} onClose={() => setDisconnectOpen(false)} maxWidth='sm' fullWidth>
+        <DialogTitle>{t('settings.licenseConnectionDisconnectConfirmTitle')}</DialogTitle>
+        <DialogContent><Typography variant='body2'>{t('settings.licenseConnectionDisconnectConfirm')}</Typography></DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDisconnectOpen(false)}>{t('common.cancel')}</Button>
+          <Button color='error' variant='contained' onClick={handleDisconnect} disabled={connectBusy}>{t('settings.licenseConnectionDisconnect')}</Button>
         </DialogActions>
       </Dialog>
 

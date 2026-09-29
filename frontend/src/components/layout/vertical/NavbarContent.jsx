@@ -30,6 +30,7 @@ import { useLocale } from '@/contexts/LocaleContext'
 import { localeCountryCodes } from '@/i18n/config'
 import { CountryFlag } from '@/components/ui/CountryFlag'
 import { leaseDaysLeft } from '@/components/settings/leaseDays'
+import { isMovedLicenseExpired } from '@/components/settings/movedLicenseExpired'
 
 // Materio settings hook (theme, mode, etc.)
 import { useSettings } from '@core/hooks/useSettings'
@@ -339,7 +340,7 @@ const NavbarContent = ({ targetLayout } = {}) => {
   const leaseNotif = isProviderTenant && canViewAdmin && (licenseStatus?.lease_error || lostHeld || (portalReachable && conn.lease_warn)) ? {
     id: 'license-lease',
     message: licenseStatus?.lease_error
-      ? t('settings.licenseLeaseExpiredTitle')
+      ? t(isMovedLicenseExpired(licenseStatus, conn) ? 'settings.licenseMovedExpiredTitle' : 'settings.licenseLeaseExpiredTitle')
       : lostHeld
         ? (lostHeldDays === null ? t('license.licenseLostEnded') : t('license.licenseLost', { days: lostHeldDays }))
         : t('license.leaseExpiring', { days: conn.lease_days_remaining }),

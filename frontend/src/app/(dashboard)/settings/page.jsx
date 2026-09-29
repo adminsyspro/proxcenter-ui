@@ -48,6 +48,7 @@ import EmptyState from '@/components/EmptyState'
 import { CountryFlag } from '@/components/ui/CountryFlag'
 import { interpretConnectionStatusResponse } from '@/components/settings/connectionStatusResult'
 import { leaseDaysLeft } from '@/components/settings/leaseDays'
+import { isMovedLicenseExpired } from '@/components/settings/movedLicenseExpired'
 import { findCountry } from '@/lib/utils/countries'
 
 import { isMultiLicenseEnabled } from '@/lib/features'
@@ -1837,7 +1838,7 @@ function connectedHost(portalUrl) {
   }
 }
 
-function ConnectionCard({ connection, offline, t, busy, onConnect, onCancel, onDisconnect, onCheckin }) {
+function ConnectionCard({ connection, offline, t, busy, onConnect, onCancel, onDisconnect, onCheckin, onResetIdentity }) {
   const status = connection?.status || 'none'
   const fmt = (v) => (v ? new Date(v).toLocaleString() : t('settings.licenseConnectionNever'))
   const minutesLeft = connection?.pairing_expires_at ? Math.max(0, Math.ceil((new Date(connection.pairing_expires_at).getTime() - Date.now()) / 60000)) : 0
@@ -1944,6 +1945,19 @@ function ConnectionCard({ connection, offline, t, busy, onConnect, onCancel, onD
           </>
         )}
 
+        {status === 'cloned' && (
+          <>
+            <Alert severity='error' sx={{ mb: 2 }}>{t('settings.licenseConnectionCloned')}</Alert>
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 1, mb: 2 }}>
+              <Typography variant='body2'><strong>{t('settings.licenseConnectionInstance')}:</strong> {connection.instance_name || connection.instance_id || '—'}</Typography>
+              <Typography variant='body2'><strong>{t('settings.licenseConnectionCustomer')}:</strong> {connection.customer_name || '—'}</Typography>
+            </Box>
+            <Button variant='outlined' color='warning' size='small' onClick={onResetIdentity} disabled={busy} startIcon={<i className='ri-refresh-line' />}>
+              {t('settings.licenseResetIdentity')}
+            </Button>
+          </>
+        )}
+
         {(status === 'revoked' || status === 'identity_changed') && (
           <>
             <Alert severity='error' sx={{ mb: 2 }}>{status === 'revoked' ? t('settings.licenseConnectionRevoked') : t('settings.licenseConnectionIdentityChanged')}</Alert>
@@ -2012,6 +2026,11 @@ function LicenseTab() {
   const bindingError = licenseStatus?.binding_error || null
   const leaseError = licenseStatus?.lease_error || null
   const connection = licenseStatus?.connection || null
+  // D5: a lease error can mean this instance simply failed to renew, or
+  // that the license was claimed by another instance (still held there,
+  // lost here). The two need different advice, so tell them apart once and
+  // reuse the verdict for both this alert and the navbar's crit item.
+  const movedExpired = isMovedLicenseExpired(licenseStatus, connection)
   const [connectBusy, setConnectBusy] = useState(false)
   const [disconnectOpen, setDisconnectOpen] = useState(false)
   const prevConnStatus = useRef(connection?.status)
@@ -2325,14 +2344,20 @@ function LicenseTab() {
 
       {leaseError && (
         <Alert severity='error' icon={<i className='ri-timer-flash-line' />} sx={{ mb: 3, '& .MuiAlert-message': { width: '100%' } }}>
-          <Typography variant='subtitle2' fontWeight={700} sx={{ mb: 0.5 }}>{t('settings.licenseLeaseExpiredTitle')}</Typography>
-          <Typography variant='body2' sx={{ mb: 1 }}>
-            {t('settings.licenseLeaseExpiredBody', { licenseId: licenseStatus?.license_id || '—', leaseUntil: licenseStatus?.lease_until ? new Date(licenseStatus.lease_until).toLocaleString() : '—' })}
+          <Typography variant='subtitle2' fontWeight={700} sx={{ mb: 0.5 }}>
+            {t(movedExpired ? 'settings.licenseMovedExpiredTitle' : 'settings.licenseLeaseExpiredTitle')}
           </Typography>
-          <Box component='ol' sx={{ m: 0, pl: 2.5, listStyle: 'decimal' }}>
-            <li><Typography variant='body2'>{t('settings.licenseLeaseExpiredStep1')}</Typography></li>
-            <li><Typography variant='body2'>{t('settings.licenseLeaseExpiredStep2')}</Typography></li>
-          </Box>
+          <Typography variant='body2' sx={{ mb: movedExpired ? 0 : 1 }}>
+            {movedExpired
+              ? t('settings.licenseMovedExpiredBody', { leaseUntil: licenseStatus?.lease_until ? new Date(licenseStatus.lease_until).toLocaleString() : '—' })
+              : t('settings.licenseLeaseExpiredBody', { licenseId: licenseStatus?.license_id || '—', leaseUntil: licenseStatus?.lease_until ? new Date(licenseStatus.lease_until).toLocaleString() : '—' })}
+          </Typography>
+          {!movedExpired && (
+            <Box component='ol' sx={{ m: 0, pl: 2.5, listStyle: 'decimal' }}>
+              <li><Typography variant='body2'>{t('settings.licenseLeaseExpiredStep1')}</Typography></li>
+              <li><Typography variant='body2'>{t('settings.licenseLeaseExpiredStep2')}</Typography></li>
+            </Box>
+          )}
         </Alert>
       )}
 
@@ -2717,7 +2742,8 @@ function LicenseTab() {
       )}
 
       <ConnectionCard connection={connection} offline={!!licenseStatus?.offline} t={t} busy={connectBusy || activating}
-        onConnect={handleConnect} onCancel={handleCancelPairing} onDisconnect={() => setDisconnectOpen(true)} onCheckin={handleCheckinNow} />
+        onConnect={handleConnect} onCancel={handleCancelPairing} onDisconnect={() => setDisconnectOpen(true)} onCheckin={handleCheckinNow}
+        onResetIdentity={() => setResetIdentityOpen(true)} />
 
       {/* Deactivate Confirmation Dialog */}
       <Dialog

@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { buildLicenseTableRows, computePerTenantRollup } from '@/lib/license/view'
 import { isMultiLicenseEnabled } from '@/lib/features'
 import { leaseDaysLeft } from '@/components/settings/leaseDays'
+import { isMovedLicenseExpired } from '@/components/settings/movedLicenseExpired'
 
 // Exercise the page-local components without exporting unsupported Next.js page
 // exports or loading unrelated settings tabs and their providers.
@@ -26,7 +27,7 @@ const dependencies = {
   LinearProgress: mui.LinearProgress, TextField: mui.TextField, FormControl: mui.FormControl,
   InputLabel: mui.InputLabel, Select: mui.Select, MenuItem: mui.MenuItem, FormControlLabel: mui.FormControlLabel,
   Checkbox: mui.Checkbox, useTheme: mui.useTheme,
-  buildLicenseTableRows, computePerTenantRollup, isMultiLicenseEnabled, leaseDaysLeft,
+  buildLicenseTableRows, computePerTenantRollup, isMultiLicenseEnabled, leaseDaysLeft, isMovedLicenseExpired,
   useTranslations: () => t,
   useLicense: () => ({ refresh: refreshContext }),
   useLicenseManagement: () => management,
@@ -39,7 +40,7 @@ const code = execFileSync(process.execPath, ['-e', `
 `], { input: section + '\nreturn { LicenseTab, ConnectionCard }', encoding: 'utf8' })
 const { LicenseTab, ConnectionCard } = new Function(...Object.keys(dependencies), code)(...Object.values(dependencies))
 const connected = { available: true, status: 'connected', held: [], instance_id: 'instance-1' }
-const callbacks = () => ({ onConnect: vi.fn(), onCancel: vi.fn(), onDisconnect: vi.fn(), onCheckin: vi.fn() })
+const callbacks = () => ({ onConnect: vi.fn(), onCancel: vi.fn(), onDisconnect: vi.fn(), onCheckin: vi.fn(), onResetIdentity: vi.fn() })
 
 beforeEach(() => {
   multiLicense = false
@@ -157,6 +158,19 @@ describe('ConnectionCard', () => {
     expect((screen.getByRole('button') as HTMLButtonElement).disabled).toBe(true)
     expect(screen.getByRole('alert').textContent).toContain('PAIRING_EXPIRED')
   })
+  it('shows the cloned alert with a reset identity action, and no check-in or disconnect (A6)', () => {
+    const actions = callbacks()
+    const { container } = render(React.createElement(ConnectionCard, {
+      t, ...actions, connection: { ...connected, status: 'cloned', instance_name: 'edge-1', customer_name: 'Acme' },
+    }))
+    expect(screen.getByText('settings.licenseConnectionCloned')).toBeTruthy()
+    expect(container.textContent).toContain('edge-1')
+    expect(container.textContent).toContain('Acme')
+    expect(screen.queryByRole('button', { name: 'settings.licenseConnectionCheckinNow' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'settings.licenseConnectionDisconnect' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'settings.licenseResetIdentity' }))
+    expect(actions.onResetIdentity).toHaveBeenCalledOnce()
+  })
 })
 
 describe('LicenseTab connection integration', () => {
@@ -190,6 +204,20 @@ describe('LicenseTab connection integration', () => {
     await mountTab()
     expect(screen.getByText('settings.licenseLeaseExpiredTitle')).toBeTruthy()
     expect(screen.getByText('settings.licenseLeaseExpiredBody {"licenseId":"—","leaseUntil":"—"}')).toBeTruthy()
+    expect(screen.getByText('settings.licenseLeaseExpiredStep1')).toBeTruthy()
+    expect(screen.queryByText('settings.licenseMovedExpiredTitle')).toBeNull()
+  })
+  it('shows the moved-license copy instead, with no Check-in-now step, when the lease error license is held elsewhere (D5)', async () => {
+    management.licenseStatus = {
+      licensed: false, lease_error: 'expired', license_id: 'lic-1', lease_until: '2030-01-01T00:00:00Z',
+      connection: { ...connected, held: [{ license_id: 'lic-1', lost: true }] },
+    }
+    await mountTab()
+    expect(screen.getByText('settings.licenseMovedExpiredTitle')).toBeTruthy()
+    expect(screen.getByText(`settings.licenseMovedExpiredBody {"leaseUntil":"${new Date('2030-01-01T00:00:00Z').toLocaleString()}"}`)).toBeTruthy()
+    expect(screen.queryByText('settings.licenseLeaseExpiredTitle')).toBeNull()
+    expect(screen.queryByText('settings.licenseLeaseExpiredStep1')).toBeNull()
+    expect(screen.queryByText('settings.licenseLeaseExpiredStep2')).toBeNull()
   })
   it.each(['pairing', 'disconnected'])('refreshes context only when %s transitions to connected', async previous => {
     management.licenseStatus = null

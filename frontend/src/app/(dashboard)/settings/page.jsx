@@ -47,6 +47,7 @@ import { useRBAC } from '@/contexts/RBACContext'
 import EmptyState from '@/components/EmptyState'
 import { CountryFlag } from '@/components/ui/CountryFlag'
 import { interpretConnectionStatusResponse } from '@/components/settings/connectionStatusResult'
+import { leaseDaysLeft } from '@/components/settings/leaseDays'
 import { findCountry } from '@/lib/utils/countries'
 
 import { isMultiLicenseEnabled } from '@/lib/features'
@@ -1825,11 +1826,20 @@ function FingerprintRow({ label, value, t }) {
   )
 }
 
+// The host to show in the connected chip: the portal this instance actually
+// reports to, never a hardcoded name. Falls back when portal_url is missing
+// or not a valid URL (a stale or partially-loaded connection record).
+function connectedHost(portalUrl) {
+  try {
+    return new URL(portalUrl).host || 'proxcenter.io'
+  } catch {
+    return 'proxcenter.io'
+  }
+}
+
 function ConnectionCard({ connection, offline, t, busy, onConnect, onCancel, onDisconnect, onCheckin }) {
   const status = connection?.status || 'none'
   const fmt = (v) => (v ? new Date(v).toLocaleString() : t('settings.licenseConnectionNever'))
-  // Whole days, rounded down like the backend's lease_days_remaining.
-  const daysLeft = (v) => (v ? Math.max(0, Math.floor((new Date(v).getTime() - Date.now()) / 86400000)) : 0)
   const minutesLeft = connection?.pairing_expires_at ? Math.max(0, Math.ceil((new Date(connection.pairing_expires_at).getTime() - Date.now()) / 60000)) : 0
   const skewMinutes = Math.round(Math.abs(connection?.server_skew_seconds || 0) / 60)
 
@@ -1847,7 +1857,7 @@ function ConnectionCard({ connection, offline, t, busy, onConnect, onCancel, onD
             <i className='ri-plug-line' style={{ marginRight: 8, opacity: 0.6 }} />
             {t('settings.licenseConnectionTitle')}
           </Typography>
-          {status === 'connected' && <Chip size='small' color='success' icon={<i className='ri-checkbox-circle-line' />} label={t('settings.licenseConnectionConnected')} />}
+          {status === 'connected' && <Chip size='small' color='success' icon={<i className='ri-checkbox-circle-line' />} label={t('settings.licenseConnectionConnectedTo', { host: connectedHost(connection.portal_url) })} />}
           {status === 'disconnected' && <Chip size='small' color='warning' icon={<i className='ri-wifi-off-line' />} label={t('settings.licenseConnectionDisconnected')} />}
           {status === 'pairing' && <Chip size='small' color='info' icon={<i className='ri-time-line' />} label={t('settings.licenseConnectionPairingTitle')} />}
         </Box>
@@ -1894,7 +1904,7 @@ function ConnectionCard({ connection, offline, t, busy, onConnect, onCancel, onD
             </Box>
             {connection.lease_until && (
               <Typography variant='body2' color={connection.lease_warn ? 'error' : 'text.secondary'} sx={{ mb: 1 }}>
-                {t('settings.licenseConnectionLeaseRemaining', { days: connection.lease_days_remaining })}
+                {t('settings.licenseConnectionLeaseRemaining', { days: leaseDaysLeft(connection.lease_until) ?? 0 })}
               </Typography>
             )}
             {skewMinutes >= 5 && <Alert severity='warning' sx={{ mb: 2 }}>{t('settings.licenseConnectionClockSkew', { minutes: skewMinutes })}</Alert>}
@@ -1905,9 +1915,9 @@ function ConnectionCard({ connection, offline, t, busy, onConnect, onCancel, onD
               <Box component='ul' sx={{ m: 0, mb: 2, pl: 2.5 }}>
                 {connection.held.map(h => (
                   <li key={h.license_id}>
-                    <Typography variant='body2'>
+                    <Typography variant='body2' component='div'>
                       {h.label || h.license_id} {h.lost
-                        ? <Chip size='small' color='error' variant='outlined' sx={{ ml: 1 }} label={t('settings.licenseConnectionLost', { days: daysLeft(h.grace_until) })} />
+                        ? <Chip size='small' color='error' variant='outlined' sx={{ ml: 1 }} label={t('settings.licenseConnectionLost', { days: leaseDaysLeft(h.grace_until) ?? 0 })} />
                         : <Chip size='small' color='success' variant='outlined' sx={{ ml: 1 }} label={`${t('settings.licenseConnectionHeld')} · ${t('settings.licenseLeaseUntil')} ${new Date(h.lease_until).toLocaleDateString()}`} />}
                     </Typography>
                   </li>

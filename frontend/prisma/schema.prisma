@@ -1403,6 +1403,7 @@ model LicenseConnection {
   serverSkewSeconds   Int       @default(0) @map("server_skew_seconds")
   held                Json      @default("[]")
   revokedIds          Json      @default("[]") @map("revoked_ids")
+  checkinToken        String    @default("") @map("checkin_token")
   updatedAt           DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
 
   @@map("license_connection")

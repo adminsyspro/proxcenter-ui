@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { createTranslator } from 'next-intl'
 
 import de from './de.json'
 import en from './en.json'
@@ -18,6 +19,7 @@ const requiredKeys = [
   'settings.licenseConnectionDisconnectConfirmTitle', 'settings.licenseConnectionDisconnectConfirm', 'settings.licenseConnectionDisconnected', 'settings.licenseConnectionFailures',
   'settings.licenseConnectionLastError', 'settings.licenseConnectionNextTry', 'settings.licenseConnectionRevoked', 'settings.licenseConnectionIdentityChanged',
   'settings.licenseConnectionReconnect', 'settings.licenseConnectionEnded', 'settings.licenseConnectionFailed', 'settings.licenseConnectionUnavailable',
+  'settings.licenseConnectionConnectedTo',
   'settings.licenseBindingConnected', 'settings.licenseLeaseUntil', 'settings.licenseLeaseExpiredTitle', 'settings.licenseLeaseExpiredBody',
   'settings.licenseLeaseExpiredStep1', 'settings.licenseLeaseExpiredStep2',
   'license.connectionFailing', 'license.leaseExpiring', 'license.licenseLost',
@@ -41,5 +43,36 @@ describe('license connection i18n parity across the 6 served locales', () => {
         expect(placeholders(value as string), `${locale}: ${key} placeholders`).toEqual(placeholders(get(en, key) as string))
       }
     })
+  }
+})
+
+// A8: the plural rule (=0 / one / other) is real ICU syntax, not just a
+// placeholder. A stray brace or an unknown plural category only throws at
+// format time, never at JSON-parse time, so each locale needs an actual
+// formatting pass for every day count that matters (0 = "less than a day",
+// 1 = singular, 2 = plural). next-intl swallows format errors by default
+// (it falls back to the key), so onError rethrows here to make a broken
+// pattern fail the test instead of silently passing.
+describe('lease day-count plurals format for days 0, 1 and 2 in every locale', () => {
+  const pluralKeys = ['settings.licenseConnectionLeaseRemaining', 'settings.licenseConnectionLost']
+
+  for (const [locale, messages] of Object.entries(locales)) {
+    const t = createTranslator({
+      locale,
+      messages,
+      onError: (error) => { throw error }
+    }) as unknown as (key: string, values?: Record<string, unknown>) => string
+
+    for (const key of pluralKeys) {
+      for (const days of [0, 1, 2]) {
+        it(`${locale} formats ${key} for days=${days} without throwing`, () => {
+          let result = ''
+
+          expect(() => { result = t(key, { days }) }).not.toThrow()
+          expect(result.length, `${locale}: ${key} (days=${days}) is empty`).toBeGreaterThan(0)
+          expect(result, `${locale}: ${key} (days=${days}) leaked ICU syntax`).not.toMatch(/[{}]/)
+        })
+      }
+    }
   }
 })

@@ -29,6 +29,7 @@ import { useTranslations } from 'next-intl'
 import { useLocale } from '@/contexts/LocaleContext'
 import { localeCountryCodes } from '@/i18n/config'
 import { CountryFlag } from '@/components/ui/CountryFlag'
+import { leaseDaysLeft } from '@/components/settings/leaseDays'
 
 // Materio settings hook (theme, mode, etc.)
 import { useSettings } from '@core/hooks/useSettings'
@@ -337,7 +338,7 @@ const NavbarContent = ({ targetLayout } = {}) => {
     message: licenseStatus?.lease_error
       ? t('settings.licenseLeaseExpiredTitle')
       : lostHeld
-        ? t('license.licenseLost', { days: Math.max(0, Math.floor((new Date(lostHeld.grace_until ?? 0).getTime() - Date.now()) / 86400000)) })
+        ? t('license.licenseLost', { days: leaseDaysLeft(lostHeld.grace_until) ?? 0 })
         : t('license.leaseExpiring', { days: conn.lease_days_remaining }),
     severity: 'crit',
     source: 'License',

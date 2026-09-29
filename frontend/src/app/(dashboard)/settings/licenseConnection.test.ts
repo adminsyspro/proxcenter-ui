@@ -8,6 +8,7 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { buildLicenseTableRows, computePerTenantRollup } from '@/lib/license/view'
 import { isMultiLicenseEnabled } from '@/lib/features'
+import { leaseDaysLeft } from '@/components/settings/leaseDays'
 
 // Exercise the page-local components without exporting unsupported Next.js page
 // exports or loading unrelated settings tabs and their providers.
@@ -25,7 +26,7 @@ const dependencies = {
   LinearProgress: mui.LinearProgress, TextField: mui.TextField, FormControl: mui.FormControl,
   InputLabel: mui.InputLabel, Select: mui.Select, MenuItem: mui.MenuItem, FormControlLabel: mui.FormControlLabel,
   Checkbox: mui.Checkbox, useTheme: mui.useTheme,
-  buildLicenseTableRows, computePerTenantRollup, isMultiLicenseEnabled,
+  buildLicenseTableRows, computePerTenantRollup, isMultiLicenseEnabled, leaseDaysLeft,
   useTranslations: () => t,
   useLicense: () => ({ refresh: refreshContext }),
   useLicenseManagement: () => management,
@@ -81,6 +82,23 @@ describe('ConnectionCard', () => {
     } }))
     expect(container.textContent).toContain('settings.licenseConnectionLost {"days":2}')
   })
+  it('never nests a Chip div inside a Typography p in the held list (D4)', () => {
+    const { container } = render(React.createElement(ConnectionCard, { t, connection: {
+      ...connected, held: [{ license_id: 'lost-1', lost: true, grace_until: '2030-01-03T12:00:00Z' }],
+    } }))
+    expect(container.querySelector('li .MuiChip-root')).toBeTruthy()
+    expect(container.querySelector('p div')).toBeNull()
+  })
+  it('shows the connected host in the chip, falling back to proxcenter.io when the portal URL is missing or invalid', () => {
+    const { rerender, container } = render(React.createElement(ConnectionCard, {
+      t, connection: { ...connected, status: 'connected', portal_url: 'https://portal.example.com:8443/foo' },
+    }))
+    expect(container.textContent).toContain('settings.licenseConnectionConnectedTo {"host":"portal.example.com:8443"}')
+    rerender(React.createElement(ConnectionCard, { t, connection: { ...connected, status: 'connected', portal_url: 'not-a-url' } }))
+    expect(container.textContent).toContain('settings.licenseConnectionConnectedTo {"host":"proxcenter.io"}')
+    rerender(React.createElement(ConnectionCard, { t, connection: { ...connected, status: 'connected', portal_url: undefined } }))
+    expect(container.textContent).toContain('settings.licenseConnectionConnectedTo {"host":"proxcenter.io"}')
+  })
   it.each(['none', 'pairing', 'connected', 'disconnected', 'revoked', 'identity_changed'])('renders %s and the appropriate actions', status => {
     const actions = callbacks()
     render(React.createElement(ConnectionCard, {
@@ -103,9 +121,14 @@ describe('ConnectionCard', () => {
     }
   })
   it('handles omitted errors/grace, lost licenses, lease warnings and clock skew', () => {
+    // The lease line is computed client-side from lease_until (A8), not read
+    // off a possibly stale lease_days_remaining, so time is frozen 2 days
+    // before it.
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2029-12-30T00:00:00Z'))
     const { container } = render(React.createElement(ConnectionCard, { t, connection: {
       ...connected, status: 'disconnected', consecutive_failures: 3, server_skew_seconds: -360,
-      lease_until: '2030-01-01T00:00:00Z', lease_warn: true, lease_days_remaining: 2,
+      lease_until: '2030-01-01T00:00:00Z', lease_warn: true,
       held: [{ license_id: 'lost-1', lost: true }, { license_id: 'held-1', lease_until: '2030-01-01T00:00:00Z' }],
     } }))
     expect(container.textContent).toContain('settings.licenseConnectionLost {"days":0}')

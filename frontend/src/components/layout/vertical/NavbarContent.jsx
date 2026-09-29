@@ -29,8 +29,7 @@ import { useTranslations } from 'next-intl'
 import { useLocale } from '@/contexts/LocaleContext'
 import { localeCountryCodes } from '@/i18n/config'
 import { CountryFlag } from '@/components/ui/CountryFlag'
-import { leaseDaysLeft } from '@/components/settings/leaseDays'
-import { isMovedLicenseExpired } from '@/components/settings/movedLicenseExpired'
+import { connectionClonedNotification, leaseNotificationMessage } from '@/components/settings/licenseNotifications'
 
 // Materio settings hook (theme, mode, etc.)
 import { useSettings } from '@core/hooks/useSettings'
@@ -322,7 +321,8 @@ const NavbarContent = ({ targetLayout } = {}) => {
   } : null
 
   // Portal connection (provider only): failing check-ins warn, a lease that
-  // ends soon, a moved license or an ended lease are critical.
+  // ends soon, a moved license or an ended lease are critical, and a
+  // blocked (cloned) connection is its own critical item (M6).
   // An air-gapped instance has no portal connection to warn about.
   const conn = licenseStatus?.connection
   const portalReachable = !licenseStatus?.offline && conn?.available
@@ -333,17 +333,18 @@ const NavbarContent = ({ targetLayout } = {}) => {
     source: 'License',
     isLicenseNotif: true
   } : null
-  const lostHeld = portalReachable ? conn.held?.find(h => h.lost) : undefined
-  // null means the grace period already ran out (A8): its own "ended" copy,
-  // never "less than a day left".
-  const lostHeldDays = lostHeld ? leaseDaysLeft(lostHeld.grace_until) : null
-  const leaseNotif = isProviderTenant && canViewAdmin && (licenseStatus?.lease_error || lostHeld || (portalReachable && conn.lease_warn)) ? {
+  const clonedMessage = portalReachable ? connectionClonedNotification(conn) : null
+  const connectionClonedNotif = isProviderTenant && canViewAdmin && clonedMessage ? {
+    id: 'license-connection-cloned',
+    message: t(clonedMessage.key),
+    severity: 'crit',
+    source: 'License',
+    isLicenseNotif: true
+  } : null
+  const leaseMessage = leaseNotificationMessage(licenseStatus, conn, portalReachable)
+  const leaseNotif = isProviderTenant && canViewAdmin && leaseMessage ? {
     id: 'license-lease',
-    message: licenseStatus?.lease_error
-      ? t(isMovedLicenseExpired(licenseStatus, conn) ? 'settings.licenseMovedExpiredTitle' : 'settings.licenseLeaseExpiredTitle')
-      : lostHeld
-        ? (lostHeldDays === null ? t('license.licenseLostEnded') : t('license.licenseLost', { days: lostHeldDays }))
-        : t('license.leaseExpiring', { days: conn.lease_days_remaining }),
+    message: t(leaseMessage.key, leaseMessage.values),
     severity: 'crit',
     source: 'License',
     isLicenseNotif: true
@@ -393,6 +394,7 @@ const NavbarContent = ({ targetLayout } = {}) => {
     ...(licenseExpirationNotif ? [licenseExpirationNotif] : []),
     ...(bindingNotif ? [bindingNotif] : []),
     ...(connectionNotif ? [connectionNotif] : []),
+    ...(connectionClonedNotif ? [connectionClonedNotif] : []),
     ...(leaseNotif ? [leaseNotif] : []),
     ...drsNotifications,
     ...notifications
@@ -400,11 +402,11 @@ const NavbarContent = ({ targetLayout } = {}) => {
 
   // Combined count
   const drsCount = drsNotifications.length
-  const totalNotifCount = notifCount + (licenseExpirationNotif ? 1 : 0) + (updateNotif ? 1 : 0) + (nodeLimitNotif ? 1 : 0) + (bindingNotif ? 1 : 0) + (connectionNotif ? 1 : 0) + (leaseNotif ? 1 : 0) + drsCount
+  const totalNotifCount = notifCount + (licenseExpirationNotif ? 1 : 0) + (updateNotif ? 1 : 0) + (nodeLimitNotif ? 1 : 0) + (bindingNotif ? 1 : 0) + (connectionNotif ? 1 : 0) + (connectionClonedNotif ? 1 : 0) + (leaseNotif ? 1 : 0) + drsCount
 
   // Combined stats
   const totalNotifStats = {
-    crit: notifStats.crit + (licenseExpirationNotif?.severity === 'crit' ? 1 : 0) + (nodeLimitNotif ? 1 : 0) + (bindingNotif ? 1 : 0) + (leaseNotif ? 1 : 0) + drsNotifications.filter(d => d.severity === 'crit').length,
+    crit: notifStats.crit + (licenseExpirationNotif?.severity === 'crit' ? 1 : 0) + (nodeLimitNotif ? 1 : 0) + (bindingNotif ? 1 : 0) + (connectionClonedNotif ? 1 : 0) + (leaseNotif ? 1 : 0) + drsNotifications.filter(d => d.severity === 'crit').length,
     warn: notifStats.warn + (licenseExpirationNotif?.severity === 'warn' ? 1 : 0) + (connectionNotif ? 1 : 0) + drsNotifications.filter(d => d.severity === 'warn').length,
     info: (updateNotif ? 1 : 0) + drsNotifications.filter(d => d.severity === 'info').length,
     drs: drsCount

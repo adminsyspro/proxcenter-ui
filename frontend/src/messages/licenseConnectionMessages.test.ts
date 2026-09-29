@@ -23,7 +23,7 @@ const requiredKeys = [
   'settings.licenseConnectionConnectedTo', 'settings.licenseConnectionCloned',
   'settings.licenseBindingConnected', 'settings.licenseLeaseUntil', 'settings.licenseLeaseExpiredTitle', 'settings.licenseLeaseExpiredBody',
   'settings.licenseLeaseExpiredStep1', 'settings.licenseLeaseExpiredStep2', 'settings.licenseMovedExpiredTitle', 'settings.licenseMovedExpiredBody',
-  'license.connectionFailing', 'license.leaseExpiring', 'license.licenseLost', 'license.licenseLostEnded',
+  'license.connectionFailing', 'license.connectionCloned', 'license.leaseExpiring', 'license.licenseLost', 'license.licenseLostEnded',
 ]
 
 function get(messages: any, path: string): unknown {
@@ -55,7 +55,7 @@ describe('license connection i18n parity across the 6 served locales', () => {
 // (it falls back to the key), so onError rethrows here to make a broken
 // pattern fail the test instead of silently passing.
 describe('lease day-count plurals format for days 0, 1 and 2 in every locale', () => {
-  const pluralKeys = ['settings.licenseConnectionLeaseRemaining', 'settings.licenseConnectionLost']
+  const pluralKeys = ['settings.licenseConnectionLeaseRemaining', 'settings.licenseConnectionLost', 'license.leaseExpiring', 'license.licenseLost']
 
   for (const [locale, messages] of Object.entries(locales)) {
     const t = createTranslator({
@@ -100,4 +100,18 @@ describe('ended-lease copy formats in every locale', () => {
       })
     }
   }
+})
+
+// I1: the navbar's critical bell used a plain "{days} days" placeholder for
+// these two keys, so a 1-day lease read as "1 days" and a same-day lease as
+// "0 days". English is checked for the literal wrong text since it is the
+// only locale where "N days" is unambiguous to grep for.
+describe('license.leaseExpiring and license.licenseLost never print "0 days" or "1 days" (I1)', () => {
+  const t = createTranslator({ locale: 'en', messages: en, onError: (error) => { throw error } }) as unknown as (key: string, values?: Record<string, unknown>) => string
+
+  it.each(['license.leaseExpiring', 'license.licenseLost'])('%s singularises 1 day and never says "0 days"', key => {
+    expect(t(key, { days: 1 })).not.toMatch(/\b1 days\b/)
+    expect(t(key, { days: 0 })).not.toMatch(/\b0 days\b/)
+    expect(t(key, { days: 0 })).toContain('less than a day')
+  })
 })

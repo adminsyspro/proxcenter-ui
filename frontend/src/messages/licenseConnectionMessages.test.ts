@@ -12,17 +12,18 @@ const locales: Record<string, any> = { en, fr, de, es, ko, 'zh-CN': zhCN }
 const requiredKeys = [
   'settings.licenseConnectionTitle', 'settings.licenseConnectionNotConnected', 'settings.licenseConnectionOptIn', 'settings.licenseConnectionConnect',
   'settings.licenseConnectionPairingTitle', 'settings.licenseConnectionPairingHint', 'settings.licenseConnectionOpenPortal', 'settings.licenseConnectionPairingExpires',
-  'settings.licenseConnectionCancel', 'settings.licenseConnectionConnected', 'settings.licenseConnectionInstance', 'settings.licenseConnectionCustomer',
+  'settings.licenseConnectionCancel', 'settings.licenseConnectionInstance', 'settings.licenseConnectionCustomer',
   'settings.licenseConnectionLastCheckin', 'settings.licenseConnectionNextCheckin', 'settings.licenseConnectionNever', 'settings.licenseConnectionLeaseRemaining',
+  'settings.licenseConnectionLeaseEnded',
   'settings.licenseConnectionClockSkew', 'settings.licenseConnectionHeldTitle', 'settings.licenseConnectionHeldNone', 'settings.licenseConnectionHeld',
-  'settings.licenseConnectionLost', 'settings.licenseConnectionCheckinNow', 'settings.licenseConnectionCheckinQueued', 'settings.licenseConnectionDisconnect',
+  'settings.licenseConnectionLost', 'settings.licenseConnectionLostEnded', 'settings.licenseConnectionCheckinNow', 'settings.licenseConnectionCheckinQueued', 'settings.licenseConnectionDisconnect',
   'settings.licenseConnectionDisconnectConfirmTitle', 'settings.licenseConnectionDisconnectConfirm', 'settings.licenseConnectionDisconnected', 'settings.licenseConnectionFailures',
   'settings.licenseConnectionLastError', 'settings.licenseConnectionNextTry', 'settings.licenseConnectionRevoked', 'settings.licenseConnectionIdentityChanged',
   'settings.licenseConnectionReconnect', 'settings.licenseConnectionEnded', 'settings.licenseConnectionFailed', 'settings.licenseConnectionUnavailable',
   'settings.licenseConnectionConnectedTo',
   'settings.licenseBindingConnected', 'settings.licenseLeaseUntil', 'settings.licenseLeaseExpiredTitle', 'settings.licenseLeaseExpiredBody',
   'settings.licenseLeaseExpiredStep1', 'settings.licenseLeaseExpiredStep2',
-  'license.connectionFailing', 'license.leaseExpiring', 'license.licenseLost',
+  'license.connectionFailing', 'license.leaseExpiring', 'license.licenseLost', 'license.licenseLostEnded',
 ]
 
 function get(messages: any, path: string): unknown {
@@ -73,6 +74,30 @@ describe('lease day-count plurals format for days 0, 1 and 2 in every locale', (
           expect(result, `${locale}: ${key} (days=${days}) leaked ICU syntax`).not.toMatch(/[{}]/)
         })
       }
+    }
+  }
+})
+
+// A8: an ended lease/grace period never falls through to the "less than a
+// day" plural branch; it has its own copy, with no day count argument.
+describe('ended-lease copy formats in every locale', () => {
+  const endedKeys = ['settings.licenseConnectionLeaseEnded', 'settings.licenseConnectionLostEnded', 'license.licenseLostEnded']
+
+  for (const [locale, messages] of Object.entries(locales)) {
+    const t = createTranslator({
+      locale,
+      messages,
+      onError: (error) => { throw error }
+    }) as unknown as (key: string) => string
+
+    for (const key of endedKeys) {
+      it(`${locale} formats ${key} without throwing`, () => {
+        let result = ''
+
+        expect(() => { result = t(key) }).not.toThrow()
+        expect(result.length, `${locale}: ${key} is empty`).toBeGreaterThan(0)
+        expect(result, `${locale}: ${key} leaked ICU syntax`).not.toMatch(/[{}]/)
+      })
     }
   }
 })

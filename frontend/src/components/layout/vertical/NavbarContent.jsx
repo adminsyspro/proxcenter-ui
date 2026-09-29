@@ -333,12 +333,15 @@ const NavbarContent = ({ targetLayout } = {}) => {
     isLicenseNotif: true
   } : null
   const lostHeld = portalReachable ? conn.held?.find(h => h.lost) : undefined
+  // null means the grace period already ran out (A8): its own "ended" copy,
+  // never "less than a day left".
+  const lostHeldDays = lostHeld ? leaseDaysLeft(lostHeld.grace_until) : null
   const leaseNotif = isProviderTenant && canViewAdmin && (licenseStatus?.lease_error || lostHeld || (portalReachable && conn.lease_warn)) ? {
     id: 'license-lease',
     message: licenseStatus?.lease_error
       ? t('settings.licenseLeaseExpiredTitle')
       : lostHeld
-        ? t('license.licenseLost', { days: leaseDaysLeft(lostHeld.grace_until) ?? 0 })
+        ? (lostHeldDays === null ? t('license.licenseLostEnded') : t('license.licenseLost', { days: lostHeldDays }))
         : t('license.leaseExpiring', { days: conn.lease_days_remaining }),
     severity: 'crit',
     source: 'License',

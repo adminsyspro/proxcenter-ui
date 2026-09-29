@@ -82,6 +82,19 @@ describe('ConnectionCard', () => {
     } }))
     expect(container.textContent).toContain('settings.licenseConnectionLost {"days":2}')
   })
+  it('shows the ended copy, never "less than a day", once the lease or grace period has run out', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2030-01-01T00:00:00Z'))
+    const { container } = render(React.createElement(ConnectionCard, { t, connection: {
+      ...connected, lease_until: '2029-12-31T00:00:00Z',
+      held: [{ license_id: 'lost-1', lost: true, grace_until: '2029-12-31T00:00:00Z' }],
+    } }))
+    expect(container.textContent).toContain('settings.licenseConnectionLeaseEnded')
+    expect(container.textContent).toContain('settings.licenseConnectionLostEnded')
+    expect(container.textContent).not.toContain('settings.licenseConnectionLeaseRemaining')
+    expect(container.textContent).not.toContain('settings.licenseConnectionLost {')
+    expect(container.textContent).not.toMatch(/"days":0/)
+  })
   it('never nests a Chip div inside a Typography p in the held list (D4)', () => {
     const { container } = render(React.createElement(ConnectionCard, { t, connection: {
       ...connected, held: [{ license_id: 'lost-1', lost: true, grace_until: '2030-01-03T12:00:00Z' }],
@@ -131,7 +144,9 @@ describe('ConnectionCard', () => {
       lease_until: '2030-01-01T00:00:00Z', lease_warn: true,
       held: [{ license_id: 'lost-1', lost: true }, { license_id: 'held-1', lease_until: '2030-01-01T00:00:00Z' }],
     } }))
-    expect(container.textContent).toContain('settings.licenseConnectionLost {"days":0}')
+    // No grace_until at all is null too (A8: "no date or ended"), so it
+    // reads as the ended copy, never a false "0 days left".
+    expect(container.textContent).toContain('settings.licenseConnectionLostEnded')
     expect(container.textContent).toContain('settings.licenseConnectionClockSkew {"minutes":6}')
     expect(container.textContent).toContain('settings.licenseConnectionLeaseRemaining {"days":2}')
     expect(container.textContent).toContain('settings.licenseConnectionLastError: —')

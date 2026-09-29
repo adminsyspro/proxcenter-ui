@@ -1842,6 +1842,9 @@ function ConnectionCard({ connection, offline, t, busy, onConnect, onCancel, onD
   const fmt = (v) => (v ? new Date(v).toLocaleString() : t('settings.licenseConnectionNever'))
   const minutesLeft = connection?.pairing_expires_at ? Math.max(0, Math.ceil((new Date(connection.pairing_expires_at).getTime() - Date.now()) / 60000)) : 0
   const skewMinutes = Math.round(Math.abs(connection?.server_skew_seconds || 0) / 60)
+  // null means the lease already ended (A8): that reads as its own "ended"
+  // copy, never as "less than a day left".
+  const leaseDays = connection?.lease_until ? leaseDaysLeft(connection.lease_until) : null
 
   // An air-gapped instance never talks to the portal, whatever the
   // orchestrator reports (it may run without PROXCENTER_OFFLINE).
@@ -1903,8 +1906,10 @@ function ConnectionCard({ connection, offline, t, busy, onConnect, onCancel, onD
               <Typography variant='body2'><strong>{t('settings.licenseConnectionNextCheckin')}:</strong> {fmt(connection.next_checkin_at)}</Typography>
             </Box>
             {connection.lease_until && (
-              <Typography variant='body2' color={connection.lease_warn ? 'error' : 'text.secondary'} sx={{ mb: 1 }}>
-                {t('settings.licenseConnectionLeaseRemaining', { days: leaseDaysLeft(connection.lease_until) ?? 0 })}
+              <Typography variant='body2' color={leaseDays === null || connection.lease_warn ? 'error' : 'text.secondary'} sx={{ mb: 1 }}>
+                {leaseDays === null
+                  ? t('settings.licenseConnectionLeaseEnded')
+                  : t('settings.licenseConnectionLeaseRemaining', { days: leaseDays })}
               </Typography>
             )}
             {skewMinutes >= 5 && <Alert severity='warning' sx={{ mb: 2 }}>{t('settings.licenseConnectionClockSkew', { minutes: skewMinutes })}</Alert>}
@@ -1913,15 +1918,23 @@ function ConnectionCard({ connection, offline, t, busy, onConnect, onCancel, onD
               <Typography variant='body2' sx={{ opacity: 0.7, mb: 2 }}>{t('settings.licenseConnectionHeldNone')}</Typography>
             ) : (
               <Box component='ul' sx={{ m: 0, mb: 2, pl: 2.5 }}>
-                {connection.held.map(h => (
-                  <li key={h.license_id}>
-                    <Typography variant='body2' component='div'>
-                      {h.label || h.license_id} {h.lost
-                        ? <Chip size='small' color='error' variant='outlined' sx={{ ml: 1 }} label={t('settings.licenseConnectionLost', { days: leaseDaysLeft(h.grace_until) ?? 0 })} />
-                        : <Chip size='small' color='success' variant='outlined' sx={{ ml: 1 }} label={`${t('settings.licenseConnectionHeld')} · ${t('settings.licenseLeaseUntil')} ${new Date(h.lease_until).toLocaleDateString()}`} />}
-                    </Typography>
-                  </li>
-                ))}
+                {connection.held.map(h => {
+                  // null means the grace period already ran out (A8): show
+                  // its own "no longer valid" copy, never "less than a day".
+                  const graceDays = h.lost ? leaseDaysLeft(h.grace_until) : null
+
+                  return (
+                    <li key={h.license_id}>
+                      <Typography variant='body2' component='div'>
+                        {h.label || h.license_id} {h.lost
+                          ? <Chip size='small' color='error' variant='outlined' sx={{ ml: 1 }} label={graceDays === null
+                              ? t('settings.licenseConnectionLostEnded')
+                              : t('settings.licenseConnectionLost', { days: graceDays })} />
+                          : <Chip size='small' color='success' variant='outlined' sx={{ ml: 1 }} label={`${t('settings.licenseConnectionHeld')} · ${t('settings.licenseLeaseUntil')} ${new Date(h.lease_until).toLocaleDateString()}`} />}
+                      </Typography>
+                    </li>
+                  )
+                })}
               </Box>
             )}
             <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>

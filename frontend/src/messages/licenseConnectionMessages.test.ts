@@ -20,7 +20,7 @@ const requiredKeys = [
   'settings.licenseConnectionDisconnectConfirmTitle', 'settings.licenseConnectionDisconnectConfirm', 'settings.licenseConnectionDisconnected', 'settings.licenseConnectionFailures',
   'settings.licenseConnectionLastError', 'settings.licenseConnectionNextTry', 'settings.licenseConnectionRevoked', 'settings.licenseConnectionIdentityChanged',
   'settings.licenseConnectionReconnect', 'settings.licenseConnectionEnded', 'settings.licenseConnectionFailed', 'settings.licenseConnectionUnavailable',
-  'settings.licenseConnectionConnectedTo', 'settings.licenseConnectionCloned',
+  'settings.licenseConnectionConnectedTo', 'settings.licenseConnectionCloned', 'settings.licenseConnectionClonedReconnectHint',
   'settings.licenseBindingConnected', 'settings.licenseLeaseUntil', 'settings.licenseLeaseExpiredTitle', 'settings.licenseLeaseExpiredBody',
   'settings.licenseLeaseExpiredStep1', 'settings.licenseLeaseExpiredStep2', 'settings.licenseMovedExpiredTitle', 'settings.licenseMovedExpiredBody',
   'license.connectionFailing', 'license.connectionCloned', 'license.leaseExpiring', 'license.licenseLost', 'license.licenseLostEnded',

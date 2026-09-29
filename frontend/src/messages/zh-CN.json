@@ -3481,6 +3481,7 @@
     "licenseConnectionRevoked": "此实例已在 proxcenter.io 上被吊销。其许可证将在租约结束时停止。请重新连接以再次获取许可证。",
     "licenseConnectionIdentityChanged": "安装身份已更改（重置或恢复），proxcenter.io 不再识别此实例。请重新连接。",
     "licenseConnectionCloned": "此安装的另一个副本已在 proxcenter.io 上激活。此副本被拒绝。请重置此安装的身份，将其注册为新实例（需要自己的许可证）。",
+    "licenseConnectionClonedReconnectHint": "重新连接需要在 proxcenter.io 支持解除此安装的封锁后才能生效。",
     "licenseConnectionReconnect": "重新连接",
     "licenseConnectionEnded": "配对在未获批准的情况下结束：{error}",
     "licenseConnectionFailed": "无法连接 proxcenter.io",

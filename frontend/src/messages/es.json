@@ -3477,6 +3477,7 @@
     "licenseConnectionRevoked": "Esta instancia fue revocada en proxcenter.io. Sus licencias terminan al final de su arrendamiento. Reconéctala para volver a recibir licencias.",
     "licenseConnectionIdentityChanged": "La identidad de la instalación cambió (restablecimiento o restauración) y proxcenter.io ya no reconoce esta instancia. Reconéctala.",
     "licenseConnectionCloned": "Otra copia de esta instalación está activa en proxcenter.io. Esta copia fue rechazada. Restablece la identidad de esta instalación para registrarla como una nueva instancia (necesitará su propia licencia).",
+    "licenseConnectionClonedReconnectHint": "Reconectar funciona una vez que el soporte de proxcenter.io haya levantado el bloqueo de esta instalación.",
     "licenseConnectionReconnect": "Reconectar",
     "licenseConnectionEnded": "El emparejamiento terminó sin aprobación: {error}",
     "licenseConnectionFailed": "No se pudo contactar con proxcenter.io",

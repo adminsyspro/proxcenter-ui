@@ -3464,6 +3464,7 @@
     "licenseConnectionRevoked": "Diese Instanz wurde auf proxcenter.io widerrufen. Ihre Lizenzen enden mit ihrem Lease. Verbinden Sie sie neu, um wieder Lizenzen zu erhalten.",
     "licenseConnectionIdentityChanged": "Die Installationsidentität hat sich geändert (Zurücksetzen oder Wiederherstellung) und proxcenter.io erkennt diese Instanz nicht mehr. Verbinden Sie sie neu.",
     "licenseConnectionCloned": "Eine andere Kopie dieser Installation ist auf proxcenter.io aktiv. Diese Kopie wurde abgelehnt. Setzen Sie die Identität dieser Installation zurück, um sie als neue Instanz zu registrieren (sie benötigt eine eigene Lizenz).",
+    "licenseConnectionClonedReconnectHint": "Neu verbinden funktioniert erst, wenn der proxcenter.io-Support die Sperre für diese Installation aufgehoben hat.",
     "licenseConnectionReconnect": "Neu verbinden",
     "licenseConnectionEnded": "Die Kopplung endete ohne Freigabe: {error}",
     "licenseConnectionFailed": "proxcenter.io ist nicht erreichbar",

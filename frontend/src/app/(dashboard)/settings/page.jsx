@@ -1952,9 +1952,17 @@ function ConnectionCard({ connection, offline, t, busy, onConnect, onCancel, onD
               <Typography variant='body2'><strong>{t('settings.licenseConnectionInstance')}:</strong> {connection.instance_name || connection.instance_id || '—'}</Typography>
               <Typography variant='body2'><strong>{t('settings.licenseConnectionCustomer')}:</strong> {connection.customer_name || '—'}</Typography>
             </Box>
-            <Button variant='outlined' color='warning' size='small' onClick={onResetIdentity} disabled={busy} startIcon={<i className='ri-refresh-line' />}>
-              {t('settings.licenseResetIdentity')}
-            </Button>
+            <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
+              <Button variant='outlined' color='warning' size='small' onClick={onResetIdentity} disabled={busy} startIcon={<i className='ri-refresh-line' />}>
+                {t('settings.licenseResetIdentity')}
+              </Button>
+              <Button variant='text' size='small' onClick={onConnect} disabled={busy} startIcon={<i className='ri-plug-line' />}>
+                {t('settings.licenseConnectionReconnect')}
+              </Button>
+            </Box>
+            <Typography variant='caption' display='block' sx={{ opacity: 0.7, mt: 1 }}>
+              {t('settings.licenseConnectionClonedReconnectHint')}
+            </Typography>
           </>
         )}
 

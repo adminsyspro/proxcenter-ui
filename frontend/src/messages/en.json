@@ -3477,6 +3477,7 @@
     "licenseConnectionRevoked": "This instance was revoked on proxcenter.io. Its licenses stop at the end of their lease. Reconnect it to receive licenses again.",
     "licenseConnectionIdentityChanged": "The install identity changed (reset or restore) and proxcenter.io no longer recognises this instance. Reconnect it.",
     "licenseConnectionCloned": "Another copy of this installation is active on proxcenter.io. This copy was refused. Reset this installation's identity to register it as a new instance (it will need its own license).",
+    "licenseConnectionClonedReconnectHint": "Reconnect works once proxcenter.io support has lifted the block on this installation.",
     "licenseConnectionReconnect": "Reconnect",
     "licenseConnectionEnded": "The pairing ended without approval: {error}",
     "licenseConnectionFailed": "Could not reach proxcenter.io",

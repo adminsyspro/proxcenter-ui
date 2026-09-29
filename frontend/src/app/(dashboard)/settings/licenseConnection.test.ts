@@ -171,6 +171,15 @@ describe('ConnectionCard', () => {
     fireEvent.click(screen.getByRole('button', { name: 'settings.licenseResetIdentity' }))
     expect(actions.onResetIdentity).toHaveBeenCalledOnce()
   })
+  it('offers a secondary Reconnect action with its hint on the cloned state (I2)', () => {
+    const actions = callbacks()
+    const { container } = render(React.createElement(ConnectionCard, {
+      t, ...actions, connection: { ...connected, status: 'cloned', instance_name: 'edge-1', customer_name: 'Acme' },
+    }))
+    expect(container.textContent).toContain('settings.licenseConnectionClonedReconnectHint')
+    fireEvent.click(screen.getByRole('button', { name: 'settings.licenseConnectionReconnect' }))
+    expect(actions.onConnect).toHaveBeenCalledOnce()
+  })
 })
 
 describe('LicenseTab connection integration', () => {

@@ -3477,6 +3477,7 @@
     "licenseConnectionRevoked": "Cette instance a été révoquée sur proxcenter.io. Ses licences s'arrêtent à la fin de leur bail. Reconnectez-la pour recevoir à nouveau des licences.",
     "licenseConnectionIdentityChanged": "L'identité d'installation a changé (réinitialisation ou restauration) et proxcenter.io ne reconnaît plus cette instance. Reconnectez-la.",
     "licenseConnectionCloned": "Une autre copie de cette installation est active sur proxcenter.io. Cette copie a été refusée. Réinitialisez l'identité de cette installation pour l'enregistrer comme une nouvelle instance (elle aura besoin de sa propre licence).",
+    "licenseConnectionClonedReconnectHint": "Reconnecter ne fonctionne qu'une fois que le support proxcenter.io a levé le blocage sur cette installation.",
     "licenseConnectionReconnect": "Reconnecter",
     "licenseConnectionEnded": "L'appairage s'est terminé sans approbation : {error}",
     "licenseConnectionFailed": "Impossible de joindre proxcenter.io",

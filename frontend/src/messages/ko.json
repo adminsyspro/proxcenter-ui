@@ -3444,7 +3444,7 @@
     "licenseBindingActual": "이 설치",
     "licenseConnectionTitle": "proxcenter.io 연결",
     "licenseConnectionNotConnected": "이 인스턴스는 proxcenter.io에 연결되어 있지 않습니다. 연결하면 라이선스와 갱신을 자동으로 받습니다.",
-    "licenseConnectionOptIn": "연결하면 하루에 한 번 proxcenter.io로 다음 정보를 보냅니다: 설치 식별자와 공개 키, 지문, ProxCenter 버전, 각 연결의 이름과 클러스터 이름 및 노드 수, 보유 라이선스 식별자, 카운터, 타임스탬프. 그 외에는 없습니다: VM 이름도, 주소도 보내지 않습니다.",
+    "licenseConnectionOptIn": "연결하면 하루에 한 번 proxcenter.io로 다음 정보를 보냅니다: 설치 식별자와 공개 키, 지문, ProxCenter 버전, 각 연결의 이름과 클러스터 이름 및 노드 수, 보유 라이선스 식별자, 카운터, 타임스탬프, proxcenter.io가 발급한 체크인 토큰. 그 외에는 없습니다: VM 이름도, 주소도 보내지 않습니다.",
     "licenseConnectionConnect": "proxcenter.io에 연결",
     "licenseConnectionPairingTitle": "proxcenter.io에서 승인 대기 중",
     "licenseConnectionPairingHint": "링크를 열고 계정에 로그인한 뒤 이 코드를 입력하세요.",

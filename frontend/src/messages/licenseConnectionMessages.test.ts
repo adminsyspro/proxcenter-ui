@@ -115,3 +115,24 @@ describe('license.leaseExpiring and license.licenseLost never print "0 days" or 
     expect(t(key, { days: 0 })).toContain('less than a day')
   })
 })
+
+// M2: the opt-in disclosure must mention the rolling check-in token
+// alongside the counter and timestamp it already listed, in every locale.
+describe('settings.licenseConnectionOptIn mentions the check-in token (M2)', () => {
+  const checkinTokenMentions: Record<string, string> = {
+    en: 'check-in token',
+    fr: 'jeton de check-in',
+    de: 'Check-in-Token',
+    es: 'token de check-in',
+    ko: '체크인 토큰',
+    'zh-CN': '签到令牌'
+  }
+
+  for (const [locale, messages] of Object.entries(locales)) {
+    it(`${locale} mentions a check-in token before "Nothing else"`, () => {
+      const value = get(messages, 'settings.licenseConnectionOptIn') as string
+
+      expect(value, `${locale}: settings.licenseConnectionOptIn`).toContain(checkinTokenMentions[locale])
+    })
+  }
+})

@@ -3448,7 +3448,7 @@
     "licenseBindingActual": "此安装",
     "licenseConnectionTitle": "与 proxcenter.io 的连接",
     "licenseConnectionNotConnected": "此实例尚未连接到 proxcenter.io。连接后可自动接收许可证及其续期。",
-    "licenseConnectionOptIn": "连接后每天向 proxcenter.io 发送一次：安装标识符和公钥、指纹、ProxCenter 版本、每个连接的名称及其集群名称和节点数、所持许可证的标识符、一个计数器和一个时间戳。仅此而已：不含虚拟机名称，不含地址。",
+    "licenseConnectionOptIn": "连接后每天向 proxcenter.io 发送一次：安装标识符和公钥、指纹、ProxCenter 版本、每个连接的名称及其集群名称和节点数、所持许可证的标识符、一个计数器和一个时间戳，以及由 proxcenter.io 签发的签到令牌。仅此而已：不含虚拟机名称，不含地址。",
     "licenseConnectionConnect": "连接到 proxcenter.io",
     "licenseConnectionPairingTitle": "等待在 proxcenter.io 上批准",
     "licenseConnectionPairingHint": "打开链接，登录您的账户并输入此代码。",

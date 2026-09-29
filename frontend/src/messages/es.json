@@ -3444,7 +3444,7 @@
     "licenseBindingActual": "Esta instalación",
     "licenseConnectionTitle": "Conexión con proxcenter.io",
     "licenseConnectionNotConnected": "Esta instancia no está conectada a proxcenter.io. Conéctala para recibir sus licencias y renovaciones automáticamente.",
-    "licenseConnectionOptIn": "La conexión envía a proxcenter.io, una vez al día: el identificador y la clave pública de la instalación, la huella, la versión de ProxCenter, el nombre de cada conexión con el nombre del clúster y el número de nodos, los identificadores de las licencias en uso, un contador y una marca de tiempo. Nada más: ni nombres de VM, ni direcciones.",
+    "licenseConnectionOptIn": "La conexión envía a proxcenter.io, una vez al día: el identificador y la clave pública de la instalación, la huella, la versión de ProxCenter, el nombre de cada conexión con el nombre del clúster y el número de nodos, los identificadores de las licencias en uso, un contador y una marca de tiempo, y un token de check-in emitido por proxcenter.io. Nada más: ni nombres de VM, ni direcciones.",
     "licenseConnectionConnect": "Conectar con proxcenter.io",
     "licenseConnectionPairingTitle": "Esperando la aprobación en proxcenter.io",
     "licenseConnectionPairingHint": "Abre el enlace, inicia sesión en tu cuenta e introduce este código.",

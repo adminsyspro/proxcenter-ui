@@ -760,3 +760,14 @@ describe('useSnapshots stale-selection guard', () => {
     expect(result.current.snapshotsError).toBeNull()
   })
 })
+
+describe('useSnapshots lazy load', () => {
+  it('loads the snapshots on its own when the Snapshots tab is opened', async () => {
+    const { result, unmount } = renderHook(() => useSnapshots(makeParams({ detailTab: 5 }) as any))
+
+    await waitFor(() => expect(result.current.snapshotsLoaded).toBe(true))
+    expect(result.current.snapshots.map((s: any) => s.name)).toEqual(expect.arrayContaining(['snap1', 'snap2']))
+    expect(String((global.fetch as any).mock.calls[0][0])).toContain('/snapshots')
+    unmount()
+  })
+})

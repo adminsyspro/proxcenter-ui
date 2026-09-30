@@ -165,6 +165,35 @@ describe('TagManager - adding a tag via input calls onTagsChange', () => {
     })
   })
 
+  it('adds the typed tag when Enter is pressed in the input', async () => {
+    const onTagsChange = vi.fn()
+    const user = userEvent.setup()
+    const bodies: unknown[] = []
+
+    server.use(
+      http.get(RESOURCES_URL, () => HttpResponse.json(resourcesFixture)),
+      http.put(CONFIG_URL, async ({ request }) => {
+        bodies.push(await request.json())
+
+        return HttpResponse.json({ data: null })
+      }),
+    )
+
+    const { container } = renderWithProviders(
+      <TagManager {...makeProps({ tags: ['prod'], onTagsChange })} />,
+    )
+
+    await user.click(findAddBtn(container))
+    const popover = await waitFor(() => findPopover())
+
+    await user.type(within(popover).getByPlaceholderText('New tag...'), 'db{Enter}')
+
+    await waitFor(() => {
+      expect(onTagsChange).toHaveBeenCalledWith(['prod', 'db'])
+    })
+    expect(bodies).toEqual([{ tags: 'prod;db' }])
+  })
+
   it('does not call onTagsChange when the PUT returns an error', async () => {
     const onTagsChange = vi.fn()
     const user = userEvent.setup()

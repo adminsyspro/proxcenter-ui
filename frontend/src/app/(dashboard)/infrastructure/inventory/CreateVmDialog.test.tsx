@@ -931,3 +931,99 @@ describe('CreateVmDialog - MSP tenant VMID range', () => {
     })
   })
 })
+
+// ------------------------------------------------------------------ //
+// Default node / cluster selection on open, and the Node picker
+// ------------------------------------------------------------------ //
+
+describe('CreateVmDialog - default node and cluster selection', () => {
+  // Two online nodes on conn-1: pve1 busy, pve2 almost idle.
+  const TWO_NODES = [
+    { node: 'pve1', status: 'online', cpu: 0.8, maxcpu: 4, mem: 7 * 1024 ** 3, maxmem: 8 * 1024 ** 3 },
+    { node: 'pve2', status: 'online', cpu: 0.05, maxcpu: 4, mem: 1 * 1024 ** 3, maxmem: 8 * 1024 ** 3 },
+  ]
+
+  let nextidCalls: number
+  let bridgeNodes: string[]
+
+  beforeEach(() => {
+    seedAllHandlers()
+    nextidCalls = 0
+    bridgeNodes = []
+    server.use(
+      http.get(`*/api/v1/connections/${CONN_ID}/nodes`, () => HttpResponse.json({ data: TWO_NODES })),
+      http.get(`*/api/v1/connections/${CONN_ID}/cluster/nextid`, () => {
+        nextidCalls++
+
+        return HttpResponse.json({ data: NEXT_VMID })
+      }),
+      http.get(`*/api/v1/connections/${CONN_ID}/network-choices`, ({ request }) => {
+        bridgeNodes.push(new URL(request.url).searchParams.get('node') ?? '')
+
+        return HttpResponse.json({ data: networkChoices })
+      }),
+      http.get(`*/api/v1/connections/${CONN_ID}/nodes/:node/storage/:storage/content`, () => HttpResponse.json({ data: [] })),
+      http.get(`*/api/v1/connections/${CONN_ID}/nodes/:node/cpu-models`, () => HttpResponse.json({ data: [] })),
+    )
+  })
+
+  const nodeSelect = () => screen.getAllByRole('combobox')[0]
+
+  it('places a tenant VM on the least loaded node and fetches its next VMID', async () => {
+    useTenantMock.mockReturnValue({
+      currentTenant: { id: 't1', slug: 'acme', name: 'Acme' },
+      loading: false,
+      isFullClusterView: false,
+    })
+
+    renderWithProviders(<CreateVmDialog {...makeProps()} />)
+
+    // The tenant sees neither the Node picker nor the VM ID field: both are
+    // resolved behind the scenes (next VMID fetched, bridges of pve2 loaded).
+    await waitFor(() => expect(nextidCalls).toBe(1))
+    await waitFor(() => expect(bridgeNodes).toContain('pve2'))
+    expect(bridgeNodes).not.toContain('pve1')
+    expect(screen.queryByLabelText('VM ID')).not.toBeInTheDocument()
+  })
+
+  it('preselects the requested node of the requested connection', async () => {
+    renderWithProviders(<CreateVmDialog {...makeProps({ defaultConnId: CONN_ID, defaultNode: 'pve1' })} />)
+
+    await waitFor(() => expect(nodeSelect().textContent).toContain('pve1'))
+    expect(await screen.findByDisplayValue(String(NEXT_VMID))).toBeInTheDocument()
+    expect(nextidCalls).toBeGreaterThanOrEqual(1)
+    await waitFor(() => expect(bridgeNodes).toContain('pve1'))
+  })
+
+  it('falls back to the first node when the requested connection has no node', async () => {
+    renderWithProviders(<CreateVmDialog {...makeProps({ defaultConnId: 'conn-gone' })} />)
+
+    await waitFor(() => expect(nodeSelect().textContent).toContain('pve1'))
+    expect(await screen.findByDisplayValue(String(NEXT_VMID))).toBeInTheDocument()
+    expect(nextidCalls).toBeGreaterThanOrEqual(1)
+  })
+
+  it('selects the whole cluster when only the connection is requested, resolving to the least loaded node', async () => {
+    renderWithProviders(<CreateVmDialog {...makeProps({ defaultConnId: CONN_ID })} />)
+
+    // The cluster entry is the selected value; the VM lands on pve2.
+    await waitFor(() => expect(nodeSelect().textContent).toContain('pve-cluster-1'))
+    await waitFor(() => expect(bridgeNodes).toContain('pve2'))
+    // One nextid for the connection, one more when the cluster entry resolves.
+    await waitFor(() => expect(nextidCalls).toBe(2))
+  })
+
+  it('reloads the next VMID when the operator picks another node', async () => {
+    renderWithProviders(<CreateVmDialog {...makeProps()} />)
+
+    await waitFor(() => expect(nodeSelect().textContent).toContain('pve1'))
+    await waitFor(() => expect(nextidCalls).toBe(1))
+
+    fireEvent.mouseDown(nodeSelect())
+    fireEvent.click(await screen.findByRole('option', { name: /pve2/ }))
+
+    await waitFor(() => expect(nodeSelect().textContent).toContain('pve2'))
+    await waitFor(() => expect(nextidCalls).toBe(2))
+    await waitFor(() => expect(bridgeNodes).toContain('pve2'))
+  })
+})

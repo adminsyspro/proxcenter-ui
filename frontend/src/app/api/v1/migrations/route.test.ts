@@ -446,3 +446,58 @@ describe("POST /api/v1/migrations, CPU type of the created VM (roadmap#24)", () 
     expect(h.prisma.migrationJob.create).not.toHaveBeenCalled()
   })
 })
+
+describe("POST /api/v1/migrations, direct-ESXi cold Windows guest routed to virt-v2v", () => {
+  const esxiCold = () => {
+    h.prisma.connection.findUnique
+      .mockResolvedValueOnce({ id: "src", type: "vmware", subType: null, name: "esxi", baseUrl: "https://esxi01.lab.local" })
+      .mockResolvedValueOnce({ id: "tgt", type: "pve", name: "pve" })
+      .mockResolvedValueOnce({
+        apiTokenEnc: "enc", baseUrl: "https://esxi01.lab.local/", insecureTLS: true,
+        sshKeyEnc: "key", sshPassEnc: null, sshEnabled: true,
+      })
+  }
+
+  beforeEach(async () => {
+    const soap = await import("@/lib/vmware/soap") as any
+    soap.soapLogin.mockReset().mockResolvedValue({ cookie: "c" })
+    soap.soapLogout.mockReset().mockResolvedValue(undefined)
+    soap.soapGetVmConfig.mockReset().mockResolvedValue("<xml/>")
+    soap.parseVmConfig.mockReset()
+  })
+
+  it("converts the datastore vmPathName into the /vmfs/volumes POSIX path", async () => {
+    const soap = await import("@/lib/vmware/soap") as any
+    soap.parseVmConfig.mockReturnValue({
+      guestOS: "Microsoft Windows Server 2022 (64-bit)", guestId: "windows2019srvNext_64Guest",
+      vmPathName: "[datastore1 SSD] win2022/win2022 copy.vmx",
+    })
+    esxiCold()
+
+    const res = await callRoute(POST, { body: { ...body, migrationType: "cold" } })
+    expect(res.status).toBe(200)
+    await runAfters()
+
+    expect(cold).not.toHaveBeenCalled()
+    expect(v2v).toHaveBeenCalledTimes(1)
+    expect(v2v.mock.calls[0][1]).toMatchObject({
+      sourceType: "esxi-direct",
+      vmxPath: "/vmfs/volumes/datastore1 SSD/win2022/win2022 copy.vmx",
+      esxiHost: "esxi01.lab.local",
+      migrationType: "cold",
+    })
+  })
+
+  it("falls back to the in-house pipeline when vmPathName has no [datastore] prefix", async () => {
+    const soap = await import("@/lib/vmware/soap") as any
+    soap.parseVmConfig.mockReturnValue({ guestOS: "Windows 11", guestId: "windows11_64Guest", vmPathName: "win11/win11.vmx" })
+    esxiCold()
+
+    const res = await callRoute(POST, { body: { ...body, migrationType: "cold" } })
+    expect(res.status).toBe(200)
+    await runAfters()
+
+    expect(v2v).not.toHaveBeenCalled()
+    expect(cold).toHaveBeenCalledTimes(1)
+  })
+})

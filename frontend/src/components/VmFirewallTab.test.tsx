@@ -249,4 +249,49 @@ describe('VmFirewallTab', () => {
 
     expect(tip).toHaveTextContent('Refresh')
   })
+
+  it('strips "any" from the edited rule before sending the update', async () => {
+    api.getVMRules.mockResolvedValue([
+      { pos: 3, type: 'in', action: 'ACCEPT', enable: 1, proto: 'tcp', dport: '443', source: 'any', dest: '10.0.0.5', log: 'nolog', comment: 'https' },
+    ])
+    await renderTab()
+
+    const editIcon = document.querySelector('.ri-edit-line')?.closest('button')
+
+    if (!editIcon) throw new Error('edit button not rendered')
+    fireEvent.click(editIcon)
+
+    const dialog = await screen.findByRole('dialog')
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(api.updateVMRule).toHaveBeenCalledTimes(1))
+    expect(api.updateVMRule).toHaveBeenCalledWith(CONN_ID, NODE, 'qemu', VMID, 3, expect.objectContaining({
+      source: undefined,
+      dest: '10.0.0.5',
+      dport: '443',
+      comment: 'https',
+    }))
+  })
+
+  it('polls the firewall log every 5 seconds while the log dialog is open', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
+
+    try {
+      await renderTab()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Firewall Logs' }))
+
+      await waitFor(() => expect(api.getVMFirewallLog).toHaveBeenCalledTimes(1))
+      expect(api.getVMFirewallLog).toHaveBeenLastCalledWith(CONN_ID, NODE, 'qemu', VMID, 50)
+
+      vi.advanceTimersByTime(5000)
+      await waitFor(() => expect(api.getVMFirewallLog).toHaveBeenCalledTimes(2))
+
+      vi.advanceTimersByTime(5000)
+      await waitFor(() => expect(api.getVMFirewallLog).toHaveBeenCalledTimes(3))
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })

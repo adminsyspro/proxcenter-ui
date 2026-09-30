@@ -11,7 +11,8 @@
  */
 
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { cleanup } from '@testing-library/react'
+import { cleanup, fireEvent, within } from '@testing-library/react'
+import { server, http, HttpResponse } from '@/__tests__/setup/msw-server'
 import {
   renderWithProviders,
   screen,
@@ -231,5 +232,107 @@ describe('EditDiskDialog — unused disk volume', () => {
     const volume = screen.getByText('local:vm-100-disk-1')
     expect(screen.getByText('Volume')).toBeInTheDocument()
     expect(volume.closest('[role="alert"]')).toBeNull()
+  })
+})
+
+describe('EditDiskDialog — node-backed lists', () => {
+  afterEach(cleanup)
+
+  const CONN = 'conn-1'
+  const NODE = 'pve1'
+
+  function seedNodeStorages() {
+    const seen: string[] = []
+
+    server.use(
+      http.get(`*/api/v1/connections/${CONN}/nodes/${NODE}/storages`, ({ request }) => {
+        const content = new URL(request.url).searchParams.get('content') || ''
+
+        seen.push(content)
+        if (content === 'iso') {
+          return HttpResponse.json({ data: [
+            { storage: 'local', type: 'dir', content: 'iso,vztmpl,backup' },
+            { storage: 'ceph-pool', type: 'rbd', content: 'images,rootdir' },
+          ] })
+        }
+
+        return HttpResponse.json({ data: [
+          { storage: 'local-lvm', type: 'lvmthin', total: 100, used: 40 },
+          { storage: 'ceph-pool', type: 'rbd', total: 200, used: 10 },
+        ] })
+      }),
+      http.get(`*/api/v1/connections/${CONN}/nodes/${NODE}/storage/local/content`, () =>
+        HttpResponse.json({ data: [{ volid: 'local:iso/debian-13.1.0-amd64-netinst.iso' }, { volid: 'local:iso/virtio-win.iso' }] }),
+      ),
+    )
+
+    return seen
+  }
+
+  it('lists only ISO-capable storages for a CD-ROM and parses the image names from their volids', async () => {
+    const seen = seedNodeStorages()
+    const cdrom = { id: 'ide2', storage: 'none', size: '-', isCdrom: true, rawValue: 'none,media=cdrom' }
+
+    renderWithProviders(<EditDiskDialog {...makeProps({ disk: cdrom, connId: CONN, node: NODE })} />)
+
+    await waitFor(() => expect(seen).toContain('iso'))
+    await userEvent.click(screen.getByRole('radio', { name: /Use CD\/DVD disc image file/i }))
+
+    const storageLabel = screen.getAllByText('Storage').find(el => el.tagName === 'LABEL')!
+    fireEvent.mouseDown(within(storageLabel.parentElement!).getByRole('combobox'))
+
+    const listbox = await screen.findByRole('listbox')
+
+    expect(within(listbox).getByText('local')).toBeInTheDocument()
+    expect(within(listbox).queryByText('ceph-pool')).toBeNull()
+
+    fireEvent.click(within(listbox).getByText('local'))
+
+    const isoLabel = screen.getAllByText('ISO Image').find(el => el.tagName === 'LABEL')!
+    const isoSelect = within(isoLabel.parentElement!).getByRole('combobox')
+
+    await waitFor(() => expect(isoSelect).not.toHaveAttribute('aria-disabled', 'true'))
+    fireEvent.mouseDown(isoSelect)
+
+    const isoList = await screen.findByRole('listbox')
+
+    await waitFor(() => expect(within(isoList).getByText('debian-13.1.0-amd64-netinst.iso')).toBeInTheDocument())
+    expect(within(isoList).getByText('virtio-win.iso')).toBeInTheDocument()
+  })
+
+  it('loads the node image storages for the Move tab and hides the disk own storage', async () => {
+    const seen = seedNodeStorages()
+    const disk = { id: 'scsi0', size: '32G', storage: 'local-lvm', rawValue: 'local-lvm:vm-100-disk-0,size=32G' }
+
+    renderWithProviders(
+      <EditDiskDialog {...makeProps({ disk, connId: CONN, node: NODE, onResize: vi.fn().mockResolvedValue(undefined), onMoveStorage: vi.fn().mockResolvedValue(undefined) })} />,
+    )
+
+    await waitFor(() => expect(seen).toContain('images'))
+    await userEvent.click(screen.getByRole('tab', { name: 'Move' }))
+
+    const label = await waitFor(() => {
+      const el = screen.getAllByText('Target storage').find(e => e.tagName === 'LABEL')
+
+      if (!el) throw new Error('target storage select not rendered')
+
+      return el
+    })
+
+    fireEvent.mouseDown(within(label.parentElement!).getByRole('combobox'))
+
+    const listbox = await screen.findByRole('listbox')
+
+    expect(within(listbox).getByText('ceph-pool')).toBeInTheDocument()
+    expect(within(listbox).queryByText('local-lvm')).toBeNull()
+  })
+
+  it('suggests the first free bus slot when reassigning an unused disk', () => {
+    renderWithProviders(
+      <EditDiskDialog {...makeProps({ existingDisks: ['scsi0', 'scsi1', 'scsi3', 'scsihw', 'virtio2', 'ide2'] })} />,
+    )
+
+    expect(indexField().value).toBe('2')
+    expect(screen.getByText(/scsi2/)).toBeInTheDocument()
   })
 })

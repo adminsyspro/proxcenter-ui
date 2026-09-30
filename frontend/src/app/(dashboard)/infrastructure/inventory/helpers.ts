@@ -595,10 +595,14 @@ export function parseMarkdown(md: string): string {
   const shield = (s: string) => { shields.push(s); return `\uFFFF${shields.length - 1}\uFFFF` }
 
   // 1. Protect fenced code blocks
-  let html = md.replaceAll(/```(\w*)\n?([\s\S]*?)```/g, (_, _lang, code) => {
+  const fenceParts = md.split('```')
+  let html = fenceParts.map((part, i) => {
+    if (i % 2 === 0) return part
+    if (i === fenceParts.length - 1) return '```' + part
+    const code = part.replace(/^\w*\n?/, '')
     const escaped = code.replaceAll("&", '&amp;').replaceAll("<", '&lt;').replaceAll(">", '&gt;')
     return shield(`<pre><code>${escaped}</code></pre>`)
-  })
+  }).join('')
 
   // 2. Protect existing HTML tags (e.g. <img src='…'/>, <a href='…'>…</a>)
   html = html.replaceAll(/<[a-z/][^>]*>/gi, tag => shield(tag))
@@ -633,7 +637,7 @@ export function parseMarkdown(md: string): string {
     .replaceAll(/__([^_]+)__/g, '<strong>$1</strong>')
     .replaceAll(/\*([^*]+)\*/g, '<em>$1</em>')
     .replaceAll(/_([^_]+)_/g, '<em>$1</em>')
-    .replaceAll(/\[([^\]]+)\]\(([^)]+)\)/g, (_, text, url) => {
+    .replaceAll(/\[([^[\]]+)\]\(([^)]+)\)/g, (_, text, url) => {
       if (/^https?:\/\//i.test(url)) return `<a href="${url}" target="_blank" rel="noopener">${text}</a>`
       return text
     })

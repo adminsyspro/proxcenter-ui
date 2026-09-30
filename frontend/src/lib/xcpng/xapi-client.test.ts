@@ -547,6 +547,7 @@ describe("xcpng/xapi-client", () => {
       ["xcp.test", "https://xcp.test"],
       ["http://xcp.test", "https://xcp.test"],
       ["https://xcp.test///", "https://xcp.test"],
+      ["https://xcp.test/a//b//", "https://xcp.test/a//b"],
     ])("normalizes %s", (input, expected) => {
       expect(normalizeXapiBaseUrl(input)).toBe(expected)
     })

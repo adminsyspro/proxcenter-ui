@@ -168,16 +168,16 @@ export default function VmFirewallTab({ connectionId, node, vmType, vmid, vmName
   }, [connectionId, node, vmType, vmid])
 
   useEffect(() => {
-    fw.loadFirewallData()
-    loadVmData()
+    void fw.loadFirewallData()
+    void loadVmData()
   }, [fw.loadFirewallData, loadVmData])
 
   // Auto-refresh logs every 5s when log dialog is open
   useEffect(() => {
     if (logDialogOpen) {
-      loadLogs()
+      void loadLogs()
       logIntervalRef.current = setInterval(() => {
-        loadLogs()
+        void loadLogs()
       }, 5000)
     } else {
       if (logIntervalRef.current) {
@@ -222,7 +222,7 @@ export default function VmFirewallTab({ connectionId, node, vmType, vmid, vmName
       comment: fw.newRule.comment || undefined,
     }
 
-    fw.handleAddRule(payload)
+    void fw.handleAddRule(payload)
   }
 
   // Wrap update rule to clean source/dest
@@ -234,7 +234,7 @@ export default function VmFirewallTab({ connectionId, node, vmType, vmid, vmName
       dest: cleanSourceDest(fw.editingRule.dest) || undefined,
     }
 
-    fw.handleUpdateRule(payload)
+    void fw.handleUpdateRule(payload)
   }
 
   if (fw.loading) {

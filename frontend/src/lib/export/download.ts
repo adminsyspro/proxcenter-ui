@@ -69,7 +69,7 @@ export function filenameSlug(value: string): string {
     String(value)
       .normalize('NFKD')
       .replace(/[^\w.-]+/g, '-')
-      .replace(/^-+|-+$/g, '')
+      .replace(/^-+|(?<!-)-+$/g, '')
       .slice(0, 60) || 'export'
   )
 }

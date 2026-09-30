@@ -12,6 +12,12 @@ import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 
 export const runtime = "nodejs"
 
+function stripTrailingSlashes(value: string): string {
+  let end = value.length
+  while (end > 0 && value[end - 1] === "/") end--
+  return value.slice(0, end)
+}
+
 /**
  * Origin the server uses when it builds URLs for the IdP. Served to the form so
  * the URLs it tells the admin to register are the ones we actually send, even
@@ -19,7 +25,7 @@ export const runtime = "nodejs"
  */
 function appOrigin(req: Request): string {
   const configured = process.env.NEXTAUTH_URL
-  if (configured) return configured.replace(/\/+$/, "")
+  if (configured) return stripTrailingSlashes(configured)
   try {
     return new URL(req.url).origin
   } catch {

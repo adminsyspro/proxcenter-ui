@@ -471,6 +471,19 @@ describe('parseMarkdown', () => {
     expect(result).toContain('console.log')
   })
 
+  it('converts every closed fence and leaves an unclosed one as text', () => {
+    const result = parseMarkdown('```sh\nls\n```\nmid\n````x```\n```\ntail')
+    expect(result).toContain('<pre><code>ls\n</code></pre>')
+    expect(result).toContain('<pre><code>`x</code></pre>')
+    expect(result).toContain('```<br />tail')
+  })
+
+  it('converts several links on one line', () => {
+    const result = parseMarkdown('see [a](https://a.io) and [b](https://b.io)')
+    expect(result).toContain('<a href="https://a.io" target="_blank" rel="noopener">a</a>')
+    expect(result).toContain('<a href="https://b.io" target="_blank" rel="noopener">b</a>')
+  })
+
   it('converts blockquotes', () => {
     expect(parseMarkdown('> quote')).toContain('<blockquote>quote</blockquote>')
   })

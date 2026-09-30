@@ -62,7 +62,7 @@ export function mapXoToPveConfig(
 
   const params: PveVmCreateParams = {
     vmid: targetVmid,
-    name: xoConfig.name.replace(/[^a-zA-Z0-9-]/g, "-").replace(/^-+|-+$/g, '').substring(0, 63) || 'vm',
+    name: xoConfig.name.replace(/[^a-zA-Z0-9-]/g, "-").replace(/^-+|(?<!-)-+$/g, '').substring(0, 63) || 'vm',
     ostype: mapOsType(xoConfig.guestOS),
     cores: xoConfig.numCPU,
     sockets: 1,

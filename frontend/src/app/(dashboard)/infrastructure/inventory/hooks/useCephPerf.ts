@@ -79,13 +79,13 @@ export function useCephPerf(
       }
     }
 
-    fetchCephPerf()
+    void fetchCephPerf()
 
     let interval: ReturnType<typeof setInterval> | null = null
 
     function start() { if (interval !== null) return; interval = setInterval(fetchCephPerf, 2000) }
     function stop() { if (interval !== null) { clearInterval(interval); interval = null } }
-    function onVis() { if (document.visibilityState === 'visible') { fetchCephPerf(); start() } else { stop() } }
+    function onVis() { if (document.visibilityState === 'visible') { void fetchCephPerf(); start() } else { stop() } }
 
     document.addEventListener('visibilitychange', onVis)
     if (document.visibilityState === 'visible') start()

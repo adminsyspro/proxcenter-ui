@@ -562,7 +562,7 @@ export default function SecurityGroupsPanel({
           guests={vmFirewallData}
           guestsNotScanned={guestsNotScanned}
           onClose={() => setMembersOf(null)}
-          onChanged={touched => { touched.forEach(guest => { reloadVMFirewallRules(guest) }) }}
+          onChanged={touched => { touched.forEach(guest => { void reloadVMFirewallRules(guest) }) }}
         />
       )}
 

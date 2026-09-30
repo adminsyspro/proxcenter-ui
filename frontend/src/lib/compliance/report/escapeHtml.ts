@@ -9,6 +9,6 @@ export function sanitizeFilename(s: string): string {
     .replace(/[/\\]+/g, '-')
     .replace(/["'`<>]+/g, '-')
     .replace(/\s+/g, '')
-    .replace(/^-+|-+$/g, '')
     .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
 }

@@ -436,15 +436,15 @@ export default function ClusterTabs(props: any) {
       const msg = e.message || ''
       if (msg.includes('has moved') || msg.includes('stale')) {
         toast.warning(t('inventory.drsRecStale'))
-        mutateRecs()
+        void mutateRecs()
       } else if (msg.includes('not found')) {
         setExecutedRecIds(prev => new Set(prev).add(id))
         toast.warning(t('inventory.drsRecExpired'))
-        mutateRecs()
+        void mutateRecs()
       } else if (msg.includes('already on target')) {
         setExecutedRecIds(prev => new Set(prev).add(id))
         toast.info(t('inventory.drsAlreadyOnTarget'))
-        mutateRecs()
+        void mutateRecs()
       } else {
         toast.error(t('inventory.drsExecError', { error: msg }))
       }
@@ -531,7 +531,7 @@ export default function ClusterTabs(props: any) {
   // Load Auto-HA settings when HA tab is activated
   useEffect(() => {
     if (clusterTab === 3 && connId && !autoHaSettings && !autoHaLoading) {
-      loadAutoHaSettings()
+      void loadAutoHaSettings()
     }
   }, [clusterTab, connId])
 
@@ -565,7 +565,7 @@ export default function ClusterTabs(props: any) {
     let cancelled = false
     setClusterNodeRrdLoading(true)
 
-    ;(async () => {
+    void (async () => {
       const result: Record<string, any[]> = {}
       let servedMeta: RrdRangeMeta | null = null
 
@@ -631,7 +631,7 @@ export default function ClusterTabs(props: any) {
     const onlineNodes = (data.nodesData as any[]).filter((n: any) => n.status === 'online')
     if (onlineNodes.length === 0) return
 
-    ;(async () => {
+    void (async () => {
       const updates: Record<string, string> = {}
       await Promise.all(onlineNodes.map(async (node: any) => {
         try {
@@ -832,8 +832,7 @@ export default function ClusterTabs(props: any) {
                   sx={!cveAvailable ? { display: 'none' } : undefined}
                   label={
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                      <i className="ri-shield-cross-line" style={{ fontSize: 16 }} />
-                      CVE
+                      <i className="ri-shield-cross-line" style={{ fontSize: 16 }} />CVE
                     </Box>
                   }
                 />
@@ -1340,7 +1339,7 @@ export default function ClusterTabs(props: any) {
                                                 size="small"
                                                 color="primary"
                                                 disabled={isExecuting || executingAll || (executingRecId !== null && !isExecuting)}
-                                                onClick={(e) => { e.stopPropagation(); handleExecuteRec(rec.id, rec.vm_name || `VM ${rec.vmid}`) }}
+                                                onClick={(e) => { e.stopPropagation(); void handleExecuteRec(rec.id, rec.vm_name || `VM ${rec.vmid}`) }}
                                                 sx={{ width: 28, height: 28 }}
                                               >
                                                 {isExecuting ? <CircularProgress size={14} /> : <i className="ri-play-line" style={{ fontSize: 16 }} />}

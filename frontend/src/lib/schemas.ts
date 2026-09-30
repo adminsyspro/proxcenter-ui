@@ -32,7 +32,7 @@ export const createConnectionSchema = z.object({
   // Provider-only: create the connection directly owned by an MSP tenant
   // (omit, or 'default', for the provider pool). Validated in the route.
   ownerTenantId: z.string().optional(),
-  baseUrl: z.string().min(1, 'baseUrl is required').transform(s => s.trim().replace(/\/+$/, '')),
+  baseUrl: z.string().min(1, 'baseUrl is required').transform(s => s.trim().replace(/(?<!\/)\/+$/, '')),
   behindProxy: z.boolean().default(false),
   insecureTLS: z.boolean().default(false),
   hasCeph: z.boolean().default(false),
@@ -128,7 +128,7 @@ export const createConnectionSchema = z.object({
 export const updateConnectionSchema = z.object({
   name: z.string().min(1).transform(s => s.trim()).optional(),
   type: z.enum(['pve', 'pbs', 'vmware', 'xcpng', 'hyperv', 'nutanix']).optional(),
-  baseUrl: z.string().min(1).transform(s => s.trim().replace(/\/+$/, '')).optional(),
+  baseUrl: z.string().min(1).transform(s => s.trim().replace(/(?<!\/)\/+$/, '')).optional(),
   behindProxy: z.boolean().optional(),
   insecureTLS: z.boolean().optional(),
   hasCeph: z.boolean().optional(),

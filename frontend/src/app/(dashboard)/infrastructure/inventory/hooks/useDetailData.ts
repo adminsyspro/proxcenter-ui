@@ -52,7 +52,7 @@ export function useDetailData(selection: InventorySelection | null) {
       }
     }
 
-    run()
+    void run()
 
     return () => {
       alive = false
@@ -128,7 +128,7 @@ export function useDetailData(selection: InventorySelection | null) {
 
     function start() {
       if (intervalId !== null) return
-      poll()
+      void poll()
       intervalId = setInterval(poll, 5000)
     }
 
@@ -188,7 +188,7 @@ export function useDetailData(selection: InventorySelection | null) {
 
     const tick = () => {
       if (document.visibilityState !== 'visible') return
-      refreshDataRef.current?.()
+      void refreshDataRef.current?.()
     }
 
     function start() {

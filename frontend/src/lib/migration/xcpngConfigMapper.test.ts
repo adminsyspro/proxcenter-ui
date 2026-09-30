@@ -57,3 +57,10 @@ describe("mapXoToPveConfig — CPU type (roadmap#24)", () => {
     expect(mapXoToPveConfig(makeConfig(), 100, "local-lvm", "vmbr0", undefined, "x86-64-v3").cpu).toBe("x86-64-v3")
   })
 })
+
+describe("mapXoToPveConfig — name sanitising", () => {
+  it("folds invalid characters and trims edge hyphens", () => {
+    expect(mapXoToPveConfig(makeConfig({ name: "--my vm (copy)--" }), 100, "local-lvm", "vmbr0").name).toBe("my-vm--copy")
+    expect(mapXoToPveConfig(makeConfig({ name: "---" }), 100, "local-lvm", "vmbr0").name).toBe("vm")
+  })
+})

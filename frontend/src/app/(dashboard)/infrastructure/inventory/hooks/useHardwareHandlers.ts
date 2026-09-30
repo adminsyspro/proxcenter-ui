@@ -746,7 +746,7 @@ export function useHardwareHandlers({
         setNewClusterName('')
         setNewClusterLinks([])
         // Recharger la config
-        loadClusterConfig(connId)
+        void loadClusterConfig(connId)
       }
     } catch (e: any) {
       setClusterActionError(e?.message || 'Failed to create cluster')
@@ -782,7 +782,7 @@ export function useHardwareHandlers({
         setJoinClusterInfo('')
         setJoinClusterPassword('')
         // Recharger la config
-        loadClusterConfig(connId)
+        void loadClusterConfig(connId)
       }
     } catch (e: any) {
       setClusterActionError(e?.message || 'Failed to join cluster')
@@ -925,7 +925,7 @@ export function useHardwareHandlers({
         setBackupJobsError(json.error)
       } else {
         setBackupJobDialogOpen(false)
-        loadBackupJobs(connId)
+        void loadBackupJobs(connId)
       }
     } catch (e: any) {
       setBackupJobsError(e?.message || 'Failed to save backup job')
@@ -952,7 +952,7 @@ export function useHardwareHandlers({
         setBackupJobsError(json.error)
       } else {
         setDeleteBackupJobDialog(null)
-        loadBackupJobs(connId)
+        void loadBackupJobs(connId)
       }
     } catch (e: any) {
       setBackupJobsError(e?.message || 'Failed to delete backup job')
@@ -1208,7 +1208,7 @@ return
     setExplorerSearch('') // Reset la recherche
     const newPath = explorerPath === '/' ? `/${folderName}` : `${explorerPath}/${folderName}`
 
-    browseArchive(explorerArchive, newPath)
+    void browseArchive(explorerArchive, newPath)
   }, [explorerArchive, explorerPath, browseArchive])
 
   // Remonter d'un niveau
@@ -1220,7 +1220,7 @@ return
     parts.pop()
     const newPath = parts.length ? '/' + parts.join('/') : '/'
 
-    browseArchive(explorerArchive, newPath)
+    void browseArchive(explorerArchive, newPath)
   }, [explorerArchive, explorerPath, browseArchive])
 
   // Naviguer vers un chemin du breadcrumb
@@ -1230,7 +1230,7 @@ return
     const parts = explorerPath.split('/').filter(Boolean)
     const newPath = '/' + parts.slice(0, index + 1).join('/')
 
-    browseArchive(explorerArchive, newPath)
+    void browseArchive(explorerArchive, newPath)
   }, [explorerArchive, explorerPath, browseArchive])
 
   // Retourner à la liste des backups
@@ -1253,7 +1253,7 @@ return
   }, [])
 
   // Télécharger un fichier ou dossier depuis le backup
-  const downloadFile = useCallback(async (fileName: string, isDirectory = false) => {
+  const downloadFile = useCallback((fileName: string, isDirectory = false) => {
     if (!selectedBackup || !selection || !selectedPveStorage || !explorerArchive) return
 
     try {

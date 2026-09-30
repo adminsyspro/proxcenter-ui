@@ -150,7 +150,7 @@ export default function PbsAccessControlTab({ pbsId }: PbsAccessControlTabProps)
   }, [pbsId])
 
   useEffect(() => {
-    fetchAll()
+    void fetchAll()
   }, [fetchAll])
 
   const flatTokens: PbsFlatToken[] = useMemo(() => {

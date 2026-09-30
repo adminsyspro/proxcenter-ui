@@ -27,7 +27,7 @@ let rpcId = 0
 
 /** Accept "10.0.0.5", "xcp1.lan", "http://x" or "https://x/" and return "https://x". */
 export function normalizeXapiBaseUrl(input: string): string {
-  const t = (input || "").trim().replace(/\/+$/, "")
+  const t = (input || "").trim().replace(/(?<!\/)\/+$/, "")
   if (!t) throw new Error("XCP-ng pool master address is required")
   if (/^https?:\/\//i.test(t)) return t.replace(/^http:\/\//i, "https://")
   return `https://${t}`

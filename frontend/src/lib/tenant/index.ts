@@ -190,11 +190,11 @@ export function getTenantPrisma(tenantId: string) {
       $allModels: {
         async findMany({ args, query }: any) {
           args.where = { ...args.where, tenantId }
-          return query(args)
+          return await query(args)
         },
         async findFirst({ args, query }: any) {
           args.where = { ...args.where, tenantId }
-          return query(args)
+          return await query(args)
         },
         async findUnique({ args, query }: any) {
           // findUnique uses unique fields, so we verify after fetch.
@@ -220,7 +220,7 @@ export function getTenantPrisma(tenantId: string) {
         },
         async create({ args, query }: any) {
           args.data = { ...args.data, tenantId }
-          return query(args)
+          return await query(args)
         },
         async createMany({ args, query }: any) {
           if (Array.isArray(args.data)) {
@@ -228,7 +228,7 @@ export function getTenantPrisma(tenantId: string) {
           } else {
             args.data = { ...args.data, tenantId }
           }
-          return query(args)
+          return await query(args)
         },
         async update({ model, args, query }: any) {
           // Verify ownership before updating via the base prisma client
@@ -244,7 +244,7 @@ export function getTenantPrisma(tenantId: string) {
         },
         async updateMany({ args, query }: any) {
           args.where = { ...args.where, tenantId }
-          return query(args)
+          return await query(args)
         },
         async delete({ model, args, query }: any) {
           // Verify ownership before deleting via the base prisma client
@@ -260,7 +260,7 @@ export function getTenantPrisma(tenantId: string) {
         },
         async deleteMany({ args, query }: any) {
           args.where = { ...args.where, tenantId }
-          return query(args)
+          return await query(args)
         },
         async upsert({ model, args, query }: any) {
           // Inject tenantId into create data and strip it from update to prevent tenant reassignment
@@ -280,15 +280,15 @@ export function getTenantPrisma(tenantId: string) {
         },
         async count({ args, query }: any) {
           args.where = { ...args.where, tenantId }
-          return query(args)
+          return await query(args)
         },
         async aggregate({ args, query }: any) {
           args.where = { ...args.where, tenantId }
-          return query(args)
+          return await query(args)
         },
         async groupBy({ args, query }: any) {
           args.where = { ...args.where, tenantId }
-          return query(args)
+          return await query(args)
         },
       },
     },

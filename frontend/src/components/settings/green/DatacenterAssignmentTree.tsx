@@ -61,7 +61,7 @@ export default function DatacenterAssignmentTree({ disabled, state, onChange, in
   // accurate AND lets us grey out rows already anchored to another DC.
   useEffect(() => {
     let cancelled = false
-    ;(async () => {
+    void (async () => {
       try {
         const [connRes, ownRes] = await Promise.all([
           fetch('/api/v1/connections?type=pve'),

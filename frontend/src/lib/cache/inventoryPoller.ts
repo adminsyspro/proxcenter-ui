@@ -429,7 +429,7 @@ export function subscribe(fn: Subscriber): () => void {
   if (!masterInterval && subscribers.size === 1) {
     console.log('[inventory-poller] Starting (first subscriber)')
     // Poll immediately on first subscribe, then every POLL_INTERVAL_MS
-    pollAll()
+    void pollAll()
     masterInterval = setInterval(pollAll, POLL_INTERVAL_MS)
   }
 
@@ -449,5 +449,5 @@ export function subscribe(fn: Subscriber): () => void {
 
 /** Force an immediate poll cycle (e.g., after a user action) */
 export function triggerPoll() {
-  pollAll()
+  void pollAll()
 }

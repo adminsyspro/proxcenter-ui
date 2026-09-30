@@ -169,7 +169,7 @@ export function AddDiskDialog({ open, onClose, onSave, connId, node, vmid, exist
       }
     }
 
-    loadStorages()
+    void loadStorages()
   }, [open, connId, node])
 
   // Load ISO images for selected ISO storage. Callable so the upload/delete
@@ -194,7 +194,7 @@ export function AddDiskDialog({ open, onClose, onSave, connId, node, vmid, exist
   }, [open, connId, node, isoStorage, deviceType])
 
   useEffect(() => {
-    loadIsoImages()
+    void loadIsoImages()
   }, [loadIsoImages])
 
   // Calculer le prochain index disponible
@@ -206,7 +206,7 @@ export function AddDiskDialog({ open, onClose, onSave, connId, node, vmid, exist
     const usedIndexes = existingDisks
       .filter(d => d.startsWith(prefix))
       .map(d => {
-        const match = d.match(/(\d+)$/)
+        const match = d.slice(prefix.length).match(/^(\d+)$/)
 
 
 return match ? Number.parseInt(match[1]) : -1

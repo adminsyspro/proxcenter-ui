@@ -18,7 +18,7 @@ export interface DdProgress {
 }
 
 // `\d+` and `[\d.]+` only — no nested quantifiers (ReDoS-safe, Sonar S5852).
-const PROGRESS_RE = /(\d+) bytes (?:\([^)]*\) )?copied, ([\d.]+) s/g
+const PROGRESS_RE = /(?:^|\D)(\d+) bytes (?:\([^)]*\) )?copied, ([\d.]+) s/g
 
 /**
  * Return the LAST progress match in `text` (dd overwrites the same line via \r,

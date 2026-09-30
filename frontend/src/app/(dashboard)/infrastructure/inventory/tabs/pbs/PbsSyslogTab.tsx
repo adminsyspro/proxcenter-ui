@@ -170,7 +170,7 @@ export default function PbsSyslogTab({ pbsId }: PbsSyslogTabProps) {
 
   // Initial fetch + refetch on toolbar changes (lastEntries, since, until, serviceFilter)
   useEffect(() => {
-    fetchSyslog()
+    void fetchSyslog()
   }, [fetchSyslog])
 
   // --- Live tail polling ---
@@ -258,7 +258,7 @@ export default function PbsSyslogTab({ pbsId }: PbsSyslogTabProps) {
     }
     // Start interval
     pollTimerRef.current = setInterval(() => {
-      pollTailOnce()
+      void pollTailOnce()
     }, POLL_INTERVAL_MS)
     return () => {
       stopPolling()

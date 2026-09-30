@@ -62,12 +62,12 @@ export function useTaskTracker() {
     return json
   }, [])
 
-  const trackTask = useCallback(async (taskInfo: TaskInfo) => {
+  const trackTask = useCallback((taskInfo: TaskInfo) => {
     const { upid, connId, node, description, onSuccess, onError, queryParams } = taskInfo
 
     // Éviter de tracker la même tâche deux fois
     if (activeTasksRef.current.has(upid)) {
-      return
+      return Promise.resolve()
     }
 
     activeTasksRef.current.add(upid)
@@ -117,6 +117,7 @@ export function useTaskTracker() {
 
     // Démarrer le polling après un court délai
     setTimeout(poll, pollInterval)
+    return Promise.resolve()
   }, [toast, t, pollTaskStatus])
 
   return { trackTask }

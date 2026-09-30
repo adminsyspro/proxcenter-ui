@@ -41,9 +41,9 @@ const toRgb = (color: string): [number, number, number] | null => {
     const expand = hex.length <= 4 ? hex.slice(0, 3).replace(/./g, c => c + c) : hex.slice(0, 6)
 
     return [
-      parseInt(expand.slice(0, 2), 16),
-      parseInt(expand.slice(2, 4), 16),
-      parseInt(expand.slice(4, 6), 16)
+      Number.parseInt(expand.slice(0, 2), 16),
+      Number.parseInt(expand.slice(2, 4), 16),
+      Number.parseInt(expand.slice(4, 6), 16)
     ]
   }
 

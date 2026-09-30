@@ -76,7 +76,7 @@ const V2V_PHASE_MAP: { prefix: string; percent: number }[] = [
 //   (45.5/100%)                                            — older virt-v2v
 const V2V_JSON_MESSAGE_RE = /"message"\s*:\s*"([^"]+)"/
 const V2V_JSON_PROGRESS_RE = /"offset"\s*:\s*(\d+)\s*,\s*"total"\s*:\s*(\d+)/
-const V2V_HUMAN_LINE_RE = /^\[\s*[\d.]+\]\s+(.+)$/
+const V2V_HUMAN_LINE_RE = /^\[\s*[\d.]+\]\s+(\S.*)$/
 const V2V_OLD_PROGRESS_RE = /\(([\d.]+)\/100%\)/
 const V2V_DISK_RE = /Copying disk (\d+)\/(\d+)/
 // virt-v2v delegates the actual bytes-to-bytes copy to nbdcopy, which prints its
@@ -86,7 +86,7 @@ const V2V_DISK_RE = /Copying disk (\d+)\/(\d+)/
 // we don't care about it — we just pick up the "NN% [***...---]" shape. Matching
 // the bracketed bar is what distinguishes this from the odd "43%" substring that
 // might appear inside a human log line.
-const V2V_NBDCOPY_RE = /(\d+(?:\.\d+)?)\s*%\s*\[[*\- ]+\]/
+const V2V_NBDCOPY_RE = /(?<!\d)(\d+(?:\.\d+)?)\s*%\s*\[[*\- ]+\]/
 
 /**
  * Parse a single virt-v2v output line into structured progress.
@@ -199,7 +199,7 @@ export function calculateOverallProgress(v2v: V2vProgress): number {
   return Math.min(100, Math.round(overall * 10) / 10)
 }
 
-const PV_RE = /^([\d.]+\s*\S+)\s+\d+:\d+:\d+\s+\[\s*([\d.]+\s*\S+)\]\s+\[.*?\]\s+(\d+)%\s+ETA\s+(\S+)/
+const PV_RE = /^([\d.]+\s*[^\s\d.]\S*)\s+\d+:\d+:\d+\s+\[\s*([\d.]+\s*[^\s\d.\]][^\s\]]*)\]\s+\[[^\]]*\]\s+(\d+)%\s+ETA\s+(\S+)/
 
 /**
  * Parse a single pv stderr line into structured progress.

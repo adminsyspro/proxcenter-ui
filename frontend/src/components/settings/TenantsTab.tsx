@@ -131,7 +131,7 @@ export default function TenantsTab() {
   }, [t])
 
   useEffect(() => {
-    fetchTenants()
+    void fetchTenants()
   }, [fetchTenants])
 
   const fetchTenantUsers = useCallback(async (tenantId: string) => {
@@ -210,10 +210,10 @@ export default function TenantsTab() {
     setSelectedConnection('')
     setError('')
     setDialogOpen(true)
-    fetchTenantUsers(tenant.id)
+    void fetchTenantUsers(tenant.id)
 
     if (tenant.operatingModel === 'msp') {
-      fetchConnections()
+      void fetchConnections()
     }
   }
 
@@ -281,7 +281,7 @@ export default function TenantsTab() {
 
       setSuccess(editingTenant ? t('tenants.tenantUpdated') : t('tenants.tenantCreated'))
       setDialogOpen(false)
-      fetchTenants()
+      void fetchTenants()
     } catch (e: any) {
       setError(e.message)
     } finally {
@@ -304,7 +304,7 @@ export default function TenantsTab() {
       setSuccess(t('tenants.tenantDeleted'))
       setDeleteDialogOpen(false)
       setDeletingTenant(null)
-      fetchTenants()
+      void fetchTenants()
     } catch (e: any) {
       setError(e.message)
     }
@@ -378,7 +378,7 @@ export default function TenantsTab() {
 
       setSelectedConnection('')
       setSuccess(t('tenants.connectionAssigned'))
-      fetchConnections()
+      void fetchConnections()
     } catch (e: any) {
       setError(e.message)
     }
@@ -401,7 +401,7 @@ export default function TenantsTab() {
       }
 
       setSuccess(t('tenants.connectionReleased'))
-      fetchConnections()
+      void fetchConnections()
     } catch (e: any) {
       setError(e.message)
     }

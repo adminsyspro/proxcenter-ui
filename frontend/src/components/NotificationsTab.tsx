@@ -113,7 +113,7 @@ export default function NotificationsTab({ connectionId }: Props) {
     }
   }, [base])
 
-  useEffect(() => { fetchData() }, [fetchData])
+  useEffect(() => { void fetchData() }, [fetchData])
 
   /* ---- Target CRUD ---- */
 

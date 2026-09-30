@@ -91,7 +91,7 @@ export default function VMRulesPanel({ vmFirewallData, securityGroups, loadingVM
     try {
       await firewallAPI.toggleVMNICFirewall(selectedConnection, vm.node, vm.type, vm.vmid, newEnable)
       showToast(newEnable ? t('networkPage.firewallEnabled') : t('networkPage.firewallDisabled'), 'success')
-      reloadVMFirewallRules(vm)
+      void reloadVMFirewallRules(vm)
     } catch (err: any) {
       showToast(err.message || t('networkPage.error'), 'error')
     }
@@ -103,7 +103,7 @@ export default function VMRulesPanel({ vmFirewallData, securityGroups, loadingVM
     try {
       await firewallAPI.updateVMOptions(selectedConnection, vm.node, vm.type, vm.vmid, { [field]: value })
       showToast(t('networkPage.policyUpdated'), 'success')
-      reloadVMFirewallRules(vm)
+      void reloadVMFirewallRules(vm)
     } catch (err: any) {
       showToast(err.message || t('networkPage.error'), 'error')
     }
@@ -163,7 +163,7 @@ export default function VMRulesPanel({ vmFirewallData, securityGroups, loadingVM
     try {
       await firewallAPI.updateVMOptions(selectedConnection, vm.node, vm.type, vm.vmid, { [field]: value })
       showToast(t('networkPage.policyUpdated'), 'success')
-      reloadVMFirewallRules(vm)
+      void reloadVMFirewallRules(vm)
     } catch (err: any) {
       showToast(err.message || t('networkPage.error'), 'error')
     }
@@ -193,7 +193,7 @@ export default function VMRulesPanel({ vmFirewallData, securityGroups, loadingVM
       }
       setVmRuleDialogOpen(false)
       setEditingVMRule(null)
-      reloadVMFirewallRules(vm)
+      void reloadVMFirewallRules(vm)
     } catch (err: any) {
       showToast(err.message || t('networkPage.error'), 'error')
     }
@@ -206,7 +206,7 @@ export default function VMRulesPanel({ vmFirewallData, securityGroups, loadingVM
       await firewallAPI.deleteVMRule(selectedConnection, vm.node, vm.type, vm.vmid, pos)
       showToast(t('network.ruleDeleted'), 'success')
       setDeleteVMRuleConfirm(null)
-      reloadVMFirewallRules(vm)
+      void reloadVMFirewallRules(vm)
     } catch (err: any) {
       showToast(err.message || t('networkPage.error'), 'error')
     }
@@ -216,7 +216,7 @@ export default function VMRulesPanel({ vmFirewallData, securityGroups, loadingVM
     try {
       await firewallAPI.updateVMRule(selectedConnection, vm.node, vm.type, vm.vmid, rule.pos, { ...rule, enable: isRuleEnabled(rule) ? 0 : 1 })
       showToast(isRuleEnabled(rule) ? t('network.ruleDisabled') : t('network.ruleEnabled'), 'success')
-      reloadVMFirewallRules(vm)
+      void reloadVMFirewallRules(vm)
     } catch (err: any) {
       showToast(err.message || t('networkPage.error'), 'error')
     }
@@ -257,7 +257,7 @@ export default function VMRulesPanel({ vmFirewallData, securityGroups, loadingVM
           body: JSON.stringify({ moveto: toPos })
         })
         showToast(t('network.ruleMoved'), 'success')
-        reloadVMFirewallRules(vm)
+        void reloadVMFirewallRules(vm)
       } catch (err: any) {
         showToast(err.message || t('networkPage.moveError'), 'error')
       }
@@ -660,7 +660,7 @@ export default function VMRulesPanel({ vmFirewallData, securityGroups, loadingVM
                 <FormControl size="small">
                   <Select
                     value={logDialog.vm.options?.log_level_in || DEFAULT_LOG_LEVEL}
-                    onChange={(e) => { if (logDialog.vm) handleVMLogLevelChange(logDialog.vm, 'log_level_in', e.target.value) }}
+                    onChange={(e) => { if (logDialog.vm) void handleVMLogLevelChange(logDialog.vm, 'log_level_in', e.target.value) }}
                     sx={{ fontSize: 11, height: 28, minWidth: 90, '& .MuiSelect-select': { py: 0.3 } }}
                     disabled={!selectedConnection}
                   >
@@ -673,7 +673,7 @@ export default function VMRulesPanel({ vmFirewallData, securityGroups, loadingVM
                 <FormControl size="small">
                   <Select
                     value={logDialog.vm.options?.log_level_out || DEFAULT_LOG_LEVEL}
-                    onChange={(e) => { if (logDialog.vm) handleVMLogLevelChange(logDialog.vm, 'log_level_out', e.target.value) }}
+                    onChange={(e) => { if (logDialog.vm) void handleVMLogLevelChange(logDialog.vm, 'log_level_out', e.target.value) }}
                     sx={{ fontSize: 11, height: 28, minWidth: 90, '& .MuiSelect-select': { py: 0.3 } }}
                     disabled={!selectedConnection}
                   >

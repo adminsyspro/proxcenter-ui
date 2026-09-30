@@ -68,7 +68,7 @@ export default function PbsS3EndpointsTab({ pbsId }: PbsS3EndpointsTabProps) {
   }, [pbsId])
 
   useEffect(() => {
-    fetchEndpoints()
+    void fetchEndpoints()
   }, [fetchEndpoints])
 
   if (loading && endpoints.length === 0 && !notSupported) {

@@ -295,7 +295,7 @@ export default function NetworkDashboard({ connectionIds, connectionNames }: Pro
     const ids = connIdsKey.split(',')
     let alive = true
     setLoading(true)
-    fetchConnectionsNetworks(ids, { retries: 2 }).then(({ data, bridges, vlans, sdnVnets, vnetAliasesByConn }) => {
+    void fetchConnectionsNetworks(ids, { retries: 2 }).then(({ data, bridges, vlans, sdnVnets, vnetAliasesByConn }) => {
       if (!alive) return
       setNetworkData(data)
       setHostBridges(bridges)
@@ -316,7 +316,7 @@ export default function NetworkDashboard({ connectionIds, connectionNames }: Pro
     if (!connIdsKey || isFullClusterView) return
     const accept = new Set(connIdsKey.split(','))
     let alive = true
-    ;(async () => {
+    void (async () => {
       try {
         const vdcsRes = await fetch('/api/v1/vdcs')
         const vdcsJson = await vdcsRes.json()

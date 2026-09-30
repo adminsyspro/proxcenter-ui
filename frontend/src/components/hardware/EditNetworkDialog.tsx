@@ -162,7 +162,7 @@ export function EditNetworkDialog({ open, onClose, onSave, onDelete, connId, nod
       }
     }
 
-    loadBridges()
+    void loadBridges()
   }, [open, connId, node])
 
   // Initialiser les valeurs depuis le network

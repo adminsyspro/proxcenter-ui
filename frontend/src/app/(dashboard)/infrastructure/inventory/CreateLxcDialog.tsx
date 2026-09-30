@@ -410,14 +410,14 @@ return
       setResolvedNode('')
       setSelectedConnection('')
       setPendingClusterSelect(null)
-      loadAllData()
+      void loadAllData()
     }
   }, [open])
 
   useEffect(() => {
     if (selectedConnection && resolvedNode) {
-      loadStorages(selectedConnection)
-      loadBridges(selectedConnection, resolvedNode)
+      void loadStorages(selectedConnection)
+      void loadBridges(selectedConnection, resolvedNode)
     }
   }, [selectedConnection, resolvedNode])
 
@@ -457,7 +457,7 @@ return
       }
     }
 
-    loadPools()
+    void loadPools()
   }, [open, selectedConnection])
 
   // Appliquer la sélection cluster en attente une fois groupedNodes calculé
@@ -577,7 +577,7 @@ return
     let cancelled = false
     setLoadingTemplates(true)
 
-    Promise.all(candidateNodes.map(async (n) => {
+    void Promise.all(candidateNodes.map(async (n) => {
       try {
         const res = await fetch(
           `/api/v1/connections/${encodeURIComponent(selectedConnection)}/nodes/${encodeURIComponent(n)}/storage/${encodeURIComponent(templateStorage)}/content?content=vztmpl`

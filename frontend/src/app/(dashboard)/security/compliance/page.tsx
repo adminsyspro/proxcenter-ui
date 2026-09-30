@@ -709,7 +709,7 @@ function ProfilesTab() {
         })
       }
 
-      mutateProfiles()
+      void mutateProfiles()
       setEditDialog(null)
       setToast({ type: 'success', message: t('compliance.profileSaved') })
     } catch (e: any) {
@@ -723,7 +723,7 @@ function ProfilesTab() {
     if (!confirm(t('compliance.confirmDeleteProfile'))) return
     try {
       await fetch(`/api/v1/compliance/profiles/${profileId}`, { method: 'DELETE' })
-      mutateProfiles()
+      void mutateProfiles()
       setToast({ type: 'success', message: t('compliance.profileDeleted') })
     } catch (e: any) {
       setToast({ type: 'error', message: e?.message || 'Error' })
@@ -737,7 +737,7 @@ function ProfilesTab() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({}),
       })
-      mutateProfiles()
+      void mutateProfiles()
       setToast({ type: 'success', message: t('compliance.profileActivated') })
     } catch (e: any) {
       setToast({ type: 'error', message: e?.message || 'Error' })
@@ -751,7 +751,7 @@ function ProfilesTab() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({}),
       })
-      mutateProfiles()
+      void mutateProfiles()
       setToast({ type: 'success', message: t('compliance.profilesDeactivated') })
     } catch (e: any) {
       setToast({ type: 'error', message: e?.message || 'Error' })
@@ -1017,7 +1017,7 @@ function PoliciesTab() {
         }
         throw new Error(err.error || 'Failed to save')
       }
-      mutate()
+      void mutate()
       setPolicy2faError(null)
       setToast({ type: 'success', message: t('compliance.policiesSaved') })
     } catch (e: any) {

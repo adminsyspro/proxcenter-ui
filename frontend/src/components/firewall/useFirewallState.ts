@@ -110,7 +110,7 @@ export function useFirewallState(api: FirewallAPIAdapter) {
 
       await api.updateOptions({ enable: newEnable })
       setSnackbar({ open: true, message: `Firewall ${newEnable === 1 ? t('common.enabled') : t('common.disabled')}`, severity: 'success' })
-      loadFirewallData()
+      void loadFirewallData()
     } catch (err: any) {
       setSnackbar({ open: true, message: err.message, severity: 'error' })
     } finally {
@@ -157,7 +157,7 @@ export function useFirewallState(api: FirewallAPIAdapter) {
       setSnackbar({ open: true, message: t('network.addRule'), severity: 'success' })
       setAddRuleOpen(false)
       setNewRule({ ...DEFAULT_NEW_RULE })
-      loadFirewallData()
+      void loadFirewallData()
     } catch (err: any) {
       setSnackbar({ open: true, message: err.message, severity: 'error' })
     } finally {
@@ -175,7 +175,7 @@ export function useFirewallState(api: FirewallAPIAdapter) {
       setSnackbar({ open: true, message: t('network.addSecurityGroup'), severity: 'success' })
       setAddGroupOpen(false)
       setSelectedGroup('')
-      loadFirewallData()
+      void loadFirewallData()
     } catch (err: any) {
       setSnackbar({ open: true, message: err.message, severity: 'error' })
     } finally {
@@ -193,7 +193,7 @@ export function useFirewallState(api: FirewallAPIAdapter) {
 
       await api.updateRule(rule.pos, { enable: newEnable })
       setSnackbar({ open: true, message: `${t('network.editRule')} ${newEnable === 0 ? t('common.disabled') : t('common.enabled')}`, severity: 'success' })
-      loadRulesOnly()
+      void loadRulesOnly()
     } catch (err: any) {
       setSnackbar({ open: true, message: err.message, severity: 'error' })
     } finally {
@@ -217,7 +217,7 @@ export function useFirewallState(api: FirewallAPIAdapter) {
       await api.deleteRule(ruleToDelete)
       setSnackbar({ open: true, message: t('common.delete'), severity: 'success' })
       setRuleToDelete(null)
-      loadRulesOnly()
+      void loadRulesOnly()
     } catch (err: any) {
       setSnackbar({ open: true, message: err.message, severity: 'error' })
     } finally {
@@ -233,7 +233,7 @@ export function useFirewallState(api: FirewallAPIAdapter) {
     try {
       await api.updateRule(fromPos, { moveto: toPos })
       setSnackbar({ open: true, message: t('network.editRule'), severity: 'success' })
-      loadRulesOnly()
+      void loadRulesOnly()
     } catch (err: any) {
       setSnackbar({ open: true, message: err.message, severity: 'error' })
     } finally {
@@ -285,7 +285,7 @@ export function useFirewallState(api: FirewallAPIAdapter) {
     setDragOverRule(null)
 
     if (fromPos !== null && fromPos !== toPos) {
-      handleMoveRule(fromPos, toPos)
+      void handleMoveRule(fromPos, toPos)
     }
   }
 
@@ -299,7 +299,7 @@ export function useFirewallState(api: FirewallAPIAdapter) {
       setSnackbar({ open: true, message: t('network.editRule'), severity: 'success' })
       setEditRuleOpen(false)
       setEditingRule(null)
-      loadRulesOnly()
+      void loadRulesOnly()
     } catch (err: any) {
       setSnackbar({ open: true, message: err.message, severity: 'error' })
     } finally {

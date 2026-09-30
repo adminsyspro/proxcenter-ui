@@ -112,7 +112,7 @@ export default function PbsServicesTab({ pbsId }: PbsServicesTabProps) {
   }, [pbsId])
 
   useEffect(() => {
-    fetchServices()
+    void fetchServices()
     return () => {
       if (refreshTimerRef.current) {
         clearTimeout(refreshTimerRef.current)
@@ -166,7 +166,7 @@ export default function PbsServicesTab({ pbsId }: PbsServicesTabProps) {
         })
         if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current)
         refreshTimerRef.current = setTimeout(() => {
-          fetchServices()
+          void fetchServices()
         }, 1000)
       } catch (e: any) {
         setSnackbar({
@@ -192,14 +192,14 @@ export default function PbsServicesTab({ pbsId }: PbsServicesTabProps) {
       return
     }
 
-    runAction(svc, action)
+    void runAction(svc, action)
   }
 
   const handleConfirm = () => {
     const pa = pendingAction
     setConfirmOpen(false)
     setPendingAction(null)
-    if (pa) runAction(pa.service, pa.action)
+    if (pa) void runAction(pa.service, pa.action)
   }
 
   const handleCancel = () => {

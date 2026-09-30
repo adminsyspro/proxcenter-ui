@@ -154,13 +154,15 @@ export function summarizeMigrations(entries: MigrationHistoryEntry[]): HistorySu
   }
 }
 
+const DEFAULT_DURATION_UNITS = Object.freeze({ s: 's', min: 'min', h: 'h' })
+
 /**
  * Compact duration: "8 s", "1 min 12 s", "2 h 05 min". Unit labels come from
  * the caller so they can be translated; defaults are the SI-style symbols.
  */
 export function formatDurationMs(
   ms: number,
-  units: { s: string; min: string; h: string } = { s: 's', min: 'min', h: 'h' }
+  units: { s: string; min: string; h: string } = DEFAULT_DURATION_UNITS
 ): string {
   const totalSeconds = Math.max(0, Math.round(ms / 1000))
   const hours = Math.floor(totalSeconds / 3600)

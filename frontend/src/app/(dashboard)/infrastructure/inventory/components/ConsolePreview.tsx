@@ -112,7 +112,7 @@ function ConsolePreview({
 
     function start() {
       if (intervalRef.current) return
-      fetchScreenshot()
+      void fetchScreenshot()
       intervalRef.current = setInterval(fetchScreenshot, 10_000)
     }
 

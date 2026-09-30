@@ -43,7 +43,7 @@ export class XoSource implements XcpngSource {
 
   getVmConfig(uuid: string): Promise<XoVmConfig> { return xoGetVmConfig(this.xo, uuid) }
 
-  async diskDownload(disk: XoDiskInfo, format: "vhd" | "raw"): Promise<XcpngDiskDownload> {
+  diskDownload(disk: XoDiskInfo, format: "vhd" | "raw"): Promise<XcpngDiskDownload> {
     const url = buildVdiDownloadUrl(this.xo.baseUrl, disk.vdiUuid, format)
     const lines = [
       `url = "${url}"`,
@@ -51,7 +51,7 @@ export class XoSource implements XcpngSource {
       `header = "Accept: application/octet-stream"`,
     ]
     if (this.c.insecureTLS) lines.push("insecure")
-    return { url, curlConfig: lines.join("\n") }
+    return Promise.resolve({ url, curlConfig: lines.join("\n") })
   }
 
   async keepAlive() {}

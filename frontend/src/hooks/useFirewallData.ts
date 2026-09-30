@@ -159,7 +159,7 @@ export function useFirewallData(connectionId: string | null, isEnterprise: boole
   // Load firewall data when connection changes
   useEffect(() => {
     if (isEnterprise && connectionId) {
-      loadFirewallData()
+      void loadFirewallData()
     }
   }, [connectionId, loadFirewallData, isEnterprise])
 

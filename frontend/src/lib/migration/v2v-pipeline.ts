@@ -1153,7 +1153,7 @@ export async function runV2vMigrationPipeline(
         const colonIdx = creds.indexOf(":")
         const smbUser = colonIdx > 0 ? creds.substring(0, colonIdx) : "Administrator"
         const smbPass = colonIdx > 0 ? creds.substring(colonIdx + 1) : creds
-        const smbHost = (sourceConn.baseUrl || "").replace(/^https?:\/\//, "").replace(/:\d+\/?$/, "").replace(/\/.*$/, "")
+        const smbHost = (sourceConn.baseUrl || "").replace(/^https?:\/\//, "").replace(/:\d+\/?$/, "").split("/")[0]
         const shareName = (sourceConn as any).hypervShareName || "VMs"
 
         // The offline path copies the disk files as they are: the VM must be
@@ -1283,7 +1283,7 @@ export async function runV2vMigrationPipeline(
         host = sourceConn.baseUrl
           .replace(/^https?:\/\//, "")
           .replace(/:\d+\/?$/, "")
-          .replace(/\/.*$/, "")
+          .split("/")[0]
       }
 
       // Write password file on the target node
@@ -1324,7 +1324,7 @@ export async function runV2vMigrationPipeline(
       try {
         host = new URL(sourceConn.baseUrl).hostname
       } catch {
-        host = sourceConn.baseUrl.replace(/^https?:\/\//, "").replace(/:\d+\/?$/, "").replace(/\/.*$/, "")
+        host = sourceConn.baseUrl.replace(/^https?:\/\//, "").replace(/:\d+\/?$/, "").split("/")[0]
       }
       const esxiSshPort = sourceConn.sshPort || 22
 

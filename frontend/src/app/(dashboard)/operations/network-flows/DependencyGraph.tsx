@@ -79,7 +79,7 @@ export default function DependencyGraph({ connectionId }: DependencyGraphProps) 
   const isDark = theme.palette.mode === 'dark'
 
   useEffect(() => {
-    fetchIPPairs().then(data => {
+    void fetchIPPairs().then(data => {
       setPairs(data)
       setLoading(false)
     })

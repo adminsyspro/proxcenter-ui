@@ -17,6 +17,14 @@ export interface V2vVmConfig {
   disks: { file: string; format: string; device: string }[]
 }
 
+function trimDotsAndDashes(value: string): string {
+  let start = 0
+  let end = value.length
+  while (start < end && (value[start] === '.' || value[start] === '-')) start++
+  while (end > start && (value[end - 1] === '.' || value[end - 1] === '-')) end--
+  return value.slice(start, end)
+}
+
 /**
  * Sanitize VM name for Proxmox DNS compatibility:
  * - Replace non-alphanumeric (except . and -) with -
@@ -25,11 +33,10 @@ export interface V2vVmConfig {
  * - Max 63 chars
  */
 function sanitizeName(raw: string): string {
-  let name = raw
+  let name = trimDotsAndDashes(raw
     .replace(/\.(vhdx|vhd|vmdk|qcow2|raw|img|vdi)$/i, '') // strip disk extensions
     .replaceAll(/[^a-zA-Z0-9.\-]/g, '-')
-    .replaceAll(/-{2,}/g, '-')
-    .replaceAll(/^[.\-]+|[.\-]+$/g, '')
+    .replaceAll(/-{2,}/g, '-'))
     .substring(0, 63)
 
   return name || 'vm'

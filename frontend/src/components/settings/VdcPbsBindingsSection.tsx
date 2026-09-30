@@ -61,7 +61,7 @@ export default function VdcPbsBindingsSection({ vdcId, tenantSlug, vdcSlug, pbsC
 
   useEffect(() => {
     if (!form.pbsConnectionId) { setDatastores([]); return }
-    ;(async () => {
+    void (async () => {
       try {
         const r = await fetch(`/api/v1/admin/pbs-connections/${encodeURIComponent(form.pbsConnectionId)}/datastores`)
         const j = await r.json()

@@ -24,6 +24,17 @@ function makeConfig(overrides: Partial<EsxiVmConfig> = {}): EsxiVmConfig {
   }
 }
 
+describe("mapEsxiToPveConfig — VM name sanitising", () => {
+  it.each([
+    ["--my vm--", "my-vm"],
+    ["a--b---", "a--b"],
+    ["***", "vm"],
+    ["plain", "plain"],
+  ])("maps %j to %j", (name, expected) => {
+    expect(mapEsxiToPveConfig(makeConfig({ name }), 100, "local-lvm", "vmbr0").name).toBe(expected)
+  })
+})
+
 describe("mapEsxiToPveConfig — NIC MAC preservation", () => {
   it("preserves the source NIC MAC on net0", () => {
     const p = mapEsxiToPveConfig(makeConfig(), 100, "local-lvm", "vmbr0")

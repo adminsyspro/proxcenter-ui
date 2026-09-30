@@ -326,7 +326,7 @@ export default function BackupDashboard({ pbsServers, onPbsClick, onDatastoreCli
 
     const ac = new AbortController()
 
-    ;(async () => {
+    void (async () => {
       const perServer: Record<string, any[]> = {}
 
       await Promise.allSettled(servers.map(async (s) => {

@@ -64,6 +64,11 @@ describe('filenameSlug', () => {
     expect(filenameSlug('///')).toBe('export')
   })
 
+  it('trims leading and trailing dashes but keeps inner ones', () => {
+    expect(filenameSlug('--My--Dash--')).toBe('My--Dash')
+    expect(filenameSlug('/ a / b /')).toBe('a-b')
+  })
+
   it('caps the length so the filename stays usable', () => {
     expect(filenameSlug('a'.repeat(200))).toHaveLength(60)
   })

@@ -147,12 +147,12 @@ export function useConnectionsManagement() {
   }, [])
 
   useEffect(() => {
-    loadPveConnections()
-    loadPbsConnections()
-    loadVmwareConnections()
-    loadXcpngConnections()
-    loadNutanixConnections()
-    loadHypervConnections()
+    void loadPveConnections()
+    void loadPbsConnections()
+    void loadVmwareConnections()
+    void loadXcpngConnections()
+    void loadNutanixConnections()
+    void loadHypervConnections()
   }, [loadPveConnections, loadPbsConnections, loadVmwareConnections, loadXcpngConnections, loadNutanixConnections, loadHypervConnections])
 
   return {

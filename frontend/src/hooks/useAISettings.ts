@@ -135,7 +135,7 @@ export function useAISettings() {
 
   // Load settings on mount
   useEffect(() => {
-    loadSettings()
+    void loadSettings()
   }, [loadSettings])
 
   // Debounced auto-load models when provider/URL/key change
@@ -156,7 +156,7 @@ export function useAISettings() {
     if (debounceRef.current) clearTimeout(debounceRef.current)
 
     debounceRef.current = setTimeout(() => {
-      loadModels()
+      void loadModels()
     }, 500)
 
     return () => {

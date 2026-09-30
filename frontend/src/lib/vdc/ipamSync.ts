@@ -237,7 +237,7 @@ export async function syncIpamForVmConfig(args: SyncIpamArgs): Promise<SyncIpamR
   const allIdx = Array.from(new Set([...beforeIdx, ...afterIdx])).sort((a, b) => a - b)
 
   if (allIdx.length === 0) {
-    return { bodyOverrides, rollback: async () => undefined }
+    return { bodyOverrides, rollback: () => Promise.resolve() }
   }
 
   // Memoise per-subnet scan results across slots to avoid double-fetching
@@ -262,7 +262,7 @@ export async function syncIpamForVmConfig(args: SyncIpamArgs): Promise<SyncIpamR
       if (beforeSubnet || afterSubnet) { anyIpamRelevantSlot = true; break }
     }
     if (!anyIpamRelevantSlot) {
-      return { bodyOverrides, rollback: async () => undefined }
+      return { bodyOverrides, rollback: () => Promise.resolve() }
     }
   }
 

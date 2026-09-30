@@ -195,7 +195,8 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
   // Base directory for large intermediate files on the PVE node (SSHFS mount, VMDK dumps,
   // vmkfstools clone targets). User-selectable; falls back to /tmp for backwards compat.
   // /tmp is often a tiny tmpfs on Proxmox — a multi-GB disk transfer will saturate it.
-  const tempBase = (config.tempStorage && config.tempStorage.trim()) ? config.tempStorage.trim().replace(/\/+$/, '') : '/tmp'
+  let tempBase = (config.tempStorage && config.tempStorage.trim()) ? config.tempStorage.trim() : '/tmp'
+  while (tempBase.endsWith('/')) tempBase = tempBase.slice(0, -1)
 
   // Liveness signal for the orphan sweep (#608): bump updatedAt while the job
   // runs so a long silent step (#606) is never mistaken for a dead process.
@@ -827,7 +828,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       } finally {
         if (cloneCreated) {
           await executeOnEsxi(`vmkfstools -U '${cloneVmdkPath}'`).catch((e) => {
-            appendLog(jobId, `Warning: failed to cleanup ESXi clone: ${e.message}`, "warn")
+            void appendLog(jobId, `Warning: failed to cleanup ESXi clone: ${e.message}`, "warn")
           })
         }
       }
@@ -936,7 +937,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
           }
 
           const statsContent = await executeSSH(config.targetConnectionId, nodeIp, `cat "${statsFile}" 2>/dev/null`)
-          const curlStats = statsContent.output?.match(/\{[^}]+\}/)
+          const curlStats = statsContent.output?.match(/\{[^{}]+\}/)
           let httpCode = 0
           if (curlStats) {
             try {
@@ -983,7 +984,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
     // Helper: build ESXi SSH prefix (sshpass + legacy algorithms for ESXi BusyBox SSH)
     // Returns { setupCmd, sshPrefix, cleanupCmd } to be used in shell scripts on PVE node
     function buildEsxiSshPrefix(tmpPrefix: string) {
-      const esxiHost = esxiUrl.replace(/^https?:\/\//, "").replace(/\/.*$/, "")
+      const esxiHost = esxiUrl.replace(/^https?:\/\//, "").split("/")[0]
       const esxiSshPort = esxiConn.sshPort || 22
       const esxiSshUser = esxiConn.sshUser || "root"
       const esxiPass = esxiConn.sshPassEnc ? decryptSecret(esxiConn.sshPassEnc) : ""
@@ -1776,7 +1777,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
         // Step 3: Always cleanup the clone on ESXi
         if (cloneCreated) {
           await executeOnEsxi(`vmkfstools -U '${cloneVmdkPath}'`).catch((e) => {
-            appendLog(jobId, `Warning: failed to cleanup ESXi clone: ${e.message}`, "warn")
+            void appendLog(jobId, `Warning: failed to cleanup ESXi clone: ${e.message}`, "warn")
           })
         }
       }
@@ -2714,7 +2715,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
         // starts counting downtime, so this must not inherit the multi-hour
         // budget a warm delta pass needs (nothing here waits on the merge).
         await soapRemoveAllSnapshots(soapSession!, config.sourceVmId, { timeoutMs: SNAPSHOT_REMOVE_TERMINAL_TIMEOUT_MS }).catch((e: any) => {
-          appendLog(jobId, `Warning: failed to remove snapshot: ${e.message}`, "warn")
+          void appendLog(jobId, `Warning: failed to remove snapshot: ${e.message}`, "warn")
         })
       }
 

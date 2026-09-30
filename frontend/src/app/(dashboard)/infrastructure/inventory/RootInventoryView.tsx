@@ -166,8 +166,8 @@ function RootInventoryView({
     .replaceAll("(excellent)", `(${t('resources.scoreExcellent')})`)
     .replaceAll("(good)", `(${t('resources.scoreGood')})`)
     .replace(/^No alerts$/, t('resources.noAlerts'))
-    .replace(/(\d+) critical/, `$1 ${t('resources.critical')}`)
-    .replace(/(\d+) warning/, `$1 ${t('resources.attention')}`)
+    .replace(/(?<!\d)(\d+) critical/, `$1 ${t('resources.critical')}`)
+    .replace(/(?<!\d)(\d+) warning/, `$1 ${t('resources.attention')}`)
 
   // Build score tooltip rows from breakdown
   const scoreTooltipRows = useMemo(() => {
@@ -402,7 +402,7 @@ function RootInventoryView({
     // console.log(`[infra-rrd] Hosts:`, currentHosts.map(h => `${h.node} (connId=${h.connId})`))
     // console.log(`[infra-rrd] Debounced key: ${infraRrdNodesKey.length > 80 ? infraRrdNodesKey.substring(0, 80) + '...' : infraRrdNodesKey}`)
 
-    ;(async () => {
+    void (async () => {
       const perNode: Record<string, any[]> = {}
 
       // Group hosts by connection for batch RRD fetches (1 request per connection instead of 1 per node)

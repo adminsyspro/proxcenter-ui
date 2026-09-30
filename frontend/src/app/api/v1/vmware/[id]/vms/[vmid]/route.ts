@@ -234,7 +234,7 @@ export async function GET(
         }
       })
     } finally {
-      soapLogout(session)
+      void soapLogout(session)
     }
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })

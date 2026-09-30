@@ -147,7 +147,7 @@ return json.data || {}
       }
     }
 
-    fetchTrends()
+    void fetchTrends()
   }, [nodesStableKey, selectedKey, metricsKey, timeRange]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return { trendsData, nodeNames, loading, allConnections }

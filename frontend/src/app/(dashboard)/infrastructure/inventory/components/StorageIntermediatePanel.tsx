@@ -79,7 +79,7 @@ export default function StorageIntermediatePanel({ selection, clusterStorages, o
       }))
       if (!cancelled) setRrdData(results)
     }
-    loadAll()
+    void loadAll()
     return () => { cancelled = true }
   }, [cs, connId, nodeName, selection.type, rrdTimeframe])
 

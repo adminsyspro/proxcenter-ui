@@ -231,7 +231,7 @@ export default function DiagnosticModal({
   // Auto-run when modal opens
   useEffect(() => {
     if (open && connectionId) {
-      run()
+      void run()
     }
     // Reset when closed
     if (!open) {

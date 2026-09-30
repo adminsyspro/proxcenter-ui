@@ -37,7 +37,7 @@ export function useClusterConnections() {
     let cancelled = false
     setFilteredData(undefined)
 
-    Promise.all(
+    void Promise.all(
       connections.map(async (conn: any) => {
         try {
           const res = await fetch(`/api/v1/connections/${conn.id}/nodes`)

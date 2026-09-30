@@ -122,7 +122,7 @@ export default function CveTab({ connectionId, node, available }: CveTabProps) {
       return
     }
     setLoading(true)
-    load('GET').finally(() => setLoading(false))
+    void load('GET').finally(() => setLoading(false))
   }, [available, load])
 
   const handleScan = async () => {
@@ -470,7 +470,7 @@ export default function CveTab({ connectionId, node, available }: CveTabProps) {
         rowsPerPageOptions={[20, 50, 100]}
         labelRowsPerPage={tCommon('rowsPerPage')}
         onPageChange={(_, value) => setPage(value)}
-        onRowsPerPageChange={e => { setRowsPerPage(parseInt(e.target.value, 10)); setPage(0) }}
+        onRowsPerPageChange={e => { setRowsPerPage(Number.parseInt(e.target.value, 10)); setPage(0) }}
       />
     </Box>
   )

@@ -564,7 +564,7 @@ export default function NodeTabs(props: any) {
                   label={
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                       <i className="ri-shield-cross-line" style={{ fontSize: 16 }} />
-                      CVE
+                      {'CVE'}
                     </Box>
                   }
                 />}

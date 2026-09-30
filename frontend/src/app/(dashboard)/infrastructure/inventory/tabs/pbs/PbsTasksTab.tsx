@@ -170,7 +170,7 @@ export default function PbsTasksTab({ pbsId }: PbsTasksTabProps) {
   }, [pbsId, page, rowsPerPage, runningOnly, errorsOnly, typeFilter, userFilter])
 
   useEffect(() => {
-    fetchTasks()
+    void fetchTasks()
   }, [fetchTasks])
 
   const sortedTasks = useMemo(() => {

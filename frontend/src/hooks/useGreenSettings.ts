@@ -101,7 +101,7 @@ export function useGreenSettings() {
   }, [settings])
 
   useEffect(() => {
-    loadSettings()
+    void loadSettings()
   }, [loadSettings])
 
   return {

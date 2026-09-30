@@ -462,7 +462,7 @@ function CreateVmDialog({
       setNics([createDefaultNic()])
       setExpandedNics(new Set([0]))
       setNoNetwork(false)
-      loadAllData()
+      void loadAllData()
     }
   }, [open])
 
@@ -477,21 +477,21 @@ function CreateVmDialog({
   // Charger les storages quand un node est sélectionné
   useEffect(() => {
     if (selectedConnection && resolvedNode) {
-      loadStorages(selectedConnection)
+      void loadStorages(selectedConnection)
     }
   }, [selectedConnection, resolvedNode])
 
   // Charger les bridges quand un node est sélectionné
   useEffect(() => {
     if (selectedConnection && resolvedNode) {
-      loadBridges(selectedConnection, resolvedNode)
+      void loadBridges(selectedConnection, resolvedNode)
     }
   }, [selectedConnection, resolvedNode])
 
   // Charger les modèles CPU custom quand un node est sélectionné
   useEffect(() => {
     if (selectedConnection && resolvedNode) {
-      loadCustomCpuModels(selectedConnection, resolvedNode)
+      void loadCustomCpuModels(selectedConnection, resolvedNode)
     }
   }, [selectedConnection, resolvedNode])
 
@@ -505,7 +505,7 @@ function CreateVmDialog({
       return
     }
     let cancelled = false
-    ;(async () => {
+    void (async () => {
       try {
         const res = await fetch('/api/v1/vdcs')
         if (!res.ok) { if (!cancelled) { setVdcQuota(null); setVdcUsage(null) } ; return }
@@ -566,13 +566,13 @@ function CreateVmDialog({
       }
     }
 
-    loadPools()
+    void loadPools()
   }, [open, selectedConnection])
 
   // Charger les ISOs quand un storage ISO est sélectionné
   useEffect(() => {
     if (selectedConnection && isoStorage && resolvedNode) {
-      loadIsoImages(selectedConnection, resolvedNode, isoStorage)
+      void loadIsoImages(selectedConnection, resolvedNode, isoStorage)
     }
   }, [selectedConnection, resolvedNode, isoStorage])
 
@@ -707,7 +707,7 @@ return
             setSelectedNodeValue(target.node)
             setResolvedNode(target.node)
             setSelectedConnection(target.connId)
-            loadNextVmid(target.connId)
+            void loadNextVmid(target.connId)
           }
         } else if (defaultConnId && defaultNode) {
           const match = allNodes.find((n: any) => n.connId === defaultConnId && n.node === defaultNode)
@@ -715,24 +715,24 @@ return
           setSelectedNodeValue(target.node)
           setResolvedNode(target.node)
           setSelectedConnection(target.connId)
-          loadNextVmid(target.connId)
+          void loadNextVmid(target.connId)
         } else if (defaultConnId) {
           const clusterNodes = allNodes.filter((n: any) => n.connId === defaultConnId)
           if (clusterNodes.length > 0) {
             setPendingClusterSelect(defaultConnId)
             setSelectedConnection(defaultConnId)
-            loadNextVmid(defaultConnId)
+            void loadNextVmid(defaultConnId)
           } else {
             setSelectedNodeValue(allNodes[0].node)
             setResolvedNode(allNodes[0].node)
             setSelectedConnection(allNodes[0].connId)
-            loadNextVmid(allNodes[0].connId)
+            void loadNextVmid(allNodes[0].connId)
           }
         } else {
           setSelectedNodeValue(allNodes[0].node)
           setResolvedNode(allNodes[0].node)
           setSelectedConnection(allNodes[0].connId)
-          loadNextVmid(allNodes[0].connId)
+          void loadNextVmid(allNodes[0].connId)
         }
       }
 
@@ -830,14 +830,14 @@ return
       if (bestNode) {
         setResolvedNode(bestNode)
         setSelectedConnection(connId)
-        loadNextVmid(connId)
+        void loadNextVmid(connId)
       }
     } else {
       setResolvedNode(value)
       const nodeData = nodes.find(n => n.node === value)
       if (nodeData) {
         setSelectedConnection(nodeData.connId)
-        loadNextVmid(nodeData.connId)
+        void loadNextVmid(nodeData.connId)
       }
     }
   }

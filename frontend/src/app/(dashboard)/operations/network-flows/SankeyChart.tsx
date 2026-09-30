@@ -116,7 +116,7 @@ export default function SankeyChart() {
   const [containerWidth, setContainerWidth] = useState(typeof window !== 'undefined' ? window.innerWidth - 300 : 900)
   const [detail, setDetail] = useState<DetailData | null>(null)
   useEffect(() => {
-    fetchIPPairs().then(data => {
+    void fetchIPPairs().then(data => {
       setPairs(data)
       setLoading(false)
     })

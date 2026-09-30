@@ -63,9 +63,19 @@ type AttachPbsStorageDialogProps = {
   onAttached: () => void
 }
 
+function bareHost(baseUrl: string): string {
+  let host = baseUrl.replace(/^https?:\/\//, '')
+  const slash = host.indexOf('/')
+  if (slash !== -1) host = host.slice(0, slash)
+  const colon = host.lastIndexOf(':')
+  if (colon !== -1 && /^\d+$/.test(host.slice(colon + 1))) host = host.slice(0, colon)
+
+  return host
+}
+
 /** PVE storage ids start with a letter, so a datastore named `2024` cannot pass through as-is. */
 function suggestStorageName(datastore: string): string {
-  const core = datastore.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+  const core = datastore.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
 
   return core ? `pbs-${core}`.slice(0, 40) : ''
 }
@@ -183,7 +193,7 @@ export default function AttachPbsStorageDialog({
     // Two backup servers can hold a datastore of the same name, so the host
     // has to match too. It is compared on the bare host, which is what PVE
     // stores in `server`.
-    const host = String(selectedPbs.baseUrl ?? '').replace(/^https?:\/\//, '').replace(/\/.*$/, '').replace(/:\d+$/, '')
+    const host = bareHost(String(selectedPbs.baseUrl ?? ''))
 
     return attached.find(a => (
       a.type === 'pbs' && a.datastore === datastore && (!host || !a.server || a.server === host)

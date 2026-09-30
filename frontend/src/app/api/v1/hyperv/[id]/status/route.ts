@@ -37,7 +37,7 @@ export async function GET(
     const username = colonIdx > 0 ? creds.substring(0, colonIdx) : 'Administrator'
     const password = colonIdx > 0 ? creds.substring(colonIdx + 1) : creds
 
-    const host = conn.baseUrl.replace(/^https?:\/\//, "").replace(/\/+$/, "").split(":")[0]
+    const host = conn.baseUrl.replace(/^https?:\/\//, "").replace(/(?<!\/)\/+$/, "").split(":")[0]
     const useSSL = conn.insecureTLS ? false : conn.baseUrl.startsWith("https")
 
     const client = new HyperVClient({ host, username, password, useSSL })

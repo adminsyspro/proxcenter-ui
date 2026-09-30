@@ -103,7 +103,7 @@ export default function PbsDisksTab({ pbsId }: PbsDisksTabProps) {
   }, [pbsId])
 
   useEffect(() => {
-    fetchAll()
+    void fetchAll()
   }, [fetchAll])
 
   const typeChip = (type: string | undefined) => {

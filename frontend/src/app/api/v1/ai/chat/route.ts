@@ -328,6 +328,12 @@ ${languageInstruction(locale)}
   return prompt
 }
 
+function stripTrailingSlashes(value: string): string {
+  let end = value.length
+  while (end > 0 && value[end - 1] === '/') end--
+  return value.slice(0, end)
+}
+
 // POST /api/v1/ai/chat - Envoyer un message au LLM
 export async function POST(request: Request) {
   try {
@@ -411,7 +417,7 @@ return NextResponse.json({
         ...messages
       ]
       
-      const openaiBase = (settings.openaiBaseUrl || 'https://api.openai.com/v1').replace(/\/+$/, '')
+      const openaiBase = stripTrailingSlashes(settings.openaiBaseUrl || 'https://api.openai.com/v1')
       const response = await fetch(`${openaiBase}/chat/completions`, {
         method: 'POST',
         headers: {

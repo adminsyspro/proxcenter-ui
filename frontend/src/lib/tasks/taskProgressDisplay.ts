@@ -11,7 +11,7 @@
  */
 export function parseSpeedMBps(speed: string | null): number | null {
   if (!speed) return null
-  const m = /(\d+(?:\.\d+)?)\s*M(?:i)?B\/s/i.exec(speed)
+  const m = /(?<!\d)(\d+(?:\.\d+)?)\s*M(?:i)?B\/s/i.exec(speed)
   if (!m) return null
   const v = Number.parseFloat(m[1])
   return Number.isFinite(v) ? v : null

@@ -95,7 +95,7 @@ export default function PbsRepositoriesTab({ pbsId }: PbsRepositoriesTabProps) {
   }, [pbsId])
 
   useEffect(() => {
-    fetchRepos()
+    void fetchRepos()
   }, [fetchRepos])
 
   const runAction = useCallback(
@@ -134,7 +134,7 @@ export default function PbsRepositoriesTab({ pbsId }: PbsRepositoriesTabProps) {
 
   const handleToggle = (path: string, index: number, enabled: boolean) => {
     const key = `toggle:${path}:${index}`
-    runAction(key, {
+    void runAction(key, {
       op: 'toggle',
       path,
       index,
@@ -145,7 +145,7 @@ export default function PbsRepositoriesTab({ pbsId }: PbsRepositoriesTabProps) {
 
   const handleAdd = (handle: string) => {
     const key = `add:${handle}`
-    runAction(key, {
+    void runAction(key, {
       op: 'add',
       handle,
       digest: payload?.digest,

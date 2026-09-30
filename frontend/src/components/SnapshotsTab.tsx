@@ -85,7 +85,7 @@ export default function SnapshotsTab({ connectionId, node }: SnapshotsTabProps) 
   }
 
   useEffect(() => {
-    fetchSnapshots()
+    void fetchSnapshots()
   }, [connectionId, node])
 
   const nodes = useMemo(() => {

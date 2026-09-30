@@ -1806,10 +1806,10 @@ return Object.entries(metricsData as any)
     const fetchAll = async () => {
       needsRefresh = false
       await Promise.all(migrationIds.map(id => fetchProgress(id)))
-      if (needsRefresh) mutateMigrations()
+      if (needsRefresh) void mutateMigrations()
     }
 
-    fetchAll()
+    void fetchAll()
 
     // Rafraîchir toutes les 2 secondes
     const interval = setInterval(fetchAll, 2000)
@@ -1903,7 +1903,7 @@ return next
     setDrawerOpen(true)
 
     // Lancer la vérification de migration
-    checkMigration(rec)
+    void checkMigration(rec)
 
     // Valider que la recommandation est toujours valide (VM toujours sur le bon nœud)
     // Ne pas appeler mutateRecs ici — ça provoquerait un flash "clusters équilibrés"
@@ -1945,7 +1945,7 @@ return next
         // For approve/reject, refresh with validation
         const res = await fetch(`/api/v1/orchestrator/drs/recommendations?validate=true`)
         const validated = await res.json()
-        mutateRecs(validated, false)
+        void mutateRecs(validated, false)
         setDrawerOpen(false)
       }
     } catch (e: any) {
@@ -1963,7 +1963,7 @@ return next
         const res = await fetch(`/api/v1/orchestrator/drs/recommendations?validate=true`)
         const validated = await res.json()
 
-        mutateRecs(validated, false)
+        void mutateRecs(validated, false)
         alert(t('drsPage.vmMovedAlert'))
       } else if (errorMsg.includes('404') || errorMsg.includes('not found') || errorMsg.includes('Recommendation not found')) {
         // Recommandation n'existe plus
@@ -1978,7 +1978,7 @@ return next
         const res = await fetch(`/api/v1/orchestrator/drs/recommendations?validate=true`)
         const validated = await res.json()
 
-        mutateRecs(validated, false)
+        void mutateRecs(validated, false)
         alert(t('drsPage.vmAlreadyOnTargetAlert'))
       }
     } finally {

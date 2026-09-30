@@ -179,7 +179,7 @@ export function CloneVmDialog({ open, onClose, onClone, connId, currentNode, vmN
       }
     }
 
-    loadNodes()
+    void loadNodes()
   }, [open, connId])
 
   // Charger les pools de ressources
@@ -212,7 +212,7 @@ export function CloneVmDialog({ open, onClose, onClone, connId, currentNode, vmN
       }
     }
 
-    loadPools()
+    void loadPools()
   }, [open, connId, pools])
 
   // Charger les storages du node cible
@@ -250,7 +250,7 @@ export function CloneVmDialog({ open, onClose, onClone, connId, currentNode, vmN
       }
     }
 
-    loadStorages()
+    void loadStorages()
 
     // Reset storage when node changes
     setTargetStorage('')
@@ -285,7 +285,7 @@ export function CloneVmDialog({ open, onClose, onClone, connId, currentNode, vmN
       }
     }
 
-    loadSnapshots()
+    void loadSnapshots()
 
     return () => { cancelled = true }
   }, [open, connId, vmType, vmid, currentNode])
@@ -318,7 +318,7 @@ export function CloneVmDialog({ open, onClose, onClone, connId, currentNode, vmN
   useEffect(() => {
     if (!open || !connId) return
     let cancelled = false
-    ;(async () => {
+    void (async () => {
       const id = await fetchNextVmid(connId)
 
       // Bail if the dialog closed or the user already typed their own VMID.

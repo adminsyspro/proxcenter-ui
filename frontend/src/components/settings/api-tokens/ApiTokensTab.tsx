@@ -60,7 +60,7 @@ function ApiTokensPanel() {
   }, [t])
 
   useEffect(() => {
-    load()
+    void load()
   }, [load])
 
   async function confirmDelete() {

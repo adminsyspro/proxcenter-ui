@@ -158,6 +158,18 @@ describe("parseV2vRootPrompt", () => {
     ])
   })
 
+  it("skips an entry line broken by a stray carriage return", () => {
+    const log = [
+      " [1] /dev/sda2 (Windows Server 2019 Standard)",
+      " [2] /dev/sdb1 (Ubuntu\r 22.04)",
+      "",
+      "Enter a number between 1 and 2, or ‘exit’: ",
+    ].join("\n")
+    expect(parseV2vRootPrompt(log)).toEqual([
+      { index: 1, device: "/dev/sda2", description: "Windows Server 2019 Standard" },
+    ])
+  })
+
   it("drops a candidate whose device carries a shell metacharacter", () => {
     const log = [
       " [1] /dev/sda2 (Windows Server 2019 Standard)",

@@ -73,7 +73,7 @@ export function RollingUpdateProvider({ children }: { children: React.ReactNode 
       }
     }
 
-    check()
+    void check()
     return () => { cancelled = true; clearTimeout(timer) }
   }, [rollingUpdatesAvailable])
 

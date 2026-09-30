@@ -639,7 +639,7 @@ export default function EmergencyDRTab({
               const snapshot = restorePoint
 
               setStartTarget(null)
-              if (vm) handleStartVM(vm, snapshot)
+              if (vm) void handleStartVM(vm, snapshot)
             }}
           >
             {t('emergencyDR.startVM')}
@@ -684,7 +684,7 @@ export default function EmergencyDRTab({
               const resume = resumeReplication
 
               setStopTarget(null)
-              if (vm) handleStopVM(vm, resume)
+              if (vm) void handleStopVM(vm, resume)
             }}
           >
             {t('emergencyDR.stopVM')}

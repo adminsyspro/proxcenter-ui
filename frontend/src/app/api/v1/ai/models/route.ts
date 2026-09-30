@@ -33,7 +33,7 @@ async function fetchOllamaModels(ollamaUrl: string): Promise<string[]> {
 async function fetchOpenAIModels(key: string, baseUrl?: string): Promise<string[]> {
   const raw = baseUrl || 'https://api.openai.com/v1'
   const validated = await validateAIUrl(raw)
-  const url = validated.endsWith('/') ? validated.replace(/\/+$/, '') : validated
+  const url = validated.endsWith('/') ? validated.replace(/(?<!\/)\/+$/, '') : validated
   const res = await fetchWithTimeout(`${url}/models`, {
     headers: { Authorization: `Bearer ${key}` },
   })

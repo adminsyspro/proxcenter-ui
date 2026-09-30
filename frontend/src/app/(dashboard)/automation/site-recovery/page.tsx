@@ -115,7 +115,7 @@ export default function SiteRecoveryPage() {
   // sync, and a reopened dialog must never offer points from a previous look.
   useEffect(() => {
     if (failoverDialog.open && failoverDialog.planId && failoverDialog.type !== 'failback') {
-      mutateRestorePoints(undefined, { revalidate: true })
+      void mutateRestorePoints(undefined, { revalidate: true })
     }
   }, [failoverDialog.open, failoverDialog.planId, failoverDialog.type, mutateRestorePoints])
 
@@ -199,7 +199,7 @@ export default function SiteRecoveryPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data)
       })
-      mutateJobs()
+      void mutateJobs()
     } catch (e) {
       console.error('Failed to create job:', e)
     }
@@ -217,7 +217,7 @@ export default function SiteRecoveryPage() {
       err.status = res.status
       throw err
     }
-    mutateJobs()
+    void mutateJobs()
   }
 
   // One form for both: creating posts, editing puts onto the plan being
@@ -229,7 +229,7 @@ export default function SiteRecoveryPage() {
       const { error } = await saveRecoveryPlan(data, editPlanId)
 
       setOperationError(error)
-      if (!error) mutatePlans()
+      if (!error) void mutatePlans()
     } catch (e) {
       console.error('Failed to save plan:', e)
     } finally {
@@ -257,7 +257,7 @@ export default function SiteRecoveryPage() {
         return
       }
       setOperationError(null)
-      mutateJobs()
+      void mutateJobs()
     } catch (error) {
       setOperationError(error instanceof Error ? error.message : String(error))
     }
@@ -268,7 +268,7 @@ export default function SiteRecoveryPage() {
   const handlePauseJob = useCallback(async (id: string) => {
     try {
       await fetch(`/api/v1/orchestrator/replication/jobs/${id}/pause`, { method: 'POST' })
-      mutateJobs()
+      void mutateJobs()
     } catch (e) {
       console.error('Failed to pause job:', e)
     }
@@ -291,7 +291,7 @@ export default function SiteRecoveryPage() {
         return
       }
       setOperationError(null)
-      mutateJobs()
+      void mutateJobs()
     } catch (error) {
       setOperationError(error instanceof Error ? error.message : String(error))
     }
@@ -306,7 +306,7 @@ export default function SiteRecoveryPage() {
         return
       }
       setOperationError(null)
-      mutatePlans()
+      void mutatePlans()
     } catch (error) {
       setOperationError(error instanceof Error ? error.message : String(error))
     }
@@ -385,13 +385,13 @@ export default function SiteRecoveryPage() {
       if (!res.ok) {
         setFailoverErrorStatus(res.status)
         setFailoverError(await describeActionError(data, t('siteRecovery.failover.testConflict')))
-        mutatePlans()
+        void mutatePlans()
         return
       }
       setFailoverError(null)
       setFailoverErrorStatus(null)
       setActiveExecution(data)
-      mutatePlans()
+      void mutatePlans()
     } catch (e) {
       console.error('Failed to execute:', e)
     }
@@ -426,8 +426,8 @@ export default function SiteRecoveryPage() {
         return
       }
       setCleanupExecutionId(executionId)
-      mutateJobs()
-      mutatePlans()
+      void mutateJobs()
+      void mutatePlans()
     } catch (e) {
       // A request that never came back leaves the DR guests up just the same,
       // so it owes the operator a banner rather than a console line and a
@@ -466,8 +466,8 @@ export default function SiteRecoveryPage() {
         if (data.phase !== 'cleaning') {
           setCleanupExecutionId(null)
           setCleanupLoading(false)
-          mutateJobs()
-          mutatePlans()
+          void mutateJobs()
+          void mutatePlans()
         }
       } catch (e) {
         // A dropped poll is not a failed cleanup: the orchestrator keeps
@@ -476,7 +476,7 @@ export default function SiteRecoveryPage() {
       }
     }
 
-    poll()
+    void poll()
     const interval = setInterval(poll, 3000)
 
     return () => {
@@ -491,7 +491,7 @@ export default function SiteRecoveryPage() {
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
         setFailoverError(await describeActionError(data, 'Failed to execute failback cutover'))
-        mutatePlans()
+        void mutatePlans()
         return
       }
       setFailoverError(null)
@@ -502,7 +502,7 @@ export default function SiteRecoveryPage() {
         const execData = await execRes.json().catch(() => null)
         if (execData) setActiveExecution(execData)
       }
-      mutatePlans()
+      void mutatePlans()
     } catch (e) {
       console.error('Failed to execute failback cutover:', e)
     }
@@ -514,13 +514,13 @@ export default function SiteRecoveryPage() {
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
         setFailoverError(await describeActionError(data, 'Failed to cancel failback'))
-        mutatePlans()
+        void mutatePlans()
         return
       }
       setFailoverError(null)
       setActiveExecution(null)
       setFailoverDialog({ open: false, planId: null, type: 'test' })
-      mutatePlans()
+      void mutatePlans()
     } catch (e) {
       console.error('Failed to cancel failback:', e)
     }
@@ -537,8 +537,8 @@ export default function SiteRecoveryPage() {
   const refreshAfterEmergencyAction = useCallback(() => {
     actionRefreshTimers.current.forEach(clearTimeout)
     actionRefreshTimers.current = scheduleRefreshes(() => {
-      mutateJobs()
-      mutateAllVMs()
+      void mutateJobs()
+      void mutateAllVMs()
     })
   }, [mutateJobs, mutateAllVMs])
 
@@ -574,7 +574,7 @@ export default function SiteRecoveryPage() {
         setActiveExecution(data)
         if (data.status !== 'running') {
           clearInterval(interval)
-          mutatePlans()
+          void mutatePlans()
         }
       } catch (e) {
         console.error('Failed to poll execution:', e)

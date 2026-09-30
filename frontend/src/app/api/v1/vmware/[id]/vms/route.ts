@@ -115,7 +115,7 @@ export async function GET(
 
       return NextResponse.json({ data: { vms, connectionName: conn.name } })
     } finally {
-      soapLogout(session)
+      void soapLogout(session)
     }
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })

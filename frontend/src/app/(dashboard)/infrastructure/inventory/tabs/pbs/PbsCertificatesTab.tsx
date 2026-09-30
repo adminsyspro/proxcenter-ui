@@ -115,7 +115,7 @@ export default function PbsCertificatesTab({ pbsId }: PbsCertificatesTabProps) {
   }, [pbsId])
 
   useEffect(() => {
-    fetchCerts()
+    void fetchCerts()
   }, [fetchCerts])
 
   const statusLabel = useCallback(

@@ -910,7 +910,7 @@ export default function TasksFooter({
             <Tooltip title={t('tasks.refresh')}>
               <IconButton
                 size="small"
-                onClick={(e) => { e.stopPropagation(); mutateTasks(); }}
+                onClick={(e) => { e.stopPropagation(); void mutateTasks(); }}
               >
                 <i className="ri-refresh-line" style={{ fontSize: 16 }} />
               </IconButton>

@@ -54,7 +54,7 @@ export function useResourceData(connectionId?: string) {
     setAiAnalysis({ summary: '', recommendations: [], loading: false })
   }, [connectionId])
 
-  const loadData = useCallback(() => { mutate() }, [mutate])
+  const loadData = useCallback(() => { void mutate() }, [mutate])
 
   const runAiAnalysis = async () => {
     if (!kpis) return

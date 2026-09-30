@@ -269,7 +269,7 @@ export function EditDiskDialog({ open, onClose, onSave, onDelete, canEditHardwar
         }
       } catch {}
     }
-    loadIsoStorages()
+    void loadIsoStorages()
   }, [open, disk?.isCdrom, connId, node])
 
   // Load ISO images for selected storage. Callable so the upload/delete
@@ -295,7 +295,7 @@ export function EditDiskDialog({ open, onClose, onSave, onDelete, canEditHardwar
   }, [open, disk?.isCdrom, connId, node, isoStorage])
 
   useEffect(() => {
-    loadIsoImages()
+    void loadIsoImages()
   }, [loadIsoImages])
 
   // Charger les storages disponibles
@@ -319,7 +319,7 @@ export function EditDiskDialog({ open, onClose, onSave, onDelete, canEditHardwar
         }
       }
 
-      loadStorages()
+      void loadStorages()
     } else if (availableStorages) {
       setStorages(availableStorages)
     }
@@ -464,7 +464,7 @@ return
     const prefix = reassignBus === 'virtio' ? 'virtio' : reassignBus
     const usedIndexes = existingDisks
       .filter(d => d.startsWith(prefix))
-      .map(d => { const m = d.match(/(\d+)$/); return m ? Number.parseInt(m[1]) : -1 })
+      .map(d => { const m = d.slice(prefix.length).match(/^(\d+)$/); return m ? Number.parseInt(m[1]) : -1 })
       .filter(i => i >= 0)
     let next = 0
     while (usedIndexes.includes(next)) next++

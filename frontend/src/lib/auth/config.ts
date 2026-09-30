@@ -856,6 +856,9 @@ export async function getAuthOptions(req?: Request): Promise<NextAuthOptions> {
     return withSecure(authOptions)
   }
 
+  let issuerBase = oidcConfig.issuerUrl
+  while (issuerBase.endsWith('/')) issuerBase = issuerBase.slice(0, -1)
+
   const oidcProvider: OAuthConfig<any> = {
     id: 'oidc',
     name: oidcConfig.providerName || 'SSO',
@@ -865,7 +868,7 @@ export async function getAuthOptions(req?: Request): Promise<NextAuthOptions> {
     // claim against and rejects every callback with `expected undefined`.
     // Passing `issuer` here gives it the value to compare against.
     issuer: oidcConfig.authorizationUrl ? oidcConfig.issuerUrl : undefined,
-    wellKnown: oidcConfig.authorizationUrl ? undefined : `${oidcConfig.issuerUrl.replace(/\/+$/, '')}/.well-known/openid-configuration`,
+    wellKnown: oidcConfig.authorizationUrl ? undefined : `${issuerBase}/.well-known/openid-configuration`,
     authorization: oidcConfig.authorizationUrl ? {
       url: oidcConfig.authorizationUrl,
       params: { scope: oidcConfig.scopes },

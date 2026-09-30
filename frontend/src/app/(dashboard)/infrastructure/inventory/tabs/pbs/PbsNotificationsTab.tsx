@@ -138,7 +138,7 @@ export default function PbsNotificationsTab({ pbsId }: PbsNotificationsTabProps)
   }, [pbsId])
 
   useEffect(() => {
-    fetchAll()
+    void fetchAll()
   }, [fetchAll])
 
   const renderStatusChip = (disabled: boolean) =>

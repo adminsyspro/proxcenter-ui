@@ -100,7 +100,7 @@ export default function MetricServerTab({ connectionId }: Props) {
     }
   }, [apiBase])
 
-  useEffect(() => { fetchServers() }, [fetchServers])
+  useEffect(() => { void fetchServers() }, [fetchServers])
 
   const openCreate = (type: string) => {
     setAddMenuAnchor(null)

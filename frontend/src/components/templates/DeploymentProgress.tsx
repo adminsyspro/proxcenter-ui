@@ -104,7 +104,7 @@ export default function DeploymentProgress({ deploymentId, onComplete }: Deploym
       }
     }
 
-    poll()
+    void poll()
     return () => { active = false }
   }, [deploymentId, onComplete])
 

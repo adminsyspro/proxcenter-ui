@@ -113,7 +113,7 @@ export default function HaOpsPanel({ members, syncMode, maintenanceNodes, onRefr
             variant="contained"
             onClick={() => {
               setSwitchoverOpen(false)
-              doAction('/api/v1/ha/switchover', 'POST', { candidate: switchoverTarget })
+              void doAction('/api/v1/ha/switchover', 'POST', { candidate: switchoverTarget })
             }}
           >
             {t('node.switchover')}

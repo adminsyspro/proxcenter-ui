@@ -24,6 +24,7 @@ export async function POST(
   }
 
   // Proxmox: POST .../vncproxy (option websocket=1)
+  let responseBaseUrl = conn.baseUrl
   const data = await pveFetch<any>(
     conn,
     `/nodes/${encodeURIComponent(node)}/${encodeURIComponent(type)}/${encodeURIComponent(vmid)}/vncproxy`,
@@ -31,12 +32,13 @@ export async function POST(
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: "websocket=1",
-    }
+    },
+    { onResponse: url => { responseBaseUrl = url } }
   )
 
   const expiresAt = Date.now() + 30_000
   const sessionId = putSingleUse({
-    baseUrl: conn.baseUrl,
+    baseUrl: responseBaseUrl,
     apiToken: conn.apiToken,
     insecure: conn.insecureDev,
     node,
@@ -47,7 +49,7 @@ export async function POST(
     expiresAt,
   })
 
-  const baseUrl = new URL(conn.baseUrl)
+  const baseUrl = new URL(responseBaseUrl)
   const novncUrl = `${baseUrl.origin}/?console=${type}&novnc=1&vmid=${vmid}&vmname=VM${vmid}&node=${node}&resize=off&cmd=`
 
   return NextResponse.json({

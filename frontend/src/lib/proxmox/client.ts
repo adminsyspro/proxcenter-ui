@@ -211,6 +211,7 @@ export function classifyPveError(err: unknown): PveErrorClass {
 type FailoverEntry = {
   url: string
   cachedAt: number  // Date.now() when failover was cached
+  probing?: boolean
 }
 
 const FAILOVER_CACHE_KEY = "__proxcenter_failover_url_cache__" as const
@@ -232,13 +233,6 @@ function isHalfOpen(connId: string): boolean {
   const entry = getFailoverStore().get(connId)
   if (!entry) return false
   return (Date.now() - entry.cachedAt) >= HALF_OPEN_INTERVAL_MS
-}
-
-function refreshFailoverTimestamp(connId: string): void {
-  const entry = getFailoverStore().get(connId)
-  if (entry) {
-    entry.cachedAt = Date.now()
-  }
 }
 
 function setFailoverUrl(connId: string, url: string): void {
@@ -264,7 +258,12 @@ export async function pveFetch<T>(
   opts: ProxmoxClientOptions,
   path: string,
   init: RequestInit = {},
-  fetchOpts: { timeoutMs?: number; slowRead?: boolean } = {}
+  fetchOpts: {
+    timeoutMs?: number
+    slowRead?: boolean
+    /** Server-only endpoint of this response, for ticket-bound WebSockets. */
+    onResponse?: (baseUrl: string) => void
+  } = {}
 ): Promise<T> {
   if (!opts?.baseUrl) throw new Error("pveFetch: missing baseUrl")
   if (!opts?.apiToken) throw new Error("pveFetch: missing apiToken")
@@ -315,8 +314,9 @@ export async function pveFetch<T>(
   }
 
   /** Core request logic against a specific baseUrl */
-  async function doRequest(baseUrl: string, timeoutMs = PVE_DEFAULT_TIMEOUT_MS, ignoreCallerSignal = false): Promise<T> {
-    const url = `${baseUrl.replace(/\/$/, "")}/api2/json${path}`
+  async function doRequest(baseUrl: string, timeoutMs = PVE_DEFAULT_TIMEOUT_MS, ignoreCallerSignal = false, probe = false): Promise<T> {
+    const requestPath = probe ? '/version' : path
+    const url = `${baseUrl.replace(/\/$/, "")}/api2/json${requestPath}`
 
     // init.signal is a CANCELLATION channel, never a budget: the signals are
     // combined, so the effective deadline is the SHORTER of the two and a
@@ -331,9 +331,9 @@ export async function pveFetch<T>(
       : timeoutSignal
 
     const res = await request(url, {
-      method,
+      method: probe ? 'GET' : method,
       headers,
-      body,
+      body: probe ? undefined : body,
       dispatcher,
       signal,
     })
@@ -341,7 +341,7 @@ export async function pveFetch<T>(
     const text = await res.body.text()
 
     if (res.statusCode < 200 || res.statusCode >= 300) {
-      throw new PveApplicationError(`PVE ${res.statusCode} ${path}: ${text}`, res.statusCode)
+      throw new PveApplicationError(`PVE ${res.statusCode} ${requestPath}: ${text}`, res.statusCode)
     }
 
     let json: any
@@ -355,6 +355,7 @@ export async function pveFetch<T>(
       throw new PveApplicationError(`PVE invalid JSON (${res.statusCode}): ${text.slice(0, 200)}`, res.statusCode)
     }
 
+    if (!probe) fetchOpts.onResponse?.(baseUrl)
     return json.data as T
   }
 
@@ -367,24 +368,46 @@ export async function pveFetch<T>(
 
   if (cachedFailoverUrl) {
     // HALF_OPEN: enough time has passed, probe the primary
-    if (opts.id && isHalfOpen(opts.id)) {
+    const entry = opts.id ? getFailoverStore().get(opts.id) : undefined
+    if (opts.id && entry && isHalfOpen(opts.id) && !entry.probing) {
+      entry.probing = true
+      let recovered = false
       try {
-        const result = await doRequest(opts.baseUrl, PVE_PROBE_TIMEOUT_MS)
-        // Primary is back! Clear failover cache and reset failures
-        clearFailoverUrl(opts.id)
-        resetFailures(opts.id)
-        console.log(`[failover] Primary node recovered for connection ${safeLog(opts.id)}, clearing failover cache`)
-        return result
+        // A liveness check must not execute a caller's write. Concurrent
+        // requests keep using the fallback while this single probe runs.
+        await doRequest(opts.baseUrl, PVE_PROBE_TIMEOUT_MS, true, true)
+        recovered = getFailoverStore().get(opts.id) === entry
       } catch (probeErr) {
         // Primary still down, reset timer and use failover
-        refreshFailoverTimestamp(opts.id)
+        entry.cachedAt = Date.now()
         console.log(`[failover] Primary still down for connection ${safeLog(opts.id)}, staying on failover`)
+      } finally {
+        entry.cachedAt = Date.now()
+        entry.probing = false
+      }
+      if (recovered) {
+        try {
+          const result = await doRequest(opts.baseUrl, primaryTimeoutMs)
+          if (getFailoverStore().get(opts.id) === entry) {
+            clearFailoverUrl(opts.id)
+            resetFailures(opts.id)
+            console.log(`[failover] Primary node recovered for connection ${safeLog(opts.id)}, clearing failover cache`)
+          }
+          return result
+        } catch (err) {
+          // A primary can fail between /version and the actual read. Keep
+          // serving reads on the known fallback, but never replay a write.
+          if (!replaySafe || !isUnreachableEvidence(err)) throw err
+        }
       }
     }
 
-    // OPEN: use cached failover
+    // The cache may have changed while the recovery probe was in flight.
+    // Use its current entry and only invalidate the entry we actually tried.
+    const fallbackEntry = getFailoverStore().get(opts.id!)
+    if (!fallbackEntry) return pveFetch<T>(opts, path, init, fetchOpts)
     try {
-      const result = await doRequest(cachedFailoverUrl, primaryTimeoutMs)
+      const result = await doRequest(fallbackEntry.url, primaryTimeoutMs)
       return result
     } catch (cachedErr) {
       if (!isUnreachableEvidence(cachedErr)) {
@@ -392,6 +415,9 @@ export async function pveFetch<T>(
         // the failover node IS reachable, only this specific call failed.
         // Keep the cache intact so other requests still use the failover.
         throw cachedErr
+      }
+      if (getFailoverStore().get(opts.id!) !== fallbackEntry) {
+        return pveFetch<T>(opts, path, init, fetchOpts)
       }
       // Network error — the failover node itself is unreachable.
       // Clear cache and go directly to failover scan for a new node.

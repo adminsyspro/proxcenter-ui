@@ -62,6 +62,16 @@ type VmContextMenu = {
   Helpers
 ------------------------------ */
 
+const LEGACY_COLUMNS_STORAGE_KEY = 'proxcenter_vmtable_columns'
+const COLUMNS_STORAGE_KEY = 'proxcenter_vmtable_columns_v2'
+
+// Une colonne cochée dans le menu reste affichée même sous le seuil responsive (#911)
+export function isColumnVisible(userChoice: boolean | undefined, hiddenByWidth: boolean | undefined) {
+  if (userChoice !== undefined) return userChoice
+
+  return !hiddenByWidth
+}
+
 const pct = (v: any) => Math.max(0, Math.min(100, Number(v ?? 0)))
 
 const bytesToGb = (b: any) => Math.round((Number(b || 0) / 1024 / 1024 / 1024) * 10) / 10
@@ -571,28 +581,10 @@ return migratingVmIds.has(`${connId}:${vmid}`)
   // État pour le menu de sélection des colonnes
   const [columnsMenuAnchor, setColumnsMenuAnchor] = useState<null | HTMLElement>(null)
 
+  // Préférences de colonnes, en trois états : false = masquée par l'utilisateur,
+  // true = affichée par l'utilisateur quelle que soit la largeur, absente = règle responsive.
   const [visibleColumns, setVisibleColumns] = useState<Record<string, boolean>>(() => {
-    const defaults: Record<string, boolean> = {
-      vmid: false,
-      favorite: true,
-      name: true,
-      type: true,
-      status: true,
-      node: true,
-      vdcName: true,
-      ha: true,
-      cpu: true,
-      ram: true,
-      maxmem: true,
-      disk: true,
-      tags: true,
-      ip: true,
-      snapshots: true,
-      osInfo: true,
-      uptime: true,
-      trend: true,
-      actions: true,
-    }
+    const defaults: Record<string, boolean> = { vmid: false }
 
     if (defaultHiddenColumns) {
       for (const col of defaultHiddenColumns) {
@@ -602,8 +594,19 @@ return migratingVmIds.has(`${connId}:${vmid}`)
 
     // Restore from localStorage
     try {
-      const saved = localStorage.getItem('proxcenter_vmtable_columns')
+      const saved = localStorage.getItem(COLUMNS_STORAGE_KEY)
       if (saved) return { ...defaults, ...JSON.parse(saved) }
+
+      // L'ancienne clé stockait true pour toute colonne non masquée : seuls les false
+      // sont un vrai choix, les reprendre tels quels forcerait tout à l'écran.
+      const legacy = localStorage.getItem(LEGACY_COLUMNS_STORAGE_KEY)
+      if (legacy) {
+        const hidden = Object.fromEntries(
+          Object.entries(JSON.parse(legacy) as Record<string, boolean>).filter(([, v]) => v === false)
+        )
+
+        return { ...defaults, ...hidden }
+      }
     } catch {}
 
     return defaults
@@ -612,9 +615,32 @@ return migratingVmIds.has(`${connId}:${vmid}`)
   // Persist column visibility to localStorage
   useEffect(() => {
     try {
-      localStorage.setItem('proxcenter_vmtable_columns', JSON.stringify(visibleColumns))
+      localStorage.setItem(COLUMNS_STORAGE_KEY, JSON.stringify(visibleColumns))
     } catch {}
   }, [visibleColumns])
+
+  // Colonnes retirées par défaut selon la largeur de la fenêtre
+  const responsiveHidden = useMemo<Record<string, boolean>>(() => ({
+    vmid: isMobile,      // ID masqué sur mobile
+    type: isTablet,      // Type masqué sur tablette et mobile
+    ha: isTablet,        // HA masqué sur tablette et mobile
+    maxmem: isTablet,    // Mémoire masquée sur tablette
+    disk: isTablet,      // Disque masqué sur tablette
+    tags: isSmallDesktop, // Tags masqués sur petits desktops
+    ip: isSmallDesktop,  // IP masquée sur petits desktops
+    snapshots: isSmallDesktop, // Snapshots masqués sur petits desktops
+    osInfo: isSmallDesktop, // OS masqué sur petits desktops
+    uptime: isTablet,    // Uptime masqué sur tablette
+    trend: !isLargeDesktop, // Trend seulement sur grands écrans
+    trendIoNet: !isLargeDesktop, // IO/Net trend seulement sur grands écrans
+    node: isMobile,      // Node masqué sur mobile
+    vdcName: isMobile,   // vDC masqué sur mobile
+  }), [isMobile, isTablet, isSmallDesktop, isLargeDesktop])
+
+  const isColumnShown = useCallback(
+    (field: string) => isColumnVisible(visibleColumns[field], responsiveHidden[field]),
+    [visibleColumns, responsiveHidden]
+  )
 
   // Persist column widths to localStorage
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>(() => {
@@ -1754,42 +1780,15 @@ return (
       })
     }
 
-    // Filtrer les colonnes en combinant :
-    // 1. Les contraintes responsive (certaines colonnes ne doivent pas apparaître sur mobile/tablette)
-    // 2. Les préférences utilisateur (menu de sélection des colonnes)
-    const responsiveHidden: Record<string, boolean> = {
-      vmid: isMobile,      // ID masqué sur mobile
-      type: isTablet,      // Type masqué sur tablette et mobile
-      ha: isTablet,        // HA masqué sur tablette et mobile  
-      maxmem: isTablet,    // Mémoire masquée sur tablette
-      disk: isTablet,      // Disque masqué sur tablette
-      tags: isSmallDesktop, // Tags masqués sur petits desktops
-      ip: isSmallDesktop,  // IP masquée sur petits desktops
-      snapshots: isSmallDesktop, // Snapshots masqués sur petits desktops
-      osInfo: isSmallDesktop, // OS masqué sur petits desktops
-      uptime: isTablet,    // Uptime masqué sur tablette
-      trend: !isLargeDesktop, // Trend seulement sur grands écrans
-      trendIoNet: !isLargeDesktop, // IO/Net trend seulement sur grands écrans
-      node: isMobile,      // Node masqué sur mobile
-      vdcName: isMobile,   // vDC masqué sur mobile
-    }
-    
-    return cols.filter(col => {
-      // Si l'utilisateur a explicitement masqué la colonne
-      if (visibleColumns[col.field] === false) return false
-
-      // Si la contrainte responsive masque la colonne
-      if (responsiveHidden[col.field]) return false
-
-return true
-    }).map(col => {
+    // Le choix explicite du menu l'emporte sur la règle responsive (#911)
+    return cols.filter(col => isColumnShown(col.field)).map(col => {
       const saved = columnWidths[col.field]
       if (!saved) return col
       // Strip flex so the saved width actually takes effect. With flex set,
       // MUI re-runs flex layout on every columns-prop change and ignores width.
       return { ...col, width: saved, flex: undefined }
     })
-  }, [isCompact, expanded, showNode, nodeStatuses, showTrends, showActions, showIpSnap, onVmAction, onMigrate, canMigrate, onNodeClick, primaryColor, trendsData, trendsLoading, vms, isMobile, isTablet, isSmallDesktop, isLargeDesktop, favorites, onToggleFavorite, visibleColumns, columnWidths, showVdcColumn, diskLatency])
+  }, [isCompact, expanded, showNode, nodeStatuses, showTrends, showActions, showIpSnap, onVmAction, onMigrate, canMigrate, onNodeClick, primaryColor, trendsData, trendsLoading, vms, isMobile, isTablet, isSmallDesktop, isLargeDesktop, favorites, onToggleFavorite, isColumnShown, columnWidths, showVdcColumn, diskLatency])
 
   return (
     <Box sx={{
@@ -1931,11 +1930,11 @@ return true
                 <MenuItem 
                   key={field} 
                   dense
-                  onClick={() => setVisibleColumns(prev => ({ ...prev, [field]: !prev[field] }))}
+                  onClick={() => setVisibleColumns(prev => ({ ...prev, [field]: !isColumnShown(field) }))}
                   sx={{ py: 0.5 }}
                 >
                   <Checkbox 
-                    checked={visibleColumns[field] !== false} 
+                    checked={isColumnShown(field)}
                     size="small"
                     sx={{ p: 0.5, mr: 1 }}
                   />

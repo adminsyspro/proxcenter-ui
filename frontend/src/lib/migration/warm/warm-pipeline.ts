@@ -33,7 +33,7 @@ import type { WarmMigrationConfig } from "./types"
 import {
   registerJob, unregisterJob, acquireVmLock, releaseVmLock,
   updateJob, updateJobLive, appendLog, isCancelled, isCutoverRequested,
-  sleepUnlessCutover, awaitOperatorCutover, HOLD_PASS_INTERVAL_MS,
+  sleepUnlessCutover, awaitOperatorCutover, runDeltaPassWithRetry, HOLD_PASS_INTERVAL_MS,
 } from "./job-control"
 import {
   applyExtentsWithProgress, checksumDiskWindows, scaleWarmProgress,
@@ -496,7 +496,11 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
             status: "delta_sync", currentStep: `delta_${pass + 1}`,
             rangeStart: 80 + (15 * pass) / maxPasses, rangeEnd: 80 + (15 * (pass + 1)) / maxPasses,
           }
-        const deltaBytes = await runCbtPass(`delta-${pass + 1}`, dk => diskState.get(dk)!.currentChangeId || "*", deltaWindow)
+        // A failed pass leaves the baseline untouched, so it is retried rather
+        // than thrown away with hours of replication (#1028).
+        const deltaBytes = await runDeltaPassWithRetry(jobId, `Delta pass ${pass + 1}`,
+          () => runCbtPass(`delta-${pass + 1}`, dk => diskState.get(dk)!.currentChangeId || "*", deltaWindow))
+        if (deltaBytes === null) { await appendLog(jobId, "Operator requested cutover — proceeding to final delta", "info"); break }
         const dsec = Math.max(1, (Date.now() - tk) / 1000)
         throughput = deltaBytes > 0 ? deltaBytes / dsec : throughput
         await appendLog(jobId, `Delta pass ${pass + 1}: ${(deltaBytes / 1048576).toFixed(1)} MB`)

@@ -642,6 +642,32 @@ describe("runXcpngWarmMigration failure cleanup", () => {
     expect(hasLog("already running")).toBe(false)
   })
 
+  it("retries a delta pass that failed once instead of failing the job (#1028)", { timeout: 20000 }, async () => {
+    const jobId = "xcp-it-delta-retry"
+    // Delta 1 fails on its first attempt when its reader cannot attach, the
+    // retry diffs from the same baseline and carries the data, delta 2 is empty.
+    changedBlocks = [SMALL_DELTA, SMALL_DELTA, []]
+    const base = vi.mocked(startXapiReader).getMockImplementation()!
+    let failed = false
+    vi.mocked(startXapiReader).mockImplementation(async (c, ip, t) => {
+      if (!failed && t.sock.includes("delta-1")) { failed = true; throw new Error("orchestrator SSH timeout (30s)") }
+      return base(c, ip, t)
+    })
+
+    const err = await runToEnd(jobId, makeConfig())
+
+    expect(err).toBeNull()
+    expect(prisma.row.status).toBe("completed")
+    expect(hasLog("Delta pass 1 failed (attempt 1 of 5): orchestrator SSH timeout (30s)")).toBe(true)
+    expect(hasLog("Delta pass 1:")).toBe(true)
+    expect(hasLog("Delta pass 2:")).toBe(true)
+    // the failed attempt's snapshot is dropped at once, the retry diffs from the full-pass baseline again
+    expect(destroyed[0]).toBe("OpaqueRef:snap2")
+    expect(xapiListChangedBlocks).toHaveBeenNthCalledWith(1, expect.anything(), "OpaqueRef:snapvdi1-0", "OpaqueRef:snapvdi2-0", DISK_BYTES)
+    expect(xapiListChangedBlocks).toHaveBeenNthCalledWith(2, expect.anything(), "OpaqueRef:snapvdi1-0", "OpaqueRef:snapvdi3-0", DISK_BYTES)
+    expect(xapiFindSnapshotsByPrefix).not.toHaveBeenCalled()
+  })
+
   it("stops at the next check when the job is cancelled during the delta loop", { timeout: 20000 }, async () => {
     const jobId = "xcp-it-cancel"
     changedBlocks = [SMALL_DELTA, SMALL_DELTA, SMALL_DELTA] // never converges on its own

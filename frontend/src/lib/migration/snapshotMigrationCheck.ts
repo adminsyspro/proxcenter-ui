@@ -22,6 +22,33 @@ export interface SnapshotMigrationCheck {
 
 type GuestRef = { node: string; type: 'qemu' | 'lxc'; vmid: string }
 
+function indexStorages(list: unknown): Record<string, StorageFacts> {
+  const storages: Record<string, StorageFacts> = {}
+  for (const s of Array.isArray(list) ? list : []) {
+    if (s?.storage) storages[s.storage] = s
+  }
+  return storages
+}
+
+// PVE only counts a volume as replicated when a job replicates the guest to
+// the migration target (QemuMigrate.pm, replication_jobcfg).
+function replicatesTo(jobs: unknown, vmid: string, target: string): boolean {
+  return (Array.isArray(jobs) ? jobs : [])
+    .some(job => String(job?.guest) === String(vmid) && String(job?.target) === target)
+}
+
+/** Volids a replication job carries: on a replicating storage, without replicate=0. */
+function replicatableVolids(snapshots: SnapshotConfig[], storages: Record<string, StorageFacts>): Set<string> {
+  const volids = new Set<string>()
+  for (const value of snapshots.flatMap(snap => Object.values(snap.config))) {
+    if (typeof value !== 'string' || /(?:^|,)replicate=0(?:,|$)/.test(value)) continue
+    const volid = volidOfDrive(value)
+    const type = volid ? storages[volid.split(':')[0]]?.type : undefined
+    if (volid && type && storageSupportsReplication(type)) volids.add(volid)
+  }
+  return volids
+}
+
 export async function checkSnapshotMigration(
   conn: ProxmoxClientOptions,
   guest: GuestRef,
@@ -42,26 +69,10 @@ export async function checkSnapshotMigration(
     guest.type === 'qemu' ? pveFetch<any[]>(conn, '/cluster/replication') : Promise.resolve([]),
   ])
 
-  const storages: Record<string, StorageFacts> = {}
-  for (const s of Array.isArray(storageList) ? storageList : []) {
-    if (s?.storage) storages[s.storage] = s
-  }
-
-  // PVE only counts a volume as replicated when a job replicates the guest to
-  // the migration target (QemuMigrate.pm, replication_jobcfg).
-  const replicatedVolids = new Set<string>()
-  const replicatesToTarget = (Array.isArray(jobs) ? jobs : [])
-    .some(job => String(job?.guest) === String(guest.vmid) && String(job?.target) === opts.target)
-  if (replicatesToTarget) {
-    for (const snap of snapshots) {
-      for (const value of Object.values(snap.config)) {
-        if (typeof value !== 'string' || /(?:^|,)replicate=0(?:,|$)/.test(value)) continue
-        const volid = volidOfDrive(value)
-        const type = volid ? storages[volid.split(':')[0]]?.type : undefined
-        if (volid && type && storageSupportsReplication(type)) replicatedVolids.add(volid)
-      }
-    }
-  }
+  const storages = indexStorages(storageList)
+  const replicatedVolids = replicatesTo(jobs, guest.vmid, opts.target)
+    ? replicatableVolids(snapshots, storages)
+    : new Set<string>()
 
   const common = { guestType: guest.type, snapshots, storages, replicatedVolids, targetStorage: opts.targetStorage }
   return {

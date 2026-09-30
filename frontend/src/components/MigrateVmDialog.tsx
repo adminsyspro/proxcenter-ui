@@ -519,7 +519,7 @@ export function MigrateVmDialog({
       }
     }
 
-    loadNodes()
+    void loadNodes()
   }, [open, connId, currentNode, activeTab])
   
   // ========== LOCAL MIGRATION: Load VM config to detect disks ==========
@@ -600,7 +600,7 @@ export function MigrateVmDialog({
       }
     }
     
-    loadVmConfig()
+    void loadVmConfig()
   }, [open, connId, vmid, currentNode, vmType])
   
   // ========== LOAD HA STATUS ==========
@@ -645,7 +645,7 @@ export function MigrateVmDialog({
       }
     }
     
-    loadHaStatus()
+    void loadHaStatus()
   }, [open, connId, vmid, vmType])
   
   // ========== LOCAL MIGRATION: Load storages for selected node ==========
@@ -687,7 +687,7 @@ export function MigrateVmDialog({
       }
     }
     
-    loadStorages()
+    void loadStorages()
     setSelectedStorage('__current__')
   }, [open, connId, selectedNode, activeTab])
   
@@ -729,7 +729,7 @@ export function MigrateVmDialog({
       }
     }
     
-    loadConnections()
+    void loadConnections()
   }, [open, activeTab, connId])
   
   // ========== CROSS-CLUSTER: Load nodes from selected remote connection ==========
@@ -772,7 +772,7 @@ export function MigrateVmDialog({
       }
     }
     
-    loadRemoteNodes()
+    void loadRemoteNodes()
   }, [open, selectedRemoteConn, activeTab])
   
   // ========== CROSS-CLUSTER: Load storages and bridges from remote node ==========
@@ -830,7 +830,7 @@ export function MigrateVmDialog({
       }
     }
     
-    loadRemoteResources()
+    void loadRemoteResources()
   }, [open, selectedRemoteConn, selectedRemoteNode, activeTab])
   
   // Helper functions
@@ -995,7 +995,7 @@ export function MigrateVmDialog({
     if (activeTab === 1 && selectedRemoteConn && selectedRemoteNode && selectedRemoteStorage && selectedRemoteBridge) {
       setValidationDone(false)
       const timer = setTimeout(() => {
-        validateCrossClusterMigration()
+        void validateCrossClusterMigration()
       }, 500) // Debounce
       return () => clearTimeout(timer)
     }
@@ -1077,7 +1077,7 @@ export function MigrateVmDialog({
 
   useEffect(() => {
     if (!open || activeTab !== 1) return
-    loadSourcePrereqs()
+    void loadSourcePrereqs()
   }, [open, activeTab, loadSourcePrereqs])
 
   const runPrepare = async (payload: {

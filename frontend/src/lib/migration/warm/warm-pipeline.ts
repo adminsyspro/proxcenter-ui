@@ -20,7 +20,7 @@ import { volumesToFree, volumesToKeep, PVESM_FREE_TIMEOUT_MS, type AllocatedVolu
 import { getNodeIpForMigration } from "../pve-tasks"
 import { decideNextPass, type PassStat, type ConvergenceConfig, type ConvergenceDecision } from "./convergence"
 import { initDiskState, recordPass, type DiskWarmState } from "./state"
-import { startVddkReader, stopVddkReader, type VddkReaderHandle } from "./vddk-reader"
+import { startVddkReader, stopVddkReader, buildJobReaderSweepCmd, type VddkReaderHandle } from "./vddk-reader"
 import type { VddkOpts } from "./vddk-cmd"
 import { detectChangedExtentsByChecksum } from "./checksum-detector"
 import { checkVddkPreflight } from "./vddk-preflight"
@@ -33,7 +33,7 @@ import type { WarmMigrationConfig } from "./types"
 import {
   registerJob, unregisterJob, acquireVmLock, releaseVmLock,
   updateJob, updateJobLive, appendLog, isCancelled, isCutoverRequested,
-  sleepUnlessCutover, awaitOperatorCutover, HOLD_PASS_INTERVAL_MS,
+  sleepUnlessCutover, awaitOperatorCutover, runDeltaPassWithRetry, HOLD_PASS_INTERVAL_MS,
 } from "./job-control"
 import {
   applyExtentsWithProgress, checksumDiskWindows, scaleWarmProgress,
@@ -496,7 +496,11 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
             status: "delta_sync", currentStep: `delta_${pass + 1}`,
             rangeStart: 80 + (15 * pass) / maxPasses, rangeEnd: 80 + (15 * (pass + 1)) / maxPasses,
           }
-        const deltaBytes = await runCbtPass(`delta-${pass + 1}`, dk => diskState.get(dk)!.currentChangeId || "*", deltaWindow)
+        // A failed pass leaves the baseline untouched, so it is retried rather
+        // than thrown away with hours of replication (#1028).
+        const deltaBytes = await runDeltaPassWithRetry(jobId, `Delta pass ${pass + 1}`,
+          () => runCbtPass(`delta-${pass + 1}`, dk => diskState.get(dk)!.currentChangeId || "*", deltaWindow))
+        if (deltaBytes === null) { await appendLog(jobId, "Operator requested cutover — proceeding to final delta", "info"); break }
         const dsec = Math.max(1, (Date.now() - tk) / 1000)
         throughput = deltaBytes > 0 ? deltaBytes / dsec : throughput
         await appendLog(jobId, `Delta pass ${pass + 1}: ${(deltaBytes / 1048576).toFixed(1)} MB`)
@@ -681,6 +685,10 @@ async function cleanupOnFailure(
   for (const r of activeReaders) {
     if (nodeIp) await stopVddkReader(config.targetConnectionId, nodeIp, r).catch(() => {})
   }
+  // A launch that timed out can still have started nbdkit on the node, with the
+  // ESXi password file next to it; no handle tracks it (#1028).
+  const sweep = buildJobReaderSweepCmd(jobId)
+  if (nodeIp && sweep) await executeSSH(config.targetConnectionId, nodeIp, sweep).catch(() => {})
   if (session) {
     for (const mor of [...ourSnapshots]) {
       await soapRemoveSnapshot(session, mor, false, { timeoutMs: TERMINAL_SNAPSHOT_REMOVE_TIMEOUT_MS }).catch(() => {})

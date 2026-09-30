@@ -78,6 +78,29 @@ export function buildReaderTeardownCmd(h: VddkReaderHandle): string {
 export interface PollOpts { intervalMs?: number; maxAttempts?: number }
 
 /**
+ * Budget for the launch command alone. It only backgrounds nbdkit, so it takes
+ * a second or two on a healthy node, but a node busy applying deltas answered
+ * it in 37 s once, past the 30 s executeSSH default: the job gave up while the
+ * command went on to start nbdkit anyway (#1028).
+ */
+export const VDDK_LAUNCH_TIMEOUT_MS = 120_000
+
+/**
+ * Stop every nbdkit reader of one job and remove its socket, password and log
+ * files, whatever disk they belong to. Backstop for a reader whose launch the
+ * job gave up on: the node may have started it after the teardown of that
+ * failed launch already ran, so no handle knows about it. Same `[n]bdkit`
+ * trick as buildReaderTeardownCmd so the shell does not match itself.
+ */
+export function buildJobReaderSweepCmd(jobId: string): string | null {
+  // The id lands unquoted in a glob and a pkill pattern: accept only what a
+  // cuid can contain, and sweep nothing rather than something else.
+  if (!/^[A-Za-z0-9_-]+$/.test(jobId)) return null
+  const prefix = `/tmp/proxcenter-vddk-${jobId}-`
+  return `pkill -f "[n]bdkit.*${prefix}" 2>/dev/null; rm -f ${prefix}*`
+}
+
+/**
  * Start an nbdkit-vddk reader on the PVE node and attach it to a free NBD device:
  *   1. write the ESXi password to opts.passwordFile (0600, no trailing newline)
  *      and launch `buildNbdkitVddkCmd(opts)` backgrounded with output to a log,
@@ -106,8 +129,12 @@ export async function startVddkReader(
     `(umask 077; printf '%s' ${shellEscape(esxiPassword)} > ${shellEscape(opts.passwordFile)}); ` +
     `fuser -k ${shellEscape(opts.sock)} 2>/dev/null; rm -f ${shellEscape(opts.sock)}; ` +
     `nohup ${buildNbdkitVddkCmd(opts)} > ${shellEscape(logFile)} 2>&1 & echo $!`
-  const launchRes = await executeSSH(connectionId, nodeIp, launch)
+  const launchRes = await executeSSH(connectionId, nodeIp, launch, VDDK_LAUNCH_TIMEOUT_MS)
   if (!launchRes.success) {
+    // The command may have written the password file and started nbdkit before
+    // it failed or ran out of time: remove them like the two later failure
+    // paths do (nbdDev:"" for the same reason).
+    await stopVddkReader(connectionId, nodeIp, { nbdDev: "", sock: opts.sock, pwFile: opts.passwordFile, logFile }).catch(() => {})
     throw new Error(`failed to launch nbdkit-vddk: ${launchRes.error || launchRes.output}`)
   }
 

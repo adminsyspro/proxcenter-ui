@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import { buildNbdConnectCmd, buildReaderTeardownCmd, startVddkReader, stopVddkReader } from "./vddk-reader"
+import { buildJobReaderSweepCmd, buildNbdConnectCmd, buildReaderTeardownCmd, startVddkReader, stopVddkReader, VDDK_LAUNCH_TIMEOUT_MS } from "./vddk-reader"
 import type { VddkOpts } from "./vddk-cmd"
 
 // Mock only executeSSH; keep the real shellEscape (vddk-cmd uses it transitively).
@@ -121,6 +121,26 @@ describe("startVddkReader", () => {
     ).rejects.toThrow(/bad thumbprint|nbdkit/i)
   })
 
+  it("gives the launch its own budget and cleans up when it times out (#1028)", async () => {
+    // The node answered the launch in 37 s once: past the 30 s default, yet it
+    // went on to start nbdkit and leave the password file behind.
+    mockSSH.mockImplementation(async (...args: unknown[]) => {
+      const cmd = String(args[2] ?? "")
+      if (cmd.includes("umask 077")) return { success: false, error: "orchestrator SSH timeout (120s)" }
+      return { success: true, output: "" }
+    })
+    await expect(
+      startVddkReader("conn", "10.99.99.201", OPTS, "pw", { intervalMs: 0, maxAttempts: 3 }),
+    ).rejects.toThrow("failed to launch nbdkit-vddk: orchestrator SSH timeout (120s)")
+    expect(mockSSH.mock.calls[0][3]).toBe(VDDK_LAUNCH_TIMEOUT_MS)
+    const teardown = String(mockSSH.mock.calls[1][2])
+    expect(teardown).toContain('pkill -f "[n]bdkit.*/tmp/v.sock"')
+    expect(teardown).toContain("rm -f /tmp/v.sock /tmp/pw /tmp/v.sock.log")
+    // no device was attached, so none is detached
+    expect(teardown).not.toContain("nbd-client -d")
+    expect(mockSSH).toHaveBeenCalledTimes(2)
+  })
+
   it("throws when no free device could be attached", async () => {
     // Every candidate was busy (or lost to a race): the command exits non-zero
     // with NBD_ALLOC_FAILED and no NBD_DEV line, so no device is returned.
@@ -145,5 +165,20 @@ describe("stopVddkReader", () => {
     expect(cmd).toContain("nbd_release_holders /dev/nbd3")
     expect(cmd).toContain("nbd-client -d /dev/nbd3")
     expect(cmd).toContain("pkill -f")
+  })
+})
+
+describe("buildJobReaderSweepCmd", () => {
+  it("stops every reader of the job and removes its files", () => {
+    expect(buildJobReaderSweepCmd("cmul0xk1b03tr01p5nb6ps2gw")).toBe(
+      'pkill -f "[n]bdkit.*/tmp/proxcenter-vddk-cmul0xk1b03tr01p5nb6ps2gw-" 2>/dev/null; rm -f /tmp/proxcenter-vddk-cmul0xk1b03tr01p5nb6ps2gw-*',
+    )
+  })
+
+  it("sweeps nothing for an id that could widen the glob or the pattern", () => {
+    expect(buildJobReaderSweepCmd("")).toBeNull()
+    expect(buildJobReaderSweepCmd("a*")).toBeNull()
+    expect(buildJobReaderSweepCmd("a b")).toBeNull()
+    expect(buildJobReaderSweepCmd("a/../b")).toBeNull()
   })
 })

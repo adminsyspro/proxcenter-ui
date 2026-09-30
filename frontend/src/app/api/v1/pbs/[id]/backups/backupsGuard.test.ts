@@ -17,6 +17,7 @@ const {
   checkPermissionMock, assertVdcPbsAccessMock, getPbsConnectionByIdMock,
   getPbsConnectionByIdUnscopedMock, getAllBackupsMock, vdcPbsNamespaceFindManyMock,
   cookiesMock, currentPrincipal, getVdcScopeMock,
+  pveFetchMock, getConnectionByIdMock, getSessionPrismaMock,
 } = vi.hoisted(() => ({
   checkPermissionMock: vi.fn<(...a: any[]) => Promise<Response | null>>(),
   assertVdcPbsAccessMock: vi.fn<(id: string) => Promise<any>>(),
@@ -27,6 +28,9 @@ const {
   cookiesMock: vi.fn<() => Promise<any>>(),
   currentPrincipal: { value: undefined as Principal | undefined },
   getVdcScopeMock: vi.fn<(...a: any[]) => Promise<any>>(),
+  pveFetchMock: vi.fn<(...a: any[]) => Promise<any>>(),
+  getConnectionByIdMock: vi.fn<(...a: any[]) => Promise<any>>(),
+  getSessionPrismaMock: vi.fn<(...a: any[]) => Promise<any>>(),
 }))
 
 // Same pass-through convention as reusedRoutesGuard.test.ts: the guard's own
@@ -53,13 +57,13 @@ vi.mock('@/lib/vdc/scope', () => ({
 vi.mock('@/lib/connections/getConnection', () => ({
   getPbsConnectionById: getPbsConnectionByIdMock,
   getPbsConnectionByIdUnscoped: getPbsConnectionByIdUnscopedMock,
-  getConnectionById: vi.fn(),
+  getConnectionById: getConnectionByIdMock,
 }))
 
-vi.mock('@/lib/proxmox/client', () => ({ pveFetch: vi.fn() }))
+vi.mock('@/lib/proxmox/client', () => ({ pveFetch: pveFetchMock }))
 
 vi.mock('@/lib/tenant', () => ({
-  getSessionPrisma: vi.fn(),
+  getSessionPrisma: getSessionPrismaMock,
   getCurrentTenantId: vi.fn().mockResolvedValue('default'),
 }))
 
@@ -75,6 +79,7 @@ vi.mock('@/lib/backups/pbsSnapshots', () => ({
 }))
 
 import { callRoute, readJson } from '@/__tests__/setup/route-test'
+import { buildRestoreRequest, groupBackupsByGuest, planTargets } from '@/lib/backups/bulkRestore'
 
 const CONN = { id: 'pbs-1', baseUrl: 'https://pbs.local:8007', apiToken: 'x' }
 
@@ -122,9 +127,8 @@ beforeEach(() => {
   vdcPbsNamespaceFindManyMock.mockResolvedValue([])
   cookiesMock.mockResolvedValue({ get: () => undefined })
   getVdcScopeMock.mockResolvedValue(null)
-  // Every fixture backup already carries a vmName, so the /cluster/resources
-  // enrichment fan-out (blankNames branch) never runs -- irrelevant to what
-  // this file is proving.
+  // Base fixtures carry snapshot names; the cases below also cover unknown
+  // names, which must remain empty even when a live guest shares the VMID.
   getAllBackupsMock.mockResolvedValue({
     data: [backup(), backup({ id: 'b2', backupId: '101', vmName: 'db-01', datastore: 'store1' })],
     warnings: [],
@@ -219,5 +223,95 @@ describe('GET /api/v1/pbs/[id]/backups — context-narrowed display', () => {
     const body = await readJson<any>(res)
     // token = union: no entries removed by the (no-op) intersection
     expect(body.data.backups).toHaveLength(2)
+  })
+})
+
+// Live VMIDs cannot identify the source of a PBS snapshot: even one matching
+// live guest can belong to a different cluster or a reused VMID.
+describe('PBS backup names belong to the snapshot', () => {
+  beforeEach(() => {
+    getConnectionByIdMock.mockImplementation(async (id: string) => ({ id }))
+    getSessionPrismaMock.mockResolvedValue({
+      connection: { findMany: async () => [{ id: 'prod' }, { id: 'dr' }] },
+    })
+    pveFetchMock.mockImplementation(async (conn: { id: string }) => [
+      { vmid: 101, type: 'qemu', name: conn.id === 'prod' ? 'moveme' : 'okcvi' },
+    ])
+    getAllBackupsMock.mockResolvedValue({
+      data: [
+        backup({ id: 'prod-snapshot', namespace: 'prod', backupId: '101', vmName: '' }),
+        backup({ id: 'dr-snapshot', namespace: 'dr', backupId: '101', vmName: '' }),
+        backup({ id: 'named-snapshot', namespace: 'archive', backupId: '101', vmName: 'saved-name', comment: 'saved-name' }),
+      ],
+      warnings: [],
+      fromCache: true,
+    })
+  })
+
+  it.each([
+    ['prod', 'dr'],
+    ['dr', 'prod'],
+    ['prod'],
+  ])('does not borrow a live name when responding clusters are %j', async (...ids) => {
+    // The single-cluster case also covers an unregistered/deleted source:
+    // a globally unique match is not evidence that it owns the snapshot.
+    getSessionPrismaMock.mockResolvedValue({
+      connection: { findMany: async () => ids.map(id => ({ id })) },
+    })
+    const { GET } = await import('./route')
+    const res = await callRoute(GET, { params: { id: 'pbs-1' } })
+    expect(res.status).toBe(200)
+    const body = await readJson<any>(res)
+    expect(body.data.backups.map((b: any) => [b.id, b.namespace, b.vmName])).toEqual([
+      ['prod-snapshot', 'prod', ''],
+      ['dr-snapshot', 'dr', ''],
+      ['named-snapshot', 'archive', 'saved-name'],
+    ])
+    expect(pveFetchMock).not.toHaveBeenCalled()
+  })
+
+  it('keeps the name unknown when the source cluster is unavailable', async () => {
+    pveFetchMock.mockImplementation(async (conn: { id: string }) => {
+      if (conn.id === 'dr') throw new Error('source unavailable')
+      return [{ vmid: 101, type: 'qemu', name: 'moveme' }]
+    })
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      const { GET } = await import('./route')
+      const res = await callRoute(GET, { params: { id: 'pbs-1' }, searchParams: { namespace: 'dr' } })
+      const body = await readJson<any>(res)
+      expect(res.status).toBe(200)
+      expect(body.data.backups).toHaveLength(1)
+      expect(body.data.backups[0].vmName).toBe('')
+    } finally {
+      warn.mockRestore()
+    }
+  })
+
+  it.each([
+    ['moveme', []],
+    ['saved-name', ['named-snapshot']],
+    ['101', ['prod-snapshot', 'dr-snapshot', 'named-snapshot']],
+  ])('searching for %s only matches snapshot metadata', async (search, expectedIds) => {
+    const { GET } = await import('./route')
+    const res = await callRoute(GET, { params: { id: 'pbs-1' }, searchParams: { search } })
+    const body = await readJson<any>(res)
+    expect(res.status).toBe(200)
+    expect(body.data.backups.map((b: any) => b.id)).toEqual(expectedIds)
+  })
+
+  it('keeps separate restore sources and never renames an unknown guest from a live VM', async () => {
+    const { GET } = await import('./route')
+    const res = await callRoute(GET, { params: { id: 'pbs-1' }, searchParams: { slim: '1' } })
+    const body = await readJson<any>(res)
+    const guests = groupBackupsByGuest(body.data.backups).filter(g => g.namespace !== 'archive')
+    const plan = planTargets({ guests, mode: 'range', rangeStart: 9000, rangeEnd: 9100, usedVmIds: new Set() })
+    const requests = plan.entries.map(e => buildRestoreRequest(e, 'pbs-1', { nameSuffix: '-restored' }))
+    expect(requests).toHaveLength(2)
+    expect(requests.map(r => r?.pbsBackup.namespace).sort()).toEqual(['dr', 'prod'])
+    for (const request of requests) {
+      expect(request?.pbsBackup).toMatchObject({ pbsId: 'pbs-1', datastore: 'store1', backupPath: 'backup/vm/101/2023-11-14T22:13:20.000Z' })
+      expect(request).not.toHaveProperty('name')
+    }
   })
 })

@@ -158,6 +158,9 @@
     "svgo": ">=4.1.0",
     "@ai-sdk/provider-utils": "^4.0.33",
     "js-yaml": "^4.3.2",
-    "colord": ">=2.9.4"
+    "colord": ">=2.9.4",
+    "@scalar/json-magic": {
+      "undici": "^7.29.1"
+    }
   }
 }

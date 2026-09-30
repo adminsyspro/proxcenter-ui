@@ -5808,7 +5808,16 @@
     "loadNodesError": "노드 목록을 불러올 수 없습니다",
     "nicMacPermissionRequired": "MAC 주소를 변경하려면 공급자의 권한이 필요합니다.",
     "nicVlanPermissionRequired": "VLAN 설정을 변경하려면 공급자의 권한이 필요합니다.",
-    "nicOriginalUnavailable": "저장하기 전에 네트워크 구성을 다시 불러오세요."
+    "nicOriginalUnavailable": "저장하기 전에 네트워크 구성을 다시 불러오세요.",
+    "snapshotMigration": {
+      "title": "스냅샷 때문에 이 마이그레이션을 진행할 수 없습니다",
+      "reason": {
+        "live": "{volid}: 스냅샷 {snapshots}. Proxmox는 VM이 중지된 상태에서만 로컬 스냅샷을 이동합니다.",
+        "storage": "{volid}: 스냅샷 {snapshots}. 이 스토리지 유형은 스냅샷을 다른 노드로 옮길 수 없습니다.",
+        "target": "{volid}: 스냅샷 {snapshots}. 같은 유형의 스토리지로만 보낼 수 있습니다."
+      },
+      "offlineHint": "스냅샷을 유지하려면 VM을 종료한 뒤 오프라인으로 마이그레이션하거나, 스냅샷을 삭제하세요."
+    }
   },
   "ldap": {
     "description": "사용자가 회사 자격 증명으로 로그인할 수 있도록 LDAP/Active Directory 인증을 구성합니다.",

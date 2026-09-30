@@ -784,7 +784,7 @@ return { id: vm.id, data }
       setTrendsLoading(prev => ({ ...prev, ...newLoading }))
     }
     
-    loadTrends()
+    void loadTrends()
   }, [showTrends, visibleVms, onLoadTrends, onLoadTrendsBatch]) // Ne dépend que des VMs visibles
 
   // Fonction d'export Excel

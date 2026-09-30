@@ -24,6 +24,7 @@ export interface LicenseTableRow {
   rowId: string
   licenseId: string
   role: 'primary' | 'import' | 'option'
+  edition: string
   licensedTo: string
   usedNodes: number
   maxNodes: number
@@ -45,6 +46,7 @@ export interface TenantRollupRow {
 
 interface LicenseStatusLike {
   license_id?: string
+  edition?: string
   expires_at?: string
   customer?: { name?: string; company?: string }
   node_status?: { per_license?: PerLicenseUsage[] }
@@ -75,6 +77,7 @@ export function buildLicenseTableRows(
       rowId: 'primary',
       licenseId: status.license_id || primaryUsage.license_id,
       role: 'primary',
+      edition: status.edition || '',
       licensedTo: status.customer?.company || status.customer?.name || '',
       usedNodes: primaryUsage.used_nodes,
       maxNodes: primaryUsage.max_nodes,
@@ -94,6 +97,7 @@ export function buildLicenseTableRows(
       rowId: imp.id,
       licenseId: imp.license_id,
       role: isOption ? 'option' : 'import',
+      edition: imp.edition || '',
       licensedTo: imp.customer || '',
       usedNodes: usage ? usage.used_nodes : 0,
       maxNodes: isOption ? 0 : imp.max_nodes,

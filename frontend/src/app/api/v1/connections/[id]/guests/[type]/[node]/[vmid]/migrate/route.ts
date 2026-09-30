@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
+import { describeSnapshotBlockers, snapshotMigrationGuard } from "@/lib/migration/snapshotMigrationCheck"
 import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
 import { migrateVmSchema } from "@/lib/schemas"
 import { invalidateInventoryCache } from "@/lib/cache/inventoryCache"
@@ -53,6 +54,27 @@ export async function POST(
     
     // Déterminer le type de ressource pour l'API Proxmox
     const resourceType = type === 'lxc' ? 'lxc' : 'qemu'
+
+    // #1027: PVE aborts a migration held by local snapshots with only "check
+    // log". Refuse it here with the reason, so every caller (dialog, bulk
+    // migration, rolling node update) shows it. A failed check leaves the
+    // verdict to PVE, as before, rather than blocking on a guess.
+    let blockers: Awaited<ReturnType<typeof snapshotMigrationGuard>> = []
+    try {
+      blockers = await snapshotMigrationGuard(
+        conn,
+        { node, type: resourceType, vmid },
+        { target, targetStorage: targetstorage || undefined },
+      )
+    } catch (e: any) {
+      console.warn('[migrate] snapshot check skipped:', String(e?.message || e).replace(/[\r\n]/g, ''))
+    }
+    if (blockers.length > 0) {
+      return NextResponse.json(
+        { error: describeSnapshotBlockers(blockers), code: 'SNAPSHOTS_BLOCK_MIGRATION', blockers },
+        { status: 409 },
+      )
+    }
     
     // Construire les paramètres de migration
     const migrateParams: Record<string, any> = {

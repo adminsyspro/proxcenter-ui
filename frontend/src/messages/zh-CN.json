@@ -5812,7 +5812,16 @@
     "loadNodesError": "无法加载节点列表",
     "nicMacPermissionRequired": "更改 MAC 地址需要提供商授权。",
     "nicVlanPermissionRequired": "更改 VLAN 设置需要提供商授权。",
-    "nicOriginalUnavailable": "保存前请重新加载网络配置。"
+    "nicOriginalUnavailable": "保存前请重新加载网络配置。",
+    "snapshotMigration": {
+      "title": "快照阻止了此次迁移",
+      "reason": {
+        "live": "{volid}：快照 {snapshots}。Proxmox 仅在虚拟机停止时迁移本地快照。",
+        "storage": "{volid}：快照 {snapshots}。此存储类型无法将快照带到其他节点。",
+        "target": "{volid}：快照 {snapshots}。只能发送到相同类型的存储。"
+      },
+      "offlineHint": "关闭虚拟机并离线迁移以保留快照，或删除这些快照。"
+    }
   },
   "ldap": {
     "description": "配置 LDAP/Active Directory 身份验证，允许用户使用企业凭据登录。",

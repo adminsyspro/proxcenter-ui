@@ -5,6 +5,8 @@ import { useTranslations } from 'next-intl'
 import type { CcmPrereqCapture, CcmRestorePlan, HaResourceCapture, ReplicationJobCapture, SiteRecoveryJobRef } from '@/lib/migration/ccm-prereqs.types'
 import { storageSupportsReplication } from '@/lib/migration/ccm-prereqs.types'
 import { isSharedStorage } from '@/lib/proxmox/storage'
+import { snapshotsToClear, type SnapshotMigrationBlocker } from '@/lib/migration/snapshotMigrationBlockers'
+import { DiskSnapshotRefsAlert } from '@/components/hardware/DiskSnapshotRefsAlert'
 import { computeNegativeAffinityConflicts, getAffinityPeers, type AffinityPeer, type HaRule, type HaStatusEntry } from '@/lib/proxmox/haAffinity'
 
 import {
@@ -1000,6 +1002,42 @@ export function MigrateVmDialog({
   }, [activeTab, selectedRemoteConn, selectedRemoteNode, selectedRemoteStorage, selectedRemoteBridge])
   
   const isVmRunning = vmStatus === 'running'
+
+  // ========== LOCAL MIGRATION: snapshots holding local disks (#1027) ==========
+  // Asked once a target is picked (replication to that node lifts the live
+  // block) and again after a deletion. The answer is stored with the request it
+  // belongs to, so a node or storage switch reads as unknown until its own
+  // answer lands. Unknown never blocks: the migrate route checks again.
+  const [snapshotCheck, setSnapshotCheck] = useState<{ key: string; live: SnapshotMigrationBlocker[]; offline: SnapshotMigrationBlocker[] } | null>(null)
+  const [snapshotCheckRound, setSnapshotCheckRound] = useState(0)
+  const snapshotCheckUrl = open && activeTab === 0 && connId && selectedNode
+    ? `/api/v1/connections/${encodeURIComponent(connId)}/guests/${vmType}/${encodeURIComponent(currentNode)}/${encodeURIComponent(vmid)}/migrate/snapshot-check?target=${encodeURIComponent(selectedNode)}${selectedStorage === '__current__' ? '' : `&targetstorage=${encodeURIComponent(selectedStorage)}`}`
+    : null
+  const snapshotCheckKey = snapshotCheckUrl ? `${snapshotCheckUrl}#${snapshotCheckRound}` : null
+
+  useEffect(() => {
+    if (!snapshotCheckUrl || !snapshotCheckKey) return
+
+    let cancelled = false
+
+    fetch(snapshotCheckUrl)
+      .then(async res => {
+        if (!res.ok) return
+        const json = await res.json()
+        if (!cancelled && json?.data) {
+          setSnapshotCheck({ key: snapshotCheckKey, live: json.data.live || [], offline: json.data.offline || [] })
+        }
+      })
+      .catch(() => { /* unknown: left to the migrate route */ })
+
+    return () => { cancelled = true }
+  }, [snapshotCheckUrl, snapshotCheckKey])
+
+  // PVE migrates a running VM live whatever the checkbox says: without
+  // online=1 it refuses it outright. LXC has no live mode.
+  const snapshotBlockers = snapshotCheck && snapshotCheck.key === snapshotCheckKey
+    ? (vmType === 'qemu' && isVmRunning ? snapshotCheck.live : snapshotCheck.offline)
+    : []
   const selectedRemoteConnInfo = remoteConnections.find(c => c.id === selectedRemoteConn)
 
 
@@ -1611,6 +1649,34 @@ export function MigrateVmDialog({
               </>
             )}
             
+            {snapshotBlockers.length > 0 && (
+              <DiskSnapshotRefsAlert
+                snapshots={snapshotsToClear(snapshotBlockers)}
+                mode="move"
+                severity="error"
+                message={
+                  <>
+                    <Typography variant="body2" fontWeight={600} sx={{ mb: 0.5 }}>
+                      {t('hardware.snapshotMigration.title')}
+                    </Typography>
+                    {snapshotBlockers.map(b => (
+                      <Typography key={b.volid} variant="caption" sx={{ display: 'block' }}>
+                        {t(`hardware.snapshotMigration.reason.${b.reason}`, { volid: b.volid, snapshots: b.snapshots.join(', ') })}
+                      </Typography>
+                    ))}
+                    {snapshotBlockers.every(b => b.reason === 'live') && (
+                      <Typography variant="caption" sx={{ display: 'block', mt: 0.5 }}>
+                        {t('hardware.snapshotMigration.offlineHint')}
+                      </Typography>
+                    )}
+                  </>
+                }
+                vmKey={`${connId}:${vmType}:${currentNode}:${vmid}`}
+                canDeleteSnapshots
+                onDeleted={() => setSnapshotCheckRound(r => r + 1)}
+              />
+            )}
+
             {nodes.length > 0 && (
               <>
                 <Divider sx={{ my: 1 }} />
@@ -2133,7 +2199,7 @@ export function MigrateVmDialog({
           <Button 
             variant="contained" 
             onClick={handleLocalMigrate} 
-            disabled={migrating || !selectedNode || nodes.length === 0 || selectedNodeBlocked}
+            disabled={migrating || !selectedNode || nodes.length === 0 || selectedNodeBlocked || snapshotBlockers.length > 0}
             startIcon={migrating ? <CircularProgress size={16} /> : <i className="ri-swap-box-line" />}
           >
             {migrating ? t('hardware.migrating') : t('hardware.migrate')}

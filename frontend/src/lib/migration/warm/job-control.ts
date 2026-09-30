@@ -130,6 +130,52 @@ export async function sleepUnlessCutover(jobId: string, ms: number): Promise<boo
   return true
 }
 
+/**
+ * How many pre-cutover delta passes may fail back to back before the job gives
+ * up, and how long to wait between two attempts. A field run replicated 2.4 TB
+ * for 20 hours of manual hold and died on pass 102 because one SSH command to
+ * the node missed its 30 s budget (#1028): nothing was wrong with the copy,
+ * yet the whole migration had to restart from the full copy.
+ */
+export const DELTA_PASS_MAX_ATTEMPTS = 5
+export const DELTA_PASS_RETRY_DELAY_MS = 60 * 1000
+
+/**
+ * Run one delta pass that happens BEFORE the cutover, retrying it when it fails.
+ *
+ * Safe because a pass only moves the baseline forward once it has fully
+ * succeeded: a failed attempt leaves the previous changeId (or XAPI snapshot)
+ * in place, so the next attempt asks for everything changed since that
+ * baseline, a superset of whatever the failed attempt had half written. The
+ * source is still running at this stage, so waiting costs no downtime. The
+ * cutover pass itself must NOT go through here: the guest is off by then.
+ *
+ * Returns the pass result, or null when the operator requested cutover during
+ * a retry wait (the caller proceeds to the final delta from the last good
+ * baseline). Cancellation, and the last failure once the attempts are spent,
+ * are thrown.
+ */
+export async function runDeltaPassWithRetry<T>(
+  jobId: string, passLabel: string, run: () => Promise<T>,
+  opts: { maxAttempts?: number; delayMs?: number } = {},
+): Promise<T | null> {
+  const maxAttempts = opts.maxAttempts ?? DELTA_PASS_MAX_ATTEMPTS
+  const delayMs = opts.delayMs ?? DELTA_PASS_RETRY_DELAY_MS
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await run()
+    } catch (e: any) {
+      if (isCancelled(jobId)) throw e
+      const msg = e?.message || String(e)
+      if (attempt >= maxAttempts) {
+        throw new Error(`${passLabel} failed ${attempt} times in a row, last error: ${msg}`)
+      }
+      await appendLog(jobId, `${passLabel} failed (attempt ${attempt} of ${maxAttempts}): ${msg}. The copy on the target is intact; retrying in ${Math.round(delayMs / 1000)}s from the last completed pass`, "warn")
+      if (!(await sleepUnlessCutover(jobId, delayMs))) return null
+    }
+  }
+}
+
 /** Test seam: the hold pacing is otherwise only reachable through a full run. */
 export function __sleepUnlessCutoverForTest(jobId: string, ms: number): Promise<boolean> {
   return sleepUnlessCutover(jobId, ms)

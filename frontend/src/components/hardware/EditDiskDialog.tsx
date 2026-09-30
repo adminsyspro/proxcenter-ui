@@ -30,6 +30,7 @@ import {
 } from '@mui/material'
 
 import { replaceCdromMedia } from '@/lib/proxmox/cdrom'
+import { parsePveSize } from '@/lib/proxmox/diskSize'
 import { formatBytes } from '@/utils/format'
 import { vmDiskFormats } from '@/lib/proxmox/storage'
 import AppDialogTitle from '@/components/ui/AppDialogTitle'
@@ -42,6 +43,23 @@ import type { StoragePolicyCaps } from './utils'
 // Renders a QoS cap for a disabled, policy-driven field: empty for "no limit
 // on that axis" rather than "0", so a null cap doesn't read as a zero limit.
 const capValue = (v: number | null | undefined): string => (v === null || v === undefined ? '' : String(v))
+
+type ResizeUnit = 'M' | 'G' | 'T'
+
+const MIB = 1024 ** 2
+const RESIZE_UNIT_MB: Record<ResizeUnit, number> = { M: 1, G: 1024, T: 1024 ** 2 }
+
+// Opens the resize field on the current size in the largest unit it fills, so a
+// 512M disk starts at 512 MB and not at a rounded-up 1 GB, nor at 512 GB (#1036).
+function initialResizeSize(size: string): { value: string; unit: ResizeUnit } {
+  const mb = parsePveSize(size) / MIB
+  let unit: ResizeUnit = 'M'
+
+  if (mb >= RESIZE_UNIT_MB.T) unit = 'T'
+  else if (mb >= RESIZE_UNIT_MB.G) unit = 'G'
+
+  return { value: String(Number((mb / RESIZE_UNIT_MB[unit]).toFixed(3))), unit }
+}
 
 // ==================== EDIT DISK DIALOG ====================
 type EditDiskDialogProps = {
@@ -78,6 +96,8 @@ type EditDiskDialogProps = {
     iops_wr?: number
     isCdrom?: boolean
     isUnused?: boolean
+    isEfi?: boolean
+    isTpm?: boolean
     rawValue?: string
   } | null
   existingDisks?: string[]
@@ -100,7 +120,7 @@ export function EditDiskDialog({ open, onClose, onSave, onDelete, canEditHardwar
 
   // Resize state
   const [newSize, setNewSize] = useState('')
-  const [sizeUnit, setSizeUnit] = useState<'G' | 'T'>('G')
+  const [sizeUnit, setSizeUnit] = useState<ResizeUnit>('G')
 
   // Move storage state
   const [targetStorage, setTargetStorage] = useState('')
@@ -230,23 +250,10 @@ export function EditDiskDialog({ open, onClose, onSave, onDelete, canEditHardwar
       setIopsWr(disk.iops_wr ? String(disk.iops_wr) : '')
 
       // Initialiser la taille pour le resize
-      const sizeMatch = disk.size.match(/(\d+(?:\.\d+)?)\s*(G|T|M)?/i)
+      const initialSize = initialResizeSize(disk.size)
 
-      if (sizeMatch) {
-        const value = Number.parseFloat(sizeMatch[1])
-        const unit = (sizeMatch[2] || 'G').toUpperCase()
-
-        if (unit === 'T') {
-          setNewSize(String(value))
-          setSizeUnit('T')
-        } else if (unit === 'M') {
-          setNewSize(String(Math.ceil(value / 1024)))
-          setSizeUnit('G')
-        } else {
-          setNewSize(String(value))
-          setSizeUnit('G')
-        }
-      }
+      setNewSize(initialSize.value)
+      setSizeUnit(initialSize.unit)
 
       // Réinitialiser le move storage
       setTargetStorage('')
@@ -325,33 +332,19 @@ export function EditDiskDialog({ open, onClose, onSave, onDelete, canEditHardwar
     }
   }, [open, connId, node, availableStorages])
 
-  // Calculer la taille actuelle en GB pour la comparaison
-  const currentSizeGB = useMemo(() => {
-    if (!disk?.size) return 0
-    const sizeMatch = disk.size.match(/(\d+(?:\.\d+)?)\s*(G|T|M)?/i)
+  // Taille actuelle et nouvelle taille en MB pour la comparaison
+  const currentSizeMb = useMemo(() => parsePveSize(disk?.size) / MIB, [disk?.size])
+  const newSizeMb = useMemo(() => (Number.parseFloat(newSize) || 0) * RESIZE_UNIT_MB[sizeUnit], [newSize, sizeUnit])
+  const increase = Number(((newSizeMb - currentSizeMb) / RESIZE_UNIT_MB[sizeUnit]).toFixed(3))
 
-    if (!sizeMatch) return 0
-    const value = Number.parseFloat(sizeMatch[1])
-    const unit = (sizeMatch[2] || 'G').toUpperCase()
-
-    if (unit === 'T') return value * 1024
-    if (unit === 'M') return value / 1024
-
-return value
-  }, [disk?.size])
-
-  // Calculer la nouvelle taille en GB
-  const newSizeGB = useMemo(() => {
-    const value = Number.parseFloat(newSize) || 0
-
-
-return sizeUnit === 'T' ? value * 1024 : value
-  }, [newSize, sizeUnit])
+  // PVE only resizes a disk on a storage bus: the EFI vars and TPM state
+  // volumes keep the size their firmware expects (#1036).
+  const canResize = !!onResize && !disk?.isEfi && !disk?.isTpm
 
   const handleResize = async () => {
-    if (!disk || !onResize) return
+    if (!disk || !onResize || !canResize) return
 
-    if (newSizeGB <= currentSizeGB) {
+    if (newSizeMb <= currentSizeMb) {
       setError(t('common.error'))
 
 return
@@ -361,7 +354,7 @@ return
     setError(null)
 
     try {
-      await onResize(`+${(newSizeGB - currentSizeGB).toFixed(0)}G`)
+      await onResize(`+${Math.ceil(newSizeMb - currentSizeMb)}M`)
       onClose()
     } catch (e: any) {
       setError(e.message || t('errors.updateError'))
@@ -774,8 +767,8 @@ return
       <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ px: 3, borderBottom: 1, borderColor: 'divider' }}>
         <Tab label="Options" />
         <Tab label="Bandwidth" />
-        {onResize && <Tab label="Resize" icon={<i className="ri-expand-diagonal-line" style={{ fontSize: 16 }} />} iconPosition="start" />}
-        {onMoveStorage && <Tab label="Move" icon={<i className="ri-folder-transfer-line" style={{ fontSize: 16 }} />} iconPosition="start" />}
+        {canResize && <Tab value={2} label="Resize" icon={<i className="ri-expand-diagonal-line" style={{ fontSize: 16 }} />} iconPosition="start" />}
+        {onMoveStorage && <Tab value={3} label="Move" icon={<i className="ri-folder-transfer-line" style={{ fontSize: 16 }} />} iconPosition="start" />}
       </Tabs>
 
       <DialogContent>
@@ -888,7 +881,7 @@ return
         )}
 
         {/* Tab Resize */}
-        {tab === 2 && onResize && (
+        {tab === 2 && canResize && (
           <Stack spacing={2} sx={{ mt: 1 }}>
             <Alert severity="info" icon={<i className="ri-information-line" />}>
               {t.rich('hardware.resizeInfo', { size: disk.size, strong: (chunks) => <strong>{chunks}</strong> })}
@@ -902,13 +895,14 @@ return
                 type="number"
                 value={newSize}
                 onChange={(e) => setNewSize(e.target.value)}
-                inputProps={{ min: currentSizeGB, step: 1 }}
-                helperText={newSizeGB > currentSizeGB ? t('hardware.sizeIncrease', { size: (newSizeGB - currentSizeGB).toFixed(0) }) : t('hardware.enterLargerSize')}
-                error={newSizeGB > 0 && newSizeGB <= currentSizeGB}
+                inputProps={{ min: currentSizeMb / RESIZE_UNIT_MB[sizeUnit], step: 1 }}
+                helperText={newSizeMb > currentSizeMb ? t('hardware.sizeIncrease', { size: increase, unit: sizeUnit }) : t('hardware.enterLargerSize')}
+                error={newSizeMb > 0 && newSizeMb <= currentSizeMb}
               />
               <FormControl size="small" sx={{ minWidth: 80 }}>
                 <InputLabel>{t('hardware.unit')}</InputLabel>
-                <Select value={sizeUnit} onChange={(e) => setSizeUnit(e.target.value as 'G' | 'T')} label={t('hardware.unit')}>
+                <Select value={sizeUnit} onChange={(e) => setSizeUnit(e.target.value as ResizeUnit)} label={t('hardware.unit')}>
+                  <MenuItem value="M">MB</MenuItem>
                   <MenuItem value="G">GB</MenuItem>
                   <MenuItem value="T">TB</MenuItem>
                 </Select>
@@ -919,7 +913,7 @@ return
               variant="contained"
               color="primary"
               onClick={handleResize}
-              disabled={isWorking || newSizeGB <= currentSizeGB}
+              disabled={isWorking || newSizeMb <= currentSizeMb}
               startIcon={resizing ? <CircularProgress size={16} /> : <i className="ri-expand-diagonal-line" />}
               fullWidth
             >

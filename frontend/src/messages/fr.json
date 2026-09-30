@@ -5564,7 +5564,7 @@
     "confirmDeleteCdromHint": "Le lecteur CD/DVD et son mappage ISO seront retirés de la configuration de la VM.",
     "confirmDeleteNetwork": "Êtes-vous sûr de vouloir supprimer l'interface {id} ?",
     "newSize": "Nouvelle taille",
-    "sizeIncrease": "+{size} GB",
+    "sizeIncrease": "+{size} {unit}B",
     "enterLargerSize": "Entrez une taille supérieure",
     "unit": "Unité",
     "resizing": "Redimensionnement...",

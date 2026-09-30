@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { useTranslations } from 'next-intl'
 import { isSharedStorage } from '@/lib/proxmox/storage'
+import { GIB, pveDriveSize } from '@/lib/proxmox/diskSize'
 
 import {
   Dialog,
@@ -222,14 +223,7 @@ return
               const storageName = storageMatch[1]
 
               // Extraire la taille
-              const sizeMatch = diskStr.match(/size=(\d+(?:\.\d+)?)(G|T|M)?/)
-              let sizeGB = 0
-
-              if (sizeMatch) {
-                sizeGB = Number.parseFloat(sizeMatch[1])
-                if (sizeMatch[2] === 'T') sizeGB *= 1024
-                else if (sizeMatch[2] === 'M') sizeGB /= 1024
-              }
+              const sizeGB = pveDriveSize(diskStr) / GIB
 
               // Extraire le format
               const formatMatch = diskStr.match(/\.(qcow2|raw|vmdk)/)

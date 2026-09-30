@@ -318,20 +318,6 @@ function buildNetworkConfig(net: Partial<NetworkInfo>, type: 'qemu' | 'lxc'): st
 return parts.join(',')
 }
 
-function parseDiskSize(sizeStr: string): number {
-  // "32G" -> 32, "100M" -> 0.1
-  const match = sizeStr.match(/^(\d+(?:\.\d+)?)(G|M|T)?$/i)
-
-  if (!match) return 0
-  const num = Number.parseFloat(match[1])
-  const unit = (match[2] || 'G').toUpperCase()
-
-  if (unit === 'T') return num * 1024
-  if (unit === 'M') return num / 1024
-  
-return num
-}
-
 /* ------------------------------------------------------------------ */
 /* Main Component                                                      */
 /* ------------------------------------------------------------------ */

@@ -5568,7 +5568,7 @@
     "confirmDeleteCdromHint": "The CD/DVD drive and its ISO mapping will be removed from the VM configuration.",
     "confirmDeleteNetwork": "确定要删除接口 {id} 吗？",
     "newSize": "新大小",
-    "sizeIncrease": "+{size} GB",
+    "sizeIncrease": "+{size} {unit}B",
     "enterLargerSize": "请输入更大的值",
     "unit": "单位",
     "resizing": "正在调整大小...",

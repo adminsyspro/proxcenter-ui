@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 
 import { getConnectionById, type PveConn } from '@/lib/connections/getConnection'
 import { pveFetch } from '@/lib/proxmox/client'
+import { GIB, pveDriveSize } from '@/lib/proxmox/diskSize'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import type { ReplicableVM, ReplicationStorages, StorageEngine } from '@/lib/orchestrator/site-recovery.types'
 import { formatBytes } from '@/utils/format'
@@ -97,16 +98,6 @@ export function classifyReplicationDisk(line: string, storages: Set<string>): Di
   return storages.has(volume.split(':')[0]) ? 'engine' : 'other'
 }
 
-function diskSizeGb(line: string): number {
-  const size = line.split(',').find(option => option.startsWith('size='))?.slice(5)
-  const match = size?.match(/^(\d+(?:\.\d+)?)([KMGT])?$/i)
-
-  if (!match) return 0
-  const factors: Record<string, number> = { K: 1 / 1024 ** 2, M: 1 / 1024, G: 1, T: 1024 }
-
-  return Number(match[1]) * factors[(match[2] || 'G').toUpperCase()]
-}
-
 export function classifyReplicationVM(config: Record<string, unknown>, storages: Set<string>) {
   let engineDisks = 0
   let diskGb = 0
@@ -120,7 +111,7 @@ export function classifyReplicationVM(config: Record<string, unknown>, storages:
 
     if (kind === 'engine') {
       engineDisks++
-      diskGb += diskSizeGb(line)
+      diskGb += pveDriveSize(line) / GIB
     }
     if (kind === 'other') mixed = true
     if (kind === 'unsupported') unsupported = true

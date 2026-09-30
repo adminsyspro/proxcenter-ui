@@ -336,3 +336,61 @@ describe('EditDiskDialog — node-backed lists', () => {
     expect(screen.getByText(/scsi2/)).toBeInTheDocument()
   })
 })
+
+describe('EditDiskDialog — resize in the unit PVE wrote (#1036)', () => {
+  afterEach(cleanup)
+
+  const resizeProps = (disk: Record<string, unknown>) => makeProps({
+    disk,
+    onResize: vi.fn().mockResolvedValue(undefined),
+    onMoveStorage: vi.fn().mockResolvedValue(undefined),
+  })
+
+  it('offers no Resize tab on an EFI or TPM disk and keeps Move reachable', async () => {
+    const efi = { id: 'efidisk0', size: '528K', storage: 'local-lvm', isEfi: true, rawValue: 'local-lvm:vm-100-disk-1,efitype=4m,size=528K' }
+
+    renderWithProviders(<EditDiskDialog {...resizeProps(efi)} />)
+
+    expect(screen.queryByRole('tab', { name: 'Resize' })).toBeNull()
+    await userEvent.click(screen.getByRole('tab', { name: 'Move' }))
+    expect(screen.getByRole('tab', { name: 'Move' })).toHaveAttribute('aria-selected', 'true')
+
+    cleanup()
+    const tpm = { id: 'tpmstate0', size: '4M', storage: 'local-lvm', isTpm: true, rawValue: 'local-lvm:vm-100-disk-2,size=4M,version=v2.0' }
+
+    renderWithProviders(<EditDiskDialog {...resizeProps(tpm)} />)
+    expect(screen.queryByRole('tab', { name: 'Resize' })).toBeNull()
+  })
+
+  it('starts a 512M disk at 512 MB and sends the increase in megabytes', async () => {
+    const props = resizeProps({ id: 'scsi1', size: '512M', storage: 'local-lvm', rawValue: 'local-lvm:vm-100-disk-3,size=512M' })
+
+    renderWithProviders(<EditDiskDialog {...props} />)
+    await userEvent.click(screen.getByRole('tab', { name: 'Resize' }))
+
+    const field = screen.getByRole('spinbutton') as HTMLInputElement
+
+    expect(field.value).toBe('512')
+    await userEvent.clear(field)
+    await userEvent.type(field, '768')
+    await userEvent.click(screen.getByRole('button', { name: /768 MB/ }))
+
+    await waitFor(() => expect(props.onResize).toHaveBeenCalledWith('+256M'))
+  })
+
+  it('keeps a gigabyte disk in GB and sends the exact increase', async () => {
+    const props = resizeProps({ id: 'scsi0', size: '32G', storage: 'local-lvm', rawValue: 'local-lvm:vm-100-disk-0,size=32G' })
+
+    renderWithProviders(<EditDiskDialog {...props} />)
+    await userEvent.click(screen.getByRole('tab', { name: 'Resize' }))
+
+    const field = screen.getByRole('spinbutton') as HTMLInputElement
+
+    expect(field.value).toBe('32')
+    await userEvent.clear(field)
+    await userEvent.type(field, '40.5')
+    await userEvent.click(screen.getByRole('button', { name: /40\.5 GB/ }))
+
+    await waitFor(() => expect(props.onResize).toHaveBeenCalledWith('+8704M'))
+  })
+})

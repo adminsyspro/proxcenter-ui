@@ -5564,7 +5564,7 @@
     "confirmDeleteCdromHint": "CD/DVD 드라이브와 해당 ISO 매핑이 VM 구성에서 제거됩니다.",
     "confirmDeleteNetwork": "인터페이스 {id}을(를) 삭제하시겠습니까?",
     "newSize": "새 크기",
-    "sizeIncrease": "+{size} GB",
+    "sizeIncrease": "+{size} {unit}B",
     "enterLargerSize": "더 큰 크기를 입력하세요",
     "unit": "단위",
     "resizing": "크기 조정 중...",

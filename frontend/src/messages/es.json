@@ -5808,7 +5808,16 @@
     "loadNodesError": "No se pudo cargar la lista de nodos",
     "nicMacPermissionRequired": "Cambiar la dirección MAC requiere permiso del proveedor.",
     "nicVlanPermissionRequired": "Cambiar la configuración VLAN requiere permiso del proveedor.",
-    "nicOriginalUnavailable": "Vuelva a cargar la configuración de red antes de guardar."
+    "nicOriginalUnavailable": "Vuelva a cargar la configuración de red antes de guardar.",
+    "snapshotMigration": {
+      "title": "Hay snapshots que bloquean esta migración",
+      "reason": {
+        "live": "{volid}: snapshot(s) {snapshots}. Proxmox solo mueve los snapshots locales con la VM detenida.",
+        "storage": "{volid}: snapshot(s) {snapshots}. Este tipo de almacenamiento no puede llevar snapshots a otro nodo.",
+        "target": "{volid}: snapshot(s) {snapshots}. Solo pueden enviarse a un almacenamiento del mismo tipo."
+      },
+      "offlineHint": "Apague la VM y mígrela en frío para conservar sus snapshots, o elimínelos."
+    }
   },
   "ldap": {
     "description": "Configure la autenticación LDAP/Active Directory para permitir que los usuarios inicien sesión con sus credenciales corporativas.",

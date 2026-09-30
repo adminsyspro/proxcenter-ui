@@ -610,3 +610,57 @@ describe('VmsTable - vDC column', () => {
     expect(screen.queryByText('ACME — Paris')).not.toBeInTheDocument()
   })
 })
+
+// ------------------------------------------------------------------ //
+// Column menu vs responsive rule (#911)
+// ------------------------------------------------------------------ //
+
+// jsdom's matchMedia matches nothing, so up('xl') is false and the trend
+// columns fall under the responsive rule, as on a zoomed-in browser.
+describe('VmsTable - column menu overrides the responsive rule (#911)', () => {
+  const stoppedVms = vmRowsFixture.map(vm => ({ ...vm, status: 'stopped' }))
+  const trendIoNetHeader = (container: HTMLElement) =>
+    container.querySelector('.MuiDataGrid-columnHeader[data-field="trendIoNet"]')
+
+  function openColumnsMenu(container: HTMLElement) {
+    const icon = container.querySelector('.ri-layout-column-line')
+    fireEvent.click(icon!.parentElement!)
+  }
+
+  function trendIoNetCheckbox() {
+    const item = screen.getAllByRole('menuitem').find(li => li.textContent === 'Trend (IO/Net)')!
+
+    return item.querySelector('input[type="checkbox"]') as HTMLInputElement
+  }
+
+  afterEach(() => {
+    localStorage.clear()
+  })
+
+  it('hides the trend columns below the xl breakpoint and shows them unticked in the menu', () => {
+    const { container } = renderWithProviders(<VmsTable vms={stoppedVms} showTrends />)
+    expect(trendIoNetHeader(container)).toBeNull()
+
+    openColumnsMenu(container)
+    expect(trendIoNetCheckbox().checked).toBe(false)
+  })
+
+  it('shows a trend column below the xl breakpoint once ticked in the menu', () => {
+    const { container } = renderWithProviders(<VmsTable vms={stoppedVms} showTrends />)
+
+    openColumnsMenu(container)
+    fireEvent.click(trendIoNetCheckbox().closest('li')!)
+
+    expect(trendIoNetCheckbox().checked).toBe(true)
+    expect(trendIoNetHeader(container)).not.toBeNull()
+    expect(JSON.parse(localStorage.getItem('proxcenter_vmtable_columns_v2')!)).toMatchObject({ trendIoNet: true })
+  })
+
+  it('keeps only the hidden columns from the legacy storage key', () => {
+    localStorage.setItem('proxcenter_vmtable_columns', JSON.stringify({ trendIoNet: true, tags: false }))
+    const { container } = renderWithProviders(<VmsTable vms={stoppedVms} showTrends />)
+
+    expect(trendIoNetHeader(container)).toBeNull()
+    expect(container.querySelector('.MuiDataGrid-columnHeader[data-field="tags"]')).toBeNull()
+  })
+})

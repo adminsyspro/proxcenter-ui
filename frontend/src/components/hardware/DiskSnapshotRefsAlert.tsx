@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { useTranslations } from 'next-intl'
 import {
   Alert, Box, Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle,
@@ -15,6 +15,9 @@ type DiskSnapshotRefsAlertProps = {
   snapshots: string[]
   /** 'move': "delete source" is off; 'delete': the unused disk cannot be removed. */
   mode: 'move' | 'delete'
+  /** Replaces the mode's sentence, for a caller that explains more (#1027). */
+  message?: ReactNode
+  severity?: 'warning' | 'error'
   /** connId:type:node:vmid, the key of the snapshot DELETE route. */
   vmKey: string
   canDeleteSnapshots: boolean
@@ -27,7 +30,7 @@ type DiskSnapshotRefsAlertProps = {
  * the way the cross-cluster migration dialog does: the button never deletes
  * directly, it opens a confirmation naming every snapshot first.
  */
-export function DiskSnapshotRefsAlert({ snapshots, mode, vmKey, canDeleteSnapshots, onDeleted }: Readonly<DiskSnapshotRefsAlertProps>) {
+export function DiskSnapshotRefsAlert({ snapshots, mode, message, severity = 'warning', vmKey, canDeleteSnapshots, onDeleted }: Readonly<DiskSnapshotRefsAlertProps>) {
   const t = useTranslations()
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -50,8 +53,8 @@ export function DiskSnapshotRefsAlert({ snapshots, mode, vmKey, canDeleteSnapsho
 
   return (
     <>
-      <Alert severity="warning" icon={<i className="ri-camera-line" />}>
-        {t(mode === 'move' ? 'hardware.snapshotRefsMove' : 'hardware.snapshotRefsDelete', { snapshots: snapshots.join(', ') })}
+      <Alert severity={severity} icon={<i className="ri-camera-line" />}>
+        {message ?? t(mode === 'move' ? 'hardware.snapshotRefsMove' : 'hardware.snapshotRefsDelete', { snapshots: snapshots.join(', ') })}
         {canDeleteSnapshots && (
           <Box sx={{ mt: 1 }}>
             <Button

@@ -5808,7 +5808,16 @@
     "loadNodesError": "Unable to load the node list",
     "nicMacPermissionRequired": "Changing the MAC address requires provider permission.",
     "nicVlanPermissionRequired": "Changing VLAN settings requires provider permission.",
-    "nicOriginalUnavailable": "Reload the network configuration before saving."
+    "nicOriginalUnavailable": "Reload the network configuration before saving.",
+    "snapshotMigration": {
+      "title": "Snapshots block this migration",
+      "reason": {
+        "live": "{volid}: snapshot(s) {snapshots}. Proxmox only moves local snapshots with the VM stopped.",
+        "storage": "{volid}: snapshot(s) {snapshots}. This storage type cannot carry snapshots to another node.",
+        "target": "{volid}: snapshot(s) {snapshots}. They can only be sent to a storage of the same type."
+      },
+      "offlineHint": "Shut the VM down and migrate it offline to keep its snapshots, or delete them."
+    }
   },
   "ldap": {
     "description": "Configure LDAP/Active Directory authentication to allow users to sign in with their corporate credentials.",

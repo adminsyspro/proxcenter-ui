@@ -22,7 +22,7 @@ import type { Extent } from "./extents"
 import type { WarmMigrationConfig } from "./types"
 import {
   registerJob, unregisterJob, acquireVmLock, releaseVmLock, updateJob, updateJobLive, appendLog,
-  isCancelled, isCutoverRequested, sleepUnlessCutover, awaitOperatorCutover, HOLD_PASS_INTERVAL_MS,
+  isCancelled, isCutoverRequested, sleepUnlessCutover, awaitOperatorCutover, runDeltaPassWithRetry, HOLD_PASS_INTERVAL_MS,
 } from "./job-control"
 import {
   applyExtentsWithProgress, checksumDiskWindows, scaleWarmProgress, APPLY_INACTIVITY_MS, PROGRESS_LOG_INTERVAL_MS,
@@ -229,6 +229,18 @@ export async function runXcpngWarmMigration(jobId: string, config: WarmMigration
           const reader = readers.get(disk.position)
           if (reader) { await release(reader); readers.delete(disk.position) }
         }
+      } catch (e) {
+        // prev stays the baseline, so a retried pass diffs from it again; this
+        // attempt's snapshot is dead weight on the chain and must not pile up
+        // with every retry (#1028). Its readers go first: XAPI will not destroy
+        // a VDI that is still exported over NBD. A failed full pass has no
+        // retry and is left to the failure cleanup.
+        if (prev) {
+          for (const r of readers.values()) if (activeReaders.includes(r)) await release(r)
+          readers.clear()
+          await destroySnapshot(snap)
+        }
+        throw e
       } finally {
         for (const r of readers.values()) if (activeReaders.includes(r)) await release(r)
       }
@@ -277,7 +289,10 @@ export async function runXcpngWarmMigration(jobId: string, config: WarmMigration
         const deltaWindow: PassWindow = cutoverMode === "manual"
           ? { status: "delta_sync", currentStep: `delta_${pass + 1}`, rangeStart: 88, rangeEnd: 90 }
           : { status: "delta_sync", currentStep: `delta_${pass + 1}`, rangeStart: 80 + (15 * pass) / maxPasses, rangeEnd: 80 + (15 * (pass + 1)) / maxPasses }
-        const r = await runPass(`delta-${pass + 1}`, baseline, deltaWindow)
+        // A failed pass leaves the baseline untouched, so it is retried rather
+        // than thrown away with hours of replication (#1028).
+        const r = await runDeltaPassWithRetry(jobId, `Delta pass ${pass + 1}`, () => runPass(`delta-${pass + 1}`, baseline, deltaWindow))
+        if (r === null) { await appendLog(jobId, "Operator requested cutover: proceeding to final delta", "info"); break }
         baseline = r.snap
         const dsec = Math.max(1, (Date.now() - tk) / 1000)
         throughput = r.bytes > 0 ? r.bytes / dsec : throughput

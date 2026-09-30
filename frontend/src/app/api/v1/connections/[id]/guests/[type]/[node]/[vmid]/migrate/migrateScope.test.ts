@@ -114,3 +114,55 @@ describe("POST .../migrate — MSP ownership gate", () => {
     expect(body.error).toMatch(/migration is restricted/i)
   })
 })
+
+describe("POST .../migrate — snapshot guard (#1027)", () => {
+  function pve(routes: Record<string, any>) {
+    pveFetchMock.mockImplementation(async (_conn: any, path: string) => {
+      if (path in routes) return routes[path]
+      if (path.endsWith("/migrate")) return "UPID:pve1:0:0:migrate:100:root@pam:"
+      throw new Error(`unexpected PVE call ${path}`)
+    })
+  }
+
+  const HELD = {
+    "/nodes/pve1/qemu/100/snapshot": [{ name: "before-upgrade" }, { name: "current" }],
+    "/nodes/pve1/qemu/100/snapshot/before-upgrade/config": { scsi0: "ZFS-Pool:vm-100-disk-0,size=32G" },
+    "/storage": [{ storage: "ZFS-Pool", type: "zfspool" }],
+    "/cluster/replication": [],
+  }
+
+  it("refuses a running VM whose ZFS disk a snapshot holds, naming both, before calling PVE", async () => {
+    getInfraMock.mockResolvedValue({ kind: "provider" })
+    pve({ ...HELD, "/nodes/pve1/qemu/100/status/current": { status: "running" } })
+
+    const POST = (await import("./route")).POST as Parameters<typeof callRoute>[0]
+    const res = await callRoute(POST, { method: "POST", params: PARAMS, body: { target: "pve2" } })
+    const json = await res.json()
+
+    expect(res.status).toBe(409)
+    expect(json.code).toBe("SNAPSHOTS_BLOCK_MIGRATION")
+    expect(json.error).toContain("before-upgrade")
+    expect(json.error).toContain("ZFS-Pool:vm-100-disk-0")
+    expect(pveFetchMock.mock.calls.some(c => String(c[1]).endsWith("/migrate"))).toBe(false)
+  })
+
+  it("lets the same VM migrate once it is stopped, since ZFS carries snapshots offline", async () => {
+    getInfraMock.mockResolvedValue({ kind: "provider" })
+    pve({ ...HELD, "/nodes/pve1/qemu/100/status/current": { status: "stopped" } })
+
+    const POST = (await import("./route")).POST as Parameters<typeof callRoute>[0]
+    const res = await callRoute(POST, { method: "POST", params: PARAMS, body: { target: "pve2" } })
+
+    expect(res.status).toBe(200)
+  })
+
+  it("leaves the verdict to PVE when the check itself fails", async () => {
+    getInfraMock.mockResolvedValue({ kind: "provider" })
+    pve({ "/nodes/pve1/qemu/100/snapshot": [{ name: "s1" }] })
+
+    const POST = (await import("./route")).POST as Parameters<typeof callRoute>[0]
+    const res = await callRoute(POST, { method: "POST", params: PARAMS, body: { target: "pve2" } })
+
+    expect(res.status).toBe(200)
+  })
+})

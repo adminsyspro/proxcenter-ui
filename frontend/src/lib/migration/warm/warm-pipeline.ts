@@ -20,7 +20,7 @@ import { volumesToFree, volumesToKeep, PVESM_FREE_TIMEOUT_MS, type AllocatedVolu
 import { getNodeIpForMigration } from "../pve-tasks"
 import { decideNextPass, type PassStat, type ConvergenceConfig, type ConvergenceDecision } from "./convergence"
 import { initDiskState, recordPass, type DiskWarmState } from "./state"
-import { startVddkReader, stopVddkReader, type VddkReaderHandle } from "./vddk-reader"
+import { startVddkReader, stopVddkReader, buildJobReaderSweepCmd, type VddkReaderHandle } from "./vddk-reader"
 import type { VddkOpts } from "./vddk-cmd"
 import { detectChangedExtentsByChecksum } from "./checksum-detector"
 import { checkVddkPreflight } from "./vddk-preflight"
@@ -685,6 +685,10 @@ async function cleanupOnFailure(
   for (const r of activeReaders) {
     if (nodeIp) await stopVddkReader(config.targetConnectionId, nodeIp, r).catch(() => {})
   }
+  // A launch that timed out can still have started nbdkit on the node, with the
+  // ESXi password file next to it; no handle tracks it (#1028).
+  const sweep = buildJobReaderSweepCmd(jobId)
+  if (nodeIp && sweep) await executeSSH(config.targetConnectionId, nodeIp, sweep).catch(() => {})
   if (session) {
     for (const mor of [...ourSnapshots]) {
       await soapRemoveSnapshot(session, mor, false, { timeoutMs: TERMINAL_SNAPSHOT_REMOVE_TIMEOUT_MS }).catch(() => {})

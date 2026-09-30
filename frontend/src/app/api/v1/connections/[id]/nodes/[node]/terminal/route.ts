@@ -75,22 +75,28 @@ export async function POST(
       return NextResponse.json({ error: "Could not determine host from connection" }, { status: 500 })
     }
 
+    let responseBaseUrl = conn.baseUrl
     const termproxy = await pveFetch<any>(
       conn,
       `/nodes/${encodeURIComponent(node)}/termproxy`,
       {
         method: "POST",
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
-      }
+      },
+      { onResponse: url => { responseBaseUrl = url } }
     )
 
     if (!termproxy || !termproxy.ticket) {
       return NextResponse.json({ error: "Failed to create terminal session" }, { status: 500 })
     }
 
+    const responseUrl = new URL(responseBaseUrl)
+    host = responseUrl.hostname
+    pvePort = responseUrl.port ? Number.parseInt(responseUrl.port) : 8006
+
     const expiresAt = Date.now() + 30_000
     const sessionId = putSingleUse({
-      baseUrl: conn.baseUrl,
+      baseUrl: responseBaseUrl,
       host,
       pvePort,
       apiToken: conn.apiToken,

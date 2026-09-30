@@ -32,7 +32,7 @@
     #status-dot.error { background: #ef4444; }
     #vm-info { color: #fff; font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
     /* Le texte de statut cède avant le nom: la pastille dit déjà l'état. */
-    #status-text { color: #666; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex-shrink: 100; }
+    #status-text { color: #999; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex-shrink: 100; }
     #toolbar .vm-actions { display: flex; gap: 4px; margin: 0 8px; flex-shrink: 0; }
     #toolbar .vm-actions button {
       padding: 6px 10px; font-size: 16px; background: transparent; border: none;
@@ -41,11 +41,11 @@
     #toolbar .vm-actions button:hover { background: #333; color: #fff; }
     #toolbar .vm-actions button:disabled { color: #444; cursor: not-allowed; }
     #toolbar .vm-actions button.btn-start { color: #22c55e; }
-    #toolbar .vm-actions button.btn-start:hover { background: #14532d; }
+    #toolbar .vm-actions button.btn-start:hover { background: #14532d; color: #86efac; }
     #toolbar .vm-actions button.btn-shutdown { color: #f59e0b; }
     #toolbar .vm-actions button.btn-shutdown:hover { background: #78350f; }
     #toolbar .vm-actions button.btn-stop { color: #ef4444; }
-    #toolbar .vm-actions button.btn-stop:hover { background: #7f1d1d; }
+    #toolbar .vm-actions button.btn-stop:hover { background: #7f1d1d; color: #fca5a5; }
     #toolbar .vm-actions button.btn-pause { color: #3b82f6; }
     #toolbar .vm-actions button.btn-pause:hover { background: #1e3a8a; }
     #toolbar .vm-actions button.loading { opacity: 0.5; pointer-events: none; }
@@ -56,7 +56,7 @@
       border: 1px solid #444; border-radius: 4px; cursor: pointer;
     }
     button:hover { background: #444; }
-    button:disabled { background: #222; color: #666; cursor: not-allowed; }
+    button:disabled { background: #222; color: #999; cursor: not-allowed; }
     #error-bar {
       padding: 12px 16px; background: #7f1d1d; color: #fecaca; font-size: 13px; display: none;
     }
@@ -64,11 +64,11 @@
     #screen { flex: 1; width: 100%; background: #000; position: relative; }
     #loading {
       position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-      text-align: center; color: #666;
+      text-align: center; color: #999;
     }
     #loading .icon { font-size: 48px; margin-bottom: 16px; }
     #loading .text { font-size: 14px; }
-    #loading .subtext { font-size: 12px; margin-top: 8px; color: #555; }
+    #loading .subtext { font-size: 12px; margin-top: 8px; color: #888; }
     #novnc-instructions {
       display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
       text-align: center; color: #fca5a5; background: #450a0a; padding: 24px; border-radius: 8px; max-width: 600px;
@@ -82,7 +82,7 @@
     }
     /* Un déclencheur, pas un état: son libellé court n'a pas besoin de la même largeur. */
     #sendkey { max-width: 120px; }
-    #toolbar select:disabled { background: #222; color: #666; cursor: not-allowed; }
+    #toolbar select:disabled { background: #222; color: #999; cursor: not-allowed; }
     #toolbar .buttons button.icon { padding: 6px 9px; font-size: 14px; line-height: 1; }
     #toolbar .buttons button.active { background: #1e3a8a; border-color: #3b82f6; }
     /* Plein écran: la barre quitte le flux pour laisser tout l'écran à
@@ -140,7 +140,7 @@
 npm install @novnc/novnc esbuild<br>
 node bundle-novnc.js
         </code>
-        <p style="margin-top: 12px; font-size: 12px; color: #a8a29e;">Then reload this page.</p>
+        <p style="margin-top: 12px; font-size: 12px; color: #fecaca;">Then reload this page.</p>
       </div>
     </div>
   </div>
@@ -206,6 +206,7 @@ node bundle-novnc.js
     const MAX_RECONNECT_ATTEMPTS = 5;
     const BASE_RECONNECT_DELAY = 2000; // 2s
     let reconnectTimer = null;
+    let connectionAttempt = 0;
     let userDisconnected = false; // true when user explicitly closes
     
     // Le nom de la VM mène le libellé: la barre des tâches tronque après une
@@ -394,7 +395,35 @@ node bundle-novnc.js
       errorBar.classList.remove('visible');
     }
     
+    function scheduleReconnect() {
+      if (userDisconnected || reconnectTimer) return;
+      setInputControlsEnabled(false);
+      if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+        setStatus('error', 'Connection lost');
+        loading.style.display = 'block';
+        loadingText.textContent = 'Connection lost';
+        loadingSubtext.textContent = 'Node may be offline. Click Reconnect to try again.';
+        return;
+      }
+      const delay = Math.min(BASE_RECONNECT_DELAY * Math.pow(2, reconnectAttempts), 30000);
+      reconnectAttempts++;
+      setStatus('connecting', 'Reconnecting (' + reconnectAttempts + '/' + MAX_RECONNECT_ATTEMPTS + ')...');
+      loading.style.display = 'block';
+      loadingText.textContent = 'Reconnecting...';
+      loadingSubtext.textContent = 'Attempt ' + reconnectAttempts + ' of ' + MAX_RECONNECT_ATTEMPTS + ' in ' + Math.round(delay / 1000) + 's';
+      reconnectTimer = setTimeout(function() {
+        reconnectTimer = null;
+        connect();
+      }, delay);
+    }
+
     async function connect() {
+      if (userDisconnected) return;
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+      }
+      const attempt = ++connectionAttempt;
       if (!type || !node || !vmid) {
         showError('Missing parameters');
         setStatus('error', 'Error');
@@ -423,6 +452,7 @@ node bundle-novnc.js
         console.log('API call:', apiUrl);
         
         const res = await fetch(apiUrl, { method: 'POST' });
+        if (userDisconnected || attempt !== connectionAttempt) return;
         console.log('API status:', res.status);
         
         if (!res.ok) {
@@ -431,7 +461,7 @@ node bundle-novnc.js
         }
         
         const json = await res.json();
-        console.log('API response:', json);
+        if (userDisconnected || attempt !== connectionAttempt) return;
         
         const { wsUrl, password } = json?.data || {};
         if (!wsUrl || !password) throw new Error('Invalid session');
@@ -463,6 +493,7 @@ node bundle-novnc.js
         applyScalingMode();
 
         rfb.addEventListener('connect', () => {
+          if (attempt !== connectionAttempt || userDisconnected) return;
           console.log('VNC connected');
           loading.style.display = 'none';
           setStatus('connected', 'Connected');
@@ -494,6 +525,7 @@ node bundle-novnc.js
         });
         
         rfb.addEventListener('disconnect', (e) => {
+          if (attempt !== connectionAttempt) return;
           console.log('VNC disconnected:', e.detail);
           setInputControlsEnabled(false);
 
@@ -505,24 +537,7 @@ node bundle-novnc.js
             return;
           }
 
-          if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
-            const delay = Math.min(BASE_RECONNECT_DELAY * Math.pow(2, reconnectAttempts), 30000);
-            reconnectAttempts++;
-            setStatus('connecting', 'Reconnecting (' + reconnectAttempts + '/' + MAX_RECONNECT_ATTEMPTS + ')...');
-            loading.style.display = 'block';
-            loadingText.textContent = 'Reconnecting...';
-            loadingSubtext.textContent = 'Attempt ' + reconnectAttempts + ' of ' + MAX_RECONNECT_ATTEMPTS + ' in ' + Math.round(delay / 1000) + 's';
-            reconnectTimer = setTimeout(function() {
-              reconnectTimer = null;
-              connect();
-            }, delay);
-          } else {
-            setStatus('error', 'Connection lost');
-            loading.style.display = 'block';
-            loadingText.textContent = 'Connection lost';
-            loadingSubtext.textContent = 'Node may be offline. Click Reconnect to try again.';
-            reconnectAttempts = 0;
-          }
+          scheduleReconnect();
         });
         
         rfb.addEventListener('credentialsrequired', () => {
@@ -534,11 +549,13 @@ node bundle-novnc.js
         });
         
       } catch (err) {
+        if (userDisconnected || attempt !== connectionAttempt) return;
         console.error('Error:', err);
         showError(err.message);
         setStatus('error', 'Error');
         loadingText.textContent = 'Error';
         loadingSubtext.textContent = err.message;
+        scheduleReconnect();
       }
     }
     
@@ -577,7 +594,10 @@ node bundle-novnc.js
         
         // Reconnecter après start
         if (action === 'start') {
-          setTimeout(connect, 3000);
+          setTimeout(function() {
+            reconnectAttempts = 0;
+            connect();
+          }, 3000);
         }
       } catch (err) {
         showError(`Action ${action}: ${err.message}`);
@@ -602,10 +622,17 @@ node bundle-novnc.js
     });
     btnClose.addEventListener('click', function() {
       userDisconnected = true;
+      connectionAttempt++;
+      if (rfb) rfb.disconnect();
       if (reconnectTimer) {
         clearTimeout(reconnectTimer);
         reconnectTimer = null;
       }
+      setInputControlsEnabled(false);
+      setStatus('', 'Disconnected');
+      loading.style.display = 'block';
+      loadingText.textContent = 'Disconnected';
+      loadingSubtext.textContent = 'Click Reconnect to resume';
       window.close();
     });
     screen.addEventListener('click', () => {

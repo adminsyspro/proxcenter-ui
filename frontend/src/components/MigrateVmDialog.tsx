@@ -8,6 +8,7 @@ import { isSharedStorage } from '@/lib/proxmox/storage'
 import { snapshotsToClear, type SnapshotMigrationBlocker } from '@/lib/migration/snapshotMigrationBlockers'
 import { DiskSnapshotRefsAlert } from '@/components/hardware/DiskSnapshotRefsAlert'
 import { computeNegativeAffinityConflicts, getAffinityPeers, type AffinityPeer, type HaRule, type HaStatusEntry } from '@/lib/proxmox/haAffinity'
+import { GIB, pveDriveSize } from '@/lib/proxmox/diskSize'
 
 import {
   Dialog,
@@ -562,13 +563,7 @@ export function MigrateVmDialog({
 
             if (storageMatch) {
               const storageName = storageMatch[1]
-              const sizeMatch = diskStr.match(/size=(\d+(?:\.\d+)?)(G|T|M)?/)
-              let sizeGB = 0
-              if (sizeMatch) {
-                sizeGB = Number.parseFloat(sizeMatch[1])
-                if (sizeMatch[2] === 'T') sizeGB *= 1024
-                else if (sizeMatch[2] === 'M') sizeGB /= 1024
-              }
+              const sizeGB = pveDriveSize(diskStr) / GIB
 
               const formatMatch = diskStr.match(/\.(qcow2|raw|vmdk)/)
               const isLocal = !sharedStorages.has(storageName)

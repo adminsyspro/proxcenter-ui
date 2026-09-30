@@ -1497,7 +1497,7 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
 
             const parts = String(diskStr).split(',')
             const storagePart = parts[0].split(':')
-            const sizeMatch = diskStr.match(/size=(\d+[GMT]?)/i)
+            const sizeMatch = diskStr.match(/(?:^|,)size=(\d+(?:\.\d+)?[KMGT]?)/i)
 
             const isCdrom = diskStr.includes('media=cdrom') || storagePart[0] === 'none' || String(diskStr) === 'cdrom'
 
@@ -1592,7 +1592,7 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
           const val = String(config[key])
           if (/^efidisk\d+$/.test(key)) {
             const storagePart = val.split(',')[0].split(':')
-            const sizeMatch = val.match(/size=(\d+[KMG]?)/)
+            const sizeMatch = val.match(/(?:^|,)size=(\d+(?:\.\d+)?[KMGT]?)/i)
             disksInfo.push({
               id: key,
               storage: storagePart[0] || 'unknown',

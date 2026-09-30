@@ -5564,7 +5564,7 @@
     "confirmDeleteCdromHint": "La unidad CD/DVD y su asignación ISO se eliminarán de la configuración de la VM.",
     "confirmDeleteNetwork": "¿Seguro que quiere eliminar la interfaz {id}?",
     "newSize": "Nuevo tamaño",
-    "sizeIncrease": "+{size} GB",
+    "sizeIncrease": "+{size} {unit}B",
     "enterLargerSize": "Introduzca un tamaño mayor",
     "unit": "Unidad",
     "resizing": "Redimensionando...",

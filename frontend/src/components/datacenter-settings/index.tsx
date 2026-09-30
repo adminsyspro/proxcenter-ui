@@ -330,7 +330,7 @@ export default function DatacenterSettingsTab({ connectionId }: Props) {
     }
   }, [connectionId])
 
-  useEffect(() => { fetchOptions() }, [fetchOptions])
+  useEffect(() => { void fetchOptions() }, [fetchOptions])
 
   /* ---- Save ---- */
 

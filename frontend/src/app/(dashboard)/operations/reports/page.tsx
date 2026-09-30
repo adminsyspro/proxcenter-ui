@@ -114,7 +114,7 @@ export default function ReportsPage() {
 
       if (res.ok) {
         showToast(t('reports.reportStarted'), 'success')
-        mutateReports()
+        void mutateReports()
         setTab(1) // Switch to history tab
       } else {
         const error = await res.json()
@@ -136,7 +136,7 @@ export default function ReportsPage() {
 
       if (res.ok) {
         showToast(t('common.success'), 'success')
-        mutateReports()
+        void mutateReports()
       } else {
         showToast(t('common.error'), 'error')
       }
@@ -157,7 +157,7 @@ export default function ReportsPage() {
 
       if (res.ok) {
         showToast(t('reports.scheduleCreated'), 'success')
-        mutateReports()
+        void mutateReports()
       } else {
         const error = await res.json()
 
@@ -180,7 +180,7 @@ export default function ReportsPage() {
 
       if (res.ok) {
         showToast(t('reports.scheduleUpdated'), 'success')
-        mutateReports()
+        void mutateReports()
       } else {
         const error = await res.json()
 
@@ -201,7 +201,7 @@ export default function ReportsPage() {
 
       if (res.ok) {
         showToast(t('reports.scheduleDeleted'), 'success')
-        mutateReports()
+        void mutateReports()
       } else {
         showToast(t('common.error'), 'error')
       }
@@ -220,7 +220,7 @@ export default function ReportsPage() {
 
       if (res.ok) {
         showToast(t('reports.scheduleRunStarted'), 'success')
-        mutateReports()
+        void mutateReports()
         setTab(1) // Switch to history tab
       } else {
         const error = await res.json()

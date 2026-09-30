@@ -244,3 +244,32 @@ describe('XTermShell fullscreen control', () => {
     expect(socket.sent).toEqual(['1:200:50:'])
   })
 })
+
+describe('XTermShell incoming data', () => {
+  it('writes text frames, ArrayBuffer frames and Blob frames to the terminal', async () => {
+    const { socket } = await renderShell()
+
+    socket.connected()
+
+    const term = h.terminals.at(-1)
+
+    socket.onmessage?.({ data: 'Linux pve1 6.14.8-2-pve\r\n' })
+    // Built in this realm: TextEncoder hands back a buffer from another one,
+    // which fails the component's `instanceof ArrayBuffer` under jsdom.
+    const bytes = Array.from('Last login: Tue Sep 30\r\n', c => c.charCodeAt(0))
+    const frame = new ArrayBuffer(bytes.length)
+
+    new Uint8Array(frame).set(bytes)
+    socket.onmessage?.({ data: frame })
+    socket.onmessage?.({ data: new Blob(['root@pve1:~# ']) })
+
+    await waitFor(() => expect(term.written).toContain('root@pve1:~# '))
+    expect(term.written).toEqual(expect.arrayContaining([
+      'Linux pve1 6.14.8-2-pve\r\n',
+      'Last login: Tue Sep 30\r\n',
+      'root@pve1:~# ',
+    ]))
+    // The Blob is decoded asynchronously, so it lands after the synchronous frames.
+    expect(term.written.at(-1)).toBe('root@pve1:~# ')
+  })
+})

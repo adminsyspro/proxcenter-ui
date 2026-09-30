@@ -3705,7 +3705,7 @@ return
                       if (hasCopiedData) {
                         setCancelMigConfirmOpen(true)
                       } else {
-                        cancelMigrationJob()
+                        void cancelMigrationJob()
                       }
                     }}
                   >

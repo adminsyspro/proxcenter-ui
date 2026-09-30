@@ -117,7 +117,7 @@ export function AddNetworkDialog({ open, onClose, onSave, connId, node, vmid, vm
       }
     }
 
-    loadBridges()
+    void loadBridges()
   }, [open, connId, node])
 
   // Calculer le prochain index disponible

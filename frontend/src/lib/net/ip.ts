@@ -16,8 +16,8 @@ function normalizeIp(host: string): string {
     } else {
       const hex = /^([0-9a-f]{1,4}):([0-9a-f]{1,4})$/i.exec(tail)
       if (hex) {
-        const hi = parseInt(hex[1], 16)
-        const lo = parseInt(hex[2], 16)
+        const hi = Number.parseInt(hex[1], 16)
+        const lo = Number.parseInt(hex[2], 16)
         h = `${(hi >> 8) & 255}.${hi & 255}.${(lo >> 8) & 255}.${lo & 255}`
       }
     }

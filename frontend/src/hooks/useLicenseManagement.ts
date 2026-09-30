@@ -38,8 +38,8 @@ export function useLicenseManagement() {
   }, [])
 
   useEffect(() => {
-    loadLicenseStatus()
-    loadFeatures()
+    void loadLicenseStatus()
+    void loadFeatures()
   }, [loadLicenseStatus, loadFeatures])
 
   const handleActivate = useCallback(async (licenseKey: string) => {

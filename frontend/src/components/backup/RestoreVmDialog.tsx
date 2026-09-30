@@ -167,7 +167,7 @@ export default function RestoreVmDialog({
     if (!open || !isVdcTenant) return
     if (callerLocksConn && callerLocksNode) return
     let cancelled = false
-    ;(async () => {
+    void (async () => {
       try {
         const r = await fetch('/api/v1/vdcs', { cache: 'no-store' })
         if (cancelled) return
@@ -201,7 +201,7 @@ export default function RestoreVmDialog({
   useEffect(() => {
     if (!open || callerLocksConn) return
     let cancelled = false
-    ;(async () => {
+    void (async () => {
       try {
         const r = await fetch('/api/v1/connections?type=pve', { cache: 'no-store' })
         if (cancelled) return
@@ -218,7 +218,7 @@ export default function RestoreVmDialog({
   useEffect(() => {
     if (!open || callerLocksNode || !connectionId) return
     let cancelled = false
-    ;(async () => {
+    void (async () => {
       try {
         const r = await fetch(`/api/v1/connections/${encodeURIComponent(connectionId)}/nodes`, { cache: 'no-store' })
         if (cancelled) return
@@ -236,7 +236,7 @@ export default function RestoreVmDialog({
   useEffect(() => {
     if (!open || !connectionId || !node) return
     let cancelled = false
-    ;(async () => {
+    void (async () => {
       try {
         const contentType = type === 'lxc' ? 'rootdir' : 'images'
         const r = await fetch(

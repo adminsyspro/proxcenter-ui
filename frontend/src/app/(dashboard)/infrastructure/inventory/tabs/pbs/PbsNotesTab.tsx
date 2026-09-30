@@ -68,7 +68,7 @@ export default function PbsNotesTab({ pbsId }: PbsNotesTabProps) {
   }, [pbsId])
 
   useEffect(() => {
-    fetchNotes()
+    void fetchNotes()
   }, [fetchNotes])
 
   const saveRef = useRef<() => void>(() => {})

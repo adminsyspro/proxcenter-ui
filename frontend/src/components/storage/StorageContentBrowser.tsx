@@ -493,8 +493,8 @@ export function UploadDialog({ open, onClose, onOpen, connId, node, storage, con
   }
 
   const handleSubmit = () => {
-    if (mode === 'file') handleUploadFile()
-    else handleDownloadUrl()
+    if (mode === 'file') void handleUploadFile()
+    else void handleDownloadUrl()
   }
 
   // No accept filter — let Proxmox validate server-side to avoid browser quirks hiding valid files
@@ -759,7 +759,7 @@ export default function StorageContentBrowser({
 
   useEffect(() => {
     if (connId && node && storage) {
-      loadContent()
+      void loadContent()
     }
   }, [connId, node, storage, loadContent])
 
@@ -782,12 +782,12 @@ export default function StorageContentBrowser({
   }, [items])
 
   const handleDeleted = () => {
-    loadContent()
+    void loadContent()
     onDelete?.()
   }
 
   const handleUploaded = () => {
-    loadContent()
+    void loadContent()
     onDelete?.() // trigger parent refresh too
   }
 

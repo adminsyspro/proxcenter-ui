@@ -103,8 +103,8 @@ export default function GlobalHealthScore({
     .replaceAll("(excellent)", `(${t('resources.scoreExcellent')})`)
     .replaceAll("(good)", `(${t('resources.scoreGood')})`)
     .replace(/^No alerts$/, t('resources.noAlerts'))
-    .replace(/(\d+) critical/, `$1 ${t('resources.critical')}`)
-    .replace(/(\d+) warning/, `$1 ${t('resources.attention')}`)
+    .replace(/(?<!\d)(\d+) critical/, `$1 ${t('resources.critical')}`)
+    .replace(/(?<!\d)(\d+) warning/, `$1 ${t('resources.attention')}`)
     .replaceAll("stopped", t('resources.stopped'))
 
   const criticalAlerts = alerts.filter(a => a.severity === 'critical').length

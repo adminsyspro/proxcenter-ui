@@ -110,7 +110,7 @@ export async function GET(
         }
       })
     } finally {
-      soapLogout(session)
+      void soapLogout(session)
     }
   } catch (e: any) {
     if (e.name === 'AbortError') {

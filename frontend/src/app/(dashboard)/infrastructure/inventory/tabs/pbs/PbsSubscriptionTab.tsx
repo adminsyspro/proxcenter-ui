@@ -95,7 +95,7 @@ export default function PbsSubscriptionTab({ pbsId }: PbsSubscriptionTabProps) {
   }, [pbsId])
 
   useEffect(() => {
-    fetchSubscription()
+    void fetchSubscription()
   }, [fetchSubscription])
 
   const statusInfo = useMemo(() => {

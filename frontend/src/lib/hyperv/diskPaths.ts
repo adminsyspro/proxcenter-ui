@@ -13,7 +13,7 @@
 export const HYPERV_MOUNT_ROOT = "/mnt/hyperv"
 
 function normalizeWindowsPath(p: string): string {
-  return p.replaceAll("/", "\\").replace(/\\+$/, "")
+  return p.replaceAll("/", "\\").replace(/(?<!\\)\\+$/, "")
 }
 
 export function hypervDiskBasename(windowsPath: string): string {

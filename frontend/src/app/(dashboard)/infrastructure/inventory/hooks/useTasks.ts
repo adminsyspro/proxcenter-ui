@@ -56,7 +56,7 @@ export function useTasks({ selection, detailTab, t }: UseTasksParams) {
   // Charger les tâches quand on sélectionne l'onglet Historique des tâches (index 3)
   useEffect(() => {
     if (detailTab === 3 && selection?.type === 'vm' && !tasksLoaded && !tasksLoading) {
-      loadTasks()
+      void loadTasks()
     }
   }, [detailTab, selection?.type, selection?.id, tasksLoaded, tasksLoading, loadTasks])
 

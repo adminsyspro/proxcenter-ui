@@ -133,7 +133,7 @@ export default function FirewallPolicyTable({
         })
       }
       showToast(ruleDialogIsNew ? t('network.ruleAdded') : t('network.ruleModified'), 'success')
-      reloadClusterRules()
+      void reloadClusterRules()
       setRuleDialogOpen(false)
     } catch (err: any) {
       showToast(err.message || t('networkPage.error'), 'error')
@@ -148,7 +148,7 @@ export default function FirewallPolicyTable({
       await fetch(`/api/v1/firewall/cluster/${selectedConnection}/rules/${rule.pos}`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...rule, enable: newEnable })
       })
-      reloadClusterRules()
+      void reloadClusterRules()
       showToast(newEnable === 1 ? t('network.ruleEnabled') : t('network.ruleDisabled'), 'success')
     } catch (err: any) {
       showToast(err.message || t('networkPage.error'), 'error')
@@ -160,7 +160,7 @@ export default function FirewallPolicyTable({
     if (!deleteConfirm || !selectedConnection) return
     try {
       await firewallAPI.deleteClusterRule(selectedConnection, deleteConfirm.pos)
-      reloadClusterRules()
+      void reloadClusterRules()
       showToast(t('network.ruleDeleted'), 'success')
       setDeleteConfirm(null)
     } catch (err: any) {
@@ -200,7 +200,7 @@ export default function FirewallPolicyTable({
       await fetch(`/api/v1/firewall/cluster/${selectedConnection}/rules/${fromPos}`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ moveto: toPos })
       })
-      reloadClusterRules()
+      void reloadClusterRules()
       showToast(t('network.ruleMoved'), 'success')
     } catch (err: any) {
       showToast(err.message || t('networkPage.moveError'), 'error')

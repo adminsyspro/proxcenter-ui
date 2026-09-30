@@ -729,7 +729,7 @@ export async function soapExportSnapshot(session: SoapSession, snapshotMor: stri
 
 /** Wait for an NFC lease to become ready and return device download URLs */
 export async function soapWaitForNfcLease(session: SoapSession, leaseMor: string): Promise<NfcLeaseDeviceUrl[]> {
-  const host = session.baseUrl.replace(/^https?:\/\//, "").replace(/\/.*$/, "")
+  const host = session.baseUrl.replace(/^https?:\/\//, "").split("/")[0]
 
   for (let i = 0; i < 30; i++) {
     await new Promise(r => setTimeout(r, 2000))
@@ -974,7 +974,7 @@ export function parseVmConfig(xml: string): EsxiVmConfig {
     const thinProvisioned = d.includes("<thinProvisioned>true</thinProvisioned>")
 
     // Parse "[datastoreName] relative/path.vmdk"
-    const dsMatch = fileName.match(/^\[([^\]]+)\]\s+(.+)$/)
+    const dsMatch = fileName.match(/^\[([^\]]+)\]\s+(\S.*)$/)
     const datastoreName = dsMatch?.[1] || ""
     const relativePath = dsMatch?.[2] || ""
 
@@ -1041,13 +1041,13 @@ export function parseVmConfig(xml: string): EsxiVmConfig {
  * Returns the -flat.vmdk URL (raw disk data, standard for split VMDK).
  */
 export function buildVmdkDownloadUrl(esxiBaseUrl: string, disk: EsxiDiskInfo, dcPath = "ha-datacenter"): string {
-  const host = esxiBaseUrl.replace(/^https?:\/\//, "").replace(/\/.*$/, "")
+  const host = esxiBaseUrl.replace(/^https?:\/\//, "").split("/")[0]
   const flatPath = disk.relativePath.replace(/\.vmdk$/, "-flat.vmdk")
   return `https://${host}/folder/${encodeURIComponent(flatPath).replaceAll("%2F", "/")}?dcPath=${encodeURIComponent(dcPath)}&dsName=${encodeURIComponent(disk.datastoreName)}`
 }
 
 export function buildVmdkDescriptorUrl(esxiBaseUrl: string, disk: EsxiDiskInfo, dcPath = "ha-datacenter"): string {
-  const host = esxiBaseUrl.replace(/^https?:\/\//, "").replace(/\/.*$/, "")
+  const host = esxiBaseUrl.replace(/^https?:\/\//, "").split("/")[0]
   return `https://${host}/folder/${encodeURIComponent(disk.relativePath).replaceAll("%2F", "/")}?dcPath=${encodeURIComponent(dcPath)}&dsName=${encodeURIComponent(disk.datastoreName)}`
 }
 

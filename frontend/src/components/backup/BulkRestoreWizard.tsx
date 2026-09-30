@@ -249,7 +249,7 @@ export default function BulkRestoreWizard({
     let cancelled = false
     setLoading(true)
     setLoadError(null)
-    ;(async () => {
+    void (async () => {
       try {
         const r = await fetch(`/api/v1/pbs/${encodeURIComponent(pbsId)}/backups?pageSize=100000&slim=1`, { cache: 'no-store' })
         const j = await r.json().catch(() => ({}))
@@ -271,7 +271,7 @@ export default function BulkRestoreWizard({
   useEffect(() => {
     if (!open) return
     let cancelled = false
-    ;(async () => {
+    void (async () => {
       try {
         const r = await fetch('/api/v1/connections?type=pve', { cache: 'no-store' })
         if (cancelled || !r.ok) return
@@ -290,7 +290,7 @@ export default function BulkRestoreWizard({
   useEffect(() => {
     if (!open || connections.length === 0) return
     let cancelled = false
-    ;(async () => {
+    void (async () => {
       const found: Record<number, { status: string; cluster: string }> = {}
       await Promise.all(connections.map(async (c) => {
         try {
@@ -314,7 +314,7 @@ export default function BulkRestoreWizard({
     setNode('')
     setNodes([])
     let cancelled = false
-    ;(async () => {
+    void (async () => {
       try {
         const r = await fetch(`/api/v1/connections/${encodeURIComponent(connectionId)}/nodes`, { cache: 'no-store' })
         if (cancelled || !r.ok) return
@@ -333,7 +333,7 @@ export default function BulkRestoreWizard({
   useEffect(() => {
     if (!open || !connectionId || !node) return
     let cancelled = false
-    ;(async () => {
+    void (async () => {
       try {
         const [images, rootdir] = await Promise.all([
           fetch(`/api/v1/connections/${encodeURIComponent(connectionId)}/nodes/${encodeURIComponent(node)}/storages?content=images`, { cache: 'no-store' }),

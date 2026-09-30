@@ -314,9 +314,9 @@ return () => setPageInfo('', '', '')
 
   // Revalidate all SWR caches after mutations
   const revalidateAll = useCallback(() => {
-    mutateAlerts()
-    mutateSummary()
-    mutateRules()
+    void mutateAlerts()
+    void mutateSummary()
+    void mutateRules()
   }, [mutateAlerts, mutateSummary, mutateRules])
 
   const filteredAlerts = useMemo(() => {
@@ -525,7 +525,7 @@ return true
       message: t('alerts.deleteConfirm', { count: ids.length }),
       onConfirm: () => {
         setConfirmDialog(d => ({ ...d, open: false }))
-        handleDeleteAlerts(ids)
+        void handleDeleteAlerts(ids)
       }
     })
   }

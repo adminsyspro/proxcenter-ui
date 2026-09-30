@@ -169,10 +169,10 @@ function parseMigrationProgress(logs: TaskLogEntry[]): { progress: number; messa
   }
 
   // Regex patterns
-  const transferRegex = /(drive-\S+|scsi\d+|virtio\d+|ide\d+|sata\d+|efidisk\d+):\s*transferred\s+([\d.]+)\s*(\w+)\s+of\s+([\d.]+)\s*(\w+)\s*\(([\d.]+)%\)(?:\s+in\s+(\d+)s)?/i
-  const diskReadyRegex = /(drive-\S+|scsi\d+|virtio\d+|ide\d+|sata\d+|efidisk\d+).*?(\d+[\d.]*)\s*(\w+).*ready$/i
-  const liveProgressRegex = /migration active.*?transferred\s+([\d.]+)\s*(\w+)\s+of\s+([\d.]+)\s*(\w+)\s+VM-state,?\s*([\d.]+)\s*(\w+)\/s/i
-  const avgSpeedRegex = /average migration speed:\s*([\d.]+)\s*(\w+)\/s/i
+  const transferRegex = /(drive-\S+|scsi\d+|virtio\d+|ide\d+|sata\d+|efidisk\d+):\s*transferred\s+([\d.]+)\s*([a-z_]\w*)\s+of\s+([\d.]+)\s*([a-z_]\w*)\s*\(([\d.]+)%\)(?:\s+in\s+(\d+)s)?/i
+  const diskReadyRegex = /(drive-\S+(?!\S)|scsi\d+(?!\d)|virtio\d+(?!\d)|ide\d+(?!\d)|sata\d+(?!\d)|efidisk\d+(?!\d))\D*(\d[\d.]*)\s*([a-z_]\w*)\b.*ready$/i
+  const liveProgressRegex = /migration active.*?transferred\s+([\d.]+)\s*([a-z_]\w*)\s+of\s+([\d.]+)\s*([a-z_]\w*)\s+VM-state,?\s*([\d.]+)\s*([a-z_]\w*)\/s/i
+  const avgSpeedRegex = /average migration speed:\s*([\d.]+)\s*([a-z_]\w*)\/s/i
   const finishedRegex = /migration finished successfully/i
   const liveStartRegex = /starting online\/live migration/i
   const liveCompletedRegex = /migration (completed|status: completed)/i
@@ -187,7 +187,7 @@ function parseMigrationProgress(logs: TaskLogEntry[]): { progress: number; messa
   // even when no per-second zfs send -v output is captured to the task log.
   const zfsEstimatedRegex = /(?:full|incremental) send of \S+\/(?:vm|base|subvol)-\d+-(disk-\d+)(?:@\S+)? estimated size is\s+([\d.]+)\s*([KMGT]?)/i
   const totalEstimatedRegex = /^total estimated size is\s+([\d.]+)\s*([KMGT]?)/i
-  const zfsTimeProgressRegex = /^\d{2}:\d{2}:\d{2}\s+([\d.]+)\s*([KMGT]?)\s+\S+\/(?:vm|base|subvol)-\d+-(disk-\d+)/i
+  const zfsTimeProgressRegex = /^\d{2}:\d{2}:\d{2}\s+([\d.]+)(?:\s*([KMGT]))?\s+\S+\/(?:vm|base|subvol)-\d+-(disk-\d+)/i
   const volumeImportedRegex = /volume\s+'[^']*:(?:vm|base|subvol)-\d+-(disk-\d+)'\s+is\s+'[^']+'\s+on the target/i
   const remoteMigrateStartRegex = /starting (?:remote )?(?:storage )?migration/i
 
@@ -481,11 +481,11 @@ function parseGenericProgress(logs: TaskLogEntry[]): { progress: number; message
   let speed = ''
   let eta = ''
 
-  const progressRegex = /(\d+(?:\.\d+)?)\s*%/
-  const transferRegex = /transferred\s+([\d.]+)\s*(\w+)\s+of\s+([\d.]+)\s*(\w+)/i
-  const speedRegex = /([\d.]+)\s*(\w+)\/s/
+  const progressRegex = /(?<!\d)(\d+(?:\.\d+)?)\s*%/
+  const transferRegex = /transferred\s+([\d.]+)\s*([a-z_]\w*)\s+of\s+([\d.]+)\s*([a-z_]\w*)/i
+  const speedRegex = /(?<![\d.])([\d.]+)\s*([A-Za-z_]\w*)\/s/
   // wget-style: "  5% 2.22M 4m16s" or "12% 15.3M 1m02s"
-  const wgetProgressRegex = /(\d+)%\s+([\d.]+)([KMG])\s+(\d+[hm]\d+[ms]|\d+[hms])/
+  const wgetProgressRegex = /(?<!\d)(\d+)%\s+([\d.]+)([KMG])\s+(\d+[hm]\d+[ms]|\d+[hms])/
 
   for (const entry of logs) {
     const text = entry?.t || ''

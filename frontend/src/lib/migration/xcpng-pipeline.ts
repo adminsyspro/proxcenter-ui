@@ -429,7 +429,8 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
     // File-based fallback: use target storage path (plenty of space).
     // Block fallback: use /var/lib/vz/tmp (VHD is converted directly to the
     // block device, then the scratch file is removed).
-    const userTempStorage = config.tempStorage?.trim().replace(/\/+$/, '') || ''
+    let userTempStorage = config.tempStorage?.trim() || ''
+    while (userTempStorage.endsWith('/')) userTempStorage = userTempStorage.slice(0, -1)
     if (userTempStorage) {
       storageTempDir = `${userTempStorage}/proxcenter-xcpng-migration/${targetVmid}`
     } else if (isFileBased) {
@@ -583,7 +584,7 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
 
           // Parse curl stats before checking exit code (for http_code in error messages)
           const statsContent = await executeSSH(config.targetConnectionId, nodeIp, `cat "${statsFile}" 2>/dev/null`)
-          const curlStats = statsContent.output?.match(/\{[^}]+\}/)
+          const curlStats = statsContent.output?.match(/\{[^{}]+\}/)
           let httpCode = 0
           if (curlStats) {
             try {
@@ -600,7 +601,7 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
           if (exitCode !== 0) {
             // curl runs with -sS, so its own diagnostic sits in the stats file just
             // before the -w JSON: surface its last lines instead of a bare code.
-            const statsTail = (statsContent.output || "").replace(/\{[^}]*\}/g, "").trim().split("\n").slice(-3).join(" | ").slice(0, 300)
+            const statsTail = (statsContent.output || "").replace(/\{[^{}]*\}/g, "").trim().split("\n").slice(-3).join(" | ").slice(0, 300)
             return { state: "failed", message: `Download failed (curl exit ${exitCode}${httpInfo})${statsTail ? `: ${statsTail}` : ""}` }
           }
 

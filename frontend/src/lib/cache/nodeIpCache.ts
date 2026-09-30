@@ -77,7 +77,7 @@ export function setFailoverLock(connId: string, promise: Promise<string | null>)
   const locks = getLockStore()
   locks.set(connId, { promise, timestamp: Date.now() })
   // Auto-clean after resolution
-  promise.finally(() => {
+  void promise.finally(() => {
     const current = locks.get(connId)
     if (current?.promise === promise) locks.delete(connId)
   })

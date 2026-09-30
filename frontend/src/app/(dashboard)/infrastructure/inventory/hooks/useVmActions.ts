@@ -248,8 +248,8 @@ export function useVmActions({
         connId,
         node,
         description: `VM ${vmid}: ${t('vmActions.migrate')} (cross-cluster)`,
-        onSuccess: () => { onRefresh?.() },
-        onError: () => { onRefresh?.() },
+        onSuccess: () => { void onRefresh?.() },
+        onError: () => { void onRefresh?.() },
         // NB: do NOT pass deleteSource here. Source-VM deletion is owned solely
         // by the server-side watcher (crossClusterMigrate -> remote-migrate
         // route -> watchMigrationAndCleanup). Triggering the task-route cleanup
@@ -303,11 +303,11 @@ export function useVmActions({
         connId,
         node,
         description: `${params.name || `VM ${vmid}`}: ${t('vmActions.clone')}`,
-        onSuccess: () => { onRefresh?.() },
+        onSuccess: () => { void onRefresh?.() },
       })
     } else {
       toast.success(t('vmActions.cloneSuccess'))
-      onRefresh?.()
+      void onRefresh?.()
     }
   }, [selection, onRefresh, toast, t, trackTask])
 
@@ -383,8 +383,8 @@ export function useVmActions({
         connId,
         node,
         description: `VM ${vmid}: ${t('vmActions.migrate')} (cross-cluster)`,
-        onSuccess: () => { onRefresh?.(); setTableMigrateVm(null) },
-        onError: () => { onRefresh?.(); setTableMigrateVm(null) },
+        onSuccess: () => { void onRefresh?.(); setTableMigrateVm(null) },
+        onError: () => { void onRefresh?.(); setTableMigrateVm(null) },
         // NB: do NOT pass deleteSource here. Source-VM deletion is owned solely
         // by the server-side watcher (crossClusterMigrate -> remote-migrate
         // route -> watchMigrationAndCleanup). Triggering the task-route cleanup
@@ -449,11 +449,11 @@ export function useVmActions({
         connId,
         node,
         description: `${params.name || `VM ${vmid}`}: ${t('vmActions.clone')}`,
-        onSuccess: () => { onRefresh?.(); setTableCloneVm(null) },
+        onSuccess: () => { void onRefresh?.(); setTableCloneVm(null) },
       })
     } else {
       toast.success(t('vmActions.cloneSuccess'))
-      onRefresh?.()
+      void onRefresh?.()
       setTableCloneVm(null)
     }
   }, [tableCloneVm, onRefresh, toast, t, trackTask])
@@ -639,7 +639,7 @@ export function useVmActions({
             }
 
             const refreshAll = () => {
-              fetchDetails(selection).then(payload => {
+              void fetchDetails(selection).then(payload => {
                 setDataRef.current(payload)
                 setLocalTags(payload.tags || [])
               })
@@ -711,7 +711,7 @@ export function useVmActions({
       }
 
       const refreshAll = () => {
-        fetchDetails(selection).then(payload => {
+        void fetchDetails(selection).then(payload => {
           setDataRef.current(payload)
           setLocalTags(payload.tags || [])
         })

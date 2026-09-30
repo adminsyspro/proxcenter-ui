@@ -246,3 +246,77 @@ describe('VdcTab: edit dialog storage policy assignments', () => {
     expect(putBody.storagePolicies).toEqual([{ policyId: 'sp1', quotaMb: 51200 }])
   })
 })
+
+/** Serve extra routes on top of the default fetch stub of this file. */
+function withRoutes(extra: (url: string, init?: any) => Response | undefined) {
+  const base = globalThis.fetch as unknown as (input: any, init?: any) => Promise<Response>
+  const mock = vi.fn(async (input: any, init?: any) => extra(String(input), init) ?? base(input, init))
+
+  vi.stubGlobal('fetch', mock)
+
+  return mock
+}
+
+describe('VdcTab: create-time PBS draft', () => {
+  it('fetches the datastores of the picked PBS connection and offers them', async () => {
+    const mock = withRoutes((url) => {
+      if (url.includes('type=pbs')) return jsonRes({ data: [{ id: 'pbs 1', name: 'pbs-paris', fingerprint: 'AA:BB' }] })
+      if (url === '/api/v1/admin/pbs-connections/pbs%201/datastores') return jsonRes({ data: ['ds-main', 'ds-cold'] })
+
+      return undefined
+    })
+
+    const scope = await openCreateDialog()
+
+    await pickCluster(scope, 'frankfurt')
+    fireEvent.click(scope.getByRole('tab', { name: /storage/i }))
+    const toggle = await scope.findByRole('switch', { name: 'Configure backup' })
+
+    await waitFor(() => expect(toggle).not.toBeDisabled())
+    fireEvent.click(toggle)
+
+    fireEvent.mouseDown(scope.getByRole('combobox', { name: /PBS connection/ }))
+    fireEvent.click(within(screen.getByRole('listbox')).getByRole('option', { name: 'pbs-paris' }))
+
+    await waitFor(() => expect(mock).toHaveBeenCalledWith('/api/v1/admin/pbs-connections/pbs%201/datastores'))
+
+    fireEvent.mouseDown(scope.getByRole('combobox', { name: /Datastore/ }))
+    await waitFor(() => {
+      const labels = within(screen.getByRole('listbox')).getAllByRole('option').map((o) => o.textContent)
+
+      expect(labels).toEqual(['ds-main', 'ds-cold'])
+    })
+  })
+})
+
+describe('VdcTab: vDC list backups column', () => {
+  it('retries a failed PVE storage creation, then reloads the vDC list', async () => {
+    const retries: string[] = []
+    let listCalls = 0
+    const mock = withRoutes((url, init) => {
+      if (url.endsWith('/retry-pve-storage') && init?.method === 'POST') {
+        retries.push(url)
+
+        return jsonRes({ ok: true })
+      }
+      if (url.endsWith('/api/v1/admin/vdcs') && !init?.method) {
+        listCalls++
+
+        return jsonRes({ data: [{ ...EXISTING_VDC, pbsBindings: [{ id: 'b 1', pbsConnectionName: 'pbs-paris', datastore: 'ds-main', namespace: 'tenant-acme', pveStorages: [] }] }] })
+      }
+
+      return undefined
+    })
+
+    renderWithProviders(<VdcTab />)
+    const retry = await screen.findByRole('button', { name: 'Retry PVE storage creation' })
+    const before = listCalls
+
+    fireEvent.click(retry)
+
+    await screen.findByText('PVE storage created successfully.')
+    expect(retries).toEqual(['/api/v1/admin/vdcs/vdc-1/pbs-bindings/b%201/retry-pve-storage'])
+    await waitFor(() => expect(listCalls).toBe(before + 1))
+    expect(mock).toHaveBeenCalled()
+  })
+})

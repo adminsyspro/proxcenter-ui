@@ -54,7 +54,7 @@ const DIRECTION_BY_LABEL: Record<string, SmartTextDirection> = {
 /** Reference values that qualify another row and must never get a bar. */
 const REFERENCE_LABELS = new Set<string>(['Available Spare Threshold'])
 
-const ROW_PATTERN = /^([^:]+):[ \t]+(.+)$/
+const ROW_PATTERN = /^([^:]+):[ \t]+([^ \t].*)$/
 const PERCENT_PATTERN = /^(\d+(?:\.\d+)?)%$/
 
 function parseRow(line: string): { label: string; value: string } | null {

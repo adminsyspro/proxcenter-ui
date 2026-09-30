@@ -271,7 +271,7 @@ export default function GeoDetailsSidebar({ cluster, onClose }: GeoDetailsSideba
   }, [cluster.id, cluster.nodes, allGuests])
 
   useEffect(() => {
-    fetchTrends()
+    void fetchTrends()
   }, [cluster.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Aggregate cluster sparkline from node trends

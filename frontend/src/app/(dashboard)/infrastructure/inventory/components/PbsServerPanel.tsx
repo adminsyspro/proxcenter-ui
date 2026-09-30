@@ -259,7 +259,7 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
       const json = await res.json()
       if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`)
 
-      if (json.data) trackTask({ upid: json.data, connId, node, description: `Restore ${pbsRestoreDialog.storageType === 'lxc' ? 'CT' : 'VM'} ${pbsRestoreVmId}` })
+      if (json.data) void trackTask({ upid: json.data, connId, node, description: `Restore ${pbsRestoreDialog.storageType === 'lxc' ? 'CT' : 'VM'} ${pbsRestoreVmId}` })
       toast.success(t('inventory.pbsRestoreStarted'))
       setPbsRestoreDialog({ open: false, backup: null, storageType: 'qemu' })
     } catch (e: any) {
@@ -446,7 +446,7 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
       }
     }
 
-    reloadPbsRrd()
+    void reloadPbsRrd()
 
     return () => {
       alive = false
@@ -1190,7 +1190,7 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
                       .catch(() => {})
                   } else {
                     const connId = data.storageInfo.connId
-                    loadPbsRestoreStoragesForNode(nodeVal, connId, pbsRestoreDialog.storageType)
+                    void loadPbsRestoreStoragesForNode(nodeVal, connId, pbsRestoreDialog.storageType)
                     // Load used VM IDs
                     fetch(`/api/v1/connections/${encodeURIComponent(connId)}/resources`, { cache: 'no-store' })
                       .then(r => r.ok ? r.json() : null)
@@ -1587,7 +1587,7 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
                                     size="small"
                                     sx={{ p: 0.25 }}
                                     disabled={!!pbsFileDownloading}
-                                    onClick={(e) => { e.stopPropagation(); pbsDownloadFile(nodePath, isDir) }}
+                                    onClick={(e) => { e.stopPropagation(); void pbsDownloadFile(nodePath, isDir) }}
                                   >
                                     <i className="ri-download-2-line" style={{ fontSize: 15, opacity: isDir ? 0.4 : 0.7 }} />
                                   </IconButton>

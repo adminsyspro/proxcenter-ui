@@ -146,7 +146,7 @@ async function handleChunk(
     // First chunk: open connection to Proxmox
     if (!session) {
       const conn = await getConnectionById(id)
-      const baseUrl = conn.baseUrl.replace(/\/+$/, "")
+      const baseUrl = conn.baseUrl.replace(/(?<!\/)\/+$/, "")
       const targetUrl = new URL(
         `${baseUrl}/api2/json/nodes/${encodeURIComponent(node)}/storage/${encodeURIComponent(storage)}/upload`
       )

@@ -687,3 +687,67 @@ describe("the long-budget threshold inside pveFetch", () => {
     expect(failures).toBe(1)
   })
 })
+
+describe("pveFetch failover onto another cluster node", () => {
+  /**
+   * The primary is 127.0.0.2 on a port only bound on 127.0.0.1, so it refuses
+   * the connection; the cached node IP 127.0.0.1 answers. Once the failure
+   * threshold is reached, the scan must probe that node, cache it as the
+   * failover URL and replay the read against it.
+   */
+  let server: Server
+  let port = 0
+  const hits: string[] = []
+
+  beforeAll(async () => {
+    const { createServer } = await import("node:http")
+    server = createServer((req, res) => {
+      hits.push(`${req.headers.host}${req.url}`)
+      res.writeHead(200, { "Content-Type": "application/json" })
+      res.end(JSON.stringify({ data: { version: "9.0.3", release: "9.0" } }))
+    })
+    await new Promise<void>(resolve => server.listen(0, "127.0.0.1", () => resolve()))
+    port = (server.address() as AddressInfo).port
+  })
+
+  afterAll(async () => {
+    server.closeAllConnections()
+    await new Promise<void>(resolve => server.close(() => resolve()))
+  })
+
+  beforeEach(() => {
+    vi.spyOn(console, "warn").mockImplementation(() => {})
+    vi.spyOn(console, "log").mockImplementation(() => {})
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it("replays the read on the first reachable node and keeps using it", async () => {
+    vi.resetModules()
+    const client = await import("./client")
+    const cache = await import("../cache/nodeIpCache")
+    const connId = "conn-failover-scan"
+
+    cache.setNodeIps(connId, ["127.0.0.2", "127.0.0.1"], port, "http")
+    cache.resetFailures(connId)
+    // One failure already recorded: this refused connection reaches the threshold.
+    cache.incrementFailures(connId)
+
+    const opts = { baseUrl: `http://127.0.0.2:${port}`, apiToken: "root@pam!vitest=secret", id: connId }
+    const data = await client.pveFetch<{ version: string }>(opts, "/version")
+
+    expect(data).toEqual({ version: "9.0.3", release: "9.0" })
+    // Probe + replay both went to the candidate node.
+    expect(hits).toEqual([`127.0.0.1:${port}/api2/json/version`, `127.0.0.1:${port}/api2/json/version`])
+
+    // The candidate is now the cached failover: the next call goes straight to it.
+    const again = await client.pveFetch<{ version: string }>(opts, "/version")
+    expect(again.version).toBe("9.0.3")
+    expect(hits).toHaveLength(3)
+    expect(hits[2]).toBe(`127.0.0.1:${port}/api2/json/version`)
+
+    await client.getDefaultAgent().destroy()
+  })
+})

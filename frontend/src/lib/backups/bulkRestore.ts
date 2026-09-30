@@ -277,13 +277,13 @@ export function composeGuestName(vmName: string, suffix: string): string | null 
   const labels = raw
     .replace(/[^a-zA-Z0-9.-]+/g, '-')
     .split('.')
-    .map(label => label.replace(/^-+/, '').replace(/-+$/, ''))
+    .map(label => label.replace(/^-+/, '').replace(/(?<!-)-+$/, ''))
     .filter(Boolean)
   if (labels.length === 0) return null
 
   // Keep it inside one DNS label's 63 characters, and never end on a hyphen
   // or a dot once truncated.
-  const name = labels.join('.').slice(0, 63).replace(/[-.]+$/, '')
+  const name = labels.join('.').slice(0, 63).replace(/(?<![-.])[-.]+$/, '')
 
   return DNS_NAME_RE.test(name) ? name : null
 }

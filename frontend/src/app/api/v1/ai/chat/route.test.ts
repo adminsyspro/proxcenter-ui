@@ -218,4 +218,43 @@ describe('POST /api/v1/ai/chat', () => {
       expect(message).not.toContain('ignore previous instructions')
     })
   })
+
+  describe('OpenAI base URL', () => {
+    function openaiReply(content = 'hi'): Response {
+      return new Response(JSON.stringify({ choices: [{ message: { content } }] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    }
+
+    it('strips every trailing slash of a custom base URL before appending the path', async () => {
+      aiSettings = { enabled: true, provider: 'openai', openaiKey: 'sk-test', openaiModel: 'gpt-4o-mini', openaiBaseUrl: 'https://llm.example.com/v1///' }
+      fetchMock.mockResolvedValueOnce(openaiReply('answer'))
+
+      const res = await ask()
+      const body = await readJson<{ response?: string; provider?: string; model?: string }>(res)
+
+      expect(fetchMock.mock.calls[0][0]).toBe('https://llm.example.com/v1/chat/completions')
+      expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe('Bearer sk-test')
+      expect(body).toEqual({ response: 'answer', provider: 'openai', model: 'gpt-4o-mini' })
+    })
+
+    it('keeps a base URL without trailing slash unchanged', async () => {
+      aiSettings = { enabled: true, provider: 'openai', openaiKey: 'k', openaiModel: 'm', openaiBaseUrl: 'http://10.0.0.5:8000/v1' }
+      fetchMock.mockResolvedValueOnce(openaiReply())
+
+      await ask()
+
+      expect(fetchMock.mock.calls[0][0]).toBe('http://10.0.0.5:8000/v1/chat/completions')
+    })
+
+    it('uses the public OpenAI endpoint when no base URL is configured', async () => {
+      aiSettings = { enabled: true, provider: 'openai', openaiKey: 'k', openaiModel: 'm' }
+      fetchMock.mockResolvedValueOnce(openaiReply())
+
+      await ask()
+
+      expect(fetchMock.mock.calls[0][0]).toBe('https://api.openai.com/v1/chat/completions')
+    })
+  })
 })

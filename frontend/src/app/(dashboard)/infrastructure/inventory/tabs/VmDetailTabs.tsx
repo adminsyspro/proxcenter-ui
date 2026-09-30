@@ -4662,8 +4662,7 @@ return (
                     <CardContent>
                       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
                         <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <i className="ri-shield-check-line" style={{ fontSize: 20 }} />
-                          High Availability (HA)
+                          <i className="ri-shield-check-line" style={{ fontSize: 20 }} />High Availability (HA)
                         </Typography>
                         {haConfig && !haEditing && (
                           <Box sx={{ display: 'flex', gap: 1 }}>

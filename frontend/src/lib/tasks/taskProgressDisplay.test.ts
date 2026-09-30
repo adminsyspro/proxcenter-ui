@@ -12,6 +12,10 @@ describe("parseSpeedMBps", () => {
     expect(parseSpeedMBps("12.5 MB/s")).toBe(12.5)
     expect(parseSpeedMBps("100 MiB/s")).toBe(100)
   })
+  it("takes the first speed after a leading digit run", () => {
+    expect(parseSpeedMBps("step 2: 45.5 MB/s")).toBe(45.5)
+    expect(parseSpeedMBps("1.2.3 MB/s")).toBe(2.3)
+  })
   it("returns null when absent", () => {
     expect(parseSpeedMBps(null)).toBeNull()
     expect(parseSpeedMBps("")).toBeNull()

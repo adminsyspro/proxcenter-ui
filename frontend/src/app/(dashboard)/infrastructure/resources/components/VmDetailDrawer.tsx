@@ -56,7 +56,7 @@ export default function VmDetailDrawer({ vm, onClose }: Props) {
   }, [vm?.connId, vm?.node, vm?.type, vm?.vmid, tf])
 
   useEffect(() => {
-    if (vm) loadRrd()
+    if (vm) void loadRrd()
   }, [vm, loadRrd])
 
   // Reset timeframe when VM changes

@@ -83,7 +83,7 @@ export default function ClusterFirewallTab({ connectionId }: Props) {
   const fw = useFirewallState(api)
 
   useEffect(() => {
-    fw.loadFirewallData()
+    void fw.loadFirewallData()
   }, [fw.loadFirewallData])
 
   if (fw.loading) {

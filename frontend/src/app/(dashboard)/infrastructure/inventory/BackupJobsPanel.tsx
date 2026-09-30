@@ -256,9 +256,9 @@ export default function BackupJobsPanel({ connectionId, onError }: BackupJobsPan
 
   useEffect(() => {
     if (connectionId) {
-      loadJobs()
-      loadVms()
-      loadPools()
+      void loadJobs()
+      void loadVms()
+      void loadPools()
     }
   }, [connectionId, loadJobs, loadVms, loadPools])
 
@@ -377,7 +377,7 @@ export default function BackupJobsPanel({ connectionId, onError }: BackupJobsPan
         setError(result.error || t('inventory.failedToSaveBackupJob'))
       } else {
         setDialogOpen(false)
-        loadJobs()
+        void loadJobs()
       }
     } catch (e: any) {
       setError(e?.message || t('inventory.failedToSaveBackupJob'))
@@ -400,7 +400,7 @@ export default function BackupJobsPanel({ connectionId, onError }: BackupJobsPan
       } else {
         setDeleteDialogOpen(false)
         setJobToDelete(null)
-        loadJobs()
+        void loadJobs()
       }
     } catch (e: any) {
       setError(e?.message || t('inventory.failedToDeleteBackupJob'))
@@ -415,7 +415,7 @@ export default function BackupJobsPanel({ connectionId, onError }: BackupJobsPan
       const result = await toggleBackupJob(connectionId, job.id, !job.enabled)
 
       if (result.ok) {
-        loadJobs()
+        void loadJobs()
       }
     } catch (e) {
       console.error('Error toggling job:', e)
@@ -443,7 +443,7 @@ export default function BackupJobsPanel({ connectionId, onError }: BackupJobsPan
       if (data?.errors?.length) {
         setError(data.errors.map((e) => `${e.node}: ${e.error}`).join('; '))
       }
-      loadJobs()
+      void loadJobs()
     } catch (e: any) {
       setError(e?.message || t('inventory.failedToRunBackupJob'))
     }

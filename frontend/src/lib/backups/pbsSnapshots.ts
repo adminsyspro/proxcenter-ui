@@ -194,7 +194,7 @@ export async function getAllBackups(
 
   // Cache miss.
   if (nonBlocking) {
-    ensurePbsFetchInFlight(id, conn, tenantId, dateLocale)
+    void ensurePbsFetchInFlight(id, conn, tenantId, dateLocale)
     return { data: [], warnings: [], fromCache: false }
   }
 

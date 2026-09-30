@@ -92,7 +92,7 @@ export async function POST(req: Request) {
     }
 
     // Valider l'email
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    const emailRegex = /^[^\s@]+@[^\s@][^\s@.]*\.[^\s@]+$/
 
     if (email.length > 254 || !emailRegex.test(email)) {
       return NextResponse.json(

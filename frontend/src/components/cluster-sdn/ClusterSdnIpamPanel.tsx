@@ -33,7 +33,7 @@ export default function ClusterSdnIpamPanel({ connId }: Props) {
   // Load IPAM backends list once on mount.
   useEffect(() => {
     let cancelled = false
-    ;(async () => {
+    void (async () => {
       setLoadingBackends(true)
       setError(null)
       try {

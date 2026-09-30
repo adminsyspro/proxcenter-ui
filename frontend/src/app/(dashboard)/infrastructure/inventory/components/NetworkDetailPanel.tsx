@@ -297,8 +297,7 @@ export default function NetworkDetailPanel({ selection, onSelect }: {
             <CardContent sx={{ p: 0, '&:last-child': { pb: 0 } }}>
               <Box sx={{ px: 2, py: 1.5, borderBottom: '1px solid', borderColor: 'divider' }}>
                 <Typography fontWeight={900} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <i className="ri-share-line" style={{ fontSize: 18, opacity: 0.7 }} />
-                  Bridges
+                  <i className="ri-share-line" style={{ fontSize: 18, opacity: 0.7 }} />Bridges
                 </Typography>
               </Box>
               <TableContainer>
@@ -345,8 +344,7 @@ export default function NetworkDetailPanel({ selection, onSelect }: {
             <CardContent sx={{ p: 0, '&:last-child': { pb: 0 } }}>
               <Box sx={{ px: 2, py: 1.5, borderBottom: '1px solid', borderColor: 'divider' }}>
                 <Typography fontWeight={900} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <i className="ri-git-branch-line" style={{ fontSize: 18, opacity: 0.7 }} />
-                  VNets
+                  <i className="ri-git-branch-line" style={{ fontSize: 18, opacity: 0.7 }} />VNets
                 </Typography>
               </Box>
               <TableContainer>
@@ -517,8 +515,7 @@ export default function NetworkDetailPanel({ selection, onSelect }: {
             <CardContent sx={{ p: 0, '&:last-child': { pb: 0 } }}>
               <Box sx={{ px: 2, py: 1.5, borderBottom: '1px solid', borderColor: 'divider' }}>
                 <Typography fontWeight={900} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <i className="ri-router-line" style={{ fontSize: 18, opacity: 0.7 }} />
-                  Host interface
+                  <i className="ri-router-line" style={{ fontSize: 18, opacity: 0.7 }} />Host interface
                 </Typography>
               </Box>
               <TableContainer>
@@ -799,8 +796,7 @@ export default function NetworkDetailPanel({ selection, onSelect }: {
           <CardContent sx={{ p: 0, '&:last-child': { pb: 0 } }}>
             <Box sx={{ px: 2, py: 1.5, borderBottom: '1px solid', borderColor: 'divider' }}>
               <Typography fontWeight={900} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <i className="ri-share-line" style={{ fontSize: 18, opacity: 0.7 }} />
-                Bridge Details
+                <i className="ri-share-line" style={{ fontSize: 18, opacity: 0.7 }} />Bridge Details
               </Typography>
             </Box>
             {!bridge ? (

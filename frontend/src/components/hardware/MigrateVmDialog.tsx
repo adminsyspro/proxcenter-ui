@@ -163,7 +163,7 @@ return names.sort((a, b) => a.localeCompare(b))
       }
     }
 
-    loadNodes()
+    void loadNodes()
   }, [open, connId, currentNode, t])
 
   // Charger la config VM pour détecter les disques
@@ -255,7 +255,7 @@ return
       }
     }
 
-    loadVmConfig()
+    void loadVmConfig()
   }, [open, connId, vmid, currentNode])
 
   // Charger les infos CPU des nodes et le type CPU de la VM
@@ -339,7 +339,7 @@ return
       }
     }
 
-    loadCpuInfo()
+    void loadCpuInfo()
   }, [open, connId, currentNode, vmid])
 
   // Calculer la compatibilité CPU entre source et cible
@@ -459,7 +459,7 @@ return content.includes('images') || content.includes('rootdir')
       }
     }
 
-    loadStorages()
+    void loadStorages()
 
     // Reset storage selection when node changes
     setSelectedStorage('__current__')

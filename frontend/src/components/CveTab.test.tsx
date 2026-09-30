@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
-import { cleanup } from '@testing-library/react'
+import { cleanup, fireEvent, within } from '@testing-library/react'
 
 import { renderWithProviders, screen, waitFor } from '@/__tests__/setup/renderWithProviders'
 import CveTab from './CveTab'
@@ -99,5 +99,25 @@ describe('CveTab', () => {
 
     await waitFor(() => expect(screen.getByText('CVE-2026-54369')).toBeTruthy())
     expect(screen.getByText('CVE-2026-54370')).toBeTruthy()
+  })
+
+  it('shows more rows per page once the page size is raised to 50', async () => {
+    const vulns = Array.from({ length: 25 }, (_, i) => entry({ cveId: `CVE-2026-${String(10000 + i)}` }))
+    mockScan({
+      vulnerabilities: vulns,
+      nodes: [{ node: 'pve1', release: 'trixie', source: 'ssh', packagesScanned: 929, packagesTracked: 297, fixable: 25, noFix: 0 }],
+      lastScan: '2026-09-09T12:00:00Z',
+    })
+
+    renderWithProviders(<CveTab connectionId="conn1" node="pve1" available />)
+
+    await waitFor(() => expect(screen.getByText('CVE-2026-10000')).toBeTruthy())
+    expect(screen.queryByText('CVE-2026-10024')).toBeNull()
+
+    fireEvent.mouseDown(screen.getByRole('combobox'))
+    fireEvent.click(within(screen.getByRole('listbox')).getByText('50'))
+
+    await waitFor(() => expect(screen.getByText('CVE-2026-10024')).toBeTruthy())
+    expect(screen.getByText('CVE-2026-10000')).toBeTruthy()
   })
 })

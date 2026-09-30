@@ -146,7 +146,7 @@ export default function PbsTapeBackupTab({ pbsId }: PbsTapeBackupTabProps) {
   }, [pbsId])
 
   useEffect(() => {
-    fetchAll()
+    void fetchAll()
   }, [fetchAll])
 
   const allNotSupported =

@@ -465,6 +465,24 @@ describe('VMRulesPanel', () => {
     await waitFor(() => expect(api.updateVMOptions).toHaveBeenCalledWith(CONN, 'pve1', 'qemu', 100, { log_level_in: 'debug' }))
   })
 
+  it('changes the outbound log level from the log dialog', async () => {
+    api.getVMFirewallLog.mockResolvedValue([{ n: 1, t: 'ACCEPT OUT 10.0.0.9' }])
+    renderPanel()
+    fireEvent.click(screen.getByText('VLAN 20'))
+
+    fireEvent.click(within(rowOf('web-01')).getByRole('button', { name: 'Firewall Logs' }))
+    await waitFor(() => expect(screen.getByText('ACCEPT OUT 10.0.0.9')).toBeInTheDocument())
+
+    const logOut = within(screen.getByText('Log OUT:').parentElement!).getByRole('combobox')
+
+    expect(logOut).toHaveTextContent('nolog')
+
+    fireEvent.mouseDown(logOut)
+    fireEvent.click(within(screen.getByRole('listbox')).getByRole('option', { name: 'alert' }))
+
+    await waitFor(() => expect(api.updateVMOptions).toHaveBeenCalledWith(CONN, 'pve1', 'qemu', 100, { log_level_out: 'alert' }))
+  })
+
   it('refreshes the firewall log from the dialog button once the log has loaded', async () => {
     api.getVMFirewallLog.mockResolvedValue([{ n: 1, t: 'DROP IN 10.0.0.1' }])
     renderPanel()

@@ -118,7 +118,7 @@ async function probeHost(
       ])
 
       if (versionResult.success && versionResult.output?.trim()) {
-        const match = versionResult.output.match(/(\d+\.\d+\.\d+)/)
+        const match = versionResult.output.match(/(?<!\d)(\d+\.\d+\.\d+)/)
         if (match) nodeStatus.ovsVersion = match[1]
       }
 

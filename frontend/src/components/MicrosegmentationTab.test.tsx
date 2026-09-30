@@ -99,3 +99,73 @@ describe('MicrosegmentationTab custom gateway offset', () => {
     await waitFor(() => expect(offset().value).toBe('1'))
   })
 })
+
+describe('MicrosegmentationTab analysis reloads', () => {
+  it('re-runs the analysis when the configuration dialog is applied', async () => {
+    let analyzeCalls = 0
+
+    server.use(
+      http.get(`*/api/v1/firewall/microseg/${CONNECTION_ID}/analyze`, () => {
+        analyzeCalls++
+
+        return HttpResponse.json(ANALYSIS)
+      }),
+    )
+
+    await openConfigDialog()
+    await waitFor(() => expect(analyzeCalls).toBeGreaterThan(0))
+    const before = analyzeCalls
+
+    await userEvent.click(screen.getByRole('button', { name: 'Apply' }))
+
+    await waitFor(() => expect(analyzeCalls).toBe(before + 1))
+    await waitFor(() => expect(screen.queryByText('Micro-segmentation Configuration')).not.toBeInTheDocument())
+  })
+
+  it('applies a generated plan, then reloads the analysis', async () => {
+    const missing = {
+      ...ANALYSIS,
+      networks: [{ ...ANALYSIS.networks[0], has_gateway: false, has_base_sg: false }],
+      gateway_aliases: [],
+      base_sgs: [],
+      missing_gateways: [{ network_name: 'vmbr0', alias_name: 'gw_vmbr0', gateway_ip: '10.0.0.254' }],
+      missing_base_sgs: [{ network_name: 'vmbr0', sg_name: 'sg_vmbr0' }],
+      segmentation_ready: false,
+    }
+    const analyzeUrls: string[] = []
+    const generateBodies: any[] = []
+
+    server.use(
+      http.get(`*/api/v1/firewall/microseg/${CONNECTION_ID}/analyze`, ({ request }) => {
+        analyzeUrls.push(request.url)
+
+        return HttpResponse.json(missing)
+      }),
+      http.post(`*/api/v1/firewall/microseg/${CONNECTION_ID}/generate-base`, async ({ request }) => {
+        const body = await request.json() as any
+
+        generateBodies.push(body)
+
+        return HttpResponse.json(body.dry_run
+          ? { plan: [{ type: 'alias', name: 'gw_vmbr0', description: 'Gateway 10.0.0.254' }] }
+          : { created_aliases: ['gw_vmbr0'], created_groups: ['sg_vmbr0'], plan: [] })
+      }),
+    )
+
+    renderWithProviders(<MicrosegmentationTab connectionId={CONNECTION_ID} />)
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Generate configuration' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Preview' }))
+    await screen.findByText('Gateway 10.0.0.254')
+
+    const callsBeforeApply = analyzeUrls.length
+
+    await userEvent.click(screen.getByRole('button', { name: 'Apply (1 actions)' }))
+
+    await screen.findByText('Created 1 aliases and 1 Security Groups')
+    await waitFor(() => expect(analyzeUrls.length).toBe(callsBeforeApply + 1))
+    expect(analyzeUrls.at(-1)).toContain('gateway_offset=254')
+    expect(generateBodies.map(b => b.dry_run)).toEqual([true, false])
+    expect(generateBodies[1]).toMatchObject({ create_gateways: true, gateway_offset: 254, networks: ['vmbr0'] })
+  })
+})

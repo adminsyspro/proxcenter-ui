@@ -32,7 +32,7 @@ export default function ClusterSdnVNetFirewallPanel({ connId }: Props) {
 
   useEffect(() => {
     let cancelled = false
-    ;(async () => {
+    void (async () => {
       setLoadingVNets(true)
       setError(null)
       try {

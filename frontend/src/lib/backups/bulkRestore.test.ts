@@ -392,6 +392,7 @@ describe('composeGuestName', () => {
     expect(composeGuestName('srv1.lab.local', '-copy')).toBe('srv1.lab.local-copy')
     expect(composeGuestName('-weird-', '-x')).toBe('weird--x')
     expect(composeGuestName('a..b', '')).toBe('a.b')
+    expect(composeGuestName('--a--b--.--c-', '--')).toBe('a--b.c')
   })
 
   it('truncates to one DNS label and never ends on a hyphen or a dot', () => {

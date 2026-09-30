@@ -427,7 +427,7 @@ export default function VmConfigEditor({
   
   useEffect(() => {
     if (open) {
-      fetchConfig()
+      void fetchConfig()
       setSuccess(false)
       setRequiresRestart(false)
     }

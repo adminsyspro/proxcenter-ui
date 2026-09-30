@@ -251,12 +251,13 @@ function clearFailoverUrl(connId: string): void {
 }
 
 /** @deprecated No longer persists — kept for reference */
-async function updateConnectionBaseUrl(connId: string, newUrl: string): Promise<void> {
+function updateConnectionBaseUrl(connId: string, newUrl: string): Promise<void> {
   try {
     setFailoverUrl(connId, newUrl)
   } catch (e) {
     console.error(`[failover] Failed to update connection ${safeLog(connId)} baseUrl:`, e)
   }
+  return Promise.resolve()
 }
 
 export async function pveFetch<T>(

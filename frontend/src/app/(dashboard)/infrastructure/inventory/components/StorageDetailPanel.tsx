@@ -690,7 +690,7 @@ export default function StorageDetailPanel({
                   throw new Error(json.error || `HTTP ${res.status}`)
                 }
                 // Refresh data
-                if (selection) fetchDetails(selection).then(setData)
+                if (selection) void fetchDetails(selection).then(setData)
               }}
             />
           )) : (si.contentItems || []).length === 0 && (
@@ -716,7 +716,7 @@ export default function StorageDetailPanel({
         contentTypes={si.content || []}
         onUploaded={() => {
           setStorageUploadOpen(false)
-          if (selection) fetchDetails(selection).then(setData)
+          if (selection) void fetchDetails(selection).then(setData)
         }}
       />
 
@@ -730,7 +730,7 @@ export default function StorageDetailPanel({
           storage={si.storage}
           onDownloaded={() => {
             setTemplateDialogOpen(false)
-            if (selection) fetchDetails(selection).then(setData)
+            if (selection) void fetchDetails(selection).then(setData)
           }}
         />
       )}

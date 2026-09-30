@@ -107,7 +107,7 @@ export default function SnapshotsTab({ connections, vmNamesByConn }: Props) {
     }
   }, [])
 
-  useEffect(() => { load() }, [load])
+  useEffect(() => { void load() }, [load])
 
   const filtered = useMemo(() => {
     const qq = q.trim().toLowerCase()

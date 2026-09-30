@@ -48,6 +48,13 @@ describe('connection schemas subType', () => {
     expect(createConnectionSchema.safeParse({ name: 'x', type: 'xcpng', subType: 'kvm', baseUrl: 'https://x', vmwareUser: 'a', vmwarePassword: 'b' }).success).toBe(false)
   })
 
+  it('strips every trailing slash from baseUrl and keeps inner ones', () => {
+    const c = createConnectionSchema.safeParse({ name: 'vc', type: 'vmware', subType: 'vcenter', baseUrl: ' https://vc/a//b/// ', vmwareUser: 'a', vmwarePassword: 'b' })
+    expect(c.success && c.data.baseUrl).toBe('https://vc/a//b')
+    const u = updateConnectionSchema.safeParse({ baseUrl: 'https://vc//' })
+    expect(u.success && u.data.baseUrl).toBe('https://vc')
+  })
+
   it('lets an update switch an XCP-ng connection to xo mode', () => {
     const r = updateConnectionSchema.safeParse({ subType: 'xo' })
     expect(r.success).toBe(true)

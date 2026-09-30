@@ -138,7 +138,7 @@ async function pveNetworkAndVersion(conn: ProxmoxClientOptions): Promise<Diagnos
     const data = await pveFetch<any>(conn, '/version')
     const version: string = data?.version ?? 'unknown'
     // Warn if we can detect an outdated major version (PVE 6 or earlier).
-    const major = parseInt(version.split('.')[0] ?? '0', 10)
+    const major = Number.parseInt(version.split('.')[0] ?? '0', 10)
     if (major > 0 && major < 7) {
       return {
         status: 'warn',
@@ -467,7 +467,7 @@ async function externalReachability(meta: DiagnosticMeta): Promise<DiagnosticChe
 
     const host = parsedUrl.hostname
     const port = parsedUrl.port
-      ? parseInt(parsedUrl.port, 10)
+      ? Number.parseInt(parsedUrl.port, 10)
       : parsedUrl.protocol === 'http:' ? 80 : 443
 
     await tcpReachable(host, port)

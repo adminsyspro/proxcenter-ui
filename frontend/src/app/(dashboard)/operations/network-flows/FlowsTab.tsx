@@ -235,11 +235,11 @@ export default function FlowsTab() {
       setSparklineData(new Map(merged))
     }
 
-    fetchMissing()
+    void fetchMissing()
     // Also refresh all sparklines periodically
     sparklineTimerRef.current = window.setInterval(() => {
       sparklineRef.current = new Map() // force full refresh
-      fetchMissing()
+      void fetchMissing()
     }, 60000)
 
     return () => {
@@ -311,7 +311,7 @@ export default function FlowsTab() {
     }
   }, [])
 
-  useEffect(() => { loadAgents() }, [loadAgents])
+  useEffect(() => { void loadAgents() }, [loadAgents])
 
   // Open configure dialog (all unconfigured nodes)
   const handleOpenConfigDialog = () => {
@@ -396,7 +396,7 @@ export default function FlowsTab() {
   }, [])
 
   useEffect(() => {
-    loadData()
+    void loadData()
     const interval = setInterval(loadData, 10000) // Refresh every 10s
     return () => clearInterval(interval)
   }, [loadData])

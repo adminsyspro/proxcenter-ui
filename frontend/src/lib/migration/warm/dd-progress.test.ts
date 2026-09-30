@@ -34,6 +34,12 @@ describe("parseDdProgress", () => {
     expect(r!.seconds).toBe(5)
   })
 
+  it("reads a progress line that follows other text on the same line", () => {
+    const r = parseDdProgress("dd: 2048 bytes copied, 1 s, 2 kB/s\r4096 bytes (4.1 kB) copied, 2 s, 2 kB/s")
+    expect(r!.bytes).toBe(4096)
+    expect(r!.seconds).toBe(2)
+  })
+
   it("returns null when there is no progress line", () => {
     expect(parseDdProgress("dd: error writing '/dev/sdx': No space left on device")).toBeNull()
     expect(parseDdProgress("")).toBeNull()

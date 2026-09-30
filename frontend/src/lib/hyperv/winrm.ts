@@ -143,6 +143,12 @@ function checkFault(xml: string): void {
   }
 }
 
+function stripTrailingSlashes(value: string): string {
+  let end = value.length
+  while (end > 0 && value[end - 1] === "/") end--
+  return value.slice(0, end)
+}
+
 // ---------------------------------------------------------------------------
 // WinRM Client
 // ---------------------------------------------------------------------------
@@ -156,7 +162,7 @@ export class WinRMClient {
     const protocol = conn.useSSL ? "https" : "http"
     const port = conn.port ?? (conn.useSSL ? 5986 : 5985)
     // Strip any protocol prefix the user may have included in the host field
-    const host = conn.host.replace(/^https?:\/\//, "").replace(/\/+$/, "").split(":")[0]
+    const host = stripTrailingSlashes(conn.host.replace(/^https?:\/\//, "")).split(":")[0]
     this.endpoint = `${protocol}://${host}:${port}/wsman`
     this.authHeader = `Basic ${Buffer.from(`${conn.username}:${conn.password}`).toString("base64")}`
     this.timeout = conn.timeout ?? 30_000

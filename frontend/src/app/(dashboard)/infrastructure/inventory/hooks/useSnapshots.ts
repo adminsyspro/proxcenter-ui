@@ -264,7 +264,7 @@ export function useSnapshots({
     }
   }, [selection, newSnapshotName, newSnapshotDesc, newSnapshotRam, followSnapshotTask, toast, t])
 
-  const deleteSnapshot = useCallback(async (snapname: string) => {
+  const deleteSnapshot = useCallback((snapname: string) => {
     if (selection?.type !== 'vm') return
 
     const { connId, type, node, vmid } = parseVmId(selection.id)
@@ -390,7 +390,7 @@ export function useSnapshots({
     })
   }, [selection, snapshots, loadSnapshots, data?.title, toast, t, setConfirmAction, setConfirmActionLoading])
 
-  const rollbackSnapshot = useCallback(async (snapname: string, hasVmstate?: boolean) => {
+  const rollbackSnapshot = useCallback((snapname: string, hasVmstate?: boolean) => {
     if (selection?.type !== 'vm') return
 
     const { connId, type, node, vmid } = parseVmId(selection.id)
@@ -459,7 +459,7 @@ export function useSnapshots({
   // Load snapshots when Snapshots tab is opened (lazy loading)
   useEffect(() => {
     if (selection?.type === 'vm' && detailTab === 5 && !snapshotsLoaded && !snapshotsLoading) {
-      loadSnapshots()
+      void loadSnapshots()
     }
   }, [selection?.type, selection?.id, detailTab, snapshotsLoaded, snapshotsLoading, loadSnapshots])
 

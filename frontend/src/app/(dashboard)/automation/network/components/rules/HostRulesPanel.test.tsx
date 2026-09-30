@@ -398,6 +398,45 @@ describe('HostRulesPanel', () => {
     expect(logos[0]).toHaveAttribute('src', '/images/proxmox-logo-dark.svg')
   })
 
+  it('loads the host rules on mount when none are loaded yet', async () => {
+    const p = await renderPanel({ hostRulesByNode: {} })
+
+    expect(p.loadHostRules).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not reload the host rules on mount when they are already loaded', async () => {
+    const p = await renderPanel()
+
+    expect(p.loadHostRules).not.toHaveBeenCalled()
+  })
+
+  it('moves a rule by drag and drop, then reloads the host rules', async () => {
+    const p = await renderPanel()
+
+    expandNode(NODE)
+
+    const requests: Request[] = []
+
+    server.use(
+      http.put(`*/api/v1/firewall/nodes/${CONN}/${NODE}/rules/0`, ({ request }) => {
+        requests.push(request.clone())
+
+        return HttpResponse.json({})
+      }),
+    )
+
+    const ruleRows = screen.getAllByRole('row').filter(r => within(r).queryByRole('button', { name: 'Edit' }))
+    const dataTransfer = { effectAllowed: '', dropEffect: '', setData: vi.fn(), getData: vi.fn() }
+
+    fireEvent.dragStart(ruleRows[0], { dataTransfer })
+    fireEvent.dragOver(ruleRows[1], { dataTransfer })
+    fireEvent.drop(ruleRows[1], { dataTransfer })
+
+    await waitFor(() => expect(requests).toHaveLength(1))
+    expect(await requests[0].json()).toEqual({ moveto: 1 })
+    await waitFor(() => expect(p.loadHostRules).toHaveBeenCalledTimes(1))
+  })
+
   it('renders nothing fetchable when no connection is selected', async () => {
     renderWithProviders(<HostRulesPanel {...props({ selectedConnection: '', nodesList: [], hostRulesByNode: {} })} />)
 

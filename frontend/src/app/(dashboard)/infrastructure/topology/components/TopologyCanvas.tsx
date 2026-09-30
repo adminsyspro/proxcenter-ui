@@ -52,7 +52,7 @@ export default function TopologyCanvas({ nodes, edges, isLoading, onNodeSelect }
   useEffect(() => {
     if (nodes.length > 0) {
       const timer = setTimeout(() => {
-        fitView({ padding: 0.15, duration: 300, maxZoom: 1 })
+        void fitView({ padding: 0.15, duration: 300, maxZoom: 1 })
       }, 100)
 
       return () => clearTimeout(timer)

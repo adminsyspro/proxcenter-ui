@@ -104,7 +104,7 @@ export default function PbsTrafficControlTab({ pbsId }: PbsTrafficControlTabProp
   }, [pbsId])
 
   useEffect(() => {
-    fetchRules()
+    void fetchRules()
   }, [fetchRules])
 
   const dash = (value: string | null): React.ReactNode =>

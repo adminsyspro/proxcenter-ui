@@ -766,8 +766,8 @@ export default function DRSSettingsPanel({
               const s = settings.migration_cooldown || '5m'
               // Parse Go duration format: "5m", "5m0s", "1h30m", "30s"
               let totalMinutes = 0
-              const hMatch = s.match(/(\d+)h/)
-              const mMatch = s.match(/(\d+)m/)
+              const hMatch = s.match(/(?<!\d)(\d+)h/)
+              const mMatch = s.match(/(?<!\d)(\d+)m/)
               const sMatch = s.match(/^(\d+)s$/)
               if (hMatch) totalMinutes += Number.parseInt(hMatch[1]) * 60
               if (mMatch) totalMinutes += Number.parseInt(mMatch[1])

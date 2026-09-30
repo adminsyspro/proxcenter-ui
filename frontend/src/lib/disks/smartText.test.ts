@@ -116,6 +116,13 @@ describe('parseSmartText', () => {
     expect(view.leftover).toEqual([])
   })
 
+  it('keeps a row whose value holds a colon and leaves a blank value out', () => {
+    const view = parseSmartText('Header\nFirmware Version:\t\tA: 01\nSerial Number:   \t ')
+
+    expect(view.rows.find((r) => r.label === 'Firmware Version')?.value).toBe('A: 01')
+    expect(view.rows.find((r) => r.label === 'Serial Number')).toBeUndefined()
+  })
+
   it('handles Windows line endings the same way as Unix ones', () => {
     const withCrlf = MICRON_NVME_TEXT.replace(/\n/g, '\r\n')
     const view = parseSmartText(withCrlf)

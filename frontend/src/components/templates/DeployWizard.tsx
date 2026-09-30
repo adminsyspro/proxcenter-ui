@@ -318,7 +318,7 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
     const key = `${isoBridgeChoice.vdcId}|${isoBridgeChoice.displayName}`
     if (prefilledForRef.current === key) return
     prefilledForRef.current = key
-    fetchNextFree('both')
+    void fetchNextFree('both')
   }, [open, isoNeedsReservation, isoBridgeChoice?.vdcId, isoBridgeChoice?.displayName, fetchNextFree])
 
   // Best-effort guess of "this ISO is a Windows installer" — drives the
@@ -465,7 +465,7 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
   useEffect(() => {
     if (!open || !hideInfra) { setTenantVdcs([]); setDeployVdcId(''); return }
     let cancelled = false
-    ;(async () => {
+    void (async () => {
       try {
         const r = await fetch('/api/v1/vdcs', { cache: 'no-store' })
         if (cancelled || !r.ok) return
@@ -657,7 +657,7 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
     let cancelled = false
     reset()
     setQuotaBlocked(false)
-    ;(async () => {
+    void (async () => {
       try {
         const res = await fetch('/api/v1/vdcs')
         if (!res.ok) { if (!cancelled) reset() ; return }

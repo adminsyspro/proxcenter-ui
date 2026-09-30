@@ -90,7 +90,7 @@ export function LicenseProvider({ children }: { children: ReactNode }) {
   }, [loadLicenseStatus])
 
   useEffect(() => {
-    refresh()
+    void refresh()
   }, [refresh])
 
   const isLicensed = Boolean(status?.licensed && !status?.expired)

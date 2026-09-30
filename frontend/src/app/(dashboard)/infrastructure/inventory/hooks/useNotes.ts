@@ -91,7 +91,7 @@ export function useNotes({ selection, detailTab, t }: UseNotesParams) {
   // Charger les notes quand on sélectionne l'onglet Résumé (0) ou Notes (6)
   useEffect(() => {
     if ((detailTab === 0 || detailTab === 6) && selection?.type === 'vm' && !notesLoaded && !notesLoading) {
-      loadNotes()
+      void loadNotes()
     }
   }, [detailTab, selection?.type, selection?.id, notesLoaded, notesLoading, loadNotes])
 

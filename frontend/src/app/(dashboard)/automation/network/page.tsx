@@ -97,7 +97,7 @@ export default function NetworkAutomationPage() {
   useEffect(() => {
     if (isEnterprise && selectedConnection && !loadingVMRules && vmFirewallData.length === 0) {
       if (activeTab === 0 || activeTab === 4 || (activeTab === 1 && (rulesSubTab === 0 || rulesSubTab === 2))) {
-        loadVMFirewallData()
+        void loadVMFirewallData()
       }
     }
   }, [activeTab, rulesSubTab, selectedConnection, vmFirewallData.length, loadingVMRules, loadVMFirewallData])

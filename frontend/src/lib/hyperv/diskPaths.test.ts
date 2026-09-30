@@ -10,6 +10,7 @@ describe("hypervDiskMountPath", () => {
     [disk, "D:\\HYPERV", mounted],
     [disk, "d:\\hyperv", mounted],
     [disk, "D:\\HYPERV\\", mounted],
+    [disk, "D:\\HYPERV\\\\\\", mounted],
     ["D:/HYPERV/vm/Virtual Hard Disks/vm.vhdx", "D:/HYPERV", "/mnt/hyperv/vm/Virtual Hard Disks/vm.vhdx"],
   ])("maps %s relative to %s", (windowsPath, sharePath, expected) => {
     expect(hypervDiskMountPath(windowsPath, sharePath)).toBe(expected)

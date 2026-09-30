@@ -54,7 +54,7 @@ export default function HostRulesPanel({ hostRulesByNode, nodesList, securityGro
   // Load host rules on mount if not already loaded
   useEffect(() => {
     if (selectedConnection && nodesList.length > 0 && Object.keys(hostRulesByNode).length === 0) {
-      loadHostRules()
+      void loadHostRules()
     }
   }, [selectedConnection, nodesList, loadHostRules])
 
@@ -70,7 +70,7 @@ export default function HostRulesPanel({ hostRulesByNode, nodesList, securityGro
       }
       setNodeOptionsByNode(result)
     }
-    fetchAll()
+    void fetchAll()
   }, [selectedConnection, nodesList])
 
   const filteredHosts = nodesList.filter(node =>
@@ -102,7 +102,7 @@ export default function HostRulesPanel({ hostRulesByNode, nodesList, securityGro
         method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...rule, enable: newEnable })
       })
       showToast(newEnable === 1 ? t('network.ruleEnabled') : t('network.ruleDisabled'), 'success')
-      reloadHostRulesForNode(node)
+      void reloadHostRulesForNode(node)
     } catch (err: any) {
       showToast(err.message || t('networkPage.error'), 'error')
     }
@@ -117,7 +117,7 @@ export default function HostRulesPanel({ hostRulesByNode, nodesList, securityGro
       setHostRuleDialogOpen(false)
       setEditingHostRule(null)
       setNewHostRule({ ...DEFAULT_RULE })
-      reloadHostRulesForNode(editingHostRule.node)
+      void reloadHostRulesForNode(editingHostRule.node)
     } catch (err: any) {
       showToast(err.message || t('networkPage.error'), 'error')
     }
@@ -134,7 +134,7 @@ export default function HostRulesPanel({ hostRulesByNode, nodesList, securityGro
       showToast(t('network.ruleModified'), 'success')
       setHostRuleDialogOpen(false)
       setEditingHostRule(null)
-      reloadHostRulesForNode(editingHostRule.node)
+      void reloadHostRulesForNode(editingHostRule.node)
     } catch (err: any) {
       showToast(err.message || t('networkPage.error'), 'error')
     }
@@ -147,7 +147,7 @@ export default function HostRulesPanel({ hostRulesByNode, nodesList, securityGro
       await firewallAPI.deleteNodeRule(selectedConnection, node, pos)
       showToast(t('network.ruleDeleted'), 'success')
       setDeleteHostRuleConfirm(null)
-      reloadHostRulesForNode(node)
+      void reloadHostRulesForNode(node)
     } catch (err: any) {
       showToast(err.message || t('networkPage.error'), 'error')
     }
@@ -188,7 +188,7 @@ export default function HostRulesPanel({ hostRulesByNode, nodesList, securityGro
           body: JSON.stringify({ moveto: toPos })
         })
         showToast(t('network.ruleMoved'), 'success')
-        loadHostRules()
+        void loadHostRules()
       } catch (err: any) {
         showToast(err.message || t('networkPage.moveError'), 'error')
       }

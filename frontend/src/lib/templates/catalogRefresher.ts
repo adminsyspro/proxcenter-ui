@@ -57,7 +57,7 @@ export function startCatalogRefresher(options: CatalogRefresherOptions = {}): ()
   const tick = () => {
     if (stopped || inFlight) return
     inFlight = true
-    refresh()
+    void refresh()
       .then(
         (outcome) => {
           if (outcome.result === 'updated') {

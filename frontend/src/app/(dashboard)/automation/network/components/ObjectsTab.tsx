@@ -92,7 +92,7 @@ export default function ObjectsTab({ aliases, ipsets, selectedConnection, loadin
     }
   }
 
-  const handleUpdateIPSet = async () => {
+  const handleUpdateIPSet = () => {
     if (!editingIPSet) return
     try {
       showToast(t('networkPage.ipSetUpdated'), 'success')

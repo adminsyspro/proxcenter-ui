@@ -26,12 +26,12 @@ export class XapiSource implements XcpngSource {
   getVmConfig(uuid: string): Promise<XoVmConfig> { return xapiGetVmConfig(this.session, uuid) }
 
   /** The export URL carries the session reference: no auth header, but the URL itself is a secret. */
-  async diskDownload(disk: XoDiskInfo, format: "vhd" | "raw"): Promise<XcpngDiskDownload> {
-    if (!disk.vdiRef) throw new Error(`disk ${disk.label} has no XAPI reference`)
+  diskDownload(disk: XoDiskInfo, format: "vhd" | "raw"): Promise<XcpngDiskDownload> {
+    if (!disk.vdiRef) return Promise.reject(new Error(`disk ${disk.label} has no XAPI reference`))
     const url = xapiVdiExportUrl(this.session, disk.vdiRef, format)
     const lines = [`url = "${url}"`, `header = "Accept: application/octet-stream"`]
     if (this.c.insecureTLS) lines.push("insecure")
-    return { url, curlConfig: lines.join("\n") }
+    return Promise.resolve({ url, curlConfig: lines.join("\n") })
   }
 
   keepAlive() { return xapiKeepAlive(this.session) }

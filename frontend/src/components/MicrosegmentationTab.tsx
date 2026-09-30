@@ -238,7 +238,7 @@ return config.excludePatterns.some(pattern =>
   }, [connectionId, config.gatewayMode, config.customOffset])
   
   useEffect(() => {
-    loadAnalysis()
+    void loadAnalysis()
   }, [loadAnalysis])
   
   // Generate base SGs
@@ -273,7 +273,7 @@ return config.excludePatterns.some(pattern =>
         })
         setGenerateDialogOpen(false)
         setPreviewResult(null)
-        loadAnalysis()
+        void loadAnalysis()
       }
     } catch (err: any) {
       setSnackbar({ open: true, message: err.message, severity: 'error' })
@@ -884,7 +884,7 @@ IN  DROP   -source net-dmz-k8s     # Bloquer VLAN entrant`}
           <Button onClick={() => setConfigDialogOpen(false)}>{t('common.cancel')}</Button>
           <Button 
             variant="contained" 
-            onClick={() => { setConfigDialogOpen(false); loadAnalysis(); }}
+            onClick={() => { setConfigDialogOpen(false); void loadAnalysis(); }}
             startIcon={<i className="ri-check-line" />}
           >
             {t('common.apply')}

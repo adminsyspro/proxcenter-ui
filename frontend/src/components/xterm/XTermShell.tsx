@@ -171,7 +171,7 @@ export default function XTermShell({ sessionId, connId, node, host, onDisconnect
         } else if (typeof event.data === 'string') {
           xtermRef.current.write(event.data)
         } else if (event.data instanceof Blob) {
-          event.data.text().then((text: string) => {
+          void event.data.text().then((text: string) => {
             xtermRef.current?.write(text)
           })
         }
@@ -208,7 +208,7 @@ export default function XTermShell({ sessionId, connId, node, host, onDisconnect
 
   // Connexion initiale
   useEffect(() => {
-    connect()
+    void connect()
 
     return () => {
       if (wsRef.current) {

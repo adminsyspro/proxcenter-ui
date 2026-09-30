@@ -84,7 +84,7 @@ export default function NodeFirewallTab({ connectionId, node }: Props) {
   const fw = useFirewallState(api)
 
   useEffect(() => {
-    fw.loadFirewallData()
+    void fw.loadFirewallData()
   }, [fw.loadFirewallData])
 
   if (fw.loading) {

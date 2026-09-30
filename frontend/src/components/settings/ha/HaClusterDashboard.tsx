@@ -83,7 +83,7 @@ export default function HaClusterDashboard() {
       const data = await res.json().catch(() => ({}))
       if (res.ok) {
         setSyncResult({ type: 'success', message: data.message || t('dashboard.syncModeUpdated') })
-        mutate()
+        void mutate()
       } else {
         setSyncResult({ type: 'error', message: data.error || t('dashboard.failedStatus', { status: res.status }) })
       }
@@ -180,7 +180,7 @@ export default function HaClusterDashboard() {
               maintenanceLocked={maintenanceIPs.size > 0 && !maintenanceIPs.has(member.host)}
               leaderName={leader?.name}
               onSwitchover={switchoverCandidates.has(member.name) ? () => mutate() : undefined}
-              onRefresh={() => { mutate(); mutateConfig() }}
+              onRefresh={() => { void mutate(); void mutateConfig() }}
             />
           </Box>
         ))}

@@ -62,7 +62,7 @@ const ROOT_PROMPT_RE = /Enter a number between 1 and (\d+)/
  * direction: losing one root out of a genuine dual boot turns the ambiguous
  * case into an automatic selection of the other OS.
  */
-const ROOT_ENTRY_RE = /^\s*\[(\d+)\]\s+(\S+)(.*)$/
+const ROOT_ENTRY_RE = /^\s*\[(\d+)\]\s+(\S+)((?:[^\S\n\r\u2028\u2029].*)?)$/
 
 /**
  * Snapper snapshot subvolumes. Never a valid conversion target: they are

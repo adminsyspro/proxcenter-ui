@@ -553,7 +553,7 @@ export default function InventoryTree({ selected, onSelect, onRefreshRef, onOpti
       } catch {}
       setEntityTagsMap(map)
     }
-    loadEntityTags()
+    void loadEntityTags()
   }, [reloadTick])
   
   // Helper pour vérifier si une VM est en migration
@@ -894,7 +894,7 @@ return migratingVmIds.has(`${connId}:${vmid}`)
     const json = await res.json()
     const upid = json.data
     if (upid && typeof upid === 'string' && upid.startsWith('UPID:')) {
-      trackTask({
+      void trackTask({
         upid,
         connId: cloneTarget.connId,
         node: cloneTarget.node,
@@ -934,7 +934,7 @@ return migratingVmIds.has(`${connId}:${vmid}`)
       setTemplateTarget(null)
 
       if (upid && typeof upid === 'string' && upid.startsWith('UPID:')) {
-        trackTask({
+        void trackTask({
           upid,
           connId: templateTarget.connId,
           node: templateTarget.node,
@@ -1527,7 +1527,7 @@ return next
   // Charger les favoris au mount (seulement si pas de prop favorites)
   useEffect(() => {
     if (!propFavorites) {
-      loadFavorites()
+      void loadFavorites()
     }
   }, [propFavorites])
 
@@ -1694,7 +1694,7 @@ return next
                 const vmFetchTimeoutMs = externalVmFetchTimeoutMs(conn.type)
                 const timeoutId = setTimeout(() => controller.abort(), vmFetchTimeoutMs)
                 const apiPrefix = conn.type === 'xcpng' ? 'xcpng' : conn.type === 'hyperv' ? 'hyperv' : conn.type === 'nutanix' ? 'nutanix' : 'vmware'
-                ;(async () => {
+                void (async () => {
                   let vms: any[] = []
                   let loadError: string | undefined
                   try {
@@ -2862,7 +2862,7 @@ return favorites.has(vmKey)
       return
     }
     setNetworkLoading(true)
-    fetchConnectionsNetworks(connIds, { retries: 2 }).then(({ data, bridges, vlans, sdnVnets, vnetAliasesByConn, failedConnIds }) => {
+    void fetchConnectionsNetworks(connIds, { retries: 2 }).then(({ data, bridges, vlans, sdnVnets, vnetAliasesByConn, failedConnIds }) => {
       setNetworkData(data)
       setNetworkBridges(bridges)
       setNetworkVlans(vlans)

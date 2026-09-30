@@ -95,7 +95,7 @@ export default function PbsUpdatesTab({ pbsId }: PbsUpdatesTabProps) {
   }, [pbsId])
 
   useEffect(() => {
-    fetchUpdates()
+    void fetchUpdates()
   }, [fetchUpdates])
 
   const sortedPackages = useMemo(() => {
@@ -128,7 +128,7 @@ export default function PbsUpdatesTab({ pbsId }: PbsUpdatesTabProps) {
         message: t('inventory.pbsUpdatesRefreshStarted'),
       })
       setTimeout(() => {
-        fetchUpdates()
+        void fetchUpdates()
       }, 3000)
     } catch (e: any) {
       setSnackbar({

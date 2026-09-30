@@ -558,7 +558,7 @@ export default function InventoryDetails({
     let alive = true
     setNodeActionStorageLoading(true)
 
-    ;(async () => {
+    void (async () => {
       const localKeys = new Set<string>()
       const batchSize = 5
       for (let i = 0; i < runningVms.length; i += batchSize) {
@@ -826,7 +826,7 @@ export default function InventoryDetails({
     const connNodes = migNodeOptions.filter((o: any) => o.connId === migTargetConn)
     const fetchNode = migTargetNode === '__auto__' ? (connNodes[0]?.node || migTargetNode) : migTargetNode
     if (!fetchNode || fetchNode === '__auto__') return
-    loadMigStorages(migTargetConn, fetchNode)
+    void loadMigStorages(migTargetConn, fetchNode)
   }, [migTargetConn, migTargetNode, migNodeOptions, loadMigStorages])
 
   // Fetch storages, bridges, and check sshfs when node is selected
@@ -933,7 +933,7 @@ export default function InventoryDetails({
         setMigDiskPaths(detectedDisks.join('\n'))
       }
     }).catch(() => setVcenterPreflight({ checked: true, ok: false, installing: false, errors: ['Preflight check failed'], virtV2vInstalled: false, virtioWinInstalled: false, nbdkitInstalled: false, nbdcopyInstalled: false, guestfsToolsInstalled: false, ovmfInstalled: false, ntfsCompressionPluginInstalled: false, detectedDisks: [], tempStorages: [] }))
-    loadMigStorages(migTargetConn, fetchNode)
+    void loadMigStorages(migTargetConn, fetchNode)
     // Fetch classic Linux/OVS bridges (node-scoped) AND SDN VNets (cluster-scoped),
     // merged into one selector list. A migrated NIC accepts a VNet name in its
     // bridge= slot exactly like a vmbr, so nodes that use SDN are no longer stuck
@@ -1158,7 +1158,7 @@ export default function InventoryDetails({
       setVmMigJob((prev: any) => (prev?.id === match?.id ? prev : (match || null)))
     }).catch(() => {})
 
-    resolve()
+    void resolve()
     const iv = setInterval(resolve, 10000)
     return () => { stopped = true; clearInterval(iv) }
     // migJobId: a migration started from the dialog resolves immediately here
@@ -1745,7 +1745,7 @@ return textExts.includes(ext) || imageExts.includes(ext) || fileName.startsWith(
     }
 
     function onVis() {
-      if (document.visibilityState === 'visible') { runRrd(); startRefresh() }
+      if (document.visibilityState === 'visible') { void runRrd(); startRefresh() }
       else stopRefresh()
     }
 
@@ -1790,7 +1790,7 @@ return textExts.includes(ext) || imageExts.includes(ext) || fileName.startsWith(
     backupsLoadedForIdRef.current = currentSelectionId
 
     const { connId, node, type, vmid } = parseVmId(selection.id)
-    loadBackups(vmid, type, connId, { node })
+    void loadBackups(vmid, type, connId, { node })
     setBackupsPreloaded(true)
   }, [selection?.type, selection?.id, detailTab, loadBackups])
 
@@ -1807,7 +1807,7 @@ return textExts.includes(ext) || imageExts.includes(ext) || fileName.startsWith(
     backupsLoadedForIdRef.current = selection.id
 
     const { connId, node, type, vmid } = parseVmId(selection.id)
-    loadBackups(vmid, type, connId, { node, scanVzdump: true })
+    void loadBackups(vmid, type, connId, { node, scanVzdump: true })
     setBackupsPreloaded(true)
   }, [selection?.type, selection?.id, detailTab, loadBackups])
 
@@ -1854,7 +1854,7 @@ return
       }
     }
     
-    loadGuestInfo()
+    void loadGuestInfo()
   }, [selection?.type, selection?.id])
 
   // Charger le lock status quand une VM est sélectionnée
@@ -1993,28 +1993,28 @@ return
   // Charger les données HA du cluster quand l'onglet HA est ouvert (lazy loading)
   useEffect(() => {
     if (selection?.type === 'cluster' && clusterTab === 3 && !clusterHaLoaded && !clusterHaLoading) {
-      loadClusterHa(selection.id)
+      void loadClusterHa(selection.id)
     }
   }, [selection?.type, selection?.id, clusterTab, clusterHaLoaded, clusterHaLoading, loadClusterHa])
 
   // Charger la config du cluster quand on sélectionne l'onglet Cluster
   useEffect(() => {
     if (selection?.type === 'cluster' && clusterTab === 11 && !clusterConfigLoaded && !clusterConfigLoading) {
-      loadClusterConfig(selection.id?.split(':')[0] || '')
+      void loadClusterConfig(selection.id?.split(':')[0] || '')
     }
   }, [selection?.type, selection?.id, clusterTab, clusterConfigLoaded, clusterConfigLoading, loadClusterConfig])
 
   // Charger les notes quand on sélectionne l'onglet Notes
   useEffect(() => {
     if (selection?.type === 'cluster' && clusterTab === 6 && !clusterNotesLoaded && !clusterNotesLoading) {
-      loadClusterNotes(selection.id?.split(':')[0] || '')
+      void loadClusterNotes(selection.id?.split(':')[0] || '')
     }
   }, [selection?.type, selection?.id, clusterTab, clusterNotesLoaded, clusterNotesLoading, loadClusterNotes])
 
   // Charger Ceph quand on sélectionne l'onglet Ceph
   useEffect(() => {
     if (selection?.type === 'cluster' && clusterTab === 7 && !clusterCephLoaded && !clusterCephLoading) {
-      loadClusterCeph(selection.id?.split(':')[0] || '')
+      void loadClusterCeph(selection.id?.split(':')[0] || '')
     }
   }, [selection?.type, selection?.id, clusterTab, clusterCephLoaded, clusterCephLoading, loadClusterCeph])
 
@@ -2028,7 +2028,7 @@ return
   // Charger la config du cluster pour les nodes standalone quand on sélectionne l'onglet Cluster
   useEffect(() => {
     if (selection?.type === 'node' && nodeTab === 9 && !clusterConfigLoaded && !clusterConfigLoading) {
-      loadClusterConfig(parseNodeId(selection.id).connId)
+      void loadClusterConfig(parseNodeId(selection.id).connId)
     }
   }, [selection?.type, selection?.id, nodeTab, clusterConfigLoaded, clusterConfigLoading, loadClusterConfig])
 
@@ -2040,7 +2040,7 @@ return
   // Charger Storage quand on sélectionne l'onglet Storage
   useEffect(() => {
     if (selection?.type === 'cluster' && clusterTab === 8 && !clusterStorageLoaded && !clusterStorageLoading) {
-      loadClusterStorage(selection.id?.split(':')[0] || '')
+      void loadClusterStorage(selection.id?.split(':')[0] || '')
     }
   }, [selection?.type, selection?.id, clusterTab, clusterStorageLoaded, clusterStorageLoading, loadClusterStorage])
 
@@ -2059,7 +2059,7 @@ return
       [node]: { count: 0, updates: [], version: null, loading: true }
     }))
 
-    loadNodeAptUpdates({ connId, nodeName: node, setNodeUpdates })
+    void loadNodeAptUpdates({ connId, nodeName: node, setNodeUpdates })
   }, [selection?.type, selection?.id, nodeTab, data?.clusterName, nodeUpdates])
 
   // Charger les mises à jour quand on sélectionne l'onglet Rolling Update
@@ -2075,7 +2075,7 @@ return
             [node.node]: { count: 0, updates: [], version: null, loading: true }
           }))
 
-          loadNodeAptUpdates({
+          void loadNodeAptUpdates({
             connId,
             nodeName: node.node,
             setNodeUpdates,
@@ -2173,13 +2173,13 @@ return
         }
       } catch { /* ignore */ }
     }
-    fetchPerf()
+    void fetchPerf()
 
     let iv: ReturnType<typeof setInterval> | null = null
 
     function start() { if (iv !== null) return; iv = setInterval(fetchPerf, 3000) }
     function stop() { if (iv !== null) { clearInterval(iv); iv = null } }
-    function onVis() { if (document.visibilityState === 'visible') { fetchPerf(); start() } else { stop() } }
+    function onVis() { if (document.visibilityState === 'visible') { void fetchPerf(); start() } else { stop() } }
 
     document.addEventListener('visibilitychange', onVis)
     if (document.visibilityState === 'visible') start()
@@ -2213,14 +2213,14 @@ return
         setStorageRrdHistory(points)
       } catch { setStorageRrdHistory([]) }
     }
-    load()
+    void load()
 
     // Auto-refresh every 30s with visibility pause
     let iv: ReturnType<typeof setInterval> | null = null
 
     function start() { if (iv !== null) return; iv = setInterval(load, 30000) }
     function stop() { if (iv !== null) { clearInterval(iv); iv = null } }
-    function onVis() { if (document.visibilityState === 'visible') { load(); start() } else { stop() } }
+    function onVis() { if (document.visibilityState === 'visible') { void load(); start() } else { stop() } }
 
     document.addEventListener('visibilitychange', onVis)
     const refreshTimer = setTimeout(() => { if (document.visibilityState === 'visible') start() }, 30000)
@@ -2346,7 +2346,7 @@ return (
           ? `⚠️ ${t('inventoryPage.vmRunningCpuRestartRequired')}`
           : t('inventoryPage.changesAppliedSuccessfully'),
         vmName: vmTitle,
-        onConfirm: async () => setConfirmAction(null)
+        onConfirm: () => { setConfirmAction(null); return Promise.resolve() }
       })
     } catch (e: any) {
       // PVE a pu appliquer le changement même si on a perdu la main dessus :
@@ -2393,7 +2393,7 @@ return (
           ? `⚠️ ${t('inventoryPage.vmRunningRamRestartRequired')}`
           : t('inventoryPage.changesAppliedSuccessfully'),
         vmName: vmTitle,
-        onConfirm: async () => setConfirmAction(null)
+        onConfirm: () => { setConfirmAction(null); return Promise.resolve() }
       })
     } catch (e: any) {
       await reloadVmDetails().catch(() => {})
@@ -2501,16 +2501,16 @@ return (
       setConvertTemplateDialogOpen(false)
 
       if (upid && typeof upid === 'string' && upid.startsWith('UPID:')) {
-        trackTask({
+        void trackTask({
           upid,
           connId,
           node,
           description: `${data?.title || `VM ${vmid}`}: ${t('templates.convertToTemplate')}`,
-          onSuccess: () => { onRefresh?.() },
+          onSuccess: () => { void onRefresh?.() },
         })
       } else {
         toast.success(t('templates.convertSuccess'))
-        onRefresh?.()
+        void onRefresh?.()
       }
     } catch (e: any) {
       toast.error(`${t('errors.genericError')}: ${humanizePveError(e)}`)
@@ -2530,7 +2530,7 @@ return (
         title: t('errors.deleteError'),
         message: t('inventory.deleteVmLockedError', { lock: vmLock.lockType || 'locked' }),
         vmName: data?.title,
-        onConfirm: async () => setConfirmAction(null),
+        onConfirm: () => { setConfirmAction(null); return Promise.resolve() },
       })
 
       return
@@ -2542,7 +2542,7 @@ return (
         title: t('errors.deleteError'),
         message: t('inventory.deleteVmRunningError'),
         vmName: data?.title,
-        onConfirm: async () => setConfirmAction(null),
+        onConfirm: () => { setConfirmAction(null); return Promise.resolve() },
       })
 
       return
@@ -2597,15 +2597,15 @@ return (
       onSelect?.(null as any) // Désélectionner
 
       if (upid && typeof upid === 'string' && upid.startsWith('UPID:')) {
-        trackTask({
+        void trackTask({
           upid,
           connId,
           node,
           description: `${vmName}: ${t('common.delete')}`,
-          onSuccess: () => { onRefresh?.() },
+          onSuccess: () => { void onRefresh?.() },
         })
       } else {
-        onRefresh?.()
+        void onRefresh?.()
       }
 
       // Afficher un message de succès
@@ -2614,8 +2614,9 @@ return (
         title: t('common.success'),
         message: `${t('common.delete')} "${vmName}" ${t('common.success')}${json.warning ? ` (${json.warning})` : ''}`,
         vmName: undefined,
-        onConfirm: async () => {
+        onConfirm: () => {
           setConfirmAction(null)
+          return Promise.resolve()
         }
       })
     } catch (e: any) {
@@ -2635,7 +2636,7 @@ return (
         action: 'info',
         title: t('errors.deleteError'),
         message,
-        onConfirm: async () => setConfirmAction(null),
+        onConfirm: () => { setConfirmAction(null); return Promise.resolve() },
       })
     } finally {
       setDeletingVm(false)
@@ -3518,7 +3519,7 @@ return vm?.isCluster ?? false
                           return
                         }
                         setExitMaintenanceDialogOpen(false)
-                        refreshData()
+                        void refreshData()
                         if (onRefresh) await onRefresh()
                       } catch (e: any) {
                         setExitMaintenanceError(e?.message || 'Unknown error')
@@ -4303,7 +4304,7 @@ return vm?.isCluster ?? false
                                 // full_copy, so those stages cancel without a confirm.
                                 const hasCopiedData = ['full_copy', 'delta_sync', 'awaiting_cutover', 'cutover', 'verify'].includes(vmMigJob.status)
                                 if (hasCopiedData) setCancelMigConfirm(vmMigJob.id)
-                                else cancelVmMigration(vmMigJob.id)
+                                else void cancelVmMigration(vmMigJob.id)
                               }}
                               sx={{ textTransform: 'none' }}
                             >

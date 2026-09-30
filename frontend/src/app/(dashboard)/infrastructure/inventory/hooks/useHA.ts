@@ -145,7 +145,7 @@ export function useHA({
         setHaEditing(false)
 
         // Recharger la config
-        loadHaConfig()
+        void loadHaConfig()
       }
     } catch (e: any) {
       setHaError(e.message || t('errors.updateError'))
@@ -154,7 +154,7 @@ export function useHA({
     }
   }, [selection, haState, haGroup, haMaxRestart, haMaxRelocate, haFailback, haComment, loadHaConfig])
 
-  const removeHaConfig = useCallback(async () => {
+  const removeHaConfig = useCallback(() => {
     if (!selection || selection.type !== 'vm') return
 
     const { connId, type, vmid } = parseVmId(selection.id)
@@ -207,7 +207,7 @@ export function useHA({
   // Charger la config HA quand on sélectionne l'onglet HA (index 9)
   useEffect(() => {
     if (detailTab === 9 && selection?.type === 'vm' && !haLoaded && !haLoading) {
-      loadHaConfig()
+      void loadHaConfig()
     }
   }, [detailTab, selection?.type, selection?.id, haLoaded, haLoading, loadHaConfig])
 

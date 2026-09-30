@@ -89,13 +89,13 @@ return next
       }
     }
 
-    doToggle()
+    void doToggle()
   }, [favorites, propToggleFavorite])
 
   // Charger les favoris au mount (seulement si pas de prop favorites)
   useEffect(() => {
     if (!propFavorites) {
-      loadFavorites()
+      void loadFavorites()
     }
   }, [propFavorites, loadFavorites])
 

@@ -480,8 +480,8 @@ export default function VdcTab() {
   }, [])
 
   useEffect(() => {
-    fetchVdcs()
-    fetchDropdowns()
+    void fetchVdcs()
+    void fetchDropdowns()
   }, [fetchVdcs, fetchDropdowns])
 
   // After vDCs are loaded, resolve each distinct connection's node statuses
@@ -547,7 +547,7 @@ export default function VdcTab() {
   }, [vdcs])
 
   useEffect(() => {
-    ;(async () => {
+    void (async () => {
       const r = await fetch('/api/v1/admin/connections?type=pbs')
       if (r.ok) {
         const j = await r.json()
@@ -616,7 +616,7 @@ export default function VdcTab() {
       }
     }
 
-    fetchResources()
+    void fetchResources()
 
     return () => { cancelled = true }
   }, [form.connectionId, editingVdc?.id])
@@ -631,7 +631,7 @@ export default function VdcTab() {
       return
     }
     let cancelled = false
-    ;(async () => {
+    void (async () => {
       try {
         const r = await fetch(`/api/v1/admin/pbs-connections/${encodeURIComponent(pbsDraft.pbsConnectionId)}/datastores`)
         const j = await r.json()
@@ -1200,7 +1200,7 @@ export default function VdcTab() {
 
       setSuccess(editingVdc ? t('vdc.updated') : t('vdc.created'))
       setDialogOpen(false)
-      fetchVdcs()
+      void fetchVdcs()
     } catch (e: any) {
       setError(e.message)
     } finally {
@@ -1221,7 +1221,7 @@ export default function VdcTab() {
 
       setSuccess(t('vdc.deleted'))
       setDeleteVdc(null)
-      fetchVdcs()
+      void fetchVdcs()
     } catch (e: any) {
       setError(e.message)
     }
@@ -1591,7 +1591,7 @@ export default function VdcTab() {
                         setError(err.error || `HTTP ${res.status}`)
                       } else {
                         setSuccess(t('vdc.pbsPveStorageRetried'))
-                        fetchVdcs()
+                        void fetchVdcs()
                       }
                     } catch (e: any) {
                       setError(e?.message || String(e))

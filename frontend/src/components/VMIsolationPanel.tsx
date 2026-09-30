@@ -182,7 +182,7 @@ export default function VMIsolationPanel({ connectionId, networkFilter, excludeP
   }, [connectionId, networkFilter])
 
   useEffect(() => {
-    loadVMList()
+    void loadVMList()
   }, [loadVMList])
 
   const isNetworkExcluded = (networkName: string) => {
@@ -294,7 +294,7 @@ return
       setSelectedVM(null)
       setVmStatus(null)
       setSimulation(null)
-      loadVMList()
+      void loadVMList()
     } catch (err: any) {
       setSnackbar({ open: true, message: err.message, severity: 'error' })
     } finally {
@@ -440,7 +440,7 @@ return true
                   <Typography variant="caption" color="text.secondary">{vm.applied_sgs?.length || 0}</Typography>
                 </TableCell>
                 <TableCell>
-                  <IconButton size="small" onClick={(e) => { e.stopPropagation(); loadVMDetails(vm); }}>
+                  <IconButton size="small" onClick={(e) => { e.stopPropagation(); void loadVMDetails(vm); }}>
                     <i className="ri-settings-3-line" />
                   </IconButton>
                 </TableCell>

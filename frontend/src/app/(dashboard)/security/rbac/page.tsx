@@ -2079,7 +2079,7 @@ return () => setPageInfo('', '', '')
     } catch (e) { setError(t('errors.loadingError')) } finally { setLoading(false) }
   }, [t, enableTenantMgmt])
 
-  useEffect(() => { loadData() }, [loadData])
+  useEffect(() => { void loadData() }, [loadData])
 
   return (
     <EnterpriseGuard requiredFeature={Features.RBAC} featureName="RBAC">

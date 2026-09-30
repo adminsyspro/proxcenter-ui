@@ -171,7 +171,7 @@ export default function DeploymentWizard({
       }
     }
 
-    applyRules()
+    void applyRules()
     return () => { cancelled = true }
   }, [activeStep, applyDone, selectedConnection, ruleStatuses.length, allRules.length])
 

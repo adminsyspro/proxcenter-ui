@@ -57,7 +57,7 @@ export default function PbsRemotesTab({ pbsId }: PbsRemotesTabProps) {
   }, [pbsId])
 
   useEffect(() => {
-    fetchRemotes()
+    void fetchRemotes()
   }, [fetchRemotes])
 
   const truncate = (s: string, n: number): string =>

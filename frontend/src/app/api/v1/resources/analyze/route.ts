@@ -239,10 +239,11 @@ export async function POST(req: Request) {
         .trim()
 
       // Extraire le JSON si entouré d'autre texte
-      const jsonMatch = cleanedText.match(/\{[\s\S]*\}/)
+      const jsonStart = cleanedText.indexOf('{')
+      const jsonEnd = cleanedText.lastIndexOf('}')
 
-      if (jsonMatch) {
-        analysis = JSON.parse(jsonMatch[0])
+      if (jsonStart !== -1 && jsonEnd > jsonStart) {
+        analysis = JSON.parse(cleanedText.slice(jsonStart, jsonEnd + 1))
       } else {
         throw new Error('No JSON found')
       }

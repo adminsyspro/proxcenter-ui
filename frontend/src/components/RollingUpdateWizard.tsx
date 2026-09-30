@@ -448,7 +448,7 @@ export default function RollingUpdateWizard({
 
     let cancelled = false
 
-    ;(async () => {
+    void (async () => {
       try {
         const res = await fetch(`/api/v1/orchestrator/rolling-updates/${resumeRollingUpdateId}`)
         const json = await res.json()
@@ -538,7 +538,7 @@ export default function RollingUpdateWizard({
         setSshAddresses(addresses)
 
         // 2. Fetch network interfaces per node from Proxmox API
-        Promise.all(
+        void Promise.all(
           nodes.filter(n => n.status === 'online').map(n =>
             fetch(`/api/v1/connections/${encodeURIComponent(connectionId)}/nodes/${encodeURIComponent(n.node)}/network`)
               .then(res => res.json())
@@ -982,7 +982,7 @@ export default function RollingUpdateWizard({
                               value={selectValue}
                               onChange={(e) => {
                                 const val = e.target.value as string
-                                saveSshAddress(nodeName, val === '__auto__' ? '' : val)
+                                void saveSshAddress(nodeName, val === '__auto__' ? '' : val)
                               }}
                               sx={{ fontSize: 13 }}
                               disabled={sshSaving[nodeName]}

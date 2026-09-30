@@ -54,7 +54,7 @@ export default function AboutDialog({ open, onClose }: AboutDialogProps) {
 
   useEffect(() => {
     if (open) {
-      fetchVersionInfo()
+      void fetchVersionInfo()
     }
   }, [open])
 
@@ -63,7 +63,7 @@ export default function AboutDialog({ open, onClose }: AboutDialogProps) {
   // whether this is one (the dialog then simply shows no history).
   useEffect(() => {
     if (open && !licenseLoading && !offline) {
-      fetchReleases()
+      void fetchReleases()
     }
   }, [open, licenseLoading, offline])
 

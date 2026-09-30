@@ -382,7 +382,7 @@ export async function POST(req: Request) {
 
         if (routeToV2v) {
           // Convert "[Datastore] folder/VmName.vmx" → "/vmfs/volumes/Datastore/folder/VmName.vmx"
-          const vmxMatch = vmPathName.match(/^\[([^\]]+)\]\s+(.+)$/)
+          const vmxMatch = vmPathName.match(/^\[([^\]]+)\]\s+(\S.*)$/)
           const datastore = vmxMatch?.[1] || ""
           const relPath = vmxMatch?.[2] || ""
           const posixVmxPath = datastore && relPath ? `/vmfs/volumes/${datastore}/${relPath}` : ""

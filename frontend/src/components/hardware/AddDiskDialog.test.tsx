@@ -275,3 +275,25 @@ describe('AddDiskDialog, storage policy locks QoS fields', () => {
     expect(saved.scsi0).toContain('mbps_rd=50')
   })
 })
+
+describe('AddDiskDialog — next free bus index', () => {
+  afterEach(cleanup)
+
+  beforeEach(() => {
+    seedHandlers()
+  })
+
+  it('picks the first unused scsi index, ignoring other buses and non-numeric suffixes', async () => {
+    renderWithProviders(
+      <AddDiskDialog {...makeProps({ existingDisks: ['scsi0', 'scsi1', 'scsi3', 'scsihw', 'ide2', 'virtio2', 'sata0'] })} />,
+    )
+
+    await waitFor(() => expect(busIndexField().value).toBe('2'))
+  })
+
+  it('starts at 0 when every existing disk sits on another bus', async () => {
+    renderWithProviders(<AddDiskDialog {...makeProps({ existingDisks: ['virtio0', 'ide2', 'efidisk0'] })} />)
+
+    await waitFor(() => expect(busIndexField().value).toBe('0'))
+  })
+})

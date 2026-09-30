@@ -233,7 +233,7 @@ return (
               onChange={e => setNewTagInput(filterTagInput(e.target.value))}
               onKeyDown={e => {
                 if (e.key === 'Enter' && newTagInput.trim()) {
-                  handleAddTag(newTagInput)
+                  void handleAddTag(newTagInput)
                 }
               }}
               disabled={busy}

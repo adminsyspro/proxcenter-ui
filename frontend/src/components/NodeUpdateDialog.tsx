@@ -318,7 +318,7 @@ export default function NodeUpdateDialog({
     // Repositories and subscription status read together: enterprise-only
     // repositories are only a problem without an active subscription. A null
     // answer means the repositories could not be read, keep the previous verdict.
-    loadNodeRepoIssues(connectionId, nodeName)
+    void loadNodeRepoIssues(connectionId, nodeName)
       .then(issues => {
         if (cancelled || !issues) return
 

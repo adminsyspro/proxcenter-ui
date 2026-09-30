@@ -111,7 +111,7 @@ export default function CreateTokenDialog({ open, onClose, onCreated }: Props) {
     if (!open) return
     let active = true
 
-    ;(async () => {
+    void (async () => {
       const [tenantsRes, vdcsRes, connectionsRes] = await Promise.all([
         fetchJsonArray('/api/v1/tenants'),
         fetchJsonArray('/api/v1/admin/vdcs'),

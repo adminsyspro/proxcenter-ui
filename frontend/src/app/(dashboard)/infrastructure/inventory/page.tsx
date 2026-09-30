@@ -378,7 +378,7 @@ return () => setPageInfo('', '', '')
     try {
       if (isFav) {
         const res = await fetch(`/api/v1/favorites?vmKey=${encodeURIComponent(vmKey)}`, { method: 'DELETE' })
-        if (res.ok) mutateFavorites()
+        if (res.ok) void mutateFavorites()
       } else {
         const res = await fetch('/api/v1/favorites', {
           method: 'POST',
@@ -391,7 +391,7 @@ return () => setPageInfo('', '', '')
             vmName: vm.name
           })
         })
-        if (res.ok) mutateFavorites()
+        if (res.ok) void mutateFavorites()
       }
     } catch (e) {
       console.error('Error toggling favorite:', e)

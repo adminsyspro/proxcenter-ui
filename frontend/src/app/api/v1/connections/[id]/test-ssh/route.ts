@@ -151,7 +151,7 @@ export async function POST(
 
     // For non-PVE connections (VMware ESXi, XCP-ng), test SSH directly to the host
     if (connection.type !== 'pve' && connection.type !== 'pbs') {
-      const host = connection.baseUrl.replace(/^https?:\/\//, '').replace(/[:\/].*$/, '')
+      const host = connection.baseUrl.replace(/^https?:\/\//, '').split(/[:/]/)[0]
       const port = effectiveSshPort
       const user = effectiveSshUser
 

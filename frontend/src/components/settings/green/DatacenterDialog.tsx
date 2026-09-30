@@ -94,7 +94,7 @@ export default function DatacenterDialog({ open, initial, onClose, onSaved }: Pr
   useEffect(() => {
     if (!open || !initial?.id) return
     let cancelled = false
-    ;(async () => {
+    void (async () => {
       try {
         const res = await fetch(`/api/v1/admin/datacenters/${encodeURIComponent(initial.id!)}/assignments`)
         if (!res.ok) return

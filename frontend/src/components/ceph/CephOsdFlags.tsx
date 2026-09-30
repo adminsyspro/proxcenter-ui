@@ -96,7 +96,7 @@ export function useCephOsdFlags(connId?: string | null, enabled = true) {
       }
     }
 
-    load()
+    void load()
 
     return () => {
       cancelled = true

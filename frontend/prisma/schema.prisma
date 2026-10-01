@@ -1404,6 +1404,10 @@ model LicenseConnection {
   held                Json      @default("[]")
   revokedIds          Json      @default("[]") @map("revoked_ids")
   checkinToken        String    @default("") @map("checkin_token")
+  partnerName         String?   @map("partner_name")
+  partnerLogo         Bytes?    @map("partner_logo")
+  partnerLogoType     String?   @map("partner_logo_type")
+  partnerLogoSha256   String?   @map("partner_logo_sha256")
   updatedAt           DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
 
   @@map("license_connection")

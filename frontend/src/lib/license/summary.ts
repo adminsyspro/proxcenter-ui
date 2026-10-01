@@ -35,6 +35,7 @@ export interface LicenseConnection {
   lease_warn?: boolean
   server_skew_seconds?: number
   held?: HeldLicense[]
+  partner?: { name?: string; has_logo?: boolean; logo_sha256?: string | null } | null
 }
 
 export interface LicenseStatus {
@@ -59,7 +60,7 @@ export interface LicenseStatus {
 }
 
 export type SummarySource =
-  | { kind: 'portal'; lastSyncAt: string | null; failing: boolean }
+  | { kind: 'portal'; lastSyncAt: string | null; failing: boolean; partner: { name: string; logoUrl: string | null } | null }
   | { kind: 'file' }
   | { kind: 'key' }
 
@@ -101,6 +102,16 @@ function daysUntil(date: string, now: number): number {
 
 function customerName(status: LicenseStatus): string | null {
   return status.customer?.company || status.customer?.name || null
+}
+
+// The partner that delivered a connected license (K4). The logo url carries
+// the digest so a replaced logo is fetched again despite the browser cache.
+function portalPartner(connection: LicenseConnection | null): { name: string; logoUrl: string | null } | null {
+  const p = connection?.partner
+
+  if (!p?.name) return null
+
+  return { name: p.name, logoUrl: p.has_logo && p.logo_sha256 ? `/api/v1/license/partner-logo?v=${p.logo_sha256}` : null }
 }
 
 export function buildLicenseSummary(status: LicenseStatus, rows: LicenseTableRow[], now: number = Date.now()): LicenseSummary {
@@ -148,7 +159,7 @@ export function buildLicenseSummary(status: LicenseStatus, rows: LicenseTableRow
   let source: SummarySource
 
   if (!status.offline && isConnectedMode(connection) && status.binding === 'connected') {
-    source = { kind: 'portal', lastSyncAt: connection?.last_ok_at || null, failing: connection?.status === 'disconnected' }
+    source = { kind: 'portal', lastSyncAt: connection?.last_ok_at || null, failing: connection?.status === 'disconnected', partner: portalPartner(connection) }
   } else if (status.binding === 'install') {
     source = { kind: 'file' }
   } else {

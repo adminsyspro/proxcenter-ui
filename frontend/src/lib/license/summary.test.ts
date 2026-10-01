@@ -34,8 +34,18 @@ describe('buildLicenseSummary', () => {
       state: 'licensed', edition: 'enterprise', customer: 'Lab SAS', options: ['control_plane_ha'], licenseCount: 1,
       nodes: { used: 6, max: 8, unlimited: false, fleet: false },
       validUntil: { date: at(365), days: 365, here: false, next: false, label: null, role: null },
-      source: { kind: 'portal', lastSyncAt: connected.last_ok_at, failing: false },
+      source: { kind: 'portal', lastSyncAt: connected.last_ok_at, failing: false, partner: null },
     })
+  })
+
+  it('names the partner that delivered a connected license, with its logo url versioned by digest', () => {
+    const sha = 'a'.repeat(64)
+    const withLogo = buildLicenseSummary(base({ connection: { ...connected, partner: { name: 'Partner SAS', has_logo: true, logo_sha256: sha } } }), [], NOW)
+    expect(withLogo.source).toEqual({ kind: 'portal', lastSyncAt: connected.last_ok_at, failing: false, partner: { name: 'Partner SAS', logoUrl: `/api/v1/license/partner-logo?v=${sha}` } })
+    const noLogo = buildLicenseSummary(base({ connection: { ...connected, partner: { name: 'Partner SAS', has_logo: false } } }), [], NOW)
+    expect(noLogo.source).toMatchObject({ partner: { name: 'Partner SAS', logoUrl: null } })
+    const file = buildLicenseSummary(base({ binding: 'install', connection: { ...connected, partner: { name: 'Partner SAS', has_logo: true, logo_sha256: sha } } }), [], NOW)
+    expect(file.source).toEqual({ kind: 'file' })
   })
 
   it('shows Community with no facts when there is no license', () => {

@@ -2836,6 +2836,7 @@
         "nextExpiry": "Próximo vencimiento",
         "inDays": "{days, plural, =0 {menos de un día} one {en # día} other {en # días}}",
         "receivedFrom": "Recibida de",
+        "viaPortal": "a través de proxcenter.io",
         "activatedBy": "Activada por",
         "syncedAgo": "sincronizada {ago}",
         "lastSyncAgo": "última sincronización {ago}",

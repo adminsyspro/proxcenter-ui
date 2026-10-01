@@ -2823,6 +2823,7 @@
         "nextExpiry": "Nächster Ablauf",
         "inDays": "{days, plural, =0 {weniger als ein Tag} one {in # Tag} other {in # Tagen}}",
         "receivedFrom": "Erhalten von",
+        "viaPortal": "über proxcenter.io",
         "activatedBy": "Aktiviert durch",
         "syncedAgo": "synchronisiert {ago}",
         "lastSyncAgo": "letzte Synchronisierung {ago}",

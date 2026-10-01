@@ -2840,6 +2840,7 @@
         "nextExpiry": "下一次到期",
         "inDays": "{days, plural, =0 {不到一天} other {# 天后}}",
         "receivedFrom": "来源",
+        "viaPortal": "通过 proxcenter.io",
         "activatedBy": "激活方式",
         "syncedAgo": "{ago}已同步",
         "lastSyncAgo": "上次同步：{ago}",

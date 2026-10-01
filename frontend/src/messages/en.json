@@ -2836,6 +2836,7 @@
         "nextExpiry": "Next expiry",
         "inDays": "{days, plural, =0 {less than a day} one {in # day} other {in # days}}",
         "receivedFrom": "Received from",
+        "viaPortal": "via proxcenter.io",
         "activatedBy": "Activated by",
         "syncedAgo": "synced {ago}",
         "lastSyncAgo": "last sync {ago}",

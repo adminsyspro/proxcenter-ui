@@ -1,5 +1,7 @@
 'use client'
 
+import { useState } from 'react'
+
 import { Box, Button, Card, CardContent, Chip, LinearProgress, Tooltip, Typography } from '@mui/material'
 
 import { LogoIcon } from '@components/layout/shared/Logo'
@@ -51,6 +53,20 @@ function StatusPill({ summary, alerts, t }) {
   return summary.state === 'community'
     ? <Chip size='small' variant='outlined' label={t('settings.licenseTab.summary.pillCommunity')} />
     : <Chip size='small' color='success' variant='outlined' label={t('settings.licenseTab.summary.pillActive')} />
+}
+
+// The partner's logo, then its name; a logo that fails to load leaves the name.
+function PartnerSource({ partner }) {
+  const [failed, setFailed] = useState(false)
+
+  return (
+    <Box component='span' sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75, verticalAlign: 'middle' }}>
+      {partner.logoUrl && !failed && (
+        <Box component='img' src={partner.logoUrl} alt={partner.name} onError={() => setFailed(true)} sx={{ height: 20, maxWidth: 96, objectFit: 'contain', display: 'block' }} />
+      )}
+      {partner.name}
+    </Box>
+  )
 }
 
 export default function LicenseSummaryCard({ summary, alerts, t, locale, busy, canConnect, actions, syncAlert, onConnect, onHaveKey, onNoInternet, onRenewWithFile }) {
@@ -146,10 +162,13 @@ export default function LicenseSummaryCard({ summary, alerts, t, locale, busy, c
               >
                 {source?.kind === 'portal' && (
                   <Value
-                    main='proxcenter.io'
-                    sub={source.lastSyncAt
-                      ? t(source.failing ? 'settings.licenseTab.summary.lastSyncAgo' : 'settings.licenseTab.summary.syncedAgo', { ago: formatAgo(source.lastSyncAt, locale) })
-                      : t('settings.licenseTab.summary.neverSynced')}
+                    main={source.partner ? <PartnerSource partner={source.partner} /> : 'proxcenter.io'}
+                    sub={[
+                      source.partner ? t('settings.licenseTab.summary.viaPortal') : null,
+                      source.lastSyncAt
+                        ? t(source.failing ? 'settings.licenseTab.summary.lastSyncAgo' : 'settings.licenseTab.summary.syncedAgo', { ago: formatAgo(source.lastSyncAt, locale) })
+                        : t('settings.licenseTab.summary.neverSynced'),
+                    ].filter(Boolean).join(' · ')}
                     extra={syncAlert && (
                       // A failing sync is told on the same line, details in the tooltip, not by a banner.
                       <Tooltip title={[

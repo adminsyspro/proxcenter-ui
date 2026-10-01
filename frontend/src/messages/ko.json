@@ -2836,6 +2836,7 @@
         "nextExpiry": "다음 만료",
         "inDays": "{days, plural, =0 {하루 미만} other {#일 후}}",
         "receivedFrom": "제공처",
+        "viaPortal": "proxcenter.io 경유",
         "activatedBy": "활성화 방식",
         "syncedAgo": "{ago} 동기화됨",
         "lastSyncAgo": "마지막 동기화 {ago}",

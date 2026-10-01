@@ -56,6 +56,7 @@ function StatusPill({ summary, alerts, t }) {
 }
 
 // The partner's logo, then its name; a logo that fails to load leaves the name.
+// Keyed by the logo url (versioned by digest): a replaced logo is tried again.
 function PartnerSource({ partner }) {
   const [failed, setFailed] = useState(false)
 
@@ -162,7 +163,7 @@ export default function LicenseSummaryCard({ summary, alerts, t, locale, busy, c
               >
                 {source?.kind === 'portal' && (
                   <Value
-                    main={source.partner ? <PartnerSource partner={source.partner} /> : 'proxcenter.io'}
+                    main={source.partner ? <PartnerSource key={source.partner.logoUrl || 'none'} partner={source.partner} /> : 'proxcenter.io'}
                     sub={[
                       source.partner ? t('settings.licenseTab.summary.viaPortal') : null,
                       source.lastSyncAt

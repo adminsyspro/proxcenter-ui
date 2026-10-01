@@ -188,6 +188,12 @@ export function buildLicenseAlerts(
 ): LicenseAlert[] {
   const alerts: LicenseAlert[] = []
   const connection = status.offline ? null : status.connection || null
+  // The customer of a reseller partner has no proxcenter.io account of its
+  // own: its partner assigns and reconnects, so these alerts name the partner
+  // and never offer to open an account.
+  const partner = connection?.partner?.name || ''
+  const viaPartner = (id: string, values: Record<string, string | number>, actions: AlertAction[]) =>
+    partner ? { id: `${id}Partner`, values: { ...values, partner }, actions: actions.filter(a => a !== 'openAccount') } : { id, values, actions }
   const nodeStatus = status.node_status
   const maxNodes = nodeStatus?.max_nodes ?? status.limits?.max_nodes ?? 0
 
@@ -204,7 +210,7 @@ export function buildLicenseAlerts(
   if (status.lease_error) {
     // D5: the license was claimed by another instance, not merely unsynced.
     if (isMovedLicenseExpired(status, connection)) {
-      alerts.push({ id: 'movedEnded', severity: 'error', values: { date: status.lease_until || '' }, actions: ['openAccount'] })
+      alerts.push({ severity: 'error', ...viaPartner('movedEnded', { date: status.lease_until || '' }, ['openAccount']) })
     } else {
       alerts.push({ id: 'leaseEnded', severity: 'error', values: { date: status.lease_until || connection?.last_ok_at || '' }, actions: ['sync'] })
     }
@@ -217,7 +223,7 @@ export function buildLicenseAlerts(
   if (connection?.status === 'cloned') {
     alerts.push({ id: 'cloned', severity: 'error', values: {}, actions: ['resetIdentity', 'reconnect'] })
   } else if (connection?.status === 'revoked') {
-    alerts.push({ id: 'revoked', severity: 'error', values: {}, actions: ['reconnect'] })
+    alerts.push({ severity: 'error', ...viaPartner('revoked', {}, ['reconnect']) })
   } else if (connection?.status === 'identity_changed') {
     alerts.push({ id: 'identityChanged', severity: 'error', values: {}, actions: ['reconnect'] })
   }
@@ -241,7 +247,7 @@ export function buildLicenseAlerts(
     const days = leaseDaysLeft(h.grace_until, now)
 
     if (days === null) continue
-    alerts.push({ id: 'moved', severity: 'warning', values: { label: h.label || h.license_id, days, until: h.grace_until || '' }, actions: ['openAccount'] })
+    alerts.push({ severity: 'warning', ...viaPartner('moved', { label: h.label || h.license_id, days, until: h.grace_until || '' }, ['openAccount']) })
   }
 
   if (status.expiration_warn && !status.expired && status.expires_at) {
@@ -258,7 +264,7 @@ export function buildLicenseAlerts(
   // Connected, but proxcenter.io has not assigned any license to this
   // instance yet: the card says Community, this says why and where to act.
   if (isConnectedMode(connection) && !status.licensed && !status.lease_error && (connection?.held || []).length === 0) {
-    alerts.push({ id: 'noLicense', severity: 'info', values: {}, actions: ['openAccount'] })
+    alerts.push({ severity: 'info', ...viaPartner('noLicense', {}, ['openAccount']) })
   }
 
   if (Math.abs(connection?.server_skew_seconds || 0) >= CLOCK_SKEW_ALERT_SECONDS) {

@@ -2879,6 +2879,11 @@
           "title": "此许可证现在在另一个实例上运行",
           "body": "它已于 {date} 在此停止工作。若要在此实例上再次使用，请在您的 proxcenter.io 账户中重新分配。"
         },
+        "movedEndedPartner": {
+          "pill": "许可证已迁移",
+          "title": "此许可证现在在另一个实例上运行",
+          "body": "它已于 {date} 在此停止工作。若要在此实例上再次使用，请让您的合作伙伴 {partner} 在其 proxcenter.io 合作伙伴空间中重新分配。"
+        },
         "binding": {
           "pill": "其他服务器",
           "title": "此许可证属于另一台服务器",
@@ -2893,6 +2898,11 @@
           "pill": "已断开",
           "title": "此实例已从您的 proxcenter.io 账户中移除",
           "body": "重新连接即可再次接收其许可证。"
+        },
+        "revokedPartner": {
+          "pill": "已断开",
+          "title": "此实例已与 proxcenter.io 断开",
+          "body": "重新连接后，请将新代码交给您的合作伙伴 {partner}：合作伙伴批准后即可再次接收其许可证。"
         },
         "identityChanged": {
           "pill": "身份已更改",
@@ -2914,6 +2924,11 @@
           "title": "{label} 已分配给另一个实例",
           "body": "它在此处还可使用{days, plural, =0 {不到一天} other { # 天}}，直至 {until}。若要保留在此实例上，请在您的 proxcenter.io 账户中重新分配。"
         },
+        "movedPartner": {
+          "pill": "许可证已迁移",
+          "title": "{label} 已分配给另一个实例",
+          "body": "它在此处还可使用{days, plural, =0 {不到一天} other { # 天}}，直至 {until}。若要保留在此实例上，请让您的合作伙伴 {partner} 在其 proxcenter.io 合作伙伴空间中重新分配。"
+        },
         "expiring": {
           "pill": "即将到期",
           "title": "您的许可证将于 {date} 到期",
@@ -2928,6 +2943,11 @@
           "pill": "无许可证",
           "title": "此实例未分配任何许可证",
           "body": "此实例已连接到 proxcenter.io，但尚未持有任何许可证。请在您的账户中为其分配一个：它将在下次同步时送达此处。"
+        },
+        "noLicensePartner": {
+          "pill": "无许可证",
+          "title": "此实例未分配任何许可证",
+          "body": "此实例已连接到 proxcenter.io，但尚未持有任何许可证。您的合作伙伴 {partner} 会在其 proxcenter.io 合作伙伴空间中为其分配：它将在下次同步时送达此处。"
         },
         "clockSkew": {
           "pill": "时钟偏差",
@@ -2976,7 +2996,7 @@
       "pairing": {
         "title": "正在连接到 proxcenter.io",
         "step": "第 2 步，共 2 步：在您的账户中确认",
-        "hint": "打开 proxcenter.io，登录并输入此代码。您的许可证将自动送达此处。",
+        "hint": "打开 proxcenter.io，登录并输入此代码，或将此代码交给您的经销合作伙伴。您的许可证将自动送达此处。",
         "pill": "等待中"
       }
     },

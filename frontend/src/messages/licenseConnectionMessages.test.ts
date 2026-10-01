@@ -17,6 +17,8 @@ const requiredKeys = [
   'settings.licenseConnectionCancel', 'settings.licenseConnectionCheckinQueued', 'settings.licenseConnectionDisconnect',
   'settings.licenseConnectionDisconnectConfirmTitle', 'settings.licenseConnectionDisconnectConfirm',
   'settings.licenseConnectionFailed', 'settings.licenseConnectionUnavailable',
+  'settings.licenseTab.alerts.movedPartner.body', 'settings.licenseTab.alerts.movedEndedPartner.body',
+  'settings.licenseTab.alerts.noLicensePartner.body', 'settings.licenseTab.alerts.revokedPartner.title',
   'license.connectionFailing', 'license.connectionCloned', 'license.leaseExpiring', 'license.licenseLost', 'license.licenseLostEnded',
 ]
 
@@ -34,6 +36,10 @@ function placeholders(value: string): string[] {
   return [...new Set([...value.matchAll(/\{\s*(\w+)\s*[,}]/g)].map(m => m[1]))].sort()
 }
 
+// How each locale names the reseller partner in the pairing hint, shown
+// before the instance knows whether it has one.
+const PARTNER_WORD: Record<string, string> = { en: 'reseller partner', fr: 'partenaire revendeur', de: 'Vertriebspartner', es: 'socio distribuidor', ko: '리셀러 파트너', 'zh-CN': '经销合作伙伴' }
+
 const tabKeys = leaves(en.settings.licenseTab, 'settings.licenseTab')
 
 describe('license tab i18n parity across the 6 served locales', () => {
@@ -45,7 +51,15 @@ describe('license tab i18n parity across the 6 served locales', () => {
         expect(value, `${locale}: ${key}`).toBeTypeOf('string')
         expect((value as string).length, `${locale}: ${key} is empty`).toBeGreaterThan(0)
         expect(placeholders(value as string), `${locale}: ${key} placeholders`).toEqual(placeholders(get(en, key) as string))
+        expect(value as string, `${locale}: ${key} has an em dash`).not.toContain('\u2014')
       }
+    })
+
+    it(`${locale} names the partner in every partner variant and tells a partner customer to hand the code over`, () => {
+      for (const key of ['movedPartner.body', 'movedEndedPartner.body', 'noLicensePartner.body', 'revokedPartner.body']) {
+        expect(get(messages, `settings.licenseTab.alerts.${key}`) as string, `${locale}: ${key}`).toContain('{partner}')
+      }
+      expect(get(messages, 'settings.licenseTab.pairing.hint') as string, `${locale}: pairing.hint`).toContain(PARTNER_WORD[locale])
     })
 
     it(`${locale} has no license tab key that en lacks`, () => {
@@ -62,7 +76,7 @@ describe('license tab messages format in every locale', () => {
   const sample = (n: number) => ({
     days: n, count: n, failures: n, over: n, used: 10, max: 8, minutes: 6,
     date: '30/09/2027', since: '28/09/2026 14:30', next: '30/09/2026 14:30', until: '28/10/2026',
-    label: 'Enterprise', licenseId: 'lic-1', name: 'Lab A', ago: '3 min', host: 'proxcenter.io',
+    label: 'Enterprise', licenseId: 'lic-1', name: 'Lab A', ago: '3 min', host: 'proxcenter.io', partner: 'Partner SAS',
   })
 
   for (const [locale, messages] of Object.entries(locales)) {

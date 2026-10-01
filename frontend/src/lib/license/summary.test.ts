@@ -177,6 +177,27 @@ describe('buildLicenseAlerts', () => {
     expect(ids(base({ connection: { ...connected, status: 'identity_changed' } }))).toEqual(['identityChanged'])
   })
 
+  it('sends the customer of a partner to that partner, never to a proxcenter.io account it cannot open', () => {
+    const partner = { name: 'Partner SAS', has_logo: false }
+    const moved = base({ connection: { ...connected, partner, held: [{ license_id: 'I9', label: 'Site B', lost: true, grace_until: at(2.5) }] } })
+
+    expect(buildLicenseAlerts(moved, {}, NOW)).toEqual([
+      { id: 'movedPartner', severity: 'warning', values: { label: 'Site B', days: 2, until: at(2.5), partner: 'Partner SAS' }, actions: [] },
+    ])
+
+    const ended = base({ licensed: false, lease_error: 'expired', lease_until: at(-1), connection: { ...connected, partner, held: [{ license_id: 'P1', lost: true }] } })
+
+    expect(buildLicenseAlerts(ended, {}, NOW)).toEqual([
+      { id: 'movedEndedPartner', severity: 'error', values: { date: at(-1), partner: 'Partner SAS' }, actions: [] },
+    ])
+    expect(buildLicenseAlerts({ licensed: false, edition: 'community', connection: { ...connected, partner, held: [] } }, {}, NOW)).toEqual([
+      { id: 'noLicensePartner', severity: 'info', values: { partner: 'Partner SAS' }, actions: [] },
+    ])
+    expect(buildLicenseAlerts(base({ connection: { ...connected, partner, status: 'revoked' } }), {}, NOW)).toEqual([
+      { id: 'revokedPartner', severity: 'error', values: { partner: 'Partner SAS' }, actions: ['reconnect'] },
+    ])
+  })
+
   it('warns about clock skew from five minutes', () => {
     expect(ids(base({ connection: { ...connected, server_skew_seconds: 299 } }))).toEqual([])
     expect(buildLicenseAlerts(base({ connection: { ...connected, server_skew_seconds: -480 } }), {}, NOW)).toEqual([

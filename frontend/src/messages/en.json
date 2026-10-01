@@ -2875,6 +2875,11 @@
           "title": "This license now runs on another instance",
           "body": "It stopped working here on {date}. To use it on this instance again, assign it back from your proxcenter.io account."
         },
+        "movedEndedPartner": {
+          "pill": "License moved",
+          "title": "This license now runs on another instance",
+          "body": "It stopped working here on {date}. To use it on this instance again, ask your partner {partner} to assign it back from its proxcenter.io space."
+        },
         "binding": {
           "pill": "Other server",
           "title": "This license belongs to another server",
@@ -2889,6 +2894,11 @@
           "pill": "Disconnected",
           "title": "This instance was removed from your proxcenter.io account",
           "body": "Reconnect it to receive its licenses again."
+        },
+        "revokedPartner": {
+          "pill": "Disconnected",
+          "title": "This instance was disconnected from proxcenter.io",
+          "body": "Reconnect it and give the new code to your partner {partner}: it receives its licenses again once your partner approves it."
         },
         "identityChanged": {
           "pill": "Identity changed",
@@ -2910,6 +2920,11 @@
           "title": "{label} was assigned to another instance",
           "body": "It stays usable here {days, plural, =0 {for less than a day} one {for # more day} other {for # more days}}, until {until}. To keep it on this instance, assign it back from your proxcenter.io account."
         },
+        "movedPartner": {
+          "pill": "License moved",
+          "title": "{label} was assigned to another instance",
+          "body": "It stays usable here {days, plural, =0 {for less than a day} one {for # more day} other {for # more days}}, until {until}. To keep it on this instance, ask your partner {partner} to assign it back from its proxcenter.io space."
+        },
         "expiring": {
           "pill": "Expires soon",
           "title": "Your license expires on {date}",
@@ -2924,6 +2939,11 @@
           "pill": "No license",
           "title": "No license is assigned to this instance",
           "body": "This instance is connected to proxcenter.io but holds no license yet. Assign one to it from your account: it arrives here at the next sync."
+        },
+        "noLicensePartner": {
+          "pill": "No license",
+          "title": "No license is assigned to this instance",
+          "body": "This instance is connected to proxcenter.io but holds no license yet. Your partner {partner} assigns it from its proxcenter.io space: it arrives here at the next sync."
         },
         "clockSkew": {
           "pill": "Clock off",
@@ -2972,7 +2992,7 @@
       "pairing": {
         "title": "Connecting to proxcenter.io",
         "step": "Step 2 of 2: confirm on your account",
-        "hint": "Open proxcenter.io, sign in and enter this code. Your licenses will arrive here by themselves.",
+        "hint": "Open proxcenter.io, sign in and enter this code, or give this code to your reseller partner. Your licenses will arrive here by themselves.",
         "pill": "Waiting"
       }
     },

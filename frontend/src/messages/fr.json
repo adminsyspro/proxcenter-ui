@@ -2875,6 +2875,11 @@
           "title": "Cette licence fonctionne désormais sur une autre instance",
           "body": "Elle a cessé de fonctionner ici le {date}. Pour l'utiliser à nouveau sur cette instance, réattribuez-la depuis votre compte proxcenter.io."
         },
+        "movedEndedPartner": {
+          "pill": "Licence déplacée",
+          "title": "Cette licence fonctionne désormais sur une autre instance",
+          "body": "Elle a cessé de fonctionner ici le {date}. Pour l'utiliser à nouveau sur cette instance, demandez à votre partenaire {partner} de la réattribuer depuis son espace proxcenter.io."
+        },
         "binding": {
           "pill": "Autre serveur",
           "title": "Cette licence appartient à un autre serveur",
@@ -2889,6 +2894,11 @@
           "pill": "Déconnectée",
           "title": "Cette instance a été retirée de votre compte proxcenter.io",
           "body": "Reconnectez-la pour recevoir à nouveau ses licences."
+        },
+        "revokedPartner": {
+          "pill": "Déconnectée",
+          "title": "Cette instance a été déconnectée de proxcenter.io",
+          "body": "Reconnectez-la et transmettez le nouveau code à votre partenaire {partner} : elle recevra à nouveau ses licences dès qu'il l'aura approuvé."
         },
         "identityChanged": {
           "pill": "Identité modifiée",
@@ -2910,6 +2920,11 @@
           "title": "{label} a été attribuée à une autre instance",
           "body": "Elle reste utilisable ici {days, plural, =0 {moins d'un jour} one {encore # jour} other {encore # jours}}, jusqu'au {until}. Pour la garder sur cette instance, réattribuez-la depuis votre compte proxcenter.io."
         },
+        "movedPartner": {
+          "pill": "Licence déplacée",
+          "title": "{label} a été attribuée à une autre instance",
+          "body": "Elle reste utilisable ici {days, plural, =0 {moins d'un jour} one {encore # jour} other {encore # jours}}, jusqu'au {until}. Pour la garder sur cette instance, demandez à votre partenaire {partner} de la réattribuer depuis son espace proxcenter.io."
+        },
         "expiring": {
           "pill": "Expire bientôt",
           "title": "Votre licence expire le {date}",
@@ -2924,6 +2939,11 @@
           "pill": "Aucune licence",
           "title": "Aucune licence n'est attribuée à cette instance",
           "body": "Cette instance est connectée à proxcenter.io mais ne détient encore aucune licence. Attribuez-lui en une depuis votre compte : elle arrivera ici à la prochaine synchronisation."
+        },
+        "noLicensePartner": {
+          "pill": "Aucune licence",
+          "title": "Aucune licence n'est attribuée à cette instance",
+          "body": "Cette instance est connectée à proxcenter.io mais ne détient encore aucune licence. Votre partenaire {partner} la lui attribue depuis son espace proxcenter.io : elle arrivera ici à la prochaine synchronisation."
         },
         "clockSkew": {
           "pill": "Horloge décalée",
@@ -2972,7 +2992,7 @@
       "pairing": {
         "title": "Connexion à proxcenter.io",
         "step": "Étape 2 sur 2 : validez sur votre compte",
-        "hint": "Ouvrez proxcenter.io, connectez-vous et saisissez ce code. Vos licences arriveront ici automatiquement.",
+        "hint": "Ouvrez proxcenter.io, connectez-vous et saisissez ce code, ou transmettez ce code à votre partenaire revendeur. Vos licences arriveront ici automatiquement.",
         "pill": "En attente"
       }
     },

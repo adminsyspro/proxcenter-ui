@@ -2875,6 +2875,11 @@
           "title": "Esta licencia funciona ahora en otra instancia",
           "body": "Dejó de funcionar aquí el {date}. Para volver a usarla en esta instancia, reasígnela desde su cuenta de proxcenter.io."
         },
+        "movedEndedPartner": {
+          "pill": "Licencia movida",
+          "title": "Esta licencia funciona ahora en otra instancia",
+          "body": "Dejó de funcionar aquí el {date}. Para volver a usarla en esta instancia, pida a su socio {partner} que la reasigne desde su espacio de proxcenter.io."
+        },
         "binding": {
           "pill": "Otro servidor",
           "title": "Esta licencia pertenece a otro servidor",
@@ -2889,6 +2894,11 @@
           "pill": "Desconectada",
           "title": "Esta instancia se eliminó de su cuenta de proxcenter.io",
           "body": "Vuelva a conectarla para recibir de nuevo sus licencias."
+        },
+        "revokedPartner": {
+          "pill": "Desconectada",
+          "title": "Esta instancia se desconectó de proxcenter.io",
+          "body": "Vuelva a conectarla y entregue el nuevo código a su socio {partner}: recibirá de nuevo sus licencias en cuanto su socio lo apruebe."
         },
         "identityChanged": {
           "pill": "Identidad cambiada",
@@ -2910,6 +2920,11 @@
           "title": "{label} se asignó a otra instancia",
           "body": "Sigue disponible aquí {days, plural, =0 {menos de un día} one {# día más} other {# días más}}, hasta el {until}. Para conservarla en esta instancia, reasígnela desde su cuenta de proxcenter.io."
         },
+        "movedPartner": {
+          "pill": "Licencia movida",
+          "title": "{label} se asignó a otra instancia",
+          "body": "Sigue disponible aquí {days, plural, =0 {menos de un día} one {# día más} other {# días más}}, hasta el {until}. Para conservarla en esta instancia, pida a su socio {partner} que la reasigne desde su espacio de proxcenter.io."
+        },
         "expiring": {
           "pill": "Vence pronto",
           "title": "Su licencia vence el {date}",
@@ -2924,6 +2939,11 @@
           "pill": "Sin licencia",
           "title": "No hay ninguna licencia asignada a esta instancia",
           "body": "Esta instancia está conectada a proxcenter.io pero aún no tiene ninguna licencia. Asígnele una desde su cuenta: llegará aquí en la próxima sincronización."
+        },
+        "noLicensePartner": {
+          "pill": "Sin licencia",
+          "title": "No hay ninguna licencia asignada a esta instancia",
+          "body": "Esta instancia está conectada a proxcenter.io pero aún no tiene ninguna licencia. Su socio {partner} se la asigna desde su espacio de proxcenter.io: llegará aquí en la próxima sincronización."
         },
         "clockSkew": {
           "pill": "Reloj desfasado",
@@ -2972,7 +2992,7 @@
       "pairing": {
         "title": "Conexión con proxcenter.io",
         "step": "Paso 2 de 2: confirme en su cuenta",
-        "hint": "Abra proxcenter.io, inicie sesión e introduzca este código. Sus licencias llegarán aquí automáticamente.",
+        "hint": "Abra proxcenter.io, inicie sesión e introduzca este código, o entregue este código a su socio distribuidor. Sus licencias llegarán aquí automáticamente.",
         "pill": "En espera"
       }
     },

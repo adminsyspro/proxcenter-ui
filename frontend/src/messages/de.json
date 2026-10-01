@@ -2862,6 +2862,11 @@
           "title": "Diese Lizenz läuft jetzt auf einer anderen Instanz",
           "body": "Sie funktioniert hier seit dem {date} nicht mehr. Um sie wieder auf dieser Instanz zu nutzen, weisen Sie sie in Ihrem proxcenter.io-Konto erneut zu."
         },
+        "movedEndedPartner": {
+          "pill": "Lizenz verschoben",
+          "title": "Diese Lizenz läuft jetzt auf einer anderen Instanz",
+          "body": "Sie funktioniert hier seit dem {date} nicht mehr. Um sie wieder auf dieser Instanz zu nutzen, bitten Sie Ihren Partner {partner}, sie in seinem proxcenter.io-Bereich erneut zuzuweisen."
+        },
         "binding": {
           "pill": "Anderer Server",
           "title": "Diese Lizenz gehört zu einem anderen Server",
@@ -2876,6 +2881,11 @@
           "pill": "Getrennt",
           "title": "Diese Instanz wurde aus Ihrem proxcenter.io-Konto entfernt",
           "body": "Verbinden Sie sie erneut, um ihre Lizenzen wieder zu erhalten."
+        },
+        "revokedPartner": {
+          "pill": "Getrennt",
+          "title": "Diese Instanz wurde von proxcenter.io getrennt",
+          "body": "Verbinden Sie sie erneut und geben Sie den neuen Code an Ihren Partner {partner} weiter: Sie erhält ihre Lizenzen wieder, sobald Ihr Partner ihn bestätigt hat."
         },
         "identityChanged": {
           "pill": "Identität geändert",
@@ -2897,6 +2907,11 @@
           "title": "{label} wurde einer anderen Instanz zugewiesen",
           "body": "Sie bleibt hier {days, plural, =0 {weniger als einen Tag} one {noch # Tag} other {noch # Tage}} nutzbar, bis zum {until}. Um sie auf dieser Instanz zu behalten, weisen Sie sie in Ihrem proxcenter.io-Konto erneut zu."
         },
+        "movedPartner": {
+          "pill": "Lizenz verschoben",
+          "title": "{label} wurde einer anderen Instanz zugewiesen",
+          "body": "Sie bleibt hier {days, plural, =0 {weniger als einen Tag} one {noch # Tag} other {noch # Tage}} nutzbar, bis zum {until}. Um sie auf dieser Instanz zu behalten, bitten Sie Ihren Partner {partner}, sie in seinem proxcenter.io-Bereich erneut zuzuweisen."
+        },
         "expiring": {
           "pill": "Läuft bald ab",
           "title": "Ihre Lizenz läuft am {date} ab",
@@ -2911,6 +2926,11 @@
           "pill": "Keine Lizenz",
           "title": "Dieser Instanz ist keine Lizenz zugewiesen",
           "body": "Diese Instanz ist mit proxcenter.io verbunden, besitzt aber noch keine Lizenz. Weisen Sie ihr in Ihrem Konto eine zu: Sie kommt bei der nächsten Synchronisierung hier an."
+        },
+        "noLicensePartner": {
+          "pill": "Keine Lizenz",
+          "title": "Dieser Instanz ist keine Lizenz zugewiesen",
+          "body": "Diese Instanz ist mit proxcenter.io verbunden, besitzt aber noch keine Lizenz. Ihr Partner {partner} weist sie ihr in seinem proxcenter.io-Bereich zu: Sie kommt bei der nächsten Synchronisierung hier an."
         },
         "clockSkew": {
           "pill": "Uhr abweichend",
@@ -2959,7 +2979,7 @@
       "pairing": {
         "title": "Verbindung mit proxcenter.io",
         "step": "Schritt 2 von 2: in Ihrem Konto bestätigen",
-        "hint": "Öffnen Sie proxcenter.io, melden Sie sich an und geben Sie diesen Code ein. Ihre Lizenzen kommen dann automatisch hier an.",
+        "hint": "Öffnen Sie proxcenter.io, melden Sie sich an und geben Sie diesen Code ein, oder geben Sie diesen Code an Ihren Vertriebspartner weiter. Ihre Lizenzen kommen dann automatisch hier an.",
         "pill": "Ausstehend"
       }
     },

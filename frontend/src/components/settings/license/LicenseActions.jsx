@@ -62,6 +62,9 @@ export default function LicenseActions({
 }) {
   const [copied, setCopied] = useState(false)
   const linked = connection?.status === 'connected' || connection?.status === 'disconnected'
+
+  // The customer of a reseller partner has no proxcenter.io account to open.
+  const ownAccount = linked && !connection?.partner?.name
   const fingerprint = install?.fingerprint
 
   const copyFingerprint = async () => {
@@ -100,7 +103,7 @@ export default function LicenseActions({
           </IconButton>
         </Tooltip>
       )}
-      {!fingerprintOnly && linked && <Action label={t('settings.licenseTab.actions.openAccount')} icon='ri-external-link-line' href={portalAccountUrl(connection.portal_url)} />}
+      {!fingerprintOnly && ownAccount && <Action label={t('settings.licenseTab.actions.openAccount')} icon='ri-external-link-line' href={portalAccountUrl(connection.portal_url)} />}
       {!fingerprintOnly && (linked || showDeactivate) && <Divider orientation='vertical' flexItem sx={{ mx: 0.5 }} />}
       {!fingerprintOnly && linked && <Action label={t('settings.licenseConnectionDisconnect')} icon='ri-plug-2-line' color='error' onClick={onDisconnect} disabled={busy} />}
       {!fingerprintOnly && showDeactivate && <Action label={t('settings.deactivateLicense')} icon='ri-delete-bin-line' color='error' onClick={onDeactivate} disabled={busy} />}

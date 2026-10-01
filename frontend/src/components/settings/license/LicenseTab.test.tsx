@@ -76,6 +76,17 @@ describe('LicenseTab situations', () => {
     expect(container.textContent).toContain('Partner SAS')
   })
 
+  it('retries a replaced logo after the previous one failed to load', async () => {
+    management.licenseStatus = { ...management.licenseStatus, connection: { ...connected, partner: { name: 'Partner SAS', has_logo: true, logo_sha256: 'a'.repeat(64) } } }
+    const view = await mountTab()
+    fireEvent.error(view.container.querySelector('img[alt="Partner SAS"]') as HTMLImageElement)
+    expect(view.container.querySelector('img[alt="Partner SAS"]')).toBeNull()
+    management.licenseStatus = { ...management.licenseStatus, connection: { ...connected, partner: { name: 'Partner SAS', has_logo: true, logo_sha256: 'b'.repeat(64) } } }
+    await rerender(view)
+    const img = view.container.querySelector('img[alt="Partner SAS"]') as HTMLImageElement
+    expect(img?.getAttribute('src')).toBe(`/api/v1/license/partner-logo?v=${'b'.repeat(64)}`)
+  })
+
   it('keeps proxcenter.io as the source of a direct customer', async () => {
     const { container } = await mountTab()
     expect(container.textContent).toContain('proxcenter.io')
@@ -113,6 +124,16 @@ describe('LicenseTab situations', () => {
 
     expect(alert.textContent).toContain('settings.licenseTab.alerts.moved.title {"label":"Site B"')
     expect(within(alert).getByRole('link', { name: 'settings.licenseTab.actions.openAccount' }).getAttribute('href')).toBe('https://proxcenter.io/account/license')
+  })
+
+  it('never offers the customer of a partner an account it cannot open', async () => {
+    management.licenseStatus.connection = { ...connected, partner: { name: 'Partner SAS', has_logo: false }, held: [{ license_id: 'X9', label: 'Site B', lost: true, grace_until: at(2.5) }] }
+    await mountTab()
+    const alert = screen.getByRole('alert')
+
+    expect(alert.textContent).toContain('settings.licenseTab.alerts.movedPartner.body')
+    expect(alert.textContent).toContain('"partner":"Partner SAS"')
+    expect(screen.queryByRole('link', { name: 'settings.licenseTab.actions.openAccount' })).toBeNull()
   })
 
   it('offers the three ways in on Community, the key dialog included', async () => {

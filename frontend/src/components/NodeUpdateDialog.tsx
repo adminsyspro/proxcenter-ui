@@ -526,16 +526,6 @@ export default function NodeUpdateDialog({
     }
   }, [baseUrl, autoReboot, pollStatus, STEP.UPDATE])
 
-  const cancelUpdate = useCallback(async () => {
-    try {
-      await fetch(`/api/v1/connections/${connectionId}/nodes/${encodeURIComponent(nodeName)}/upgrade`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cancel: true }),
-      })
-    } catch {}
-  }, [connectionId, nodeName])
-
   // Post-actions: remove ceph flags
   const removeCephMaintenanceFlags = useCallback(async () => {
     setPostCephRemoving(true)
@@ -1420,11 +1410,22 @@ export default function NodeUpdateDialog({
               </>
             )}
 
-            {/* For cluster: simple completion message */}
+            {/* For cluster: completion message, carrying the real outcome */}
             {clusterMode && (
-              <Alert severity="success" icon={<i className="ri-checkbox-circle-fill" style={{ fontSize: 22 }} />}>
+              <Alert
+                severity={upgradeStatus === 'COMPLETED' ? 'success' : 'error'}
+                icon={
+                  <i
+                    className={upgradeStatus === 'COMPLETED' ? 'ri-checkbox-circle-fill' : 'ri-error-warning-fill'}
+                    style={{ fontSize: 22 }}
+                  />
+                }
+              >
                 <Typography variant="body2" fontWeight={600}>
-                  {t('updates.updateCompletedSuccess')}
+                  {upgradeStatus === 'COMPLETED'
+                    ? t('updates.updateCompletedSuccess')
+                    : t('updates.updateFailed', { error: 'See logs for details' })
+                  }
                 </Typography>
               </Alert>
             )}
@@ -1500,17 +1501,6 @@ export default function NodeUpdateDialog({
               {t('updates.startUpdate')}
             </Button>
           </>
-        )}
-
-        {/* Update running */}
-        {activeStep === STEP.UPDATE && upgradeStatus === 'RUNNING' && (
-          <Button
-            onClick={cancelUpdate}
-            color="error"
-            startIcon={<i className="ri-stop-circle-line" style={{ fontSize: 18 }} />}
-          >
-            {t('common.cancel')}
-          </Button>
         )}
 
         {/* Post-actions (cluster) */}

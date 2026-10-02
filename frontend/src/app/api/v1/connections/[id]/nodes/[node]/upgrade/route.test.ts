@@ -76,3 +76,53 @@ describe('GET upgrade poll — shared error', () => {
     expect((await readJson<any>(res)).error).toMatch(/private address/)
   })
 })
+
+describe('upgrade script — apt outcome (discussion #928)', () => {
+  const launch = async (body: any = {}) => {
+    getNodeIpMock.mockResolvedValue('10.0.0.5')
+    executeSSHMock.mockResolvedValueOnce({ success: true })
+    const POST = await importPOST()
+    await callRoute(POST, { params: { id: 'c1', node: 'pve1' }, body })
+    return executeSSHMock.mock.calls[0][2] as string
+  }
+
+  it('keeps locally modified conffiles instead of failing on the dpkg prompt', async () => {
+    const script = await launch()
+    expect(script).toContain('-o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold dist-upgrade')
+  })
+
+  it('writes RUNNING before the background job, outside the tmpfs /tmp', async () => {
+    const script = await launch()
+    expect(script.indexOf('echo RUNNING > /var/log/proxcenter-upgrade.status')).toBe(0)
+    expect(script.indexOf('nohup')).toBeGreaterThan(0)
+    expect(script).not.toContain('/tmp/')
+  })
+
+  it('auto-reboots on a newer installed kernel, not only on /var/run/reboot-required', async () => {
+    const script = await launch({ auto_reboot: true })
+    expect(script).toContain('uname -r')
+    expect(script).toContain('/boot/vmlinuz-')
+  })
+
+  it('embeds no single quote inside the single-quoted background script', async () => {
+    const script = await launch({ auto_reboot: true })
+    const inner = script.slice(script.indexOf("bash -c '") + 9, script.lastIndexOf("' > /dev/null"))
+    expect(inner).not.toContain("'")
+  })
+})
+
+describe('GET upgrade poll — reboot detection', () => {
+  it('reads the persistent files and reports the running vs installed kernel check', async () => {
+    getNodeIpMock.mockResolvedValue('10.0.0.5')
+    executeSSHMock.mockResolvedValueOnce({ success: true, output: 'COMPLETED\n---SEPARATOR---\nlog\n---SEPARATOR---\nYES\n' })
+    const GET = await importGET()
+    const res = await callRoute(GET, { params: { id: 'c1', node: 'pve1' } })
+    expect(await readJson<any>(res)).toEqual({ status: 'COMPLETED', logs: 'log', reboot_required: true })
+    const command = executeSSHMock.mock.calls[0][2] as string
+    expect(command).toContain('cat /var/log/proxcenter-upgrade.status')
+    expect(command).toContain('uname -r')
+    // an auto-reboot run ends on REBOOTING: once booted after it, it reads as COMPLETED
+    expect(command).toContain('[ "$S" = REBOOTING ]')
+    expect(command).toContain('/proc/uptime')
+  })
+})

@@ -578,18 +578,37 @@ jobs:
           BACKEND_REF: ${{ inputs.backend_ref }}
         run: |
           set -euo pipefail
+          # SHA-256 of the DER of internal/license/public_key.pem on backend
+          # main (RSA 4096, unchanged since cf64391). Pinned so a backend_ref
+          # that edits the pem cannot move the baseline of the check below.
+          PROD_LICENSE_KEY_SHA256=65443d6923c20081d06410c53da7e6f7b053012dd4e36537013d4f8875b514ea
           key=backend/internal/license/public_key.pem
           if [ -z "$STAGING_LICENSE_PUBLIC_KEY" ]; then
             echo "::error::secret STAGING_LICENSE_PUBLIC_KEY is not set"
             exit 1
           fi
-          prod_fp=$(openssl pkey -pubin -in "$key" -outform DER | sha256sum | cut -d' ' -f1)
-          printf '%s\n' "$STAGING_LICENSE_PUBLIC_KEY" > "$key"
-          staging_fp=$(openssl pkey -pubin -in "$key" -outform DER | sha256sum | cut -d' ' -f1)
-          if [ "$staging_fp" = "$prod_fp" ]; then
+          candidate=$(mktemp)
+          printf '%s\n' "$STAGING_LICENSE_PUBLIC_KEY" > "$candidate"
+          # The backend validator only accepts an RSA key; prod is RSA 4096.
+          if ! bits=$(openssl rsa -pubin -in "$candidate" -noout -text 2>/dev/null | sed -n 's/^Public-Key: (\([0-9]*\) bit)$/\1/p'); then
+            bits=""
+          fi
+          if [ "$bits" != "4096" ]; then
+            rm -f "$candidate"
+            if [ -n "$bits" ]; then got="RSA $bits"; else got="not an RSA public key"; fi
+            echo "::error::STAGING_LICENSE_PUBLIC_KEY must be an RSA 4096 public key in PEM, got: $got"
+            exit 1
+          fi
+          staging_fp=$(openssl pkey -pubin -in "$candidate" -outform DER | sha256sum | cut -d' ' -f1)
+          ref_fp=$(openssl pkey -pubin -in "$key" -outform DER | sha256sum | cut -d' ' -f1)
+          if [ "$staging_fp" = "$PROD_LICENSE_KEY_SHA256" ] || [ "$staging_fp" = "$ref_fp" ]; then
+            rm -f "$candidate"
             echo "::error::STAGING_LICENSE_PUBLIC_KEY is the production key"
             exit 1
           fi
+          mv "$candidate" "$key"
+          chmod 644 "$key"
+          prod_fp=$ref_fp
           echo "Production license key, replaced: $prod_fp"
           echo "Staging license key, embedded:    $staging_fp"
           {

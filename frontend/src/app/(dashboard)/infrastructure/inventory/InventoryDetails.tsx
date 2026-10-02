@@ -4532,6 +4532,7 @@ return vm?.isCluster ?? false
       ) : null}
 
       <InventoryDialogs
+        trackTask={trackTask}
         selection={selection}
         data={data}
         allVms={allVms}

@@ -100,6 +100,14 @@ const warmAllowedFor = (info?: { hostType?: string; connSubType?: string | null 
 /* ------------------------------------------------------------------ */
 
 export interface InventoryDialogsProps {
+  trackTask: (opts: {
+    upid: string
+    connId: string
+    node: string
+    description: string
+    onSuccess?: () => void
+    onError?: (error: string) => void
+  }) => void
   // Core data
   selection: InventorySelection | null
   data: any
@@ -436,7 +444,7 @@ export default function InventoryDialogs(props: InventoryDialogsProps) {
   const canChangeMedia = hasPermission('vm.config.media')
   const canSnapshot = hasPermission('vm.snapshot')
   const {
-    selection, data, allVms, hosts,
+    selection, data, allVms, hosts, trackTask,
     nodeActionDialog, setNodeActionDialog, nodeActionBusy, setNodeActionBusy, nodeActionStep, setNodeActionStep,
     nodeActionMigrateTarget, setNodeActionMigrateTarget, nodeActionFailedVms, setNodeActionFailedVms,
     nodeActionShutdownFailed, setNodeActionShutdownFailed, nodeActionLocalVms, nodeActionStorageLoading,
@@ -1386,6 +1394,25 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
                                       if (!res.ok) {
                                         const err = await res.json().catch(() => ({}))
                                         failed.push({ vmid: vm.vmid, name: vm.name, connId: vm.connId, type: vm.type, node: vm.node, error: err?.error || `HTTP ${res.status}` })
+                                      } else {
+                                        const body = await res.json()
+                                        const upid = body?.data
+                                        if (typeof upid !== 'string' || !upid.startsWith('UPID:')) {
+                                          throw new Error('Migration response did not include a Proxmox task ID')
+                                        }
+                                        const result = await new Promise<{ error?: string }>(resolve => {
+                                          trackTask({
+                                            upid,
+                                            connId: vm.connId,
+                                            node: vm.node,
+                                            description: `VM ${vm.vmid}: migration to ${nodeActionMigrateTarget}`,
+                                            onSuccess: () => resolve({}),
+                                            onError: error => resolve({ error }),
+                                          })
+                                        })
+                                        if (result.error) {
+                                          failed.push({ vmid: vm.vmid, name: vm.name, connId: vm.connId, type: vm.type, node: vm.node, error: result.error })
+                                        }
                                       }
                                     } catch (e: any) {
                                       failed.push({ vmid: vm.vmid, name: vm.name, connId: vm.connId, type: vm.type, node: vm.node, error: e?.message || 'Unknown error' })

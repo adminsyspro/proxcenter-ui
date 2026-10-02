@@ -17,6 +17,7 @@ interface TaskInfo {
 interface TaskStatus {
   status: 'running' | 'stopped' | 'error'
   exitstatus?: string
+  message?: string
   type?: string
 }
 
@@ -88,11 +89,11 @@ export function useTaskTracker() {
           // Tâche terminée
           activeTasksRef.current.delete(upid)
 
-          if (status.exitstatus === 'OK') {
+          if (status.exitstatus === 'OK' || status.message?.startsWith('Migration completed')) {
             toast.success(t('taskTracker.completed', { description }))
             onSuccess?.()
           } else {
-            const errorMsg = status.exitstatus || t('taskTracker.unknownError')
+            const errorMsg = status.message || status.exitstatus || t('taskTracker.unknownError')
             toast.error(t('taskTracker.failed', { description, error: errorMsg }))
             onError?.(errorMsg)
           }
@@ -106,7 +107,9 @@ export function useTaskTracker() {
         } else {
           // Timeout
           activeTasksRef.current.delete(upid)
-          toast.warning(t('taskTracker.timeout', { description }))
+          const timeoutMessage = t('taskTracker.timeout', { description })
+          toast.warning(timeoutMessage)
+          onError?.(timeoutMessage)
         }
       } catch (e: any) {
         activeTasksRef.current.delete(upid)

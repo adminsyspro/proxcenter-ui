@@ -96,6 +96,16 @@ type TaskLogEntry = {
   t: string
 }
 
+function getTaskFailureReason(logs: TaskLogEntry[]): string | undefined {
+  for (const entry of [...logs].reverse()) {
+    const line = entry?.t?.trim()
+    if (!line) continue
+    const error = line.match(/\b(?:TASK\s+)?ERROR\s*:\s*(.+)$/i)
+    if (error?.[1]?.trim()) return error[1].trim()
+  }
+  return undefined
+}
+
 type DiskProgress = {
   name: string
   totalBytes: number
@@ -578,6 +588,7 @@ return NextResponse.json({ error: `Failed to fetch task status: ${e.message}` },
     
     if (status?.status === 'stopped') {
       const exit = status?.exitstatus || ''
+      const failureReason = getTaskFailureReason(logs)
       let message: string
 
       if (exit === 'OK') {
@@ -606,10 +617,10 @@ return NextResponse.json({ error: `Failed to fetch task status: ${e.message}` },
             })
           }
         } else {
-          message = `Failed: ${exit}`
+          message = `Failed: ${failureReason || exit || 'unknown error'}`
         }
       } else {
-        message = `Failed: ${exit || 'unknown error'}`
+        message = `Failed: ${failureReason || exit || 'unknown error'}`
       }
 
       progressData = {

@@ -220,18 +220,28 @@ export function useVmActions({
       throw new Error(err?.error || `HTTP ${res.status}`)
     }
 
-    toast.success(t('vmActions.migrateSuccess'))
+    const json = await res.json()
+    const upid = json.data
+    if (typeof upid !== 'string' || !upid.startsWith('UPID:')) {
+      throw new Error('Migration response did not include a Proxmox task ID')
+    }
+
+    trackTask({
+      upid,
+      connId,
+      node,
+      description: `VM ${vmid}: ${t('vmActions.migrate')}`,
+      onSuccess: () => {
+        toast.success(t('vmActions.migrateSuccess'))
+        void onRefresh?.()
+      },
+      onError: () => { void onRefresh?.() },
+    })
 
     if (onSelect) {
       onSelect({ type: 'cluster', id: connId })
     }
-
-    await new Promise(resolve => setTimeout(resolve, 1500))
-
-    if (onRefresh) {
-      await onRefresh()
-    }
-  }, [selection, onRefresh, onSelect, toast, t])
+  }, [selection, onRefresh, onSelect, toast, t, trackTask])
 
   // ── Cross-cluster migration (selected VM panel) ─────────────────────
 
@@ -357,16 +367,28 @@ export function useVmActions({
       throw new Error(err?.error || `HTTP ${res.status}`)
     }
 
-    toast.success(t('vmActions.migrateSuccess'))
-
-    await new Promise(resolve => setTimeout(resolve, 2000))
-
-    if (onRefresh) {
-      await onRefresh()
+    const json = await res.json()
+    const upid = json.data
+    if (typeof upid !== 'string' || !upid.startsWith('UPID:')) {
+      throw new Error('Migration response did not include a Proxmox task ID')
     }
 
-    setTableMigrateVm(null)
-  }, [tableMigrateVm, onRefresh, toast, t])
+    trackTask({
+      upid,
+      connId,
+      node,
+      description: `VM ${vmid}: ${t('vmActions.migrate')}`,
+      onSuccess: () => {
+        toast.success(t('vmActions.migrateSuccess'))
+        void onRefresh?.()
+        setTableMigrateVm(null)
+      },
+      onError: () => {
+        void onRefresh?.()
+        setTableMigrateVm(null)
+      },
+    })
+  }, [tableMigrateVm, onRefresh, toast, t, trackTask])
 
   // ── Table cross-cluster migrate ─────────────────────────────────────
 

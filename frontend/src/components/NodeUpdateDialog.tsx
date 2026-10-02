@@ -36,6 +36,7 @@ import {
 import ConfirmCloseDialog from '@/components/ConfirmCloseDialog'
 import { NodeInfo, formatMemory } from '@/components/hardware/utils'
 import { loadNodeRepoIssues, type RepoIssue } from '@/lib/proxmox/aptRepositories'
+import { useTaskTracker } from '@/hooks/useTaskTracker'
 
 interface RunningVmInfo {
   vmid: number
@@ -117,6 +118,7 @@ export default function NodeUpdateDialog({
   isCluster = false,
   hasCeph = false,
 }: NodeUpdateDialogProps) {
+  const { trackTask } = useTaskTracker()
   const t = useTranslations()
 
   // Steps depend on cluster mode
@@ -439,6 +441,22 @@ export default function NodeUpdateDialog({
               const json = await res.json().catch(() => ({}))
               throw new Error(json.error || 'Migration failed')
             }
+            const json = await res.json()
+            const upid = json?.data
+            if (typeof upid !== 'string' || !upid.startsWith('UPID:')) {
+              throw new Error('Migration response did not include a Proxmox task ID')
+            }
+            const taskError = await new Promise<string | null>(resolve => {
+              trackTask({
+                upid,
+                connId: connectionId,
+                node: nodeName,
+                description: `${vm.name} (${vm.vmid}) migration to ${target}`,
+                onSuccess: () => resolve(null),
+                onError: error => resolve(error),
+              })
+            })
+            if (taskError) throw new Error(taskError)
             setVmActionResults(prev => prev.map(r =>
               r.vmid === vm.vmid && r.action === 'migrate' ? { ...r, status: 'success' } : r
             ))
@@ -491,7 +509,7 @@ export default function NodeUpdateDialog({
     } finally {
       setPreflightLoading(false)
     }
-  }, [enableMaintenance, maintenanceStatus, hasCeph, setCephMaintenanceFlags, cephMaintenanceFlagsSet, cephFlags, maintenanceUrl, cephFlagsUrl, STEP.CONFIG, migrateSharedVms, vmDistribution, sharedVms, shutdownLocalVms, localVms, connBaseUrl, nodeName])
+  }, [enableMaintenance, maintenanceStatus, hasCeph, setCephMaintenanceFlags, cephMaintenanceFlagsSet, cephFlags, maintenanceUrl, cephFlagsUrl, STEP.CONFIG, migrateSharedVms, vmDistribution, sharedVms, shutdownLocalVms, localVms, connBaseUrl, nodeName, connectionId, trackTask])
 
   const startUpdate = useCallback(async () => {
     setLoading(true)

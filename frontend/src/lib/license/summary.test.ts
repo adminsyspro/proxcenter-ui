@@ -52,6 +52,22 @@ describe('buildLicenseSummary', () => {
     expect(buildLicenseSummary({ licensed: false, edition: 'community' }, [], NOW)).toMatchObject({ state: 'community', nodes: null, validUntil: null, source: null })
   })
 
+  it('shows a connected instance without a license as waiting, received from its partner, not as Community', () => {
+    const sha = 'b'.repeat(64)
+    const partner = { name: 'Partner SAS', has_logo: true, logo_sha256: sha }
+    const s = buildLicenseSummary({ licensed: false, edition: 'community', connection: { ...connected, customer_name: 'Client SARL', partner, held: [] } }, [], NOW)
+    expect(s).toMatchObject({
+      state: 'awaiting', customer: 'Client SARL', nodes: null, validUntil: null,
+      source: { kind: 'portal', lastSyncAt: connected.last_ok_at, failing: false, partner: { name: 'Partner SAS', logoUrl: `/api/v1/license/partner-logo?v=${sha}` } },
+    })
+    const direct = buildLicenseSummary({ licensed: false, edition: 'community', connection: { ...connected, held: [] } }, [], NOW)
+    expect(direct).toMatchObject({ state: 'awaiting', source: { kind: 'portal', partner: null } })
+    const offline = buildLicenseSummary({ licensed: false, edition: 'community', offline: true, connection: { ...connected, held: [] } }, [], NOW)
+    expect(offline.state).toBe('community')
+    const pairing = buildLicenseSummary({ licensed: false, edition: 'community', connection: { ...connected, status: 'pairing', held: [] } }, [], NOW)
+    expect(pairing.state).toBe('community')
+  })
+
   it('reads a file-bound license as activated by a file, with no mention of the portal', () => {
     expect(buildLicenseSummary(base({ binding: 'install', connection: null }), [], NOW).source).toEqual({ kind: 'file' })
   })
@@ -195,6 +211,21 @@ describe('buildLicenseAlerts', () => {
     ])
     expect(buildLicenseAlerts(base({ connection: { ...connected, partner, status: 'revoked' } }), {}, NOW)).toEqual([
       { id: 'revokedPartner', severity: 'error', values: { partner: 'Partner SAS' }, actions: ['reconnect'] },
+    ])
+    // The partner renews: no renew action, the partner is named.
+    expect(buildLicenseAlerts(base({ expiration_warn: true, expires_at: at(12), connection: { ...connected, partner } }), {}, NOW)).toEqual([
+      { id: 'expiringPartner', severity: 'info', values: { date: at(12), days: 12, partner: 'Partner SAS' }, actions: [] },
+    ])
+    expect(buildLicenseAlerts(base({ expired: true, expires_at: at(-3), connection: { ...connected, partner } }), {}, NOW)).toEqual([
+      { id: 'expiredPartner', severity: 'error', values: { date: at(-3), partner: 'Partner SAS' }, actions: [] },
+    ])
+    // A file-bound license is not delivered by sync: it keeps the file path even with a partner connection.
+    expect(buildLicenseAlerts(base({ expiration_warn: true, expires_at: at(12), binding: 'install', connection: { ...connected, partner } }), {}, NOW)).toEqual([
+      { id: 'expiringFile', severity: 'info', values: { date: at(12), days: 12 }, actions: ['renew'] },
+    ])
+    // A direct customer keeps the renew action.
+    expect(buildLicenseAlerts(base({ expired: true, expires_at: at(-3) }), {}, NOW)).toEqual([
+      { id: 'expired', severity: 'error', values: { date: at(-3) }, actions: ['renew'] },
     ])
   })
 

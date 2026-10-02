@@ -2825,6 +2825,9 @@
       "summary": {
         "enterprise": "ProxCenter Enterprise",
         "community": "ProxCenter Community",
+        "awaiting": "等待许可证",
+        "awaitingDesc": "已连接到 proxcenter.io，尚未分配许可证",
+        "pillAwaiting": "等待中",
         "communityDesc": "免费，无时间限制",
         "communityPitch": "升级到 Enterprise 即可解锁高可用、高级访问控制、报告等功能。",
         "pillActive": "有效",
@@ -2868,6 +2871,11 @@
           "pill": "已过期",
           "title": "您的许可证已于 {date} 过期",
           "body": "Enterprise 功能已关闭。续订许可证即可重新启用。"
+        },
+        "expiredPartner": {
+          "pill": "已过期",
+          "title": "您的许可证已于 {date} 过期",
+          "body": "Enterprise 功能已关闭。您的合作伙伴 {partner} 会续订许可证，续订后将在下次同步时重新启用。"
         },
         "leaseEnded": {
           "pill": "同步逾期",
@@ -2934,6 +2942,11 @@
           "title": "您的许可证将于 {date} 到期",
           "body": "在 proxcenter.io 续订后，新许可证会在下次同步时自动送达此服务器。"
         },
+        "expiringPartner": {
+          "pill": "即将到期",
+          "title": "您的许可证将于 {date} 到期",
+          "body": "您的合作伙伴 {partner} 会为您续订：新许可证将在下次同步时自动送达此服务器。"
+        },
         "expiringFile": {
           "pill": "即将到期",
           "title": "您的许可证将于 {date} 到期",
@@ -2995,7 +3008,7 @@
       },
       "pairing": {
         "title": "正在连接到 proxcenter.io",
-        "step": "第 2 步，共 2 步：在您的账户中确认",
+        "step": "第 2 步，共 2 步：在 proxcenter.io 确认，或将代码交给您的经销合作伙伴",
         "hint": "打开 proxcenter.io，登录并输入此代码，或将此代码交给您的经销合作伙伴。您的许可证将自动送达此处。",
         "pill": "等待中"
       }

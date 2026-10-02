@@ -386,7 +386,8 @@ export default function LicenseTab() {
   }
 
   const busy = connectBusy || activating
-  const licensed = summary?.state !== 'community'
+  const licensed = summary?.state === 'licensed' || summary?.state === 'expired'
+  const awaiting = summary?.state === 'awaiting'
   const connectable = !offline && !!connection?.available
   const pairing = connectable && connection?.status === 'pairing'
   const showTable = tableRows.length > 1
@@ -422,13 +423,13 @@ export default function LicenseTab() {
       ) : (
         <>
           {pairing && <PairingPanel connection={connection} t={t} busy={busy} onCancel={handleCancelPairing} />}
-          {!(pairing && !licensed) && (
+          {!(pairing && !licensed && !awaiting) && (
             <LicenseSummaryCard
               summary={summary} alerts={alerts} t={t} locale={locale} busy={busy} canConnect={connectable && !['connected', 'disconnected'].includes(connection?.status)}
               syncAlert={alerts.find(a => SYNC_ALERTS.has(a.id)) || null}
               actions={(
                 <LicenseActions
-                  t={t} busy={busy} install={install} canSign={canSign} licensed={licensed} fingerprintOnly={!licensed}
+                  t={t} busy={busy} install={install} canSign={canSign} licensed={licensed} fingerprintOnly={!licensed && !awaiting} awaiting={awaiting}
                   showImport={mlEnabled && !showTable} showDeactivate={licensed && !showTable}
                   connection={connectable && !pairing ? connection : null}
                   onSync={handleCheckinNow} onConnect={handleConnect} onDisconnect={() => setDisconnectOpen(true)}

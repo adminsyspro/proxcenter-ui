@@ -12,6 +12,8 @@ const ICON = {
   quota: 'ri-server-line',
   expired: 'ri-calendar-close-line',
   expiring: 'ri-calendar-event-line',
+  expiringPartner: 'ri-calendar-event-line',
+  expiredPartner: 'ri-calendar-close-line',
   expiringFile: 'ri-calendar-event-line',
   leaseEnded: 'ri-wifi-off-line',
   syncFailing: 'ri-wifi-off-line',

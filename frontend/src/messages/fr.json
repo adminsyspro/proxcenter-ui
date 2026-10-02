@@ -2821,6 +2821,9 @@
       "summary": {
         "enterprise": "ProxCenter Enterprise",
         "community": "ProxCenter Community",
+        "awaiting": "En attente de licence",
+        "awaitingDesc": "Connectée à proxcenter.io, aucune licence attribuée pour l'instant",
+        "pillAwaiting": "En attente",
         "communityDesc": "Gratuit, sans limite de durée",
         "communityPitch": "Passez en Enterprise pour débloquer la haute disponibilité, le contrôle d'accès avancé, les rapports et plus encore.",
         "pillActive": "Active",
@@ -2864,6 +2867,11 @@
           "pill": "Expirée",
           "title": "Votre licence a expiré le {date}",
           "body": "Les fonctionnalités Enterprise sont désactivées. Renouvelez la licence pour les réactiver."
+        },
+        "expiredPartner": {
+          "pill": "Expirée",
+          "title": "Votre licence a expiré le {date}",
+          "body": "Les fonctionnalités Enterprise sont désactivées. Votre partenaire {partner} renouvelle la licence : elles se réactiveront à la synchronisation suivante."
         },
         "leaseEnded": {
           "pill": "Synchro en retard",
@@ -2930,6 +2938,11 @@
           "title": "Votre licence expire le {date}",
           "body": "Une fois renouvelée sur proxcenter.io, la nouvelle licence arrive ici toute seule à la synchronisation suivante."
         },
+        "expiringPartner": {
+          "pill": "Expire bientôt",
+          "title": "Votre licence expire le {date}",
+          "body": "Votre partenaire {partner} la renouvelle : la nouvelle licence arrive ici toute seule à la synchronisation suivante."
+        },
         "expiringFile": {
           "pill": "Expire bientôt",
           "title": "Votre licence expire le {date}",
@@ -2991,7 +3004,7 @@
       },
       "pairing": {
         "title": "Connexion à proxcenter.io",
-        "step": "Étape 2 sur 2 : validez sur votre compte",
+        "step": "Étape 2 sur 2 : validez sur proxcenter.io, ou donnez le code à votre partenaire revendeur",
         "hint": "Ouvrez proxcenter.io, connectez-vous et saisissez ce code, ou transmettez ce code à votre partenaire revendeur. Vos licences arriveront ici automatiquement.",
         "pill": "En attente"
       }

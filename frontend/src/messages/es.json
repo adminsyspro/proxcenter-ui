@@ -2821,6 +2821,9 @@
       "summary": {
         "enterprise": "ProxCenter Enterprise",
         "community": "ProxCenter Community",
+        "awaiting": "Esperando una licencia",
+        "awaitingDesc": "Conectada a proxcenter.io, aún sin licencia asignada",
+        "pillAwaiting": "En espera",
         "communityDesc": "Gratuito, sin límite de tiempo",
         "communityPitch": "Pase a Enterprise para desbloquear la alta disponibilidad, el control de acceso avanzado, los informes y mucho más.",
         "pillActive": "Activa",
@@ -2864,6 +2867,11 @@
           "pill": "Vencida",
           "title": "Su licencia venció el {date}",
           "body": "Las funciones Enterprise están desactivadas. Renueve la licencia para volver a activarlas."
+        },
+        "expiredPartner": {
+          "pill": "Vencida",
+          "title": "Su licencia venció el {date}",
+          "body": "Las funciones Enterprise están desactivadas. Su socio {partner} renueva la licencia: se volverán a activar en la siguiente sincronización."
         },
         "leaseEnded": {
           "pill": "Sincronización atrasada",
@@ -2930,6 +2938,11 @@
           "title": "Su licencia vence el {date}",
           "body": "Una vez renovada en proxcenter.io, la nueva licencia llega sola a este servidor en la siguiente sincronización."
         },
+        "expiringPartner": {
+          "pill": "Vence pronto",
+          "title": "Su licencia vence el {date}",
+          "body": "Su socio {partner} la renueva: la nueva licencia llega sola a este servidor en la siguiente sincronización."
+        },
         "expiringFile": {
           "pill": "Vence pronto",
           "title": "Su licencia vence el {date}",
@@ -2991,7 +3004,7 @@
       },
       "pairing": {
         "title": "Conexión con proxcenter.io",
-        "step": "Paso 2 de 2: confirme en su cuenta",
+        "step": "Paso 2 de 2: confirme en proxcenter.io o entregue el código a su socio distribuidor",
         "hint": "Abra proxcenter.io, inicie sesión e introduzca este código, o entregue este código a su socio distribuidor. Sus licencias llegarán aquí automáticamente.",
         "pill": "En espera"
       }

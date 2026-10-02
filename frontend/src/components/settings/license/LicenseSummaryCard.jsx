@@ -50,6 +50,8 @@ function StatusPill({ summary, alerts, t }) {
     return <Chip size='small' color={SEVERITY_COLOR[worst.severity]} label={t(`settings.licenseTab.alerts.${worst.id}.pill`)} />
   }
 
+  if (summary.state === 'awaiting') return <Chip size='small' variant='outlined' color='info' label={t('settings.licenseTab.summary.pillAwaiting')} />
+
   return summary.state === 'community'
     ? <Chip size='small' variant='outlined' label={t('settings.licenseTab.summary.pillCommunity')} />
     : <Chip size='small' color='success' variant='outlined' label={t('settings.licenseTab.summary.pillActive')} />
@@ -70,8 +72,51 @@ function PartnerSource({ partner }) {
   )
 }
 
+// Where the license comes from: proxcenter.io (and the partner that delivers
+// it), a request file or a pasted key; a failing sync is told on the same line.
+function SourceFact({ source, syncAlert, color, t, locale }) {
+  return (
+    <Fact
+      inline
+      label={t(source?.kind === 'portal' ? 'settings.licenseTab.summary.receivedFrom' : 'settings.licenseTab.summary.activatedBy')}
+      color={color}
+    >
+      {source?.kind === 'portal' && (
+        <Value
+          main={source.partner ? <PartnerSource key={source.partner.logoUrl || 'none'} partner={source.partner} /> : 'proxcenter.io'}
+          sub={[
+            source.partner ? t('settings.licenseTab.summary.viaPortal') : null,
+            source.lastSyncAt
+              ? t(source.failing ? 'settings.licenseTab.summary.lastSyncAgo' : 'settings.licenseTab.summary.syncedAgo', { ago: formatAgo(source.lastSyncAt, locale) })
+              : t('settings.licenseTab.summary.neverSynced'),
+          ].filter(Boolean).join(' · ')}
+          extra={syncAlert && (
+            // A failing sync is told on the same line, details in the tooltip, not by a banner.
+            <Tooltip title={[
+              t('settings.licenseTab.summary.syncFailingInline', {
+                since: formatDateTime(syncAlert.values.since, locale),
+                failures: syncAlert.values.failures,
+                next: formatDateTime(syncAlert.values.next, locale),
+              }),
+              syncAlert.values.until ? t('settings.licenseTab.summary.syncFailingUntil', { until: formatDate(syncAlert.values.until, locale) }) : null,
+            ].filter(Boolean).join(' ')}>
+              <Typography component='span' variant='body2' color='warning.main' sx={{ fontWeight: 400, ml: 1, cursor: 'help' }}>
+                <i className='ri-error-warning-line' aria-hidden='true' style={{ fontSize: '0.8125rem', verticalAlign: '-1px', marginRight: 3 }} />
+                {t('settings.licenseTab.summary.syncFailingShort', { failures: syncAlert.values.failures })}
+              </Typography>
+            </Tooltip>
+          )}
+        />
+      )}
+      {source?.kind === 'file' && <Value main={t('settings.licenseTab.summary.fileSource')} sub={t('settings.licenseTab.summary.fileBound')} />}
+      {source?.kind === 'key' && <Value main={t('settings.licenseTab.summary.keySource')} />}
+    </Fact>
+  )
+}
+
 export default function LicenseSummaryCard({ summary, alerts, t, locale, busy, canConnect, actions, syncAlert, onConnect, onHaveKey, onNoInternet, onRenewWithFile }) {
   const community = summary.state === 'community'
+  const awaiting = summary.state === 'awaiting'
   const factColor = {}
 
   for (const a of alerts) {
@@ -96,10 +141,12 @@ export default function LicenseSummaryCard({ summary, alerts, t, locale, busy, c
           </Box>
           <Box sx={{ flex: 1, minWidth: 0 }}>
             <Typography variant='h6' fontWeight={700}>
-              {t(community ? 'settings.licenseTab.summary.community' : 'settings.licenseTab.summary.enterprise')}
+              {t(awaiting ? 'settings.licenseTab.summary.awaiting' : community ? 'settings.licenseTab.summary.community' : 'settings.licenseTab.summary.enterprise')}
             </Typography>
             <Typography variant='body2' color='text.secondary' noWrap>
-              {community
+              {awaiting
+                ? summary.customer || t('settings.licenseTab.summary.awaitingDesc')
+                : community
                 ? t('settings.licenseTab.summary.communityDesc')
                 : [summary.customer, summary.licenseCount > 1 ? t('settings.licenseTab.summary.licenseCount', { count: summary.licenseCount }) : null].filter(Boolean).join(' · ')}
             </Typography>
@@ -109,7 +156,11 @@ export default function LicenseSummaryCard({ summary, alerts, t, locale, busy, c
           {actions}
         </Box>
 
-        {community ? (
+        {awaiting ? (
+          <Box sx={{ mt: 2.5, pt: 2.5, borderTop: 1, borderColor: 'divider' }}>
+            <SourceFact source={source} syncAlert={syncAlert} color={factColor.source} t={t} locale={locale} />
+          </Box>
+        ) : community ? (
           <>
             <Typography variant='body2' color='text.secondary' sx={{ mt: 2 }}>{t('settings.licenseTab.summary.communityPitch')}</Typography>
             <Box sx={{ display: 'flex', gap: 1.5, mt: 2, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -156,41 +207,7 @@ export default function LicenseSummaryCard({ summary, alerts, t, locale, busy, c
                 ) : <Value main='—' />}
               </Fact>
 
-              <Fact
-                inline
-                label={t(source?.kind === 'portal' ? 'settings.licenseTab.summary.receivedFrom' : 'settings.licenseTab.summary.activatedBy')}
-                color={factColor.source}
-              >
-                {source?.kind === 'portal' && (
-                  <Value
-                    main={source.partner ? <PartnerSource key={source.partner.logoUrl || 'none'} partner={source.partner} /> : 'proxcenter.io'}
-                    sub={[
-                      source.partner ? t('settings.licenseTab.summary.viaPortal') : null,
-                      source.lastSyncAt
-                        ? t(source.failing ? 'settings.licenseTab.summary.lastSyncAgo' : 'settings.licenseTab.summary.syncedAgo', { ago: formatAgo(source.lastSyncAt, locale) })
-                        : t('settings.licenseTab.summary.neverSynced'),
-                    ].filter(Boolean).join(' · ')}
-                    extra={syncAlert && (
-                      // A failing sync is told on the same line, details in the tooltip, not by a banner.
-                      <Tooltip title={[
-                        t('settings.licenseTab.summary.syncFailingInline', {
-                          since: formatDateTime(syncAlert.values.since, locale),
-                          failures: syncAlert.values.failures,
-                          next: formatDateTime(syncAlert.values.next, locale),
-                        }),
-                        syncAlert.values.until ? t('settings.licenseTab.summary.syncFailingUntil', { until: formatDate(syncAlert.values.until, locale) }) : null,
-                      ].filter(Boolean).join(' ')}>
-                        <Typography component='span' variant='body2' color='warning.main' sx={{ fontWeight: 400, ml: 1, cursor: 'help' }}>
-                          <i className='ri-error-warning-line' aria-hidden='true' style={{ fontSize: '0.8125rem', verticalAlign: '-1px', marginRight: 3 }} />
-                          {t('settings.licenseTab.summary.syncFailingShort', { failures: syncAlert.values.failures })}
-                        </Typography>
-                      </Tooltip>
-                    )}
-                  />
-                )}
-                {source?.kind === 'file' && <Value main={t('settings.licenseTab.summary.fileSource')} sub={t('settings.licenseTab.summary.fileBound')} />}
-                {source?.kind === 'key' && <Value main={t('settings.licenseTab.summary.keySource')} />}
-              </Fact>
+              <SourceFact source={source} syncAlert={syncAlert} color={factColor.source} t={t} locale={locale} />
             </Box>
 
             {source?.kind === 'file' && (

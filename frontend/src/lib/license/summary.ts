@@ -65,7 +65,8 @@ export type SummarySource =
   | { kind: 'key' }
 
 export interface LicenseSummary {
-  state: 'community' | 'licensed' | 'expired'
+  // awaiting: connected to proxcenter.io but holding no license yet.
+  state: 'community' | 'awaiting' | 'licensed' | 'expired'
   edition: 'enterprise' | 'community'
   customer: string | null
   // used is null when the orchestrator did not count the nodes.
@@ -123,6 +124,16 @@ export function buildLicenseSummary(status: LicenseStatus, rows: LicenseTableRow
   const enterprise = status.edition === 'enterprise' || status.edition === 'enterprise_plus'
 
   if (state === 'community') {
+    // Paired with proxcenter.io but no license assigned yet: say so, and who
+    // delivers it, rather than looking like an instance never connected.
+    if (!status.offline && isConnectedMode(connection)) {
+      return {
+        state: 'awaiting', edition: 'community', customer: connection?.customer_name || null, nodes: null, validUntil: null,
+        source: { kind: 'portal', lastSyncAt: connection?.last_ok_at || null, failing: connection?.status === 'disconnected', partner: portalPartner(connection) },
+        options: [], licenseCount: 0, nfr: false,
+      }
+    }
+
     return { state, edition: 'community', customer: null, nodes: null, validUntil: null, source: null, options: [], licenseCount: 0, nfr: false }
   }
 
@@ -190,10 +201,10 @@ export function buildLicenseAlerts(
   const connection = status.offline ? null : status.connection || null
   // The customer of a reseller partner has no proxcenter.io account of its
   // own: its partner assigns and reconnects, so these alerts name the partner
-  // and never offer to open an account.
+  // and never offer to open an account or to renew on proxcenter.io.
   const partner = connection?.partner?.name || ''
   const viaPartner = (id: string, values: Record<string, string | number>, actions: AlertAction[]) =>
-    partner ? { id: `${id}Partner`, values: { ...values, partner }, actions: actions.filter(a => a !== 'openAccount') } : { id, values, actions }
+    partner ? { id: `${id}Partner`, values: { ...values, partner }, actions: actions.filter(a => a !== 'openAccount' && a !== 'renew') } : { id, values, actions }
   const nodeStatus = status.node_status
   const maxNodes = nodeStatus?.max_nodes ?? status.limits?.max_nodes ?? 0
 
@@ -204,7 +215,11 @@ export function buildLicenseAlerts(
   }
 
   if (status.expired) {
-    alerts.push({ id: 'expired', severity: 'error', values: { date: status.expires_at || '' }, actions: ['renew'] })
+    // Its partner renews it: no renew link for the customer of a partner.
+    // Only a portal-delivered license is renewed by the partner and arrives by sync.
+    const portalDelivered = isConnectedMode(connection) && status.binding === 'connected'
+
+    alerts.push({ severity: 'error', ...(portalDelivered ? viaPartner : (id: string, v: Record<string, string | number>, a: AlertAction[]) => ({ id, values: v, actions: a }))('expired', { date: status.expires_at || '' }, ['renew']) })
   }
 
   if (status.lease_error) {
@@ -253,12 +268,12 @@ export function buildLicenseAlerts(
   if (status.expiration_warn && !status.expired && status.expires_at) {
     const portal = isConnectedMode(connection) && status.binding === 'connected'
 
-    alerts.push({
-      id: portal ? 'expiring' : 'expiringFile',
-      severity: 'info',
-      values: { date: status.expires_at, days: daysUntil(status.expires_at, now) },
-      actions: ['renew'],
-    })
+    const values = { date: status.expires_at, days: daysUntil(status.expires_at, now) }
+
+    // The customer of a partner does not renew: its partner does, so the
+    // alert names the partner and offers no link to proxcenter.io.
+    if (partner && portal) alerts.push({ id: 'expiringPartner', severity: 'info', values: { ...values, partner }, actions: [] })
+    else alerts.push({ id: portal ? 'expiring' : 'expiringFile', severity: 'info', values, actions: ['renew'] })
   }
 
   // Connected, but proxcenter.io has not assigned any license to this

@@ -57,7 +57,7 @@ function Action({ label, icon, onClick, href, disabled, color }) {
 // sync and connection, the offline request and key paste, the fingerprint,
 // then the destructive ones last, set apart.
 export default function LicenseActions({
-  t, busy, install, canSign, licensed, showImport, showDeactivate, connection, fingerprintOnly = false,
+  t, busy, install, canSign, licensed, showImport, showDeactivate, connection, fingerprintOnly = false, awaiting = false,
   onSync, onConnect, onDisconnect, onRequestFile, onActivateKey, onResetIdentity, onImport, onDeactivate,
 }) {
   const [copied, setCopied] = useState(false)
@@ -81,14 +81,19 @@ export default function LicenseActions({
         <>
           {linked && <Action label={t('settings.licenseTab.connection.sync')} icon='ri-refresh-line' onClick={onSync} disabled={busy} />}
           {connection?.status === 'none' && licensed && <Action label={t('settings.licenseTab.summary.connect')} icon='ri-plug-line' onClick={onConnect} disabled={busy} />}
-          <Action
-            label={canSign ? t('settings.licenseGenerateRequest') : t('settings.licenseSigningUnavailable')}
-            icon='ri-file-shield-2-line' onClick={onRequestFile} disabled={!canSign || busy}
-          />
-          <Action label={t('settings.licenseTab.advanced.activateKey')} icon='ri-key-2-line' onClick={onActivateKey} disabled={busy} />
+          {/* A connected instance waiting for its license gets it at the next sync, not from a file or a key. */}
+          {!awaiting && (
+            <>
+              <Action
+                label={canSign ? t('settings.licenseGenerateRequest') : t('settings.licenseSigningUnavailable')}
+                icon='ri-file-shield-2-line' onClick={onRequestFile} disabled={!canSign || busy}
+              />
+              <Action label={t('settings.licenseTab.advanced.activateKey')} icon='ri-key-2-line' onClick={onActivateKey} disabled={busy} />
+            </>
+          )}
         </>
       )}
-      {!fingerprintOnly && showImport && <Action label={t('settings.licenseTab.licenses.import')} icon='ri-add-line' onClick={onImport} disabled={busy} />}
+      {!fingerprintOnly && !awaiting && showImport && <Action label={t('settings.licenseTab.licenses.import')} icon='ri-add-line' onClick={onImport} disabled={busy} />}
       {!canSign && <Action label={t('settings.licenseResetIdentity')} icon='ri-restart-line' color='warning' onClick={onResetIdentity} disabled={busy} />}
       {fingerprint && (
         <Tooltip title={

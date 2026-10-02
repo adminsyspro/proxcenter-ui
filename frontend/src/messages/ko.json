@@ -2821,6 +2821,9 @@
       "summary": {
         "enterprise": "ProxCenter Enterprise",
         "community": "ProxCenter Community",
+        "awaiting": "라이선스 대기 중",
+        "awaitingDesc": "proxcenter.io에 연결됨, 아직 할당된 라이선스 없음",
+        "pillAwaiting": "대기 중",
         "communityDesc": "무료, 기간 제한 없음",
         "communityPitch": "Enterprise로 업그레이드하면 고가용성, 고급 접근 제어, 보고서 등을 사용할 수 있습니다.",
         "pillActive": "활성",
@@ -2864,6 +2867,11 @@
           "pill": "만료됨",
           "title": "라이선스가 {date}에 만료되었습니다",
           "body": "Enterprise 기능이 비활성화되었습니다. 라이선스를 갱신하면 다시 활성화됩니다."
+        },
+        "expiredPartner": {
+          "pill": "만료됨",
+          "title": "라이선스가 {date}에 만료되었습니다",
+          "body": "Enterprise 기능이 비활성화되었습니다. 파트너 {partner}이(가) 라이선스를 갱신하면 다음 동기화 때 다시 활성화됩니다."
         },
         "leaseEnded": {
           "pill": "동기화 지연",
@@ -2930,6 +2938,11 @@
           "title": "라이선스가 {date}에 만료됩니다",
           "body": "proxcenter.io에서 갱신하면 다음 동기화 때 새 라이선스가 이 서버에 자동으로 전달됩니다."
         },
+        "expiringPartner": {
+          "pill": "곧 만료",
+          "title": "라이선스가 {date}에 만료됩니다",
+          "body": "파트너 {partner}이(가) 갱신하며, 새 라이선스는 다음 동기화 때 이 서버에 자동으로 전달됩니다."
+        },
         "expiringFile": {
           "pill": "곧 만료",
           "title": "라이선스가 {date}에 만료됩니다",
@@ -2991,7 +3004,7 @@
       },
       "pairing": {
         "title": "proxcenter.io에 연결 중",
-        "step": "2/2단계: 계정에서 확인하세요",
+        "step": "2/2단계: proxcenter.io에서 확인하거나 코드를 리셀러 파트너에게 전달하세요",
         "hint": "proxcenter.io를 열고 로그인한 뒤 이 코드를 입력하거나, 이 코드를 리셀러 파트너에게 전달하세요. 라이선스가 자동으로 이곳에 전달됩니다.",
         "pill": "대기 중"
       }

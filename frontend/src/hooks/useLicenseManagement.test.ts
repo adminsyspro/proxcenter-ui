@@ -86,3 +86,115 @@ describe('license connection actions', () => {
     expect(fetchMock).toHaveBeenCalledTimes(3)
   })
 })
+
+describe('license key actions', () => {
+  it('sends a cleaned key and returns the binding mismatch details without reloading', async () => {
+    const { result } = await mount()
+    fetchMock.mockResolvedValueOnce(response({
+      success: false, error: 'bound elsewhere', code: 'LICENSE_BINDING_MISMATCH', expected_fingerprint: 'fp-a', actual_fingerprint: 'fp-b',
+    }, 409))
+    await act(async () => {
+      expect(await result.current.handleActivate('  LINE1   \nLINE2  \n')).toEqual({
+        success: false, error: 'bound elsewhere', code: 'LICENSE_BINDING_MISMATCH', expected: 'fp-a', actual: 'fp-b',
+      })
+    })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ license: 'LINE1\nLINE2' })
+    expect(result.current.activating).toBe(false)
+  })
+
+  it('returns the activation error, or a default one', async () => {
+    const { result } = await mount()
+    fetchMock.mockResolvedValueOnce(response({ success: false, error: 'expired' }, 400))
+      .mockResolvedValueOnce(response({ success: false }))
+    await act(async () => {
+      expect(await result.current.handleActivate('KEY')).toEqual({ success: false, error: 'expired' })
+      expect(await result.current.handleActivate('KEY')).toEqual({ success: false, error: 'Activation failed' })
+    })
+  })
+
+  it('reloads status, features and the page after a successful activation', async () => {
+    const reload = vi.fn()
+    vi.stubGlobal('location', { ...window.location, reload })
+    const { result } = await mount()
+    fetchMock.mockResolvedValueOnce(response({ success: true }))
+    await act(async () => { expect(await result.current.handleActivate('KEY')).toEqual({ success: true }) })
+    expect(fetchMock.mock.calls.map(c => c[0])).toEqual(['/api/v1/license/activate', '/api/v1/license/status', '/api/v1/license/features'])
+    expect(reload).toHaveBeenCalledTimes(1)
+  })
+
+  it('deactivates and refreshes, or returns the error', async () => {
+    const { result } = await mount()
+    fetchMock.mockResolvedValueOnce(response({ success: true }))
+    await act(async () => { expect(await result.current.handleDeactivate()).toEqual({ success: true }) })
+    expect(fetchMock.mock.calls.map(c => c[0])).toEqual(['/api/v1/license/deactivate', '/api/v1/license/status', '/api/v1/license/features'])
+    fetchMock.mockResolvedValueOnce(response({ success: false }, 500)).mockResolvedValueOnce(response({ success: false, error: 'locked' }, 409))
+    await act(async () => {
+      expect(await result.current.handleDeactivate()).toEqual({ success: false, error: 'Deactivation failed' })
+      expect(await result.current.handleDeactivate()).toEqual({ success: false, error: 'locked' })
+    })
+  })
+})
+
+describe('license request and install identity', () => {
+  function blobResponse(disposition: string | null) {
+    return { ok: true, status: 200, blob: async () => new Blob(['{}']), headers: { get: () => disposition } }
+  }
+
+  it.each([
+    ['attachment; filename="proxcenter-license-request-abcd1234.json"', 'proxcenter-license-request-abcd1234.json'],
+    [null, 'proxcenter-license-request.json'],
+  ])('downloads the request file (%s)', async (disposition, filename) => {
+    const { result } = await mount()
+    const createObjectURL = vi.fn(() => 'blob:req')
+    const revokeObjectURL = vi.fn()
+    vi.stubGlobal('URL', { ...URL, createObjectURL, revokeObjectURL })
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+      expect(this.download).toBe(filename)
+      expect(this.href).toBe('blob:req')
+    })
+    fetchMock.mockResolvedValueOnce(blobResponse(disposition))
+    await act(async () => { expect(await result.current.downloadLicenseRequest()).toEqual({ success: true }) })
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/license/request', { cache: 'no-store' })
+    expect(click).toHaveBeenCalledTimes(1)
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:req')
+    expect(document.querySelector('a[download]')).toBeNull()
+  })
+
+  it('returns the request error with its code, the HTTP status, or the network error', async () => {
+    const { result } = await mount()
+    fetchMock.mockResolvedValueOnce(response({ error: 'cannot sign', code: 'IDENTITY_SIGNING_UNAVAILABLE' }, 409))
+      .mockResolvedValueOnce({ ok: false, status: 502, json: async () => { throw new Error('not JSON') } })
+      .mockRejectedValueOnce(new Error('offline'))
+      .mockRejectedValueOnce({})
+    await act(async () => {
+      expect(await result.current.downloadLicenseRequest()).toEqual({ success: false, error: 'cannot sign', code: 'IDENTITY_SIGNING_UNAVAILABLE' })
+      expect(await result.current.downloadLicenseRequest()).toEqual({ success: false, error: 'HTTP 502', code: undefined })
+      expect(await result.current.downloadLicenseRequest()).toEqual({ success: false, error: 'offline' })
+      expect(await result.current.downloadLicenseRequest()).toEqual({ success: false, error: 'Request failed' })
+    })
+    expect(result.current.activating).toBe(false)
+  })
+
+  it('resets the identity and reloads the status', async () => {
+    const { result } = await mount()
+    fetchMock.mockResolvedValueOnce(response({ success: true }))
+    await act(async () => { expect(await result.current.resetInstallIdentity()).toEqual({ success: true }) })
+    expect(fetchMock.mock.calls).toEqual([['/api/v1/license/identity/reset', { method: 'POST' }], ['/api/v1/license/status', { cache: 'no-store' }]])
+  })
+
+  it('returns the reset error, the HTTP status, or the network error', async () => {
+    const { result } = await mount()
+    fetchMock.mockResolvedValueOnce(response({ success: false, error: 'bound' }, 409))
+      .mockResolvedValueOnce({ ok: false, status: 503, json: async () => { throw new Error('not JSON') } })
+      .mockRejectedValueOnce(new Error('offline'))
+      .mockRejectedValueOnce({})
+    await act(async () => {
+      expect(await result.current.resetInstallIdentity()).toEqual({ success: false, error: 'bound' })
+      expect(await result.current.resetInstallIdentity()).toEqual({ success: false, error: 'HTTP 503' })
+      expect(await result.current.resetInstallIdentity()).toEqual({ success: false, error: 'offline' })
+      expect(await result.current.resetInstallIdentity()).toEqual({ success: false, error: 'Reset failed' })
+    })
+    expect(fetchMock).toHaveBeenCalledTimes(4)
+  })
+})

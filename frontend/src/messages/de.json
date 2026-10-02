@@ -2808,6 +2808,9 @@
       "summary": {
         "enterprise": "ProxCenter Enterprise",
         "community": "ProxCenter Community",
+        "awaiting": "Warten auf eine Lizenz",
+        "awaitingDesc": "Mit proxcenter.io verbunden, noch keine Lizenz zugewiesen",
+        "pillAwaiting": "Ausstehend",
         "communityDesc": "Kostenlos, ohne zeitliche Begrenzung",
         "communityPitch": "Wechseln Sie zu Enterprise für Hochverfügbarkeit, erweiterte Zugriffskontrolle, Berichte und mehr.",
         "pillActive": "Aktiv",
@@ -2852,6 +2855,11 @@
           "title": "Ihre Lizenz ist am {date} abgelaufen",
           "body": "Die Enterprise-Funktionen sind deaktiviert. Erneuern Sie die Lizenz, um sie wieder zu aktivieren."
         },
+        "expiredPartner": {
+          "pill": "Abgelaufen",
+          "title": "Ihre Lizenz ist am {date} abgelaufen",
+          "body": "Die Enterprise-Funktionen sind deaktiviert. Ihr Partner {partner} erneuert die Lizenz: Die Funktionen werden bei der nächsten Synchronisierung wieder aktiviert."
+        },
         "leaseEnded": {
           "pill": "Synchronisierung überfällig",
           "title": "Ihre Lizenzen funktionieren nicht mehr",
@@ -2885,7 +2893,7 @@
         "revokedPartner": {
           "pill": "Getrennt",
           "title": "Diese Instanz wurde von proxcenter.io getrennt",
-          "body": "Verbinden Sie sie erneut und geben Sie den neuen Code an Ihren Partner {partner} weiter: Sie erhält ihre Lizenzen wieder, sobald Ihr Partner ihn bestätigt hat."
+          "body": "Verbinden Sie die Instanz erneut und geben Sie den neuen Code an Ihren Partner {partner} weiter: Die Instanz erhält ihre Lizenzen wieder, sobald Ihr Partner ihn bestätigt hat."
         },
         "identityChanged": {
           "pill": "Identität geändert",
@@ -2916,6 +2924,11 @@
           "pill": "Läuft bald ab",
           "title": "Ihre Lizenz läuft am {date} ab",
           "body": "Nach der Erneuerung auf proxcenter.io erreicht die neue Lizenz diesen Server bei der nächsten Synchronisierung von selbst."
+        },
+        "expiringPartner": {
+          "pill": "Läuft bald ab",
+          "title": "Ihre Lizenz läuft am {date} ab",
+          "body": "Ihr Partner {partner} erneuert die Lizenz: Die neue Lizenz erreicht diesen Server bei der nächsten Synchronisierung von selbst."
         },
         "expiringFile": {
           "pill": "Läuft bald ab",
@@ -2978,7 +2991,7 @@
       },
       "pairing": {
         "title": "Verbindung mit proxcenter.io",
-        "step": "Schritt 2 von 2: in Ihrem Konto bestätigen",
+        "step": "Schritt 2 von 2: auf proxcenter.io bestätigen oder den Code an Ihren Vertriebspartner weitergeben",
         "hint": "Öffnen Sie proxcenter.io, melden Sie sich an und geben Sie diesen Code ein, oder geben Sie diesen Code an Ihren Vertriebspartner weiter. Ihre Lizenzen kommen dann automatisch hier an.",
         "pill": "Ausstehend"
       }

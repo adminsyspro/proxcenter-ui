@@ -2821,6 +2821,9 @@
       "summary": {
         "enterprise": "ProxCenter Enterprise",
         "community": "ProxCenter Community",
+        "awaiting": "Waiting for a license",
+        "awaitingDesc": "Connected to proxcenter.io, no license assigned yet",
+        "pillAwaiting": "Waiting",
         "communityDesc": "Free, with no time limit",
         "communityPitch": "Upgrade to Enterprise to unlock high availability, advanced access control, reports and more.",
         "pillActive": "Active",
@@ -2864,6 +2867,11 @@
           "pill": "Expired",
           "title": "Your license expired on {date}",
           "body": "Enterprise features are turned off. Renew the license to turn them back on."
+        },
+        "expiredPartner": {
+          "pill": "Expired",
+          "title": "Your license expired on {date}",
+          "body": "Enterprise features are turned off. Your partner {partner} renews the license: it turns them back on at the next sync."
         },
         "leaseEnded": {
           "pill": "Sync overdue",
@@ -2930,6 +2938,11 @@
           "title": "Your license expires on {date}",
           "body": "Once renewed on proxcenter.io, the new license reaches this server by itself at the next sync."
         },
+        "expiringPartner": {
+          "pill": "Expires soon",
+          "title": "Your license expires on {date}",
+          "body": "Your partner {partner} renews it: the new license reaches this server by itself at the next sync."
+        },
         "expiringFile": {
           "pill": "Expires soon",
           "title": "Your license expires on {date}",
@@ -2991,7 +3004,7 @@
       },
       "pairing": {
         "title": "Connecting to proxcenter.io",
-        "step": "Step 2 of 2: confirm on your account",
+        "step": "Step 2 of 2: confirm on proxcenter.io, or give the code to your reseller partner",
         "hint": "Open proxcenter.io, sign in and enter this code, or give this code to your reseller partner. Your licenses will arrive here by themselves.",
         "pill": "Waiting"
       }

@@ -56,10 +56,17 @@ describe('license tab i18n parity across the 6 served locales', () => {
     })
 
     it(`${locale} names the partner in every partner variant and tells a partner customer to hand the code over`, () => {
-      for (const key of ['movedPartner.body', 'movedEndedPartner.body', 'noLicensePartner.body', 'revokedPartner.body']) {
+      for (const key of ['movedPartner.body', 'movedEndedPartner.body', 'noLicensePartner.body', 'revokedPartner.body', 'expiringPartner.body', 'expiredPartner.body']) {
         expect(get(messages, `settings.licenseTab.alerts.${key}`) as string, `${locale}: ${key}`).toContain('{partner}')
       }
       expect(get(messages, 'settings.licenseTab.pairing.hint') as string, `${locale}: pairing.hint`).toContain(PARTNER_WORD[locale])
+      expect(get(messages, 'settings.licenseTab.pairing.step') as string, `${locale}: pairing.step`).toContain(PARTNER_WORD[locale])
+    })
+
+    it(`${locale} never tells a partner customer to renew on proxcenter.io`, () => {
+      for (const key of ['expiringPartner.body', 'expiredPartner.body']) {
+        expect(get(messages, `settings.licenseTab.alerts.${key}`) as string, `${locale}: ${key}`).not.toContain('proxcenter.io')
+      }
     })
 
     it(`${locale} has no license tab key that en lacks`, () => {

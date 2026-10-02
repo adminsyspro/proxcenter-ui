@@ -136,6 +136,23 @@ describe('LicenseTab situations', () => {
     expect(screen.queryByRole('link', { name: 'settings.licenseTab.actions.openAccount' })).toBeNull()
   })
 
+  it('links a direct customer to its account to renew, a partner customer to nobody', async () => {
+    management.licenseStatus = { ...management.licenseStatus, expiration_warn: true, expires_at: at(12) }
+    const view = await mountTab()
+    let alert = screen.getByRole('alert')
+
+    expect(alert.textContent).toContain('settings.licenseTab.alerts.expiring.body')
+    expect(within(alert).getByRole('link', { name: 'settings.licenseTab.actions.renew' }).getAttribute('href')).toBe('https://proxcenter.io/account/license')
+
+    management.licenseStatus = { ...management.licenseStatus, connection: { ...connected, partner: { name: 'Partner SAS', has_logo: false } } }
+    await rerender(view)
+    alert = screen.getByRole('alert')
+    expect(alert.textContent).toContain('settings.licenseTab.alerts.expiringPartner.body')
+    expect(alert.textContent).toContain('"partner":"Partner SAS"')
+    expect(screen.queryByRole('link', { name: 'settings.licenseTab.actions.renew' })).toBeNull()
+    expect(view.container.querySelector('a[href*="proxcenter.io"]')).toBeNull()
+  })
+
   it('offers the three ways in on Community, the key dialog included', async () => {
     management.licenseStatus = { licensed: false, edition: 'community', connection: { available: true, status: 'none' } }
     await mountTab()
@@ -149,6 +166,22 @@ describe('LicenseTab situations', () => {
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'KEY' } })
     await act(async () => fireEvent.click(button('settings.activateLicense')))
     expect(management.handleActivate).toHaveBeenCalledWith('KEY')
+  })
+
+  it('shows a connected instance without a license as waiting for it, received from its partner, with no offline ways in', async () => {
+    management.licenseStatus = { licensed: false, edition: 'community', connection: { ...connected, customer_name: 'Client SARL', partner: { name: 'Partner SAS', has_logo: true, logo_sha256: 'c'.repeat(64) }, held: [] } }
+    const { container } = await mountTab()
+
+    expect(container.textContent).toContain('settings.licenseTab.summary.awaiting')
+    expect(container.textContent).not.toContain('settings.licenseTab.summary.community')
+    expect(container.textContent).toContain('Client SARL')
+    expect(container.textContent).toContain('settings.licenseTab.summary.receivedFrom')
+    expect(container.querySelector('img')?.getAttribute('src')).toBe(`/api/v1/license/partner-logo?v=${'c'.repeat(64)}`)
+    expect(screen.queryByRole('button', { name: 'settings.licenseTab.summary.haveKey' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'settings.licenseTab.summary.noInternet' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'settings.licenseGenerateRequest' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'settings.licenseTab.connection.sync' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'settings.licenseConnectionDisconnect' })).toBeTruthy()
   })
 
   it('shows the pairing code in place of the card, and cancels', async () => {

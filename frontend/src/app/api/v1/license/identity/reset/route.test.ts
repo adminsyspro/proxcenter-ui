@@ -52,4 +52,35 @@ describe('POST /api/v1/license/identity/reset', () => {
     expect(res.status).toBe(503)
     expect((await res.json()).code).toBe('ORCHESTRATOR_UNAVAILABLE')
   })
+
+  it('reports HTTP status when the orchestrator error is not JSON', async () => {
+    fetchMock.mockResolvedValue(new Response('<html>bad gateway</html>', { status: 502 }))
+    const res = await (await resetPOST())()
+    expect(res.status).toBe(502)
+    expect(await res.json()).toEqual({ success: false, error: 'HTTP 502' })
+  })
+
+  it.each(['connect ECONNREFUSED 127.0.0.1:8080', 'getaddrinfo ENOTFOUND orchestrator'])('503s on %s', async message => {
+    fetchMock.mockRejectedValue(new Error(message))
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const res = await (await resetPOST())()
+    expect(res.status).toBe(503)
+    expect((await res.json()).code).toBe('ORCHESTRATOR_UNAVAILABLE')
+  })
+
+  it('500s with the error message on any other failure', async () => {
+    fetchMock.mockRejectedValue(new Error('socket hang up'))
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const res = await (await resetPOST())()
+    expect(res.status).toBe(500)
+    expect(await res.json()).toEqual({ success: false, error: 'socket hang up' })
+  })
+
+  it('500s with a default message when the error has none', async () => {
+    fetchMock.mockRejectedValue({})
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const res = await (await resetPOST())()
+    expect(res.status).toBe(500)
+    expect(await res.json()).toEqual({ success: false, error: 'Failed to reset the install identity' })
+  })
 })

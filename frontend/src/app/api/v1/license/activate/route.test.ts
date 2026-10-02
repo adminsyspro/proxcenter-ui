@@ -7,6 +7,8 @@ const fetchMock = vi.fn()
 vi.mock('@/lib/rbac', () => ({ checkPermission: checkPermissionMock, PERMISSIONS: { ADMIN_SETTINGS: 'admin.settings' } }))
 vi.mock('@/lib/orchestrator/headers', () => ({ orchestratorHeaders: (x: any) => ({ ...x }) }))
 
+type ActivateBody = { success?: boolean; error?: string; code?: string; expected_fingerprint?: string; actual_fingerprint?: string }
+
 async function activatePOST() { const mod = await import('./route'); return mod.POST as Parameters<typeof callRoute>[0] }
 
 beforeEach(() => {
@@ -25,7 +27,7 @@ describe('POST /api/v1/license/activate', () => {
     fetchMock.mockResolvedValue({ ok: true, status: 200, json: async () => ({ success: true }) })
     const res = await callRoute(await activatePOST(), { body: { license: 'BLOB' } })
     expect(res.status).toBe(200)
-    expect((await readJson(res)).success).toBe(true)
+    expect((await readJson<ActivateBody>(res))?.success).toBe(true)
   })
 
   it('forwards the code and both fingerprints on a 409 binding mismatch', async () => {
@@ -42,16 +44,35 @@ describe('POST /api/v1/license/activate', () => {
     })
     const res = await callRoute(await activatePOST(), { body: { license: 'BLOB' } })
     expect(res.status).toBe(409)
-    const body = await readJson(res)
-    expect(body.success).toBe(false)
-    expect(body.code).toBe('LICENSE_BINDING_MISMATCH')
-    expect(body.expected_fingerprint).toBe('fp-expected')
-    expect(body.actual_fingerprint).toBe('fp-actual')
+    expect(await readJson<ActivateBody>(res)).toEqual({
+      success: false,
+      error: 'License bound to another install',
+      code: 'LICENSE_BINDING_MISMATCH',
+      expected_fingerprint: 'fp-expected',
+      actual_fingerprint: 'fp-actual',
+    })
+  })
+
+  it('forwards a plain orchestrator error without code or fingerprints', async () => {
+    fetchMock.mockResolvedValue({ ok: false, status: 422, json: async () => ({}) })
+    const res = await callRoute(await activatePOST(), { body: { license: 'BLOB' } })
+    expect(res.status).toBe(422)
+    expect(await readJson<ActivateBody>(res)).toEqual({ success: false, error: 'HTTP 422' })
   })
 
   it('returns 503 when the orchestrator is down', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
     fetchMock.mockRejectedValue(new Error('fetch failed'))
     const res = await callRoute(await activatePOST(), { body: { license: 'BLOB' } })
     expect(res.status).toBe(503)
+    expect((await readJson<ActivateBody>(res))?.code).toBe('ORCHESTRATOR_UNAVAILABLE')
+  })
+
+  it('returns 500 with the error message on any other failure', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    fetchMock.mockResolvedValue({ ok: true, status: 200, json: async () => { throw new Error('bad JSON') } })
+    const res = await callRoute(await activatePOST(), { body: { license: 'BLOB' } })
+    expect(res.status).toBe(500)
+    expect(await readJson<ActivateBody>(res)).toEqual({ success: false, error: 'bad JSON' })
   })
 })

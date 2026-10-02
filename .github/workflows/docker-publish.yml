@@ -12,9 +12,22 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version tag for the images'
+        description: 'Version tag for the images (staging: staging or X.Y.Z-staging)'
         required: false
         default: 'latest'
+      staging:
+        description: 'Staging build: staging license key, published under version only'
+        type: boolean
+        required: false
+        default: false
+      frontend_ref:
+        description: 'Staging only: proxcenter-ui branch or tag to build'
+        required: false
+        default: ''
+      backend_ref:
+        description: 'Staging only: proxcenter-backend branch or tag to build'
+        required: false
+        default: ''
 
 env:
   REGISTRY: ghcr.io
@@ -24,9 +37,33 @@ env:
 
 jobs:
   # ========================================
+  # Staging dispatch guard
+  # ========================================
+  # Runs the checker from the dispatched ref: a staging build checks out
+  # older sources (frontend_ref) that do not carry this script.
+  dispatch-guard:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Check staging inputs
+        env:
+          GH_EVENT: ${{ github.event_name }}
+          GH_REF: ${{ github.ref }}
+          INPUT_STAGING: ${{ inputs.staging }}
+          INPUT_VERSION: ${{ inputs.version }}
+          INPUT_FRONTEND_REF: ${{ inputs.frontend_ref }}
+          INPUT_BACKEND_REF: ${{ inputs.backend_ref }}
+        run: bash .github/scripts/check-staging-inputs.sh
+
+  # ========================================
   # Run Frontend Tests
   # ========================================
   test:
+    needs: [dispatch-guard]
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -50,6 +87,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.staging && inputs.frontend_ref || '' }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v7
@@ -98,6 +137,20 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.staging && inputs.frontend_ref || '' }}
+
+      - name: Record the built source
+        id: src
+        env:
+          STAGING: ${{ inputs.staging }}
+          FRONTEND_REF: ${{ inputs.frontend_ref }}
+        run: |
+          sha=$(git rev-parse HEAD)
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          if [ "$STAGING" = "true" ]; then
+            echo "### Staging frontend: $FRONTEND_REF at $sha" >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -131,14 +184,14 @@ jobs:
         with:
           images: ${{ env.FRONTEND_IMAGE }}
           tags: |
-            type=ref,event=branch
+            type=ref,event=branch,enable=${{ !inputs.staging }}
             type=ref,event=pr
             type=ref,event=tag
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
             type=raw,value=${{ steps.resolve.outputs.version }},enable=${{ steps.resolve.outputs.version != 'dev' }}
-            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') && !inputs.staging }}
 
       - name: Build and push Frontend
         uses: docker/build-push-action@v7
@@ -149,7 +202,7 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
-            GIT_SHA=${{ github.sha }}
+            GIT_SHA=${{ steps.src.outputs.sha }}
             APP_VERSION=${{ steps.resolve.outputs.version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -169,7 +222,7 @@ jobs:
   # ========================================
   build-demo:
     needs: [test, test-backend]
-    if: ${{ always() && needs.test.result == 'success' && (needs.test-backend.result == 'success' || github.actor == 'dependabot[bot]') }}
+    if: ${{ always() && !inputs.staging && needs.test.result == 'success' && (needs.test-backend.result == 'success' || github.actor == 'dependabot[bot]') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -223,6 +276,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.staging && inputs.frontend_ref || '' }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -256,14 +311,14 @@ jobs:
         with:
           images: ${{ env.WEASYPRINT_IMAGE }}
           tags: |
-            type=ref,event=branch
+            type=ref,event=branch,enable=${{ !inputs.staging }}
             type=ref,event=pr
             type=ref,event=tag
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
             type=raw,value=${{ steps.resolve.outputs.version }},enable=${{ steps.resolve.outputs.version != 'dev' }}
-            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') && !inputs.staging }}
 
       - name: Build and push WeasyPrint
         uses: docker/build-push-action@v7
@@ -294,7 +349,7 @@ jobs:
   # (Enterprise-only); nodes authenticate with GHCR_TOKEN from .env.
   build-ha-images:
     needs: [test, test-backend]
-    if: ${{ always() && needs.test.result == 'success' && (needs.test-backend.result == 'success' || github.actor == 'dependabot[bot]') }}
+    if: ${{ always() && !inputs.staging && needs.test.result == 'success' && (needs.test-backend.result == 'success' || github.actor == 'dependabot[bot]') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -374,7 +429,7 @@ jobs:
   # digest first copied (re-mirroring is a deliberate manual act: delete
   # the GHCR tag, then re-run the workflow).
   mirror-ha-images:
-    if: ${{ github.event_name != 'pull_request' }}
+    if: ${{ github.event_name != 'pull_request' && !inputs.staging }}
     runs-on: ubuntu-latest
     permissions:
       packages: write
@@ -412,6 +467,7 @@ jobs:
   # ========================================
   test-backend:
     if: github.actor != 'dependabot[bot]'
+    needs: [dispatch-guard]
     runs-on: ubuntu-latest
     # Replication tests open a per-run schema on this Postgres via
     # POSTGRES_TEST_URL (mirrors the vitest globalSetup pattern). Tests
@@ -440,9 +496,13 @@ jobs:
           GH_REF: ${{ github.ref }}
           GH_REF_NAME: ${{ github.ref_name }}
           PAT: ${{ secrets.ORCHESTRATOR_PAT }}
+          INPUT_STAGING: ${{ inputs.staging }}
+          INPUT_BACKEND_REF: ${{ inputs.backend_ref }}
         run: |
           REF="main"
-          if [[ "$GH_REF" == refs/tags/v* ]]; then
+          if [[ "$INPUT_STAGING" == "true" ]]; then
+            REF="$INPUT_BACKEND_REF"
+          elif [[ "$GH_REF" == refs/tags/v* ]]; then
             if git ls-remote --tags "https://x-access-token:${PAT}@github.com/adminsyspro/proxcenter-backend.git" "$GH_REF_NAME" | grep -q "$GH_REF_NAME"; then
               REF="$GH_REF_NAME"
             fi
@@ -490,9 +550,13 @@ jobs:
           GH_REF: ${{ github.ref }}
           GH_REF_NAME: ${{ github.ref_name }}
           PAT: ${{ secrets.ORCHESTRATOR_PAT }}
+          INPUT_STAGING: ${{ inputs.staging }}
+          INPUT_BACKEND_REF: ${{ inputs.backend_ref }}
         run: |
           REF="main"
-          if [[ "$GH_REF" == refs/tags/v* ]]; then
+          if [[ "$INPUT_STAGING" == "true" ]]; then
+            REF="$INPUT_BACKEND_REF"
+          elif [[ "$GH_REF" == refs/tags/v* ]]; then
             if git ls-remote --tags "https://x-access-token:${PAT}@github.com/adminsyspro/proxcenter-backend.git" "$GH_REF_NAME" | grep -q "$GH_REF_NAME"; then
               REF="$GH_REF_NAME"
             fi
@@ -506,6 +570,33 @@ jobs:
           ref: ${{ steps.backend-ref.outputs.ref }}
           path: backend
           token: ${{ secrets.ORCHESTRATOR_PAT }}
+
+      - name: Swap in the staging license public key
+        if: ${{ inputs.staging }}
+        env:
+          STAGING_LICENSE_PUBLIC_KEY: ${{ secrets.STAGING_LICENSE_PUBLIC_KEY }}
+          BACKEND_REF: ${{ inputs.backend_ref }}
+        run: |
+          set -euo pipefail
+          key=backend/internal/license/public_key.pem
+          if [ -z "$STAGING_LICENSE_PUBLIC_KEY" ]; then
+            echo "::error::secret STAGING_LICENSE_PUBLIC_KEY is not set"
+            exit 1
+          fi
+          prod_fp=$(openssl pkey -pubin -in "$key" -outform DER | sha256sum | cut -d' ' -f1)
+          printf '%s\n' "$STAGING_LICENSE_PUBLIC_KEY" > "$key"
+          staging_fp=$(openssl pkey -pubin -in "$key" -outform DER | sha256sum | cut -d' ' -f1)
+          if [ "$staging_fp" = "$prod_fp" ]; then
+            echo "::error::STAGING_LICENSE_PUBLIC_KEY is the production key"
+            exit 1
+          fi
+          echo "Production license key, replaced: $prod_fp"
+          echo "Staging license key, embedded:    $staging_fp"
+          {
+            echo "### Staging orchestrator"
+            echo "- backend $BACKEND_REF at $(git -C backend rev-parse HEAD)"
+            echo "- license public key sha256 (DER): $staging_fp"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -539,14 +630,14 @@ jobs:
         with:
           images: ${{ env.ORCHESTRATOR_IMAGE }}
           tags: |
-            type=ref,event=branch
+            type=ref,event=branch,enable=${{ !inputs.staging }}
             type=ref,event=pr
             type=ref,event=tag
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
             type=raw,value=${{ steps.resolve.outputs.version }},enable=${{ steps.resolve.outputs.version != 'dev' }}
-            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') && !inputs.staging }}
 
       - name: Build and push Orchestrator
         uses: docker/build-push-action@v7

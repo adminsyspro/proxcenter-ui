@@ -36,6 +36,7 @@ describe('parseVmConfig', () => {
       cores: 4,
       sockets: 2,
       memoryMb: 8192,
+      diskCapacityBytes: null,
     })
   })
 
@@ -50,6 +51,7 @@ describe('parseVmConfig', () => {
     expect(parseVmConfig(null)).toEqual({
       cpuType: null, scsihw: null, agentEnabled: false, bios: null,
       ostype: null, onboot: false, cores: null, sockets: null, memoryMb: null,
+      diskCapacityBytes: null,
     })
   })
 
@@ -57,6 +59,7 @@ describe('parseVmConfig', () => {
     expect(parseVmConfig({ cores: 'not-a-number', sockets: Infinity, memory: NaN, onboot: 0 })).toEqual({
       cpuType: null, scsihw: null, agentEnabled: false, bios: null,
       ostype: null, onboot: false, cores: null, sockets: null, memoryMb: null,
+      diskCapacityBytes: null,
     })
   })
 })
@@ -89,9 +92,20 @@ describe('enrichVmsWithConfig', () => {
   })
 
   it('uses the lxc path for containers', async () => {
-    pveFetchMock.mockResolvedValue({ ostype: 'debian', onboot: 1 })
-    await enrichVmsWithConfig(CONN, [{ vmid: '300', node: 'n1', type: 'lxc', status: 'running' }], new Set(['n1']))
+    pveFetchMock.mockResolvedValue({ ostype: 'debian', onboot: 1, rootfs: 'local-lvm:vm-300-disk-0,size=8G', mp0: 'local:subvol-300-disk-1,size=20G' })
+    const out = await enrichVmsWithConfig(CONN, [{ vmid: '300', node: 'n1', type: 'lxc', status: 'running' }], new Set(['n1']))
     expect(pveFetchMock).toHaveBeenCalledWith(CONN, '/nodes/n1/lxc/300/config')
+    expect(out[0].diskCapacityBytes).toBe(28 * 1024 ** 3)
+  })
+
+  it('sums QEMU disks and firmware devices from the config', async () => {
+    pveFetchMock.mockResolvedValue({
+      scsi0: 'local-lvm:vm-100-disk-0,size=50G',
+      virtio1: 'local-lvm:vm-100-disk-1,size=50G',
+      efidisk0: 'local-lvm:vm-100-disk-2,size=528K',
+    })
+    const out = await enrichVmsWithConfig(CONN, [vms[0]], new Set(['n1']))
+    expect(out[0].diskCapacityBytes).toBe(100 * 1024 ** 3 + 528 * 1024)
   })
 
   it('never throws when a /config call fails', async () => {

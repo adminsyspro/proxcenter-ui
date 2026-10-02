@@ -24,3 +24,25 @@ export function pveDriveSize(drive: unknown): number {
 
   return size ? parsePveSize(size.slice(5)) : 0
 }
+
+/** Sum configured guest disks when the cluster resource's maxdisk is incomplete. */
+export function guestDiskCapacity(config: Record<string, unknown> | null, type: string): number | null {
+  if (!config) return null
+
+  const diskKey = type === 'lxc'
+    ? /^(?:rootfs|mp\d+)$/
+    : /^(?:(?:scsi|sata|ide|virtio)\d+|efidisk\d+|tpmstate\d+)$/
+  let total = 0
+  let found = false
+
+  for (const [key, value] of Object.entries(config)) {
+    if (!diskKey.test(key)) continue
+    const bytes = pveDriveSize(value)
+    if (bytes > 0) {
+      total += bytes
+      found = true
+    }
+  }
+
+  return found ? total : null
+}

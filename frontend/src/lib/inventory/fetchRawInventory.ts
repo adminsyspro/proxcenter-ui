@@ -14,6 +14,7 @@ import { pveFetch } from "@/lib/proxmox/client"
 import { aggregateStorage, type AggregatedStorage } from "@/lib/proxmox/storage"
 import type { PoolFacts } from "./proxmoxProjections"
 import { readNodeStatus, readPools, readStorageResources } from "./proxmoxProjections"
+import { enrichVmsWithConfig } from "./vmConfig"
 import { pbsFetch } from "@/lib/proxmox/pbs-client"
 import { collectNodeAddresses, resolveManagementIp } from "@/lib/proxmox/resolveManagementIp"
 import {
@@ -285,6 +286,12 @@ export async function fetchRawInventory(infra: InfraScope): Promise<RawInventory
       })
 
       const nodeEnrichData = await Promise.all(nodeEnrichPromises)
+      const diskConfigGuests = await enrichVmsWithConfig(
+        connConfig,
+        guests.filter(g => g?.node).map(g => ({ vmid: String(g.vmid), node: g.node, type: g.type || 'qemu', status: g.status || 'unknown' })),
+        nodesResult.status === 'fulfilled' ? new Set(nodes.filter(n => n?.node && n.status === 'online').map(n => n.node)) : null,
+      )
+      const diskCapacityByGuest = new Map(diskConfigGuests.map(g => [`${g.node}\u0000${g.vmid}`, g.diskCapacityBytes] as const))
       type NodeEnrichment = Omit<(typeof nodeEnrichData)[number], 'node'>
       const nodeIpMap = new Map<string, NodeEnrichment>()
 
@@ -351,7 +358,10 @@ export async function fetchRawInventory(infra: InfraScope): Promise<RawInventory
           mem: g.mem,
           maxmem: g.maxmem,
           disk: g.disk,
-          maxdisk: g.maxdisk,
+          // `/cluster/resources` can report only the boot disk, and may report
+          // zero for a stopped VM. Prefer the sum from its already-supported
+          // per-guest config read when those sizes are available.
+          maxdisk: diskCapacityByGuest.get(`${g.node}\u0000${g.vmid}`) ?? g.maxdisk,
           uptime: g.uptime,
           pool: g.pool,
           tags: g.tags,

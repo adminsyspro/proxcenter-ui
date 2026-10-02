@@ -7,6 +7,7 @@
 // search identity of the guest (MACs, static IPs, description; #223, #861),
 // parsed by guestNetIdentity.ts at no extra call.
 import { pveFetch } from "@/lib/proxmox/client"
+import { guestDiskCapacity } from "@/lib/proxmox/diskSize"
 
 import { mapWithConcurrency, PVEPROXY_CONCURRENCY } from "./concurrency"
 import { EMPTY_GUEST_NET_IDENTITY, parseGuestNetIdentity, type GuestNetIdentity } from "./guestNetIdentity"
@@ -21,6 +22,7 @@ export type VmConfigFields = {
   cores: number | null
   sockets: number | null
   memoryMb: number | null
+  diskCapacityBytes: number | null
 }
 
 export type VmAgentProbe = {
@@ -45,6 +47,7 @@ const EMPTY_CONFIG: VmConfigFields = {
   cores: null,
   sockets: null,
   memoryMb: null,
+  diskCapacityBytes: null,
 }
 
 /** The Proxmox `agent` property is a property-list string: "1", "0", "enabled=1,type=virtio". */
@@ -61,7 +64,7 @@ function num(raw: unknown): number | null {
   return Number.isFinite(parsed) ? parsed : null
 }
 
-export function parseVmConfig(config: Record<string, any> | null): VmConfigFields {
+export function parseVmConfig(config: Record<string, any> | null, type: string = 'qemu'): VmConfigFields {
   if (!config) return { ...EMPTY_CONFIG }
   return {
     cpuType: config.cpu ? String(config.cpu) : null,
@@ -73,6 +76,7 @@ export function parseVmConfig(config: Record<string, any> | null): VmConfigField
     cores: num(config.cores),
     sockets: num(config.sockets),
     memoryMb: num(config.memory),
+    diskCapacityBytes: guestDiskCapacity(config, type),
   }
 }
 
@@ -107,7 +111,7 @@ export async function enrichVmsWithConfig<T extends EnrichableVm>(
     } catch {
       // A failing /config never fails the route.
     }
-    const fields = parseVmConfig(config)
+    const fields = parseVmConfig(config, vm.type)
     const enriched = { ...vm, ...fields, ...parseGuestNetIdentity(config, kind) }
 
     if (!opts.includeAgent) return enriched

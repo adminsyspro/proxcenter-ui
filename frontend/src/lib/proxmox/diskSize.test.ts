@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { GIB, parsePveSize, pveDriveSize } from './diskSize'
+import { GIB, guestDiskCapacity, parsePveSize, pveDriveSize } from './diskSize'
 
 describe('parsePveSize', () => {
   it.each([
@@ -37,5 +37,31 @@ describe('pveDriveSize', () => {
   it('returns 0 without a size option', () => {
     expect(pveDriveSize('none,media=cdrom')).toBe(0)
     expect(pveDriveSize(undefined)).toBe(0)
+  })
+})
+
+describe('guestDiskCapacity', () => {
+  it('sums every configured QEMU disk, including firmware devices', () => {
+    expect(guestDiskCapacity({
+      scsi0: 'local-lvm:vm-100-disk-0,size=50G',
+      virtio1: 'local-lvm:vm-100-disk-1,size=50G',
+      ide2: 'local:iso/debian.iso,media=cdrom',
+      efidisk0: 'local-lvm:vm-100-disk-2,size=528K',
+      tpmstate0: 'local-lvm:vm-100-disk-3,size=4M',
+      unused0: 'local-lvm:vm-100-disk-4,size=10G',
+    }, 'qemu')).toBe(100 * GIB + 528 * 1024 + 4 * 1024 ** 2)
+  })
+
+  it('sums the root filesystem and mount points for an LXC', () => {
+    expect(guestDiskCapacity({
+      rootfs: 'local-lvm:vm-200-disk-0,size=8G',
+      mp0: 'local:subvol-200-disk-1,size=20G',
+      unused0: 'local:subvol-200-disk-2,size=40G',
+    }, 'lxc')).toBe(28 * GIB)
+  })
+
+  it('returns null when config contains no parseable disk sizes', () => {
+    expect(guestDiskCapacity({ ide2: 'none,media=cdrom' }, 'qemu')).toBeNull()
+    expect(guestDiskCapacity(null, 'qemu')).toBeNull()
   })
 })

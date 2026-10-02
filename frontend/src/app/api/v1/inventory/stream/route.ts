@@ -11,6 +11,7 @@ import { isSharedStorage } from "@/lib/proxmox/storage"
 import { getRBACContext, filterVmsByPermission, PERMISSIONS, checkPermission, getRbacInfraScope, applyRbacInfraFilter, filterVisibleConnections, filterCandidateConnections, isConnectionVisible, mayHaveVisibleGuests, pruneEmptyConnections, type RbacInfraScope } from "@/lib/rbac"
 import { resolveManagementIp } from "@/lib/proxmox/resolveManagementIp"
 import { readPools, type PoolFacts } from "@/lib/inventory/proxmoxProjections"
+import { enrichVmsWithConfig } from "@/lib/inventory/vmConfig"
 import {
   getInventoryFromCache,
   setCachedInventory,
@@ -235,6 +236,12 @@ async function fetchOneCluster(conn: {
     })
 
     const nodeEnrichData = await Promise.all(nodeEnrichPromises)
+    const diskConfigGuests = await enrichVmsWithConfig(
+      connConfig,
+      guests.filter(g => g?.node).map(g => ({ vmid: String(g.vmid), node: g.node, type: g.type || 'qemu', status: g.status || 'unknown' })),
+      nodesResult.status === 'fulfilled' ? new Set(nodes.filter(n => n?.node && n.status === 'online').map(n => n.node)) : null,
+    )
+    const diskCapacityByGuest = new Map(diskConfigGuests.map(g => [`${g.node}\u0000${g.vmid}`, g.diskCapacityBytes] as const))
     const nodeIpMap = new Map<string, { ip?: string; mem?: number; maxmem?: number }>()
     for (const { node, ip, mem, maxmem } of nodeEnrichData) {
       if (node) nodeIpMap.set(node, { ip, mem, maxmem })
@@ -273,7 +280,7 @@ async function fetchOneCluster(conn: {
         status: g.status || 'unknown',
         node: g.node,
         cpu: g.cpu, maxcpu: g.maxcpu, mem: g.mem, maxmem: g.maxmem,
-        disk: g.disk, maxdisk: g.maxdisk,
+        disk: g.disk, maxdisk: diskCapacityByGuest.get(`${g.node}\u0000${g.vmid}`) ?? g.maxdisk,
         uptime: g.uptime, pool: g.pool, tags: g.tags,
         lock: g.lock,
         template: g.template === 1 || g.template === true,

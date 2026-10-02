@@ -1227,6 +1227,9 @@ return (
         width: 120,
         minWidth: 60,
         renderHeader: headerIconOnly('ri-price-tag-3-line'),
+        // DataGrid's default string comparator subtracts non-string values;
+        // arrays therefore sort as NaN instead of by their visible tags.
+        valueGetter: (_value, row) => (row.tags || []).join(', '),
         renderCell: (params) => <TagsCell tags={params.row.tags || []} getTagColor={(tag) => getTagColor(tag, params.row.connId)} shape={getShape(params.row.connId)} />
       })
     }

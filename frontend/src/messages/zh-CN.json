@@ -8068,7 +8068,13 @@
     "noAttributionHelp": "代理工作正常，sFlow 数据正在被解码。要进行归属，必须能在采样位置看到客户机流量：客户机 NIC 必须经过 OVS 网桥。在 SDN VNet 上，同一 VNet 内两个客户机之间的流量会停留在 Linux 网桥上，永远不会被采样。",
     "noNodeToConfigure": "没有需要配置的节点。",
     "configureRequestFailed": "配置请求失败。",
-    "configureOutcome": "已在 {configured} 个节点上配置 sFlow，共 {total} 个节点"
+    "configureOutcome": "已在 {configured} 个节点上配置 sFlow，共 {total} 个节点",
+    "searchPlaceholder": "按 IP、虚拟机名称或 VMID 搜索",
+    "searchHighlight": "高亮",
+    "searchFilter": "筛选",
+    "searchMatches": "{count} 条匹配的流量",
+    "searchNoMatch": "没有与“{query}”匹配的流量",
+    "searchEnterHint": "按 Enter 键打开最佳匹配项的详情"
   },
   "myVdc": {
     "title": "我的数据中心",

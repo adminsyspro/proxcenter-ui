@@ -14,6 +14,7 @@ import {
   DialogTitle,
   Divider,
   IconButton,
+  InputAdornment,
   LinearProgress,
   Table,
   TableBody,
@@ -21,24 +22,31 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  TextField,
+  ToggleButton,
+  ToggleButtonGroup,
+  Tooltip,
   Typography,
   useTheme,
 } from '@mui/material'
 
 import { formatBytes } from '@/utils/format'
 
-interface IPPair {
-  src_ip: string
-  dst_ip: string
-  bytes: number
-  packets: number
-  protocol: string
-  dst_port: number
-}
+import {
+  buildEndpointIndex,
+  endpointLabel,
+  endpointMatches,
+  mergePairs,
+  normalizeQuery,
+  type IPPair,
+} from './flowSearch'
 
 interface SankeyNodeData {
   name: string
+  label: string
   category: 'source' | 'service' | 'destination'
+  vmid?: number
+  matched: boolean
 }
 
 interface SankeyLinkData {
@@ -50,7 +58,13 @@ interface SankeyLinkData {
   packets?: number
   srcIP?: string
   dstIP?: string
+  matched: boolean
 }
+
+type SearchMode = 'highlight' | 'filter'
+
+// Flows drawn at once, beyond which the diagram becomes unreadable
+const MAX_FLOWS = 30
 
 // Well-known port → service name
 function portToService(port: number, protocol: string): string {
@@ -71,8 +85,11 @@ const FLOW_COLORS = [
   '#84cc16', '#e11d48', '#0ea5e9', '#d946ef', '#22d3ee',
 ]
 
-async function fetchIPPairs(): Promise<IPPair[]> {
-  const res = await fetch('/api/v1/orchestrator/sflow?endpoint=ip-pairs&n=100')
+// With a query the orchestrator filters before its top-N cut, so a quiet VM
+// outside the global top flows is still found.
+async function fetchIPPairs(query = ''): Promise<IPPair[]> {
+  const q = query ? `&q=${encodeURIComponent(query)}` : ''
+  const res = await fetch(`/api/v1/orchestrator/sflow?endpoint=ip-pairs&n=100${q}`)
   if (!res.ok) return []
   const data = await res.json()
   return Array.isArray(data) ? data : []
@@ -82,6 +99,8 @@ async function fetchIPPairs(): Promise<IPPair[]> {
 interface NodeDetail {
   type: 'node'
   name: string
+  label: string
+  vmid?: number
   category: 'source' | 'service' | 'destination'
   totalBytes: number
   totalPackets: number
@@ -115,21 +134,39 @@ export default function SankeyChart() {
   const [hoveredNode, setHoveredNode] = useState<number | null>(null)
   const [containerWidth, setContainerWidth] = useState(typeof window !== 'undefined' ? window.innerWidth - 300 : 900)
   const [detail, setDetail] = useState<DetailData | null>(null)
+  const [search, setSearch] = useState('')
+  const [query, setQuery] = useState('')
+  const [mode, setMode] = useState<SearchMode>('highlight')
+  const [matchedPairs, setMatchedPairs] = useState<IPPair[]>([])
+
   useEffect(() => {
-    void fetchIPPairs().then(data => {
-      setPairs(data)
+    const timer = setTimeout(() => setQuery(search.trim()), 300)
+    return () => clearTimeout(timer)
+  }, [search])
+
+  useEffect(() => {
+    let cancelled = false
+    const load = async () => {
+      const [top, matched] = await Promise.all([fetchIPPairs(), query ? fetchIPPairs(query) : Promise.resolve([])])
+      if (cancelled) return
+      setPairs(top)
+      setMatchedPairs(matched)
       setLoading(false)
-    })
+    }
 
-    const interval = setInterval(async () => {
-      const data = await fetchIPPairs()
-      setPairs(data)
-    }, 15000)
+    void load()
+    const interval = setInterval(load, 15000)
 
-    return () => clearInterval(interval)
-  }, [])
+    return () => {
+      cancelled = true
+      clearInterval(interval)
+    }
+  }, [query])
 
-  // Track container width
+  const endpointIndex = useMemo(() => buildEndpointIndex([...pairs, ...matchedPairs]), [pairs, matchedPairs])
+  const q = normalizeQuery(query)
+
+  // Track container width (the container only mounts once data is loaded)
   useEffect(() => {
     if (!containerRef.current) return
     const observer = new ResizeObserver(entries => {
@@ -139,7 +176,7 @@ export default function SankeyChart() {
     })
     observer.observe(containerRef.current)
     return () => observer.disconnect()
-  }, [])
+  }, [loading])
 
   // SVG dimensions: full width, height = fill remaining viewport
   const svgWidth = containerWidth || 900
@@ -153,6 +190,16 @@ export default function SankeyChart() {
   const sankeyData = useMemo(() => {
     if (pairs.length === 0) return null
 
+    const matches = (ip: string) => endpointMatches(ip, endpointIndex.get(ip), q)
+    const pairMatches = (p: IPPair) => matches(p.src_ip) || matches(p.dst_ip)
+
+    // The server-side matches are re-checked locally: an orchestrator that
+    // predates ?q= answers with its unfiltered top pairs.
+    const serverMatches = matchedPairs.filter(pairMatches)
+    const sourcePairs = !q ? pairs
+      : mode === 'filter' ? mergePairs(pairs.filter(pairMatches), serverMatches)
+      : mergePairs(pairs, serverMatches)
+
     const nodeMap = new Map<string, number>()
     const nodes: SankeyNodeData[] = []
     const links: SankeyLinkData[] = []
@@ -162,14 +209,19 @@ export default function SankeyChart() {
       if (nodeMap.has(key)) return nodeMap.get(key)!
       const idx = nodes.length
       nodeMap.set(key, idx)
-      nodes.push({ name, category })
+      if (category === 'service') {
+        nodes.push({ name, label: name, category, matched: false })
+      } else {
+        const info = endpointIndex.get(name)
+        nodes.push({ name, label: endpointLabel(name, info), category, vmid: info?.vmid, matched: matches(name) })
+      }
       return idx
     }
 
     // Aggregate by src → service → dst
-    const aggregated = new Map<string, { bytes: number; packets: number; protocol: string; port: number; srcIP: string; dstIP: string }>()
+    const aggregated = new Map<string, { bytes: number; packets: number; protocol: string; port: number; srcIP: string; dstIP: string; matched: boolean }>()
 
-    for (const pair of pairs) {
+    for (const pair of sourcePairs) {
       const service = portToService(pair.dst_port, pair.protocol)
       const key = `${pair.src_ip}|${service}|${pair.dst_ip}`
 
@@ -185,12 +237,23 @@ export default function SankeyChart() {
           port: pair.dst_port,
           srcIP: pair.src_ip,
           dstIP: pair.dst_ip,
+          matched: !!q && pairMatches(pair),
         })
       }
     }
 
-    // Only keep top flows to avoid visual clutter
-    const sortedFlows = Array.from(aggregated.values()).sort((a, b) => b.bytes - a.bytes).slice(0, 30)
+    // Only keep top flows to avoid visual clutter. When highlighting, every
+    // matching flow is kept first and the busiest other flows give it context.
+    const allFlows = Array.from(aggregated.values()).sort((a, b) => b.bytes - a.bytes)
+    const matchedFlows = allFlows.filter(f => f.matched)
+    let sortedFlows = allFlows.slice(0, MAX_FLOWS)
+    if (q && mode === 'filter') {
+      sortedFlows = matchedFlows.slice(0, MAX_FLOWS)
+    } else if (q) {
+      const kept = matchedFlows.slice(0, MAX_FLOWS)
+      const context = allFlows.filter(f => !f.matched).slice(0, Math.max(10, MAX_FLOWS - kept.length))
+      sortedFlows = [...kept, ...context].sort((a, b) => b.bytes - a.bytes)
+    }
 
     for (const flow of sortedFlows) {
       const service = portToService(flow.port, flow.protocol)
@@ -199,19 +262,17 @@ export default function SankeyChart() {
       const dstIdx = getOrCreateNode(flow.dstIP, 'destination')
 
       // src → service
-      links.push({ source: srcIdx, target: svcIdx, value: flow.bytes, protocol: flow.protocol, port: flow.port, packets: flow.packets, srcIP: flow.srcIP, dstIP: flow.dstIP })
+      links.push({ source: srcIdx, target: svcIdx, value: flow.bytes, protocol: flow.protocol, port: flow.port, packets: flow.packets, srcIP: flow.srcIP, dstIP: flow.dstIP, matched: flow.matched })
       // service → dst
-      links.push({ source: svcIdx, target: dstIdx, value: flow.bytes, protocol: flow.protocol, port: flow.port, packets: flow.packets, srcIP: flow.srcIP, dstIP: flow.dstIP })
+      links.push({ source: svcIdx, target: dstIdx, value: flow.bytes, protocol: flow.protocol, port: flow.port, packets: flow.packets, srcIP: flow.srcIP, dstIP: flow.dstIP, matched: flow.matched })
     }
 
-    if (nodes.length === 0 || links.length === 0) return null
-
-    return { nodes, links }
-  }, [pairs])
+    return { nodes, links, matchCount: matchedFlows.length }
+  }, [pairs, matchedPairs, endpointIndex, q, mode])
 
   // Compute Sankey layout
   const layout = useMemo(() => {
-    if (!sankeyData) return null
+    if (!sankeyData || sankeyData.links.length === 0) return null
 
     const margin = { top: 30, right: 120, bottom: 10, left: 120 }
     const width = svgWidth - margin.left - margin.right
@@ -232,7 +293,16 @@ export default function SankeyChart() {
         links: sankeyData.links.map(d => ({ ...d })),
       })
 
-      return { ...result, margin, width, height }
+      // Nodes on a matching flow (the match itself, its services and its peers)
+      const litNodes = new Set<number>()
+      for (const link of result.links as any[]) {
+        if (link.matched) {
+          litNodes.add(link.source.index)
+          litNodes.add(link.target.index)
+        }
+      }
+
+      return { ...result, margin, width, height, litNodes }
     } catch {
       return null
     }
@@ -255,7 +325,7 @@ export default function SankeyChart() {
     for (const link of layout.links as any[]) {
       if ((link.source as any).index === nodeIdx) {
         connections.push({
-          name: (link.target as any).name,
+          name: (link.target as any).label,
           bytes: link.value,
           packets: link.packets || 0,
           direction: 'out',
@@ -267,7 +337,7 @@ export default function SankeyChart() {
       }
       if ((link.target as any).index === nodeIdx) {
         connections.push({
-          name: (link.source as any).name,
+          name: (link.source as any).label,
           bytes: link.value,
           packets: link.packets || 0,
           direction: 'in',
@@ -284,6 +354,8 @@ export default function SankeyChart() {
     setDetail({
       type: 'node',
       name: node.name,
+      label: node.label,
+      vmid: node.vmid,
       category: node.category,
       totalBytes: totalNodeBytes,
       totalPackets: totalNodePackets,
@@ -334,6 +406,20 @@ export default function SankeyChart() {
     })
   }
 
+  // Enter opens the details of the busiest matching endpoint
+  const openTopMatch = () => {
+    if (!layout) return
+    let best = -1
+    let bestValue = -1
+    ;(layout.nodes as any[]).forEach((node, idx) => {
+      if (node.matched && (node.value || 0) > bestValue) {
+        best = idx
+        bestValue = node.value || 0
+      }
+    })
+    if (best >= 0) handleNodeClick(layout.nodes[best], best)
+  }
+
   // Check if a node's links are hovered
   const isNodeHighlighted = (nodeIdx: number): boolean => {
     if (hoveredNode === nodeIdx) return true
@@ -351,7 +437,7 @@ export default function SankeyChart() {
     )
   }
 
-  if (!layout || pairs.length === 0) {
+  if (pairs.length === 0 || (!layout && !q)) {
     return (
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 400 }}>
         <Box sx={{ textAlign: 'center', opacity: 0.5 }}>
@@ -362,8 +448,15 @@ export default function SankeyChart() {
     )
   }
 
-  const { nodes: layoutNodes, links: layoutLinks, margin } = layout
+  const layoutNodes = (layout?.nodes ?? []) as any[]
+  const layoutLinks = (layout?.links ?? []) as any[]
+  const margin = layout?.margin ?? { top: 30, right: 120, bottom: 10, left: 120 }
   const linkPathGenerator = sankeyLinkHorizontal()
+
+  // Highlight mode dims everything that is not on a matching flow; hovering keeps precedence
+  const hovering = hoveredLink !== null || hoveredNode !== null
+  const emphasizing = !!q && mode === 'highlight' && (sankeyData?.matchCount ?? 0) > 0
+  const matchCount = sankeyData?.matchCount ?? 0
 
   // Category labels — aligned with the Sankey columns (inside the margin area)
   const layoutWidth = svgWidth - margin.left - margin.right
@@ -389,11 +482,70 @@ export default function SankeyChart() {
     <>
       <Card variant="outlined" sx={{ borderRadius: 2, overflow: 'hidden', width: '100%' }}>
         <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
-          <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1 }}>
-            <i className="ri-flow-chart" style={{ fontSize: 16, marginRight: 6 }} />
-            {t('networkFlows.flowDiagram')}
-          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1, mb: 1 }}>
+            <Typography variant="subtitle2" fontWeight={700}>
+              <i className="ri-flow-chart" style={{ fontSize: 16, marginRight: 6 }} />
+              {t('networkFlows.flowDiagram')}
+            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
+              {q && (
+                <Chip
+                  size="small"
+                  variant="outlined"
+                  color={matchCount > 0 ? 'primary' : 'default'}
+                  label={t('networkFlows.searchMatches', { count: matchCount })}
+                />
+              )}
+              <Tooltip title={t('networkFlows.searchEnterHint')} placement="top">
+                <TextField
+                  size="small"
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') openTopMatch() }}
+                  placeholder={t('networkFlows.searchPlaceholder')}
+                  inputProps={{ 'aria-label': t('networkFlows.searchPlaceholder') }}
+                  sx={{ width: { xs: '100%', sm: 280 } }}
+                  InputProps={{
+                    startAdornment: <InputAdornment position="start"><i className="ri-search-line" style={{ fontSize: 14, opacity: 0.5 }} /></InputAdornment>,
+                    endAdornment: search ? (
+                      <InputAdornment position="end">
+                        <IconButton size="small" aria-label="clear" onClick={() => setSearch('')}>
+                          <i className="ri-close-line" style={{ fontSize: 14 }} />
+                        </IconButton>
+                      </InputAdornment>
+                    ) : null,
+                  }}
+                />
+              </Tooltip>
+              <ToggleButtonGroup
+                size="small"
+                exclusive
+                value={mode}
+                onChange={(_, v: SearchMode | null) => { if (v) setMode(v) }}
+                sx={{ '& .MuiToggleButton-root': { textTransform: 'none', fontSize: 12, py: 0.5, px: 1.25 } }}
+              >
+                <ToggleButton value="highlight">
+                  <i className="ri-focus-3-line" style={{ fontSize: 14, marginRight: 4 }} />
+                  {t('networkFlows.searchHighlight')}
+                </ToggleButton>
+                <ToggleButton value="filter">
+                  <i className="ri-filter-3-line" style={{ fontSize: 14, marginRight: 4 }} />
+                  {t('networkFlows.searchFilter')}
+                </ToggleButton>
+              </ToggleButtonGroup>
+            </Box>
+          </Box>
 
+          {!layout && (
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 300 }}>
+              <Box sx={{ textAlign: 'center', opacity: 0.5 }}>
+                <i className="ri-search-line" style={{ fontSize: 40 }} />
+                <Typography variant="body2" sx={{ mt: 1 }}>{t('networkFlows.searchNoMatch', { query })}</Typography>
+              </Box>
+            </Box>
+          )}
+
+          {layout && (
           <Box ref={containerRef} sx={{ width: '100%', minWidth: 0, overflow: 'hidden', minHeight: 100 }}>
             <svg
               width={svgWidth}
@@ -428,6 +580,8 @@ export default function SankeyChart() {
 
                   const color = FLOW_COLORS[idx % FLOW_COLORS.length]
                   const isHovered = hoveredLink === idx || hoveredLink === idx + 1 || hoveredLink === idx - 1
+                  const baseOpacity = hovering ? (isHovered ? 0.6 : 0.08) : emphasizing ? (link.matched ? 0.55 : 0.05) : 0.3
+                  const dashOpacity = hovering ? (isHovered ? 0.9 : 0.15) : emphasizing ? (link.matched ? 0.9 : 0.08) : 0.6
                   const linkWidth = Math.max(2, link.width || 1)
 
                   // Animation speed based on flow volume — bigger flow = faster
@@ -443,7 +597,7 @@ export default function SankeyChart() {
                         fill="none"
                         stroke={color}
                         strokeWidth={linkWidth}
-                        strokeOpacity={hoveredLink === null && hoveredNode === null ? 0.3 : isHovered ? 0.6 : 0.08}
+                        strokeOpacity={baseOpacity}
                         onMouseEnter={() => setHoveredLink(idx)}
                         onMouseLeave={() => setHoveredLink(null)}
                         onClick={() => handleLinkClick(link, idx)}
@@ -455,7 +609,7 @@ export default function SankeyChart() {
                         fill="none"
                         stroke={color}
                         strokeWidth={Math.min(linkWidth * 0.5, 6)}
-                        strokeOpacity={hoveredLink === null && hoveredNode === null ? 0.6 : isHovered ? 0.9 : 0.15}
+                        strokeOpacity={dashOpacity}
                         strokeDasharray="8 32"
                         style={{
                           animation: `flowDash ${animDuration}s linear infinite`,
@@ -464,7 +618,7 @@ export default function SankeyChart() {
                         }}
                       />
                       <title>
-                        {`${(link.source as any).name} → ${(link.target as any).name}\n${formatBytes(link.value)} · ${(link.packets || 0).toLocaleString()} pkts`}
+                        {`${(link.source as any).label} → ${(link.target as any).label}\n${formatBytes(link.value)} · ${(link.packets || 0).toLocaleString()} pkts`}
                       </title>
                     </g>
                   )
@@ -475,6 +629,8 @@ export default function SankeyChart() {
                   const nodeHeight = Math.max(4, (node.y1 || 0) - (node.y0 || 0))
                   const color = categoryColors[node.category] || theme.palette.primary.main
                   const highlighted = isNodeHighlighted(idx)
+                  const opacity = hovering ? (highlighted ? 1 : 0.3) : emphasizing ? (layout.litNodes.has(idx) ? 1 : 0.2) : 0.9
+                  const isMatch = emphasizing && node.matched
 
                   return (
                     <g
@@ -491,7 +647,9 @@ export default function SankeyChart() {
                         height={nodeHeight}
                         fill={color}
                         rx={3}
-                        opacity={hoveredNode === null && hoveredLink === null ? 0.9 : highlighted ? 1 : 0.3}
+                        opacity={opacity}
+                        stroke={isMatch ? theme.palette.text.primary : 'none'}
+                        strokeWidth={isMatch ? 2 : 0}
                         style={{ transition: 'opacity 0.2s' }}
                       />
                       <text
@@ -502,10 +660,11 @@ export default function SankeyChart() {
                         fill={theme.palette.text.primary}
                         fontSize={11}
                         fontFamily="JetBrains Mono, monospace"
-                        opacity={hoveredNode === null && hoveredLink === null ? 1 : highlighted ? 1 : 0.3}
+                        fontWeight={isMatch ? 700 : 400}
+                        opacity={hovering ? (highlighted ? 1 : 0.3) : emphasizing ? (layout.litNodes.has(idx) ? 1 : 0.3) : 1}
                         style={{ transition: 'opacity 0.2s' }}
                       >
-                        {node.name}
+                        {node.label}
                       </text>
                     </g>
                   )
@@ -513,6 +672,7 @@ export default function SankeyChart() {
               </g>
             </svg>
           </Box>
+          )}
         </CardContent>
       </Card>
 
@@ -530,8 +690,11 @@ export default function SankeyChart() {
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
                 <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: categoryColors[detail.category] }} />
                 <Typography variant="h6" fontFamily="JetBrains Mono, monospace" fontSize={16}>
-                  {detail.name}
+                  {detail.label}
                 </Typography>
+                {detail.vmid ? (
+                  <Chip label={`ID ${detail.vmid}`} size="small" variant="outlined" sx={{ height: 20, fontSize: '0.7rem' }} />
+                ) : null}
                 <Chip
                   label={categoryLabels[detail.category]}
                   size="small"
@@ -659,7 +822,7 @@ export default function SankeyChart() {
                 <Box sx={{ textAlign: 'center' }}>
                   <Typography variant="caption" color="text.secondary" display="block">{t('networkFlows.source')}</Typography>
                   <Typography fontFamily="JetBrains Mono, monospace" fontWeight={700} fontSize={13} color="warning.main">
-                    {detail.srcIP}
+                    {endpointLabel(detail.srcIP, endpointIndex.get(detail.srcIP))}
                   </Typography>
                 </Box>
                 <i className="ri-arrow-right-line" style={{ fontSize: 18, color: theme.palette.text.secondary }} />
@@ -676,7 +839,7 @@ export default function SankeyChart() {
                 <Box sx={{ textAlign: 'center' }}>
                   <Typography variant="caption" color="text.secondary" display="block">{t('networkFlows.destination')}</Typography>
                   <Typography fontFamily="JetBrains Mono, monospace" fontWeight={700} fontSize={13} color="success.main">
-                    {detail.dstIP}
+                    {endpointLabel(detail.dstIP, endpointIndex.get(detail.dstIP))}
                   </Typography>
                 </Box>
               </Box>

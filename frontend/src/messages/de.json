@@ -8000,7 +8000,13 @@
     "noAttributionHelp": "Die Agents funktionieren, die sFlow-Daten werden dekodiert. Für die Zuordnung muss der Gastverkehr dort sichtbar sein, wo das Sampling erfolgt: Eine Gast-NIC muss eine OVS-Bridge erreichen. In einem SDN-VNet verbleibt der Verkehr zwischen zwei Gästen desselben VNets auf der Linux-Bridge und wird nie erfasst.",
     "noNodeToConfigure": "Kein Node muss konfiguriert werden.",
     "configureRequestFailed": "Die Konfigurationsanfrage ist fehlgeschlagen.",
-    "configureOutcome": "sFlow auf {configured} von {total} Nodes konfiguriert"
+    "configureOutcome": "sFlow auf {configured} von {total} Nodes konfiguriert",
+    "searchPlaceholder": "Nach IP, VM-Name oder VMID suchen",
+    "searchHighlight": "Hervorheben",
+    "searchFilter": "Filtern",
+    "searchMatches": "{count, plural, one {# passender Fluss} other {# passende Flüsse}}",
+    "searchNoMatch": "Kein Fluss passt zu „{query}“",
+    "searchEnterHint": "Eingabetaste öffnet die Details des besten Treffers"
   },
   "myVdc": {
     "title": "Mein Datacenter",

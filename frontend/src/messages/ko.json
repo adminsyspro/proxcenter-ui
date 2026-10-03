@@ -8062,7 +8062,13 @@
     "noAttributionHelp": "에이전트가 정상 작동 중이며 sFlow 데이터도 디코딩되고 있습니다. 귀속을 위해서는 샘플링이 수행되는 위치에서 게스트 트래픽이 보여야 합니다. 즉, 게스트 NIC가 OVS 브리지에 연결되어야 합니다. SDN VNet에서는 동일한 VNet에 속한 두 게스트 간 트래픽이 Linux 브리지에 머물러 샘플링되지 않습니다.",
     "noNodeToConfigure": "구성할 노드가 없습니다.",
     "configureRequestFailed": "구성 요청에 실패했습니다.",
-    "configureOutcome": "{configured}개 노드에 sFlow 구성 완료(전체 {total}개)"
+    "configureOutcome": "{configured}개 노드에 sFlow 구성 완료(전체 {total}개)",
+    "searchPlaceholder": "IP, VM 이름 또는 VMID로 검색",
+    "searchHighlight": "강조",
+    "searchFilter": "필터",
+    "searchMatches": "일치하는 플로우 {count}개",
+    "searchNoMatch": "\"{query}\"와(과) 일치하는 플로우가 없습니다",
+    "searchEnterHint": "Enter 키를 누르면 가장 일치하는 항목의 세부 정보가 열립니다"
   },
   "vdc": {
     "title": "가상 데이터센터",

@@ -1,4 +1,8 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { spawnSync } from 'node:child_process'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { callRoute, readJson } from '@/__tests__/setup/route-test'
 
 const checkPermissionMock = vi.fn<(...args: any[]) => Promise<Response | null>>()
@@ -108,6 +112,65 @@ describe('upgrade script — apt outcome (discussion #928)', () => {
     const script = await launch({ auto_reboot: true })
     const inner = script.slice(script.indexOf("bash -c '") + 9, script.lastIndexOf("' > /dev/null"))
     expect(inner).not.toContain("'")
+  })
+})
+
+describe('upgrade script — run in bash against stubbed apt-get and reboot', () => {
+  let dir: string
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'pc-upgrade-'))
+    mkdirSync(join(dir, 'bin'))
+  })
+  afterEach(() => rmSync(dir, { recursive: true, force: true }))
+
+  const stub = (name: string, body: string) => {
+    writeFileSync(join(dir, 'bin', name), `#!/bin/sh\n${body}\n`)
+    chmodSync(join(dir, 'bin', name), 0o755)
+  }
+
+  // Runs the background part of the script synchronously and returns every
+  // status write in order (">" is turned into ">>" so the history survives).
+  const run = async (opts: { autoReboot: boolean; aptExit: number; rebootNeeded: boolean; rebootExit?: number }) => {
+    getNodeIpMock.mockResolvedValue('10.0.0.5')
+    executeSSHMock.mockResolvedValueOnce({ success: true })
+    const POST = await importPOST()
+    await callRoute(POST, { params: { id: 'c1', node: 'pve1' }, body: { auto_reboot: opts.autoReboot } })
+    const script = executeSSHMock.mock.calls[0][2] as string
+    const inner = script.slice(script.indexOf("bash -c '") + 9, script.lastIndexOf("' > /dev/null"))
+    const flag = join(dir, 'reboot-required')
+    if (opts.rebootNeeded) writeFileSync(flag, '')
+    stub('apt-get', `exit ${opts.aptExit}`)
+    stub('reboot', `echo called >> ${join(dir, 'reboot-calls')}; exit ${opts.rebootExit ?? 0}`)
+    const local = inner
+      .replaceAll('> /var/log/proxcenter-upgrade.status', `>> ${join(dir, 'status')}`)
+      .replaceAll('/var/log/proxcenter-upgrade.log', join(dir, 'log'))
+      .replaceAll('/var/run/reboot-required', flag)
+      .replaceAll('/boot/vmlinuz-', join(dir, 'no-kernel-'))
+      .replaceAll('sleep 2', 'true')
+    spawnSync('bash', ['-c', local], { env: { ...process.env, PATH: `${join(dir, 'bin')}:${process.env.PATH}` } })
+    const read = (f: string) => (existsSync(join(dir, f)) ? readFileSync(join(dir, f), 'utf8').trim().split('\n') : [])
+    return { statuses: read('status'), rebooted: read('reboot-calls').length > 0 }
+  }
+
+  it('reports FAILED and does not reboot when apt fails, even if a kernel is pending', async () => {
+    expect(await run({ autoReboot: true, aptExit: 100, rebootNeeded: true })).toEqual({ statuses: ['FAILED'], rebooted: false })
+  })
+
+  it('goes straight to REBOOTING, never through COMPLETED, so the dialog cannot reboot a second time', async () => {
+    expect(await run({ autoReboot: true, aptExit: 0, rebootNeeded: true })).toEqual({ statuses: ['REBOOTING'], rebooted: true })
+  })
+
+  it('falls back to COMPLETED when the reboot command itself fails', async () => {
+    expect(await run({ autoReboot: true, aptExit: 0, rebootNeeded: true, rebootExit: 1 })).toEqual({ statuses: ['REBOOTING', 'COMPLETED'], rebooted: true })
+  })
+
+  it('completes without rebooting when no reboot is needed', async () => {
+    expect(await run({ autoReboot: true, aptExit: 0, rebootNeeded: false })).toEqual({ statuses: ['COMPLETED'], rebooted: false })
+  })
+
+  it('never reboots when auto-reboot is off', async () => {
+    expect(await run({ autoReboot: false, aptExit: 0, rebootNeeded: true })).toEqual({ statuses: ['COMPLETED'], rebooted: false })
   })
 })
 

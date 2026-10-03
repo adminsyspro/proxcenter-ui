@@ -56,9 +56,14 @@ export async function POST(req: Request, ctx: Ctx) {
     return NextResponse.json({ error: check.error }, { status: check.status })
   }
 
-  const rebootCmd = autoReboot
-    ? `if ${REBOOT_REQUIRED_TEST}; then echo REBOOTING > ${STATUS_FILE}; sleep 2; reboot; fi`
-    : ""
+  // Only a successful apt run may reboot: rebooting after a failure would turn
+  // FAILED into REBOOTING, then into COMPLETED once the node is back. A run
+  // that reboots writes REBOOTING directly, never COMPLETED first, or a poll in
+  // between would make the dialog send its own reboot. If reboot itself fails,
+  // the run is still a success that leaves the reboot to the operator.
+  const successCmd = autoReboot
+    ? `if ${REBOOT_REQUIRED_TEST}; then echo REBOOTING > ${STATUS_FILE}; sleep 2; reboot || echo COMPLETED > ${STATUS_FILE}; else echo COMPLETED > ${STATUS_FILE}; fi`
+    : `echo COMPLETED > ${STATUS_FILE}`
 
   // RUNNING is written before the background job starts, so the first poll
   // can never read the outcome of a previous run.
@@ -69,8 +74,7 @@ export async function POST(req: Request, ctx: Ctx) {
   // Rolling Update do.
   const script = `echo RUNNING > ${STATUS_FILE}; rm -f ${LOG_FILE}; nohup bash -c '
 (apt-get update 2>&1 && DEBIAN_FRONTEND=noninteractive apt-get -y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold dist-upgrade 2>&1) >> ${LOG_FILE} 2>&1
-if [ $? -eq 0 ]; then echo COMPLETED > ${STATUS_FILE}; else echo FAILED > ${STATUS_FILE}; fi
-${rebootCmd}
+if [ $? -eq 0 ]; then ${successCmd}; else echo FAILED > ${STATUS_FILE}; fi
 ' > /dev/null 2>&1 &`
 
   const result = await executeSSH(id, nodeIp, script)

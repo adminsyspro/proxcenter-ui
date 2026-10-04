@@ -2846,6 +2846,8 @@
         "viaPortal": "通过 proxcenter.io",
         "viaPartner": "通过",
         "activatedBy": "激活方式",
+        "providedBy": "提供方",
+        "importSource": "导入的许可证",
         "syncedAgo": "{ago}已同步",
         "lastSyncAgo": "上次同步：{ago}",
         "neverSynced": "尚未同步",
@@ -2897,6 +2899,11 @@
           "pill": "其他服务器",
           "title": "此许可证属于另一台服务器",
           "body": "许可证 {licenseId} 是为另一个 ProxCenter 安装签发的。请在此服务器上生成许可证请求并发送，以获取适用于它的密钥。"
+        },
+        "standIn": {
+          "pill": "主许可证无效",
+          "title": "没有有效的主许可证：{reason}",
+          "body": "Enterprise 版本由导入的许可证 {label} 提供，有效期至 {until}。主许可证一旦有效即重新生效。"
         },
         "cloned": {
           "pill": "检测到副本",
@@ -2969,6 +2976,13 @@
           "body": "日期和剩余天数可能不准确。请同步服务器时钟（NTP）。"
         }
       },
+      "primaryProblem": {
+        "absent": "未激活",
+        "expired": "已过期",
+        "lease_expired": "租约已结束，同步逾期",
+        "bound_elsewhere": "绑定到其他服务器",
+        "invalid": "无法验证"
+      },
       "actions": {
         "addNodes": "添加节点",
         "renew": "续订",
@@ -2990,6 +3004,7 @@
         "rolePrimary": "主许可证",
         "roleImport": "导入",
         "roleOption": "选项",
+        "providesEdition": "提供版本",
         "unknown": "未知许可证",
         "pool": "共享池",
         "moved": "{days, plural, =0 {已迁移 · 此处不到一天} other {已迁移 · 此处还剩 # 天}}",

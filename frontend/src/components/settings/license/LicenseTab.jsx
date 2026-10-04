@@ -390,10 +390,23 @@ export default function LicenseTab() {
   const awaiting = summary?.state === 'awaiting'
   const connectable = !offline && !!connection?.available
   const pairing = connectable && connection?.status === 'pairing'
-  const showTable = tableRows.length > 1
+  // Several licenses, or any import: an import is always listed with its
+  // state, even alone (standing in for the primary, or granting nothing).
+  const showTable = tableRows.length > 1 || tableRows.some(r => r.role !== 'primary')
+  const primaryInTable = showTable && tableRows.some(r => r.role === 'primary')
+  // An import stands in for the primary: the alert explains what the primary
+  // needs, the header keeps its deactivate action since it has no row.
+  const standIn = licenseStatus?.effective_source?.kind === 'import' ? licenseStatus.primary_problem || null : null
   const binding = bindingMismatch
     ? { expected: bindingMismatch.expected, actual: bindingMismatch.actual }
     : licenseStatus?.binding_error ? { expected: licenseStatus.bound_fingerprint || '', actual: install?.fingerprint || '' } : null
+  const standInBinding = standIn?.reason === 'bound_elsewhere' ? { expected: standIn.bound_fingerprint || '', actual: install?.fingerprint || '' } : null
+  const fingerprints = b => (
+    <Box sx={{ display: 'grid', gap: 0.75 }}>
+      <FingerprintRow label={t('settings.licenseBindingExpected')} value={b.expected} t={t} />
+      <FingerprintRow label={t('settings.licenseBindingActual')} value={b.actual} t={t} />
+    </Box>
+  )
   const portalLinked = connectable && licenseStatus?.binding === 'connected'
   const alertHandlers = {
     addNodes: SUBSCRIBE_URL,
@@ -430,7 +443,7 @@ export default function LicenseTab() {
               actions={(
                 <LicenseActions
                   t={t} busy={busy} install={install} canSign={canSign} licensed={licensed} fingerprintOnly={!licensed && !awaiting} awaiting={awaiting}
-                  showImport={mlEnabled && !showTable} showDeactivate={licensed && !showTable}
+                  showImport={mlEnabled && !showTable} showDeactivate={licensed && !primaryInTable && standIn?.reason !== 'absent'}
                   connection={connectable && !pairing ? connection : null}
                   onSync={handleCheckinNow} onConnect={handleConnect} onDisconnect={() => setDisconnectOpen(true)}
                   onRequestFile={handleGenerateRequest} onActivateKey={() => setKeyDialogOpen(true)} onResetIdentity={() => setResetIdentityOpen(true)}
@@ -440,17 +453,14 @@ export default function LicenseTab() {
               onConnect={handleConnect} onHaveKey={() => setKeyDialogOpen(true)} onNoInternet={handleGenerateRequest} onRenewWithFile={handleGenerateRequest}
             />
           )}
-          <LicenseAlerts alerts={alerts.filter(a => !SYNC_ALERTS.has(a.id))} t={t} locale={locale} busy={busy} handlers={alertHandlers} details={binding ? {
-            binding: (
-              <Box sx={{ display: 'grid', gap: 0.75 }}>
-                <FingerprintRow label={t('settings.licenseBindingExpected')} value={binding.expected} t={t} />
-                <FingerprintRow label={t('settings.licenseBindingActual')} value={binding.actual} t={t} />
-              </Box>
-            ),
-          } : {}} />
+          <LicenseAlerts alerts={alerts.filter(a => !SYNC_ALERTS.has(a.id))} t={t} locale={locale} busy={busy} handlers={alertHandlers} details={{
+            ...(binding ? { binding: fingerprints(binding) } : {}),
+            ...(standInBinding ? { standIn: fingerprints(standInBinding) } : {}),
+          }} />
           {showTable && (
             <LicensesSection
               rows={tableRows} held={heldById} t={t} locale={locale} connName={connName} canImport={mlEnabled} perTenant={perTenant}
+              effectiveLicenseId={standIn ? licenseStatus.effective_source.license_id : null}
               onImport={() => { setImportBlob(''); setImportConnId(''); setImportOpen(true) }}
               onEditMapping={openEditMapping}
               onRemove={row => setRemoveTarget({ rowId: row.rowId, licenseId: row.licenseId })}

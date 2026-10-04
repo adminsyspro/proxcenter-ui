@@ -117,6 +117,20 @@ describe('buildLicenseSummary', () => {
   it('reads a zero node limit as unlimited', () => {
     expect(buildLicenseSummary(base({ limits: { max_nodes: 0 } }), [], NOW).nodes?.unlimited).toBe(true)
   })
+
+  it('reads an import standing in for the primary as the source, named by its customer', () => {
+    const status = base({
+      license_id: 'I1', customer: { company: 'Client Durand' }, binding: 'floating', connection: null, expires_at: at(200),
+      effective_source: { kind: 'import', row_id: 'imp-a', license_id: 'I1', label: 'Client Durand', expires_at: at(200) },
+      primary_problem: { reason: 'expired', license_id: 'P0' },
+    })
+    const s = buildLicenseSummary(status, [row({ rowId: 'imp-a', licenseId: 'I1', role: 'import', licensedTo: 'Client Durand', expiresAt: at(200) })], NOW)
+
+    expect(s).toMatchObject({ state: 'licensed', edition: 'enterprise', customer: 'Client Durand', source: { kind: 'import', label: 'Client Durand' }, licenseCount: 1 })
+    expect(s.validUntil).toMatchObject({ date: at(200), days: 200, here: false, next: false })
+    // The primary providing the edition keeps its own source.
+    expect(buildLicenseSummary(base({ effective_source: { kind: 'primary', license_id: 'P1' } }), [], NOW).source).toMatchObject({ kind: 'portal' })
+  })
 })
 
 describe('buildLicenseAlerts', () => {
@@ -180,6 +194,24 @@ describe('buildLicenseAlerts', () => {
     const [alert] = buildLicenseAlerts(base({ node_status: { current_nodes: 10, max_nodes: 8, exceeded: true } }), {}, NOW)
 
     expect(alert).toEqual({ id: 'quota', severity: 'error', values: { used: 10, max: 8, over: 2 }, actions: ['addNodes'] })
+  })
+
+  it('explains an import standing in for the primary, with the fix the primary needs', () => {
+    const standIn = (reason: string, over: Partial<LicenseStatus> = {}) => base({
+      license_id: 'I1', binding: 'floating', connection: null,
+      effective_source: { kind: 'import', license_id: 'I1', label: 'Client Durand', expires_at: at(200) }, primary_problem: { reason, license_id: 'P0' }, ...over,
+    })
+
+    expect(buildLicenseAlerts(standIn('expired'), {}, NOW)).toEqual([
+      { id: 'standIn', severity: 'warning', values: { reason: 'expired', label: 'Client Durand', until: at(200) }, actions: ['renew'] },
+    ])
+    expect(buildLicenseAlerts(standIn('lease_expired'), {}, NOW)[0]).toMatchObject({ id: 'standIn', actions: ['sync'] })
+    expect(buildLicenseAlerts(standIn('bound_elsewhere'), {}, NOW)[0]).toMatchObject({ id: 'standIn', actions: ['requestFile'] })
+    expect(buildLicenseAlerts(standIn('absent'), {}, NOW)[0]).toMatchObject({ id: 'standIn', actions: [] })
+    // Named by its license id when the import carries no customer.
+    expect(buildLicenseAlerts(standIn('absent', { effective_source: { kind: 'import', license_id: 'I1' } }), {}, NOW)[0].values).toEqual({ reason: 'absent', label: 'I1', until: '' })
+    // The primary providing the edition is no stand-in.
+    expect(ids(base({ effective_source: { kind: 'primary', license_id: 'P1' }, primary_problem: null }))).toEqual([])
   })
 
   it('reports a license bound to another server, from the status or a refused activation', () => {

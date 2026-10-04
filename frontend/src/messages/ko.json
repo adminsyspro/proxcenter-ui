@@ -2842,6 +2842,8 @@
         "viaPortal": "proxcenter.io 경유",
         "viaPartner": "제공:",
         "activatedBy": "활성화 방식",
+        "providedBy": "제공",
+        "importSource": "가져온 라이선스",
         "syncedAgo": "{ago} 동기화됨",
         "lastSyncAgo": "마지막 동기화 {ago}",
         "neverSynced": "아직 동기화되지 않음",
@@ -2893,6 +2895,11 @@
           "pill": "다른 서버",
           "title": "이 라이선스는 다른 서버에 속해 있습니다",
           "body": "라이선스 {licenseId}은(는) 다른 ProxCenter 설치를 위해 발급되었습니다. 이 서버에서 라이선스 요청을 생성하고 보내 이 서버용 키를 받으세요."
+        },
+        "standIn": {
+          "pill": "기본 라이선스 무효",
+          "title": "유효한 기본 라이선스 없음: {reason}",
+          "body": "Enterprise 에디션은 가져온 라이선스 {label}이(가) {until}까지 제공합니다. 기본 라이선스는 유효해지는 즉시 다시 적용됩니다."
         },
         "cloned": {
           "pill": "복제본 감지",
@@ -2965,6 +2972,13 @@
           "body": "날짜와 남은 일수가 정확하지 않을 수 있습니다. 서버 시계를 동기화하세요(NTP)."
         }
       },
+      "primaryProblem": {
+        "absent": "활성화된 라이선스 없음",
+        "expired": "만료됨",
+        "lease_expired": "임대 종료, 동기화 지연",
+        "bound_elsewhere": "다른 서버에 연결됨",
+        "invalid": "검증할 수 없음"
+      },
       "actions": {
         "addNodes": "노드 추가",
         "renew": "갱신",
@@ -2986,6 +3000,7 @@
         "rolePrimary": "기본",
         "roleImport": "가져옴",
         "roleOption": "옵션",
+        "providesEdition": "에디션 제공",
         "unknown": "알 수 없는 라이선스",
         "pool": "공유 풀",
         "moved": "{days, plural, =0 {이동됨 · 여기서 하루 미만} other {이동됨 · 여기서 #일}}",

@@ -44,7 +44,9 @@ function StateCell({ row, held, t }) {
   )
 }
 
-export default function LicensesSection({ rows, held, t, locale, connName, canImport, perTenant, onImport, onEditMapping, onRemove, onDeactivate }) {
+// effectiveLicenseId: the import standing in for the primary, if any; its
+// row says so next to its name.
+export default function LicensesSection({ rows, held, t, locale, connName, canImport, perTenant, effectiveLicenseId = null, onImport, onEditMapping, onRemove, onDeactivate }) {
   const msp = rows.some(r => r.role === 'import')
 
   return (
@@ -86,7 +88,12 @@ export default function LicensesSection({ rows, held, t, locale, connName, canIm
                         <i className={row.role === 'option' ? 'ri-puzzle-line' : 'ri-key-2-line'} style={{ fontSize: 16 }} aria-hidden='true' />
                       </Box>
                       <Box sx={{ minWidth: 0 }}>
-                        <Typography variant='body2' fontWeight={600}>{licenseName(row, h, t)}</Typography>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
+                          <Typography variant='body2' fontWeight={600}>{licenseName(row, h, t)}</Typography>
+                          {effectiveLicenseId && row.licenseId === effectiveLicenseId && (
+                            <Chip size='small' variant='outlined' color='success' label={t('settings.licenseTab.licenses.providesEdition')} />
+                          )}
+                        </Box>
                         <Typography variant='caption' color='text.secondary' title={row.licenseId}>{sub}</Typography>
                       </Box>
                     </Box>

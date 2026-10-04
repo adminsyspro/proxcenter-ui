@@ -170,6 +170,70 @@ describe('LicenseTab situations', () => {
     expect(management.handleActivate).toHaveBeenCalledWith('KEY')
   })
 
+  it('explains an import standing in for the invalid primary and marks it in the list', async () => {
+    multiLicense = true
+    importsPayload = [{ id: 'imp-a', license_id: 'I1', edition: 'enterprise', max_nodes: 12, expires_at: at(200), state: 'active', connection_ids: [], customer: 'Client Durand' }]
+    management.licenseStatus = {
+      licensed: true, edition: 'enterprise', license_id: 'I1', customer: { company: 'Client Durand' }, binding: 'floating', limits: { max_nodes: 12 },
+      node_status: { current_nodes: 6, max_nodes: 12, per_license: [{ license_id: 'I1', max_nodes: 12, used_nodes: 6 }] }, expires_at: at(200), options: [],
+      install: { fingerprint: 'fp-here', can_sign: true },
+      effective_source: { kind: 'import', row_id: 'imp-a', license_id: 'I1', label: 'Client Durand', edition: 'enterprise', expires_at: at(200) },
+      primary_problem: { reason: 'expired', license_id: 'P0', expires_at: at(-3) },
+      connection: { available: true, status: 'none' },
+    }
+    const view = await mountTab()
+    const alert = screen.getByRole('alert')
+
+    expect(alert.textContent).toContain('settings.licenseTab.alerts.standIn.title')
+    expect(alert.textContent).toContain('settings.licenseTab.primaryProblem.expired')
+    expect(alert.textContent).toContain('"label":"Client Durand"')
+    expect(within(alert).getByRole('link', { name: 'settings.licenseTab.actions.renew' })).toBeTruthy()
+    expect(view.container.textContent).toContain('settings.licenseTab.summary.enterprise')
+    expect(view.container.textContent).toContain('settings.licenseTab.alerts.standIn.pill')
+    expect(view.container.textContent).toContain('settings.licenseTab.summary.providedBy')
+    expect(view.container.textContent).toContain('settings.licenseTab.summary.importSource')
+    // The import is listed even alone, flagged as the one providing the edition, with its usage.
+    const rows = screen.getAllByRole('row')
+
+    expect(rows).toHaveLength(2)
+    expect(rows[1].textContent).toContain('settings.licenseTab.licenses.providesEdition')
+    expect(rows[1].textContent).toContain('settings.licenseTab.licenses.state.active')
+    expect(rows[1].textContent).toContain('6 / 12')
+    // The invalid primary has no row: the header keeps its deactivate action.
+    expect(screen.getByRole('button', { name: 'settings.deactivateLicense' })).toBeTruthy()
+
+    // Bound to another server: both fingerprints and the request file action.
+    management.licenseStatus = { ...management.licenseStatus, primary_problem: { reason: 'bound_elsewhere', license_id: 'P0', bound_fingerprint: 'fp-there' } }
+    await rerender(view)
+    expect(screen.getByRole('alert').textContent).toContain('settings.licenseTab.primaryProblem.bound_elsewhere')
+    expect(screen.getByRole('alert').textContent).toContain('fp-there')
+    expect(screen.getByRole('alert').textContent).toContain('fp-here')
+    expect(within(screen.getByRole('alert')).getByRole('button', { name: 'settings.licenseTab.actions.requestFile' })).toBeTruthy()
+
+    // No primary at all: nothing to deactivate.
+    management.licenseStatus = { ...management.licenseStatus, primary_problem: { reason: 'absent' } }
+    await rerender(view)
+    expect(screen.queryByRole('button', { name: 'settings.deactivateLicense' })).toBeNull()
+  })
+
+  it('lists the imports with their state even when none grants an edition', async () => {
+    multiLicense = true
+    importsPayload = [
+      { id: 'imp-old', license_id: 'I8', edition: 'enterprise', max_nodes: 4, expires_at: at(-1), state: 'active', connection_ids: [], customer: 'Client Old' },
+      { id: 'imp-b', license_id: 'I9', edition: 'enterprise', max_nodes: 4, expires_at: at(100), state: 'active', connection_ids: [], binding_error: 'license I9 is bound to install fp-B' },
+    ]
+    management.licenseStatus = { licensed: false, edition: 'community', connection: { available: true, status: 'none' } }
+    const { container } = await mountTab()
+    const rows = screen.getAllByRole('row')
+
+    expect(container.textContent).toContain('settings.licenseTab.summary.community')
+    expect(rows).toHaveLength(3)
+    expect(rows[1].textContent).toContain('settings.licenseTab.licenses.state.expired')
+    expect(rows[2].textContent).toContain('settings.licenseTab.licenses.state.invalid')
+    expect(container.textContent).not.toContain('settings.licenseTab.licenses.providesEdition')
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
   it('shows a connected instance without a license as waiting for it, received from its partner, with no offline ways in', async () => {
     management.licenseStatus = { licensed: false, edition: 'community', connection: { ...connected, customer_name: 'Client SARL', partner: { name: 'Partner SAS', has_logo: true, logo_sha256: 'c'.repeat(64) }, held: [] } }
     const { container } = await mountTab()

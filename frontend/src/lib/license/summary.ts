@@ -57,12 +57,18 @@ export interface LicenseStatus {
   lease_error?: string
   offline?: boolean
   connection?: LicenseConnection | null
+  // The license granting the edition and, when an import stands in for the
+  // primary, why the primary does not (the fields above then describe the import).
+  effective_source?: { kind: 'primary' | 'import' | string; row_id?: string; license_id: string; label?: string; edition?: string; expires_at?: string } | null
+  primary_problem?: { reason: string; license_id?: string; message?: string; expires_at?: string; lease_until?: string; bound_fingerprint?: string } | null
 }
 
 export type SummarySource =
   | { kind: 'portal'; lastSyncAt: string | null; failing: boolean; partner: { name: string; logoUrl: string | null } | null }
   | { kind: 'file' }
   | { kind: 'key' }
+  // An import standing in for the primary; label is its licensed-to customer.
+  | { kind: 'import'; label: string | null }
 
 export interface LicenseSummary {
   // awaiting: connected to proxcenter.io but holding no license yet.
@@ -169,7 +175,9 @@ export function buildLicenseSummary(status: LicenseStatus, rows: LicenseTableRow
 
   let source: SummarySource
 
-  if (!status.offline && isConnectedMode(connection) && status.binding === 'connected') {
+  if (status.effective_source?.kind === 'import') {
+    source = { kind: 'import', label: status.effective_source.label || null }
+  } else if (!status.offline && isConnectedMode(connection) && status.binding === 'connected') {
     source = { kind: 'portal', lastSyncAt: connection?.last_ok_at || null, failing: connection?.status === 'disconnected', partner: portalPartner(connection) }
   } else if (status.binding === 'install') {
     source = { kind: 'file' }
@@ -212,6 +220,23 @@ export function buildLicenseAlerts(
     const used = nodeStatus.current_nodes ?? 0
 
     alerts.push({ id: 'quota', severity: 'error', values: { used, max: maxNodes, over: Math.max(0, used - maxNodes) }, actions: ['addNodes'] })
+  }
+
+  // An import stands in for the primary (none activated, expired, lease over
+  // or bound to another server): the edition is kept, the alert names the
+  // import, until when, and offers what the primary needs. `reason` is a key
+  // of settings.licenseTab.primaryProblem, translated by the component.
+  const source = status.effective_source
+  const standIn = source?.kind === 'import' ? status.primary_problem : null
+
+  if (source && standIn) {
+    const fix: Record<string, AlertAction[]> = { expired: ['renew'], lease_expired: ['sync'], bound_elsewhere: ['requestFile'] }
+
+    alerts.push({
+      id: 'standIn', severity: 'warning',
+      values: { reason: standIn.reason, label: source.label || source.license_id, until: source.expires_at || '' },
+      actions: fix[standIn.reason] || [],
+    })
   }
 
   if (status.expired) {

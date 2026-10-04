@@ -2829,6 +2829,8 @@
         "viaPortal": "über proxcenter.io",
         "viaPartner": "über",
         "activatedBy": "Aktiviert durch",
+        "providedBy": "Bereitgestellt von",
+        "importSource": "Importierte Lizenz",
         "syncedAgo": "synchronisiert {ago}",
         "lastSyncAgo": "letzte Synchronisierung {ago}",
         "neverSynced": "noch nicht synchronisiert",
@@ -2880,6 +2882,11 @@
           "pill": "Anderer Server",
           "title": "Diese Lizenz gehört zu einem anderen Server",
           "body": "Die Lizenz {licenseId} wurde für eine andere ProxCenter-Installation ausgestellt. Erzeugen Sie auf diesem Server eine Lizenzanfrage und senden Sie sie, um einen passenden Schlüssel zu erhalten."
+        },
+        "standIn": {
+          "pill": "Primäre ungültig",
+          "title": "Keine gültige primäre Lizenz: {reason}",
+          "body": "Die Enterprise-Edition stammt aus der importierten Lizenz {label}, bis zum {until}. Die primäre Lizenz übernimmt wieder, sobald sie gültig ist."
         },
         "cloned": {
           "pill": "Kopie erkannt",
@@ -2952,6 +2959,13 @@
           "body": "Datumsangaben und verbleibende Tage können ungenau sein. Synchronisieren Sie die Serveruhr (NTP)."
         }
       },
+      "primaryProblem": {
+        "absent": "keine aktiviert",
+        "expired": "abgelaufen",
+        "lease_expired": "Lease beendet, Synchronisierung überfällig",
+        "bound_elsewhere": "an einen anderen Server gebunden",
+        "invalid": "nicht überprüfbar"
+      },
       "actions": {
         "addNodes": "Nodes hinzufügen",
         "renew": "Erneuern",
@@ -2973,6 +2987,7 @@
         "rolePrimary": "Primär",
         "roleImport": "Import",
         "roleOption": "Option",
+        "providesEdition": "Stellt die Edition bereit",
         "unknown": "Unbekannte Lizenz",
         "pool": "Gemeinsamer Pool",
         "moved": "{days, plural, =0 {Verschoben · hier weniger als ein Tag} one {Verschoben · hier # Tag} other {Verschoben · hier # Tage}}",

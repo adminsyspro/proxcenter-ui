@@ -2842,6 +2842,8 @@
         "viaPortal": "via proxcenter.io",
         "viaPartner": "via",
         "activatedBy": "Activated by",
+        "providedBy": "Provided by",
+        "importSource": "Imported license",
         "syncedAgo": "synced {ago}",
         "lastSyncAgo": "last sync {ago}",
         "neverSynced": "not synced yet",
@@ -2893,6 +2895,11 @@
           "pill": "Other server",
           "title": "This license belongs to another server",
           "body": "License {licenseId} was issued for another ProxCenter installation. Generate a license request from this server and send it to get a key for it."
+        },
+        "standIn": {
+          "pill": "Primary invalid",
+          "title": "No valid primary license: {reason}",
+          "body": "The Enterprise edition comes from the imported license {label} until {until}. The primary license takes over again as soon as it is valid."
         },
         "cloned": {
           "pill": "Copy detected",
@@ -2965,6 +2972,13 @@
           "body": "Dates and remaining days may be approximate. Synchronize the server clock (NTP)."
         }
       },
+      "primaryProblem": {
+        "absent": "none activated",
+        "expired": "expired",
+        "lease_expired": "lease ended, sync overdue",
+        "bound_elsewhere": "bound to another server",
+        "invalid": "could not be verified"
+      },
       "actions": {
         "addNodes": "Add nodes",
         "renew": "Renew",
@@ -2986,6 +3000,7 @@
         "rolePrimary": "Primary",
         "roleImport": "Import",
         "roleOption": "Option",
+        "providesEdition": "Provides the edition",
         "unknown": "Unknown license",
         "pool": "Shared pool",
         "moved": "{days, plural, =0 {Moved · less than a day here} one {Moved · # day here} other {Moved · # days here}}",

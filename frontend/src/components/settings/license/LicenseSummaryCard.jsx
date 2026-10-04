@@ -20,6 +20,7 @@ const FACT_OF_ALERT = {
   syncFailing: 'source',
   syncFailingNoLease: 'source',
   leaseEnded: 'source',
+  standIn: 'source',
 }
 
 // inline: the label sits before the value on the same line, not above it.
@@ -90,12 +91,13 @@ function PartnerTitle({ source, t, locale }) {
 }
 
 // Where the license comes from: proxcenter.io (and the partner that delivers
-// it), a request file or a pasted key; a failing sync is told on the same line.
+// it), a request file, a pasted key, or an import standing in for the primary;
+// a failing sync is told on the same line.
 function SourceFact({ source, syncAlert, color, t, locale }) {
   return (
     <Fact
       inline
-      label={t(source?.kind === 'portal' ? 'settings.licenseTab.summary.receivedFrom' : 'settings.licenseTab.summary.activatedBy')}
+      label={t(source?.kind === 'portal' ? 'settings.licenseTab.summary.receivedFrom' : source?.kind === 'import' ? 'settings.licenseTab.summary.providedBy' : 'settings.licenseTab.summary.activatedBy')}
       color={color}
     >
       {source?.kind === 'portal' && (
@@ -127,6 +129,7 @@ function SourceFact({ source, syncAlert, color, t, locale }) {
       )}
       {source?.kind === 'file' && <Value main={t('settings.licenseTab.summary.fileSource')} sub={t('settings.licenseTab.summary.fileBound')} />}
       {source?.kind === 'key' && <Value main={t('settings.licenseTab.summary.keySource')} />}
+      {source?.kind === 'import' && <Value main={t('settings.licenseTab.summary.importSource')} sub={source.label} />}
     </Fact>
   )
 }

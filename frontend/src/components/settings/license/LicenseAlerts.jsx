@@ -21,6 +21,7 @@ const ICON = {
   moved: 'ri-arrow-left-right-line',
   movedEnded: 'ri-arrow-left-right-line',
   binding: 'ri-lock-2-line',
+  standIn: 'ri-key-2-line',
   cloned: 'ri-file-copy-line',
   revoked: 'ri-plug-2-line',
   identityChanged: 'ri-fingerprint-line',
@@ -28,11 +29,13 @@ const ICON = {
   noLicense: 'ri-inbox-line',
 }
 
-function formatValues(values, locale) {
+// `reason` names a key of settings.licenseTab.primaryProblem, read here.
+function formatValues(values, locale, t) {
   const out = {}
 
   for (const [k, v] of Object.entries(values)) {
-    out[k] = DATE_VALUES.has(k) ? formatDate(v, locale) : DATETIME_VALUES.has(k) ? formatDateTime(v, locale) : v
+    out[k] = k === 'reason' ? t(`settings.licenseTab.primaryProblem.${v}`)
+      : DATE_VALUES.has(k) ? formatDate(v, locale) : DATETIME_VALUES.has(k) ? formatDateTime(v, locale) : v
   }
 
   return out
@@ -47,7 +50,7 @@ export default function LicenseAlerts({ alerts, t, locale, busy, handlers, detai
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, mb: 2 }}>
       {alerts.map((a, i) => {
-        const values = formatValues(a.values, locale)
+        const values = formatValues(a.values, locale, t)
 
         return (
           <Alert

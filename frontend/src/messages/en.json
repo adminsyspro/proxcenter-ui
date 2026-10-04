@@ -3018,6 +3018,15 @@
       "advanced": {
         "activateKey": "Activate a license key"
       },
+      "offline": {
+        "title": "Licensing a server without Internet access",
+        "intro": "This server does not need to reach proxcenter.io: its license is tied to it through a request file.",
+        "step1": "Download the license request file of this server.",
+        "step2": "From a connected machine, send it through your proxcenter.io account, or to your partner.",
+        "step3": "You receive the license key file in return.",
+        "step4": "Load it here with \"{haveKey}\".",
+        "download": "Download the license request"
+      },
       "pairing": {
         "title": "Connecting to proxcenter.io",
         "step": "Step 2 of 2: confirm on proxcenter.io, or give the code to your reseller partner",

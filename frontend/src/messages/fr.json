@@ -3018,6 +3018,15 @@
       "advanced": {
         "activateKey": "Activer une clé de licence"
       },
+      "offline": {
+        "title": "Licencier un serveur sans accès Internet",
+        "intro": "Ce serveur n'a pas besoin de joindre proxcenter.io : sa licence lui est liée par un fichier de demande.",
+        "step1": "Téléchargez le fichier de demande de licence de ce serveur.",
+        "step2": "Depuis une machine connectée, envoyez-le via votre compte proxcenter.io, ou à votre partenaire.",
+        "step3": "Vous recevez en retour le fichier de clé de licence.",
+        "step4": "Chargez-le ici avec « {haveKey} ».",
+        "download": "Télécharger la demande de licence"
+      },
       "pairing": {
         "title": "Connexion à proxcenter.io",
         "step": "Étape 2 sur 2 : validez sur proxcenter.io, ou donnez le code à votre partenaire revendeur",

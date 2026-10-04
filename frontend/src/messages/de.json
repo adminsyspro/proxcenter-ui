@@ -3005,6 +3005,15 @@
       "advanced": {
         "activateKey": "Lizenzschlüssel aktivieren"
       },
+      "offline": {
+        "title": "Einen Server ohne Internetzugang lizenzieren",
+        "intro": "Dieser Server muss proxcenter.io nicht erreichen: Seine Lizenz wird ihm über eine Anforderungsdatei zugeordnet.",
+        "step1": "Laden Sie die Lizenzanforderungsdatei dieses Servers herunter.",
+        "step2": "Senden Sie sie von einem verbundenen Rechner über Ihr proxcenter.io-Konto oder an Ihren Partner.",
+        "step3": "Sie erhalten im Gegenzug die Lizenzschlüsseldatei.",
+        "step4": "Laden Sie sie hier über „{haveKey}“.",
+        "download": "Lizenzanforderung herunterladen"
+      },
       "pairing": {
         "title": "Verbindung mit proxcenter.io",
         "step": "Schritt 2 von 2: auf proxcenter.io bestätigen oder den Code an Ihren Vertriebspartner weitergeben",

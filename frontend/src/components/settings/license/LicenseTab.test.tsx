@@ -162,12 +162,41 @@ describe('LicenseTab situations', () => {
     // Community: the header keeps only the fingerprint, no second Connect.
     expect(screen.getAllByRole('button', { name: 'settings.licenseTab.summary.connect' })).toHaveLength(1)
     expect(screen.queryByRole('button', { name: 'settings.licenseGenerateRequest' })).toBeNull()
-    fireEvent.click(button('settings.licenseTab.summary.noInternet'))
-    expect(management.downloadLicenseRequest).toHaveBeenCalledOnce()
+    expect(button('settings.licenseTab.summary.noInternet')).toBeTruthy()
     fireEvent.click(button('settings.licenseTab.summary.haveKey'))
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'KEY' } })
     await act(async () => fireEvent.click(button('settings.activateLicense')))
     expect(management.handleActivate).toHaveBeenCalledWith('KEY')
+  })
+
+  it('explains offline licensing in four steps before downloading the request', async () => {
+    management.licenseStatus = { licensed: false, edition: 'community', connection: { available: true, status: 'none' } }
+    await mountTab()
+    fireEvent.click(button('settings.licenseTab.summary.noInternet'))
+    let dialog = screen.getByRole('dialog')
+
+    expect(dialog.textContent).toContain('settings.licenseTab.offline.title')
+    expect(dialog.textContent).toContain('settings.licenseTab.offline.intro')
+    for (const n of [1, 2, 3, 4]) expect(dialog.textContent).toContain(`settings.licenseTab.offline.step${n}`)
+    // Step 4 names the existing "I have a license key" button.
+    expect(dialog.textContent).toContain('"haveKey":"settings.licenseTab.summary.haveKey"')
+    expect(dialog.querySelectorAll('ol li')).toHaveLength(4)
+    expect(management.downloadLicenseRequest).not.toHaveBeenCalled()
+
+    // Close downloads nothing.
+    fireEvent.click(within(dialog).getByRole('button', { name: 'common.close' }))
+    await act(async () => vi.advanceTimersByTime(1000))
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(management.downloadLicenseRequest).not.toHaveBeenCalled()
+
+    // The primary action downloads the request and closes the steps.
+    fireEvent.click(button('settings.licenseTab.summary.noInternet'))
+    dialog = screen.getByRole('dialog')
+    await act(async () => fireEvent.click(within(dialog).getByRole('button', { name: 'settings.licenseTab.offline.download' })))
+    expect(management.downloadLicenseRequest).toHaveBeenCalledOnce()
+    expect(management.setSuccess).toHaveBeenCalledWith('settings.licenseRequestDownloaded')
+    await act(async () => vi.advanceTimersByTime(1000))
+    expect(screen.queryByRole('dialog')).toBeNull()
   })
 
   it('explains an import standing in for the invalid primary and marks it in the list', async () => {

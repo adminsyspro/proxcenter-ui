@@ -3022,6 +3022,15 @@
       "advanced": {
         "activateKey": "激活许可证密钥"
       },
+      "offline": {
+        "title": "为无法访问互联网的服务器授权",
+        "intro": "此服务器无需连接 proxcenter.io：其许可证通过请求文件与之绑定。",
+        "step1": "下载此服务器的许可证请求文件。",
+        "step2": "在联网的计算机上，通过您的 proxcenter.io 账户发送，或发送给您的合作伙伴。",
+        "step3": "您将收到许可证密钥文件。",
+        "step4": "在此处通过“{haveKey}”加载它。",
+        "download": "下载许可证请求"
+      },
       "pairing": {
         "title": "正在连接到 proxcenter.io",
         "step": "第 2 步，共 2 步：在 proxcenter.io 确认，或将代码交给您的经销合作伙伴",

@@ -59,6 +59,7 @@ export default function LicenseTab() {
   const [keyDialogOpen, setKeyDialogOpen] = useState(false)
   const [deactivateDialogOpen, setDeactivateDialogOpen] = useState(false)
   const [resetIdentityOpen, setResetIdentityOpen] = useState(false)
+  const [offlineOpen, setOfflineOpen] = useState(false) // the offline licensing steps, before the request download
   const [bindingMismatch, setBindingMismatch] = useState(null) // { expected, actual } from a refused activation
 
   const offline = !!licenseStatus?.offline
@@ -450,7 +451,7 @@ export default function LicenseTab() {
                   onImport={() => { setImportBlob(''); setImportConnId(''); setImportOpen(true) }} onDeactivate={() => setDeactivateDialogOpen(true)}
                 />
               )}
-              onConnect={handleConnect} onHaveKey={() => setKeyDialogOpen(true)} onNoInternet={handleGenerateRequest} onRenewWithFile={handleGenerateRequest}
+              onConnect={handleConnect} onHaveKey={() => setKeyDialogOpen(true)} onNoInternet={() => setOfflineOpen(true)} onRenewWithFile={handleGenerateRequest}
             />
           )}
           <LicenseAlerts alerts={alerts.filter(a => !SYNC_ALERTS.has(a.id))} t={t} locale={locale} busy={busy} handlers={alertHandlers} details={{
@@ -502,6 +503,30 @@ export default function LicenseTab() {
         <DialogActions sx={{ px: 3, pb: 2 }}>
           <Button onClick={() => setDeactivateDialogOpen(false)} variant='outlined'>{t('common.cancel')}</Button>
           <Button onClick={handleDeactivate} variant='contained' color='error' startIcon={<i className='ri-delete-bin-line' />}>{t('settings.deactivateLicense')}</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Offline licensing: the steps first, the request file download last */}
+      <Dialog open={offlineOpen} onClose={() => setOfflineOpen(false)} maxWidth='sm' fullWidth>
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <i className='ri-wifi-off-line' style={{ fontSize: 22 }} />
+          {t('settings.licenseTab.offline.title')}
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant='body2' color='text.secondary'>{t('settings.licenseTab.offline.intro')}</Typography>
+          <Box component='ol' sx={{ pl: 2.5, mt: 1.5, mb: 0, display: 'grid', gap: 1 }}>
+            {[1, 2, 3, 4].map(n => (
+              <Typography key={n} component='li' variant='body2'>
+                {t(`settings.licenseTab.offline.step${n}`, { haveKey: t('settings.licenseTab.summary.haveKey') })}
+              </Typography>
+            ))}
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setOfflineOpen(false)} variant='outlined'>{t('common.close')}</Button>
+          <Button variant='contained' disabled={busy || !canSign} onClick={() => { setOfflineOpen(false); handleGenerateRequest() }} startIcon={<i className='ri-download-2-line' />}>
+            {t('settings.licenseTab.offline.download')}
+          </Button>
         </DialogActions>
       </Dialog>
 

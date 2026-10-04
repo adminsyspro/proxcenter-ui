@@ -2,6 +2,8 @@ import { NextResponse } from "next/server"
 
 import { orchestratorHeaders } from "@/lib/orchestrator/headers"
 import { isOfflineMode } from "@/lib/offline"
+import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { requireProviderTenant } from "@/lib/tenant"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -15,6 +17,32 @@ const DEFAULT_COMMUNITY_STATUS = {
   edition: 'community',
   features: ['dashboard', 'inventory', 'backups', 'storage'],
   options: [],
+}
+
+// Whoever holds the pairing code can approve the pairing on the portal and
+// own the instance, so the code, its link and the identity of the pairing
+// only go to the people allowed to connect (the same gates as the connect
+// route). Everyone else still reads the rest of the status.
+const PAIRING_SECRETS = ["user_code", "verification_url", "pairing_expires_at", "customer_name", "instance_id"]
+
+async function canSeePairingSecrets(): Promise<boolean> {
+  try {
+    if (await requireProviderTenant()) return false
+
+    return !(await checkPermission(PERMISSIONS.ADMIN_SETTINGS))
+  } catch {
+    return false
+  }
+}
+
+async function withVisibleConnection(data: any): Promise<any> {
+  const connection = data?.connection
+  if (!connection || typeof connection !== "object") return data
+  if (await canSeePairingSecrets()) return data
+  const visible = { ...connection }
+  for (const key of PAIRING_SECRETS) delete visible[key]
+
+  return { ...data, connection: visible }
 }
 
 export async function GET() {
@@ -35,7 +63,7 @@ export async function GET() {
       )
     }
 
-    return NextResponse.json({ ...data, offline })
+    return NextResponse.json({ ...(await withVisibleConnection(data)), offline })
   } catch (e: any) {
     // Return default community license when orchestrator is unavailable (silent)
     if (e?.message?.includes('ECONNREFUSED') ||

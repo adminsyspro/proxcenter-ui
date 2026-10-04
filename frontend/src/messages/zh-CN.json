@@ -119,6 +119,12 @@
     "upgradeToPro": "升级到企业版",
     "contactSales": "需要帮助？",
     "nodeLimitExceeded": "节点限制已超出：{current}/{max} 个节点 — 只读模式已激活",
+    "bindingMismatch": "许可证已绑定到其他安装：Enterprise 功能已禁用",
+    "connectionFailing": "无法连接 proxcenter.io：{count} 次签到失败；许可证在租约结束前仍然有效",
+    "connectionCloned": "此安装的另一个副本已在 proxcenter.io 上激活；此副本被拒绝",
+    "leaseExpiring": "许可证租约将在 {days, plural, =0 {不到一天} one {#天} other {#天}} 后结束：请与 proxcenter.io 签到",
+    "licenseLost": "一个许可证已移至另一实例：此处剩余 {days, plural, =0 {不到一天} one {#天} other {#天}}",
+    "licenseLostEnded": "一个许可证已移至另一实例，此处不再可用",
     "nodeLimitWarning": "节点限制",
     "nodeLimitUpgrade": "升级您的许可证",
     "addonChip": "附加组件",
@@ -2815,6 +2821,223 @@
     "viewRecommendations": "查看建议"
   },
   "settings": {
+    "licenseTab": {
+      "summary": {
+        "enterprise": "ProxCenter Enterprise",
+        "community": "ProxCenter Community",
+        "awaiting": "等待许可证",
+        "awaitingDesc": "已连接到 proxcenter.io，尚未分配许可证",
+        "pillAwaiting": "等待中",
+        "communityDesc": "免费，无时间限制",
+        "communityPitch": "升级到 Enterprise 即可解锁高可用、高级访问控制、报告等功能。",
+        "pillActive": "有效",
+        "pillCommunity": "Community",
+        "nfr": "NFR",
+        "licenseCount": "{count, plural, other {# 个许可证}}",
+        "nodes": "节点",
+        "nodesFleet": "节点（全部许可证）",
+        "nodesOf": "/ 允许 {max} 个",
+        "unlimited": "无限制",
+        "validUntil": "有效期至",
+        "validHereUntil": "在此实例有效期至",
+        "nextExpiry": "下一次到期",
+        "inDays": "{days, plural, =0 {不到一天} other {# 天后}}",
+        "receivedFrom": "来源",
+        "viaPortal": "通过 proxcenter.io",
+        "viaPartner": "通过",
+        "activatedBy": "激活方式",
+        "providedBy": "提供方",
+        "importSource": "导入的许可证",
+        "syncedAgo": "{ago}已同步",
+        "lastSyncAgo": "上次同步：{ago}",
+        "neverSynced": "尚未同步",
+        "syncFailingInline": "自 {since} 起无法连接 · {failures, plural, =0 {尚无失败} other {失败 # 次}} · 下次尝试 {next}",
+        "syncFailingUntil": "在没有同步的情况下，许可证可使用至 {until}。",
+        "syncFailingShort": "无法连接（{failures, plural, =0 {尚无失败} other {失败 # 次}}）",
+        "fileSource": "许可证文件",
+        "fileBound": "已绑定到此服务器",
+        "keySource": "许可证密钥",
+        "renewWithFile": "使用文件续订",
+        "connect": "连接到 proxcenter.io",
+        "haveKey": "我有许可证密钥",
+        "noInternet": "服务器无法访问互联网？",
+        "unknownTitle": "无法读取许可证状态",
+        "unknownBody": "ProxCenter 无法连接其许可证服务。请稍后重试。"
+      },
+      "alerts": {
+        "quota": {
+          "pill": "超出配额",
+          "title": "{used} 个节点，允许 {max} 个",
+          "body": "超出配额期间 ProxCenter 为只读。请移除 {over, plural, other {# 个节点}}或扩展您的许可证。"
+        },
+        "expired": {
+          "pill": "已过期",
+          "title": "您的许可证已于 {date} 过期",
+          "body": "Enterprise 功能已关闭。续订许可证即可重新启用。"
+        },
+        "expiredPartner": {
+          "pill": "已过期",
+          "title": "您的许可证已于 {date} 过期",
+          "body": "Enterprise 功能已关闭。您的合作伙伴 {partner} 会续订许可证，续订后将在下次同步时重新启用。"
+        },
+        "leaseEnded": {
+          "pill": "同步逾期",
+          "title": "您的许可证已停止工作",
+          "body": "此服务器自 {date} 起未与 proxcenter.io 同步。请检查其互联网访问或代理，然后重新同步：首次同步成功后许可证即可恢复。"
+        },
+        "movedEnded": {
+          "pill": "许可证已迁移",
+          "title": "此许可证现在在另一个实例上运行",
+          "body": "它已于 {date} 在此停止工作。若要在此实例上再次使用，请在您的 proxcenter.io 账户中重新分配。"
+        },
+        "movedEndedPartner": {
+          "pill": "许可证已迁移",
+          "title": "此许可证现在在另一个实例上运行",
+          "body": "它已于 {date} 在此停止工作。若要在此实例上再次使用，请让您的合作伙伴 {partner} 在其 proxcenter.io 合作伙伴空间中重新分配。"
+        },
+        "binding": {
+          "pill": "其他服务器",
+          "title": "此许可证属于另一台服务器",
+          "body": "许可证 {licenseId} 是为另一个 ProxCenter 安装签发的。请在此服务器上生成许可证请求并发送，以获取适用于它的密钥。"
+        },
+        "standIn": {
+          "pill": "主许可证无效",
+          "title": "没有有效的主许可证：{reason}",
+          "body": "Enterprise 版本由导入的许可证 {label} 提供，有效期至 {until}。主许可证一旦有效即重新生效。"
+        },
+        "cloned": {
+          "pill": "检测到副本",
+          "title": "此实例的另一个副本正在使用相同的许可证",
+          "body": "proxcenter.io 已拒绝此副本。请重置此实例的身份，并在支持团队解除封锁后重新连接。"
+        },
+        "revoked": {
+          "pill": "已断开",
+          "title": "此实例已从您的 proxcenter.io 账户中移除",
+          "body": "重新连接即可再次接收其许可证。"
+        },
+        "revokedPartner": {
+          "pill": "已断开",
+          "title": "此实例已与 proxcenter.io 断开",
+          "body": "重新连接后，请将新代码交给您的合作伙伴 {partner}：合作伙伴批准后即可再次接收其许可证。"
+        },
+        "identityChanged": {
+          "pill": "身份已更改",
+          "title": "此实例的身份已更改",
+          "body": "重新连接到 proxcenter.io 即可再次接收其许可证。"
+        },
+        "syncFailing": {
+          "pill": "同步失败",
+          "title": "自 {since} 起无法连接 proxcenter.io",
+          "body": "{failures, plural, =0 {尚无失败的尝试} other {失败尝试 # 次}}，下次尝试：{next}。在没有新同步的情况下，您的许可证可继续使用至 {until}。请检查此服务器的互联网访问或代理。"
+        },
+        "syncFailingNoLease": {
+          "pill": "同步失败",
+          "title": "自 {since} 起无法连接 proxcenter.io",
+          "body": "{failures, plural, =0 {尚无失败的尝试} other {失败尝试 # 次}}，下次尝试：{next}。请检查此服务器的互联网访问或代理。"
+        },
+        "moved": {
+          "pill": "许可证已迁移",
+          "title": "{label} 已分配给另一个实例",
+          "body": "它在此处还可使用{days, plural, =0 {不到一天} other { # 天}}，直至 {until}。若要保留在此实例上，请在您的 proxcenter.io 账户中重新分配。"
+        },
+        "movedPartner": {
+          "pill": "许可证已迁移",
+          "title": "{label} 已分配给另一个实例",
+          "body": "它在此处还可使用{days, plural, =0 {不到一天} other { # 天}}，直至 {until}。若要保留在此实例上，请让您的合作伙伴 {partner} 在其 proxcenter.io 合作伙伴空间中重新分配。"
+        },
+        "expiring": {
+          "pill": "即将到期",
+          "title": "您的许可证将于 {date} 到期",
+          "body": "在 proxcenter.io 续订后，新许可证会在下次同步时自动送达此服务器。"
+        },
+        "expiringPartner": {
+          "pill": "即将到期",
+          "title": "您的许可证将于 {date} 到期",
+          "body": "您的合作伙伴 {partner} 会为您续订：新许可证将在下次同步时自动送达此服务器。"
+        },
+        "expiringFile": {
+          "pill": "即将到期",
+          "title": "您的许可证将于 {date} 到期",
+          "body": "请在 proxcenter.io 续订，然后在此服务器上激活新的许可证文件。"
+        },
+        "noLicense": {
+          "pill": "无许可证",
+          "title": "此实例未分配任何许可证",
+          "body": "此实例已连接到 proxcenter.io，但尚未持有任何许可证。请在您的账户中为其分配一个：它将在下次同步时送达此处。"
+        },
+        "noLicensePartner": {
+          "pill": "无许可证",
+          "title": "此实例未分配任何许可证",
+          "body": "此实例已连接到 proxcenter.io，但尚未持有任何许可证。您的合作伙伴 {partner} 会在其 proxcenter.io 合作伙伴空间中为其分配：它将在下次同步时送达此处。"
+        },
+        "clockSkew": {
+          "pill": "时钟偏差",
+          "title": "此服务器的时钟偏差 {minutes} 分钟",
+          "body": "日期和剩余天数可能不准确。请同步服务器时钟（NTP）。"
+        }
+      },
+      "primaryProblem": {
+        "absent": "未激活",
+        "expired": "已过期",
+        "lease_expired": "租约已结束，同步逾期",
+        "bound_elsewhere": "绑定到其他服务器",
+        "invalid": "无法验证"
+      },
+      "actions": {
+        "addNodes": "添加节点",
+        "renew": "续订",
+        "sync": "立即同步",
+        "retry": "重试",
+        "requestFile": "生成许可证请求",
+        "resetIdentity": "重置身份",
+        "reconnect": "重新连接",
+        "openAccount": "打开我的账户"
+      },
+      "licenses": {
+        "title": "许可证",
+        "import": "导入许可证",
+        "colLicense": "许可证",
+        "colNodes": "节点",
+        "colClusters": "集群",
+        "colValidUntil": "有效期至",
+        "colState": "状态",
+        "rolePrimary": "主许可证",
+        "roleImport": "导入",
+        "roleOption": "选项",
+        "providesEdition": "提供版本",
+        "unknown": "未知许可证",
+        "pool": "共享池",
+        "moved": "{days, plural, =0 {已迁移 · 此处不到一天} other {已迁移 · 此处还剩 # 天}}",
+        "movedEnded": "已迁移 · 此处不再有效",
+        "state": {
+          "active": "有效",
+          "expired": "已过期",
+          "invalid": "无效",
+          "unknown": "未知"
+        }
+      },
+      "connection": {
+        "sync": "同步"
+      },
+      "advanced": {
+        "activateKey": "激活许可证密钥"
+      },
+      "offline": {
+        "title": "为无法访问互联网的服务器授权",
+        "intro": "此服务器无需连接 proxcenter.io：其许可证通过请求文件与之绑定。",
+        "step1": "下载此服务器的许可证请求文件。",
+        "step2": "在联网的计算机上，通过您的 proxcenter.io 账户发送，或发送给您的合作伙伴。",
+        "step3": "您将收到许可证密钥文件。",
+        "step4": "在此处通过“{haveKey}”加载它。",
+        "download": "下载许可证请求"
+      },
+      "pairing": {
+        "title": "正在连接到 proxcenter.io",
+        "step": "第 2 步，共 2 步：在 proxcenter.io 确认，或将代码交给您的经销合作伙伴",
+        "hint": "打开 proxcenter.io，登录并输入此代码，或将此代码交给您的经销合作伙伴。您的许可证将自动送达此处。",
+        "pill": "等待中"
+      }
+    },
     "inventoryTagStyle": {
       "title": "清单标签",
       "desc": "标签在清单树和虚拟机列表中的显示方式。",
@@ -3092,15 +3315,7 @@
     "pbsStep3": "同时向用户和令牌授予权限",
     "pbsStep3Hint": "令牌不会继承其用户的任何 ACL 条目",
     "pbsSetupAdminNote": "vDC 备份自动绑定需要 / 路径上的 Admin 角色：ProxCenter 会创建命名空间、受限子令牌及其 ACL。若仅需只读监控，DatastoreReader + Audit 即可（Audit 提供查看服务器状态所需的 Sys.Audit 权限）。",
-    "communityEdition": "社区版",
-    "enterpriseEdition": "企业版",
-    "communityLicenseDesc": "功能有限的免费许可证",
-    "licensedTo": "许可给",
-    "activeLicense": "活跃",
     "expired": "已过期",
-    "daysLeft": "剩余天数",
-    "expiresOn": "到期时间",
-    "activateProLicense": "激活企业版许可证",
     "licenseKeyPlaceholder": "在此粘贴您的许可证密钥...",
     "activateLicense": "激活许可证",
     "activating": "激活中...",
@@ -3108,12 +3323,7 @@
     "licenseActivated": "许可证激活成功！",
     "licenseDeactivated": "许可证已停用",
     "confirmDeactivateLicense": "您确定要停用您的许可证吗？",
-    "nodeQuota": "节点配额",
     "nodesIncluded": "包含在您的许可证中",
-    "unlimitedNodes": "无限节点",
-    "upgradeNodes": "升级",
-    "needLicense": "需要许可证？",
-    "viewPricing": "查看价格",
     "aiConfigDescription": "配置 AI 助手，使用自然语言与您的基础设施交互。",
     "enableAiAssistant": "启用 AI 助手",
     "enableAiAssistantDesc": "允许使用自然语言与 ProxCenter 交互",
@@ -3369,27 +3579,12 @@
     "community": "社区版",
     "allFeaturesEnabled": "所有功能已启用",
     "featuresAvailableWithUpgrade": "升级后可获得 {count} 项功能",
-    "licenseValidity": "许可证有效期",
-    "licenseExpired": "已过期",
-    "licenseDays": "{count} 天",
-    "pleaseRenewLicense": "请续订您的许可证",
-    "untilDate": "至 {date}",
-    "percentUsed": "已使用 {percent}%",
     "nEnabled": "已启用 {enabled}/{total}",
     "unlockAllFeatures": "使用企业版许可证解锁所有功能",
     "viewPricingBtn": "查看价格",
-    "licenseManagementTitle": "许可证管理",
-    "manageSubscription": "管理订阅",
     "licenseFleetCapacity": "集群总容量",
     "licenseFleetWithinLimit": "在许可容量范围内",
-    "licenseFleetExceeded": "集群超出许可容量",
     "licenseFleetSummaryHint": "所有有效许可证的总和。超出后安装将切换到只读模式。",
-    "licensesTableTitle": "许可证",
-    "licenseImportBtn": "导入许可证",
-    "licenseColRole": "角色",
-    "licenseColId": "许可证 ID",
-    "licenseColLicensedTo": "授权给",
-    "licenseColCapabilities": "功能",
     "licenseEditMapping": "编辑映射",
     "licenseEditMappingTitle": "编辑许可证映射",
     "licenseEditMappingHint": "选择此许可证覆盖的集群。已被其他许可证覆盖的集群将被禁用。",
@@ -3397,15 +3592,6 @@
     "licenseMappingSuccess": "映射已更新",
     "licenseMappingFailed": "映射更新失败",
     "licenseConnCoveredByOther": "已被覆盖",
-    "licenseColNodes": "节点（已用 / 最大）",
-    "licenseNodesNotApplicable": "不适用",
-    "licenseColMapped": "映射到",
-    "licenseColExpires": "到期时间",
-    "licenseColStatus": "状态",
-    "licenseRolePrimary": "主许可证",
-    "licenseRoleImport": "导入",
-    "licenseRoleOption": "附加组件",
-    "licenseUnmappedFloating": "浮动（池）",
     "licenseRemoveImport": "移除",
     "licenseRemoveConfirm": "移除此导入的许可证？其覆盖的节点将回退至主许可证配额。",
     "licenseRemoveOptionConfirm": "移除此附加组件许可证？移除后 {feature} 功能将被禁用。",
@@ -3417,13 +3603,37 @@
     "licenseImportSubmit": "导入",
     "licenseImportSuccess": "许可证已导入",
     "licenseImportFailed": "导入失败",
+    "licenseInstallFingerprint": "安装指纹",
+    "licenseInstallFingerprintHint": "用于标识此 ProxCenter 部署。可提供给技术支持，并生成许可证请求以获取绑定到该指纹的密钥。",
+    "licenseCopyFingerprint": "复制指纹",
+    "licenseFingerprintCopied": "指纹已复制",
+    "licenseGenerateRequest": "生成许可证请求",
+    "licenseRequestDownloaded": "许可证请求已下载",
+    "licenseRequestFailed": "无法生成许可证请求",
+    "licenseSigningUnavailable": "安装身份没有可用的签名密钥（APP_SECRET 是否已更改？）。请重置身份以重新生成请求。",
+    "licenseResetIdentity": "重置安装身份",
+    "licenseResetIdentityConfirmTitle": "重置安装身份？",
+    "licenseResetIdentityConfirm": "将生成新的指纹。绑定到当前指纹的许可证在门户重新绑定之前将无法在此安装上使用。",
+    "licenseIdentityReset": "安装身份已重置",
+    "licenseIdentityResetFailed": "无法重置安装身份",
+    "licenseBindingExpected": "绑定到",
+    "licenseBindingActual": "此安装",
+    "licenseConnectionOptIn": "连接后每天向 proxcenter.io 发送一次：安装标识符和公钥、指纹、ProxCenter 版本、每个连接的名称及其集群名称和节点数、所持许可证的标识符、一个计数器和一个时间戳，以及由 proxcenter.io 签发的签到令牌。仅此而已：不含虚拟机名称，不含地址。",
+    "licenseConnectionOpenPortal": "打开 proxcenter.io",
+    "licenseConnectionPairingExpires": "代码还有 {minutes} 分钟有效",
+    "licenseConnectionCancel": "取消配对",
+    "licenseConnectionCheckinQueued": "已请求同步；状态将在一分钟内刷新。",
+    "licenseConnectionDisconnect": "断开连接",
+    "licenseConnectionDisconnectConfirmTitle": "断开与 proxcenter.io 的连接？",
+    "licenseConnectionDisconnectConfirm": "所持许可证在其租约结束前（最多 30 天）仍然有效，之后此实例将回退到 Community 版本。您可以随时重新连接。",
+    "licenseConnectionFailed": "无法连接 proxcenter.io",
+    "licenseConnectionUnavailable": "此实例已禁用门户连接。",
+    "licenseLeaseExpiredTitle": "此许可证的租约已结束",
+    "licenseMovedExpiredTitle": "此许可证已移动到另一个实例",
     "licenseRemoveSuccess": "许可证已移除",
     "licenseRemoveFailed": "移除失败",
     "licensePerTenantTitle": "按租户",
-    "licensePerTenantHint": "归属于每个 MSP 客户租户的许可证覆盖范围。",
-    "licensePerTenantCoveredBy": "由 {ids} 覆盖",
     "licensePoolProvider": "池 / 提供商",
-    "nodeQuotaExceeded": "节点配额已超出 ({current}/{max})。部分功能可能受限。",
     "featureLabels": {
       "dashboard": "仪表盘",
       "inventory": "资源清单",

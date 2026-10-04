@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { requireProviderTenant } from "@/lib/tenant"
 import { orchestratorHeaders } from "@/lib/orchestrator/headers"
 
 export const runtime = "nodejs"
@@ -8,6 +9,8 @@ const ORCHESTRATOR_URL = process.env.ORCHESTRATOR_URL || "http://localhost:8080"
 
 export async function POST(req: Request) {
   try {
+    const providerGate = await requireProviderTenant()
+    if (providerGate) return providerGate
     const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
     if (denied) return denied
 
@@ -29,7 +32,13 @@ export async function POST(req: Request) {
 
     if (!res.ok) {
       return NextResponse.json(
-        { success: false, error: data?.error || `HTTP ${res.status}` },
+        {
+          success: false,
+          error: data?.error || `HTTP ${res.status}`,
+          ...(data?.code ? { code: data.code } : {}),
+          ...(data?.expected_fingerprint ? { expected_fingerprint: data.expected_fingerprint } : {}),
+          ...(data?.actual_fingerprint ? { actual_fingerprint: data.actual_fingerprint } : {}),
+        },
         { status: res.status }
       )
     }

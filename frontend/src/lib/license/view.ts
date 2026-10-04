@@ -19,11 +19,13 @@ export interface ImportedLicenseDTO {
   customer?: string
   type?: 'edition' | 'option' | string
   capabilities?: string[]
+  binding_error?: string
 }
 export interface LicenseTableRow {
   rowId: string
   licenseId: string
   role: 'primary' | 'import' | 'option'
+  edition: string
   licensedTo: string
   usedNodes: number
   maxNodes: number
@@ -45,6 +47,7 @@ export interface TenantRollupRow {
 
 interface LicenseStatusLike {
   license_id?: string
+  edition?: string
   expires_at?: string
   customer?: { name?: string; company?: string }
   node_status?: { per_license?: PerLicenseUsage[] }
@@ -55,14 +58,16 @@ interface LicenseStatusLike {
  * one row per imported license, joining per-license usage (used/max, from
  * node_status.per_license) with import metadata (expiry, cluster, connections,
  * from GET /license/imports). An import with no per_license entry (inert/expired)
- * shows used=0, max from its own max_nodes.
+ * shows used=0, max from its own max_nodes. Imports are listed even without
+ * node_status (Community, or an import standing in for the primary), so the
+ * tab always shows them with their state.
  */
 export function buildLicenseTableRows(
   status: LicenseStatusLike,
   imports: ImportedLicenseDTO[],
+  now: number = Date.now(),
 ): LicenseTableRow[] {
-  const perLicense = status?.node_status?.per_license
-  if (!Array.isArray(perLicense)) return []
+  const perLicense = Array.isArray(status?.node_status?.per_license) ? status.node_status!.per_license! : []
 
   const usageByLicenseId = new Map<string, PerLicenseUsage>()
   for (const pl of perLicense) usageByLicenseId.set(pl.license_id, pl)
@@ -75,6 +80,7 @@ export function buildLicenseTableRows(
       rowId: 'primary',
       licenseId: status.license_id || primaryUsage.license_id,
       role: 'primary',
+      edition: status.edition || '',
       licensedTo: status.customer?.company || status.customer?.name || '',
       usedNodes: primaryUsage.used_nodes,
       maxNodes: primaryUsage.max_nodes,
@@ -94,6 +100,7 @@ export function buildLicenseTableRows(
       rowId: imp.id,
       licenseId: imp.license_id,
       role: isOption ? 'option' : 'import',
+      edition: imp.edition || '',
       licensedTo: imp.customer || '',
       usedNodes: usage ? usage.used_nodes : 0,
       maxNodes: isOption ? 0 : imp.max_nodes,
@@ -101,12 +108,22 @@ export function buildLicenseTableRows(
       expiresAt: imp.expires_at || null,
       clusterUuid: imp.cluster_uuid || null,
       connectionIds: imp.connection_ids || [],
-      state: imp.state,
+      state: importState(imp, now),
       capabilities: imp.capabilities || [],
     })
   }
 
   return rows
+}
+
+/**
+ * The state the orchestrator gives, unless the row is unusable here: bound to
+ * another server (binding_error) reads as invalid, past its expiry as expired.
+ */
+function importState(imp: ImportedLicenseDTO, now: number): string {
+  if (imp.binding_error) return 'invalid'
+  if (imp.expires_at && new Date(imp.expires_at).getTime() <= now) return 'expired'
+  return imp.state
 }
 
 /**

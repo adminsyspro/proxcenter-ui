@@ -57,6 +57,19 @@ describe('buildLicenseTableRows', () => {
     expect(buildLicenseTableRows({} as any, [])).toEqual([])
   })
 
+  it('lists the imports with their state even without node_status (Community, or an import standing in)', () => {
+    const now = Date.parse('2026-09-30T12:00:00Z')
+    const rows = buildLicenseTableRows({ licensed: false } as any, [
+      { id: 'imp-old', license_id: 'I8', edition: 'enterprise', max_nodes: 4, cluster_uuid: null, expires_at: '2026-01-01T00:00:00Z', state: 'active', connection_ids: [] },
+      { id: 'imp-b', license_id: 'I9', edition: 'enterprise', max_nodes: 4, cluster_uuid: null, expires_at: '2027-01-01T00:00:00Z', state: 'active', connection_ids: [], binding_error: 'license I9 is bound to install fp-B' },
+      { id: 'imp-ok', license_id: 'I10', edition: 'enterprise', max_nodes: 4, cluster_uuid: null, expires_at: '2027-01-01T00:00:00Z', state: 'active', connection_ids: [] },
+    ] as any, now)
+    expect(rows.map(r => [r.rowId, r.role, r.state, r.usedNodes])).toEqual([
+      ['imp-old', 'import', 'expired', 0], ['imp-b', 'import', 'invalid', 0], ['imp-ok', 'import', 'active', 0],
+    ])
+    expect(rows.some(r => r.role === 'primary')).toBe(false)
+  })
+
   it('lists an import that has no per_license entry (e.g. inert/expired) with 0 used', () => {
     const rows = buildLicenseTableRows(
       { node_status: { per_license: [{ license_id: 'PRIMARY-1', max_nodes: 10, used_nodes: 0, is_primary: true }] }, license_id: 'PRIMARY-1' } as any,

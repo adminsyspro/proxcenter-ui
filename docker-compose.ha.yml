@@ -176,6 +176,9 @@ services:
       # installation guide).
       PROXCENTER_CVE_FEED_URL: ${CVE_FEED_URL:-}
       PROXCENTER_CVE_DEBIAN_MIRROR: ${CVE_DEBIAN_MIRROR:-}
+      # Air-gapped instance: the orchestrator never calls proxcenter.io (no
+      # portal connection, no check-in). Written by install-airgap.sh.
+      PROXCENTER_OFFLINE: ${PROXCENTER_OFFLINE:-}
       LICENSE_KEY: ${LICENSE_KEY:-}
       TZ: ${TZ:-Europe/Paris}
       # sFlow collector: with host networking, UDP 6343 is reachable

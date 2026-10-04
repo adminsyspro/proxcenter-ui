@@ -1379,6 +1379,41 @@ model InstallIdentity {
   @@map("install_identities")
 }
 
+// Portal connection of this install (roadmap#22, lot 4): how the connected
+// keys arrive, never the keys themselves (primary_license / licenses). One row.
+// The orchestrator creates the same table when this migration has not run.
+model LicenseConnection {
+  id                  Int       @id @default(1)
+  portalUrl           String    @map("portal_url")
+  status              String    @default("none")
+  instanceId          String?   @map("instance_id")
+  instanceName        String?   @map("instance_name")
+  customerName        String?   @map("customer_name")
+  deviceCode          String?   @map("device_code")
+  userCode            String?   @map("user_code")
+  verificationUrl     String?   @map("verification_url")
+  pairingExpiresAt    DateTime? @map("pairing_expires_at") @db.Timestamptz(6)
+  connectedAt         DateTime? @map("connected_at") @db.Timestamptz(6)
+  lastCheckinAt       DateTime? @map("last_checkin_at") @db.Timestamptz(6)
+  lastOkAt            DateTime? @map("last_ok_at") @db.Timestamptz(6)
+  nextCheckinAt       DateTime? @map("next_checkin_at") @db.Timestamptz(6)
+  checkinSeq          BigInt    @default(0) @map("checkin_seq")
+  consecutiveFailures Int       @default(0) @map("consecutive_failures")
+  lastError           String    @default("") @map("last_error")
+  serverSkewSeconds   Int       @default(0) @map("server_skew_seconds")
+  held                Json      @default("[]")
+  revokedIds          Json      @default("[]") @map("revoked_ids")
+  checkinToken        String    @default("") @map("checkin_token")
+  partnerName         String?   @map("partner_name")
+  partnerLogo         Bytes?    @map("partner_logo")
+  partnerLogoType     String?   @map("partner_logo_type")
+  partnerLogoSha256   String?   @map("partner_logo_sha256")
+  updatedAt           DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@map("license_connection")
+  // CHECK (id = 1) is added by hand in the migration.
+}
+
 model License {
   id                 String   @id @default(cuid())
   licenseId          String   @unique @map("license_id")

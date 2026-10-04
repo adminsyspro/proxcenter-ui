@@ -119,6 +119,12 @@
     "upgradeToPro": "Upgrade to Enterprise",
     "contactSales": "Need help?",
     "nodeLimitExceeded": "Node limit exceeded: {current}/{max} nodes — read-only mode active",
+    "bindingMismatch": "License bound to another installation: Enterprise features are disabled",
+    "connectionFailing": "proxcenter.io unreachable: {count} check-ins failed; licenses keep working until their lease ends",
+    "connectionCloned": "Another copy of this installation is active on proxcenter.io; this copy was refused",
+    "leaseExpiring": "The license lease ends in {days, plural, =0 {less than a day} one {# day} other {# days}}: check in with proxcenter.io",
+    "licenseLost": "A license was moved to another instance: {days, plural, =0 {less than a day} one {# day} other {# days}} left here",
+    "licenseLostEnded": "A license was moved to another instance and no longer works here",
     "nodeLimitWarning": "NODE LIMIT",
     "nodeLimitUpgrade": "Upgrade your license",
     "addonChip": "Add-on",
@@ -2811,6 +2817,223 @@
     "viewRecommendations": "View recommendations"
   },
   "settings": {
+    "licenseTab": {
+      "summary": {
+        "enterprise": "ProxCenter Enterprise",
+        "community": "ProxCenter Community",
+        "awaiting": "Waiting for a license",
+        "awaitingDesc": "Connected to proxcenter.io, no license assigned yet",
+        "pillAwaiting": "Waiting",
+        "communityDesc": "Free, with no time limit",
+        "communityPitch": "Upgrade to Enterprise to unlock high availability, advanced access control, reports and more.",
+        "pillActive": "Active",
+        "pillCommunity": "Community",
+        "nfr": "NFR",
+        "licenseCount": "{count, plural, one {# license} other {# licenses}}",
+        "nodes": "Nodes",
+        "nodesFleet": "Nodes (all licenses)",
+        "nodesOf": "of {max} allowed",
+        "unlimited": "Unlimited",
+        "validUntil": "Valid until",
+        "validHereUntil": "Valid here until",
+        "nextExpiry": "Next expiry",
+        "inDays": "{days, plural, =0 {less than a day} one {in # day} other {in # days}}",
+        "receivedFrom": "Received from",
+        "viaPortal": "via proxcenter.io",
+        "viaPartner": "via",
+        "activatedBy": "Activated by",
+        "providedBy": "Provided by",
+        "importSource": "Imported license",
+        "syncedAgo": "synced {ago}",
+        "lastSyncAgo": "last sync {ago}",
+        "neverSynced": "not synced yet",
+        "syncFailingInline": "Unreachable since {since} · {failures, plural, =0 {no failed attempt yet} one {# failed attempt} other {# failed attempts}} · next try {next}",
+        "syncFailingUntil": "Licenses keep working until {until} without a sync.",
+        "syncFailingShort": "unreachable ({failures, plural, =0 {no failure yet} one {# failure} other {# failures}})",
+        "fileSource": "License file",
+        "fileBound": "bound to this server",
+        "keySource": "License key",
+        "renewWithFile": "Renew with a file",
+        "connect": "Connect to proxcenter.io",
+        "haveKey": "I have a license key",
+        "noInternet": "Server without Internet access?",
+        "unknownTitle": "Unable to read the license status",
+        "unknownBody": "ProxCenter could not reach its license service. Retry in a moment."
+      },
+      "alerts": {
+        "quota": {
+          "pill": "Quota exceeded",
+          "title": "{used} nodes for {max} allowed",
+          "body": "ProxCenter is read-only while the quota is exceeded. Remove {over, plural, one {# node} other {# nodes}} or extend your license."
+        },
+        "expired": {
+          "pill": "Expired",
+          "title": "Your license expired on {date}",
+          "body": "Enterprise features are turned off. Renew the license to turn them back on."
+        },
+        "expiredPartner": {
+          "pill": "Expired",
+          "title": "Your license expired on {date}",
+          "body": "Enterprise features are turned off. Your partner {partner} renews the license: it turns them back on at the next sync."
+        },
+        "leaseEnded": {
+          "pill": "Sync overdue",
+          "title": "Your licenses stopped working",
+          "body": "This server has not synced with proxcenter.io since {date}. Check its Internet access or proxy, then sync again: the licenses come back at the first successful sync."
+        },
+        "movedEnded": {
+          "pill": "License moved",
+          "title": "This license now runs on another instance",
+          "body": "It stopped working here on {date}. To use it on this instance again, assign it back from your proxcenter.io account."
+        },
+        "movedEndedPartner": {
+          "pill": "License moved",
+          "title": "This license now runs on another instance",
+          "body": "It stopped working here on {date}. To use it on this instance again, ask your partner {partner} to assign it back from its proxcenter.io space."
+        },
+        "binding": {
+          "pill": "Other server",
+          "title": "This license belongs to another server",
+          "body": "License {licenseId} was issued for another ProxCenter installation. Generate a license request from this server and send it to get a key for it."
+        },
+        "standIn": {
+          "pill": "Primary invalid",
+          "title": "No valid primary license: {reason}",
+          "body": "The Enterprise edition comes from the imported license {label} until {until}. The primary license takes over again as soon as it is valid."
+        },
+        "cloned": {
+          "pill": "Copy detected",
+          "title": "Another copy of this instance uses the same licenses",
+          "body": "proxcenter.io refused this copy. Reset this instance's identity, then reconnect it once support has lifted the block."
+        },
+        "revoked": {
+          "pill": "Disconnected",
+          "title": "This instance was removed from your proxcenter.io account",
+          "body": "Reconnect it to receive its licenses again."
+        },
+        "revokedPartner": {
+          "pill": "Disconnected",
+          "title": "This instance was disconnected from proxcenter.io",
+          "body": "Reconnect it and give the new code to your partner {partner}: it receives its licenses again once your partner approves it."
+        },
+        "identityChanged": {
+          "pill": "Identity changed",
+          "title": "This instance's identity has changed",
+          "body": "Reconnect it to proxcenter.io to receive its licenses again."
+        },
+        "syncFailing": {
+          "pill": "Sync failing",
+          "title": "Cannot reach proxcenter.io since {since}",
+          "body": "{failures, plural, =0 {No attempt has failed yet} one {# failed attempt} other {# failed attempts}}, next try on {next}. Your licenses keep working until {until} without a new sync. Check this server's Internet access or proxy."
+        },
+        "syncFailingNoLease": {
+          "pill": "Sync failing",
+          "title": "Cannot reach proxcenter.io since {since}",
+          "body": "{failures, plural, =0 {No attempt has failed yet} one {# failed attempt} other {# failed attempts}}, next try on {next}. Check this server's Internet access or proxy."
+        },
+        "moved": {
+          "pill": "License moved",
+          "title": "{label} was assigned to another instance",
+          "body": "It stays usable here {days, plural, =0 {for less than a day} one {for # more day} other {for # more days}}, until {until}. To keep it on this instance, assign it back from your proxcenter.io account."
+        },
+        "movedPartner": {
+          "pill": "License moved",
+          "title": "{label} was assigned to another instance",
+          "body": "It stays usable here {days, plural, =0 {for less than a day} one {for # more day} other {for # more days}}, until {until}. To keep it on this instance, ask your partner {partner} to assign it back from its proxcenter.io space."
+        },
+        "expiring": {
+          "pill": "Expires soon",
+          "title": "Your license expires on {date}",
+          "body": "Once renewed on proxcenter.io, the new license reaches this server by itself at the next sync."
+        },
+        "expiringPartner": {
+          "pill": "Expires soon",
+          "title": "Your license expires on {date}",
+          "body": "Your partner {partner} renews it: the new license reaches this server by itself at the next sync."
+        },
+        "expiringFile": {
+          "pill": "Expires soon",
+          "title": "Your license expires on {date}",
+          "body": "Renew it on proxcenter.io, then activate the new license file on this server."
+        },
+        "noLicense": {
+          "pill": "No license",
+          "title": "No license is assigned to this instance",
+          "body": "This instance is connected to proxcenter.io but holds no license yet. Assign one to it from your account: it arrives here at the next sync."
+        },
+        "noLicensePartner": {
+          "pill": "No license",
+          "title": "No license is assigned to this instance",
+          "body": "This instance is connected to proxcenter.io but holds no license yet. Your partner {partner} assigns it from its proxcenter.io space: it arrives here at the next sync."
+        },
+        "clockSkew": {
+          "pill": "Clock off",
+          "title": "This server's clock is {minutes} minutes off",
+          "body": "Dates and remaining days may be approximate. Synchronize the server clock (NTP)."
+        }
+      },
+      "primaryProblem": {
+        "absent": "none activated",
+        "expired": "expired",
+        "lease_expired": "lease ended, sync overdue",
+        "bound_elsewhere": "bound to another server",
+        "invalid": "could not be verified"
+      },
+      "actions": {
+        "addNodes": "Add nodes",
+        "renew": "Renew",
+        "sync": "Sync now",
+        "retry": "Retry",
+        "requestFile": "Generate a license request",
+        "resetIdentity": "Reset identity",
+        "reconnect": "Reconnect",
+        "openAccount": "Open my account"
+      },
+      "licenses": {
+        "title": "Licenses",
+        "import": "Import a license",
+        "colLicense": "License",
+        "colNodes": "Nodes",
+        "colClusters": "Clusters",
+        "colValidUntil": "Valid until",
+        "colState": "Status",
+        "rolePrimary": "Primary",
+        "roleImport": "Import",
+        "roleOption": "Option",
+        "providesEdition": "Provides the edition",
+        "unknown": "Unknown license",
+        "pool": "Shared pool",
+        "moved": "{days, plural, =0 {Moved · less than a day here} one {Moved · # day here} other {Moved · # days here}}",
+        "movedEnded": "Moved · no longer valid here",
+        "state": {
+          "active": "Active",
+          "expired": "Expired",
+          "invalid": "Invalid",
+          "unknown": "Unknown"
+        }
+      },
+      "connection": {
+        "sync": "Sync"
+      },
+      "advanced": {
+        "activateKey": "Activate a license key"
+      },
+      "offline": {
+        "title": "Licensing a server without Internet access",
+        "intro": "This server does not need to reach proxcenter.io: its license is tied to it through a request file.",
+        "step1": "Download the license request file of this server.",
+        "step2": "From a connected machine, send it through your proxcenter.io account, or to your partner.",
+        "step3": "You receive the license key file in return.",
+        "step4": "Load it here with \"{haveKey}\".",
+        "download": "Download the license request"
+      },
+      "pairing": {
+        "title": "Connecting to proxcenter.io",
+        "step": "Step 2 of 2: confirm on proxcenter.io, or give the code to your reseller partner",
+        "hint": "Open proxcenter.io, sign in and enter this code, or give this code to your reseller partner. Your licenses will arrive here by themselves.",
+        "pill": "Waiting"
+      }
+    },
     "inventoryTagStyle": {
       "title": "Inventory tags",
       "desc": "How guest tags are drawn in the inventory tree and in the VM list.",
@@ -3088,15 +3311,7 @@
     "pbsStep3": "Grant permissions to the user AND to the token",
     "pbsStep3Hint": "a token inherits none of its user's ACL entries",
     "pbsSetupAdminNote": "Admin on / is required for vDC backup auto-binding: ProxCenter creates the namespace, a scoped sub-token and its ACL. For read-only monitoring, DatastoreReader + Audit are enough (Audit provides the Sys.Audit privilege needed for server status).",
-    "communityEdition": "Community Edition",
-    "enterpriseEdition": "Enterprise Edition",
-    "communityLicenseDesc": "Free license with limited features",
-    "licensedTo": "Licensed to",
-    "activeLicense": "Active",
     "expired": "Expired",
-    "daysLeft": "days left",
-    "expiresOn": "Expires",
-    "activateProLicense": "Activate Enterprise License",
     "licenseKeyPlaceholder": "Paste your license key here...",
     "activateLicense": "Activate License",
     "activating": "Activating...",
@@ -3104,12 +3319,7 @@
     "licenseActivated": "License activated successfully!",
     "licenseDeactivated": "License deactivated",
     "confirmDeactivateLicense": "Are you sure you want to deactivate your license?",
-    "nodeQuota": "Node Quota",
     "nodesIncluded": "included in your license",
-    "unlimitedNodes": "Unlimited nodes",
-    "upgradeNodes": "Upgrade",
-    "needLicense": "Need a license?",
-    "viewPricing": "View pricing",
     "aiConfigDescription": "Configure the AI assistant to interact with your infrastructure using natural language.",
     "enableAiAssistant": "Enable AI assistant",
     "enableAiAssistantDesc": "Allows interacting with ProxCenter using natural language",
@@ -3365,27 +3575,12 @@
     "community": "Community",
     "allFeaturesEnabled": "All features enabled",
     "featuresAvailableWithUpgrade": "{count} features available with upgrade",
-    "licenseValidity": "License Validity",
-    "licenseExpired": "Expired",
-    "licenseDays": "{count} days",
-    "pleaseRenewLicense": "Please renew your license",
-    "untilDate": "Until {date}",
-    "percentUsed": "{percent}% used",
     "nEnabled": "{enabled}/{total} enabled",
     "unlockAllFeatures": "Unlock all features with an Enterprise license",
     "viewPricingBtn": "View pricing",
-    "licenseManagementTitle": "License Management",
-    "manageSubscription": "Manage subscription",
     "licenseFleetCapacity": "Fleet capacity",
     "licenseFleetWithinLimit": "Within licensed capacity",
-    "licenseFleetExceeded": "Fleet over licensed capacity",
     "licenseFleetSummaryHint": "Sum of all active licenses. The install switches to read-only beyond this.",
-    "licensesTableTitle": "Licenses",
-    "licenseImportBtn": "Import a license",
-    "licenseColRole": "Role",
-    "licenseColId": "License ID",
-    "licenseColLicensedTo": "Licensed to",
-    "licenseColCapabilities": "Capabilities",
     "licenseEditMapping": "Edit mapping",
     "licenseEditMappingTitle": "Edit license mapping",
     "licenseEditMappingHint": "Select the clusters this license covers. A cluster already covered by another license is disabled.",
@@ -3393,15 +3588,6 @@
     "licenseMappingSuccess": "Mapping updated",
     "licenseMappingFailed": "Mapping update failed",
     "licenseConnCoveredByOther": "already covered",
-    "licenseColNodes": "Nodes (used / max)",
-    "licenseNodesNotApplicable": "n/a",
-    "licenseColMapped": "Mapped to",
-    "licenseColExpires": "Expires",
-    "licenseColStatus": "Status",
-    "licenseRolePrimary": "Primary",
-    "licenseRoleImport": "Import",
-    "licenseRoleOption": "Add-on",
-    "licenseUnmappedFloating": "Floating (pool)",
     "licenseRemoveImport": "Remove",
     "licenseRemoveConfirm": "Remove this imported license? The nodes it covers will fall back under the primary quota.",
     "licenseRemoveOptionConfirm": "Remove this add-on license? The {feature} capability will be disabled once it is removed.",
@@ -3413,13 +3599,37 @@
     "licenseImportSubmit": "Import",
     "licenseImportSuccess": "License imported",
     "licenseImportFailed": "Import failed",
+    "licenseInstallFingerprint": "Install fingerprint",
+    "licenseInstallFingerprintHint": "Identifies this ProxCenter deployment. Give it to support, and generate a license request to obtain a key bound to it.",
+    "licenseCopyFingerprint": "Copy the fingerprint",
+    "licenseFingerprintCopied": "Fingerprint copied",
+    "licenseGenerateRequest": "Generate a license request",
+    "licenseRequestDownloaded": "License request downloaded",
+    "licenseRequestFailed": "Could not generate the license request",
+    "licenseSigningUnavailable": "The install identity has no usable signing key (was APP_SECRET changed?). Reset the identity to generate requests again.",
+    "licenseResetIdentity": "Reset install identity",
+    "licenseResetIdentityConfirmTitle": "Reset the install identity?",
+    "licenseResetIdentityConfirm": "A new fingerprint will be generated. A license bound to the current fingerprint stops working on this installation until it is rebound on the portal.",
+    "licenseIdentityReset": "Install identity reset",
+    "licenseIdentityResetFailed": "Could not reset the install identity",
+    "licenseBindingExpected": "Bound to",
+    "licenseBindingActual": "This installation",
+    "licenseConnectionOptIn": "Connecting sends to proxcenter.io, once a day: the install identifier and public key, the fingerprint, the ProxCenter version, the name of each connection with its cluster name and node count, the identifiers of the licenses held, a counter and a timestamp, and a check-in token issued by proxcenter.io. Nothing else: no VM names, no addresses.",
+    "licenseConnectionOpenPortal": "Open proxcenter.io",
+    "licenseConnectionPairingExpires": "Code valid for {minutes} more minutes",
+    "licenseConnectionCancel": "Cancel the pairing",
+    "licenseConnectionCheckinQueued": "Sync requested; the status refreshes within a minute.",
+    "licenseConnectionDisconnect": "Disconnect",
+    "licenseConnectionDisconnectConfirmTitle": "Disconnect from proxcenter.io?",
+    "licenseConnectionDisconnectConfirm": "The licenses held stay valid until the end of their lease (30 days at most), then this instance falls back to the Community edition. You can reconnect at any time.",
+    "licenseConnectionFailed": "Could not reach proxcenter.io",
+    "licenseConnectionUnavailable": "The portal connection is disabled on this instance.",
+    "licenseLeaseExpiredTitle": "The lease of this license has ended",
+    "licenseMovedExpiredTitle": "This license was moved to another instance",
     "licenseRemoveSuccess": "License removed",
     "licenseRemoveFailed": "Removal failed",
     "licensePerTenantTitle": "Per tenant",
-    "licensePerTenantHint": "License coverage attributed to each MSP client tenant.",
-    "licensePerTenantCoveredBy": "covered by {ids}",
     "licensePoolProvider": "Pool / provider",
-    "nodeQuotaExceeded": "Node quota exceeded ({current}/{max}). Some features may be restricted.",
     "featureLabels": {
       "dashboard": "Dashboard",
       "inventory": "Inventory",

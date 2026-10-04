@@ -29,6 +29,7 @@ import { useTranslations } from 'next-intl'
 import { useLocale } from '@/contexts/LocaleContext'
 import { localeCountryCodes } from '@/i18n/config'
 import { CountryFlag } from '@/components/ui/CountryFlag'
+import { connectionClonedNotification, leaseNotificationMessage } from '@/components/settings/licenseNotifications'
 
 // Materio settings hook (theme, mode, etc.)
 import { useSettings } from '@core/hooks/useSettings'
@@ -309,6 +310,46 @@ const NavbarContent = ({ targetLayout } = {}) => {
     isNodeLimitNotif: true
   } : null
 
+  // License bound to another install (provider only): the tab explains,
+  // the bell makes sure the amputated UI is never mistaken for Community.
+  const bindingNotif = isProviderTenant && canViewAdmin && licenseStatus?.binding_error ? {
+    id: 'license-binding-mismatch',
+    message: t('license.bindingMismatch'),
+    severity: 'crit',
+    source: 'License',
+    isLicenseNotif: true
+  } : null
+
+  // Portal connection (provider only): failing check-ins warn, a lease that
+  // ends soon, a moved license or an ended lease are critical, and a
+  // blocked (cloned) connection is its own critical item (M6).
+  // An air-gapped instance has no portal connection to warn about.
+  const conn = licenseStatus?.connection
+  const portalReachable = !licenseStatus?.offline && conn?.available
+  const connectionNotif = isProviderTenant && canViewAdmin && portalReachable && (conn.status === 'disconnected') && (conn.consecutive_failures || 0) >= 3 ? {
+    id: 'license-connection-failing',
+    message: t('license.connectionFailing', { count: conn.consecutive_failures }),
+    severity: 'warn',
+    source: 'License',
+    isLicenseNotif: true
+  } : null
+  const clonedMessage = portalReachable ? connectionClonedNotification(conn) : null
+  const connectionClonedNotif = isProviderTenant && canViewAdmin && clonedMessage ? {
+    id: 'license-connection-cloned',
+    message: t(clonedMessage.key),
+    severity: 'crit',
+    source: 'License',
+    isLicenseNotif: true
+  } : null
+  const leaseMessage = leaseNotificationMessage(licenseStatus, conn, portalReachable)
+  const leaseNotif = isProviderTenant && canViewAdmin && leaseMessage ? {
+    id: 'license-lease',
+    message: t(leaseMessage.key, leaseMessage.values),
+    severity: 'crit',
+    source: 'License',
+    isLicenseNotif: true
+  } : null
+
   // Update available notification (provider only)
   const updateNotif = isProviderTenant && canViewAdmin && updateInfo?.updateAvailable ? {
     id: 'version-update',
@@ -351,18 +392,22 @@ const NavbarContent = ({ targetLayout } = {}) => {
     ...(nodeLimitNotif ? [nodeLimitNotif] : []),
     ...(updateNotif ? [updateNotif] : []),
     ...(licenseExpirationNotif ? [licenseExpirationNotif] : []),
+    ...(bindingNotif ? [bindingNotif] : []),
+    ...(connectionNotif ? [connectionNotif] : []),
+    ...(connectionClonedNotif ? [connectionClonedNotif] : []),
+    ...(leaseNotif ? [leaseNotif] : []),
     ...drsNotifications,
     ...notifications
   ]
 
   // Combined count
   const drsCount = drsNotifications.length
-  const totalNotifCount = notifCount + (licenseExpirationNotif ? 1 : 0) + (updateNotif ? 1 : 0) + (nodeLimitNotif ? 1 : 0) + drsCount
+  const totalNotifCount = notifCount + (licenseExpirationNotif ? 1 : 0) + (updateNotif ? 1 : 0) + (nodeLimitNotif ? 1 : 0) + (bindingNotif ? 1 : 0) + (connectionNotif ? 1 : 0) + (connectionClonedNotif ? 1 : 0) + (leaseNotif ? 1 : 0) + drsCount
 
   // Combined stats
   const totalNotifStats = {
-    crit: notifStats.crit + (licenseExpirationNotif?.severity === 'crit' ? 1 : 0) + (nodeLimitNotif ? 1 : 0) + drsNotifications.filter(d => d.severity === 'crit').length,
-    warn: notifStats.warn + (licenseExpirationNotif?.severity === 'warn' ? 1 : 0) + drsNotifications.filter(d => d.severity === 'warn').length,
+    crit: notifStats.crit + (licenseExpirationNotif?.severity === 'crit' ? 1 : 0) + (nodeLimitNotif ? 1 : 0) + (bindingNotif ? 1 : 0) + (connectionClonedNotif ? 1 : 0) + (leaseNotif ? 1 : 0) + drsNotifications.filter(d => d.severity === 'crit').length,
+    warn: notifStats.warn + (licenseExpirationNotif?.severity === 'warn' ? 1 : 0) + (connectionNotif ? 1 : 0) + drsNotifications.filter(d => d.severity === 'warn').length,
     info: (updateNotif ? 1 : 0) + drsNotifications.filter(d => d.severity === 'info').length,
     drs: drsCount
   }

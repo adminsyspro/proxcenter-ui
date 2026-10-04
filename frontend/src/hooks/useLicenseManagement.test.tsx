@@ -27,7 +27,7 @@ describe('useLicenseManagement', () => {
       expect(result.current.features).toEqual([{ id: 'rolling_updates', enabled: true }])
     })
     expect(result.current.loading).toBe(false)
-    expect(global.fetch).toHaveBeenCalledWith('/api/v1/license/status')
+    expect(global.fetch).toHaveBeenCalledWith('/api/v1/license/status', { cache: 'no-store' })
     expect(global.fetch).toHaveBeenCalledWith('/api/v1/license/features')
   })
 })

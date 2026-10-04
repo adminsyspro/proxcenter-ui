@@ -7,46 +7,37 @@ export const runtime = "nodejs"
 
 const ORCHESTRATOR_URL = process.env.ORCHESTRATOR_URL || "http://localhost:8080"
 
-export async function DELETE() {
+// Regenerates the install identity (new fingerprint). A license bound to the
+// previous fingerprint stops matching until it is rebound on the portal.
+export async function POST() {
   try {
     const providerGate = await requireProviderTenant()
     if (providerGate) return providerGate
     const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
     if (denied) return denied
 
-    const res = await fetch(`${ORCHESTRATOR_URL}/api/v1/license/deactivate`, {
-      method: "DELETE",
-      headers: orchestratorHeaders(),
+    const res = await fetch(`${ORCHESTRATOR_URL}/api/v1/license/identity/reset`, {
+      method: "POST",
+      headers: orchestratorHeaders({ "Content-Type": "application/json" }),
     })
-
-    const data = await res.json()
+    const data = await res.json().catch(() => null)
 
     if (!res.ok) {
       return NextResponse.json(
-        { success: false, error: data?.error || `HTTP ${res.status}` },
+        { success: false, error: data?.error || `HTTP ${res.status}`, ...(data?.code ? { code: data.code } : {}) },
         { status: res.status }
       )
     }
-
     return NextResponse.json(data)
   } catch (e: any) {
-    console.error("License deactivation failed:", e?.message)
-
+    console.error("Install identity reset failed:", e?.message)
     const msg = e?.message || ""
     if (msg.includes("fetch failed") || msg.includes("ECONNREFUSED") || msg.includes("ENOTFOUND")) {
       return NextResponse.json(
-        {
-          success: false,
-          error: "The ProxCenter backend (orchestrator) is not reachable. Enterprise features require the backend container to be running. If you upgraded from Community to Enterprise, please follow the Enterprise installation guide to deploy the backend container.",
-          code: "ORCHESTRATOR_UNAVAILABLE",
-        },
+        { success: false, error: "The ProxCenter backend (orchestrator) is not reachable.", code: "ORCHESTRATOR_UNAVAILABLE" },
         { status: 503 }
       )
     }
-
-    return NextResponse.json(
-      { success: false, error: msg || "Failed to deactivate license" },
-      { status: 500 }
-    )
+    return NextResponse.json({ success: false, error: msg || "Failed to reset the install identity" }, { status: 500 })
   }
 }

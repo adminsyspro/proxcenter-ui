@@ -266,12 +266,13 @@ export default function LicenseTab() {
 
   const heldById = useMemo(() => new Map((offline ? [] : connection?.held || []).map(h => [h.license_id, h])), [offline, connection])
 
-  // A held license the table does not list (typically one moved to another
-  // instance, still usable here in its grace period) keeps its own row.
+  // A held license the table does not list because it moved to another
+  // instance (still usable here in its grace period) keeps its own row. One
+  // only missing locally (a deactivated primary) comes back at the next sync.
   const tableRows = useMemo(() => {
     if (licenseRows.length === 0) return licenseRows
     const listed = new Set(licenseRows.map(r => r.licenseId))
-    const extra = [...heldById.values()].filter(h => !listed.has(h.license_id)).map(h => ({
+    const extra = [...heldById.values()].filter(h => h.lost && !listed.has(h.license_id)).map(h => ({
       rowId: `held-${h.license_id}`, licenseId: h.license_id, role: h.kind === 'option' ? 'option' : 'import', edition: '', label: h.label,
       licensedTo: '', usedNodes: 0, maxNodes: 0, unlimited: false, expiresAt: null, clusterUuid: null, connectionIds: [], state: 'unknown',
       capabilities: [], heldOnly: true,

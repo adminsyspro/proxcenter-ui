@@ -245,6 +245,22 @@ describe('LicenseTab situations', () => {
     expect(screen.queryByRole('button', { name: 'settings.deactivateLicense' })).toBeNull()
   })
 
+  it('does not list the deactivated connected primary the portal still holds as an unknown license', async () => {
+    multiLicense = true
+    importsPayload = [{ id: 'imp-a', license_id: 'I1', edition: 'enterprise', max_nodes: 10, expires_at: at(200), state: 'active', connection_ids: [], customer: 'Trial' }]
+    management.licenseStatus = {
+      licensed: true, edition: 'enterprise', license_id: 'I1', customer: { company: 'Trial' }, binding: 'floating', limits: { max_nodes: 10 },
+      node_status: { current_nodes: 6, max_nodes: 10, per_license: [{ license_id: 'I1', max_nodes: 10, used_nodes: 6, is_primary: false }] }, expires_at: at(200), options: [],
+      install: { fingerprint: 'fp-here', can_sign: true },
+      effective_source: { kind: 'import', row_id: 'imp-a', license_id: 'I1', label: 'Trial', edition: 'enterprise', expires_at: at(200) },
+      primary_problem: { reason: 'absent' },
+      connection: { ...connected, held: [{ license_id: 'P1', kind: 'edition', lost: false, label: '', lease_until: at(30) }] },
+    }
+    const { container } = await mountTab()
+    expect(container.textContent).not.toContain('settings.licenseTab.licenses.unknown')
+    expect(container.textContent).toContain('settings.licenseTab.licenses.providesEdition')
+  })
+
   it('lists the imports with their state even when none grants an edition', async () => {
     multiLicense = true
     importsPayload = [

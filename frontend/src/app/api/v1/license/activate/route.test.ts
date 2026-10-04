@@ -2,9 +2,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { callRoute, readJson } from '@/__tests__/setup/route-test'
 
 const checkPermissionMock = vi.fn<(...a: any[]) => Promise<Response | null>>()
+const requireProviderTenantMock = vi.fn<() => Promise<Response | null>>()
 const fetchMock = vi.fn()
 
 vi.mock('@/lib/rbac', () => ({ checkPermission: checkPermissionMock, PERMISSIONS: { ADMIN_SETTINGS: 'admin.settings' } }))
+vi.mock('@/lib/tenant', () => ({ requireProviderTenant: requireProviderTenantMock }))
 vi.mock('@/lib/orchestrator/headers', () => ({ orchestratorHeaders: (x: any) => ({ ...x }) }))
 
 type ActivateBody = { success?: boolean; error?: string; code?: string; expected_fingerprint?: string; actual_fingerprint?: string }
@@ -13,11 +15,21 @@ async function activatePOST() { const mod = await import('./route'); return mod.
 
 beforeEach(() => {
   checkPermissionMock.mockReset().mockResolvedValue(null)
+  requireProviderTenantMock.mockReset().mockResolvedValue(null)
   fetchMock.mockReset()
   vi.stubGlobal('fetch', fetchMock)
 })
 
 describe('POST /api/v1/license/activate', () => {
+  it('403s outside the provider tenant without reaching the orchestrator', async () => {
+    const { NextResponse } = await import('next/server')
+    requireProviderTenantMock.mockResolvedValue(NextResponse.json({ error: 'This operation is only available from the provider tenant' }, { status: 403 }))
+    const res = await callRoute(await activatePOST(), { body: { license: 'BLOB' } })
+    expect(res.status).toBe(403)
+    expect(checkPermissionMock).not.toHaveBeenCalled()
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
   it('400s when the license key is missing', async () => {
     const res = await callRoute(await activatePOST(), { body: {} })
     expect(res.status).toBe(400)

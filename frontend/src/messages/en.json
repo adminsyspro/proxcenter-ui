@@ -8247,7 +8247,13 @@
     "noAttributionHelp": "The agents are working, sFlow data is being decoded. Attribution needs guest traffic to be visible where sampling happens: a guest NIC must reach an OVS bridge. On an SDN VNet, traffic between two guests of the same VNet stays on the Linux bridge and is never sampled.",
     "noNodeToConfigure": "No node needs configuring.",
     "configureRequestFailed": "The configuration request failed.",
-    "configureOutcome": "sFlow configured on {configured} of {total} nodes"
+    "configureOutcome": "sFlow configured on {configured} of {total} nodes",
+    "searchPlaceholder": "Search by IP, VM name or VMID",
+    "searchHighlight": "Highlight",
+    "searchFilter": "Filter",
+    "searchMatches": "{count, plural, one {# matching flow} other {# matching flows}}",
+    "searchNoMatch": "No flow matches \"{query}\"",
+    "searchEnterHint": "Press Enter to open the details of the top match"
   },
   "vdc": {
     "title": "Virtual Datacenters",

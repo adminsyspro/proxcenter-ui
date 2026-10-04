@@ -8248,7 +8248,13 @@
     "noAttributionHelp": "Les agents fonctionnent, les données sFlow sont bien décodées. L'attribution exige que le trafic des invités soit visible là où l'échantillonnage a lieu : une carte d'invité doit atteindre un bridge OVS. Sur un VNet SDN, le trafic entre deux invités du même VNet reste sur le bridge Linux et n'est jamais échantillonné.",
     "noNodeToConfigure": "Aucun nœud à configurer.",
     "configureRequestFailed": "La requête de configuration a échoué.",
-    "configureOutcome": "sFlow configuré sur {configured} nœud(s) sur {total}"
+    "configureOutcome": "sFlow configuré sur {configured} nœud(s) sur {total}",
+    "searchPlaceholder": "Rechercher par IP, nom de VM ou VMID",
+    "searchHighlight": "Surligner",
+    "searchFilter": "Filtrer",
+    "searchMatches": "{count, plural, one {# flux correspondant} other {# flux correspondants}}",
+    "searchNoMatch": "Aucun flux ne correspond à « {query} »",
+    "searchEnterHint": "Entrée ouvre le détail du meilleur résultat"
   },
   "vdc": {
     "title": "Datacenters Virtuels",

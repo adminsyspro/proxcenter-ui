@@ -9,6 +9,19 @@ export const runtime = "nodejs"
 
 type Ctx = { params: Promise<{ id: string; node: string }> }
 
+// Both files live under /var/log: on PVE 9 (Debian 13) /tmp is a tmpfs, so the
+// reboot that follows a kernel update used to wipe the only record of what apt
+// printed (adminsyspro/proxcenter-ui discussion #928).
+const STATUS_FILE = "/var/log/proxcenter-upgrade.status"
+const LOG_FILE = "/var/log/proxcenter-upgrade.log"
+
+// Exits 0 when the node needs a reboot. PVE never creates
+// /var/run/reboot-required (no update-notifier-common), so the reliable signal
+// is a newer installed kernel than the running one. No single quotes: it is
+// embedded in the single-quoted upgrade script.
+const REBOOT_REQUIRED_TEST =
+  `{ test -f /var/run/reboot-required || { L=$(ls /boot/vmlinuz-* 2>/dev/null | sed "s|^/boot/vmlinuz-||" | sort -V | tail -n 1); [ -n "$L" ] && [ "$L" != "$(uname -r)" ]; }; }`
+
 /**
  * POST — Start a node upgrade via SSH (apt-get dist-upgrade).
  * The command runs in background (nohup) so the HTTP request returns immediately.
@@ -43,19 +56,25 @@ export async function POST(req: Request, ctx: Ctx) {
     return NextResponse.json({ error: check.error }, { status: check.status })
   }
 
-  // Build the upgrade script
-  // Status file: /tmp/.proxcenter-upgrade-status
-  // Log file:    /tmp/.proxcenter-upgrade.log
-  const rebootCmd = autoReboot
-    ? `if [ -f /var/run/reboot-required ]; then echo REBOOTING > /tmp/.proxcenter-upgrade-status; sleep 2; reboot; fi`
-    : ""
+  // Only a successful apt run may reboot: rebooting after a failure would turn
+  // FAILED into REBOOTING, then into COMPLETED once the node is back. A run
+  // that reboots writes REBOOTING directly, never COMPLETED first, or a poll in
+  // between would make the dialog send its own reboot. If reboot itself fails,
+  // the run is still a success that leaves the reboot to the operator.
+  const successCmd = autoReboot
+    ? `if ${REBOOT_REQUIRED_TEST}; then echo REBOOTING > ${STATUS_FILE}; sleep 2; reboot || echo COMPLETED > ${STATUS_FILE}; else echo COMPLETED > ${STATUS_FILE}; fi`
+    : `echo COMPLETED > ${STATUS_FILE}`
 
-  const script = `nohup bash -c '
-echo RUNNING > /tmp/.proxcenter-upgrade-status
-rm -f /tmp/.proxcenter-upgrade.log
-(apt-get update 2>&1 && DEBIAN_FRONTEND=noninteractive apt-get dist-upgrade -y 2>&1) >> /tmp/.proxcenter-upgrade.log 2>&1
-if [ $? -eq 0 ]; then echo COMPLETED > /tmp/.proxcenter-upgrade-status; else echo FAILED > /tmp/.proxcenter-upgrade-status; fi
-${rebootCmd}
+  // RUNNING is written before the background job starts, so the first poll
+  // can never read the outcome of a previous run.
+  // A locally modified conffile (e.g. a customised zabbix_agent2.conf) makes
+  // dpkg ask which version to keep. Nobody can answer in the background, so
+  // without confdef/confold dpkg leaves that package unconfigured and apt
+  // exits non-zero. Keep the local file, as dpkg's own default and the
+  // Rolling Update do.
+  const script = `echo RUNNING > ${STATUS_FILE}; rm -f ${LOG_FILE}; nohup bash -c '
+(apt-get update 2>&1 && DEBIAN_FRONTEND=noninteractive apt-get -y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold dist-upgrade 2>&1) >> ${LOG_FILE} 2>&1
+if [ $? -eq 0 ]; then ${successCmd}; else echo FAILED > ${STATUS_FILE}; fi
 ' > /dev/null 2>&1 &`
 
   const result = await executeSSH(id, nodeIp, script)
@@ -90,7 +109,12 @@ export async function GET(_req: Request, ctx: Ctx) {
 
   const nodeIp = await getNodeIp(conn, node)
 
-  const command = `cat /tmp/.proxcenter-upgrade-status 2>/dev/null || echo UNKNOWN; echo '---SEPARATOR---'; cat /tmp/.proxcenter-upgrade.log 2>/dev/null; echo '---SEPARATOR---'; test -f /var/run/reboot-required && echo YES || echo NO`
+  // REBOOTING is the last thing an auto-reboot run writes. Once the node is
+  // back (booted after that write), the run is over: report COMPLETED, or the
+  // dialog would poll a status that never moves again.
+  const readStatus = `S=$(cat ${STATUS_FILE} 2>/dev/null || echo UNKNOWN); if [ "$S" = REBOOTING ] && [ $(( $(date +%s) - $(stat -c %Y ${STATUS_FILE}) )) -gt $(cut -d. -f1 /proc/uptime) ]; then S=COMPLETED; fi; echo "$S"`
+
+  const command = `${readStatus}; echo '---SEPARATOR---'; cat ${LOG_FILE} 2>/dev/null; echo '---SEPARATOR---'; if ${REBOOT_REQUIRED_TEST}; then echo YES; else echo NO; fi`
 
   const result = await executeSSH(id, nodeIp, command)
 

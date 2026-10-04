@@ -83,7 +83,7 @@ describe('license tab messages format in every locale', () => {
   const sample = (n: number) => ({
     days: n, count: n, failures: n, over: n, used: 10, max: 8, minutes: 6,
     date: '30/09/2027', since: '28/09/2026 14:30', next: '30/09/2026 14:30', until: '28/10/2026',
-    label: 'Enterprise', licenseId: 'lic-1', name: 'Lab A', ago: '3 min', host: 'proxcenter.io', partner: 'Partner SAS',
+    label: 'Enterprise', licenseId: 'lic-1', name: 'Lab A', ago: '3 min', host: 'proxcenter.io', partner: 'Partner SAS', reason: 'expired', haveKey: 'I have a license key',
   })
 
   for (const [locale, messages] of Object.entries(locales)) {

@@ -2840,6 +2840,7 @@
         "inDays": "{days, plural, =0 {moins d'un jour} one {dans # jour} other {dans # jours}}",
         "receivedFrom": "Reçue de",
         "viaPortal": "via proxcenter.io",
+        "viaPartner": "via",
         "activatedBy": "Activée par",
         "syncedAgo": "synchronisée {ago}",
         "lastSyncAgo": "dernière synchro {ago}",

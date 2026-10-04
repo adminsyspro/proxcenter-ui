@@ -64,11 +64,13 @@ const button = (name: string) => screen.getByRole('button', { name })
 const sync = () => button('settings.licenseTab.connection.sync')
 
 describe('LicenseTab situations', () => {
-  it('shows the partner name and logo on the Received from line, proxcenter.io as the channel', async () => {
+  it('names the partner and its logo in the title, without the Received from line', async () => {
     management.licenseStatus = { ...management.licenseStatus, connection: { ...connected, partner: { name: 'Partner SAS', has_logo: true, logo_sha256: 'a'.repeat(64) } } }
     const { container } = await mountTab()
-    expect(container.textContent).toContain('Partner SAS')
-    expect(container.textContent).toContain('settings.licenseTab.summary.viaPortal')
+    const title = container.querySelector('h6') as HTMLElement
+    expect(title.textContent).toContain('settings.licenseTab.summary.viaPartner')
+    expect(title.textContent).toContain('Partner SAS')
+    expect(container.textContent).not.toContain('settings.licenseTab.summary.receivedFrom')
     const img = container.querySelector('img[alt="Partner SAS"]') as HTMLImageElement
     expect(img.getAttribute('src')).toBe(`/api/v1/license/partner-logo?v=${'a'.repeat(64)}`)
     fireEvent.error(img)

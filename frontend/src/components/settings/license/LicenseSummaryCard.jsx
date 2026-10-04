@@ -59,16 +59,33 @@ function StatusPill({ summary, alerts, t }) {
 
 // The partner's logo, then its name; a logo that fails to load leaves the name.
 // Keyed by the logo url (versioned by digest): a replaced logo is tried again.
-function PartnerSource({ partner }) {
+function PartnerSource({ partner, logoHeight = 20, logoMaxWidth = 96 }) {
   const [failed, setFailed] = useState(false)
 
   return (
     <Box component='span' sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75, verticalAlign: 'middle' }}>
       {partner.logoUrl && !failed && (
-        <Box component='img' src={partner.logoUrl} alt={partner.name} onError={() => setFailed(true)} sx={{ height: 20, maxWidth: 96, objectFit: 'contain', display: 'block' }} />
+        <Box component='img' src={partner.logoUrl} alt={partner.name} onError={() => setFailed(true)} sx={{ height: logoHeight, maxWidth: logoMaxWidth, objectFit: 'contain', display: 'block' }} />
       )}
       {partner.name}
     </Box>
+  )
+}
+
+// A licensed install delivered by a partner names it in the title, with its
+// logo at a readable size; the sync state moves to the tooltip.
+function PartnerTitle({ source, t, locale }) {
+  const synced = source.lastSyncAt
+    ? t('settings.licenseTab.summary.syncedAgo', { ago: formatAgo(source.lastSyncAt, locale) })
+    : t('settings.licenseTab.summary.neverSynced')
+
+  return (
+    <Tooltip title={`${t('settings.licenseTab.summary.viaPortal')} · ${synced}`}>
+      <Box component='span' sx={{ display: 'inline-flex', alignItems: 'center', gap: 1, ml: 1, fontWeight: 600, cursor: 'default' }}>
+        <Typography component='span' variant='h6' color='text.secondary' sx={{ fontWeight: 400 }}>{t('settings.licenseTab.summary.viaPartner')}</Typography>
+        <PartnerSource key={source.partner.logoUrl || 'none'} partner={source.partner} logoHeight={32} logoMaxWidth={160} />
+      </Box>
+    </Tooltip>
   )
 }
 
@@ -130,6 +147,10 @@ export default function LicenseSummaryCard({ summary, alerts, t, locale, busy, c
   if (summary.validUntil?.here && !factColor.validUntil) factColor.validUntil = 'warning'
 
   const { nodes, validUntil, source } = summary
+  // The partner is named in the title; the source line then only comes back to
+  // tell a failing sync.
+  const partnerInTitle = !community && !awaiting && source?.kind === 'portal' && !!source.partner
+  const showSourceFact = !partnerInTitle || !!syncAlert
   const nodePct = nodes && !nodes.unlimited && nodes.used !== null ? Math.min(100, Math.round((nodes.used / nodes.max) * 100)) : null
 
   return (
@@ -140,8 +161,9 @@ export default function LicenseSummaryCard({ summary, alerts, t, locale, busy, c
             <LogoIcon size={30} />
           </Box>
           <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Typography variant='h6' fontWeight={700}>
+            <Typography variant='h6' fontWeight={700} sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap' }}>
               {t(awaiting ? 'settings.licenseTab.summary.awaiting' : community ? 'settings.licenseTab.summary.community' : 'settings.licenseTab.summary.enterprise')}
+              {partnerInTitle && <PartnerTitle source={source} t={t} locale={locale} />}
             </Typography>
             <Typography variant='body2' color='text.secondary' noWrap>
               {awaiting
@@ -207,7 +229,7 @@ export default function LicenseSummaryCard({ summary, alerts, t, locale, busy, c
                 ) : <Value main='—' />}
               </Fact>
 
-              <SourceFact source={source} syncAlert={syncAlert} color={factColor.source} t={t} locale={locale} />
+              {showSourceFact && <SourceFact source={source} syncAlert={syncAlert} color={factColor.source} t={t} locale={locale} />}
             </Box>
 
             {source?.kind === 'file' && (

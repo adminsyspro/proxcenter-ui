@@ -34,6 +34,7 @@ import {
 } from '@mui/material'
 
 import ConfirmCloseDialog from '@/components/ConfirmCloseDialog'
+import { useRBAC } from '@/contexts/RBACContext'
 import { NodeInfo, formatMemory } from '@/components/hardware/utils'
 import { loadNodeRepoIssues, type RepoIssue } from '@/lib/proxmox/aptRepositories'
 
@@ -118,6 +119,10 @@ export default function NodeUpdateDialog({
   hasCeph = false,
 }: NodeUpdateDialogProps) {
   const t = useTranslations()
+  // Ceph OSD flags are cluster-wide storage settings: setting them needs
+  // storage.admin on top of the node right that runs the update (#920).
+  const { hasPermission } = useRBAC()
+  const canSetCephFlags = hasPermission('storage.admin')
 
   // Steps depend on cluster mode
   const clusterMode = isCluster
@@ -394,7 +399,7 @@ export default function NodeUpdateDialog({
       }
 
       // Set Ceph maintenance flags if selected and hasCeph
-      if (hasCeph && setCephMaintenanceFlags && !cephMaintenanceFlagsSet) {
+      if (hasCeph && canSetCephFlags && setCephMaintenanceFlags && !cephMaintenanceFlagsSet) {
         for (const flag of CEPH_MAINTENANCE_FLAGS) {
           if (!cephFlags.includes(flag)) {
             await fetch(cephFlagsUrl, {
@@ -491,7 +496,7 @@ export default function NodeUpdateDialog({
     } finally {
       setPreflightLoading(false)
     }
-  }, [enableMaintenance, maintenanceStatus, hasCeph, setCephMaintenanceFlags, cephMaintenanceFlagsSet, cephFlags, maintenanceUrl, cephFlagsUrl, STEP.CONFIG, migrateSharedVms, vmDistribution, sharedVms, shutdownLocalVms, localVms, connBaseUrl, nodeName])
+  }, [enableMaintenance, maintenanceStatus, hasCeph, canSetCephFlags, setCephMaintenanceFlags, cephMaintenanceFlagsSet, cephFlags, maintenanceUrl, cephFlagsUrl, STEP.CONFIG, migrateSharedVms, vmDistribution, sharedVms, shutdownLocalVms, localVms, connBaseUrl, nodeName])
 
   const startUpdate = useCallback(async () => {
     setLoading(true)
@@ -762,16 +767,18 @@ export default function NodeUpdateDialog({
                           ))}
                         </Box>
                       )}
-                      <FormControlLabel
-                        control={
-                          <Switch
-                            checked={setCephMaintenanceFlags}
-                            onChange={(e) => setSetCephMaintenanceFlags(e.target.checked)}
-                            size="small"
-                          />
-                        }
-                        label={<Typography variant="body2">{t('updates.setCephFlagsBefore')}</Typography>}
-                      />
+                      {canSetCephFlags && (
+                        <FormControlLabel
+                          control={
+                            <Switch
+                              checked={setCephMaintenanceFlags}
+                              onChange={(e) => setSetCephMaintenanceFlags(e.target.checked)}
+                              size="small"
+                            />
+                          }
+                          label={<Typography variant="body2">{t('updates.setCephFlagsBefore')}</Typography>}
+                        />
+                      )}
                     </>
                   )}
                 </CardContent>

@@ -39,6 +39,7 @@ import { CephOsdFlagsDialog, useCephOsdFlags } from '@/components/ceph/CephOsdFl
 
 import { getDateLocale } from '@/lib/i18n/date'
 import { usePageTitle } from '@/contexts/PageTitleContext'
+import PermissionGuard from '@/components/guards/PermissionGuard'
 import { formatBytes } from '@/utils/format'
 import { useCephPerformance, useCephRRD } from '@/hooks/useCeph'
 import { CardsSkeleton, TableSkeleton } from '@/components/skeletons'
@@ -433,7 +434,7 @@ function StatBox({ label, value, color }) {
   Page
 ------------------------------ */
 
-export default function CephPage() {
+function CephPage() {
   const t = useTranslations()
   const theme = useTheme()
   const dateLocale = getDateLocale(useLocale())
@@ -1727,5 +1728,14 @@ return updated.slice(-30)
         onToggle={osdFlags.toggle}
       />
     </Box>
+  )
+}
+
+// The menu entry is hidden without storage.admin; a direct URL lands here (#920).
+export default function CephPageGuarded() {
+  return (
+    <PermissionGuard permission='storage.admin'>
+      <CephPage />
+    </PermissionGuard>
   )
 }

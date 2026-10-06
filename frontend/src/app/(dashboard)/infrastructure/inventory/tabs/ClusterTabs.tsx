@@ -343,6 +343,8 @@ export default function ClusterTabs(props: any) {
   // Écrire storage.cfg relève de la gestion de la connexion, le grant que les
   // routes POST / DELETE exigent (issue #890).
   const canManageCluster = hasPermission('connection.manage')
+  // Unsetting an OSD flag is a storage.admin action on the API side (#920).
+  const canSetCephFlags = hasPermission('storage.admin')
   const activeRollingUpdateId = hasActiveUpdate(clusterConnId)
 
   const drsHealth = useMemo(() => {
@@ -1151,7 +1153,7 @@ export default function ClusterTabs(props: any) {
                                   label={flag}
                                   size="small"
                                   color="warning"
-                                  onDelete={() => handleRemoveCephFlag(flag)}
+                                  onDelete={canSetCephFlags ? () => handleRemoveCephFlag(flag) : undefined}
                                   disabled={cephFlagToggling === flag}
                                   deleteIcon={cephFlagToggling === flag ? <CircularProgress size={14} /> : undefined}
                                   sx={{ fontFamily: 'monospace', fontSize: 11, height: 24 }}

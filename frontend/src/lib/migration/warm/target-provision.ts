@@ -6,6 +6,7 @@ import { waitForPveTask } from "../pve-tasks"
 import { parseDdProgress } from "./dd-progress"
 import { updateJob, updateJobLive, appendLog } from "./job-control"
 import { scaleWarmProgress, APPLY_TIMEOUT_MS, APPLY_INACTIVITY_MS, PROGRESS_LOG_INTERVAL_MS } from "./apply"
+import { type SshTarget } from "@/lib/ssh/node-endpoint-core"
 
 // Parallel ranges for the streamed zero fallback. One dd is queue depth 1: the
 // #606 field run sustained only 359 MiB/s on an FC array that reaches 1.9 GB/s
@@ -113,7 +114,7 @@ export interface ProvisionDisk { key: number; capacityBytes: number }
 // Progress covers 0→10 of the locked scale, weighted by bytes zeroed across
 // all disks (they share the target storage, so it is all-thick or none).
 export async function provisionBlockTargets(a: {
-  jobId: string; connectionId: string; nodeIp: string
+  jobId: string; connectionId: string; nodeIp: SshTarget
   targetStorage: string; storageType: string; targetVmid: number
   shellConf: Record<string, any>; disks: ProvisionDisk[]; allocatedVolumes: AllocatedVolume[]
 }): Promise<Map<number, string>> {

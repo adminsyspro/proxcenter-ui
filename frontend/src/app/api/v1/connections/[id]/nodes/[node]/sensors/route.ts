@@ -4,7 +4,7 @@ import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { parseHwmon } from "@/lib/sensors/hwmon"
 import { executeSSH } from "@/lib/ssh/exec"
-import { getNodeIp } from "@/lib/ssh/node-ip"
+import { resolveNodeSshEndpoint } from "@/lib/ssh/node-endpoint"
 
 export const runtime = "nodejs"
 
@@ -79,7 +79,7 @@ export async function GET(
       return NextResponse.json({ error: "Connection not found" }, { status: 404 })
     }
 
-    const nodeIp = await getNodeIp(conn, node)
+    const nodeIp = await resolveNodeSshEndpoint(conn, node)
     const result = await executeSSH(id, nodeIp, HWMON_COMMAND, SSH_TIMEOUT_MS)
 
     // SSH disabled on the connection, host unreachable, credentials rejected:

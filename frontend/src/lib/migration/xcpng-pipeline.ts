@@ -24,6 +24,8 @@ import { getConnectionById } from "@/lib/connections/getConnection"
 import { pveFetch } from "@/lib/proxmox/client"
 import { isFileBasedStorage } from "@/lib/proxmox/storage"
 import { executeSSH, shellEscape } from "@/lib/ssh/exec"
+import { formatSshEndpoint, resolveSshTargetPort, sshTargetHost, type SshTarget } from "@/lib/ssh/node-endpoint-core"
+import { getNodeSshEndpointForMigration } from "./pve-tasks"
 import { openXcpngSource, type XcpngSource } from "@/lib/xcpng/source"
 import { mapXoToPveConfig, isWindowsXoVm } from "./xcpngConfigMapper"
 import type { XoVmConfig, XoDiskInfo } from "@/lib/xcpng/client"
@@ -151,31 +153,12 @@ async function waitForPveTask(
 }
 
 /**
- * Find the IP address of a Proxmox node for SSH access.
- */
-async function getNodeIp(db: any, connectionId: string, nodeName: string, baseUrl: string): Promise<string> {
-  const host = await db.managedHost.findFirst({
-    where: { connectionId, node: nodeName, enabled: true },
-    select: { ip: true, sshAddress: true },
-  })
-  if (host?.sshAddress) return host.sshAddress
-  if (host?.ip) return host.ip
-
-  try {
-    const url = new URL(baseUrl)
-    return url.hostname
-  } catch {
-    throw new Error(`Cannot determine IP for node ${nodeName}`)
-  }
-}
-
-/**
  * executeSSH with configurable timeout for long-running operations.
  */
 async function executeSSHWithTimeout(
   db: any,
   connectionId: string,
-  nodeIp: string,
+  target: SshTarget,
   command: string,
   timeoutMs: number
 ): Promise<{ success: boolean; output?: string; error?: string }> {
@@ -192,7 +175,7 @@ async function executeSSHWithTimeout(
   }
 
   const { Client } = await import("ssh2")
-  const port = connection.sshPort || 22
+  const port = await resolveSshTargetPort(db, connectionId, target, connection.sshPort)
   const user = connection.sshUser || "root"
 
   let key: string | undefined
@@ -239,7 +222,7 @@ async function executeSSHWithTimeout(
     conn.on("error", (err) => { clearTimeout(timeout); resolve({ success: false, error: err.message }) })
 
     const connectConfig: Record<string, unknown> = {
-      host: nodeIp, port, username: user, readyTimeout: 30_000,
+      host: sshTargetHost(target), port, username: user, readyTimeout: 30_000,
       keepaliveInterval: 10000, keepaliveCountMax: 999,
     }
     if (key) { connectConfig.privateKey = key; if (passphrase) connectConfig.passphrase = passphrase }
@@ -344,8 +327,8 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
     if (isCancelled(jobId)) throw new Error("Migration cancelled")
 
     // Verify PVE SSH connectivity
-    const nodeIp = await getNodeIp(prisma, config.targetConnectionId, config.targetNode, pveConn.baseUrl)
-    await appendLog(jobId, `Testing SSH to Proxmox node ${config.targetNode} (${nodeIp})...`)
+    const nodeIp = await getNodeSshEndpointForMigration(prisma, config.targetConnectionId, config.targetNode, pveConn.baseUrl)
+    await appendLog(jobId, `Testing SSH to Proxmox node ${config.targetNode} (${formatSshEndpoint(nodeIp)})...`)
     const sshTest = await executeSSH(config.targetConnectionId, nodeIp, "echo ok")
     if (!sshTest.success) {
       throw new Error(`SSH to Proxmox node failed: ${sshTest.error}`)
@@ -803,7 +786,7 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
 
     // Cleanup: remove temp files
     try {
-      const nodeIp = await getNodeIp(prisma, config.targetConnectionId, config.targetNode,
+      const nodeIp = await getNodeSshEndpointForMigration(prisma, config.targetConnectionId, config.targetNode,
         (await getConnectionById(config.targetConnectionId)).baseUrl)
       if (storageTempDir) {
         await executeSSH(config.targetConnectionId, nodeIp,

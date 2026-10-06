@@ -1,5 +1,6 @@
 import { executeSSH } from "@/lib/ssh/exec"
 import { extractHostname, isPrivateIp } from "@/lib/net/ip"
+import { formatSshEndpoint, sshTargetHost, type SshTarget } from "@/lib/ssh/node-endpoint-core"
 
 // Flat result shape rather than a discriminated union: this project compiles
 // with strictNullChecks off, where narrowing a boolean-discriminant union via
@@ -11,8 +12,9 @@ export type TargetCheck = { ok: boolean; status?: number; error?: string }
  * private IP, point the operator at the per-node SSH address override; otherwise
  * fall back to the caller's generic message.
  */
-export function sshTargetError(node: string, nodeIp: string, fallback?: string): string {
-  if (isPrivateIp(nodeIp)) {
+export function sshTargetError(node: string, target: SshTarget, fallback?: string): string {
+  const nodeIp = formatSshEndpoint(target)
+  if (isPrivateIp(sshTargetHost(target))) {
     return `Could not reach node '${node}' at ${nodeIp} over SSH. That looks like a private address, not reachable from ProxCenter (e.g. the node is behind NAT). Set an SSH address override for this node to the address you reach it on.`
   }
   return fallback || `Failed to reach node '${node}' at ${nodeIp} over SSH.`
@@ -30,16 +32,17 @@ export async function verifyNodeTarget(
   connId: string,
   conn: { host?: string; baseUrl?: string },
   node: string,
-  nodeIp: string,
+  target: SshTarget,
 ): Promise<TargetCheck> {
   const connHost = extractHostname(conn.host || conn.baseUrl || "")
-  const resolvedViaConnHost = !!connHost && nodeIp === connHost
+  const resolvedViaConnHost = !!connHost && sshTargetHost(target) === connHost
   if (!resolvedViaConnHost) return { ok: true }
 
-  const probe = await executeSSH(connId, nodeIp, "hostname -s")
+  const probe = await executeSSH(connId, target, "hostname -s")
   if (!probe.success) {
-    return { ok: false, status: 502, error: sshTargetError(node, nodeIp, probe.error || "SSH unreachable") }
+    return { ok: false, status: 502, error: sshTargetError(node, target, probe.error || "SSH unreachable") }
   }
+  const nodeIp = formatSshEndpoint(target)
 
   // Compare short hostname labels on both sides: `hostname -s` is short, but a
   // misconfigured host can still emit an FQDN, and the Proxmox node name may be

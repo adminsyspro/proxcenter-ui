@@ -5,7 +5,7 @@ import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
 import { executeSSH } from "@/lib/ssh/exec"
 import { assertVmid } from "@/lib/ssh/validate"
-import { getNodeIp } from "@/lib/ssh/node-ip"
+import { resolveNodeSshEndpoint } from "@/lib/ssh/node-endpoint"
 
 export const runtime = "nodejs"
 
@@ -61,7 +61,7 @@ export async function POST(
     const lockType = config.lock
 
     // Get node IP and execute unlock via SSH
-    const nodeIp = await getNodeIp(conn, node)
+    const nodeIp = await resolveNodeSshEndpoint(conn, node)
     const unlockCmd = type === 'qemu' ? `qm unlock ${safeVmid}` : `pct unlock ${safeVmid}`
     const sshResult = await executeSSH(id, nodeIp, unlockCmd)
 

@@ -1,4 +1,5 @@
 import { executeSSH, shellEscape } from "@/lib/ssh/exec"
+import type { SshTarget } from "@/lib/ssh/node-endpoint-core"
 import { pveFetch, type ProxmoxClientOptions } from "@/lib/proxmox/client"
 import { nextFreeDiskName, type AllocatedVolume } from "./pvesm-alloc"
 import { pveSetVmConfig } from "./pve-vm-config"
@@ -27,7 +28,7 @@ import { pveSetVmConfig } from "./pve-vm-config"
  */
 export interface AdoptFileVolumeArgs {
   connectionId: string
-  nodeIp: string
+  nodeIp: SshTarget
   /** Absolute path of the converted image on the target node. */
   sourcePath: string
   /** PVE storage ID the volume must belong to. */
@@ -205,7 +206,7 @@ export interface AdoptImportAttachArgs {
   /** PVE node the VM lives on. */
   targetNode: string
   connectionId: string
-  nodeIp: string
+  nodeIp: SshTarget
   /** Absolute path of the converted image on the target node. */
   sourcePath: string
   targetStorage: string

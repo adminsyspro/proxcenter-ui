@@ -5,7 +5,7 @@ import { checkPermission, buildNodeResourceId, PERMISSIONS } from "@/lib/rbac"
 import { executeSSH } from "@/lib/ssh/exec"
 import { assertNodeName } from "@/lib/ssh/validate"
 import { safeLog } from "@/lib/log/sanitize"
-import { getNodeIp } from "@/lib/ssh/node-ip"
+import { formatSshEndpoint, resolveNodeSshEndpoint } from "@/lib/ssh/node-endpoint"
 
 export const runtime = "nodejs"
 
@@ -48,10 +48,10 @@ async function toggleMaintenance(
 
     const conn = await getConnectionById(id)
 
-    const nodeIp = await getNodeIp(conn, safeNode)
+    const nodeIp = await resolveNodeSshEndpoint(conn, safeNode)
     const command = `ha-manager crm-command node-maintenance ${enable ? 'enable' : 'disable'} ${safeNode}`
 
-    console.log(`[maintenance] ${label} ${safeLog(safeNode)}: executing via SSH on ${safeLog(nodeIp)}: ${safeLog(command)}`)
+    console.log(`[maintenance] ${label} ${safeLog(safeNode)}: executing via SSH on ${safeLog(formatSshEndpoint(nodeIp))}: ${safeLog(command)}`)
     const result = await executeSSH(id, nodeIp, command)
 
     if (result.success) {

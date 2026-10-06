@@ -16,11 +16,11 @@ vi.mock("@/lib/connections/getConnection", () => ({
   getConnectionById: vi.fn(async () => ({ baseUrl: "https://pve.local:8006" })),
 }))
 vi.mock("../pve-tasks", () => ({
-  getNodeIpForMigration: vi.fn(async () => "10.0.0.7"),
+  getNodeSshEndpointForMigration: vi.fn(async () => ({ host: "10.0.0.7", port: 2201, source: "override" })),
 }))
 vi.mock("@/lib/db/prisma", () => ({ prisma: {} }))
-import { getNodeIpForMigration } from "../pve-tasks"
-const mockNodeIp = getNodeIpForMigration as unknown as ReturnType<typeof vi.fn>
+import { getNodeSshEndpointForMigration } from "../pve-tasks"
+const mockNodeIp = getNodeSshEndpointForMigration as unknown as ReturnType<typeof vi.fn>
 
 const ALL_OK = [
   "nbdkit=ok",
@@ -63,7 +63,7 @@ describe("runXcpngWarmNodePreflight", () => {
   beforeEach(() => {
     mockSSH.mockReset()
     mockNodeIp.mockReset()
-    mockNodeIp.mockResolvedValue("10.0.0.7")
+    mockNodeIp.mockResolvedValue({ host: "10.0.0.7", port: 2201, source: "override" })
   })
 
   it("resolves the migration node IP and probes that node", async () => {
@@ -80,7 +80,7 @@ describe("runXcpngWarmNodePreflight", () => {
     )
     expect(mockSSH).toHaveBeenCalledWith(
       "conn",
-      "10.0.0.7",
+      { host: "10.0.0.7", port: 2201, source: "override" },
       expect.stringContaining("nbdkit-nbd-plugin=ok"),
     )
   })

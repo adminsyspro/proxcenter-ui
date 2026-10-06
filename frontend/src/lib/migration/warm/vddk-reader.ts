@@ -1,6 +1,7 @@
 import { executeSSH, shellEscape } from "@/lib/ssh/exec"
 import { NBD_RELEASE_HOLDERS_FN, nbdReleaseHoldersCall } from "../nbd-holders"
 import { buildNbdkitVddkCmd, type VddkOpts } from "./vddk-cmd"
+import { type SshTarget } from "@/lib/ssh/node-endpoint-core"
 
 /** A running nbdkit-vddk reader: the kernel device it is attached to plus the
  *  node-side resources (socket, password file, log) that must be cleaned up. */
@@ -112,7 +113,7 @@ export function buildJobReaderSweepCmd(jobId: string): string | null {
  */
 export async function startVddkReader(
   connectionId: string,
-  nodeIp: string,
+  nodeIp: SshTarget,
   opts: VddkOpts,
   esxiPassword: string,
   poll: PollOpts = {},
@@ -172,6 +173,6 @@ export async function startVddkReader(
 }
 
 /** Tear down a reader started by startVddkReader. Best-effort; safe to call twice. */
-export async function stopVddkReader(connectionId: string, nodeIp: string, handle: VddkReaderHandle): Promise<void> {
+export async function stopVddkReader(connectionId: string, nodeIp: SshTarget, handle: VddkReaderHandle): Promise<void> {
   await executeSSH(connectionId, nodeIp, buildReaderTeardownCmd(handle))
 }

@@ -17,7 +17,7 @@ import {
 } from "@/lib/vmware/cbt"
 import { mapEsxiToPveConfig } from "../configMapper"
 import { volumesToFree, volumesToKeep, PVESM_FREE_TIMEOUT_MS, type AllocatedVolume } from "../pvesm-alloc"
-import { getNodeIpForMigration } from "../pve-tasks"
+import { getNodeSshEndpointForMigration } from "../pve-tasks"
 import { decideNextPass, type PassStat, type ConvergenceConfig, type ConvergenceDecision } from "./convergence"
 import { initDiskState, recordPass, type DiskWarmState } from "./state"
 import { startVddkReader, stopVddkReader, buildJobReaderSweepCmd, type VddkReaderHandle } from "./vddk-reader"
@@ -42,6 +42,7 @@ import {
 import { createTargetVmShell, provisionBlockTargets, markVolumesCopied } from "./target-provision"
 import { cleanShutdownAndConfirm, isVmwareToolsUnavailable, type PowerOffOps } from "./power-off"
 import { attachDisksAndBoot, verifySampledFirstBlock } from "./finish"
+import { type SshTarget } from "@/lib/ssh/node-endpoint-core"
 
 // ── Pure convergence planning (unit-tested) ──
 
@@ -202,7 +203,7 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
   let soapSession: SoapSession | null = null
   let stopKeepAlive: (() => void) | null = null
   let targetVmid: number | null = config.targetVmid ?? null
-  let nodeIp = ""                                   // resolved in planning; used by failure cleanup
+  let nodeIp: SshTarget = ""                                   // resolved in planning; used by failure cleanup
   const vmKey = `${config.sourceConnectionId}:${config.sourceVmId}`
   let acquiredVmLock = false
   const ourSnapshots: string[] = []                 // MORs WE created — cleaned up by specific MOR
@@ -243,7 +244,7 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
     const esxiHost = new URL(esxiUrl).hostname
 
     const pveConn = await getConnectionById(config.targetConnectionId)
-    nodeIp = await getNodeIpForMigration(prisma, config.targetConnectionId, config.targetNode, (pveConn as any).baseUrl)
+    nodeIp = await getNodeSshEndpointForMigration(prisma, config.targetConnectionId, config.targetNode, (pveConn as any).baseUrl)
 
     soapSession = await soapLogin(esxiUrl, username, password, esxiConn.insecureTLS)
     await appendLog(jobId, `Authenticated to ${esxiHost} as ${username}`, "success")
@@ -678,7 +679,7 @@ async function cleanupOnFailure(
   ourSnapshots: string[],
   allocatedVolumes: AllocatedVolume[],
   activeReaders: VddkReaderHandle[],
-  nodeIp: string,
+  nodeIp: SshTarget,
 ): Promise<void> {
   // nodeIp is the value resolved during planning (empty if we failed before that,
   // in which case nothing was allocated on the node and there is nothing to free).

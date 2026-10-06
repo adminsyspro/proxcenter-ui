@@ -1,5 +1,6 @@
 import { executeSSH, shellEscape } from "@/lib/ssh/exec"
 import type { Extent } from "./extents"
+import { type SshTarget } from "@/lib/ssh/node-endpoint-core"
 
 /**
  * Diff two ordered lists of fixed-block checksums and return one extent per
@@ -42,7 +43,7 @@ export interface ScanChecksumOpts {
  */
 export async function scanBlockChecksums(
   connectionId: string,
-  nodeIp: string,
+  nodeIp: SshTarget,
   device: string,
   blockSize: number,
   numBlocks: number,
@@ -72,7 +73,7 @@ export async function scanBlockChecksums(
  */
 export async function detectChangedExtentsByChecksum(
   connectionId: string,
-  nodeIp: string,
+  nodeIp: SshTarget,
   srcDevice: string,
   dstDevice: string,
   blockSize: number,

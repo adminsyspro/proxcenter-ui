@@ -33,6 +33,7 @@ import {
 import type { SoapSession, NfcLeaseDeviceUrl, EsxiVmConfig } from "@/lib/vmware/soap"
 import { NfcProgressTracker, runWithConcurrency } from "./nfc-progress"
 import { NFC_STREAM_PROBE_SCRIPT, probeCommand, parseNfcStreamProbe, type NfcStreamProbe } from "./nfc-stream-probe"
+import { type SshTarget } from "@/lib/ssh/node-endpoint-core"
 
 export type NfcLogLevel = "info" | "success" | "warn" | "error"
 
@@ -47,7 +48,7 @@ export interface NfcExportParams {
   jobId: string
   targetConnectionId: string
   sourceVmId: string
-  nodeIp: string
+  nodeIp: SshTarget
   session: SoapSession
   /** Staging directory on the node; disks land there as disk-<n>.vmdk. */
   outputDir: string
@@ -213,7 +214,7 @@ export async function runVcenterNfcExport(p: NfcExportParams, io: NfcJobIo): Pro
 interface DiskDownload {
   jobId: string
   targetConnectionId: string
-  nodeIp: string
+  nodeIp: SshTarget
   session: SoapSession
   leaseMor: string
   device: NfcLeaseDeviceUrl

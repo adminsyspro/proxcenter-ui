@@ -36,7 +36,10 @@ vi.mock("@/lib/tenant", async importOriginal => {
   const actual = await importOriginal<typeof import("@/lib/tenant")>()
   return { ...actual, getTenantPrisma: vi.fn() }
 })
-vi.mock("@/lib/ssh/node-ip", () => ({ getNodeIp: vi.fn() }))
+vi.mock("@/lib/ssh/node-endpoint", async () => ({
+  ...(await import("@/lib/ssh/node-endpoint-core")),
+  resolveNodeSshEndpoint: vi.fn(),
+}))
 vi.mock("./job-heartbeat", () => ({ startJobHeartbeat: vi.fn() }))
 vi.mock("./pve-vm-config", () => ({ pveSetVmConfig: vi.fn(), destroyPveVm: vi.fn() }))
 vi.mock("@/lib/audit", () => ({ audit: vi.fn() }))
@@ -45,7 +48,7 @@ import { executeSSH } from "@/lib/ssh/exec"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { getTenantPrisma } from "@/lib/tenant"
-import { getNodeIp } from "@/lib/ssh/node-ip"
+import { resolveNodeSshEndpoint } from "@/lib/ssh/node-endpoint"
 import { startJobHeartbeat } from "./job-heartbeat"
 import { pveSetVmConfig, destroyPveVm } from "./pve-vm-config"
 import { audit } from "@/lib/audit"
@@ -140,6 +143,10 @@ function unescapeSingleQuoted(s: string): string {
   if (!t.startsWith("'") || !t.endsWith("'")) return t
   return t.slice(1, -1).replaceAll("'\\''", "'")
 }
+
+// Target node reached through a shared public address with its own port, the
+// layout where only the per-node port tells the nodes apart.
+const NODE_SSH = { host: "203.0.113.10", port: 2202, source: "override" as const }
 
 async function sshRouter(_connId: string, _host: string, command: string) {
   if (command.startsWith("nohup bash -c ")) {
@@ -247,7 +254,7 @@ beforeEach(() => {
   prisma = makeFakePrisma()
   vi.mocked(getTenantPrisma).mockImplementation(() => prisma as any)
   vi.mocked(getConnectionById).mockResolvedValue(PVE_CONN as any)
-  vi.mocked(getNodeIp).mockResolvedValue("10.0.0.1")
+  vi.mocked(resolveNodeSshEndpoint).mockResolvedValue(NODE_SSH)
   vi.mocked(startJobHeartbeat).mockReturnValue(() => {})
   vi.mocked(pveSetVmConfig).mockResolvedValue(undefined as any)
   vi.mocked(destroyPveVm).mockResolvedValue(undefined as any)
@@ -347,6 +354,21 @@ describe("runV2vMigrationPipeline multi-boot recovery (#738)", () => {
     expect(String(prisma.row.error)).toContain('Invalid root filesystem "/dev/sda1; reboot"')
     expect(v2vLaunches).toHaveLength(0)
     expect(destroyPveVm).not.toHaveBeenCalled()
+  })
+})
+
+describe("runV2vMigrationPipeline target node SSH endpoint", () => {
+  it("runs every command on the target node's own address and port", { timeout: 15000 }, async () => {
+    queueV2vRuns([{ exit: 0, log: SUCCESS_LOG }])
+
+    await runPipelineToEnd("v2v-it-endpoint", makeConfig())
+
+    expect(prisma.row.status).toBe("completed")
+    expect(resolveNodeSshEndpoint).toHaveBeenCalledWith(PVE_CONN, expect.any(String))
+    const targets = vi.mocked(executeSSH).mock.calls.map(c => c[1])
+    expect(targets.length).toBeGreaterThan(0)
+    expect(targets.every(t => t === NODE_SSH)).toBe(true)
+    expect(messages().some(m => m.includes("(203.0.113.10:2202)"))).toBe(true)
   })
 })
 

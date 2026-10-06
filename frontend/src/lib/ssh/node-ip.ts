@@ -20,8 +20,12 @@ import { isPrivateIp, extractHostname } from "@/lib/net/ip"
  * unreachable from here. Gated to a single-node connection so a cluster node is
  * never routed to the connection host. Identity is re-verified before any
  * destructive op (see verify-node-target.ts). Fail-closed on any ambiguity.
+ *
+ * `skipOverride` returns the Proxmox-side address only (steps 1-5), for a
+ * caller that applies the override itself (see resolveNodeSshEndpoint). To
+ * also get the per-node SSH port, use resolveNodeSshEndpoint instead.
  */
-export async function getNodeIp(conn: any, nodeName: string): Promise<string> {
+export async function getNodeIp(conn: any, nodeName: string, opts: { skipOverride?: boolean } = {}): Promise<string> {
   const connId = conn.id || conn.connectionId
 
   // 0. Explicit override wins; also tells us a row exists for THIS node.
@@ -32,7 +36,7 @@ export async function getNodeIp(conn: any, nodeName: string): Promise<string> {
         where: { connectionId_node: { connectionId: connId, node: nodeName } },
         select: { sshAddress: true, ip: true },
       })
-      if (host?.sshAddress) return host.sshAddress
+      if (host?.sshAddress && !opts.skipOverride) return host.sshAddress
     }
   } catch {}
 

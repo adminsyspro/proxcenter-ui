@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getCurrentTenantId, getSessionPrisma } from "@/lib/tenant"
 import { orchestratorFetch } from "@/lib/orchestrator"
 import { executeSSH } from "@/lib/ssh/exec"
+import { managedHostSshEndpoint, type NodeSshEndpoint } from "@/lib/ssh/node-endpoint-core"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { audit } from "@/lib/audit"
 import { applySFlowOnNode, type SFlowDesiredConfig } from "@/lib/sflow/configure"
@@ -39,7 +40,7 @@ interface NodeSFlowStatus {
 //
 // Tries the hosts in turn: one reachable node answers for the whole cluster, and
 // depending on a single one would lose the whole table whenever that node is down.
-async function collectGuestMACs(connId: string, ips: string[]): Promise<Record<string, number>> {
+async function collectGuestMACs(connId: string, ips: NodeSshEndpoint[]): Promise<Record<string, number>> {
   for (const ip of ips) {
     const result = await executeSSH(connId, ip, GUEST_MACS_COMMAND)
     if (!result.success) continue
@@ -61,8 +62,9 @@ function invalidateAgentsCache(tenantId: string) {
   agentsCache.delete(tenantId)
 }
 
-// Probe a single PVE node: detect OVS, capture version + sFlow config, and push
-// the port map to the Go orchestrator. Returns a status entry even on failure
+// Probe a single PVE node over its SSH endpoint (`ssh`): detect OVS, capture
+// version + sFlow config, and push the port map to the Go orchestrator, keyed
+// by `ip`, the node's own address (the sFlow agent address). Returns a status entry even on failure
 // so the UI can show the node as offline. Independent SSH commands run in
 // parallel once OVS presence is confirmed.
 async function probeHost(
@@ -70,6 +72,7 @@ async function probeHost(
   connName: string,
   nodeName: string,
   ip: string,
+  ssh: NodeSshEndpoint,
   guestMacs: Record<string, number>,
 ): Promise<NodeSFlowStatus> {
   const nodeStatus: NodeSFlowStatus = {
@@ -88,12 +91,12 @@ async function probeHost(
   }
 
   try {
-    const bridgesResult = await executeSSH(connId, ip, "ovs-vsctl list-br 2>/dev/null || true")
+    const bridgesResult = await executeSSH(connId, ssh, "ovs-vsctl list-br 2>/dev/null || true")
     let hasBridges = bridgesResult.success && !!bridgesResult.output?.trim()
 
     if (!hasBridges) {
       // Fallback: ovs-vsctl may not be in PATH — probe with which
-      const whichResult = await executeSSH(connId, ip, "which ovs-vsctl 2>/dev/null && ovs-vsctl list-br")
+      const whichResult = await executeSSH(connId, ssh, "which ovs-vsctl 2>/dev/null && ovs-vsctl list-br")
       if (whichResult.success && whichResult.output?.trim()) {
         const lines = whichResult.output.trim().split("\n").filter(Boolean)
         if (lines.length > 0 && lines[0].includes("ovs-vsctl")) {
@@ -112,9 +115,9 @@ async function probeHost(
 
       // Run the three remaining probes concurrently since they're independent
       const [versionResult, sflowResult, ipLinkResult] = await Promise.all([
-        executeSSH(connId, ip, "ovs-vsctl --version 2>/dev/null | head -1 || true"),
-        executeSSH(connId, ip, "ovs-vsctl list sflow 2>/dev/null | grep -E 'targets|agent|sampling' || true"),
-        executeSSH(connId, ip, "ip -o link 2>/dev/null"),
+        executeSSH(connId, ssh, "ovs-vsctl --version 2>/dev/null | head -1 || true"),
+        executeSSH(connId, ssh, "ovs-vsctl list sflow 2>/dev/null | grep -E 'targets|agent|sampling' || true"),
+        executeSSH(connId, ssh, "ip -o link 2>/dev/null"),
       ])
 
       if (versionResult.success && versionResult.output?.trim()) {
@@ -212,13 +215,18 @@ export async function GET() {
     const nested = await Promise.all(
       connections.map(async (conn): Promise<NodeSFlowStatus[]> => {
         if (!conn.sshKeyEnc && !conn.sshPassEnc) return []
-        const targets = conn.hosts.filter((h): h is typeof h & { ip: string } => h.enabled && !!h.ip)
+        const targets = conn.hosts
+          .filter(h => h.enabled && !!(h.ip || h.sshAddress))
+          .map(h => {
+            const endpoint = managedHostSshEndpoint(h, conn.sshPort)
+            return { node: h.node, ip: h.ip || endpoint.host, endpoint }
+          })
         if (targets.length === 0) return []
 
         // Cluster-wide, so the first node that answers covers every guest.
-        const guestMacs = await collectGuestMACs(conn.id, targets.map(h => h.ip))
+        const guestMacs = await collectGuestMACs(conn.id, targets.map(h => h.endpoint))
 
-        return Promise.all(targets.map(host => probeHost(conn.id, conn.name, host.node, host.ip, guestMacs)))
+        return Promise.all(targets.map(t => probeHost(conn.id, conn.name, t.node, t.ip, t.endpoint, guestMacs)))
       })
     )
     const results: NodeSFlowStatus[] = nested.flat()
@@ -293,7 +301,11 @@ export async function POST(request: NextRequest) {
       }
 
       try {
-        const applied = await applySFlowOnNode(conn.id, ip, desiredConfig)
+        // Reach the node on its own SSH address and port; the posted ip only
+        // stands in for a node this connection no longer lists.
+        const host = conn.hosts?.find(h => h.node === nodeReq.node)
+        const target = host ? managedHostSshEndpoint({ ...host, ip: host.ip || ip }, conn.sshPort) : ip
+        const applied = await applySFlowOnNode(conn.id, target, desiredConfig)
 
         results.push({
           node: nodeReq.node,

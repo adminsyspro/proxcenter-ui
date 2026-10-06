@@ -6,6 +6,7 @@
  * one copy each is how two code paths silently drift apart.
  */
 import { executeSSH, shellEscape } from "@/lib/ssh/exec"
+import type { SshTarget } from "@/lib/ssh/node-endpoint-core"
 
 export interface SFlowDesiredConfig {
   collectorTarget: string
@@ -69,7 +70,7 @@ export function parseConfigureOutput(output: string): { configured: number; fail
 /** Apply the configuration on one node and report precisely what happened. */
 export async function applySFlowOnNode(
   connectionId: string,
-  ip: string,
+  ip: SshTarget,
   cfg: SFlowDesiredConfig,
 ): Promise<SFlowApplyResult> {
   const result = await executeSSH(connectionId, ip, buildSFlowConfigureCommand(cfg))

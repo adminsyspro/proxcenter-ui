@@ -1,7 +1,8 @@
 import { executeSSH } from "@/lib/ssh/exec"
 import { getConnectionById } from "@/lib/connections/getConnection"
-import { getNodeIpForMigration } from "../pve-tasks"
+import { getNodeSshEndpointForMigration } from "../pve-tasks"
 import { prisma } from "@/lib/db/prisma"
+import { formatSshEndpoint, type SshTarget } from "@/lib/ssh/node-endpoint-core"
 
 /** Go/no-go for the NBD warm path: which of NBD_PREFLIGHT_TOOLS are absent. */
 export interface NbdPreflightResult { ok: boolean; missing: string[]; error?: string }
@@ -38,20 +39,20 @@ export function parseNbdPreflightOutput(output: string): NbdPreflightResult {
  * Returns a structured result rather than throwing, so the pipeline can surface
  * the actionable message to the operator before starting a migration.
  */
-export async function checkNbdNodePreflight(connectionId: string, nodeIp: string): Promise<NbdPreflightResult> {
+export async function checkNbdNodePreflight(connectionId: string, nodeIp: SshTarget): Promise<NbdPreflightResult> {
   const res = await executeSSH(connectionId, nodeIp, buildNbdPreflightCmd())
-  if (!res.success) return { ok: false, missing: [], error: `NBD preflight probe could not run on ${nodeIp}: ${res.error || res.output}` }
+  if (!res.success) return { ok: false, missing: [], error: `NBD preflight probe could not run on ${formatSshEndpoint(nodeIp)}: ${res.error || res.output}` }
   return parseNbdPreflightOutput(res.output || "")
 }
 
 /**
  * Pre-migration go/no-go for the XCP-ng warm path, surfaced in the migrate
  * dialog. Resolves the target node IP exactly as the warm engine does
- * (getNodeIpForMigration), so the dialog's verdict matches the backstop the
+ * (getNodeSshEndpointForMigration), so the dialog's verdict matches the backstop the
  * engine performs at planning time.
  */
 export async function runXcpngWarmNodePreflight(connectionId: string, node: string): Promise<NbdPreflightResult> {
   const conn = await getConnectionById(connectionId)
-  const nodeIp = await getNodeIpForMigration(prisma, connectionId, node, conn.baseUrl)
+  const nodeIp = await getNodeSshEndpointForMigration(prisma, connectionId, node, conn.baseUrl)
   return checkNbdNodePreflight(connectionId, nodeIp)
 }

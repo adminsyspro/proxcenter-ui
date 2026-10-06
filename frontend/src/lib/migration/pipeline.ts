@@ -23,6 +23,7 @@ import { getConnectionById } from "@/lib/connections/getConnection"
 import { pveFetch } from "@/lib/proxmox/client"
 import { isFileBasedStorage } from "@/lib/proxmox/storage"
 import { executeSSH, shellEscape } from "@/lib/ssh/exec"
+import { formatSshEndpoint, resolveSshTargetPort, sshTargetHost, type SshTarget } from "@/lib/ssh/node-endpoint-core"
 import { soapLogin, soapLogout, soapGetVmConfig, parseVmConfig, buildVmdkDownloadUrl, buildVmdkDescriptorUrl, extractProp, soapCreateSnapshot, soapRemoveAllSnapshots, soapPowerOffVm, soapExportVm, soapWaitForNfcLease, soapNfcLeaseProgress, soapNfcLeaseComplete, soapNfcLeaseAbort, SNAPSHOT_REMOVE_TERMINAL_TIMEOUT_MS } from "@/lib/vmware/soap"
 import { mapEsxiToPveConfig, isWindowsVm } from "./configMapper"
 import type { SoapSession, EsxiVmConfig, EsxiDiskInfo, NfcLeaseDeviceUrl } from "@/lib/vmware/soap"
@@ -32,7 +33,7 @@ import {
 } from "./pvesm-alloc"
 import { adoptImportAndAttachFileVolume } from "./adopt-file-volume"
 import { pveSetVmConfig, destroyPveVm } from "./pve-vm-config"
-import { waitForPveTask, getNodeIpForMigration } from "./pve-tasks"
+import { waitForPveTask, getNodeSshEndpointForMigration } from "./pve-tasks"
 import { convertDisksToQcow2 } from "./qcow2-convert"
 import { buildUefiInjectScript } from "./uefi-inject"
 import { startJobHeartbeat } from "./job-heartbeat"
@@ -312,8 +313,8 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
     if (isCancelled(jobId)) throw new Error("Migration cancelled")
 
     // Verify PVE SSH connectivity
-    const nodeIp = await getNodeIpForMigration(prisma, config.targetConnectionId, config.targetNode, pveConn.baseUrl)
-    await appendLog(jobId, `Testing SSH to Proxmox node ${config.targetNode} (${nodeIp})...`)
+    const nodeIp = await getNodeSshEndpointForMigration(prisma, config.targetConnectionId, config.targetNode, pveConn.baseUrl)
+    await appendLog(jobId, `Testing SSH to Proxmox node ${config.targetNode} (${formatSshEndpoint(nodeIp)})...`)
     const sshTest = await executeSSH(config.targetConnectionId, nodeIp, "echo ok")
     if (!sshTest.success) {
       throw new Error(`SSH to Proxmox node failed: ${sshTest.error}`)
@@ -2901,7 +2902,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
 
     // Cleanup: remove temp files on Proxmox node
     try {
-      const nodeIp = await getNodeIpForMigration(prisma, config.targetConnectionId, config.targetNode,
+      const nodeIp = await getNodeSshEndpointForMigration(prisma, config.targetConnectionId, config.targetNode,
         (await getConnectionById(config.targetConnectionId)).baseUrl)
       // Clean temp files on storage path (file-based storage)
       if (storageTempDir) {
@@ -2935,7 +2936,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
     const orphans = volumesToFree(allocatedVolumes)
     if (orphans.length > 0 && config.targetConnectionId) {
       try {
-        const nodeIp = await getNodeIpForMigration(prisma, config.targetConnectionId, config.targetNode,
+        const nodeIp = await getNodeSshEndpointForMigration(prisma, config.targetConnectionId, config.targetNode,
           (await getConnectionById(config.targetConnectionId)).baseUrl)
         for (const vol of orphans) {
           if (vol.rbdMapped && vol.devicePath) {
@@ -2986,7 +2987,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
 async function executeSSHWithTimeout(
   db: any,
   connectionId: string,
-  nodeIp: string,
+  target: SshTarget,
   command: string,
   timeoutMs: number
 ): Promise<{ success: boolean; output?: string; error?: string }> {
@@ -3004,7 +3005,7 @@ async function executeSSHWithTimeout(
 
   const { Client } = await import("ssh2")
 
-  const port = connection.sshPort || 22
+  const port = await resolveSshTargetPort(db, connectionId, target, connection.sshPort)
   const user = connection.sshUser || "root"
 
   let key: string | undefined
@@ -3051,7 +3052,7 @@ async function executeSSHWithTimeout(
     conn.on("error", (err) => { clearTimeout(timeout); resolve({ success: false, error: err.message }) })
 
     const connectConfig: Record<string, unknown> = {
-      host: nodeIp, port, username: user, readyTimeout: 30_000,
+      host: sshTargetHost(target), port, username: user, readyTimeout: 30_000,
       keepaliveInterval: 10000, keepaliveCountMax: 999,
     }
     if (key) { connectConfig.privateKey = key; if (passphrase) connectConfig.passphrase = passphrase }

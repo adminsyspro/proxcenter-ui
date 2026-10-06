@@ -4,7 +4,7 @@
 import { pveFetch } from '@/lib/proxmox/client'
 import { buildSSHAuditCommand, parseSSHAuditOutput, type SSHNodeData, type SSHHardeningData } from '@/lib/compliance/ssh-checks'
 import { executeSSH } from '@/lib/ssh/exec'
-import { getNodeIp } from '@/lib/ssh/node-ip'
+import { resolveNodeSshEndpoint } from '@/lib/ssh/node-endpoint'
 import type { HardeningData } from '@/lib/compliance/hardening'
 
 const VM_CONCURRENCY = 10
@@ -98,7 +98,7 @@ export async function collectHardeningData(opts: CollectHardeningDataOptions): P
       // Only SSH into the filtered node(s)
       await Promise.all(nodes.map(async (n: any) => {
         try {
-          const nodeIp = await getNodeIp(conn, n.node)
+          const nodeIp = await resolveNodeSshEndpoint(conn, n.node)
           const result = await executeSSH(connectionId, nodeIp, sshCommand)
           if (result.success && result.output) {
             sshNodes.push({

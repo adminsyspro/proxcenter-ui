@@ -25,6 +25,16 @@ vi.mock('@/lib/ssh/exec', () => ({
 vi.mock('@/lib/ssh/node-ip', () => ({
   getNodeIp: vi.fn<(...args: any[]) => Promise<string>>(),
 }))
+// Routes resolve the node through resolveNodeSshEndpoint; keep the address
+// coming from the getNodeIp mock above and the connection port (22).
+vi.mock('@/lib/ssh/node-endpoint', async () => {
+  const nodeIp = await import('@/lib/ssh/node-ip')
+  return {
+    ...(await import('@/lib/ssh/node-endpoint-core')),
+    resolveNodeSshEndpoint: async (conn: any, node: string) =>
+      ({ host: await nodeIp.getNodeIp(conn, node), port: 22, source: 'proxmox' }),
+  }
+})
 
 // NOTE: @/lib/ssh/validate is intentionally NOT mocked — the real assertVmid
 // is what this suite exercises.
@@ -63,7 +73,7 @@ describe('POST .../unlock — happy path', () => {
     expect(res.status).toBe(200)
     const body = await readJson<any>(res)
     expect(body.data.unlocked).toBe(true)
-    expect(executeSSHMock).toHaveBeenCalledWith(CONN_ID, NODE_IP, 'qm unlock 100')
+    expect(executeSSHMock).toHaveBeenCalledWith(CONN_ID, expect.objectContaining({ host: NODE_IP }), 'qm unlock 100')
   })
 
   it('uses `pct unlock` for LXC containers', async () => {
@@ -72,7 +82,7 @@ describe('POST .../unlock — happy path', () => {
       params: { ...baseParams, type: 'lxc' },
     })
     expect(res.status).toBe(200)
-    expect(executeSSHMock).toHaveBeenCalledWith(CONN_ID, NODE_IP, 'pct unlock 100')
+    expect(executeSSHMock).toHaveBeenCalledWith(CONN_ID, expect.objectContaining({ host: NODE_IP }), 'pct unlock 100')
   })
 
   it('rejects a vmid with leading zeros (grammar) with 400', async () => {

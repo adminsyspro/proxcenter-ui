@@ -14,7 +14,7 @@ import type { XoVmConfig, XoDiskInfo } from "@/lib/xcpng/client"
 import { splitCreds, xcpngSubTypeOf } from "@/lib/xcpng/source"
 import { mapXoToPveConfig } from "../xcpngConfigMapper"
 import { volumesToFree, volumesToKeep, PVESM_FREE_TIMEOUT_MS, type AllocatedVolume } from "../pvesm-alloc"
-import { getNodeIpForMigration } from "../pve-tasks"
+import { getNodeSshEndpointForMigration } from "../pve-tasks"
 import { startJobHeartbeat } from "../job-heartbeat"
 import { decideNextPass, type ConvergenceConfig } from "./convergence"
 import { detectChangedExtentsByChecksum } from "./checksum-detector"
@@ -34,6 +34,7 @@ import { attachDisksAndBoot, verifySampledFirstBlock } from "./finish"
 import { startXapiReader, stopXapiReader, readAllocatedExtents, type XapiReaderHandle } from "./xapi-reader"
 import { checkNbdNodePreflight } from "./xcpng-node-preflight"
 import { startSessionKeepAlive } from "./session-keepalive"
+import { type SshTarget } from "@/lib/ssh/node-endpoint-core"
 
 export const XCPNG_SNAPSHOT_PREFIX = "proxcenter-warm"
 // XAPI sessions expire after 24 h of inactivity by default; ping well within that.
@@ -72,7 +73,7 @@ export async function runXcpngWarmMigration(jobId: string, config: WarmMigration
   let session: XapiSession | null = null
   let stopKeepAlive: (() => void) | null = null
   let vmRef = ""
-  let nodeIp = ""
+  let nodeIp: SshTarget = ""
   let targetVmid: number | null = config.targetVmid ?? null
   const vmKey = `${config.sourceConnectionId}:${config.sourceVmId}`
   let acquiredVmLock = false
@@ -97,7 +98,7 @@ export async function runXcpngWarmMigration(jobId: string, config: WarmMigration
     stopKeepAlive = startSessionKeepAlive(() => xapiKeepAlive(session!), KEEPALIVE_MS)
 
     const pveConn = await getConnectionById(config.targetConnectionId)
-    nodeIp = await getNodeIpForMigration(prisma, config.targetConnectionId, config.targetNode, pveConn.baseUrl)
+    nodeIp = await getNodeSshEndpointForMigration(prisma, config.targetConnectionId, config.targetNode, pveConn.baseUrl)
 
     vmRef = await xapiVmRefByUuid(session, config.sourceVmId)
     const vmConfig: XoVmConfig = await xapiGetVmConfig(session, config.sourceVmId)

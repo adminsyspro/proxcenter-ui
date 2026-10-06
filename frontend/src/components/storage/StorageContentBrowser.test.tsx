@@ -21,6 +21,8 @@ import { server, http, HttpResponse } from '@/__tests__/setup/msw-server'
 
 const h = vi.hoisted(() => ({
   uploadFileToStorage: vi.fn(),
+  // Rights of the signed-in user; every test starts with all storage rights.
+  permissions: new Set<string>(),
   tasks: {
     addTask: vi.fn(),
     updateTask: vi.fn(),
@@ -34,6 +36,9 @@ const h = vi.hoisted(() => ({
 vi.mock('@/lib/storage/uploadClient', () => ({ uploadFileToStorage: h.uploadFileToStorage }))
 vi.mock('@/contexts/ProxCenterTasksContext', () => ({ useProxCenterTasks: () => h.tasks }))
 vi.mock('@/components/storage/TemplateDownloadDialog', () => ({ default: () => null }))
+vi.mock('@/contexts/RBACContext', () => ({
+  useRBAC: () => ({ hasPermission: (p: string) => h.permissions.has(p), isAdmin: false, loading: false }),
+}))
 
 import StorageContentBrowser from './StorageContentBrowser'
 
@@ -73,6 +78,7 @@ function renderBrowser(onDelete = vi.fn()) {
 describe('StorageContentBrowser', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    h.permissions = new Set(['storage.content', 'storage.upload', 'storage.delete'])
     seedContent()
   })
 
@@ -177,5 +183,34 @@ describe('StorageContentBrowser', () => {
     // The dialog closes and the list is refreshed 1.5 s after the task is accepted.
     await waitFor(() => expect(onDelete).toHaveBeenCalledTimes(1), { timeout: 3000 })
     expect(contentCalls).toBe(2)
+  })
+
+  // Issue #920: each write control follows the right its route enforces.
+  it('hides the delete buttons without storage.delete', async () => {
+    h.permissions.delete('storage.delete')
+    renderBrowser()
+
+    await waitFor(() => expect(screen.getByText('virtio-win-0.1.271.iso')).toBeInTheDocument())
+    expect(screen.queryAllByTitle('Delete')).toHaveLength(0)
+    expect(screen.getByTitle('Upload')).toBeInTheDocument()
+  })
+
+  it('hides the upload button without storage.upload', async () => {
+    h.permissions.delete('storage.upload')
+    renderBrowser()
+
+    await waitFor(() => expect(screen.getByText('virtio-win-0.1.271.iso')).toBeInTheDocument())
+    expect(screen.queryByTitle('Upload')).toBeNull()
+    expect(screen.getAllByTitle('Delete').length).toBeGreaterThan(0)
+  })
+
+  it('readOnly still hides every write control, whatever the rights', async () => {
+    renderWithProviders(
+      <StorageContentBrowser connId={CONN} node={NODE} storage={STORAGE} contentTypes={['iso']} readOnly />,
+    )
+
+    await waitFor(() => expect(screen.getByText('virtio-win-0.1.271.iso')).toBeInTheDocument())
+    expect(screen.queryByTitle('Upload')).toBeNull()
+    expect(screen.queryAllByTitle('Delete')).toHaveLength(0)
   })
 })

@@ -27,7 +27,7 @@ const {
 vi.mock("@/lib/rbac", () => ({
   checkPermission: (...a: any[]) => checkPermissionMock(...a),
   guestPerimeterAllows: (...a: any[]) => guestPerimeterAllowsMock(...a),
-  PERMISSIONS: { VM_VIEW: "vm.view" },
+  PERMISSIONS: { VM_VIEW: "vm.view", STORAGE_CONTENT: "storage.content" },
 }))
 vi.mock("@/lib/connections/getConnection", () => ({
   getConnectionById: (...a: any[]) => getConnectionByIdMock(...a),
@@ -76,13 +76,15 @@ beforeEach(() => {
 })
 
 describe("GET .../nodes/[node]/storage/[storage]/content", () => {
-  it("returns the storage listing when the caller holds vm.view", async () => {
+  it("returns the storage listing when the caller holds storage.content", async () => {
     const GET = (await import("./route")).GET as Parameters<typeof callRoute>[0]
     const res = await callRoute(GET, { params: PARAMS, searchParams: QUERY })
     const json = await res.json()
 
     expect(res.status).toBe(200)
     expect(json.data).toEqual(ISOS)
+    // Issue #920: browsing is gated on storage.content, no longer on vm.view.
+    expect(checkPermissionMock).toHaveBeenCalledWith("storage.content", "connection", "conn-1")
     // Permission granted, so the guest-derived fallback is never consulted.
     expect(guestPerimeterAllowsMock).not.toHaveBeenCalled()
   })
@@ -109,7 +111,7 @@ describe("GET .../nodes/[node]/storage/[storage]/content", () => {
 
     expect(res.status).toBe(200)
     expect(json.data).toEqual(ISOS)
-    expect(guestPerimeterAllowsMock).toHaveBeenCalledWith("conn-1", "vm.view")
+    expect(guestPerimeterAllowsMock).toHaveBeenCalledWith("conn-1", "storage.content")
   })
 })
 

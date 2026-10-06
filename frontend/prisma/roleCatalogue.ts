@@ -132,6 +132,7 @@ export const ROLES: RoleSeed[] = [
     permissions: [
       "vm.view", "vm.console", "vm.start", "vm.stop", "vm.restart", "vm.suspend",
       "vm.snapshot", "vm.backup",
+      "storage.content",
       "node.view", "node.console", "connection.view", "backup.view",
       "events.view", "tasks.view", "alerts.view", "automation.view", "reports.view",
     ],
@@ -144,7 +145,7 @@ export const ROLES: RoleSeed[] = [
     permissions: [
       "vm.view", "vm.console", "vm.start", "vm.stop", "vm.restart", "vm.suspend",
       "vm.snapshot", "vm.backup", "vm.clone", "vm.migrate", "vm.config", "vm.delete", "vm.create",
-      "storage.view", "storage.content", "storage.upload",
+      "storage.view", "storage.content", "storage.upload", "storage.delete",
       "node.view", "node.console", "node.manage", "connection.view",
       "backup.view", "backup.restore",
       "events.view", "tasks.view", "storage.admin",
@@ -157,7 +158,7 @@ export const ROLES: RoleSeed[] = [
     description: "Read-only access to all resources",
     color: "#3b82f6",
     permissions: [
-      "vm.view", "node.view", "connection.view", "storage.view", "backup.view",
+      "vm.view", "node.view", "connection.view", "storage.view", "storage.content", "backup.view",
       "events.view", "alerts.view", "automation.view", "reports.view", "tasks.view",
     ],
   },
@@ -173,6 +174,8 @@ export const ROLES: RoleSeed[] = [
       // use. The SSE stream + filterVmsByPermission still restrict the actual
       // VM list to the user's assigned scope.
       "connection.view", "node.view",
+      // issue #920: the storage content route feeds the ISO and disk pickers.
+      "storage.content",
     ],
   },
   {
@@ -186,7 +189,9 @@ export const ROLES: RoleSeed[] = [
       "vm.view", "vm.console", "vm.start", "vm.stop", "vm.restart", "vm.suspend",
       "vm.snapshot", "vm.backup", "vm.clone", "vm.migrate", "vm.config", "vm.delete", "vm.create",
       "node.view", "connection.view",
-      "storage.view",
+      // issue #920: the vDC ISO library is the tenant's own, guarded to its
+      // storages by guardTenantStorageWrite.
+      "storage.view", "storage.content", "storage.upload", "storage.delete",
       "backup.view", "backup.restore", "backup.delete",
       "backup.job.view", "backup.job.create", "backup.job.edit", "backup.job.delete", "backup.job.run",
       "admin.users", "admin.rbac", "admin.settings", "admin.audit",
@@ -204,7 +209,7 @@ export const ROLES: RoleSeed[] = [
     permissions: [
       "vm.view", "vm.console", "vm.start", "vm.stop", "vm.restart", "vm.suspend",
       "vm.snapshot", "vm.migrate", "vm.config",
-      "storage.view",
+      "storage.view", "storage.content",
       "node.view", "connection.view",
       "backup.view",
       "events.view", "tasks.view",
@@ -220,7 +225,7 @@ export const ROLES: RoleSeed[] = [
     color: "#6b7280",
     permissions: [
       "vm.view", "vm.console",
-      "storage.view",
+      "storage.view", "storage.content",
       "node.view", "connection.view",
       "backup.view",
       "events.view", "tasks.view",

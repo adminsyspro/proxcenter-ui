@@ -785,6 +785,7 @@
     "storageSnippets": "Snippets",
     "storageTemplates": "Templates CT",
     "storageEmpty": "Aucun contenu trouvé dans ce stockage",
+    "storageContentAccessDenied": "Vous n'avez pas la permission de parcourir le contenu de ce stockage (storage.content).",
     "networkLoadFailed": "Chargement échoué, cliquer pour réessayer",
     "pbsBackupList": "Sauvegardes PBS",
     "pbsName": "Nom",

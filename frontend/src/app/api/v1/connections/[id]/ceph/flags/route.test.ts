@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
+const checkPermission = vi.fn<(...args: unknown[]) => Promise<Response | null>>(async () => null)
 vi.mock("@/lib/rbac", () => ({
-  checkPermission: vi.fn(async () => null),
-  PERMISSIONS: { NODE_VIEW: "node.view", NODE_MANAGE: "node.manage" },
+  checkPermission: (...args: unknown[]) => checkPermission(...args),
+  PERMISSIONS: { NODE_VIEW: "node.view", NODE_MANAGE: "node.manage", STORAGE_ADMIN: "storage.admin" },
 }))
 vi.mock("@/lib/connections/getConnection", () => ({
   getConnectionById: vi.fn(async () => ({ id: "c1", baseUrl: "https://h", apiToken: "t" })),
@@ -17,6 +18,7 @@ import { callRoute, readJson } from "@/__tests__/setup/route-test"
 
 beforeEach(() => {
   vi.clearAllMocks()
+  checkPermission.mockResolvedValue(null)
   pveFetch.mockResolvedValue(null)
 })
 
@@ -56,6 +58,20 @@ describe("Ceph flag set/unset", () => {
   it("400s without ever calling PVE when the flag is missing", async () => {
     const res = await callRoute(PUT, { params: { id: "c1" }, method: "PUT", body: {} })
     expect(res.status).toBe(400)
+    expect(pveFetch).not.toHaveBeenCalled()
+  })
+
+  // Issue #920: setting an OSD flag is a storage.admin action.
+  it.each([["PUT", PUT], ["DELETE", DELETE]] as const)("%s checks storage.admin on the connection", async (method, handler) => {
+    const res = await callRoute(handler, { params: { id: "c1" }, method, body: { flag: "noout" } })
+    expect(res.status).toBe(200)
+    expect(checkPermission).toHaveBeenCalledWith("storage.admin", "connection", "c1")
+  })
+
+  it.each([["PUT", PUT], ["DELETE", DELETE]] as const)("%s 403s without storage.admin and never calls PVE", async (method, handler) => {
+    checkPermission.mockResolvedValue(new Response(JSON.stringify({ error: "forbidden" }), { status: 403 }))
+    const res = await callRoute(handler, { params: { id: "c1" }, method, body: { flag: "noout" } })
+    expect(res.status).toBe(403)
     expect(pveFetch).not.toHaveBeenCalled()
   })
 })

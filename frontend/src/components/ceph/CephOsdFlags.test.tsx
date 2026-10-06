@@ -67,6 +67,17 @@ describe('CephOsdFlagsPanel', () => {
     }
   })
 
+  it('greys every switch out in read-only mode, while still showing the live state (#920)', async () => {
+    seedFlags(['noout'])
+
+    renderWithProviders(<CephOsdFlagsPanel connId={CONN_ID} readOnly />)
+    await waitFor(() => expect(getFlagSwitch('noout')).toBeChecked())
+
+    for (const flag of FLAG_NAMES) {
+      expect(getFlagSwitch(flag)).toBeDisabled()
+    }
+  })
+
   it('checks only flags returned by the API', async () => {
     seedFlags(['noout'])
 

@@ -27,6 +27,7 @@ import {
 import { formatBytes } from '@/utils/format'
 import { uploadFileToStorage } from '@/lib/storage/uploadClient'
 import { useProxCenterTasks } from '@/contexts/ProxCenterTasksContext'
+import { useRBAC } from '@/contexts/RBACContext'
 import TemplateDownloadDialog from '@/components/storage/TemplateDownloadDialog'
 
 // ---------- Types ----------
@@ -71,12 +72,12 @@ const CONTENT_MAP: Record<string, { label: string; icon: string; uploadable: boo
 
 // ---------- Single content group ----------
 
-function ContentGroupCard({ group, connId, node, storage, readOnly, onDeleted, onUploadClick, onDownloadTemplate }: {
+function ContentGroupCard({ group, connId, node, storage, canDelete, onDeleted, onUploadClick, onDownloadTemplate }: {
   group: ContentGroup
   connId: string
   node: string
   storage: string
-  readOnly?: boolean
+  canDelete: boolean
   onDeleted?: () => void
   onUploadClick?: () => void
   onDownloadTemplate?: () => void
@@ -87,7 +88,6 @@ function ContentGroupCard({ group, connId, node, storage, readOnly, onDeleted, o
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
 
-  const canDelete = !readOnly
   const isAttachedType = group.contentType === 'images' || group.contentType === 'rootdir'
 
   const filtered = useMemo(() => {
@@ -734,8 +734,14 @@ export default function StorageContentBrowser({
   const [uploadOpen, setUploadOpen] = useState(false)
   const [templateDialogOpen, setTemplateDialogOpen] = useState(false)
 
-  const hasUploadableContent = !readOnly && contentTypes.some(ct => CONTENT_MAP[ct]?.uploadable)
-  const hasVztmpl = !readOnly && contentTypes.includes('vztmpl')
+  // readOnly hides every write control; otherwise each control follows the
+  // right its route enforces (#920): uploads, URL and template downloads need
+  // storage.upload, deleting a volume needs storage.delete.
+  const { hasPermission } = useRBAC()
+  const canUpload = !readOnly && hasPermission('storage.upload')
+  const canDelete = !readOnly && hasPermission('storage.delete')
+  const hasUploadableContent = canUpload && contentTypes.some(ct => CONTENT_MAP[ct]?.uploadable)
+  const hasVztmpl = canUpload && contentTypes.includes('vztmpl')
 
   const loadContent = useCallback(async () => {
     setLoading(true)
@@ -815,7 +821,7 @@ export default function StorageContentBrowser({
             connId={connId}
             node={node}
             storage={storage}
-            readOnly={readOnly}
+            canDelete={canDelete}
             onDeleted={handleDeleted}
             onUploadClick={hasUploadableContent && CONTENT_MAP[ct]?.uploadable ? () => setUploadOpen(true) : undefined}
             onDownloadTemplate={ct === 'vztmpl' && hasVztmpl ? () => setTemplateDialogOpen(true) : undefined}

@@ -33,6 +33,7 @@ import {
 import { DataGrid } from '@mui/x-data-grid'
 
 import { usePageTitle } from '@/contexts/PageTitleContext'
+import PermissionGuard from '@/components/guards/PermissionGuard'
 import { formatBytes } from '@/utils/format'
 import EmptyState from '@/components/EmptyState'
 import { CardsSkeleton, TableSkeleton } from '@/components/skeletons'
@@ -228,7 +229,7 @@ function KpiCard({ title, value, subtitle, icon, color }) {
   Page
 ------------------------------ */
 
-export default function StorageOverviewPage() {
+function StorageOverviewPage() {
   const t = useTranslations()
   const theme = useTheme()
 
@@ -1065,5 +1066,14 @@ return (
         </Box>
       </Drawer>
     </Box>
+  )
+}
+
+// The menu entry is hidden without storage.admin; a direct URL lands here (#920).
+export default function StorageOverviewPageGuarded() {
+  return (
+    <PermissionGuard permission='storage.admin'>
+      <StorageOverviewPage />
+    </PermissionGuard>
   )
 }

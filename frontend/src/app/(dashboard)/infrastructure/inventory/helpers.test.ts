@@ -1687,3 +1687,54 @@ describe('fetchDetails — node provisioning inputs (#969)', () => {
     expect(payload?.vmsData?.map(vm => vm.maxmem)).toEqual([8589934592, 4294967296])
   })
 })
+
+/* ------------------------------------------------------------------ */
+/* fetchDetails: storage content refused (issue #920)                  */
+/* ------------------------------------------------------------------ */
+
+describe('fetchDetails: storage content listing refused', () => {
+  const res = (body: any, status = 200) => ({ ok: status < 400, status, json: async () => body }) as Response
+
+  function stubFetch(contentStatus: number) {
+    vi.stubGlobal('fetch', vi.fn((input: any) => {
+      const url = String(input)
+      if (url.includes('/content')) {
+        return Promise.resolve(contentStatus === 200
+          ? res({ data: [{ volid: 'local:iso/debian.iso', content: 'iso', size: 1 }] })
+          : res({ error: 'Forbidden' }, contentStatus))
+      }
+      if (url.endsWith('/storage')) return Promise.resolve(res({ data: [{ storage: 'local', node: 'pve1', type: 'dir', content: ['iso'] }] }))
+      return Promise.resolve(res({ data: { name: 'PVE' } }))
+    }))
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('flags a 403 as contentDenied instead of an empty storage', async () => {
+    stubFetch(403)
+
+    const payload = await fetchDetails({ type: 'storage', id: 'conn1:local:pve1' } as any)
+
+    expect(payload?.storageInfo?.contentDenied).toBe(true)
+    expect(payload?.storageInfo?.contentItems).toEqual([])
+  })
+
+  it('leaves contentDenied false when the listing answers', async () => {
+    stubFetch(200)
+
+    const payload = await fetchDetails({ type: 'storage', id: 'conn1:local:pve1' } as any)
+
+    expect(payload?.storageInfo?.contentDenied).toBe(false)
+    expect(payload?.storageInfo?.contentItems).toHaveLength(1)
+  })
+
+  it('does not call another failure a denial', async () => {
+    stubFetch(500)
+
+    const payload = await fetchDetails({ type: 'storage', id: 'conn1:local:pve1' } as any)
+
+    expect(payload?.storageInfo?.contentDenied).toBe(false)
+  })
+})

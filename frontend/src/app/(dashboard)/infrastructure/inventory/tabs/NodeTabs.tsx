@@ -156,7 +156,7 @@ export default function NodeTabs(props: any) {
   const t = useTranslations()
   const theme = useTheme()
   const { branding } = useBranding()
-  const { isAdmin } = useRBAC()
+  const { isAdmin, hasPermission } = useRBAC()
   const chartTooltipStyle = { backgroundColor: theme.palette.background.paper, border: `1px solid ${theme.palette.divider}`, borderRadius: 4, color: theme.palette.text.primary }
   const systemReportCopy = useCopyToClipboard()
 
@@ -2640,6 +2640,7 @@ export default function NodeTabs(props: any) {
                             <CephOsdFlagsPanel
                               connId={nodeConnId}
                               enabled={nodeTab === 8 && nodeCephSubTab === 2 && !!data.clusterName}
+                              readOnly={!hasPermission('storage.admin')}
                             />
 
                             {/* OSD Table */}

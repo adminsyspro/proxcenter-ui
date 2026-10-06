@@ -6,6 +6,7 @@ vi.mock('@/lib/rbac', () => ({
   checkPermission: vi.fn<(...args: any[]) => Promise<Response | null>>(),
   PERMISSIONS: {
     CONNECTION_VIEW: 'connection.view',
+    STORAGE_DELETE: 'storage.delete',
   },
 }))
 
@@ -122,6 +123,14 @@ describe('DELETE /api/v1/connections/[id]/nodes/[node]/storage/[storage]/content
 
     expect(res.status).toBe(403)
     expect(pveFetchMock).not.toHaveBeenCalled()
+  })
+
+  // Issue #920: connection.view used to be enough to delete a volume.
+  it('gates the delete on storage.delete for the connection', async () => {
+    const res = await callRoute(DELETE as any, { method: 'DELETE', params: BASE_PARAMS })
+
+    expect(res.status).toBe(200)
+    expect(checkPermissionMock).toHaveBeenCalledWith('storage.delete', 'connection', 'conn-1')
   })
 
   it('403 when guardTenantStorageWrite blocks', async () => {

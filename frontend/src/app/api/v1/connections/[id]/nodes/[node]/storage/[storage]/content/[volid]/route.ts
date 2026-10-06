@@ -23,7 +23,7 @@ export async function DELETE(
   try {
     const { id, node, storage, volid } = await ctx.params
 
-    const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW, "connection", id)
+    const denied = await checkPermission(PERMISSIONS.STORAGE_DELETE, "connection", id)
     if (denied) return denied
 
     // The volid is URL-encoded; Proxmox expects the full volid (storage:path)

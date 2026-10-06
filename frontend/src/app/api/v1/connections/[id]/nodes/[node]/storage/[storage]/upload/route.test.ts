@@ -20,7 +20,7 @@ const { checkPermissionMock, guardMock, nameMock, getConnectionByIdMock, getPrin
 
 vi.mock("@/lib/rbac", () => ({
   checkPermission: (...a: any[]) => checkPermissionMock(...a),
-  PERMISSIONS: { CONNECTION_VIEW: "connection.view" },
+  PERMISSIONS: { CONNECTION_VIEW: "connection.view", STORAGE_UPLOAD: "storage.upload" },
 }))
 // tenantUploadFilename namespaces a tenant's file on an upload library; by
 // default it hands the name back unchanged (provider / non-library case).
@@ -68,6 +68,41 @@ beforeEach(() => {
   nameMock.mockReset().mockImplementation(async (_c: string, _s: string, f: string) => f)
   getConnectionByIdMock.mockReset().mockResolvedValue({ id: "conn-1", baseUrl: "https://pve:8006", apiToken: "t" })
   getPrincipalMock.mockReset().mockResolvedValue({ ok: true, principal: { userId: "u1" } })
+})
+
+describe("upload: RBAC (#920)", () => {
+  it("chunk leg: 403s without storage.upload before the guard or PVE", async () => {
+    checkPermissionMock.mockResolvedValue(new Response(JSON.stringify({ error: "denied" }), { status: 403 }))
+    const res = await callRoute(POST, {
+      method: "POST",
+      params: PARAMS,
+      headers: { "x-chunk-index": "0", "x-total-size": "10", "x-file-name": "x.iso", "x-upload-id": "u-rbac-1" },
+      body: "0123456789",
+    })
+    expect(res.status).toBe(403)
+    expect(checkPermissionMock).toHaveBeenCalledWith("storage.upload", "connection", "conn-1")
+    expect(guardMock).not.toHaveBeenCalled()
+    expect(getConnectionByIdMock).not.toHaveBeenCalled()
+  })
+
+  it("finalize leg: 403s without storage.upload before the guard", async () => {
+    checkPermissionMock.mockResolvedValue(new Response(JSON.stringify({ error: "denied" }), { status: 403 }))
+    const res = await callRoute(POST, {
+      method: "POST",
+      params: PARAMS,
+      headers: { "x-finalize": "1", "x-file-name": "x.iso", "x-upload-id": "u-rbac-2" },
+    })
+    expect(res.status).toBe(403)
+    expect(checkPermissionMock).toHaveBeenCalledWith("storage.upload", "connection", "conn-1")
+    expect(guardMock).not.toHaveBeenCalled()
+  })
+
+  it("cancel leg: checks storage.upload", async () => {
+    checkPermissionMock.mockResolvedValue(new Response(JSON.stringify({ error: "denied" }), { status: 403 }))
+    const res = await callRoute(DELETE as any, { params: PARAMS, method: "DELETE", headers: { "X-Upload-Id": "u-rbac-3" } })
+    expect(res.status).toBe(403)
+    expect(checkPermissionMock).toHaveBeenCalledWith("storage.upload", "connection", "conn-1")
+  })
 })
 
 describe("POST upload: tenant write guard sees the filename on both legs", () => {
@@ -189,7 +224,7 @@ describe("DELETE upload: stopping a transfer in flight", () => {
     expect(res.status).toBe(400)
   })
 
-  it("refuses without the connection permission", async () => {
+  it("refuses without storage.upload", async () => {
     checkPermissionMock.mockResolvedValue(new Response(JSON.stringify({ error: "denied" }), { status: 403 }))
 
     expect((await startChunk()).status).toBe(403)

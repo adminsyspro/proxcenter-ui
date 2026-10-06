@@ -45,6 +45,9 @@ type Props = {
    * derrière un onglet, et `/cluster/ceph/flags` est un aller-retour PVE.
    */
   enabled?: boolean
+
+  /** Interrupteurs grisés : poser un flag demande storage.admin (#920). */
+  readOnly?: boolean
 }
 
 /**
@@ -134,10 +137,11 @@ type SwitchesProps = {
   loading: boolean
   toggling: string | null
   onToggle: (flag: string, enable: boolean) => void
+  readOnly?: boolean
 }
 
 /** La grille d'interrupteurs, ON quand le flag est posé sur le cluster. */
-function FlagSwitches({ flags, loading, toggling, onToggle }: SwitchesProps) {
+function FlagSwitches({ flags, loading, toggling, onToggle, readOnly = false }: SwitchesProps) {
   const t = useTranslations()
 
   return (
@@ -150,7 +154,7 @@ function FlagSwitches({ flags, loading, toggling, onToggle }: SwitchesProps) {
                 checked={flags.includes(flag)}
                 onChange={e => onToggle(flag, e.target.checked)}
                 size='small'
-                disabled={toggling === flag || loading}
+                disabled={readOnly || toggling === flag || loading}
               />
             }
             label={
@@ -175,7 +179,7 @@ function FlagSwitches({ flags, loading, toggling, onToggle }: SwitchesProps) {
  * Panneau développé : la grille d'interrupteurs à même la carte. Forme utilisée
  * là où la place ne manque pas, dans l'onglet Ceph d'un nœud.
  */
-export function CephOsdFlagsPanel({ connId, enabled = true }: Props) {
+export function CephOsdFlagsPanel({ connId, enabled = true, readOnly = false }: Props) {
   const t = useTranslations()
   const { flags, loading, toggling, forbidden, toggle } = useCephOsdFlags(connId, enabled)
 
@@ -196,7 +200,7 @@ export function CephOsdFlagsPanel({ connId, enabled = true }: Props) {
           {t('ceph.osdFlagsDescription')}
         </Typography>
 
-        <FlagSwitches flags={flags} loading={loading} toggling={toggling} onToggle={toggle} />
+        <FlagSwitches flags={flags} loading={loading} toggling={toggling} onToggle={toggle} readOnly={readOnly} />
       </CardContent>
     </Card>
   )

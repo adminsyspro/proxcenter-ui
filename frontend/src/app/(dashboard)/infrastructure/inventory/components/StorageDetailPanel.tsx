@@ -19,6 +19,7 @@ import { AreaChart, Area, XAxis, YAxis, Tooltip } from 'recharts'
 import ChartContainer from '@/components/ChartContainer'
 
 import { formatBytes } from '@/utils/format'
+import { useRBAC } from '@/contexts/RBACContext'
 import { formatBps, formatRrdTick, fetchDetails } from '../helpers'
 import ExpandableChart from './ExpandableChart'
 import StorageContentGroup from './StorageContentGroup'
@@ -103,6 +104,10 @@ export default function StorageDetailPanel({
 }: StorageDetailPanelProps) {
   const t = useTranslations()
   const theme = useTheme()
+  // Write controls follow the rights their routes enforce (#920).
+  const { hasPermission } = useRBAC()
+  const canUpload = hasPermission('storage.upload')
+  const canDelete = hasPermission('storage.delete')
 
   const si = data.storageInfo
   if (!si) return null
@@ -668,8 +673,20 @@ export default function StorageDetailPanel({
         )
       })() : null}
 
+      {/* Content listing refused: say so rather than show an empty storage */}
+      {si.contentDenied && (
+        <Card variant="outlined" sx={{ borderRadius: 2 }}>
+          <CardContent sx={{ p: 3, textAlign: 'center' }}>
+            <i className="ri-lock-line" style={{ fontSize: 36, opacity: 0.3 }} />
+            <Typography variant="body2" sx={{ opacity: 0.7, mt: 1 }}>
+              {t('inventory.storageContentAccessDenied')}
+            </Typography>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Non-PBS content items grouped by type */}
-      {(si.type !== 'pbs' || !groups['backup']?.items?.length) && (
+      {!si.contentDenied && (si.type !== 'pbs' || !groups['backup']?.items?.length) && (
         Object.keys(groups).length > 0 ? Object.entries(groups)
           .filter(([ct]) => si.type === 'pbs' ? ct !== 'backup' : true)
           .map(([contentType, group]) => (
@@ -678,9 +695,9 @@ export default function StorageDetailPanel({
               group={group}
               formatBytes={formatBytes}
               vmNames={vmNamesMap}
-              onUpload={['iso', 'snippets', 'vztmpl', 'import'].includes(contentType) ? () => setStorageUploadOpen(true) : undefined}
-              onDownloadTemplate={contentType === 'vztmpl' ? () => setTemplateDialogOpen(true) : undefined}
-              onDelete={async (volid: string) => {
+              onUpload={canUpload && ['iso', 'snippets', 'vztmpl', 'import'].includes(contentType) ? () => setStorageUploadOpen(true) : undefined}
+              onDownloadTemplate={canUpload && contentType === 'vztmpl' ? () => setTemplateDialogOpen(true) : undefined}
+              onDelete={canDelete ? async (volid: string) => {
                 const res = await fetch(
                   `/api/v1/connections/${encodeURIComponent(si.connId)}/nodes/${encodeURIComponent(si.node)}/storage/${encodeURIComponent(si.storage)}/content/${encodeURIComponent(volid)}`,
                   { method: 'DELETE' }
@@ -691,7 +708,7 @@ export default function StorageDetailPanel({
                 }
                 // Refresh data
                 if (selection) void fetchDetails(selection).then(setData)
-              }}
+              } : undefined}
             />
           )) : (si.contentItems || []).length === 0 && (
           <Card variant="outlined" sx={{ borderRadius: 2 }}>
@@ -706,22 +723,24 @@ export default function StorageDetailPanel({
       )}
 
       {/* Upload dialog for storage content */}
-      <UploadDialog
-        open={storageUploadOpen}
-        onClose={() => setStorageUploadOpen(false)}
-        onOpen={() => setStorageUploadOpen(true)}
-        connId={si.connId}
-        node={si.node}
-        storage={si.storage}
-        contentTypes={si.content || []}
-        onUploaded={() => {
-          setStorageUploadOpen(false)
-          if (selection) void fetchDetails(selection).then(setData)
-        }}
-      />
+      {canUpload && (
+        <UploadDialog
+          open={storageUploadOpen}
+          onClose={() => setStorageUploadOpen(false)}
+          onOpen={() => setStorageUploadOpen(true)}
+          connId={si.connId}
+          node={si.node}
+          storage={si.storage}
+          contentTypes={si.content || []}
+          onUploaded={() => {
+            setStorageUploadOpen(false)
+            if (selection) void fetchDetails(selection).then(setData)
+          }}
+        />
+      )}
 
       {/* Template download dialog */}
-      {(si.content || []).includes('vztmpl') && (
+      {canUpload && (si.content || []).includes('vztmpl') && (
         <TemplateDownloadDialog
           open={templateDialogOpen}
           onClose={() => setTemplateDialogOpen(false)}

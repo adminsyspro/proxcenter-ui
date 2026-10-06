@@ -45,6 +45,8 @@ import { useTenant } from '@/contexts/TenantContext'
 import { useCopyToClipboard } from '@/lib/clipboard'
 import { isPartialIPv4Cidr, isValidCidr } from '@/lib/net/cidr'
 import { isHostKeyMismatch } from './hostKeyMismatch'
+import NodeSshEndpointsEditor from '@/components/ssh/NodeSshEndpointsEditor'
+import { formatSshEndpoint } from '@/lib/ssh/node-endpoint-core'
 
 export type ConnectionFormData = {
   name: string
@@ -120,6 +122,12 @@ const defaultFormData: ConnectionFormData = {
   ownerTenantId: '',
 }
 
+// Label of where the SSH test took a node's address from.
+const SSH_ADDRESS_SOURCE_KEYS = {
+  override: 'settings.sshNodeEndpoints.sourceOverride',
+  proxmox: 'settings.sshNodeEndpoints.sourceProxmox',
+} as const
+
 // The dialog repeats one info bubble next to labels and section titles, and
 // one section title shape. Two small components keep them in a single place
 // and out of the duplication radar.
@@ -190,7 +198,16 @@ export default function ConnectionDialog({
   const [testingSSH, setTestingSSH] = useState(false)
   const [sshTestResult, setSshTestResult] = useState<{
     success: boolean
-    nodes?: { node: string; ip: string; status: string; error?: string }[]
+    nodes?: {
+      node: string
+      ip: string
+      status: string
+      error?: string
+      // Sent by orchestrators that know per-node SSH overrides; absent on older ones.
+      host?: string
+      port?: number
+      address_source?: 'override' | 'proxmox'
+    }[]
     error?: string
   } | null>(null)
 
@@ -1249,6 +1266,23 @@ export default function ConnectionDialog({
               sx={{ mt: 1, ml: 0 }}
             />
 
+            {/* Per-node SSH address and port (PVE): needs the saved connection's nodes */}
+            {type === 'pve' && form.sshEnabled && (
+              <Box sx={{ mt: 2 }}>
+                <Typography variant='body2' sx={{ fontWeight: 600 }}>{t('settings.sshNodeEndpoints.title')}</Typography>
+                <Typography variant='caption' color='text.secondary' sx={{ display: 'block', mb: 1.5 }}>
+                  {t('settings.sshNodeEndpoints.description')}
+                </Typography>
+                {isEdit && initialData?.id ? (
+                  <NodeSshEndpointsEditor connectionId={initialData.id} defaultPort={form.sshPort} />
+                ) : (
+                  <Typography variant='caption' color='text.secondary' sx={{ display: 'block' }}>
+                    {t('settings.sshNodeEndpoints.newConnectionHint')}
+                  </Typography>
+                )}
+              </Box>
+            )}
+
             {/* Test SSH Button (only in edit mode with existing connection) */}
             {isEdit && initialData?.id && form.sshEnabled && (
               <Box sx={{ mt: 2 }}>
@@ -1280,8 +1314,12 @@ export default function ConnectionDialog({
                         // dropping the pin, and offering the button anyway would
                         // teach the operator to clear pins on any red row.
                         const canRetrust = node.status !== 'ok' && isHostKeyMismatch(node.error)
-                        const feedback = retrustFeedback[node.ip]
-                        const busy = retrustingHost === node.ip
+                        const host = node.host || node.ip
+                        const feedback = retrustFeedback[host]
+                        const busy = retrustingHost === host
+                        const target = node.port ? formatSshEndpoint({ host, port: node.port }) : host
+                        const sourceKey = node.address_source && SSH_ADDRESS_SOURCE_KEYS[node.address_source]
+                        const source = sourceKey ? t(sourceKey) : null
 
                         return (
                           <Box key={node.node} sx={{ ml: 1 }}>
@@ -1289,7 +1327,7 @@ export default function ConnectionDialog({
                               <i className={node.status === 'ok' ? "ri-check-line" : "ri-close-line"}
                                  style={{ color: node.status === 'ok' ? '#22c55e' : '#ef4444' }} />
                               <Typography variant="body2">
-                                {node.node} ({node.ip})
+                                {node.node} ({source ? `${target}, ${source}` : target})
                               </Typography>
                               {node.error && (
                                 <Typography variant="caption" color="error">
@@ -1303,7 +1341,7 @@ export default function ConnectionDialog({
                                       size="small"
                                       variant="outlined"
                                       color="warning"
-                                      onClick={() => handleRetrustHost(node.ip)}
+                                      onClick={() => handleRetrustHost(host)}
                                       disabled={retrustingHost !== null || testingSSH}
                                       startIcon={busy
                                         ? <CircularProgress size={14} />

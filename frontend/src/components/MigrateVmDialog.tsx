@@ -7,6 +7,7 @@ import { storageSupportsReplication } from '@/lib/migration/ccm-prereqs.types'
 import { isSharedStorage } from '@/lib/proxmox/storage'
 import { snapshotsToClear, type SnapshotMigrationBlocker } from '@/lib/migration/snapshotMigrationBlockers'
 import { DiskSnapshotRefsAlert } from '@/components/hardware/DiskSnapshotRefsAlert'
+import PendingChangesWarning from '@/components/migration/PendingChangesWarning'
 import { computeNegativeAffinityConflicts, getAffinityPeers, type AffinityPeer, type HaRule, type HaStatusEntry } from '@/lib/proxmox/haAffinity'
 import { GIB, pveDriveSize } from '@/lib/proxmox/diskSize'
 
@@ -1643,7 +1644,12 @@ export function MigrateVmDialog({
                 )}
               </>
             )}
-            
+
+            {/* #926: changes waiting for a restart may make PVE fail the live migration */}
+            {open && activeTab === 0 && isVmRunning && (
+              <PendingChangesWarning guests={[{ connId, node: currentNode, type: vmType, vmid, name: vmName }]} />
+            )}
+
             {snapshotBlockers.length > 0 && (
               <DiskSnapshotRefsAlert
                 snapshots={snapshotsToClear(snapshotBlockers)}

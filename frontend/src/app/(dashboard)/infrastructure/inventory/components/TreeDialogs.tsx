@@ -35,6 +35,9 @@ import { MigrateVmDialog, CrossClusterMigrateParams } from '@/components/Migrate
 import { CloneVmDialog } from '@/components/hardware/CloneVmDialog'
 import { usedVmidsOnConnection, nextVmidOnConnection } from '@/components/hardware/utils'
 import { crossClusterMigrate } from '@/lib/migration/crossClusterMigrate'
+import { startTrackedMigration } from '@/lib/migration/guestMigrateClient'
+import { useTaskTracker } from '@/hooks/useTaskTracker'
+import PendingChangesWarning from '@/components/migration/PendingChangesWarning'
 import { NodeIcon, ClusterIcon, StatusIcon } from './TreeIcons'
 import { useTenant } from '@/contexts/TenantContext'
 
@@ -291,6 +294,7 @@ export interface TreeDialogsProps {
 
 export default function TreeDialogs(props: TreeDialogsProps) {
   const t = useTranslations()
+  const { trackTask } = useTaskTracker()
   // Migration is allowed for provider AND MSP tenants (full-cluster view).
   // vDC / iaas tenants cannot migrate (placement is the provider's job).
   // MSP users only see connections they own; the backend enforces ownership.
@@ -807,6 +811,15 @@ export default function TreeDialogs(props: TreeDialogsProps) {
             </Typography>
           )}
           {bulkActionDialog.action === 'migrate-all' && (
+            // #926: preflight for the running guests, migrated live
+            <PendingChangesWarning
+              sx={{ mt: 2 }}
+              guests={getNodeVms(bulkActionDialog.connId, bulkActionDialog.node)
+                .filter(v => v.status === 'running')
+                .map(v => ({ connId: bulkActionDialog.connId, node: bulkActionDialog.node, type: v.type, vmid: v.vmid, name: v.name }))}
+            />
+          )}
+          {bulkActionDialog.action === 'migrate-all' && (
             <FormControl fullWidth sx={{ mt: 2 }}>
               <InputLabel size="small">{t('bulkActions.targetNode')}</InputLabel>
               <Select
@@ -921,19 +934,13 @@ export default function TreeDialogs(props: TreeDialogsProps) {
           vmType={migrateTarget.type as 'qemu' | 'lxc'}
           onMigrate={async (targetNode, online, targetStorage, withLocalDisks) => {
             // Migration intra-cluster
-            const { connId, node, type, vmid } = migrateTarget
-            const res = await fetch(
-              `/api/v1/connections/${encodeURIComponent(connId)}/guests/${type}/${encodeURIComponent(node)}/${encodeURIComponent(vmid)}/migrate`,
-              {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ target: targetNode, online, targetstorage: targetStorage, 'with-local-disks': withLocalDisks })
-              }
+            // #926: followed to its end, which toasts the outcome with the reason.
+            await startTrackedMigration(
+              trackTask,
+              migrateTarget,
+              { target: targetNode, online, targetstorage: targetStorage, 'with-local-disks': withLocalDisks },
+              { description: `${migrateTarget.name || `VM ${migrateTarget.vmid}`}: ${t('vmActions.migrate')}`, onDone: () => setReloadTick(x => x + 1) },
             )
-            if (!res.ok) {
-              const err = await res.json().catch(() => ({}))
-              throw new Error(err?.error || res.statusText)
-            }
             setMigrateDialogOpen(false)
             setMigrateTarget(null)
             setReloadTick(x => x + 1)

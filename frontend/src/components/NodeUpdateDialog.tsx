@@ -37,6 +37,9 @@ import ConfirmCloseDialog from '@/components/ConfirmCloseDialog'
 import { useRBAC } from '@/contexts/RBACContext'
 import { NodeInfo, formatMemory } from '@/components/hardware/utils'
 import { loadNodeRepoIssues, type RepoIssue } from '@/lib/proxmox/aptRepositories'
+import { migrateGuestAndWait, migrationFailureText } from '@/lib/migration/guestMigrateClient'
+import TaskLogButton from '@/components/tasks/TaskLogButton'
+import PendingChangesWarning from '@/components/migration/PendingChangesWarning'
 
 interface RunningVmInfo {
   vmid: number
@@ -55,6 +58,9 @@ interface VmActionResult {
   status: 'pending' | 'running' | 'success' | 'failed'
   error?: string
   target?: string
+  /** The migration task, to open its log when it failed (#926). */
+  upid?: string | null
+  taskNode?: string
 }
 
 interface NodeUpdateDialogProps {
@@ -106,6 +112,30 @@ function distributeVms(vms: RunningVmInfo[], nodes: NodeInfo[]): Map<number, str
   }
 
   return result
+}
+
+/** One guest of the pre-flight migrate/shutdown run, with why it failed (#926). */
+function VmActionResultRow({ r, connectionId }: Readonly<{ r: VmActionResult; connectionId: string }>) {
+  const t = useTranslations()
+
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25, minWidth: 0 }}>
+      {r.status === 'success' && <i className="ri-checkbox-circle-fill" style={{ fontSize: 14, color: 'var(--mui-palette-success-main)' }} />}
+      {r.status === 'failed' && <i className="ri-error-warning-fill" style={{ fontSize: 14, color: 'var(--mui-palette-error-main)' }} />}
+      {r.status === 'running' && <CircularProgress size={12} />}
+      {r.status === 'pending' && <i className="ri-time-line" style={{ fontSize: 14, opacity: 0.4 }} />}
+      <Typography variant="caption" sx={{ fontFamily: 'monospace', fontSize: 11, flexShrink: 0 }}>
+        {r.type === 'qemu' ? 'VM' : 'CT'} {r.vmid} ({r.name})
+      </Typography>
+      <Typography variant="caption" noWrap title={r.error} sx={{ ml: 'auto', fontSize: 11, minWidth: 0, ...(r.status === 'failed' && { color: 'error.main' }) }}>
+        {r.status === 'success' && r.action === 'migrate' && t('updates.vmMigrateSuccess', { target: r.target || '?' })}
+        {r.status === 'success' && r.action === 'shutdown' && t('updates.vmShutdownSuccess')}
+        {r.status === 'failed' && (r.error || (r.action === 'migrate' ? t('updates.vmMigrateFailed') : t('updates.vmShutdownFailed')))}
+        {r.status === 'running' && '...'}
+      </Typography>
+      {r.status === 'failed' && r.upid && <TaskLogButton connectionId={connectionId} upid={r.upid} node={r.taskNode} size={14} />}
+    </Box>
+  )
 }
 
 export default function NodeUpdateDialog({
@@ -191,6 +221,7 @@ export default function NodeUpdateDialog({
   const [didShutdownVms, setDidShutdownVms] = useState(false)
   const [migrateBackInProgress, setMigrateBackInProgress] = useState(false)
   const [migrateBackDone, setMigrateBackDone] = useState(false)
+  const [migrateBackFailures, setMigrateBackFailures] = useState<string[]>([])
   const [restartVmsInProgress, setRestartVmsInProgress] = useState(false)
   const [restartVmsDone, setRestartVmsDone] = useState(false)
 
@@ -434,24 +465,20 @@ export default function NodeUpdateDialog({
           setVmActionResults(prev => prev.map(r =>
             r.vmid === vm.vmid && r.action === 'migrate' ? { ...r, status: 'running' } : r
           ))
-          try {
-            const res = await fetch(`${connBaseUrl}/guests/${vm.type}/${encodeURIComponent(nodeName)}/${vm.vmid}/migrate`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ target, online: true }),
-            })
-            if (!res.ok) {
-              const json = await res.json().catch(() => ({}))
-              throw new Error(json.error || 'Migration failed')
-            }
-            setVmActionResults(prev => prev.map(r =>
-              r.vmid === vm.vmid && r.action === 'migrate' ? { ...r, status: 'success' } : r
-            ))
+          // #926: a guest counts as migrated once its PVE task ended OK, not
+          // when the POST was accepted.
+          const outcome = await migrateGuestAndWait(
+            { connId: connectionId, node: nodeName, type: vm.type, vmid: vm.vmid },
+            { target, online: true },
+          )
+          const result: Partial<VmActionResult> = outcome.ok
+            ? { status: 'success' }
+            : { status: 'failed', error: migrationFailureText(outcome, t), upid: outcome.upid, taskNode: outcome.node }
+          setVmActionResults(prev => prev.map(r =>
+            r.vmid === vm.vmid && r.action === 'migrate' ? { ...r, ...result } : r
+          ))
+          if (outcome.ok) {
             successfulMigrations.push({ vmid: vm.vmid, name: vm.name, type: vm.type, action: 'migrate', status: 'success', target })
-          } catch (err: any) {
-            setVmActionResults(prev => prev.map(r =>
-              r.vmid === vm.vmid && r.action === 'migrate' ? { ...r, status: 'failed', error: err.message } : r
-            ))
           }
         }
         if (vmsToMigrate.length > 0) {
@@ -496,7 +523,7 @@ export default function NodeUpdateDialog({
     } finally {
       setPreflightLoading(false)
     }
-  }, [enableMaintenance, maintenanceStatus, hasCeph, canSetCephFlags, setCephMaintenanceFlags, cephMaintenanceFlagsSet, cephFlags, maintenanceUrl, cephFlagsUrl, STEP.CONFIG, migrateSharedVms, vmDistribution, sharedVms, shutdownLocalVms, localVms, connBaseUrl, nodeName])
+  }, [enableMaintenance, maintenanceStatus, hasCeph, canSetCephFlags, setCephMaintenanceFlags, cephMaintenanceFlagsSet, cephFlags, maintenanceUrl, cephFlagsUrl, STEP.CONFIG, migrateSharedVms, vmDistribution, sharedVms, shutdownLocalVms, localVms, connBaseUrl, connectionId, nodeName, t])
 
   const startUpdate = useCallback(async () => {
     setLoading(true)
@@ -563,18 +590,20 @@ export default function NodeUpdateDialog({
   const migrateVmsBack = useCallback(async () => {
     setMigrateBackInProgress(true)
     try {
+      const failures: string[] = []
       for (const vm of migratedVms) {
         if (!vm.target) continue
-        await fetch(`${connBaseUrl}/guests/${vm.type}/${encodeURIComponent(vm.target)}/${vm.vmid}/migrate`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ target: nodeName, online: true }),
-        })
+        const outcome = await migrateGuestAndWait(
+          { connId: connectionId, node: vm.target, type: vm.type, vmid: vm.vmid },
+          { target: nodeName, online: true },
+        )
+        if (!outcome.ok) failures.push(`${vm.name}: ${migrationFailureText(outcome, t)}`)
       }
+      setMigrateBackFailures(failures)
       setMigrateBackDone(true)
     } catch {}
     setMigrateBackInProgress(false)
-  }, [migratedVms, connBaseUrl, nodeName])
+  }, [migratedVms, connectionId, nodeName, t])
 
   // Post-actions: restart shut down VMs
   const restartLocalVmsAction = useCallback(async () => {
@@ -644,6 +673,7 @@ export default function NodeUpdateDialog({
     setDidShutdownVms(false)
     setMigrateBackInProgress(false)
     setMigrateBackDone(false)
+    setMigrateBackFailures([])
     setRestartVmsInProgress(false)
     setRestartVmsDone(false)
     onClose()
@@ -877,6 +907,13 @@ export default function NodeUpdateDialog({
                           <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
                             {t('updates.migrateSharedVmsHint')}
                           </Typography>
+                          {/* #926: preflight for changes waiting for a restart */}
+                          {!vmActionsInProgress && (
+                            <PendingChangesWarning
+                              sx={{ mt: 1 }}
+                              guests={sharedVms.map(vm => ({ connId: connectionId, node: nodeName, type: vm.type, vmid: vm.vmid, name: vm.name }))}
+                            />
+                          )}
                         </Box>
                       )}
                     </Box>
@@ -933,23 +970,7 @@ export default function NodeUpdateDialog({
                         value={(vmActionResults.filter(r => r.status === 'success' || r.status === 'failed').length / vmActionResults.length) * 100}
                         sx={{ height: 4, borderRadius: 1, mb: 1 }}
                       />
-                      {vmActionResults.map(r => (
-                        <Box key={`${r.type}-${r.vmid}`} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25 }}>
-                          {r.status === 'success' && <i className="ri-checkbox-circle-fill" style={{ fontSize: 14, color: 'var(--mui-palette-success-main)' }} />}
-                          {r.status === 'failed' && <i className="ri-error-warning-fill" style={{ fontSize: 14, color: 'var(--mui-palette-error-main)' }} />}
-                          {r.status === 'running' && <CircularProgress size={12} />}
-                          {r.status === 'pending' && <i className="ri-time-line" style={{ fontSize: 14, opacity: 0.4 }} />}
-                          <Typography variant="caption" sx={{ fontFamily: 'monospace', fontSize: 11 }}>
-                            {r.type === 'qemu' ? 'VM' : 'CT'} {r.vmid} ({r.name})
-                          </Typography>
-                          <Typography variant="caption" sx={{ ml: 'auto', fontSize: 11 }}>
-                            {r.status === 'success' && r.action === 'migrate' && t('updates.vmMigrateSuccess', { target: r.target || '?' })}
-                            {r.status === 'success' && r.action === 'shutdown' && t('updates.vmShutdownSuccess')}
-                            {r.status === 'failed' && (r.error || (r.action === 'migrate' ? t('updates.vmMigrateFailed') : t('updates.vmShutdownFailed')))}
-                            {r.status === 'running' && '...'}
-                          </Typography>
-                        </Box>
-                      ))}
+                      {vmActionResults.map(r => <VmActionResultRow key={`${r.type}-${r.vmid}`} r={r} connectionId={connectionId} />)}
                     </Box>
                   )}
                 </CardContent>
@@ -970,6 +991,18 @@ export default function NodeUpdateDialog({
         {/* Step: Configuration */}
         {activeStep === STEP.CONFIG && (
           <Stack spacing={2.5}>
+            {/* #926: guests the pre-flight could not move are still on the node */}
+            {vmActionResults.some(r => r.status === 'failed') && (
+              <Alert severity="error" icon={<i className="ri-error-warning-line" style={{ fontSize: 20 }} />}>
+                <Typography variant="body2" fontWeight={600} sx={{ mb: 0.5 }}>
+                  {t('updates.vmActionsFailedTitle', { count: vmActionResults.filter(r => r.status === 'failed').length })}
+                </Typography>
+                {vmActionResults.filter(r => r.status === 'failed').map(r => (
+                  <VmActionResultRow key={`${r.type}-${r.vmid}`} r={r} connectionId={connectionId} />
+                ))}
+              </Alert>
+            )}
+
             {sshNotConfigured && (
               <Alert
                 severity="error"
@@ -1259,11 +1292,19 @@ export default function NodeUpdateDialog({
                     <i className="ri-swap-box-line" style={{ marginRight: 8, fontSize: 16 }} />
                     {t('updates.migrateVmsBack')}
                   </Typography>
-                  {migrateBackDone ? (
+                  {migrateBackDone && migrateBackFailures.length > 0 && (
+                    <Alert severity="error">
+                      {migrateBackFailures.map(line => (
+                        <Typography key={line} variant="body2">{line}</Typography>
+                      ))}
+                    </Alert>
+                  )}
+                  {migrateBackDone && migrateBackFailures.length === 0 && (
                     <Alert severity="success">
                       <Typography variant="body2">{t('updates.vmsMigratedBack')}</Typography>
                     </Alert>
-                  ) : (
+                  )}
+                  {!migrateBackDone && (
                     <>
                       <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
                         {t('updates.migrateVmsBackDescription', {

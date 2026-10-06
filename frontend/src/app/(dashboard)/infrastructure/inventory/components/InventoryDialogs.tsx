@@ -62,6 +62,10 @@ const CloneVmDialog = dynamic(() => import('@/components/HardwareModals').then(m
 import { MigrateVmDialog, CrossClusterMigrateParams } from '@/components/MigrateVmDialog'
 
 import { BULK_MIG_CONCURRENCY } from '../bulkMigrationConfig'
+import { migrateGuestAndWait, migrationFailureText, runInBatches } from '@/lib/migration/guestMigrateClient'
+import FailureReasonText from '@/components/tasks/FailureReasonText'
+import TaskLogButton from '@/components/tasks/TaskLogButton'
+import PendingChangesWarning from '@/components/migration/PendingChangesWarning'
 import CreateVmDialog from '../CreateVmDialog'
 import CreateLxcDialog from '../CreateLxcDialog'
 import HaGroupDialog from '../HaGroupDialog'
@@ -115,8 +119,8 @@ export interface InventoryDialogsProps {
   setNodeActionStep: (v: string | null) => void
   nodeActionMigrateTarget: string
   setNodeActionMigrateTarget: (v: string) => void
-  nodeActionFailedVms: { vmid: string; name: string; connId: string; type: string; node: string; error: string }[]
-  setNodeActionFailedVms: (v: { vmid: string; name: string; connId: string; type: string; node: string; error: string }[]) => void
+  nodeActionFailedVms: NodeActionFailedVm[]
+  setNodeActionFailedVms: (v: NodeActionFailedVm[]) => void
   nodeActionShutdownFailed: boolean
   setNodeActionShutdownFailed: (v: boolean) => void
   nodeActionLocalVms: Set<string>
@@ -410,21 +414,23 @@ function CopyableCommand({ command }: { command: string }) {
 
 // Guests listed by the node reboot/shutdown dialog, drawn like the inventory
 // tree: type icon with its status dot, name, then the vmid.
-type NodeActionGuest = { connId: string; vmid: string; name: string; type: string; status?: string; error?: string }
+type NodeActionGuest = { connId: string; vmid: string; name: string; type: string; status?: string; error?: string; upid?: string | null; taskNode?: string }
+
+/** A guest the evacuation could not move, with why and its task when PVE ran one (#926). */
+export type NodeActionFailedVm = { vmid: string; name: string; connId: string; type: string; node: string; error: string; upid?: string | null; taskNode?: string }
 
 function NodeActionGuestList({ vms, limit = 8 }: { vms: NodeActionGuest[]; limit?: number }) {
   return (
     <Box sx={{ mt: 1, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-      {vms.slice(0, limit).map(vm => {
-        const row = (
-          <Box key={`${vm.connId}:${vm.vmid}`} sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-            <StatusIcon status={vm.status} type="vm" vmType={vm.type} />
-            <Typography variant="body2">{vm.name}</Typography>
-            <Typography variant="caption" sx={{ opacity: 0.5 }}>{vm.vmid}</Typography>
-          </Box>
-        )
-        return vm.error ? <MuiTooltip key={`${vm.connId}:${vm.vmid}`} title={vm.error}>{row}</MuiTooltip> : row
-      })}
+      {vms.slice(0, limit).map(vm => (
+        <Box key={`${vm.connId}:${vm.vmid}`} sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0 }}>
+          <StatusIcon status={vm.status} type="vm" vmType={vm.type} />
+          <Typography variant="body2" sx={{ flexShrink: 0 }}>{vm.name}</Typography>
+          <Typography variant="caption" sx={{ opacity: 0.5, flexShrink: 0 }}>{vm.vmid}</Typography>
+          <FailureReasonText reason={vm.error} sx={{ ml: 0.5 }} />
+          {vm.upid && <TaskLogButton connectionId={vm.connId} upid={vm.upid} node={vm.taskNode} size={14} />}
+        </Box>
+      ))}
       {vms.length > limit && <Typography variant="caption" sx={{ opacity: 0.7 }}>+{vms.length - limit}</Typography>}
     </Box>
   )
@@ -1234,6 +1240,11 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
                         </Alert>
                       )}
 
+                      {/* #926: preflight for changes waiting for a restart */}
+                      {!nodeActionStorageLoading && isClusterNode && sharedVms.length > 0 && nodeActionFailedVms.length === 0 && (
+                        <PendingChangesWarning guests={sharedVms} />
+                      )}
+
                       {/* Local storage VMs — cannot be migrated */}
                       {!nodeActionStorageLoading && localVms.length > 0 && (
                         <Alert severity={isClusterNode ? 'warning' : 'info'} icon={<i className={isClusterNode ? 'ri-hard-drive-2-line' : 'ri-computer-line'} style={{ fontSize: 20 }} />}>
@@ -1370,30 +1381,20 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
 
                               if (sharedVms.length > 0 && nodeActionMigrateTarget && nodeActionFailedVms.length === 0) {
                                 setNodeActionStep(t('inventory.nodeActionMigratingStep', { done: 0, total: sharedVms.length }))
-                                let done = 0
-                                const failed: { vmid: string; name: string; connId: string; type: string; node: string; error: string }[] = []
-                                const batchSize = 3
-                                for (let i = 0; i < sharedVms.length; i += batchSize) {
-                                  const batch = sharedVms.slice(i, i + batchSize)
-                                  await Promise.all(batch.map(async (vm) => {
-                                    try {
-                                      const url = `/api/v1/connections/${encodeURIComponent(vm.connId)}/guests/${vm.type}/${encodeURIComponent(vm.node)}/${encodeURIComponent(vm.vmid)}/migrate`
-                                      const res = await fetch(url, {
-                                        method: 'POST',
-                                        headers: { 'Content-Type': 'application/json' },
-                                        body: JSON.stringify({ target: nodeActionMigrateTarget, online: true }),
-                                      })
-                                      if (!res.ok) {
-                                        const err = await res.json().catch(() => ({}))
-                                        failed.push({ vmid: vm.vmid, name: vm.name, connId: vm.connId, type: vm.type, node: vm.node, error: err?.error || `HTTP ${res.status}` })
-                                      }
-                                    } catch (e: any) {
-                                      failed.push({ vmid: vm.vmid, name: vm.name, connId: vm.connId, type: vm.type, node: vm.node, error: e?.message || 'Unknown error' })
+                                // #926: a guest has left the node once its PVE task ended OK,
+                                // not when the POST was accepted; the node command waits for it.
+                                const failed: NodeActionFailedVm[] = []
+                                await runInBatches(
+                                  sharedVms,
+                                  3,
+                                  async vm => {
+                                    const outcome = await migrateGuestAndWait(vm, { target: nodeActionMigrateTarget, online: true })
+                                    if (!outcome.ok) {
+                                      failed.push({ vmid: vm.vmid, name: vm.name, connId: vm.connId, type: vm.type, node: vm.node, error: migrationFailureText(outcome, t), upid: outcome.upid, taskNode: outcome.node })
                                     }
-                                    done++
-                                    setNodeActionStep(t('inventory.nodeActionMigratingStep', { done, total: sharedVms.length }))
-                                  }))
-                                }
+                                  },
+                                  (_vm, _result, done) => setNodeActionStep(t('inventory.nodeActionMigratingStep', { done, total: sharedVms.length })),
+                                )
                                 if (failed.length > 0) {
                                   setNodeActionFailedVms(failed)
                                   setNodeActionStep(null)
@@ -2387,6 +2388,10 @@ return
               <Alert severity="info" sx={{ mb: 2 }}>
                 {t('bulkActions.confirmMigrateAll')}
               </Alert>
+              {/* #926: preflight for the running guests, migrated live */}
+              <PendingChangesWarning
+                guests={((data?.allVms as any[]) || []).filter((vm: any) => vm.node === bulkActionDialog.node?.name && !vm.template && vm.status === 'running')}
+              />
               <FormControl fullWidth size="small" sx={{ mt: 2 }}>
                 <InputLabel>{t('bulkActions.targetNode')}</InputLabel>
                 <Select

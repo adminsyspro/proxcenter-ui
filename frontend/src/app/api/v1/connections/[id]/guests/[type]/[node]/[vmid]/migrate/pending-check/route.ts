@@ -4,6 +4,7 @@ import { getConnectionById } from "@/lib/connections/getConnection"
 import { pveFetch } from "@/lib/proxmox/client"
 import { pendingChangesFromPve } from "@/lib/migration/pendingChanges"
 import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
+import { migrationTenantDenied } from "@/lib/tenant/migrationGuard"
 import { assertVmid, assertNodeName } from "@/lib/ssh/validate"
 
 export const runtime = "nodejs"
@@ -29,6 +30,9 @@ export async function GET(
 
     const denied = await checkPermission(PERMISSIONS.VM_MIGRATE, "vm", buildVmResourceId(id, safeNode, type, safeVmid))
     if (denied) return denied
+
+    const tenantDenied = await migrationTenantDenied(id)
+    if (tenantDenied) return tenantDenied
 
     const conn = await getConnectionById(id)
     const guestType = type === 'lxc' ? 'lxc' : 'qemu'

@@ -6,8 +6,7 @@ import { describeSnapshotBlockers, snapshotMigrationGuard } from "@/lib/migratio
 import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
 import { migrateVmSchema } from "@/lib/schemas"
 import { invalidateInventoryCache } from "@/lib/cache/inventoryCache"
-import { getCurrentTenantId } from "@/lib/tenant"
-import { getTenantInfrastructureScope, canMigrateConnections } from "@/lib/tenant/infraScope"
+import { migrationTenantDenied } from "@/lib/tenant/migrationGuard"
 
 export const runtime = "nodejs"
 
@@ -26,17 +25,8 @@ export async function POST(
 
     if (denied) return denied
 
-    // VM placement is a whole-cluster operation: the provider may migrate any
-    // cluster it manages; an MSP tenant may migrate within a cluster it OWNS;
-    // vDC/iaas tenants get an abstracted slice and cannot migrate.
-    const tenantId = await getCurrentTenantId()
-    const infra = await getTenantInfrastructureScope(tenantId)
-    if (!canMigrateConnections(infra, id)) {
-      return NextResponse.json(
-        { error: 'Migration is restricted to the provider or the MSP tenant that owns this connection' },
-        { status: 403 },
-      )
-    }
+    const tenantDenied = await migrationTenantDenied(id)
+    if (tenantDenied) return tenantDenied
 
     const rawBody = await req.json()
     const parseResult = migrateVmSchema.safeParse(rawBody)

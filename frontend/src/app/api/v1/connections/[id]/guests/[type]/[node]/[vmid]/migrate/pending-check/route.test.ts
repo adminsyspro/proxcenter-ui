@@ -14,6 +14,8 @@ vi.mock('@/lib/rbac', () => ({
   buildVmResourceId: (id: string, node: string, type: string, vmid: string) => `${id}/${node}/${type}/${vmid}`,
   PERMISSIONS: { VM_MIGRATE: 'vm.migrate' },
 }))
+const tenantDeniedMock = vi.fn<(...args: any[]) => Promise<Response | null>>()
+vi.mock('@/lib/tenant/migrationGuard', () => ({ migrationTenantDenied: tenantDeniedMock }))
 vi.mock('@/lib/connections/getConnection', () => ({ getConnectionById: async () => ({ id: 'conn-1' }) }))
 vi.mock('@/lib/proxmox/client', () => ({ pveFetch: pveFetchMock }))
 
@@ -36,10 +38,19 @@ const PVE_PENDING = [
 
 beforeEach(() => {
   checkPermissionMock.mockReset().mockResolvedValue(null)
+  tenantDeniedMock.mockReset().mockResolvedValue(null)
   pveFetchMock.mockReset().mockResolvedValue(PVE_PENDING)
 })
 
 describe('GET migrate/pending-check', () => {
+  it('refuses a tenant that may not migrate on this connection before reading PVE', async () => {
+    tenantDeniedMock.mockResolvedValue(new Response(JSON.stringify({ error: 'restricted' }), { status: 403 }))
+    const res = await callRoute(await loadGet(), { params, searchParams: { target: 'pve2' } })
+    expect(res.status).toBe(403)
+    expect(tenantDeniedMock).toHaveBeenCalledWith('conn-1')
+    expect(pveFetchMock).not.toHaveBeenCalled()
+  })
+
   it('returns only the changes waiting for a restart', async () => {
     const res = await callRoute(await loadGet(), { params })
 

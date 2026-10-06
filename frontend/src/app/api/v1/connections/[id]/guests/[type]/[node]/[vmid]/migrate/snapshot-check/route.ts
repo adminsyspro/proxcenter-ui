@@ -3,6 +3,7 @@ import { NextResponse } from "next/server"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkSnapshotMigration } from "@/lib/migration/snapshotMigrationCheck"
 import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
+import { migrationTenantDenied } from "@/lib/tenant/migrationGuard"
 import { assertVmid, assertNodeName } from "@/lib/ssh/validate"
 
 export const runtime = "nodejs"
@@ -34,6 +35,9 @@ export async function GET(
 
     const denied = await checkPermission(PERMISSIONS.VM_MIGRATE, "vm", buildVmResourceId(id, safeNode, type, safeVmid))
     if (denied) return denied
+
+    const tenantDenied = await migrationTenantDenied(id)
+    if (tenantDenied) return tenantDenied
 
     const conn = await getConnectionById(id)
     const data = await checkSnapshotMigration(

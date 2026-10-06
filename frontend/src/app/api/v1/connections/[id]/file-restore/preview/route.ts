@@ -2,9 +2,8 @@ import { NextResponse } from "next/server"
 
 import { request } from "undici"
 
-import { getConnectionById } from "@/lib/connections/getConnection"
-import { getInsecureAgent } from "@/lib/proxmox/client"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { resolveFileRestoreTarget } from "@/lib/proxmox/fileRestoreTarget"
 
 export const runtime = "nodejs"
 
@@ -74,41 +73,12 @@ export async function GET(
       }, { status: 400 })
     }
 
-    const conn = await getConnectionById(pveId)
+    // Tenant scope on storage, volume and node, before any Proxmox request.
+    const target = await resolveFileRestoreTarget(pveId, storage, volume)
+    if (target instanceof Response) return target
 
-    const dispatcher = conn.insecureDev
-      ? getInsecureAgent()
-      : undefined
-
-    // Récupérer un node qui a accès au storage
-    const resourcesUrl = `${conn.baseUrl.replace(/\/$/, "")}/api2/json/cluster/resources`
-
-    const resourcesRes = await request(resourcesUrl, {
-      method: 'GET',
-      headers: { Authorization: `PVEAPIToken=${conn.apiToken}` },
-      dispatcher,
-    })
-
-    const resourcesJson = JSON.parse(await resourcesRes.body.text())
-    const allResources = resourcesJson.data || []
-
-    const storageNodes = allResources
-      .filter((r: any) => r.type === 'storage' && r.storage === storage && r.status === 'available')
-      .map((r: any) => r.node)
-
-    const onlineNodes = allResources
-      .filter((r: any) => r.type === 'node' && r.status === 'online')
-      .map((r: any) => r.node)
-
-    const nodeName = storageNodes.find((n: string) => onlineNodes.includes(n))
-      || storageNodes[0]
-      || onlineNodes[0]
-
-    if (!nodeName) {
-      return NextResponse.json({ error: "No available node found with storage access" }, { status: 500 })
-    }
+    const { conn, dispatcher, nodeName, volumeId } = target
     const filepathBase64 = Buffer.from(filepath, 'utf-8').toString('base64')
-    const volumeId = volume.includes(':') ? volume : `${storage}:${volume}`
 
     // Télécharger le fichier
     const downloadUrl = `${conn.baseUrl.replace(/\/$/, "")}/api2/json/nodes/${nodeName}/storage/${encodeURIComponent(storage)}/file-restore/download`

@@ -17,7 +17,7 @@ const { checkPermissionMock, guardMock, nameMock, getConnectionByIdMock, pveFetc
 
 vi.mock("@/lib/rbac", () => ({
   checkPermission: (...a: any[]) => checkPermissionMock(...a),
-  PERMISSIONS: { CONNECTION_VIEW: "connection.view" },
+  PERMISSIONS: { CONNECTION_VIEW: "connection.view", STORAGE_UPLOAD: "storage.upload" },
 }))
 vi.mock("@/lib/vdc/scope", () => ({
   guardTenantStorageWrite: (...a: any[]) => guardMock(...a),
@@ -47,6 +47,22 @@ beforeEach(() => {
       return { [key]: { 'Sys.AccessNetwork': 1, 'Datastore.AllocateTemplate': 1 } }
     }
     return "UPID:pve1:download"
+  })
+})
+
+describe("POST download-url: RBAC (#920)", () => {
+  it("gates the download on storage.upload for the connection", async () => {
+    const res = await callRoute(POST, { method: "POST", params: PARAMS, body: BODY })
+    expect(res.status).toBe(200)
+    expect(checkPermissionMock).toHaveBeenCalledWith("storage.upload", "connection", "conn-1")
+  })
+
+  it("403s without storage.upload and never reaches PVE", async () => {
+    checkPermissionMock.mockResolvedValue(new Response(JSON.stringify({ error: "forbidden" }), { status: 403 }))
+    const res = await callRoute(POST, { method: "POST", params: PARAMS, body: BODY })
+    expect(res.status).toBe(403)
+    expect(guardMock).not.toHaveBeenCalled()
+    expect(pveFetchMock).not.toHaveBeenCalled()
   })
 })
 

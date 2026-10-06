@@ -61,7 +61,8 @@ async function setCephFlag(
     return NextResponse.json({ error: "Missing or invalid 'flag' parameter" }, { status: 400 })
   }
 
-  const denied = await checkPermission(PERMISSIONS.NODE_MANAGE, "connection", id)
+  // OSD flags act on the whole Ceph cluster: a storage.admin action (#920).
+  const denied = await checkPermission(PERMISSIONS.STORAGE_ADMIN, "connection", id)
   if (denied) return denied
 
   const conn = await getConnectionById(id)

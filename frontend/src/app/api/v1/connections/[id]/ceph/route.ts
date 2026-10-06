@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 
+import { flattenOsdTree, osdUpIn } from "@/lib/ceph/osdList"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { formatBytes } from "@/utils/format"
@@ -152,26 +153,6 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
 
     // Mapper les OSDs avec plus de détails
     // Les OSDs peuvent être dans un format arborescent dans Proxmox
-    const extractOsdsFromTree = (items: any[]): any[] => {
-      let result: any[] = []
-
-      for (const item of items) {
-        // C'est un OSD si il a un id numérique ou si type === 'osd'
-        if (item.type === 'osd' || (item.id !== undefined && typeof item.id === 'number')) {
-          result.push(item)
-        }
-
-
-        // Parcourir les enfants
-        if (item.children && Array.isArray(item.children)) {
-          result = result.concat(extractOsdsFromTree(item.children))
-        }
-      }
-
-      
-return result
-    }
-    
     // Extract CRUSH tree hierarchy preserving root → datacenter → host → osd nesting
     const extractCrushTree = (items: any[]): any[] => {
       return items.map(item => {
@@ -189,24 +170,8 @@ return result
       })
     }
 
-    // osdList peut être un tableau plat ou un objet avec root/children
-    let flatOsdList: any[] = []
+    const flatOsdList = flattenOsdTree(osdList)
 
-    if (Array.isArray(osdList)) {
-      // Vérifier si c'est déjà plat ou arborescent
-      if (osdList.length > 0 && osdList[0]?.children) {
-        flatOsdList = extractOsdsFromTree(osdList)
-      } else if (osdList.length > 0 && osdList[0]?.root?.children) {
-        flatOsdList = extractOsdsFromTree(osdList[0].root.children)
-      } else {
-        flatOsdList = osdList
-      }
-    } else if (osdList && typeof osdList === 'object') {
-      if ((osdList as any).root?.children) {
-        flatOsdList = extractOsdsFromTree((osdList as any).root.children)
-      }
-    }
-    
     // Extract full CRUSH tree hierarchy
     let crushTree: any[] = []
     if (Array.isArray(osdList)) {
@@ -241,13 +206,7 @@ return result
         // Dans l'arbre CRUSH: status peut être "up" directement
         // Dans la liste plate: up=1/0
         // Parfois c'est une string "up" ou "down"
-        const statusStr = String(osd.status || '').toLowerCase()
-
-        const isUp = osd.up === 1 || osd.up === true || osd.up === '1' || 
-                     statusStr === 'up' || statusStr.includes('up')
-
-        const isIn = osd.in === 1 || osd.in === true || osd.in === '1' ||
-                     (osd.reweight !== undefined && osd.reweight > 0)
+        const { up: isUp, in: isIn } = osdUpIn(osd)
         
         return {
           id: osd.id,

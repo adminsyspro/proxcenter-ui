@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 
 import { pveFetch } from "@/lib/proxmox/client"
+import { osdUpInList } from "@/lib/ceph/osdList"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 
@@ -29,7 +30,12 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
 
     // Essayer de récupérer le status Ceph depuis le premier node
     try {
-      const status = await pveFetch<any>(conn, `/nodes/${encodeURIComponent(firstNode)}/ceph/status`)
+      const [status, osdTree] = await Promise.all([
+        pveFetch<any>(conn, `/nodes/${encodeURIComponent(firstNode)}/ceph/status`),
+        // Per-OSD up/in flags for the OSD grid; the grid falls back to the
+        // health details when this read fails.
+        pveFetch<any>(conn, `/nodes/${encodeURIComponent(firstNode)}/ceph/osd`).catch(() => null),
+      ])
       
       // Récupérer aussi la version Ceph
       let version = null
@@ -137,6 +143,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
               num_osds: osdmap.num_osds || 0,
               num_up_osds: osdmap.num_up_osds || 0,
               num_in_osds: osdmap.num_in_osds || 0,
+              list: osdUpInList(osdTree),
             },
             mds: mdsServers,
             healthChecks,

@@ -1012,7 +1012,7 @@
     "nodeActionShutdownLocalOption": "Arrêter ces guests pour continuer",
     "nodeActionMigrateAutoDesc": "Une migration en live sera tentée pour tous les guests. Si certains guests ne peuvent pas être migrés (ex: stockage local), une confirmation vous sera demandée avant tout arrêt.",
     "nodeActionMigrateFailed": "{count} guest(s) n'ont pas pu être migrés",
-    "nodeActionMigrateFailedDesc": "Ces guests sont probablement sur un stockage local. Vous pouvez les arrêter pour continuer, ou annuler et les déplacer manuellement.",
+    "nodeActionMigrateFailedDesc": "Ces guests sont toujours sur le nœud. Vous pouvez les arrêter pour continuer, ou annuler et les déplacer manuellement.",
     "nodeActionShutdownFailedOption": "Arrêter ces guests pour continuer",
     "nodeActionStandaloneShutdownDesc": "Proxmox VE arrête proprement tous les guests en cours d'exécution pendant l'action sur le nœud.",
     "nodeActionSelfHostedWarning": "Si ProxCenter tourne dans l'un de ces guests, il s'arrête aussi. L'action sur le nœud va tout de même au bout, mais ProxCenter reste inaccessible jusqu'au redémarrage de son guest.",
@@ -4515,7 +4515,8 @@
       "completed": "Terminé: {type}",
       "browserBlocked": "Notifications bloquées dans le navigateur",
       "lastUpdated": "Mis à jour {time}"
-    }
+    },
+    "viewLog": "Voir le journal"
   },
   "events": {
     "title": "Évènements",
@@ -5684,7 +5685,9 @@
     "cloneSuccess": "Clonage en cours",
     "bulkSuccess": "{description} - {count} VMs",
     "bulkPartial": "{description} - {success} OK, {errors} erreurs",
-    "bulkFailed": "{description} - {errors} erreurs"
+    "bulkFailed": "{description} - {errors} erreurs",
+    "migrateStillRunning": "Toujours en cours quand ProxCenter a cessé de la suivre, voir le journal de la tâche",
+    "migrateGuestFailed": "{name} : échec de la migration : {reason}"
   },
   "vmConfig": {
     "title": "Configuration VM",
@@ -7435,7 +7438,8 @@
       "qdevice_offline": "Le QDevice est configuré mais non connecté : il ne vote plus."
     },
     "healthVotes": "Voix, quorum {required}",
-    "healthVotesQDevice": "Voix avec QDevice, quorum {required}"
+    "healthVotesQDevice": "Voix avec QDevice, quorum {required}",
+    "vmActionsFailedTitle": "{count} guest(s) n'ont pas pu être déplacés ou arrêtés et sont toujours sur ce nœud"
   },
   "replication": {
     "title": "Réplication",
@@ -9039,5 +9043,9 @@
     "stepSeconds": "{n} s",
     "stepMinutes": "{n} min",
     "stepHours": "{n} h"
+  },
+  "migrationPreflight": {
+    "pendingTitle": "{count} guest(s) ont des modifications de configuration en attente d'un redémarrage",
+    "pendingBody": "Proxmox migre un guest démarré avec la configuration qu'il exécute, la migration peut donc échouer tant que le guest n'a pas redémarré. Le cas échéant, le journal de la tâche en donne la raison."
   }
 }

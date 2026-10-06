@@ -999,7 +999,7 @@
     "nodeActionShutdownLocalOption": "Diese Gäste herunterfahren um fortzufahren",
     "nodeActionMigrateAutoDesc": "Für alle laufenden Gäste wird eine Live-Migration versucht. Falls einige Gäste nicht migriert werden können (z.B. lokaler Speicher), werden Sie vor dem Herunterfahren gefragt.",
     "nodeActionMigrateFailed": "{count} Gast/Gäste konnten nicht migriert werden",
-    "nodeActionMigrateFailedDesc": "Diese Gäste befinden sich wahrscheinlich auf lokalem Speicher. Sie können sie herunterfahren oder abbrechen und manuell verschieben.",
+    "nodeActionMigrateFailedDesc": "Diese Gäste befinden sich noch auf dem Knoten. Sie können sie herunterfahren oder abbrechen und manuell verschieben.",
     "nodeActionShutdownFailedOption": "Diese Gäste herunterfahren um fortzufahren",
     "nodeActionStandaloneShutdownDesc": "Proxmox VE fährt im Rahmen der Node-Aktion alle laufenden Gäste sauber herunter.",
     "nodeActionSelfHostedWarning": "Läuft ProxCenter in einem dieser Gäste, wird es ebenfalls beendet. Die Node-Aktion wird trotzdem ausgeführt, aber ProxCenter bleibt unerreichbar, bis sein Gast wieder läuft.",
@@ -4494,7 +4494,8 @@
       "completed": "abgeschlossen: {type}",
       "browserBlocked": "Benachrichtigungen blocked in browser",
       "lastUpdated": "aktualisierend {time}"
-    }
+    },
+    "viewLog": "Protokoll anzeigen"
   },
   "events": {
     "title": "Ereignisse",
@@ -5663,7 +5664,9 @@
     "cloneSuccess": "Klonen gestartet",
     "bulkSuccess": "{description} - {count} VMs",
     "bulkPartial": "{description} - {success} OK, {errors} Fehler",
-    "bulkFailed": "{description} - {errors} Fehler"
+    "bulkFailed": "{description} - {errors} Fehler",
+    "migrateStillRunning": "Lief noch, als ProxCenter die Verfolgung beendet hat, siehe Task-Protokoll",
+    "migrateGuestFailed": "{name}: Migration fehlgeschlagen: {reason}"
   },
   "vmConfig": {
     "title": "VM Konfiguration",
@@ -7382,7 +7385,8 @@
       "qdevice_offline": "Das QDevice ist konfiguriert, aber nicht verbunden, und stimmt daher nicht mehr mit ab."
     },
     "healthVotes": "Stimmen, Quorum {required}",
-    "healthVotesQDevice": "Stimmen mit QDevice, Quorum {required}"
+    "healthVotesQDevice": "Stimmen mit QDevice, Quorum {required}",
+    "vmActionsFailedTitle": "{count} Gast/Gäste konnten nicht verschoben oder heruntergefahren werden und befinden sich noch auf diesem Knoten"
   },
   "replication": {
     "title": "Replikation",
@@ -8698,5 +8702,9 @@
     "stepSeconds": "{n} s",
     "stepMinutes": "{n} Min.",
     "stepHours": "{n} Std."
+  },
+  "migrationPreflight": {
+    "pendingTitle": "{count} Gast/Gäste haben Konfigurationsänderungen, die auf einen Neustart warten",
+    "pendingBody": "Proxmox migriert einen laufenden Gast mit der Konfiguration, mit der er läuft, daher kann die Migration bis zu einem Neustart des Gasts fehlschlagen. In diesem Fall nennt das Task-Protokoll den Grund."
   }
 }

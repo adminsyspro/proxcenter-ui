@@ -1012,7 +1012,7 @@
     "nodeActionShutdownLocalOption": "이 게스트들을 종료하고 계속 진행",
     "nodeActionMigrateAutoDesc": "실행 중인 모든 게스트에 대해 라이브 마이그레이션을 시도합니다. 일부 게스트를 마이그레이션할 수 없는 경우(예: 로컬 스토리지) 종료 전에 확인을 요청합니다.",
     "nodeActionMigrateFailed": "게스트 {count}개를 마이그레이션할 수 없습니다",
-    "nodeActionMigrateFailedDesc": "이 게스트들은 로컬 스토리지에 있을 가능성이 높습니다. 종료하고 계속 진행하거나, 취소 후 수동으로 이동할 수 있습니다.",
+    "nodeActionMigrateFailedDesc": "이 게스트들은 아직 노드에 있습니다. 종료하고 계속 진행하거나, 취소 후 수동으로 이동할 수 있습니다.",
     "nodeActionShutdownFailedOption": "이 게스트들을 종료하고 계속 진행",
     "nodeActionStandaloneShutdownDesc": "Proxmox VE가 노드 작업 과정에서 실행 중인 모든 게스트를 정상적으로 종료합니다.",
     "nodeActionSelfHostedWarning": "ProxCenter가 이 게스트 중 하나에서 실행 중이면 함께 중지됩니다. 노드 작업은 그대로 완료되지만, 해당 게스트가 다시 실행될 때까지 ProxCenter에 접속할 수 없습니다.",
@@ -4515,7 +4515,8 @@
       "completed": "완료: {type}",
       "browserBlocked": "브라우저에서 알림이 차단되었습니다",
       "lastUpdated": "{time} 업데이트됨"
-    }
+    },
+    "viewLog": "로그 보기"
   },
   "events": {
     "title": "이벤트",
@@ -5684,7 +5685,9 @@
     "cloneSuccess": "복제가 시작되었습니다",
     "bulkSuccess": "{description} - VM {count}개",
     "bulkPartial": "{description} - {success}개 성공, {errors}개 오류",
-    "bulkFailed": "{description} - {errors}개 오류"
+    "bulkFailed": "{description} - {errors}개 오류",
+    "migrateStillRunning": "ProxCenter가 추적을 중단했을 때 아직 실행 중이었습니다. 작업 로그를 확인하세요",
+    "migrateGuestFailed": "{name}: 마이그레이션 실패: {reason}"
   },
   "vmConfig": {
     "title": "VM 구성",
@@ -7440,7 +7443,8 @@
       "qdevice_offline": "QDevice가 구성되어 있지만 연결되지 않아 더 이상 투표하지 않습니다."
     },
     "healthVotes": "표, 쿼럼 {required}",
-    "healthVotesQDevice": "QDevice 포함 표, 쿼럼 {required}"
+    "healthVotesQDevice": "QDevice 포함 표, 쿼럼 {required}",
+    "vmActionsFailedTitle": "게스트 {count}개를 이동하거나 종료할 수 없어 아직 이 노드에 있습니다"
   },
   "replication": {
     "title": "복제",
@@ -9038,5 +9042,9 @@
     "stepSeconds": "{n}초",
     "stepMinutes": "{n}분",
     "stepHours": "{n}시간"
+  },
+  "migrationPreflight": {
+    "pendingTitle": "게스트 {count}개에 재시작을 기다리는 구성 변경 사항이 있습니다",
+    "pendingBody": "Proxmox는 실행 중인 게스트를 현재 실행 중인 구성으로 마이그레이션하므로, 게스트를 재시작하기 전까지 마이그레이션이 실패할 수 있습니다. 실패하면 작업 로그에서 이유를 확인할 수 있습니다."
   }
 }

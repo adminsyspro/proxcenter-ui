@@ -16,6 +16,11 @@ export interface MigrationHistoryEntry {
   completed_at?: string | null
   status: 'running' | 'completed' | 'failed'
   error?: string
+  /**
+   * Why the move failed, read by the orchestrator from the PVE task log
+   * (#926). Absent on rows, or orchestrators, older than that field.
+   */
+  failure_reason?: string
   /** Why DRS decided the move. Empty on rows written before the orchestrator stored it. */
   reason?: string
   maintenance_evacuation?: boolean
@@ -56,6 +61,13 @@ const asTime = (iso: string | null | undefined): number | null => {
 }
 
 /** Wall-clock duration of a finished migration, null while it runs or when a timestamp is unusable. */
+/** Why a failed move failed: the task-log reason when stored, the error otherwise, '' if neither. */
+export function migrationFailureReason(entry: MigrationHistoryEntry): string {
+  if (entry.status !== 'failed') return ''
+
+  return entry.failure_reason?.trim() || entry.error?.trim() || ''
+}
+
 export function migrationDurationMs(entry: MigrationHistoryEntry): number | null {
   const start = asTime(entry.started_at)
   const end = asTime(entry.completed_at)

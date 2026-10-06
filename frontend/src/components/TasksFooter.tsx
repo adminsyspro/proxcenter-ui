@@ -41,6 +41,9 @@ import {
   runPveTaskStop
 } from '@/lib/tasks/jobActions'
 import StopTaskButton from '@/components/tasks/StopTaskButton'
+import TaskLogButton from '@/components/tasks/TaskLogButton'
+import FailureReasonText from '@/components/tasks/FailureReasonText'
+import { useTaskFailureReasons } from '@/hooks/useTaskFailureReasons'
 import StopTaskConfirmDialog from '@/components/tasks/StopTaskConfirmDialog'
 import { useStopTask, type StopTaskTarget } from '@/hooks/useStopTask'
 import { useRBAC } from '@/contexts/RBACContext'
@@ -118,6 +121,11 @@ const TASK_TYPE_KEYS: Record<string, string> = {
   startall: 'tasks.types.startall',
   stopall: 'tasks.types.stopall',
   migrateall: 'tasks.types.migrateall',
+}
+
+/** A finished task that did not end OK (WARNINGS count as OK). */
+function isFailedStatus(status: string | null | undefined): boolean {
+  return !!status && status !== 'running' && status !== 'OK' && !status.includes('WARNINGS')
 }
 
 function getStatusColor(status: string): 'success' | 'error' | 'warning' | 'primary' | 'default' {
@@ -368,6 +376,17 @@ export default function TasksFooter({
   const [selectedTask, setSelectedTask] = useState<TaskEvent | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
 
+  // Why each failed Proxmox task failed (#926), asked only while the list shows.
+  const failedTaskRefs = useMemo(
+    () => (expanded && !hidden && activeTab === 'proxmox')
+      ? sortedTasks
+        .filter(task => isFailedStatus(task.status) && task.upid?.startsWith('UPID:') && task.connectionId && task.node)
+        .map(task => ({ upid: task.upid, connectionId: task.connectionId, node: task.node }))
+      : [],
+    [expanded, hidden, activeTab, sortedTasks]
+  )
+  const failureReasons = useTaskFailureReasons(failedTaskRefs)
+
   // Panel height (resizable by dragging, #582). `maxHeight` stays the seed
   // so the default appearance is unchanged for users who never drag.
   const [panelHeight, setPanelHeight] = useState(() => {
@@ -512,7 +531,7 @@ export default function TasksFooter({
 
   // Count running tasks
   const runningCount = tasks.filter(t => t.status === 'running').length
-  const errorCount = tasks.filter(t => t.status && t.status !== 'running' && t.status !== 'OK' && !t.status.includes('WARNINGS')).length
+  const errorCount = tasks.filter(t => isFailedStatus(t.status)).length
 
   // Always-dark theme for the taskbar (must stay dark even in light mode)
   // Inherit typography from the current theme so fonts match the rest of the app
@@ -614,9 +633,12 @@ export default function TasksFooter({
       flex: 2,
       minWidth: 200,
       renderCell: (params) => (
-        <Typography variant="caption" noWrap title={params.value}>
-          {params.value || formatTaskType(params.row.type)}
-        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0, height: '100%' }}>
+          <Typography variant="caption" noWrap title={params.value} sx={{ flexShrink: 0, maxWidth: '50%' }}>
+            {params.value || formatTaskType(params.row.type)}
+          </Typography>
+          <FailureReasonText reason={failureReasons[params.row.upid]} />
+        </Box>
       )
     },
     {
@@ -673,9 +695,12 @@ export default function TasksFooter({
       headerAlign: 'center',
       renderCell: (params) => {
         const target = stopTargetForTask(params.row)
-        if (!target) return null
+        if (target) return <StopTaskButton stopping={stop.isStopping(target.id)} onClick={() => stop.ask(target)} />
 
-        return <StopTaskButton stopping={stop.isStopping(target.id)} onClick={() => stop.ask(target)} />
+        // A failed task offers its log right on the row (#926).
+        if (!isFailedStatus(params.row.status)) return null
+
+        return <TaskLogButton connectionId={params.row.connectionId} upid={params.row.upid} node={params.row.node} status={params.row.status} />
       }
     }
   ]
@@ -1067,7 +1092,7 @@ export default function TasksFooter({
                 onRowDoubleClick={handleRowDoubleClick}
                 getRowClassName={(params) => {
                   if (params.row.status === 'running') return 'row-running'
-                  if (params.row.status && params.row.status !== 'OK' && !params.row.status.includes('WARNINGS')) return 'row-error'
+                  if (isFailedStatus(params.row.status)) return 'row-error'
 
 return ''
                 }}

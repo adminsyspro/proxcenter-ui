@@ -1016,7 +1016,7 @@
     "nodeActionShutdownLocalOption": "关闭这些客户机以继续",
     "nodeActionMigrateAutoDesc": "将尝试对所有运行中的客户机进行在线迁移。如果某些客户机无法迁移（如本地存储），在关闭前会征求您的确认。",
     "nodeActionMigrateFailed": "{count} 个客户机无法迁移",
-    "nodeActionMigrateFailedDesc": "这些客户机可能使用了本地存储。您可以关闭它们以继续，或取消并手动移动。",
+    "nodeActionMigrateFailedDesc": "这些客户机仍在节点上。您可以关闭它们以继续，或取消并手动移动。",
     "nodeActionShutdownFailedOption": "关闭这些客户机以继续",
     "nodeActionStandaloneShutdownDesc": "Proxmox VE 会在节点操作过程中正常关闭所有运行中的客户机。",
     "nodeActionSelfHostedWarning": "如果 ProxCenter 运行在其中某个客户机中，它也会随之停止。节点操作仍会完成，但在其客户机重新运行之前将无法访问 ProxCenter。",
@@ -4519,7 +4519,8 @@
       "completed": "已完成：{type}",
       "browserBlocked": "浏览器已阻止通知",
       "lastUpdated": "更新于 {time}"
-    }
+    },
+    "viewLog": "查看日志"
   },
   "events": {
     "title": "事件",
@@ -5688,7 +5689,9 @@
     "cloneSuccess": "克隆已开始",
     "bulkSuccess": "{description} - {count} 个虚拟机",
     "bulkPartial": "{description} - {success} 个成功，{errors} 个错误",
-    "bulkFailed": "{description} - {errors} 个错误"
+    "bulkFailed": "{description} - {errors} 个错误",
+    "migrateStillRunning": "ProxCenter 停止跟踪时仍在运行，请查看任务日志",
+    "migrateGuestFailed": "{name}：迁移失败：{reason}"
   },
   "vmConfig": {
     "title": "VM 配置",
@@ -7444,7 +7447,8 @@
       "qdevice_offline": "QDevice 已配置但未连接，因此不再参与投票。"
     },
     "healthVotes": "票数，仲裁 {required}",
-    "healthVotesQDevice": "含 QDevice 的票数，仲裁 {required}"
+    "healthVotesQDevice": "含 QDevice 的票数，仲裁 {required}",
+    "vmActionsFailedTitle": "{count} 个客户机无法迁移或关闭，仍在此节点上"
   },
   "replication": {
     "title": "复制",
@@ -9044,5 +9048,9 @@
     "stepSeconds": "{n} 秒",
     "stepMinutes": "{n} 分钟",
     "stepHours": "{n} 小时"
+  },
+  "migrationPreflight": {
+    "pendingTitle": "{count} 个客户机有等待重启的配置更改",
+    "pendingBody": "Proxmox 使用运行中客户机当前运行的配置进行迁移，因此在客户机重启之前迁移可能失败。如果失败，任务日志会给出原因。"
   }
 }

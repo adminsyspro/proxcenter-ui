@@ -1,6 +1,7 @@
 import { executeSSH, shellEscape } from "@/lib/ssh/exec"
 import { buildNbdConnectCmd, buildReaderTeardownCmd, type PollOpts } from "./vddk-reader"
 import type { Extent } from "./extents"
+import { type SshTarget } from "@/lib/ssh/node-endpoint-core"
 
 /** The xapi-nbd export to re-serve locally: unix socket to create, plus the
  *  TLS NBD endpoint XAPI handed us (address, port, export name with session)
@@ -57,7 +58,7 @@ export function buildNbdkitXapiCmd(t: XapiNbdTarget, caDir: string): string {
  * nbdkit log back before teardown removes it, so the real cause reaches the
  * caller either way.
  */
-export async function startXapiReader(connectionId: string, nodeIp: string, t: XapiNbdTarget, poll: PollOpts = {}): Promise<XapiReaderHandle> {
+export async function startXapiReader(connectionId: string, nodeIp: SshTarget, t: XapiNbdTarget, poll: PollOpts = {}): Promise<XapiReaderHandle> {
   // Fail here rather than pin nothing: with an empty ca-cert.pem nbdkit still
   // binds the socket, so the missing certificate would only surface later as a
   // puzzling "nbd-client failed to attach a free NBD device".
@@ -117,7 +118,7 @@ export async function startXapiReader(connectionId: string, nodeIp: string, t: X
  * unintended is removed. The pinned-CA directory is removed in the same command
  * (`rm -rf` needs a directory, which the shared `rm -f` file list cannot do).
  */
-export async function stopXapiReader(connectionId: string, nodeIp: string, h: XapiReaderHandle): Promise<void> {
+export async function stopXapiReader(connectionId: string, nodeIp: SshTarget, h: XapiReaderHandle): Promise<void> {
   const teardown = buildReaderTeardownCmd({ nbdDev: h.nbdDev, sock: h.sock, pwFile: "", logFile: h.logFile })
   await executeSSH(connectionId, nodeIp, `${teardown}; rm -rf ${shellEscape(h.caDir)}`)
 }
@@ -139,7 +140,7 @@ export function parseAllocatedExtents(json: string, diskBytes: number): Extent[]
 }
 
 /** Allocated map of the export behind `sock`; falls back to the whole disk when the map is unavailable. */
-export async function readAllocatedExtents(connectionId: string, nodeIp: string, sock: string, diskBytes: number): Promise<Extent[]> {
+export async function readAllocatedExtents(connectionId: string, nodeIp: SshTarget, sock: string, diskBytes: number): Promise<Extent[]> {
   const res = await executeSSH(connectionId, nodeIp, `nbdinfo --map --json ${shellEscape(`nbd+unix:///?socket=${sock}`)}`, 120_000)
   try { if (!res.success) throw new Error(res.error || "nbdinfo failed"); return parseAllocatedExtents(res.output || "", diskBytes) }
   catch { return [{ offset: 0, length: diskBytes }] }

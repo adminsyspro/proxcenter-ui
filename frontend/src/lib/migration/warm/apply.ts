@@ -4,6 +4,7 @@ import { createDdProgressAccumulator } from "./dd-progress"
 import type { Extent } from "./extents"
 import type { WarmStatus } from "./types"
 import { updateJobLive, appendLog } from "./job-control"
+import { type SshTarget } from "@/lib/ssh/node-endpoint-core"
 
 // Long-running SSH operations (block apply, checksum scan) need a generous timeout.
 export const APPLY_TIMEOUT_MS = 12 * 60 * 60 * 1000
@@ -68,7 +69,7 @@ export interface PassProgress extends PassWindow {
 // so the original abort-on-first-error (`set -e`) semantics hold across the
 // split. `label` distinguishes the delta/full path from the checksum path.
 export async function applyExtentsWithProgress(a: {
-  jobId: string; connectionId: string; nodeIp: string
+  jobId: string; connectionId: string; nodeIp: SshTarget
   nbdDev: string; dev: string; extents: Extent[]; capacityBytes: number
   label: string; diskIndex: number; pass: PassProgress
 }): Promise<void> {

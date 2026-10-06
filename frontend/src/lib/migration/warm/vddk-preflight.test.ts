@@ -14,11 +14,11 @@ vi.mock("@/lib/connections/getConnection", () => ({
   getConnectionById: vi.fn(async () => ({ baseUrl: "https://pve.local:8006" })),
 }))
 vi.mock("../pve-tasks", () => ({
-  getNodeIpForMigration: vi.fn(async () => "10.0.0.7"),
+  getNodeSshEndpointForMigration: vi.fn(async () => ({ host: "10.0.0.7", port: 2201, source: "override" })),
 }))
 vi.mock("@/lib/db/prisma", () => ({ prisma: {} }))
-import { getNodeIpForMigration } from "../pve-tasks"
-const mockNodeIp = getNodeIpForMigration as unknown as ReturnType<typeof vi.fn>
+import { getNodeSshEndpointForMigration } from "../pve-tasks"
+const mockNodeIp = getNodeSshEndpointForMigration as unknown as ReturnType<typeof vi.fn>
 
 const ALL_PRESENT = [
   "nbdkit=/usr/sbin/nbdkit",
@@ -139,23 +139,23 @@ describe("runWarmNodePreflight", () => {
   beforeEach(() => {
     mockSSH.mockReset()
     mockNodeIp.mockClear()
-    mockNodeIp.mockResolvedValue("10.0.0.7")
+    mockNodeIp.mockResolvedValue({ host: "10.0.0.7", port: 2201, source: "override" })
   })
 
   it("resolves the node IP the way the engine does, then probes that node (default libdir)", async () => {
     mockSSH.mockResolvedValue({ success: true, output: ALL_PRESENT })
     const r = await runWarmNodePreflight("conn", "pve1")
     expect(r.ok).toBe(true)
-    // Engine parity: getNodeIpForMigration(prisma, connId, node, baseUrl)
+    // Engine parity: getNodeSshEndpointForMigration(prisma, connId, node, baseUrl)
     expect(mockNodeIp).toHaveBeenCalledWith(expect.anything(), "conn", "pve1", "https://pve.local:8006")
-    // Probe ran against the resolved IP, with the engine's default libdir.
-    expect(mockSSH).toHaveBeenCalledWith("conn", "10.0.0.7", expect.stringContaining("vmware-vix-disklib"))
+    // Probe ran against the resolved host and per-node port, with the engine's default libdir.
+    expect(mockSSH).toHaveBeenCalledWith("conn", { host: "10.0.0.7", port: 2201, source: "override" }, expect.stringContaining("vmware-vix-disklib"))
   })
 
   it("honours a custom vddkLibdir so the verdict matches the migration's libdir", async () => {
     mockSSH.mockResolvedValue({ success: true, output: ALL_PRESENT })
     await runWarmNodePreflight("conn", "pve1", "/opt/vddk")
-    expect(mockSSH).toHaveBeenCalledWith("conn", "10.0.0.7", expect.stringContaining("'/opt/vddk'/lib64/libvixDiskLib.so"))
+    expect(mockSSH).toHaveBeenCalledWith("conn", { host: "10.0.0.7", port: 2201, source: "override" }, expect.stringContaining("'/opt/vddk'/lib64/libvixDiskLib.so"))
   })
 
   it("returns no-go with the missing deps when the node is not prepared", async () => {

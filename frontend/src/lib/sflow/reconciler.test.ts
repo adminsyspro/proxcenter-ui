@@ -133,7 +133,7 @@ describe("reconcileSFlow", () => {
 
     await expect(reconcileSFlow()).resolves.toEqual({ checked: 1, reapplied: 0, failed: 0 })
     expect(executeSSHMock).toHaveBeenCalledTimes(1)
-    expect(executeSSHMock).toHaveBeenCalledWith("right-tenant", "10.0.0.1", "sflow-probe-command")
+    expect(executeSSHMock).toHaveBeenCalledWith("right-tenant", expect.objectContaining({ host: "10.0.0.1", port: 22 }), "sflow-probe-command")
   })
 
   it("skips connections without SSH credentials and unusable hosts", async () => {
@@ -173,7 +173,29 @@ describe("reconcileSFlow", () => {
     executeSSHMock.mockResolvedValue({ success: true, output: "0\n" })
 
     await expect(reconcileSFlow()).resolves.toEqual({ checked: 1, reapplied: 1, failed: 0 })
-    expect(applySFlowOnNodeMock).toHaveBeenCalledWith("connection-1", "10.0.0.1", desiredConfig)
+    expect(applySFlowOnNodeMock).toHaveBeenCalledWith("connection-1", expect.objectContaining({ host: "10.0.0.1", port: 22 }), desiredConfig)
+  })
+
+  it("reaches each node on its own SSH address and port, else the connection port", async () => {
+    settingFindManyMock.mockResolvedValue([{ tenantId: "tenant-1", value: desiredConfig }])
+    connectionFindManyMock.mockResolvedValue([connection({
+      sshPort: 2222,
+      hosts: [
+        { enabled: true, ip: "10.0.0.1", sshAddress: "203.0.113.10", sshPort: 2201 },
+        { enabled: true, ip: "10.0.0.2", sshAddress: "203.0.113.10", sshPort: 2202 },
+        { enabled: true, ip: "10.0.0.3", sshAddress: null, sshPort: null },
+      ],
+    })])
+    executeSSHMock.mockResolvedValue({ success: true, output: "0\n" })
+
+    await reconcileSFlow()
+
+    expect(executeSSHMock.mock.calls.map(c => c[1])).toEqual([
+      { host: "203.0.113.10", port: 2201, source: "override" },
+      { host: "203.0.113.10", port: 2202, source: "override" },
+      { host: "10.0.0.3", port: 2222, source: "proxmox" },
+    ])
+    expect(applySFlowOnNodeMock.mock.calls.map(c => c[1].port)).toEqual([2201, 2202, 2222])
   })
 
   it("does not count a node with no OVS bridge as a failure", async () => {

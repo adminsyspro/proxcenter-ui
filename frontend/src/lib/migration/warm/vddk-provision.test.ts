@@ -20,7 +20,7 @@ vi.mock("@/lib/connections/getConnection", () => ({
   getConnectionById: vi.fn(async () => ({ baseUrl: "https://pve.local:8006" })),
 }))
 vi.mock("../pve-tasks", () => ({
-  getNodeIpForMigration: vi.fn(async () => "10.0.0.7"),
+  getNodeSshEndpointForMigration: vi.fn(async () => ({ host: "10.0.0.7", port: 2201, source: "override" })),
 }))
 vi.mock("@/lib/db/prisma", () => ({ prisma: {} }))
 
@@ -288,13 +288,13 @@ describe("provisionWarmNode", () => {
     // Install run: bearer via env, generous timeout for apt + the download.
     const [connId, nodeIp, cmd, timeoutMs] = mockSSH.mock.calls[0]
     expect(connId).toBe("conn")
-    expect(nodeIp).toBe("10.0.0.7")
+    expect(nodeIp).toEqual({ host: "10.0.0.7", port: 2201, source: "override" })
     expect(cmd).toContain("env VDDK_BEARER=")
     expect(cmd).toContain("nbdkit-plugin-vddk")
     expect(timeoutMs).toBeGreaterThan(60_000)
 
     // Verdict comes from the existing preflight probe, on the same node.
-    expect(mockSSH.mock.calls[1][1]).toBe("10.0.0.7")
+    expect(mockSSH.mock.calls[1][1]).toEqual({ host: "10.0.0.7", port: 2201, source: "override" })
     expect(mockSSH.mock.calls[1][2]).toContain("vmware-vix-disklib")
   })
 

@@ -1,7 +1,8 @@
 import { executeSSH, shellEscape } from "@/lib/ssh/exec"
 import { getConnectionById } from "@/lib/connections/getConnection"
-import { getNodeIpForMigration } from "../pve-tasks"
+import { getNodeSshEndpointForMigration } from "../pve-tasks"
 import { prisma } from "@/lib/db/prisma"
+import { formatSshEndpoint, type SshTarget } from "@/lib/ssh/node-endpoint-core"
 
 /** Default VDDK libdir. Must match the warm engine default (warm-pipeline.ts). */
 export const DEFAULT_VDDK_LIBDIR = "/usr/lib/vmware-vix-disklib"
@@ -114,10 +115,10 @@ export function parsePreflightOutput(output: string, libdir: string): VddkPrefli
  * Returns a structured result rather than throwing, so the pipeline can surface
  * the actionable message to the operator before starting a migration.
  */
-export async function checkVddkPreflight(connectionId: string, nodeIp: string, libdir: string): Promise<VddkPreflightResult> {
+export async function checkVddkPreflight(connectionId: string, nodeIp: SshTarget, libdir: string): Promise<VddkPreflightResult> {
   const res = await executeSSH(connectionId, nodeIp, buildPreflightCmd(libdir))
   if (!res.success) {
-    return { ok: false, missing: [], error: `VDDK preflight probe could not run on ${nodeIp}: ${res.error || res.output}` }
+    return { ok: false, missing: [], error: `VDDK preflight probe could not run on ${formatSshEndpoint(nodeIp)}: ${res.error || res.output}` }
   }
   return parsePreflightOutput(res.output || "", libdir)
 }
@@ -126,7 +127,7 @@ export async function checkVddkPreflight(connectionId: string, nodeIp: string, l
  * Pre-migration go/no-go for the warm path, surfaced in the migrate dialog.
  *
  * Resolves the target node IP exactly as runWarmMigration does
- * (getNodeIpForMigration + the same `vddkLibdir || default`) and runs
+ * (getNodeSshEndpointForMigration + the same `vddkLibdir || default`) and runs
  * checkVddkPreflight, so the dialog's verdict matches the backstop the engine
  * performs at planning time. Node preparation itself is the operator's
  * responsibility (documented separately); this only reports readiness.
@@ -137,6 +138,6 @@ export async function runWarmNodePreflight(
   vddkLibdir?: string,
 ): Promise<VddkPreflightResult> {
   const conn = await getConnectionById(connectionId)
-  const nodeIp = await getNodeIpForMigration(prisma, connectionId, node, conn.baseUrl)
+  const nodeIp = await getNodeSshEndpointForMigration(prisma, connectionId, node, conn.baseUrl)
   return checkVddkPreflight(connectionId, nodeIp, vddkLibdir || DEFAULT_VDDK_LIBDIR)
 }

@@ -28,7 +28,7 @@ import { HyperVClient } from "@/lib/hyperv/client"
 import { resolveHypervDiskPaths } from "./hyperv-disks"
 import { applySourceSizing, hypervSourceSizing, nutanixSourceSizing, type SourceSizing } from "./source-sizing"
 import { ntfsCompressionPluginCheckCommand, ntfsCompressionPluginInstallScript } from "./ntfs-compression-plugin"
-import { getNodeIp } from "@/lib/ssh/node-ip"
+import { resolveNodeSshEndpoint } from "@/lib/ssh/node-endpoint"
 import { parseV2vLine, calculateOverallProgress } from "./v2v-progress"
 import { parseV2vXml, buildPveCreateParams } from "./v2vConfigMapper"
 import type { V2vVmConfig } from "./v2vConfigMapper"
@@ -60,6 +60,7 @@ import { startJobHeartbeat } from "./job-heartbeat"
 import { MIGRATION_CPU_TYPE_DEFAULT } from "./cpu-type"
 import { sanitizeV2vRoot, planV2vRootRetry } from "./v2v-root-select"
 import type { V2vRootCandidate } from "./v2v-root-select"
+import { formatSshEndpoint, type SshTarget } from '@/lib/ssh/node-endpoint-core'
 
 type MigrationStatus = "pending" | "preflight" | "creating_vm" | "transferring" | "configuring" | "converting_disks" | "completed" | "failed" | "cancelled"
 
@@ -463,7 +464,7 @@ function buildSynthesizedLibvirtXml(
 async function runVirtV2vWithProgress(
   jobId: string,
   config: V2vMigrationConfig,
-  nodeIp: string,
+  nodeIp: SshTarget,
   v2vCommand: string,
   progressOffset: number,
   progressScale: number,
@@ -1043,8 +1044,8 @@ export async function runV2vMigrationPipeline(
 
     // Get PVE connection
     const pveConn = await getConnectionById(config.targetConnectionId)
-    const nodeIp = await getNodeIp(pveConn, config.targetNode)
-    await appendLog(jobId, `Target node: ${config.targetNode} (${nodeIp})`)
+    const nodeIp = await resolveNodeSshEndpoint(pveConn, config.targetNode)
+    await appendLog(jobId, `Target node: ${config.targetNode} (${formatSshEndpoint(nodeIp)})`)
 
     // Verify virt-v2v is installed
     const v2vCheck = await executeSSH(config.targetConnectionId, nodeIp, "which virt-v2v")
@@ -2772,7 +2773,7 @@ export async function runV2vMigrationPipeline(
     // Clean up downloaded disk files
     try {
       const pveConn = await getConnectionById(config.targetConnectionId)
-      const nodeIp = await getNodeIp(pveConn, config.targetNode)
+      const nodeIp = await resolveNodeSshEndpoint(pveConn, config.targetNode)
       const nutanixDownloadDir = `${tempBase}/nutanix-${jobId}`
       await executeSSH(config.targetConnectionId, nodeIp, `rm -rf ${shellEscape(nutanixDownloadDir)}`).catch(() => {})
     } catch { /* best effort */ }
@@ -2816,7 +2817,7 @@ export async function runV2vMigrationPipeline(
     const failedCleanups: string[] = []
     try {
       const pveConn = await getConnectionById(config.targetConnectionId)
-      const nodeIp = await getNodeIp(pveConn, config.targetNode)
+      const nodeIp = await resolveNodeSshEndpoint(pveConn, config.targetNode)
       const rmOutput = await executeSSH(config.targetConnectionId, nodeIp, `rm -rf ${shellEscape(outputDir)}`, CLEANUP_TIMEOUT_MS)
       if (!rmOutput.success) failedCleanups.push(`${outputDir}: ${rmOutput.error || "unknown"}`)
       if (directWriteDir) {
@@ -2970,7 +2971,7 @@ export async function runV2vMigrationPipeline(
       const nfcFailed: string[] = []
       try {
         const pveConn = await getConnectionById(config.targetConnectionId)
-        const nodeIp = await getNodeIp(pveConn, config.targetNode)
+        const nodeIp = await resolveNodeSshEndpoint(pveConn, config.targetNode)
         for (const p of nfcDownloadedDisks) {
           const rmRes = await executeSSH(config.targetConnectionId, nodeIp, `rm -f ${shellEscape(p)}`, 120_000)
           if (!rmRes.success) nfcFailed.push(`${p}: ${rmRes.error || "unknown"}`)

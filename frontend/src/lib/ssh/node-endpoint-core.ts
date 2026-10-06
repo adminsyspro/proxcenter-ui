@@ -63,6 +63,17 @@ export function pickNodeSshEndpoint(input: {
     : { host: input.reportedHost, port, source: "proxmox" }
 }
 
+/**
+ * Endpoint of a node from its ManagedHost row alone (stored IP as the reported
+ * address), for callers that iterate the rows of a connection.
+ */
+export function managedHostSshEndpoint(
+  host: { ip?: string | null } & NodeSshOverride,
+  connSshPort?: number | null,
+): NodeSshEndpoint {
+  return pickNodeSshEndpoint({ reportedHost: host.ip ?? "", connSshPort, override: host })
+}
+
 /** Host part of an SSH target. */
 export function sshTargetHost(target: SshTarget): string {
   return typeof target === "string" ? target : target.host

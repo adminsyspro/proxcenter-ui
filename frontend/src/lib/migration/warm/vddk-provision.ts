@@ -1,8 +1,9 @@
 import { executeSSH, shellEscape } from "@/lib/ssh/exec"
 import { getConnectionById } from "@/lib/connections/getConnection"
-import { getNodeIpForMigration } from "../pve-tasks"
+import { getNodeSshEndpointForMigration } from "../pve-tasks"
 import { prisma } from "@/lib/db/prisma"
 import { checkVddkPreflight, DEFAULT_VDDK_LIBDIR, type VddkPreflightResult } from "./vddk-preflight"
+import { formatSshEndpoint } from "@/lib/ssh/node-endpoint-core"
 
 // Automated warm-migration node provisioning (issue: Broadcom closed the
 // public VDDK download in August 2026). The VDDK now ships as a private GHCR
@@ -273,7 +274,7 @@ export async function provisionWarmNode(
   // Resolve the node IP exactly as runWarmMigration / runWarmNodePreflight do,
   // so we provision the very node the engine will use.
   const conn = await getConnectionById(connectionId)
-  const nodeIp = await getNodeIpForMigration(prisma, connectionId, node, conn.baseUrl)
+  const nodeIp = await getNodeSshEndpointForMigration(prisma, connectionId, node, conn.baseUrl)
 
   const { bearer, digest } = await resolveVddkArtifact(token)
   const script = buildVddkInstallScript({ pkg: vddkPackage(), digest, libdir })
@@ -282,7 +283,7 @@ export async function provisionWarmNode(
   if (!res.success) {
     const detail = [res.error, res.output].filter(Boolean).join("\n").trim() || "no output"
     throw new Error(
-      `Warm-migration node provisioning failed on ${node} (${nodeIp}): ` +
+      `Warm-migration node provisioning failed on ${node} (${formatSshEndpoint(nodeIp)}): ` +
       redactSecret(redactSecret(detail, bearer), token),
     )
   }

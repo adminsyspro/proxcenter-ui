@@ -4,6 +4,7 @@ import { pveSetVmConfig } from "../pve-vm-config"
 import { convertDisksToQcow2 } from "../qcow2-convert"
 import { scanBlockChecksums } from "./checksum-detector"
 import { updateJob, appendLog } from "./job-control"
+import { type SshTarget } from "@/lib/ssh/node-endpoint-core"
 
 /**
  * Attach the copied volumes to the target VM, optionally start it, then run the
@@ -61,7 +62,7 @@ export async function attachDisksAndBoot(a: {
  * on the node; the source-specific reader stays with the caller.
  */
 export async function verifySampledFirstBlock(a: {
-  jobId: string; connectionId: string; nodeIp: string; diskIndex: number; dev: string
+  jobId: string; connectionId: string; nodeIp: SshTarget; diskIndex: number; dev: string
   openReader: () => Promise<{ nbdDev: string; close: () => Promise<void> }>
 }): Promise<void> {
   const { jobId, connectionId, nodeIp, diskIndex: i, dev } = a

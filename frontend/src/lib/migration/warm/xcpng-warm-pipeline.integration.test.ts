@@ -33,7 +33,7 @@ vi.mock("@/lib/tenant", async importOriginal => {
   return { ...actual, getTenantPrisma: vi.fn() }
 })
 vi.mock("@/lib/crypto/secret", () => ({ decryptSecret: vi.fn(() => "root:secret"), encryptSecret: vi.fn() }))
-vi.mock("../pve-tasks", () => ({ getNodeIpForMigration: vi.fn(), waitForPveTask: vi.fn() }))
+vi.mock("../pve-tasks", () => ({ getNodeSshEndpointForMigration: vi.fn(), waitForPveTask: vi.fn() }))
 vi.mock("../pvesm-alloc", async importOriginal => {
   const actual = await importOriginal<typeof import("../pvesm-alloc")>()
   // nextFreeDiskName, volumesToFree, volumesToKeep and PVESM_FREE_TIMEOUT_MS stay real.
@@ -63,7 +63,7 @@ import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { getTenantPrisma } from "@/lib/tenant"
 import { decryptSecret } from "@/lib/crypto/secret"
-import { getNodeIpForMigration, waitForPveTask } from "../pve-tasks"
+import { getNodeSshEndpointForMigration, waitForPveTask } from "../pve-tasks"
 import { allocateAndMapBlockVolume, type AllocatedVolume, type AllocateAndMapArgs } from "../pvesm-alloc"
 import { pveSetVmConfig } from "../pve-vm-config"
 import { convertDisksToQcow2 } from "../qcow2-convert"
@@ -272,7 +272,7 @@ beforeEach(() => {
   vi.mocked(getTenantPrisma).mockImplementation(() => prisma as any)
   vi.mocked(decryptSecret).mockReturnValue("root:secret")
   vi.mocked(getConnectionById).mockResolvedValue(PVE_CONN as any)
-  vi.mocked(getNodeIpForMigration).mockResolvedValue("10.0.0.5")
+  vi.mocked(getNodeSshEndpointForMigration).mockResolvedValue({ host: "10.0.0.5", port: 2202, source: "override" })
   vi.mocked(waitForPveTask).mockResolvedValue(undefined)
   vi.mocked(startJobHeartbeat).mockReturnValue(() => {})
   vi.mocked(startSessionKeepAlive).mockReturnValue(() => {})
@@ -369,6 +369,12 @@ describe("runXcpngWarmMigration CBT path", () => {
     expect(prisma.row.completedAt).toBeInstanceOf(Date)
     expect(prisma.row.sourceVmName).toBe("Debian13")
     expect(prisma.row.targetVmid).toBe(900)
+
+    // Every target-node command and reader ran on the node's own SSH address and port.
+    const node = { host: "10.0.0.5", port: 2202, source: "override" }
+    expect(vi.mocked(executeSSH).mock.calls.length).toBeGreaterThan(0)
+    expect(vi.mocked(executeSSH).mock.calls.every(c => JSON.stringify(c[1]) === JSON.stringify(node))).toBe(true)
+    expect(vi.mocked(startXapiReader).mock.calls.every(c => JSON.stringify(c[1]) === JSON.stringify(node))).toBe(true)
 
     // planning gathered everything before touching the pool
     expect(xapiLogin).toHaveBeenCalledWith("https://xcp.test", "root", "secret", true)
@@ -577,7 +583,7 @@ describe("runXcpngWarmMigration checksum fallback", () => {
     // one checksum snapshot, one reader, one block-diff pass, snapshot dropped in finally
     expect(vi.mocked(xapiSnapshotVm).mock.calls.map(c => c[2])).toEqual([`${XCPNG_SNAPSHOT_PREFIX}-checksum`])
     expect(readerTags(jobId)).toEqual(["checksum-0", "vrfy-0"])
-    expect(detectChangedExtentsByChecksum).toHaveBeenCalledWith("conn-pve", "10.0.0.5", "/dev/nbd1", "/dev/zvol/DatastoreVM/vm-777-disk-1", 256 * 1024 * KiB, DISK_BYTES, expect.anything())
+    expect(detectChangedExtentsByChecksum).toHaveBeenCalledWith("conn-pve", { host: "10.0.0.5", port: 2202, source: "override" }, "/dev/nbd1", "/dev/zvol/DatastoreVM/vm-777-disk-1", 256 * 1024 * KiB, DISK_BYTES, expect.anything())
     expect(hasLog("Disk 0: scanning source and target block checksums (15.0 GB)")).toBe(true)
     // the scan progress callback drove a live write on the full_copy scale
     expect(prisma.migrationJob.updateMany).toHaveBeenCalledWith(expect.objectContaining({

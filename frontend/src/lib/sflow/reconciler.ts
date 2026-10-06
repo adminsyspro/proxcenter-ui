@@ -18,6 +18,7 @@
  */
 import { prisma } from "@/lib/db/prisma"
 import { executeSSH } from "@/lib/ssh/exec"
+import { managedHostSshEndpoint } from "@/lib/ssh/node-endpoint-core"
 import { applySFlowOnNode, SFLOW_PROBE_COMMAND, type SFlowDesiredConfig } from "@/lib/sflow/configure"
 
 export const SFLOW_RECONCILE_INTERVAL_MS = 10 * 60 * 1000
@@ -77,15 +78,16 @@ export async function reconcileSFlow(): Promise<SFlowReconcileReport> {
       if (!conn.sshKeyEnc && !conn.sshPassEnc) continue
 
       for (const host of conn.hosts) {
-        if (!host.enabled || !host.ip) continue
+        if (!host.enabled || !(host.ip || host.sshAddress)) continue
+        const target = managedHostSshEndpoint(host, conn.sshPort)
 
-        const probe = await executeSSH(conn.id, host.ip, SFLOW_PROBE_COMMAND)
+        const probe = await executeSSH(conn.id, target, SFLOW_PROBE_COMMAND)
         if (!probe.success) continue // unreachable, not drifted
 
         report.checked++
         if (Number.parseInt((probe.output ?? "0").trim(), 10) > 0) continue // still configured
 
-        const applied = await applySFlowOnNode(conn.id, host.ip, config)
+        const applied = await applySFlowOnNode(conn.id, target, config)
         if (applied.success) {
           report.reapplied++
         } else if (applied.bridgesConfigured === 0 && applied.failedBridges.length === 0) {

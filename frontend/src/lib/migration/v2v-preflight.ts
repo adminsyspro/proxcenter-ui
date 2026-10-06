@@ -1,6 +1,6 @@
 import { executeSSH, shellEscape, type SSHResult } from "@/lib/ssh/exec"
 import { getConnectionById } from "@/lib/connections/getConnection"
-import { getNodeIp } from "@/lib/ssh/node-ip"
+import { resolveNodeSshEndpoint } from "@/lib/ssh/node-endpoint"
 import { ntfsCompressionPluginCheckCommand, ntfsCompressionPluginInstallScript } from "./ntfs-compression-plugin"
 
 export interface TempStorageOption {
@@ -90,7 +90,7 @@ export async function runV2vPreflight(
 
   // Resolve node IP
   const conn = await getConnectionById(targetConnectionId)
-  const nodeIp = await getNodeIp(conn, targetNode)
+  const nodeIp = await resolveNodeSshEndpoint(conn, targetNode)
 
   // 1. Check SSH connectivity
   const sshCheck = await executeSSH(targetConnectionId, nodeIp, "echo ok")
@@ -313,7 +313,7 @@ export async function installV2vPackages(
   targetNode: string
 ): Promise<SSHResult> {
   const conn = await getConnectionById(targetConnectionId)
-  const nodeIp = await getNodeIp(conn, targetNode)
+  const nodeIp = await resolveNodeSshEndpoint(conn, targetNode)
 
   // Single-line bash script: `set -e` gives us early-exit on any failure, so a
   // failing rhsrvany fetch surfaces as an install error instead of silently
@@ -361,7 +361,7 @@ export async function startVirtioWinDownload(
   targetNode: string
 ): Promise<SSHResult> {
   const conn = await getConnectionById(targetConnectionId)
-  const nodeIp = await getNodeIp(conn, targetNode)
+  const nodeIp = await resolveNodeSshEndpoint(conn, targetNode)
 
   // Remove stale exit marker + partial file, then launch curl in background
   return executeSSH(
@@ -381,7 +381,7 @@ export async function checkVirtioWinProgress(
   targetNode: string
 ): Promise<{ downloading: boolean; sizeBytes: number; expectedBytes: number; percent: number; done: boolean; error?: string }> {
   const conn = await getConnectionById(targetConnectionId)
-  const nodeIp = await getNodeIp(conn, targetNode)
+  const nodeIp = await resolveNodeSshEndpoint(conn, targetNode)
 
   // Check if the exit marker exists (means curl finished)
   const exitCheck = await executeSSH(targetConnectionId, nodeIp, `cat ${VIRTIO_WIN_EXIT} 2>/dev/null || echo RUNNING`)

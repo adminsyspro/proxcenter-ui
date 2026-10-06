@@ -43,11 +43,3 @@ export async function getNodeSshEndpointForMigration(db: any, connectionId: stri
   }
   return pickNodeSshEndpoint({ reportedHost, connSshPort: conn?.sshPort, override: host })
 }
-
-/**
- * Find the IP address of a Proxmox node for SSH access.
- * Tries managed hosts first, then extracts from baseUrl.
- */
-export async function getNodeIpForMigration(db: any, connectionId: string, nodeName: string, baseUrl: string): Promise<string> {
-  return (await getNodeSshEndpointForMigration(db, connectionId, nodeName, baseUrl)).host
-}

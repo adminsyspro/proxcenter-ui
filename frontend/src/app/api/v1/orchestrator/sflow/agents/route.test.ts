@@ -217,7 +217,8 @@ describe('GET /sflow/agents: node probing and port map push', () => {
 
   // Dispatch on the command so one mock serves the whole probe sequence.
   function sshByCommand(opts: { macsFrom: string | null; ovsOn: string[]; sflowOn: string[] }) {
-    return async (_conn: string, ip: string, cmd: string) => {
+    return async (_conn: string, target: { host: string }, cmd: string) => {
+      const ip = target.host
       if (cmd.includes('/etc/pve/nodes/')) {
         if (opts.macsFrom === null || ip !== opts.macsFrom) return { success: false, output: '', error: 'ssh: unreachable' }
         return { success: true, output: MAC_LINES }

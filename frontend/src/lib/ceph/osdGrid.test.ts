@@ -49,3 +49,20 @@ describe('osdGridStates', () => {
     expect(countOf(items, 'up')).toBe(42)
   })
 })
+
+describe('osdGridStates with the real OSD list', () => {
+  it('uses each OSD own flags and ids, gaps included', () => {
+    const items = osdGridStates({
+      total: 4, up: 3, inCount: 3,
+      healthChecks: { OSD_NEARFULL: { detail: [{ message: 'osd.20 is near full' }] } },
+      osds: [{ id: 20, up: true, in: true }, { id: 0, up: true, in: true }, { id: 3, up: false, in: true }, { id: 7, up: true, in: false }],
+    })
+
+    expect(items).toEqual([
+      { id: 0, state: 'up' },
+      { id: 3, state: 'down' },
+      { id: 7, state: 'out' },
+      { id: 20, state: 'nearfull' },
+    ])
+  })
+})

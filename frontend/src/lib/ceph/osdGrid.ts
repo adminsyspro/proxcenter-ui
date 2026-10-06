@@ -22,17 +22,20 @@ function idsIn(check: { detail?: Array<{ message?: string }> } | null | undefine
 /**
  * State of each OSD for the cluster OSD grids (inventory and dashboard).
  *
- * The status summary only gives counts, so which OSD is down comes from the
+ * With the real OSD list (`osds`), each OSD takes its own state. Without it
+ * the status summary only gives counts, so which OSD is down comes from the
  * Ceph health details, which name each one (`osd.N ... is down`). Those ids
  * are used alone when present: guessing by position (the last ids are the
  * down ones) is only a fallback for clusters that report no detail, since a
  * failed host rarely carries the highest ids.
  */
-export function osdGridStates({ total, up, inCount, healthChecks }: {
+export function osdGridStates({ total, up, inCount, healthChecks, osds }: {
   total: number
   up: number
   inCount: number
   healthChecks?: HealthChecks | null
+  /** Real per-OSD flags when the caller has them: used instead of any guess. */
+  osds?: ReadonlyArray<{ id: number; up: boolean; in: boolean }> | null
 }): OsdGridItem[] {
   const checks = healthChecks || {}
   const downIds = new Set<number>()
@@ -44,6 +47,18 @@ export function osdGridStates({ total, up, inCount, healthChecks }: {
     if (name === 'OSD_DOWN' || name === 'OSD_FLAGS') ids.forEach(id => downIds.add(id))
     else if (name === 'OSD_NEARFULL' || name === 'OSD_BACKFILLFULL') ids.forEach(id => nearFullIds.add(id))
     else if (name === 'OSD_FULL') ids.forEach(id => fullIds.add(id))
+  }
+
+  if (osds && osds.length > 0) {
+    return [...osds].sort((a, b) => a.id - b.id).map(o => {
+      let state: OsdGridState = 'up'
+
+      if (!o.up) state = 'down'
+      else if (fullIds.has(o.id)) state = 'full'
+      else if (nearFullIds.has(o.id)) state = 'nearfull'
+      else if (!o.in) state = 'out'
+      return { id: o.id, state }
+    })
   }
 
   const downNamed = downIds.size > 0

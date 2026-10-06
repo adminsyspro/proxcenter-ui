@@ -193,6 +193,7 @@ function CephClusterCard({ cluster, isDark, perfData }) {
               up: cluster.osdsUp,
               inCount: cluster.osdsIn || cluster.osdsUp,
               healthChecks: cluster.healthChecks,
+              osds: cluster.osds,
             }).map(({ id, state }) => {
               const { color, status, opacity } = OSD_STATE_STYLE[state]
               return (

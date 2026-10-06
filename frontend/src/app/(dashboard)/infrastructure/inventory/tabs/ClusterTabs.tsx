@@ -2528,6 +2528,7 @@ export default function ClusterTabs(props: any) {
                                     up: numUp,
                                     inCount: numIn,
                                     healthChecks: clusterCephData.health?.checks,
+                                    osds: clusterCephData._normalized?.osd?.list,
                                   })
 
                                   return (

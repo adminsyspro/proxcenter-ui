@@ -48,3 +48,23 @@ describe('role_tenant_admin — task center + events (issue #430)', () => {
     expect(tenantAdmin?.permissions).toContain('events.view')
   })
 })
+
+/**
+ * Issue #920: browsing storage content is gated on storage.content, and that
+ * route also feeds the ISO and disk pickers of the guest wizards. Every
+ * system role able to see guests must therefore carry it.
+ */
+describe('system roles with vm.view also browse storage content (issue #920)', () => {
+  const explicit = ROLES.filter(r => !r.permissions.includes('*') && r.permissions.includes('vm.view'))
+
+  it('covers the non-wildcard roles that see guests', () => {
+    expect(explicit.map(r => r.id)).toEqual(expect.arrayContaining([
+      'role_operator', 'role_vm_admin', 'role_viewer', 'role_vm_user',
+      'role_tenant_admin', 'role_tenant_operator', 'role_tenant_viewer',
+    ]))
+  })
+
+  it.each(explicit.map(r => [r.id, r] as const))('%s carries storage.content', (_id, role) => {
+    expect(role.permissions).toContain('storage.content')
+  })
+})

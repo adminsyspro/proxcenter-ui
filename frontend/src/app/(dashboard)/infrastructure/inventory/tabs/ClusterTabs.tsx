@@ -87,6 +87,15 @@ import { aggregatePermissionErrors } from '@/lib/proxmox/loadNodeAptUpdates'
 import MetricsRangeSelector, { type MetricsRangeValue } from '@/components/metrics/MetricsRangeSelector'
 import useChartDragRange from '@/components/metrics/useChartDragRange'
 import { timeframeForWindow, type RrdRangeMeta, type RrdWindow } from '@/lib/metrics/rrdRange'
+import { osdGridStates, type OsdGridState } from '@/lib/ceph/osdGrid'
+
+const INVENTORY_OSD_STYLE: Record<OsdGridState, { color: string; label: string; opacity: number }> = {
+  down: { color: '#ef4444', label: 'Down', opacity: 1 },
+  full: { color: '#ef4444', label: 'Full', opacity: 1 },
+  nearfull: { color: '#ff9800', label: 'Near Full', opacity: 1 },
+  out: { color: '#ff9800', label: 'Up/Out', opacity: 1 },
+  up: { color: '#4caf50', label: 'Up/In', opacity: 0.7 },
+}
 
 function HaResourceChips({ resources, allVms }: { resources: string; allVms: any[] }) {
   if (!resources) return <Typography variant="body2" sx={{ opacity: 0.4 }}>-</Typography>
@@ -2514,34 +2523,12 @@ export default function ClusterTabs(props: any) {
                                   const numIn = clusterCephData._normalized?.osd?.num_in_osds || clusterCephData.osdmap?.osdmap?.num_in_osds || 0
                                   const numTotal = clusterCephData._normalized?.osd?.num_osds || clusterCephData.osdmap?.osdmap?.num_osds || 0
 
-                                  // Parse health checks to find degraded OSDs by ID
-                                  const checks = clusterCephData.health?.checks || {}
-                                  const downIds = new Set<number>()
-                                  const warnIds = new Set<number>()
-                                  const fullIds = new Set<number>()
-                                  const osdRe = /osd\.(\d+)/g
-
-                                  for (const [name, data] of Object.entries(checks as Record<string, any>)) {
-                                    for (const d of (data?.detail || [])) {
-                                      const msg = d?.message || ''
-                                      let m
-                                      osdRe.lastIndex = 0
-                                      while ((m = osdRe.exec(msg)) !== null) {
-                                        const id = Number.parseInt(m[1], 10)
-                                        if (name === 'OSD_DOWN' || name === 'OSD_FLAGS') downIds.add(id)
-                                        else if (name === 'OSD_NEARFULL' || name === 'OSD_BACKFILLFULL') warnIds.add(id)
-                                        else if (name === 'OSD_FULL') fullIds.add(id)
-                                      }
-                                    }
-                                  }
-
-                                  const getOsdState = (osdId: number) => {
-                                    if (downIds.has(osdId)) return { color: '#ef4444', label: 'Down', opacity: 1 }
-                                    if (fullIds.has(osdId)) return { color: '#ef4444', label: 'Full', opacity: 1 }
-                                    if (warnIds.has(osdId)) return { color: '#ff9800', label: 'Near Full', opacity: 1 }
-                                    if (osdId >= numUp) return { color: '#ef4444', label: 'Down', opacity: 1 }
-                                    return { color: '#4caf50', label: 'Up/In', opacity: 0.7 }
-                                  }
+                                  const osdStates = osdGridStates({
+                                    total: numTotal,
+                                    up: numUp,
+                                    inCount: numIn,
+                                    healthChecks: clusterCephData.health?.checks,
+                                  })
 
                                   return (
                                     <Box>
@@ -2552,8 +2539,8 @@ export default function ClusterTabs(props: any) {
                                         <Typography variant="caption" sx={{ opacity: 0.5 }}>/ {numTotal}</Typography>
                                       </Box>
                                       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.5 }}>
-                                        {Array.from({ length: numTotal }, (_, i) => {
-                                          const state = getOsdState(i)
+                                        {osdStates.map(({ id: i, state: osdState }) => {
+                                          const state = INVENTORY_OSD_STYLE[osdState]
                                           return (
                                             <MuiTooltip key={i} title={`OSD ${i} - ${state.label}`}>
                                               <i className="ri-hard-drive-3-fill" style={{ fontSize: 14, color: state.color, opacity: state.opacity }} />

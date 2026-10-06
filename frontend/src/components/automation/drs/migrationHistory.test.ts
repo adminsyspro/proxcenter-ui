@@ -5,6 +5,7 @@ import {
   formatDurationMs,
   groupByDay,
   migrationDurationMs,
+  migrationFailureReason,
   sortNewestFirst,
   summarizeMigrations,
   type MigrationHistoryEntry
@@ -174,5 +175,22 @@ describe('formatDurationMs', () => {
 
   it('uses custom unit labels', () => {
     expect(formatDurationMs(7500000, { s: 'sec', min: 'mn', h: 'hr' })).toBe('2 hr 05 mn')
+  })
+})
+
+describe('migrationFailureReason (#926)', () => {
+  it('prefers the reason read from the task log', () => {
+    expect(migrationFailureReason(entry({ status: 'failed', error: 'migration aborted', failure_reason: 'CT is locked (backup)' })))
+      .toBe('CT is locked (backup)')
+  })
+
+  it('falls back to the error when the orchestrator stores no reason', () => {
+    expect(migrationFailureReason(entry({ status: 'failed', error: 'migration aborted' }))).toBe('migration aborted')
+    expect(migrationFailureReason(entry({ status: 'failed', error: 'migration aborted', failure_reason: '  ' }))).toBe('migration aborted')
+  })
+
+  it('is empty for a move that did not fail or carries nothing', () => {
+    expect(migrationFailureReason(entry({ status: 'failed' }))).toBe('')
+    expect(migrationFailureReason(entry({ status: 'completed', error: 'stale' }))).toBe('')
   })
 })

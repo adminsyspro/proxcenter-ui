@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { pveFetch } from '@/lib/proxmox/client'
 import { isVmConfigNotFoundError } from '@/lib/proxmox/locateVm'
 import { fetchTaskLog } from '@/lib/proxmox/taskLog'
+import { extractTaskFailureReason } from '@/lib/proxmox/taskFailureReason'
 import { getConnectionById, type PveConn } from '@/lib/connections/getConnection'
 import { formatBytes as formatSize } from '@/utils/format'
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
@@ -575,7 +576,13 @@ return NextResponse.json({ error: `Failed to fetch task status: ${e.message}` },
     const duration = endTime ? endTime - startTime : now - startTime
 
     let progressData: { progress: number; message: string; speed: string; eta: string }
-    
+    // #926: why a failed task failed, read from its log; null otherwise.
+    let failureReason: string | null = null
+    const failWith = (exit: string) => {
+      failureReason = extractTaskFailureReason(logs) || exit || null
+      return `Failed: ${failureReason || 'unknown error'}`
+    }
+
     if (status?.status === 'stopped') {
       const exit = status?.exitstatus || ''
       let message: string
@@ -606,10 +613,10 @@ return NextResponse.json({ error: `Failed to fetch task status: ${e.message}` },
             })
           }
         } else {
-          message = `Failed: ${exit}`
+          message = failWith(exit)
         }
       } else {
-        message = `Failed: ${exit || 'unknown error'}`
+        message = failWith(exit)
       }
 
       progressData = {
@@ -629,7 +636,8 @@ return NextResponse.json({ error: `Failed to fetch task status: ${e.message}` },
     }
 
     // Send at most 5000 log lines to the frontend to avoid huge payloads
-    const MAX_FRONTEND_LOGS = 5000
+    // ?summary=1 (lists that only want the outcome) skips the lines entirely.
+    const MAX_FRONTEND_LOGS = new URL(req.url).searchParams.get('summary') === '1' ? 0 : 5000
     const totalLogLines = logs.length
     const truncatedLogs = totalLogLines > MAX_FRONTEND_LOGS
       ? logs.slice(totalLogLines - MAX_FRONTEND_LOGS)
@@ -643,6 +651,7 @@ return NextResponse.json({ error: `Failed to fetch task status: ${e.message}` },
       user: status?.user || null,
       status: status?.status || 'unknown',
       exitstatus: status?.exitstatus || null,
+      failureReason,
       starttime: status?.starttime || null,
       endtime: status?.endtime || null,
       duration: formatDuration(duration),

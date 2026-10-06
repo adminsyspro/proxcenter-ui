@@ -129,7 +129,7 @@ import StorageDetailPanel from './components/StorageDetailPanel'
 import ExpandableChart from './components/ExpandableChart'
 import StorageContentGroup from './components/StorageContentGroup'
 import PbsServerPanel, { type PbsServerPanelHandle } from './components/PbsServerPanel'
-import InventoryDialogs from './components/InventoryDialogs'
+import InventoryDialogs, { type NodeActionFailedVm } from './components/InventoryDialogs'
 import ExternalHypervisorDashboard from './components/ExternalHypervisorDashboard'
 import { useDetailData } from './hooks/useDetailData'
 import { useVmActions } from './hooks/useVmActions'
@@ -328,7 +328,7 @@ export default function InventoryDetails({
   const [nodeActionBusy, setNodeActionBusy] = useState(false)
   const [nodeActionStep, setNodeActionStep] = useState<string | null>(null)
   const [nodeActionMigrateTarget, setNodeActionMigrateTarget] = useState('')
-  const [nodeActionFailedVms, setNodeActionFailedVms] = useState<{ vmid: string; name: string; connId: string; type: string; node: string; error: string }[]>([])
+  const [nodeActionFailedVms, setNodeActionFailedVms] = useState<NodeActionFailedVm[]>([])
   const [nodeActionShutdownFailed, setNodeActionShutdownFailed] = useState(false)
   const [nodeActionLocalVms, setNodeActionLocalVms] = useState<Set<string>>(new Set())
   const [nodeActionStorageLoading, setNodeActionStorageLoading] = useState(false)

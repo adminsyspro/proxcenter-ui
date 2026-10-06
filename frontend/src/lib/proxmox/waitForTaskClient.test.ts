@@ -44,7 +44,18 @@ describe("waitForPveTask", () => {
     expect(res).toEqual({
       outcome: "failed",
       error: "VM 100 qmp command 'blockdev-del' failed - Node is in use",
+      reason: "VM 100 qmp command 'blockdev-del' failed - Node is in use",
     })
+  })
+
+  it("carries the reason the task route read from the log (#926)", async () => {
+    vi.spyOn(global, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ status: "stopped", exitstatus: "migration aborted", failureReason: "CT is locked (backup)" }), { status: 200 }),
+    )
+
+    const res = await waitForPveTask("conn-1", "pve-01", UPID, FAST)
+
+    expect(res).toEqual({ outcome: "failed", error: "migration aborted", reason: "CT is locked (backup)" })
   })
 
   it("reports failed with an empty error when PVE gave no exitstatus", async () => {
@@ -53,7 +64,7 @@ describe("waitForPveTask", () => {
 
     const res = await waitForPveTask("conn-1", "pve-01", UPID, FAST)
 
-    expect(res).toEqual({ outcome: "failed", error: "" })
+    expect(res).toEqual({ outcome: "failed", error: "", reason: "" })
   })
 
   it("retries after a thrown network error and still succeeds", async () => {
@@ -140,7 +151,7 @@ describe("waitForPveTask", () => {
 
     const expected =
       `/api/v1/tasks/${encodeURIComponent("conn 1")}` +
-      `/${encodeURIComponent("pve/node#1")}/${encodeURIComponent(UPID)}`
+      `/${encodeURIComponent("pve/node#1")}/${encodeURIComponent(UPID)}?summary=1`
     expect(fetchSpy).toHaveBeenCalledWith(expected, { cache: "no-store" })
     expect(String(fetchSpy.mock.calls[0][0])).toContain("UPID%3A")
   })

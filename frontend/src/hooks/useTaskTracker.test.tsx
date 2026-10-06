@@ -103,6 +103,28 @@ describe('useTaskTracker', () => {
     expect(onError).toHaveBeenCalledWith('disk full')
   })
 
+  it('reports the failure reason the task route read from the log, not the bare exitstatus (#926)', async () => {
+    stubFetch(async () => okResponse({ status: 'stopped', exitstatus: 'migration aborted', failureReason: 'CT is locked (backup)' }))
+    const onError = vi.fn()
+
+    await trackAndRun(baseTask({ onError }))
+
+    expect(toast.error).toHaveBeenCalledWith('taskTracker.failed')
+    expect(onError).toHaveBeenCalledWith('CT is locked (backup)')
+  })
+
+  it('follows a task for the requested time instead of the 5 minute default', async () => {
+    stubFetch(async () => okResponse({ status: 'running' }))
+
+    await trackAndRun(baseTask({ timeoutMs: 30 * 60_000 }), POLL_INTERVAL * (MAX_ATTEMPTS + 1))
+    expect(toast.warning).not.toHaveBeenCalled()
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30 * 60_000)
+    })
+    expect(toast.warning).toHaveBeenCalledWith('taskTracker.timeout')
+  })
+
   it('falls back to the unknown-error label when exitstatus is missing', async () => {
     stubFetch(async () => okResponse({ status: 'stopped' }))
     const onError = vi.fn()

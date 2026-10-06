@@ -58,6 +58,7 @@ import { showsClusterLevel } from '@/lib/rbac/scopeKinds'
 import { useTagColors } from '@/contexts/TagColorContext'
 import { useTenant } from '@/contexts/TenantContext'
 import { useTaskTracker } from '@/hooks/useTaskTracker'
+import { startTrackedMigration } from '@/lib/migration/guestMigrateClient'
 import { useMyVdcs } from '@/hooks/useMyVdcs'
 import { readVdcContextCookie } from '@/lib/vdc/contextCookie'
 import { describeVmLoadFailure, describeVmLoadTimeout, externalVmFetchTimeoutMs } from '@/lib/inventory/externalVmFetch'
@@ -1242,19 +1243,15 @@ return migratingVmIds.has(`${connId}:${vmid}`)
         const batch = vmsToProcess.slice(i, i + batchSize)
         await Promise.all(batch.map(async (vm) => {
           try {
-            let url: string
-            let body: string | undefined
             if (apiAction === 'migrate') {
-              url = `/api/v1/connections/${encodeURIComponent(connId)}/guests/${vm.type}/${encodeURIComponent(node)}/${encodeURIComponent(vm.vmid)}/migrate`
-              body = JSON.stringify({ target: targetNode, online: vm.status === 'running' })
-            } else {
-              url = `/api/v1/connections/${encodeURIComponent(connId)}/guests/${vm.type}/${encodeURIComponent(node)}/${encodeURIComponent(vm.vmid)}/${apiAction}`
+              // #926: each migration is followed to its end, which toasts the
+              // outcome with the reason; the POST alone proves nothing.
+              await startTrackedMigration(trackTask, { connId, node, type: vm.type, vmid: vm.vmid }, { target: targetNode, online: vm.status === 'running' }, {
+                description: `${vm.name || `VM ${vm.vmid}`}: ${t('vmActions.migrate')}`,
+              })
+              return
             }
-            await fetch(url, {
-              method: 'POST',
-              headers: body ? { 'Content-Type': 'application/json' } : undefined,
-              body,
-            })
+            await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/guests/${vm.type}/${encodeURIComponent(node)}/${encodeURIComponent(vm.vmid)}/${apiAction}`, { method: 'POST' })
           } catch {}
         }))
       }

@@ -22,6 +22,8 @@ import { alpha, useTheme } from '@mui/material/styles'
 import { useLocale, useTranslations } from 'next-intl'
 
 import EmptyState from '@/components/EmptyState'
+import FailureReasonText from '@/components/tasks/FailureReasonText'
+import TaskLogButton from '@/components/tasks/TaskLogButton'
 import { DonutStatCard, DonutTotalCard } from '@/components/charts/DonutStatCards'
 import { formatDate, formatTime } from '@/lib/i18n/date'
 
@@ -30,6 +32,7 @@ import {
   formatDurationMs,
   groupByDay,
   migrationDurationMs,
+  migrationFailureReason,
   sortNewestFirst,
   summarizeMigrations,
   type HistoryStatusFilter,
@@ -164,10 +167,11 @@ const MigrationHistoryTab = ({ migrations, connectionNames, vmStatus = {}, nodeS
 
   // Status as a glyph, not a chip: a green check, a red cross, or a spinner
   // while the move runs. The tooltip is the only place the label lives now, and
-  // on a failure it also carries the error text.
+  // on a failure it also carries the error text, which the reason cell shows too.
   const statusGlyph = (entry: MigrationHistoryEntry) => {
     if (entry.status === 'failed') {
-      const label = entry.error ? `${t('drsPage.historyStatusFailed')}: ${entry.error}` : t('drsPage.historyStatusFailed')
+      const failure = migrationFailureReason(entry)
+      const label = failure ? `${t('drsPage.historyStatusFailed')}: ${failure}` : t('drsPage.historyStatusFailed')
 
       return (
         <Tooltip title={label} arrow>
@@ -363,13 +367,21 @@ const MigrationHistoryTab = ({ migrations, connectionNames, vmStatus = {}, nodeS
                           <Typography sx={{ opacity: 0.4, textAlign: 'center' }}>→</Typography>
                           {nodeCell(entry, entry.target_node)}
 
-                          {/* Reason, takes what is left */}
-                          <Typography
-                            variant='caption'
-                            sx={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', opacity: entry.reason ? 0.8 : 0.5, fontStyle: entry.reason ? 'normal' : 'italic' }}
-                          >
-                            {entry.reason || t('drsPage.historyNoReason')}
-                          </Typography>
+                          {/* Reason, takes what is left; a failed move adds why it failed (#926) */}
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 0 }}>
+                            <Box sx={{ minWidth: 0, flex: 1 }}>
+                              <Typography
+                                variant='caption'
+                                sx={{ display: 'block', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', opacity: entry.reason ? 0.8 : 0.5, fontStyle: entry.reason ? 'normal' : 'italic' }}
+                              >
+                                {entry.reason || t('drsPage.historyNoReason')}
+                              </Typography>
+                              <FailureReasonText reason={migrationFailureReason(entry)} />
+                            </Box>
+                            {entry.status === 'failed' && entry.task_id && (
+                              <TaskLogButton connectionId={entry.connection_id} upid={entry.task_id} node={entry.source_node} />
+                            )}
+                          </Box>
 
                           {/* Duration */}
                           <Typography variant='body2' sx={{ textAlign: 'right', opacity: 0.8 }}>

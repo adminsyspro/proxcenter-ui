@@ -23,6 +23,7 @@
 // its memory changes through cgroups.
 
 import { pveFetch, PVE_DEFAULT_TIMEOUT_MS, type ProxmoxClientOptions } from "./client"
+import { parseUpid } from "./upid"
 
 /**
  * How long a config write may hold the HTTP request while the qmconfig task
@@ -64,19 +65,8 @@ export type GuestConfigWriteResult =
   /** The task outlived our budget. It is still running on `node`. */
   | { state: "running"; upid: string; node: string }
 
-/**
- * Recognise a task id and the node running it.
- * Shape: `UPID:<node>:<pid>:<pstart>:<starttime>:<type>:<id>:<user>:`
- */
-export function parseUpid(value: unknown): { upid: string; node: string } | null {
-  if (typeof value !== "string") return null
-
-  const match = /^UPID:([^\s:]+):/.exec(value)
-
-  if (!match) return null
-
-  return { upid: value, node: match[1] }
-}
+// Lives in ./upid so browser code can read a UPID without pulling the PVE client in.
+export { parseUpid } from "./upid"
 
 /**
  * Push a config patch to PVE and wait for it to be applied.

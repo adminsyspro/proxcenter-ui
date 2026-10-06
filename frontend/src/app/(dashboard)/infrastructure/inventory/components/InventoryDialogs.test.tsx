@@ -516,6 +516,78 @@ describe('InventoryDialogs', () => {
       expect(calls.guestShutdowns).toEqual([])
     })
 
+    // #926: HTTP 200 on the POST only means PVE accepted the task.
+    function migrationTask(finalStatus: Record<string, unknown>) {
+      const UPID = `UPID:${NODE_NAME}:0000ABCD:00001234:6A000000:qmigrate:100:root@pam:`
+      server.use(
+        http.post('*/api/v1/connections/:id/guests/:type/:node/:vmid/migrate', () => HttpResponse.json({ success: true, data: UPID })),
+        http.get('*/api/v1/tasks/:conn/:node/:upid', () => HttpResponse.json({ status: 'stopped', ...finalStatus })),
+        http.get('*/api/v1/connections/:id/guests/:type/:node/:vmid/migrate/pending-check', () => HttpResponse.json({ data: { changes: [] } })),
+      )
+      return UPID
+    }
+
+    it('does not reboot when a migration PVE accepted then failed, and keeps the reason and the task', async () => {
+      const calls = recordRequests()
+      const upid = migrationTask({ exitstatus: 'migration aborted', failureReason: "can't migrate VM which uses local devices: hostpci0" })
+      const setNodeActionFailedVms = vi.fn()
+      renderWithProviders(<InventoryDialogs {...makeProps({
+        nodeActionDialog: { action: 'reboot', nodeName: NODE_NAME, connId: CONN_ID, node: NODE_NAME },
+        allVms: [runningVm('100')],
+        hosts: [host(NODE_NAME), host('pve2')],
+        nodeActionMigrateTarget: 'pve2',
+        setNodeActionFailedVms,
+      })} />)
+
+      fireEvent.click(screen.getByRole('button', { name: /confirm/i }))
+
+      await waitFor(() => expect(setNodeActionFailedVms).toHaveBeenCalled())
+      expect(setNodeActionFailedVms).toHaveBeenCalledWith([expect.objectContaining({
+        vmid: '100',
+        error: "can't migrate VM which uses local devices: hostpci0",
+        upid,
+        taskNode: NODE_NAME,
+      })])
+      expect(calls.nodeCommands).toEqual([])
+    })
+
+    it('reboots once every migration task ended OK', async () => {
+      const calls = recordRequests()
+      migrationTask({ exitstatus: 'OK' })
+      const setNodeActionDialog = vi.fn()
+      const setNodeActionFailedVms = vi.fn()
+      renderWithProviders(<InventoryDialogs {...makeProps({
+        nodeActionDialog: { action: 'reboot', nodeName: NODE_NAME, connId: CONN_ID, node: NODE_NAME },
+        setNodeActionDialog,
+        allVms: [runningVm('100')],
+        hosts: [host(NODE_NAME), host('pve2')],
+        nodeActionMigrateTarget: 'pve2',
+        setNodeActionFailedVms,
+      })} />)
+
+      fireEvent.click(screen.getByRole('button', { name: /confirm/i }))
+
+      await waitFor(() => expect(setNodeActionDialog).toHaveBeenCalledWith(null))
+      expect(calls.nodeCommands).toEqual(['reboot'])
+      expect(setNodeActionFailedVms).not.toHaveBeenCalledWith(expect.arrayContaining([expect.anything()]))
+    })
+
+    it('shows why a guest could not be moved, with its task log, on the failed row', () => {
+      renderWithProviders(<InventoryDialogs {...makeProps({
+        nodeActionDialog: { action: 'reboot', nodeName: NODE_NAME, connId: CONN_ID, node: NODE_NAME },
+        allVms: [runningVm('100')],
+        hosts: [host(NODE_NAME), host('pve2')],
+        nodeActionMigrateTarget: 'pve2',
+        nodeActionFailedVms: [{
+          vmid: '100', name: 'vm100', connId: CONN_ID, type: 'qemu', node: NODE_NAME,
+          error: 'CT is locked (backup)', upid: `UPID:${NODE_NAME}:1:2:3:qmigrate:100:root@pam:`, taskNode: NODE_NAME,
+        }],
+      })} />)
+
+      expect(screen.getByText('CT is locked (backup)')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /tasks\.viewLog|view log/i })).toBeInTheDocument()
+    })
+
     it('cluster reboot leaves the guests whose migration failed to PVE', async () => {
       const calls = recordRequests()
       const setNodeActionDialog = vi.fn()

@@ -165,6 +165,33 @@ describe('MigrationHistoryTab', () => {
     expect(container.querySelector('.ri-checkbox-circle-fill')).toBeNull()
   })
 
+  it('shows why a failed migration failed on the row, with its task log (#926)', () => {
+    render(
+      <MigrationHistoryTab
+        migrations={[migration({
+          status: 'failed',
+          error: 'migration aborted',
+          failure_reason: "can't migrate VM which uses local devices: hostpci0",
+          task_id: 'UPID:pve1:0000ABCD:00001234:6A000000:qmigrate:9400:root@pam:'
+        })]}
+        connectionNames={names}
+      />
+    )
+
+    expect(screen.getByText("can't migrate VM which uses local devices: hostpci0")).toBeInTheDocument()
+    expect(screen.getByLabelText("drsPage.historyStatusFailed: can't migrate VM which uses local devices: hostpci0")).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'tasks.viewLog' })).toBeInTheDocument()
+  })
+
+  it('falls back to the error of an orchestrator that stores no reason, without a log link when no task ran', () => {
+    render(
+      <MigrationHistoryTab migrations={[migration({ status: 'failed', error: 'storage full on pve3' })]} connectionNames={names} />
+    )
+
+    expect(screen.getByText('storage full on pve3')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'tasks.viewLog' })).not.toBeInTheDocument()
+  })
+
   it('narrows rows by VMID and shows the no-match message for an unmatched name', () => {
     render(
       <MigrationHistoryTab

@@ -1,34 +1,29 @@
 import { NextResponse } from "next/server"
 
 import { getConnectionById } from "@/lib/connections/getConnection"
-import { checkSnapshotMigration } from "@/lib/migration/snapshotMigrationCheck"
+import { pveFetch } from "@/lib/proxmox/client"
+import { pendingChangesFromPve } from "@/lib/migration/pendingChanges"
 import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
 import { migrationTenantDenied } from "@/lib/tenant/migrationGuard"
 import { assertVmid, assertNodeName } from "@/lib/ssh/validate"
 
 export const runtime = "nodejs"
 
-// GET /api/v1/connections/{id}/guests/{type}/{node}/{vmid}/migrate/snapshot-check?target=pve2[&targetstorage=x]
-// Local volumes that snapshots stop from migrating to another node of the
-// same cluster (#1027), for a live and for an offline migration, so the
-// dialog can explain and offer a remedy before PVE aborts the task.
+// GET /api/v1/connections/{id}/guests/{type}/{node}/{vmid}/migrate/pending-check
+// Configuration changes the guest has not applied yet (#926), so the migrate
+// dialogs can warn that PVE may refuse to move it before it is restarted.
 export async function GET(
-  req: Request,
+  _req: Request,
   ctx: { params: Promise<{ id: string; type: string; node: string; vmid: string }> }
 ) {
   try {
     const { id, type, node, vmid } = await ctx.params
-    const params = new URL(req.url).searchParams
-    const target = params.get('target') || ''
-    const targetStorage = params.get('targetstorage') || undefined
 
     let safeVmid: string
     let safeNode: string
-    let safeTarget: string
     try {
       safeVmid = assertVmid(vmid)
       safeNode = assertNodeName(node)
-      safeTarget = assertNodeName(target)
     } catch {
       return NextResponse.json({ error: "Invalid node name or vmid" }, { status: 400 })
     }
@@ -40,15 +35,12 @@ export async function GET(
     if (tenantDenied) return tenantDenied
 
     const conn = await getConnectionById(id)
-    const data = await checkSnapshotMigration(
-      conn,
-      { node: safeNode, type: type === 'lxc' ? 'lxc' : 'qemu', vmid: safeVmid },
-      { target: safeTarget, targetStorage },
-    )
+    const guestType = type === 'lxc' ? 'lxc' : 'qemu'
+    const rows = await pveFetch<unknown>(conn, `/nodes/${encodeURIComponent(safeNode)}/${guestType}/${encodeURIComponent(safeVmid)}/pending`)
 
-    return NextResponse.json({ data })
+    return NextResponse.json({ data: { changes: pendingChangesFromPve(rows) } })
   } catch (e: any) {
-    console.error('[migrate/snapshot-check] GET error:', String(e?.message || e).replace(/[\r\n]/g, ''))
+    console.error('[migrate/pending-check] GET error:', String(e?.message || e).replace(/[\r\n]/g, ''))
 
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }

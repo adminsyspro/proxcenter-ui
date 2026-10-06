@@ -35,6 +35,8 @@ import { CardsSkeleton, TableSkeleton } from '@/components/skeletons'
 import { jobActionPermission, jobActions, runJobAction } from '@/lib/tasks/jobActions'
 import JobDetailDialog from '@/components/tasks/JobDetailDialog'
 import StopTaskButton from '@/components/tasks/StopTaskButton'
+import TaskLogButton from '@/components/tasks/TaskLogButton'
+import FailureReasonText from '@/components/tasks/FailureReasonText'
 import StopTaskConfirmDialog from '@/components/tasks/StopTaskConfirmDialog'
 import { StatusChip, TypeChip } from '@/components/tasks/JobChips'
 import { useStopTask } from '@/hooks/useStopTask'
@@ -287,12 +289,16 @@ export default function JobsPage() {
         flex: 1,
         minWidth: 200,
         renderCell: params => (
-          <Typography
-            variant='body2'
-            sx={{ opacity: 0.7, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-          >
-            {params.row.detail}
-          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0, height: '100%' }}>
+            <Typography
+              variant='body2'
+              sx={{ opacity: 0.7, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flexShrink: 0, maxWidth: '50%' }}
+            >
+              {params.row.detail}
+            </Typography>
+            {/* #926: why it failed, on the row itself */}
+            {params.row.status === 'failed' && <FailureReasonText reason={params.row.metadata?.error} />}
+          </Box>
         )
       },
       {
@@ -306,9 +312,13 @@ export default function JobsPage() {
         headerAlign: 'center',
         renderCell: params => {
           const target = stopTargetForJob(params.row)
-          if (!target) return null
+          if (target) return <StopTaskButton stopping={isStopping(target.id)} onClick={() => askStop(target)} />
 
-          return <StopTaskButton stopping={isStopping(target.id)} onClick={() => askStop(target)} />
+          // A failed job that ran a Proxmox task offers that task's log (#926).
+          const { taskId, connectionId } = params.row.metadata || {}
+          if (params.row.status !== 'failed' || !taskId?.startsWith?.('UPID:') || !connectionId) return null
+
+          return <TaskLogButton connectionId={connectionId} upid={taskId} />
         }
       }
     ],

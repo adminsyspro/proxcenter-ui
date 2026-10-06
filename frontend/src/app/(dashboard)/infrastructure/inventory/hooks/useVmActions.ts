@@ -7,6 +7,13 @@ import type { InventorySelection, DetailsPayload } from '../types'
 import type { AllVmItem, HostItem } from '../InventoryTree'
 import { parseVmId, fetchDetails, resolveVmPowerAction } from '../helpers'
 import { crossClusterMigrate } from '@/lib/migration/crossClusterMigrate'
+import {
+  migrateGuestAndWait,
+  migrationFailureText,
+  runInBatches,
+  startTrackedMigration,
+  type MigrateGuestRef,
+} from '@/lib/migration/guestMigrateClient'
 
 /* ------------------------------------------------------------------ */
 /* Types                                                               */
@@ -27,6 +34,7 @@ type TrackTaskFn = (opts: {
   onSuccess?: () => void
   onError?: () => void
   queryParams?: Record<string, string>
+  timeoutMs?: number
 }) => void
 
 export type TableMigrateVm = {
@@ -190,11 +198,19 @@ export function useVmActions({
 
   // ── Migration handlers (selected VM panel) ──────────────────────────
 
-  const handleMigrateVm = useCallback(async (targetNode: string, online: boolean, targetStorage?: string, withLocalDisks?: boolean) => {
-    if (selection?.type !== 'vm') throw new Error('No VM selected')
-
-    const { connId, node, type, vmid } = parseVmId(selection.id)
-
+  /**
+   * Start an intra-cluster migration and follow its PVE task (#926): the POST
+   * only says PVE accepted it, so success or failure, with the reason read
+   * from the task log, is toasted when the task ends. Rejects when the
+   * request itself is refused, so the dialog shows that error.
+   */
+  const migrateAndTrack = useCallback(async (
+    guest: MigrateGuestRef & { name?: string },
+    targetNode: string,
+    online: boolean,
+    targetStorage?: string,
+    withLocalDisks?: boolean,
+  ) => {
     const body: Record<string, any> = { target: targetNode, online }
 
     if (targetStorage) {
@@ -205,22 +221,20 @@ export function useVmActions({
       body['withLocalDisks'] = true
     }
 
-    const res = await fetch(
-      `/api/v1/connections/${encodeURIComponent(connId)}/guests/${type}/${encodeURIComponent(node)}/${encodeURIComponent(vmid)}/migrate`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
-      }
-    )
+    const upid = await startTrackedMigration(trackTask, guest, body, {
+      description: `${guest.name || `VM ${guest.vmid}`}: ${t('vmActions.migrate')}`,
+      onDone: () => { void onRefresh?.() },
+    })
 
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}))
+    if (!upid) toast.success(t('vmActions.migrateSuccess'))
+  }, [toast, t, trackTask, onRefresh])
 
-      throw new Error(err?.error || `HTTP ${res.status}`)
-    }
+  const handleMigrateVm = useCallback(async (targetNode: string, online: boolean, targetStorage?: string, withLocalDisks?: boolean) => {
+    if (selection?.type !== 'vm') throw new Error('No VM selected')
 
-    toast.success(t('vmActions.migrateSuccess'))
+    const { connId, node, type, vmid } = parseVmId(selection.id)
+
+    await migrateAndTrack({ connId, node, type, vmid, name: data?.title }, targetNode, online, targetStorage, withLocalDisks)
 
     if (onSelect) {
       onSelect({ type: 'cluster', id: connId })
@@ -231,7 +245,7 @@ export function useVmActions({
     if (onRefresh) {
       await onRefresh()
     }
-  }, [selection, onRefresh, onSelect, toast, t])
+  }, [selection, onRefresh, onSelect, migrateAndTrack, data?.title])
 
   // ── Cross-cluster migration (selected VM panel) ─────────────────────
 
@@ -330,34 +344,7 @@ export function useVmActions({
   const handleTableMigrateVm = useCallback(async (targetNode: string, online: boolean, targetStorage?: string, withLocalDisks?: boolean) => {
     if (!tableMigrateVm) throw new Error('No VM selected for migration')
 
-    const { connId, node, type, vmid } = tableMigrateVm
-
-    const body: Record<string, any> = { target: targetNode, online }
-
-    if (targetStorage) {
-      body['targetstorage'] = targetStorage
-    }
-
-    if (withLocalDisks) {
-      body['withLocalDisks'] = true
-    }
-
-    const res = await fetch(
-      `/api/v1/connections/${encodeURIComponent(connId)}/guests/${type}/${encodeURIComponent(node)}/${encodeURIComponent(vmid)}/migrate`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
-      }
-    )
-
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}))
-
-      throw new Error(err?.error || `HTTP ${res.status}`)
-    }
-
-    toast.success(t('vmActions.migrateSuccess'))
+    await migrateAndTrack(tableMigrateVm, targetNode, online, targetStorage, withLocalDisks)
 
     await new Promise(resolve => setTimeout(resolve, 2000))
 
@@ -366,7 +353,7 @@ export function useVmActions({
     }
 
     setTableMigrateVm(null)
-  }, [tableMigrateVm, onRefresh, toast, t])
+  }, [tableMigrateVm, onRefresh, migrateAndTrack])
 
   // ── Table cross-cluster migrate ─────────────────────────────────────
 
@@ -533,40 +520,40 @@ export function useVmActions({
     setBulkActionDialog({ open: false, action: null, node: null, targetNode: '' })
     toast.info(`${description} (${vmsToProcess.length} VMs)...`)
 
-    const batchSize = 5
     let successCount = 0
     let errorCount = 0
+    const migrationFailures: { name: string; reason: string }[] = []
 
-    for (let i = 0; i < vmsToProcess.length; i += batchSize) {
-      const batch = vmsToProcess.slice(i, i + batchSize)
+    await runInBatches(vmsToProcess, 5, async (vm: any) => {
+      // #926: a migration counts once its PVE task ended OK, not on HTTP 200.
+      if (apiAction === 'migrate') {
+        const outcome = await migrateGuestAndWait(vm, { target: targetNode, online: vm.status === 'running' })
+        if (outcome.ok) {
+          successCount++
+        } else {
+          errorCount++
+          migrationFailures.push({ name: vm.name || `VM ${vm.vmid}`, reason: migrationFailureText(outcome, t) })
+        }
+        return
+      }
 
-      await Promise.all(batch.map(async (vm: any) => {
-        try {
-          let url: string
-          let body: any = undefined
+      try {
+        const url = `/api/v1/connections/${encodeURIComponent(vm.connId)}/guests/${vm.type}/${encodeURIComponent(vm.node)}/${encodeURIComponent(vm.vmid)}/${apiAction}`
+        const res = await fetch(url, { method: 'POST' })
 
-          if (apiAction === 'migrate') {
-            url = `/api/v1/connections/${encodeURIComponent(vm.connId)}/guests/${vm.type}/${encodeURIComponent(vm.node)}/${encodeURIComponent(vm.vmid)}/migrate`
-            body = JSON.stringify({ target: targetNode, online: vm.status === 'running' })
-          } else {
-            url = `/api/v1/connections/${encodeURIComponent(vm.connId)}/guests/${vm.type}/${encodeURIComponent(vm.node)}/${encodeURIComponent(vm.vmid)}/${apiAction}`
-          }
-
-          const res = await fetch(url, {
-            method: 'POST',
-            headers: body ? { 'Content-Type': 'application/json' } : undefined,
-            body,
-          })
-
-          if (res.ok) {
-            successCount++
-          } else {
-            errorCount++
-          }
-        } catch {
+        if (res.ok) {
+          successCount++
+        } else {
           errorCount++
         }
-      }))
+      } catch {
+        errorCount++
+      }
+    })
+
+    // One toast per guest that did not move, with the reason, a handful at most.
+    for (const failure of migrationFailures.slice(0, 5)) {
+      toast.error(t('vmActions.migrateGuestFailed', failure))
     }
 
     if (errorCount === 0) {

@@ -261,7 +261,9 @@ export async function GET(req: Request) {
               sourceNode: m.source_node,
               targetNode: m.target_node,
               taskId: m.task_id,
-              error: m.error,
+              // #926: the reason the orchestrator read from the PVE task log,
+              // when it is new enough to store one; the bare error otherwise.
+              error: m.failure_reason || m.error,
             },
           })
         }

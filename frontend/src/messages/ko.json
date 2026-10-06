@@ -785,6 +785,7 @@
     "storageSnippets": "스니펫",
     "storageTemplates": "CT 템플릿",
     "storageEmpty": "이 스토리지에서 콘텐츠를 찾을 수 없습니다",
+    "storageContentAccessDenied": "이 스토리지의 콘텐츠를 탐색할 권한이 없습니다 (storage.content).",
     "networkLoadFailed": "로딩에 실패했습니다. 클릭하여 재시도하세요",
     "pbsBackupList": "PBS 백업",
     "pbsName": "이름",

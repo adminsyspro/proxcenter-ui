@@ -789,6 +789,7 @@
     "storageSnippets": "代码片段",
     "storageTemplates": "CT 模板",
     "storageEmpty": "此存储中未找到内容",
+    "storageContentAccessDenied": "您没有浏览此存储内容的权限 (storage.content)。",
     "networkLoadFailed": "无法加载，点击重试",
     "pbsBackupList": "PBS 备份",
     "pbsName": "名称",

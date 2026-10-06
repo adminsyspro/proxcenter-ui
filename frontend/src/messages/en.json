@@ -785,6 +785,7 @@
     "storageSnippets": "Snippets",
     "storageTemplates": "CT Templates",
     "storageEmpty": "No content found in this storage",
+    "storageContentAccessDenied": "You do not have permission to browse the content of this storage (storage.content).",
     "networkLoadFailed": "Couldn't load, click to retry",
     "pbsBackupList": "PBS Backups",
     "pbsName": "Name",

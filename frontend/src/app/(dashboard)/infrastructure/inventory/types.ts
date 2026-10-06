@@ -412,6 +412,8 @@ export type DetailsPayload = {
       encrypted?: boolean | string
       verification?: { state: string; upid?: string } | null
     }>
+    /** The content listing answered 403 (no storage.content on this storage). */
+    contentDenied?: boolean
   }
 
   extTypeInfo?: {

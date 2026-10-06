@@ -774,6 +774,7 @@
     "storageSnippets": "Snippets",
     "storageTemplates": "CT Vorlagen",
     "storageEmpty": "Kein Inhalt in diesem Storage gefunden",
+    "storageContentAccessDenied": "Sie haben keine Berechtigung, den Inhalt dieses Storage zu durchsuchen (storage.content).",
     "pbsBackupList": "PBS-Backups",
     "pbsName": "Name",
     "pbsNotes": "Notizen",

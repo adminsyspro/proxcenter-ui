@@ -785,6 +785,7 @@
     "storageSnippets": "Snippets",
     "storageTemplates": "Plantillas CT",
     "storageEmpty": "No se encontró contenido en este almacenamiento",
+    "storageContentAccessDenied": "No tienes permiso para explorar el contenido de este almacenamiento (storage.content).",
     "networkLoadFailed": "No se pudo cargar; haz clic para reintentar",
     "pbsBackupList": "Backups PBS",
     "pbsName": "Nombre",

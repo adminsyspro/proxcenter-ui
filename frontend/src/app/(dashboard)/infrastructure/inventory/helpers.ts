@@ -2206,6 +2206,9 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
 
     // Fetch storage content (volumes, ISOs, etc.)
     let contentItems: any[] = []
+    // A 403 means the user lacks storage.content (#920): flag it so the panel
+    // says so instead of showing an empty storage.
+    let contentDenied = false
     if (contentNode) {
       try {
         const contentR = await fetch(
@@ -2215,6 +2218,8 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
         if (contentR.ok) {
           const json = await contentR.json()
           contentItems = json?.data || []
+        } else if (contentR.status === 403) {
+          contentDenied = true
         }
       } catch {}
     }
@@ -2278,6 +2283,7 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
         monhost: storageData?.monhost,
         nodes: storageData?.nodes,
         contentItems,
+        contentDenied,
       },
     }
   }

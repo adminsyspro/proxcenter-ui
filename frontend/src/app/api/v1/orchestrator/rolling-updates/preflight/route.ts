@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 
 import { getSessionPrisma } from "@/lib/tenant"
 import { decryptSecret } from "@/lib/crypto/secret"
+import { buildOrchestratorSshOverrides } from "@/lib/ssh/node-endpoint-core"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { orchestratorHeaders } from "@/lib/orchestrator/headers"
 
@@ -46,16 +47,15 @@ export async function POST(req: Request) {
       )
     }
 
-    // Fetch per-node SSH address overrides from ManagedHost
+    // Per-node SSH address and port overrides from ManagedHost, in the object
+    // form { node: { address, port } } (empty address = Proxmox-reported one,
+    // omitted port = connection port).
     const managedHosts = await prisma.managedHost.findMany({
       where: { connectionId },
-      select: { node: true, sshAddress: true },
+      select: { node: true, sshAddress: true, sshPort: true },
     })
 
-    const sshOverrides: Record<string, string> = {}
-    for (const h of managedHosts) {
-      if (h.sshAddress) sshOverrides[h.node] = h.sshAddress
-    }
+    const sshOverrides = buildOrchestratorSshOverrides(managedHosts)
 
     // Build SSH credentials if enabled
     let sshCredentials: any = null

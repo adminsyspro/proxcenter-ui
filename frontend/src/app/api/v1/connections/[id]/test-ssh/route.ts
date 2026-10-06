@@ -6,6 +6,7 @@ import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getNodeIp } from "@/lib/ssh/node-ip"
+import { buildOrchestratorSshOverrides, normalizeSshAddress, pickNodeSshEndpoint } from "@/lib/ssh/node-endpoint-core"
 import { executeSSHDirect } from "@/lib/ssh/exec"
 import { orchestratorHeaders } from "@/lib/orchestrator/headers"
 
@@ -188,6 +189,16 @@ export async function POST(
       }
     }
 
+    // Per-node SSH address and port overrides. The orchestrator gets them in
+    // the same object form as rolling updates, so the test reaches the exact
+    // host:port the other SSH paths use.
+    const managedHosts = await prisma.managedHost.findMany({
+      where: { connectionId: id },
+      select: { node: true, sshAddress: true, sshPort: true },
+    })
+    const sshOverrides = buildOrchestratorSshOverrides(managedHosts)
+    const overrideByNode = new Map(managedHosts.map(h => [h.node, h]))
+
     // 1. Try orchestrator first (PVE/PBS only)
     try {
       const sshCredentials: Record<string, unknown> = {
@@ -196,6 +207,7 @@ export async function POST(
         sshUser: effectiveSshUser,
         sshAuthMethod: effectiveAuthMethod,
       }
+      if (Object.keys(sshOverrides).length > 0) sshCredentials.ssh_overrides = sshOverrides
       if (sshKey) sshCredentials.sshKey = sshKey
       if (sshPassword) sshCredentials.sshPassword = sshPassword
       if (sshPassphrase) sshCredentials.sshPassphrase = sshPassphrase
@@ -243,16 +255,6 @@ export async function POST(
       }, { status: 500 })
     }
 
-    // Fetch SSH address overrides
-    const managedHosts = await prisma.managedHost.findMany({
-      where: { connectionId: id },
-      select: { node: true, sshAddress: true },
-    })
-    const sshOverrides = new Map(
-      managedHosts.filter(h => h.sshAddress).map(h => [h.node, h.sshAddress!])
-    )
-
-    const port = effectiveSshPort
     const user = effectiveSshUser
 
     const results = await Promise.all(
@@ -260,12 +262,23 @@ export async function POST(
         const nodeName = n.node || n.name
         if (!nodeName) return null
 
-        const ip = sshOverrides.get(nodeName) || await getNodeIp(conn, nodeName)
+        const override = overrideByNode.get(nodeName) ?? null
+        const reportedHost = normalizeSshAddress(override?.sshAddress)
+          ? ''
+          : await getNodeIp(conn, nodeName, { skipOverride: true })
+        const endpoint = pickNodeSshEndpoint({ reportedHost, connSshPort: effectiveSshPort, override })
+        const target = {
+          node: nodeName,
+          ip: endpoint.host,
+          host: endpoint.host,
+          port: endpoint.port,
+          address_source: endpoint.source,
+        }
 
         try {
           const result = await executeSSHDirect({
-            host: ip,
-            port,
+            host: endpoint.host,
+            port: endpoint.port,
             user,
             key: sshKey,
             password: sshPassword,
@@ -274,15 +287,13 @@ export async function POST(
           })
 
           return {
-            node: nodeName,
-            ip,
+            ...target,
             status: result.success ? 'ok' as const : 'error' as const,
             error: result.success ? undefined : result.error,
           }
         } catch (e: any) {
           return {
-            node: nodeName,
-            ip,
+            ...target,
             status: 'error' as const,
             error: e.message,
           }

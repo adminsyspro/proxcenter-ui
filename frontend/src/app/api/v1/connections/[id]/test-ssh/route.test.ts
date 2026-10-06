@@ -400,4 +400,80 @@ describe('POST /api/v1/connections/[id]/test-ssh - other behavior', () => {
       expect.objectContaining({ host: '172.16.0.99' }),
     )
   })
+
+  const sshConnRow = {
+    id: 'conn-1',
+    type: 'pve',
+    baseUrl: 'https://203.0.113.10:8006',
+    sshEnabled: true,
+    sshPort: 22,
+    sshUser: 'root',
+    sshAuthMethod: 'password',
+    sshKeyEnc: null,
+    sshPassEnc: 'enc-pw',
+  }
+
+  it('forwards the per-node overrides to the orchestrator in the object form', async () => {
+    findUniqueMock.mockResolvedValueOnce(sshConnRow)
+    findManyMock.mockResolvedValueOnce([
+      { node: 'pve1', sshAddress: ' 203.0.113.10 ', sshPort: 2201 },
+      { node: 'pve2', sshAddress: '203.0.113.10', sshPort: 2202 },
+      { node: 'pve3', sshAddress: null, sshPort: 2203 },
+      { node: 'pve4', sshAddress: null, sshPort: null },
+    ])
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ success: true, nodes: [] }) })
+
+    const handler = await importHandler()
+
+    await callRoute(handler, { params: { id: 'conn-1' }, body: { sshEnabled: true, sshAuthMethod: 'password' } })
+
+    const orchBody = JSON.parse(fetchMock.mock.calls[0][1].body as string)
+
+    expect(orchBody.ssh_overrides).toEqual({
+      pve1: { address: '203.0.113.10', port: 2201 },
+      pve2: { address: '203.0.113.10', port: 2202 },
+      pve3: { address: '', port: 2203 },
+    })
+  })
+
+  it('sends no ssh_overrides key when no node has an override', async () => {
+    findUniqueMock.mockResolvedValueOnce(sshConnRow)
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ success: true, nodes: [] }) })
+
+    const handler = await importHandler()
+
+    await callRoute(handler, { params: { id: 'conn-1' }, body: { sshEnabled: true, sshAuthMethod: 'password' } })
+
+    const orchBody = JSON.parse(fetchMock.mock.calls[0][1].body as string)
+
+    expect(orchBody).not.toHaveProperty('ssh_overrides')
+  })
+
+  it('ssh2 fallback reaches each node on its own port and reports host, port and address source', async () => {
+    findUniqueMock.mockResolvedValueOnce(sshConnRow)
+    const connErr: any = new Error('fetch failed')
+
+    connErr.cause = { code: 'ECONNREFUSED' }
+    fetchMock.mockRejectedValueOnce(connErr)
+    getConnectionByIdMock.mockResolvedValueOnce({ id: 'conn-1' })
+    pveFetchMock.mockResolvedValueOnce([{ node: 'pve1' }, { node: 'pve2' }])
+    findManyMock.mockResolvedValueOnce([{ node: 'pve1', sshAddress: '203.0.113.10', sshPort: 2201 }])
+    getNodeIpMock.mockResolvedValueOnce('10.0.0.12')
+    executeSSHDirectMock.mockResolvedValue({ success: true })
+
+    const handler = await importHandler()
+
+    const res = await callRoute(handler, {
+      params: { id: 'conn-1' },
+      body: { sshEnabled: true, sshPort: 2222, sshAuthMethod: 'password' },
+    })
+    const json = await readJson<any>(res)
+
+    expect(getNodeIpMock).toHaveBeenCalledTimes(1)
+    expect(getNodeIpMock).toHaveBeenCalledWith({ id: 'conn-1' }, 'pve2', { skipOverride: true })
+    expect(executeSSHDirectMock).toHaveBeenCalledWith(expect.objectContaining({ host: '203.0.113.10', port: 2201 }))
+    expect(executeSSHDirectMock).toHaveBeenCalledWith(expect.objectContaining({ host: '10.0.0.12', port: 2222 }))
+    expect(json.nodes[0]).toMatchObject({ node: 'pve1', ip: '203.0.113.10', host: '203.0.113.10', port: 2201, address_source: 'override' })
+    expect(json.nodes[1]).toMatchObject({ node: 'pve2', ip: '10.0.0.12', host: '10.0.0.12', port: 2222, address_source: 'proxmox' })
+  })
 })

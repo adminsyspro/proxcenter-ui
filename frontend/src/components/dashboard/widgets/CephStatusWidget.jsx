@@ -9,6 +9,15 @@ import ChartContainer from '@/components/ChartContainer'
 
 import { widgetColors } from './themeColors'
 import { formatTime } from './timeRangeUtils'
+import { osdGridStates } from '@/lib/ceph/osdGrid'
+
+const OSD_STATE_STYLE = {
+  down: { color: '#ef4444', status: 'Down', opacity: 1 },
+  full: { color: '#ef4444', status: 'Full', opacity: 1 },
+  nearfull: { color: '#ff9800', status: 'Near Full', opacity: 1 },
+  out: { color: '#ff9800', status: 'Up / Out', opacity: 1 },
+  up: { color: '#4caf50', status: 'Up / In', opacity: 0.6 },
+}
 
 // ─── Animated Circular Gauge ─────────────────────────────────────────────────
 function CircularGauge({ value, label, size = 56, strokeWidth = 4.5, color, sublabel, isDark = true }) {
@@ -177,44 +186,25 @@ function CephClusterCard({ cluster, isDark, perfData }) {
       </Box>
 
       {/* OSD icons */}
-      {cluster.osdsTotal > 0 && cluster.osdsTotal <= 100 && (() => {
-        const checks = cluster.healthChecks || {}
-        const downIds = new Set()
-        const warnIds = new Set()
-        const fullIds = new Set()
-        const re = /osd\.(\d+)/g
-        for (const [n, d] of Object.entries(checks)) {
-          for (const det of (d?.detail || [])) {
-            let m; re.lastIndex = 0
-            while ((m = re.exec(det?.message || '')) !== null) {
-              const id = Number.parseInt(m[1], 10)
-              if (n === 'OSD_DOWN' || n === 'OSD_FLAGS') downIds.add(id)
-              else if (n === 'OSD_NEARFULL' || n === 'OSD_BACKFILLFULL') warnIds.add(id)
-              else if (n === 'OSD_FULL') fullIds.add(id)
-            }
-          }
-        }
-        return (
+      {cluster.osdsTotal > 0 && cluster.osdsTotal <= 100 && (
           <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.4, justifyContent: 'center' }}>
-            {Array.from({ length: cluster.osdsTotal }, (_, i) => {
-              const isUp = i < cluster.osdsUp
-              const isIn = i < (cluster.osdsIn || cluster.osdsUp)
-              let color, status, opacity
-              if (downIds.has(i) || !isUp) { color = '#ef4444'; status = 'Down'; opacity = 1 }
-              else if (fullIds.has(i)) { color = '#ef4444'; status = 'Full'; opacity = 1 }
-              else if (warnIds.has(i)) { color = '#ff9800'; status = 'Near Full'; opacity = 1 }
-              else if (!isIn) { color = '#ff9800'; status = 'Up / Out'; opacity = 1 }
-              else { color = '#4caf50'; status = 'Up / In'; opacity = 0.6 }
+            {osdGridStates({
+              total: cluster.osdsTotal,
+              up: cluster.osdsUp,
+              inCount: cluster.osdsIn || cluster.osdsUp,
+              healthChecks: cluster.healthChecks,
+              osds: cluster.osds,
+            }).map(({ id, state }) => {
+              const { color, status, opacity } = OSD_STATE_STYLE[state]
               return (
-                <span key={i} title={`OSD.${i} - ${status}`}
+                <span key={id} title={`OSD.${id} - ${status}`}
                   style={{ fontSize: '0.8571rem', color, opacity, cursor: 'default', lineHeight: 1 }}>
                   <i className="ri-hard-drive-3-fill" />
                 </span>
               )
             })}
           </Box>
-        )
-      })()}
+      )}
 
       </Box>
 

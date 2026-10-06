@@ -21,6 +21,7 @@ import { isAlertInRbacScope } from "@/lib/alerts/visibility"
 import { fetchDashboardOrchAlerts } from "@/lib/alerts/dashboardOrchAlerts"
 import { demoResponse } from "@/lib/demo/demo-api"
 import { getSetting } from "@/lib/db/settings"
+import { osdUpInList } from '@/lib/ceph/osdList'
 
 export const runtime = "nodejs"
 
@@ -224,6 +225,13 @@ export async function GET(req: Request) {
           const resources = resourcesResult.status === 'fulfilled' ? resourcesResult.value || [] : []
           const status = statusResult.status === 'fulfilled' ? statusResult.value || [] : []
           const cephStatus = cephResult.status === 'fulfilled' ? cephResult.value : null
+          // Per-OSD up/in flags for the dashboard OSD grid, read from one online
+          // node (the OSD tree is cluster-wide); the grid falls back to the
+          // health details when this read fails.
+          const cephNode = cephStatus ? nodes.find((n: any) => n?.status === 'online')?.node : undefined
+          const cephOsds = cephNode
+            ? osdUpInList(await pveFetch<any>(connData, `/nodes/${encodeURIComponent(cephNode)}/ceph/osd`, {}, pveTimeout).catch(() => null))
+            : []
 
           const clusterRow = status.find((x: any) => x?.type === "cluster")
           const clusterName = clusterRow?.name || conn.name || conn.id
@@ -278,7 +286,7 @@ return {
             }
           }))
 
-          return { conn, clusterName, isCluster: nodes.length > 1, quorum: quorumRow, nodes: nodeStatuses, vms, lxcs, cephStatus, connStorageUsed, connStorageMax }
+          return { conn, clusterName, isCluster: nodes.length > 1, quorum: quorumRow, nodes: nodeStatuses, vms, lxcs, cephStatus, cephOsds, connStorageUsed, connStorageMax }
         } catch (e) {
           console.error(`[dashboard] PVE error ${conn.id}:`, e)
           
@@ -520,6 +528,7 @@ return null
           usedPct: pgmap?.bytes_total > 0 ? round1((Number(pgmap?.bytes_used || 0) / Number(pgmap?.bytes_total)) * 100) : 0,
           readBps: Number(pgmap?.read_bytes_sec || 0), writeBps: Number(pgmap?.write_bytes_sec || 0),
           healthChecks: data.cephStatus?.health?.checks || {},
+          osds: data.cephOsds || [],
         }
 
         // Only include real Ceph clusters (multi-node with actual OSDs)

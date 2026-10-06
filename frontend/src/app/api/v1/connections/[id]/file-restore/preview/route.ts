@@ -2,10 +2,8 @@ import { NextResponse } from "next/server"
 
 import { request } from "undici"
 
-import { getConnectionById } from "@/lib/connections/getConnection"
-import { getInsecureAgent } from "@/lib/proxmox/client"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
-import { authorizeFileRestore, fileRestoreDenied, pickFileRestoreNode } from "@/lib/vdc/fileRestoreScope"
+import { resolveFileRestoreTarget } from "@/lib/proxmox/fileRestoreTarget"
 
 export const runtime = "nodejs"
 
@@ -76,36 +74,11 @@ export async function GET(
     }
 
     // Tenant scope on storage, volume and node, before any Proxmox request.
-    const access = await authorizeFileRestore(pveId, storage, volume)
-    if (access instanceof Response) return access
+    const target = await resolveFileRestoreTarget(pveId, storage, volume)
+    if (target instanceof Response) return target
 
-    const conn = await getConnectionById(pveId)
-
-    const dispatcher = conn.insecureDev
-      ? getInsecureAgent()
-      : undefined
-
-    // Récupérer un node qui a accès au storage
-    const resourcesUrl = `${conn.baseUrl.replace(/\/$/, "")}/api2/json/cluster/resources`
-
-    const resourcesRes = await request(resourcesUrl, {
-      method: 'GET',
-      headers: { Authorization: `PVEAPIToken=${conn.apiToken}` },
-      dispatcher,
-    })
-
-    const resourcesJson = JSON.parse(await resourcesRes.body.text())
-    const allResources = resourcesJson.data || []
-
-    const nodeName = pickFileRestoreNode(allResources, storage, access.allowedNodes)
-
-    if (!nodeName) {
-      if (access.allowedNodes) return fileRestoreDenied()
-
-      return NextResponse.json({ error: "No available node found with storage access" }, { status: 500 })
-    }
+    const { conn, dispatcher, nodeName, volumeId } = target
     const filepathBase64 = Buffer.from(filepath, 'utf-8').toString('base64')
-    const volumeId = access.volumeId
 
     // Télécharger le fichier
     const downloadUrl = `${conn.baseUrl.replace(/\/$/, "")}/api2/json/nodes/${nodeName}/storage/${encodeURIComponent(storage)}/file-restore/download`

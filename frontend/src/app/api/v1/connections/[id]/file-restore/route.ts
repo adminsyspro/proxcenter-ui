@@ -3,11 +3,9 @@ import { cookies } from "next/headers"
 
 import { request } from "undici"
 
-import { getConnectionById } from "@/lib/connections/getConnection"
-import { getInsecureAgent } from "@/lib/proxmox/client"
 import { formatBytes } from "@/utils/format"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
-import { authorizeFileRestore, fileRestoreDenied, pickFileRestoreNode } from "@/lib/vdc/fileRestoreScope"
+import { resolveFileRestoreTarget } from "@/lib/proxmox/fileRestoreTarget"
 import { getDateLocale } from "@/lib/i18n/date"
 
 export const runtime = "nodejs"
@@ -50,37 +48,10 @@ export async function GET(
     }
 
     // Tenant scope on storage, volume and node, before any Proxmox request.
-    const access = await authorizeFileRestore(pveId, storage, volume)
-    if (access instanceof Response) return access
+    const target = await resolveFileRestoreTarget(pveId, storage, volume)
+    if (target instanceof Response) return target
 
-    const conn = await getConnectionById(pveId)
-
-    const dispatcher = conn.insecureDev
-      ? getInsecureAgent()
-      : undefined
-
-    // Récupérer un node qui a accès au storage (important pour PBS avec encryption key)
-    // D'abord, chercher les nodes ayant le storage via /cluster/resources
-    const resourcesUrl = `${conn.baseUrl.replace(/\/$/, "")}/api2/json/cluster/resources`
-
-    const resourcesRes = await request(resourcesUrl, {
-      method: 'GET',
-      headers: { Authorization: `PVEAPIToken=${conn.apiToken}` },
-      dispatcher,
-    })
-
-    const resourcesJson = JSON.parse(await resourcesRes.body.text())
-    const allResources = resourcesJson.data || []
-
-    const nodeName = pickFileRestoreNode(allResources, storage, access.allowedNodes)
-
-    if (!nodeName) {
-      if (access.allowedNodes) return fileRestoreDenied()
-
-      return NextResponse.json({ error: "No available node found with storage access" }, { status: 500 })
-    }
-
-    const volumeId = access.volumeId
+    const { conn, dispatcher, nodeName, volumeId } = target
 
     // Encoder le filepath en base64 comme attendu par l'API PVE
     const filepathBase64 = Buffer.from(filepath, 'utf-8').toString('base64')

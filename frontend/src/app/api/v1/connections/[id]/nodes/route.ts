@@ -200,20 +200,21 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   }
 
   // Fetch SSH address overrides from ManagedHost
-  let sshOverrides: Record<string, { sshAddress: string | null; hostId: string }> = {}
+  let sshOverrides: Record<string, { sshAddress: string | null; sshPort: number | null; hostId: string }> = {}
   try {
     const hosts = await hostDb.managedHost.findMany({
       where: { connectionId: id },
-      select: { id: true, node: true, sshAddress: true },
+      select: { id: true, node: true, sshAddress: true, sshPort: true },
     })
     for (const h of hosts) {
-      sshOverrides[h.node] = { sshAddress: h.sshAddress, hostId: h.id }
+      sshOverrides[h.node] = { sshAddress: h.sshAddress, sshPort: h.sshPort, hostId: h.id }
     }
   } catch {}
 
   let nodesWithSsh = enrichedNodes.map((n: any) => ({
     ...n,
     sshAddress: sshOverrides[n.node || n.name]?.sshAddress || null,
+    sshPort: sshOverrides[n.node || n.name]?.sshPort ?? null,
     hostId: sshOverrides[n.node || n.name]?.hostId || null,
   }))
 

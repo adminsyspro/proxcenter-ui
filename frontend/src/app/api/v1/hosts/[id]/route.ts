@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 
 import { getSessionPrisma } from "@/lib/tenant"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { normalizeSshAddress, normalizeSshPort } from "@/lib/ssh/node-endpoint-core"
 
 export const runtime = "nodejs"
 
@@ -44,7 +45,16 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     if (body.displayName !== undefined) data.displayName = body.displayName ? String(body.displayName).trim() : null
     if (body.enabled !== undefined) data.enabled = !!body.enabled
     if (body.notes !== undefined) data.notes = body.notes ? String(body.notes) : null
-    if (body.sshAddress !== undefined) data.sshAddress = body.sshAddress ? String(body.sshAddress).trim() : null
+    if (body.sshAddress !== undefined) data.sshAddress = normalizeSshAddress(body.sshAddress == null ? null : String(body.sshAddress))
+    if (body.sshPort !== undefined) {
+      // null or "" clears the override (the connection port applies again).
+      const cleared = body.sshPort === null || body.sshPort === ""
+      const port = normalizeSshPort(body.sshPort)
+      if (!cleared && port === null) {
+        return NextResponse.json({ error: "sshPort must be an integer between 1 and 65535" }, { status: 400 })
+      }
+      data.sshPort = port
+    }
     if (body.tags !== undefined) data.tags = body.tags ? String(body.tags) : null
 
     const updated = await prisma.managedHost.update({
@@ -61,6 +71,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
         node: updated.node,
         displayName: updated.displayName ?? null,
         sshAddress: updated.sshAddress ?? null,
+        sshPort: updated.sshPort ?? null,
         enabled: updated.enabled,
         notes: updated.notes ?? null,
         tags: updated.tags ?? null,

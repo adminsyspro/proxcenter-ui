@@ -75,6 +75,7 @@ model ManagedHost {
   node         String
   ip           String?
   sshAddress   String?
+  sshPort      Int?
   displayName  String?
   enabled      Boolean     @default(true)
   notes        String?

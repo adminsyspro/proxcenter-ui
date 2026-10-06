@@ -7,6 +7,7 @@ import { getConnectionById } from "@/lib/connections/getConnection"
 import { getInsecureAgent } from "@/lib/proxmox/client"
 import { formatBytes } from "@/utils/format"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { authorizeFileRestore, fileRestoreDenied, pickFileRestoreNode } from "@/lib/vdc/fileRestoreScope"
 import { getDateLocale } from "@/lib/i18n/date"
 
 export const runtime = "nodejs"
@@ -48,6 +49,10 @@ export async function GET(
       return NextResponse.json({ error: "Missing required parameters: storage, volume" }, { status: 400 })
     }
 
+    // Tenant scope on storage, volume and node, before any Proxmox request.
+    const access = await authorizeFileRestore(pveId, storage, volume)
+    if (access instanceof Response) return access
+
     const conn = await getConnectionById(pveId)
 
     const dispatcher = conn.insecureDev
@@ -67,27 +72,15 @@ export async function GET(
     const resourcesJson = JSON.parse(await resourcesRes.body.text())
     const allResources = resourcesJson.data || []
 
-    // Trouver les nodes qui ont ce storage
-    const storageNodes = allResources
-      .filter((r: any) => r.type === 'storage' && r.storage === storage && r.status === 'available')
-      .map((r: any) => r.node)
-
-    // Aussi récupérer tous les nodes online
-    const onlineNodes = allResources
-      .filter((r: any) => r.type === 'node' && r.status === 'online')
-      .map((r: any) => r.node)
-
-    // Préférer un node qui a le storage, sinon n'importe quel node online
-    const nodeName = storageNodes.find((n: string) => onlineNodes.includes(n))
-      || storageNodes[0]
-      || onlineNodes[0]
+    const nodeName = pickFileRestoreNode(allResources, storage, access.allowedNodes)
 
     if (!nodeName) {
+      if (access.allowedNodes) return fileRestoreDenied()
+
       return NextResponse.json({ error: "No available node found with storage access" }, { status: 500 })
     }
 
-    // Construire le volume ID complet si nécessaire
-    const volumeId = volume.includes(':') ? volume : `${storage}:${volume}`
+    const volumeId = access.volumeId
 
     // Encoder le filepath en base64 comme attendu par l'API PVE
     const filepathBase64 = Buffer.from(filepath, 'utf-8').toString('base64')

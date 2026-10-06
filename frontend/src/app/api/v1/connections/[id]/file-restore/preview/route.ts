@@ -5,6 +5,7 @@ import { request } from "undici"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { getInsecureAgent } from "@/lib/proxmox/client"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { authorizeFileRestore, fileRestoreDenied, pickFileRestoreNode } from "@/lib/vdc/fileRestoreScope"
 
 export const runtime = "nodejs"
 
@@ -74,6 +75,10 @@ export async function GET(
       }, { status: 400 })
     }
 
+    // Tenant scope on storage, volume and node, before any Proxmox request.
+    const access = await authorizeFileRestore(pveId, storage, volume)
+    if (access instanceof Response) return access
+
     const conn = await getConnectionById(pveId)
 
     const dispatcher = conn.insecureDev
@@ -92,23 +97,15 @@ export async function GET(
     const resourcesJson = JSON.parse(await resourcesRes.body.text())
     const allResources = resourcesJson.data || []
 
-    const storageNodes = allResources
-      .filter((r: any) => r.type === 'storage' && r.storage === storage && r.status === 'available')
-      .map((r: any) => r.node)
-
-    const onlineNodes = allResources
-      .filter((r: any) => r.type === 'node' && r.status === 'online')
-      .map((r: any) => r.node)
-
-    const nodeName = storageNodes.find((n: string) => onlineNodes.includes(n))
-      || storageNodes[0]
-      || onlineNodes[0]
+    const nodeName = pickFileRestoreNode(allResources, storage, access.allowedNodes)
 
     if (!nodeName) {
+      if (access.allowedNodes) return fileRestoreDenied()
+
       return NextResponse.json({ error: "No available node found with storage access" }, { status: 500 })
     }
     const filepathBase64 = Buffer.from(filepath, 'utf-8').toString('base64')
-    const volumeId = volume.includes(':') ? volume : `${storage}:${volume}`
+    const volumeId = access.volumeId
 
     // Télécharger le fichier
     const downloadUrl = `${conn.baseUrl.replace(/\/$/, "")}/api2/json/nodes/${nodeName}/storage/${encodeURIComponent(storage)}/file-restore/download`

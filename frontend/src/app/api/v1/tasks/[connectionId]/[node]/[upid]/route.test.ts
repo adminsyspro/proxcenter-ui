@@ -342,3 +342,76 @@ describe('GET /api/v1/tasks/[connectionId]/[node]/[upid] — progress of a runni
     })
   })
 })
+
+describe('GET /api/v1/tasks/[connectionId]/[node]/[upid]: failure reason (#926)', () => {
+  function stoppedTask(exitstatus: string, lines: string[]) {
+    pveFetchMock.mockImplementation((_conn: any, path: string) => {
+      if (typeof path === 'string') {
+        if (path.includes('/status')) {
+          return Promise.resolve({ status: 'stopped', exitstatus, type: 'qmigrate', id: '100', starttime: 1000, endtime: 1004 })
+        }
+        if (path.includes('/log')) return Promise.resolve(lines.map((t, i) => ({ n: i + 1, t })))
+      }
+      return Promise.resolve(undefined)
+    })
+  }
+
+  async function body(query = '') {
+    const { req, params } = ctx(query)
+    const res = await GET(req, { params })
+    expect(res.status).toBe(200)
+    return readJson<any>(res)
+  }
+
+  it('returns the reason Proxmox logged instead of the bare exitstatus', async () => {
+    stoppedTask('migration aborted', [
+      "2026-09-11 10:00:00 starting migration of VM 100 to node 'pve2' (10.42.0.102)",
+      "2026-09-11 10:00:00 ERROR: Problem found while scanning volumes - can't migrate local cdrom 'local:iso/debian.iso'",
+      '2026-09-11 10:00:00 aborting phase 1 - cleanup resources',
+      "2026-09-11 10:00:01 ERROR: migration aborted (duration 00:00:01): Problem found while scanning volumes - can't migrate local cdrom 'local:iso/debian.iso'",
+      'TASK ERROR: migration aborted',
+    ])
+
+    const json = await body()
+
+    expect(json.exitstatus).toBe('migration aborted')
+    expect(json.failureReason).toBe("Problem found while scanning volumes - can't migrate local cdrom 'local:iso/debian.iso'")
+    expect(json.message).toBe(`Failed: ${json.failureReason}`)
+    expect(json.logs).toHaveLength(5)
+  })
+
+  it('falls back to the exitstatus when the log says nothing', async () => {
+    stoppedTask('migration aborted', [])
+
+    const json = await body()
+
+    expect(json.failureReason).toBe('migration aborted')
+  })
+
+  it('reads the reason of a migration that finished with problems without completing', async () => {
+    stoppedTask('migration problems', [
+      "2026-09-11 10:00:03 ERROR: online migrate failure - VM 100 qmp command 'migrate' failed - aborting",
+      '2026-09-11 10:00:05 ERROR: migration finished with problems (duration 00:00:05)',
+      'TASK ERROR: migration problems',
+    ])
+
+    expect((await body()).failureReason).toBe("online migrate failure - VM 100 qmp command 'migrate' failed - aborting")
+  })
+
+  it('has no reason for a successful task or one stopped by the user', async () => {
+    expect((await body()).failureReason).toBeNull()
+
+    stoppedTask('received interrupt', ['TASK ERROR: received interrupt'])
+    expect((await body()).failureReason).toBeNull()
+  })
+
+  it('omits the log lines in summary mode but still extracts the reason', async () => {
+    stoppedTask('migration aborted', ['TASK ERROR: CT is locked (backup)'])
+
+    const json = await body('?summary=1')
+
+    expect(json.failureReason).toBe('CT is locked (backup)')
+    expect(json.logs).toEqual([])
+    expect(json.totalLogLines).toBe(1)
+  })
+})

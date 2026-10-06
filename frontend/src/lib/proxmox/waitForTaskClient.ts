@@ -16,6 +16,11 @@ export interface WaitForPveTaskResult {
   outcome: PveTaskOutcome
   /** PVE exitstatus when outcome === 'failed'; '' when PVE gave no detail. */
   error?: string
+  /**
+   * Why it failed, read from the task log by the task route (#926), falling
+   * back to the exitstatus. Only set when outcome === 'failed'.
+   */
+  reason?: string
 }
 
 export interface WaitForPveTaskOptions {
@@ -46,7 +51,7 @@ export async function waitForPveTask(
   const timeoutMs = options.timeoutMs ?? 600_000
   const url =
     `/api/v1/tasks/${encodeURIComponent(connId)}` +
-    `/${encodeURIComponent(node)}/${encodeURIComponent(upid)}`
+    `/${encodeURIComponent(node)}/${encodeURIComponent(upid)}?summary=1`
   const start = Date.now()
 
   for (;;) {
@@ -58,7 +63,8 @@ export async function waitForPveTask(
         const status = await res.json()
         if (status?.status === 'stopped') {
           if (status.exitstatus === 'OK') return { outcome: 'ok' }
-          return { outcome: 'failed', error: status.exitstatus || '' }
+          const error = status.exitstatus || ''
+          return { outcome: 'failed', error, reason: status.failureReason || error }
         }
       }
       // Non-ok HTTP responses fall through to the retry below.

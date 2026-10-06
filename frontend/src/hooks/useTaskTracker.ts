@@ -12,11 +12,15 @@ interface TaskInfo {
   onSuccess?: () => void
   onError?: (error: string) => void
   queryParams?: Record<string, string>
+  /** How long to follow the task before giving up. Default 5 minutes. */
+  timeoutMs?: number
 }
 
 interface TaskStatus {
   status: 'running' | 'stopped' | 'error'
   exitstatus?: string
+  /** Why the task failed, read by the task route from the PVE log (#926). */
+  failureReason?: string | null
   type?: string
 }
 
@@ -63,7 +67,7 @@ export function useTaskTracker() {
   }, [])
 
   const trackTask = useCallback((taskInfo: TaskInfo) => {
-    const { upid, connId, node, description, onSuccess, onError, queryParams } = taskInfo
+    const { upid, connId, node, description, onSuccess, onError, queryParams, timeoutMs } = taskInfo
 
     // Éviter de tracker la même tâche deux fois
     if (activeTasksRef.current.has(upid)) {
@@ -76,7 +80,7 @@ export function useTaskTracker() {
     toast.info(`${description}...`)
 
     const pollInterval = 2000 // 2 secondes
-    const maxAttempts = 150 // 5 minutes max (150 * 2s)
+    const maxAttempts = Math.max(1, Math.round((timeoutMs ?? 300_000) / pollInterval)) // 5 minutes by default
     let attempts = 0
 
     const poll = async () => {
@@ -92,7 +96,7 @@ export function useTaskTracker() {
             toast.success(t('taskTracker.completed', { description }))
             onSuccess?.()
           } else {
-            const errorMsg = status.exitstatus || t('taskTracker.unknownError')
+            const errorMsg = status.failureReason || status.exitstatus || t('taskTracker.unknownError')
             toast.error(t('taskTracker.failed', { description, error: errorMsg }))
             onError?.(errorMsg)
           }

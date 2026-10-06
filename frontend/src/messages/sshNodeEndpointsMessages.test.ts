@@ -22,6 +22,7 @@ const KEYS = [
   'newConnectionHint',
   'sourceOverride',
   'sourceProxmox',
+  'readOnlyHint',
 ]
 
 describe('Per-node SSH address and port editor: i18n parity across the 6 served locales', () => {

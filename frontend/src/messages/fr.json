@@ -3520,7 +3520,8 @@
       "noNodes": "Aucun nœud trouvé pour cette connexion.",
       "newConnectionHint": "Enregistrez d'abord la connexion, puis définissez ici une adresse et un port SSH par nœud.",
       "sourceOverride": "surcharge du nœud",
-      "sourceProxmox": "adresse Proxmox"
+      "sourceProxmox": "adresse Proxmox",
+      "readOnlyHint": "Les modifier nécessite la permission des paramètres d'administration."
     },
     "editPveServer": "Modifier le serveur PVE",
     "editPbsServer": "Modifier le serveur PBS",

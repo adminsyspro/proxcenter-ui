@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl'
 import { Autocomplete, Box, CircularProgress, TextField, Tooltip, Typography } from '@mui/material'
 
 import { NodeIcon } from '@/app/(dashboard)/infrastructure/inventory/components/TreeIcons'
+import { useRBAC } from '@/contexts/RBACContext'
 import { normalizeSshAddress, normalizeSshPort } from '@/lib/ssh/node-endpoint-core'
 
 /** A node's SSH override as the editor holds it (null = not overridden). */
@@ -43,9 +44,13 @@ function savedValues(rows: Record<string, Row>): Record<string, NodeSshValue> {
  * Per-node SSH address and port overrides, saved to ManagedHost on blur.
  * The address is free text (a VPN, admin VLAN or NAT address Proxmox does not
  * report is valid); the node's reported interfaces are offered as suggestions.
+ * Saving goes through the hosts API, gated on admin.settings: without it the
+ * values are shown read-only.
  */
 export default function NodeSshEndpointsEditor({ connectionId, nodeNames, defaultPort, onChange }: Props) {
   const t = useTranslations()
+  const rbac = useRBAC()
+  const canEdit = !rbac.loading && rbac.hasPermission('admin.settings')
   const [rows, setRows] = useState<Record<string, Row>>({})
   const [order, setOrder] = useState<string[]>([])
   const [ifaces, setIfaces] = useState<Record<string, NodeIface[]>>({})
@@ -107,7 +112,7 @@ export default function NodeSshEndpointsEditor({ connectionId, nodeNames, defaul
 
   const commit = useCallback(async (node: string, address: string, portText: string) => {
     const row = rows[node]
-    if (!row?.hostId || row.saving) return
+    if (!canEdit || !row?.hostId || row.saving) return
 
     const nextAddress = normalizeSshAddress(address)
     const nextPort = normalizeSshPort(portText)
@@ -142,7 +147,7 @@ export default function NodeSshEndpointsEditor({ connectionId, nodeNames, defaul
     } catch (e: any) {
       patchRow(node, { saving: false, error: t('settings.sshNodeEndpoints.saveFailed', { error: e?.message || String(e) }) })
     }
-  }, [rows, onChange, t])
+  }, [canEdit, rows, onChange, t])
 
   if (loading) return <CircularProgress size={18} />
 
@@ -157,6 +162,11 @@ export default function NodeSshEndpointsEditor({ connectionId, nodeNames, defaul
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+      {!canEdit && !rbac.loading && (
+        <Typography variant='caption' color='text.secondary' sx={{ display: 'block' }}>
+          {t('settings.sshNodeEndpoints.readOnlyHint')}
+        </Typography>
+      )}
       {visible.map(node => {
         const row = rows[node]
         const options = ifaces[node] || []
@@ -185,7 +195,7 @@ export default function NodeSshEndpointsEditor({ connectionId, nodeNames, defaul
                   patchRow(node, { address })
                   void commit(node, address, row.port)
                 }}
-                disabled={row.saving || !row.hostId}
+                disabled={!canEdit || row.saving || !row.hostId}
                 groupBy={() => t('settings.sshNodeEndpoints.interfaces')}
                 renderOption={(props, ip) => {
                   const iface = options.find(o => o.ip === ip)
@@ -220,7 +230,7 @@ export default function NodeSshEndpointsEditor({ connectionId, nodeNames, defaul
                 value={row.port}
                 onChange={e => patchRow(node, { port: e.target.value.replace(/\D/g, '') })}
                 onBlur={() => void commit(node, row.address, row.port)}
-                disabled={row.saving || !row.hostId}
+                disabled={!canEdit || row.saving || !row.hostId}
                 error={!!row.error && !!row.port && normalizeSshPort(row.port) === null}
                 sx={{ width: 96, flexShrink: 0 }}
                 slotProps={{ inputLabel: { shrink: true }, htmlInput: { inputMode: 'numeric', style: MONO } }}

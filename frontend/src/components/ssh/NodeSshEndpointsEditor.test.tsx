@@ -4,6 +4,8 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import NodeSshEndpointsEditor from './NodeSshEndpointsEditor'
 
 vi.mock('next-intl', () => ({ useTranslations: () => (k: string) => k }))
+const rbac = { loading: false, hasPermission: vi.fn((p: string) => p === 'admin.settings') }
+vi.mock('@/contexts/RBACContext', () => ({ useRBAC: () => rbac }))
 vi.mock('@/app/(dashboard)/infrastructure/inventory/components/TreeIcons', () => ({
   NodeIcon: () => <span />,
 }))
@@ -16,6 +18,7 @@ const NODES = [
 let fetchMock: ReturnType<typeof vi.fn>
 
 beforeEach(() => {
+  rbac.hasPermission.mockImplementation((p: string) => p === 'admin.settings')
   fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
     if (init?.method === 'PATCH') {
       const body = JSON.parse(String(init.body))
@@ -94,5 +97,30 @@ describe('NodeSshEndpointsEditor', () => {
     expect(await screen.findAllByLabelText('settings.sshNodeEndpoints.address')).toHaveLength(1)
     expect(screen.getByText('pve2')).toBeInTheDocument()
     expect(screen.queryByText('pve1')).not.toBeInTheDocument()
+  })
+
+  it('is read-only with a hint, and never saves, without the admin settings permission', async () => {
+    rbac.hasPermission.mockReturnValue(false)
+    render(<NodeSshEndpointsEditor connectionId='c1' />)
+
+    const addresses = await screen.findAllByLabelText('settings.sshNodeEndpoints.address')
+    expect((addresses[0] as HTMLInputElement).value).toBe('203.0.113.10')
+    expect(addresses.every(a => (a as HTMLInputElement).disabled)).toBe(true)
+    const ports = screen.getAllByLabelText('settings.sshNodeEndpoints.port')
+    expect((ports[0] as HTMLInputElement).value).toBe('2201')
+    expect(ports.every(p => (p as HTMLInputElement).disabled)).toBe(true)
+    expect(screen.getByText('settings.sshNodeEndpoints.readOnlyHint')).toBeInTheDocument()
+    expect(rbac.hasPermission).toHaveBeenCalledWith('admin.settings')
+
+    fireEvent.blur(ports[0])
+    await new Promise(r => setTimeout(r, 0))
+    expect(patchCalls()).toHaveLength(0)
+  })
+
+  it('shows no read-only hint to a user who can edit', async () => {
+    render(<NodeSshEndpointsEditor connectionId='c1' />)
+
+    await screen.findAllByLabelText('settings.sshNodeEndpoints.address')
+    expect(screen.queryByText('settings.sshNodeEndpoints.readOnlyHint')).not.toBeInTheDocument()
   })
 })

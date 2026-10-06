@@ -3520,7 +3520,8 @@
       "noNodes": "No node found for this connection.",
       "newConnectionHint": "Save the connection first, then set an SSH address and port per node here.",
       "sourceOverride": "node override",
-      "sourceProxmox": "Proxmox address"
+      "sourceProxmox": "Proxmox address",
+      "readOnlyHint": "Changing these needs the admin settings permission."
     },
     "editPveServer": "Edit PVE Server",
     "editPbsServer": "Edit PBS Server",

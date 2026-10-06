@@ -3520,7 +3520,8 @@
       "noNodes": "No se encontró ningún nodo para esta conexión.",
       "newConnectionHint": "Guarde primero la conexión y luego defina aquí una dirección y un puerto SSH por nodo.",
       "sourceOverride": "anulación del nodo",
-      "sourceProxmox": "dirección de Proxmox"
+      "sourceProxmox": "dirección de Proxmox",
+      "readOnlyHint": "Para cambiarlos se necesita el permiso de configuración de administración."
     },
     "editPveServer": "Editar PVE Servidor",
     "editPbsServer": "Editar PBS Servidor",

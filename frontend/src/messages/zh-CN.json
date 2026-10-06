@@ -3524,7 +3524,8 @@
       "noNodes": "未找到此连接的节点。",
       "newConnectionHint": "请先保存连接，然后在此为每个节点设置 SSH 地址和端口。",
       "sourceOverride": "节点覆盖",
-      "sourceProxmox": "Proxmox 地址"
+      "sourceProxmox": "Proxmox 地址",
+      "readOnlyHint": "修改这些设置需要管理设置权限。"
     },
     "editPveServer": "编辑 PVE 服务器",
     "editPbsServer": "编辑 PBS 服务器",

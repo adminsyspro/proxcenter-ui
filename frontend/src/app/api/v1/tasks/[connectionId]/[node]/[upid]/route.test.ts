@@ -22,6 +22,16 @@ vi.mock('@/lib/ssh/exec', () => ({
 vi.mock('@/lib/ssh/node-ip', () => ({
   getNodeIp: vi.fn<(...args: any[]) => Promise<any>>(),
 }))
+// Routes resolve the node through resolveNodeSshEndpoint; keep the address
+// coming from the getNodeIp mock above and the connection port (22).
+vi.mock('@/lib/ssh/node-endpoint', async () => {
+  const nodeIp = await import('@/lib/ssh/node-ip')
+  return {
+    ...(await import('@/lib/ssh/node-endpoint-core')),
+    resolveNodeSshEndpoint: async (conn: any, node: string) =>
+      ({ host: await nodeIp.getNodeIp(conn, node), port: 22, source: 'proxmox' }),
+  }
+})
 
 import { GET } from './route'
 import { checkPermission } from '@/lib/rbac'
@@ -115,7 +125,7 @@ describe('GET /api/v1/tasks/[connectionId]/[node]/[upid] — source-VM cleanup (
     const res = await GET(req, { params })
 
     expect(res.status).toBe(200)
-    expect(executeSSHMock).toHaveBeenCalledWith('conn-1', '10.0.0.2', 'qm unlock 100')
+    expect(executeSSHMock).toHaveBeenCalledWith('conn-1', expect.objectContaining({ host: '10.0.0.2' }), 'qm unlock 100')
     expect(sawSourceVmDelete()).toBe(false)
   })
 
@@ -218,7 +228,7 @@ describe('GET /api/v1/tasks/[connectionId]/[node]/[upid] — source-VM cleanup (
     const res = await GET(req, { params })
 
     expect(res.status).toBe(200)
-    expect(executeSSHMock).toHaveBeenCalledWith('conn-1', '10.0.0.2', 'qm unlock 100')
+    expect(executeSSHMock).toHaveBeenCalledWith('conn-1', expect.objectContaining({ host: '10.0.0.2' }), 'qm unlock 100')
     expect(sawSourceVmDelete()).toBe(false)
   })
 })

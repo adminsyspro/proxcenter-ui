@@ -11,6 +11,16 @@ const { checkPermissionMock, getConnByIdMock, getNodeIpMock, executeSSHMock } = 
 
 vi.mock('@/lib/connections/getConnection', () => ({ getConnectionById: (...a: any[]) => getConnByIdMock(...a) }))
 vi.mock('@/lib/ssh/node-ip', () => ({ getNodeIp: (...a: any[]) => getNodeIpMock(...a) }))
+// Routes resolve the node through resolveNodeSshEndpoint; keep the address
+// coming from the getNodeIp mock above and the connection port (22).
+vi.mock('@/lib/ssh/node-endpoint', async () => {
+  const nodeIp = await import('@/lib/ssh/node-ip')
+  return {
+    ...(await import('@/lib/ssh/node-endpoint-core')),
+    resolveNodeSshEndpoint: async (conn: any, node: string) =>
+      ({ host: await nodeIp.getNodeIp(conn, node), port: 22, source: 'proxmox' }),
+  }
+})
 vi.mock('@/lib/ssh/exec', () => ({ executeSSH: (...a: any[]) => executeSSHMock(...a) }))
 vi.mock('@/lib/rbac', () => ({
   checkPermission: (...a: any[]) => checkPermissionMock(...a),
@@ -67,7 +77,7 @@ describe('GET .../nodes/[node]/sensors', () => {
 
     const [, ip, command] = executeSSHMock.mock.calls[0]
 
-    expect(ip).toBe('10.0.0.1')
+    expect(ip).toMatchObject({ host: '10.0.0.1', port: 22 })
     expect(command).toContain('/sys/class/hwmon/')
     expect(command).not.toContain('pve')
   })

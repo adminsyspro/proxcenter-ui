@@ -23,6 +23,16 @@ vi.mock('@/lib/ssh/exec', () => ({
   shellEscape: (s: string) => `'${s.replaceAll("'", "'\\''")}'`,
 }))
 vi.mock('@/lib/ssh/node-ip', () => ({ getNodeIp: getNodeIpMock }))
+// Routes resolve the node through resolveNodeSshEndpoint; keep the address
+// coming from the getNodeIp mock above and the connection port (22).
+vi.mock('@/lib/ssh/node-endpoint', async () => {
+  const nodeIp = await import('@/lib/ssh/node-ip')
+  return {
+    ...(await import('@/lib/ssh/node-endpoint-core')),
+    resolveNodeSshEndpoint: async (conn: any, node: string) =>
+      ({ host: await nodeIp.getNodeIp(conn, node), port: 22, source: 'proxmox' }),
+  }
+})
 vi.mock('./stretchPeers', async (importOriginal) => ({
   ...(await importOriginal<any>()),
   memberPeersForVdc: memberPeersMock,
@@ -80,9 +90,9 @@ describe('testNetworkReachability', () => {
   })
 
   it("runs one SSH command per node against the other members' peers and reads the verdicts", async () => {
-    executeSSHMock.mockImplementation(async (_conn: string, ip: string, cmd: string) => {
-      if (ip === 'ip-of-pve2') return { success: true, output: '10.42.0.111 ko\n' }
-      if (ip === 'ip-of-pve1-dr') return { success: true, output: '10.42.0.101 ok\n10.42.0.102 ok\n' }
+    executeSSHMock.mockImplementation(async (_conn: string, ip: { host: string }, cmd: string) => {
+      if (ip.host === 'ip-of-pve2') return { success: true, output: '10.42.0.111 ko\n' }
+      if (ip.host === 'ip-of-pve1-dr') return { success: true, output: '10.42.0.101 ok\n10.42.0.102 ok\n' }
       expect(cmd).toContain("'10.42.0.111'")
       return { success: true, output: '10.42.0.111 ok\n' }
     })
@@ -90,7 +100,7 @@ describe('testNetworkReachability', () => {
     const results = await testNetworkReachability('n1')
 
     expect(executeSSHMock).toHaveBeenCalledTimes(3)
-    expect(executeSSHMock).toHaveBeenCalledWith('c-prod', 'ip-of-pve1', expect.stringContaining('ping'), expect.any(Number))
+    expect(executeSSHMock).toHaveBeenCalledWith('c-prod', expect.objectContaining({ host: 'ip-of-pve1' }), expect.stringContaining('ping'), expect.any(Number))
     expect(results).toEqual([
       { vdcId: 'v-prod', vdcName: 'MSP-vDC', connectionId: 'c-prod', connectionName: 'PVE-PROD', node: 'pve1', peer: '10.42.0.111', state: 'reachable' },
       { vdcId: 'v-prod', vdcName: 'MSP-vDC', connectionId: 'c-prod', connectionName: 'PVE-PROD', node: 'pve2', peer: '10.42.0.111', state: 'unreachable' },

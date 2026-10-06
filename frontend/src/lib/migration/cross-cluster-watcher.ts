@@ -2,7 +2,8 @@ import { applyRestorePlan, rollbackPrereqsOnSource, type CcmRestorePlan } from '
 import { pveFetch } from '@/lib/proxmox/client'
 import { decryptSecret } from '@/lib/crypto/secret'
 import { getTenantPrisma } from '@/lib/tenant'
-import { getNodeIp } from '@/lib/ssh/node-ip'
+import { resolveNodeSshEndpoint } from '@/lib/ssh/node-endpoint'
+import { resolveSshTargetPort, sshTargetHost, type SshTarget } from '@/lib/ssh/node-endpoint-core'
 import { executeSSHDirect, shellEscape, type SSHResult } from '@/lib/ssh/exec'
 import { assertVmid } from '@/lib/ssh/validate'
 import type { PveConn } from '@/lib/connections/getConnection'
@@ -40,7 +41,7 @@ type WatcherOpts = {
 async function runSshForWatcher(
   connectionId: string,
   tenantId: string,
-  nodeIp: string,
+  target: SshTarget,
   command: string,
   timeoutMs = 30_000,
 ): Promise<SSHResult> {
@@ -62,7 +63,8 @@ async function runSshForWatcher(
     return { success: false, error: 'SSH not enabled for this connection' }
   }
 
-  const port = connection.sshPort || 22
+  const nodeIp = sshTargetHost(target)
+  const port = await resolveSshTargetPort(prisma, connectionId, target, connection.sshPort)
   const user = connection.sshUser || 'root'
 
   let key: string | undefined
@@ -201,8 +203,8 @@ export async function watchMigrationAndCleanup(opts: WatcherOpts): Promise<void>
       `/nodes/${encodeURIComponent(sourceNode)}/qemu/${encodeURIComponent(vmid)}/config`,
     )
     if (vmConfig?.lock) {
-      const nodeIp = await getNodeIp(sourceConn, sourceNode)
-      const result = await runSshForWatcher(connectionId, tenantId, nodeIp, `qm unlock ${safeVmid}`)
+      const endpoint = await resolveNodeSshEndpoint(sourceConn, sourceNode)
+      const result = await runSshForWatcher(connectionId, tenantId, endpoint, `qm unlock ${safeVmid}`)
       if (result.success) {
         console.log(`${tag} auto-unlocked VM on ${sourceNode}`)
         unlocked = true

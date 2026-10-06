@@ -7,7 +7,7 @@
 
 import { prisma } from '@/lib/db/prisma'
 import { executeSSH, shellEscape } from '@/lib/ssh/exec'
-import { getNodeIp } from '@/lib/ssh/node-ip'
+import { resolveNodeSshEndpoint, type NodeSshEndpoint } from '@/lib/ssh/node-endpoint'
 
 import { connectionOf, memberPeersForVdc, VDC_TRANSPORT_SELECT } from './stretchPeers'
 
@@ -94,9 +94,9 @@ export async function testNetworkReachability(networkId: string): Promise<Reacha
 
     // The nodes of one cluster in parallel: each SSH session pings every peer once.
     const perNode = await Promise.all(nodes.map(async (node): Promise<ReachabilityResult[]> => {
-      let nodeIp: string
+      let nodeIp: NodeSshEndpoint
       try {
-        nodeIp = await getNodeIp(conn, node)
+        nodeIp = await resolveNodeSshEndpoint(conn, node)
       } catch (err: any) {
         return peers.map(peer => ({ ...base, node, peer, state: 'unavailable' as const, message: err?.message || String(err) }))
       }

@@ -4,6 +4,7 @@ import { decryptSecret } from "@/lib/crypto/secret"
 import { safeLog } from "@/lib/log/sanitize"
 import { orchestratorHeaders } from "@/lib/orchestrator/headers"
 import { makeHostVerifier } from "@/lib/ssh/host-key-store"
+import { resolveSshTargetPort, sshTargetHost, type SshTarget } from "@/lib/ssh/node-endpoint-core"
 
 const ORCHESTRATOR_URL = process.env.ORCHESTRATOR_URL || "http://localhost:8080"
 
@@ -112,10 +113,14 @@ export function createInactivityTimer(ms: number, onFire: () => void): { bump: (
  *
  * 1. Try the Go orchestrator POST /api/v1/ssh/exec
  * 2. On network error (ECONNREFUSED, fetch failure) → direct ssh2 execution
+ *
+ * `target` is a bare host (the connection port applies, unless a node override
+ * matches that host) or an endpoint from resolveNodeSshEndpoint carrying the
+ * node's own port.
  */
 export async function executeSSH(
   connectionId: string,
-  nodeIp: string,
+  target: SshTarget,
   command: string,
   timeoutMs: number = 30_000,
   execOpts: SSHExecOpts = {}
@@ -146,7 +151,8 @@ export async function executeSSH(
     return { success: false, error: "SSH not enabled for this connection" }
   }
 
-  const port = connection.sshPort || 22
+  const nodeIp = sshTargetHost(target)
+  const port = await resolveSshTargetPort(prisma, connectionId, target, connection.sshPort)
   const user = connection.sshUser || "root"
 
   // Decrypt credentials based on configured auth method

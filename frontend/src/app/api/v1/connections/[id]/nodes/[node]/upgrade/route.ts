@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { getConnectionById } from "@/lib/connections/getConnection"
-import { getNodeIp } from "@/lib/ssh/node-ip"
+import { resolveNodeSshEndpoint } from "@/lib/ssh/node-endpoint"
 import { executeSSH } from "@/lib/ssh/exec"
 import { checkPermission, PERMISSIONS, buildNodeResourceId } from "@/lib/rbac"
 import { verifyNodeTarget, sshTargetError } from "@/lib/ssh/verify-node-target"
@@ -49,7 +49,7 @@ export async function POST(req: Request, ctx: Ctx) {
     // no body is fine
   }
 
-  const nodeIp = await getNodeIp(conn, node)
+  const nodeIp = await resolveNodeSshEndpoint(conn, node)
 
   const check = await verifyNodeTarget(id, conn, node, nodeIp)
   if (!check.ok) {
@@ -107,7 +107,7 @@ export async function GET(_req: Request, ctx: Ctx) {
     return NextResponse.json({ error: "Connection not found" }, { status: 404 })
   }
 
-  const nodeIp = await getNodeIp(conn, node)
+  const nodeIp = await resolveNodeSshEndpoint(conn, node)
 
   // REBOOTING is the last thing an auto-reboot run writes. Once the node is
   // back (booted after that write), the run is over: report COMPLETED, or the

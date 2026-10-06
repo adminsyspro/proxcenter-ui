@@ -7,7 +7,7 @@ import { locateVmInCluster } from "@/lib/proxmox/locateVm"
 import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
 import { executeSSH } from "@/lib/ssh/exec"
 import { assertVmid } from "@/lib/ssh/validate"
-import { getNodeIp } from "@/lib/ssh/node-ip"
+import { resolveNodeSshEndpoint } from "@/lib/ssh/node-endpoint"
 
 export const runtime = "nodejs"
 
@@ -137,7 +137,7 @@ export async function GET(
     // Try the originally-requested node first.
     let resolvedNode = node
     let movedTo: string | null = null
-    let nodeIp = await getNodeIp(conn, resolvedNode)
+    let nodeIp = await resolveNodeSshEndpoint(conn, resolvedNode)
     let sshResult = await executeSSH(conn.id, nodeIp, cmd)
 
     // qm monitor exits with status 2 when the VM is not on this node — most
@@ -149,7 +149,7 @@ export async function GET(
       if (located && located.node !== resolvedNode) {
         resolvedNode = located.node
         movedTo = located.node
-        nodeIp = await getNodeIp(conn, resolvedNode)
+        nodeIp = await resolveNodeSshEndpoint(conn, resolvedNode)
         sshResult = await executeSSH(conn.id, nodeIp, cmd)
       }
     }

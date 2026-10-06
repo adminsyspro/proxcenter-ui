@@ -12,7 +12,7 @@ import { getConnectionById, getPbsConnectionById } from "@/lib/connections/getCo
 import { runConnectionDiagnostics, type DiagnosticMeta } from "@/lib/diagnostics/connectionDiagnostics"
 import { prisma } from "@/lib/db/prisma"
 import { decryptSecret } from "@/lib/crypto/secret"
-import { getNodeIp } from "@/lib/ssh/node-ip"
+import { resolveNodeSshEndpoint } from "@/lib/ssh/node-endpoint"
 
 export const runtime = "nodejs"
 
@@ -144,7 +144,9 @@ export async function GET(
           const nodes = await pveFetch<any[]>(pveConn, "/nodes")
           const firstOnline = (nodes ?? []).find((n: any) => n.status === "online") ?? nodes?.[0]
           if (firstOnline?.node) {
-            meta.sshHost = await getNodeIp(pveConn, firstOnline.node as string)
+            const endpoint = await resolveNodeSshEndpoint({ ...pveConn, sshPort: raw.sshPort }, firstOnline.node as string)
+            meta.sshHost = endpoint.host
+            meta.sshPort = endpoint.port
           }
         } catch {
           // SSH host resolution is best-effort; the ssh check will skip if missing.

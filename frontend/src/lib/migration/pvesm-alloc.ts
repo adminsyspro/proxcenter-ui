@@ -1,4 +1,5 @@
 import { executeSSH, shellEscape } from "@/lib/ssh/exec"
+import type { SshTarget } from "@/lib/ssh/node-endpoint-core"
 
 export interface AllocateAndResolveResult {
   volumeId: string
@@ -153,7 +154,7 @@ export function nextFreeDiskName(
 
 export interface AllocateAndMapArgs {
   connectionId: string
-  nodeIp: string
+  nodeIp: SshTarget
   targetStorage: string
   targetVmid: number | string
   volName: string
@@ -248,7 +249,7 @@ export async function allocateAndMapBlockVolume(args: AllocateAndMapArgs): Promi
  */
 export async function allocateBlockVolumeAndResolvePath(
   connectionId: string,
-  nodeIp: string,
+  nodeIp: SshTarget,
   targetStorage: string,
   targetVmid: number | string,
   volName: string,

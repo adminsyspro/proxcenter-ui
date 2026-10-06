@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { getConnectionById } from "@/lib/connections/getConnection"
-import { getNodeIp } from "@/lib/ssh/node-ip"
+import { resolveNodeSshEndpoint } from "@/lib/ssh/node-endpoint"
 import { executeSSH } from "@/lib/ssh/exec"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 
@@ -25,7 +25,7 @@ export async function GET(_req: Request, ctx: Ctx) {
   }
 
   try {
-    const nodeIp = await getNodeIp(conn, node)
+    const nodeIp = await resolveNodeSshEndpoint(conn, node)
     const result = await executeSSH(id, nodeIp, "which sshfs")
     console.log("[check-sshfs]", node, "result:", JSON.stringify({ success: result.success, output: result.output?.trim(), error: result.error }))
     // "which sshfs" returns the path (e.g. /usr/bin/sshfs) on success, empty/error on failure

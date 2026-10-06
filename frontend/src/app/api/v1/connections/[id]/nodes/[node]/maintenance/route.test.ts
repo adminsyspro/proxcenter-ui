@@ -31,6 +31,16 @@ vi.mock('@/lib/ssh/exec', () => ({
 vi.mock('@/lib/ssh/node-ip', () => ({
   getNodeIp: vi.fn<(...args: any[]) => Promise<string>>(),
 }))
+// Routes resolve the node through resolveNodeSshEndpoint; keep the address
+// coming from the getNodeIp mock above and the connection port (22).
+vi.mock('@/lib/ssh/node-endpoint', async () => {
+  const nodeIp = await import('@/lib/ssh/node-ip')
+  return {
+    ...(await import('@/lib/ssh/node-endpoint-core')),
+    resolveNodeSshEndpoint: async (conn: any, node: string) =>
+      ({ host: await nodeIp.getNodeIp(conn, node), port: 22, source: 'proxmox' }),
+  }
+})
 
 import { GET, POST, DELETE } from './route'
 import { getConnectionById } from '@/lib/connections/getConnection'
@@ -190,7 +200,7 @@ describe('POST /api/v1/connections/[id]/nodes/[node]/maintenance', () => {
     expect(getNodeIpMock).toHaveBeenCalledWith({ id: CONN_ID }, NODE)
     expect(executeSSHMock).toHaveBeenCalledWith(
       CONN_ID,
-      NODE_IP,
+      expect.objectContaining({ host: NODE_IP }),
       `ha-manager crm-command node-maintenance enable ${NODE}`
     )
   })
@@ -264,7 +274,7 @@ describe('DELETE /api/v1/connections/[id]/nodes/[node]/maintenance', () => {
 
     expect(executeSSHMock).toHaveBeenCalledWith(
       CONN_ID,
-      NODE_IP,
+      expect.objectContaining({ host: NODE_IP }),
       `ha-manager crm-command node-maintenance disable ${NODE}`
     )
   })
@@ -331,7 +341,7 @@ describe('node-name validation (command injection)', () => {
     expect(res.status).toBe(200)
     expect(executeSSHMock).toHaveBeenCalledWith(
       CONN_ID,
-      NODE_IP,
+      expect.objectContaining({ host: NODE_IP }),
       'ha-manager crm-command node-maintenance enable pve-node-02',
     )
   })

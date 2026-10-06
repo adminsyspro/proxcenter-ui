@@ -53,6 +53,7 @@ const PowerSettingsNewIcon = (props: any) => <i className="ri-shut-down-line" st
 
 import EntityTagManager from './components/EntityTagManager'
 import { resolveVmPowerAction } from './helpers'
+import { networkConnKey } from './networkConnKey'
 import { useRBAC } from '@/contexts/RBACContext'
 import { showsClusterLevel } from '@/lib/rbac/scopeKinds'
 import { useTagColors } from '@/contexts/TagColorContext'
@@ -2553,6 +2554,8 @@ return favorites.has(vmKey)
   const [networkLoading, setNetworkLoading] = useState(false)
   const [networkFailedConnIds, setNetworkFailedConnIds] = useState<string[]>([])
   const networkFetchedRef = useRef(false)
+  // Connection set of the latest Network fetch (see networkConnKey).
+  const networkFetchedKeyRef = useRef<string | null>(null)
 
   // Tenant VNet view — replaces the conn/node/VLAN/VM walk for non-provider
   // tenants in the Network tree. Each entry mirrors what VnetsSection
@@ -2849,7 +2852,8 @@ return favorites.has(vmKey)
   const fetchNetworks = useCallback(() => {
     const connIds = clusters.map(c => c.connId).filter(Boolean)
     if (connIds.length === 0) return
-    const cacheKey = connIds.sort((a, b) => a.localeCompare(b)).join(',')
+    const cacheKey = networkConnKey(clusters)
+    networkFetchedKeyRef.current = cacheKey
     if (networkCacheRef.current?.connIds === cacheKey) {
       setNetworkData(networkCacheRef.current.data)
       setNetworkBridges(networkCacheRef.current.bridges)
@@ -2860,6 +2864,9 @@ return favorites.has(vmKey)
     }
     setNetworkLoading(true)
     void fetchConnectionsNetworks(connIds, { retries: 2 }).then(({ data, bridges, vlans, sdnVnets, vnetAliasesByConn, failedConnIds }) => {
+      // A newer fetch started once more clusters streamed in: drop this one so
+      // a partial answer never replaces the full one.
+      if (networkFetchedKeyRef.current !== cacheKey) return
       setNetworkData(data)
       setNetworkBridges(bridges)
       setNetworkVlans(vlans)
@@ -2910,6 +2917,16 @@ return favorites.has(vmKey)
       }
     }
   }, [isHydrated, expandedNetSections, clusters.length, isFullClusterView, fetchTenantVnets])
+
+  // Clusters stream in one by one on first load: a Network fetch started with
+  // the first cluster must be redone once the others arrive, otherwise only
+  // whichever cluster answered first is listed.
+  useEffect(() => {
+    if (!isFullClusterView || !expandedNetSections.has('network')) return
+    if (!networkFetchedRef.current || networkFetchedKeyRef.current === null) return
+    const key = networkConnKey(clusters)
+    if (key && key !== networkFetchedKeyRef.current) fetchNetworksRef.current?.()
+  }, [clusters, expandedNetSections, isFullClusterView])
 
   // Build network tree: Connection → Node → [bridges] + VLAN buckets. VLAN
   // buckets are seeded from both guest NIC tags and host VLAN sub-interfaces so

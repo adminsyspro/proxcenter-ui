@@ -2907,6 +2907,7 @@ return vm?.isCluster ?? false
             groups={pools.map(p => ({
               key: p.pool,
               label: p.pool,
+              description: p.comment,
               vms: p.vms
             }))}
             allVms={displayVms}

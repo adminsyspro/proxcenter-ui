@@ -2106,7 +2106,21 @@
     "drsExecAllPartial": "{success} iniciadas, {errors} fallidas",
     "drsRecStale": "Recomendación is stale — data has been refreshed",
     "drsRecExpired": "Recomendación Sin longer exists",
-    "drsAlreadyOnTarget": "VM is already en el destino nodo"
+    "drsAlreadyOnTarget": "VM is already en el destino nodo",
+    "createPool": "Crear pool",
+    "createSubPool": "Crear sub-pool",
+    "editPool": "Editar el pool {pool}",
+    "editPoolComment": "Editar comentario",
+    "deletePool": "Eliminar el pool {pool}",
+    "deletePoolConfirm": "¿Eliminar el pool {pool}? Proxmox no permite eliminar un pool que todavía contiene invitados o almacenamientos.",
+    "poolId": "ID del pool",
+    "poolIdHelp": "Empieza por una letra; letras, dígitos, . - _ ; / para un sub-pool (3 niveles máx.).",
+    "poolComment": "Comentario",
+    "poolCluster": "Clúster",
+    "poolCreated": "Pool {pool} creado",
+    "poolUpdated": "Pool {pool} actualizado",
+    "poolDeleted": "Pool {pool} eliminado",
+    "poolOwnedByVdc": "Este pool pertenece al vDC {vdc}: elimine el vDC en su lugar."
   },
   "inventoryPage": {
     "newTag": "Nueva etiqueta...",

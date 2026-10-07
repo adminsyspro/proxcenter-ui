@@ -68,6 +68,7 @@ import { CloneVmDialog } from '@/components/hardware/CloneVmDialog'
 import { StatusIcon, NodeIcon, ClusterIcon, getVmIcon } from './components/TreeIcons'
 import { VmItem } from './components/VmItem'
 import TreeDialogs from './components/TreeDialogs'
+import PoolDialog, { type PoolDialogState, type PoolOwner } from './components/PoolDialog'
 
 // Re-export for external consumers (e.g. InventoryDetails.tsx)
 export { StatusIcon, NodeIcon, ClusterIcon, getVmIcon } from './components/TreeIcons'
@@ -145,6 +146,8 @@ export type HostItem = {
 
 export type PoolItem = {
   pool: string
+  // Commentaire Proxmox (le premier non vide si le pool existe sur plusieurs clusters).
+  comment?: string
   vms: AllVmItem[]
 }
 
@@ -212,6 +215,8 @@ type TreeCluster = {
   // Pools déclarés par Proxmox, ceux sans aucun invité compris (issue #978).
   // Sans eux la vue Pools ne connaîtrait que les pools cités par une VM.
   pools: string[]
+  // Commentaire Proxmox de chaque pool déclaré, par poolid.
+  poolComments?: Record<string, string>
   nodes: {
     node: string
     status?: string
@@ -458,7 +463,11 @@ function safeJson<T>(x: any): T {
 export default function InventoryTree({ selected, onSelect, onRefreshRef, onOptimisticVmStatusRef, onOptimisticVmTagsRef, viewMode: controlledViewMode, onViewModeChange, onAllVmsChange, onHostsChange, onPoolsChange, onTagsChange, onPbsServersChange, favorites: propFavorites, onToggleFavorite, migratingVmIds, pendingActionVmIds, onRefresh, refreshLoading, onCollapse, isCollapsed, allowedViewModes, onCreateVm, onCreateLxc, onNodeAction, onStoragesChange, onExternalHypervisorsChange, showVmId, onToggleShowVmId }: Props) {
   const t = useTranslations()
   const theme = useTheme()
-  const { isAdmin, scopeTypes } = useRBAC()
+  const { isAdmin, scopeTypes, hasPermission } = useRBAC()
+  // Proxmox pools are per connection; the API re-checks connection.manage on each one.
+  const canManagePools = hasPermission('connection.manage')
+  const [poolDialog, setPoolDialog] = useState<PoolDialogState>(null)
+  const [poolMenu, setPoolMenu] = useState<{ anchor?: HTMLElement; mouseX?: number; mouseY?: number; path: string } | null>(null)
   // Tenants other than the provider get the cloud-style abstraction —
   // shared storages on a multi-tenant cluster would leak other tenants'
   // VMID metadata, so we hide the STORAGES section from them entirely
@@ -1539,6 +1548,9 @@ return next
     pools: (cluster.pools || [])
       .map((p: any) => (typeof p === 'string' ? p : p?.poolid))
       .filter((poolid: any): poolid is string => typeof poolid === 'string' && poolid !== ''),
+    poolComments: Object.fromEntries((cluster.pools || [])
+      .filter((p: any) => typeof p?.poolid === 'string' && typeof p?.comment === 'string' && p.comment !== '')
+      .map((p: any) => [p.poolid, p.comment])),
     nodes: (cluster.nodes || []).map((node: any) => ({
       node: node.node,
       status: node.status,
@@ -2311,6 +2323,28 @@ return vms
     return names
   }, [clusters])
 
+  // Clusters déclarant chaque pool : la vue fusionne les pools homonymes,
+  // l'édition et la suppression doivent savoir sur quel cluster agir.
+  const poolOwners = useMemo(() => {
+    const owners = new Map<string, PoolOwner[]>()
+
+    clusters.forEach(clu => clu.pools?.forEach(pool => {
+      if (!owners.has(pool)) owners.set(pool, [])
+      owners.get(pool)!.push({ connId: clu.connId, connName: clu.name, comment: clu.poolComments?.[pool] })
+    }))
+
+    return owners
+  }, [clusters])
+
+  const openCreatePool = useCallback((parent?: string) => {
+    setPoolDialog({
+      mode: 'create',
+      parent,
+      // Un sous-pool naît sur le cluster de son parent.
+      clusters: parent ? (poolOwners.get(parent) || []) : clusters.map(c => ({ connId: c.connId, connName: c.name })),
+    })
+  }, [clusters, poolOwners])
+
   // Liste des pools uniques avec leurs VMs (filtrées, sans templates)
   const poolsList = useMemo(() => {
     const poolsMap = new Map<string, typeof displayVms>()
@@ -2457,6 +2491,12 @@ return a.pool.localeCompare(b.pool)
       <Box key={node.path}>
         {/* Header pool */}
         <Box
+          className="pool-header"
+          onContextMenu={e => {
+            if (!canManagePools || !poolOwners.has(node.path)) return
+            e.preventDefault()
+            setPoolMenu({ mouseX: e.clientX, mouseY: e.clientY, path: node.path })
+          }}
           onClick={() => {
             const willCollapse = !isCollapsed
 
@@ -2481,8 +2521,25 @@ return a.pool.localeCompare(b.pool)
           }}>
           <i className={isCollapsed ? "ri-add-line" : "ri-subtract-line"} style={{ fontSize: 14, opacity: 0.7 }} />
           <i className="ri-folder-fill" style={{ fontSize: 14, opacity: 0.7 }} />
-          <Typography variant="body2" sx={{ fontWeight: 700 }}>{node.name}</Typography>
-          <Typography variant="caption" sx={{ opacity: 0.5 }}>({node.totalCount})</Typography>
+          <Typography variant="body2" sx={{ fontWeight: 700, fontSize: 13 }}>{node.name}</Typography>
+          <Typography variant="body2" sx={{ fontSize: 13, opacity: 0.5 }}>({node.totalCount})</Typography>
+          <Typography variant="body2" noWrap sx={{ flex: 1, minWidth: 0, fontSize: 13, color: 'text.secondary' }}>
+            {poolOwners.get(node.path)?.find(o => o.comment)?.comment || ''}
+          </Typography>
+          {canManagePools && poolOwners.has(node.path) && (
+            <IconButton
+              size="small"
+              className="pool-actions"
+              aria-label={t('common.actions')}
+              onClick={e => {
+                e.stopPropagation()
+                setPoolMenu({ anchor: e.currentTarget, path: node.path })
+              }}
+              sx={{ p: 0.25, opacity: 0, '.pool-header:hover &, &:focus-visible': { opacity: 1 } }}
+            >
+              <i className="ri-more-2-fill" style={{ fontSize: 16 }} />
+            </IconButton>
+          )}
         </Box>
         {/* VMs directes du pool */}
         {!isCollapsed && node.vms.map(vm => (
@@ -3089,13 +3146,14 @@ return favorites.has(vmKey)
   useEffect(() => {
     onPoolsChange?.(poolsList.map(p => ({
       pool: p.pool,
+      comment: poolOwners.get(p.pool)?.find(o => o.comment)?.comment,
       vms: p.vms.map(vm => ({
         ...vm,
         type: vm.type as 'qemu' | 'lxc',
         tags: vm.tags?.split(';').filter(Boolean)
       }))
     })))
-  }, [poolsList, onPoolsChange])
+  }, [poolsList, poolOwners, onPoolsChange])
 
   // Notifier le parent quand les tags changent
   useEffect(() => {
@@ -3242,6 +3300,13 @@ return favorites.has(vmKey)
               </IconButton>
             </Tooltip>
           )}
+          {viewMode === 'pools' && canManagePools && clusters.length > 0 && (
+            <Tooltip title={t('inventory.createPool')}>
+              <IconButton size='small' onClick={() => openCreatePool()}>
+                <i className="ri-folder-add-line" style={{ fontSize: 18 }} />
+              </IconButton>
+            </Tooltip>
+          )}
           {onToggleShowVmId && (
             <Tooltip title={showVmId ? t('inventory.hideVmId') : t('inventory.showVmId')}>
               <IconButton size='small' onClick={onToggleShowVmId} sx={{ color: showVmId ? 'primary.main' : 'text.disabled' }}>
@@ -3346,7 +3411,7 @@ return favorites.has(vmKey)
         </ToggleButtonGroup>
       </Box>
     ),
-    [loading, searchInput, viewMode, displayVms.length, hostsList.length, poolsTree, tagsList.length, templatesCount, favoritesList.length, onRefresh, refreshLoading, onCollapse, isCollapsed, allowedViewModes, theme.palette.mode, expandAll, collapseAll, expandAllSections, collapseAllSections, isTreeExpanded, isSectionsAllExpanded, showVmId, onToggleShowVmId]
+    [loading, searchInput, viewMode, displayVms.length, hostsList.length, poolsTree, tagsList.length, templatesCount, favoritesList.length, onRefresh, refreshLoading, onCollapse, isCollapsed, allowedViewModes, theme.palette.mode, expandAll, collapseAll, expandAllSections, collapseAllSections, isTreeExpanded, isSectionsAllExpanded, showVmId, onToggleShowVmId, canManagePools, clusters.length, openCreatePool]
   )
 
   return (
@@ -3574,9 +3639,9 @@ return (
                   }}>
                   <i className={isCollapsed ? "ri-add-line" : "ri-subtract-line"} style={{ fontSize: 14, opacity: 0.7 }} />
                   <NodeIcon status={host.status || 'online'} size={16} />
-                  <Typography variant="body2" sx={{ fontWeight: 700 }}>{host.node}</Typography>
-                  <Typography variant="caption" sx={{ opacity: 0.5 }}>({host.vms.length})</Typography>
-                  <Typography variant="caption" sx={{ opacity: 0.4, ml: 'auto' }}>{host.connName}</Typography>
+                  <Typography variant="body2" sx={{ fontWeight: 700, fontSize: 13 }}>{host.node}</Typography>
+                  <Typography variant="body2" sx={{ fontSize: 13, opacity: 0.5 }}>({host.vms.length})</Typography>
+                  <Typography variant="body2" sx={{ fontSize: 13, opacity: 0.4, ml: 'auto' }}>{host.connName}</Typography>
                 </Box>
                 {/* VMs de l'hôte */}
                 {!isCollapsed && host.vms.map(vm => (
@@ -3640,8 +3705,8 @@ return (
                   }}>
                   <i className={isCollapsed ? "ri-add-line" : "ri-subtract-line"} style={{ fontSize: 14, opacity: 0.7 }} />
                   <i className="ri-price-tag-3-fill" style={{ fontSize: 14, color: tc }} />
-                  <Typography variant="body2" sx={{ fontWeight: 700, color: tc }}>{tag}</Typography>
-                  <Typography variant="caption" sx={{ opacity: 0.5 }}>({totalCount})</Typography>
+                  <Typography variant="body2" sx={{ fontWeight: 700, fontSize: 13, color: tc }}>{tag}</Typography>
+                  <Typography variant="body2" sx={{ fontSize: 13, opacity: 0.5 }}>({totalCount})</Typography>
                 </Box>
                 {/* Entities (clusters/nodes) avec ce tag */}
                 {!isCollapsed && entities.map(entity => {
@@ -5056,6 +5121,43 @@ return (
         handleBackupNow={handleBackupNow}
         handleOpenConsole={handleOpenConsole}
         handleUnlock={handleUnlock}
+      />
+      <Menu
+        open={!!poolMenu}
+        onClose={() => setPoolMenu(null)}
+        anchorEl={poolMenu?.anchor}
+        anchorReference={poolMenu?.anchor ? 'anchorEl' : 'anchorPosition'}
+        anchorPosition={poolMenu && !poolMenu.anchor ? { top: poolMenu.mouseY ?? 0, left: poolMenu.mouseX ?? 0 } : undefined}
+      >
+        {/* PVE limite l'imbrication à 3 niveaux */}
+        {poolMenu && poolMenu.path.split('/').length < 3 && (
+          <MenuItem onClick={() => { openCreatePool(poolMenu.path); setPoolMenu(null) }}>
+            <ListItemIcon><i className="ri-folder-add-line" style={{ fontSize: 18 }} /></ListItemIcon>
+            <ListItemText>{t('inventory.createSubPool')}</ListItemText>
+          </MenuItem>
+        )}
+        <MenuItem onClick={() => {
+          if (poolMenu) setPoolDialog({ mode: 'edit', poolid: poolMenu.path, owners: poolOwners.get(poolMenu.path) || [] })
+          setPoolMenu(null)
+        }}>
+          <ListItemIcon><i className="ri-edit-line" style={{ fontSize: 18 }} /></ListItemIcon>
+          <ListItemText>{t('inventory.editPoolComment')}</ListItemText>
+        </MenuItem>
+        <MenuItem onClick={() => {
+          if (poolMenu) setPoolDialog({ mode: 'delete', poolid: poolMenu.path, owners: poolOwners.get(poolMenu.path) || [] })
+          setPoolMenu(null)
+        }} sx={{ color: 'error.main' }}>
+          <ListItemIcon><i className="ri-delete-bin-line" style={{ fontSize: 18, color: 'inherit' }} /></ListItemIcon>
+          <ListItemText>{t('common.delete')}</ListItemText>
+        </MenuItem>
+      </Menu>
+      <PoolDialog
+        state={poolDialog}
+        onClose={() => setPoolDialog(null)}
+        onDone={message => {
+          setSnackbar({ open: true, message, severity: 'success' })
+          setReloadTick(x => x + 1)
+        }}
       />
     </Box>
   )

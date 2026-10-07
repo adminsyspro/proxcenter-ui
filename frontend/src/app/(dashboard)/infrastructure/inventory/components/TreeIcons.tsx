@@ -87,20 +87,20 @@ export function StatusIcon({ status, type, isMigrating, isPendingAction, mainten
         boxShadow: status === 'running' ? `0 0 4px ${dotColor}` : 'none',
       }} />
       {lock && (
-        <Box sx={{
-          position: 'absolute', top: -4, left: -4,
-          width: dotSize + 4, height: dotSize + 4, borderRadius: '50%',
-          bgcolor: '#ff9800',
-          border: '1.5px solid', borderColor: 'background.paper',
-          boxShadow: '0 0 6px rgba(255, 152, 0, 0.8)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          '@keyframes lockPulse': {
-            '0%, 100%': { boxShadow: '0 0 4px rgba(255, 152, 0, 0.6)' },
-            '50%': { boxShadow: '0 0 10px rgba(255, 152, 0, 1)' },
-          },
-          animation: 'lockPulse 2s ease-in-out infinite',
-        }}>
-          <i className="ri-lock-fill" style={{ fontSize: dotSize, color: '#fff' }} />
+        // Proxmox lock (backup, migrate, snapshot...): a plain glyph cut out of
+        // the guest icon by a background-coloured disc, no glow nor pulse, so
+        // a list of locked guests stays readable.
+        <Box
+          component="span"
+          title={`lock: ${lock}`}
+          sx={{
+            position: 'absolute', top: -3, left: -4,
+            width: dotSize + 3, height: dotSize + 3, borderRadius: '50%',
+            bgcolor: 'background.paper',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+        >
+          <i className="ri-lock-fill" style={{ fontSize: dotSize + 1, color: '#ed6c02', lineHeight: 1 }} />
         </Box>
       )}
     </Box>

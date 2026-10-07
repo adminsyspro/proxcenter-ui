@@ -2110,7 +2110,21 @@
     "drsExecAllPartial": "{success} 已启动，{errors} 失败",
     "drsRecStale": "建议已过时 — 数据已刷新",
     "drsRecExpired": "建议已不存在",
-    "drsAlreadyOnTarget": "虚拟机已在目标节点上"
+    "drsAlreadyOnTarget": "虚拟机已在目标节点上",
+    "createPool": "创建资源池",
+    "createSubPool": "创建子资源池",
+    "editPool": "编辑资源池 {pool}",
+    "editPoolComment": "编辑备注",
+    "deletePool": "删除资源池 {pool}",
+    "deletePoolConfirm": "删除资源池 {pool}？Proxmox 拒绝删除仍包含虚拟机或存储的资源池。",
+    "poolId": "资源池 ID",
+    "poolIdHelp": "以字母开头；字母、数字、. - _；子资源池用 /（最多 3 级）。",
+    "poolComment": "备注",
+    "poolCluster": "集群",
+    "poolCreated": "资源池 {pool} 已创建",
+    "poolUpdated": "资源池 {pool} 已更新",
+    "poolDeleted": "资源池 {pool} 已删除",
+    "poolOwnedByVdc": "此资源池属于 vDC {vdc}：请改为删除该 vDC。"
   },
   "inventoryPage": {
     "newTag": "新标签...",

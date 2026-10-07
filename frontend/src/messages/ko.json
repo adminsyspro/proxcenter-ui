@@ -2106,7 +2106,21 @@
     "drsExecAllPartial": "{success}건 시작, {errors}건 실패",
     "drsRecStale": "권장 사항이 오래되었습니다 — 데이터가 새로 고침되었습니다",
     "drsRecExpired": "권장 사항이 더 이상 존재하지 않습니다",
-    "drsAlreadyOnTarget": "VM이 이미 대상 노드에 있습니다"
+    "drsAlreadyOnTarget": "VM이 이미 대상 노드에 있습니다",
+    "createPool": "풀 생성",
+    "createSubPool": "하위 풀 생성",
+    "editPool": "풀 {pool} 편집",
+    "editPoolComment": "설명 편집",
+    "deletePool": "풀 {pool} 삭제",
+    "deletePoolConfirm": "풀 {pool}을(를) 삭제하시겠습니까? Proxmox는 게스트나 스토리지가 남아 있는 풀의 삭제를 거부합니다.",
+    "poolId": "풀 ID",
+    "poolIdHelp": "문자로 시작; 문자, 숫자, . - _ ; 하위 풀은 / 사용 (최대 3단계).",
+    "poolComment": "설명",
+    "poolCluster": "클러스터",
+    "poolCreated": "풀 {pool} 생성됨",
+    "poolUpdated": "풀 {pool} 업데이트됨",
+    "poolDeleted": "풀 {pool} 삭제됨",
+    "poolOwnedByVdc": "이 풀은 vDC {vdc}에 속합니다. 대신 vDC를 삭제하세요."
   },
   "inventoryPage": {
     "newTag": "새 태그...",

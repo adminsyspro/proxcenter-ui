@@ -25,6 +25,8 @@ type GroupedVmsViewProps = {
     key: string
     label: string
     sublabel?: string
+    // Free text shown right after the label (a pool's Proxmox comment).
+    description?: string
     color?: string
     icon?: React.ReactNode
     vms: AllVmItem[]
@@ -164,9 +166,14 @@ return next
                         bgcolor: group.color
                       }} />
                     )}
-                    <Typography fontWeight={700} sx={{ flex: 1, fontSize: 13 }}>
+                    <Typography fontWeight={700} sx={{ flex: group.description ? 'none' : 1, fontSize: 13 }}>
                       {group.label}
                     </Typography>
+                    {group.description && (
+                      <Typography noWrap sx={{ flex: 1, minWidth: 0, fontSize: 13, color: 'text.secondary' }}>
+                        {group.description}
+                      </Typography>
+                    )}
                     {group.sublabel && (
                       <Typography variant="caption" sx={{ opacity: 0.6, fontSize: 11 }}>
                         {group.sublabel}

@@ -82,6 +82,11 @@ export type AuditAction =
   // SDN
   | "sdn.apply"
 
+  // Proxmox resource pools
+  | "pool.create"
+  | "pool.update"
+  | "pool.delete"
+
   // API tokens
   | "apitoken.create"
   // Deleting a token removes the row outright; "apitoken.revoke" is KEPT

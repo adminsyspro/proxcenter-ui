@@ -14,7 +14,7 @@ describe('docker-publish bundle job', () => {
     expect(job).toContain("if: startsWith(github.ref, 'refs/tags/v')")
     expect(job).toContain('needs: [release]')
     expect(job).toContain('edition: [community, enterprise]')
-    expect(job).toContain('./install-airgap.sh bundle --edition "$EDITION" --version "$VERSION" --compose "docker-compose.$EDITION.yml" --output dist')
+    expect(job).toContain('./install-airgap.sh bundle --edition "$EDITION" --version "$VERSION" --compose "docker-compose.$EDITION.yml" --ha-compose docker-compose.ha.yml --output dist')
   })
 
   it('attaches the community bundle to the release and pushes the enterprise one to R2 only when the secrets exist', () => {

@@ -262,3 +262,62 @@ describe('DELETE /api/v1/connections/[id]/pools', () => {
     expect(pveFetchMock).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('pools writes: error edges', () => {
+  it('keeps a non-PVE error message as is', async () => {
+    pveFetchMock.mockRejectedValue(new Error('socket hang up'))
+
+    const res = await callRoute(POST as any, { method: 'POST', params: { id: 'c1' }, body: { poolid: 'p3' } })
+
+    expect(res.status).toBe(500)
+    expect((await readJson<any>(res)).error).toBe('socket hang up')
+  })
+
+  it('keeps the envelope when the PVE body is not JSON', async () => {
+    pveFetchMock.mockRejectedValue(new (PveApplicationError as any)('PVE 400 /pools: <html>bad</html>', 400))
+
+    const res = await callRoute(POST as any, { method: 'POST', params: { id: 'c1' }, body: { poolid: 'p3' } })
+
+    expect((await readJson<any>(res)).error).toBe('PVE 400 /pools: <html>bad</html>')
+  })
+
+  it('appends the parameter errors Proxmox lists', async () => {
+    pveFetchMock.mockRejectedValue(new (PveApplicationError as any)('PVE 400 /pools: {"message":"Parameter verification failed.","errors":{"poolid":"invalid format"}}', 400))
+
+    const res = await callRoute(POST as any, { method: 'POST', params: { id: 'c1' }, body: { poolid: 'p3' } })
+
+    expect((await readJson<any>(res)).error).toBe('Parameter verification failed. invalid format')
+  })
+
+  it('still answers when the audit row cannot be written', async () => {
+    pveFetchMock.mockResolvedValue(null)
+    ;(audit as any).mockRejectedValue(new Error('db down'))
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    const res = await callRoute(DELETE as any, { method: 'DELETE', params: { id: 'c1' }, searchParams: { poolid: 'p3' } })
+
+    expect(res.status).toBe(200)
+    expect(warn).toHaveBeenCalled()
+    warn.mockRestore()
+  })
+})
+
+describe('pools writes: failures', () => {
+  it('audits a refused comment update and relays it', async () => {
+    pveFetchMock.mockRejectedValue(new (PveApplicationError as any)('PVE 403 /pools: {"message":"Permission check failed (/pool/p1, Pool.Allocate)"}', 403))
+
+    const res = await callRoute(PUT as any, { method: 'PUT', params: { id: 'c1' }, body: { poolid: 'p1', comment: 'x' } })
+
+    expect(res.status).toBe(403)
+    expect((audit as any).mock.calls[0][0]).toMatchObject({ action: 'pool.update', status: 'failure' })
+  })
+
+  it('answers 404 for an unknown connection', async () => {
+    getConnectionByIdMock.mockResolvedValue(null)
+
+    const res = await callRoute(POST as any, { method: 'POST', params: { id: 'nope' }, body: { poolid: 'p1' } })
+
+    expect(res.status).toBe(404)
+    expect(pveFetchMock).not.toHaveBeenCalled()
+  })
+})

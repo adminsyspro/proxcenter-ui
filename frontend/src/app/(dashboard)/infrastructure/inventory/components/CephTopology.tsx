@@ -5,7 +5,7 @@ import {
   Box, Card, CardContent, CircularProgress, Stack, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow, Tooltip as MuiTooltip, Typography, useTheme,
 } from '@mui/material'
-import { buildCrushTopology, capacityColor, type CrushNode } from './cephTopology'
+import { buildCrushTopology, capacityColor, type CrushNode } from './cephCrushTopology'
 import { formatBytes } from '@/utils/format'
 
 // Theme-aware tooltip styling, mirroring InventoryTree's tooltipSlotProps.

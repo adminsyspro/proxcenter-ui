@@ -54,6 +54,8 @@ function vm(vmid: number, overrides: Partial<VMFirewallInfo> = {}): VMFirewallIn
     type: 'qemu',
     status: 'running',
     firewallEnabled: false,
+    optionsEnabled: false,
+    nicFirewallEnabled: false,
     rules: [],
     options: null,
     vlans: [],
@@ -245,6 +247,38 @@ describe('useVMFirewallRules', () => {
     expect(result.current.vmFirewallData[2].firewallEnabled).toBe(false)
   })
 
+  it('reports a guest as firewalled only when both its options and a NIC have the firewall on (#1065)', async () => {
+    const optionsByGuest: Record<number, { enable?: number }> = { 700: { enable: 1 }, 701: { enable: 0 }, 702: { enable: 1 }, 703: {} }
+
+    mockGuestScan(
+      [guest(700), guest(701), guest(702), guest(703)],
+      {
+        700: { net0: 'virtio=AA:10,bridge=vmbr0,firewall=1' },
+        701: { net0: 'virtio=AA:11,bridge=vmbr0,firewall=1' },
+        702: { net0: 'virtio=AA:12,bridge=vmbr0,firewall=0' },
+        703: { net3: 'virtio=AA:13,bridge=vmbr0,firewall=1' },
+      },
+    )
+    getVMOptions.mockImplementation(async (_connectionId, _node, _type, vmid) => optionsByGuest[Number(vmid)])
+
+    const { result } = renderHook(() => useVMFirewallRules('conn-1'))
+
+    await act(async () => {
+      await result.current.loadVMFirewallData()
+    })
+
+    const state = (vmid: number) => {
+      const { firewallEnabled, optionsEnabled, nicFirewallEnabled } = result.current.vmFirewallData.find(item => item.vmid === vmid)!
+
+      return { firewallEnabled, optionsEnabled, nicFirewallEnabled }
+    }
+
+    expect(state(700)).toEqual({ firewallEnabled: true, optionsEnabled: true, nicFirewallEnabled: true })
+    expect(state(701)).toEqual({ firewallEnabled: false, optionsEnabled: false, nicFirewallEnabled: true })
+    expect(state(702)).toEqual({ firewallEnabled: false, optionsEnabled: true, nicFirewallEnabled: false })
+    expect(state(703)).toEqual({ firewallEnabled: false, optionsEnabled: false, nicFirewallEnabled: true })
+  })
+
   it('reloads only the requested guest with its latest rules, options and NIC config', async () => {
     const first = vm(500, { rules: [rule(0)] })
     const untouched = vm(501, { name: 'leave-me-alone', rules: [rule(1)] })
@@ -267,9 +301,12 @@ describe('useVMFirewallRules', () => {
     })
 
     expect(getVMRules).toHaveBeenCalledWith('conn-1', 'pve1', 'qemu', 500)
+    // #1065: firewall=1 on a NIC with the options switch off filters nothing.
     expect(result.current.vmFirewallData[0]).toMatchObject({
       vmid: 500,
-      firewallEnabled: true,
+      firewallEnabled: false,
+      optionsEnabled: false,
+      nicFirewallEnabled: true,
       rules: [rule(7), rule(8)],
       options: { enable: 0, policy_in: 'DROP' },
       vlans: [10, 40],

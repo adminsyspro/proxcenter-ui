@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useMemo } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { useTranslations } from 'next-intl'
 
 import {
@@ -21,6 +21,7 @@ import {
 } from '@mui/material'
 
 import { useFirewallState } from './firewall/useFirewallState'
+import { PVE_DEFAULT_POLICY_IN, PVE_DEFAULT_POLICY_OUT } from '@/lib/firewall/pveDefaults'
 import { PolicyChip } from './firewall/shared'
 import FirewallRulesTable from './firewall/FirewallRulesTable'
 import FirewallDialogs from './firewall/FirewallDialogs'
@@ -87,6 +88,21 @@ export default function NodeFirewallTab({ connectionId, node }: Props) {
     void fw.loadFirewallData()
   }, [fw.loadFirewallData])
 
+  // PVE node options have no policy: the host's input/output policy is the
+  // cluster's, so the tiles below show that one (#1065).
+  const [clusterPolicy, setClusterPolicy] = useState<{ policy_in?: string; policy_out?: string }>({})
+
+  useEffect(() => {
+    let cancelled = false
+
+    fetch(`/api/v1/firewall/cluster/${connectionId}?type=options`)
+      .then(res => (res.ok ? res.json() : {}))
+      .then(data => { if (!cancelled) setClusterPolicy(data || {}) })
+      .catch(() => {})
+
+    return () => { cancelled = true }
+  }, [connectionId])
+
   if (fw.loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', py: 8 }}>
@@ -137,7 +153,7 @@ export default function NodeFirewallTab({ connectionId, node }: Props) {
                   <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
                     Policy IN
                   </Typography>
-                  <PolicyChip policy={fw.options.policy_in || 'ACCEPT'} />
+                  <PolicyChip policy={clusterPolicy.policy_in || PVE_DEFAULT_POLICY_IN} />
                 </Paper>
               </Grid>
               <Grid size={{ xs: 6, sm: 3 }}>
@@ -145,7 +161,7 @@ export default function NodeFirewallTab({ connectionId, node }: Props) {
                   <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
                     Policy OUT
                   </Typography>
-                  <PolicyChip policy={fw.options.policy_out || 'ACCEPT'} />
+                  <PolicyChip policy={clusterPolicy.policy_out || PVE_DEFAULT_POLICY_OUT} />
                 </Paper>
               </Grid>
               <Grid size={{ xs: 6, sm: 3 }}>

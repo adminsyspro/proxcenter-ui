@@ -6952,7 +6952,9 @@
       "disabled": "Deshabilitado",
       "policyIn": "Política IN",
       "policyOut": "Política OUT"
-    }
+    },
+    "firewallNoNicFlag": "Activado en las opciones del firewall del invitado, pero ninguna interfaz de red tiene la opción firewall: no se filtra nada",
+    "firewallOptionsOff": "Una interfaz de red tiene la opción firewall, pero el firewall está desactivado en las opciones del invitado: no se filtra nada"
   },
   "deployWizard": {
     "bannerTitle": "Firewall de clúster no configurado",

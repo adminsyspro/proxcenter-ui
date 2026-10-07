@@ -6894,7 +6894,9 @@
       "disabled": "Deaktiviert",
       "policyIn": "Policy IN",
       "policyOut": "Policy OUT"
-    }
+    },
+    "firewallNoNicFlag": "In den Firewall-Optionen des Gasts aktiviert, aber keine Netzwerkschnittstelle hat die Firewall-Option: es wird nichts gefiltert",
+    "firewallOptionsOff": "Eine Netzwerkschnittstelle hat die Firewall-Option, aber die Firewall ist in den Optionen des Gasts deaktiviert: es wird nichts gefiltert"
   },
   "deployWizard": {
     "bannerTitle": "Cluster-Firewall nicht konfiguriert",

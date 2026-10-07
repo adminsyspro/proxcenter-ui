@@ -6952,7 +6952,9 @@
       "disabled": "Disabled",
       "policyIn": "Policy IN",
       "policyOut": "Policy OUT"
-    }
+    },
+    "firewallNoNicFlag": "Enabled in the guest's firewall options, but no network interface has the firewall flag: nothing is filtered",
+    "firewallOptionsOff": "A network interface has the firewall flag, but the firewall is off in the guest's options: nothing is filtered"
   },
   "deployWizard": {
     "bannerTitle": "Cluster firewall not configured",

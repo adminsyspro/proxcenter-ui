@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { buildCrushTopology, capacityColor } from "./cephTopology"
+import { buildCrushTopology, capacityColor } from "./cephCrushTopology"
 
 // Mirrors real PVE shapes: OSD ids are STRINGS, the /ceph/rules endpoint is
 // bare ({name} only, no id/steps), the pool carries crush_rule_name +

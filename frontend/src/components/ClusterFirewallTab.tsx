@@ -21,6 +21,7 @@ import {
 } from '@mui/material'
 
 import { useFirewallState } from './firewall/useFirewallState'
+import { PVE_DEFAULT_POLICY_IN, PVE_DEFAULT_POLICY_OUT } from '@/lib/firewall/pveDefaults'
 import { PolicyChip } from './firewall/shared'
 import FirewallRulesTable from './firewall/FirewallRulesTable'
 import FirewallDialogs from './firewall/FirewallDialogs'
@@ -136,7 +137,7 @@ export default function ClusterFirewallTab({ connectionId }: Props) {
                   <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
                     Policy IN
                   </Typography>
-                  <PolicyChip policy={fw.options.policy_in || 'DROP'} />
+                  <PolicyChip policy={fw.options.policy_in || PVE_DEFAULT_POLICY_IN} />
                 </Paper>
               </Grid>
               <Grid size={{ xs: 6, sm: 3 }}>
@@ -144,7 +145,7 @@ export default function ClusterFirewallTab({ connectionId }: Props) {
                   <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
                     Policy OUT
                   </Typography>
-                  <PolicyChip policy={fw.options.policy_out || 'ACCEPT'} />
+                  <PolicyChip policy={fw.options.policy_out || PVE_DEFAULT_POLICY_OUT} />
                 </Paper>
               </Grid>
               <Grid size={{ xs: 6, sm: 3 }}>

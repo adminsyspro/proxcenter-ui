@@ -1,6 +1,8 @@
 // src/lib/compliance/hardening.ts
 // Pure functions for hardening checks and scoring — no I/O
 
+import { PVE_DEFAULT_POLICY_IN, PVE_DEFAULT_POLICY_OUT } from '@/lib/firewall/pveDefaults'
+
 export type Severity = 'critical' | 'high' | 'medium' | 'low'
 export type CheckStatus = 'pass' | 'fail' | 'warning' | 'skip'
 export type CheckCategory = 'cluster' | 'node' | 'access' | 'vm' | 'os' | 'ssh' | 'network' | 'services' | 'filesystem' | 'logging'
@@ -61,7 +63,8 @@ function checkClusterFirewall(data: HardeningData): HardeningCheck {
 }
 
 function checkPolicyIn(data: HardeningData): HardeningCheck {
-  const policy = data.firewallOptions?.policy_in?.toUpperCase()
+  // Unset means PVE's default, not ACCEPT (#1065); no options at all stays a fail.
+  const policy = data.firewallOptions && (data.firewallOptions.policy_in || PVE_DEFAULT_POLICY_IN).toUpperCase()
   const ok = policy === 'DROP' || policy === 'REJECT'
   return {
     id: 'cluster_policy_in',
@@ -72,12 +75,12 @@ function checkPolicyIn(data: HardeningData): HardeningCheck {
     status: ok ? 'pass' : 'fail',
     earned: ok ? 15 : 0,
     entity: 'Cluster',
-    details: ok ? `Inbound policy is ${policy}` : `Inbound policy is ${policy || 'ACCEPT'} — set it to DROP`,
+    details: ok ? `Inbound policy is ${policy}` : `Inbound policy is ${policy || 'unknown'} — set it to DROP`,
   }
 }
 
 function checkPolicyOut(data: HardeningData): HardeningCheck {
-  const policy = data.firewallOptions?.policy_out?.toUpperCase()
+  const policy = data.firewallOptions && (data.firewallOptions.policy_out || PVE_DEFAULT_POLICY_OUT).toUpperCase()
   const ok = policy === 'DROP' || policy === 'REJECT'
   return {
     id: 'cluster_policy_out',
@@ -88,7 +91,7 @@ function checkPolicyOut(data: HardeningData): HardeningCheck {
     status: ok ? 'pass' : 'warning',
     earned: ok ? 10 : 0,
     entity: 'Cluster',
-    details: ok ? `Outbound policy is ${policy}` : `Outbound policy is ${policy || 'ACCEPT'} — consider setting it to DROP`,
+    details: ok ? `Outbound policy is ${policy}` : `Outbound policy is ${policy || 'unknown'} — consider setting it to DROP`,
   }
 }
 

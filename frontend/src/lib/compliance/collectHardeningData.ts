@@ -37,7 +37,8 @@ export async function collectHardeningData(opts: CollectHardeningDataOptions): P
 
   // Parallel fetch: cluster-level data
   const [firewallOptions, version, nodesRaw, usersRaw, resourcesRaw, backupJobsRaw, haResourcesRaw, replicationRaw, poolsRaw] = await Promise.all([
-    pveFetch<any>(conn, '/cluster/firewall/options').catch(() => ({})),
+    // undefined, not {}: an empty object reads as "every policy at PVE's default".
+    pveFetch<any>(conn, '/cluster/firewall/options').catch(() => undefined),
     pveFetch<any>(conn, '/version').catch(() => ({})),
     pveFetch<any>(conn, '/nodes').catch(() => []),
     pveFetch<any>(conn, '/access/users?full=1').catch(() => []),

@@ -1,6 +1,7 @@
 import useSWR from 'swr'
 import { useSWRFetch } from './useSWRFetch'
 import { useRefreshInterval } from './useRefreshInterval'
+import { hasNICFirewall, PVE_DEFAULT_POLICY_IN, PVE_DEFAULT_POLICY_OUT } from '@/lib/firewall/pveDefaults'
 
 // Fetcher that chains connections -> firewall options for a single PVE connection
 const clusterFirewallFetcher = async (url: string) => {
@@ -36,8 +37,8 @@ const firewallScoresFetcher = async () => {
 
         let score = 0
         const enabled = fwData?.enable === 1
-        const policyIn = fwData?.policy_in || 'ACCEPT'
-        const policyOut = fwData?.policy_out || 'ACCEPT'
+        const policyIn = fwData?.policy_in || PVE_DEFAULT_POLICY_IN
+        const policyOut = fwData?.policy_out || PVE_DEFAULT_POLICY_OUT
         if (enabled) score += 40
         if (policyIn === 'DROP') score += 30
         if (policyOut === 'DROP') score += 30
@@ -99,23 +100,17 @@ const vmFirewallCoverageFetcher = async () => {
   return Promise.all(
     guests.slice(0, 30).map(async (vm: any) => {
       try {
-        const [configRes, rulesRes] = await Promise.all([
+        const [configRes, rulesRes, optionsRes] = await Promise.all([
           fetch(`/api/v1/connections/${pveConn.id}/guests/${vm.type}/${vm.node}/${vm.vmid}/config`),
-          fetch(`/api/v1/firewall/vms/${pveConn.id}/${vm.node}/${vm.type}/${vm.vmid}?type=rules`).catch(() => null)
+          fetch(`/api/v1/firewall/vms/${pveConn.id}/${vm.node}/${vm.type}/${vm.vmid}?type=rules`).catch(() => null),
+          fetch(`/api/v1/firewall/vms/${pveConn.id}/${vm.node}/${vm.type}/${vm.vmid}?type=options`).catch(() => null)
         ])
 
-        let firewallEnabled = false
-        if (configRes.ok) {
-          const configJson = await configRes.json()
-          const config = configJson?.data || {}
-          for (let i = 0; i < 10; i++) {
-            const netConfig = config[`net${i}`]
-            if (netConfig && typeof netConfig === 'string' && netConfig.includes('firewall=1')) {
-              firewallEnabled = true
-              break
-            }
-          }
-        }
+        // PVE filters the guest only when its firewall options AND one of its
+        // NICs have the firewall on (#1065).
+        const config = configRes.ok ? (await configRes.json())?.data : null
+        const options = optionsRes?.ok ? await optionsRes.json() : null
+        const firewallEnabled = options?.enable === 1 && hasNICFirewall(config)
 
         let rules: any[] = []
         let hasSG = false

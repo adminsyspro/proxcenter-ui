@@ -11,6 +11,7 @@ import {
 
 import * as firewallAPI from '@/lib/api/firewall'
 import { VMFirewallInfo } from '@/hooks/useVMFirewallRules'
+import { PVE_DEFAULT_POLICY_IN, PVE_DEFAULT_POLICY_OUT } from '@/lib/firewall/pveDefaults'
 import DeploymentWizard from './DeploymentWizard'
 
 interface DashboardTabProps {
@@ -81,7 +82,11 @@ export default function DashboardTab({
   const vmsWithFirewall = vmFirewallData.filter(v => v.firewallEnabled).length
   const totalVMs = vmFirewallData.length || 1
   const vmCoverage = (vmsWithFirewall / totalVMs) * 100
-  const hasStrictPolicy = currentOptions?.policy_in === 'DROP' || currentOptions?.policy_out === 'DROP'
+  // Node options carry no policy: a host follows the cluster's, and an unset
+  // policy is PVE's default, not ACCEPT (#1065).
+  const policyIn = clusterOptions?.policy_in || PVE_DEFAULT_POLICY_IN
+  const policyOut = clusterOptions?.policy_out || PVE_DEFAULT_POLICY_OUT
+  const hasStrictPolicy = policyIn === 'DROP' || policyOut === 'DROP'
   const firewallEnabled = currentOptions?.enable === 1
   const unprotected = vmFirewallData.filter(v => !v.firewallEnabled).length
 
@@ -214,23 +219,23 @@ export default function DashboardTab({
                     <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
                       <Chip
                         icon={<i className="ri-arrow-down-line" style={{ fontSize: 14 }} />}
-                        label={`IN: ${currentOptions?.policy_in || 'ACCEPT'}`}
+                        label={`IN: ${policyIn}`}
                         size="small"
                         sx={{
                           height: 24, fontSize: 11, fontWeight: 700,
-                          bgcolor: alpha(currentOptions?.policy_in === 'DROP' ? '#ef4444' : '#22c55e', 0.18),
-                          color: currentOptions?.policy_in === 'DROP' ? '#ef4444' : '#22c55e',
+                          bgcolor: alpha(policyIn === 'DROP' ? '#ef4444' : '#22c55e', 0.18),
+                          color: policyIn === 'DROP' ? '#ef4444' : '#22c55e',
                           '& .MuiChip-icon': { color: 'inherit' }
                         }}
                       />
                       <Chip
                         icon={<i className="ri-arrow-up-line" style={{ fontSize: 14 }} />}
-                        label={`OUT: ${currentOptions?.policy_out || 'ACCEPT'}`}
+                        label={`OUT: ${policyOut}`}
                         size="small"
                         sx={{
                           height: 24, fontSize: 11, fontWeight: 700,
-                          bgcolor: alpha(currentOptions?.policy_out === 'DROP' ? '#ef4444' : '#22c55e', 0.18),
-                          color: currentOptions?.policy_out === 'DROP' ? '#ef4444' : '#22c55e',
+                          bgcolor: alpha(policyOut === 'DROP' ? '#ef4444' : '#22c55e', 0.18),
+                          color: policyOut === 'DROP' ? '#ef4444' : '#22c55e',
                           '& .MuiChip-icon': { color: 'inherit' }
                         }}
                       />
@@ -346,7 +351,7 @@ export default function DashboardTab({
                 description: t('network.activateFirewall'), action: t('networkPage.viewDetails'), onClick: () => { onNavigateTab(1); onNavigateRulesSubTab(0) }
               })
             }
-            if (currentOptions?.policy_in !== 'DROP') {
+            if (policyIn !== 'DROP') {
               recommendations.push({
                 severity: 'warning', icon: 'ri-arrow-down-line',
                 title: t('firewall.policyInPermissive'),

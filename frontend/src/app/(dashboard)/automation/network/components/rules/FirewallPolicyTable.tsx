@@ -11,6 +11,7 @@ import {
 } from '@mui/material'
 
 import * as firewallAPI from '@/lib/api/firewall'
+import { PVE_DEFAULT_POLICY_IN, PVE_DEFAULT_POLICY_OUT } from '@/lib/firewall/pveDefaults'
 import { isRuleEnabled } from './shared/isRuleEnabled'
 import { ruleToFormData } from './shared/ruleToFormData'
 import { useToast } from '@/contexts/ToastContext'
@@ -271,7 +272,7 @@ export default function FirewallPolicyTable({
               <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary' }}>Policy IN:</Typography>
               <FormControl size="small" sx={{ minWidth: 100 }}>
                 <Select
-                  value={clusterOptions?.policy_in || 'DROP'}
+                  value={clusterOptions?.policy_in || PVE_DEFAULT_POLICY_IN}
                   onChange={(e) => handlePolicyChange('policy_in', e.target.value)}
                   sx={{ fontSize: 12, height: 28, '& .MuiSelect-select': { py: 0.3 } }}
                   disabled={!selectedConnection}
@@ -286,7 +287,7 @@ export default function FirewallPolicyTable({
               <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary' }}>Policy OUT:</Typography>
               <FormControl size="small" sx={{ minWidth: 100 }}>
                 <Select
-                  value={clusterOptions?.policy_out || 'ACCEPT'}
+                  value={clusterOptions?.policy_out || PVE_DEFAULT_POLICY_OUT}
                   onChange={(e) => handlePolicyChange('policy_out', e.target.value)}
                   sx={{ fontSize: 12, height: 28, '& .MuiSelect-select': { py: 0.3 } }}
                   disabled={!selectedConnection}

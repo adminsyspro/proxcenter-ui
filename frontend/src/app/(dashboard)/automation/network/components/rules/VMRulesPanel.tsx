@@ -18,6 +18,7 @@ import { useToast } from '@/contexts/ToastContext'
 import LogLevelSelect from '@/components/firewall/LogLevelSelect'
 import { LOG_LEVELS, DEFAULT_LOG_LEVEL } from '@/components/firewall/logLevels'
 import { DEFAULT_RULE } from '../../types'
+import { PVE_DEFAULT_POLICY_IN, PVE_DEFAULT_POLICY_OUT } from '@/lib/firewall/pveDefaults'
 import RulesTableHead from './shared/RulesTableHead'
 import { RuleActionCell, RuleLogCommentCells, RuleRowActionsCell, RuleRowLeadingCells, RuleTrafficCells } from './shared/RuleTableCells'
 import AliasIpsetAutocomplete, { useAliasIpsetOptions } from './shared/AliasIpsetAutocomplete'
@@ -84,16 +85,26 @@ export default function VMRulesPanel({ vmFirewallData, securityGroups, loadingVM
 
   const autocompleteOptions = useAliasIpsetOptions(aliases, ipsets)
 
-  // ── Toggle VM firewall (modifies NIC config firewall=0/1) ──
+  // ── Toggle VM firewall ──
+  // PVE filters a guest only when the firewall is enabled in its options AND
+  // on one of its NICs (#1065). Turning it on sets whichever level is missing;
+  // turning it off clears the options switch, like PVE's own "Firewall" option,
+  // and leaves the NIC flags alone so the guest's network is not re-plugged.
   const handleToggleVMFirewall = async (vm: VMFirewallInfo) => {
     if (!selectedConnection) return
     const newEnable = !vm.firewallEnabled
     try {
-      await firewallAPI.toggleVMNICFirewall(selectedConnection, vm.node, vm.type, vm.vmid, newEnable)
+      if (!newEnable || !vm.optionsEnabled) {
+        await firewallAPI.updateVMOptions(selectedConnection, vm.node, vm.type, vm.vmid, { enable: newEnable ? 1 : 0 })
+      }
+      if (newEnable && !vm.nicFirewallEnabled) {
+        await firewallAPI.toggleVMNICFirewall(selectedConnection, vm.node, vm.type, vm.vmid, true)
+      }
       showToast(newEnable ? t('networkPage.firewallEnabled') : t('networkPage.firewallDisabled'), 'success')
       void reloadVMFirewallRules(vm)
     } catch (err: any) {
       showToast(err.message || t('networkPage.error'), 'error')
+      void reloadVMFirewallRules(vm)
     }
   }
 
@@ -377,7 +388,7 @@ export default function VMRulesPanel({ vmFirewallData, securityGroups, loadingVM
                                     <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary', fontSize: 10 }}>IN:</Typography>
                                     <FormControl size="small">
                                       <Select
-                                        value={vm.options?.policy_in || 'ACCEPT'}
+                                        value={vm.options?.policy_in || PVE_DEFAULT_POLICY_IN}
                                         onChange={(e) => handleVMPolicyChange(vm, 'policy_in', e.target.value)}
                                         sx={{ fontSize: 10, height: 22, minWidth: 72, '& .MuiSelect-select': { py: 0.1 } }}
                                         disabled={!selectedConnection}
@@ -390,7 +401,7 @@ export default function VMRulesPanel({ vmFirewallData, securityGroups, loadingVM
                                     <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary', fontSize: 10 }}>OUT:</Typography>
                                     <FormControl size="small">
                                       <Select
-                                        value={vm.options?.policy_out || 'ACCEPT'}
+                                        value={vm.options?.policy_out || PVE_DEFAULT_POLICY_OUT}
                                         onChange={(e) => handleVMPolicyChange(vm, 'policy_out', e.target.value)}
                                         sx={{ fontSize: 10, height: 22, minWidth: 72, '& .MuiSelect-select': { py: 0.1 } }}
                                         disabled={!selectedConnection}
@@ -416,6 +427,11 @@ export default function VMRulesPanel({ vmFirewallData, securityGroups, loadingVM
                                   <Typography variant="caption" sx={{ fontWeight: 600, color: vm.firewallEnabled ? '#22c55e' : 'text.secondary', fontSize: 11, minWidth: 24 }}>
                                     {vm.firewallEnabled ? 'ON' : 'OFF'}
                                   </Typography>
+                                  {vm.optionsEnabled !== vm.nicFirewallEnabled && (
+                                    <Tooltip title={t(vm.optionsEnabled ? 'networkPage.firewallNoNicFlag' : 'networkPage.firewallOptionsOff')}>
+                                      <i className="ri-error-warning-line" style={{ fontSize: 16, color: theme.palette.warning.main }} />
+                                    </Tooltip>
+                                  )}
                                   <Tooltip title={t('networkPage.viewLogs')}>
                                     <IconButton size="small" onClick={() => openLogDialog(vm)}>
                                       <i className="ri-terminal-box-line" style={{ fontSize: 16 }} />

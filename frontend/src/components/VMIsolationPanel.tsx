@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useTranslations } from 'next-intl'
 
+import { PVE_DEFAULT_POLICY_IN } from '@/lib/firewall/pveDefaults'
+
 import {
   Alert,
   Avatar,
@@ -495,7 +497,7 @@ return true
                     </Box>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <Typography variant="body2" color="text.secondary">Policy IN</Typography>
-                      <Chip size="small" label={simulation?.current_state.policy_in || 'ACCEPT'} color={simulation?.current_state.policy_in === 'DROP' ? 'success' : 'error'} sx={{ height: 22, fontSize: 12 }} />
+                      <Chip size="small" label={simulation?.current_state.policy_in || PVE_DEFAULT_POLICY_IN} color={(simulation?.current_state.policy_in || PVE_DEFAULT_POLICY_IN) === 'DROP' ? 'success' : 'error'} sx={{ height: 22, fontSize: 12 }} />
                     </Box>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <Typography variant="body2" color="text.secondary">Security Groups</Typography>

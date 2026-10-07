@@ -76,14 +76,14 @@ const BARE_RULE: firewallAPIType.FirewallRule = { pos: 1, type: '', action: '' }
 
 const WEB: VMFirewallInfo = {
   vmid: 100, name: 'web-01', node: 'pve1', type: 'qemu', status: 'running',
-  firewallEnabled: true, rules: [FULL_RULE, BARE_RULE],
+  firewallEnabled: true, optionsEnabled: true, nicFirewallEnabled: true, rules: [FULL_RULE, BARE_RULE],
   options: { enable: 1, policy_in: 'DROP', policy_out: 'ACCEPT', log_level_in: 'info', log_level_out: 'nolog' },
   vlans: [20],
 }
 
 const DB: VMFirewallInfo = {
   vmid: 101, name: 'db-01', node: 'pve2', type: 'lxc', status: 'running',
-  firewallEnabled: false, rules: [], options: null, vlans: [],
+  firewallEnabled: false, optionsEnabled: false, nicFirewallEnabled: true, rules: [], options: null, vlans: [],
 }
 
 const ALIASES: firewallAPIType.Alias[] = [{ name: 'net-mgmt', cidr: '10.99.99.0/24' }]
@@ -229,13 +229,30 @@ describe('VMRulesPanel', () => {
     expect(screen.getByText('No VM found')).toBeInTheDocument()
   })
 
-  it('toggles a guest NIC firewall from its section switch', async () => {
+  it('turns a guest firewall off through its options and leaves its NICs alone (#1065)', async () => {
     renderPanel()
     fireEvent.click(screen.getByText('VLAN 20'))
 
     fireEvent.click(within(rowOf('web-01')).getByRole('switch'))
 
-    await waitFor(() => expect(api.toggleVMNICFirewall).toHaveBeenCalledWith(CONN, 'pve1', 'qemu', 100, false))
+    await waitFor(() => expect(api.updateVMOptions).toHaveBeenCalledWith(CONN, 'pve1', 'qemu', 100, { enable: 0 }))
+    expect(api.toggleVMNICFirewall).not.toHaveBeenCalled()
+  })
+
+  it('turns a guest firewall on by enabling only the level that is missing (#1065)', async () => {
+    renderPanel()
+    fireEvent.click(screen.getByText('Untagged'))
+
+    const row = rowOf('db-01')
+
+    // firewall=1 on a NIC but off in the options: shown OFF, with the warning
+    expect(within(row).getByText('OFF')).toBeInTheDocument()
+    expect(row.querySelector('i.ri-error-warning-line')).not.toBeNull()
+
+    fireEvent.click(within(row).getByRole('switch'))
+
+    await waitFor(() => expect(api.updateVMOptions).toHaveBeenCalledWith(CONN, 'pve2', 'lxc', 101, { enable: 1 }))
+    expect(api.toggleVMNICFirewall).not.toHaveBeenCalled()
   })
 
   it('changes a guest inbound policy from its section select', async () => {

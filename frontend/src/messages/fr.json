@@ -6952,7 +6952,9 @@
       "disabled": "Désactivé",
       "policyIn": "Policy IN",
       "policyOut": "Policy OUT"
-    }
+    },
+    "firewallNoNicFlag": "Activé dans les options du pare-feu de l'invité, mais aucune interface réseau n'a l'option pare-feu : rien n'est filtré",
+    "firewallOptionsOff": "Une interface réseau a l'option pare-feu, mais le pare-feu est désactivé dans les options de l'invité : rien n'est filtré"
   },
   "deployWizard": {
     "bannerTitle": "Firewall du cluster non configuré",

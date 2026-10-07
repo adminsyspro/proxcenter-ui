@@ -36,6 +36,7 @@ import {
 import * as firewallAPI from '@/lib/api/firewall'
 
 import { useFirewallState } from './firewall/useFirewallState'
+import { PVE_DEFAULT_POLICY_IN, PVE_DEFAULT_POLICY_OUT } from '@/lib/firewall/pveDefaults'
 import { LOG_LEVELS, DEFAULT_LOG_LEVEL, cleanSourceDest } from './firewall/shared'
 import FirewallRulesTable from './firewall/FirewallRulesTable'
 import FirewallDialogs from './firewall/FirewallDialogs'
@@ -324,7 +325,7 @@ export default function VmFirewallTab({ connectionId, node, vmType, vmid, vmName
                     <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary', fontSize: 10 }}>IN:</Typography>
                     <FormControl size="small">
                       <Select
-                        value={fw.options.policy_in || 'ACCEPT'}
+                        value={fw.options.policy_in || PVE_DEFAULT_POLICY_IN}
                         onChange={(e) => fw.handlePolicyChange('policy_in', e.target.value)}
                         sx={{ fontSize: 10, height: 22, minWidth: 72, '& .MuiSelect-select': { py: 0.1 } }}
                         disabled={fw.saving || !canConfig}
@@ -337,7 +338,7 @@ export default function VmFirewallTab({ connectionId, node, vmType, vmid, vmName
                     <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary', fontSize: 10 }}>OUT:</Typography>
                     <FormControl size="small">
                       <Select
-                        value={fw.options.policy_out || 'ACCEPT'}
+                        value={fw.options.policy_out || PVE_DEFAULT_POLICY_OUT}
                         onChange={(e) => fw.handlePolicyChange('policy_out', e.target.value)}
                         sx={{ fontSize: 10, height: 22, minWidth: 72, '& .MuiSelect-select': { py: 0.1 } }}
                         disabled={fw.saving || !canConfig}

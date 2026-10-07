@@ -6956,7 +6956,9 @@
       "disabled": "已禁用",
       "policyIn": "入站策略",
       "policyOut": "出站策略"
-    }
+    },
+    "firewallNoNicFlag": "已在客户机防火墙选项中启用，但没有任何网络接口设置防火墙标志：不会过滤任何流量",
+    "firewallOptionsOff": "某个网络接口设置了防火墙标志，但客户机选项中的防火墙已关闭：不会过滤任何流量"
   },
   "deployWizard": {
     "bannerTitle": "集群防火墙未配置",

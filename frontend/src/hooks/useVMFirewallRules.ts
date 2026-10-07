@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react'
 import * as firewallAPI from '@/lib/api/firewall'
 import { errorMessage } from '@/lib/firewall/loadError'
+import { hasNICFirewall } from '@/lib/firewall/pveDefaults'
 
 export interface VMFirewallInfo {
   vmid: number
@@ -8,21 +9,24 @@ export interface VMFirewallInfo {
   node: string
   type: 'qemu' | 'lxc'
   status: string
+  /** The firewall filters this guest's traffic: both levels below are on. */
   firewallEnabled: boolean
+  /** Enabled in the guest's firewall options (PVE "Firewall: Yes"). */
+  optionsEnabled: boolean
+  /** `firewall=1` on at least one NIC. */
+  nicFirewallEnabled: boolean
   rules: firewallAPI.FirewallRule[]
   options: firewallAPI.VMOptions | null
   vlans: number[]
 }
 
-// Helper: Check if firewall is enabled on any NIC from VM config
-function checkNICFirewallEnabled(config: Record<string, any>): boolean {
-  for (let i = 0; i < 10; i++) {
-    const netConfig = config[`net${i}`]
-    if (netConfig && typeof netConfig === 'string' && netConfig.includes('firewall=1')) {
-      return true
-    }
-  }
-  return false
+// Both levels must be on for PVE to filter anything (#1065): the options
+// switch alone, or firewall=1 on a NIC alone, used to read as protected.
+function firewallState(options: firewallAPI.VMOptions | null, config: Record<string, any> | null | undefined) {
+  const optionsEnabled = options?.enable === 1
+  const nicFirewallEnabled = hasNICFirewall(config)
+
+  return { firewallEnabled: optionsEnabled && nicFirewallEnabled, optionsEnabled, nicFirewallEnabled }
 }
 
 // Helper: Extract unique VLAN tags from NIC config (tag=XXX)
@@ -112,13 +116,11 @@ export function useVMFirewallRules(connectionId: string | null): UseVMFirewallRu
             fetch(`/api/v1/connections/${connectionId}/guests/${guest.type}/${guest.node}/${guest.vmid}/config`).then(r => r.json()).catch(() => null)
           ])
 
-          // Firewall is "active" if enabled on at least one NIC
-          const nicFirewallEnabled = configResp?.data ? checkNICFirewallEnabled(configResp.data) : false
           const vlans = configResp?.data ? extractVLANs(configResp.data) : []
 
           return {
             ...base,
-            firewallEnabled: nicFirewallEnabled,
+            ...firewallState(optionsData, configResp?.data),
             rules: Array.isArray(rulesData) ? rulesData : [],
             options: optionsData,
             vlans,
@@ -126,7 +128,7 @@ export function useVMFirewallRules(connectionId: string | null): UseVMFirewallRu
         } catch (err) {
           errors.add(errorMessage(err))
 
-          return { ...base, firewallEnabled: false, rules: [], options: null, vlans: [] }
+          return { ...base, ...firewallState(null, null), rules: [], options: null, vlans: [] }
         }
       }
 
@@ -169,13 +171,12 @@ export function useVMFirewallRules(connectionId: string | null): UseVMFirewallRu
         fetch(`/api/v1/connections/${connectionId}/guests/${vm.type}/${vm.node}/${vm.vmid}/config`).then(r => r.json()).catch(() => null)
       ])
 
-      const nicFirewallEnabled = configResp?.data ? checkNICFirewallEnabled(configResp.data) : false
       const vlans = configResp?.data ? extractVLANs(configResp.data) : []
 
       setVMFirewallData(prev => prev.map(v =>
         v.vmid === vm.vmid ? {
           ...v,
-          firewallEnabled: nicFirewallEnabled,
+          ...firewallState(optionsData, configResp?.data),
           rules: Array.isArray(rulesData) ? rulesData : [],
           options: optionsData,
           vlans,

@@ -55,7 +55,7 @@ const CLUSTER_RULES: firewallAPIType.FirewallRule[] = [
 
 const WEB_VM: VMFirewallInfo = {
   vmid: 100, name: 'web-01', node: 'pve1', type: 'qemu', status: 'running',
-  firewallEnabled: true, options: null, vlans: [20],
+  firewallEnabled: true, optionsEnabled: true, nicFirewallEnabled: true, options: null, vlans: [20],
   rules: [{ pos: 0, type: 'in', action: 'ACCEPT' }],
 }
 

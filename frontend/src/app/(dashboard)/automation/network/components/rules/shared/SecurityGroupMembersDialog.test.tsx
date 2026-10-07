@@ -60,6 +60,8 @@ function guest(vmid: number, overrides: Partial<VMFirewallInfo> = {}): VMFirewal
     type: 'qemu',
     status: 'running',
     firewallEnabled: true,
+    optionsEnabled: true,
+    nicFirewallEnabled: true,
     rules: [],
     options: null,
     vlans: [],

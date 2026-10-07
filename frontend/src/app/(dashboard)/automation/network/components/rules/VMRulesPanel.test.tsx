@@ -255,6 +255,28 @@ describe('VMRulesPanel', () => {
     expect(api.toggleVMNICFirewall).not.toHaveBeenCalled()
   })
 
+  it('turns a guest firewall on by flagging its NICs when only the options were on (#1065)', async () => {
+    const half: VMFirewallInfo = { ...DB, optionsEnabled: true, nicFirewallEnabled: false, options: { enable: 1 } }
+
+    renderPanel({ vmFirewallData: [WEB, half] })
+    fireEvent.click(screen.getByText('Untagged'))
+
+    fireEvent.click(within(rowOf('db-01')).getByRole('switch'))
+
+    await waitFor(() => expect(api.toggleVMNICFirewall).toHaveBeenCalledWith(CONN, 'pve2', 'lxc', 101, true))
+    expect(api.updateVMOptions).not.toHaveBeenCalled()
+  })
+
+  it('reloads the guest after a failed toggle so the switch shows what PVE kept', async () => {
+    api.updateVMOptions.mockRejectedValueOnce(new Error('HTTP 500'))
+    const p = renderPanel()
+    fireEvent.click(screen.getByText('VLAN 20'))
+
+    fireEvent.click(within(rowOf('web-01')).getByRole('switch'))
+
+    await waitFor(() => expect(p.reloadVMFirewallRules).toHaveBeenCalledWith(WEB))
+  })
+
   it('changes a guest inbound policy from its section select', async () => {
     renderPanel()
     fireEvent.click(screen.getByText('VLAN 20'))

@@ -741,7 +741,9 @@ jobs:
   # Air-gapped bundles (on version tags)
   # ========================================
   # install-airgap.sh bundle saves the images the compose resolves to at this
-  # tag, with the compose, the script, a manifest and checksums (ui#956). The
+  # tag, with the compose, the script, a manifest and checksums (ui#956);
+  # Enterprise also packs the 3-node HA images of docker-compose.ha.yml
+  # (--ha-compose, ignored for Community) in the same images.tar. The
   # Community bundle is a public release asset; the Enterprise one goes to the
   # private R2 bucket the customer portal serves. The R2 step is skipped, with
   # a warning, until the three R2_* secrets exist.
@@ -780,7 +782,7 @@ jobs:
           set -euo pipefail
           VERSION="${TAG#v}"
           chmod +x install-airgap.sh
-          ./install-airgap.sh bundle --edition "$EDITION" --version "$VERSION" --compose "docker-compose.$EDITION.yml" --output dist
+          ./install-airgap.sh bundle --edition "$EDITION" --version "$VERSION" --compose "docker-compose.$EDITION.yml" --ha-compose docker-compose.ha.yml --output dist
           ls -la dist
 
       - name: Attach the Community bundle to the release

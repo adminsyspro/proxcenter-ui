@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useRef, useEffect } from 'react'
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 
 import {
   Alert,
@@ -12,10 +12,13 @@ import {
   Chip,
   Collapse,
   FormControlLabel,
+  FormLabel,
   IconButton,
   InputAdornment,
   LinearProgress,
   Link,
+  Radio,
+  RadioGroup,
   Step,
   StepLabel,
   Stepper,
@@ -30,7 +33,7 @@ import {
 } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
-import type { HaConfig } from './useHaConfig'
+import type { HaConfig, HaImageSource, HaImageSourceMode } from './useHaConfig'
 import { resolveCompletionTarget } from './haRedirect'
 
 interface DeployStepEvent {
@@ -43,6 +46,16 @@ interface DeployStepEvent {
   timestamp: string
 }
 
+type CheckStatus = 'pass' | 'fail' | 'warn' | 'unverifiable' | 'info'
+
+// Structured pre-flight check from the orchestrator. Detail is an English
+// remediation message rendered as-is, like other backend errors.
+interface CheckResult {
+  name: string
+  status: CheckStatus | string
+  detail?: string
+}
+
 interface ValidationResult {
   ip: string
   ssh: boolean
@@ -51,6 +64,8 @@ interface ValidationResult {
   dockerCompose: boolean
   pgCompatible: boolean
   ping: Record<string, boolean>
+  // Optional: older orchestrators do not send structured checks.
+  checks?: CheckResult[]
 }
 
 interface ValidationResponse {
@@ -58,6 +73,7 @@ interface ValidationResponse {
   global: {
     vipAvailable: boolean
     externalUrl?: string
+    checks?: CheckResult[]
   }
 }
 
@@ -68,6 +84,13 @@ interface NodeInput {
   vrrpPriority: number
 }
 
+const KNOWN_CHECK_NAMES = new Set(['registry', 'tcpMatrix', 'listeners', 'vipInterface', 'existingStack', 'postgresVolume'])
+
+// vipAddress duplicates the legacy vipAvailable row, which is already shown.
+const SKIPPED_GLOBAL_CHECKS = new Set(['vipAddress'])
+
+const hasFailedCheck = (checks: CheckResult[] | undefined) => (checks ?? []).some(c => c.status === 'fail')
+
 const WIZARD_STEP_KEYS = ['stepPrerequisites', 'stepNodes', 'stepNetwork', 'stepValidation', 'stepDeployment'] as const
 
 const PREREQ_KEYS = ['prereq1', 'prereq2', 'prereq3', 'prereq4', 'prereq5'] as const
@@ -75,6 +98,19 @@ const PREREQ_KEYS = ['prereq1', 'prereq2', 'prereq3', 'prereq4', 'prereq5'] as c
 const RUNBOOK_URL = 'https://docs.proxcenter.io/operations/ha-conversion'
 
 const BACKUP_PATH = '/opt/proxcenter/backup-pre-patroni.sql'
+
+// Same pattern as the orchestrator: host[:port]/namespace, no scheme,
+// lowercase namespace path.
+const REGISTRY_REGEX = /^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?(:[0-9]{1,5})?(\/[a-z0-9]+([._-][a-z0-9]+)*)*$/
+
+const IMAGE_SOURCE_MODES: { mode: HaImageSourceMode; key: string }[] = [
+  { mode: '', key: 'imageSourceAuto' },
+  { mode: 'online', key: 'imageSourceOnline' },
+  { mode: 'registry', key: 'imageSourceRegistry' },
+  { mode: 'local', key: 'imageSourceLocal' },
+]
+
+const normalizeRegistry = (value: string) => value.trim().replace(/\/+$/, '')
 
 const IPV4_REGEX = /^(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)$/
 
@@ -108,6 +144,12 @@ export default function HaDeployWizard({
   const [vipInterface, setVipInterface] = useState(config?.vipInterface || 'eth0')
   const [externalUrl, setExternalUrl] = useState(config?.externalUrl || '')
   const [showPw, setShowPw] = useState<Record<number, boolean>>({})
+  const [imageMode, setImageMode] = useState<HaImageSourceMode>(config?.imageSource?.mode || '')
+  const [registry, setRegistry] = useState(config?.imageSource?.registry || '')
+  const [registryCaCert, setRegistryCaCert] = useState(config?.imageSource?.caCert || '')
+  const [registryUsername, setRegistryUsername] = useState('')
+  const [registryPassword, setRegistryPassword] = useState('')
+  const [showRegistryPw, setShowRegistryPw] = useState(false)
 
   const [validating, setValidating] = useState(false)
   const [validationResult, setValidationResult] = useState<ValidationResponse | null>(null)
@@ -145,11 +187,29 @@ export default function HaDeployWizard({
   // Any change to network inputs invalidates a previous validation run
   useEffect(() => {
     setValidationResult(null)
-  }, [vip, vipInterface])
+  }, [vip, vipInterface, imageMode, registry, registryCaCert, registryUsername, registryPassword])
+
+  const registryValue = normalizeRegistry(registry)
+  const registryValid = REGISTRY_REGEX.test(registryValue)
+
+  // Only the fields of the selected mode are sent: { mode: '' } for auto.
+  const imageSource = useMemo<HaImageSource>(() => (imageMode === 'registry'
+    ? {
+        mode: imageMode,
+        registry: normalizeRegistry(registry),
+        ...(registryCaCert.trim() ? { caCert: registryCaCert.trim() } : {}),
+      }
+    : { mode: imageMode }), [imageMode, registry, registryCaCert])
+
+  // Typed once for validation and deployment, never stored.
+  const registryCredentials = useMemo(() => (imageMode === 'registry' && registryUsername.trim()
+    ? { registryUsername: registryUsername.trim(), registryPassword }
+    : {}), [imageMode, registryUsername, registryPassword])
 
   const canProceedNodes = nodes.every(n => IPV4_REGEX.test(n.ip) && n.password.length > 0)
 
   const canProceedNetwork = IPV4_REGEX.test(vip) && vipInterface.length > 0
+    && (imageMode !== 'registry' || registryValid)
 
   const handleValidate = useCallback(async () => {
     setValidating(true)
@@ -164,6 +224,8 @@ export default function HaDeployWizard({
           vip,
           vipInterface,
           externalUrl: externalUrl.trim(),
+          imageSource,
+          ...registryCredentials,
         }),
       })
       if (!res.ok) {
@@ -178,12 +240,14 @@ export default function HaDeployWizard({
     } finally {
       setValidating(false)
     }
-  }, [nodes, vip, vipInterface, externalUrl, t])
+  }, [nodes, vip, vipInterface, externalUrl, imageSource, registryCredentials, t])
 
   const validationPassed = validationResult
     ? validationResult.results.every(r => r.ssh && r.docker && r.dockerCompose
         && Object.values(r.ping).every(Boolean))
       && validationResult.global.vipAvailable
+      && !validationResult.results.some(r => hasFailedCheck(r.checks))
+      && !hasFailedCheck(validationResult.global.checks)
     : false
 
   // Post-deploy destination (decision 3): the preserved external URL comes
@@ -354,6 +418,7 @@ export default function HaDeployWizard({
           vip,
           vipInterface,
           externalUrl: externalUrl.trim(),
+          imageSource,
           sshPasswords: Object.fromEntries(nodes.map(n => [n.ip, n.password])),
         }),
       })
@@ -370,6 +435,7 @@ export default function HaDeployWizard({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           sshPasswords: Object.fromEntries(nodes.map(n => [n.ip, n.password])),
+          ...registryCredentials,
         }),
       })
       if (!deployRes.ok) {
@@ -384,7 +450,7 @@ export default function HaDeployWizard({
       setDeployError(e.message || t('wizard.deployFailed'))
       setDeploying(false)
     }
-  }, [nodes, vip, vipInterface, externalUrl, connectSSE, t])
+  }, [nodes, vip, vipInterface, externalUrl, imageSource, registryCredentials, connectSSE, t])
 
   const handleRetryDeploy = useCallback(async () => {
     setDeploying(true)
@@ -499,6 +565,103 @@ export default function HaDeployWizard({
     </Box>
   )
 
+  const renderImageSource = () => (
+    <Box sx={{ mt: 3 }}>
+      <FormLabel id="ha-image-source-label" sx={{ display: 'block', mb: 0.5, fontWeight: 600, color: 'text.primary' }}>
+        {t('wizard.imageSourceTitle')}
+      </FormLabel>
+      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+        {t('wizard.imageSourceIntro')}
+      </Typography>
+      <RadioGroup
+        aria-labelledby="ha-image-source-label"
+        value={imageMode}
+        onChange={(e) => setImageMode(e.target.value as HaImageSourceMode)}
+      >
+        {IMAGE_SOURCE_MODES.map(({ mode, key }) => (
+          <FormControlLabel
+            key={key}
+            value={mode}
+            control={<Radio size="small" />}
+            label={<Typography variant="body2">{t(`wizard.${key}`)}</Typography>}
+          />
+        ))}
+      </RadioGroup>
+      {imageMode === 'registry' && (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1.5 }}>
+          <TextField
+            label={t('wizard.registryLabel')}
+            placeholder="harbor.example.com/proxcenter"
+            value={registry}
+            onChange={(e) => setRegistry(e.target.value)}
+            error={registry.trim().length > 0 && !registryValid}
+            helperText={registry.trim().length > 0 && !registryValid ? t('wizard.registryInvalid') : t('wizard.registryHelper')}
+            size="small"
+            fullWidth
+          />
+          <Box sx={{ display: 'flex', gap: 2 }}>
+            <TextField
+              label={t('wizard.registryUsernameLabel')}
+              value={registryUsername}
+              onChange={(e) => setRegistryUsername(e.target.value)}
+              autoComplete="off"
+              size="small"
+              sx={{ flex: 1 }}
+            />
+            <TextField
+              label={t('wizard.registryPasswordLabel')}
+              type={showRegistryPw ? 'text' : 'password'}
+              value={registryPassword}
+              onChange={(e) => setRegistryPassword(e.target.value)}
+              autoComplete="new-password"
+              size="small"
+              sx={{ flex: 1 }}
+              slotProps={{
+                input: {
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <IconButton
+                        onClick={() => setShowRegistryPw(v => !v)}
+                        edge="end"
+                        size="small"
+                        aria-label={showRegistryPw ? t('wizard.hidePassword') : t('wizard.showPassword')}
+                      >
+                        <i className={showRegistryPw ? 'ri-eye-off-line' : 'ri-eye-line'} />
+                      </IconButton>
+                    </InputAdornment>
+                  ),
+                },
+              }}
+            />
+          </Box>
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: -1 }}>
+            {t('wizard.registryCredentialsHelper')}
+          </Typography>
+          <TextField
+            label={t('wizard.registryCaLabel')}
+            placeholder="-----BEGIN CERTIFICATE-----"
+            value={registryCaCert}
+            onChange={(e) => setRegistryCaCert(e.target.value)}
+            helperText={t('wizard.registryCaHelper')}
+            multiline
+            minRows={3}
+            maxRows={10}
+            size="small"
+            fullWidth
+            slotProps={{ htmlInput: { style: { fontFamily: 'monospace', fontSize: 12 } } }}
+          />
+        </Box>
+      )}
+      {imageMode === 'local' && (
+        <Alert severity="info" sx={{ mt: 1.5 }}>
+          {t.rich('wizard.imageSourceLocalHint', {
+            code: (chunks) => <Box component="code" sx={{ fontFamily: 'monospace', px: 0.5, bgcolor: 'action.hover', borderRadius: 0.5 }}>{chunks}</Box>,
+          })}
+        </Alert>
+      )}
+    </Box>
+  )
+
   const renderNetwork = () => (
     <Box>
       <Typography variant="h6" sx={{ mb: 2 }}>{t('wizard.networkTitle')}</Typography>
@@ -532,6 +695,7 @@ export default function HaDeployWizard({
       <Alert severity="info" sx={{ mt: 2 }}>
         {t('wizard.networkNotice')}
       </Alert>
+      {renderImageSource()}
     </Box>
   )
 
@@ -582,6 +746,33 @@ export default function HaDeployWizard({
             values: results.map(r => r.ping[target] ?? undefined),
           })
         }
+
+        // Structured pre-flight checks: one row per distinct name, in
+        // first-seen order across nodes.
+        const checkLabel = (name: string) => (KNOWN_CHECK_NAMES.has(name) ? t(`wizard.checkName.${name}`) : name)
+        const statusIcon = (status: string) => {
+          if (status === 'pass') return checkIcon(true)
+          if (status === 'fail') return checkIcon(false)
+          if (status === 'info') {
+            return <i className="ri-information-line" aria-label={status} style={{ color: 'var(--mui-palette-text-secondary)', fontSize: 18 }} />
+          }
+          return <i className="ri-error-warning-line" aria-label={status} style={{ color: 'var(--mui-palette-warning-main)', fontSize: 18 }} />
+        }
+        const structuredNames = [...new Set(results.flatMap(r => (r.checks ?? []).map(c => c.name)))]
+        const globalChecks = (validationResult.global.checks ?? []).filter(c => !SKIPPED_GLOBAL_CHECKS.has(c.name))
+        const issues: Record<'error' | 'warning' | 'info', string[]> = { error: [], warning: [], info: [] }
+        const addIssue = (who: string, c: CheckResult) => {
+          if (c.status === 'pass') return
+          const severity = c.status === 'fail' ? 'error' : c.status === 'info' ? 'info' : 'warning'
+          issues[severity].push(`${who}: ${c.detail || checkLabel(c.name)}`)
+        }
+        results.forEach((r, i) => (r.checks ?? []).forEach(c => addIssue(nodes[i]?.name || r.ip, c)))
+        globalChecks.forEach(c => addIssue(checkLabel(c.name), c))
+        const issueTitles: Record<'error' | 'warning' | 'info', string | null> = {
+          error: t('wizard.checkIssuesBlocking'),
+          warning: t('wizard.checkIssuesWarnings'),
+          info: null,
+        }
         return (
           <Box>
             <TableContainer>
@@ -615,6 +806,19 @@ export default function HaDeployWizard({
                       ))}
                     </TableRow>
                   ))}
+                  {structuredNames.map((name) => (
+                    <TableRow key={`check-${name}`}>
+                      <TableCell sx={{ py: 0.75 }}>{checkLabel(name)}</TableCell>
+                      {results.map((r, i) => {
+                        const c = r.checks?.find(x => x.name === name)
+                        return (
+                          <TableCell key={i} align="center" sx={{ py: 0.75 }}>
+                            {c ? statusIcon(c.status) : <Typography variant="caption" color="text.secondary">{t('wizard.notAvailable')}</Typography>}
+                          </TableCell>
+                        )
+                      })}
+                    </TableRow>
+                  ))}
                   <TableRow>
                     <TableCell sx={{ py: 0.75, fontWeight: 600, borderTop: 2, borderColor: 'divider' }}>{t('wizard.vipAvailable', { vip })}</TableCell>
                     {results.map((_, i) => (
@@ -635,6 +839,29 @@ export default function HaDeployWizard({
                 </TableBody>
               </Table>
             </TableContainer>
+            {globalChecks.length > 0 && (
+              <Box sx={{ mt: 1.5 }}>
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontWeight: 600, mb: 0.5 }}>
+                  {t('wizard.globalChecksTitle')}
+                </Typography>
+                {globalChecks.map(c => (
+                  <Box key={c.name} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    {statusIcon(c.status)}
+                    <Typography variant="body2">{checkLabel(c.name)}</Typography>
+                  </Box>
+                ))}
+              </Box>
+            )}
+            {(['error', 'warning', 'info'] as const).filter(sev => issues[sev].length > 0).map(sev => (
+              <Alert key={sev} severity={sev} sx={{ mt: 1.5 }}>
+                {issueTitles[sev] && <Typography variant="body2" sx={{ fontWeight: 600 }}>{issueTitles[sev]}</Typography>}
+                <Box component="ul" sx={{ m: 0, pl: 2.5 }}>
+                  {issues[sev].map((line, i) => (
+                    <Typography key={i} component="li" variant="body2">{line}</Typography>
+                  ))}
+                </Box>
+              </Alert>
+            ))}
             {validationPassed && (
               <Alert severity="success" sx={{ mt: 2 }}>{t('wizard.allChecksPassed')}</Alert>
             )}

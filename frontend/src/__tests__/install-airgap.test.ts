@@ -6,6 +6,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { SCRIPT, makeAirgapSandbox, makeFakeBundle, readEnvFile, removeAirgapSandbox, runAirgap, type AirgapSandbox } from './setup/airgap-sandbox'
 
+const REPO = join(__dirname, '..', '..', '..')
+
 let sb: AirgapSandbox
 beforeEach(() => { sb = makeAirgapSandbox() })
 afterEach(() => { removeAirgapSandbox(sb) })
@@ -78,6 +80,91 @@ describe('bundle', () => {
     const r = runAirgap(sb, ['bundle', '--edition', 'enterprise', '--version', '1.4.10', '--output', out], sb.dir)
     expect(r.status, r.stdout + r.stderr).toBe(0)
     expect(sb.argv().some(a => a.includes('https://raw.githubusercontent.com/adminsyspro/proxcenter-ui/v1.4.10/docker-compose.enterprise.yml'))).toBe(true)
+    expect(sb.argv().some(a => a.includes('https://raw.githubusercontent.com/adminsyspro/proxcenter-ui/v1.4.10/docker-compose.ha.yml'))).toBe(true)
+  })
+
+  it('enterprise also packs the HA images of docker-compose.ha.yml in the same images.tar and manifest', () => {
+    const out = join(sb.dir, 'dist')
+    mkdirSync(out)
+    const editionImages = [
+      'ghcr.io/adminsyspro/proxcenter-frontend:1.4.10',
+      'ghcr.io/adminsyspro/proxcenter-orchestrator:1.4.10',
+      'ghcr.io/adminsyspro/proxcenter-weasyprint:1.4.10',
+      'postgres:16-alpine',
+    ]
+    const r = runAirgap(
+      sb,
+      ['bundle', '--edition', 'enterprise', '--version', '1.4.10',
+        '--compose', join(REPO, 'docker-compose.enterprise.yml'), '--ha-compose', join(REPO, 'docker-compose.ha.yml'),
+        '--output', out, '--no-pull'],
+      sb.dir,
+      { FAKE_IMAGES: editionImages.join('\n'), REGISTRY: 'evil.example.com', VERSION: '9.9.9' },
+    )
+    expect(r.status, r.stdout + r.stderr).toBe(0)
+
+    const argv = sb.argv()
+    // Pinned like the edition compose: an exported REGISTRY/VERSION is ignored.
+    expect(argv).toContain('compose config -f docker-compose.ha.yml env COMPOSE_FILE=docker-compose.ha.yml REGISTRY=ghcr.io/adminsyspro VERSION=1.4.10')
+    expect(argv.some(a => a.startsWith('curl'))).toBe(false)
+
+    const ha = [
+      'ghcr.io/adminsyspro/etcd:v3.5.17',
+      'ghcr.io/adminsyspro/haproxy:2.9-alpine',
+      'ghcr.io/adminsyspro/proxcenter-keepalived:1.4.10',
+      'ghcr.io/adminsyspro/proxcenter-patroni:1.4.10',
+    ]
+    const all = [...new Set([...editionImages, ...ha])].sort()
+    expect(argv.some(a => a.startsWith(`docker save ${all.join(' ')} -o `)), argv.join('\n')).toBe(true)
+
+    const tarball = join(out, 'proxcenter-enterprise-1.4.10.tar.gz')
+    const list = spawnSync('tar', ['tzf', tarball], { encoding: 'utf8' }).stdout
+    expect(list).not.toContain('docker-compose.ha.yml') // the orchestrator renders its own
+    const extract = join(sb.dir, 'x')
+    mkdirSync(extract)
+    spawnSync('tar', ['xzf', tarball, '-C', extract])
+    const bdir = join(extract, 'proxcenter-enterprise-1.4.10')
+    const names = JSON.parse(readFileSync(join(bdir, 'manifest.json'), 'utf8')).images.map((i: any) => i.name)
+    expect(names).toEqual(all)
+    for (const img of ha) expect(names, img).toContain(img)
+    const readme = readFileSync(join(bdir, 'README.txt'), 'utf8')
+    expect(readme).toContain('sudo ./install-airgap.sh load')
+    expect(readme).toMatch(/nodes 2 and 3/)
+  })
+
+  it('community ignores --ha-compose: no HA resolution, no HA image', () => {
+    const out = join(sb.dir, 'dist')
+    mkdirSync(out)
+    const compose = join(sb.dir, 'docker-compose.community.yml')
+    spawnSync('bash', ['-c', `printf '%s' "$FAKE_COMPOSE_BODY" > ${compose}`], { env: sb.env })
+    const r = runAirgap(
+      sb,
+      ['bundle', '--edition', 'community', '--version', '1.4.10', '--compose', compose, '--ha-compose', join(REPO, 'docker-compose.ha.yml'), '--output', out, '--no-pull'],
+      sb.dir,
+    )
+    expect(r.status, r.stdout + r.stderr).toBe(0)
+    expect(r.stdout).toMatch(/--ha-compose ignored/)
+    expect(sb.argv().some(a => a.startsWith('compose config -f'))).toBe(false)
+    const extract = join(sb.dir, 'x')
+    mkdirSync(extract)
+    spawnSync('tar', ['xzf', join(out, 'proxcenter-community-1.4.10.tar.gz'), '-C', extract])
+    const bdir = join(extract, 'proxcenter-community-1.4.10')
+    const names = JSON.parse(readFileSync(join(bdir, 'manifest.json'), 'utf8')).images.map((i: any) => i.name)
+    expect(names).toEqual(['ghcr.io/adminsyspro/proxcenter-frontend:1.4.10', 'postgres:16-alpine'])
+    expect(readFileSync(join(bdir, 'README.txt'), 'utf8')).not.toContain('install-airgap.sh load')
+  })
+
+  it('fails loudly when the HA compose cannot be resolved, before saving anything', () => {
+    const out = join(sb.dir, 'dist')
+    mkdirSync(out)
+    const r = runAirgap(
+      sb,
+      ['bundle', '--edition', 'enterprise', '--version', '1.4.10', '--compose', join(REPO, 'docker-compose.enterprise.yml'), '--ha-compose', join(REPO, 'docker-compose.ha.yml'), '--output', out, '--no-pull'],
+      sb.dir,
+      { FAKE_HA_CONFIG_RC: '15' },
+    )
+    expect(r.status).toBe(1)
+    expect(r.stderr).toMatch(/docker compose config failed on docker-compose\.ha\.yml/)
+    expect(sb.argv().some(a => a.startsWith('docker save'))).toBe(false)
   })
 
   it('refuses a version that is not X.Y.Z and an unknown edition', () => {
@@ -480,6 +567,20 @@ describe('upgrade', () => {
     expect(stripChanging(readFileSync(join(sb.installDir, '.env'), 'utf8'))).toEqual(stripChanging(beforeRaw))
   })
 
+  it('refuses on a converted HA node (docker-compose.ha.yml present), before touching anything', () => {
+    installedEnv()
+    writeFileSync(join(sb.installDir, 'docker-compose.ha.yml'), 'services: {}\n')
+    const bdir = makeFakeBundle(sb, { edition: 'enterprise', version: '1.4.10' })
+    const r = runAirgap(sb, ['upgrade', '--install-dir', sb.installDir, '--health-timeout', '5'], bdir)
+    expect(r.status).toBe(1)
+    expect(r.stderr).toMatch(/air-gapped upgrade of an HA cluster is not supported by this script/)
+    expect(r.stderr).toMatch(/install-airgap\.sh load/)
+    expect(r.stderr).toContain('https://docs.proxcenter.io/getting-started/air-gapped-installation')
+    const argv = sb.argv()
+    expect(argv.some(a => a.startsWith('docker load') || a.includes('pg_dump') || a.startsWith('docker compose up'))).toBe(false)
+    expect(readEnvFile(join(sb.installDir, '.env')).VERSION).toBe('1.4.9')
+  })
+
   it('refuses when there is no installation, and when the edition differs', () => {
     const bdir = makeFakeBundle(sb, { edition: 'enterprise' })
     let r = runAirgap(sb, ['upgrade', '--install-dir', sb.installDir], bdir)
@@ -596,6 +697,47 @@ describe('upgrade', () => {
     expect(r.stdout).not.toMatch(/gunzip -c/)
     expect(r.stdout).not.toMatch(/DROP SCHEMA/)
     expect(r.stdout).toMatch(/docker compose stop frontend(?! orchestrator)/)
+  })
+})
+
+describe('load (HA nodes 2 and 3)', () => {
+  it('verifies the checksums and loads every manifest image, installing nothing', () => {
+    const images = [
+      'ghcr.io/adminsyspro/etcd:v3.5.17',
+      'ghcr.io/adminsyspro/proxcenter-frontend:1.4.10',
+      'ghcr.io/adminsyspro/proxcenter-patroni:1.4.10',
+      'postgres:16-alpine',
+    ]
+    const bdir = makeFakeBundle(sb, { edition: 'enterprise', version: '1.4.10', images })
+    const r = runAirgap(sb, ['load'], bdir)
+    expect(r.status, r.stdout + r.stderr).toBe(0)
+    expect(r.stdout).toMatch(/Checksums verified/)
+    expect(r.stdout).toMatch(/ready for the HA conversion on this node/)
+    const argv = sb.argv()
+    expect(argv).toContain(`docker load -i ${join(bdir, 'images.tar')}`)
+    for (const img of images) expect(argv, img).toContain(`docker image inspect ${img}`)
+    expect(argv.some(a => /^docker (compose up|volume create|run|pull|push|tag) /.test(a))).toBe(false)
+    expect(existsSync(sb.installDir)).toBe(false)
+    expect(readFileSync(sb.env.AIRGAP_LOAD_LOG, 'utf8')).toContain('install-airgap.sh load')
+  })
+
+  it('refuses a corrupted bundle before loading anything', () => {
+    const bdir = makeFakeBundle(sb, { edition: 'enterprise' })
+    writeFileSync(join(bdir, 'images.tar'), 'tampered\n')
+    const r = runAirgap(sb, ['load'], bdir)
+    expect(r.status).toBe(1)
+    expect(r.stderr).toMatch(/Checksum verification failed/)
+    expect(sb.argv().some(a => a.startsWith('docker load'))).toBe(false)
+  })
+
+  it('fails outside an extracted bundle and on an unknown option', () => {
+    let r = runAirgap(sb, ['load'], sb.dir)
+    expect(r.status).toBe(1)
+    expect(r.stderr).toMatch(/manifest\.json not found next to/)
+    const bdir = makeFakeBundle(sb)
+    r = runAirgap(sb, ['load', '--install-dir', '/opt/x'], bdir)
+    expect(r.status).toBe(1)
+    expect(r.stderr).toMatch(/Unknown option: --install-dir/)
   })
 })
 

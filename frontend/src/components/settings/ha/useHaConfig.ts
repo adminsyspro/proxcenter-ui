@@ -5,10 +5,19 @@ export interface HaConfig {
   vip: string
   vipInterface: string
   externalUrl?: string
+  imageSource?: HaImageSource
   deploymentState: 'idle' | 'deploying' | 'deployed' | 'failed'
   deploymentStep: number
   deployedAt: string | null
   nodes: HaNodeConfig[]
+}
+
+export type HaImageSourceMode = '' | 'online' | 'registry' | 'local'
+
+export interface HaImageSource {
+  mode: HaImageSourceMode
+  registry?: string
+  caCert?: string
 }
 
 export interface HaNodeConfig {

@@ -5,16 +5,22 @@
 # Builds a self-contained bundle on a connected host, and installs or
 # upgrades ProxCenter from it on a host with no internet access (ui#956).
 #
-#   ./install-airgap.sh bundle --edition <community|enterprise> --version <X.Y.Z> [--compose <file>] [--output <dir>] [--no-pull]
+#   ./install-airgap.sh bundle --edition <community|enterprise> --version <X.Y.Z> [--compose <file>] [--ha-compose <file>] [--output <dir>] [--no-pull]
 #   sudo ./install-airgap.sh install [--license <path to .key file>] [--install-dir /opt/proxcenter] [--registry <host/namespace>]
 #   sudo ./install-airgap.sh upgrade [--install-dir /opt/proxcenter] [--skip-db-backup]
+#   sudo ./install-airgap.sh load
 #   (or `sudo bash install-airgap.sh ...` when the bundle sits on media without the exec bit)
 #
-# install and upgrade run from the extracted bundle directory and find the
+# An Enterprise bundle also carries the images of the 3-node HA control
+# plane (docker-compose.ha.yml): load puts them on HA nodes 2 and 3, where
+# nothing is installed, before the conversion.
+#
+# install, upgrade and load run from the extracted bundle directory and find the
 # other files next to this script. They need bash, coreutils, gzip,
 # sha256sum and Docker Engine 24+ with the compose plugin already installed
 # (openssl optional): no curl, no jq, nothing is downloaded on the isolated
-# host. bundle also needs curl when --compose is not given.
+# host. bundle also needs curl when --compose (or, for Enterprise,
+# --ha-compose) is not given.
 # ============================================
 set -Eeuo pipefail
 
@@ -76,16 +82,21 @@ trap on_error ERR
 usage() {
     cat <<USAGE
 Usage:
-  $0 bundle  --edition <community|enterprise> --version <X.Y.Z> [--compose <file>] [--output <dir>] [--no-pull]
+  $0 bundle  --edition <community|enterprise> --version <X.Y.Z> [--compose <file>] [--ha-compose <file>] [--output <dir>] [--no-pull]
   $0 install [--license <path to .key file>] [--install-dir <dir>] [--registry <host/namespace>] [--health-timeout <s>]
   $0 upgrade [--install-dir <dir>] [--skip-db-backup] [--health-timeout <s>]
+  $0 load
 
 bundle runs on a connected host already logged in to ghcr.io (Enterprise).
 --no-pull packs the images already present in the local Docker daemon
 instead of pulling them (CI build jobs, or a local build with no registry
 token at hand).
-install and upgrade run as root from the extracted bundle directory, on the
-air-gapped host, and never touch the network.
+An Enterprise bundle also packs the images of the 3-node HA control plane,
+resolved from --ha-compose (default: docker-compose.ha.yml downloaded at the
+tag); --ha-compose is ignored for Community.
+install, upgrade and load run as root from the extracted bundle directory, on
+the air-gapped host, and never touch the network. load only verifies and
+loads the images: run it on HA nodes 2 and 3 before the HA conversion.
 USAGE
     exit 1
 }
@@ -242,12 +253,13 @@ BANNER
 # ---------- bundle ----------
 
 cmd_bundle() {
-    local edition="" version="" compose="" output="." no_pull=false
+    local edition="" version="" compose="" ha_compose="" output="." no_pull=false
     while [[ $# -gt 0 ]]; do
         case $1 in
             --edition) edition="$2"; shift 2 ;;
             --version) version="$2"; shift 2 ;;
             --compose) compose="$2"; shift 2 ;;
+            --ha-compose) ha_compose="$2"; shift 2 ;;
             --output) output="$2"; shift 2 ;;
             --no-pull) no_pull=true; shift ;;
             -h|--help) usage ;;
@@ -282,6 +294,21 @@ cmd_bundle() {
         curl -fsSL --connect-timeout 15 --max-time 60 "$url" -o "$stage/docker-compose.yml" || log_error "Cannot download $url"
         log_success "Downloaded docker-compose.$edition.yml at tag v$version"
     fi
+    # Enterprise only: the HA compose is read for its image list and nothing
+    # else. It stays out of $stage (the orchestrator renders its own compose
+    # on each node at conversion time), so it lands in $work.
+    if [ "$edition" = "enterprise" ]; then
+        if [ -n "$ha_compose" ]; then
+            cp "$ha_compose" "$work/docker-compose.ha.yml"
+            log_success "Using $ha_compose for the HA images"
+        else
+            local ha_url="$RAW_BASE/v$version/docker-compose.ha.yml"
+            curl -fsSL --connect-timeout 15 --max-time 60 "$ha_url" -o "$work/docker-compose.ha.yml" || log_error "Cannot download $ha_url"
+            log_success "Downloaded docker-compose.ha.yml at tag v$version"
+        fi
+    elif [ -n "$ha_compose" ]; then
+        log_info "--ha-compose ignored: the Community edition has no HA control plane"
+    fi
 
     if [ "$no_pull" = true ]; then step 2 "Resolving images already present locally"; else step 2 "Resolving and pulling images"; fi
     # The compose declares ${POSTGRES_PASSWORD:?...}: give config a throwaway value.
@@ -297,6 +324,22 @@ cmd_bundle() {
         log_error "docker compose config failed: $(tr '\n' ' ' < "$images_err")"
     fi
     [ -n "$images" ] || log_error "docker compose config --images returned nothing"
+    if [ "$edition" = "enterprise" ]; then
+        # Same pinning as above. -f and a cd into $work (which holds no .env)
+        # keep a stray .env next to the source file out of the resolution;
+        # the per-node values the HA compose interpolates without a default
+        # get throwaway ones so config does not warn about them.
+        local ha_images ha_err="$work/compose-config-ha.err"
+        if ! ha_images=$(cd "$work" && COMPOSE_FILE=docker-compose.ha.yml REGISTRY=ghcr.io/adminsyspro VERSION="$version" \
+                POSTGRES_PASSWORD=bundle APP_SECRET=bundle NEXTAUTH_SECRET=bundle ORCHESTRATOR_API_KEY=bundle \
+                NODE_NAME=bundle NODE_IP=127.0.0.1 VIP=127.0.0.1 PEER1_IP=127.0.0.1 PEER2_IP=127.0.0.1 PEER3_IP=127.0.0.1 \
+                docker compose -f docker-compose.ha.yml config --images 2>"$ha_err" | sed '/^[[:space:]]*$/d' | sort -u); then
+            log_error "docker compose config failed on docker-compose.ha.yml: $(tr '\n' ' ' < "$ha_err")"
+        fi
+        [ -n "$ha_images" ] || log_error "docker compose config --images returned nothing for docker-compose.ha.yml"
+        # One images.tar for everything: the HA images join the edition ones.
+        images=$(printf '%s\n%s\n' "$images" "$ha_images" | sed '/^[[:space:]]*$/d' | sort -u)
+    fi
     local img entries=""
     while IFS= read -r img; do
         if [ "$no_pull" = true ]; then
@@ -334,8 +377,17 @@ cmd_bundle() {
         echo "  ]"
         echo "}"
     } > "$stage/manifest.json"
-    local install_line="sudo ./install-airgap.sh install"
-    if [ "$edition" = "enterprise" ]; then install_line="sudo ./install-airgap.sh install --license /path/to/license.key"; fi
+    local install_line="sudo ./install-airgap.sh install" ha_lines=""
+    if [ "$edition" = "enterprise" ]; then
+        install_line="sudo ./install-airgap.sh install --license /path/to/license.key"
+        ha_lines="
+3-node HA control plane: this bundle also holds the HA images. Install on
+node 1 as above; on nodes 2 and 3 (nothing installed there), copy and extract
+this bundle, then run before the HA conversion:
+
+  sudo ./install-airgap.sh load        # verify and load the images only
+"
+    fi
     cat > "$stage/README.txt" <<README
 ProxCenter $edition $version, air-gapped bundle
 
@@ -344,7 +396,7 @@ from this directory:
 
   $install_line     # fresh install
   sudo ./install-airgap.sh upgrade     # upgrade an existing /opt/proxcenter
-
+$ha_lines
 On media without the exec bit (FAT, noexec mount), run the same commands as
 "sudo bash install-airgap.sh ..." instead of "sudo ./install-airgap.sh ...".
 
@@ -804,6 +856,11 @@ cmd_upgrade() {
     if [ ! -f "$INSTALL_DIR/.env" ] || [ ! -f "$INSTALL_DIR/docker-compose.yml" ]; then
         log_error "No existing installation at $INSTALL_DIR (.env or docker-compose.yml missing). Use: sudo $SCRIPT_PATH install"
     fi
+    # A converted HA node: restarting its single-node docker-compose.yml here
+    # would fight the HA stack the orchestrator rendered.
+    if [ -f "$INSTALL_DIR/docker-compose.ha.yml" ]; then
+        log_error "$INSTALL_DIR belongs to a converted HA cluster (docker-compose.ha.yml present): the air-gapped upgrade of an HA cluster is not supported by this script. Run 'sudo ./install-airgap.sh load' from the new bundle on every node, then follow the HA upgrade procedure of the documentation: https://docs.proxcenter.io/getting-started/air-gapped-installation"
+    fi
     local edition version old_version installed
     edition=$(manifest_get edition); version=$(manifest_get version)
     installed=$(installed_edition)
@@ -855,6 +912,49 @@ cmd_upgrade() {
     echo ""
 }
 
+# ---------- load (HA nodes 2 and 3) ----------
+
+# cmd_load: verify and load the bundle images only, on an HA node where
+# nothing is installed (no INSTALL_DIR, no .env), so the HA conversion finds
+# every image locally. The log goes under /var/log: the bundle may sit on
+# read-only media. AIRGAP_LOAD_LOG overrides it (tests).
+cmd_load() {
+    local invoked_args=("$@")
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -h|--help) usage ;;
+            *) log_error "Unknown option: $1" ;;
+        esac
+    done
+    require_root
+    require_docker
+    [ -f "$SCRIPT_DIR/manifest.json" ] || log_error "manifest.json not found next to $SCRIPT_PATH. Run the install-airgap.sh shipped inside the extracted bundle."
+    local edition version
+    edition=$(manifest_get edition); version=$(manifest_get version)
+    if [ -z "$edition" ] || [ -z "$version" ]; then log_error "manifest.json has no edition/version"; fi
+    init_log "${AIRGAP_LOAD_LOG:-/var/log/proxcenter-airgap-load.log}" load "${invoked_args[@]+"${invoked_args[@]}"}"
+    TOTAL_STEPS=3
+    print_banner "${edition^} Edition" "load $version"
+
+    step 1 "Verifying the bundle"
+    verify_checksums
+
+    step 2 "Loading images"
+    load_images
+
+    step 3 "Done"
+    echo ""
+    echo -e "${GREEN}${BOLD}  ProxCenter $version images loaded on this node${NC}"
+    echo ""
+    echo -e "    ${BOLD}Images${NC}      $(manifest_images | wc -l | tr -d ' ')"
+    echo -e "    ${BOLD}Duration${NC}    $(format_duration $(( $(date +%s) - START_TIME )))"
+    echo -e "    ${BOLD}Log${NC}         $LOG_FILE"
+    echo ""
+    echo -e "    ${DIM}The images are ready for the HA conversion on this node. Nothing else is installed here:${NC}"
+    echo -e "    ${DIM}once every node has run load, start the conversion from the ProxCenter UI of node 1.${NC}"
+    echo ""
+}
+
 # ---------- main ----------
 
 main() {
@@ -864,6 +964,7 @@ main() {
         bundle) cmd_bundle "$@" ;;
         install) cmd_install "$@" ;;
         upgrade) cmd_upgrade "$@" ;;
+        load) cmd_load "$@" ;;
         -h|--help) usage ;;
         *) echo "Unknown command: $cmd" >&2; usage ;;
     esac

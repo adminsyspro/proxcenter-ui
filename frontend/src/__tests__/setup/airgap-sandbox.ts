@@ -30,6 +30,14 @@ case "$1 $2" in
     if [ -z "$POSTGRES_PASSWORD" ]; then echo "error while interpolating services.postgres.environment: required variable POSTGRES_PASSWORD is missing a value" >&2; exit 1; fi
     # --images: print what FAKE_IMAGES holds, one per line
     printf '%s\\n' $FAKE_IMAGES; exit 0 ;;
+  "compose -f")
+    # bundle's HA image resolution: docker compose -f docker-compose.ha.yml config --images.
+    echo "compose config -f $3 env COMPOSE_FILE=$COMPOSE_FILE REGISTRY=$REGISTRY VERSION=$VERSION" >> "$FAKE_ARGV_LOG"
+    if [ "\${FAKE_HA_CONFIG_RC:-0}" != "0" ]; then echo "fake HA compose config failure (rc=\$FAKE_HA_CONFIG_RC)" >&2; exit "$FAKE_HA_CONFIG_RC"; fi
+    # Resolve the image: lines of the real file with the inline REGISTRY and
+    # VERSION, the way compose interpolates \${REGISTRY:-...} and \${VERSION:-...}.
+    sed -n 's/^[[:space:]]*image:[[:space:]]*//p' "$3" | sed "s|\\\${REGISTRY:-[^}]*}|$REGISTRY|; s|\\\${VERSION:-[^}]*}|$VERSION|"
+    exit 0 ;;
   "compose up"|"compose down") echo " Container proxcenter-frontend Started"; exit \${FAKE_COMPOSE_UP_RC:-0} ;;
   "compose ps")
     if [ "\${FAKE_COMPOSE_PS_RC:-0}" != "0" ]; then echo "fake compose ps failure (rc=\$FAKE_COMPOSE_PS_RC)" >&2; exit "$FAKE_COMPOSE_PS_RC"; fi
@@ -109,6 +117,8 @@ export function makeAirgapSandbox(): AirgapSandbox {
     FAKE_DOCKER_ROOT: dir,
     FAKE_COMPOSE_BODY: 'services:\n  frontend:\n    image: ${REGISTRY:-ghcr.io/adminsyspro}/proxcenter-frontend:${VERSION:-latest}\n',
     AIRGAP_ALLOW_NON_ROOT: '1',
+    // load logs under /var/log by default, not writable without root.
+    AIRGAP_LOAD_LOG: join(dir, 'log', 'proxcenter-airgap-load.log'),
     TERM: 'dumb',
   }
   return {

@@ -11,6 +11,7 @@
     "start": "concurrently \"next start\" \"node ws-proxy.js\"",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
+    "lint:css": "stylelint \"src/**/*.{css,js,jsx,ts,tsx}\"",
     "format": "prettier --write \"src/**/*.{js,jsx,ts,tsx}\"",
     "build:icons": "tsx src/assets/iconify-icons/bundle-icons-css.mjs",
     "postinstall": "npm run build:icons",
@@ -122,7 +123,6 @@
   },
   "resolutions": {
     "rimraf": "5.0.7",
-    "unicorn-magic": "0.1.0",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "confbox": "0.2.4",
@@ -135,7 +135,6 @@
   },
   "overrides": {
     "rimraf": "5.0.7",
-    "unicorn-magic": "0.1.0",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "confbox": "^0.3.1",

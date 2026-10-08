@@ -9,11 +9,11 @@ import { commonLayoutClasses } from '@layouts/utils/layoutClasses'
 
 const StyledMain = styled.main`
   padding: ${themeConfig.layoutPadding}px;
-  padding-bottom: calc(${themeConfig.layoutPadding}px + var(--taskbar-height, 0px));
+  padding-block-end: calc(${themeConfig.layoutPadding}px + var(--taskbar-height, 0px));
   flex: 1;
   display: flex;
   flex-direction: column;
-  transition: padding-bottom 0.2s ease;
+  transition: padding-block-end 0.2s ease;
   overflow-y: auto;
   min-block-size: 0;
 

@@ -272,6 +272,12 @@ export default function TaskDetailDialog({ open, task, onClose }) {
               <Typography variant="caption" sx={{ opacity: 0.5, display: 'block' }}>{t('tasks.detail.user')}</Typography>
               <Typography variant="body2" sx={{ fontWeight: 500 }}>{details?.user || task.user || '—'}</Typography>
             </Box>
+            {task.initiatedBy?.email && (
+              <Box>
+                <Typography variant="caption" sx={{ opacity: 0.5, display: 'block' }}>{t('tasks.detail.initiatedBy')}</Typography>
+                <Typography variant="body2" sx={{ fontWeight: 500 }}>{task.initiatedBy.email}</Typography>
+              </Box>
+            )}
             <Box>
               <Typography variant="caption" sx={{ opacity: 0.5, display: 'block' }}>{t('tasks.detail.duration')}</Typography>
               <Typography variant="body2" sx={{ fontWeight: 500 }}>{details?.duration || task.duration || '—'}</Typography>

@@ -4065,6 +4065,7 @@
       "snapshot": "快照",
       "backup": "备份",
       "restore": "恢复",
+      "consoleOpen": "打开控制台",
       "export": "导出",
       "import": "导入",
       "test": "测试",
@@ -4547,6 +4548,7 @@
     "detail": {
       "node": "节点",
       "user": "用户",
+      "initiatedBy": "发起人",
       "duration": "持续时间",
       "loading": "加载中...",
       "allLogs": "所有日志",

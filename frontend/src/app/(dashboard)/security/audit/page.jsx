@@ -68,6 +68,7 @@ const ACTION_KEYS = {
   snapshot: 'audit.actions.snapshot',
   backup: 'audit.actions.backup',
   restore: 'audit.actions.restore',
+  'console.open': 'audit.actions.consoleOpen',
 
   // Other
   export: 'audit.actions.export',

@@ -6722,6 +6722,14 @@
     "domainNoTarget": "无可迁移目标"
   },
   "usersPage": {
+    "currentRoles": "当前角色",
+    "roleOriginManual": "手动",
+    "rolesManagedByProvider": "这些角色来自 {provider} 组映射，每次登录时重新评估。",
+    "roleOverrideAction": "手动设置",
+    "roleOverrideWarning": "所选角色将替换上方所有角色。之后 {provider} 映射将不再管理此用户的角色，直到在此处清除。",
+    "roleSetManually": "此角色为手动设置：{provider} 组映射不再适用于此用户。",
+    "roleHandBackAction": "交还给 {provider}",
+    "roleHandBackPending": "保存后，{provider} 组映射将在此用户下次登录时分配其角色。",
     "rbacRoles": "RBAC 角色",
     "rbacRole": "RBAC 角色",
     "selectRoles": "选择角色...",

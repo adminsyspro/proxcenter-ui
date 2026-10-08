@@ -49,6 +49,7 @@ import RevokeSingleSessionDialog from '@/components/security/RevokeSingleSession
 import RevokeEverySessionDialog from '@/components/security/RevokeEverySessionDialog'
 import { tooltipSlotProps } from '@/components/settings/ha/tooltipSlotProps'
 import { redirectToLoginOnce } from '@/hooks/useSWRFetch'
+import { assignmentOrigin, summarizeUserRoles } from '@/lib/rbac/userRoleSummary'
 
 /* --------------------------------
    Helpers
@@ -71,45 +72,64 @@ return t ? t('time.daysAgo', { count: Math.floor(diff / 86400) }) : `${Math.floo
    Components
 -------------------------------- */
 
+function roleLabel(role, t) {
+  return t && role.is_system ? t(`rbac.roles.${role.id}`) : role.name
+}
+
 function RoleChip({ roles, t }) {
   const list = Array.isArray(roles) ? roles : []
-  if (list.length === 0) {
+  const { distinctRoles, divergentAcrossTenants } = summarizeUserRoles(list)
+  if (distinctRoles.length === 0) {
     return <Chip size='small' label={t ? t('usersPage.noRole') : 'No role'} variant='outlined' sx={{ opacity: 0.5 }} />
   }
 
-  // Same role on every membership → single chip (the common MSP case).
-  // Divergent roles (e.g. tenant_admin on tenant-1 + tenant_viewer on
-  // tenant-2) get a Multiple chip whose tooltip lists the breakdown so
-  // the operator notices and audits without leaving the row.
-  const distinctRoleIds = new Set(list.map(r => r.id).filter(Boolean))
-  if (distinctRoleIds.size <= 1) {
-    const role = list[0]
+  // Tenants holding different roles (e.g. tenant_admin on tenant-1 +
+  // tenant_viewer on tenant-2) get a warning chip whose tooltip lists the
+  // breakdown, so the operator notices and audits without leaving the row.
+  if (divergentAcrossTenants) {
+    const breakdown = list.map(r => `${r.tenant_name || r.tenant_id || '?'}: ${roleLabel(r, t)}`).join(' · ')
     return (
-      <Chip
-        size='small'
-        label={t && role.is_system ? t(`rbac.roles.${role.id}`) : role.name}
-        sx={{
-          bgcolor: role.color ? `${role.color}20` : undefined,
-          color: role.color || undefined,
-          borderColor: role.color || undefined,
-        }}
-        variant='outlined'
-      />
+      <Tooltip title={breakdown}>
+        <Chip
+          size='small'
+          label={t ? t('usersPage.rolesMixed', { count: distinctRoles.length }) : `${distinctRoles.length} roles`}
+          variant='outlined'
+          color='warning'
+          icon={<i className='ri-error-warning-line' style={{ fontSize: 14 }} />}
+        />
+      </Tooltip>
     )
   }
-  const breakdown = list.map(r => `${r.tenant_name || r.tenant_id || '?'}: ${r.name}`).join(' · ')
+
+  // Same role set everywhere. Several roles there are cumulated grants (SSO
+  // "combine every matching role", issue #1074), a normal state: show the
+  // first one and a counter, the tooltip naming them all.
+  const [first, ...others] = distinctRoles
+  const firstChip = (
+    <Chip
+      size='small'
+      label={roleLabel(first, t)}
+      sx={{
+        bgcolor: first.color ? `${first.color}20` : undefined,
+        color: first.color || undefined,
+        borderColor: first.color || undefined,
+      }}
+      variant='outlined'
+    />
+  )
+  if (others.length === 0) return firstChip
+
   return (
-    <Tooltip title={breakdown}>
-      <Chip
-        size='small'
-        label={t ? t('usersPage.rolesMixed', { count: distinctRoleIds.size }) : `${distinctRoleIds.size} roles`}
-        variant='outlined'
-        color='warning'
-        icon={<i className='ri-error-warning-line' style={{ fontSize: 14 }} />}
-      />
+    <Tooltip title={distinctRoles.map(r => roleLabel(r, t)).join(' · ')}>
+      <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
+        {firstChip}
+        <Chip size='small' variant='outlined' label={`+${others.length}`} />
+      </Box>
     </Tooltip>
   )
 }
+
+const PROVIDER_LABELS = { oidc: 'SSO', ldap: 'LDAP' }
 
 function AuthProviderChip({ provider, t }) {
   if (provider === 'ldap') {
@@ -289,6 +309,10 @@ function UserDialog({ open, onClose, user, onSave, rbacRoles, t, showRbac = true
   const [enabled, setEnabled] = useState(true)
   const [selectedRole, setSelectedRole] = useState(null)
   const [initialRoleId, setInitialRoleId] = useState(null)
+  // The operator chose to take a provider-managed role over (issue #1074).
+  const [overrideProvider, setOverrideProvider] = useState(false)
+  // The operator chose to clear an admin-owned role so the provider maps it again.
+  const [handBackToProvider, setHandBackToProvider] = useState(false)
   const [selectedTenants, setSelectedTenants] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -305,13 +329,22 @@ function UserDialog({ open, onClose, user, onSave, rbacRoles, t, showRbac = true
   // multi-select but still display their current memberships so the
   // operator sees the rule rather than an empty field.
   const tenantPickerDisabled = isEdit && !!user?.is_super_admin
+  const roleSummary = useMemo(() => summarizeUserRoles(isEdit ? user?.roles : []), [isEdit, user])
   // Detect role divergence across tenants. Used in provider view to
   // warn that saving a single role propagates to every membership and
   // overwrites per-tenant differences (typically set via the per-tenant
-  // user list at Settings → Tenants → <X> → users).
-  const rolesAreDivergent = isEdit && Array.isArray(user?.roles)
-    ? new Set(user.roles.map(r => r.id).filter(Boolean)).size > 1
-    : false
+  // user list at Settings → Tenants → <X> → users). Several roles in the
+  // same tenant (SSO cumulative mapping) are not a divergence.
+  const rolesAreDivergent = roleSummary.divergentAcrossTenants
+  // Rows the SSO / LDAP sign-in owns are rewritten at every login. Saving a
+  // role here deletes them and hands the role to the admin for good (see
+  // lib/auth/roleSync), so the picker stays locked until the operator says so.
+  const providerManagedBy = roleSummary.providerManagedBy
+  const roleLockedByProvider = !!providerManagedBy && !overrideProvider
+  // The reverse: an SSO / LDAP account whose role an admin took over. The
+  // provider mapping no longer applies until that role is cleared.
+  const adminOwnsExternalRole = isExternalAuth && !providerManagedBy && roleSummary.hasManualRow
+  const roleChanged = handBackToProvider || (selectedRole?.id ?? null) !== initialRoleId
 
   // Tokens the target created, loaded whenever the dialog edits somebody
   // else. Self-edits cannot reach the Enabled switch at all (see isSelf).
@@ -333,10 +366,10 @@ function UserDialog({ open, onClose, user, onSave, rbacRoles, t, showRbac = true
       // legacy int comparison (=== 1) was always false and pinned the
       // Switch off regardless of the row's real state.
       setEnabled(!!user.enabled)
-      // Divergent roles → leave the picker empty so the operator must
-      // pick a role explicitly (and acknowledge the propagation).
-      const distinctIds = new Set((user.roles || []).map(r => r.id).filter(Boolean))
-      const initialRole = distinctIds.size > 1 ? null : (user.roles?.[0] || null)
+      // Several roles → leave the picker empty so the operator must pick a
+      // role explicitly (and acknowledge it replaces all of them).
+      const { distinctRoles } = summarizeUserRoles(user.roles)
+      const initialRole = distinctRoles.length > 1 ? null : (distinctRoles[0] || null)
       setSelectedRole(initialRole)
       setInitialRoleId(initialRole?.id ?? null)
       setSelectedTenants(Array.isArray(user.tenants) ? user.tenants.map(t2 => t2.id) : [])
@@ -352,6 +385,8 @@ function UserDialog({ open, onClose, user, onSave, rbacRoles, t, showRbac = true
 
     setError('')
     setDeleteApiTokens(false)
+    setOverrideProvider(false)
+    setHandBackToProvider(false)
   }, [user, open])
 
   // Clear the role state when the selected tenants make the current role
@@ -445,7 +480,7 @@ return
             // This avoids re-sending a protected role (super_admin /
             // provider_admin) the backend would refuse, when the dialog is
             // just being used to edit other fields.
-            ...(enableTenantMgmt && showRbac && !isSelf && (selectedRole?.id ?? null) !== initialRoleId
+            ...(enableTenantMgmt && showRbac && !isSelf && roleChanged
               ? { roleId: selectedRole?.id ?? null }
               : {}),
             // Gated on showTokenWarning, not on the checkbox alone: ticking
@@ -490,11 +525,14 @@ return
       // Provider view (default tenant + Enterprise) handled the role
       // propagation server-side via the PATCH `roleId` field above.
       // Skip the per-assignment fallback to avoid double writes.
-      if (!(isEdit && enableTenantMgmt)) {
+      //
+      // An edit that leaves the role alone must not touch the assignments:
+      // a user holding several cumulated roles opens with an empty picker,
+      // and rewriting from it erased every role on a mere rename (#1074).
+      if (!(isEdit && enableTenantMgmt) && (!isEdit || roleChanged)) {
         // Tenant-scoped view (or create): drop existing assignments
         // visible to this caller and create a fresh one in the current
-        // tenant. Same behaviour as before — still one role per tenant
-        // for non-provider operators.
+        // tenant. Still one role per tenant for non-provider operators.
         if (isEdit && user.roles) {
           for (const role of user.roles) {
             if (role.assignment_id) {
@@ -627,12 +665,134 @@ return
             ? rbacRoles.filter(r => !TENANT_FORBIDDEN_ROLE_IDS.has(r.id))
             : rbacRoles).filter(r => r.id !== 'role_super_admin' && r.id !== 'role_provider_admin')
 
+          const providerLabel = PROVIDER_LABELS[providerManagedBy || user?.auth_provider] || 'SSO'
+          const originLabel = origin =>
+            origin === 'manual'
+              ? (t ? t('usersPage.roleOriginManual') : 'manual')
+              : PROVIDER_LABELS[origin]
+
           return (
           <>
+          {isEdit && (user?.roles || []).length > 0 && (
+            <Box sx={{ mb: 2 }}>
+              <Typography variant='caption' sx={{ display: 'block', mb: 0.75, opacity: 0.7 }}>
+                {t ? t('usersPage.currentRoles') : 'Current roles'}
+              </Typography>
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
+                {user.roles.map(r => (
+                  <Chip
+                    key={r.assignment_id || `${r.tenant_id}-${r.id}`}
+                    size='small'
+                    variant='outlined'
+                    sx={{ borderColor: r.color || undefined }}
+                    label={
+                      <>
+                        {roleLabel(r, t)}
+                        {enableTenantMgmt && r.tenant_name ? ` · ${r.tenant_name}` : ''}
+                        <Box component='span' sx={{ ml: 0.75, opacity: 0.6 }}>
+                          {originLabel(assignmentOrigin(r.assignment_id))}
+                        </Box>
+                      </>
+                    }
+                  />
+                ))}
+              </Box>
+            </Box>
+          )}
+
+          {roleLockedByProvider && (
+            <Alert
+              severity='info'
+              icon={<i className='ri-information-line' />}
+              sx={{ mb: 2 }}
+              action={
+                <Button size='small' color='inherit' sx={{ whiteSpace: 'nowrap' }} onClick={() => setOverrideProvider(true)}>
+                  {t ? t('usersPage.roleOverrideAction') : 'Set manually'}
+                </Button>
+              }
+            >
+              {t
+                ? t('usersPage.rolesManagedByProvider', { provider: providerLabel })
+                : `These roles come from the ${providerLabel} group mapping and are re-evaluated at every sign-in.`}
+            </Alert>
+          )}
+
+          {providerManagedBy && overrideProvider && (
+            <Alert
+              severity='warning'
+              icon={<i className='ri-error-warning-line' />}
+              sx={{ mb: 2 }}
+              action={
+                <Button
+                  size='small'
+                  color='inherit'
+                  sx={{ whiteSpace: 'nowrap' }}
+                  onClick={() => {
+                    setOverrideProvider(false)
+                    setSelectedRole((user?.roles || []).find(r => r.id === initialRoleId) || null)
+                  }}
+                >
+                  {t ? t('common.cancel') : 'Cancel'}
+                </Button>
+              }
+            >
+              {t
+                ? t('usersPage.roleOverrideWarning', { provider: providerLabel })
+                : `The role you pick replaces every role above. The ${providerLabel} mapping then stops managing this user's role until it is cleared here.`}
+            </Alert>
+          )}
+
+          {adminOwnsExternalRole && (
+            <Alert
+              severity='info'
+              icon={<i className='ri-information-line' />}
+              sx={{ mb: 2 }}
+              action={
+                handBackToProvider ? (
+                  <Button
+                    size='small'
+                    color='inherit'
+                    sx={{ whiteSpace: 'nowrap' }}
+                    onClick={() => {
+                      setHandBackToProvider(false)
+                      setSelectedRole((user?.roles || []).find(r => r.id === initialRoleId) || null)
+                    }}
+                  >
+                    {t ? t('common.cancel') : 'Cancel'}
+                  </Button>
+                ) : (
+                  <Button
+                    size='small'
+                    color='inherit'
+                    sx={{ whiteSpace: 'nowrap' }}
+                    onClick={() => {
+                      setHandBackToProvider(true)
+                      setSelectedRole(null)
+                    }}
+                  >
+                    {t ? t('usersPage.roleHandBackAction', { provider: providerLabel }) : `Hand back to ${providerLabel}`}
+                  </Button>
+                )
+              }
+            >
+              {handBackToProvider
+                ? (t
+                    ? t('usersPage.roleHandBackPending', { provider: providerLabel })
+                    : `Once saved, the ${providerLabel} group mapping assigns this user's roles at the next sign-in.`)
+                : (t
+                    ? t('usersPage.roleSetManually', { provider: providerLabel })
+                    : `This role was set manually: the ${providerLabel} group mapping no longer applies to this user.`)}
+            </Alert>
+          )}
+
           <Autocomplete
             options={visibleRoles}
+            disabled={roleLockedByProvider}
             value={selectedRole}
-            onChange={(_, newValue) => setSelectedRole(newValue)}
+            onChange={(_, newValue) => {
+              setSelectedRole(newValue)
+              setHandBackToProvider(false)
+            }}
             getOptionLabel={(option) => t && option.is_system ? t(`rbac.roles.${option.id}`) : option.name}
             isOptionEqualToValue={(option, value) => option.id === value.id}
             renderInput={(params) => (
@@ -1304,6 +1464,7 @@ return () => setPageInfo('', '', '')
           id: a.role?.id || a.role_id,
           name: a.role?.name || a.role_name,
           color: a.role?.color || a.role_color,
+          is_system: !!a.role?.is_system,
           tenant_id: a.tenant_id || null,
           tenant_name: a.tenant_name || null,
           assignment_id: a.id,

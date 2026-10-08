@@ -6670,6 +6670,16 @@
     "domainNoTarget": "kein Ziel möglich"
   },
   "usersPage": {
+    "currentRoles": "Aktuelle Rollen",
+    "roleOriginManual": "manuell",
+    "rolesManagedByProvider": "Diese Rollen stammen aus der {provider}-Gruppenzuordnung und werden bei jeder Anmeldung neu bewertet.",
+    "roleOverrideAction": "Manuell festlegen",
+    "roleOverrideWarning": "Die gewählte Rolle ersetzt alle obigen Rollen. Die {provider}-Zuordnung verwaltet die Rolle dieses Benutzers dann nicht mehr, bis sie hier entfernt wird.",
+    "roleSetManually": "Diese Rolle wurde manuell festgelegt: Die {provider}-Gruppenzuordnung gilt für diesen Benutzer nicht mehr.",
+    "roleHandBackAction": "An {provider} zurückgeben",
+    "roleHandBackPending": "Nach dem Speichern weist die {provider}-Gruppenzuordnung die Rollen dieses Benutzers bei der nächsten Anmeldung zu.",
+    "rolesMixed": "{count} Rollen",
+    "rolesDivergentWarning": "Die Rollen unterscheiden sich zwischen den Tenants dieses Benutzers. Wenn Sie hier eine Rolle speichern, werden alle Zuweisungen pro Tenant überschrieben.",
     "rbacRoles": "RBAC-Rollen",
     "rbacRole": "RBAC-Rolle",
     "selectRoles": "auswählen roles...",

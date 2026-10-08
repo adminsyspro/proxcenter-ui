@@ -6718,6 +6718,14 @@
     "domainNoTarget": "이동할 대상 없음"
   },
   "usersPage": {
+    "currentRoles": "현재 역할",
+    "roleOriginManual": "수동",
+    "rolesManagedByProvider": "이 역할은 {provider} 그룹 매핑에서 부여되며 로그인할 때마다 다시 평가됩니다.",
+    "roleOverrideAction": "수동으로 설정",
+    "roleOverrideWarning": "선택한 역할이 위의 모든 역할을 대체합니다. 이후 여기서 해제할 때까지 {provider} 매핑이 이 사용자의 역할을 관리하지 않습니다.",
+    "roleSetManually": "이 역할은 수동으로 설정되었습니다. {provider} 그룹 매핑이 더 이상 이 사용자에게 적용되지 않습니다.",
+    "roleHandBackAction": "{provider}에 반환",
+    "roleHandBackPending": "저장하면 다음 로그인 시 {provider} 그룹 매핑이 이 사용자의 역할을 부여합니다.",
     "rbacRoles": "RBAC 역할",
     "rbacRole": "RBAC 역할",
     "selectRoles": "역할 선택...",

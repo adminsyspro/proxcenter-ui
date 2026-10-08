@@ -6718,6 +6718,14 @@
     "domainNoTarget": "sin destino posible"
   },
   "usersPage": {
+    "currentRoles": "Roles actuales",
+    "roleOriginManual": "manual",
+    "rolesManagedByProvider": "Estos roles provienen del mapeo de grupos de {provider} y se reevalúan en cada inicio de sesión.",
+    "roleOverrideAction": "Definir manualmente",
+    "roleOverrideWarning": "El rol elegido reemplaza todos los roles anteriores. El mapeo de {provider} deja entonces de gestionar el rol de este usuario hasta que se quite aquí.",
+    "roleSetManually": "Este rol se definió manualmente: el mapeo de grupos de {provider} ya no se aplica a este usuario.",
+    "roleHandBackAction": "Devolver a {provider}",
+    "roleHandBackPending": "Tras guardar, el mapeo de grupos de {provider} asigna los roles de este usuario en su próximo inicio de sesión.",
     "rbacRoles": "Roles RBAC",
     "rbacRole": "Rol RBAC",
     "selectRoles": "Seleccionar roles...",

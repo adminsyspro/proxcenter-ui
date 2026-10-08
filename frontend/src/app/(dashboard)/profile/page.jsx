@@ -74,7 +74,9 @@ return () => setPageInfo('', '', '')
   const [passwordSuccess, setPasswordSuccess] = useState('')
   const [passwordError, setPasswordError] = useState('')
 
-  const primaryRole = rbacRoles[0]
+  // A user can hold several roles at once (SSO "combine every matching role",
+  // issue #1074): list each distinct one instead of the first and a counter.
+  const distinctRoles = rbacRoles.filter((role, i) => rbacRoles.findIndex(r => r.id === role.id) === i)
 
   useEffect(() => {
     if (user?.name) {
@@ -179,16 +181,16 @@ return
               >
                 {!user?.avatar && getInitials(user?.name, user?.email)}
               </Avatar>
-              {primaryRole && (
-                <Chip
-                  label={primaryRole.name}
-                  sx={{ mb: 1, bgcolor: primaryRole.color || undefined, color: '#fff' }}
-                />
-              )}
-              {rbacRoles.length > 1 && (
-                <Typography variant='caption' sx={{ opacity: 0.5, textAlign: 'center' }}>
-                  +{rbacRoles.length - 1} {t('common.other')}
-                </Typography>
+              {distinctRoles.length > 0 && (
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 0.75, mb: 1, maxWidth: 220 }}>
+                  {distinctRoles.map(role => (
+                    <Chip
+                      key={role.id}
+                      label={role.name}
+                      sx={{ bgcolor: role.color || undefined, color: '#fff' }}
+                    />
+                  ))}
+                </Box>
               )}
             </Box>
 

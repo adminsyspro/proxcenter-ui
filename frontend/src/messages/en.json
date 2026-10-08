@@ -6718,6 +6718,14 @@
     "domainNoTarget": "nowhere to move"
   },
   "usersPage": {
+    "currentRoles": "Current roles",
+    "roleOriginManual": "manual",
+    "rolesManagedByProvider": "These roles come from the {provider} group mapping and are re-evaluated at every sign-in.",
+    "roleOverrideAction": "Set manually",
+    "roleOverrideWarning": "The role you pick replaces every role above. The {provider} mapping then stops managing this user's role until it is cleared here.",
+    "roleSetManually": "This role was set manually: the {provider} group mapping no longer applies to this user.",
+    "roleHandBackAction": "Hand back to {provider}",
+    "roleHandBackPending": "Once saved, the {provider} group mapping assigns this user's roles at the next sign-in.",
     "rbacRoles": "RBAC Roles",
     "rbacRole": "RBAC Role",
     "selectRoles": "Select roles...",

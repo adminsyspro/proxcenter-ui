@@ -5380,7 +5380,10 @@
       "formatIso": "ISO (Installationsmedium)",
       "formatIsoChip": "Manuelle Installation",
       "formatCloudChip": "Cloud-Init",
-      "isoUploadNote": "ISO-Dateien sind Bootmedien. Nach der Bereitstellung bleibt die VM gestoppt und Sie führen das OS-Installationsprogramm manuell über die noVNC-Konsole aus — kein Cloud-Init."
+      "isoUploadNote": "ISO-Dateien sind Bootmedien. Nach der Bereitstellung bleibt die VM gestoppt und Sie führen das OS-Installationsprogramm manuell über die noVNC-Konsole aus — kein Cloud-Init.",
+      "extraLocationTitle": "Kopie auf einem anderen Cluster Nr. {index}",
+      "addExtraLocation": "Kopie auf einem anderen Cluster hinzufügen",
+      "extraLocationHelp": "Wählen Sie dasselbe Image auf einem anderen Cluster aus, um es auch dort bereitstellen zu können. Jeder Cluster benötigt eine eigene, von seinen Knoten erreichbare Kopie."
     },
     "blueprints": {
       "image": "Image",
@@ -5421,7 +5424,9 @@
         "storageQuotaUnlimited": "Kein Speicherkontingent",
         "storageQuotaUnavailable": "Kontingentdaten nicht verfügbar",
         "noWritableStorage": "In diesem vDC ist kein beschreibbarer Speicher für VM-Festplatten verfügbar.",
-        "storagesLoadError": "Die Speicherliste konnte nicht geladen werden. Versuchen Sie es erneut oder wenden Sie sich an Ihren Anbieter."
+        "storagesLoadError": "Die Speicherliste konnte nicht geladen werden. Versuchen Sie es erneut oder wenden Sie sich an Ihren Anbieter.",
+        "imageNotOnCluster": "Dieses Image hat keine Kopie auf dem ausgewählten Cluster. Wählen Sie einen anderen Cluster oder bitten Sie den Besitzer des Images, diesen hinzuzufügen.",
+        "imageNotOnClusterUse": "Dieses Image hat keine Kopie auf dem ausgewählten Cluster. Stellen Sie es bereit auf: {clusters}."
       },
       "hardware": {
         "title": "Hardware",

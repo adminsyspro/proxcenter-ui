@@ -779,6 +779,50 @@ describe('POST templates/deploy: source volume authorization', () => {
     expect(deploymentUpdateMock.mock.calls.some(call => call[0].data.status === 'failed')).toBe(true)
   })
 
+  describe('copies on other clusters (#44)', () => {
+    // Werner's layout: the golden image is bound to ml5-cl01 (conn-0) and the
+    // same NFS export is mounted as another storage on pac-cl01 (conn-1).
+    const golden = {
+      ...source, tenantId: 'default', isShared: true, sourceConnectionId: 'conn-0', sourceNode: 'ml5-n1',
+      volumeId: 'nfs-ml5:import/golden.qcow2',
+      extraLocations: [{ connectionId: 'conn-1', node: 'pve1', volumeId: 'nfs-pac:import/golden.qcow2' }],
+    }
+    const pveWithCopy = async (_conn: any, path: string, opts?: any) => {
+      if (path.endsWith('/content')) return [{ volid: 'nfs-pac:import/golden.qcow2', content: 'import' }]
+      if (path.endsWith('/qemu') && opts?.method === 'POST') return 'UPID:create'
+      return {}
+    }
+
+    it('deploys on the target cluster from the copy declared there', async () => {
+      findCustomImageForTenantMock.mockResolvedValue(golden)
+      pveFetchMock.mockImplementation(pveWithCopy)
+      const res = await callRoute(await loadPost(), { body: baseBody })
+      expect(res.status).toBe(200)
+      await runAfters()
+      expect(String(qemuCreateParams().get('scsi0'))).toContain('import-from=nfs-pac:import/golden.qcow2')
+    })
+
+    it('refuses, before any PVE call, a cluster holding no copy', async () => {
+      findCustomImageForTenantMock.mockResolvedValue({ ...golden, extraLocations: [] })
+      const res = await callRoute(await loadPost(), { body: baseBody })
+      expect(res.status).toBe(400)
+      expect((await readJson(res)).error).toMatch(/no copy on the selected cluster/)
+      expect(pveFetchMock).not.toHaveBeenCalled()
+      expect(afterCbs).toHaveLength(0)
+    })
+
+    it('fails before PVE writes when the copy is withdrawn after the response', async () => {
+      findCustomImageForTenantMock.mockResolvedValue(golden)
+      pveFetchMock.mockImplementation(pveWithCopy)
+      const res = await callRoute(await loadPost(), { body: baseBody })
+      expect(res.status).toBe(200)
+      findCustomImageForTenantMock.mockResolvedValue({ ...golden, extraLocations: [] })
+      await runAfters()
+      expect(pveFetchMock.mock.calls.some(call => call[2]?.method === 'POST' || call[2]?.method === 'PUT')).toBe(false)
+      expect(deploymentUpdateMock.mock.calls.some(call => call[0].data.status === 'failed')).toBe(true)
+    })
+  })
+
   it('deploys a provider shared image whose source sits outside the tenant vDC (#971)', async () => {
     const golden = { ...source, tenantId: 'default', isShared: true, volumeId: 'provider-store:import/golden.qcow2', sourceNode: 'pve3' }
     findCustomImageForTenantMock.mockResolvedValue(golden)

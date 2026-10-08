@@ -5405,7 +5405,10 @@
       "formatIso": "ISO（安装介质）",
       "formatIsoChip": "手动安装",
       "formatCloudChip": "Cloud-init",
-      "isoUploadNote": "ISO 文件是可启动安装介质。部署后 VM 将保持停止状态，需通过 noVNC 控制台手动运行操作系统安装程序，不会执行 cloud-init。"
+      "isoUploadNote": "ISO 文件是可启动安装介质。部署后 VM 将保持停止状态，需通过 noVNC 控制台手动运行操作系统安装程序，不会执行 cloud-init。",
+      "extraLocationTitle": "其他集群上的副本 #{index}",
+      "addExtraLocation": "添加其他集群上的副本",
+      "extraLocationHelp": "选择存储在其他集群上的同一镜像，使其也可以在该集群部署。每个集群都需要自己的副本，且其节点可以访问。"
     },
     "blueprints": {
       "image": "镜像",
@@ -5446,7 +5449,9 @@
         "storageQuotaUnlimited": "无存储配额",
         "storageQuotaUnavailable": "配额信息不可用",
         "noWritableStorage": "此 vDC 中没有可写的虚拟机磁盘存储。",
-        "storagesLoadError": "无法加载存储列表。请重试或联系您的提供商。"
+        "storagesLoadError": "无法加载存储列表。请重试或联系您的提供商。",
+        "imageNotOnCluster": "此镜像在所选集群上没有副本。请选择其他集群，或请镜像所有者添加此集群。",
+        "imageNotOnClusterUse": "此镜像在所选集群上没有副本。可部署到：{clusters}。"
       },
       "hardware": {
         "title": "硬件",

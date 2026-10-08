@@ -249,6 +249,13 @@ export const moveDiskSchema = z.object({
 
 // ─── Custom Images ──────────────────────────────────────────────────────────
 
+/** One more cluster holding a copy of a volume-mode custom image (#44). */
+const customImageLocationSchema = z.object({
+  connectionId: z.string().min(1).max(200),
+  node: z.string().min(1).max(200),
+  volumeId: z.string().min(1).max(200),
+})
+
 /** POST /api/v1/templates/custom-images — create a custom image */
 export const createCustomImageSchema = z.object({
   name: z.string().min(1, 'name is required').max(100).transform(s => s.trim()),
@@ -262,6 +269,7 @@ export const createCustomImageSchema = z.object({
   volumeId: z.string().max(200).nullable().optional(),
   sourceConnectionId: z.string().min(1).max(200).nullable().optional(),
   sourceNode: z.string().min(1).max(200).nullable().optional(),
+  extraLocations: z.array(customImageLocationSchema).max(32).default([]),
   defaultDiskSize: z.string().regex(/^\d+G$/, 'Must be like "20G"').default('20G'),
   minMemory: z.number().int().min(128).max(1048576).default(512),
   recommendedMemory: z.number().int().min(128).max(1048576).default(2048),
@@ -303,6 +311,7 @@ export const updateCustomImageSchema = z.object({
   volumeId: z.string().max(200).nullable().optional(),
   sourceConnectionId: z.string().min(1).max(200).nullable().optional(),
   sourceNode: z.string().min(1).max(200).nullable().optional(),
+  extraLocations: z.array(customImageLocationSchema).max(32).optional(),
   defaultDiskSize: z.string().regex(/^\d+G$/).optional(),
   minMemory: z.number().int().min(128).max(1048576).optional(),
   recommendedMemory: z.number().int().min(128).max(1048576).optional(),

@@ -1,5 +1,5 @@
-import { describe, it, expect, afterEach } from 'vitest'
-import { cleanup, fireEvent } from '@testing-library/react'
+import { describe, it, expect, afterEach, vi } from 'vitest'
+import { cleanup, fireEvent, waitFor } from '@testing-library/react'
 import { renderWithProviders, screen } from '@/__tests__/setup/renderWithProviders'
 import { server, http, HttpResponse } from '@/__tests__/setup/msw-server'
 
@@ -79,11 +79,14 @@ describe('SankeyChart', () => {
   })
 
   it('says so when no flow matches in filter mode', async () => {
+    const served = vi.fn()
     server.use(
-      http.get('*/api/v1/orchestrator/sflow', ({ request }) =>
-        HttpResponse.json(new URL(request.url).searchParams.get('q') ? [] : [
+      http.get('*/api/v1/orchestrator/sflow', ({ request }) => {
+        served(new URL(request.url).searchParams.get('q'))
+        return HttpResponse.json(new URL(request.url).searchParams.get('q') ? [] : [
           { src_ip: '10.0.0.1', dst_ip: '10.0.0.2', bytes: 4096, packets: 4, protocol: 'tcp', dst_port: 443 },
-        ])),
+        ])
+      }),
     )
 
     renderWithProviders(<SankeyChart />)
@@ -94,5 +97,9 @@ describe('SankeyChart', () => {
 
     expect(await screen.findByText('No flow matches "nothing"')).toBeInTheDocument()
     expect(screen.queryByText('10.0.0.1')).not.toBeInTheDocument()
+    // The message comes from client-side filtering, before the filtered reload
+    // answers. Wait for that reload so no request outlives the file: once MSW
+    // is closed it would go to the real network and reject unhandled.
+    await waitFor(() => expect(served).toHaveBeenCalledWith('nothing'))
   })
 })

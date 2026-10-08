@@ -94,6 +94,8 @@ describe('DiagnosticModal - success path', () => {
     expect(screen.getByText('Connection diagnostics')).toBeInTheDocument()
     // connectionName caption is rendered below the title.
     expect(screen.getByText(CONN_NAME)).toBeInTheDocument()
+    // Let the auto-run settle so no fetch outlives the test.
+    await screen.findByText('Host reachable')
   })
 
   it('renders check labels from the fixture after fetch resolves', async () => {
@@ -231,7 +233,7 @@ describe('DiagnosticModal - error path', () => {
 // ------------------------------------------------------------------ //
 
 describe('DiagnosticModal - null connectionId', () => {
-  // No MSW handler seeded. If a request fires, MSW will error (onUnhandledRequest:'error').
+  // No MSW handler seeded. If a request fires, MSW will error (onUnhandledFrame:'error').
 
   it('renders the dialog title without firing diagnostics when connectionId=null', () => {
     renderWithProviders(
@@ -263,7 +265,10 @@ describe('DiagnosticModal - close button', () => {
     seedDiagnosticsOk()
   })
 
-  it('calls onClose when the Close button in DialogActions is clicked', () => {
+  // Each test awaits the auto-run fetch: a request still in flight at the end
+  // of the file resolves after jsdom teardown and setState then throws
+  // "window is not defined" as an unhandled rejection.
+  it('calls onClose when the Close button in DialogActions is clicked', async () => {
     const onClose = vi.fn()
     renderWithProviders(<DiagnosticModal {...makeProps({ onClose })} />)
 
@@ -272,9 +277,10 @@ describe('DiagnosticModal - close button', () => {
     fireEvent.click(closeBtn)
 
     expect(onClose).toHaveBeenCalledTimes(1)
+    await screen.findByText('Host reachable')
   })
 
-  it('calls onClose when the X icon button in the title is clicked', () => {
+  it('calls onClose when the X icon button in the title is clicked', async () => {
     const onClose = vi.fn()
     renderWithProviders(<DiagnosticModal {...makeProps({ onClose })} />)
 
@@ -287,5 +293,6 @@ describe('DiagnosticModal - close button', () => {
     fireEvent.click(iconBtns[0])
 
     expect(onClose).toHaveBeenCalledTimes(1)
+    await screen.findByText('Host reachable')
   })
 })

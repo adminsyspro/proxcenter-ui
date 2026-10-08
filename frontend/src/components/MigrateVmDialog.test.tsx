@@ -406,8 +406,12 @@ describe('MigrateVmDialog - cross-cluster prerequisites', () => {
   })
 
   it('opens a separate confirmation listing every snapshot without fetching', async () => {
-    const { prepare } = seedPrereqHandlers({ issues: [snapshotsBlocker] })
+    const { prepare, check } = seedPrereqHandlers({ issues: [snapshotsBlocker] })
     await renderPrereqs()
+    // Source-side rows render before the target cascade (remote nodes,
+    // storages, bridges, debounced check) settles. Spy only once it has, so
+    // the assertion is about the click, not about background loading.
+    await waitFor(() => expect(check).toHaveBeenCalledTimes(1), { timeout: 10_000 })
     const fetchSpy = vi.spyOn(globalThis, 'fetch')
     fireEvent.click(screen.getByRole('button', { name: 'Delete 2 snapshot(s)' }))
     const confirmation = screen.getByRole('dialog', { name: 'Delete snapshots permanently?' })

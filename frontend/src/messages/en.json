@@ -5399,7 +5399,10 @@
       "formatIso": "ISO (install media)",
       "formatIsoChip": "Manual install",
       "formatCloudChip": "Cloud-init",
-      "isoUploadNote": "ISO files are boot media. After deploy the VM will stay stopped and you'll run the OS installer manually via the noVNC console — there's no cloud-init at all."
+      "isoUploadNote": "ISO files are boot media. After deploy the VM will stay stopped and you'll run the OS installer manually via the noVNC console — there's no cloud-init at all.",
+      "extraLocationTitle": "Copy on another cluster #{index}",
+      "addExtraLocation": "Add a copy on another cluster",
+      "extraLocationHelp": "Pick the same image as stored on another cluster to make it deployable there too. Each cluster needs its own copy, reachable from its nodes."
     },
     "blueprints": {
       "image": "Image",
@@ -5440,7 +5443,9 @@
         "storageQuotaUnlimited": "No storage quota",
         "storageQuotaUnavailable": "Quota information unavailable",
         "noWritableStorage": "No writable VM disk storage is available in this vDC.",
-        "storagesLoadError": "The storage list could not be loaded. Retry, or contact your provider."
+        "storagesLoadError": "The storage list could not be loaded. Retry, or contact your provider.",
+        "imageNotOnCluster": "This image has no copy on the selected cluster. Pick another cluster, or ask the image owner to add this one to the image.",
+        "imageNotOnClusterUse": "This image has no copy on the selected cluster. Deploy it on: {clusters}."
       },
       "hardware": {
         "title": "Hardware",

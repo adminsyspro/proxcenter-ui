@@ -5399,7 +5399,10 @@
       "formatIso": "ISO (medio de instalación)",
       "formatIsoChip": "Instalación manual",
       "formatCloudChip": "Cloud-init",
-      "isoUploadNote": "Los archivos ISO son medios de arranque. Tras el despliegue, la VM permanecerá detenida y tendrás que ejecutar manualmente el instalador del SO mediante la consola noVNC; no hay cloud-init en absoluto."
+      "isoUploadNote": "Los archivos ISO son medios de arranque. Tras el despliegue, la VM permanecerá detenida y tendrás que ejecutar manualmente el instalador del SO mediante la consola noVNC; no hay cloud-init en absoluto.",
+      "extraLocationTitle": "Copia en otro clúster n.º {index}",
+      "addExtraLocation": "Añadir una copia en otro clúster",
+      "extraLocationHelp": "Seleccione la misma imagen almacenada en otro clúster para poder desplegarla también allí. Cada clúster necesita su propia copia, accesible desde sus nodos."
     },
     "blueprints": {
       "image": "Imagen",
@@ -5440,7 +5443,9 @@
         "storageQuotaUnlimited": "Sin cuota de almacenamiento",
         "storageQuotaUnavailable": "Información de cuota no disponible",
         "noWritableStorage": "No hay almacenamiento de discos de VM con acceso de escritura en este vDC.",
-        "storagesLoadError": "No se pudo cargar la lista de almacenamientos. Reinténtelo o contacte con su proveedor."
+        "storagesLoadError": "No se pudo cargar la lista de almacenamientos. Reinténtelo o contacte con su proveedor.",
+        "imageNotOnCluster": "Esta imagen no tiene copia en el clúster seleccionado. Elija otro clúster o pida al propietario de la imagen que añada este.",
+        "imageNotOnClusterUse": "Esta imagen no tiene copia en el clúster seleccionado. Despliéguela en: {clusters}."
       },
       "hardware": {
         "title": "Hardware",

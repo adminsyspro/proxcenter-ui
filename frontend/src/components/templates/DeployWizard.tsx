@@ -895,11 +895,16 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
     if (status === 'failed' && error) setDeployError(error)
   }, [])
 
+  // A volume image only deploys on the clusters holding a copy of it (#44).
+  // URL and built-in images carry no list and go anywhere.
+  const imageConnectionIds = (image as { connectionIds?: string[] } | null)?.connectionIds
+  const imageOffCluster = !!imageConnectionIds && !!connectionId && !imageConnectionIds.includes(connectionId)
+
   const canProceed = useMemo(() => {
     switch (activeStep) {
       case 0: return !!image
       case 1: {
-        const baseOk = !!connectionId && !!node && storageSelectionReady && vmid >= 100 && !!vmName.trim()
+        const baseOk = !!connectionId && !!node && storageSelectionReady && vmid >= 100 && !!vmName.trim() && !imageOffCluster
         // ISO mode also requires an ISO-capable storage on the node — if
         // the tenant's vDC has none we surface a blocking message instead
         // of the picker, and the wizard can't advance.
@@ -943,7 +948,7 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
       case 4: return storageSelectionReady && !quotaBlocked
       default: return false
     }
-  }, [activeStep, image, connectionId, node, storage, storageSelectionReady, vmid, vmName, cores, memory, diskSize, quotaBlocked, isIsoMode, isoStorage, isoNeedsReservation, ostypeOverride, staticIp, staticMac, bridges, networkBridge, ipOverride, manualIpCidr, manualGateway, useDhcp])
+  }, [activeStep, image, imageOffCluster, connectionId, node, storage, storageSelectionReady, vmid, vmName, cores, memory, diskSize, quotaBlocked, isIsoMode, isoStorage, isoNeedsReservation, ostypeOverride, staticIp, staticMac, bridges, networkBridge, ipOverride, manualIpCidr, manualGateway, useDhcp])
 
   // ─── Step renderers ────────────────────────────────────────────────
 
@@ -999,6 +1004,19 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
     const isoBlocker = isIsoMode && !!node && isoStorages.length === 0 ? (
       <Alert severity="error" variant="outlined" icon={<i className="ri-error-warning-line" style={{ fontSize: 18 }} />}>
         {t('templates.deploy.iso.noIsoStorage')}
+      </Alert>
+    ) : null
+
+    // Named from the caller's own connection list only: a copy on a cluster
+    // it cannot see stays unnamed.
+    const imageClusterNames = imageOffCluster
+      ? connections.filter(c => imageConnectionIds?.includes(c.id)).map(c => c.name)
+      : []
+    const imageClusterBlocker = imageOffCluster ? (
+      <Alert severity="error" variant="outlined" icon={<i className="ri-error-warning-line" style={{ fontSize: 18 }} />}>
+        {imageClusterNames.length
+          ? t('templates.deploy.target.imageNotOnClusterUse', { clusters: imageClusterNames.join(', ') })
+          : t('templates.deploy.target.imageNotOnCluster')}
       </Alert>
     ) : null
 
@@ -1070,6 +1088,7 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
             </Alert>
           )}
           {isoBlocker}
+          {imageClusterBlocker}
         </Stack>
       )
     }
@@ -1210,6 +1229,7 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
       )}
 
       {isoBlocker}
+      {imageClusterBlocker}
 
       <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
         <NumericTextField

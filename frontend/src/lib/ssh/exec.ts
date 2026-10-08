@@ -244,61 +244,62 @@ export async function executeSSH(
   const needsSudo = connection.sshUseSudo && user !== 'root'
   const finalCommand = needsSudo ? `sudo sh -c ${shellEscape(command)}` : command
 
-  const streaming = execOpts.onData !== undefined || execOpts.inactivityMs !== undefined
-
-  // 1. Try orchestrator
-  if (!streaming) {
-    try {
-      const body: Record<string, unknown> = { host: nodeIp, port, user, command: finalCommand }
-      if (key) body.key = key
-      if (password) body.password = password
-      if (passphrase) body.passphrase = passphrase
-
-      const res = await fetch(`${ORCHESTRATOR_URL}/api/v1/ssh/exec`, {
-        method: "POST",
-        headers: orchestratorHeaders({ "Content-Type": "application/json" }),
-        body: JSON.stringify(body),
-        signal: AbortSignal.timeout(timeoutMs),
-        dispatcher: orchestratorExecDispatcher,
-      } as RequestInit)
-
-      if (res.ok) {
-        const data = await res.json()
-        console.log(`[ssh] executed via orchestrator on ${safeLog(nodeIp)}`)
-        return { success: data.success !== false, output: data.output, error: data.error }
-      }
-
-      const err = await res.json().catch(() => ({}))
-      const errMsg = err?.error || res.statusText
-      // If orchestrator rejects the command (whitelist), fall through to direct ssh2
-      if (errMsg.includes('not allowed') || errMsg.includes('not permitted') || res.status === 403) {
-        console.log(`[ssh] orchestrator rejected command, falling back to ssh2 for ${safeLog(nodeIp)}`)
-      } else {
-        return { success: false, error: errMsg }
-      }
-    } catch (err) {
-      // A fetch timeout (AbortSignal.timeout) is NOT "unreachable": the orchestrator
-      // may have already run, or be running, the command. Re-running it over ssh2
-      // would risk a second multi-hour operation, so surface the timeout instead of
-      // falling through (#445). Only a genuine connection failure falls back.
-      if (isOrchestratorTimeoutError(err)) {
-        return { success: false, error: `orchestrator SSH timeout (${Math.round(timeoutMs / 1000)}s)` }
-      }
-      // Same for a response lost after the request went out: only a request that
-      // never reached the orchestrator is safe to replay over ssh2 (#1076).
-      if (!isOrchestratorNotReachedError(err)) {
-        return { success: false, error: `orchestrator connection lost while the command may still be running: ${(err as Error)?.message ?? String(err)}` }
-      }
-      // Orchestrator unreachable – fall through to ssh2
-      console.log(`[ssh] orchestrator unavailable, falling back to ssh2 for ${safeLog(nodeIp)}`)
-    }
-  }
-
-  // 2. Fallback: direct ssh2
-  return executeSSHDirect({
+  const direct = () => executeSSHDirect({
     host: nodeIp, port, user, key, password, passphrase, command: finalCommand, timeoutMs,
     inactivityMs: execOpts.inactivityMs, onData: execOpts.onData,
   })
+
+  // The orchestrator answers once at the end, so a streaming call cannot go through it.
+  if (execOpts.onData !== undefined || execOpts.inactivityMs !== undefined) return direct()
+
+  // 1. Try orchestrator
+  try {
+    const body: Record<string, unknown> = { host: nodeIp, port, user, command: finalCommand }
+    if (key) body.key = key
+    if (password) body.password = password
+    if (passphrase) body.passphrase = passphrase
+
+    const res = await fetch(`${ORCHESTRATOR_URL}/api/v1/ssh/exec`, {
+      method: "POST",
+      headers: orchestratorHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(timeoutMs),
+      dispatcher: orchestratorExecDispatcher,
+    } as RequestInit)
+
+    if (res.ok) {
+      const data = await res.json()
+      console.log(`[ssh] executed via orchestrator on ${safeLog(nodeIp)}`)
+      return { success: data.success !== false, output: data.output, error: data.error }
+    }
+
+    const err = await res.json().catch(() => ({}))
+    const errMsg = err?.error || res.statusText
+    // If orchestrator rejects the command (whitelist), fall through to direct ssh2
+    if (errMsg.includes('not allowed') || errMsg.includes('not permitted') || res.status === 403) {
+      console.log(`[ssh] orchestrator rejected command, falling back to ssh2 for ${safeLog(nodeIp)}`)
+    } else {
+      return { success: false, error: errMsg }
+    }
+  } catch (err) {
+    // A fetch timeout (AbortSignal.timeout) is NOT "unreachable": the orchestrator
+    // may have already run, or be running, the command. Re-running it over ssh2
+    // would risk a second multi-hour operation, so surface the timeout instead of
+    // falling through (#445). Only a genuine connection failure falls back.
+    if (isOrchestratorTimeoutError(err)) {
+      return { success: false, error: `orchestrator SSH timeout (${Math.round(timeoutMs / 1000)}s)` }
+    }
+    // Same for a response lost after the request went out: only a request that
+    // never reached the orchestrator is safe to replay over ssh2 (#1076).
+    if (!isOrchestratorNotReachedError(err)) {
+      return { success: false, error: `orchestrator connection lost while the command may still be running: ${(err as Error)?.message ?? String(err)}` }
+    }
+    // Orchestrator unreachable – fall through to ssh2
+    console.log(`[ssh] orchestrator unavailable, falling back to ssh2 for ${safeLog(nodeIp)}`)
+  }
+
+  // 2. Fallback: direct ssh2
+  return direct()
 }
 
 /**

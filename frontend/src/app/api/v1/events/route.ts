@@ -10,6 +10,7 @@ import { getTenantInfrastructureScope, inventoryConnectionPlan, maskingScope } f
 import { getVdcVmidsByConnection } from "@/lib/alerts/vdcVmids"
 import { extractTaskVmid } from "@/lib/tasks/scope"
 import { findTaskInitiators } from "@/lib/audit/taskInitiators"
+import { getPrincipal } from "@/lib/auth/principal"
 
 export const runtime = 'nodejs'
 
@@ -326,9 +327,14 @@ export async function GET(req: Request) {
     if (taskEvents.length > 0) {
       try {
         const oldest = Math.min(...taskEvents.map(e => new Date(e.ts).getTime()))
+        // The feed only needs connection.view, the identity of other users is
+        // audit data: without admin.audit a caller sees its own actions only.
+        const readsJournal = !(await checkPermission(PERMISSIONS.ADMIN_AUDIT))
+        const self = readsJournal ? null : (await getPrincipal()).principal
+        const onlyFor = readsJournal ? undefined : { userId: self?.userId, apiTokenId: self?.tokenId }
         const initiators = await findTaskInitiators(
           taskEvents.map(e => e.id),
-          { tenantId: infra.kind === 'provider' ? null : tenantId, since: new Date(oldest - 60_000) },
+          { tenantId: infra.kind === 'provider' ? null : tenantId, since: new Date(oldest - 60_000), onlyFor },
         )
         for (const event of taskEvents) {
           const initiator = initiators.get(event.id)

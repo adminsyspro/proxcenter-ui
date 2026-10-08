@@ -26,11 +26,13 @@ vi.mock("@/lib/connections/getConnection", () => ({
   getConnectionById: vi.fn().mockResolvedValue({ baseUrl: "https://pve", apiToken: "t" }),
 }))
 vi.mock("@/lib/proxmox/client", () => ({ pveFetch: pveFetchMock }))
+const deniedPermissions = new Set<string>()
 vi.mock("@/lib/rbac", () => ({
-  checkPermission: vi.fn().mockResolvedValue(null),
+  checkPermission: vi.fn(async (perm: string) => (deniedPermissions.has(perm) ? new Response(null, { status: 403 }) : null)),
   getCurrentRbacInfraScope: vi.fn().mockResolvedValue(null),
-  PERMISSIONS: { CONNECTION_VIEW: "connection.view" },
+  PERMISSIONS: { CONNECTION_VIEW: "connection.view", ADMIN_AUDIT: "admin.audit" },
 }))
+vi.mock("@/lib/auth/principal", () => ({ getPrincipal: async () => ({ ok: true, principal: { kind: "session", userId: "u-self" } }) }))
 vi.mock("@/lib/alerts/vdcVmids", () => ({ getVdcVmidsByConnection: vi.fn().mockResolvedValue(null) }))
 vi.mock("@/lib/audit/taskInitiators", () => ({ findTaskInitiators: (...a: any[]) => findInitiatorsMock(...a) }))
 
@@ -41,6 +43,7 @@ const START = "UPID:n1:00000002:00000002:00000FA1:qmstart:101:proxcenter@pve!api
 
 beforeEach(() => {
   vi.clearAllMocks()
+  deniedPermissions.clear()
   currentTenant = "default"
   getInfraMock.mockResolvedValue({ kind: "provider" })
   pveFetchMock.mockImplementation(async (_c: any, path: string) => {
@@ -53,7 +56,7 @@ beforeEach(() => {
 
     return []
   })
-  findInitiatorsMock.mockResolvedValue(new Map([[VNC, { userId: "u1", email: "alice@example.com", apiTokenId: null }]]))
+  findInitiatorsMock.mockResolvedValue(new Map([[VNC, { email: "alice@example.com", apiTokenId: null }]]))
 })
 
 describe("GET /api/v1/events task initiator (roadmap#41)", () => {
@@ -64,7 +67,7 @@ describe("GET /api/v1/events task initiator (roadmap#41)", () => {
     const vnc = body.data.find((e: any) => e.id === VNC)
     const start = body.data.find((e: any) => e.id === START)
     expect(vnc.user).toBe("proxcenter@pve!api")
-    expect(vnc.initiatedBy).toEqual({ userId: "u1", email: "alice@example.com", apiTokenId: null })
+    expect(vnc.initiatedBy).toEqual({ email: "alice@example.com", apiTokenId: null })
     expect(start.initiatedBy).toBeUndefined()
 
     expect(findInitiatorsMock).toHaveBeenCalledTimes(1)
@@ -72,6 +75,16 @@ describe("GET /api/v1/events task initiator (roadmap#41)", () => {
     expect(new Set(upids)).toEqual(new Set([VNC, START]))
     expect(opts.tenantId).toBeNull()
     expect(opts.since.getTime()).toBeLessThanOrEqual(4000 * 1000)
+  })
+
+  it("without admin.audit, only the caller's own actions are attributed", async () => {
+    const { GET } = await import("./route")
+    await callRoute(GET, { method: "GET", url: "http://localhost/api/v1/events?source=tasks" })
+    expect(findInitiatorsMock.mock.calls[0][1].onlyFor).toBeUndefined()
+
+    deniedPermissions.add("admin.audit")
+    await callRoute(GET, { method: "GET", url: "http://localhost/api/v1/events?source=tasks" })
+    expect(findInitiatorsMock.mock.calls[1][1].onlyFor).toEqual({ userId: "u-self", apiTokenId: undefined })
   })
 
   it("restricts a tenant to its own journal", async () => {

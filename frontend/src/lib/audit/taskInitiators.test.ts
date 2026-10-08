@@ -30,7 +30,7 @@ describe('findTaskInitiators (roadmap#41)', () => {
 
     const map = await findTaskInitiators([VNC_A, VNC_B, 'UPID:unknown'], { tenantId: null, since: new Date(T0.getTime() - 60_000) })
 
-    expect(map.get(VNC_A)).toEqual({ userId: 'u1', email: 'alice@example.com', apiTokenId: null })
+    expect(map.get(VNC_A)).toEqual({ email: 'alice@example.com', apiTokenId: null })
     expect(map.get(VNC_B)?.email).toBe('bob@example.com')
     expect(map.has('UPID:unknown')).toBe(false)
   })
@@ -59,7 +59,17 @@ describe('findTaskInitiators (roadmap#41)', () => {
   it('attributes a token-driven task to the token', async () => {
     await seed('t1', 'default', VNC_A, { token: 'tok_1' })
     const map = await findTaskInitiators([VNC_A], { tenantId: null, since: new Date(T0.getTime() - 60_000) })
-    expect(map.get(VNC_A)).toEqual({ userId: null, email: null, apiTokenId: 'tok_1' })
+    expect(map.get(VNC_A)).toEqual({ email: null, apiTokenId: 'tok_1' })
+  })
+
+  it('narrows to the caller own rows without the audit right', async () => {
+    await seed('a1', 'default', VNC_A, { id: 'u1', email: 'alice@example.com' })
+    await seed('a2', 'default', VNC_B, { id: 'u2', email: 'bob@example.com' })
+    const since = new Date(T0.getTime() - 60_000)
+
+    const own = await findTaskInitiators([VNC_A, VNC_B], { tenantId: null, since, onlyFor: { userId: 'u1' } })
+    expect([...own.keys()]).toEqual([VNC_A])
+    expect((await findTaskInitiators([VNC_A, VNC_B], { tenantId: null, since, onlyFor: {} })).size).toBe(0)
   })
 
   it('skips the query entirely for an empty page', async () => {

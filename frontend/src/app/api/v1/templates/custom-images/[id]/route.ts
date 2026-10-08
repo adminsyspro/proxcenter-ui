@@ -4,7 +4,7 @@ import { NextResponse } from "next/server"
 import { getSessionPrisma, getCurrentTenantId, DEFAULT_TENANT_ID } from "@/lib/tenant"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { updateCustomImageSchema } from "@/lib/schemas"
-import { authorizeImageVolume, SourceVolumeError } from '@/lib/templates/sourceVolume'
+import { authorizeImageLocations, authorizeImageVolume, extraImageLocations, SourceVolumeError } from '@/lib/templates/sourceVolume'
 
 export const runtime = "nodejs"
 
@@ -54,17 +54,21 @@ export async function PUT(req: Request, ctx: Ctx) {
     const tenantId = await getCurrentTenantId()
     const data: any = { ...body }
     const source = { ...existing, ...body }
-    const sourceTouched = ['sourceType', 'volumeId', 'sourceConnectionId', 'sourceNode', 'format']
+    const sourceTouched = ['sourceType', 'volumeId', 'sourceConnectionId', 'sourceNode', 'format', 'extraLocations']
       .some(key => (body as Record<string, unknown>)[key] !== undefined)
     if (source.sourceType === 'volume') {
       // A metadata edit (name, memory...) must not depend on the source
       // cluster being reachable or the volume still existing: the source was
       // authorised when it was set and is checked again at deploy time.
-      if (sourceTouched) await authorizeImageVolume({ tenantId, source })
+      if (sourceTouched) {
+        await authorizeImageVolume({ tenantId, source })
+        await authorizeImageLocations({ tenantId, source, locations: extraImageLocations(source) })
+      }
     } else {
       data.sourceConnectionId = null
       data.sourceNode = null
       data.volumeId = null
+      data.extraLocations = []
     }
     if (data.isShared !== undefined && tenantId !== DEFAULT_TENANT_ID) {
       delete data.isShared

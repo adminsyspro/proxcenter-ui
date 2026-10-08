@@ -19,7 +19,7 @@ vi.mock('@/lib/audit', () => ({ audit: async () => {} }))
 
 import { POST } from './route'
 import { PUT } from './[id]/route'
-import { authorizeImageVolume } from '@/lib/templates/sourceVolume'
+import { authorizeImageVolume, imageSourceForConnection } from '@/lib/templates/sourceVolume'
 
 const body = { name: 'Disk image', sourceType: 'volume', volumeId: 'shared:vm-201-disk-0', sourceConnectionId: 'conn-a', sourceNode: 'pve1' }
 const request = (data: object) => new Request('http://localhost/api/v1/templates/custom-images', { method: 'POST', body: JSON.stringify(data) })
@@ -223,6 +223,72 @@ describe('custom image source authorization', () => {
   it('permits the selected shared volume on a different target node', async () => {
     await expect(authorizeImageVolume({ tenantId: 'tenant-a', source: body, target: { connectionId: 'conn-a', node: 'pve2' } })).resolves.toBeUndefined()
   })
+  describe('copies on other clusters (#44)', () => {
+    const copy = { connectionId: 'conn-b', node: 'pve7', volumeId: 'nfs-pac:import/golden.qcow2' }
+    const provider = () => {
+      mocks.tenant.mockResolvedValue('default')
+      mocks.infra.mockResolvedValue({ kind: 'provider' })
+      mocks.pve.mockImplementation(async (_conn, path) => path.endsWith('/content')
+        ? [{ volid: body.volumeId, content: 'images', vmid: 201 }, { volid: copy.volumeId, content: 'import' }]
+        : [{ vmid: 201, type: 'qemu', node: 'pve1', pool: 'pool-a' }])
+    }
+
+    it('records a copy after checking it exists on that cluster and node', async () => {
+      provider()
+      const response = await POST(request({ ...body, extraLocations: [copy] }))
+      expect(response.status).toBe(201)
+      expect((await response.json()).data.extraLocations).toEqual([copy])
+      expect(mocks.connection).toHaveBeenCalledWith('conn-b')
+      expect(mocks.pve.mock.calls.some(call => call[1] === '/nodes/pve7/storage/nfs-pac/content')).toBe(true)
+    })
+
+    it('refuses a copy whose volume is missing on its cluster', async () => {
+      provider()
+      const response = await POST(request({ ...body, extraLocations: [{ ...copy, volumeId: 'nfs-pac:import/absent.qcow2' }] }))
+      expect(response.status).toBe(403)
+      expect(mocks.create).not.toHaveBeenCalled()
+    })
+
+    it('refuses a copy on the source cluster, or two copies on one cluster', async () => {
+      provider()
+      expect((await POST(request({ ...body, extraLocations: [{ ...copy, connectionId: 'conn-a' }] }))).status).toBe(400)
+      expect((await POST(request({ ...body, extraLocations: [copy, { ...copy, node: 'pve8' }] }))).status).toBe(400)
+      expect(mocks.create).not.toHaveBeenCalled()
+    })
+
+    it('refuses a tenant copy on a cluster outside its vDC', async () => {
+      const response = await POST(request({ ...body, extraLocations: [copy] }))
+      expect(response.status).toBe(403)
+      expect(mocks.create).not.toHaveBeenCalled()
+    })
+
+    it('revalidates copies on edit and drops them when switching back to a URL', async () => {
+      mocks.find.mockResolvedValue({ ...body, id: 'image-a', tenantId: 'tenant-a', extraLocations: [] })
+      expect((await PUT(request({ extraLocations: [copy] }), { params: Promise.resolve({ id: 'image-a' }) })).status).toBe(403)
+      expect(mocks.update).not.toHaveBeenCalled()
+      mocks.find.mockResolvedValue({ ...body, id: 'image-a', tenantId: 'tenant-a', extraLocations: [copy] })
+      const response = await PUT(request({ sourceType: 'url', downloadUrl: 'https://example.test/image.qcow2' }), { params: Promise.resolve({ id: 'image-a' }) })
+      expect(response.status).toBe(200)
+      expect((await response.json()).data.extraLocations).toEqual([])
+    })
+
+    it('resolves the copy held by the target cluster, never an unlisted one', () => {
+      const row = { ...body, format: 'qcow2', extraLocations: [copy, { connectionId: 'conn-c' }, 'junk'] }
+      expect(imageSourceForConnection(row, 'conn-a')).toBe(row)
+      expect(imageSourceForConnection(row, 'conn-b')).toMatchObject({ sourceConnectionId: 'conn-b', sourceNode: 'pve7', volumeId: copy.volumeId })
+      expect(imageSourceForConnection(row, 'conn-c')).toBeNull()
+      expect(imageSourceForConnection(row, 'conn-z')).toBeNull()
+    })
+
+    it('lets a tenant deploy a published image from its copy outside the vDC', async () => {
+      const golden = { ...body, format: 'qcow2', tenantId: 'default', isShared: true, extraLocations: [copy] }
+      mocks.infra.mockResolvedValue({ kind: 'iaas', vdcScope: { ...scope(), connectionIds: new Set(['conn-b']), nodesByConnection: new Map([['conn-b', new Set(['pve7'])]]) } })
+      mocks.pve.mockResolvedValue([{ volid: copy.volumeId, content: 'import' }])
+      const resolved = imageSourceForConnection(golden, 'conn-b')!
+      await expect(authorizeImageVolume({ tenantId: 'tenant-a', source: resolved, target: { connectionId: 'conn-b', node: 'pve7' }, publishedImage: resolved })).resolves.toBeUndefined()
+    })
+  })
+
   it('keeps URL image creation independent of source-volume permissions', async () => {
     const response = await POST(request({ name: 'URL', sourceType: 'url', downloadUrl: 'https://example.test/image.qcow2' }))
     expect(response.status).toBe(201)

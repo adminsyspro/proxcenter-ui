@@ -7,7 +7,7 @@ import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { authOptions } from "@/lib/auth/config"
 import { createCustomImageSchema } from "@/lib/schemas"
 import { prisma as basePrisma } from "@/lib/db/prisma"
-import { authorizeImageVolume, SourceVolumeError } from '@/lib/templates/sourceVolume'
+import { authorizeImageLocations, authorizeImageVolume, SourceVolumeError } from '@/lib/templates/sourceVolume'
 
 export const runtime = "nodejs"
 
@@ -59,6 +59,7 @@ export async function POST(req: Request) {
 
     if (body.sourceType === 'volume') {
       await authorizeImageVolume({ tenantId, source: body })
+      await authorizeImageLocations({ tenantId, source: body, locations: body.extraLocations })
     }
 
     // Only the provider (tenant 'default') can publish a shared catalogue
@@ -102,6 +103,7 @@ export async function POST(req: Request) {
         volumeId: body.volumeId || null,
         sourceConnectionId: body.sourceType === 'volume' ? body.sourceConnectionId : null,
         sourceNode: body.sourceType === 'volume' ? body.sourceNode : null,
+        extraLocations: body.sourceType === 'volume' ? body.extraLocations : [],
         defaultDiskSize: body.defaultDiskSize,
         minMemory: body.minMemory,
         recommendedMemory: body.recommendedMemory,

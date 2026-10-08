@@ -12,9 +12,8 @@
 export type AssignmentOrigin = "oidc" | "ldap" | "manual"
 
 export function assignmentOrigin(assignmentId: string | null | undefined): AssignmentOrigin {
-  const id = assignmentId || ""
-  if (id.startsWith("oidc_")) return "oidc"
-  if (id.startsWith("ldap_")) return "ldap"
+  if (assignmentId?.startsWith("oidc_")) return "oidc"
+  if (assignmentId?.startsWith("ldap_")) return "ldap"
   return "manual"
 }
 
@@ -70,7 +69,7 @@ export function summarizeUserRoles<R extends UserRoleEntry>(roles: readonly R[] 
     else providerManagedBy ??= origin
   }
 
-  const signatures = new Set([...roleSetsByTenant.values()].map(set => [...set].sort().join("\u0000")))
+  const signatures = new Set([...roleSetsByTenant.values()].map(set => [...set].sort((x, y) => x.localeCompare(y)).join("\u0000")))
 
   return {
     distinctRoles,

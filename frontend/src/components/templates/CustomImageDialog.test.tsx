@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, it } from 'vitest'
-import { cleanup } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { cleanup, waitFor } from '@testing-library/react'
 
 import { renderWithProviders, screen, userEvent } from '@/__tests__/setup/renderWithProviders'
 import CustomImageDialog from './CustomImageDialog'
@@ -55,5 +55,53 @@ describe('CustomImageDialog hardware spec fields', () => {
     await userEvent.tab()
 
     expect(minMemory.value).toBe('512')
+  })
+})
+
+// Copies of a volume image on other clusters (#44). Editing a volume image puts
+// the dialog in volume mode whatever the tenant, so the copy list is reachable.
+describe('CustomImageDialog copies on other clusters', () => {
+  const CONNS = [{ id: 'c-prod', name: 'PVE-PROD' }, { id: 'c-dr', name: 'PVE-DR' }, { id: 'c-lab', name: 'PVE-LAB' }]
+  const image = {
+    id: 'img-1', name: 'Golden', sourceType: 'volume', format: 'qcow2', defaultDiskSize: '20G',
+    sourceConnectionId: 'c-prod', sourceNode: 'pve1', volumeId: 'local:import/golden.qcow2',
+    extraLocations: [{ connectionId: 'c-dr', node: 'pve1-dr', volumeId: 'local:import/golden.qcow2' }],
+  }
+  let saved: any = null
+
+  beforeEach(() => {
+    saved = null
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      if (init?.method === 'PUT') { saved = JSON.parse(String(init.body)); return { json: async () => ({ data: {} }) } }
+      if (url.startsWith('/api/v1/connections?')) return { json: async () => ({ data: CONNS }) }
+      return { json: async () => ({ data: [] }) }
+    }))
+  })
+  afterEach(() => { cleanup(); vi.unstubAllGlobals() })
+
+  it('shows the stored copy, removes it and adds a new one before saving', async () => {
+    const onClose = vi.fn()
+    renderWithProviders(<CustomImageDialog open onClose={onClose} editData={image} />)
+
+    expect(await screen.findByText('Copy on another cluster #1')).toBeTruthy()
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    expect(screen.queryByText('Copy on another cluster #1')).toBeNull()
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Add a copy on another cluster' }))
+    expect(screen.getByText('Copy on another cluster #1')).toBeTruthy()
+    // A copy still missing its cluster, node and volume keeps Save disabled.
+    expect((screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled).toBe(true)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(onClose).toHaveBeenCalledWith(true))
+    expect(saved).toMatchObject({ sourceType: 'volume', sourceConnectionId: 'c-prod', sourceNode: 'pve1', extraLocations: [] })
+  })
+
+  it('sends the stored copies back unchanged on a plain save', async () => {
+    renderWithProviders(<CustomImageDialog open onClose={() => {}} editData={image} />)
+    await screen.findByText('Copy on another cluster #1')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(saved?.extraLocations).toEqual(image.extraLocations))
   })
 })

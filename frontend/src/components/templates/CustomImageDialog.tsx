@@ -13,6 +13,7 @@ import {
   DialogTitle,
   FormControl,
   FormControlLabel,
+  IconButton,
   InputLabel,
   MenuItem,
   Select,
@@ -21,10 +22,12 @@ import {
   TextField,
   ToggleButton,
   ToggleButtonGroup,
+  Tooltip,
   Typography,
 } from '@mui/material'
 
 import NumericTextField from '@/components/ui/NumericTextField'
+import VolumeSourcePicker, { type VolumeLocation } from '@/components/templates/VolumeSourcePicker'
 import { useTenant } from '@/contexts/TenantContext'
 
 interface CustomImageDialogProps {
@@ -48,7 +51,9 @@ export default function CustomImageDialog({ open, onClose, editData }: CustomIma
   const [sourceType, setSourceType] = useState<'url' | 'volume'>('url')
   const [downloadUrl, setDownloadUrl] = useState('')
   const [checksumUrl, setChecksumUrl] = useState('')
-  const [volumeId, setVolumeId] = useState('')
+  const [source, setSource] = useState<VolumeLocation>({ connectionId: '', node: '', volumeId: '' })
+  // Copies of the same image on other clusters (#44), deployable there too.
+  const [extraLocations, setExtraLocations] = useState<VolumeLocation[]>([])
   const [defaultDiskSize, setDefaultDiskSize] = useState('20G')
   const [minMemory, setMinMemory] = useState(512)
   const [recommendedMemory, setRecommendedMemory] = useState(2048)
@@ -61,13 +66,6 @@ export default function CustomImageDialog({ open, onClose, editData }: CustomIma
 
   // Volume browser state
   const [connections, setConnections] = useState<any[]>([])
-  const [selectedConn, setSelectedConn] = useState('')
-  const [nodes, setNodes] = useState<any[]>([])
-  const [selectedNode, setSelectedNode] = useState('')
-  const [storages, setStorages] = useState<any[]>([])
-  const [selectedStorage, setSelectedStorage] = useState('')
-  const [volumes, setVolumes] = useState<any[]>([])
-  const [loadingVolumes, setLoadingVolumes] = useState(false)
 
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -77,9 +75,12 @@ export default function CustomImageDialog({ open, onClose, editData }: CustomIma
     if (!open) return
     setError(null)
     setSaving(false)
-    setSelectedConn(editData?.sourceConnectionId || '')
-    setSelectedNode(editData?.sourceNode || '')
-    setSelectedStorage(editData?.volumeId?.split(':')[0] || '')
+    setSource({
+      connectionId: editData?.sourceConnectionId || '',
+      node: editData?.sourceNode || '',
+      volumeId: editData?.volumeId || '',
+    })
+    setExtraLocations(Array.isArray(editData?.extraLocations) ? editData.extraLocations : [])
 
     if (editData) {
       setName(editData.name || '')
@@ -90,7 +91,6 @@ export default function CustomImageDialog({ open, onClose, editData }: CustomIma
       setSourceType(editData.sourceType || 'url')
       setDownloadUrl(editData.downloadUrl || '')
       setChecksumUrl(editData.checksumUrl || '')
-      setVolumeId(editData.volumeId || '')
       setDefaultDiskSize(editData.defaultDiskSize || '20G')
       setMinMemory(editData.minMemory || 512)
       setRecommendedMemory(editData.recommendedMemory || 2048)
@@ -108,7 +108,6 @@ export default function CustomImageDialog({ open, onClose, editData }: CustomIma
       setSourceType('url')
       setDownloadUrl('')
       setChecksumUrl('')
-      setVolumeId('')
       setDefaultDiskSize('20G')
       setMinMemory(512)
       setRecommendedMemory(2048)
@@ -128,53 +127,10 @@ export default function CustomImageDialog({ open, onClose, editData }: CustomIma
       .then(res => {
         const conns = res.data || []
         setConnections(conns)
-        if (conns.length === 1) setSelectedConn(current => current || conns[0].id)
+        if (conns.length === 1) setSource(current => current.connectionId ? current : { ...current, connectionId: conns[0].id })
       })
       .catch(() => {})
   }, [open, sourceType])
-
-  // Fetch nodes
-  useEffect(() => {
-    if (!selectedConn) { setNodes([]); setSelectedNode(''); return }
-    fetch(`/api/v1/connections/${encodeURIComponent(selectedConn)}/nodes`)
-      .then(r => r.json())
-      .then(res => {
-        const nodeList = (res.data || []).filter((n: any) => n.status === 'online')
-        setNodes(nodeList)
-        if (nodeList.length === 1) setSelectedNode(current => current || nodeList[0].node)
-      })
-      .catch(() => setNodes([]))
-  }, [selectedConn])
-
-  // Fetch storages
-  useEffect(() => {
-    if (!selectedConn || !selectedNode) { setStorages([]); setSelectedStorage(''); return }
-    fetch(`/api/v1/connections/${encodeURIComponent(selectedConn)}/nodes/${encodeURIComponent(selectedNode)}/storages`)
-      .then(r => r.json())
-      .then(res => {
-        const stList = (res.data || []).filter((s: any) => s.enabled !== 0)
-        setStorages(stList)
-      })
-      .catch(() => setStorages([]))
-  }, [selectedConn, selectedNode])
-
-  // Fetch volumes from storage
-  useEffect(() => {
-    if (!selectedConn || !selectedNode || !selectedStorage) { setVolumes([]); return }
-    setLoadingVolumes(true)
-    fetch(`/api/v1/connections/${encodeURIComponent(selectedConn)}/nodes/${encodeURIComponent(selectedNode)}/storage/${encodeURIComponent(selectedStorage)}/content`)
-      .then(r => r.json())
-      .then(res => {
-        // Filter to importable image files
-        const vols = (res.data || []).filter((v: any) => {
-          const vol = v.volid || ''
-          return vol.match(/\.(qcow2|raw|vmdk|img|iso)$/i) || v.content === 'import' || v.content === 'images'
-        })
-        setVolumes(vols)
-        setLoadingVolumes(false)
-      })
-      .catch(() => { setVolumes([]); setLoadingVolumes(false) })
-  }, [selectedConn, selectedNode, selectedStorage])
 
   const handleSave = useCallback(async () => {
     setSaving(true)
@@ -184,9 +140,10 @@ export default function CustomImageDialog({ open, onClose, editData }: CustomIma
       name, vendor, version, arch, format, sourceType,
       downloadUrl: sourceType === 'url' ? downloadUrl : null,
       checksumUrl: sourceType === 'url' && checksumUrl ? checksumUrl : null,
-      volumeId: sourceType === 'volume' ? volumeId : null,
-      sourceConnectionId: sourceType === 'volume' ? selectedConn : null,
-      sourceNode: sourceType === 'volume' ? selectedNode : null,
+      volumeId: sourceType === 'volume' ? source.volumeId : null,
+      sourceConnectionId: sourceType === 'volume' ? source.connectionId : null,
+      sourceNode: sourceType === 'volume' ? source.node : null,
+      extraLocations: sourceType === 'volume' ? extraLocations : [],
       defaultDiskSize, minMemory, recommendedMemory, minCores, recommendedCores,
       ostype, tags: tags || null,
       isShared,
@@ -215,12 +172,14 @@ export default function CustomImageDialog({ open, onClose, editData }: CustomIma
     }
   }, [
     name, vendor, version, arch, format, sourceType, downloadUrl, checksumUrl,
-    volumeId, defaultDiskSize, minMemory, recommendedMemory, minCores,
-    recommendedCores, ostype, tags, isEdit, editData, onClose, isShared, selectedConn, selectedNode,
+    source, extraLocations, defaultDiskSize, minMemory, recommendedMemory, minCores,
+    recommendedCores, ostype, tags, isEdit, editData, onClose, isShared,
   ])
 
   const canSave = name.trim() &&
-    (sourceType === 'url' ? downloadUrl.trim() : volumeId.trim() && selectedConn && selectedNode) &&
+    (sourceType === 'url'
+      ? downloadUrl.trim()
+      : [source, ...extraLocations].every(loc => loc.volumeId.trim() && loc.connectionId && loc.node)) &&
     defaultDiskSize.match(/^\d+G$/)
 
   return (
@@ -313,96 +272,52 @@ export default function CustomImageDialog({ open, onClose, editData }: CustomIma
           {/* Source: Volume browser */}
           {sourceType === 'volume' && (
             <Stack spacing={2}>
-              <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 2 }}>
-                <FormControl size="small">
-                  <InputLabel>{t('templates.deploy.target.connection')}</InputLabel>
-                  <Select
-                    value={selectedConn}
-                    onChange={e => { setSelectedConn(e.target.value); setSelectedNode(''); setSelectedStorage('') }}
-                    label={t('templates.deploy.target.connection')}
-                  >
-                    {connections.map((c: any) => (
-                      <MenuItem key={c.id} value={c.id}>{c.name}</MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-                <FormControl size="small" disabled={!selectedConn}>
-                  <InputLabel>{t('templates.deploy.target.node')}</InputLabel>
-                  <Select
-                    value={selectedNode}
-                    onChange={e => { setSelectedNode(e.target.value); setSelectedStorage('') }}
-                    label={t('templates.deploy.target.node')}
-                  >
-                    {nodes.map((n: any) => (
-                      <MenuItem key={n.node} value={n.node}>{n.node}</MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-                <FormControl size="small" disabled={!selectedNode}>
-                  <InputLabel>{t('templates.deploy.target.storage')}</InputLabel>
-                  <Select
-                    value={selectedStorage}
-                    onChange={e => setSelectedStorage(e.target.value)}
-                    label={t('templates.deploy.target.storage')}
-                  >
-                    {storages.map((s: any) => (
-                      <MenuItem key={s.storage} value={s.storage}>
-                        {s.storage} ({s.type})
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </Box>
+              <VolumeSourcePicker key={`${open}-${editData?.id ?? 'new'}`} connections={connections} value={source} onChange={setSource} />
 
-              {/* Volume list */}
-              {loadingVolumes ? (
-                <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
-                  <CircularProgress size={24} />
+              {/* Copies on other clusters: the same image deploys there too.
+                  Each copy is picked explicitly, a volume name proves
+                  nothing about the disk it names on another cluster. */}
+              {extraLocations.map((loc, i) => (
+                <Box key={i} sx={{ border: 1, borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 1.5 }}>
+                    <Typography variant="subtitle2" sx={{ opacity: 0.7 }}>
+                      {t('templates.catalog.extraLocationTitle', { index: i + 1 })}
+                    </Typography>
+                    <Tooltip title={t('common.delete')}>
+                      <IconButton
+                        size="small"
+                        sx={{ ml: 'auto' }}
+                        aria-label={t('common.delete')}
+                        onClick={() => setExtraLocations(list => list.filter((_, j) => j !== i))}
+                      >
+                        <i className="ri-delete-bin-line" style={{ fontSize: 16 }} />
+                      </IconButton>
+                    </Tooltip>
+                  </Box>
+                  <VolumeSourcePicker
+                    connections={connections.filter((c: any) => c.id === loc.connectionId
+                      || ![source, ...extraLocations].some(other => other.connectionId === c.id))}
+                    value={loc}
+                    onChange={next => setExtraLocations(list => list.map((item, j) => j === i ? next : item))}
+                  />
                 </Box>
-              ) : volumes.length > 0 ? (
-                <Box sx={{ maxHeight: 200, overflow: 'auto', border: 1, borderColor: 'divider', borderRadius: 1 }}>
-                  {volumes.map((v: any) => (
-                    <Box
-                      key={v.volid}
-                      onClick={() => setVolumeId(v.volid)}
-                      sx={{
-                        px: 1.5, py: 0.75,
-                        cursor: 'pointer',
-                        bgcolor: volumeId === v.volid ? 'action.selected' : 'transparent',
-                        '&:hover': { bgcolor: 'action.hover' },
-                        display: 'flex', alignItems: 'center', gap: 1,
-                        borderBottom: 1, borderColor: 'divider',
-                        '&:last-child': { borderBottom: 0 },
-                      }}
-                    >
-                      <i className="ri-file-line" style={{ fontSize: 14, opacity: 0.5 }} />
-                      <Typography variant="body2" sx={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '0.75rem' }}>
-                        {v.volid}
-                      </Typography>
-                      {v.size && (
-                        <Typography variant="caption" sx={{ opacity: 0.5, ml: 'auto' }}>
-                          {(v.size / 1073741824).toFixed(1)} GB
-                        </Typography>
-                      )}
-                    </Box>
-                  ))}
-                </Box>
-              ) : selectedStorage ? (
-                <Typography variant="body2" sx={{ opacity: 0.5, fontStyle: 'italic' }}>
-                  {t('templates.catalog.noVolumes')}
-                </Typography>
-              ) : null}
+              ))}
 
-              <TextField
-                size="small"
-                label={t('templates.catalog.volumeIdLabel')}
-                value={volumeId}
-                onChange={e => setVolumeId(e.target.value)}
-                required
-                fullWidth
-                placeholder="local:import/my-image.qcow2"
-                helperText={t('templates.catalog.volumeIdHelp')}
-              />
+              {connections.length > extraLocations.length + 1 && (
+                <Box>
+                  <Button
+                    size="small"
+                    startIcon={<i className="ri-add-line" />}
+                    disabled={!source.connectionId}
+                    onClick={() => setExtraLocations(list => [...list, { connectionId: '', node: '', volumeId: '' }])}
+                  >
+                    {t('templates.catalog.addExtraLocation')}
+                  </Button>
+                  <Typography variant="caption" sx={{ opacity: 0.65, display: 'block' }}>
+                    {t('templates.catalog.extraLocationHelp')}
+                  </Typography>
+                </Box>
+              )}
             </Stack>
           )}
 

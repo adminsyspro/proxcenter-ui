@@ -89,7 +89,9 @@ export function customImageToCloudImage(ci: {
   ostype: string
   tags: string | null
   isShared?: boolean | null
-}): CloudImage & { sourceType: string; volumeId: string | null; isCustom: true; isShared?: boolean } {
+  sourceConnectionId?: string | null
+  extraLocations?: unknown
+}): CloudImage & { sourceType: string; volumeId: string | null; isCustom: true; isShared?: boolean; connectionIds?: string[] } {
   return {
     slug: ci.slug,
     name: ci.name,
@@ -111,5 +113,12 @@ export function customImageToCloudImage(ci: {
     volumeId: ci.volumeId,
     isCustom: true,
     isShared: !!ci.isShared,
+    // A volume image only deploys on the clusters holding a copy (#44); the
+    // wizard warns before the deploy route refuses. URL images go anywhere.
+    ...(ci.sourceType === 'volume' && {
+      connectionIds: [ci.sourceConnectionId, ...(Array.isArray(ci.extraLocations) ? ci.extraLocations : [])
+        .map((loc: any) => loc?.connectionId)]
+        .filter((id): id is string => typeof id === 'string' && !!id),
+    }),
   }
 }

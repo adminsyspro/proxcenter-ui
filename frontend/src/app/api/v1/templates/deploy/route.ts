@@ -13,7 +13,7 @@ import { downloadToStorage } from "@/lib/proxmox/download"
 import { selectDownloadStorage } from "@/lib/templates/downloadStorage"
 import { customImageToCloudImage } from "@/lib/templates/cloudImages"
 import { findCustomImageForTenant } from "@/lib/templates/customImageScope"
-import { authorizeImageVolume, SourceVolumeError, type ImageVolumeSource } from '@/lib/templates/sourceVolume'
+import { authorizeImageVolume, imageSourceForConnection, SourceVolumeError, type ImageVolumeSource } from '@/lib/templates/sourceVolume'
 import { resolveBuiltInImage } from "@/lib/templates/catalogStore"
 import { supportsVmDisks } from "@/lib/proxmox/storage"
 import { resolveVdcForTenant, checkVdcQuota } from "@/lib/vdc/quota"
@@ -32,6 +32,10 @@ import { checkVmidAgainstTenantRange } from "@/lib/tenant/vmidRange"
 export const runtime = "nodejs"
 
 type DeploymentStatus = "pending" | "downloading" | "creating" | "configuring" | "starting" | "completed" | "failed"
+
+// No cluster names here: the copies may sit on clusters the caller cannot see.
+// The wizard names the ones it can, from its own connection list.
+const IMAGE_NOT_ON_CLUSTER = 'This image has no copy on the selected cluster. Pick a cluster that holds one, or ask the image owner to add this cluster to the image.'
 
 async function updateDeployment(id: string, status: DeploymentStatus, extra: Record<string, any> = {}) {
   const prisma = await getSessionPrisma()
@@ -96,7 +100,15 @@ export async function POST(req: Request) {
       isCustom = true
       sourceType = customRow.sourceType
       volumeId = customRow.volumeId
-      if (sourceType === 'volume') volumeSource = customRow
+      if (sourceType === 'volume') {
+        // A volume image deploys from the copy held by the target cluster:
+        // its source, or one its owner declared on another cluster (#44).
+        volumeSource = imageSourceForConnection(customRow, body.connectionId)
+        if (!volumeSource) {
+          return NextResponse.json({ error: IMAGE_NOT_ON_CLUSTER }, { status: 400 })
+        }
+        volumeId = volumeSource.volumeId ?? null
+      }
     }
 
     // Resolve the tenant's vDC for this connection+node so we can pin
@@ -344,7 +356,8 @@ export async function POST(req: Request) {
         if (volumeSource) {
           // Recheck before the background worker writes to PVE. A source
           // that disappeared or changed ownership must never be imported.
-          const currentSource = await findCustomImageForTenant(tenantId, body.imageSlug)
+          const currentRow = await findCustomImageForTenant(tenantId, body.imageSlug)
+          const currentSource = currentRow && imageSourceForConnection(currentRow, body.connectionId)
           if (!currentSource || currentSource.sourceType !== 'volume'
             || currentSource.volumeId !== volumeSource.volumeId
             || currentSource.sourceConnectionId !== volumeSource.sourceConnectionId

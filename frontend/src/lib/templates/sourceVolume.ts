@@ -19,6 +19,67 @@ export interface ImageVolumeSource {
   isShared?: boolean
 }
 
+/** Another cluster holding a copy of a volume-mode image (#44). */
+export interface ImageLocation {
+  connectionId: string
+  node: string
+  volumeId: string
+}
+
+/** The copies declared on a catalogue row. The column is JSON, so anything
+ * that is not a complete location is dropped rather than trusted. */
+export function extraImageLocations(row: { extraLocations?: unknown }): ImageLocation[] {
+  if (!Array.isArray(row.extraLocations)) return []
+
+  return row.extraLocations.filter((loc): loc is ImageLocation => !!loc && typeof loc === 'object'
+    && ['connectionId', 'node', 'volumeId'].every(key => typeof (loc as any)[key] === 'string' && (loc as any)[key]))
+}
+
+/** Every cluster the image can be deployed on: its source first, then copies. */
+export function imageConnectionIds(row: ImageVolumeSource & { extraLocations?: unknown }): string[] {
+  return [row.sourceConnectionId, ...extraImageLocations(row).map(loc => loc.connectionId)]
+    .filter((id): id is string => !!id)
+}
+
+/** The row as seen from `connectionId`: its own source on the source cluster,
+ * the declared copy on another one, null when that cluster holds no copy.
+ * Built from the server-resolved row only, so the result can stand in as the
+ * `publishedImage` grant of authorizeImageVolume. */
+export function imageSourceForConnection<T extends ImageVolumeSource & { extraLocations?: unknown }>(
+  row: T,
+  connectionId: string,
+): T | null {
+  // A legacy row without a source keeps failing in authorizeImageVolume with
+  // its own "select its source cluster" message.
+  if (!row.sourceConnectionId || row.sourceConnectionId === connectionId) return row
+  const copy = extraImageLocations(row).find(loc => loc.connectionId === connectionId)
+  if (!copy) return null
+
+  return { ...row, volumeId: copy.volumeId, sourceConnectionId: copy.connectionId, sourceNode: copy.node }
+}
+
+/** Validate the copies an owner declares on save: one per cluster, never on
+ * the source cluster, and each checked like a source (exists on that node,
+ * matches the format, inside the caller's scope). */
+export async function authorizeImageLocations(args: {
+  tenantId: string
+  source: ImageVolumeSource
+  locations: ImageLocation[]
+}): Promise<void> {
+  const { tenantId, source, locations } = args
+  const seen = new Set<string>()
+  for (const loc of locations) {
+    if (loc.connectionId === source.sourceConnectionId || seen.has(loc.connectionId)) {
+      throw new SourceVolumeError('Each cluster can hold only one copy of the image.', 400)
+    }
+    seen.add(loc.connectionId)
+    await authorizeImageVolume({
+      tenantId,
+      source: { ...source, volumeId: loc.volumeId, sourceConnectionId: loc.connectionId, sourceNode: loc.node },
+    })
+  }
+}
+
 /** Validate the exact source, never the caller's declared destination storage.
  * A locator is required: identical PVE volume names can refer to different
  * disks on different clusters, or on two nodes' local storage. Old rows need

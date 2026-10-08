@@ -5401,7 +5401,10 @@
       "formatIso": "ISO (média d'installation)",
       "formatIsoChip": "Installation manuelle",
       "formatCloudChip": "Cloud-init",
-      "isoUploadNote": "Les fichiers ISO sont des médias bootables. Après le déploiement, la VM reste arrêtée et vous lancerez l'installeur manuellement via la console noVNC — il n'y a pas de cloud-init du tout."
+      "isoUploadNote": "Les fichiers ISO sont des médias bootables. Après le déploiement, la VM reste arrêtée et vous lancerez l'installeur manuellement via la console noVNC — il n'y a pas de cloud-init du tout.",
+      "extraLocationTitle": "Copie sur un autre cluster n°{index}",
+      "addExtraLocation": "Ajouter une copie sur un autre cluster",
+      "extraLocationHelp": "Sélectionnez la même image stockée sur un autre cluster pour pouvoir la déployer aussi là-bas. Chaque cluster a besoin de sa propre copie, accessible depuis ses nœuds."
     },
     "blueprints": {
       "image": "Image",
@@ -5442,7 +5445,9 @@
         "storageQuotaUnlimited": "Aucun quota de stockage",
         "storageQuotaUnavailable": "Quota indisponible",
         "noWritableStorage": "Aucun stockage de disques VM accessible en écriture dans ce vDC.",
-        "storagesLoadError": "La liste des stockages n’a pas pu être chargée. Réessayez ou contactez votre fournisseur."
+        "storagesLoadError": "La liste des stockages n’a pas pu être chargée. Réessayez ou contactez votre fournisseur.",
+        "imageNotOnCluster": "Cette image n'a pas de copie sur le cluster sélectionné. Choisissez un autre cluster, ou demandez au propriétaire de l'image d'y ajouter celui-ci.",
+        "imageNotOnClusterUse": "Cette image n'a pas de copie sur le cluster sélectionné. Déployez-la sur : {clusters}."
       },
       "hardware": {
         "title": "Matériel",

@@ -177,6 +177,10 @@ model CustomImage {
   volumeId          String?  @map("volume_id") // e.g. "local:import/golden-ubuntu.qcow2"
   sourceConnectionId String? @map("source_connection_id")
   sourceNode        String?  @map("source_node")
+  // Same image on other clusters (#44): [{ connectionId, node, volumeId }].
+  // A volume name says nothing about which disk it is on another cluster, so
+  // each copy is declared and validated explicitly, never inferred.
+  extraLocations    Json     @default("[]") @map("extra_locations")
   defaultDiskSize   String   @default("20G") @map("default_disk_size")
   minMemory         Int      @default(512) @map("min_memory")
   recommendedMemory Int      @default(2048) @map("recommended_memory")

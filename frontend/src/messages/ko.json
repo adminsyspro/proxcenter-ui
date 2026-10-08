@@ -4061,6 +4061,7 @@
       "snapshot": "스냅샷",
       "backup": "백업",
       "restore": "복원",
+      "consoleOpen": "콘솔 열기",
       "export": "내보내기",
       "import": "가져오기",
       "test": "테스트",
@@ -4543,6 +4544,7 @@
     "detail": {
       "node": "노드",
       "user": "사용자",
+      "initiatedBy": "실행한 사용자",
       "duration": "소요 시간",
       "loading": "로드 중...",
       "allLogs": "모든 로그",

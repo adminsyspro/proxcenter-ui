@@ -4061,6 +4061,7 @@
       "snapshot": "Snapshot",
       "backup": "Backup",
       "restore": "Restauration",
+      "consoleOpen": "Ouverture de console",
       "export": "Export",
       "import": "Import",
       "test": "Test",
@@ -4543,6 +4544,7 @@
     "detail": {
       "node": "Nœud",
       "user": "Utilisateur",
+      "initiatedBy": "Initié par",
       "duration": "Durée",
       "loading": "Chargement...",
       "allLogs": "Tous les logs",

@@ -194,6 +194,7 @@ return events.filter(e => {
         e.node?.toLowerCase().includes(qq) ||
         e.entity?.toLowerCase().includes(qq) ||
         e.user?.toLowerCase().includes(qq) ||
+        e.initiatedBy?.email?.toLowerCase().includes(qq) ||
         e.typeLabel?.toLowerCase().includes(qq)
 
       const matchLevel = levelFilter === 'all' || e.level === levelFilter
@@ -313,12 +314,24 @@ return { total, errors, warnings, running }
       {
         field: 'user',
         headerName: t('eventsPage.columnUser'),
-        width: 140,
-        renderCell: params => (
-          <Typography variant='body2' sx={{ opacity: 0.7 }}>
-            {params.row.user || '—'}
-          </Typography>
-        )
+        width: 200,
+        renderCell: params =>
+          params.row.initiatedBy?.email ? (
+            // ProxCenter operator first, the technical PVE identity that
+            // actually ran the task kept visible underneath (roadmap#41).
+            <Box sx={{ minWidth: 0, lineHeight: 1.2 }}>
+              <Typography variant='body2' noWrap sx={{ display: 'block' }}>
+                {params.row.initiatedBy.email}
+              </Typography>
+              <Typography variant='caption' noWrap sx={{ display: 'block', opacity: 0.6 }}>
+                {params.row.user || '—'}
+              </Typography>
+            </Box>
+          ) : (
+            <Typography variant='body2' sx={{ opacity: 0.7 }}>
+              {params.row.user || '—'}
+            </Typography>
+          )
       },
       {
         field: 'message',

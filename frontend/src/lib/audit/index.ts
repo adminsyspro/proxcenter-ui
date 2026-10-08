@@ -56,6 +56,9 @@ export type AuditAction =
   | "backup"
   | "restore"
 
+  // Interactive console opened (noVNC on a QEMU VM or an LXC container)
+  | "console.open"
+
   // Other
   | "export"
   | "import"

@@ -9,7 +9,7 @@
  * Gotchas carried over from RestoreVmDialog.test.tsx:
  *   - the dialog renders in a MUI portal: assert through screen.*
  *   - a MUI Select opens on mouseDown, not click
- *   - MSW runs with onUnhandledRequest:'error', so every endpoint the wizard
+ *   - MSW runs with onUnhandledFrame:'error', so every endpoint the wizard
  *     touches on open must be seeded
  * `pollIntervalMs` is driven down to 20 ms so the queue runs at test speed.
  */

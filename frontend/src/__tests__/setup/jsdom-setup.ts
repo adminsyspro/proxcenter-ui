@@ -41,6 +41,6 @@ for (const name of ['localStorage', 'sessionStorage'] as const) {
 
 // Start MSW for the jsdom lane. Unhandled requests error loudly so a missing
 // fixture fails the test instead of silently returning empty data.
-beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
+beforeAll(() => server.listen({ onUnhandledFrame: 'error' }))
 afterEach(() => server.resetHandlers())
 afterAll(() => server.close())

@@ -308,6 +308,20 @@ function seedPrereqHandlers({
   return { prepare, check, clearIssues: () => { currentIssues = [] } }
 }
 
+// The submit button turns enabled, then can flip back to disabled while a
+// debounced re-check starts. Under CI load a single click right after the
+// enabled assertion can land in that window and do nothing, so click again
+// until the handler has run. A click on a disabled button is a no-op, so the
+// handler still runs once.
+async function submitCrossCluster(onCrossClusterMigrate: ReturnType<typeof vi.fn>) {
+  await waitFor(() => {
+    if (onCrossClusterMigrate.mock.calls.length === 0) {
+      fireEvent.click(screen.getByRole('button', { name: 'Start Cross-Cluster Migration' }))
+    }
+    expect(onCrossClusterMigrate).toHaveBeenCalled()
+  })
+}
+
 async function renderPrereqs(rowLabel = /High Availability|Replication|Snapshots|Site Recovery/) {
   useLicenseMock.mockReturnValue({ hasFeature: () => true, loading: false })
   const props = { ...makeProps(), isCluster: false, onCrossClusterMigrate: vi.fn().mockResolvedValue(undefined) }
@@ -406,8 +420,12 @@ describe('MigrateVmDialog - cross-cluster prerequisites', () => {
   })
 
   it('opens a separate confirmation listing every snapshot without fetching', async () => {
-    const { prepare } = seedPrereqHandlers({ issues: [snapshotsBlocker] })
+    const { prepare, check } = seedPrereqHandlers({ issues: [snapshotsBlocker] })
     await renderPrereqs()
+    // Source-side rows render before the target cascade (remote nodes,
+    // storages, bridges, debounced check) settles. Spy only once it has, so
+    // the assertion is about the click, not about background loading.
+    await waitFor(() => expect(check).toHaveBeenCalledTimes(1), { timeout: 10_000 })
     const fetchSpy = vi.spyOn(globalThis, 'fetch')
     fireEvent.click(screen.getByRole('button', { name: 'Delete 2 snapshot(s)' }))
     const confirmation = screen.getByRole('dialog', { name: 'Delete snapshots permanently?' })
@@ -522,9 +540,7 @@ describe('MigrateVmDialog - cross-cluster prerequisites', () => {
     await clearReversible()
     fireEvent.click(restoreSwitch())
     expect(restoreSwitch()).not.toBeChecked()
-    const submit = screen.getByRole('button', { name: 'Start Cross-Cluster Migration' })
-    await waitFor(() => expect(submit).toBeEnabled())
-    fireEvent.click(submit)
+    await submitCrossCluster(props.onCrossClusterMigrate)
     await waitFor(() => expect(props.onCrossClusterMigrate).toHaveBeenCalledWith(expect.objectContaining({
       restore: { capture: haCapture, restoreHa: false, restoreReplication: false, rollbackOnFailure: true },
     })))
@@ -542,9 +558,7 @@ describe('MigrateVmDialog - cross-cluster prerequisites', () => {
     fireEvent.click(screen.getByRole('option', { name: 'remote2' }))
     fireEvent.change(screen.getByLabelText('Replication schedule'), { target: { value: '*/30' } })
     fireEvent.change(screen.getByLabelText('Rate limit (MB/s)'), { target: { value: '25' } })
-    const submit = screen.getByRole('button', { name: 'Start Cross-Cluster Migration' })
-    await waitFor(() => expect(submit).toBeEnabled())
-    fireEvent.click(submit)
+    await submitCrossCluster(props.onCrossClusterMigrate)
     await waitFor(() => expect(props.onCrossClusterMigrate).toHaveBeenCalledWith(expect.objectContaining({
       restore: expect.objectContaining({ capture: replicationCapture, restoreReplication: true, replicationTarget: 'remote2', replicationSchedule: '*/30', replicationRate: 25, rollbackOnFailure: true }),
     })))
@@ -575,9 +589,7 @@ describe('MigrateVmDialog - cross-cluster prerequisites', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Delete 2 snapshot(s)' }))
     fireEvent.click(screen.getByRole('button', { name: 'Delete permanently' }))
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Delete snapshots permanently?' })).not.toBeInTheDocument())
-    const submit = screen.getByRole('button', { name: 'Start Cross-Cluster Migration' })
-    await waitFor(() => expect(submit).toBeEnabled())
-    fireEvent.click(submit)
+    await submitCrossCluster(props.onCrossClusterMigrate)
     await waitFor(() => expect(props.onCrossClusterMigrate).toHaveBeenCalledWith(expect.objectContaining({
       restore: expect.objectContaining({ capture: { ...haCapture, snapshotsDeleted: snapshotsBlocker.remediation.names } }),
     })))

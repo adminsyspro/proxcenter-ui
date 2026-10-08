@@ -3,7 +3,7 @@
  *
  * Strategy: render the dialog with open={true}, pass connectionId+node as
  * props so the pickers are locked and we only need to seed the endpoints
- * that actually fire. MSW is wired globally with onUnhandledRequest:'error'
+ * that actually fire. MSW is wired globally with onUnhandledFrame:'error'
  * so every on-open endpoint must be seeded in beforeEach.
  *
  * Gotchas carried over from the CreateLxc/CreateVm templates:

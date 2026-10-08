@@ -9,6 +9,8 @@ import { filterCandidateConnections, isFlatRecordVisible } from '@/lib/rbac/infr
 import { getTenantInfrastructureScope, inventoryConnectionPlan, maskingScope } from '@/lib/tenant/infraScope'
 import { getVdcVmidsByConnection } from "@/lib/alerts/vdcVmids"
 import { extractTaskVmid } from "@/lib/tasks/scope"
+import { findTaskInitiators } from "@/lib/audit/taskInitiators"
+import { getPrincipal } from "@/lib/auth/principal"
 
 export const runtime = 'nodejs'
 
@@ -317,6 +319,32 @@ export async function GET(req: Request) {
 
     // Limiter le nombre de résultats (dedupKey is internal, strip it)
     const limitedEvents = dedupedEvents.slice(0, limit).map(({ dedupKey, ...event }) => event)
+
+    // Attach the ProxCenter user behind each task (roadmap#41). `user` stays
+    // the technical PVE identity; `initiatedBy` is added next to it. A tenant
+    // only reads its own journal, the provider reads every tenant's.
+    const taskEvents = limitedEvents.filter(e => e.category === 'task')
+    if (taskEvents.length > 0) {
+      try {
+        const oldest = Math.min(...taskEvents.map(e => new Date(e.ts).getTime()))
+        // The feed only needs connection.view, the identity of other users is
+        // audit data: without admin.audit a caller sees its own actions only.
+        const readsJournal = !(await checkPermission(PERMISSIONS.ADMIN_AUDIT))
+        const self = readsJournal ? null : (await getPrincipal()).principal
+        const onlyFor = readsJournal ? undefined : { userId: self?.userId, apiTokenId: self?.tokenId }
+        const initiators = await findTaskInitiators(
+          taskEvents.map(e => e.id),
+          { tenantId: infra.kind === 'provider' ? null : tenantId, since: new Date(oldest - 60_000), onlyFor },
+        )
+        for (const event of taskEvents) {
+          const initiator = initiators.get(event.id)
+          if (initiator) event.initiatedBy = initiator
+        }
+      } catch (e) {
+        // Attribution is a bonus on top of the PVE feed, never a reason to fail it.
+        console.error('Erreur attribution events:', e)
+      }
+    }
 
     return NextResponse.json({
       data: limitedEvents,

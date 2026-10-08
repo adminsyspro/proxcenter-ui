@@ -4048,6 +4048,7 @@
       "snapshot": "Snapshot",
       "backup": "Backup",
       "restore": "Wiederherstellen",
+      "consoleOpen": "Konsole geöffnet",
       "export": "Exportieren",
       "import": "Importieren",
       "test": "Testen",
@@ -4522,6 +4523,7 @@
     "detail": {
       "node": "Node",
       "user": "Benutzer",
+      "initiatedBy": "Ausgelöst von",
       "duration": "Dauer",
       "loading": "Laden...",
       "allLogs": "Alle Logs",

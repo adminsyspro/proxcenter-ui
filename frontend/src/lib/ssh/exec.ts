@@ -1,4 +1,5 @@
 import { Client } from "ssh2"
+import { Agent } from "undici"
 import { prisma } from "@/lib/db/prisma"
 import { decryptSecret } from "@/lib/crypto/secret"
 import { safeLog } from "@/lib/log/sanitize"
@@ -7,6 +8,22 @@ import { makeHostVerifier } from "@/lib/ssh/host-key-store"
 import { resolveSshTargetPort, sshTargetHost, type SshTarget } from "@/lib/ssh/node-endpoint-core"
 
 const ORCHESTRATOR_URL = process.env.ORCHESTRATOR_URL || "http://localhost:8080"
+
+// Dispatcher for /ssh/exec with undici's own headers/body timeouts turned off.
+// Their default is 300s, so any remote command running longer than five minutes
+// (a warm-migration dd segment, a thick zeroing) failed as a bare
+// "TypeError: fetch failed" while the orchestrator was still running it; that
+// read as "unreachable", and the same command was started a second time over
+// ssh2 on top of the first (two dd on one range, discussion #1076). The call is
+// bounded by the caller's AbortSignal.timeout instead.
+const orchestratorExecDispatcher = new Agent({ allowH2: false, headersTimeout: 0, bodyTimeout: 0 })
+
+// Error codes meaning the request never reached the orchestrator, so the command
+// cannot have started there and running it over ssh2 is safe. Anything else
+// (socket closed mid-response, undici timeouts) means it may be running.
+const ORCHESTRATOR_NOT_REACHED_CODES = new Set([
+  "ECONNREFUSED", "ENOTFOUND", "EAI_AGAIN", "EHOSTUNREACH", "ENETUNREACH", "UND_ERR_CONNECT_TIMEOUT",
+])
 
 /**
  * Escape a string for safe use as a shell argument.
@@ -91,6 +108,22 @@ export function isOrchestratorTimeoutError(err: unknown): boolean {
 }
 
 /**
+ * True when a failed orchestrator fetch provably never reached the orchestrator
+ * (refused, unresolvable, unroutable, connect timeout). Only then is falling back
+ * to ssh2 safe: once the request is out, a lost response says nothing about the
+ * command, which may still be running there (#1076).
+ */
+export function isOrchestratorNotReachedError(err: unknown): boolean {
+  let e: unknown = err
+  for (let depth = 0; e && depth < 4; depth++) {
+    const code = (e as { code?: unknown }).code
+    if (typeof code === "string" && ORCHESTRATOR_NOT_REACHED_CODES.has(code)) return true
+    e = (e as { cause?: unknown }).cause
+  }
+  return false
+}
+
+/**
  * A resettable inactivity timer. Armed on creation; `bump()` restarts the
  * countdown (call it on every byte of activity), `clear()` cancels it, and
  * `onFire` runs once if the full interval elapses without a bump.
@@ -112,7 +145,11 @@ export function createInactivityTimer(ms: number, onFire: () => void): { bump: (
  * Execute an SSH command with orchestrator-first, ssh2-fallback strategy.
  *
  * 1. Try the Go orchestrator POST /api/v1/ssh/exec
- * 2. On network error (ECONNREFUSED, fetch failure) → direct ssh2 execution
+ * 2. When the orchestrator was never reached (refused, unresolvable) or rejects
+ *    the command → direct ssh2 execution
+ *
+ * A call that streams (`onData`) or guards inactivity goes straight to ssh2: the
+ * orchestrator answers once at the end, so neither option can work through it.
  *
  * `target` is a bare host (the connection port applies, unless a node override
  * matches that host) or an endpoint from resolveNodeSshEndpoint carrying the
@@ -207,6 +244,14 @@ export async function executeSSH(
   const needsSudo = connection.sshUseSudo && user !== 'root'
   const finalCommand = needsSudo ? `sudo sh -c ${shellEscape(command)}` : command
 
+  const direct = () => executeSSHDirect({
+    host: nodeIp, port, user, key, password, passphrase, command: finalCommand, timeoutMs,
+    inactivityMs: execOpts.inactivityMs, onData: execOpts.onData,
+  })
+
+  // The orchestrator answers once at the end, so a streaming call cannot go through it.
+  if (execOpts.onData !== undefined || execOpts.inactivityMs !== undefined) return direct()
+
   // 1. Try orchestrator
   try {
     const body: Record<string, unknown> = { host: nodeIp, port, user, command: finalCommand }
@@ -219,7 +264,8 @@ export async function executeSSH(
       headers: orchestratorHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(timeoutMs),
-    })
+      dispatcher: orchestratorExecDispatcher,
+    } as RequestInit)
 
     if (res.ok) {
       const data = await res.json()
@@ -243,15 +289,17 @@ export async function executeSSH(
     if (isOrchestratorTimeoutError(err)) {
       return { success: false, error: `orchestrator SSH timeout (${Math.round(timeoutMs / 1000)}s)` }
     }
+    // Same for a response lost after the request went out: only a request that
+    // never reached the orchestrator is safe to replay over ssh2 (#1076).
+    if (!isOrchestratorNotReachedError(err)) {
+      return { success: false, error: `orchestrator connection lost while the command may still be running: ${(err as Error)?.message ?? String(err)}` }
+    }
     // Orchestrator unreachable – fall through to ssh2
     console.log(`[ssh] orchestrator unavailable, falling back to ssh2 for ${safeLog(nodeIp)}`)
   }
 
   // 2. Fallback: direct ssh2
-  return executeSSHDirect({
-    host: nodeIp, port, user, key, password, passphrase, command: finalCommand, timeoutMs,
-    inactivityMs: execOpts.inactivityMs, onData: execOpts.onData,
-  })
+  return direct()
 }
 
 /**

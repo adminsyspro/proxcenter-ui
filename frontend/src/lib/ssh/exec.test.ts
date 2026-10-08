@@ -40,7 +40,24 @@ vi.mock("@/lib/ssh/host-key-store", () => ({
   },
 }))
 
-import { buildConnectConfig, isOrchestratorTimeoutError, createInactivityTimer, executeSSHDirect } from "./exec"
+// executeSSH reads the connection's SSH settings; a password connection with
+// sudo off keeps the command unchanged so the tests can compare it verbatim.
+vi.mock("@/lib/db/prisma", () => ({
+  prisma: {
+    connection: {
+      findUnique: async () => ({
+        sshEnabled: true, sshPort: 22, sshUser: "root", sshAuthMethod: "password",
+        sshKeyEnc: null, sshPassEnc: "enc", sshUseSudo: false,
+      }),
+    },
+  },
+}))
+vi.mock("@/lib/crypto/secret", () => ({ decryptSecret: () => "pw" }))
+
+import {
+  buildConnectConfig, isOrchestratorTimeoutError, isOrchestratorNotReachedError, createInactivityTimer,
+  executeSSH, executeSSHDirect,
+} from "./exec"
 
 const flush = () => new Promise<void>((r) => setTimeout(r, 0))
 
@@ -215,5 +232,72 @@ describe("executeSSHDirect (ssh2 wiring)", () => {
     expect(answer).toHaveBeenCalledWith([])
     c._stream!.emit("close", 0)
     await p
+  })
+})
+
+describe("isOrchestratorNotReachedError", () => {
+  const fetchFailed = (code: string) => Object.assign(new TypeError("fetch failed"), { cause: Object.assign(new Error(code), { code }) })
+
+  it("treats a refused or unresolvable orchestrator as never reached, so falling back to ssh2 is safe", () => {
+    for (const code of ["ECONNREFUSED", "ENOTFOUND", "EAI_AGAIN", "EHOSTUNREACH", "ENETUNREACH", "UND_ERR_CONNECT_TIMEOUT"]) {
+      expect(isOrchestratorNotReachedError(fetchFailed(code))).toBe(true)
+    }
+  })
+
+  it("treats a lost response as possibly running, so the command is never started twice (#1076)", () => {
+    expect(isOrchestratorNotReachedError(fetchFailed("UND_ERR_HEADERS_TIMEOUT"))).toBe(false)
+    expect(isOrchestratorNotReachedError(fetchFailed("UND_ERR_SOCKET"))).toBe(false)
+    expect(isOrchestratorNotReachedError(fetchFailed("ECONNRESET"))).toBe(false)
+    expect(isOrchestratorNotReachedError(new TypeError("fetch failed"))).toBe(false)
+    expect(isOrchestratorNotReachedError(null)).toBe(false)
+  })
+})
+
+describe("executeSSH (orchestrator first, ssh2 fallback)", () => {
+  const fetchMock = vi.fn()
+  const fetchFailed = (code: string) => Object.assign(new TypeError("fetch failed"), { cause: Object.assign(new Error(code), { code }) })
+
+  afterEach(() => { fetchMock.mockReset(); vi.unstubAllGlobals(); h.clients.length = 0 })
+
+  const stub = () => vi.stubGlobal("fetch", fetchMock)
+
+  it("returns the orchestrator's answer when it responds", async () => {
+    stub()
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ success: true, output: "ok" }), { status: 200 }))
+    await expect(executeSSH("c1", "10.0.0.9", "uptime")).resolves.toEqual({ success: true, output: "ok", error: undefined })
+    expect(h.clients).toHaveLength(0)
+  })
+
+  it("does not start the command again over ssh2 when the response is lost after the request went out (#1076)", async () => {
+    stub()
+    fetchMock.mockRejectedValue(fetchFailed("UND_ERR_HEADERS_TIMEOUT"))
+    const r = await executeSSH("c1", "10.0.0.9", "dd if=/dev/nbd0 of=/dev/vg/vm-1-disk-0", 60_000)
+    expect(r.success).toBe(false)
+    expect(r.error).toMatch(/may still be running/)
+    expect(h.clients).toHaveLength(0)
+  })
+
+  it("falls back to ssh2 when the orchestrator was never reached", async () => {
+    stub()
+    fetchMock.mockRejectedValue(fetchFailed("ECONNREFUSED"))
+    const p = executeSSH("c1", "10.0.0.9", "uptime")
+    await flush(); await flush()
+    const c = h.clients.at(-1)!
+    c._stream!.emit("data", Buffer.from("up 3 days"))
+    c._stream!.emit("close", 0)
+    await expect(p).resolves.toMatchObject({ success: true, output: "up 3 days" })
+  })
+
+  it("sends a streaming call straight to ssh2, since the orchestrator answers only once at the end", async () => {
+    stub()
+    const chunks: string[] = []
+    const p = executeSSH("c1", "10.0.0.9", "dd status=progress", 60_000, { inactivityMs: 30_000, onData: (x) => chunks.push(x) })
+    await flush(); await flush()
+    expect(fetchMock).not.toHaveBeenCalled()
+    const c = h.clients.at(-1)!
+    c._stream!.emit("data", Buffer.from("1 GB copied"))
+    c._stream!.emit("close", 0)
+    await expect(p).resolves.toMatchObject({ success: true })
+    expect(chunks).toEqual(["1 GB copied"])
   })
 })

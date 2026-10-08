@@ -58,7 +58,7 @@
     "jpeg-js": "^0.4.4",
     "leaflet": "^1.9.4",
     "nanoid": "^6.0.1",
-    "next": "^16.3.6",
+    "next": "^16.3.8",
     "next-auth": "^4.24.15",
     "next-intl": "^4.14.7",
     "otplib": "^13.5.0",
@@ -130,7 +130,7 @@
     "@hono/node-server": ">=1.19.13",
     "defu": ">=6.1.5",
     "fast-uri": "^3.1.4",
-    "shell-quote": ">=1.10.0",
+    "shell-quote": ">=1.11.0",
     "deepmerge-ts": ">=8.0.2"
   },
   "overrides": {
@@ -149,7 +149,7 @@
     "fast-uri": "^3.1.4",
     "postcss": "$postcss",
     "js-cookie": "^3.0.7",
-    "shell-quote": ">=1.10.0",
+    "shell-quote": ">=1.11.0",
     "deepmerge-ts": ">=8.0.2",
     "tmp": "^0.2.6",
     "uuid": "^11.1.1",

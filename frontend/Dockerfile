@@ -96,9 +96,10 @@ WORKDIR /app
 # CVE round (CVE-2026-45447 PKCS7_verify use-after-free et al.). The
 # node:26-alpine base ships 3.5.6-r0; Alpine has published the fixed
 # 3.5.7-r0. Pulling the patched packages explicitly keeps the runtime
-# image clean regardless of the base image's rebuild cadence. Runs as
-# root, before the USER switch further down.
-RUN apk upgrade --no-cache libssl3 libcrypto3
+# image clean regardless of the base image's rebuild cadence. Same for
+# zlib (CVE-2026-85091 heap overflow, fixed in 1.3.2-r1). Runs as root,
+# before the USER switch further down.
+RUN apk upgrade --no-cache libssl3 libcrypto3 zlib
 
 # Remove npm/npx from the runtime image. The app never invokes them at
 # run time (docker-entrypoint.sh runs the Prisma CLI via `node

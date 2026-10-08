@@ -9,7 +9,7 @@ import { commonLayoutClasses, verticalLayoutClasses } from '@layouts/utils/layou
 const StyledContentWrapper = styled.div`
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
+  min-block-size: 100vh;
   /* A fixed top banner (broadcast or demo mode) publishes its height here.
      Unset resolves to 0px, so the layout is untouched without a banner.
      box-sizing is border-box globally, so min-height still totals 100vh. */

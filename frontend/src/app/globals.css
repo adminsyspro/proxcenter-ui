@@ -109,10 +109,9 @@ html {
 body::before {
   content: '';
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 280px;
+  inset-block-start: 0;
+  inset-inline: 0;
+  block-size: 280px;
   background: linear-gradient(
     180deg,
     rgba(var(--mui-palette-primary-mainChannel), 0.18) 0%,

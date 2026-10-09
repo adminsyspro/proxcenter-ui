@@ -53,6 +53,11 @@ const defaults = (): ServerConfig => ({
 })
 
 let cfg: ServerConfig = defaults()
+// Real SSH handshakes: slower than the 5 s default on shared CI runners. A
+// test that overruns keeps writing into the next test's root (`root` is
+// reassigned per test), so give them room rather than let them leak.
+vi.setConfig({ testTimeout: 30_000 })
+
 let root = ''
 let server: Server
 let port = 0
@@ -238,10 +243,17 @@ afterEach(async () => {
 const creds = () => ({ host: '127.0.0.1', port, username: 'root', password: 'ok' })
 const log = vi.fn()
 
+// The host key is fixed for the whole file: probe it once. A probe per
+// writer doubled the handshakes and pushed the multi-writer tests past the
+// default timeout on the CI runners.
+let cachedFingerprint: string | null = null
+
 async function fingerprint(): Promise<string> {
+  if (cachedFingerprint) return cachedFingerprint
   const res = await probeSsh(creds(), 5_000)
   if (!res.ok || !res.hostKeyFingerprint) throw new Error('probe failed')
-  return res.hostKeyFingerprint
+  cachedFingerprint = res.hostKeyFingerprint
+  return cachedFingerprint
 }
 
 async function writer(over: Partial<ReturnType<typeof creds>> = {}): Promise<SshWriter> {

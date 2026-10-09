@@ -85,6 +85,29 @@ describe('guest disk latency peak thresholds (#881)', () => {
   })
 })
 
+describe('backup coverage settings (roadmap#48)', () => {
+  it('defaults to the alert off, 24 h of grace and the no-backup tag', async () => {
+    const body = await (await callRoute(GET as any)).json()
+    expect(body).toMatchObject({ backup_coverage_alerts: 0, backup_coverage_grace_hours: 24, backup_coverage_exclude_tag: 'no-backup' })
+  })
+
+  it('pushes the switch and the normalized settings to the orchestrator and stores them', async () => {
+    const res = await callRoute(PUT as any, {
+      method: 'PUT',
+      body: { backup_coverage_alerts: 1, backup_coverage_grace_hours: 48.6, backup_coverage_exclude_tag: ' Skip ' },
+    })
+    expect(res.status).toBe(200)
+    const expected = expect.objectContaining({ backup_coverage_alerts: 1, backup_coverage_grace_hours: 48, backup_coverage_exclude_tag: 'skip' })
+    expect(updateThresholdsMock).toHaveBeenCalledWith(expected)
+    expect(setSettingMock).toHaveBeenCalledWith('alert_thresholds', 'tenant-1', expected)
+  })
+
+  it('falls back to the default tag when PVE would refuse the value', async () => {
+    const body = await (await callRoute(PUT as any, { method: 'PUT', body: { backup_coverage_exclude_tag: 'has space' } })).json()
+    expect(body.backup_coverage_exclude_tag).toBe('no-backup')
+  })
+})
+
 describe('PUT /api/v1/settings/alerts/thresholds', () => {
   it('trims the pattern, pushes it to the orchestrator and stores it', async () => {
     const res = await callRoute(PUT as any, {

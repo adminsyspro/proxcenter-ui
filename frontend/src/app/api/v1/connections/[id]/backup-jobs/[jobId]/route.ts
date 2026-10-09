@@ -3,6 +3,7 @@ import { NextResponse } from "next/server"
 import { applyMaxfilesTranslation } from "@/lib/backups/prune"
 import { buildSharedVzdumpParams, planBackupRunDispatch, vzdumpRunBody, type VmLocation } from "@/lib/backups/runDispatch"
 import { invalidateBackupRuns } from "@/lib/backups/vzdumpRunsService"
+import { namespaceMismatchResponse } from "@/lib/backups/pbsNamespace"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
@@ -119,6 +120,11 @@ export async function PUT(req: Request, ctx: RouteContext) {
         return NextResponse.json({ error: infraError }, { status: 403 })
       }
     }
+
+    // The PBS namespace is the storage's (storage.cfg), never a job option:
+    // refuse one the target storage does not carry, ignore it otherwise.
+    const nsError = await namespaceMismatchResponse(conn, body.storage || owned.job?.storage, body.namespace)
+    if (nsError) return nsError
 
     // Construire les paramètres
     const params = new URLSearchParams()

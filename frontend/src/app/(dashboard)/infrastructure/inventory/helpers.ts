@@ -126,7 +126,9 @@ export function canEditLxcFeature(key: LxcFeatureKey, unprivileged: boolean): bo
 /**
  * PVE errors reach the UI as `PVE <status> <path>: <raw body>`, the body being
  * PVE's JSON envelope (`{"data":null,"message":"Permission check failed …\n"}`).
- * Surface the message alone when the body parses; keep the text otherwise.
+ * Surface the message alone when the body parses, followed by the per-field
+ * reasons of a parameter check (`"errors":{"schedule":"invalid format …"}`);
+ * keep the text otherwise.
  */
 export function humanizePveError(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error)
@@ -136,8 +138,13 @@ export function humanizePveError(error: unknown): string {
   try {
     const body = JSON.parse(match[1])
     const inner = typeof body?.message === 'string' ? body.message.trim() : ''
+    const fields = body?.errors && typeof body.errors === 'object'
+      ? Object.entries(body.errors).map(([field, reason]) => `${field}: ${String(reason).trim()}`)
+      : []
 
-    return inner || message
+    if (!inner) return message
+
+    return fields.length > 0 ? `${inner} ${fields.join('; ')}` : inner
   } catch {
     return message
   }

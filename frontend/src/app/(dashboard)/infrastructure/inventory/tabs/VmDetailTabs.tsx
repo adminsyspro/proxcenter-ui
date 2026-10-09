@@ -67,7 +67,10 @@ import { formatBytes } from '@/utils/format'
 import { formatDateTime } from '@/lib/i18n/date'
 import VmFirewallTab from '@/components/VmFirewallTab'
 import RestoreVmDialog from '@/components/backup/RestoreVmDialog'
+import RestoreToGuestDialog from '@/components/backups/RestoreToGuestDialog'
+import { isRestorableItemPath } from '@/lib/guestFileRestore/paths'
 import ChangeTrackingTab from './ChangeTrackingTab'
+import ReplicationJobDialog, { type ReplicationJobDialogState } from '../components/ReplicationJobDialog'
 import { useLicense, Features } from '@/contexts/LicenseContext'
 import { useRBAC } from '@/contexts/RBACContext'
 const AddDiskDialog = dynamic(() => import('@/components/HardwareModals').then(mod => ({ default: mod.AddDiskDialog })), { ssr: false })
@@ -214,6 +217,7 @@ export default function VmDetailTabs(props: any) {
   const [vmBackupNamespaceFilter, setVmBackupNamespaceFilter] = useState<string>('all')
   // Per-backup restore dialog (Backup tab). Null when closed.
   const [restoreDialog, setRestoreDialog] = useState<{ backup: any } | null>(null)
+  const [restoreToGuestItem, setRestoreToGuestItem] = useState<{ path: string; directory: boolean; size?: number; label?: string } | null>(null)
   const [bootOrderOpen, setBootOrderOpen] = useState(false)
   const [bootDevices, setBootDevices] = useState<Array<{ id: string; enabled: boolean }>>([])
   const [bootSaving, setBootSaving] = useState(false)
@@ -221,7 +225,6 @@ export default function VmDetailTabs(props: any) {
 
   const {
     addCephReplicationDialogOpen,
-    addReplicationDialogOpen,
     availableTargetNodes,
     backToArchives,
     backToBackupsList,
@@ -307,12 +310,8 @@ export default function VmDetailTabs(props: any) {
     primaryColor,
     primaryColorLight,
     removeHaConfig,
-    replicationComment,
     replicationJobs,
     replicationLoading,
-    replicationRateLimit,
-    replicationSchedule,
-    replicationTargetNode,
     rollbackSnapshot,
     rrdError,
     rrdLoading,
@@ -322,7 +321,6 @@ export default function VmDetailTabs(props: any) {
     saveNotes,
     savingCpu,
     savingMemory,
-    savingReplication,
     selectedBackup,
     selectedCephCluster,
     selectedPveStorage,
@@ -335,7 +333,6 @@ export default function VmDetailTabs(props: any) {
     setAddOtherHardwareDialogOpen,
     setEditOtherHardwareDialogOpen,
     setSelectedOtherHardware,
-    setAddReplicationDialogOpen,
     setBackupCompress,
     setBackupMode,
     setBackupNote,
@@ -378,12 +375,7 @@ export default function VmDetailTabs(props: any) {
     setNewSnapshotRam,
     setNotesEditing,
     setNumaEnabled,
-    setReplicationComment,
     setReplicationLoaded,
-    setReplicationRateLimit,
-    setReplicationSchedule,
-    setReplicationTargetNode,
-    setSavingReplication,
     setSelectedBackup,
     selectedDisk,
     setSelectedCephCluster,
@@ -535,6 +527,8 @@ export default function VmDetailTabs(props: any) {
   const [diskMenuTarget, setDiskMenuTarget] = useState<any | null>(null)
   const [detachConfirmOpen, setDetachConfirmOpen] = useState(false)
   const [deleteUnusedTarget, setDeleteUnusedTarget] = useState<any | null>(null)
+
+  const [replicationDialogState, setReplicationDialogState] = useState<ReplicationJobDialogState>(null)
 
   // Replication log dialog
   const [replicationLogJob, setReplicationLogJob] = useState<any | null>(null)
@@ -3481,12 +3475,27 @@ return (
                                   const isNavigable = file.type === 'directory' || file.type === 'virtual' || file.leaf === false || file.leaf === 0
                                   const canDownload = explorerMode === 'pve' && selectedPveStorage
                                   const canPreviewFile = canDownload && !isNavigable && canPreview(file.name)
+                                  const guestItemPath = explorerPath === '/'
+                                    ? `/${explorerArchive}/${file.name}`
+                                    : `/${explorerArchive}${explorerPath}/${file.name}`
+                                  // Never a whole disk, partition or LV node: only entries inside a filesystem.
+                                  const canRestoreToGuest = canDownload
+                                    && (file.type === 'file' || file.type === 'directory')
+                                    && isRestorableItemPath('pve', guestItemPath)
+                                  // Right padding of the row = room for the action icons, so the
+                                  // folder chevron never slides under them.
+                                  const actionCount = canDownload ? 1 + (canPreviewFile ? 1 : 0) + (canRestoreToGuest ? 1 : 0) : 0
 
                                   
 return (
-                                    <ListItem 
-                                      key={idx} 
+                                    <ListItem
+                                      key={idx}
                                       disablePadding
+                                      // MUI pads the row button by 48px whenever there is a secondary
+                                      // action, through a nested selector the button's own sx cannot beat.
+                                      // In px: the theme spacing unit is not 8. Each small icon button is
+                                      // ~30px wide, the action block sits 16px from the edge.
+                                      sx={{ '& > .MuiListItemButton-root': { pr: `${24 + actionCount * 30}px` } }}
                                       secondaryAction={
                                         canDownload && (
                                           <Stack direction="row" spacing={0}>
@@ -3504,8 +3513,8 @@ return (
                                               </MuiTooltip>
                                             )}
                                             <MuiTooltip title={t('common.download')}>
-                                              <IconButton 
-                                                edge="end" 
+                                              <IconButton
+                                                edge={canRestoreToGuest ? false : 'end'}
                                                 size="small"
                                                 onClick={(e) => {
                                                   e.stopPropagation()
@@ -3515,6 +3524,25 @@ return (
                                                 <i className="ri-download-2-line" style={{ fontSize: 18 }} />
                                               </IconButton>
                                             </MuiTooltip>
+                                            {canRestoreToGuest && (
+                                              <MuiTooltip title={t('guestFileRestore.restoreIntoGuest')}>
+                                                <IconButton
+                                                  edge="end"
+                                                  size="small"
+                                                  onClick={(e) => {
+                                                    e.stopPropagation()
+                                                    setRestoreToGuestItem({
+                                                      path: guestItemPath,
+                                                      directory: file.type === 'directory',
+                                                      size: file.type === 'file' ? file.size : undefined,
+                                                      label: file.name,
+                                                    })
+                                                  }}
+                                                >
+                                                  <i className="ri-folder-transfer-line" style={{ fontSize: 18 }} />
+                                                </IconButton>
+                                              </MuiTooltip>
+                                            )}
                                           </Stack>
                                         )
                                       }
@@ -3522,7 +3550,7 @@ return (
                                       <ListItemButton
                                         onClick={() => isNavigable && navigateToFolder(file.name)}
                                         disabled={!isNavigable && file.type !== 'file'}
-                                        sx={{ borderRadius: 1, pr: canDownload ? (canPreviewFile ? 10 : 6) : 2 }}
+                                        sx={{ borderRadius: 1 }}
                                       >
                                         <ListItemIcon sx={{ minWidth: 36 }}>
                                           {file.type === 'directory' || file.type === 'virtual' ? (
@@ -4067,13 +4095,7 @@ return (
                             size="small"
                             variant="contained"
                             startIcon={<AddIcon />}
-                            onClick={() => {
-                              setReplicationTargetNode('')
-                              setReplicationSchedule('*/15')
-                              setReplicationRateLimit('')
-                              setReplicationComment('')
-                              setAddReplicationDialogOpen(true)
-                            }}
+                            onClick={() => setReplicationDialogState({ mode: 'create', guest: String(parseVmId(selection?.id || '').vmid) })}
                             disabled={availableTargetNodes.length === 0}
                           >
                             {t('replication.addJob')}
@@ -4134,7 +4156,7 @@ return (
                                             sx={{ height: 22 }}
                                           />
                                         </MuiTooltip>
-                                      ) : job.disable ? (
+                                      ) : job.enabled === false ? (
                                         <Chip 
                                           size="small" 
                                           label={t('common.disabled')} 
@@ -4198,6 +4220,14 @@ return (
                                             <i className="ri-play-fill" style={{ fontSize: 16 }} />
                                           </IconButton>
                                         </MuiTooltip>
+                                        <MuiTooltip title={t('common.edit')}>
+                                          <IconButton
+                                            size="small"
+                                            onClick={() => setReplicationDialogState({ mode: 'edit', job })}
+                                          >
+                                            <i className="ri-edit-line" style={{ fontSize: 16 }} />
+                                          </IconButton>
+                                        </MuiTooltip>
                                         <MuiTooltip title={t('common.delete')}>
                                           <IconButton
                                             size="small"
@@ -4232,125 +4262,16 @@ return (
                   </Stack>
 
 
-                  {/* Dialog Ajouter Réplication ZFS */}
-                  <Dialog 
-                    open={addReplicationDialogOpen} 
-                    onClose={() => setAddReplicationDialogOpen(false)}
-                    maxWidth="sm"
-                    fullWidth
-                  >
-                    <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <i className="ri-repeat-line" style={{ fontSize: 24 }} />
-                      {t('replication.createJob')}
-                    </DialogTitle>
-                    <DialogContent>
-                      <Stack spacing={2} sx={{ mt: 1 }}>
-                        <Box>
-                          <Typography variant="body2" fontWeight={600} sx={{ mb: 0.5 }}>
-                            CT/VM ID
-                          </Typography>
-                          <TextField
-                            fullWidth
-                            size="small"
-                            value={selection?.id ? parseVmId(selection.id).vmid : ''}
-                            disabled
-                          />
-                        </Box>
-
-                        <FormControl fullWidth size="small">
-                          <InputLabel>{t('replication.target')}</InputLabel>
-                          <Select
-                            value={replicationTargetNode}
-                            label={t('replication.target')}
-                            onChange={(e) => setReplicationTargetNode(e.target.value)}
-                          >
-                            {availableTargetNodes.map((node) => (
-                              <MenuItem key={node} value={node}>{node}</MenuItem>
-                            ))}
-                          </Select>
-                        </FormControl>
-
-                        <FormControl fullWidth size="small">
-                          <InputLabel>{t('replication.schedule')}</InputLabel>
-                          <Select
-                            value={replicationSchedule}
-                            label={t('replication.schedule')}
-                            onChange={(e) => setReplicationSchedule(e.target.value)}
-                          >
-                            <MenuItem value="*/5">*/5 - {t('replication.every5min')}</MenuItem>
-                            <MenuItem value="*/15">*/15 - {t('replication.every15min')}</MenuItem>
-                            <MenuItem value="*/30">*/30 - {t('replication.every30min')}</MenuItem>
-                            <MenuItem value="0">0 - {t('replication.everyHour')}</MenuItem>
-                            <MenuItem value="0 */2">0 */2 - {t('replication.every2hours')}</MenuItem>
-                            <MenuItem value="0 */6">0 */6 - {t('replication.every6hours')}</MenuItem>
-                            <MenuItem value="0 0">0 0 - {t('replication.daily')}</MenuItem>
-                          </Select>
-                        </FormControl>
-
-                        <TextField
-                          fullWidth
-                          size="small"
-                          label={t('replication.rateLimit')}
-                          value={replicationRateLimit}
-                          onChange={(e) => setReplicationRateLimit(e.target.value)}
-                          placeholder="unlimited"
-                          InputProps={{
-                            endAdornment: <InputAdornment position="end">MB/s</InputAdornment>,
-                          }}
-                        />
-
-                        <TextField
-                          fullWidth
-                          size="small"
-                          label={t('replication.comment')}
-                          value={replicationComment}
-                          onChange={(e) => setReplicationComment(e.target.value)}
-                          multiline
-                          rows={2}
-                        />
-                      </Stack>
-                    </DialogContent>
-                    <DialogActions>
-                      <Button onClick={() => setAddReplicationDialogOpen(false)}>
-                        {t('common.cancel')}
-                      </Button>
-                      <Button
-                        variant="contained"
-                        disabled={!replicationTargetNode || savingReplication}
-                        startIcon={savingReplication ? <CircularProgress size={16} /> : <AddIcon />}
-                        onClick={async () => {
-                          if (!selection?.id || !replicationTargetNode) return
-                          setSavingReplication(true)
-                          const { connId, node, vmid } = parseVmId(selection.id)
-                          try {
-                            const body: any = {
-                              target: replicationTargetNode,
-                              schedule: replicationSchedule,
-                            }
-                            if (replicationRateLimit) body.rate = replicationRateLimit
-                            if (replicationComment) body.comment = replicationComment
-
-                            const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/replication`, {
-                              method: 'POST',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ ...body, guest: vmid }),
-                            })
-                            
-                            if (res.ok) {
-                              setAddReplicationDialogOpen(false)
-                              setReplicationLoaded(false)
-                            }
-                          } catch (e) {
-                            console.error('Error creating replication job:', e)
-                          } finally {
-                            setSavingReplication(false)
-                          }
-                        }}
-                      >
-                        {t('replication.create')}
-                      </Button>
-                    </DialogActions>
-                  </Dialog>
+                  {/* Dialog Créer / Modifier Réplication ZFS */}
+                  <ReplicationJobDialog
+                    state={replicationDialogState}
+                    connId={selection?.id ? parseVmId(selection.id).connId : ''}
+                    node={selection?.id ? parseVmId(selection.id).node : ''}
+                    targets={availableTargetNodes.map((n: string) => ({ node: n, online: true }))}
+                    jobs={replicationJobs}
+                    onClose={() => setReplicationDialogState(null)}
+                    onSaved={() => setReplicationLoaded(false)}
+                  />
 
                   {/* Dialog Confirmer suppression */}
                   <Dialog 
@@ -5056,6 +4977,20 @@ return (
           </Button>
         </DialogActions>
       </Dialog>
+      {restoreToGuestItem && selection?.type === 'vm' && selectedBackup && selectedPveStorage && (() => {
+        const { connId, node, type, vmid } = parseVmId(selection.id)
+
+        return (
+          <RestoreToGuestDialog
+            open
+            onClose={() => setRestoreToGuestItem(null)}
+            source={{ kind: 'pve', connId, storage: selectedPveStorage.storage, volume: selectedBackup.backupPath }}
+            items={[restoreToGuestItem]}
+            defaultTarget={{ connId, node, type: type === 'lxc' ? 'lxc' : 'qemu', vmid: Number(vmid), name: data?.name || data?.title }}
+            backupLabel={selectedBackup.backupTime ? `${data?.name || data?.title || vmid} · ${formatDateTime(selectedBackup.backupTime * 1000, locale)}` : undefined}
+          />
+        )
+      })()}
       {restoreDialog && selection?.type === 'vm' && (() => {
         const { connId, node, type, vmid } = parseVmId(selection.id)
 

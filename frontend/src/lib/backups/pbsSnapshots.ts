@@ -71,7 +71,11 @@ export async function fetchAllPbsBackups(
             vmName: vmName,
             backupTime: snap['backup-time'] || 0,
             backupTimeFormatted: backupTime?.toLocaleString(dateLocale) || '-',
-            backupTimeIso: backupTime?.toISOString() || '',
+            // PBS names a snapshot `<type>/<id>/<RFC 3339 UTC>` without
+            // milliseconds; with them PVE refuses the volume ("unable to parse
+            // PBS volume name"), which broke every path rebuilt from this field
+            // (file restore, whole-guest restore of /operations/backups).
+            backupTimeIso: backupTime?.toISOString().replace(/\.\d{3}Z$/, 'Z') || '',
 
             // Taille
             size: snap.size || 0,

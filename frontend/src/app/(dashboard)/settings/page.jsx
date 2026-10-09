@@ -74,6 +74,11 @@ const SyslogTab = dynamic(() => import('@/components/settings/SyslogTab'), {
   loading: tabLoading
 })
 
+const GuestFileRestoreTab = dynamic(() => import('@/components/settings/GuestFileRestoreTab'), {
+  ssr: false,
+  loading: tabLoading
+})
+
 const AppearanceTab = dynamic(() => import('@/components/settings/AppearanceTab'), {
   ssr: false,
   loading: tabLoading
@@ -2373,7 +2378,7 @@ export default function SettingsPage() {
     return () => setPageInfo('', '', '')
   }, [setPageInfo, t, isOnboarding])
 
-  const allTabNames = ['connections', 'appearance', 'alert-thresholds', 'notifications', 'syslog', 'broadcast', 'ldap', 'oidc', 'license', 'ai', 'green', 'white-label', 'vdc', 'tenants', 'ssh-commands', 'ha', 'api']
+  const allTabNames = ['connections', 'appearance', 'alert-thresholds', 'notifications', 'syslog', 'guest-file-restore', 'broadcast', 'ldap', 'oidc', 'license', 'ai', 'green', 'white-label', 'vdc', 'tenants', 'ssh-commands', 'ha', 'api']
 
   const allTabs = [
     { label: t('settings.connections'), icon: 'ri-link', component: ConnectionsTab, providerOnly: true },
@@ -2381,6 +2386,7 @@ export default function SettingsPage() {
     { label: t('settings.alertThresholds.title'), icon: 'ri-alarm-warning-line', component: AlertThresholdsTab, providerOnly: true },
     { label: t('settings.notifications'), icon: 'ri-notification-3-line', component: NotificationsTab, requiredFeature: Features.NOTIFICATIONS, providerOnly: true },
     { label: t('settings.syslog.tabLabel'), icon: 'ri-broadcast-line', component: SyslogTab, requiredFeature: Features.SYSLOG_FORWARDING, providerOnly: true },
+    { label: t('guestFileRestore.tabLabel'), icon: 'ri-folder-transfer-line', component: GuestFileRestoreTab, providerOnly: true },
     { label: t('settings.broadcast.tabLabel'), icon: 'ri-megaphone-line', component: BroadcastTab, providerOnly: true },
     { label: 'LDAP / Active Directory', icon: 'ri-server-line', component: LdapConfigTab, requiredFeature: Features.LDAP, providerOnly: true },
     { label: 'OIDC / SSO', icon: 'ri-shield-keyhole-line', component: OidcConfigTab, requiredFeature: Features.OIDC, providerOnly: true },

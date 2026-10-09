@@ -84,6 +84,22 @@ describe('GET /api/v1/internal/alert-config', () => {
     expect(body.thresholds.snapshot_max_age_days).toBe(7)
   })
 
+  it('ships the backup coverage settings (roadmap#48), the grace hours as int', async () => {
+    getSettingMock.mockResolvedValueOnce({ backup_coverage_alerts: 1, backup_coverage_grace_hours: 12.7, backup_coverage_exclude_tag: ' skip ' })
+    findManyMock.mockResolvedValueOnce([])
+
+    const body = await (await GET(makeReq({ 'X-API-Key': 'secret-key' }))).json()
+    expect(body.thresholds).toMatchObject({ backup_coverage_alerts: 1, backup_coverage_grace_hours: 12, backup_coverage_exclude_tag: 'skip' })
+  })
+
+  it('defaults the backup coverage alert to off when the setting predates it', async () => {
+    getSettingMock.mockResolvedValueOnce({ cpu_warning: 70 })
+    findManyMock.mockResolvedValueOnce([])
+
+    const body = await (await GET(makeReq({ 'X-API-Key': 'secret-key' }))).json()
+    expect(body.thresholds).toMatchObject({ backup_coverage_alerts: 0, backup_coverage_grace_hours: 24, backup_coverage_exclude_tag: 'no-backup' })
+  })
+
   it('truncates fractional snapshot_max_age_days to int for the Go decoder', async () => {
     // The Go AlertThresholds struct decodes snapshot_max_age_days as int.
     // A fractional value (which the settings PUT path can persist) would make

@@ -6,6 +6,7 @@ import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { getCurrentTenantId } from '@/lib/tenant'
 import { alertsApi, parseOrchestratorError } from '@/lib/orchestrator/client'
 import { demoResponse } from '@/lib/demo/demo-api'
+import { DEFAULT_COVERAGE_SETTINGS, normalizeExcludeTag, normalizeGraceHours } from '@/lib/backups/coverage'
 
 export const runtime = 'nodejs'
 
@@ -58,6 +59,15 @@ const DEFAULT_THRESHOLDS = {
   // Independent from the RPO grace above: an operator can want to hear about a
   // job that failed outright without hearing about one that merely drifted.
   replication_failure_alerts: 1,
+  // Backup coverage (roadmap#48): hours a new guest may stay out of every
+  // backup job before it is reported, and the PVE tag that opts a guest out.
+  // Read by the coverage list today, pushed with the rest so the orchestrator
+  // can raise the matching alert with the same settings.
+  backup_coverage_grace_hours: DEFAULT_COVERAGE_SETTINGS.graceHours,
+  backup_coverage_exclude_tag: DEFAULT_COVERAGE_SETTINGS.excludeTag,
+  // 1 = the orchestrator raises one alert per uncovered guest and resolves it
+  // once covered. Off by default: a fleet without jobs would alert on every guest.
+  backup_coverage_alerts: 0,
 }
 
 type Thresholds = typeof DEFAULT_THRESHOLDS
@@ -73,6 +83,10 @@ function coerceThresholds(raw: any): Thresholds {
       t[key] = v
     }
   }
+  // The coverage settings are an int and a PVE tag: a fraction or a value PVE
+  // would refuse as a tag falls back to a usable setting instead.
+  t.backup_coverage_grace_hours = normalizeGraceHours(t.backup_coverage_grace_hours)
+  t.backup_coverage_exclude_tag = normalizeExcludeTag(t.backup_coverage_exclude_tag) ?? DEFAULT_COVERAGE_SETTINGS.excludeTag
   return t as Thresholds
 }
 

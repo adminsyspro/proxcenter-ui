@@ -1452,3 +1452,51 @@ model LicenseMapping {
   @@id([licenseId, connectionId])
   @@map("license_mappings")
 }
+
+/// Restore of files from a PBS backup straight into a running guest (agent or
+/// SSH). One row per job; progress and the last log lines are mirrored here so
+/// the dialog can poll it. Credentials never land in this table.
+model GuestFileRestoreJob {
+  id             String    @id @default(cuid())
+  tenantId       String    @default("default") @map("tenant_id")
+  connectionId   String    @map("connection_id")
+  node           String
+  vmid           Int
+  guestType      String    @map("guest_type")
+  guestName      String?   @map("guest_name")
+  // GuestRestoreSource (ids only, no secret)
+  source         Json
+  // [{ path, directory, size? }]
+  items          Json
+  // agent | ssh
+  method         String
+  // { mode: 'original'|'custom', path?, windowsDrive? }
+  destination    Json
+  // keep | overwrite | skip
+  conflict       String
+  // queued | running | completed | completed_with_errors | failed | cancelled
+  status         String    @default("queued")
+  // linux | windows
+  guestOs        String?   @map("guest_os")
+  bytesDone      BigInt    @default(0) @map("bytes_done")
+  // Bytes received from the backup (runs ahead of bytesDone while a file is staged)
+  bytesRead      BigInt    @default(0) @map("bytes_read")
+  bytesTotal     BigInt?   @map("bytes_total")
+  filesDone      Int       @default(0) @map("files_done")
+  filesSkipped   Int       @default(0) @map("files_skipped")
+  filesFailed    Int       @default(0) @map("files_failed")
+  currentPath    String?   @map("current_path")
+  error          String?
+  // Last 200 lines: [{ at, level: 'info'|'warn'|'error', msg }]
+  log            Json      @default("[]")
+  createdById    String?   @map("created_by_id")
+  createdByEmail String?   @map("created_by_email")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  startedAt      DateTime? @map("started_at")
+  completedAt    DateTime? @map("completed_at")
+  updatedAt      DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  @@index([tenantId, createdAt])
+  @@index([connectionId, vmid])
+  @@map("guest_file_restore_jobs")
+}

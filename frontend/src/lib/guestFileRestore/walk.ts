@@ -10,6 +10,7 @@
 import { pbsFetch } from '@/lib/proxmox/pbs-client'
 import { pveFetch } from '@/lib/proxmox/client'
 
+import { stripTrailing } from './paths'
 import type { ResolvedSource } from './sources'
 
 export type SourceEntryType = 'file' | 'directory' | 'symlink' | 'other'
@@ -38,7 +39,7 @@ function base64(s: string): string {
 }
 
 function joinSourcePath(dir: string, name: string): string {
-  return `${dir.replace(/\/+$/, '')}/${name}`
+  return `${stripTrailing(dir, '/')}/${name}`
 }
 
 function entryType(raw: { type?: string; leaf?: unknown }): SourceEntryType {
@@ -82,7 +83,7 @@ export async function listSourceDirectory(src: ResolvedSource, dir: string, sign
       { slowRead: true },
     )
   } else {
-    const inner = dir === '/' ? '' : dir.replace(/\/+$/, '')
+    const inner = dir === '/' ? '' : stripTrailing(dir, '/')
     const params = new URLSearchParams({
       'backup-type': src.backupType,
       'backup-id': src.backupId,

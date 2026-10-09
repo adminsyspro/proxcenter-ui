@@ -5,6 +5,7 @@ import {
   guestTargetPath,
   innerPathOf,
   isRestorableItemPath,
+  stripTrailing,
   isSafeRelPath,
   joinGuestPath,
   keepBothCandidates,
@@ -163,5 +164,15 @@ describe('isRestorableItemPath', () => {
     expect(isRestorableItemPath('pve', '/etc/hosts')).toBe(false)
     expect(isRestorableItemPath('pbs', '/etc')).toBe(true)
     expect(isRestorableItemPath('pbs', '/')).toBe(false)
+  })
+})
+
+describe('stripTrailing', () => {
+  it('drops only trailing characters of the set, in linear time', () => {
+    expect(stripTrailing('/a/b///', '/')).toBe('/a/b')
+    expect(stripTrailing('C:\\dir\\/', '\\/')).toBe('C:\\dir')
+    expect(stripTrailing('///', '/')).toBe('')
+    expect(stripTrailing('abc==', '=')).toBe('abc')
+    expect(stripTrailing('a' + '/'.repeat(100_000) + 'b', '/')).toBe('a' + '/'.repeat(100_000) + 'b')
   })
 })

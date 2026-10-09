@@ -518,7 +518,7 @@ export default function RestoreToGuestDialog({
       if (!cancelled) timer = setTimeout(tick, POLL_MS)
     }
 
-    tick()
+    void tick()
 
     return () => {
       cancelled = true

@@ -14,6 +14,7 @@ import type { Readable } from 'node:stream'
 import { Client } from 'ssh2'
 import type { ConnectConfig, SFTPWrapper, Stats } from 'ssh2'
 
+import { stripTrailing } from '../paths'
 import { chunkStream } from '../stream'
 import type { GuestFileRestoreProbeResult, GuestOs, GuestRestoreSshCredentials, SshProbeErrorClass } from '../types'
 import { GuestWriterError, errorMessage, type GuestWriter, type WriteMeta, type WriteOptions } from './writer'
@@ -47,7 +48,7 @@ export interface SshConnection {
 }
 
 export function sshFingerprint(key: Buffer): string {
-  return 'SHA256:' + createHash('sha256').update(key).digest('base64').replace(/=+$/, '')
+  return 'SHA256:' + stripTrailing(createHash('sha256').update(key).digest('base64'), '=')
 }
 
 /** True when the presented key is the one the operator confirmed. */
@@ -507,9 +508,10 @@ export class SshWriter implements GuestWriter {
     }
   }
 
-  async close(): Promise<void> {
+  close(): Promise<void> {
     try { this.sftp.end() } catch { /* already gone */ }
     try { this.client.end() } catch { /* already gone */ }
     this.closed = true
+    return Promise.resolve()
   }
 }

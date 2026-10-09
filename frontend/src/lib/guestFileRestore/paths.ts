@@ -9,6 +9,16 @@ import type { GuestOs, GuestRestoreDestination } from './types'
 export const PXAR_SUFFIX = '.pxar.didx'
 export const IMG_SUFFIX = '.img.fidx'
 
+/**
+ * Drop every trailing character found in `chars` (a loop rather than a
+ * `/x+$/` regex, which backtracks quadratically on long runs).
+ */
+export function stripTrailing(s: string, chars: string): string {
+  let end = s.length
+  while (end > 0 && chars.includes(s[end - 1])) end--
+  return s.slice(0, end)
+}
+
 /** Segments of a posix-like path, without the empty and `.` ones. */
 export function posixSegments(p: string): string[] {
   return p.split('/').filter(s => s !== '' && s !== '.')
@@ -98,12 +108,12 @@ export function toWindowsPath(posixLike: string, drive = 'C'): string {
 export function joinGuestPath(os: GuestOs, base: string, relPath: string): string {
   const rel = posixSegments(relPath)
   if (os === 'windows') {
-    let b = base.replace(/[\\/]+$/, '')
+    let b = stripTrailing(base, '\\/')
     if (/^[A-Za-z]:$/.test(b)) b += '\\'
     const prefix = b.endsWith('\\') ? b : b + '\\'
     return rel.length ? prefix + rel.map(windowsSeparators).join('\\') : b
   }
-  const b = base.replace(/\/+$/, '') || ''
+  const b = stripTrailing(base, '/')
   return rel.length ? `${b}/${rel.join('/')}` : b || '/'
 }
 
@@ -175,10 +185,10 @@ export function* keepBothCandidates(targetPath: string, os: GuestOs, prefix: str
 export function guestDirname(path: string, os: GuestOs): string {
   const { dir } = splitLast(path, os)
   if (os === 'windows') {
-    const trimmed = dir.replace(/\\+$/, '')
+    const trimmed = stripTrailing(dir, '\\')
     return /^[A-Za-z]:$/.test(trimmed) ? trimmed + '\\' : trimmed
   }
-  const trimmed = dir.replace(/\/+$/, '')
+  const trimmed = stripTrailing(dir, '/')
   return trimmed || '/'
 }
 

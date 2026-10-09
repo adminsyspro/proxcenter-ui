@@ -167,7 +167,7 @@ function numeric(buf: Buffer, off: number, len: number): number {
   }
   const text = cstr(field, 0, field.length).trim()
   if (text === '') return 0
-  const value = parseInt(text, 8)
+  const value = Number.parseInt(text, 8)
   if (!Number.isFinite(value)) throw new TarFormatError(`Invalid numeric field "${text}"`)
   return value
 }
@@ -188,7 +188,7 @@ export function parseTarHeader(block: Buffer): TarHeader | null {
   let name = cstr(block, 0, 100)
   const prefix = magic.startsWith('ustar') ? cstr(block, 345, 155) : ''
   if (prefix) name = `${prefix}/${name}`
-  const typeflag = block[156] === 0 ? '0' : String.fromCharCode(block[156])
+  const typeflag = block[156] === 0 ? '0' : String.fromCodePoint(block[156])
   const mtime = numeric(block, 136, 12)
   return {
     name,
@@ -209,7 +209,7 @@ export function parsePax(body: Buffer): Record<string, string> {
   while (off < body.length) {
     const space = body.indexOf(0x20, off)
     if (space === -1) break
-    const len = parseInt(body.subarray(off, space).toString('latin1'), 10)
+    const len = Number.parseInt(body.subarray(off, space).toString('latin1'), 10)
     if (!Number.isFinite(len) || len <= 0 || off + len > body.length) break
     const record = body.subarray(space + 1, off + len - 1).toString('utf8')
     const eq = record.indexOf('=')
@@ -248,7 +248,7 @@ class EntryBody extends Readable {
   }
 
   _read(): void {
-    if (this.pulling || this.stopped) return
+    if (this.pulling !== null || this.stopped) return
     this.pulling = this.pull()
   }
 
@@ -311,7 +311,7 @@ class EntryBody extends Readable {
   /** Resolves once no pull is in flight (the reader may then be used again). */
   async settled(): Promise<void> {
     this.stopped = true
-    while (this.pulling) await this.pulling.catch(() => {})
+    while (this.pulling !== null) await this.pulling.catch(() => {})
   }
 }
 

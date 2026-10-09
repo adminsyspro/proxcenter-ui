@@ -73,3 +73,27 @@ describe('PUT /api/v1/settings/guest-file-restore', () => {
     expect((await callRoute(PUT, { method: 'PUT', body: {} })).status).toBe(403)
   })
 })
+
+describe('settings route server errors', () => {
+  beforeEach(() => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+  })
+
+  it('maps a load failure of GET to 500 with its message, or a generic one', async () => {
+    loadMock.mockRejectedValueOnce(new Error('db down')).mockRejectedValueOnce({})
+    const first = await callRoute(GET, { method: 'GET' })
+    expect(first.status).toBe(500)
+    expect(await readJson(first)).toEqual({ error: 'db down' })
+    expect(await readJson(await callRoute(GET, { method: 'GET' }))).toEqual({ error: 'Erreur serveur' })
+  })
+
+  it('maps a save failure of PUT to 500 without auditing', async () => {
+    saveMock.mockRejectedValueOnce(new Error('write failed')).mockRejectedValueOnce(null)
+    const body = { ...DEFAULT_GUEST_FILE_RESTORE_SETTINGS }
+    const first = await callRoute(PUT, { method: 'PUT', body })
+    expect(first.status).toBe(500)
+    expect(await readJson(first)).toEqual({ error: 'write failed' })
+    expect(await readJson(await callRoute(PUT, { method: 'PUT', body }))).toEqual({ error: 'Erreur serveur' })
+    expect(auditMock).not.toHaveBeenCalled()
+  })
+})

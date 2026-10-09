@@ -103,7 +103,7 @@ function expandIpv6(ip: string): string {
   const tailGroups = tail ? tail.split(':') : []
   const missing = v.includes('::') ? 8 - headGroups.length - tailGroups.length : 0
   const groups = [...headGroups, ...Array.from({ length: Math.max(0, missing) }, () => '0'), ...tailGroups]
-  return groups.map(g => (g ? parseInt(g, 16).toString(16) : '0')).join(':')
+  return groups.map(g => (g ? Number.parseInt(g, 16).toString(16) : '0')).join(':')
 }
 
 /** Comparable form of an address: trimmed, no brackets or zone, IPv6 expanded. Null when it is not an IP. */
@@ -117,8 +117,8 @@ export function canonicalIp(value: string): string | null {
     // or `::ffff:10.0.0.1` would slip past a refusal of `10.0.0.1`.
     const mapped = /^0:0:0:0:0:ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(expanded)
     if (mapped) {
-      const hi = parseInt(mapped[1], 16)
-      const lo = parseInt(mapped[2], 16)
+      const hi = Number.parseInt(mapped[1], 16)
+      const lo = Number.parseInt(mapped[2], 16)
       return [hi >> 8, hi & 255, lo >> 8, lo & 255].join('.')
     }
     return expanded

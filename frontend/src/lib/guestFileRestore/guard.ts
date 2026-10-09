@@ -69,3 +69,14 @@ export async function authorizeRestoreTarget(target: GuestRestoreTarget): Promis
     buildVmResourceId(target.connId, target.node, target.type, String(target.vmid)),
   )
 }
+
+/**
+ * Whether the caller belongs to the provider tenant, read from the raw session
+ * claim (not getCurrentTenantId(), whose "default" fallback could promote a
+ * tenant user). API tokens never count as provider callers here.
+ */
+export async function isProviderCaller(principal: Principal): Promise<boolean> {
+  if (principal.kind === 'token') return false
+  const session = await getServerSession(authOptions)
+  return (session as any)?.user?.tenantId === PROVIDER_TENANT_ID
+}

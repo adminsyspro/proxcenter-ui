@@ -4,7 +4,7 @@ import { callRoute, readJson } from '@/__tests__/setup/route-test'
 
 const {
   userGuardMock, targetGuardMock, settingsMock, connMock, resolveSourceMock, pveFetchMock,
-  createMock, findManyMock, auditMock, runMock, afterMock, checkPermissionMock, purgeMock, reconcileMock, hostGuardMock,
+  createMock, findManyMock, auditMock, runMock, afterMock, checkPermissionMock, purgeMock, reconcileMock, hostGuardMock, providerMock,
 } = vi.hoisted(() => ({
   userGuardMock: vi.fn(),
   targetGuardMock: vi.fn(),
@@ -21,15 +21,21 @@ const {
   purgeMock: vi.fn(),
   reconcileMock: vi.fn(),
   hostGuardMock: vi.fn(),
+  providerMock: vi.fn(),
 }))
 
 vi.mock('next/server', async importOriginal => ({ ...(await importOriginal<typeof import('next/server')>()), after: (fn: () => unknown) => afterMock(fn) }))
 vi.mock('@/lib/guestFileRestore/guard', () => ({
   requireGuestFileRestoreUser: () => userGuardMock(),
   authorizeRestoreTarget: (...a: any[]) => targetGuardMock(...a),
+  isProviderCaller: (...a: any[]) => providerMock(...a),
 }))
 vi.mock('@/lib/guestFileRestore/settings', () => ({ loadGuestFileRestoreSettings: () => settingsMock() }))
-vi.mock('@/lib/guestFileRestore/guestAddresses', () => ({ assertSshHostAllowed: (...a: any[]) => hostGuardMock(...a) }))
+vi.mock('@/lib/guestFileRestore/guestAddresses', () => ({
+  assertSshHostAllowed: (...a: any[]) => hostGuardMock(...a),
+  SSH_CONNECT_FAILED_MESSAGE: 'Could not connect to the SSH host',
+  opaqueSshErrorClass: (c?: string) => c === 'unreachable' || c === 'timeout' || c === 'error',
+}))
 vi.mock('@/lib/connections/getConnection', () => ({ getConnectionByIdOrNull: (...a: any[]) => connMock(...a) }))
 vi.mock('@/lib/guestFileRestore/sources', async importOriginal => ({
   ...(await importOriginal<typeof import('@/lib/guestFileRestore/sources')>()),
@@ -89,6 +95,7 @@ beforeEach(() => {
   purgeMock.mockReset().mockResolvedValue(0)
   reconcileMock.mockReset().mockImplementation(async (rows: any[]) => rows)
   hostGuardMock.mockReset().mockResolvedValue(null)
+  providerMock.mockReset().mockResolvedValue(true)
 })
 
 const FINGERPRINT = 'SHA256:' + 'a'.repeat(43)
@@ -115,12 +122,21 @@ describe('POST /api/v1/guest-file-restore/jobs', () => {
     expect(entry.details).toMatchObject({ operation: 'restore_files_to_guest', phase: 'start', method: 'ssh', items: 1, source: 'pbs:backup/vm/100/2026-09-20T18:51:49Z' })
     expect(JSON.stringify(entry)).not.toContain('hunter2')
 
-    expect(hostGuardMock).toHaveBeenCalledWith({ conn: expect.objectContaining({ id: 'c1' }), target, host: '10.0.0.5', principal: expect.objectContaining({ userId: 'u1' }) })
+    expect(hostGuardMock).toHaveBeenCalledWith({ conn: expect.objectContaining({ id: 'c1' }), target, host: '10.0.0.5', principal: expect.objectContaining({ userId: 'u1' }), providerCaller: true })
     expect(afterMock).toHaveBeenCalledTimes(1)
     expect(runMock).toHaveBeenCalledWith('job1', expect.objectContaining({
       source: resolved, method: 'ssh', ssh, conflict: 'keep', settings: expect.objectContaining({ maxConcurrentJobs: 3 }),
       target: expect.objectContaining({ node: 'pve1', vmid: 100, type: 'qemu' }),
+      opaqueConnectErrors: false,
     }))
+  })
+
+  it('binds a tenant caller to the guest addresses and hides connection causes in its job', async () => {
+    providerMock.mockResolvedValue(false)
+    const ssh = { host: '10.0.0.5', username: 'root', password: 'p', hostKeyFingerprint: FINGERPRINT }
+    expect((await callRoute(POST, { body: body({ method: 'ssh', ssh }) })).status).toBe(202)
+    expect(hostGuardMock).toHaveBeenCalledWith(expect.objectContaining({ providerCaller: false }))
+    expect(runMock).toHaveBeenCalledWith('job1', expect.objectContaining({ opaqueConnectErrors: true }))
   })
 
   it('leaves bytesTotal null when an item has no size and honours the requested conflict', async () => {

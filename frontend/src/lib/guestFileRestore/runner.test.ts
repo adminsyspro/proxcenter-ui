@@ -15,16 +15,22 @@ const { updateMock, findUniqueMock, auditMock } = vi.hoisted(() => ({
 vi.mock('@/lib/db/prisma', () => ({ prisma: { guestFileRestoreJob: { update: updateMock, findUnique: findUniqueMock } } }))
 vi.mock('@/lib/audit', () => ({ audit: auditMock }))
 vi.mock('./writers/agent', () => ({ AgentWriter: { create: vi.fn() } }))
-vi.mock('./writers/ssh', () => ({ SshWriter: { connect: vi.fn() } }))
+vi.mock('./writers/ssh', () => ({
+  SshWriter: { connect: vi.fn() },
+  classifySshError: (err: unknown) => ({ errorClass: /ECONNREFUSED|EHOSTUNREACH/.test(String(err)) ? 'unreachable' : /auth/i.test(String(err)) ? 'auth_failed' : 'error', message: '' }),
+}))
 
 import { buildTarZst, readAll, streamOf } from './fixtures.test-helpers'
 import { resetRegistry } from './registry'
 import { _impl, cancelGuestFileRestoreJob, runGuestFileRestoreJob, type RunContext } from './runner'
+import { SshWriter } from './writers/ssh'
 import { DEFAULT_GUEST_FILE_RESTORE_SETTINGS } from './settings'
 import { _impl as spoolImpl } from './spool'
 import type { GuestOs, GuestRestoreItem } from './types'
 import type { SourceTreeEntry } from './walk'
 import { GuestWriterError, type GuestWriter, type WriteMeta } from './writers/writer'
+
+const realCreateWriter = _impl.createWriter
 
 class FakeWriter implements GuestWriter {
   readonly description = 'fake writer'
@@ -542,5 +548,30 @@ describe('runGuestFileRestoreJob', () => {
 
   it('readAll helper reads a whole stream', async () => {
     expect((await readAll(Readable.from([Buffer.from('a'), Buffer.from('b')]))).toString()).toBe('ab')
+  })
+})
+
+describe('SSH connection errors of a tenant job', () => {
+  const sshCtx = (opaque: boolean) => ({
+    ...context({ items: [{ path: '/root.pxar.didx/etc/hosts', directory: false }] }),
+    method: 'ssh' as const,
+    ssh: { host: '10.0.0.5', username: 'root', password: 'p', hostKeyFingerprint: 'SHA256:' + 'A'.repeat(43) },
+    opaqueConnectErrors: opaque,
+  })
+
+  it('logs "could not connect" instead of the network cause for a tenant, the cause for the provider', async () => {
+    _impl.createWriter = realCreateWriter
+    vi.mocked(SshWriter.connect).mockRejectedValue(new Error('connect ECONNREFUSED 10.0.0.5:22'))
+    await runGuestFileRestoreJob('job-opaque', sshCtx(true))
+    expect(lastUpdate()).toMatchObject({ status: 'failed', error: 'Could not connect to the SSH host' })
+    await runGuestFileRestoreJob('job-raw', sshCtx(false))
+    expect(lastUpdate().error).toContain('ECONNREFUSED')
+  })
+
+  it('keeps an authentication failure readable for a tenant', async () => {
+    _impl.createWriter = realCreateWriter
+    vi.mocked(SshWriter.connect).mockRejectedValue(new Error('All configured authentication methods failed'))
+    await runGuestFileRestoreJob('job-auth', sshCtx(true))
+    expect(lastUpdate().error).toContain('authentication')
   })
 })

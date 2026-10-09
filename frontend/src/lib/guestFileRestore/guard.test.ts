@@ -22,7 +22,7 @@ vi.mock('@/lib/rbac', () => ({
   isUserSuperAdmin: (...a: any[]) => superAdminMock(...a),
 }))
 
-import { authorizeRestoreTarget, requireGuestFileRestoreAdmin, requireGuestFileRestoreUser } from './guard'
+import { authorizeRestoreTarget, isProviderCaller, requireGuestFileRestoreAdmin, requireGuestFileRestoreUser } from './guard'
 
 beforeEach(() => {
   sessionMock.mockReset().mockResolvedValue({ user: { id: 'u1', tenantId: 'default', email: 'u1@example.com' } })
@@ -80,5 +80,16 @@ describe('authorizeRestoreTarget', () => {
   it('checks BACKUP_RESTORE on the vm resource', async () => {
     await authorizeRestoreTarget({ connId: 'c1', node: 'pve1', type: 'qemu', vmid: 100 })
     expect(checkPermissionMock).toHaveBeenCalledWith('backup.restore', 'vm', 'c1:pve1:qemu:100')
+  })
+})
+
+describe('isProviderCaller', () => {
+  it('reads the raw session claim and never counts an API token', async () => {
+    expect(await isProviderCaller({ kind: 'session', userId: 'u1', tenantId: 'default' } as any)).toBe(true)
+    sessionMock.mockResolvedValue({ user: { id: 'u2', tenantId: 'tenant-b' } })
+    expect(await isProviderCaller({ kind: 'session', userId: 'u2', tenantId: 'default' } as any)).toBe(false)
+    sessionMock.mockResolvedValue({ user: { id: 'u3' } })
+    expect(await isProviderCaller({ kind: 'session', userId: 'u3', tenantId: 'default' } as any)).toBe(false)
+    expect(await isProviderCaller({ kind: 'token', tenantId: 'default' } as any)).toBe(false)
   })
 })

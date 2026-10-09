@@ -1,26 +1,91 @@
 // src/lib/guestFileRestore/guestAddresses.ts
 //
-// The SSH host of a restore is bound to the guest the caller is authorised
-// on: it must be one of the addresses the guest itself reports (QEMU guest
-// agent, or the container's interfaces), so the route can never be used to
-// reach an arbitrary host with the caller's credentials. A super admin may
-// target any host (NAT, jump tunnels).
+// The SSH host of a restore. A provider caller (default tenant) already
+// reaches the whole infrastructure (node consoles, node SSH), so any host is
+// accepted (NAT, jump tunnels). Anyone else (MSP / vDC tenants, API tokens)
+// is bound to the guest they are authorised on: the host must be one of the
+// addresses the guest reports (QEMU guest agent, container interfaces), AND
+// must not be an address of the infrastructure ProxCenter knows (PVE/PBS and
+// other connections, managed nodes, ProxCenter's own interfaces). The second
+// check matters because a tenant is root in its guest and can make the agent
+// report any address, e.g. a PVE node's, to probe the management network
+// from ProxCenter.
 
+import { lookup } from 'node:dns/promises'
 import { isIP } from 'node:net'
+import { networkInterfaces } from 'node:os'
 
 import { NextResponse } from 'next/server'
 
 import type { Principal } from '@/lib/auth/principal'
 import type { PveConn } from '@/lib/connections/getConnection'
+import { prisma } from '@/lib/db/prisma'
 import { pveFetch } from '@/lib/proxmox/client'
-import { isUserSuperAdmin } from '@/lib/rbac'
 
 import type { GuestRestoreTarget } from './types'
 
 export const SSH_HOST_NOT_GUEST_MESSAGE = "SSH host must be one of the guest's addresses"
 
 /** Indirection for tests. */
-export const _impl = { pveFetch, isUserSuperAdmin }
+export const _impl = {
+  pveFetch,
+  /** Hosts (name or IP) of every connection and managed node in the database. */
+  infrastructureHosts: async (): Promise<string[]> => {
+    const [connections, hosts] = await Promise.all([
+      prisma.connection.findMany({ select: { baseUrl: true } }),
+      prisma.managedHost.findMany({ where: { ip: { not: null } }, select: { ip: true } }),
+    ])
+    const out: string[] = []
+    for (const c of connections) {
+      try {
+        out.push(new URL(c.baseUrl).hostname)
+      } catch {
+        // malformed URL: nothing to add
+      }
+    }
+    for (const h of hosts) if (h.ip) out.push(h.ip)
+    for (const url of [process.env.ORCHESTRATOR_URL, process.env.DATABASE_URL]) {
+      try {
+        if (url) out.push(new URL(url).hostname)
+      } catch {
+        // not a URL
+      }
+    }
+    return out
+  },
+  /** ProxCenter's own interface addresses. */
+  localAddresses: (): string[] => Object.values(networkInterfaces()).flat().map(a => a?.address ?? '').filter(Boolean),
+  /** Every address a host name resolves to; empty when it does not resolve. */
+  resolve: async (name: string): Promise<string[]> => {
+    try {
+      const answers = await Promise.race([
+        lookup(name, { all: true }),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('dns timeout')), 3_000)),
+      ])
+      return answers.map(a => a.address)
+    } catch {
+      return []
+    }
+  },
+}
+
+/** Canonical addresses of the infrastructure, host names resolved. */
+export async function infrastructureAddresses(): Promise<Set<string>> {
+  const hosts = [...(await _impl.infrastructureHosts()), ..._impl.localAddresses()]
+  const out = new Set<string>()
+  await Promise.all(hosts.map(async h => {
+    const direct = canonicalIp(h)
+    if (direct) {
+      out.add(direct)
+      return
+    }
+    for (const a of await _impl.resolve(h.replace(/^\[|\]$/g, ''))) {
+      const c = canonicalIp(a)
+      if (c) out.add(c)
+    }
+  }))
+  return out
+}
 
 function expandIpv6(ip: string): string {
   let v = ip
@@ -112,19 +177,20 @@ export function isAllowedSshHost(host: string, addresses: string[]): boolean {
 }
 
 /**
- * Refuse an SSH host that is not one of the guest's addresses, unless the
- * caller is a super admin. Returns the 400 to send, or null.
+ * Refuse an SSH host a non-provider caller may not reach: not one of the
+ * guest's addresses, or an infrastructure address. Same answer for both, so
+ * the refusal says nothing about the infrastructure. Returns the 400 to
+ * send, or null.
  */
 export async function assertSshHostAllowed(opts: {
   conn: PveConn
   target: GuestRestoreTarget
   host: string
   principal: Principal
+  /** Caller of the provider tenant (raw session claim), see isProviderCaller. */
+  providerCaller: boolean
 }): Promise<Response | null> {
-  const { principal } = opts
-  if (principal.kind !== 'token' && principal.userId && (await _impl.isUserSuperAdmin(principal.userId))) {
-    return null
-  }
+  if (opts.providerCaller && opts.principal.kind !== 'token') return null
   let addresses: string[]
   try {
     addresses = await listGuestAddresses(opts.conn, opts.target)
@@ -138,5 +204,22 @@ export async function assertSshHostAllowed(opts: {
   if (!isAllowedSshHost(opts.host, addresses)) {
     return NextResponse.json({ error: SSH_HOST_NOT_GUEST_MESSAGE, addresses }, { status: 400 })
   }
+  const infrastructure = await infrastructureAddresses()
+  if (infrastructure.has(canonicalIp(opts.host)!)) {
+    console.warn(`[guest-file-restore] SSH host ${opts.host} refused for vm ${opts.target.vmid}: it is an infrastructure address the guest reports as its own`)
+    return NextResponse.json({ error: SSH_HOST_NOT_GUEST_MESSAGE, addresses: addresses.filter(a => !infrastructure.has(a)) }, { status: 400 })
+  }
   return null
+}
+
+/**
+ * What a non-provider caller learns when an SSH connection fails: "could not
+ * connect" whatever the cause (refused, timeout, unreachable), so the test
+ * button cannot be used to scan ports. Authentication and host key answers
+ * stay precise: they only come from a host that speaks SSH.
+ */
+export const SSH_CONNECT_FAILED_MESSAGE = 'Could not connect to the SSH host'
+
+export function opaqueSshErrorClass(errorClass: string | undefined): boolean {
+  return errorClass === 'unreachable' || errorClass === 'timeout' || errorClass === 'error'
 }

@@ -4,14 +4,16 @@
 // would (guest agent or SSH) and reports its OS, plus the SSH host key
 // fingerprint the operator confirms before creating the job. Always answers
 // 200 with `{ ok, ... }` once the request itself is accepted; credentials
-// are used for this one connection and dropped. The SSH host must be one of
-// the guest's own addresses (super admins excepted).
+// are used for this one connection and dropped. For callers outside the
+// provider tenant, the SSH host must be one of the guest's own addresses and
+// not an infrastructure address, and a failed connection reads the same
+// whatever its cause (see guestAddresses.ts).
 
 import { NextResponse } from 'next/server'
 
 import { getConnectionByIdOrNull } from '@/lib/connections/getConnection'
-import { authorizeRestoreTarget, requireGuestFileRestoreUser } from '@/lib/guestFileRestore/guard'
-import { assertSshHostAllowed } from '@/lib/guestFileRestore/guestAddresses'
+import { authorizeRestoreTarget, isProviderCaller, requireGuestFileRestoreUser } from '@/lib/guestFileRestore/guard'
+import { SSH_CONNECT_FAILED_MESSAGE, assertSshHostAllowed, opaqueSshErrorClass } from '@/lib/guestFileRestore/guestAddresses'
 import { probeRequestSchema, validationError } from '@/lib/guestFileRestore/schemas'
 import { loadGuestFileRestoreSettings } from '@/lib/guestFileRestore/settings'
 import type { GuestFileRestoreProbeResult } from '@/lib/guestFileRestore/types'
@@ -59,9 +61,13 @@ export async function POST(request: Request) {
       result = await probeAgent({ conn, node: target.node, vmid: target.vmid })
     } else {
       if (!ssh) return NextResponse.json({ error: 'SSH credentials are required' }, { status: 400 })
-      const hostDenied = await assertSshHostAllowed({ conn, target, host: ssh.host, principal: guard.principal })
+      const providerCaller = await isProviderCaller(guard.principal)
+      const hostDenied = await assertSshHostAllowed({ conn, target, host: ssh.host, principal: guard.principal, providerCaller })
       if (hostDenied) return hostDenied
-      result = await probeSsh(ssh, settings.sshConnectTimeoutSec * 1000)
+      const sshResult = await probeSsh(ssh, settings.sshConnectTimeoutSec * 1000)
+      result = !sshResult.ok && !providerCaller && opaqueSshErrorClass('errorClass' in sshResult ? sshResult.errorClass : undefined)
+        ? { ok: false, error: SSH_CONNECT_FAILED_MESSAGE, errorClass: 'error' }
+        : sshResult
     }
 
     return NextResponse.json(result)

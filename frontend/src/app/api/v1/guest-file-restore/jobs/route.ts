@@ -12,7 +12,7 @@ import type { Prisma } from '@prisma/client'
 
 import { audit } from '@/lib/audit'
 import { getConnectionByIdOrNull } from '@/lib/connections/getConnection'
-import { authorizeRestoreTarget, requireGuestFileRestoreUser } from '@/lib/guestFileRestore/guard'
+import { authorizeRestoreTarget, isProviderCaller, requireGuestFileRestoreUser } from '@/lib/guestFileRestore/guard'
 import { assertSshHostAllowed } from '@/lib/guestFileRestore/guestAddresses'
 import { knownBytesTotal, runGuestFileRestoreJob, type RunContext } from '@/lib/guestFileRestore/runner'
 import { createJobRequestSchema, listJobsQuerySchema, validationError } from '@/lib/guestFileRestore/schemas'
@@ -121,8 +121,9 @@ export async function POST(request: Request) {
     const conn = await getConnectionByIdOrNull(target.connId)
     if (!conn) return NextResponse.json({ error: 'Connection not found' }, { status: 404 })
 
+    const providerCaller = await isProviderCaller(guard.principal)
     if (method === 'ssh' && ssh) {
-      const hostDenied = await assertSshHostAllowed({ conn, target, host: ssh.host, principal: guard.principal })
+      const hostDenied = await assertSshHostAllowed({ conn, target, host: ssh.host, principal: guard.principal, providerCaller })
       if (hostDenied) return hostDenied
     }
 
@@ -180,6 +181,7 @@ export async function POST(request: Request) {
       conflict,
       settings,
       ssh,
+      opaqueConnectErrors: !providerCaller,
     }
     after(() => runGuestFileRestoreJob(row.id, ctx))
 

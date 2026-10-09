@@ -49,9 +49,10 @@ import type {
   GuestRestoreSshCredentials,
 } from './types'
 import { walkSourceTree, type SourceTreeEntry } from './walk'
+import { SSH_CONNECT_FAILED_MESSAGE, opaqueSshErrorClass } from './guestAddresses'
 import { AgentWriter } from './writers/agent'
-import { SshWriter } from './writers/ssh'
-import { errorMessage, isFatalWriterError, type GuestWriter } from './writers/writer'
+import { SshWriter, classifySshError } from './writers/ssh'
+import { GuestWriterError, errorMessage, isFatalWriterError, type GuestWriter } from './writers/writer'
 
 export const LOG_RING_SIZE = 200
 const PROGRESS_INTERVAL_MS = 1_000
@@ -73,6 +74,8 @@ export interface RunContext {
   conflict: GuestRestoreConflict
   settings: GuestFileRestoreSettings
   ssh?: GuestRestoreSshCredentials
+  /** Non-provider caller: an SSH connection failure is logged without its cause. */
+  opaqueConnectErrors?: boolean
 }
 
 /** Indirection so tests can inject a fake writer, source and disk. */
@@ -86,7 +89,16 @@ export const _impl = {
       )
     }
     if (!ctx.ssh) throw new Error('SSH credentials are required for the SSH method')
-    return SshWriter.connect(ctx.ssh, ctx.settings.sshConnectTimeoutSec * 1000, { log: (level, msg) => log.push(level, msg) })
+    try {
+      return await SshWriter.connect(ctx.ssh, ctx.settings.sshConnectTimeoutSec * 1000, { log: (level, msg) => log.push(level, msg) })
+    } catch (err) {
+      // The job log is visible to the caller: same rule as the probe, so a
+      // job cannot serve to scan ports either.
+      if (ctx.opaqueConnectErrors && opaqueSshErrorClass(classifySshError(err).errorClass)) {
+        throw new GuestWriterError(SSH_CONNECT_FAILED_MESSAGE, true)
+      }
+      throw err
+    }
   },
   openSourceStream,
   walkSourceTree,

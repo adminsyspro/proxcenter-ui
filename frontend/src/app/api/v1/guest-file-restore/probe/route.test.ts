@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { callRoute, readJson } from '@/__tests__/setup/route-test'
 
-const { userGuardMock, targetGuardMock, settingsMock, connMock, probeAgentMock, probeSshMock, hostGuardMock } = vi.hoisted(() => ({
+const { userGuardMock, targetGuardMock, settingsMock, connMock, probeAgentMock, probeSshMock, hostGuardMock, providerMock } = vi.hoisted(() => ({
   userGuardMock: vi.fn(),
   targetGuardMock: vi.fn(),
   settingsMock: vi.fn(),
@@ -10,14 +10,20 @@ const { userGuardMock, targetGuardMock, settingsMock, connMock, probeAgentMock, 
   probeAgentMock: vi.fn(),
   probeSshMock: vi.fn(),
   hostGuardMock: vi.fn(),
+  providerMock: vi.fn(),
 }))
 
 vi.mock('@/lib/guestFileRestore/guard', () => ({
   requireGuestFileRestoreUser: () => userGuardMock(),
   authorizeRestoreTarget: (...a: any[]) => targetGuardMock(...a),
+  isProviderCaller: (...a: any[]) => providerMock(...a),
 }))
 vi.mock('@/lib/guestFileRestore/settings', () => ({ loadGuestFileRestoreSettings: () => settingsMock() }))
-vi.mock('@/lib/guestFileRestore/guestAddresses', () => ({ assertSshHostAllowed: (...a: any[]) => hostGuardMock(...a) }))
+vi.mock('@/lib/guestFileRestore/guestAddresses', () => ({
+  assertSshHostAllowed: (...a: any[]) => hostGuardMock(...a),
+  SSH_CONNECT_FAILED_MESSAGE: 'Could not connect to the SSH host',
+  opaqueSshErrorClass: (c?: string) => c === 'unreachable' || c === 'timeout' || c === 'error',
+}))
 vi.mock('@/lib/connections/getConnection', () => ({ getConnectionByIdOrNull: (...a: any[]) => connMock(...a) }))
 vi.mock('@/lib/guestFileRestore/writers/agent', () => ({ probeAgent: (...a: any[]) => probeAgentMock(...a) }))
 vi.mock('@/lib/guestFileRestore/writers/ssh', () => ({ probeSsh: (...a: any[]) => probeSshMock(...a) }))
@@ -35,6 +41,7 @@ beforeEach(() => {
   probeAgentMock.mockReset().mockResolvedValue({ ok: true, os: 'linux', hostname: 'web-01' })
   probeSshMock.mockReset().mockResolvedValue({ ok: true, os: 'windows', hostname: 'WIN', hostKeyFingerprint: 'SHA256:abc', details: { fingerprint: 'SHA256:abc' } })
   hostGuardMock.mockReset().mockResolvedValue(null)
+  providerMock.mockReset().mockResolvedValue(true)
 })
 
 describe('POST /api/v1/guest-file-restore/probe', () => {
@@ -81,7 +88,7 @@ describe('POST /api/v1/guest-file-restore/probe', () => {
     expect(res.status).toBe(200)
     expect(await readJson(res)).toMatchObject({ ok: true, os: 'windows', hostKeyFingerprint: 'SHA256:abc' })
     expect(probeSshMock).toHaveBeenCalledWith(ssh, 20_000)
-    expect(hostGuardMock).toHaveBeenCalledWith({ conn: expect.objectContaining({ id: 'c1' }), target: lxc, host: '10.0.0.5', principal: expect.objectContaining({ userId: 'u1' }) })
+    expect(hostGuardMock).toHaveBeenCalledWith({ conn: expect.objectContaining({ id: 'c1' }), target: lxc, host: '10.0.0.5', principal: expect.objectContaining({ userId: 'u1' }), providerCaller: true })
 
     const missing = await callRoute(POST, { body: { target, method: 'ssh' } })
     expect(missing.status).toBe(400)
@@ -101,6 +108,18 @@ describe('POST /api/v1/guest-file-restore/probe', () => {
     const res = await callRoute(POST, { body: { target, method: 'ssh', ssh: { host: '10.0.0.5', username: 'root', password: 'p' } } })
     expect(res.status).toBe(200)
     expect(await readJson(res)).toEqual({ ok: false, error: 'SSH authentication failed: check the user name, password or private key', errorClass: 'auth_failed' })
+  })
+
+  // Tenants must not be able to tell a closed port from a filtered one.
+  it('hides the network cause of an SSH failure from a tenant caller, not from the provider', async () => {
+    const ssh = { host: '10.0.0.5', username: 'root', password: 'p' }
+    probeSshMock.mockResolvedValue({ ok: false, error: 'SSH host unreachable: check the address, the port and the firewall', errorClass: 'unreachable' })
+    expect(await readJson(await callRoute(POST, { body: { target, method: 'ssh', ssh } }))).toMatchObject({ errorClass: 'unreachable' })
+    providerMock.mockResolvedValue(false)
+    expect(await readJson(await callRoute(POST, { body: { target, method: 'ssh', ssh } }))).toEqual({ ok: false, error: 'Could not connect to the SSH host', errorClass: 'error' })
+    expect(hostGuardMock).toHaveBeenLastCalledWith(expect.objectContaining({ providerCaller: false }))
+    probeSshMock.mockResolvedValue({ ok: false, error: 'SSH authentication failed: check the user name, password or private key', errorClass: 'auth_failed' })
+    expect(await readJson(await callRoute(POST, { body: { target, method: 'ssh', ssh } }))).toMatchObject({ errorClass: 'auth_failed' })
   })
 
   it('answers 404 when the target connection is unknown', async () => {

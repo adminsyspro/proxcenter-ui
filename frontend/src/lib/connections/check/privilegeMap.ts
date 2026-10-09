@@ -90,6 +90,11 @@ export interface PrivilegeRequirement {
   severity: 'fail' | 'warn'
 }
 
+const requirement = (severity: PrivilegeRequirement['severity']) =>
+  (id: string, path: string, privileges: string[], features: FeatureId[]): PrivilegeRequirement => ({ id, path, privileges, features, severity })
+const fail = requirement('fail')
+const warn = requirement('warn')
+
 /**
  * Audit privileges first: without them the inventory is empty, so they fail.
  * Everything else degrades one feature and warns.
@@ -100,176 +105,38 @@ export interface PrivilegeRequirement {
  * `/pool`, `/mapping`.
  */
 export const PRIVILEGE_REQUIREMENTS: PrivilegeRequirement[] = [
-  {
-    id: 'cluster-audit',
-    path: '/',
-    privileges: ['Sys.Audit'],
-    features: ['inventory', 'nodes', 'ha', 'firewall', 'backupJobs', 'ceph', 'compliance'],
-    severity: 'fail',
-  },
-  {
-    id: 'guest-audit',
-    path: '/vms',
-    privileges: ['VM.Audit'],
-    features: ['inventory', 'guestConfig', 'snapshots', 'replication', 'firewall'],
-    severity: 'fail',
-  },
-  {
-    id: 'storage-audit',
-    path: '/storage',
-    privileges: ['Datastore.Audit'],
-    features: ['inventory', 'storage', 'ceph'],
-    severity: 'fail',
-  },
-  {
-    id: 'guest-console',
-    path: '/vms',
-    privileges: ['VM.Console'],
-    features: ['console'],
-    severity: 'warn',
-  },
-  {
-    id: 'cluster-console',
-    path: '/',
-    privileges: ['Sys.Console'],
-    features: ['nodeShell', 'ha'],
-    severity: 'warn',
-  },
-  {
-    id: 'guest-power',
-    path: '/vms',
-    privileges: ['VM.PowerMgmt'],
-    features: ['guestPower'],
-    severity: 'warn',
-  },
-  {
-    id: 'guest-config',
-    path: '/vms',
-    privileges: [
-      'VM.Config.Disk',
-      'VM.Config.CPU',
-      'VM.Config.Memory',
-      'VM.Config.Network',
-      'VM.Config.Options',
-      'VM.Config.HWType',
-      'VM.Config.CDROM',
-      'VM.Config.Cloudinit',
-    ],
-    features: ['guestConfig', 'firewall'],
-    severity: 'warn',
-  },
-  {
-    id: 'guest-create',
-    path: '/vms',
-    privileges: ['VM.Allocate', 'VM.Clone'],
-    features: ['guestCreate', 'templates', 'migrationsTarget'],
-    severity: 'warn',
-  },
-  {
-    id: 'guest-snapshot',
-    path: '/vms',
-    privileges: ['VM.Snapshot', 'VM.Snapshot.Rollback'],
-    features: ['snapshots'],
-    severity: 'warn',
-  },
-  {
-    id: 'guest-migrate',
-    path: '/vms',
-    privileges: ['VM.Migrate'],
-    features: ['migrations'],
-    severity: 'warn',
-  },
-  {
-    id: 'guest-backup',
-    path: '/vms',
-    privileges: ['VM.Backup'],
-    features: ['backups'],
-    severity: 'warn',
-  },
-  {
-    id: 'storage-allocate-space',
-    path: '/storage',
-    privileges: ['Datastore.AllocateSpace'],
-    features: ['guestCreate', 'backups', 'migrations', 'migrationsTarget', 'templates'],
-    severity: 'warn',
-  },
-  {
-    id: 'storage-allocate',
-    path: '/storage',
-    privileges: ['Datastore.Allocate'],
-    features: ['storage', 'replication'],
-    severity: 'warn',
-  },
-  {
-    id: 'storage-template',
-    path: '/storage',
-    privileges: ['Datastore.AllocateTemplate'],
-    features: ['templates'],
-    severity: 'warn',
-  },
-  {
-    id: 'cluster-modify',
-    path: '/',
-    privileges: ['Sys.Modify'],
-    features: ['backupJobs', 'firewall', 'ceph', 'nodeUpdates', 'nodes'],
-    severity: 'warn',
-  },
-  {
-    id: 'cluster-incoming',
-    path: '/',
-    privileges: ['Sys.Incoming'],
-    features: ['migrationsTarget'],
-    severity: 'warn',
-  },
-  {
-    id: 'node-power',
-    path: '/nodes',
-    privileges: ['Sys.PowerMgmt'],
-    features: ['nodePower'],
-    severity: 'warn',
-  },
-  {
-    id: 'sdn-audit',
-    path: '/sdn',
-    privileges: ['SDN.Audit'],
-    features: ['sdn'],
-    severity: 'warn',
-  },
-  {
-    id: 'sdn-allocate',
-    path: '/sdn',
-    privileges: ['SDN.Allocate'],
-    features: ['sdn'],
-    severity: 'warn',
-  },
-  {
-    id: 'pool-audit',
-    path: '/pool',
-    privileges: ['Pool.Audit'],
-    features: ['pools'],
-    severity: 'warn',
-  },
-  {
-    id: 'pool-allocate',
-    path: '/pool',
-    privileges: ['Pool.Allocate'],
-    features: ['pools'],
-    severity: 'warn',
-  },
-  {
-    id: 'mapping-audit',
-    path: '/mapping',
-    privileges: ['Mapping.Audit'],
-    features: ['hardwareMappings', 'notifications'],
-    severity: 'warn',
-  },
-  {
-    id: 'mapping-modify',
-    path: '/mapping',
-    privileges: ['Mapping.Modify'],
-    features: ['notifications'],
-    severity: 'warn',
-  },
+  fail('cluster-audit', '/', ['Sys.Audit'], ['inventory', 'nodes', 'ha', 'firewall', 'backupJobs', 'ceph', 'compliance']),
+  fail('guest-audit', '/vms', ['VM.Audit'], ['inventory', 'guestConfig', 'snapshots', 'replication', 'firewall']),
+  fail('storage-audit', '/storage', ['Datastore.Audit'], ['inventory', 'storage', 'ceph']),
+  warn('guest-console', '/vms', ['VM.Console'], ['console']),
+  warn('cluster-console', '/', ['Sys.Console'], ['nodeShell', 'ha']),
+  warn('guest-power', '/vms', ['VM.PowerMgmt'], ['guestPower']),
+  warn('guest-config', '/vms', [
+    'VM.Config.Disk',
+    'VM.Config.CPU',
+    'VM.Config.Memory',
+    'VM.Config.Network',
+    'VM.Config.Options',
+    'VM.Config.HWType',
+    'VM.Config.CDROM',
+    'VM.Config.Cloudinit',
+  ], ['guestConfig', 'firewall']),
+  warn('guest-create', '/vms', ['VM.Allocate', 'VM.Clone'], ['guestCreate', 'templates', 'migrationsTarget']),
+  warn('guest-snapshot', '/vms', ['VM.Snapshot', 'VM.Snapshot.Rollback'], ['snapshots']),
+  warn('guest-migrate', '/vms', ['VM.Migrate'], ['migrations']),
+  warn('guest-backup', '/vms', ['VM.Backup'], ['backups']),
+  warn('storage-allocate-space', '/storage', ['Datastore.AllocateSpace'], ['guestCreate', 'backups', 'migrations', 'migrationsTarget', 'templates']),
+  warn('storage-allocate', '/storage', ['Datastore.Allocate'], ['storage', 'replication']),
+  warn('storage-template', '/storage', ['Datastore.AllocateTemplate'], ['templates']),
+  warn('cluster-modify', '/', ['Sys.Modify'], ['backupJobs', 'firewall', 'ceph', 'nodeUpdates', 'nodes']),
+  warn('cluster-incoming', '/', ['Sys.Incoming'], ['migrationsTarget']),
+  warn('node-power', '/nodes', ['Sys.PowerMgmt'], ['nodePower']),
+  warn('sdn-audit', '/sdn', ['SDN.Audit'], ['sdn']),
+  warn('sdn-allocate', '/sdn', ['SDN.Allocate'], ['sdn']),
+  warn('pool-audit', '/pool', ['Pool.Audit'], ['pools']),
+  warn('pool-allocate', '/pool', ['Pool.Allocate'], ['pools']),
+  warn('mapping-audit', '/mapping', ['Mapping.Audit'], ['hardwareMappings', 'notifications']),
+  warn('mapping-modify', '/mapping', ['Mapping.Modify'], ['notifications']),
 ]
 
 /**
@@ -339,92 +206,61 @@ export function hasPrivilegeAt(permissions: PvePermissions, path: string, privil
 }
 
 /**
+ * Ordered rules, the first match wins: path pattern, family, and the features
+ * the family serves. Paths are normalized by endpointFamily.
+ */
+const FAMILY_RULES: Array<[RegExp, string, FeatureId[]]> = [
+  [/^\/version$/, 'version', []],
+  [/^\/access\/permissions$/, 'access/permissions', []],
+  [/^\/access(\/|$)/, 'access', ['compliance']],
+  [/^\/cluster\/nextid$/, 'cluster/nextid', []],
+  [/^\/cluster\/resources$/, 'cluster/resources', ['inventory']],
+  [/^\/cluster\/(status|config|options)(\/|$)/, 'cluster/status', ['inventory', 'nodes']],
+  [/^\/cluster\/metrics(\/|$)/, 'cluster/metrics', ['nodes']],
+  [/^\/cluster\/(tasks|log)$/, 'cluster/log', ['inventory']],
+  [/^\/cluster\/ha(\/|$)/, 'cluster/ha', ['ha']],
+  [/^\/cluster\/sdn(\/|$)/, 'cluster/sdn', ['sdn']],
+  [/^\/cluster\/firewall(\/|$)/, 'cluster/firewall', ['firewall']],
+  [/^\/cluster\/backup(\/|$)/, 'cluster/backup', ['backupJobs']],
+  [/^\/cluster\/replication(\/|$)/, 'cluster/replication', ['replication']],
+  [/^\/cluster\/notifications(\/|$)/, 'cluster/notifications', ['notifications']],
+  [/^\/cluster\/mapping(\/|$)/, 'cluster/mapping', ['hardwareMappings']],
+  [/^\/cluster\/ceph(\/|$)/, 'ceph', ['ceph']],
+  [/^\/nodes$/, 'nodes', ['inventory']],
+  [/^\/nodes\/[^/]+\/ceph(\/|$)/, 'ceph', ['ceph']],
+  [/^\/nodes\/[^/]+\/(termproxy|vncshell|spiceshell)$/, 'node/shell', ['nodeShell']],
+  [/^\/nodes\/[^/]+\/firewall(\/|$)/, 'node/firewall', ['firewall']],
+  [/^\/nodes\/[^/]+\/apt(\/|$)/, 'node/apt', ['nodeUpdates']],
+  [/^\/nodes\/[^/]+\/status$/, 'node', ['nodes', 'compliance']],
+  [/^\/nodes\/[^/]+\/(vzdump|vzdump\/.*)$/, 'backup/vzdump', ['backups']],
+  [/^\/nodes\/[^/]+\/storage\/[^/]+\/download-url$/, 'storage/download', ['templates']],
+  [/^\/nodes\/[^/]+\/storage(\/|$)/, 'storage', ['storage']],
+  [/^\/nodes\/[^/]+\/capabilities(\/|$)/, 'node/capabilities', []],
+  [/^\/nodes\/[^/]+\/(qemu|lxc|\{x\})\/[^/]+\/(vncproxy|termproxy|spiceproxy|vncwebsocket)$/, 'guest/console', ['console']],
+  [/^\/nodes\/[^/]+\/(qemu|lxc|\{x\})\/[^/]+\/status(\/|$)/, 'guest/power', ['guestPower']],
+  [/^\/nodes\/[^/]+\/(qemu|lxc|\{x\})\/[^/]+\/(migrate|remote_migrate|mtunnel)$/, 'guest/migrate', ['migrations', 'migrationsTarget']],
+  [/^\/nodes\/[^/]+\/(qemu|lxc|\{x\})\/[^/]+\/snapshot(\/|$)/, 'guest/snapshot', ['snapshots']],
+  [/^\/nodes\/[^/]+\/(qemu|lxc|\{x\})\/[^/]+\/(clone|template)$/, 'guest/create', ['guestCreate', 'templates']],
+  [/^\/nodes\/[^/]+\/(qemu|lxc|\{x\})\/[^/]+\/firewall(\/|$)/, 'guest/firewall', ['firewall']],
+  [/^\/nodes\/[^/]+\/(qemu|lxc|\{x\})\/[^/]+(\/|$)/, 'guest', ['inventory', 'guestConfig']],
+  [/^\/nodes\/[^/]+\/(qemu|lxc)$/, 'guest', ['inventory', 'guestConfig']],
+  [/^\/nodes\/[^/]+(\/|$)/, 'node', ['nodes', 'compliance']],
+  [/^\/storage(\/|$)/, 'storage', ['storage']],
+  [/^\/pools(\/|$)/, 'pools', ['pools']],
+  // Paths assembled entirely at runtime (`${path}`): nothing to classify.
+  [/^\{x\}(\/\{x\})*(\/|$)/, 'dynamic', []],
+]
+
+/**
  * The PVE endpoints the app calls, grouped into families, each family naming
  * the features it serves. A family with no feature is `user => 'all'` in
  * pve-manager (no privilege needed). privilegeMap.test.ts scans every
  * `pveFetch` call in the tree and fails when a path has no family here, so a
  * new endpoint cannot land without its privileges being thought about.
  */
-export const ENDPOINT_FEATURES: Record<string, FeatureId[]> = {
-  'version': [],
-  'access/permissions': [],
-  'cluster/nextid': [],
-  'node/capabilities': [],
-  'dynamic': [],
-  'access': ['compliance'],
-  'cluster/resources': ['inventory'],
-  'cluster/status': ['inventory', 'nodes'],
-  'cluster/metrics': ['nodes'],
-  'cluster/log': ['inventory'],
-  'cluster/ha': ['ha'],
-  'cluster/sdn': ['sdn'],
-  'cluster/firewall': ['firewall'],
-  'cluster/backup': ['backupJobs'],
-  'cluster/replication': ['replication'],
-  'cluster/notifications': ['notifications'],
-  'cluster/mapping': ['hardwareMappings'],
-  'ceph': ['ceph'],
-  'nodes': ['inventory'],
-  'node': ['nodes', 'compliance'],
-  'node/shell': ['nodeShell'],
-  'node/firewall': ['firewall'],
-  'node/apt': ['nodeUpdates'],
-  'node/power': ['nodePower'],
-  'guest': ['inventory', 'guestConfig'],
-  'guest/console': ['console'],
-  'guest/power': ['guestPower'],
-  'guest/migrate': ['migrations', 'migrationsTarget'],
-  'guest/snapshot': ['snapshots'],
-  'guest/create': ['guestCreate', 'templates'],
-  'guest/firewall': ['firewall'],
-  'backup/vzdump': ['backups'],
-  'storage': ['storage'],
-  'storage/download': ['templates'],
-  'pools': ['pools'],
-}
-
-/** Ordered rules: the first match wins. Paths are normalized by endpointFamily. */
-const FAMILY_RULES: Array<[RegExp, string]> = [
-  [/^\/version$/, 'version'],
-  [/^\/access\/permissions$/, 'access/permissions'],
-  [/^\/access(\/|$)/, 'access'],
-  [/^\/cluster\/nextid$/, 'cluster/nextid'],
-  [/^\/cluster\/resources$/, 'cluster/resources'],
-  [/^\/cluster\/(status|config|options)(\/|$)/, 'cluster/status'],
-  [/^\/cluster\/metrics(\/|$)/, 'cluster/metrics'],
-  [/^\/cluster\/(tasks|log)$/, 'cluster/log'],
-  [/^\/cluster\/ha(\/|$)/, 'cluster/ha'],
-  [/^\/cluster\/sdn(\/|$)/, 'cluster/sdn'],
-  [/^\/cluster\/firewall(\/|$)/, 'cluster/firewall'],
-  [/^\/cluster\/backup(\/|$)/, 'cluster/backup'],
-  [/^\/cluster\/replication(\/|$)/, 'cluster/replication'],
-  [/^\/cluster\/notifications(\/|$)/, 'cluster/notifications'],
-  [/^\/cluster\/mapping(\/|$)/, 'cluster/mapping'],
-  [/^\/cluster\/ceph(\/|$)/, 'ceph'],
-  [/^\/nodes$/, 'nodes'],
-  [/^\/nodes\/[^/]+\/ceph(\/|$)/, 'ceph'],
-  [/^\/nodes\/[^/]+\/(termproxy|vncshell|spiceshell)$/, 'node/shell'],
-  [/^\/nodes\/[^/]+\/firewall(\/|$)/, 'node/firewall'],
-  [/^\/nodes\/[^/]+\/apt(\/|$)/, 'node/apt'],
-  [/^\/nodes\/[^/]+\/status$/, 'node'],
-  [/^\/nodes\/[^/]+\/(vzdump|vzdump\/.*)$/, 'backup/vzdump'],
-  [/^\/nodes\/[^/]+\/storage\/[^/]+\/download-url$/, 'storage/download'],
-  [/^\/nodes\/[^/]+\/storage(\/|$)/, 'storage'],
-  [/^\/nodes\/[^/]+\/capabilities(\/|$)/, 'node/capabilities'],
-  [/^\/nodes\/[^/]+\/(qemu|lxc|\{x\})\/[^/]+\/(vncproxy|termproxy|spiceproxy|vncwebsocket)$/, 'guest/console'],
-  [/^\/nodes\/[^/]+\/(qemu|lxc|\{x\})\/[^/]+\/status(\/|$)/, 'guest/power'],
-  [/^\/nodes\/[^/]+\/(qemu|lxc|\{x\})\/[^/]+\/(migrate|remote_migrate|mtunnel)$/, 'guest/migrate'],
-  [/^\/nodes\/[^/]+\/(qemu|lxc|\{x\})\/[^/]+\/snapshot(\/|$)/, 'guest/snapshot'],
-  [/^\/nodes\/[^/]+\/(qemu|lxc|\{x\})\/[^/]+\/(clone|template)$/, 'guest/create'],
-  [/^\/nodes\/[^/]+\/(qemu|lxc|\{x\})\/[^/]+\/firewall(\/|$)/, 'guest/firewall'],
-  [/^\/nodes\/[^/]+\/(qemu|lxc|\{x\})\/[^/]+(\/|$)/, 'guest'],
-  [/^\/nodes\/[^/]+\/(qemu|lxc)$/, 'guest'],
-  [/^\/nodes\/[^/]+(\/|$)/, 'node'],
-  [/^\/storage(\/|$)/, 'storage'],
-  [/^\/pools(\/|$)/, 'pools'],
-  // Paths assembled entirely at runtime (`${path}`): nothing to classify.
-  [/^\{x\}(\/\{x\})*(\/|$)/, 'dynamic'],
-]
+export const ENDPOINT_FEATURES: Record<string, FeatureId[]> = Object.fromEntries(
+  FAMILY_RULES.map(([, family, features]) => [family, features]),
+)
 
 /**
  * The family of one `pveFetch` path. Template holes (`${...}`) are already

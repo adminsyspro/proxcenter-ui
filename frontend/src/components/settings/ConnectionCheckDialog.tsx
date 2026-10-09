@@ -16,11 +16,11 @@ import {
   Dialog,
   DialogActions,
   DialogContent,
-  DialogTitle,
   Divider,
-  IconButton,
   Typography,
 } from '@mui/material'
+
+import ConnectionDialogTitle from './ConnectionDialogTitle'
 
 import { CHECK_PROBE_ORDER, type CheckItem, type CheckProbe, type CheckStatus } from '@/lib/connections/check/types'
 
@@ -128,24 +128,7 @@ export default function ConnectionCheckDialog({ open, connectionId, connectionNa
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth='sm' fullWidth PaperProps={{ sx: { bgcolor: 'background.paper' } }}>
-      <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, pb: 1 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <i className='ri-shield-check-line' style={{ fontSize: 20 }} />
-          <Box>
-            <Typography variant='subtitle1' sx={{ fontWeight: 700, lineHeight: 1.2 }}>
-              {t('title')}
-            </Typography>
-            {connectionName && (
-              <Typography variant='caption' sx={{ opacity: 0.6 }}>
-                {connectionName}
-              </Typography>
-            )}
-          </Box>
-        </Box>
-        <IconButton size='small' onClick={onClose} sx={{ opacity: 0.6 }}>
-          <i className='ri-close-line' style={{ fontSize: 18 }} />
-        </IconButton>
-      </DialogTitle>
+      <ConnectionDialogTitle icon='ri-shield-check-line' title={t('title')} connectionName={connectionName} onClose={onClose} />
 
       <Divider />
 

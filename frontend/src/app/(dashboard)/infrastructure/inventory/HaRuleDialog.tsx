@@ -180,7 +180,7 @@ return
     const parts = sid.split(':')
     const vmType = parts[0] === 'ct' ? 'lxc' : 'qemu'
     const vmid = parts[1]
-    const vm = (allVms || []).find((v: any) => String(v.vmid) === vmid)
+    const vm = (allVms || []).find((v: any) => v.connId === connId && String(v.vmid) === vmid)
     return { vmType, vmid, name: vm?.name, status: vm?.status || 'unknown', template: vm?.template }
   }
 

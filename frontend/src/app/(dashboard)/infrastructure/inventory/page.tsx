@@ -14,7 +14,7 @@ import { usePVEConnections } from '@/hooks/useConnections'
 import { useSWRFetch } from '@/hooks/useSWRFetch'
 import { extractTaskVmid } from '@/lib/tasks/scope'
 
-import { hasDeepLinkSelection } from './deepLink'
+import { findDeepLinkedVm, hasDeepLinkSelection } from './deepLink'
 import InventoryTree, { InventorySelection, ViewMode, AllVmItem, HostItem, PoolItem, TagItem, TreePbsServer, TreeClusterStorage } from './InventoryTree'
 import InventoryDetails from './InventoryDetails'
 
@@ -163,21 +163,7 @@ export default function InventoryPage() {
     // VM deep-link — needs rawVms loaded
     if (rawVms.length === 0) return
 
-    const vmid = searchParams.get('vmid')
-    if (!vmid) return
-
-    const connId = searchParams.get('connId')
-    const node = searchParams.get('node')
-    const vmType = searchParams.get('type')
-
-    // Find the VM — prefer exact match with all params, fallback to vmid-only
-    let found = rawVms.find(
-      vm => String(vm.vmid) === vmid && (!connId || vm.connId === connId) && (!node || vm.node === node)
-    )
-
-    if (!found) {
-      found = rawVms.find(vm => String(vm.vmid) === vmid)
-    }
+    const found = findDeepLinkedVm(rawVms, searchParams)
 
     if (found) {
       deepLinkHandled.current = true

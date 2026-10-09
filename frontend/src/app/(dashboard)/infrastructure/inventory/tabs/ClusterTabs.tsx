@@ -97,7 +97,7 @@ const INVENTORY_OSD_STYLE: Record<OsdGridState, { color: string; label: string; 
   up: { color: '#4caf50', label: 'Up/In', opacity: 0.7 },
 }
 
-function HaResourceChips({ resources, allVms }: { resources: string; allVms: any[] }) {
+function HaResourceChips({ resources, allVms, connId }: { resources: string; allVms: any[]; connId: string }) {
   if (!resources) return <Typography variant="body2" sx={{ opacity: 0.4 }}>-</Typography>
   const sids = resources.split(',').map(s => s.trim()).filter(Boolean)
   return (
@@ -106,7 +106,7 @@ function HaResourceChips({ resources, allVms }: { resources: string; allVms: any
         const parts = sid.split(':')
         const vmType = parts[0] === 'ct' ? 'lxc' : 'qemu'
         const vmid = parts[1]
-        const vm = allVms.find((v: any) => String(v.vmid) === vmid)
+        const vm = allVms.find((v: any) => v.connId === connId && String(v.vmid) === vmid)
         const iconClass = vm?.template ? 'ri-file-copy-fill' : vmType === 'lxc' ? 'ri-instance-fill' : 'ri-computer-fill'
         const dotColor = vm?.template ? 'transparent' : (vm?.status === 'running' ? '#4caf50' : vm?.status === 'paused' ? '#ed6c02' : '#f44336')
         return (
@@ -1978,7 +1978,7 @@ export default function ClusterTabs(props: any) {
                                     const sidParts = String(res.sid).split(':')
                                     const vmType = sidParts[0] === 'ct' ? 'lxc' : 'qemu'
                                     const vmid = sidParts[1]
-                                    const vm = (allVms || []).find((v: any) => String(v.vmid) === vmid)
+                                    const vm = (allVms || []).find((v: any) => v.connId === clusterConnId && String(v.vmid) === vmid)
                                     const vmStatus = vm?.status || 'unknown'
                                     const iconClass = vm?.template ? 'ri-file-copy-fill' : vmType === 'lxc' ? 'ri-instance-fill' : 'ri-computer-fill'
                                     const dotColor = vm?.template ? 'transparent' : vmStatus === 'running' ? '#4caf50' : vmStatus === 'paused' ? '#ed6c02' : '#f44336'
@@ -2213,7 +2213,7 @@ export default function ClusterTabs(props: any) {
                                           <i className={rule.strict ? 'ri-lock-line' : 'ri-lock-unlock-line'} style={{ fontSize: 16, color: rule.strict ? '#f59e0b' : '#9ca3af' }} />
                                         </Box>
                                       </MuiTooltip>
-                                      <HaResourceChips resources={rule.resources} allVms={allVms || []} />
+                                      <HaResourceChips resources={rule.resources} allVms={allVms || []} connId={clusterConnId} />
                                       <HaNodeChips nodes={rule.nodes} nodesData={data?.nodesData || []} theme={theme} />
                                       <Box sx={{ display: 'flex', justifyContent: 'center', gap: 0.5 }}>
                                         <MuiTooltip title={t('common.edit')}>
@@ -2317,7 +2317,7 @@ export default function ClusterTabs(props: any) {
                                           <i className={rule.affinity === 'positive' ? 'ri-link' : 'ri-link-unlink'} style={{ fontSize: 16, color: rule.affinity === 'positive' ? '#3b82f6' : '#f59e0b' }} />
                                         </Box>
                                       </MuiTooltip>
-                                      <HaResourceChips resources={rule.resources} allVms={allVms || []} />
+                                      <HaResourceChips resources={rule.resources} allVms={allVms || []} connId={clusterConnId} />
                                       <Box sx={{ display: 'flex', justifyContent: 'center', gap: 0.5 }}>
                                         <MuiTooltip title={t('common.edit')}>
                                           <IconButton

@@ -269,14 +269,7 @@ export function useHardwareHandlers({
   const [replicationJobs, setReplicationJobs] = useState<any[]>([])
   const [replicationLoading, setReplicationLoading] = useState(false)
   const [replicationLoaded, setReplicationLoaded] = useState(false)
-  const addReplicationDialogOpen = activeDialog === 'addReplication'
-  const setAddReplicationDialogOpen = useCallback((v: boolean) => setActiveDialog(v ? 'addReplication' : 'none'), [])
-  const [replicationTargetNode, setReplicationTargetNode] = useState('')
-  const [replicationSchedule, setReplicationSchedule] = useState('*/15')
-  const [replicationRateLimit, setReplicationRateLimit] = useState('')
-  const [replicationComment, setReplicationComment] = useState('')
   const [availableTargetNodes, setAvailableTargetNodes] = useState<string[]>([])
-  const [savingReplication, setSavingReplication] = useState(false)
   const [deleteReplicationId, setDeleteReplicationId] = useState<string | null>(null)
 
   // États pour la réplication Ceph
@@ -324,10 +317,7 @@ export function useHardwareHandlers({
   const [systemReportData, setSystemReportData] = useState<string | null>(null)
   const [systemReportLoading, setSystemReportLoading] = useState(false)
 
-  const [replicationDialogOpen, setReplicationDialogOpen] = useState(false)
-  const [replicationDialogMode, setReplicationDialogMode] = useState<'create' | 'edit'>('create')
   const [editingReplicationJob, setEditingReplicationJob] = useState<any>(null)
-  const [replicationSaving, setReplicationSaving] = useState(false)
   const [deleteReplicationDialogOpen, setDeleteReplicationDialogOpen] = useState(false)
   const [deletingReplicationJob, setDeletingReplicationJob] = useState<any>(null)
   const [replicationDeleting, setReplicationDeleting] = useState(false)
@@ -335,14 +325,6 @@ export function useHardwareHandlers({
   const [replicationLogData, setReplicationLogData] = useState<string[]>([])
   const [replicationLogLoading, setReplicationLogLoading] = useState(false)
   const [replicationLogJob, setReplicationLogJob] = useState<any>(null)
-  const [replicationFormData, setReplicationFormData] = useState({
-    guest: '',
-    target: '',
-    schedule: '*/15',
-    rate: '',
-    comment: '',
-    enabled: true
-  })
 
   const [nodeSystemSubTab, setNodeSystemSubTab] = useState(0) // 0=Network, 1=Certificates, 2=DNS, 3=Hosts, 4=Options, 5=Time, 6=Syslog
   const [nodeSyslogLive, setNodeSyslogLive] = useState(false)
@@ -1319,13 +1301,7 @@ return explorerFiles.filter((file: any) =>
     replicationJobs, setReplicationJobs,
     replicationLoading, setReplicationLoading,
     replicationLoaded, setReplicationLoaded,
-    addReplicationDialogOpen, setAddReplicationDialogOpen,
-    replicationTargetNode, setReplicationTargetNode,
-    replicationSchedule, setReplicationSchedule,
-    replicationRateLimit, setReplicationRateLimit,
-    replicationComment, setReplicationComment,
     availableTargetNodes, setAvailableTargetNodes,
-    savingReplication, setSavingReplication,
     deleteReplicationId, setDeleteReplicationId,
 
     // Replication Ceph
@@ -1370,10 +1346,7 @@ return explorerFiles.filter((file: any) =>
     systemReportLoading, setSystemReportLoading,
 
     // Replication dialog
-    replicationDialogOpen, setReplicationDialogOpen,
-    replicationDialogMode, setReplicationDialogMode,
     editingReplicationJob, setEditingReplicationJob,
-    replicationSaving, setReplicationSaving,
     deleteReplicationDialogOpen, setDeleteReplicationDialogOpen,
     deletingReplicationJob, setDeletingReplicationJob,
     replicationDeleting, setReplicationDeleting,
@@ -1381,7 +1354,6 @@ return explorerFiles.filter((file: any) =>
     replicationLogData, setReplicationLogData,
     replicationLogLoading, setReplicationLogLoading,
     replicationLogJob, setReplicationLogJob,
-    replicationFormData, setReplicationFormData,
 
     // Node system
     nodeSystemSubTab, setNodeSystemSubTab,

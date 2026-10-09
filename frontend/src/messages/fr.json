@@ -7552,7 +7552,18 @@
     "selectTargetCluster": "Sélectionner le cluster cible",
     "loadingClusters": "Chargement des clusters Ceph disponibles...",
     "noCephClusters": "Aucun autre cluster Ceph disponible. Ajoutez d'autres connexions Proxmox avec Ceph pour activer la réplication inter-clusters.",
-    "targetCluster": "Cluster cible"
+    "targetCluster": "Cluster cible",
+    "editJob": "Modifier le job de réplication",
+    "guest": "ID CT/VM",
+    "alreadyReplicated": "déjà répliquée",
+    "offline": "hors ligne",
+    "every1min": "Toutes les minutes",
+    "every10min": "Toutes les 10 minutes",
+    "every12hours": "Toutes les 12 heures",
+    "scheduleHelper": "Événement calendaire Proxmox, par exemple */3 (toutes les 3 minutes) ou mon..fri 8..18:*/10",
+    "unlimited": "illimité",
+    "enabled": "Activé",
+    "saveFailed": "Échec de l'enregistrement du job de réplication"
   },
   "pbs": {
     "backups": "Sauvegardes",

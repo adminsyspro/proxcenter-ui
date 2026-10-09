@@ -58,6 +58,7 @@ import VmsTable, { VmRow, TrendPoint } from '@/components/VmsTable'
 import BackupJobsPanel from '../BackupJobsPanel'
 import CveTab from '@/components/CveTab'
 import ChangeTrackingTab from './ChangeTrackingTab'
+import ReplicationJobDialog, { type ReplicationJobDialogState } from '../components/ReplicationJobDialog'
 import { useLicense, Features } from '@/contexts/LicenseContext'
 import SnapshotsTab from '@/components/SnapshotsTab'
 import NodeFirewallTab from '@/components/NodeFirewallTab'
@@ -216,14 +217,10 @@ export default function NodeTabs(props: any) {
     removeSubscriptionDialogOpen,
     removeSubscriptionLoading,
     replicationDeleting,
-    replicationDialogMode,
-    replicationDialogOpen,
-    replicationFormData,
     replicationLogData,
     replicationLogDialogOpen,
     replicationLogJob,
     replicationLogLoading,
-    replicationSaving,
     rrdError,
     rrdLoading,
     selection,
@@ -264,14 +261,10 @@ export default function NodeTabs(props: any) {
     setRemoveSubscriptionDialogOpen,
     setRemoveSubscriptionLoading,
     setReplicationDeleting,
-    setReplicationDialogMode,
-    setReplicationDialogOpen,
-    setReplicationFormData,
     setReplicationLogData,
     setReplicationLogDialogOpen,
     setReplicationLogJob,
     setReplicationLogLoading,
-    setReplicationSaving,
     setSubscriptionKeyDialogOpen,
     setSubscriptionKeyInput,
     setSubscriptionKeySaving,
@@ -316,6 +309,7 @@ export default function NodeTabs(props: any) {
   const complianceAvailable = hasFeature(Features.COMPLIANCE)
 
   // Network interface dialog state
+  const [replicationDialogState, setReplicationDialogState] = useState<ReplicationJobDialogState>(null)
   const [networkDialogOpen, setNetworkDialogOpen] = useState(false)
   const [networkDialogMode, setNetworkDialogMode] = useState<'create' | 'edit' | 'view'>('view')
   const [networkDialogIface, setNetworkDialogIface] = useState<any>(null)
@@ -3114,17 +3108,8 @@ export default function NodeTabs(props: any) {
                             variant="outlined"
                             startIcon={<i className="ri-add-line" style={{ fontSize: 14 }} />}
                             onClick={() => {
-                              setReplicationDialogMode('create')
                               setEditingReplicationJob(null)
-                              setReplicationFormData({
-                                guest: '',
-                                target: '',
-                                schedule: '*/15',
-                                rate: '',
-                                comment: '',
-                                enabled: true
-                              })
-                              setReplicationDialogOpen(true)
+                              setReplicationDialogState({ mode: 'create', guests: nodeReplicationData?.guests || [] })
                             }}
                           >
                             Add
@@ -3135,18 +3120,7 @@ export default function NodeTabs(props: any) {
                             disabled={!editingReplicationJob}
                             startIcon={<i className="ri-edit-line" style={{ fontSize: 14 }} />}
                             onClick={() => {
-                              if (editingReplicationJob) {
-                                setReplicationDialogMode('edit')
-                                setReplicationFormData({
-                                  guest: String(editingReplicationJob.guest),
-                                  target: editingReplicationJob.target,
-                                  schedule: editingReplicationJob.schedule || '*/15',
-                                  rate: editingReplicationJob.rate || '',
-                                  comment: editingReplicationJob.comment || '',
-                                  enabled: editingReplicationJob.enabled !== false
-                                })
-                                setReplicationDialogOpen(true)
-                              }
+                              if (editingReplicationJob) setReplicationDialogState({ mode: 'edit', job: editingReplicationJob })
                             }}
                           >
                             Edit
@@ -3301,148 +3275,15 @@ export default function NodeTabs(props: any) {
                         </Card>
 
                         {/* Dialog Create/Edit Replication Job */}
-                        <Dialog open={replicationDialogOpen} onClose={() => setReplicationDialogOpen(false)} maxWidth="sm" fullWidth>
-                          <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                            <i className="ri-refresh-line" style={{ fontSize: 20 }} />
-                            {replicationDialogMode === 'create' ? 'Create: Replication Job' : 'Edit: Replication Job'}
-                          </DialogTitle>
-                          <DialogContent>
-                            <Stack spacing={2} sx={{ mt: 1 }}>
-                              {replicationDialogMode === 'create' && (
-                                <FormControl fullWidth size="small">
-                                  <InputLabel>CT/VM ID</InputLabel>
-                                  <Select
-                                    value={replicationFormData.guest}
-                                    label="CT/VM ID"
-                                    onChange={(e) => setReplicationFormData(prev => ({ ...prev, guest: e.target.value }))}
-                                  >
-                                    {(nodeReplicationData?.guests || []).map((g: any) => (
-                                      <MenuItem key={g.vmid} value={String(g.vmid)}>
-                                        {g.vmid} - {g.name || 'unnamed'} ({g.type})
-                                      </MenuItem>
-                                    ))}
-                                  </Select>
-                                </FormControl>
-                              )}
-                              {replicationDialogMode === 'edit' && (
-                                <TextField
-                                  fullWidth
-                                  size="small"
-                                  label="CT/VM ID"
-                                  value={replicationFormData.guest}
-                                  disabled
-                                />
-                              )}
-                              <FormControl fullWidth size="small">
-                                <InputLabel>Target</InputLabel>
-                                <Select
-                                  value={replicationFormData.target}
-                                  label="Target"
-                                  onChange={(e) => setReplicationFormData(prev => ({ ...prev, target: e.target.value }))}
-                                >
-                                  {(nodeReplicationData?.nodes || []).map((n: any) => (
-                                    <MenuItem key={n.node} value={n.node} disabled={!n.online}>
-                                      {n.node} {!n.online && '(offline)'}
-                                    </MenuItem>
-                                  ))}
-                                </Select>
-                              </FormControl>
-                              <FormControl fullWidth size="small">
-                                <InputLabel>Schedule</InputLabel>
-                                <Select
-                                  value={replicationFormData.schedule}
-                                  label="Schedule"
-                                  onChange={(e) => setReplicationFormData(prev => ({ ...prev, schedule: e.target.value }))}
-                                >
-                                  <MenuItem value="*/1">*/1 - Every minute</MenuItem>
-                                  <MenuItem value="*/5">*/5 - Every 5 minutes</MenuItem>
-                                  <MenuItem value="*/15">*/15 - Every 15 minutes</MenuItem>
-                                  <MenuItem value="*/30">*/30 - Every 30 minutes</MenuItem>
-                                  <MenuItem value="0 *">0 * - Every hour</MenuItem>
-                                  <MenuItem value="0 */2">0 */2 - Every 2 hours</MenuItem>
-                                  <MenuItem value="0 */6">0 */6 - Every 6 hours</MenuItem>
-                                  <MenuItem value="0 */12">0 */12 - Every 12 hours</MenuItem>
-                                  <MenuItem value="0 0">0 0 - Daily at midnight</MenuItem>
-                                </Select>
-                              </FormControl>
-                              <TextField
-                                fullWidth
-                                size="small"
-                                label="Rate limit (MB/s)"
-                                placeholder="unlimited"
-                                value={replicationFormData.rate}
-                                onChange={(e) => setReplicationFormData(prev => ({ ...prev, rate: e.target.value }))}
-                                helperText="Leave empty for unlimited"
-                              />
-                              <TextField
-                                fullWidth
-                                size="small"
-                                label="Comment"
-                                value={replicationFormData.comment}
-                                onChange={(e) => setReplicationFormData(prev => ({ ...prev, comment: e.target.value }))}
-                              />
-                              <FormControlLabel
-                                control={
-                                  <Checkbox
-                                    checked={replicationFormData.enabled}
-                                    onChange={(e) => setReplicationFormData(prev => ({ ...prev, enabled: e.target.checked }))}
-                                  />
-                                }
-                                label="Enabled"
-                              />
-                            </Stack>
-                          </DialogContent>
-                          <DialogActions>
-                            <Button onClick={() => setReplicationDialogOpen(false)}>Cancel</Button>
-                            <Button 
-                              variant="contained"
-                              disabled={replicationSaving || (replicationDialogMode === 'create' && (!replicationFormData.guest || !replicationFormData.target))}
-                              onClick={async () => {
-                                setReplicationSaving(true)
-                                const { connId, node } = parseNodeId(selection?.id || '')
-                                try {
-                                  const method = replicationDialogMode === 'create' ? 'POST' : 'PUT'
-                                  const body = replicationDialogMode === 'create' 
-                                    ? {
-                                        guest: replicationFormData.guest,
-                                        target: replicationFormData.target,
-                                        schedule: replicationFormData.schedule,
-                                        rate: replicationFormData.rate || undefined,
-                                        comment: replicationFormData.comment || undefined,
-                                        enabled: replicationFormData.enabled
-                                      }
-                                    : {
-                                        jobId: editingReplicationJob?.id,
-                                        schedule: replicationFormData.schedule,
-                                        rate: replicationFormData.rate || undefined,
-                                        comment: replicationFormData.comment || undefined,
-                                        enabled: replicationFormData.enabled
-                                      }
-                                  
-                                  const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/replication`, {
-                                    method,
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify(body)
-                                  })
-                                  
-                                  if (res.ok) {
-                                    setReplicationDialogOpen(false)
-                                    setNodeReplicationLoaded(false) // Recharger
-                                  } else {
-                                    const err = await res.json()
-                                    alert(err.error || 'Failed to save replication job')
-                                  }
-                                } catch (e) {
-                                  alert('Error saving replication job')
-                                } finally {
-                                  setReplicationSaving(false)
-                                }
-                              }}
-                            >
-                              {replicationSaving ? <CircularProgress size={20} /> : (replicationDialogMode === 'create' ? 'Create' : 'Save')}
-                            </Button>
-                          </DialogActions>
-                        </Dialog>
+                        <ReplicationJobDialog
+                          state={replicationDialogState}
+                          connId={parseNodeId(selection?.id || '').connId}
+                          node={parseNodeId(selection?.id || '').node}
+                          targets={nodeReplicationData?.nodes || []}
+                          jobs={nodeReplicationData?.jobs || []}
+                          onClose={() => setReplicationDialogState(null)}
+                          onSaved={() => setNodeReplicationLoaded(false)}
+                        />
 
                         {/* Dialog Delete Replication Job */}
                         <Dialog open={deleteReplicationDialogOpen} onClose={() => setDeleteReplicationDialogOpen(false)} maxWidth="xs" fullWidth>

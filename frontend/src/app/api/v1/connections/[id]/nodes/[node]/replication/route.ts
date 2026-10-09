@@ -196,11 +196,20 @@ export async function PUT(
     }
 
     // Construire les paramètres
+    // Une valeur vide efface l'option côté Proxmox (paramètre `delete`).
     const params: Record<string, string> = {}
+    const toDelete: string[] = []
     if (schedule !== undefined) params.schedule = schedule
-    if (rate !== undefined) params.rate = String(rate)
-    if (comment !== undefined) params.comment = comment
+    if (rate !== undefined) {
+      if (rate === '' || rate === null) toDelete.push('rate')
+      else params.rate = String(rate)
+    }
+    if (comment !== undefined) {
+      if (comment === '' || comment === null) toDelete.push('comment')
+      else params.comment = comment
+    }
     if (enabled !== undefined) params.disable = enabled ? '0' : '1'
+    if (toDelete.length > 0) params.delete = toDelete.join(',')
 
     // Modifier le job via l'API cluster
     await pveFetch(

@@ -68,6 +68,7 @@ import { formatDateTime } from '@/lib/i18n/date'
 import VmFirewallTab from '@/components/VmFirewallTab'
 import RestoreVmDialog from '@/components/backup/RestoreVmDialog'
 import ChangeTrackingTab from './ChangeTrackingTab'
+import ReplicationJobDialog, { type ReplicationJobDialogState } from '../components/ReplicationJobDialog'
 import { useLicense, Features } from '@/contexts/LicenseContext'
 import { useRBAC } from '@/contexts/RBACContext'
 const AddDiskDialog = dynamic(() => import('@/components/HardwareModals').then(mod => ({ default: mod.AddDiskDialog })), { ssr: false })
@@ -221,7 +222,6 @@ export default function VmDetailTabs(props: any) {
 
   const {
     addCephReplicationDialogOpen,
-    addReplicationDialogOpen,
     availableTargetNodes,
     backToArchives,
     backToBackupsList,
@@ -307,12 +307,8 @@ export default function VmDetailTabs(props: any) {
     primaryColor,
     primaryColorLight,
     removeHaConfig,
-    replicationComment,
     replicationJobs,
     replicationLoading,
-    replicationRateLimit,
-    replicationSchedule,
-    replicationTargetNode,
     rollbackSnapshot,
     rrdError,
     rrdLoading,
@@ -322,7 +318,6 @@ export default function VmDetailTabs(props: any) {
     saveNotes,
     savingCpu,
     savingMemory,
-    savingReplication,
     selectedBackup,
     selectedCephCluster,
     selectedPveStorage,
@@ -335,7 +330,6 @@ export default function VmDetailTabs(props: any) {
     setAddOtherHardwareDialogOpen,
     setEditOtherHardwareDialogOpen,
     setSelectedOtherHardware,
-    setAddReplicationDialogOpen,
     setBackupCompress,
     setBackupMode,
     setBackupNote,
@@ -378,12 +372,7 @@ export default function VmDetailTabs(props: any) {
     setNewSnapshotRam,
     setNotesEditing,
     setNumaEnabled,
-    setReplicationComment,
     setReplicationLoaded,
-    setReplicationRateLimit,
-    setReplicationSchedule,
-    setReplicationTargetNode,
-    setSavingReplication,
     setSelectedBackup,
     selectedDisk,
     setSelectedCephCluster,
@@ -535,6 +524,8 @@ export default function VmDetailTabs(props: any) {
   const [diskMenuTarget, setDiskMenuTarget] = useState<any | null>(null)
   const [detachConfirmOpen, setDetachConfirmOpen] = useState(false)
   const [deleteUnusedTarget, setDeleteUnusedTarget] = useState<any | null>(null)
+
+  const [replicationDialogState, setReplicationDialogState] = useState<ReplicationJobDialogState>(null)
 
   // Replication log dialog
   const [replicationLogJob, setReplicationLogJob] = useState<any | null>(null)
@@ -4067,13 +4058,7 @@ return (
                             size="small"
                             variant="contained"
                             startIcon={<AddIcon />}
-                            onClick={() => {
-                              setReplicationTargetNode('')
-                              setReplicationSchedule('*/15')
-                              setReplicationRateLimit('')
-                              setReplicationComment('')
-                              setAddReplicationDialogOpen(true)
-                            }}
+                            onClick={() => setReplicationDialogState({ mode: 'create', guest: String(parseVmId(selection?.id || '').vmid) })}
                             disabled={availableTargetNodes.length === 0}
                           >
                             {t('replication.addJob')}
@@ -4134,7 +4119,7 @@ return (
                                             sx={{ height: 22 }}
                                           />
                                         </MuiTooltip>
-                                      ) : job.disable ? (
+                                      ) : job.enabled === false ? (
                                         <Chip 
                                           size="small" 
                                           label={t('common.disabled')} 
@@ -4198,6 +4183,14 @@ return (
                                             <i className="ri-play-fill" style={{ fontSize: 16 }} />
                                           </IconButton>
                                         </MuiTooltip>
+                                        <MuiTooltip title={t('common.edit')}>
+                                          <IconButton
+                                            size="small"
+                                            onClick={() => setReplicationDialogState({ mode: 'edit', job })}
+                                          >
+                                            <i className="ri-edit-line" style={{ fontSize: 16 }} />
+                                          </IconButton>
+                                        </MuiTooltip>
                                         <MuiTooltip title={t('common.delete')}>
                                           <IconButton
                                             size="small"
@@ -4232,125 +4225,16 @@ return (
                   </Stack>
 
 
-                  {/* Dialog Ajouter Réplication ZFS */}
-                  <Dialog 
-                    open={addReplicationDialogOpen} 
-                    onClose={() => setAddReplicationDialogOpen(false)}
-                    maxWidth="sm"
-                    fullWidth
-                  >
-                    <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <i className="ri-repeat-line" style={{ fontSize: 24 }} />
-                      {t('replication.createJob')}
-                    </DialogTitle>
-                    <DialogContent>
-                      <Stack spacing={2} sx={{ mt: 1 }}>
-                        <Box>
-                          <Typography variant="body2" fontWeight={600} sx={{ mb: 0.5 }}>
-                            CT/VM ID
-                          </Typography>
-                          <TextField
-                            fullWidth
-                            size="small"
-                            value={selection?.id ? parseVmId(selection.id).vmid : ''}
-                            disabled
-                          />
-                        </Box>
-
-                        <FormControl fullWidth size="small">
-                          <InputLabel>{t('replication.target')}</InputLabel>
-                          <Select
-                            value={replicationTargetNode}
-                            label={t('replication.target')}
-                            onChange={(e) => setReplicationTargetNode(e.target.value)}
-                          >
-                            {availableTargetNodes.map((node) => (
-                              <MenuItem key={node} value={node}>{node}</MenuItem>
-                            ))}
-                          </Select>
-                        </FormControl>
-
-                        <FormControl fullWidth size="small">
-                          <InputLabel>{t('replication.schedule')}</InputLabel>
-                          <Select
-                            value={replicationSchedule}
-                            label={t('replication.schedule')}
-                            onChange={(e) => setReplicationSchedule(e.target.value)}
-                          >
-                            <MenuItem value="*/5">*/5 - {t('replication.every5min')}</MenuItem>
-                            <MenuItem value="*/15">*/15 - {t('replication.every15min')}</MenuItem>
-                            <MenuItem value="*/30">*/30 - {t('replication.every30min')}</MenuItem>
-                            <MenuItem value="0">0 - {t('replication.everyHour')}</MenuItem>
-                            <MenuItem value="0 */2">0 */2 - {t('replication.every2hours')}</MenuItem>
-                            <MenuItem value="0 */6">0 */6 - {t('replication.every6hours')}</MenuItem>
-                            <MenuItem value="0 0">0 0 - {t('replication.daily')}</MenuItem>
-                          </Select>
-                        </FormControl>
-
-                        <TextField
-                          fullWidth
-                          size="small"
-                          label={t('replication.rateLimit')}
-                          value={replicationRateLimit}
-                          onChange={(e) => setReplicationRateLimit(e.target.value)}
-                          placeholder="unlimited"
-                          InputProps={{
-                            endAdornment: <InputAdornment position="end">MB/s</InputAdornment>,
-                          }}
-                        />
-
-                        <TextField
-                          fullWidth
-                          size="small"
-                          label={t('replication.comment')}
-                          value={replicationComment}
-                          onChange={(e) => setReplicationComment(e.target.value)}
-                          multiline
-                          rows={2}
-                        />
-                      </Stack>
-                    </DialogContent>
-                    <DialogActions>
-                      <Button onClick={() => setAddReplicationDialogOpen(false)}>
-                        {t('common.cancel')}
-                      </Button>
-                      <Button
-                        variant="contained"
-                        disabled={!replicationTargetNode || savingReplication}
-                        startIcon={savingReplication ? <CircularProgress size={16} /> : <AddIcon />}
-                        onClick={async () => {
-                          if (!selection?.id || !replicationTargetNode) return
-                          setSavingReplication(true)
-                          const { connId, node, vmid } = parseVmId(selection.id)
-                          try {
-                            const body: any = {
-                              target: replicationTargetNode,
-                              schedule: replicationSchedule,
-                            }
-                            if (replicationRateLimit) body.rate = replicationRateLimit
-                            if (replicationComment) body.comment = replicationComment
-
-                            const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/replication`, {
-                              method: 'POST',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ ...body, guest: vmid }),
-                            })
-                            
-                            if (res.ok) {
-                              setAddReplicationDialogOpen(false)
-                              setReplicationLoaded(false)
-                            }
-                          } catch (e) {
-                            console.error('Error creating replication job:', e)
-                          } finally {
-                            setSavingReplication(false)
-                          }
-                        }}
-                      >
-                        {t('replication.create')}
-                      </Button>
-                    </DialogActions>
-                  </Dialog>
+                  {/* Dialog Créer / Modifier Réplication ZFS */}
+                  <ReplicationJobDialog
+                    state={replicationDialogState}
+                    connId={selection?.id ? parseVmId(selection.id).connId : ''}
+                    node={selection?.id ? parseVmId(selection.id).node : ''}
+                    targets={availableTargetNodes.map((n: string) => ({ node: n, online: true }))}
+                    jobs={replicationJobs}
+                    onClose={() => setReplicationDialogState(null)}
+                    onSaved={() => setReplicationLoaded(false)}
+                  />
 
                   {/* Dialog Confirmer suppression */}
                   <Dialog 

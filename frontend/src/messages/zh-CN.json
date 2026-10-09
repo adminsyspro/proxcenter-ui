@@ -7561,7 +7561,18 @@
     "selectTargetCluster": "选择目标集群",
     "loadingClusters": "正在加载可用的 Ceph 集群...",
     "noCephClusters": "没有其他可用的 Ceph 集群。添加其他带有 Ceph 的 Proxmox 连接以启用跨集群复制。",
-    "targetCluster": "目标集群"
+    "targetCluster": "目标集群",
+    "editJob": "编辑复制任务",
+    "guest": "CT/VM ID",
+    "alreadyReplicated": "已复制",
+    "offline": "离线",
+    "every1min": "每分钟",
+    "every10min": "每 10 分钟",
+    "every12hours": "每 12 小时",
+    "scheduleHelper": "Proxmox 日历事件，例如 */3（每 3 分钟）或 mon..fri 8..18:*/10",
+    "unlimited": "无限制",
+    "enabled": "已启用",
+    "saveFailed": "保存复制任务失败"
   },
   "pbs": {
     "backups": "备份",

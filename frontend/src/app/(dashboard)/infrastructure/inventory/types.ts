@@ -547,5 +547,4 @@ export type ActiveDialog =
   | 'createBackup'
   | 'deleteVm'
   | 'convertTemplate'
-  | 'addReplication'
   | 'addCephReplication'

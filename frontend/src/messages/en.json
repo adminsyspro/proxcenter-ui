@@ -7557,7 +7557,18 @@
     "selectTargetCluster": "Select target cluster",
     "loadingClusters": "Loading available Ceph clusters...",
     "noCephClusters": "No other Ceph cluster available. Add other Proxmox connections with Ceph to enable cross-cluster replication.",
-    "targetCluster": "Target Cluster"
+    "targetCluster": "Target Cluster",
+    "editJob": "Edit Replication Job",
+    "guest": "CT/VM ID",
+    "alreadyReplicated": "already replicated",
+    "offline": "offline",
+    "every1min": "Every minute",
+    "every10min": "Every 10 minutes",
+    "every12hours": "Every 12 hours",
+    "scheduleHelper": "Proxmox calendar event, for example */3 (every 3 minutes) or mon..fri 8..18:*/10",
+    "unlimited": "unlimited",
+    "enabled": "Enabled",
+    "saveFailed": "Failed to save the replication job"
   },
   "pbs": {
     "backups": "Backups",

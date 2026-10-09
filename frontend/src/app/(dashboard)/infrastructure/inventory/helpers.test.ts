@@ -1318,6 +1318,12 @@ describe('humanizePveError', () => {
     expect(humanizePveError(raw)).toBe('Permission check failed (changing feature flags (except nesting) is only allowed for root@pam)')
   })
 
+  it('appends the per-field reasons of a failed parameter check', () => {
+    const raw = 'PVE 400 /cluster/replication/9882-1: {"message":"Parameter verification failed.\\n","data":null,"errors":{"schedule":"invalid format - invalid calendar event \'toto\'\\n"}}'
+
+    expect(humanizePveError(raw)).toBe("Parameter verification failed. schedule: invalid format - invalid calendar event 'toto'")
+  })
+
   it('keeps the text when the body is not JSON or has no message', () => {
     expect(humanizePveError('PVE 500 /nodes/pve1/lxc/101/config: <html>gateway timeout</html>')).toBe('PVE 500 /nodes/pve1/lxc/101/config: <html>gateway timeout</html>')
     expect(humanizePveError('PVE 400 /x: {"data":null}')).toBe('PVE 400 /x: {"data":null}')

@@ -7557,7 +7557,18 @@
     "selectTargetCluster": "대상 클러스터 선택",
     "loadingClusters": "사용 가능한 Ceph 클러스터 로드 중...",
     "noCephClusters": "사용 가능한 다른 Ceph 클러스터가 없습니다. 클러스터 간 복제를 사용하려면 Ceph가 있는 다른 Proxmox 연결을 추가하세요.",
-    "targetCluster": "대상 클러스터"
+    "targetCluster": "대상 클러스터",
+    "editJob": "복제 작업 편집",
+    "guest": "CT/VM ID",
+    "alreadyReplicated": "이미 복제됨",
+    "offline": "오프라인",
+    "every1min": "1분마다",
+    "every10min": "10분마다",
+    "every12hours": "12시간마다",
+    "scheduleHelper": "Proxmox 캘린더 이벤트, 예: */3 (3분마다) 또는 mon..fri 8..18:*/10",
+    "unlimited": "무제한",
+    "enabled": "활성화됨",
+    "saveFailed": "복제 작업을 저장하지 못했습니다"
   },
   "pbs": {
     "backups": "백업",

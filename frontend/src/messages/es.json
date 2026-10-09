@@ -2947,7 +2947,7 @@
       "restoredPrefixHelper": "Se añade delante del nombre del archivo cuando se conservan ambas versiones, por ejemplo RESTORED-hosts.",
       "restoredPrefixInvalid": "De 1 a 32 caracteres, sin / ni \\.",
       "defaultCustomDirLinux": "Carpeta personalizada predeterminada (Linux)",
-      "defaultCustomDirLinuxHelper": "Se propone al restaurar en una carpeta personalizada de un invitado Linux.",
+      "defaultCustomDirLinuxHelper": "Se propone al restaurar en una carpeta personalizada de un invitado Linux. ~ es la carpeta personal de la cuenta que escribe (root con el agente invitado, el usuario SSH en otro caso).",
       "defaultCustomDirWindows": "Carpeta personalizada predeterminada (Windows)",
       "defaultCustomDirWindowsHelper": "Se propone al restaurar en una carpeta personalizada de un invitado Windows.",
       "jobsHeading": "Tareas de restauración",

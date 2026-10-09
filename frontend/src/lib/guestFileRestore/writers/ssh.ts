@@ -488,6 +488,17 @@ export class SshWriter implements GuestWriter {
     }
   }
 
+  /** Home folder of the SSH account: where SFTP starts (`realpath .`). */
+  async homeDir(): Promise<string | null> {
+    if (this.os === 'windows') return null
+    try {
+      const home = await this.op<string>(cb => this.sftp.realpath('.', cb))
+      return home.startsWith('/') ? home : null
+    } catch {
+      return null
+    }
+  }
+
   async setMeta(path: string, meta: WriteMeta): Promise<void> {
     await this.applyMeta(path, meta)
   }

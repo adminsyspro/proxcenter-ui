@@ -2934,7 +2934,7 @@
       "restoredPrefixHelper": "Wird dem Dateinamen vorangestellt, wenn beide Versionen behalten werden, zum Beispiel RESTORED-hosts.",
       "restoredPrefixInvalid": "1 bis 32 Zeichen, ohne / oder \\.",
       "defaultCustomDirLinux": "Standardordner (Linux)",
-      "defaultCustomDirLinuxHelper": "Vorgeschlagen, wenn in einen eigenen Ordner eines Linux-Gasts wiederhergestellt wird.",
+      "defaultCustomDirLinuxHelper": "Wird vorgeschlagen, wenn in einen eigenen Ordner eines Linux-Gasts wiederhergestellt wird. ~ ist das Home-Verzeichnis des schreibenden Kontos (root mit dem Gast-Agenten, sonst der SSH-Benutzer).",
       "defaultCustomDirWindows": "Standardordner (Windows)",
       "defaultCustomDirWindowsHelper": "Vorgeschlagen, wenn in einen eigenen Ordner eines Windows-Gasts wiederhergestellt wird.",
       "jobsHeading": "Wiederherstellungsaufträge",

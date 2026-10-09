@@ -13,7 +13,7 @@ import { GuestWriterError } from './writer'
 
 const conn = { id: 'c1', name: 'pve', baseUrl: 'https://pve:8006', apiToken: 'u@pam!t=secret', insecureDev: true, behindProxy: false }
 const target = { conn, node: 'pve1', vmid: 9990 } as any
-const STAGING = '/var/tmp/.pxc-restore-Ab12Cd34'
+const STAGING = '/var/lib/.pxc-restore/job-Ab12Cd34'
 const WIN_STAGING = 'C:\\Windows\\TEMP\\pxc-restore-0123456789abcdef0123456789abcdef'
 
 type ExecAnswer = { exitcode: number; out?: string; err?: string }
@@ -51,7 +51,7 @@ function installPve(opts: PveOptions = {}) {
       pid += 1
       const s = script(body.command)
       const custom = opts.exec?.(body.command, body['input-data'])
-      const fallback = s.startsWith('mktemp') ? { exitcode: 0, out: `${STAGING}\n` } : s.includes('NewGuid') ? { exitcode: 0, out: `${WIN_STAGING}\r\n` } : { exitcode: 0 }
+      const fallback = s.includes('mktemp -d') ? { exitcode: 0, out: `${STAGING}\n` } : s.includes('NewGuid') ? { exitcode: 0, out: `${WIN_STAGING}\r\n` } : { exitcode: 0 }
       results.set(pid, custom ?? fallback)
       return { pid }
     }
@@ -161,10 +161,10 @@ describe('AgentWriter linux edge cases', () => {
   })
 
   it('refuses a staging directory the guest did not create as expected', async () => {
-    installPve({ exec: argv => (script(argv).startsWith('mktemp') ? { exitcode: 0, out: '/tmp/predictable\n' } : undefined) })
+    installPve({ exec: argv => (script(argv).includes('mktemp -d') ? { exitcode: 0, out: '/tmp/predictable\n' } : undefined) })
     const w = await make()
     await expect(w.writeFile('/etc/x', Readable.from([Buffer.from('x')]), {}, () => {}, signal())).rejects.toMatchObject({ fatal: true, message: expect.stringContaining('/tmp/predictable') })
-    installPve({ exec: argv => (script(argv).startsWith('mktemp') ? { exitcode: 1 } : undefined) })
+    installPve({ exec: argv => (script(argv).includes('mktemp -d') ? { exitcode: 1 } : undefined) })
     const w2 = await make()
     await expect(w2.writeFile('/etc/x', Readable.from([Buffer.from('x')]), {}, () => {}, signal())).rejects.toThrow('exit code 1')
   })

@@ -30,7 +30,7 @@ import { prisma } from '@/lib/db/prisma'
 import { safeLog } from '@/lib/log/sanitize'
 
 import { readRestoreEntries, type RestoreEntry } from './entries'
-import { guestDirname, guestTargetPath, keepBothCandidates, posixBasename } from './paths'
+import { expandHomePath, guestDirname, guestTargetPath, isHomePath, keepBothCandidates, posixBasename } from './paths'
 import { acquireSlot, abortJob, registerJob, releaseSlot, unregisterJob } from './registry'
 import { openSourceStream, sourceLabel, type ResolvedSource } from './sources'
 import { SpoolSpaceError, resolveSpoolDir, spoolToFile } from './spool'
@@ -104,6 +104,15 @@ export const _impl = {
   walkSourceTree,
   spoolToFile,
   now: () => Date.now(),
+}
+
+/** `~/x` against the home of the account that writes; a fatal error when it cannot be told. */
+export async function resolveHome(writer: GuestWriter, path: string): Promise<string> {
+  if (!isHomePath(path)) return path
+  if (writer.os === 'windows') throw new GuestWriterError(`"${path}": ~ is only understood on Linux guests, use a drive path`, true)
+  const home = await writer.homeDir?.()
+  if (!home) throw new GuestWriterError(`Cannot tell the home folder of the guest account to resolve "${path}"`, true)
+  return expandHomePath(path, home)
 }
 
 export class JobLog {
@@ -210,6 +219,8 @@ export async function runGuestFileRestoreJob(jobId: string, ctx: RunContext): Pr
   const tick = () => { void persist(false) }
 
   const defaults = { linux: ctx.settings.defaultCustomDirLinux, windows: ctx.settings.defaultCustomDirWindows }
+  // `~/...` folders are resolved against the writing account once connected.
+  let destination = ctx.destination
   const stallTimeoutMs = ctx.settings.sourceStallTimeoutSec * 1000
   const spoolDir = resolveSpoolDir(ctx.settings.spoolDir)
   let writer: GuestWriter | null = null
@@ -283,7 +294,7 @@ export async function runGuestFileRestoreJob(jobId: string, ctx: RunContext): Pr
   const handleEntry = async (w: GuestWriter, item: GuestRestoreItem, entry: RestoreEntry, relPath: string, stage: boolean): Promise<void> => {
     const target = guestTargetPath({
       os: w.os,
-      destination: ctx.destination,
+      destination,
       sourceKind: ctx.source.kind,
       itemPath: item.path,
       relPath,
@@ -423,7 +434,7 @@ export async function runGuestFileRestoreJob(jobId: string, ctx: RunContext): Pr
    * mode and owner it had in the backup, an existing one is left as it is.
    */
   const createWalkedDirectory = async (w: GuestWriter, item: GuestRestoreItem, sourcePath: string, relPath: string): Promise<void> => {
-    const target = guestTargetPath({ os: w.os, destination: ctx.destination, sourceKind: ctx.source.kind, itemPath: item.path, relPath, defaults })
+    const target = guestTargetPath({ os: w.os, destination, sourceKind: ctx.source.kind, itemPath: item.path, relPath, defaults })
     progress.currentPath = target
     const existed = await w.exists(target)
     await w.mkdirp(target)
@@ -606,8 +617,10 @@ export async function runGuestFileRestoreJob(jobId: string, ctx: RunContext): Pr
     writer = await _impl.createWriter(jobId, ctx, log)
     progress.guestOs = writer.os
     log.push('info', `Connected: ${writer.description}`)
-    if (ctx.destination.mode === 'custom') {
-      log.push('info', `Destination folder: ${ctx.destination.path?.trim() || (writer.os === 'windows' ? defaults.windows : defaults.linux)}`)
+    if (destination.mode === 'custom') {
+      if (writer.os === 'linux') defaults.linux = await resolveHome(writer, defaults.linux)
+      if (destination.path?.trim()) destination = { ...destination, path: await resolveHome(writer, destination.path.trim()) }
+      log.push('info', `Destination folder: ${destination.path?.trim() || (writer.os === 'windows' ? defaults.windows : defaults.linux)}`)
     }
     await persist(true)
 

@@ -2947,7 +2947,7 @@
       "restoredPrefixHelper": "두 버전을 모두 유지할 때 파일 이름 앞에 붙습니다. 예: RESTORED-hosts.",
       "restoredPrefixInvalid": "1~32자, / 또는 \\ 제외.",
       "defaultCustomDirLinux": "기본 사용자 지정 폴더(Linux)",
-      "defaultCustomDirLinuxHelper": "Linux 게스트의 사용자 지정 폴더로 복원할 때 제안됩니다.",
+      "defaultCustomDirLinuxHelper": "Linux 게스트의 사용자 지정 폴더로 복원할 때 제안됩니다. ~는 쓰기를 수행하는 계정의 홈 폴더입니다(게스트 에이전트는 root, 그 외에는 SSH 사용자).",
       "defaultCustomDirWindows": "기본 사용자 지정 폴더(Windows)",
       "defaultCustomDirWindowsHelper": "Windows 게스트의 사용자 지정 폴더로 복원할 때 제안됩니다.",
       "jobsHeading": "복원 작업",

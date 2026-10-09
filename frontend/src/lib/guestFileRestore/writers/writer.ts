@@ -50,6 +50,8 @@ export interface GuestWriter {
   symlink(path: string, target: string, meta?: Pick<WriteMeta, 'uid' | 'gid'>): Promise<void>
   /** Owner of an existing path, when the transport can tell (null otherwise, e.g. Windows). */
   ownerOf?(path: string): Promise<{ uid: number; gid: number } | null>
+  /** Home folder of the account that writes (linux), for a `~/...` destination. */
+  homeDir?(): Promise<string | null>
   close(): Promise<void>
 }
 

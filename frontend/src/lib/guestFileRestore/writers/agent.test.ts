@@ -6,7 +6,7 @@ const { pveFetchMock } = vi.hoisted(() => ({ pveFetchMock: vi.fn() }))
 
 vi.mock('@/lib/proxmox/client', () => ({ pveFetch: (...a: any[]) => pveFetchMock(...a) }))
 
-import { AGENT_CHUNK_BYTES, AGENT_STAGING_TEMPLATE, AgentWriter, SH, _impl, agentExec, probeAgent, psCommand, shCommand } from './agent'
+import { AGENT_CHUNK_BYTES, AGENT_STAGING_ROOT, AGENT_STAGING_TEMPLATE, AgentWriter, SH, _impl, agentExec, probeAgent, psCommand, shCommand } from './agent'
 import { GuestWriterError } from './writer'
 
 const conn = { id: 'c1', name: 'pve', baseUrl: 'https://pve:8006', apiToken: 'u@pam!t=secret', insecureDev: true, behindProxy: false }
@@ -50,12 +50,12 @@ function installPve(opts: { os?: 'linux' | 'windows'; execExit?: (argv: string[]
   })
 }
 
-const STAGING = '/var/tmp/.pxc-restore-Ab12Cd34'
+const STAGING = '/var/lib/.pxc-restore/job-Ab12Cd34'
 const WIN_STAGING = 'C:\\Windows\\TEMP\\pxc-restore-0123456789abcdef0123456789abcdef'
 
 /** What the guest answers by default: the staging directory for mktemp, success otherwise. */
 function defaultExec(argv: string[]): { exitcode: number; out?: string; err?: string } {
-  if (argv[0] === 'sh' && argv[2].startsWith('mktemp -d')) return { exitcode: 0, out: `${STAGING}\n` }
+  if (argv[0] === 'sh' && argv[2].includes('mktemp -d')) return { exitcode: 0, out: `${STAGING}\n` }
   if (argv[0] === 'powershell.exe') {
     const script = Buffer.from(argv[6], 'base64').toString('utf16le')
     if (script.includes('NewGuid')) return { exitcode: 0, out: `${WIN_STAGING}\r\n` }
@@ -124,7 +124,9 @@ describe('AgentWriter on linux', () => {
     const after = calls().slice(3)
     // The staging directory comes from mktemp, never from a predictable name.
     expect(after[0].path).toBe('/nodes/pve1/qemu/9990/agent/exec')
-    expect(after[0].body.command.slice(2)).toEqual([SH.mktempDir, 'sh', AGENT_STAGING_TEMPLATE])
+    expect(after[0].body.command.slice(2)).toEqual([SH.mktempDir, 'sh', AGENT_STAGING_ROOT, AGENT_STAGING_TEMPLATE])
+    // Never a world-writable directory: another account could plant names there.
+    expect(AGENT_STAGING_ROOT).toBe('/var/lib/.pxc-restore')
     expect(AGENT_STAGING_TEMPLATE).toMatch(/XXXXXXXX$/)
     // The fast path never file-writes at the target: file-write follows symlinks.
     const write = after.find(c => c.path.endsWith('/file-write'))!
@@ -152,12 +154,12 @@ describe('AgentWriter on linux', () => {
   })
 
   it('refuses a destination tree with a symlinked component not owned by root', async () => {
-    installPve({ execExit: argv => (argv[2] === SH.mkdirp && argv[4] === '/var/tmp/proxcenter-restore/etc' ? { exitcode: 3, err: '/var/tmp/proxcenter-restore is a symlink owned by uid 1000' } : undefined as any) })
+    installPve({ execExit: argv => (argv[2] === SH.mkdirp && argv[4] === '/srv/proxcenter-restore/etc' ? { exitcode: 3, err: '/srv/proxcenter-restore is a symlink owned by uid 1000' } : undefined as any) })
     const w = await AgentWriter.create(target, 'job1', { maxBytes: 1024, log })
-    const err = await w.mkdirp('/var/tmp/proxcenter-restore/etc').catch(e => e)
+    const err = await w.mkdirp('/srv/proxcenter-restore/etc').catch(e => e)
     expect(err).toBeInstanceOf(GuestWriterError)
     expect(err.fatal).toBe(false)
-    expect(err.message).toContain('refused, /var/tmp/proxcenter-restore is a symlink owned by uid 1000')
+    expect(err.message).toContain('refused, /srv/proxcenter-restore is a symlink owned by uid 1000')
     expect(SH.mkdirp).toContain('stat -c %u')
     expect(SH.mkdirp.indexOf('mkdir -p')).toBeGreaterThan(SH.mkdirp.indexOf('[ -L "$p" ]'))
     await w.mkdirp('/srv/ok')
@@ -185,7 +187,7 @@ describe('AgentWriter on linux', () => {
     expect(Buffer.concat(writes.map(b => Buffer.from(b.content, 'base64')))).toEqual(data)
 
     const execs = after.filter(c => c.path.endsWith('/agent/exec')).map(c => c.body.command)
-    expect(execs[0].slice(3)).toEqual(['sh', AGENT_STAGING_TEMPLATE])
+    expect(execs[0].slice(3)).toEqual(['sh', AGENT_STAGING_ROOT, AGENT_STAGING_TEMPLATE])
     expect(execs[1].slice(3)).toEqual([
       'sh',
       `${STAGING}/1.file`,

@@ -26,7 +26,7 @@ const SETTINGS = {
   agentParallelWrites: 4,
   defaultConflict: 'overwrite',
   restoredPrefix: 'RESTORED-',
-  defaultCustomDirLinux: '/var/tmp/proxcenter-restore',
+  defaultCustomDirLinux: '/srv/proxcenter-restore',
   defaultCustomDirWindows: 'C:\\ProxCenter-Restore',
 }
 
@@ -593,7 +593,7 @@ describe('RestoreToGuestDialog destination', () => {
 
     const folder = screen.getByLabelText(/folder in the guest/i)
 
-    await waitFor(() => expect(folder).toHaveValue('/var/tmp/proxcenter-restore'))
+    await waitFor(() => expect(folder).toHaveValue('/srv/proxcenter-restore'))
     fireEvent.change(folder, { target: { value: '   ' } })
     expect(restoreButton()).toBeDisabled()
     fireEvent.change(folder, { target: { value: ' /restore/here ' } })

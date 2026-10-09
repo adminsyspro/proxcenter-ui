@@ -82,7 +82,7 @@ const DEFAULT_SETTINGS: RestoreSettings = {
   agentParallelWrites: 4,
   defaultConflict: 'keep',
   restoredPrefix: 'RESTORED-',
-  defaultCustomDirLinux: '/var/tmp/proxcenter-restore',
+  defaultCustomDirLinux: '~/proxcenter-restore',
   defaultCustomDirWindows: 'C:\\ProxCenter-Restore',
 }
 

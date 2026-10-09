@@ -2947,7 +2947,7 @@
       "restoredPrefixHelper": "Ajouté devant le nom du fichier quand les deux versions sont conservées, par exemple RESTORED-hosts.",
       "restoredPrefixInvalid": "De 1 à 32 caractères, sans / ni \\.",
       "defaultCustomDirLinux": "Dossier personnalisé par défaut (Linux)",
-      "defaultCustomDirLinuxHelper": "Proposé quand la restauration se fait dans un dossier personnalisé d’un invité Linux.",
+      "defaultCustomDirLinuxHelper": "Proposé quand la restauration se fait dans un dossier personnalisé d’un invité Linux. ~ désigne le dossier personnel du compte qui écrit (root avec l’agent invité, l’utilisateur SSH sinon).",
       "defaultCustomDirWindows": "Dossier personnalisé par défaut (Windows)",
       "defaultCustomDirWindowsHelper": "Proposé quand la restauration se fait dans un dossier personnalisé d’un invité Windows.",
       "jobsHeading": "Tâches de restauration",

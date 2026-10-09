@@ -18,7 +18,7 @@ const saved = {
   agentParallelWrites: 4,
   defaultConflict: 'keep',
   restoredPrefix: 'BAK-',
-  defaultCustomDirLinux: '/var/tmp/proxcenter-restore',
+  defaultCustomDirLinux: '/srv/proxcenter-restore',
   defaultCustomDirWindows: 'C:\\ProxCenter-Restore',
   sshConnectTimeoutSec: 20,
   maxConcurrentJobs: 3,
@@ -73,7 +73,7 @@ describe('GuestFileRestoreTab', () => {
     await renderLoaded()
     expect(fetchMock).toHaveBeenCalledWith('/api/v1/settings/guest-file-restore', undefined)
     expect(field('Guest agent limit per restore (MiB)')).toHaveValue(1024)
-    expect(field('Default custom folder (Linux)')).toHaveValue('/var/tmp/proxcenter-restore')
+    expect(field('Default custom folder (Linux)')).toHaveValue('/srv/proxcenter-restore')
     expect(saveButton()).toBeDisabled()
     expect(resetButton()).toBeDisabled()
   })

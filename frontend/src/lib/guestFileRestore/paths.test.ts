@@ -4,6 +4,8 @@ import {
   guestDirname,
   guestTargetPath,
   innerPathOf,
+  expandHomePath,
+  isHomePath,
   isRestorableItemPath,
   stripTrailing,
   isSafeRelPath,
@@ -14,7 +16,7 @@ import {
   withCounter,
 } from './paths'
 
-const defaults = { linux: '/var/tmp/proxcenter-restore', windows: 'C:\\ProxCenter-Restore' }
+const defaults = { linux: '/srv/proxcenter-restore', windows: 'C:\\ProxCenter-Restore' }
 
 describe('splitArchivePath', () => {
   it('splits a pxar path after the archive', () => {
@@ -59,7 +61,7 @@ describe('joinGuestPath / toWindowsPath', () => {
   it('joins posix paths', () => {
     expect(joinGuestPath('linux', '/etc', 'apt/sources.list')).toBe('/etc/apt/sources.list')
     expect(joinGuestPath('linux', '/', 'hosts')).toBe('/hosts')
-    expect(joinGuestPath('linux', '/var/tmp/', '')).toBe('/var/tmp')
+    expect(joinGuestPath('linux', '/srv/', '')).toBe('/srv')
   })
   it('joins windows paths with backslashes', () => {
     expect(joinGuestPath('windows', 'C:\\', 'Users/x/a.txt')).toBe('C:\\Users\\x\\a.txt')
@@ -112,7 +114,7 @@ describe('guestTargetPath', () => {
   it('uses the custom folder, or the per-OS default when empty', () => {
     const base = { sourceKind: 'pve' as const, itemPath: '/root.pxar.didx/etc/apt', relPath: 'apt/x', defaults }
     expect(guestTargetPath({ ...base, os: 'linux', destination: { mode: 'custom', path: '/restore' } })).toBe('/restore/apt/x')
-    expect(guestTargetPath({ ...base, os: 'linux', destination: { mode: 'custom' } })).toBe('/var/tmp/proxcenter-restore/apt/x')
+    expect(guestTargetPath({ ...base, os: 'linux', destination: { mode: 'custom' } })).toBe('/srv/proxcenter-restore/apt/x')
     expect(guestTargetPath({ ...base, os: 'windows', destination: { mode: 'custom', path: '  ' } })).toBe('C:\\ProxCenter-Restore\\apt\\x')
   })
 })
@@ -174,5 +176,17 @@ describe('stripTrailing', () => {
     expect(stripTrailing('///', '/')).toBe('')
     expect(stripTrailing('abc==', '=')).toBe('abc')
     expect(stripTrailing('a' + '/'.repeat(100_000) + 'b', '/')).toBe('a' + '/'.repeat(100_000) + 'b')
+  })
+})
+
+describe('isHomePath / expandHomePath', () => {
+  it('expands ~ and ~/x only', () => {
+    expect(isHomePath('~')).toBe(true)
+    expect(isHomePath('~/x')).toBe(true)
+    expect(isHomePath('~x')).toBe(false)
+    expect(isHomePath('/srv/~/x')).toBe(false)
+    expect(expandHomePath('~/a/b', '/root')).toBe('/root/a/b')
+    expect(expandHomePath('~', '/home/u/')).toBe('/home/u')
+    expect(expandHomePath('/srv/x', '/root')).toBe('/srv/x')
   })
 })

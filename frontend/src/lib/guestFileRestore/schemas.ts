@@ -6,7 +6,7 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 
-import { PXAR_SUFFIX, hasParentSegment, isRestorableItemPath } from './paths'
+import { PXAR_SUFFIX, hasParentSegment, isHomePath, isRestorableItemPath } from './paths'
 
 const ID = z.string().trim().min(1).max(64)
 
@@ -15,9 +15,9 @@ function safeSourcePath(p: string): boolean {
   return p.startsWith('/') && !hasParentSegment(p) && !p.includes('\0')
 }
 
-/** Absolute guest folder on either OS (`/var/tmp/x` or `C:\x`), no `..`. */
+/** Guest folder: absolute on either OS (`/srv/x` or `C:\x`) or `~/x` (home of the writing account), no `..`. */
 function safeGuestDir(p: string): boolean {
-  return /^(\/|[A-Za-z]:[\\/])/.test(p) && !hasParentSegment(p) && !p.includes('\0')
+  return (/^(\/|[A-Za-z]:[\\/])/.test(p) || isHomePath(p)) && !hasParentSegment(p) && !p.includes('\0')
 }
 
 export const guestRestoreSourceSchema = z.discriminatedUnion('kind', [

@@ -9,6 +9,7 @@ import { z } from 'zod'
 import { getSetting, setSetting } from '@/lib/db/settings'
 
 import type { GuestFileRestoreSettings } from './types'
+import { isHomePath } from './paths'
 
 export const GUEST_FILE_RESTORE_SETTING_KEY = 'guest_file_restore'
 
@@ -34,8 +35,10 @@ export const guestFileRestoreSettingsSchema = z.object({
     .string()
     .min(1)
     .max(1024)
-    .refine(v => v.startsWith('/'), { message: 'Must be an absolute path' })
-    .default('/var/tmp/proxcenter-restore'),
+    .refine(v => v.startsWith('/') || isHomePath(v), { message: 'Must be an absolute path or start with ~/' })
+    // Under the home of the writing account: a world-writable default (/tmp)
+    // would leave restored files readable by every account of the guest.
+    .default('~/proxcenter-restore'),
   defaultCustomDirWindows: z
     .string()
     .min(1)

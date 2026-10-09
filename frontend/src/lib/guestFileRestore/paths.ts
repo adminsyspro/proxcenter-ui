@@ -19,6 +19,17 @@ export function stripTrailing(s: string, chars: string): string {
   return s.slice(0, end)
 }
 
+/** `~` or `~/...`: a folder under the home of the account that writes (linux). */
+export function isHomePath(p: string): boolean {
+  return p === '~' || p.startsWith('~/')
+}
+
+/** `~/x` with home `/home/u` -> `/home/u/x`; any other path is returned as is. */
+export function expandHomePath(p: string, home: string): string {
+  if (!isHomePath(p)) return p
+  return stripTrailing(home, '/') + p.slice(1)
+}
+
 /** Segments of a posix-like path, without the empty and `.` ones. */
 export function posixSegments(p: string): string[] {
   return p.split('/').filter(s => s !== '' && s !== '.')

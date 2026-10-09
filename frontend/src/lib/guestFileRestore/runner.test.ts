@@ -34,6 +34,7 @@ const realCreateWriter = _impl.createWriter
 
 class FakeWriter implements GuestWriter {
   readonly description = 'fake writer'
+  homeDir?: () => Promise<string | null>
   readonly files = new Map<string, Buffer>()
   readonly metas = new Map<string, WriteMeta>()
   readonly dirs = new Set<string>()
@@ -203,6 +204,24 @@ describe('runGuestFileRestoreJob', () => {
       userEmail: 'alice@example.org',
       details: { operation: 'restore_files_to_guest', phase: 'end', status: 'completed', filesDone: 3 },
     })
+  })
+
+  it('resolves the ~/ default and a ~/ folder against the home of the writing account', async () => {
+    writer.homeDir = async () => '/home/alice/'
+    serve({ '/root.pxar.didx/etc/hosts': Buffer.from('x'), '/root.pxar.didx/etc/motd': Buffer.from('y') })
+    await runGuestFileRestoreJob('job-home', context({ items: [{ path: '/root.pxar.didx/etc/hosts', directory: false }], destination: { mode: 'custom' } }))
+    expect([...writer.files.keys()]).toEqual(['/home/alice/proxcenter-restore/hosts'])
+    await runGuestFileRestoreJob('job-home2', context({ items: [{ path: '/root.pxar.didx/etc/motd', directory: false }], destination: { mode: 'custom', path: '~/restored' } }))
+    expect(writer.files.has('/home/alice/restored/motd')).toBe(true)
+  })
+
+  it('fails the job when the home folder cannot be told, and refuses ~ on windows', async () => {
+    serve({ '/root.pxar.didx/etc/hosts': Buffer.from('x') })
+    await runGuestFileRestoreJob('job-nohome', context({ items: [{ path: '/root.pxar.didx/etc/hosts', directory: false }], destination: { mode: 'custom' } }))
+    expect(lastUpdate()).toMatchObject({ status: 'failed', error: expect.stringContaining('home folder') })
+    writer = new FakeWriter('windows')
+    await runGuestFileRestoreJob('job-wintilde', context({ items: [{ path: '/root.pxar.didx/etc/hosts', directory: false }], destination: { mode: 'custom', path: '~/x' } }))
+    expect(lastUpdate()).toMatchObject({ status: 'failed', error: expect.stringContaining('only understood on Linux') })
   })
 
   it('writes to the custom folder with the per-OS default on windows', async () => {

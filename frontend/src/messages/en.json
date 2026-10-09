@@ -2947,7 +2947,7 @@
       "restoredPrefixHelper": "Added in front of the file name when both versions are kept, for example RESTORED-hosts.",
       "restoredPrefixInvalid": "From 1 to 32 characters, without / or \\.",
       "defaultCustomDirLinux": "Default custom folder (Linux)",
-      "defaultCustomDirLinuxHelper": "Proposed when the user restores into a custom folder of a Linux guest.",
+      "defaultCustomDirLinuxHelper": "Proposed when the user restores into a custom folder of a Linux guest. ~ is the home folder of the account that writes (root with the guest agent, the SSH user otherwise).",
       "defaultCustomDirWindows": "Default custom folder (Windows)",
       "defaultCustomDirWindowsHelper": "Proposed when the user restores into a custom folder of a Windows guest.",
       "jobsHeading": "Restore jobs",

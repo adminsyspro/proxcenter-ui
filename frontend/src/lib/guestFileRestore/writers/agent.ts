@@ -133,8 +133,12 @@ export const SH = {
   // The tree is checked before mkdir (so nothing is created through a planted
   // link) and again after it.
   mkdirp: `${SH_CHECK_COMPONENTS}; mkdir -p -- "$1" || exit 1; ${SH_CHECK_COMPONENTS}; [ -d "$1" ] || exit 4; exit 0`,
-  // $1 = template; prints the directory (0700, root).
-  mktempDir: 'mktemp -d -- "$1"',
+  // $1 = staging root, $2 = template. The root lives under /var/lib, which
+  // only root can write, and must be a real root-owned directory (never a
+  // link); the job directory inside it is unpredictable (0700, root).
+  mktempDir: 'r="$1"; [ -L "$r" ] && exit 5; mkdir -p -m 0700 -- "$r" || exit 1; [ -d "$r" ] && [ "$(stat -c %u -- "$r")" = 0 ] || exit 6; chmod 0700 -- "$r" && mktemp -d -- "$r/$2"',
+  // Home folder of root, for a `~/...` destination.
+  home: 'h=$(getent passwd 0 2>/dev/null | cut -d: -f6); printf %s "${h:-/root}"',
   // $1 = staged file, $2.. = staged parts appended in order then deleted.
   append: 't="$1"; shift; cat -- "$@" >> "$t" && rm -f -- "$@"',
   // $1 = staged file, $2 = target, $3 = octal mode, $4 = uid:gid, $5 = mtime
@@ -325,8 +329,13 @@ export interface AgentWriterOptions {
   log: (level: 'info' | 'warn' | 'error', msg: string) => void
 }
 
-/** mktemp template of the per-job staging directory (0700, root). */
-export const AGENT_STAGING_TEMPLATE = '/var/tmp/.pxc-restore-XXXXXXXX'
+/**
+ * Staging of the agent writes: a root-only folder under /var/lib (never a
+ * world-writable /tmp, where another account could plant names), holding one
+ * mktemp directory per job.
+ */
+export const AGENT_STAGING_ROOT = '/var/lib/.pxc-restore'
+export const AGENT_STAGING_TEMPLATE = 'job-XXXXXXXX'
 
 export class AgentWriter implements GuestWriter {
   readonly os: GuestOs
@@ -411,9 +420,11 @@ export class AgentWriter implements GuestWriter {
   /** The per-job staging directory, created by the guest with an unpredictable name. */
   private async ensureStaging(signal: AbortSignal): Promise<string> {
     if (this.stagingDir) return this.stagingDir
-    const res = await this.exec(shCommand(SH.mktempDir, AGENT_STAGING_TEMPLATE), { script: PS.mktempDir, input: {} }, signal, 30_000)
+    const res = await this.exec(shCommand(SH.mktempDir, AGENT_STAGING_ROOT, AGENT_STAGING_TEMPLATE), { script: PS.mktempDir, input: {} }, signal, 30_000)
     const dir = res.out.trim().split(/\r?\n/).filter(Boolean).at(-1) ?? ''
-    const valid = this.os === 'windows' ? /^[A-Za-z]:\\.+pxc-restore-[0-9a-f]{32}$/i.test(dir) : /^\/var\/tmp\/\.pxc-restore-[A-Za-z0-9]{8}$/.test(dir)
+    const valid = this.os === 'windows'
+      ? /^[A-Za-z]:\\.+pxc-restore-[0-9a-f]{32}$/i.test(dir)
+      : dir.startsWith(`${AGENT_STAGING_ROOT}/job-`) && /^[A-Za-z0-9]{8}$/.test(dir.slice(AGENT_STAGING_ROOT.length + 5))
     if (res.exitcode !== 0 || !valid) {
       throw new GuestWriterError(`Cannot create the staging directory in the guest: ${res.err.trim() || res.out.trim() || `exit code ${res.exitcode}`}`, true)
     }
@@ -531,6 +542,14 @@ export class AgentWriter implements GuestWriter {
     }
 
     await this.finish(staged, path, meta, opts.overwrite === true, signal)
+  }
+
+  /** Home folder of root (the agent writes as root); null on Windows. */
+  async homeDir(): Promise<string | null> {
+    if (this.os === 'windows') return null
+    const res = await agentExec(this.target, shCommand(SH.home), undefined, new AbortController().signal, 30_000)
+    const home = res.out.trim()
+    return res.exitcode === 0 && home.startsWith('/') ? home : null
   }
 
   /** uid:gid of a path (linux only; the link itself for a symlink). */

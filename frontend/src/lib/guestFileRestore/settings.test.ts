@@ -30,7 +30,7 @@ describe('guest file restore settings', () => {
       agentParallelWrites: 4,
       defaultConflict: 'keep',
       restoredPrefix: 'RESTORED-',
-      defaultCustomDirLinux: '/var/tmp/proxcenter-restore',
+      defaultCustomDirLinux: '~/proxcenter-restore',
       defaultCustomDirWindows: 'C:\\ProxCenter-Restore',
       sshConnectTimeoutSec: 20,
       maxConcurrentJobs: 3,

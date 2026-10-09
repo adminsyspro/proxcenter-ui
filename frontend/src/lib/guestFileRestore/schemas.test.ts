@@ -70,7 +70,10 @@ describe('createJobRequestSchema', () => {
 describe('destination and ssh schemas', () => {
   it('accepts absolute folders on both OS and refuses climbing', () => {
     const ok = (d: object) => guestRestoreDestinationSchema.safeParse(d).success
-    expect(ok({ mode: 'custom', path: '/var/tmp/restore' })).toBe(true)
+    expect(ok({ mode: 'custom', path: '/srv/restore' })).toBe(true)
+    expect(ok({ mode: 'custom', path: '~/restore' })).toBe(true)
+    expect(ok({ mode: 'custom', path: '~restore' })).toBe(false)
+    expect(ok({ mode: 'custom', path: '~/../etc' })).toBe(false)
     expect(ok({ mode: 'custom', path: 'C:\\Restore' })).toBe(true)
     expect(ok({ mode: 'custom', path: '' })).toBe(true)
     expect(ok({ mode: 'custom', path: 'relative' })).toBe(false)

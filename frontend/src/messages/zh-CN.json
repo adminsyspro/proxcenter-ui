@@ -2951,7 +2951,7 @@
       "restoredPrefixHelper": "保留两个版本时添加在文件名前，例如 RESTORED-hosts。",
       "restoredPrefixInvalid": "1 到 32 个字符，不能包含 / 或 \\。",
       "defaultCustomDirLinux": "默认自定义文件夹（Linux）",
-      "defaultCustomDirLinuxHelper": "还原到 Linux 客户机的自定义文件夹时建议使用。",
+      "defaultCustomDirLinuxHelper": "恢复到 Linux 客户机的自定义文件夹时默认使用。~ 表示执行写入的账户的主目录（使用客户机代理时为 root，否则为 SSH 用户）。",
       "defaultCustomDirWindows": "默认自定义文件夹（Windows）",
       "defaultCustomDirWindowsHelper": "还原到 Windows 客户机的自定义文件夹时建议使用。",
       "jobsHeading": "还原任务",

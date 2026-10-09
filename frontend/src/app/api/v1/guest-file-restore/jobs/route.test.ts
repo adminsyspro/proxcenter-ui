@@ -70,7 +70,7 @@ const source = { kind: 'pve', connId: 'c1', storage: 'pbs', volume: 'backup/vm/1
 const items = [{ path: '/drive-scsi0.img.fidx/part/1/etc/hosts', directory: false, size: 20 }]
 const settings = {
   agentEnabled: true, sshEnabled: true, agentMaxBytes: 1024, defaultConflict: 'keep', restoredPrefix: 'RESTORED-',
-  defaultCustomDirLinux: '/var/tmp/proxcenter-restore', defaultCustomDirWindows: 'C:\\ProxCenter-Restore',
+  defaultCustomDirLinux: '/srv/proxcenter-restore', defaultCustomDirWindows: 'C:\\ProxCenter-Restore',
   sshConnectTimeoutSec: 20, maxConcurrentJobs: 3, jobRetentionDays: 30,
 }
 const resolved = { kind: 'pve', conn: { id: 'c1', apiToken: 'secret' }, dispatcher: undefined, nodeName: 'pve1', storage: 'pbs', volumeId: 'pbs:backup/vm/100/x' }

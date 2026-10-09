@@ -135,7 +135,9 @@ export async function GET(
         'backup-type': backupType,
         'backup-id': vmid,
         'backup-time': timestamp,
-        'filepath': archiveName + filepath, // ex: "root.pxar.didx/etc"
+        // PBS decodes `filepath` as base64 ("base64 decoding of path failed"
+        // otherwise); the first component names the archive.
+        'filepath': Buffer.from(`/${archiveName}${filepath === '/' ? '' : filepath}`, 'utf-8').toString('base64'),
       })
 
       if (ns) catalogParams.set('ns', ns)

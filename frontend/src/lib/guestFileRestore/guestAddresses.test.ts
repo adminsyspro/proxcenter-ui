@@ -58,7 +58,8 @@ describe('canonicalIp / isRoutableGuestAddress', () => {
     expect(canonicalIp('[FD00::5]')).toBe('fd00:0:0:0:0:0:0:5')
     expect(canonicalIp('fe80::1%eth0')).toBe('fe80:0:0:0:0:0:0:1')
     expect(canonicalIp('fd00:0000:0000:0000:0000:0000:0000:0005')).toBe('fd00:0:0:0:0:0:0:5')
-    expect(canonicalIp('::ffff:10.0.0.5')).toBe('0:0:0:0:0:ffff:a00:5')
+    expect(canonicalIp('::ffff:10.0.0.5')).toBe('10.0.0.5')
+    expect(canonicalIp('::ffff:a2a:65')).toBe('10.42.0.101')
     expect(canonicalIp('vm.example.org')).toBeNull()
     expect(canonicalIp('10.0.0')).toBeNull()
   })
@@ -70,7 +71,8 @@ describe('canonicalIp / isRoutableGuestAddress', () => {
     expect(isRoutableGuestAddress('fd00:0:0:0:0:0:0:5')).toBe(true)
     expect(isRoutableGuestAddress('0:0:0:0:0:0:0:1')).toBe(false)
     expect(isRoutableGuestAddress('fe80:0:0:0:0:0:0:1')).toBe(false)
-    expect(isRoutableGuestAddress('0:0:0:0:0:ffff:7f00:1')).toBe(false)
+    expect(isRoutableGuestAddress(canonicalIp('::ffff:127.0.0.1')!)).toBe(false)
+    expect(isRoutableGuestAddress(canonicalIp('::ffff:169.254.1.1')!)).toBe(false)
   })
 })
 
@@ -137,6 +139,12 @@ describe('assertSshHostAllowed', () => {
       expect(await res!.json(), host).toEqual({ error: SSH_HOST_NOT_GUEST_MESSAGE, addresses: ['10.42.0.55'] })
     }
     expect(await assertSshHostAllowed({ ...tenant, host: '10.42.0.55' })).toBeNull()
+  })
+  it('refuses an infrastructure address written as IPv4-mapped IPv6', async () => {
+    pveFetchMock.mockResolvedValue({ result: [{ name: 'eth0', 'ip-addresses': [{ 'ip-address': '::ffff:10.42.0.101' }, { 'ip-address': '10.42.0.55' }] }] })
+    for (const host of ['::ffff:10.42.0.101', '[::ffff:a2a:65]']) {
+      expect((await assertSshHostAllowed({ ...tenant, host }))?.status, host).toBe(400)
+    }
   })
   it('lets a provider caller use any host without resolving anything', async () => {
     expect(await assertSshHostAllowed({ ...tenant, providerCaller: true, host: 'jump.example.org' })).toBeNull()

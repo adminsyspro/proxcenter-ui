@@ -84,8 +84,11 @@ describe('authorizeRestoreTarget', () => {
 })
 
 describe('isProviderCaller', () => {
-  it('reads the raw session claim and never counts an API token', async () => {
+  it('requires a provider super admin, from the raw session claim, never an API token', async () => {
     expect(await isProviderCaller({ kind: 'session', userId: 'u1', tenantId: 'default' } as any)).toBe(true)
+    superAdminMock.mockResolvedValue(false)
+    expect(await isProviderCaller({ kind: 'session', userId: 'u1', tenantId: 'default' } as any)).toBe(false)
+    superAdminMock.mockResolvedValue(true)
     sessionMock.mockResolvedValue({ user: { id: 'u2', tenantId: 'tenant-b' } })
     expect(await isProviderCaller({ kind: 'session', userId: 'u2', tenantId: 'default' } as any)).toBe(false)
     sessionMock.mockResolvedValue({ user: { id: 'u3' } })

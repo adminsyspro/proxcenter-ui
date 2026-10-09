@@ -1,8 +1,8 @@
 // src/lib/guestFileRestore/guestAddresses.ts
 //
-// The SSH host of a restore. A provider caller (default tenant) already
-// reaches the whole infrastructure (node consoles, node SSH), so any host is
-// accepted (NAT, jump tunnels). Anyone else (MSP / vDC tenants, API tokens)
+// The SSH host of a restore. A provider super admin already reaches the whole
+// infrastructure (node consoles, node SSH), so any host is accepted (NAT, jump
+// tunnels). Anyone else (other provider users, MSP / vDC tenants, API tokens)
 // is bound to the guest they are authorised on: the host must be one of the
 // addresses the guest reports (QEMU guest agent, container interfaces), AND
 // must not be an address of the infrastructure ProxCenter knows (PVE/PBS and
@@ -111,7 +111,18 @@ export function canonicalIp(value: string): string | null {
   const v = value.trim().replace(/^\[|\]$/g, '').replace(/%.*$/, '').toLowerCase()
   const kind = isIP(v)
   if (kind === 4) return v
-  if (kind === 6) return expandIpv6(v)
+  if (kind === 6) {
+    const expanded = expandIpv6(v)
+    // An IPv4-mapped address reaches the IPv4 host: compare it as that host,
+    // or `::ffff:10.0.0.1` would slip past a refusal of `10.0.0.1`.
+    const mapped = /^0:0:0:0:0:ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(expanded)
+    if (mapped) {
+      const hi = parseInt(mapped[1], 16)
+      const lo = parseInt(mapped[2], 16)
+      return [hi >> 8, hi & 255, lo >> 8, lo & 255].join('.')
+    }
+    return expanded
+  }
   return null
 }
 
@@ -122,8 +133,7 @@ export function isRoutableGuestAddress(canonical: string): boolean {
   }
   if (canonical === '0:0:0:0:0:0:0:1' || canonical === '0:0:0:0:0:0:0:0') return false
   if (/^fe[89ab][0-9a-f]?:/.test(canonical)) return false
-  // IPv4-mapped loopback / link-local (::ffff:127.x, ::ffff:169.254.x)
-  if (/^0:0:0:0:0:ffff:7f[0-9a-f]{2}:/.test(canonical) || /^0:0:0:0:0:ffff:a9fe:/.test(canonical)) return false
+  // IPv4-mapped addresses come out of canonicalIp in dotted form, checked above.
   return true
 }
 
@@ -187,7 +197,7 @@ export async function assertSshHostAllowed(opts: {
   target: GuestRestoreTarget
   host: string
   principal: Principal
-  /** Caller of the provider tenant (raw session claim), see isProviderCaller. */
+  /** Provider super admin (raw session claim), see isProviderCaller in guard.ts. */
   providerCaller: boolean
 }): Promise<Response | null> {
   if (opts.providerCaller && opts.principal.kind !== 'token') return null

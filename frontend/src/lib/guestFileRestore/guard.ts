@@ -71,12 +71,16 @@ export async function authorizeRestoreTarget(target: GuestRestoreTarget): Promis
 }
 
 /**
- * Whether the caller belongs to the provider tenant, read from the raw session
- * claim (not getCurrentTenantId(), whose "default" fallback could promote a
- * tenant user). API tokens never count as provider callers here.
+ * Whether the caller may aim the SSH restore at any host and see the precise
+ * cause of a failed connection: a super admin of the provider tenant, who
+ * already reaches the whole infrastructure. Tenant membership alone is not
+ * enough (a provider user may hold backup.restore on a few guests only). The
+ * tenant comes from the raw session claim (not getCurrentTenantId(), whose
+ * "default" fallback could promote a tenant user); API tokens never qualify.
  */
 export async function isProviderCaller(principal: Principal): Promise<boolean> {
-  if (principal.kind === 'token') return false
+  if (principal.kind === 'token' || !principal.userId) return false
   const session = await getServerSession(authOptions)
-  return (session as any)?.user?.tenantId === PROVIDER_TENANT_ID
+  if ((session as any)?.user?.tenantId !== PROVIDER_TENANT_ID) return false
+  return isUserSuperAdmin(principal.userId)
 }

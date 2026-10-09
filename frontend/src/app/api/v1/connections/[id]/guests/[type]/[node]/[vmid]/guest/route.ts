@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 
 import { pveFetch } from "@/lib/proxmox/client"
+import { getOsType } from "@/lib/proxmox/guestOs"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
 
@@ -8,28 +9,6 @@ export const runtime = "nodejs"
 
 type RouteContext = {
   params: Promise<{ id: string; type: string; node: string; vmid: string }>
-}
-
-// Déterminer le type d'OS à partir des infos du guest agent
-function getOsType(osInfo: any): 'linux' | 'windows' | 'other' {
-  if (!osInfo) return 'other'
-  
-  const id = (osInfo.id || '').toLowerCase()
-  const name = (osInfo.name || '').toLowerCase()
-  
-  // Windows
-  if (id === 'mswindows' || name.includes('windows')) {
-    return 'windows'
-  }
-  
-  // Linux distributions
-  const linuxDistros = ['debian', 'ubuntu', 'centos', 'rhel', 'fedora', 'alpine', 'arch', 'opensuse', 'suse', 'mint', 'manjaro', 'rocky', 'alma', 'oracle', 'gentoo', 'slackware', 'nixos']
-
-  if (linuxDistros.some(d => id.includes(d) || name.includes(d)) || name.includes('linux')) {
-    return 'linux'
-  }
-  
-  return 'other'
 }
 
 type OsInfo = {

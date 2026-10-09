@@ -8,6 +8,8 @@ import { getDateLocale } from '@/lib/i18n/date'
 import { buildPbsSnapshotName, pbsFormatLabel } from '@/lib/backups/snapshotDisplay'
 import { useToast } from '@/contexts/ToastContext'
 import { useTaskTracker } from '@/hooks/useTaskTracker'
+import RestoreToGuestDialog from '@/components/backups/RestoreToGuestDialog'
+import { isRestorableItemPath } from '@/lib/guestFileRestore/paths'
 
 import {
   Accordion,
@@ -144,6 +146,8 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
   const [pbsFileExpandedPaths, setPbsFileExpandedPaths] = useState<Set<string>>(new Set())
   const [pbsFileSearch, setPbsFileSearch] = useState('')
   const [pbsFileDownloading, setPbsFileDownloading] = useState<string | null>(null)
+  const [pbsFileGuests, setPbsFileGuests] = useState<any[]>([])
+  const [pbsRestoreToGuestItem, setPbsRestoreToGuestItem] = useState<{ path: string; directory: boolean; size?: number; label?: string } | null>(null)
 
   // PBS storage: open restore dialog
   const openPbsRestoreDialog = useCallback(async (backup: any, si: any) => {
@@ -291,6 +295,13 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
     setPbsFileLoading(true)
     setPbsFileError(null)
     setPbsFilePveStorage({ storage: si.storage, connId: si.connId, node: si.node })
+    setPbsFileGuests([])
+
+    // Guests of the connection, to preselect the backed up one as restore target
+    fetch(`/api/v1/connections/${encodeURIComponent(si.connId)}/resources`, { cache: 'no-store' })
+      .then(r => (r.ok ? r.json() : null))
+      .then(json => { if (json) setPbsFileGuests(json.data || []) })
+      .catch(() => {})
 
     try {
       const params = new URLSearchParams({ storage: si.storage, volume: backup.volid, filepath: '/' })
@@ -401,6 +412,32 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
       setPbsFileDownloading(null)
     }
   }, [pbsFileRestoreDialog, data, pbsFilePveStorage])
+
+  // PBS file restore: restore into a guest action (files and folders only)
+  const renderRestoreToGuestButton = (node: any, nodePath: string) => {
+    if (node.isRawDiskImage || (node.type !== 'file' && node.type !== 'directory')) return null
+    // Never a whole disk, partition or LV node: only entries inside a filesystem.
+    if (!isRestorableItemPath('pve', `/${nodePath}`)) return null
+    return (
+      <MuiTooltip title={t('guestFileRestore.restoreIntoGuest')}>
+        <IconButton
+          size="small"
+          sx={{ p: 0.25 }}
+          onClick={(e) => {
+            e.stopPropagation()
+            setPbsRestoreToGuestItem({
+              path: `/${nodePath}`,
+              directory: node.type === 'directory',
+              size: node.type === 'file' ? node.size : undefined,
+              label: node.name,
+            })
+          }}
+        >
+          <i className="ri-folder-transfer-line" style={{ fontSize: 15, opacity: 0.7 }} />
+        </IconButton>
+      </MuiTooltip>
+    )
+  }
 
   // Expose handlers to parent via ref
   useImperativeHandle(ref, () => ({
@@ -1441,7 +1478,7 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
                     <TableCell sx={{ fontWeight: 700, fontSize: 11 }}>{t('inventory.pbsName')}</TableCell>
                     <TableCell sx={{ fontWeight: 700, fontSize: 11, width: 90 }}>{t('inventory.pbsSize')}</TableCell>
                     <TableCell sx={{ fontWeight: 700, fontSize: 11, width: 140 }}>Modified</TableCell>
-                    <TableCell sx={{ fontWeight: 700, fontSize: 11, width: 50 }}></TableCell>
+                    <TableCell sx={{ fontWeight: 700, fontSize: 11, width: 80 }}></TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -1510,11 +1547,14 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
                               {pbsFileDownloading === nodePath ? (
                                 <CircularProgress size={14} />
                               ) : (
-                                <MuiTooltip title={isDir ? `${t('common.download')} (.tar.zst)` : t('common.download')}>
-                                  <IconButton size="small" sx={{ p: 0.25 }} disabled={!!pbsFileDownloading} onClick={() => pbsDownloadFile(nodePath, isDir)}>
-                                    <i className="ri-download-2-line" style={{ fontSize: 15, opacity: isDir ? 0.4 : 0.7 }} />
-                                  </IconButton>
-                                </MuiTooltip>
+                                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                                  <MuiTooltip title={isDir ? `${t('common.download')} (.tar.zst)` : t('common.download')}>
+                                    <IconButton size="small" sx={{ p: 0.25 }} disabled={!!pbsFileDownloading} onClick={() => pbsDownloadFile(nodePath, isDir)}>
+                                      <i className="ri-download-2-line" style={{ fontSize: 15, opacity: isDir ? 0.4 : 0.7 }} />
+                                    </IconButton>
+                                  </MuiTooltip>
+                                  {renderRestoreToGuestButton(node, nodePath)}
+                                </Box>
                               )}
                             </TableCell>
                           </TableRow>
@@ -1582,16 +1622,19 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
                               {pbsFileDownloading === nodePath ? (
                                 <CircularProgress size={14} />
                               ) : (
-                                <MuiTooltip title={isDir ? `${t('common.download')} (.tar.zst)` : t('common.download')}>
-                                  <IconButton
-                                    size="small"
-                                    sx={{ p: 0.25 }}
-                                    disabled={!!pbsFileDownloading}
-                                    onClick={(e) => { e.stopPropagation(); void pbsDownloadFile(nodePath, isDir) }}
-                                  >
-                                    <i className="ri-download-2-line" style={{ fontSize: 15, opacity: isDir ? 0.4 : 0.7 }} />
-                                  </IconButton>
-                                </MuiTooltip>
+                                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                                  <MuiTooltip title={isDir ? `${t('common.download')} (.tar.zst)` : t('common.download')}>
+                                    <IconButton
+                                      size="small"
+                                      sx={{ p: 0.25 }}
+                                      disabled={!!pbsFileDownloading}
+                                      onClick={(e) => { e.stopPropagation(); void pbsDownloadFile(nodePath, isDir) }}
+                                    >
+                                      <i className="ri-download-2-line" style={{ fontSize: 15, opacity: isDir ? 0.4 : 0.7 }} />
+                                    </IconButton>
+                                  </MuiTooltip>
+                                  {renderRestoreToGuestButton(node, nodePath)}
+                                </Box>
                               )}
                             </TableCell>
                           </TableRow>
@@ -1612,6 +1655,27 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
           )}
         </DialogContent>
       </Dialog>
+
+      {pbsRestoreToGuestItem && pbsFileRestoreDialog.backup && (data?.storageInfo || pbsFilePveStorage) && (() => {
+        const si = data?.storageInfo || pbsFilePveStorage
+        const backup = pbsFileRestoreDialog.backup
+        const volidMatch = /backup\/(?:vm|ct)\/(\d+)\//.exec(String(backup.volid || ''))
+        const backupVmid = Number(backup.vmid ?? volidMatch?.[1])
+        const guest = Number.isFinite(backupVmid)
+          ? pbsFileGuests.find((g: any) => Number(g.vmid) === backupVmid && (g.type === 'qemu' || g.type === 'lxc') && !g.template)
+          : undefined
+
+        return (
+          <RestoreToGuestDialog
+            open
+            onClose={() => setPbsRestoreToGuestItem(null)}
+            source={{ kind: 'pve', connId: si.connId, storage: si.storage, volume: backup.volid }}
+            items={[pbsRestoreToGuestItem]}
+            defaultTarget={guest ? { connId: si.connId, node: guest.node, type: guest.type, vmid: Number(guest.vmid), name: guest.name } : undefined}
+            backupLabel={backup.volid}
+          />
+        )
+      })()}
     </>
   )
 })

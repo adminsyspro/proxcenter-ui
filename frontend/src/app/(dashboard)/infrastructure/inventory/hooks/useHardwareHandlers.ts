@@ -1017,12 +1017,13 @@ return []
 return
       } else {
         const files = (json.data?.files || []).map((f: any) => {
-          // Les fichiers .img.fidx sont des images de disques bruts PBS
-          // Ils ne supportent pas le file-restore (seuls .pxar.fidx le supportent)
           // Le nom peut commencer par / (ex: /drive-scsi0.img.fidx)
           const fileName = (f.name || '').replace(/^\//, '') // Enlever le / initial
-          // Seuls les .pxar peuvent être explorés (archives de fichiers)
-          const isRawDiskImage = fileName && !fileName.includes('.pxar') && (
+          // An image is "raw, not browsable" only when PVE says so: through
+          // file-restore a drive-*.img.fidx IS browsable (partitions, LVM),
+          // and judging by the name alone labelled it "not browsable" next to
+          // a working chevron. Same rule as parsePbsFiles in PbsServerPanel.
+          const isRawDiskImage = !f.browsable && fileName && !fileName.includes('.pxar') && (
             fileName.endsWith('.img.fidx') || fileName.endsWith('.img.didx') ||
             fileName.endsWith('.raw.fidx') || fileName.endsWith('.raw.didx') ||
             fileName.endsWith('.img') || /^drive-.*\.(img|raw)/i.test(fileName)

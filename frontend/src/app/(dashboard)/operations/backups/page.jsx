@@ -50,6 +50,8 @@ import RestoreVmDialog from '@/components/backup/RestoreVmDialog'
 import BulkRestoreWizard from '@/components/backup/BulkRestoreWizard'
 import { useTenant } from '@/contexts/TenantContext'
 import { useToast } from '@/contexts/ToastContext'
+import RestoreToGuestDialog from '@/components/backups/RestoreToGuestDialog'
+import { isRestorableItemPath } from '@/lib/guestFileRestore/paths'
 
 /* -----------------------------
   Helpers
@@ -252,6 +254,19 @@ return () => setPageInfo('', '', '')
   const [explorerArchive, setExplorerArchive] = useState(null) // Archive sélectionnée
   const [explorerPath, setExplorerPath] = useState('/') // Chemin actuel
   const [explorerArchives, setExplorerArchives] = useState([]) // Liste des archives du backup
+  // VM image archives (.img.fidx) are browsed through a PVE storage pointing
+  // at this PBS datastore: { connId, connName, storage } while doing so.
+  const [explorerPve, setExplorerPve] = useState(null)
+  const [pveStoragePicker, setPveStoragePicker] = useState(null) // { archive, options }
+  const [pveStorageChoice, setPveStorageChoice] = useState('') // `${connId}|${storage}`
+
+  // Restore files into a guest
+  const [restoreToGuest, setRestoreToGuest] = useState(null) // { source, items, defaultTarget }
+  const [guestCandidates, setGuestCandidates] = useState(null)
+
+  const pveBackupVolume = selectedBackup
+    ? `backup/${selectedBackup.backupType}/${selectedBackup.backupId}/${selectedBackup.backupTimeIso}`
+    : ''
 
   // Charger le contenu d'un backup (liste des archives)
   const loadBackupContent = useCallback(async (backup) => {
@@ -282,13 +297,36 @@ return () => setPageInfo('', '', '')
   }, [selectedPbs, t])
 
   // Naviguer dans une archive
-  const browseArchive = useCallback(async (archiveName, path = '/') => {
+  const browseArchive = useCallback(async (archiveName, path = '/', pve = explorerPve) => {
     if (!selectedBackup || !selectedPbs) return
 
     setExplorerLoading(true)
     setExplorerError(null)
 
     try {
+      if (pve) {
+        const params = new URLSearchParams({
+          storage: pve.storage,
+          volume: pveBackupVolume,
+          filepath: path === '/' ? `/${archiveName}` : `/${archiveName}${path}`,
+        })
+
+        const res = await fetch(`/api/v1/connections/${encodeURIComponent(pve.connId)}/file-restore?${params}`)
+        const json = await res.json()
+
+        if (json.error && !json.data?.files?.length) {
+          setExplorerError(json.error)
+        } else {
+          setExplorerFiles(json.data?.files || [])
+          setExplorerArchive(archiveName)
+          setExplorerPath(path)
+          setExplorerPve(pve)
+          if (json.error) setExplorerError(json.error)
+        }
+
+        return
+      }
+
       const backupId = encodeURIComponent(selectedBackup.id)
 
       const params = new URLSearchParams({
@@ -314,7 +352,109 @@ return () => setPageInfo('', '', '')
     } finally {
       setExplorerLoading(false)
     }
-  }, [selectedBackup, selectedPbs, t])
+  }, [selectedBackup, selectedPbs, explorerPve, pveBackupVolume, t])
+
+  // Ouvrir une image disque (.img.fidx) via un stockage PVE branché sur ce datastore
+  const openImageArchive = useCallback(async (archiveName) => {
+    if (!selectedBackup || !selectedPbs) return
+
+    setExplorerLoading(true)
+    setExplorerError(null)
+    setPveStoragePicker(null)
+
+    try {
+      const params = new URLSearchParams({ datastore: selectedBackup.datastore })
+
+      if (selectedBackup.namespace) params.set('ns', selectedBackup.namespace)
+
+      const res = await fetch(`/api/v1/pbs/${encodeURIComponent(selectedPbs)}/pve-storages?${params}`)
+      const json = await res.json()
+
+      if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`)
+
+      const options = json.data || []
+
+      if (options.length === 0) {
+        setExplorerError(t('backups.noPveStorageForImage'))
+
+        return
+      }
+
+      const chosen = options.length === 1
+        ? options[0]
+        : options.find(o => `${o.connId}|${o.storage}` === pveStorageChoice)
+
+      if (!chosen) {
+        setPveStoragePicker({ archive: archiveName, options })
+
+        return
+      }
+
+      await browseArchive(archiveName, '/', { connId: chosen.connId, connName: chosen.connName, storage: chosen.storage })
+    } catch (e) {
+      setExplorerError(e.message || t('errors.loadingError'))
+    } finally {
+      setExplorerLoading(false)
+    }
+  }, [selectedBackup, selectedPbs, pveStorageChoice, browseArchive, t])
+
+  // Guest whose vmid matches the backup, preselected as restore target
+  const findDefaultGuest = useCallback((connId) => {
+    if (!selectedBackup || !guestCandidates) return undefined
+    const vmid = Number(selectedBackup.backupId)
+    const type = selectedBackup.backupType === 'ct' ? 'lxc' : selectedBackup.backupType === 'vm' ? 'qemu' : null
+
+    if (!Number.isFinite(vmid) || !type) return undefined
+    const matches = guestCandidates.filter(g =>
+      Number(g.vmid) === vmid && g.type === type && !g.template && (!connId || g.connId === connId)
+    )
+
+    // Without a connection to anchor on, a vmid reused on several clusters is ambiguous
+    if (matches.length !== 1) return undefined
+    const g = matches[0]
+
+    return { connId: g.connId, node: g.node, type: g.type, vmid, name: g.name }
+  }, [selectedBackup, guestCandidates])
+
+  // Restore one explorer entry into a guest
+  const openRestoreToGuest = useCallback((file) => {
+    if (!selectedBackup || !explorerArchive) return
+    const innerPath = explorerPath === '/' ? `/${file.name}` : `${explorerPath}/${file.name}`
+    const item = {
+      path: explorerPve ? `/${explorerArchive}${innerPath}` : innerPath,
+      directory: file.type === 'directory',
+      size: file.type === 'file' ? file.size : undefined,
+      label: file.name,
+    }
+    const source = explorerPve
+      ? { kind: 'pve', connId: explorerPve.connId, storage: explorerPve.storage, volume: pveBackupVolume }
+      : {
+          kind: 'pbs',
+          pbsId: selectedPbs,
+          datastore: selectedBackup.datastore,
+          namespace: selectedBackup.namespace || '',
+          backupType: selectedBackup.backupType,
+          backupId: selectedBackup.backupId,
+          backupTime: selectedBackup.backupTime,
+          archive: explorerArchive,
+        }
+
+    setRestoreToGuest({ source, items: [item], defaultTarget: findDefaultGuest(explorerPve?.connId) })
+  }, [selectedBackup, selectedPbs, explorerArchive, explorerPath, explorerPve, pveBackupVolume, findDefaultGuest])
+
+  // Télécharger une entrée d'une image disque (via le stockage PVE)
+  const downloadPveEntry = useCallback((file) => {
+    if (!explorerPve || !explorerArchive) return
+    const innerPath = explorerPath === '/' ? `/${file.name}` : `${explorerPath}/${file.name}`
+    const params = new URLSearchParams({
+      storage: explorerPve.storage,
+      volume: pveBackupVolume,
+      filepath: `/${explorerArchive}${innerPath}`,
+    })
+
+    if (file.type !== 'file') params.set('directory', '1')
+    window.open(`/api/v1/connections/${encodeURIComponent(explorerPve.connId)}/file-restore/download?${params}`, '_blank', 'noopener')
+  }, [explorerPve, explorerArchive, explorerPath, pveBackupVolume])
 
   // Naviguer dans un dossier
   const navigateToFolder = useCallback((folderName) => {
@@ -349,6 +489,7 @@ return () => setPageInfo('', '', '')
     setExplorerArchive(null)
     setExplorerPath('/')
     setExplorerFiles([])
+    setExplorerPve(null)
   }, [])
 
   // Charger le contenu quand on change d'onglet vers Explorer
@@ -358,6 +499,19 @@ return () => setPageInfo('', '', '')
     }
   }, [drawerTab, selectedBackup, explorerArchives.length, loadBackupContent])
 
+  // Liste des guests (une fois), pour présélectionner la cible d'une restauration dans un guest
+  useEffect(() => {
+    if (drawerTab !== 1 || isVdcTenant || guestCandidates) return
+    let cancelled = false
+
+    fetch('/api/v1/vms', { cache: 'no-store' })
+      .then(r => (r.ok ? r.json() : null))
+      .then(json => { if (!cancelled) setGuestCandidates(json?.data?.vms || []) })
+      .catch(() => { if (!cancelled) setGuestCandidates([]) })
+
+    return () => { cancelled = true }
+  }, [drawerTab, isVdcTenant, guestCandidates])
+
   // Reset explorer quand on change de backup
   useEffect(() => {
     setExplorerArchives([])
@@ -365,6 +519,8 @@ return () => setPageInfo('', '', '')
     setExplorerPath('/')
     setExplorerFiles([])
     setExplorerError(null)
+    setExplorerPve(null)
+    setPveStoragePicker(null)
     setDrawerTab(0)
   }, [selectedBackup?.id])
 
@@ -1306,16 +1462,42 @@ return () => clearTimeout(timer)
                         <Typography variant='subtitle2' sx={{ mb: 1, opacity: 0.7 }}>
                           {t('backups.backupArchives')}
                         </Typography>
+                        {pveStoragePicker && (
+                          <FormControl size='small' fullWidth sx={{ mb: 1 }}>
+                            <InputLabel>{t('backups.pickPveStorage')}</InputLabel>
+                            <Select
+                              label={t('backups.pickPveStorage')}
+                              value=''
+                              sx={SMALL_SELECT_SX}
+                              onChange={(e) => {
+                                const chosen = pveStoragePicker.options.find(o => `${o.connId}|${o.storage}` === e.target.value)
+
+                                if (!chosen) return
+                                setPveStorageChoice(e.target.value)
+                                setPveStoragePicker(null)
+                                browseArchive(pveStoragePicker.archive, '/', { connId: chosen.connId, connName: chosen.connName, storage: chosen.storage })
+                              }}
+                            >
+                              {pveStoragePicker.options.map(o => (
+                                <MenuItem key={`${o.connId}|${o.storage}`} value={`${o.connId}|${o.storage}`}>
+                                  {o.connName} · {o.storage}
+                                </MenuItem>
+                              ))}
+                            </Select>
+                          </FormControl>
+                        )}
                         <List dense>
                           {explorerArchives.map((file, idx) => {
                             // .blob → direct download via /file-download
                             // .pxar.didx → browsable
-                            // .img.fidx → "Use file restore" hint (no inline download — the index alone is useless)
+                            // .img.fidx → browsed through a PVE storage bound to this datastore
                             const isBlob = typeof file.name === 'string' && file.name.endsWith('.blob')
                             const isImgIdx = typeof file.name === 'string' && file.name.endsWith('.img.fidx')
                             const handleClick = () => {
                               if (file.browsable) {
-                                browseArchive(file.name, '/')
+                                browseArchive(file.name, '/', null)
+                              } else if (isImgIdx) {
+                                openImageArchive(file.name)
                               } else if (isBlob) {
                                 // Trigger the browser download. The route streams
                                 // the bytes with Content-Disposition: attachment.
@@ -1330,9 +1512,9 @@ return () => clearTimeout(timer)
                               : isBlob
                                 ? t('backups.clickToDownload')
                                 : isImgIdx
-                                  ? t('backups.useFileRestore')
+                                  ? t('backups.vmImageBrowseHint')
                                   : t('backups.notExplorable')
-                            const trailingIcon = file.browsable
+                            const trailingIcon = file.browsable || isImgIdx
                               ? 'ri-arrow-right-s-line'
                               : isBlob
                                 ? 'ri-download-2-line'
@@ -1341,7 +1523,7 @@ return () => clearTimeout(timer)
                             <ListItem key={idx} disablePadding>
                               <ListItemButton
                                 onClick={handleClick}
-                                disabled={!file.browsable && !isBlob}
+                                disabled={!file.browsable && !isBlob && !isImgIdx}
                               >
                                 <ListItemIcon sx={{ minWidth: 36 }}>
                                   <FileIcon type={file.type} name={file.name} />
@@ -1390,7 +1572,8 @@ return () => clearTimeout(timer)
                               sx={{ cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }}
                               onClick={backToArchives}
                             >
-                              {explorerArchive.replaceAll('.pxar.didx', '')}
+                              {explorerArchive.replaceAll('.pxar.didx', '').replaceAll('.img.fidx', '')}
+                              {explorerPve ? ` (${explorerPve.connName || explorerPve.connId} · ${explorerPve.storage})` : ''}
                             </Typography>
                             {explorerPath !== '/' && explorerPath.split('/').filter(Boolean).map((part, idx) => (
                               <Typography
@@ -1417,27 +1600,73 @@ return () => clearTimeout(timer)
 
                         {/* Liste des fichiers */}
                         <List dense sx={{ maxHeight: 'calc(100vh - 350px)', overflow: 'auto' }}>
-                          {explorerFiles.map((file, idx) => (
-                            <ListItem key={idx} disablePadding>
+                          {explorerFiles.map((file, idx) => {
+                            const isNavigable = explorerPve ? !!file.browsable : file.type === 'directory'
+                            const canDownload = !!explorerPve && (file.type === 'file' || file.type === 'directory' || file.type === 'virtual')
+                            const guestInnerPath = explorerPath === '/' ? `/${file.name}` : `${explorerPath}/${file.name}`
+                            // Never a whole disk, partition or LV node: only entries inside a filesystem.
+                            const canRestoreToGuest = (file.type === 'file' || file.type === 'directory')
+                              && isRestorableItemPath(explorerPve ? 'pve' : 'pbs', explorerPve ? `/${explorerArchive}${guestInnerPath}` : guestInnerPath)
+                            const actionCount = (canDownload ? 1 : 0) + (canRestoreToGuest ? 1 : 0)
+
+                            return (
+                            <ListItem
+                              key={idx}
+                              disablePadding
+                              // MUI pads the row button by 48px whenever there is a secondary
+                              // action, through a nested selector the button's own sx cannot beat.
+                              // In px: the theme spacing unit is not 8. Each small icon button is
+                              // ~30px wide, the action block sits 16px from the edge.
+                              sx={actionCount > 0 ? { '& > .MuiListItemButton-root': { pr: `${24 + actionCount * 30}px` } } : undefined}
+                              secondaryAction={actionCount > 0 && (
+                                <Stack direction='row' spacing={0}>
+                                  {canDownload && (
+                                    <Tooltip title={t('common.download')}>
+                                      <IconButton
+                                        size='small'
+                                        edge={canRestoreToGuest ? false : 'end'}
+                                        onClick={(e) => { e.stopPropagation(); downloadPveEntry(file) }}
+                                      >
+                                        <i className='ri-download-2-line' style={{ fontSize: 18 }} />
+                                      </IconButton>
+                                    </Tooltip>
+                                  )}
+                                  {canRestoreToGuest && (
+                                    <Tooltip title={t('guestFileRestore.restoreIntoGuest')}>
+                                      <IconButton
+                                        size='small'
+                                        edge='end'
+                                        onClick={(e) => { e.stopPropagation(); openRestoreToGuest(file) }}
+                                      >
+                                        <i className='ri-folder-transfer-line' style={{ fontSize: 18 }} />
+                                      </IconButton>
+                                    </Tooltip>
+                                  )}
+                                </Stack>
+                              )}
+                            >
                               <ListItemButton
-                                onClick={() => file.type === 'directory' && navigateToFolder(file.name)}
+                                onClick={() => isNavigable && navigateToFolder(file.name)}
                                 sx={{ borderRadius: 1 }}
                               >
                                 <ListItemIcon sx={{ minWidth: 36 }}>
-                                  <FileIcon type={file.type} name={file.name} />
+                                  {file.type === 'virtual'
+                                    ? <i className='ri-hard-drive-2-fill' style={{ color: '#42A5F5', fontSize: 20 }} />
+                                    : <FileIcon type={file.type} name={file.name} />}
                                 </ListItemIcon>
                                 <ListItemText
                                   primary={file.name}
-                                  secondary={file.type === 'directory' ? null : file.sizeFormatted}
-                                  primaryTypographyProps={{ variant: 'body2' }}
+                                  secondary={isNavigable ? null : file.sizeFormatted}
+                                  primaryTypographyProps={{ variant: 'body2', noWrap: true }}
                                   secondaryTypographyProps={{ variant: 'caption' }}
                                 />
-                                {file.type === 'directory' && (
+                                {isNavigable && (
                                   <i className='ri-arrow-right-s-line' style={{ opacity: 0.5 }} />
                                 )}
                               </ListItemButton>
                             </ListItem>
-                          ))}
+                            )
+                          })}
                           {explorerFiles.length === 0 && (
                             <Typography variant='body2' sx={{ opacity: 0.5, py: 2, textAlign: 'center' }}>
                               {t('backups.emptyFolder')}
@@ -1465,6 +1694,19 @@ return () => clearTimeout(timer)
           pbsId={selectedPbs}
           initialDatastore={datastoreFilter}
           initialNamespace={namespaceFilter}
+        />
+      )}
+
+      {restoreToGuest && (
+        <RestoreToGuestDialog
+          open
+          onClose={() => setRestoreToGuest(null)}
+          source={restoreToGuest.source}
+          items={restoreToGuest.items}
+          defaultTarget={restoreToGuest.defaultTarget}
+          backupLabel={selectedBackup
+            ? `${selectedBackup.backupType === 'ct' ? 'CT' : 'VM'} ${selectedBackup.backupId}${selectedBackup.backupTime ? ` · ${formatDateTime(selectedBackup.backupTime * 1000, locale)}` : ''}`
+            : undefined}
         />
       )}
 

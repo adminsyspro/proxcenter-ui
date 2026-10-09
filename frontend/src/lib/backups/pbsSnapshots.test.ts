@@ -309,7 +309,7 @@ describe('fetchAllPbsBackups', () => {
     expect(backup.owner).toBe('root@pam')
     expect(backup.comment).toBe('nightly backup')
     expect(backup.backupTimeFormatted).toBe(new Date(1_700_000_000 * 1000).toLocaleString('en-US'))
-    expect(backup.backupTimeIso).toBe(new Date(1_700_000_000 * 1000).toISOString())
+    expect(backup.backupTimeIso).toBe('2023-11-14T22:13:20Z')
   })
 
   it('a snapshot with no backup-time formats as "-"/"" instead of an Invalid Date', async () => {

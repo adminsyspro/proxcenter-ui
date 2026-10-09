@@ -67,6 +67,8 @@ import { formatBytes } from '@/utils/format'
 import { formatDateTime } from '@/lib/i18n/date'
 import VmFirewallTab from '@/components/VmFirewallTab'
 import RestoreVmDialog from '@/components/backup/RestoreVmDialog'
+import RestoreToGuestDialog from '@/components/backups/RestoreToGuestDialog'
+import { isRestorableItemPath } from '@/lib/guestFileRestore/paths'
 import ChangeTrackingTab from './ChangeTrackingTab'
 import ReplicationJobDialog, { type ReplicationJobDialogState } from '../components/ReplicationJobDialog'
 import { useLicense, Features } from '@/contexts/LicenseContext'
@@ -215,6 +217,7 @@ export default function VmDetailTabs(props: any) {
   const [vmBackupNamespaceFilter, setVmBackupNamespaceFilter] = useState<string>('all')
   // Per-backup restore dialog (Backup tab). Null when closed.
   const [restoreDialog, setRestoreDialog] = useState<{ backup: any } | null>(null)
+  const [restoreToGuestItem, setRestoreToGuestItem] = useState<{ path: string; directory: boolean; size?: number; label?: string } | null>(null)
   const [bootOrderOpen, setBootOrderOpen] = useState(false)
   const [bootDevices, setBootDevices] = useState<Array<{ id: string; enabled: boolean }>>([])
   const [bootSaving, setBootSaving] = useState(false)
@@ -3472,12 +3475,27 @@ return (
                                   const isNavigable = file.type === 'directory' || file.type === 'virtual' || file.leaf === false || file.leaf === 0
                                   const canDownload = explorerMode === 'pve' && selectedPveStorage
                                   const canPreviewFile = canDownload && !isNavigable && canPreview(file.name)
+                                  const guestItemPath = explorerPath === '/'
+                                    ? `/${explorerArchive}/${file.name}`
+                                    : `/${explorerArchive}${explorerPath}/${file.name}`
+                                  // Never a whole disk, partition or LV node: only entries inside a filesystem.
+                                  const canRestoreToGuest = canDownload
+                                    && (file.type === 'file' || file.type === 'directory')
+                                    && isRestorableItemPath('pve', guestItemPath)
+                                  // Right padding of the row = room for the action icons, so the
+                                  // folder chevron never slides under them.
+                                  const actionCount = canDownload ? 1 + (canPreviewFile ? 1 : 0) + (canRestoreToGuest ? 1 : 0) : 0
 
                                   
 return (
-                                    <ListItem 
-                                      key={idx} 
+                                    <ListItem
+                                      key={idx}
                                       disablePadding
+                                      // MUI pads the row button by 48px whenever there is a secondary
+                                      // action, through a nested selector the button's own sx cannot beat.
+                                      // In px: the theme spacing unit is not 8. Each small icon button is
+                                      // ~30px wide, the action block sits 16px from the edge.
+                                      sx={{ '& > .MuiListItemButton-root': { pr: `${24 + actionCount * 30}px` } }}
                                       secondaryAction={
                                         canDownload && (
                                           <Stack direction="row" spacing={0}>
@@ -3495,8 +3513,8 @@ return (
                                               </MuiTooltip>
                                             )}
                                             <MuiTooltip title={t('common.download')}>
-                                              <IconButton 
-                                                edge="end" 
+                                              <IconButton
+                                                edge={canRestoreToGuest ? false : 'end'}
                                                 size="small"
                                                 onClick={(e) => {
                                                   e.stopPropagation()
@@ -3506,6 +3524,25 @@ return (
                                                 <i className="ri-download-2-line" style={{ fontSize: 18 }} />
                                               </IconButton>
                                             </MuiTooltip>
+                                            {canRestoreToGuest && (
+                                              <MuiTooltip title={t('guestFileRestore.restoreIntoGuest')}>
+                                                <IconButton
+                                                  edge="end"
+                                                  size="small"
+                                                  onClick={(e) => {
+                                                    e.stopPropagation()
+                                                    setRestoreToGuestItem({
+                                                      path: guestItemPath,
+                                                      directory: file.type === 'directory',
+                                                      size: file.type === 'file' ? file.size : undefined,
+                                                      label: file.name,
+                                                    })
+                                                  }}
+                                                >
+                                                  <i className="ri-folder-transfer-line" style={{ fontSize: 18 }} />
+                                                </IconButton>
+                                              </MuiTooltip>
+                                            )}
                                           </Stack>
                                         )
                                       }
@@ -3513,7 +3550,7 @@ return (
                                       <ListItemButton
                                         onClick={() => isNavigable && navigateToFolder(file.name)}
                                         disabled={!isNavigable && file.type !== 'file'}
-                                        sx={{ borderRadius: 1, pr: canDownload ? (canPreviewFile ? 10 : 6) : 2 }}
+                                        sx={{ borderRadius: 1 }}
                                       >
                                         <ListItemIcon sx={{ minWidth: 36 }}>
                                           {file.type === 'directory' || file.type === 'virtual' ? (
@@ -4940,6 +4977,20 @@ return (
           </Button>
         </DialogActions>
       </Dialog>
+      {restoreToGuestItem && selection?.type === 'vm' && selectedBackup && selectedPveStorage && (() => {
+        const { connId, node, type, vmid } = parseVmId(selection.id)
+
+        return (
+          <RestoreToGuestDialog
+            open
+            onClose={() => setRestoreToGuestItem(null)}
+            source={{ kind: 'pve', connId, storage: selectedPveStorage.storage, volume: selectedBackup.backupPath }}
+            items={[restoreToGuestItem]}
+            defaultTarget={{ connId, node, type: type === 'lxc' ? 'lxc' : 'qemu', vmid: Number(vmid), name: data?.name || data?.title }}
+            backupLabel={selectedBackup.backupTime ? `${data?.name || data?.title || vmid} · ${formatDateTime(selectedBackup.backupTime * 1000, locale)}` : undefined}
+          />
+        )
+      })()}
       {restoreDialog && selection?.type === 'vm' && (() => {
         const { connId, node, type, vmid } = parseVmId(selection.id)
 

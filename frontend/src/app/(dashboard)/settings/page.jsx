@@ -107,6 +107,10 @@ const DiagnosticModal = dynamic(() => import('@/components/settings/DiagnosticMo
   ssr: false
 })
 
+const ConnectionCheckDialog = dynamic(() => import('@/components/settings/ConnectionCheckDialog'), {
+  ssr: false
+})
+
 const WhiteLabelTab = dynamic(() => import('@/components/settings/WhiteLabelTab'), {
   ssr: false,
   loading: tabLoading
@@ -426,6 +430,9 @@ function ConnectionsTab() {
     setDiagOpen(true)
   }
 
+  // "Check connection" dialog state (PVE connections only)
+  const [checkConn, setCheckConn] = useState(null)
+
   const handleDetectCeph = async (connId) => {
     setDetectingCephId(connId)
     try {
@@ -680,6 +687,41 @@ function ConnectionsTab() {
     )
   })
 
+  // "Check connection" column (PVE grid only): read-only probes with a fix per failure
+  const makeCheckColumn = () => ({
+    field: 'check',
+    headerName: '',
+    width: 46,
+    sortable: false,
+    renderCell: params => (
+      <Box sx={{ display: 'flex', alignItems: 'center', height: '100%' }}>
+        <Tooltip
+          title={t('settings.connectionCheck.button')}
+          slotProps={{
+            tooltip: {
+              sx: {
+                bgcolor: 'background.paper',
+                color: 'text.primary',
+                border: '1px solid',
+                borderColor: 'divider',
+                borderRadius: 1,
+                boxShadow: 3,
+              }
+            }
+          }}
+        >
+          <IconButton
+            size='small'
+            onClick={(e) => { e.stopPropagation(); setCheckConn({ id: params.row.id, name: params.row.name }) }}
+            sx={{ width: 28, height: 28 }}
+          >
+            <i className='ri-shield-check-line' style={{ fontSize: 16 }} />
+          </IconButton>
+        </Tooltip>
+      </Box>
+    )
+  })
+
   // PVE Columns
   const pveColumns = useMemo(
     () => [
@@ -881,6 +923,7 @@ function ConnectionsTab() {
         },
       },
       makeDiagnosticColumn(),
+      makeCheckColumn(),
       {
         field: 'actions',
         headerName: '',
@@ -1689,6 +1732,14 @@ function ConnectionsTab() {
         connectionId={diagConnectionId}
         connectionName={diagConnectionName}
         onClose={() => setDiagOpen(false)}
+      />
+
+      {/* Check connection dialog */}
+      <ConnectionCheckDialog
+        open={!!checkConn}
+        connectionId={checkConn?.id ?? null}
+        connectionName={checkConn?.name ?? ''}
+        onClose={() => setCheckConn(null)}
       />
 
       {/* Dialog confirmation suppression connexion — remplace l'ancien

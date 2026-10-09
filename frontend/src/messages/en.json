@@ -3808,6 +3808,141 @@
       "unavailable": "Diagnostics unavailable",
       "allOk": "All checks passed."
     },
+    "connectionCheck": {
+      "title": "Check connection",
+      "button": "Check connection",
+      "running": "Running checks...",
+      "rerun": "Re-run",
+      "close": "Close",
+      "unavailable": "Check unavailable",
+      "allOk": "All checks passed.",
+      "summaryOk": "{count} OK",
+      "summaryWarn": "{count, plural, one {# warning} other {# warnings}}",
+      "summaryFail": "{count, plural, one {# failure} other {# failures}}",
+      "summarySkip": "{count} skipped",
+      "probes": {
+        "api": "API reachability",
+        "tls": "TLS certificate",
+        "privileges": "Token privileges",
+        "version": "Proxmox VE version",
+        "clock": "Clock",
+        "quorum": "Cluster quorum",
+        "ssh": "SSH"
+      },
+      "features": {
+        "inventory": "inventory and dashboard",
+        "nodes": "node details and metrics",
+        "console": "VM and container consoles",
+        "nodeShell": "node shell",
+        "guestConfig": "guest configuration",
+        "guestPower": "guest start, stop and reboot",
+        "guestCreate": "guest creation and cloning",
+        "templates": "templates and image downloads",
+        "snapshots": "snapshots",
+        "migrations": "migrations",
+        "migrationsTarget": "cross-cluster migrations (as target)",
+        "backups": "backups and restores",
+        "backupJobs": "backup jobs",
+        "storage": "storage management",
+        "replication": "replication",
+        "sdn": "SDN",
+        "firewall": "firewall",
+        "ha": "high availability",
+        "ceph": "Ceph",
+        "pools": "pools",
+        "notifications": "notifications",
+        "nodeUpdates": "node updates",
+        "nodePower": "node power actions (rolling updates, green IT)",
+        "hardwareMappings": "hardware mappings",
+        "compliance": "compliance and hardening",
+        "warmMigration": "warm migrations",
+        "haAffinityRules": "HA affinity rules",
+        "sdnFabrics": "SDN fabrics",
+        "vnetFirewall": "VNet firewall",
+        "nestedPools": "nested pools"
+      },
+      "hints": {
+        "api": {
+          "ok": "{host} answered in {latencyMs} ms (Proxmox VE {version}).",
+          "unauthorized": "{host} rejected the API token (HTTP 401). Check the token id and secret of the connection, and that the token is neither expired nor disabled in Datacenter > Permissions > API Tokens.",
+          "tlsRejected": "{host} presented a certificate the ProxCenter host does not trust ({reason}). Enable \"Ignore TLS certificate errors\" on the connection, or install a certificate issued by a CA the ProxCenter host trusts.",
+          "timeout": "{host} accepted the connection but did not answer within {timeoutMs} ms. Check pveproxy on the node (systemctl status pveproxy) and the network path.",
+          "unreachable": "{host} is unreachable ({error}). Check the address and port of the connection, that the node is up, and the firewall between ProxCenter and the node (TCP 8006).",
+          "httpError": "{host} answered HTTP {status} to a version request. Check pveproxy on the node and any reverse proxy in between.",
+          "fallbackOk": "Fallback {node} ({host}) answered in {latencyMs} ms.",
+          "fallbackUnreachable": "Fallback {node} ({host}) is unreachable ({error}): failover to this node will not work. Check the node and the firewall, or fix its address in the connection node list.",
+          "fallbackTlsRejected": "Fallback {node} ({host}) presents a certificate that does not match its address ({reason}): failover to this node will fail. Enable \"Ignore TLS certificate errors\" on the connection, or add the node address to its certificate.",
+          "fallbackBehindProxy": "The connection goes through a reverse proxy: failover to other nodes is disabled, so fallback hosts are not probed.",
+          "noFallbackHosts": "No fallback host is known: if {host} goes down, ProxCenter cannot fail over to another node. Open the inventory or save the connection again to discover the cluster nodes."
+        },
+        "tls": {
+          "ok": "The certificate of {host} is trusted and valid until {validTo} ({days} days).",
+          "okUntrusted": "The certificate of {host} is valid until {validTo} ({days} days). It is not issued by a trusted CA and is accepted because TLS errors are ignored on this connection.",
+          "untrusted": "The certificate of {host} is not trusted by the ProxCenter host ({reason}). API calls fail until \"Ignore TLS certificate errors\" is enabled on the connection or a trusted certificate is installed on the node.",
+          "expiringSoon": "The certificate of {host} expires in {days} days ({validTo}). Renew it on the node (pvenode cert set, or the ACME plugin) before it expires.",
+          "expired": "The certificate of {host} expired on {validTo}. Renew it on the node (pvenode cert set, or the ACME plugin), then restart pveproxy.",
+          "notYetValid": "The certificate of {host} is not valid before {validFrom}. Check the clock of the node that issued it.",
+          "unreachable": "No TLS handshake with {host} ({error}).",
+          "notHttps": "The connection uses plain HTTP: there is no certificate to check.",
+          "noPin": "No certificate fingerprint is pinned on this connection.",
+          "pinMatch": "The certificate fingerprint matches the pinned one ({fingerprint}).",
+          "pinMismatch": "The certificate fingerprint changed: pinned {expected}, presented {actual}. If the certificate was renewed on purpose, capture the fingerprint again in the connection dialog; otherwise investigate before trusting the host.",
+          "pinUnchecked": "The fingerprint was not compared: the certificate could not be read."
+        },
+        "privileges": {
+          "ok": "The token {tokenId} holds the {count} privileges ProxCenter uses.",
+          "unreadable": "The permissions of {tokenId} could not be read ({error}).",
+          "none": "The token {tokenId} has no effective privilege. A privilege counts only when the user {user} holds it and, with privilege separation on (the default), when the token holds it too: {command}",
+          "noneSeparated": "The token {tokenId} has no effective privilege. Its privilege separation is on, so a privilege counts only when both the user {user} and the token hold it: {command}",
+          "noneUser": "The token {tokenId} has no effective privilege. Its privilege separation is off, so it uses the privileges of the user {user}: {command}",
+          "missing": "{privileges} missing on {path}. Impacted: {features}. Grant it to the user {user} and, if the token has privilege separation on (the default), to the token too: {command}",
+          "missingSeparated": "{privileges} missing on {path}. Impacted: {features}. The token has privilege separation on, so both the user {user} and the token need it: {command}",
+          "missingUser": "{privileges} missing on {path}. Impacted: {features}. The token has privilege separation off, so grant it to the user {user}: {command}"
+        },
+        "version": {
+          "ok": "{node} runs Proxmox VE {version}.",
+          "unreadable": "The version of {node} could not be read ({error}).",
+          "belowSupported": "{node} runs Proxmox VE {version}; ProxCenter needs Proxmox VE {min} or later. Upgrade the node.",
+          "gated": "{node} runs Proxmox VE {version}; these features need Proxmox VE {required}: {features}. Upgrade the node to use them.",
+          "mixed": "The nodes run different Proxmox VE versions ({versions}). Migrations between versions can fail; upgrade every node to the same version."
+        },
+        "clock": {
+          "ok": "The clock of {node} is within {skewSeconds} s of ProxCenter.",
+          "warn": "The clock of {node} is off by {skewSeconds} s from ProxCenter. Enable NTP (chrony) on the node and on the ProxCenter host; a larger skew breaks ticket and token validation.",
+          "fail": "The clock of {node} is off by {skewSeconds} s from ProxCenter: API tickets and consoles will fail. Enable NTP (chrony) on the node and on the ProxCenter host, then check timedatectl on both.",
+          "forbidden": "The clock of {node} was not read: the token lacks Sys.Audit on /nodes/{node}.",
+          "unreadable": "The clock of {node} could not be read ({error})."
+        },
+        "quorum": {
+          "ok": "Cluster {cluster} is quorate ({online}/{total} nodes online).",
+          "standalone": "Standalone node: no cluster quorum to check.",
+          "degraded": "Cluster {cluster} is quorate but {offline, plural, one {# node is} other {# nodes are}} offline ({nodes}). Bring the nodes back before the cluster loses quorum.",
+          "lost": "Cluster {cluster} has lost quorum ({online}/{total} nodes online): guests cannot be started or migrated. Bring nodes back online; on a two-node cluster add a QDevice (pvecm qdevice setup).",
+          "forbidden": "The cluster status was not read: the token lacks Sys.Audit on /.",
+          "unreadable": "The cluster status could not be read ({error})."
+        },
+        "ssh": {
+          "disabled": "SSH is not enabled on this connection.",
+          "prerequisitesFailed": "SSH not tested: the API or TLS checks failed.",
+          "noCredentials": "SSH not tested: no usable key or password is stored on the connection.",
+          "ok": "{node}: SSH login as {user} on {host}:{port} works (hostname {hostname}).",
+          "hostKeyMismatch": "{node}: the host key of {host} changed since it was pinned. If the node was reinstalled or rekeyed, use Re-trust in the connection dialog.",
+          "authFailed": "{node}: SSH authentication failed for {user} on {host}:{port}. Check the key or password stored on the connection, and that the public key is in the authorized_keys of {user} on the node.",
+          "timeout": "{node}: no SSH answer from {host}:{port}. Check sshd and the firewall (TCP {port}), or set a per-node SSH address in the connection dialog.",
+          "failed": "{node}: SSH to {host}:{port} failed ({error})."
+        },
+        "probe": {
+          "timeout": "The {probe} check did not finish within {timeoutMs} ms.",
+          "crashed": "The {probe} check failed unexpectedly ({error})."
+        },
+        "nodes": {
+          "unreadable": "Not checked: the node list could not be read ({error})."
+        },
+        "node": {
+          "offline": "{node} is offline: not checked."
+        }
+      }
+    },
     "syslog": {
       "tabLabel": "Syslog / SIEM",
       "title": "Syslog / SIEM forwarding",

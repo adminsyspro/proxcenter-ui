@@ -811,6 +811,7 @@ export interface Alert {
     | 'disk_latency_peak'
     | 'replication_rpo'
     | 'replication_failed'
+    | 'backup_coverage'
     | 'custom'
   severity: 'info' | 'warning' | 'critical'
   status: 'active' | 'acknowledged' | 'resolved' | 'silenced'
@@ -886,6 +887,12 @@ export interface AlertThresholds {
   replication_rpo_grace_percent: number
   /** Alert on a failed replication job (#721). 0 disables, 1 enables. */
   replication_failure_alerts: number
+  /** Alert on every guest no enabled PVE backup job covers (roadmap#48). 0 disables (default), 1 enables. */
+  backup_coverage_alerts?: number
+  /** Hours a new guest may stay uncovered before it is reported (roadmap#48). 0 reports it at once. */
+  backup_coverage_grace_hours?: number
+  /** PVE tag that leaves a guest out of the coverage check on purpose (roadmap#48). Empty disables it. */
+  backup_coverage_exclude_tag?: string
 }
 
 export interface AlertsResponse {

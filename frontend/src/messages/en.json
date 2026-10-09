@@ -529,7 +529,8 @@
       "nodesGauges": "Nodes Gauges",
       "clustersGauges": "Clusters Gauges",
       "clusterHealth": "Cluster Health",
-      "themeLogo": "Theme Logo"
+      "themeLogo": "Theme Logo",
+      "backupCoverage": "Backup Coverage"
     },
     "widgetDescs": {
       "kpiClusters": "Shows number of clusters and nodes",
@@ -564,7 +565,8 @@
       "clustersGauges": "Per-cluster gauges, sparklines and health score",
       "clusterHealth": "Health score with key metrics",
       "sectionHeader": "Collapsible section separator",
-      "themeLogo": "Shows the current theme logo"
+      "themeLogo": "Shows the current theme logo",
+      "backupCoverage": "Guests covered by no backup job"
     },
     "widgetDrs": {
       "automatic": "Automatic",
@@ -626,7 +628,11 @@
     "importDashboards": "Import dashboards…",
     "dashboardsExported": "{count, plural, one {# dashboard exported.} other {# dashboards exported to one file.}}",
     "dashboardsImported": "{count, plural, one {# dashboard imported.} other {# dashboards imported.}}",
-    "importSkipped": "{count, plural, one {# dashboard was skipped: none of its widgets are available here.} other {# dashboards were skipped: none of their widgets are available here.}}"
+    "importSkipped": "{count, plural, one {# dashboard was skipped: none of its widgets are available here.} other {# dashboards were skipped: none of their widgets are available here.}}",
+    "widgetBackupCoverage": {
+      "uncovered": "guests covered by no backup job",
+      "viewAll": "View all"
+    }
   },
   "alerts": {
     "title": "Alerts",
@@ -779,7 +785,10 @@
     "replicationRpoGrace": "% tolerated above the job's RPO target",
     "replicationFailures": "Replication failures",
     "replicationFailuresDesc": "Alert when a replication job errors out, independently of its RPO",
-    "replicationFailuresEscalation": "Warning, then critical once the retries are spent"
+    "replicationFailuresEscalation": "Warning, then critical once the retries are spent",
+    "backupCoverage": "Backup coverage",
+    "backupCoverageDesc": "One alert per guest no enabled Proxmox backup job covers, resolved once a job covers it. Off by default.",
+    "backupCoverageDetail": "Guests created less than {hours} h ago and guests tagged {tag} are left out; both are set from the Backups page."
   },
   "inventory": {
     "alertsDialog": {
@@ -2798,6 +2807,79 @@
         }
       }
     },
+    "coverage": {
+      "title": "Backup coverage",
+      "uncoveredCount": "{count} uncovered",
+      "allCoveredShort": "All covered",
+      "coveredOf": "{covered} of {total} guests covered",
+      "allCovered": "Every guest is covered by a backup job",
+      "noMatch": "No guest matches these filters",
+      "settings": "Coverage settings",
+      "search": "Search a guest",
+      "allClusters": "All clusters",
+      "allReasons": "All reasons",
+      "colGuest": "Guest",
+      "colCluster": "Cluster",
+      "colNode": "Node",
+      "colReason": "Reason",
+      "reasons": {
+        "no_job": "No enabled backup job on this cluster",
+        "not_selected": "Selected by no backup job",
+        "excluded": "Excluded from a job that backs up all guests",
+        "other_node": "Selected by a job restricted to another node",
+        "disabled_job": "Only selected by a disabled job"
+      },
+      "hints": {
+        "no_job": "Create a backup job on this cluster, or tag the guest to leave it out on purpose.",
+        "not_selected": "Add the guest to a job, or to a pool a job backs up, or tag it to leave it out on purpose.",
+        "excluded": "Remove the guest from the job exclusions, or tag it to leave it out on purpose.",
+        "other_node": "The job only runs on its own node: the guest was created on, or moved to, another node.",
+        "disabled_job": "Enable the job, or select the guest in an enabled job."
+      },
+      "detailJobs": "Jobs",
+      "detailPool": "Pool",
+      "detailTags": "Tags",
+      "detailCreated": "Created",
+      "detailUnknown": "Unknown",
+      "detailNone": "None",
+      "ignoredTemplates": "{count, plural, one {# template} other {# templates}}",
+      "ignoredTag": "{count, plural, one {# guest} other {# guests}} tagged {tag}",
+      "ignoredGrace": "{count, plural, one {# guest} other {# guests}} created less than {hours} h ago",
+      "notListed": "Not listed: {items}",
+      "errorsTitle": "Coverage unknown for {clusters}: their backup jobs could not be read.",
+      "loadError": "Could not load the backup coverage",
+      "displayedRows": "{from}-{to} of {count}",
+      "graceLabel": "Grace period (hours)",
+      "graceHelp": "A guest created less than this many hours ago is not listed yet; 0 lists it at once. The creation time comes from the VM configuration, or from the recent create and restore tasks for containers and older VMs.",
+      "tagLabel": "Exclusion tag",
+      "tagHelp": "A guest carrying this Proxmox tag is left out of backups on purpose and not listed. Empty disables the opt-out.",
+      "tagInvalid": "Lowercase letters, digits and _ + . - only",
+      "saved": "Coverage settings saved",
+      "saveError": "Could not save the coverage settings",
+      "alertsLabel": "Alert on uncovered guests",
+      "alertsHelp": "The orchestrator raises one alert per guest listed here and resolves it once the guest is covered, through the usual alert notifications.",
+      "addToJob": "Add to a backup job",
+      "addTitle": "Add {name} ({vmid}) to a backup job",
+      "jobsLoadError": "Could not load the backup jobs of this cluster",
+      "noJobOnCluster": "{cluster} has no backup job yet.",
+      "createJob": "Create a backup job",
+      "addWillUnexclude": "Removes the guest from the exclusions of this job",
+      "addWillAppend": "Adds the guest to the guests of this job",
+      "addDisabledWarning": "This job is disabled: the guest stays uncovered until the job is enabled.",
+      "addConfirm": "Add",
+      "addedToJob": "{name} added to backup job {job}",
+      "addedToDisabledJob": "{name} added to backup job {job}, which is disabled: enable it to cover the guest",
+      "addError": "Could not add the guest to the job: {error}",
+      "addRefused": {
+        "pool": "Backs up pool {pool}: the guest joins it through the pool",
+        "other_node": "Only runs on node {node}, not the guest's node",
+        "already": "Already selects this guest",
+        "no_selection": "Selects no guest"
+      }
+    },
+    "namespaceFromStorage": "Set on the PBS storage, pick the storage to change it",
+    "namespaceStorageMismatch": "The PBS namespace is set on the storage: \"{storage}\" does not write to namespace \"{namespace}\". Pick a storage bound to that namespace.",
+    "noStorageForNamespace": "No PBS storage of this cluster writes to namespace \"{namespace}\" of your vDC, so no backup job can be created. Ask your provider to add one.",
     "vmImageBrowse": "Browse files",
     "vmImageBrowseHint": "Click to explore the disk image through a Proxmox node",
     "pickPveStorage": "Proxmox storage used to read this backup",

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState, useCallback } from 'react'
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 
 import { useLocale, useTranslations } from 'next-intl'
 
@@ -50,6 +50,9 @@ import { DataGrid } from '@mui/x-data-grid'
 /* -----------------------------
   Helpers
 ------------------------------ */
+
+// PBS namespaces as storage.cfg writes them: '' is the root namespace.
+const normNamespace = ns => (typeof ns === 'string' ? ns.trim().replace(/^\/+|\/+$/g, '') : '')
 
 const formatDate = (dateStr, locale) => {
   if (!dateStr) return '—'
@@ -121,7 +124,7 @@ const StatusChip = ({ state, t }) => {
 
 const MANUAL_RUNS_KEY = '__manual__'
 
-function PveJobsTab({ pveConnections = [], isVdcTenant = false }) {
+function PveJobsTab({ pveConnections = [], isVdcTenant = false, createRequest = null, onJobsChanged }) {
   const theme = useTheme()
   const t = useTranslations()
   const locale = useLocale()
@@ -140,6 +143,10 @@ function PveJobsTab({ pveConnections = [], isVdcTenant = false }) {
   const [pools, setPools] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+  // Connection whose jobs, storages and nodes are the ones in state: a job
+  // creation asked from the coverage card waits for it (roadmap#48).
+  const [loadedConnection, setLoadedConnection] = useState('')
+  const handledCreateRef = useRef(null)
   
   // Dialog
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -170,8 +177,11 @@ function PveJobsTab({ pveConnections = [], isVdcTenant = false }) {
     mailto: '',
     mailnotification: 'always',
     maxfiles: 1,
-    namespace: ''
   })
+  // vDC tenant: the PBS namespace of its binding when no PBS storage of this
+  // connection writes to it (the namespace is a storage property, a job
+  // cannot carry one), so the dialog says so instead of saving.
+  const [missingNamespaceStorage, setMissingNamespaceStorage] = useState(null)
 
   // Run history (#1003): loaded apart from the jobs so the table never waits on it.
   const [runsDrawer, setRunsDrawer] = useState(null) // { key: jobId | MANUAL_RUNS_KEY, focusUpid }
@@ -214,6 +224,7 @@ function PveJobsTab({ pveConnections = [], isVdcTenant = false }) {
         // Utiliser allBackupStorages pour avoir tous les storages qui supportent backup
         setStorages(json.data?.allBackupStorages || json.data?.storages || [])
         setNodes(json.data?.nodes || [])
+        setLoadedConnection(selectedConnection)
       }
     } catch (e) {
       setError(e.message || t('errors.loadingError'))
@@ -333,18 +344,31 @@ function PveJobsTab({ pveConnections = [], isVdcTenant = false }) {
     return options
   }, [pools, formData.pool])
 
-  const handleCreate = () => {
+  const handleCreate = (prefill = {}) => {
     // Trouver le premier storage PBS
-    const pbsStorage = storages.find(s => s.isPbs || s.type === 'pbs')
+    const pbsStorages = storages.filter(s => s.isPbs || s.type === 'pbs')
+    let storageId = pbsStorages[0]?.id || ''
 
     // Tenant: prefill everything from the first (and product-wise only)
-    // vDC on this connection — pool, PBS namespace, and we keep the PBS
-    // storage auto-pick. Provider keeps the open form.
+    // vDC on this connection. The PBS namespace of its binding lives on a
+    // PBS storage, so the storage bound to that namespace (and datastore) is
+    // preselected; without one there is nothing valid to save.
     const tenantVdc = isVdcTenant ? tenantPools[0] : null
+    let missingNs = null
+    if (tenantVdc) {
+      const wanted = normNamespace(tenantVdc.namespace)
+      const match = pbsStorages.find(s =>
+        normNamespace(s.namespace) === wanted &&
+        (!tenantVdc.datastore || !s.datastore || s.datastore === tenantVdc.datastore)
+      )
+      storageId = match?.id || ''
+      if (!match) missingNs = wanted
+    }
+    setMissingNamespaceStorage(missingNs)
 
     setFormData({
       enabled: true,
-      storage: pbsStorage?.id || '',
+      storage: storageId,
       schedule: '00:00',
       node: '',
       mode: 'snapshot',
@@ -357,12 +381,27 @@ function PveJobsTab({ pveConnections = [], isVdcTenant = false }) {
       mailto: '',
       mailnotification: 'always',
       maxfiles: 1,
-      namespace: tenantVdc?.namespace || '',
+      ...prefill,
     })
     setDialogMode('create')
     setEditingJob(null)
     setDialogOpen(true)
   }
+  // Job creation asked from the coverage card (roadmap#48): switch to the
+  // guest's connection, wait for its storages, then open the create dialog
+  // with the guest preselected.
+  const [switchedFor, setSwitchedFor] = useState(null)
+  if (createRequest && createRequest !== switchedFor) {
+    setSwitchedFor(createRequest)
+    if (selectedConnection !== createRequest.connId) setSelectedConnection(createRequest.connId)
+  }
+  useEffect(() => {
+    if (!createRequest || handledCreateRef.current === createRequest.nonce) return
+    if (selectedConnection !== createRequest.connId || loading || loadedConnection !== createRequest.connId) return
+    handledCreateRef.current = createRequest.nonce
+    handleCreate({ selectionMode: 'include', vmids: [String(createRequest.vmid)] })
+  }, [createRequest, selectedConnection, loading, loadedConnection]) // eslint-disable-line react-hooks/exhaustive-deps
+
 
   const handleEdit = (job) => {
     setFormData({
@@ -380,8 +419,8 @@ function PveJobsTab({ pveConnections = [], isVdcTenant = false }) {
       mailto: job.mailto || '',
       mailnotification: job.mailnotification || 'always',
       maxfiles: job.maxfiles || 1,
-      namespace: job.namespace || ''
     })
+    setMissingNamespaceStorage(null)
     setDialogMode('edit')
     setEditingJob(job)
     setDialogOpen(true)
@@ -404,10 +443,13 @@ function PveJobsTab({ pveConnections = [], isVdcTenant = false }) {
       const json = await res.json()
       
       if (json.error) {
-        setError(json.error)
+        setError(json.code === 'namespace_storage_mismatch'
+          ? t('backups.namespaceStorageMismatch', { storage: json.storage, namespace: json.namespace })
+          : json.error)
       } else {
         setDialogOpen(false)
         loadJobs()
+        onJobsChanged?.()
       }
     } catch (e) {
       setError(e.message || t('backups.saveError'))
@@ -799,6 +841,11 @@ return '—'
         </DialogTitle>
         <DialogContent>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
+            {isVdcTenant && dialogMode === 'create' && missingNamespaceStorage !== null && (
+              <Alert severity="error">
+                {t('backups.noStorageForNamespace', { namespace: missingNamespaceStorage || t('backups.rootNamespace') })}
+              </Alert>
+            )}
             {/* Row 1 — infra pickers (PBS storage, namespace, node)
                 are entirely hidden for tenants because the vDC drives
                 all of them: handleCreate prefills from tenantPools[0].
@@ -831,13 +878,18 @@ return '—'
                   </Select>
                 </FormControl>
 
+                {/* Read only: PVE takes the namespace from the PBS storage
+                    entry (storage.cfg), a job has no namespace of its own. */}
                 <TextField
                   size="small"
                   label={t('backups.namespace')}
-                  value={formData.namespace}
-                  onChange={(e) => setFormData(prev => ({ ...prev, namespace: e.target.value }))}
-                  placeholder="ex: prod/web"
-                  helperText={t('common.optional')}
+                  value={(() => {
+                    const ns = normNamespace(storages.find(s => s.id === formData.storage)?.namespace)
+                    return formData.storage ? (ns || t('backups.rootNamespace')) : ''
+                  })()}
+                  helperText={t('backups.namespaceFromStorage')}
+                  slotProps={{ input: { readOnly: true } }}
+                  disabled={!formData.storage}
                 />
 
                 <FormControl fullWidth size="small">
@@ -1962,7 +2014,7 @@ function PbsJobsTab({ pbsConnections = [], isVdcTenant = false }) {
 const SMALL_SELECT_SX = { '& .MuiInputBase-input.MuiSelect-select': { minHeight: '1.4375em', lineHeight: '1.4375em' } }
 const TOOLBAR_CONTROL_SX = { height: 35.86 }
 
-export default function BackupJobsTabs({ pveConnections = [], pbsConnections = [] }) {
+export default function BackupJobsTabs({ pveConnections = [], pbsConnections = [], createRequest = null, onJobsChanged }) {
   const theme = useTheme()
   const t = useTranslations()
   const [activeTab, setActiveTab] = useState(0)
@@ -1972,6 +2024,14 @@ export default function BackupJobsTabs({ pveConnections = [], pbsConnections = [
   // unrestricted view.
   const { currentTenant, loading: tenantLoading } = useTenant()
   const isVdcTenant = !tenantLoading && !!currentTenant && currentTenant.id !== 'default'
+
+  // A job creation asked from the coverage card opens this section on the PVE tab.
+  const [seenRequest, setSeenRequest] = useState(null)
+  if (createRequest && createRequest !== seenRequest) {
+    setSeenRequest(createRequest)
+    setExpanded(true)
+    setActiveTab(0)
+  }
 
   return (
     <Card variant="outlined">
@@ -2010,7 +2070,7 @@ export default function BackupJobsTabs({ pveConnections = [], pbsConnections = [
             />
           </Tabs>
 
-          {activeTab === 0 && <PveJobsTab pveConnections={pveConnections} isVdcTenant={isVdcTenant} />}
+          {activeTab === 0 && <PveJobsTab pveConnections={pveConnections} isVdcTenant={isVdcTenant} createRequest={createRequest} onJobsChanged={onJobsChanged} />}
           {activeTab === 1 && <PbsJobsTab pbsConnections={pbsConnections} isVdcTenant={isVdcTenant} />}
         </Collapse>
       </CardContent>

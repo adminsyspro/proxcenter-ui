@@ -43,12 +43,14 @@ import { usePageTitle } from '@/contexts/PageTitleContext'
 import { formatBytes } from '@/utils/format'
 import { formatDateTime } from '@/lib/i18n/date'
 import BackupJobsTabs from './BackupJobsTabs'
+import BackupCoverageCard from './BackupCoverageCard'
 import BackupTrendsChart from './BackupTrendsChart'
 import EmptyState from '@/components/EmptyState'
 import { TableSkeleton } from '@/components/skeletons'
 import RestoreVmDialog from '@/components/backup/RestoreVmDialog'
 import BulkRestoreWizard from '@/components/backup/BulkRestoreWizard'
 import { useTenant } from '@/contexts/TenantContext'
+import { useRBAC } from '@/contexts/RBACContext'
 import { useToast } from '@/contexts/ToastContext'
 import RestoreToGuestDialog from '@/components/backups/RestoreToGuestDialog'
 import { isRestorableItemPath } from '@/lib/guestFileRestore/paths'
@@ -188,6 +190,17 @@ export default function BackupsPage() {
   // 'default' tenant keeps both tabs.
   const { currentTenant, loading: tenantLoading } = useTenant()
   const isVdcTenant = !tenantLoading && !!currentTenant && currentTenant.id !== 'default'
+  const rbac = useRBAC()
+  // The coverage settings sit in the alert thresholds, a provider setting.
+  const canEditCoverage = !isVdcTenant && !rbac.loading && rbac.hasPermission('admin.settings')
+  // Adding an uncovered guest to a job edits provider jobs: same permission as the job editor.
+  const canAddToJob = !isVdcTenant && !rbac.loading && rbac.hasPermission('backup.job.edit')
+  const [jobCreateRequest, setJobCreateRequest] = useState(null)
+  const [coverageRefresh, setCoverageRefresh] = useState(0)
+  const requestJobCreate = useCallback(guest => {
+    setJobCreateRequest({ connId: guest.connId, vmid: guest.vmid, nonce: Date.now() })
+  }, [])
+  const refreshCoverage = useCallback(() => setCoverageRefresh(n => n + 1), [])
 
   useEffect(() => {
     setPageInfo(t('backups.title'), t('backups.subtitle'), 'ri-file-copy-fill')
@@ -1055,7 +1068,23 @@ return () => clearTimeout(timer)
           backups ponctuels par VM dans /infrastructure/inventory et le
           quota maxBackups s'applique sur ces backups ad-hoc. */}
       {!isVdcTenant && (pveConnections.length > 0 || pbsConnections.length > 0) && (
-        <BackupJobsTabs pveConnections={pveConnections} pbsConnections={pbsConnections} />
+        <BackupJobsTabs
+          pveConnections={pveConnections}
+          pbsConnections={pbsConnections}
+          createRequest={jobCreateRequest}
+          onJobsChanged={refreshCoverage}
+        />
+      )}
+
+      {/* Invités couverts par aucun job de sauvegarde PVE (roadmap#48), visibles
+          aussi par un tenant vDC, limités aux invités de ses pools. */}
+      {pveConnections.length > 0 && (
+        <BackupCoverageCard
+          canEditSettings={canEditCoverage}
+          canAddToJob={canAddToJob}
+          onCreateJob={requestJobCreate}
+          refreshKey={coverageRefresh}
+        />
       )}
 
       {/* Filtres et liste des backups */}

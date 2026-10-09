@@ -529,7 +529,8 @@
       "nodesGauges": "Indicadores de nodos",
       "clustersGauges": "Indicadores de clusters",
       "clusterHealth": "Salud del cluster",
-      "themeLogo": "Logo del tema"
+      "themeLogo": "Logo del tema",
+      "backupCoverage": "Cobertura de copias"
     },
     "widgetDescs": {
       "kpiClusters": "Shows number de clusters y nodos",
@@ -564,7 +565,8 @@
       "clustersGauges": "por-cluster gauges, sparklines y salud puntuación",
       "clusterHealth": "Salud puntuación con clave metrics",
       "sectionHeader": "Separador de sección contraíble",
-      "themeLogo": "Muestra el logo del tema actual"
+      "themeLogo": "Muestra el logo del tema actual",
+      "backupCoverage": "Invitados sin ningún trabajo de copia de seguridad"
     },
     "widgetDrs": {
       "automatic": "Automático",
@@ -626,7 +628,11 @@
     "importDashboards": "Importar dashboards…",
     "dashboardsExported": "{count, plural, one {# dashboard exportado.} other {# dashboards exportados en un solo archivo.}}",
     "dashboardsImported": "{count, plural, one {# dashboard importado.} other {# dashboards importados.}}",
-    "importSkipped": "{count, plural, one {Se ha omitido # dashboard: ninguno de sus widgets está disponible aquí.} other {Se han omitido # dashboards: ninguno de sus widgets está disponible aquí.}}"
+    "importSkipped": "{count, plural, one {Se ha omitido # dashboard: ninguno de sus widgets está disponible aquí.} other {Se han omitido # dashboards: ninguno de sus widgets está disponible aquí.}}",
+    "widgetBackupCoverage": {
+      "uncovered": "invitados sin ningún trabajo de copia de seguridad",
+      "viewAll": "Ver todo"
+    }
   },
   "alerts": {
     "title": "Alertas",
@@ -779,7 +785,10 @@
     "replicationRpoGrace": "% tolerado por encima del objetivo de RPO del trabajo",
     "replicationFailures": "Fallos de replicación",
     "replicationFailuresDesc": "Alertar cuando una tarea de replicación falla, con independencia de su RPO",
-    "replicationFailuresEscalation": "Advertencia y luego crítico cuando se agotan los reintentos"
+    "replicationFailuresEscalation": "Advertencia y luego crítico cuando se agotan los reintentos",
+    "backupCoverage": "Cobertura de copias de seguridad",
+    "backupCoverageDesc": "Una alerta por invitado que ningún trabajo de copia de seguridad de Proxmox activo cubre, resuelta cuando un trabajo lo cubre. Desactivada por defecto.",
+    "backupCoverageDetail": "Los invitados creados hace menos de {hours} h y los etiquetados {tag} quedan fuera; ambos se ajustan desde la página Copias de seguridad."
   },
   "inventory": {
     "alertsDialog": {
@@ -2798,6 +2807,79 @@
         }
       }
     },
+    "coverage": {
+      "title": "Cobertura de copias de seguridad",
+      "uncoveredCount": "{count} sin cubrir",
+      "allCoveredShort": "Todo cubierto",
+      "coveredOf": "{covered} de {total} invitados cubiertos",
+      "allCovered": "Todos los invitados están cubiertos por un trabajo de copia de seguridad",
+      "noMatch": "Ningún invitado coincide con estos filtros",
+      "settings": "Ajustes de la cobertura",
+      "search": "Buscar un invitado",
+      "allClusters": "Todos los clústeres",
+      "allReasons": "Todos los motivos",
+      "colGuest": "Invitado",
+      "colCluster": "Clúster",
+      "colNode": "Nodo",
+      "colReason": "Motivo",
+      "reasons": {
+        "no_job": "Ningún trabajo de copia de seguridad activo en este clúster",
+        "not_selected": "Ningún trabajo de copia de seguridad lo selecciona",
+        "excluded": "Excluido de un trabajo que respalda todos los invitados",
+        "other_node": "Seleccionado por un trabajo limitado a otro nodo",
+        "disabled_job": "Solo lo selecciona un trabajo desactivado"
+      },
+      "hints": {
+        "no_job": "Cree un trabajo de copia de seguridad en este clúster, o etiquete el invitado para dejarlo fuera a propósito.",
+        "not_selected": "Añada el invitado a un trabajo, o a un pool que un trabajo respalda, o etiquételo para dejarlo fuera a propósito.",
+        "excluded": "Quite el invitado de las exclusiones del trabajo, o etiquételo para dejarlo fuera a propósito.",
+        "other_node": "El trabajo solo se ejecuta en su propio nodo: el invitado se creó en otro nodo o se movió a él.",
+        "disabled_job": "Active el trabajo, o seleccione el invitado en un trabajo activo."
+      },
+      "detailJobs": "Trabajos",
+      "detailPool": "Pool",
+      "detailTags": "Etiquetas",
+      "detailCreated": "Creado",
+      "detailUnknown": "Desconocido",
+      "detailNone": "Ninguno",
+      "ignoredTemplates": "{count, plural, one {# plantilla} other {# plantillas}}",
+      "ignoredTag": "{count, plural, one {# invitado etiquetado} other {# invitados etiquetados}} {tag}",
+      "ignoredGrace": "{count, plural, one {# invitado creado} other {# invitados creados}} hace menos de {hours} h",
+      "notListed": "No listados: {items}",
+      "errorsTitle": "Cobertura desconocida para {clusters}: no se pudieron leer sus trabajos de copia de seguridad.",
+      "loadError": "No se pudo cargar la cobertura de las copias de seguridad",
+      "displayedRows": "{from}-{to} de {count}",
+      "graceLabel": "Periodo de gracia (horas)",
+      "graceHelp": "Un invitado creado hace menos de estas horas aún no se lista; 0 lo lista de inmediato. La fecha de creación viene de la configuración de la VM, o de las tareas recientes de creación y restauración para los contenedores y las VM más antiguas.",
+      "tagLabel": "Etiqueta de exclusión",
+      "tagHelp": "Un invitado con esta etiqueta de Proxmox queda fuera de las copias a propósito y no se lista. Vacío desactiva la exclusión.",
+      "tagInvalid": "Solo minúsculas, dígitos y _ + . -",
+      "saved": "Ajustes de la cobertura guardados",
+      "saveError": "No se pudieron guardar los ajustes de la cobertura",
+      "alertsLabel": "Alertar sobre los invitados sin cubrir",
+      "alertsHelp": "El orquestador genera una alerta por cada invitado listado aquí y la resuelve cuando el invitado queda cubierto, con las notificaciones de alerta habituales.",
+      "addToJob": "Añadir a un trabajo de copia de seguridad",
+      "addTitle": "Añadir {name} ({vmid}) a un trabajo de copia de seguridad",
+      "jobsLoadError": "No se pudieron cargar los trabajos de copia de seguridad de este clúster",
+      "noJobOnCluster": "{cluster} aún no tiene ningún trabajo de copia de seguridad.",
+      "createJob": "Crear un trabajo de copia de seguridad",
+      "addWillUnexclude": "Quita el invitado de las exclusiones de este trabajo",
+      "addWillAppend": "Añade el invitado a los invitados de este trabajo",
+      "addDisabledWarning": "Este trabajo está desactivado: el invitado sigue sin cubrir hasta que se active el trabajo.",
+      "addConfirm": "Añadir",
+      "addedToJob": "{name} añadido al trabajo de copia de seguridad {job}",
+      "addedToDisabledJob": "{name} añadido al trabajo de copia de seguridad {job}, que está desactivado: actívelo para cubrir el invitado",
+      "addError": "No se pudo añadir el invitado al trabajo: {error}",
+      "addRefused": {
+        "pool": "Respalda el pool {pool}: el invitado entra a través del pool",
+        "other_node": "Solo se ejecuta en el nodo {node}, no en el del invitado",
+        "already": "Ya selecciona este invitado",
+        "no_selection": "No selecciona ningún invitado"
+      }
+    },
+    "namespaceFromStorage": "Definido en el almacenamiento PBS, elija el almacenamiento para cambiarlo",
+    "namespaceStorageMismatch": "El namespace PBS se define en el almacenamiento: \"{storage}\" no escribe en el namespace \"{namespace}\". Elija un almacenamiento vinculado a ese namespace.",
+    "noStorageForNamespace": "Ningún almacenamiento PBS de este clúster escribe en el namespace \"{namespace}\" de su vDC, así que no se puede crear ningún trabajo de copia de seguridad. Pida a su proveedor que añada uno.",
     "vmImageBrowse": "Explorar archivos",
     "vmImageBrowseHint": "Haga clic para explorar la imagen de disco a través de un nodo Proxmox",
     "pickPveStorage": "Almacenamiento Proxmox usado para leer esta copia de seguridad",

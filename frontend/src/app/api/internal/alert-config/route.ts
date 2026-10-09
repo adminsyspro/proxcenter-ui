@@ -38,6 +38,11 @@ const DEFAULT_THRESHOLDS = {
   disk_latency_collection: 1,
   // Metrics collection cadence in seconds (#881), an int on the Go side too.
   metrics_interval_seconds: 60,
+  // Backup coverage (roadmap#48), see the settings route. Hours are an int.
+  backup_coverage_grace_hours: 24,
+  backup_coverage_exclude_tag: 'no-backup',
+  // 0/1 switch, float64 on the Go side like replication_failure_alerts.
+  backup_coverage_alerts: 0,
 }
 
 type Thresholds = typeof DEFAULT_THRESHOLDS
@@ -51,6 +56,7 @@ const INT_THRESHOLD_KEYS: ReadonlySet<keyof Thresholds> = new Set([
   'disk_latency_window_minutes',
   'disk_latency_retention_days',
   'metrics_interval_seconds',
+  'backup_coverage_grace_hours',
 ])
 
 function coerceThresholds(raw: unknown): Thresholds {

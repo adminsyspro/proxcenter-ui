@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 
 import { applyMaxfilesTranslation, extractKeepLastFromPruneBackups } from "@/lib/backups/prune"
+import { namespaceMismatchResponse, storageNamespace } from "@/lib/backups/pbsNamespace"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
@@ -120,20 +121,10 @@ export async function GET(_req: Request, ctx: RouteContext) {
         excludedVmids,
         pool: job.pool || null,
 
-        // PBS Namespace (important pour organiser les backups sur PBS)
-        // prune-backups peut être un objet ou une string selon la version PVE
-        namespace: (() => {
-          const pruneBackups = job['prune-backups']
-
-          if (typeof pruneBackups === 'string') {
-            const match = pruneBackups.match(/ns=([^\s,]+)/)
-
-            if (match) return match[1]
-          }
-
-          
-return job.namespace || ''
-        })(),
+        // PBS namespace: a property of the target storage in storage.cfg,
+        // never of the job (PVE has no such job option), so it is read from
+        // the storage the job writes to.
+        namespace: storageNamespace((storages || []).find((s: any) => s.storage === job.storage)),
 
         // Retention. PVE 8.x dropped `maxfiles` in favor of `prune-backups`,
         // so jobs created on modern clusters (including those our create
@@ -221,6 +212,8 @@ return job.namespace || ''
             enabled: s.enabled !== 0,
             shared: s.shared === 1,
             isPbs: s.type === 'pbs',
+            namespace: storageNamespace(s),
+            datastore: s.datastore || '',
             total: status?.total || 0,
             used: status?.used || 0,
             avail: status?.avail || 0,
@@ -235,7 +228,9 @@ return job.namespace || ''
           content: s.content,
           enabled: s.enabled !== 0,
           shared: s.shared === 1,
-          isPbs: s.type === 'pbs'
+          isPbs: s.type === 'pbs',
+          namespace: storageNamespace(s),
+          datastore: s.datastore || '',
         })),
         nodes: visibleNodes.map((n: any) => ({
           node: n.node,
@@ -316,6 +311,10 @@ export async function POST(req: Request, ctx: RouteContext) {
     if (body.selectionMode === 'pool' && !body.pool) {
       return NextResponse.json({ error: "Pool is required" }, { status: 400 })
     }
+
+    // The namespace belongs to the storage: refuse one the storage does not carry.
+    const nsError = await namespaceMismatchResponse(conn, body.storage, body.namespace)
+    if (nsError) return nsError
 
     params.set('storage', body.storage)
     
@@ -407,16 +406,6 @@ export async function POST(req: Request, ctx: RouteContext) {
     if (body.repeatMissed) params.set('repeat-missed', '1')
     if (body.pbsChangeDetectionMode && body.pbsChangeDetectionMode !== 'default') {
       params.set('pbs-change-detection-mode', body.pbsChangeDetectionMode)
-    }
-
-    // PBS Namespace
-    if (body.namespace) {
-      const existingPrune = params.get('prune-backups') || ''
-      if (existingPrune && !existingPrune.includes('ns=')) {
-        params.set('prune-backups', `${existingPrune},ns=${body.namespace}`)
-      } else if (!existingPrune) {
-        params.set('prune-backups', `ns=${body.namespace}`)
-      }
     }
 
     // Créer le job

@@ -4026,6 +4026,141 @@
       "unavailable": "Diagnostics indisponibles",
       "allOk": "Tous les controles sont passés."
     },
+    "connectionCheck": {
+      "title": "Vérifier la connexion",
+      "button": "Vérifier la connexion",
+      "running": "Vérifications en cours...",
+      "rerun": "Relancer",
+      "close": "Fermer",
+      "unavailable": "Vérification indisponible",
+      "allOk": "Toutes les vérifications sont passées.",
+      "summaryOk": "{count} OK",
+      "summaryWarn": "{count, plural, one {# avertissement} other {# avertissements}}",
+      "summaryFail": "{count, plural, one {# échec} other {# échecs}}",
+      "summarySkip": "{count} ignorées",
+      "probes": {
+        "api": "Joignabilité de l'API",
+        "tls": "Certificat TLS",
+        "privileges": "Privilèges du jeton",
+        "version": "Version de Proxmox VE",
+        "clock": "Horloge",
+        "quorum": "Quorum du cluster",
+        "ssh": "SSH"
+      },
+      "features": {
+        "inventory": "inventaire et tableau de bord",
+        "nodes": "détails et métriques des nœuds",
+        "console": "consoles des VM et conteneurs",
+        "nodeShell": "shell des nœuds",
+        "guestConfig": "configuration des invités",
+        "guestPower": "démarrage, arrêt et redémarrage des invités",
+        "guestCreate": "création et clonage des invités",
+        "templates": "modèles et téléchargements d'images",
+        "snapshots": "instantanés",
+        "migrations": "migrations",
+        "migrationsTarget": "migrations inter-clusters (en tant que cible)",
+        "backups": "sauvegardes et restaurations",
+        "backupJobs": "tâches de sauvegarde",
+        "storage": "gestion du stockage",
+        "replication": "réplication",
+        "sdn": "SDN",
+        "firewall": "pare-feu",
+        "ha": "haute disponibilité",
+        "ceph": "Ceph",
+        "pools": "pools",
+        "notifications": "notifications",
+        "nodeUpdates": "mises à jour des nœuds",
+        "nodePower": "actions d'alimentation des nœuds (mises à jour progressives, green IT)",
+        "hardwareMappings": "mappages matériels",
+        "compliance": "conformité et durcissement",
+        "warmMigration": "migrations à chaud",
+        "haAffinityRules": "règles d'affinité HA",
+        "sdnFabrics": "fabrics SDN",
+        "vnetFirewall": "pare-feu VNet",
+        "nestedPools": "pools imbriqués"
+      },
+      "hints": {
+        "api": {
+          "ok": "{host} a répondu en {latencyMs} ms (Proxmox VE {version}).",
+          "unauthorized": "{host} a refusé le jeton API (HTTP 401). Vérifiez l'identifiant et le secret du jeton dans la connexion, et que le jeton n'est ni expiré ni désactivé dans Datacenter > Permissions > API Tokens.",
+          "tlsRejected": "{host} présente un certificat auquel l'hôte ProxCenter ne fait pas confiance ({reason}). Activez « Ignorer les erreurs de certificat TLS » sur la connexion, ou installez un certificat émis par une CA reconnue par l'hôte ProxCenter.",
+          "timeout": "{host} a accepté la connexion mais n'a pas répondu en {timeoutMs} ms. Vérifiez pveproxy sur le nœud (systemctl status pveproxy) et le chemin réseau.",
+          "unreachable": "{host} est injoignable ({error}). Vérifiez l'adresse et le port de la connexion, que le nœud est démarré, et le pare-feu entre ProxCenter et le nœud (TCP 8006).",
+          "httpError": "{host} a répondu HTTP {status} à une demande de version. Vérifiez pveproxy sur le nœud et tout reverse proxy intermédiaire.",
+          "fallbackOk": "Le nœud de repli {node} ({host}) a répondu en {latencyMs} ms.",
+          "fallbackUnreachable": "Le nœud de repli {node} ({host}) est injoignable ({error}) : la bascule vers ce nœud ne fonctionnera pas. Vérifiez le nœud et le pare-feu, ou corrigez son adresse dans la liste des nœuds de la connexion.",
+          "fallbackTlsRejected": "Le nœud de repli {node} ({host}) présente un certificat qui ne correspond pas à son adresse ({reason}) : la bascule vers ce nœud échouera. Activez « Ignorer les erreurs de certificat TLS » sur la connexion, ou ajoutez l'adresse du nœud à son certificat.",
+          "fallbackBehindProxy": "La connexion passe par un reverse proxy : la bascule vers d'autres nœuds est désactivée, les hôtes de repli ne sont donc pas sondés.",
+          "noFallbackHosts": "Aucun hôte de repli connu : si {host} tombe, ProxCenter ne peut pas basculer sur un autre nœud. Ouvrez l'inventaire ou enregistrez à nouveau la connexion pour découvrir les nœuds du cluster."
+        },
+        "tls": {
+          "ok": "Le certificat de {host} est reconnu et valide jusqu'au {validTo} ({days} jours).",
+          "okUntrusted": "Le certificat de {host} est valide jusqu'au {validTo} ({days} jours). Il n'est pas émis par une CA reconnue et est accepté parce que les erreurs TLS sont ignorées sur cette connexion.",
+          "untrusted": "Le certificat de {host} n'est pas reconnu par l'hôte ProxCenter ({reason}). Les appels API échouent tant que « Ignorer les erreurs de certificat TLS » n'est pas activé sur la connexion ou qu'un certificat reconnu n'est pas installé sur le nœud.",
+          "expiringSoon": "Le certificat de {host} expire dans {days} jours ({validTo}). Renouvelez-le sur le nœud (pvenode cert set, ou le plugin ACME) avant son expiration.",
+          "expired": "Le certificat de {host} a expiré le {validTo}. Renouvelez-le sur le nœud (pvenode cert set, ou le plugin ACME), puis redémarrez pveproxy.",
+          "notYetValid": "Le certificat de {host} n'est pas valide avant le {validFrom}. Vérifiez l'horloge du nœud qui l'a émis.",
+          "unreachable": "Pas de négociation TLS avec {host} ({error}).",
+          "notHttps": "La connexion utilise HTTP sans TLS : aucun certificat à vérifier.",
+          "noPin": "Aucune empreinte de certificat n'est épinglée sur cette connexion.",
+          "pinMatch": "L'empreinte du certificat correspond à celle épinglée ({fingerprint}).",
+          "pinMismatch": "L'empreinte du certificat a changé : épinglée {expected}, présentée {actual}. Si le certificat a été renouvelé volontairement, capturez à nouveau l'empreinte dans la boîte de dialogue de la connexion ; sinon, enquêtez avant de faire confiance à l'hôte.",
+          "pinUnchecked": "Empreinte non comparée : le certificat n'a pas pu être lu."
+        },
+        "privileges": {
+          "ok": "Le jeton {tokenId} détient les {count} privilèges utilisés par ProxCenter.",
+          "unreadable": "Les permissions de {tokenId} n'ont pas pu être lues ({error}).",
+          "none": "Le jeton {tokenId} n'a aucun privilège effectif. Un privilège ne compte que si l'utilisateur {user} le détient et, avec la séparation des privilèges activée (par défaut), si le jeton le détient aussi : {command}",
+          "noneSeparated": "Le jeton {tokenId} n'a aucun privilège effectif. Sa séparation des privilèges est activée : un privilège ne compte que si l'utilisateur {user} et le jeton le détiennent tous les deux : {command}",
+          "noneUser": "Le jeton {tokenId} n'a aucun privilège effectif. Sa séparation des privilèges est désactivée : il utilise les privilèges de l'utilisateur {user} : {command}",
+          "missing": "{privileges} manquant sur {path}. Impacté : {features}. Accordez-le à l'utilisateur {user} et, si le jeton a la séparation des privilèges activée (par défaut), au jeton aussi : {command}",
+          "missingSeparated": "{privileges} manquant sur {path}. Impacté : {features}. Le jeton a la séparation des privilèges activée : l'utilisateur {user} et le jeton doivent tous les deux le détenir : {command}",
+          "missingUser": "{privileges} manquant sur {path}. Impacté : {features}. Le jeton a la séparation des privilèges désactivée : accordez-le à l'utilisateur {user} : {command}"
+        },
+        "version": {
+          "ok": "{node} exécute Proxmox VE {version}.",
+          "unreadable": "La version de {node} n'a pas pu être lue ({error}).",
+          "belowSupported": "{node} exécute Proxmox VE {version} ; ProxCenter requiert Proxmox VE {min} ou plus récent. Mettez le nœud à niveau.",
+          "gated": "{node} exécute Proxmox VE {version} ; ces fonctionnalités requièrent Proxmox VE {required} : {features}. Mettez le nœud à niveau pour les utiliser.",
+          "mixed": "Les nœuds exécutent des versions différentes de Proxmox VE ({versions}). Les migrations entre versions peuvent échouer ; mettez tous les nœuds à la même version."
+        },
+        "clock": {
+          "ok": "L'horloge de {node} est à {skewSeconds} s de celle de ProxCenter.",
+          "warn": "L'horloge de {node} est décalée de {skewSeconds} s par rapport à ProxCenter. Activez NTP (chrony) sur le nœud et sur l'hôte ProxCenter ; un décalage plus grand casse la validation des tickets et des jetons.",
+          "fail": "L'horloge de {node} est décalée de {skewSeconds} s par rapport à ProxCenter : les tickets API et les consoles échoueront. Activez NTP (chrony) sur le nœud et sur l'hôte ProxCenter, puis vérifiez timedatectl des deux côtés.",
+          "forbidden": "L'horloge de {node} n'a pas été lue : le jeton n'a pas Sys.Audit sur /nodes/{node}.",
+          "unreadable": "L'horloge de {node} n'a pas pu être lue ({error})."
+        },
+        "quorum": {
+          "ok": "Le cluster {cluster} a le quorum ({online}/{total} nœuds en ligne).",
+          "standalone": "Nœud autonome : pas de quorum de cluster à vérifier.",
+          "degraded": "Le cluster {cluster} a le quorum mais {offline, plural, one {# nœud est} other {# nœuds sont}} hors ligne ({nodes}). Remettez les nœuds en ligne avant que le cluster ne perde le quorum.",
+          "lost": "Le cluster {cluster} a perdu le quorum ({online}/{total} nœuds en ligne) : les invités ne peuvent être ni démarrés ni migrés. Remettez des nœuds en ligne ; sur un cluster à deux nœuds, ajoutez un QDevice (pvecm qdevice setup).",
+          "forbidden": "L'état du cluster n'a pas été lu : le jeton n'a pas Sys.Audit sur /.",
+          "unreadable": "L'état du cluster n'a pas pu être lu ({error})."
+        },
+        "ssh": {
+          "disabled": "SSH n'est pas activé sur cette connexion.",
+          "prerequisitesFailed": "SSH non testé : les vérifications API ou TLS ont échoué.",
+          "noCredentials": "SSH non testé : aucune clé ni aucun mot de passe utilisable n'est enregistré sur la connexion.",
+          "ok": "{node} : la connexion SSH en {user} sur {host}:{port} fonctionne (hostname {hostname}).",
+          "hostKeyMismatch": "{node} : la clé d'hôte de {host} a changé depuis son épinglage. Si le nœud a été réinstallé ou sa clé régénérée, utilisez Refaire confiance dans la boîte de dialogue de la connexion.",
+          "authFailed": "{node} : l'authentification SSH a échoué pour {user} sur {host}:{port}. Vérifiez la clé ou le mot de passe enregistré sur la connexion, et que la clé publique figure dans le fichier authorized_keys de {user} sur le nœud.",
+          "timeout": "{node} : aucune réponse SSH de {host}:{port}. Vérifiez sshd et le pare-feu (TCP {port}), ou définissez une adresse SSH par nœud dans la boîte de dialogue de la connexion.",
+          "failed": "{node} : SSH vers {host}:{port} a échoué ({error})."
+        },
+        "probe": {
+          "timeout": "La vérification {probe} ne s'est pas terminée en {timeoutMs} ms.",
+          "crashed": "La vérification {probe} a échoué de façon inattendue ({error})."
+        },
+        "nodes": {
+          "unreadable": "Non vérifié : la liste des nœuds n'a pas pu être lue ({error})."
+        },
+        "node": {
+          "offline": "{node} est hors ligne : non vérifié."
+        }
+      }
+    },
     "syslog": {
       "tabLabel": "Syslog / SIEM",
       "title": "Transfert Syslog / SIEM",

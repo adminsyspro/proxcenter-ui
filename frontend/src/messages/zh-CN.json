@@ -4030,6 +4030,141 @@
       "unavailable": "诊断不可用",
       "allOk": "所有检查均通过。"
     },
+    "connectionCheck": {
+      "title": "检查连接",
+      "button": "检查连接",
+      "running": "正在运行检查...",
+      "rerun": "重新运行",
+      "close": "关闭",
+      "unavailable": "检查不可用",
+      "allOk": "所有检查均已通过。",
+      "summaryOk": "{count} 项正常",
+      "summaryWarn": "{count} 项警告",
+      "summaryFail": "{count} 项失败",
+      "summarySkip": "{count} 项跳过",
+      "probes": {
+        "api": "API 可达性",
+        "tls": "TLS 证书",
+        "privileges": "令牌权限",
+        "version": "Proxmox VE 版本",
+        "clock": "时钟",
+        "quorum": "集群仲裁",
+        "ssh": "SSH"
+      },
+      "features": {
+        "inventory": "清单和仪表板",
+        "nodes": "节点详情和指标",
+        "console": "虚拟机和容器控制台",
+        "nodeShell": "节点 Shell",
+        "guestConfig": "客户机配置",
+        "guestPower": "客户机启动、停止和重启",
+        "guestCreate": "客户机创建和克隆",
+        "templates": "模板和镜像下载",
+        "snapshots": "快照",
+        "migrations": "迁移",
+        "migrationsTarget": "跨集群迁移（作为目标）",
+        "backups": "备份和恢复",
+        "backupJobs": "备份任务",
+        "storage": "存储管理",
+        "replication": "复制",
+        "sdn": "SDN",
+        "firewall": "防火墙",
+        "ha": "高可用",
+        "ceph": "Ceph",
+        "pools": "资源池",
+        "notifications": "通知",
+        "nodeUpdates": "节点更新",
+        "nodePower": "节点电源操作（滚动更新、绿色 IT）",
+        "hardwareMappings": "硬件映射",
+        "compliance": "合规与加固",
+        "warmMigration": "热迁移",
+        "haAffinityRules": "HA 亲和规则",
+        "sdnFabrics": "SDN Fabric",
+        "vnetFirewall": "VNet 防火墙",
+        "nestedPools": "嵌套资源池"
+      },
+      "hints": {
+        "api": {
+          "ok": "{host} 在 {latencyMs} ms 内响应（Proxmox VE {version}）。",
+          "unauthorized": "{host} 拒绝了 API 令牌（HTTP 401）。请检查连接中的令牌 ID 和密钥，并在 Datacenter > Permissions > API Tokens 中确认令牌未过期且未被禁用。",
+          "tlsRejected": "{host} 出示的证书不受 ProxCenter 主机信任（{reason}）。请在连接上启用“忽略 TLS 证书错误”，或安装由 ProxCenter 主机信任的 CA 签发的证书。",
+          "timeout": "{host} 接受了连接但未在 {timeoutMs} ms 内响应。请检查节点上的 pveproxy（systemctl status pveproxy）和网络路径。",
+          "unreachable": "{host} 不可达（{error}）。请检查连接的地址和端口、节点是否已开机，以及 ProxCenter 与节点之间的防火墙（TCP 8006）。",
+          "httpError": "{host} 对版本请求返回了 HTTP {status}。请检查节点上的 pveproxy 以及中间的反向代理。",
+          "fallbackOk": "备用节点 {node}（{host}）在 {latencyMs} ms 内响应。",
+          "fallbackUnreachable": "备用节点 {node}（{host}）不可达（{error}）：无法故障转移到该节点。请检查节点和防火墙，或在连接的节点列表中修正其地址。",
+          "fallbackTlsRejected": "备用节点 {node}（{host}）出示的证书与其地址不匹配（{reason}）：故障转移到该节点将失败。请在连接上启用“忽略 TLS 证书错误”，或将节点地址加入其证书。",
+          "fallbackBehindProxy": "连接经过反向代理：到其他节点的故障转移已禁用，因此不探测备用主机。",
+          "noFallbackHosts": "没有已知的备用主机：如果 {host} 宕机，ProxCenter 无法故障转移到其他节点。请打开清单或重新保存连接以发现集群节点。"
+        },
+        "tls": {
+          "ok": "{host} 的证书受信任，有效期至 {validTo}（{days} 天）。",
+          "okUntrusted": "{host} 的证书有效期至 {validTo}（{days} 天）。它并非由受信任的 CA 签发，因为此连接忽略 TLS 错误而被接受。",
+          "untrusted": "ProxCenter 主机不信任 {host} 的证书（{reason}）。在连接上启用“忽略 TLS 证书错误”或在节点上安装受信任的证书之前，API 调用将失败。",
+          "expiringSoon": "{host} 的证书将在 {days} 天后过期（{validTo}）。请在过期前在节点上续期（pvenode cert set 或 ACME 插件）。",
+          "expired": "{host} 的证书已于 {validTo} 过期。请在节点上续期（pvenode cert set 或 ACME 插件），然后重启 pveproxy。",
+          "notYetValid": "{host} 的证书在 {validFrom} 之前无效。请检查签发该证书的节点的时钟。",
+          "unreachable": "无法与 {host} 完成 TLS 握手（{error}）。",
+          "notHttps": "连接使用明文 HTTP：没有可检查的证书。",
+          "noPin": "此连接未固定任何证书指纹。",
+          "pinMatch": "证书指纹与固定的指纹一致（{fingerprint}）。",
+          "pinMismatch": "证书指纹已更改：固定值 {expected}，当前值 {actual}。如果证书是有意更新的，请在连接对话框中重新捕获指纹；否则请先调查再信任该主机。",
+          "pinUnchecked": "未比较指纹：无法读取证书。"
+        },
+        "privileges": {
+          "ok": "令牌 {tokenId} 拥有 ProxCenter 使用的全部 {count} 项权限。",
+          "unreadable": "无法读取 {tokenId} 的权限（{error}）。",
+          "none": "令牌 {tokenId} 没有任何有效权限。只有当用户 {user} 拥有某项权限，且在启用权限分离（默认）时令牌也拥有该权限，它才生效：{command}",
+          "noneSeparated": "令牌 {tokenId} 没有任何有效权限。它已启用权限分离，因此只有用户 {user} 和令牌同时拥有的权限才生效：{command}",
+          "noneUser": "令牌 {tokenId} 没有任何有效权限。它已禁用权限分离，因此使用用户 {user} 的权限：{command}",
+          "missing": "{path} 上缺少 {privileges}。受影响：{features}。请授予用户 {user}，若令牌已启用权限分离（默认），也要授予令牌：{command}",
+          "missingSeparated": "{path} 上缺少 {privileges}。受影响：{features}。令牌已启用权限分离，因此用户 {user} 和令牌都需要该权限：{command}",
+          "missingUser": "{path} 上缺少 {privileges}。受影响：{features}。令牌已禁用权限分离，因此请授予用户 {user}：{command}"
+        },
+        "version": {
+          "ok": "{node} 运行 Proxmox VE {version}。",
+          "unreadable": "无法读取 {node} 的版本（{error}）。",
+          "belowSupported": "{node} 运行 Proxmox VE {version}；ProxCenter 需要 Proxmox VE {min} 或更高版本。请升级该节点。",
+          "gated": "{node} 运行 Proxmox VE {version}；以下功能需要 Proxmox VE {required}：{features}。请升级该节点以使用它们。",
+          "mixed": "各节点运行的 Proxmox VE 版本不同（{versions}）。跨版本迁移可能失败；请将所有节点升级到同一版本。"
+        },
+        "clock": {
+          "ok": "{node} 的时钟与 ProxCenter 相差在 {skewSeconds} 秒以内。",
+          "warn": "{node} 的时钟与 ProxCenter 相差 {skewSeconds} 秒。请在节点和 ProxCenter 主机上启用 NTP（chrony）；更大的偏差会导致票据和令牌校验失败。",
+          "fail": "{node} 的时钟与 ProxCenter 相差 {skewSeconds} 秒：API 票据和控制台将失败。请在节点和 ProxCenter 主机上启用 NTP（chrony），然后在两端检查 timedatectl。",
+          "forbidden": "未读取 {node} 的时钟：令牌缺少 /nodes/{node} 上的 Sys.Audit。",
+          "unreadable": "无法读取 {node} 的时钟（{error}）。"
+        },
+        "quorum": {
+          "ok": "集群 {cluster} 已达到仲裁（{online}/{total} 个节点在线）。",
+          "standalone": "独立节点：没有需要检查的集群仲裁。",
+          "degraded": "集群 {cluster} 已达到仲裁，但有 {offline} 个节点离线（{nodes}）。请在集群失去仲裁前恢复这些节点。",
+          "lost": "集群 {cluster} 已失去仲裁（{online}/{total} 个节点在线）：客户机无法启动或迁移。请让节点恢复在线；双节点集群请添加 QDevice（pvecm qdevice setup）。",
+          "forbidden": "未读取集群状态：令牌缺少 / 上的 Sys.Audit。",
+          "unreadable": "无法读取集群状态（{error}）。"
+        },
+        "ssh": {
+          "disabled": "此连接未启用 SSH。",
+          "prerequisitesFailed": "未测试 SSH：API 或 TLS 检查失败。",
+          "noCredentials": "未测试 SSH：连接中没有可用的密钥或密码。",
+          "ok": "{node}：以 {user} 身份通过 SSH 登录 {host}:{port} 成功（主机名 {hostname}）。",
+          "hostKeyMismatch": "{node}：{host} 的主机密钥自固定以来已更改。如果节点已重装或重新生成密钥，请在连接对话框中使用“重新信任”。",
+          "authFailed": "{node}：{user} 在 {host}:{port} 上的 SSH 认证失败。请检查连接中保存的密钥或密码，并确认公钥位于节点上 {user} 的 authorized_keys 中。",
+          "timeout": "{node}：{host}:{port} 没有 SSH 响应。请检查 sshd 和防火墙（TCP {port}），或在连接对话框中为该节点设置 SSH 地址。",
+          "failed": "{node}：到 {host}:{port} 的 SSH 失败（{error}）。"
+        },
+        "probe": {
+          "timeout": "{probe} 检查未在 {timeoutMs} ms 内完成。",
+          "crashed": "{probe} 检查意外失败（{error}）。"
+        },
+        "nodes": {
+          "unreadable": "未检查：无法读取节点列表（{error}）。"
+        },
+        "node": {
+          "offline": "{node} 已离线：未检查。"
+        }
+      }
+    },
     "syslog": {
       "tabLabel": "Syslog / SIEM",
       "title": "Syslog / SIEM 转发",

@@ -15,12 +15,12 @@ import {
   Dialog,
   DialogActions,
   DialogContent,
-  DialogTitle,
   Divider,
-  IconButton,
   Tooltip,
   Typography,
 } from '@mui/material'
+
+import ConnectionDialogTitle from './ConnectionDialogTitle'
 
 // ---- Types -----------------------------------------------------------------
 
@@ -273,33 +273,7 @@ export default function DiagnosticModal({
         sx: { bgcolor: 'background.paper' },
       }}
     >
-      {/* ---- Title ---- */}
-      <DialogTitle
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 1,
-          pb: 1,
-        }}
-      >
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <i className='ri-heart-pulse-line' style={{ fontSize: 20 }} />
-          <Box>
-            <Typography variant='subtitle1' sx={{ fontWeight: 700, lineHeight: 1.2 }}>
-              {t('title')}
-            </Typography>
-            {connectionName && (
-              <Typography variant='caption' sx={{ opacity: 0.6 }}>
-                {connectionName}
-              </Typography>
-            )}
-          </Box>
-        </Box>
-        <IconButton size='small' onClick={onClose} sx={{ opacity: 0.6 }}>
-          <i className='ri-close-line' style={{ fontSize: 18 }} />
-        </IconButton>
-      </DialogTitle>
+      <ConnectionDialogTitle icon='ri-heart-pulse-line' title={t('title')} connectionName={connectionName} onClose={onClose} />
 
       <Divider />
 

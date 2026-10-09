@@ -4026,6 +4026,141 @@
       "unavailable": "Diagnóstico no disponible",
       "allOk": "Todas las comprobaciones han pasado."
     },
+    "connectionCheck": {
+      "title": "Comprobar conexión",
+      "button": "Comprobar conexión",
+      "running": "Ejecutando comprobaciones...",
+      "rerun": "Volver a ejecutar",
+      "close": "Cerrar",
+      "unavailable": "Comprobación no disponible",
+      "allOk": "Todas las comprobaciones han pasado.",
+      "summaryOk": "{count} OK",
+      "summaryWarn": "{count, plural, one {# advertencia} other {# advertencias}}",
+      "summaryFail": "{count, plural, one {# fallo} other {# fallos}}",
+      "summarySkip": "{count} omitidas",
+      "probes": {
+        "api": "Accesibilidad de la API",
+        "tls": "Certificado TLS",
+        "privileges": "Privilegios del token",
+        "version": "Versión de Proxmox VE",
+        "clock": "Reloj",
+        "quorum": "Quórum del clúster",
+        "ssh": "SSH"
+      },
+      "features": {
+        "inventory": "inventario y panel",
+        "nodes": "detalles y métricas de los nodos",
+        "console": "consolas de VM y contenedores",
+        "nodeShell": "shell de los nodos",
+        "guestConfig": "configuración de invitados",
+        "guestPower": "inicio, parada y reinicio de invitados",
+        "guestCreate": "creación y clonado de invitados",
+        "templates": "plantillas y descargas de imágenes",
+        "snapshots": "instantáneas",
+        "migrations": "migraciones",
+        "migrationsTarget": "migraciones entre clústeres (como destino)",
+        "backups": "copias de seguridad y restauraciones",
+        "backupJobs": "trabajos de copia de seguridad",
+        "storage": "gestión del almacenamiento",
+        "replication": "replicación",
+        "sdn": "SDN",
+        "firewall": "cortafuegos",
+        "ha": "alta disponibilidad",
+        "ceph": "Ceph",
+        "pools": "pools",
+        "notifications": "notificaciones",
+        "nodeUpdates": "actualizaciones de los nodos",
+        "nodePower": "acciones de energía de los nodos (actualizaciones progresivas, green IT)",
+        "hardwareMappings": "mapeos de hardware",
+        "compliance": "cumplimiento y endurecimiento",
+        "warmMigration": "migraciones en caliente",
+        "haAffinityRules": "reglas de afinidad HA",
+        "sdnFabrics": "fabrics SDN",
+        "vnetFirewall": "cortafuegos VNet",
+        "nestedPools": "pools anidados"
+      },
+      "hints": {
+        "api": {
+          "ok": "{host} respondió en {latencyMs} ms (Proxmox VE {version}).",
+          "unauthorized": "{host} rechazó el token de API (HTTP 401). Compruebe el identificador y el secreto del token en la conexión, y que el token no esté caducado ni desactivado en Datacenter > Permissions > API Tokens.",
+          "tlsRejected": "{host} presentó un certificado en el que el host de ProxCenter no confía ({reason}). Active \"Ignorar errores de certificado TLS\" en la conexión, o instale un certificado emitido por una CA en la que confíe el host de ProxCenter.",
+          "timeout": "{host} aceptó la conexión pero no respondió en {timeoutMs} ms. Compruebe pveproxy en el nodo (systemctl status pveproxy) y la ruta de red.",
+          "unreachable": "{host} es inaccesible ({error}). Compruebe la dirección y el puerto de la conexión, que el nodo esté encendido, y el cortafuegos entre ProxCenter y el nodo (TCP 8006).",
+          "httpError": "{host} respondió HTTP {status} a una petición de versión. Compruebe pveproxy en el nodo y cualquier proxy inverso intermedio.",
+          "fallbackOk": "El nodo de respaldo {node} ({host}) respondió en {latencyMs} ms.",
+          "fallbackUnreachable": "El nodo de respaldo {node} ({host}) es inaccesible ({error}): la conmutación a este nodo no funcionará. Compruebe el nodo y el cortafuegos, o corrija su dirección en la lista de nodos de la conexión.",
+          "fallbackTlsRejected": "El nodo de respaldo {node} ({host}) presenta un certificado que no coincide con su dirección ({reason}): la conmutación a este nodo fallará. Active \"Ignorar errores de certificado TLS\" en la conexión, o añada la dirección del nodo a su certificado.",
+          "fallbackBehindProxy": "La conexión pasa por un proxy inverso: la conmutación a otros nodos está desactivada, por lo que no se sondean los hosts de respaldo.",
+          "noFallbackHosts": "No se conoce ningún host de respaldo: si {host} cae, ProxCenter no puede conmutar a otro nodo. Abra el inventario o guarde de nuevo la conexión para descubrir los nodos del clúster."
+        },
+        "tls": {
+          "ok": "El certificado de {host} es de confianza y válido hasta el {validTo} ({days} días).",
+          "okUntrusted": "El certificado de {host} es válido hasta el {validTo} ({days} días). No lo emite una CA de confianza y se acepta porque los errores TLS se ignoran en esta conexión.",
+          "untrusted": "El host de ProxCenter no confía en el certificado de {host} ({reason}). Las llamadas a la API fallan hasta que se active \"Ignorar errores de certificado TLS\" en la conexión o se instale un certificado de confianza en el nodo.",
+          "expiringSoon": "El certificado de {host} caduca en {days} días ({validTo}). Renuévelo en el nodo (pvenode cert set, o el plugin ACME) antes de que caduque.",
+          "expired": "El certificado de {host} caducó el {validTo}. Renuévelo en el nodo (pvenode cert set, o el plugin ACME) y reinicie pveproxy.",
+          "notYetValid": "El certificado de {host} no es válido antes del {validFrom}. Compruebe el reloj del nodo que lo emitió.",
+          "unreachable": "Sin negociación TLS con {host} ({error}).",
+          "notHttps": "La conexión usa HTTP sin cifrar: no hay certificado que comprobar.",
+          "noPin": "No hay ninguna huella de certificado fijada en esta conexión.",
+          "pinMatch": "La huella del certificado coincide con la fijada ({fingerprint}).",
+          "pinMismatch": "La huella del certificado ha cambiado: fijada {expected}, presentada {actual}. Si el certificado se renovó a propósito, capture de nuevo la huella en el diálogo de la conexión; si no, investigue antes de confiar en el host.",
+          "pinUnchecked": "Huella no comparada: no se pudo leer el certificado."
+        },
+        "privileges": {
+          "ok": "El token {tokenId} posee los {count} privilegios que usa ProxCenter.",
+          "unreadable": "No se pudieron leer los permisos de {tokenId} ({error}).",
+          "none": "El token {tokenId} no tiene ningún privilegio efectivo. Un privilegio solo cuenta si el usuario {user} lo posee y, con la separación de privilegios activada (por defecto), si el token también lo posee: {command}",
+          "noneSeparated": "El token {tokenId} no tiene ningún privilegio efectivo. Su separación de privilegios está activada, así que un privilegio solo cuenta si el usuario {user} y el token lo poseen ambos: {command}",
+          "noneUser": "El token {tokenId} no tiene ningún privilegio efectivo. Su separación de privilegios está desactivada, así que usa los privilegios del usuario {user}: {command}",
+          "missing": "Falta {privileges} en {path}. Afectado: {features}. Concédalo al usuario {user} y, si el token tiene la separación de privilegios activada (por defecto), también al token: {command}",
+          "missingSeparated": "Falta {privileges} en {path}. Afectado: {features}. El token tiene la separación de privilegios activada, así que el usuario {user} y el token lo necesitan ambos: {command}",
+          "missingUser": "Falta {privileges} en {path}. Afectado: {features}. El token tiene la separación de privilegios desactivada, así que concédalo al usuario {user}: {command}"
+        },
+        "version": {
+          "ok": "{node} ejecuta Proxmox VE {version}.",
+          "unreadable": "No se pudo leer la versión de {node} ({error}).",
+          "belowSupported": "{node} ejecuta Proxmox VE {version}; ProxCenter necesita Proxmox VE {min} o posterior. Actualice el nodo.",
+          "gated": "{node} ejecuta Proxmox VE {version}; estas funciones necesitan Proxmox VE {required}: {features}. Actualice el nodo para usarlas.",
+          "mixed": "Los nodos ejecutan versiones distintas de Proxmox VE ({versions}). Las migraciones entre versiones pueden fallar; actualice todos los nodos a la misma versión."
+        },
+        "clock": {
+          "ok": "El reloj de {node} está a {skewSeconds} s del de ProxCenter.",
+          "warn": "El reloj de {node} se desvía {skewSeconds} s respecto a ProxCenter. Active NTP (chrony) en el nodo y en el host de ProxCenter; una desviación mayor rompe la validación de tickets y tokens.",
+          "fail": "El reloj de {node} se desvía {skewSeconds} s respecto a ProxCenter: los tickets de API y las consolas fallarán. Active NTP (chrony) en el nodo y en el host de ProxCenter, y compruebe timedatectl en ambos.",
+          "forbidden": "No se leyó el reloj de {node}: el token no tiene Sys.Audit en /nodes/{node}.",
+          "unreadable": "No se pudo leer el reloj de {node} ({error})."
+        },
+        "quorum": {
+          "ok": "El clúster {cluster} tiene quórum ({online}/{total} nodos en línea).",
+          "standalone": "Nodo independiente: no hay quórum de clúster que comprobar.",
+          "degraded": "El clúster {cluster} tiene quórum pero {offline, plural, one {# nodo está} other {# nodos están}} fuera de línea ({nodes}). Recupere los nodos antes de que el clúster pierda el quórum.",
+          "lost": "El clúster {cluster} ha perdido el quórum ({online}/{total} nodos en línea): los invitados no pueden iniciarse ni migrarse. Vuelva a poner nodos en línea; en un clúster de dos nodos añada un QDevice (pvecm qdevice setup).",
+          "forbidden": "No se leyó el estado del clúster: el token no tiene Sys.Audit en /.",
+          "unreadable": "No se pudo leer el estado del clúster ({error})."
+        },
+        "ssh": {
+          "disabled": "SSH no está activado en esta conexión.",
+          "prerequisitesFailed": "SSH no probado: las comprobaciones de API o TLS fallaron.",
+          "noCredentials": "SSH no probado: no hay ninguna clave ni contraseña utilizable guardada en la conexión.",
+          "ok": "{node}: el inicio de sesión SSH como {user} en {host}:{port} funciona (hostname {hostname}).",
+          "hostKeyMismatch": "{node}: la clave de host de {host} cambió desde que se fijó. Si el nodo se reinstaló o se regeneró su clave, use Volver a confiar en el diálogo de la conexión.",
+          "authFailed": "{node}: la autenticación SSH falló para {user} en {host}:{port}. Compruebe la clave o la contraseña guardada en la conexión, y que la clave pública esté en el authorized_keys de {user} en el nodo.",
+          "timeout": "{node}: sin respuesta SSH de {host}:{port}. Compruebe sshd y el cortafuegos (TCP {port}), o defina una dirección SSH por nodo en el diálogo de la conexión.",
+          "failed": "{node}: SSH hacia {host}:{port} falló ({error})."
+        },
+        "probe": {
+          "timeout": "La comprobación {probe} no terminó en {timeoutMs} ms.",
+          "crashed": "La comprobación {probe} falló de forma inesperada ({error})."
+        },
+        "nodes": {
+          "unreadable": "No comprobado: no se pudo leer la lista de nodos ({error})."
+        },
+        "node": {
+          "offline": "{node} está fuera de línea: no comprobado."
+        }
+      }
+    },
     "syslog": {
       "tabLabel": "Syslog / SIEM",
       "title": "Reenvío Syslog / SIEM",

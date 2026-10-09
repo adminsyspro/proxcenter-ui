@@ -4026,6 +4026,141 @@
       "unavailable": "진단을 사용할 수 없습니다",
       "allOk": "모든 검사를 통과했습니다."
     },
+    "connectionCheck": {
+      "title": "연결 점검",
+      "button": "연결 점검",
+      "running": "점검 실행 중...",
+      "rerun": "다시 실행",
+      "close": "닫기",
+      "unavailable": "점검을 사용할 수 없음",
+      "allOk": "모든 점검을 통과했습니다.",
+      "summaryOk": "{count} OK",
+      "summaryWarn": "경고 {count}건",
+      "summaryFail": "실패 {count}건",
+      "summarySkip": "건너뜀 {count}건",
+      "probes": {
+        "api": "API 접근성",
+        "tls": "TLS 인증서",
+        "privileges": "토큰 권한",
+        "version": "Proxmox VE 버전",
+        "clock": "시계",
+        "quorum": "클러스터 쿼럼",
+        "ssh": "SSH"
+      },
+      "features": {
+        "inventory": "인벤토리 및 대시보드",
+        "nodes": "노드 상세 정보 및 메트릭",
+        "console": "VM 및 컨테이너 콘솔",
+        "nodeShell": "노드 셸",
+        "guestConfig": "게스트 구성",
+        "guestPower": "게스트 시작, 중지, 재부팅",
+        "guestCreate": "게스트 생성 및 복제",
+        "templates": "템플릿 및 이미지 다운로드",
+        "snapshots": "스냅샷",
+        "migrations": "마이그레이션",
+        "migrationsTarget": "클러스터 간 마이그레이션 (대상으로서)",
+        "backups": "백업 및 복원",
+        "backupJobs": "백업 작업",
+        "storage": "스토리지 관리",
+        "replication": "복제",
+        "sdn": "SDN",
+        "firewall": "방화벽",
+        "ha": "고가용성",
+        "ceph": "Ceph",
+        "pools": "풀",
+        "notifications": "알림",
+        "nodeUpdates": "노드 업데이트",
+        "nodePower": "노드 전원 작업 (롤링 업데이트, 그린 IT)",
+        "hardwareMappings": "하드웨어 매핑",
+        "compliance": "컴플라이언스 및 보안 강화",
+        "warmMigration": "웜 마이그레이션",
+        "haAffinityRules": "HA 선호도 규칙",
+        "sdnFabrics": "SDN 패브릭",
+        "vnetFirewall": "VNet 방화벽",
+        "nestedPools": "중첩 풀"
+      },
+      "hints": {
+        "api": {
+          "ok": "{host}이(가) {latencyMs} ms 만에 응답했습니다 (Proxmox VE {version}).",
+          "unauthorized": "{host}이(가) API 토큰을 거부했습니다 (HTTP 401). 연결의 토큰 ID와 시크릿을 확인하고, Datacenter > Permissions > API Tokens에서 토큰이 만료되거나 비활성화되지 않았는지 확인하세요.",
+          "tlsRejected": "{host}이(가) ProxCenter 호스트가 신뢰하지 않는 인증서를 제시했습니다 ({reason}). 연결에서 \"TLS 인증서 오류 무시\"를 활성화하거나, ProxCenter 호스트가 신뢰하는 CA가 발급한 인증서를 설치하세요.",
+          "timeout": "{host}이(가) 연결은 수락했지만 {timeoutMs} ms 내에 응답하지 않았습니다. 노드의 pveproxy (systemctl status pveproxy)와 네트워크 경로를 확인하세요.",
+          "unreachable": "{host}에 접근할 수 없습니다 ({error}). 연결의 주소와 포트, 노드가 켜져 있는지, 그리고 ProxCenter와 노드 사이의 방화벽 (TCP 8006)을 확인하세요.",
+          "httpError": "{host}이(가) 버전 요청에 HTTP {status}로 응답했습니다. 노드의 pveproxy와 중간의 리버스 프록시를 확인하세요.",
+          "fallbackOk": "대체 노드 {node} ({host})이(가) {latencyMs} ms 만에 응답했습니다.",
+          "fallbackUnreachable": "대체 노드 {node} ({host})에 접근할 수 없습니다 ({error}). 이 노드로의 장애 조치가 동작하지 않습니다. 노드와 방화벽을 확인하거나 연결의 노드 목록에서 주소를 수정하세요.",
+          "fallbackTlsRejected": "대체 노드 {node} ({host})이(가) 주소와 일치하지 않는 인증서를 제시합니다 ({reason}). 이 노드로의 장애 조치가 실패합니다. 연결에서 \"TLS 인증서 오류 무시\"를 활성화하거나 노드 주소를 인증서에 추가하세요.",
+          "fallbackBehindProxy": "연결이 리버스 프록시를 거칩니다. 다른 노드로의 장애 조치가 비활성화되어 대체 호스트를 점검하지 않습니다.",
+          "noFallbackHosts": "알려진 대체 호스트가 없습니다. {host}이(가) 중단되면 ProxCenter는 다른 노드로 장애 조치할 수 없습니다. 인벤토리를 열거나 연결을 다시 저장하여 클러스터 노드를 검색하세요."
+        },
+        "tls": {
+          "ok": "{host}의 인증서는 신뢰할 수 있으며 {validTo}까지 유효합니다 ({days}일).",
+          "okUntrusted": "{host}의 인증서는 {validTo}까지 유효합니다 ({days}일). 신뢰할 수 있는 CA가 발급한 것은 아니며, 이 연결에서 TLS 오류를 무시하므로 허용됩니다.",
+          "untrusted": "ProxCenter 호스트가 {host}의 인증서를 신뢰하지 않습니다 ({reason}). 연결에서 \"TLS 인증서 오류 무시\"를 활성화하거나 노드에 신뢰할 수 있는 인증서를 설치할 때까지 API 호출이 실패합니다.",
+          "expiringSoon": "{host}의 인증서가 {days}일 후 만료됩니다 ({validTo}). 만료 전에 노드에서 갱신하세요 (pvenode cert set 또는 ACME 플러그인).",
+          "expired": "{host}의 인증서가 {validTo}에 만료되었습니다. 노드에서 갱신한 뒤 (pvenode cert set 또는 ACME 플러그인) pveproxy를 재시작하세요.",
+          "notYetValid": "{host}의 인증서는 {validFrom} 이전에는 유효하지 않습니다. 인증서를 발급한 노드의 시계를 확인하세요.",
+          "unreachable": "{host}과(와) TLS 핸드셰이크를 할 수 없습니다 ({error}).",
+          "notHttps": "연결이 일반 HTTP를 사용합니다. 점검할 인증서가 없습니다.",
+          "noPin": "이 연결에 고정된 인증서 지문이 없습니다.",
+          "pinMatch": "인증서 지문이 고정된 지문과 일치합니다 ({fingerprint}).",
+          "pinMismatch": "인증서 지문이 변경되었습니다. 고정: {expected}, 제시: {actual}. 인증서를 의도적으로 갱신했다면 연결 대화상자에서 지문을 다시 캡처하고, 그렇지 않다면 호스트를 신뢰하기 전에 원인을 조사하세요.",
+          "pinUnchecked": "지문을 비교하지 않았습니다. 인증서를 읽을 수 없었습니다."
+        },
+        "privileges": {
+          "ok": "토큰 {tokenId}이(가) ProxCenter가 사용하는 {count}개 권한을 모두 보유합니다.",
+          "unreadable": "{tokenId}의 권한을 읽을 수 없습니다 ({error}).",
+          "none": "토큰 {tokenId}에 유효한 권한이 없습니다. 권한은 사용자 {user}가 보유하고, 권한 분리가 활성화된 경우(기본값) 토큰도 보유할 때만 적용됩니다: {command}",
+          "noneSeparated": "토큰 {tokenId}에 유효한 권한이 없습니다. 권한 분리가 활성화되어 있으므로 사용자 {user}와 토큰이 모두 보유한 권한만 적용됩니다: {command}",
+          "noneUser": "토큰 {tokenId}에 유효한 권한이 없습니다. 권한 분리가 비활성화되어 있으므로 사용자 {user}의 권한을 사용합니다: {command}",
+          "missing": "{path}에 {privileges} 권한이 없습니다. 영향받는 기능: {features}. 사용자 {user}에게 부여하고, 토큰의 권한 분리가 활성화된 경우(기본값) 토큰에도 부여하세요: {command}",
+          "missingSeparated": "{path}에 {privileges} 권한이 없습니다. 영향받는 기능: {features}. 토큰의 권한 분리가 활성화되어 있으므로 사용자 {user}와 토큰 모두에게 필요합니다: {command}",
+          "missingUser": "{path}에 {privileges} 권한이 없습니다. 영향받는 기능: {features}. 토큰의 권한 분리가 비활성화되어 있으므로 사용자 {user}에게 부여하세요: {command}"
+        },
+        "version": {
+          "ok": "{node}은(는) Proxmox VE {version}을(를) 실행 중입니다.",
+          "unreadable": "{node}의 버전을 읽을 수 없습니다 ({error}).",
+          "belowSupported": "{node}은(는) Proxmox VE {version}을(를) 실행 중입니다. ProxCenter에는 Proxmox VE {min} 이상이 필요합니다. 노드를 업그레이드하세요.",
+          "gated": "{node}은(는) Proxmox VE {version}을(를) 실행 중입니다. 다음 기능에는 Proxmox VE {required}이(가) 필요합니다: {features}. 사용하려면 노드를 업그레이드하세요.",
+          "mixed": "노드들이 서로 다른 Proxmox VE 버전을 실행 중입니다 ({versions}). 버전 간 마이그레이션이 실패할 수 있으니 모든 노드를 같은 버전으로 업그레이드하세요."
+        },
+        "clock": {
+          "ok": "{node}의 시계는 ProxCenter와 {skewSeconds}초 이내로 일치합니다.",
+          "warn": "{node}의 시계가 ProxCenter와 {skewSeconds}초 차이가 납니다. 노드와 ProxCenter 호스트에서 NTP (chrony)를 활성화하세요. 차이가 더 커지면 티켓과 토큰 검증이 실패합니다.",
+          "fail": "{node}의 시계가 ProxCenter와 {skewSeconds}초 차이가 납니다. API 티켓과 콘솔이 실패합니다. 노드와 ProxCenter 호스트에서 NTP (chrony)를 활성화한 뒤 양쪽에서 timedatectl을 확인하세요.",
+          "forbidden": "{node}의 시계를 읽지 않았습니다. 토큰에 /nodes/{node}에 대한 Sys.Audit 권한이 없습니다.",
+          "unreadable": "{node}의 시계를 읽을 수 없습니다 ({error})."
+        },
+        "quorum": {
+          "ok": "클러스터 {cluster}에 쿼럼이 있습니다 (온라인 노드 {online}/{total}).",
+          "standalone": "독립 실행형 노드입니다. 점검할 클러스터 쿼럼이 없습니다.",
+          "degraded": "클러스터 {cluster}에 쿼럼은 있지만 노드 {offline}개가 오프라인입니다 ({nodes}). 클러스터가 쿼럼을 잃기 전에 노드를 복구하세요.",
+          "lost": "클러스터 {cluster}이(가) 쿼럼을 잃었습니다 (온라인 노드 {online}/{total}). 게스트를 시작하거나 마이그레이션할 수 없습니다. 노드를 다시 온라인으로 만들고, 2노드 클러스터라면 QDevice를 추가하세요 (pvecm qdevice setup).",
+          "forbidden": "클러스터 상태를 읽지 않았습니다. 토큰에 /에 대한 Sys.Audit 권한이 없습니다.",
+          "unreadable": "클러스터 상태를 읽을 수 없습니다 ({error})."
+        },
+        "ssh": {
+          "disabled": "이 연결에서 SSH가 활성화되어 있지 않습니다.",
+          "prerequisitesFailed": "SSH를 테스트하지 않았습니다. API 또는 TLS 점검이 실패했습니다.",
+          "noCredentials": "SSH를 테스트하지 않았습니다. 연결에 사용 가능한 키나 비밀번호가 저장되어 있지 않습니다.",
+          "ok": "{node}: {host}:{port}에 {user}로 SSH 로그인이 동작합니다 (호스트 이름 {hostname}).",
+          "hostKeyMismatch": "{node}: {host}의 호스트 키가 고정된 이후 변경되었습니다. 노드를 재설치했거나 키를 재생성했다면 연결 대화상자에서 다시 신뢰를 사용하세요.",
+          "authFailed": "{node}: {host}:{port}에서 {user}의 SSH 인증이 실패했습니다. 연결에 저장된 키 또는 비밀번호를 확인하고, 공개 키가 노드의 {user} authorized_keys에 있는지 확인하세요.",
+          "timeout": "{node}: {host}:{port}에서 SSH 응답이 없습니다. sshd와 방화벽 (TCP {port})을 확인하거나 연결 대화상자에서 노드별 SSH 주소를 설정하세요.",
+          "failed": "{node}: {host}:{port}로의 SSH가 실패했습니다 ({error})."
+        },
+        "probe": {
+          "timeout": "{probe} 점검이 {timeoutMs} ms 내에 끝나지 않았습니다.",
+          "crashed": "{probe} 점검이 예기치 않게 실패했습니다 ({error})."
+        },
+        "nodes": {
+          "unreadable": "점검하지 않았습니다. 노드 목록을 읽을 수 없습니다 ({error})."
+        },
+        "node": {
+          "offline": "{node}이(가) 오프라인입니다. 점검하지 않았습니다."
+        }
+      }
+    },
     "syslog": {
       "tabLabel": "Syslog / SIEM",
       "title": "Syslog / SIEM 전달",

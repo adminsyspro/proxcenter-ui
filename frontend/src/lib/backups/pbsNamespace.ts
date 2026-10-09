@@ -14,7 +14,15 @@ export const NAMESPACE_MISMATCH_CODE = 'namespace_storage_mismatch'
 
 /** '' for the root namespace; surrounding slashes and blanks dropped. */
 export function normalizeNamespace(ns: unknown): string {
-  return typeof ns === 'string' ? ns.trim().replace(/^\/+|\/+$/g, '') : ''
+  if (typeof ns !== 'string') return ''
+  const value = ns.trim()
+  // Index scan rather than a /^\/+|\/+$/ regex: the input comes from the
+  // request body and the alternation backtracks on long runs of '/'.
+  let start = 0
+  let end = value.length
+  while (start < end && value[start] === '/') start++
+  while (end > start && value[end - 1] === '/') end--
+  return value.slice(start, end)
 }
 
 /** Namespace of a storage entry from /storage, '' when none (root, or not PBS). */

@@ -531,7 +531,8 @@
       "nodesGauges": "节点仪表",
       "clustersGauges": "集群仪表",
       "clusterHealth": "集群健康状况",
-      "themeLogo": "主题标志"
+      "themeLogo": "主题标志",
+      "backupCoverage": "备份覆盖范围"
     },
     "widgetDescs": {
       "kpiClusters": "显示集群和节点数量",
@@ -568,7 +569,8 @@
       "clustersGauges": "每集群图表、趋势线和健康评分",
       "clusterHealth": "关键指标健康评分",
       "sectionHeader": "可折叠分区分隔符",
-      "themeLogo": "显示当前主题的标志"
+      "themeLogo": "显示当前主题的标志",
+      "backupCoverage": "未被任何备份任务覆盖的客户机"
     },
     "widgetDrs": {
       "automatic": "自动",
@@ -630,7 +632,11 @@
     "importDashboards": "导入仪表盘…",
     "dashboardsExported": "已将 {count} 个仪表盘导出为一个文件。",
     "dashboardsImported": "已导入 {count} 个仪表盘。",
-    "importSkipped": "已跳过 {count} 个仪表盘：其小部件在此处均不可用。"
+    "importSkipped": "已跳过 {count} 个仪表盘：其小部件在此处均不可用。",
+    "widgetBackupCoverage": {
+      "uncovered": "个客户机未被任何备份任务覆盖",
+      "viewAll": "查看全部"
+    }
   },
   "alerts": {
     "title": "告警",
@@ -783,7 +789,10 @@
     "replicationRpoGrace": "% 相对任务 RPO 目标的容忍上限",
     "replicationFailures": "复制失败",
     "replicationFailuresDesc": "当复制任务出错时告警，与其 RPO 无关",
-    "replicationFailuresEscalation": "先为警告，重试次数用尽后升为严重"
+    "replicationFailuresEscalation": "先为警告，重试次数用尽后升为严重",
+    "backupCoverage": "备份覆盖范围",
+    "backupCoverageDesc": "为每个未被任何已启用 Proxmox 备份任务覆盖的客户机生成一条告警，被任务覆盖后自动解除。默认关闭。",
+    "backupCoverageDetail": "创建不到 {hours} 小时的客户机和带有 {tag} 标签的客户机不计入；两者均在备份页面中设置。"
   },
   "inventory": {
     "alertsDialog": {
@@ -2802,6 +2811,79 @@
         }
       }
     },
+    "coverage": {
+      "title": "备份覆盖范围",
+      "uncoveredCount": "{count} 个未覆盖",
+      "allCoveredShort": "全部已覆盖",
+      "coveredOf": "{total} 个客户机中已覆盖 {covered} 个",
+      "allCovered": "所有客户机均已被备份任务覆盖",
+      "noMatch": "没有符合筛选条件的客户机",
+      "settings": "覆盖范围设置",
+      "search": "搜索客户机",
+      "allClusters": "所有集群",
+      "allReasons": "所有原因",
+      "colGuest": "客户机",
+      "colCluster": "集群",
+      "colNode": "节点",
+      "colReason": "原因",
+      "reasons": {
+        "no_job": "此集群上没有已启用的备份任务",
+        "not_selected": "未被任何备份任务选中",
+        "excluded": "被备份所有客户机的任务排除",
+        "other_node": "仅被限定于其他节点的任务选中",
+        "disabled_job": "仅被已禁用的任务选中"
+      },
+      "hints": {
+        "no_job": "请在此集群上创建备份任务，或为客户机添加标签以有意排除。",
+        "not_selected": "请将客户机加入某个任务，或加入某个任务备份的资源池，或为其添加标签以有意排除。",
+        "excluded": "请将客户机从任务的排除列表中移除，或为其添加标签以有意排除。",
+        "other_node": "该任务只在其自身节点上运行：客户机创建于或迁移到了其他节点。",
+        "disabled_job": "请启用该任务，或在已启用的任务中选择该客户机。"
+      },
+      "detailJobs": "任务",
+      "detailPool": "资源池",
+      "detailTags": "标签",
+      "detailCreated": "创建时间",
+      "detailUnknown": "未知",
+      "detailNone": "无",
+      "ignoredTemplates": "{count} 个模板",
+      "ignoredTag": "{count} 个带有 {tag} 标签的客户机",
+      "ignoredGrace": "{count} 个创建不到 {hours} 小时的客户机",
+      "notListed": "未列出：{items}",
+      "errorsTitle": "{clusters} 的覆盖情况未知：无法读取其备份任务。",
+      "loadError": "无法加载备份覆盖范围",
+      "displayedRows": "{from}-{to} / 共 {count}",
+      "graceLabel": "宽限期（小时）",
+      "graceHelp": "创建时间少于该小时数的客户机暂不列出；0 表示立即列出。创建时间取自虚拟机配置，容器和较旧的虚拟机则取自最近的创建和恢复任务。",
+      "tagLabel": "排除标签",
+      "tagHelp": "带有此 Proxmox 标签的客户机被有意排除在备份之外，且不会列出。留空则禁用排除。",
+      "tagInvalid": "仅限小写字母、数字和 _ + . -",
+      "saved": "覆盖范围设置已保存",
+      "saveError": "无法保存覆盖范围设置",
+      "alertsLabel": "对未覆盖的客户机告警",
+      "alertsHelp": "编排器为此处列出的每个客户机生成一条告警，并在客户机被覆盖后通过常规告警通知将其解除。",
+      "addToJob": "添加到备份任务",
+      "addTitle": "将 {name} ({vmid}) 添加到备份任务",
+      "jobsLoadError": "无法加载此集群的备份任务",
+      "noJobOnCluster": "{cluster} 还没有备份任务。",
+      "createJob": "创建备份任务",
+      "addWillUnexclude": "将客户机从此任务的排除列表中移除",
+      "addWillAppend": "将客户机添加到此任务的客户机列表",
+      "addDisabledWarning": "此任务已禁用：在任务启用之前，客户机仍未被覆盖。",
+      "addConfirm": "添加",
+      "addedToJob": "已将 {name} 添加到备份任务 {job}",
+      "addedToDisabledJob": "已将 {name} 添加到已禁用的备份任务 {job}：请启用该任务以覆盖此客户机",
+      "addError": "无法将客户机添加到任务：{error}",
+      "addRefused": {
+        "pool": "备份资源池 {pool}：客户机通过资源池加入",
+        "other_node": "仅在节点 {node} 上运行，而不是客户机所在的节点",
+        "already": "已选中此客户机",
+        "no_selection": "未选中任何客户机"
+      }
+    },
+    "namespaceFromStorage": "在 PBS 存储上设置，选择存储即可更改",
+    "namespaceStorageMismatch": "PBS 命名空间在存储上设置：\"{storage}\" 不写入命名空间 \"{namespace}\"。请选择绑定到该命名空间的存储。",
+    "noStorageForNamespace": "此集群没有写入您 vDC 命名空间 \"{namespace}\" 的 PBS 存储，因此无法创建备份任务。请联系您的提供商添加一个。",
     "vmImageBrowse": "浏览文件",
     "vmImageBrowseHint": "点击以通过 Proxmox 节点浏览磁盘镜像",
     "pickPveStorage": "用于读取此备份的 Proxmox 存储",

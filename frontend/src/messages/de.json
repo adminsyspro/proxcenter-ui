@@ -516,7 +516,8 @@
       "nodeGuests": "Guests pro Node",
       "drsStatus": "DRS-Status",
       "siteRecovery": "Site Recovery",
-      "themeLogo": "Theme-Logo"
+      "themeLogo": "Theme-Logo",
+      "backupCoverage": "Backup-Abdeckung"
     },
     "widgetDescs": {
       "kpiClusters": "Anzahl der Cluster und Nodes",
@@ -553,7 +554,8 @@
       "clustersGauges": "Diagramme pro Cluster mit Sparklines und Score",
       "clusterHealth": "Gesundheitsbewertung mit wichtigen Metriken",
       "sectionHeader": "Einklappbarer Abschnittsseparator",
-      "themeLogo": "Zeigt das Logo des aktuellen Themes"
+      "themeLogo": "Zeigt das Logo des aktuellen Themes",
+      "backupCoverage": "Gäste ohne Backup-Job"
     },
     "widgetDrs": {
       "automatic": "Automatisch",
@@ -615,7 +617,11 @@
     "importDashboards": "Dashboards importieren…",
     "dashboardsExported": "{count, plural, one {# Dashboard exportiert.} other {# Dashboards in eine Datei exportiert.}}",
     "dashboardsImported": "{count, plural, one {# Dashboard importiert.} other {# Dashboards importiert.}}",
-    "importSkipped": "{count, plural, one {# Dashboard wurde übersprungen: keines seiner Widgets ist hier verfügbar.} other {# Dashboards wurden übersprungen: keines ihrer Widgets ist hier verfügbar.}}"
+    "importSkipped": "{count, plural, one {# Dashboard wurde übersprungen: keines seiner Widgets ist hier verfügbar.} other {# Dashboards wurden übersprungen: keines ihrer Widgets ist hier verfügbar.}}",
+    "widgetBackupCoverage": {
+      "uncovered": "Gäste ohne Backup-Job",
+      "viewAll": "Alle anzeigen"
+    }
   },
   "alerts": {
     "title": "Warnmeldungen",
@@ -768,7 +774,10 @@
     "replicationRpoGrace": "% Toleranz über dem RPO-Ziel des Auftrags",
     "replicationFailures": "Replikationsfehler",
     "replicationFailuresDesc": "Warnen, wenn eine Replikationsaufgabe fehlschlägt, unabhängig von ihrem RPO",
-    "replicationFailuresEscalation": "Warnung, dann kritisch, sobald die Versuche aufgebraucht sind"
+    "replicationFailuresEscalation": "Warnung, dann kritisch, sobald die Versuche aufgebraucht sind",
+    "backupCoverage": "Backup-Abdeckung",
+    "backupCoverageDesc": "Eine Warnung pro Gast, den kein aktiver Proxmox-Backup-Job abdeckt, aufgehoben sobald ein Job ihn abdeckt. Standardmäßig aus.",
+    "backupCoverageDetail": "Gäste, die vor weniger als {hours} h erstellt wurden, und Gäste mit dem Tag {tag} bleiben außen vor; beides wird auf der Seite Backups eingestellt."
   },
   "inventory": {
     "alertsDialog": {
@@ -2785,6 +2794,79 @@
         }
       }
     },
+    "coverage": {
+      "title": "Backup-Abdeckung",
+      "uncoveredCount": "{count} nicht abgedeckt",
+      "allCoveredShort": "Alles abgedeckt",
+      "coveredOf": "{covered} von {total} Gästen abgedeckt",
+      "allCovered": "Jeder Gast ist durch einen Backup-Job abgedeckt",
+      "noMatch": "Kein Gast entspricht diesen Filtern",
+      "settings": "Einstellungen der Abdeckung",
+      "search": "Gast suchen",
+      "allClusters": "Alle Cluster",
+      "allReasons": "Alle Gründe",
+      "colGuest": "Gast",
+      "colCluster": "Cluster",
+      "colNode": "Knoten",
+      "colReason": "Grund",
+      "reasons": {
+        "no_job": "Kein aktiver Backup-Job auf diesem Cluster",
+        "not_selected": "Von keinem Backup-Job ausgewählt",
+        "excluded": "Von einem Job ausgeschlossen, der alle Gäste sichert",
+        "other_node": "Von einem Job ausgewählt, der auf einen anderen Knoten beschränkt ist",
+        "disabled_job": "Nur von einem deaktivierten Job ausgewählt"
+      },
+      "hints": {
+        "no_job": "Legen Sie auf diesem Cluster einen Backup-Job an oder versehen Sie den Gast mit dem Tag, um ihn bewusst auszuschließen.",
+        "not_selected": "Nehmen Sie den Gast in einen Job oder in einen von einem Job gesicherten Pool auf, oder versehen Sie ihn mit dem Tag, um ihn bewusst auszuschließen.",
+        "excluded": "Entfernen Sie den Gast aus den Ausschlüssen des Jobs oder versehen Sie ihn mit dem Tag, um ihn bewusst auszuschließen.",
+        "other_node": "Der Job läuft nur auf seinem eigenen Knoten: Der Gast wurde auf einem anderen Knoten erstellt oder dorthin verschoben.",
+        "disabled_job": "Aktivieren Sie den Job oder wählen Sie den Gast in einem aktiven Job aus."
+      },
+      "detailJobs": "Jobs",
+      "detailPool": "Pool",
+      "detailTags": "Tags",
+      "detailCreated": "Erstellt",
+      "detailUnknown": "Unbekannt",
+      "detailNone": "Keine",
+      "ignoredTemplates": "{count, plural, one {# Vorlage} other {# Vorlagen}}",
+      "ignoredTag": "{count, plural, one {# Gast} other {# Gäste}} mit Tag {tag}",
+      "ignoredGrace": "{count, plural, one {# Gast} other {# Gäste}} vor weniger als {hours} h erstellt",
+      "notListed": "Nicht aufgeführt: {items}",
+      "errorsTitle": "Abdeckung für {clusters} unbekannt: Ihre Backup-Jobs konnten nicht gelesen werden.",
+      "loadError": "Die Backup-Abdeckung konnte nicht geladen werden",
+      "displayedRows": "{from}-{to} von {count}",
+      "graceLabel": "Karenzzeit (Stunden)",
+      "graceHelp": "Ein Gast, der vor weniger Stunden erstellt wurde, wird noch nicht aufgeführt; 0 führt ihn sofort auf. Die Erstellungszeit stammt aus der VM-Konfiguration oder, für Container und ältere VMs, aus den letzten Erstellungs- und Wiederherstellungsaufgaben.",
+      "tagLabel": "Ausschluss-Tag",
+      "tagHelp": "Ein Gast mit diesem Proxmox-Tag wird bewusst nicht gesichert und nicht aufgeführt. Leer deaktiviert den Ausschluss.",
+      "tagInvalid": "Nur Kleinbuchstaben, Ziffern und _ + . -",
+      "saved": "Einstellungen der Abdeckung gespeichert",
+      "saveError": "Die Einstellungen der Abdeckung konnten nicht gespeichert werden",
+      "alertsLabel": "Bei nicht abgedeckten Gästen warnen",
+      "alertsHelp": "Der Orchestrator löst pro hier aufgeführtem Gast eine Warnung aus und hebt sie auf, sobald der Gast abgedeckt ist, über die üblichen Warnungsbenachrichtigungen.",
+      "addToJob": "Zu einem Backup-Job hinzufügen",
+      "addTitle": "{name} ({vmid}) zu einem Backup-Job hinzufügen",
+      "jobsLoadError": "Die Backup-Jobs dieses Clusters konnten nicht geladen werden",
+      "noJobOnCluster": "{cluster} hat noch keinen Backup-Job.",
+      "createJob": "Backup-Job erstellen",
+      "addWillUnexclude": "Entfernt den Gast aus den Ausschlüssen dieses Jobs",
+      "addWillAppend": "Fügt den Gast den Gästen dieses Jobs hinzu",
+      "addDisabledWarning": "Dieser Job ist deaktiviert: Der Gast bleibt ungesichert, bis der Job aktiviert wird.",
+      "addConfirm": "Hinzufügen",
+      "addedToJob": "{name} zum Backup-Job {job} hinzugefügt",
+      "addedToDisabledJob": "{name} zum Backup-Job {job} hinzugefügt, der deaktiviert ist: Aktivieren Sie ihn, um den Gast abzudecken",
+      "addError": "Der Gast konnte nicht zum Job hinzugefügt werden: {error}",
+      "addRefused": {
+        "pool": "Sichert den Pool {pool}: Der Gast kommt über den Pool hinzu",
+        "other_node": "Läuft nur auf Knoten {node}, nicht auf dem des Gastes",
+        "already": "Wählt diesen Gast bereits aus",
+        "no_selection": "Wählt keinen Gast aus"
+      }
+    },
+    "namespaceFromStorage": "Wird am PBS-Speicher festgelegt, wählen Sie den Speicher, um ihn zu ändern",
+    "namespaceStorageMismatch": "Der PBS-Namespace wird am Speicher festgelegt: \"{storage}\" schreibt nicht in den Namespace \"{namespace}\". Wählen Sie einen Speicher, der an diesen Namespace gebunden ist.",
+    "noStorageForNamespace": "Kein PBS-Speicher dieses Clusters schreibt in den Namespace \"{namespace}\" Ihres vDC, daher kann kein Backup-Job erstellt werden. Bitten Sie Ihren Anbieter, einen hinzuzufügen.",
     "vmImageBrowse": "Dateien durchsuchen",
     "vmImageBrowseHint": "Klicken, um das Disk-Image über einen Proxmox-Knoten zu durchsuchen",
     "pickPveStorage": "Proxmox-Speicher zum Lesen dieses Backups",

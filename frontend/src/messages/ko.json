@@ -529,7 +529,8 @@
       "nodesGauges": "노드 게이지",
       "clustersGauges": "클러스터 게이지",
       "clusterHealth": "클러스터 상태 점수",
-      "themeLogo": "테마 로고"
+      "themeLogo": "테마 로고",
+      "backupCoverage": "백업 적용 범위"
     },
     "widgetDescs": {
       "kpiClusters": "클러스터 및 노드 수 표시",
@@ -564,7 +565,8 @@
       "clustersGauges": "클러스터별 게이지, 스파크라인 및 상태 점수",
       "clusterHealth": "핵심 지표가 포함된 상태 점수",
       "sectionHeader": "접을 수 있는 섹션 구분선",
-      "themeLogo": "현재 테마의 로고를 표시합니다"
+      "themeLogo": "현재 테마의 로고를 표시합니다",
+      "backupCoverage": "백업 작업에 포함되지 않은 게스트"
     },
     "widgetDrs": {
       "automatic": "자동",
@@ -626,7 +628,11 @@
     "importDashboards": "대시보드 가져오기…",
     "dashboardsExported": "대시보드 {count}개를 파일 하나로 내보냈습니다.",
     "dashboardsImported": "대시보드 {count}개를 가져왔습니다.",
-    "importSkipped": "대시보드 {count}개를 건너뛰었습니다. 해당 위젯이 이 설치에 없습니다."
+    "importSkipped": "대시보드 {count}개를 건너뛰었습니다. 해당 위젯이 이 설치에 없습니다.",
+    "widgetBackupCoverage": {
+      "uncovered": "백업 작업에 포함되지 않은 게스트",
+      "viewAll": "모두 보기"
+    }
   },
   "alerts": {
     "title": "알림",
@@ -779,7 +785,10 @@
     "replicationRpoGrace": "작업의 RPO 목표를 초과해 허용하는 비율(%)",
     "replicationFailures": "복제 실패",
     "replicationFailuresDesc": "RPO와 무관하게 복제 작업이 오류로 끝나면 알립니다",
-    "replicationFailuresEscalation": "경고로 시작하여 재시도가 모두 소진되면 심각으로 올립니다"
+    "replicationFailuresEscalation": "경고로 시작하여 재시도가 모두 소진되면 심각으로 올립니다",
+    "backupCoverage": "백업 적용 범위",
+    "backupCoverageDesc": "활성화된 Proxmox 백업 작업에 포함되지 않은 게스트마다 알림을 하나씩 발생시키고, 작업에 포함되면 해결합니다. 기본값은 꺼짐입니다.",
+    "backupCoverageDetail": "{hours}시간 이내에 생성된 게스트와 {tag} 태그가 지정된 게스트는 제외되며, 두 설정은 백업 페이지에서 변경합니다."
   },
   "inventory": {
     "alertsDialog": {
@@ -2798,6 +2807,79 @@
         }
       }
     },
+    "coverage": {
+      "title": "백업 적용 범위",
+      "uncoveredCount": "{count}개 미적용",
+      "allCoveredShort": "모두 적용됨",
+      "coveredOf": "게스트 {total}개 중 {covered}개 적용됨",
+      "allCovered": "모든 게스트가 백업 작업에 포함되어 있습니다",
+      "noMatch": "필터와 일치하는 게스트가 없습니다",
+      "settings": "적용 범위 설정",
+      "search": "게스트 검색",
+      "allClusters": "모든 클러스터",
+      "allReasons": "모든 사유",
+      "colGuest": "게스트",
+      "colCluster": "클러스터",
+      "colNode": "노드",
+      "colReason": "사유",
+      "reasons": {
+        "no_job": "이 클러스터에 활성화된 백업 작업이 없음",
+        "not_selected": "어떤 백업 작업에도 선택되지 않음",
+        "excluded": "모든 게스트를 백업하는 작업에서 제외됨",
+        "other_node": "다른 노드로 제한된 작업에서만 선택됨",
+        "disabled_job": "비활성화된 작업에서만 선택됨"
+      },
+      "hints": {
+        "no_job": "이 클러스터에 백업 작업을 만들거나, 의도적으로 제외하려면 게스트에 태그를 지정하세요.",
+        "not_selected": "게스트를 작업이나 작업이 백업하는 풀에 추가하거나, 의도적으로 제외하려면 태그를 지정하세요.",
+        "excluded": "작업의 제외 목록에서 게스트를 제거하거나, 의도적으로 제외하려면 태그를 지정하세요.",
+        "other_node": "작업은 자신의 노드에서만 실행됩니다. 게스트가 다른 노드에서 생성되었거나 다른 노드로 이동되었습니다.",
+        "disabled_job": "작업을 활성화하거나 활성화된 작업에서 게스트를 선택하세요."
+      },
+      "detailJobs": "작업",
+      "detailPool": "풀",
+      "detailTags": "태그",
+      "detailCreated": "생성일",
+      "detailUnknown": "알 수 없음",
+      "detailNone": "없음",
+      "ignoredTemplates": "템플릿 {count}개",
+      "ignoredTag": "{tag} 태그가 지정된 게스트 {count}개",
+      "ignoredGrace": "{hours}시간 이내에 생성된 게스트 {count}개",
+      "notListed": "목록에서 제외: {items}",
+      "errorsTitle": "{clusters}의 적용 범위를 알 수 없습니다. 백업 작업을 읽을 수 없습니다.",
+      "loadError": "백업 적용 범위를 불러올 수 없습니다",
+      "displayedRows": "{count}개 중 {from}-{to}",
+      "graceLabel": "유예 기간(시간)",
+      "graceHelp": "이 시간보다 최근에 생성된 게스트는 아직 목록에 표시되지 않습니다. 0이면 즉시 표시됩니다. 생성 시간은 VM 구성에서 가져오며, 컨테이너와 오래된 VM은 최근 생성 및 복원 작업에서 가져옵니다.",
+      "tagLabel": "제외 태그",
+      "tagHelp": "이 Proxmox 태그가 있는 게스트는 의도적으로 백업에서 제외되며 목록에 표시되지 않습니다. 비워 두면 제외 기능이 꺼집니다.",
+      "tagInvalid": "소문자, 숫자 및 _ + . - 만 사용 가능",
+      "saved": "적용 범위 설정이 저장되었습니다",
+      "saveError": "적용 범위 설정을 저장할 수 없습니다",
+      "alertsLabel": "미적용 게스트 알림",
+      "alertsHelp": "오케스트레이터가 여기에 표시된 게스트마다 알림을 발생시키고, 게스트가 백업에 포함되면 일반 알림 채널로 해결을 알립니다.",
+      "addToJob": "백업 작업에 추가",
+      "addTitle": "{name} ({vmid})을(를) 백업 작업에 추가",
+      "jobsLoadError": "이 클러스터의 백업 작업을 불러올 수 없습니다",
+      "noJobOnCluster": "{cluster}에 아직 백업 작업이 없습니다.",
+      "createJob": "백업 작업 만들기",
+      "addWillUnexclude": "이 작업의 제외 목록에서 게스트를 제거합니다",
+      "addWillAppend": "이 작업의 게스트 목록에 게스트를 추가합니다",
+      "addDisabledWarning": "이 작업은 비활성화되어 있습니다. 작업이 활성화될 때까지 게스트는 백업되지 않습니다.",
+      "addConfirm": "추가",
+      "addedToJob": "{name}을(를) 백업 작업 {job}에 추가했습니다",
+      "addedToDisabledJob": "{name}을(를) 비활성화된 백업 작업 {job}에 추가했습니다. 게스트를 백업하려면 작업을 활성화하세요",
+      "addError": "게스트를 작업에 추가할 수 없습니다: {error}",
+      "addRefused": {
+        "pool": "풀 {pool}을(를) 백업합니다. 게스트는 풀을 통해 포함됩니다",
+        "other_node": "노드 {node}에서만 실행되며 게스트의 노드가 아닙니다",
+        "already": "이미 이 게스트를 선택하고 있습니다",
+        "no_selection": "선택된 게스트가 없습니다"
+      }
+    },
+    "namespaceFromStorage": "PBS 스토리지에서 설정됩니다. 변경하려면 스토리지를 선택하세요",
+    "namespaceStorageMismatch": "PBS 네임스페이스는 스토리지에서 설정됩니다. \"{storage}\"은(는) 네임스페이스 \"{namespace}\"에 쓰지 않습니다. 해당 네임스페이스에 연결된 스토리지를 선택하세요.",
+    "noStorageForNamespace": "이 클러스터에 vDC 네임스페이스 \"{namespace}\"에 쓰는 PBS 스토리지가 없어 백업 작업을 만들 수 없습니다. 공급자에게 추가를 요청하세요.",
     "vmImageBrowse": "파일 탐색",
     "vmImageBrowseHint": "Proxmox 노드를 통해 디스크 이미지를 탐색하려면 클릭하세요",
     "pickPveStorage": "이 백업을 읽는 데 사용할 Proxmox 스토리지",

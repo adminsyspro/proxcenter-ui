@@ -529,7 +529,8 @@
       "nodesGauges": "Jauges Nodes",
       "clustersGauges": "Jauges Clusters",
       "clusterHealth": "Santé Cluster",
-      "themeLogo": "Logo du thème"
+      "themeLogo": "Logo du thème",
+      "backupCoverage": "Couverture des sauvegardes"
     },
     "widgetDescs": {
       "kpiClusters": "Affiche le nombre de clusters et nodes",
@@ -564,7 +565,8 @@
       "clustersGauges": "Jauges par cluster avec sparklines et score",
       "clusterHealth": "Score de santé avec métriques clés",
       "sectionHeader": "Séparateur de section pliable",
-      "themeLogo": "Affiche le logo du thème actuel"
+      "themeLogo": "Affiche le logo du thème actuel",
+      "backupCoverage": "Invités couverts par aucun job de sauvegarde"
     },
     "widgetDrs": {
       "automatic": "Automatique",
@@ -626,7 +628,11 @@
     "importDashboards": "Importer des dashboards…",
     "dashboardsExported": "{count, plural, one {# dashboard exporté.} other {# dashboards exportés dans un seul fichier.}}",
     "dashboardsImported": "{count, plural, one {# dashboard importé.} other {# dashboards importés.}}",
-    "importSkipped": "{count, plural, one {# dashboard a été ignoré : aucun de ses widgets n’est disponible ici.} other {# dashboards ont été ignorés : aucun de leurs widgets n’est disponible ici.}}"
+    "importSkipped": "{count, plural, one {# dashboard a été ignoré : aucun de ses widgets n’est disponible ici.} other {# dashboards ont été ignorés : aucun de leurs widgets n’est disponible ici.}}",
+    "widgetBackupCoverage": {
+      "uncovered": "invités couverts par aucun job de sauvegarde",
+      "viewAll": "Tout voir"
+    }
   },
   "alerts": {
     "title": "Alertes",
@@ -779,7 +785,10 @@
     "replicationRpoGrace": "% toléré au-delà de l'objectif RPO de la tâche",
     "replicationFailures": "Échecs de réplication",
     "replicationFailuresDesc": "Alerter quand une tâche de réplication tombe en erreur, indépendamment de son RPO",
-    "replicationFailuresEscalation": "Avertissement, puis critique une fois les tentatives épuisées"
+    "replicationFailuresEscalation": "Avertissement, puis critique une fois les tentatives épuisées",
+    "backupCoverage": "Couverture des sauvegardes",
+    "backupCoverageDesc": "Une alerte par invité qu'aucun job de sauvegarde Proxmox actif ne couvre, résolue dès qu'un job le couvre. Désactivée par défaut.",
+    "backupCoverageDetail": "Les invités créés il y a moins de {hours} h et ceux étiquetés {tag} sont écartés ; les deux se règlent depuis la page Sauvegardes."
   },
   "inventory": {
     "alertsDialog": {
@@ -2798,6 +2807,79 @@
         }
       }
     },
+    "coverage": {
+      "title": "Couverture des sauvegardes",
+      "uncoveredCount": "{count} non couvert(s)",
+      "allCoveredShort": "Tout est couvert",
+      "coveredOf": "{covered} invités couverts sur {total}",
+      "allCovered": "Chaque invité est couvert par un job de sauvegarde",
+      "noMatch": "Aucun invité ne correspond à ces filtres",
+      "settings": "Réglages de la couverture",
+      "search": "Rechercher un invité",
+      "allClusters": "Tous les clusters",
+      "allReasons": "Toutes les raisons",
+      "colGuest": "Invité",
+      "colCluster": "Cluster",
+      "colNode": "Nœud",
+      "colReason": "Raison",
+      "reasons": {
+        "no_job": "Aucun job de sauvegarde actif sur ce cluster",
+        "not_selected": "Sélectionné par aucun job de sauvegarde",
+        "excluded": "Exclu d'un job qui sauvegarde tous les invités",
+        "other_node": "Sélectionné par un job limité à un autre nœud",
+        "disabled_job": "Sélectionné uniquement par un job désactivé"
+      },
+      "hints": {
+        "no_job": "Créez un job de sauvegarde sur ce cluster, ou étiquetez l'invité pour l'écarter volontairement.",
+        "not_selected": "Ajoutez l'invité à un job, ou à un pool sauvegardé par un job, ou étiquetez-le pour l'écarter volontairement.",
+        "excluded": "Retirez l'invité des exclusions du job, ou étiquetez-le pour l'écarter volontairement.",
+        "other_node": "Le job ne tourne que sur son propre nœud : l'invité a été créé sur un autre nœud, ou y a été déplacé.",
+        "disabled_job": "Activez le job, ou sélectionnez l'invité dans un job actif."
+      },
+      "detailJobs": "Jobs",
+      "detailPool": "Pool",
+      "detailTags": "Tags",
+      "detailCreated": "Créé le",
+      "detailUnknown": "Inconnu",
+      "detailNone": "Aucun",
+      "ignoredTemplates": "{count, plural, one {# modèle} other {# modèles}}",
+      "ignoredTag": "{count, plural, one {# invité étiqueté} other {# invités étiquetés}} {tag}",
+      "ignoredGrace": "{count, plural, one {# invité créé} other {# invités créés}} il y a moins de {hours} h",
+      "notListed": "Non listés : {items}",
+      "errorsTitle": "Couverture inconnue pour {clusters} : leurs jobs de sauvegarde n'ont pas pu être lus.",
+      "loadError": "Impossible de charger la couverture des sauvegardes",
+      "displayedRows": "{from}-{to} sur {count}",
+      "graceLabel": "Délai de grâce (heures)",
+      "graceHelp": "Un invité créé il y a moins de ce nombre d'heures n'est pas encore listé ; 0 le liste immédiatement. La date de création vient de la configuration de la VM, ou des tâches récentes de création et de restauration pour les conteneurs et les VM plus anciennes.",
+      "tagLabel": "Tag d'exclusion",
+      "tagHelp": "Un invité portant ce tag Proxmox est volontairement écarté des sauvegardes et n'est pas listé. Vide désactive l'exclusion.",
+      "tagInvalid": "Minuscules, chiffres et _ + . - uniquement",
+      "saved": "Réglages de la couverture enregistrés",
+      "saveError": "Impossible d'enregistrer les réglages de la couverture",
+      "alertsLabel": "Alerter sur les invités non couverts",
+      "alertsHelp": "L'orchestrateur lève une alerte par invité listé ici et la résout dès que l'invité est couvert, avec les notifications d'alerte habituelles.",
+      "addToJob": "Ajouter à un job de sauvegarde",
+      "addTitle": "Ajouter {name} ({vmid}) à un job de sauvegarde",
+      "jobsLoadError": "Impossible de charger les jobs de sauvegarde de ce cluster",
+      "noJobOnCluster": "{cluster} n'a encore aucun job de sauvegarde.",
+      "createJob": "Créer un job de sauvegarde",
+      "addWillUnexclude": "Retire l'invité des exclusions de ce job",
+      "addWillAppend": "Ajoute l'invité aux invités de ce job",
+      "addDisabledWarning": "Ce job est désactivé : l'invité reste non couvert tant que le job n'est pas activé.",
+      "addConfirm": "Ajouter",
+      "addedToJob": "{name} ajouté au job de sauvegarde {job}",
+      "addedToDisabledJob": "{name} ajouté au job de sauvegarde {job}, qui est désactivé : activez-le pour couvrir l'invité",
+      "addError": "Impossible d'ajouter l'invité au job : {error}",
+      "addRefused": {
+        "pool": "Sauvegarde le pool {pool} : l'invité y entre par le pool",
+        "other_node": "Ne tourne que sur le nœud {node}, pas celui de l'invité",
+        "already": "Sélectionne déjà cet invité",
+        "no_selection": "Ne sélectionne aucun invité"
+      }
+    },
+    "namespaceFromStorage": "Défini sur le stockage PBS, choisissez le stockage pour le changer",
+    "namespaceStorageMismatch": "Le namespace PBS est défini sur le stockage : « {storage} » n'écrit pas dans le namespace « {namespace} ». Choisissez un stockage lié à ce namespace.",
+    "noStorageForNamespace": "Aucun stockage PBS de ce cluster n'écrit dans le namespace « {namespace} » de votre vDC : aucun job de sauvegarde ne peut être créé. Demandez à votre fournisseur d'en ajouter un.",
     "vmImageBrowse": "Parcourir les fichiers",
     "vmImageBrowseHint": "Cliquez pour explorer l'image disque via un nœud Proxmox",
     "pickPveStorage": "Stockage Proxmox utilisé pour lire cette sauvegarde",

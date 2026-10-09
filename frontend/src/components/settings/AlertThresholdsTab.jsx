@@ -44,6 +44,11 @@ const DEFAULTS = {
   metrics_interval_seconds: 60,
   replication_rpo_grace_percent: 25,
   replication_failure_alerts: 1,
+  // Edited from the backup coverage card of the Backups page (roadmap#48),
+  // carried here so a save from this tab sends them back unchanged.
+  backup_coverage_grace_hours: 24,
+  backup_coverage_exclude_tag: 'no-backup',
+  backup_coverage_alerts: 0,
 }
 
 // The tab grew to eleven cards: one row per family stopped reading as a
@@ -95,6 +100,11 @@ export default function AlertThresholdsTab() {
       }
       const saved = await r.json()
       setThresholds({ ...DEFAULTS, ...saved })
+      // The backup coverage toggle lives here too: run a coverage pass now
+      // rather than at the next hourly task. Best effort, only logged.
+      fetch('/api/v1/orchestrator/alerts/backup-coverage/check', { method: 'POST' })
+        .then(res => { if (!res.ok) console.warn('[backup coverage] immediate check not started:', res.status) })
+        .catch(err => console.warn('[backup coverage] immediate check not started:', err))
       setSnackbar({ open: true, severity: 'success', message: t('settings.alertThresholds.saved') })
     } catch (e) {
       setSnackbar({ open: true, severity: 'error', message: e.message || t('settings.alertThresholds.saveError') })
@@ -360,6 +370,23 @@ export default function AlertThresholdsTab() {
             sx={{ mt: 1.5 }}
           />
         </SingleThresholdCard>
+
+        {/* One alert per guest no enabled PVE backup job covers (roadmap#48).
+            Off by default: a fleet without jobs would raise one per guest.
+            Grace period and opt-out tag are shared with the coverage list
+            of the Backups page, where they are edited. */}
+        <ToggleCard
+          icon='ri-shield-check-line'
+          label={t('alerts.backupCoverage')}
+          description={t('alerts.backupCoverageDesc')}
+          detail={t('alerts.backupCoverageDetail', {
+            hours: thresholds.backup_coverage_grace_hours ?? 24,
+            tag: thresholds.backup_coverage_exclude_tag || '-',
+          })}
+          enabled={thresholds.backup_coverage_alerts > 0}
+          onToggle={(checked) => setThresholds(th => ({ ...th, backup_coverage_alerts: checked ? 1 : 0 }))}
+          tDisabled={t('alerts.snapshotDisabled')}
+        />
       </Box>
       )}
 

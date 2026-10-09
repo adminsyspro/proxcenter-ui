@@ -23,6 +23,7 @@ const ActivityFeedWidget = dynamic(() => import('./widgets/ActivityFeedWidget'),
 const StoragePoolsWidget = dynamic(() => import('./widgets/StoragePoolsWidget'), { ssr: false })
 const UptimeNodesWidget = dynamic(() => import('./widgets/UptimeNodesWidget'), { ssr: false })
 const BackupRecentWidget = dynamic(() => import('./widgets/BackupRecentWidget'), { ssr: false })
+const BackupCoverageWidget = dynamic(() => import('./widgets/BackupCoverageWidget'), { ssr: false })
 const QuickStatsWidget = dynamic(() => import('./widgets/QuickStatsWidget'), { ssr: false })
 
 
@@ -230,6 +231,18 @@ export const WIDGET_REGISTRY = {
     maxSize: { w: 12, h: 20 },
     noContainer: true,
     component: BackupRecentWidget,
+  },
+  'backup-coverage': {
+    type: 'backup-coverage',
+    name: 'Backup Coverage',
+    description: 'Guests covered by no backup job',
+    icon: 'ri-shield-check-line',
+    category: 'backup',
+    defaultSize: { w: 4, h: 4 },
+    minSize: { w: 3, h: 3 },
+    maxSize: { w: 12, h: 20 },
+    noContainer: true,
+    component: BackupCoverageWidget,
   },
   'clusters-list': {
     type: 'clusters-list',

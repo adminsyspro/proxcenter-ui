@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 
 import { orchestratorFetch, parseOrchestratorError } from '@/lib/orchestrator'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
+import { requireProviderTenant } from '@/lib/tenant'
 
 // Notification channels (Slack, Teams, ntfy, Discord, generic webhook) live
 // in the orchestrator next to the email settings; these routes only relay.
@@ -28,6 +29,11 @@ export async function GET() {
   // Channels are global (orchestrator not tenant-aware): admins only, like the settings.
   const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
   if (denied) return denied
+  // Notifications are global and the tab is provider-only: a tenant admin
+  // holds admin.settings too, and must not read the recipients or add a
+  // channel that receives every tenant's alerts.
+  const providerGate = await requireProviderTenant()
+  if (providerGate) return providerGate
 
   try {
     const data = await orchestratorFetch('/notifications/channels')
@@ -41,6 +47,8 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
   if (denied) return denied
+  const providerGate = await requireProviderTenant()
+  if (providerGate) return providerGate
 
   try {
     const body = await request.json()

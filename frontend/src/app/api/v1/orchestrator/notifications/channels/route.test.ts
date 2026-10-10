@@ -7,14 +7,19 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { callRoute } from '@/__tests__/setup/route-test'
 
-const { orchestratorFetchMock, checkPermissionMock } = vi.hoisted(() => ({
+const { orchestratorFetchMock, checkPermissionMock, requireProviderTenantMock } = vi.hoisted(() => ({
   orchestratorFetchMock: vi.fn(),
   checkPermissionMock: vi.fn(),
+  requireProviderTenantMock: vi.fn(),
 }))
 
 vi.mock('@/lib/orchestrator', async orig => ({
   ...(await orig<typeof import('@/lib/orchestrator')>()),
   orchestratorFetch: (...a: any[]) => orchestratorFetchMock(...a),
+}))
+
+vi.mock('@/lib/tenant', () => ({
+  requireProviderTenant: (...a: any[]) => requireProviderTenantMock(...a),
 }))
 
 vi.mock('@/lib/rbac', () => ({
@@ -27,10 +32,22 @@ const CHANNEL = { id: 'c1', name: 'Ops', type: 'slack', enabled: true, url_maske
 beforeEach(() => {
   vi.clearAllMocks()
   checkPermissionMock.mockResolvedValue(null)
+  requireProviderTenantMock.mockResolvedValue(null)
   vi.spyOn(console, 'error').mockImplementation(() => {})
 })
 
 describe('GET /api/v1/orchestrator/notifications/channels', () => {
+  it('is refused outside the provider tenant', async () => {
+    requireProviderTenantMock.mockResolvedValue(new Response(JSON.stringify({ error: 'provider only' }), { status: 403 }))
+
+    const { GET } = await import('./route')
+    const res = await GET()
+
+    expect(res.status).toBe(403)
+    expect(orchestratorFetchMock).not.toHaveBeenCalled()
+  })
+
+
   it('requires the admin settings permission', async () => {
     const denied = new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403 })
 

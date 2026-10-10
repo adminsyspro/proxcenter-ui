@@ -6,14 +6,19 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { callRoute } from '@/__tests__/setup/route-test'
 
-const { orchestratorFetchMock, checkPermissionMock } = vi.hoisted(() => ({
+const { orchestratorFetchMock, checkPermissionMock, requireProviderTenantMock } = vi.hoisted(() => ({
   orchestratorFetchMock: vi.fn(),
   checkPermissionMock: vi.fn(),
+  requireProviderTenantMock: vi.fn(),
 }))
 
 vi.mock('@/lib/orchestrator', async orig => ({
   ...(await orig<typeof import('@/lib/orchestrator')>()),
   orchestratorFetch: (...a: any[]) => orchestratorFetchMock(...a),
+}))
+
+vi.mock('@/lib/tenant', () => ({
+  requireProviderTenant: (...a: any[]) => requireProviderTenantMock(...a),
 }))
 
 vi.mock('@/lib/rbac', () => ({
@@ -24,6 +29,7 @@ vi.mock('@/lib/rbac', () => ({
 beforeEach(() => {
   vi.clearAllMocks()
   checkPermissionMock.mockResolvedValue(null)
+  requireProviderTenantMock.mockResolvedValue(null)
   vi.spyOn(console, 'error').mockImplementation(() => {})
 })
 

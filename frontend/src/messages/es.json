@@ -4366,7 +4366,95 @@
     "inheritDefault": "Heredar (predeterminado)",
     "categorySeverityHelper": "Define una severidad mínima por categoría o hereda el valor global predeterminado.",
     "rateLimit": "Límite de tasa por hora",
-    "rateLimitHelper": "Protección contra spam (0 = ilimitado)"
+    "rateLimitHelper": "Protección contra spam (0 = ilimitado)",
+    "publicUrl": "URL pública de ProxCenter",
+    "publicUrlHelper": "Se usa para los enlaces de los mensajes de canal (Slack, Teams, ntfy, Discord, webhook). Vacío: sin enlace.",
+    "channels": {
+      "title": "Canales de notificación",
+      "description": "Envíe las mismas notificaciones a Slack, Microsoft Teams, ntfy, Discord o un webhook. Primero se aplican los filtros globales de tipo y gravedad de abajo, y después los filtros propios de cada canal.",
+      "add": "Añadir canal",
+      "empty": "Todavía no hay canales. El correo seguirá siendo el único destinatario hasta que se añada uno.",
+      "loadError": "No se pudieron cargar los canales:",
+      "saveError": "Error al guardar:",
+      "saved": "Canal guardado",
+      "columns": {
+        "name": "Canal",
+        "target": "Destino",
+        "filters": "Filtros",
+        "activity": "Actividad"
+      },
+      "allTypes": "Todos los tipos",
+      "neverSent": "Nada enviado todavía",
+      "lastSent": "Último envío {time}",
+      "lastError": "Último error: {error}",
+      "test": "Enviar prueba",
+      "testing": "Enviando...",
+      "testOk": "Mensaje de prueba entregado.",
+      "testFailed": "La prueba falló:",
+      "showSecrets": "Mostrar secretos",
+      "hideSecrets": "Ocultar secretos",
+      "keepCurrent": "Dejar vacío para conservar {current}",
+      "keepStoredSecret": "Hay un valor guardado. Dejar vacío para conservarlo.",
+      "clearToken": "Eliminar el token guardado",
+      "clearSigningSecret": "Eliminar el secreto de firma guardado",
+      "clearHeaderValue": "Eliminar el valor de cabecera guardado",
+      "dialog": {
+        "addTitle": "Añadir un canal",
+        "editTitle": "Editar el canal"
+      },
+      "deleteConfirm": {
+        "title": "Eliminar el canal",
+        "body": "¿Eliminar el canal \"{name}\"? Las notificaciones dejarán de enviarse a él."
+      },
+      "fields": {
+        "name": "Nombre",
+        "type": "Tipo",
+        "url": "URL",
+        "token": "Token de acceso",
+        "tokenHelper": "Opcional. Se envía como token Bearer al servidor ntfy.",
+        "headerName": "Nombre de la cabecera personalizada",
+        "headerValue": "Valor de la cabecera personalizada",
+        "signingSecret": "Secreto de firma",
+        "signingSecretHelper": "Opcional. Cada petición llevará entonces X-ProxCenter-Signature: sha256='<'HMAC-SHA256 del cuerpo'>'.",
+        "types": "Tipos de notificación",
+        "typesHelper": "Vacío significa todos los tipos.",
+        "minSeverity": "Gravedad mínima",
+        "minSeverityHelper": "Las alertas resueltas se envían siempre.",
+        "allowPrivate": "Permitir destinos en red privada",
+        "allowPrivateHelper": "Las direcciones de bucle local, link-local y privadas se rechazan mientras esto esté desactivado.",
+        "allowPrivateWarning": "El orquestador enviará a direcciones de sus propias redes. Actívelo solo para un receptor que controle.",
+        "enabled": "Activado"
+      },
+      "urlHelper": {
+        "slack": "URL del webhook entrante de la aplicación de Slack.",
+        "teams": "URL de un flujo de Teams \"Cuando se recibe una solicitud de webhook de Teams\".",
+        "ntfy": "URL completa del tema, en ntfy.sh o en su propio servidor.",
+        "discord": "URL de webhook de las integraciones del canal.",
+        "webhook": "Recibe un POST JSON por cada notificación."
+      },
+      "types": {
+        "slack": "Slack",
+        "teams": "Microsoft Teams",
+        "ntfy": "ntfy",
+        "discord": "Discord",
+        "webhook": "Webhook"
+      },
+      "notificationTypes": {
+        "alert": "Alertas",
+        "event": "Eventos",
+        "migration": "Migraciones",
+        "backup": "Copias de seguridad",
+        "replication": "Replicación",
+        "maintenance": "Mantenimiento",
+        "report": "Informes"
+      },
+      "severities": {
+        "info": "Info y superiores",
+        "success": "Éxito y superiores",
+        "warning": "Avisos y críticas",
+        "critical": "Solo críticas"
+      }
+    }
   },
   "audit": {
     "title": "Auditoría y logs",

@@ -4370,7 +4370,95 @@
     "inheritDefault": "继承（默认）",
     "categorySeverityHelper": "按类别设置最低严重级别，或继承全局默认值。",
     "rateLimit": "每小时速率限制",
-    "rateLimitHelper": "防垃圾邮件保护（0 = 无限制）"
+    "rateLimitHelper": "防垃圾邮件保护（0 = 无限制）",
+    "publicUrl": "ProxCenter 公开 URL",
+    "publicUrlHelper": "用于渠道消息（Slack、Teams、ntfy、Discord、Webhook）中的链接。留空则不带链接。",
+    "channels": {
+      "title": "通知渠道",
+      "description": "将同样的通知发送到 Slack、Microsoft Teams、ntfy、Discord 或 Webhook。先应用下方的全局类型和严重级别过滤，再应用每个渠道自己的过滤条件。",
+      "add": "添加渠道",
+      "empty": "尚无渠道。添加渠道之前，邮件仍是唯一的接收方。",
+      "loadError": "无法加载渠道：",
+      "saveError": "保存失败：",
+      "saved": "渠道已保存",
+      "columns": {
+        "name": "渠道",
+        "target": "目标",
+        "filters": "过滤",
+        "activity": "活动"
+      },
+      "allTypes": "所有类型",
+      "neverSent": "尚未发送任何内容",
+      "lastSent": "最近发送 {time}",
+      "lastError": "最近错误：{error}",
+      "test": "发送测试",
+      "testing": "发送中...",
+      "testOk": "测试消息已送达。",
+      "testFailed": "测试失败：",
+      "showSecrets": "显示密钥",
+      "hideSecrets": "隐藏密钥",
+      "keepCurrent": "留空以保留 {current}",
+      "keepStoredSecret": "已保存一个值。留空以保留。",
+      "clearToken": "移除已保存的令牌",
+      "clearSigningSecret": "移除已保存的签名密钥",
+      "clearHeaderValue": "移除已保存的标头值",
+      "dialog": {
+        "addTitle": "添加渠道",
+        "editTitle": "编辑渠道"
+      },
+      "deleteConfirm": {
+        "title": "删除渠道",
+        "body": "删除渠道“{name}”？通知将不再发送到该渠道。"
+      },
+      "fields": {
+        "name": "名称",
+        "type": "类型",
+        "url": "URL",
+        "token": "访问令牌",
+        "tokenHelper": "可选。以 Bearer 令牌形式发送给 ntfy 服务器。",
+        "headerName": "自定义标头名称",
+        "headerValue": "自定义标头值",
+        "signingSecret": "签名密钥",
+        "signingSecretHelper": "可选。设置后每个请求都会携带 X-ProxCenter-Signature: sha256='<'请求体的 HMAC-SHA256'>'。",
+        "types": "通知类型",
+        "typesHelper": "留空表示所有类型。",
+        "minSeverity": "最低严重级别",
+        "minSeverityHelper": "已解决的告警始终会发送。",
+        "allowPrivate": "允许私有网络目标",
+        "allowPrivateHelper": "未启用时，回环、链路本地和私有地址会被拒绝。",
+        "allowPrivateWarning": "编排器将向其自身网络中的地址发送请求。仅对您掌控的接收方启用。",
+        "enabled": "已启用"
+      },
+      "urlHelper": {
+        "slack": "Slack 应用的传入 Webhook URL。",
+        "teams": "Teams 工作流“收到 Teams Webhook 请求时”的 URL。",
+        "ntfy": "完整的主题 URL，位于 ntfy.sh 或您自己的服务器。",
+        "discord": "频道集成中的 Webhook URL。",
+        "webhook": "每条通知都会收到一个 JSON POST。"
+      },
+      "types": {
+        "slack": "Slack",
+        "teams": "Microsoft Teams",
+        "ntfy": "ntfy",
+        "discord": "Discord",
+        "webhook": "Webhook"
+      },
+      "notificationTypes": {
+        "alert": "告警",
+        "event": "事件",
+        "migration": "迁移",
+        "backup": "备份",
+        "replication": "复制",
+        "maintenance": "维护",
+        "report": "报告"
+      },
+      "severities": {
+        "info": "信息及以上",
+        "success": "成功及以上",
+        "warning": "警告和严重",
+        "critical": "仅严重"
+      }
+    }
   },
   "audit": {
     "title": "审计与日志",

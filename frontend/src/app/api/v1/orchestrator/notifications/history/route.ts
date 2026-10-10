@@ -2,13 +2,18 @@ export const dynamic = "force-dynamic"
 import { NextRequest, NextResponse } from 'next/server'
 
 import { orchestratorFetch } from '@/lib/orchestrator'
-import { getTenantConnectionIds } from '@/lib/tenant'
+import { getTenantConnectionIds, requireProviderTenant } from '@/lib/tenant'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 
 export async function GET(request: NextRequest) {
   try {
     const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
     if (denied) return denied
+    // Notifications are global and the tab is provider-only: a tenant admin
+    // holds admin.settings too, and must not read the recipients or add a
+    // channel that receives every tenant's alerts.
+    const providerGate = await requireProviderTenant()
+    if (providerGate) return providerGate
 
     const { searchParams } = new URL(request.url)
     const limit = Number.parseInt(searchParams.get('limit') || '20')

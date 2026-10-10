@@ -94,3 +94,52 @@ describe('DELETE /api/v1/orchestrator/notifications/channels/[id]', () => {
     expect(orchestratorFetchMock).not.toHaveBeenCalled()
   })
 })
+
+describe('/api/v1/orchestrator/notifications/channels/[id] outside the provider tenant', () => {
+  it('refuses an update', async () => {
+    const gate = new Response(null, { status: 403 })
+
+    requireProviderTenantMock.mockResolvedValue(gate)
+
+    const { PUT } = await import('./route')
+    const res = await callRoute(PUT, { method: 'PUT', params: { id: 'c1' }, body: { name: 'x' } })
+
+    expect(res).toBe(gate)
+    expect(orchestratorFetchMock).not.toHaveBeenCalled()
+  })
+
+  it('refuses a deletion', async () => {
+    const gate = new Response(null, { status: 403 })
+
+    requireProviderTenantMock.mockResolvedValue(gate)
+
+    const { DELETE } = await import('./route')
+    const res = await callRoute(DELETE, { method: 'DELETE', params: { id: 'c1' } })
+
+    expect(res).toBe(gate)
+    expect(orchestratorFetchMock).not.toHaveBeenCalled()
+  })
+})
+
+describe('DELETE /api/v1/orchestrator/notifications/channels/[id] errors', () => {
+  it('keeps an upstream 404 a 404', async () => {
+    orchestratorFetchMock.mockRejectedValue(new Error('Orchestrator 404: {"error":"notification channel not found"}'))
+
+    const { DELETE } = await import('./route')
+    const res = await callRoute(DELETE, { method: 'DELETE', params: { id: 'gone' } })
+
+    expect(res.status).toBe(404)
+    expect((await res.json()).error).toBe('notification channel not found')
+  })
+
+  it('answers 500 with the error message on any other failure', async () => {
+    orchestratorFetchMock.mockRejectedValue(new Error('socket hang up'))
+
+    const { DELETE } = await import('./route')
+    const res = await callRoute(DELETE, { method: 'DELETE', params: { id: 'c1' } })
+
+    expect(res.status).toBe(500)
+    expect((await res.json()).error).toBe('socket hang up')
+    expect(console.error).toHaveBeenCalledWith('Failed to delete notification channel', expect.any(Error))
+  })
+})

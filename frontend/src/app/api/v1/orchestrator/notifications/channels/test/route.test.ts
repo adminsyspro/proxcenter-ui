@@ -78,3 +78,41 @@ describe('POST /api/v1/orchestrator/notifications/channels/test', () => {
     expect((await res.json()).error).toBe('url is required')
   })
 })
+
+describe('POST /api/v1/orchestrator/notifications/channels/test failures', () => {
+  it('is refused outside the provider tenant', async () => {
+    const gate = new Response(null, { status: 403 })
+
+    requireProviderTenantMock.mockResolvedValue(gate)
+
+    const { POST } = await import('./route')
+    const res = await callRoute(POST, { method: 'POST', body: { type: 'slack' } })
+
+    expect(res).toBe(gate)
+    expect(orchestratorFetchMock).not.toHaveBeenCalled()
+  })
+
+  it('answers 500 without logging when the orchestrator is unreachable', async () => {
+    const err: any = new Error('Orchestrator unavailable')
+
+    err.code = 'ORCHESTRATOR_UNAVAILABLE'
+    orchestratorFetchMock.mockRejectedValue(err)
+
+    const { POST } = await import('./route')
+    const res = await callRoute(POST, { method: 'POST', body: { type: 'slack' } })
+
+    expect(res.status).toBe(500)
+    expect((await res.json()).error).toBe('Orchestrator unavailable')
+    expect(console.error).not.toHaveBeenCalled()
+  })
+
+  it('logs and answers 500 on an upstream 5xx', async () => {
+    orchestratorFetchMock.mockRejectedValue(new Error('Orchestrator 502: bad gateway'))
+
+    const { POST } = await import('./route')
+    const res = await callRoute(POST, { method: 'POST', body: { type: 'slack' } })
+
+    expect(res.status).toBe(500)
+    expect(console.error).toHaveBeenCalledWith('Failed to test notification channel', expect.any(Error))
+  })
+})

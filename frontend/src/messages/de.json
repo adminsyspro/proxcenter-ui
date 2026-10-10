@@ -4402,7 +4402,7 @@
         "headerName": "Name des benutzerdefinierten Headers",
         "headerValue": "Wert des benutzerdefinierten Headers",
         "signingSecret": "Signaturgeheimnis",
-        "signingSecretHelper": "Optional. Jede Anfrage trägt dann X-ProxCenter-Signature: sha256=<HMAC-SHA256 des Bodys>.",
+        "signingSecretHelper": "Optional. Jede Anfrage trägt dann X-ProxCenter-Signature: sha256='<'HMAC-SHA256 des Bodys'>'.",
         "types": "Benachrichtigungstypen",
         "typesHelper": "Leer bedeutet alle Typen.",
         "minSeverity": "Mindestschweregrad",

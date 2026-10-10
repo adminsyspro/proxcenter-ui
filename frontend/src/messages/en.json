@@ -4415,7 +4415,7 @@
         "headerName": "Custom header name",
         "headerValue": "Custom header value",
         "signingSecret": "Signing secret",
-        "signingSecretHelper": "Optional. Each request then carries X-ProxCenter-Signature: sha256=<HMAC-SHA256 of the body>.",
+        "signingSecretHelper": "Optional. Each request then carries X-ProxCenter-Signature: sha256='<'HMAC-SHA256 of the body'>'.",
         "types": "Notification types",
         "typesHelper": "Empty means every type.",
         "minSeverity": "Minimum severity",

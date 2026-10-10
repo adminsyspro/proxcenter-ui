@@ -4415,7 +4415,7 @@
         "headerName": "Nombre de la cabecera personalizada",
         "headerValue": "Valor de la cabecera personalizada",
         "signingSecret": "Secreto de firma",
-        "signingSecretHelper": "Opcional. Cada petición llevará entonces X-ProxCenter-Signature: sha256=<HMAC-SHA256 del cuerpo>.",
+        "signingSecretHelper": "Opcional. Cada petición llevará entonces X-ProxCenter-Signature: sha256='<'HMAC-SHA256 del cuerpo'>'.",
         "types": "Tipos de notificación",
         "typesHelper": "Vacío significa todos los tipos.",
         "minSeverity": "Gravedad mínima",

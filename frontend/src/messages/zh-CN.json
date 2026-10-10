@@ -4419,7 +4419,7 @@
         "headerName": "自定义标头名称",
         "headerValue": "自定义标头值",
         "signingSecret": "签名密钥",
-        "signingSecretHelper": "可选。设置后每个请求都会携带 X-ProxCenter-Signature: sha256=<请求体的 HMAC-SHA256>。",
+        "signingSecretHelper": "可选。设置后每个请求都会携带 X-ProxCenter-Signature: sha256='<'请求体的 HMAC-SHA256'>'。",
         "types": "通知类型",
         "typesHelper": "留空表示所有类型。",
         "minSeverity": "最低严重级别",

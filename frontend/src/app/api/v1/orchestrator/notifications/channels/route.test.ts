@@ -118,3 +118,29 @@ describe('POST /api/v1/orchestrator/notifications/channels', () => {
     expect(res.status).toBe(500)
   })
 })
+
+describe('POST /api/v1/orchestrator/notifications/channels gates', () => {
+  it('requires the admin settings permission', async () => {
+    const denied = new Response(null, { status: 403 })
+
+    checkPermissionMock.mockResolvedValue(denied)
+
+    const { POST } = await import('./route')
+    const res = await callRoute(POST, { method: 'POST', body: { name: 'x' } })
+
+    expect(res).toBe(denied)
+    expect(orchestratorFetchMock).not.toHaveBeenCalled()
+  })
+
+  it('is refused outside the provider tenant', async () => {
+    const gate = new Response(null, { status: 403 })
+
+    requireProviderTenantMock.mockResolvedValue(gate)
+
+    const { POST } = await import('./route')
+    const res = await callRoute(POST, { method: 'POST', body: { name: 'x' } })
+
+    expect(res).toBe(gate)
+    expect(orchestratorFetchMock).not.toHaveBeenCalled()
+  })
+})

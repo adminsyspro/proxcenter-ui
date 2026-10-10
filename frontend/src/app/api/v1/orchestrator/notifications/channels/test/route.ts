@@ -1,7 +1,8 @@
 export const dynamic = "force-dynamic"
 import { NextRequest, NextResponse } from 'next/server'
 
-import { orchestratorFetch, parseOrchestratorError } from '@/lib/orchestrator'
+import { orchestratorFetch } from '@/lib/orchestrator'
+import { relayOrchestratorError } from '@/lib/orchestrator/relayError'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { requireProviderTenant } from '@/lib/tenant'
 
@@ -26,20 +27,7 @@ export async function POST(request: NextRequest) {
     })
 
     return NextResponse.json(data)
-  } catch (error: any) {
-    const upstream = parseOrchestratorError(error)
-
-    if (upstream && upstream.status >= 400 && upstream.status < 500) {
-      return NextResponse.json({ error: upstream.message }, { status: upstream.status })
-    }
-
-    if ((error as any)?.code !== 'ORCHESTRATOR_UNAVAILABLE') {
-      console.error('Failed to test notification channel:', error)
-    }
-
-    return NextResponse.json(
-      { error: error.message || 'Failed to test notification channel' },
-      { status: 500 }
-    )
+  } catch (error) {
+    return relayOrchestratorError(error, 'Failed to test notification channel')
   }
 }

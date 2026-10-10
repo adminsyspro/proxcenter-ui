@@ -18,10 +18,8 @@ import {
   CardContent,
   Checkbox,
   Chip,
-  CircularProgress,
   Collapse,
   Dialog,
-  DialogActions,
   DialogContent,
   FormControl,
   FormControlLabel,
@@ -32,7 +30,6 @@ import {
   MenuItem,
   OutlinedInput,
   Select,
-  Skeleton,
   Stack,
   Switch,
   Table,
@@ -41,11 +38,20 @@ import {
   TableHead,
   TableRow,
   TextField,
-  Tooltip,
   Typography,
 } from '@mui/material'
 
 import AppDialogTitle from '@/components/ui/AppDialogTitle'
+import { DestinationDialogActions, SMALL_SELECT_SX, TestResultAlert } from '@/components/settings/destinations/DestinationDialogParts'
+import {
+  ActivityCaption,
+  DeleteDestinationDialog,
+  DestinationListState,
+  DestinationRowActions,
+  HealthDot,
+  type DestinationMessage,
+} from '@/components/settings/destinations/DestinationListParts'
+import { fetchJson } from '@/components/settings/destinations/fetchJson'
 import {
   CHANNEL_NOTIFICATION_TYPES,
   CHANNEL_SEVERITIES,
@@ -56,7 +62,6 @@ import {
   channelSecretKind,
   channelToInput,
   newChannelInput,
-  type ChannelHealth,
   type ChannelInput,
   type ChannelNotificationType,
   type ChannelSeverity,
@@ -66,40 +71,11 @@ import {
 
 const API = '/api/v1/orchestrator/notifications/channels'
 
-// A small MUI Select renders 38 px against 35.9 px for a small TextField; this
-// pins both to the same line height so a row of fields sits level.
-const SMALL_SELECT_SX = {
-  '& .MuiInputBase-input.MuiSelect-select': { minHeight: '1.4375em', lineHeight: '1.4375em' },
-} as const
-
 type Payload = { data: NotificationChannel[] }
 
 type TestResult = { success: boolean; error?: string; message?: string }
 
-async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
-  const r = await fetch(url, init)
-  const text = await r.text()
-  let json: any = null
-
-  try {
-    json = text ? JSON.parse(text) : null
-  } catch {
-    // not JSON
-  }
-
-  if (!r.ok) throw new Error(json?.error || text || `HTTP ${r.status}`)
-
-  return json as T
-}
-
 const fetcher = (url: string) => fetchJson<Payload>(url)
-
-const HEALTH_COLOR: Record<ChannelHealth, string> = {
-  disabled: 'text.disabled',
-  idle: 'action.disabled',
-  ok: 'success.main',
-  error: 'error.main',
-}
 
 // Type glyph at the head of every row.
 function ChannelGlyph({ type }: { type: ChannelType }) {
@@ -113,7 +89,7 @@ export default function NotificationChannelsCard() {
   const tc = useTranslations('common')
   const { data, error: loadError, isLoading, mutate } = useSWR<Payload>(API, fetcher, { refreshInterval: 15_000 })
 
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const [message, setMessage] = useState<DestinationMessage | null>(null)
   const [saving, setSaving] = useState(false)
   const [editing, setEditing] = useState<{ channel: NotificationChannel | null; form: ChannelInput } | null>(null)
   const [deleting, setDeleting] = useState<NotificationChannel | null>(null)
@@ -223,30 +199,15 @@ export default function NotificationChannelsCard() {
           </Button>
         </Stack>
 
-        {loadError && (
-          <Alert severity='error' sx={{ mb: 2 }}>
-            {t('loadError')} {String(loadError.message || '')}
-          </Alert>
-        )}
-
-        {message && (
-          <Alert severity={message.type} sx={{ mb: 2 }} onClose={() => setMessage(null)}>
-            {message.text}
-          </Alert>
-        )}
-
-        {isLoading && (
-          <Stack spacing={1}>
-            <Skeleton variant='rounded' height={40} />
-            <Skeleton variant='rounded' height={40} />
-          </Stack>
-        )}
-
-        {!isLoading && !loadError && channels.length === 0 && (
-          <Typography variant='body2' color='text.secondary'>
-            {t('empty')}
-          </Typography>
-        )}
+        <DestinationListState
+          loadError={loadError}
+          loadErrorLabel={t('loadError')}
+          message={message}
+          onCloseMessage={() => setMessage(null)}
+          isLoading={isLoading}
+          empty={channels.length === 0}
+          emptyLabel={t('empty')}
+        />
 
         {!isLoading && channels.length > 0 && (
           <Table size='small'>
@@ -267,9 +228,7 @@ export default function NotificationChannelsCard() {
                 return (
                   <TableRow key={ch.id} hover data-testid={`channel-row-${ch.id}`}>
                     <TableCell padding='checkbox'>
-                      <Tooltip title={activityText(ch)}>
-                        <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: HEALTH_COLOR[health], mx: 'auto' }} />
-                      </Tooltip>
+                      <HealthDot health={health} title={activityText(ch)} />
                     </TableCell>
                     <TableCell sx={{ maxWidth: 260 }}>
                       <Stack direction='row' spacing={1} alignItems='center' sx={{ minWidth: 0 }}>
@@ -291,24 +250,16 @@ export default function NotificationChannelsCard() {
                       </Typography>
                     </TableCell>
                     <TableCell sx={{ maxWidth: 260 }}>
-                      <Typography variant='caption' color={health === 'error' ? 'error.main' : 'text.secondary'} noWrap component='div'>
-                        {activityText(ch)}
-                      </Typography>
+                      <ActivityCaption health={health} text={activityText(ch)} />
                     </TableCell>
                     <TableCell align='right' sx={{ whiteSpace: 'nowrap' }}>
-                      <Tooltip title={ch.enabled ? tc('enabled') : tc('disabled')}>
-                        <Switch size='small' checked={ch.enabled} disabled={saving} onChange={e => toggle(ch, e.target.checked)} />
-                      </Tooltip>
-                      <Tooltip title={tc('edit')}>
-                        <IconButton size='small' onClick={() => setEditing({ channel: ch, form: channelToInput(ch) })}>
-                          <i className='ri-pencil-line' />
-                        </IconButton>
-                      </Tooltip>
-                      <Tooltip title={tc('delete')}>
-                        <IconButton size='small' color='error' onClick={() => setDeleting(ch)}>
-                          <i className='ri-delete-bin-line' />
-                        </IconButton>
-                      </Tooltip>
+                      <DestinationRowActions
+                        enabled={ch.enabled}
+                        saving={saving}
+                        onToggle={enabled => toggle(ch, enabled)}
+                        onEdit={() => setEditing({ channel: ch, form: channelToInput(ch) })}
+                        onDelete={() => setDeleting(ch)}
+                      />
                     </TableCell>
                   </TableRow>
                 )
@@ -328,20 +279,14 @@ export default function NotificationChannelsCard() {
         />
       )}
 
-      <Dialog open={Boolean(deleting)} onClose={() => setDeleting(null)} maxWidth='xs' fullWidth>
-        <AppDialogTitle onClose={() => setDeleting(null)} icon={<i className='ri-delete-bin-line' />}>
-          {t('deleteConfirm.title')}
-        </AppDialogTitle>
-        <DialogContent>
-          <Typography variant='body2'>{deleting && t('deleteConfirm.body', { name: deleting.name })}</Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDeleting(null)}>{tc('cancel')}</Button>
-          <Button color='error' variant='contained' disabled={saving} onClick={() => deleting && remove(deleting)}>
-            {tc('delete')}
-          </Button>
-        </DialogActions>
-      </Dialog>
+      <DeleteDestinationDialog
+        open={Boolean(deleting)}
+        title={t('deleteConfirm.title')}
+        body={deleting && t('deleteConfirm.body', { name: deleting.name })}
+        saving={saving}
+        onCancel={() => setDeleting(null)}
+        onConfirm={() => deleting && remove(deleting)}
+      />
     </Card>
   )
 }
@@ -588,53 +533,24 @@ function ChannelDialog({ channel, initial, saving, onCancel, onSave }: DialogPro
           />
 
           {testResult && (
-            <Alert severity={testResult.success ? 'success' : 'error'} onClose={() => setTestResult(null)}>
-              {testResult.success ? t('testOk') : t('testFailed')}
-              {!testResult.success && testResult.error && (
-                <Box
-                  component='pre'
-                  sx={{
-                    mt: 1,
-                    mb: 0,
-                    p: 1,
-                    fontSize: '0.7rem',
-                    whiteSpace: 'pre-wrap',
-                    wordBreak: 'break-all',
-                    bgcolor: 'action.hover',
-                    borderRadius: 1,
-                    maxHeight: 120,
-                    overflow: 'auto',
-                  }}
-                >
-                  {testResult.error}
-                </Box>
-              )}
-            </Alert>
+            <TestResultAlert
+              ok={testResult.success}
+              text={testResult.success ? t('testOk') : t('testFailed')}
+              details={testResult.success ? undefined : testResult.error}
+              onClose={() => setTestResult(null)}
+            />
           )}
         </Stack>
       </DialogContent>
-      <DialogActions sx={{ px: 3, pb: 2 }}>
-        <Button
-          variant='outlined'
-          onClick={runTest}
-          disabled={testing || saving}
-          startIcon={testing ? <CircularProgress size={16} /> : <i className='ri-send-plane-line' />}
-          sx={{ mr: 'auto' }}
-        >
-          {testing ? t('testing') : t('test')}
-        </Button>
-        <Button onClick={onCancel} disabled={saving}>
-          {tc('cancel')}
-        </Button>
-        <Button
-          variant='contained'
-          onClick={submit}
-          disabled={saving}
-          startIcon={saving ? <CircularProgress size={16} /> : <i className='ri-save-line' />}
-        >
-          {saving ? tc('saving') : tc('save')}
-        </Button>
-      </DialogActions>
+      <DestinationDialogActions
+        testing={testing}
+        saving={saving}
+        testLabel={t('test')}
+        testingLabel={t('testing')}
+        onTest={runTest}
+        onCancel={onCancel}
+        onSave={submit}
+      />
     </Dialog>
   )
 }

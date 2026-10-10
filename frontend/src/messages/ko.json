@@ -4415,7 +4415,7 @@
         "headerName": "사용자 지정 헤더 이름",
         "headerValue": "사용자 지정 헤더 값",
         "signingSecret": "서명 비밀 키",
-        "signingSecretHelper": "선택 사항. 설정하면 각 요청에 X-ProxCenter-Signature: sha256=<본문의 HMAC-SHA256> 헤더가 포함됩니다.",
+        "signingSecretHelper": "선택 사항. 설정하면 각 요청에 X-ProxCenter-Signature: sha256='<'본문의 HMAC-SHA256'>' 헤더가 포함됩니다.",
         "types": "알림 유형",
         "typesHelper": "비워 두면 모든 유형입니다.",
         "minSeverity": "최소 심각도",

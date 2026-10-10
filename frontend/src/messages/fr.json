@@ -4415,7 +4415,7 @@
         "headerName": "Nom de l'en-tête personnalisé",
         "headerValue": "Valeur de l'en-tête personnalisé",
         "signingSecret": "Secret de signature",
-        "signingSecretHelper": "Facultatif. Chaque requête porte alors X-ProxCenter-Signature: sha256=<HMAC-SHA256 du corps>.",
+        "signingSecretHelper": "Facultatif. Chaque requête porte alors X-ProxCenter-Signature: sha256='<'HMAC-SHA256 du corps'>'.",
         "types": "Types de notification",
         "typesHelper": "Vide : tous les types.",
         "minSeverity": "Sévérité minimale",

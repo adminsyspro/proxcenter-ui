@@ -15,20 +15,16 @@ import {
   Card,
   CardContent,
   Chip,
-  CircularProgress,
   Collapse,
   Dialog,
-  DialogActions,
   DialogContent,
   FormControl,
   FormControlLabel,
   FormHelperText,
-  IconButton,
   InputLabel,
   MenuItem,
   OutlinedInput,
   Select,
-  Skeleton,
   Stack,
   Switch,
   Table,
@@ -43,6 +39,17 @@ import {
 
 import AppDialogTitle from '@/components/ui/AppDialogTitle'
 import NumericTextField from '@/components/ui/NumericTextField'
+import { DestinationDialogActions, SMALL_SELECT_SX, TestResultAlert } from '@/components/settings/destinations/DestinationDialogParts'
+import {
+  ActivityCaption,
+  DeleteDestinationDialog,
+  DestinationListState,
+  DestinationRowActions,
+  HealthDot,
+  type DestinationHealth,
+  type DestinationMessage,
+} from '@/components/settings/destinations/DestinationListParts'
+import { fetchJson } from '@/components/settings/destinations/fetchJson'
 import {
   AUDIT_CATEGORIES,
   MAX_SYSLOG_DESTINATIONS,
@@ -60,12 +67,6 @@ import {
 
 const API = '/api/v1/settings/syslog'
 
-// A small MUI Select renders 38 px against 35.9 px for a small TextField; this
-// pins both to the same line height so a row of fields sits level.
-const SMALL_SELECT_SX = {
-  '& .MuiInputBase-input.MuiSelect-select': { minHeight: '1.4375em', lineHeight: '1.4375em' },
-} as const
-
 type Payload = {
   destinations: SyslogDestination[]
   status: Record<string, SyslogDestinationStatus>
@@ -73,19 +74,6 @@ type Payload = {
 }
 
 type TestResult = { ok: boolean; error?: string; message?: string }
-
-async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
-  const r = await fetch(url, init)
-  const text = await r.text()
-  let json: any = null
-  try {
-    json = text ? JSON.parse(text) : null
-  } catch {
-    // not JSON
-  }
-  if (!r.ok) throw new Error(json?.error || text || `HTTP ${r.status}`)
-  return json as T
-}
 
 const fetcher = (url: string) => fetchJson<Payload>(url)
 
@@ -105,21 +93,12 @@ function newDestination(): SyslogDestination {
   }
 }
 
-type Health = 'disabled' | 'idle' | 'ok' | 'error'
-
-function healthOf(dest: SyslogDestination, st?: SyslogDestinationStatus): Health {
+function healthOf(dest: SyslogDestination, st?: SyslogDestinationStatus): DestinationHealth {
   if (!dest.enabled) return 'disabled'
   if (!st) return 'idle'
   if (st.lastErrorAt && (!st.lastSentAt || st.lastErrorAt > st.lastSentAt)) return 'error'
   if (st.sent > 0) return 'ok'
   return 'idle'
-}
-
-const HEALTH_COLOR: Record<Health, string> = {
-  disabled: 'text.disabled',
-  idle: 'action.disabled',
-  ok: 'success.main',
-  error: 'error.main',
 }
 
 function isStream(transport: SyslogTransport) {
@@ -131,7 +110,7 @@ export default function SyslogDestinationsCard() {
   const tc = useTranslations('common')
   const { data, error: loadError, isLoading, mutate } = useSWR<Payload>(API, fetcher, { refreshInterval: 15_000 })
 
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const [message, setMessage] = useState<DestinationMessage | null>(null)
   const [saving, setSaving] = useState(false)
   const [editing, setEditing] = useState<SyslogDestination | null>(null)
   const [deleting, setDeleting] = useState<SyslogDestination | null>(null)
@@ -214,30 +193,15 @@ export default function SyslogDestinationsCard() {
           </Tooltip>
         </Stack>
 
-        {loadError && (
-          <Alert severity='error' sx={{ mb: 2 }}>
-            {t('loadError')} {String(loadError.message || '')}
-          </Alert>
-        )}
-
-        {message && (
-          <Alert severity={message.type} sx={{ mb: 2 }} onClose={() => setMessage(null)}>
-            {message.text}
-          </Alert>
-        )}
-
-        {isLoading && (
-          <Stack spacing={1}>
-            <Skeleton variant='rounded' height={40} />
-            <Skeleton variant='rounded' height={40} />
-          </Stack>
-        )}
-
-        {!isLoading && !loadError && destinations.length === 0 && (
-          <Typography variant='body2' color='text.secondary'>
-            {t('empty')}
-          </Typography>
-        )}
+        <DestinationListState
+          loadError={loadError}
+          loadErrorLabel={t('loadError')}
+          message={message}
+          onCloseMessage={() => setMessage(null)}
+          isLoading={isLoading}
+          empty={destinations.length === 0}
+          emptyLabel={t('empty')}
+        />
 
         {!isLoading && destinations.length > 0 && (
           <Table size='small'>
@@ -259,17 +223,7 @@ export default function SyslogDestinationsCard() {
                 return (
                   <TableRow key={dest.id} hover>
                     <TableCell padding='checkbox'>
-                      <Tooltip title={activityText(dest, st)}>
-                        <Box
-                          sx={{
-                            width: 10,
-                            height: 10,
-                            borderRadius: '50%',
-                            bgcolor: HEALTH_COLOR[health],
-                            mx: 'auto',
-                          }}
-                        />
-                      </Tooltip>
+                      <HealthDot health={health} title={activityText(dest, st)} />
                     </TableCell>
                     <TableCell sx={{ maxWidth: 200 }}>
                       <Typography variant='body2' fontWeight={500} noWrap>
@@ -295,24 +249,16 @@ export default function SyslogDestinationsCard() {
                       </Typography>
                     </TableCell>
                     <TableCell sx={{ maxWidth: 260 }}>
-                      <Typography variant='caption' color={health === 'error' ? 'error.main' : 'text.secondary'} noWrap component='div'>
-                        {activityText(dest, st)}
-                      </Typography>
+                      <ActivityCaption health={health} text={activityText(dest, st)} />
                     </TableCell>
                     <TableCell align='right' sx={{ whiteSpace: 'nowrap' }}>
-                      <Tooltip title={dest.enabled ? tc('enabled') : tc('disabled')}>
-                        <Switch size='small' checked={dest.enabled} disabled={saving} onChange={e => toggle(dest, e.target.checked)} />
-                      </Tooltip>
-                      <Tooltip title={tc('edit')}>
-                        <IconButton size='small' onClick={() => setEditing(dest)}>
-                          <i className='ri-pencil-line' />
-                        </IconButton>
-                      </Tooltip>
-                      <Tooltip title={tc('delete')}>
-                        <IconButton size='small' color='error' onClick={() => setDeleting(dest)}>
-                          <i className='ri-delete-bin-line' />
-                        </IconButton>
-                      </Tooltip>
+                      <DestinationRowActions
+                        enabled={dest.enabled}
+                        saving={saving}
+                        onToggle={enabled => toggle(dest, enabled)}
+                        onEdit={() => setEditing(dest)}
+                        onDelete={() => setDeleting(dest)}
+                      />
                     </TableCell>
                   </TableRow>
                 )
@@ -332,20 +278,14 @@ export default function SyslogDestinationsCard() {
         />
       )}
 
-      <Dialog open={Boolean(deleting)} onClose={() => setDeleting(null)} maxWidth='xs' fullWidth>
-        <AppDialogTitle onClose={() => setDeleting(null)} icon={<i className='ri-delete-bin-line' />}>
-          {t('deleteConfirm.title')}
-        </AppDialogTitle>
-        <DialogContent>
-          <Typography variant='body2'>{deleting && t('deleteConfirm.body', { name: deleting.name })}</Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDeleting(null)}>{tc('cancel')}</Button>
-          <Button color='error' variant='contained' disabled={saving} onClick={() => deleting && remove(deleting)}>
-            {tc('delete')}
-          </Button>
-        </DialogActions>
-      </Dialog>
+      <DeleteDestinationDialog
+        open={Boolean(deleting)}
+        title={t('deleteConfirm.title')}
+        body={deleting && t('deleteConfirm.body', { name: deleting.name })}
+        saving={saving}
+        onCancel={() => setDeleting(null)}
+        onConfirm={() => deleting && remove(deleting)}
+      />
     </Card>
   )
 }
@@ -594,53 +534,24 @@ function DestinationDialog({ initial, saving, onCancel, onSave, categoryLabel }:
           />
 
           {testResult && (
-            <Alert severity={testResult.ok ? 'success' : 'error'} onClose={() => setTestResult(null)}>
-              {testText(testResult)}
-              {testResult.message && (
-                <Box
-                  component='pre'
-                  sx={{
-                    mt: 1,
-                    mb: 0,
-                    p: 1,
-                    fontSize: '0.7rem',
-                    whiteSpace: 'pre-wrap',
-                    wordBreak: 'break-all',
-                    bgcolor: 'action.hover',
-                    borderRadius: 1,
-                    maxHeight: 120,
-                    overflow: 'auto',
-                  }}
-                >
-                  {testResult.message}
-                </Box>
-              )}
-            </Alert>
+            <TestResultAlert
+              ok={testResult.ok}
+              text={testText(testResult)}
+              details={testResult.message}
+              onClose={() => setTestResult(null)}
+            />
           )}
         </Stack>
       </DialogContent>
-      <DialogActions sx={{ px: 3, pb: 2 }}>
-        <Button
-          variant='outlined'
-          onClick={runTest}
-          disabled={testing || saving}
-          startIcon={testing ? <CircularProgress size={16} /> : <i className='ri-send-plane-line' />}
-          sx={{ mr: 'auto' }}
-        >
-          {testing ? t('testing') : t('test')}
-        </Button>
-        <Button onClick={onCancel} disabled={saving}>
-          {tc('cancel')}
-        </Button>
-        <Button
-          variant='contained'
-          onClick={submit}
-          disabled={saving}
-          startIcon={saving ? <CircularProgress size={16} /> : <i className='ri-save-line' />}
-        >
-          {saving ? tc('saving') : tc('save')}
-        </Button>
-      </DialogActions>
+      <DestinationDialogActions
+        testing={testing}
+        saving={saving}
+        testLabel={t('test')}
+        testingLabel={t('testing')}
+        onTest={runTest}
+        onCancel={onCancel}
+        onSave={submit}
+      />
     </Dialog>
   )
 }

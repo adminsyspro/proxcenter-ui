@@ -4399,6 +4399,8 @@
       "login": "로그인",
       "logout": "로그아웃",
       "loginFailed": "로그인 실패",
+      "loginLocked": "로그인 잠김",
+      "loginUnlocked": "로그인 잠금 해제",
       "passwordChange": "비밀번호 변경",
       "create": "생성",
       "read": "읽기",
@@ -8435,6 +8437,10 @@
     "maxFailedHelper": "0 = 무제한",
     "lockoutDuration": "잠금 시간 (분)",
     "lockoutHelper": "최대 실패 횟수 초과 후 잠금 지속 시간",
+    "ipMaxFailedAttempts": "출발지 IP별 최대 실패 횟수",
+    "ipMaxFailedHelper": "0 = 사용 안 함. 해당 IP 뒤의 모든 계정을 잠급니다. 같은 NAT나 프록시 뒤의 사용자는 IP를 공유하므로 계정별 값보다 충분히 크게 설정하세요",
+    "trustedProxies": "신뢰할 리버스 프록시 수",
+    "trustedProxiesHelper": "ProxCenter 앞단의 리버스 프록시 수 (1 = 기본 제공 nginx, 2 = 그 앞의 로드 밸런서). IP 잠금, 감사 로그, 세션, API 토큰에서 어떤 X-Forwarded-For 항목을 클라이언트 IP로 볼지 정합니다. 0 = 클라이언트 IP를 기록하지 않음",
     "auditPolicy": "감사 정책",
     "retentionDays": "보존 기간 (일)",
     "retentionHelper": "감사 로그를 보관할 일수",
@@ -8493,6 +8499,19 @@
         "iso-27001-2022": "ISO/IEC 27001은 정보 보안 관리 체계(ISMS)에 대한 국제 표준입니다. 부속서 A에는 조직, 인적, 물리적, 기술적 영역에 걸쳐 93개의 통제 항목이 나열되어 있습니다.",
         "cis-controls-v8-1": "Center for Internet Security의 18개 컨트롤과 153개 세이프가드. 식별자와 짧은 제목만 포함하며, 점수는 기술적 통과율이지 CIS 인증이 아닙니다."
       }
+    },
+    "loginLockouts": {
+      "title": "잠긴 계정 및 IP",
+      "description": "로그인 실패가 너무 많아 거부된 계정과 출발지 IP입니다. 잠금 시간이 지나면 자동으로 해제되며, 잠금 해제 버튼으로 즉시 해제할 수 있습니다.",
+      "empty": "잠긴 계정이나 IP가 없습니다.",
+      "subject": "계정 또는 IP",
+      "type": "유형",
+      "kindAccount": "계정",
+      "kindIp": "IP 주소",
+      "failedAttempts": "실패 횟수",
+      "lockedUntil": "잠금 종료",
+      "unlock": "잠금 해제",
+      "unlockFailed": "잠금을 해제하지 못했습니다. 다시 시도하세요."
     }
   },
   "changes": {

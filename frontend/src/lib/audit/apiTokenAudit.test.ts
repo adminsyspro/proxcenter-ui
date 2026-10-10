@@ -20,6 +20,7 @@ import { _impl } from '@/lib/auth/requireEnterprise'
 import { _resetLicenseVerdictCache } from '@/lib/api-tokens/licenseGate'
 import { _resetRateLimitCounters } from '@/lib/api-tokens/rateLimit'
 import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
+import { invalidateTrustedProxiesCache } from '@/lib/net/clientIp'
 import { audit } from './index'
 
 beforeEach(async () => {
@@ -30,8 +31,32 @@ beforeEach(async () => {
   vi.spyOn(_impl, 'getServerLicense').mockResolvedValue(ENTERPRISE_WITH_API_ACCESS)
   headersMock.mockResolvedValue(new Headers())
   getServerSessionMock.mockResolvedValue(null)
-  await truncate(['audit_logs', 'api_tokens', 'tenants'])
+  invalidateTrustedProxiesCache()
+  await truncate(['audit_logs', 'api_tokens', 'tenants', 'security_policies'])
   await seedDefaultTenant()
+})
+
+describe('audit, client IP', () => {
+  it('records the hop the trusted proxy appended, not a forged first hop', async () => {
+    headersMock.mockResolvedValue(new Headers({ 'x-forwarded-for': '6.6.6.6, 203.0.113.9' }))
+    const row = await prismaTest.auditLog.findUnique({ where: { id: await audit({ action: 'login', category: 'auth' }) } })
+    expect(row?.ipAddress).toBe('203.0.113.9')
+  })
+
+  it('follows the trusted proxies setting', async () => {
+    await prismaTest.securityPolicy.create({
+      data: { id: 'default', tenantId: 'default', loginTrustedProxies: 2, updatedAt: new Date() },
+    })
+    headersMock.mockResolvedValue(new Headers({ 'x-forwarded-for': '6.6.6.6, 203.0.113.9, 10.0.0.2' }))
+    const row = await prismaTest.auditLog.findUnique({ where: { id: await audit({ action: 'login', category: 'auth' }) } })
+    expect(row?.ipAddress).toBe('203.0.113.9')
+  })
+
+  it('records null when the IP cannot be resolved, and ignores x-real-ip', async () => {
+    headersMock.mockResolvedValue(new Headers({ 'x-real-ip': '6.6.6.6' }))
+    const row = await prismaTest.auditLog.findUnique({ where: { id: await audit({ action: 'login', category: 'auth' }) } })
+    expect(row?.ipAddress).toBeNull()
+  })
 })
 
 describe('audit, token attribution (D13)', () => {

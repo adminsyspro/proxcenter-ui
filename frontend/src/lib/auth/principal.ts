@@ -15,6 +15,7 @@ import { getAllowlistEntryById, matchesEntry } from "@/lib/api-tokens/allowlist"
 import { expandScopes } from "@/lib/api-tokens/scopes"
 import { isApiAccessLicensed } from "@/lib/api-tokens/licenseGate"
 import { consumeRateLimit } from "@/lib/api-tokens/rateLimit"
+import { clientIpFromHeaders } from "@/lib/net/clientIp"
 import { Features } from "@/lib/license/features"
 
 // FLAT type on purpose: tsconfig strict:false breaks discriminated-union
@@ -189,7 +190,7 @@ export async function getPrincipal(options: GetPrincipalOptions = {}): Promise<P
 
   // 11. Expand scopes, build the principal, conditional last_used update.
   if (options.recordUsage) {
-    const ip = hdrs.get("x-forwarded-for") || hdrs.get("x-real-ip") || null
+    const ip = await clientIpFromHeaders(hdrs)
     await touchTokenUsage(token.id, ip)
   }
 

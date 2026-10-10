@@ -4399,6 +4399,8 @@
       "login": "Connexion",
       "logout": "Déconnexion",
       "loginFailed": "Échec connexion",
+      "loginLocked": "Connexion verrouillée",
+      "loginUnlocked": "Connexion déverrouillée",
       "passwordChange": "Changement MDP",
       "create": "Création",
       "read": "Lecture",
@@ -8436,6 +8438,10 @@
     "maxFailedHelper": "0 = illimité",
     "lockoutDuration": "Durée de verrouillage (minutes)",
     "lockoutHelper": "Durée après le nombre max de tentatives",
+    "ipMaxFailedAttempts": "Tentatives max par IP source",
+    "ipMaxFailedHelper": "0 = désactivé. Verrouille tous les comptes derrière cette IP : les utilisateurs derrière un même NAT ou proxy la partagent, gardez une valeur bien au-dessus de celle par compte",
+    "trustedProxies": "Reverse proxies de confiance",
+    "trustedProxiesHelper": "Nombre de reverse proxies devant ProxCenter (1 = le nginx fourni, 2 = un répartiteur de charge devant lui). Détermine l'entrée X-Forwarded-For retenue comme IP du client, pour le verrouillage par IP, le journal d'audit, les sessions et les tokens API ; 0 = aucune IP client enregistrée",
     "auditPolicy": "Politique d'audit",
     "retentionDays": "Rétention (jours)",
     "retentionHelper": "Nombre de jours de conservation des logs",
@@ -8494,6 +8500,19 @@
         "iso-27001-2022": "ISO/IEC 27001 est la norme internationale pour les systèmes de management de la sécurité de l'information (SMSI). L'annexe A recense 93 contrôles couvrant les thèmes organisationnels, humains, physiques et technologiques.",
         "cis-controls-v8-1": "18 contrôles et 153 safeguards du Center for Internet Security. Identifiants et titres courts uniquement ; le score est un taux de réussite technique, pas une certification CIS."
       }
+    },
+    "loginLockouts": {
+      "title": "Comptes et IP verrouillés",
+      "description": "Comptes et IP sources refusés à la connexion après trop d'échecs. Ils se déverrouillent seuls à la fin de la durée de verrouillage, ou tout de suite avec Déverrouiller.",
+      "empty": "Aucun compte ni aucune IP verrouillés.",
+      "subject": "Compte ou IP",
+      "type": "Type",
+      "kindAccount": "Compte",
+      "kindIp": "Adresse IP",
+      "failedAttempts": "Tentatives échouées",
+      "lockedUntil": "Verrouillé jusqu'à",
+      "unlock": "Déverrouiller",
+      "unlockFailed": "Déverrouillage impossible, réessayez."
     }
   },
   "changes": {

@@ -15,6 +15,7 @@
 
 import { prisma } from '@/lib/db/prisma'
 import type { Prisma } from '@prisma/client'
+import { invalidateTrustedProxiesCache } from '@/lib/net/clientIp'
 
 export interface SecurityPolicies {
   id: string
@@ -27,6 +28,8 @@ export interface SecurityPolicies {
   session_max_concurrent: number
   login_max_failed_attempts: number
   login_lockout_duration_minutes: number
+  login_ip_max_failed_attempts: number
+  login_trusted_proxies: number
   audit_retention_days: number
   audit_auto_cleanup: boolean
   require_2fa_for_super_admin: boolean
@@ -48,6 +51,8 @@ function rowToPolicies(row: PrismaRow): SecurityPolicies {
     session_max_concurrent: row.sessionMaxConcurrent,
     login_max_failed_attempts: row.loginMaxFailedAttempts,
     login_lockout_duration_minutes: row.loginLockoutDurationMinutes,
+    login_ip_max_failed_attempts: row.loginIpMaxFailedAttempts,
+    login_trusted_proxies: row.loginTrustedProxies,
     audit_retention_days: row.auditRetentionDays,
     audit_auto_cleanup: row.auditAutoCleanup,
     require_2fa_for_super_admin: row.require2faForSuperAdmin,
@@ -86,6 +91,8 @@ const SNAKE_TO_CAMEL: Record<string, keyof Prisma.SecurityPolicyUpdateInput> = {
   session_max_concurrent: 'sessionMaxConcurrent',
   login_max_failed_attempts: 'loginMaxFailedAttempts',
   login_lockout_duration_minutes: 'loginLockoutDurationMinutes',
+  login_ip_max_failed_attempts: 'loginIpMaxFailedAttempts',
+  login_trusted_proxies: 'loginTrustedProxies',
   audit_retention_days: 'auditRetentionDays',
   audit_auto_cleanup: 'auditAutoCleanup',
   require_2fa_for_super_admin: 'require2faForSuperAdmin',
@@ -155,6 +162,7 @@ export async function updateSecurityPolicies(
     where: { id: 'default', tenantId },
     data,
   })
+  invalidateTrustedProxiesCache()
 
   return getSecurityPolicies(tenantId)
 }

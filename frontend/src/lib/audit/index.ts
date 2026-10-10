@@ -8,6 +8,7 @@ import { prisma } from "@/lib/db/prisma"
 import { getCurrentTenantId } from "@/lib/tenant"
 import { getPrincipal, getTokenPrincipalContext } from "@/lib/auth/principal"
 import { forwardAuditEvent } from "@/lib/syslog/forwarder"
+import { clientIpFromHeaders } from "@/lib/net/clientIp"
 
 export type AuditCategory =
   | "auth"           // Connexion, déconnexion, changement de mot de passe
@@ -33,6 +34,8 @@ export type AuditAction =
   | "login"
   | "logout"
   | "login_failed"
+  | "login_locked"
+  | "login_unlocked"
   | "password_changed"
   | "sessions_revoked"
   | "session_revoked_single"
@@ -179,7 +182,9 @@ export async function audit(entry: AuditLogEntry, tx?: Prisma.TransactionClient)
     try {
       const headersList = await headers()
 
-      ipAddress = ipAddress || headersList.get("x-forwarded-for") || headersList.get("x-real-ip") || "unknown"
+      // Only the hop our trusted proxies appended; null when it cannot be
+      // resolved rather than a client-supplied value.
+      ipAddress = ipAddress || (await clientIpFromHeaders(headersList)) || undefined
       userAgent = userAgent || headersList.get("user-agent") || "unknown"
     } catch {
       // Headers non disponibles

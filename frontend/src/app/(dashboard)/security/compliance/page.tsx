@@ -21,6 +21,7 @@ import {
   useComplianceProfiles,
 } from '@/hooks/useHardeningChecks'
 import FrameworksTab from '@/components/compliance/FrameworksTab'
+import LoginLockoutsCard from '@/components/compliance/LoginLockoutsCard'
 
 // Severity config
 const severityColors: Record<string, 'error' | 'warning' | 'info' | 'default'> = {
@@ -1148,6 +1149,29 @@ function PoliciesTab() {
                   helperText={t('compliance.lockoutHelper')}
                   inputProps={{ min: 0 }}
                 />
+                <NumericTextField
+                  type="number"
+                  label={t('compliance.ipMaxFailedAttempts')}
+                  value={form.login_ip_max_failed_attempts}
+                  onChange={(v) => handleChange('login_ip_max_failed_attempts', v)}
+                  fallback={0}
+                  min={0}
+                  size="small"
+                  helperText={t('compliance.ipMaxFailedHelper')}
+                  inputProps={{ min: 0 }}
+                />
+                <NumericTextField
+                  type="number"
+                  label={t('compliance.trustedProxies')}
+                  value={form.login_trusted_proxies}
+                  onChange={(v) => handleChange('login_trusted_proxies', v)}
+                  fallback={0}
+                  min={0}
+                  max={10}
+                  size="small"
+                  helperText={t('compliance.trustedProxiesHelper')}
+                  inputProps={{ min: 0, max: 10 }}
+                />
               </Box>
             </CardContent>
           </Card>
@@ -1227,6 +1251,9 @@ function PoliciesTab() {
           {saving ? t('common.saving') : t('common.save')}
         </Button>
       </Box>
+
+      {/* Accounts and IPs locked by the login policy */}
+      <LoginLockoutsCard />
     </Box>
   )
 }

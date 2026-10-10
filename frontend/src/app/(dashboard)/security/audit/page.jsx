@@ -49,6 +49,8 @@ const ACTION_KEYS = {
   login: 'audit.actions.login',
   logout: 'audit.actions.logout',
   login_failed: 'audit.actions.loginFailed',
+  login_locked: 'audit.actions.loginLocked',
+  login_unlocked: 'audit.actions.loginUnlocked',
   password_changed: 'audit.actions.passwordChange', // NOSONAR: action key, not a credential
 
   // CRUD

@@ -181,3 +181,49 @@ describe('useNodeTrends', () => {
     expect(result.current.trendsData).toBeNull()
   })
 })
+
+describe('useNodeTrends after unmount', () => {
+  // CI flake: a widget test ended before its trends response, jsdom was torn
+  // down, and the late setState crashed React with "window is not defined".
+  it('aborts its request and sets no state once unmounted', async () => {
+    let release!: () => void
+    let signal: AbortSignal | undefined
+
+    vi.stubGlobal('fetch', vi.fn((_url: string, init?: RequestInit) => {
+      signal = init?.signal ?? undefined
+
+      return new Promise<Response>(resolve => {
+        release = () => resolve(jsonResponse({ data: { 'node:pve-01': [{ ts: 1, t: '10:00', cpu: 1, ram: 2 }] } }))
+      })
+    }))
+
+    const rejections: unknown[] = []
+    const onRejection = (reason: unknown) => { rejections.push(reason) }
+
+    process.on('unhandledRejection', onRejection)
+
+    const { unmount } = renderHook(() => useNodeTrends({
+      data: clusterData, selectedConnections: [], timeRange: '1h', metrics: CPU_RAM,
+    }))
+
+    await waitFor(() => expect(release).toBeDefined())
+    unmount()
+
+    // What the jsdom teardown does before a late response lands.
+    const win = globalThis.window
+
+    // @ts-expect-error simulating the torn-down environment
+    delete globalThis.window
+
+    try {
+      release()
+      await new Promise(r => setTimeout(r, 20))
+    } finally {
+      globalThis.window = win
+      process.off('unhandledRejection', onRejection)
+    }
+
+    expect(signal?.aborted).toBe(true)
+    expect(rejections).toEqual([])
+  })
+})

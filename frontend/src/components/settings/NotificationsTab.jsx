@@ -27,6 +27,7 @@ import {
 } from '@mui/material'
 
 import NumericTextField from '@/components/ui/NumericTextField'
+import NotificationChannelsCard from '@/components/settings/NotificationChannelsCard'
 import {
   formatRecipients,
   invalidRecipients,
@@ -533,6 +534,9 @@ return
         </CardContent>
       </Card>
 
+      {/* Section Canaux (Slack, Teams, ntfy, Discord, webhook) */}
+      <NotificationChannelsCard />
+
       {/* Section Types de notifications */}
       <Card variant='outlined' sx={{ mb: 3 }}>
         <CardContent>
@@ -660,6 +664,17 @@ return
                 endAdornment: <InputAdornment position='end'>emails/h</InputAdornment>
               }}
               helperText={t('notifications.rateLimitHelper')}
+            />
+
+            {/* Address the channel messages link back to; empty = no link. */}
+            <TextField
+              fullWidth
+              label={t('notifications.publicUrl')}
+              placeholder='https://proxcenter.example.com'
+              value={settings.public_url || ''}
+              onChange={e => setSettings(s => ({ ...s, public_url: e.target.value }))}
+              helperText={t('notifications.publicUrlHelper')}
+              sx={{ gridColumn: { md: '1 / -1' } }}
             />
           </Box>
         </CardContent>

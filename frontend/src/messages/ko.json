@@ -4366,7 +4366,95 @@
     "inheritDefault": "상속 (기본값)",
     "categorySeverityHelper": "카테고리별 최소 심각도를 설정하거나 전역 기본값을 상속합니다.",
     "rateLimit": "시간당 발송 제한",
-    "rateLimitHelper": "스팸 방지 (0 = 무제한)"
+    "rateLimitHelper": "스팸 방지 (0 = 무제한)",
+    "publicUrl": "ProxCenter 공개 URL",
+    "publicUrlHelper": "채널 메시지(Slack, Teams, ntfy, Discord, 웹훅)의 링크에 사용됩니다. 비워 두면 링크가 없습니다.",
+    "channels": {
+      "title": "알림 채널",
+      "description": "같은 알림을 Slack, Microsoft Teams, ntfy, Discord 또는 웹훅으로 보냅니다. 아래의 전역 유형 및 심각도 필터가 먼저 적용되고, 그다음 각 채널의 필터가 적용됩니다.",
+      "add": "채널 추가",
+      "empty": "아직 채널이 없습니다. 채널을 추가할 때까지 이메일이 유일한 수신자입니다.",
+      "loadError": "채널을 불러올 수 없습니다:",
+      "saveError": "저장 실패:",
+      "saved": "채널이 저장되었습니다",
+      "columns": {
+        "name": "채널",
+        "target": "대상",
+        "filters": "필터",
+        "activity": "활동"
+      },
+      "allTypes": "모든 유형",
+      "neverSent": "아직 전송된 항목 없음",
+      "lastSent": "마지막 전송 {time}",
+      "lastError": "마지막 오류: {error}",
+      "test": "테스트 전송",
+      "testing": "전송 중...",
+      "testOk": "테스트 메시지가 전달되었습니다.",
+      "testFailed": "테스트 실패:",
+      "showSecrets": "비밀 값 표시",
+      "hideSecrets": "비밀 값 숨기기",
+      "keepCurrent": "{current}을(를) 유지하려면 비워 두세요",
+      "keepStoredSecret": "값이 저장되어 있습니다. 유지하려면 비워 두세요.",
+      "clearToken": "저장된 토큰 제거",
+      "clearSigningSecret": "저장된 서명 비밀 키 제거",
+      "clearHeaderValue": "저장된 헤더 값 제거",
+      "dialog": {
+        "addTitle": "채널 추가",
+        "editTitle": "채널 편집"
+      },
+      "deleteConfirm": {
+        "title": "채널 삭제",
+        "body": "\"{name}\" 채널을 삭제할까요? 더 이상 이 채널로 알림이 전송되지 않습니다."
+      },
+      "fields": {
+        "name": "이름",
+        "type": "유형",
+        "url": "URL",
+        "token": "액세스 토큰",
+        "tokenHelper": "선택 사항. ntfy 서버에 Bearer 토큰으로 전송됩니다.",
+        "headerName": "사용자 지정 헤더 이름",
+        "headerValue": "사용자 지정 헤더 값",
+        "signingSecret": "서명 비밀 키",
+        "signingSecretHelper": "선택 사항. 설정하면 각 요청에 X-ProxCenter-Signature: sha256='<'본문의 HMAC-SHA256'>' 헤더가 포함됩니다.",
+        "types": "알림 유형",
+        "typesHelper": "비워 두면 모든 유형입니다.",
+        "minSeverity": "최소 심각도",
+        "minSeverityHelper": "해결된 알림은 항상 전송됩니다.",
+        "allowPrivate": "사설 네트워크 대상 허용",
+        "allowPrivateHelper": "이 옵션을 켜기 전까지 루프백, 링크 로컬, 사설 주소는 거부됩니다.",
+        "allowPrivateWarning": "오케스트레이터가 자신의 네트워크에 있는 주소로 전송하게 됩니다. 직접 관리하는 수신자에만 사용하세요.",
+        "enabled": "활성화"
+      },
+      "urlHelper": {
+        "slack": "Slack 앱의 수신 웹훅 URL입니다.",
+        "teams": "Teams 워크플로 \"Teams 웹후크 요청을 받은 경우\"의 URL입니다.",
+        "ntfy": "ntfy.sh 또는 자체 서버의 전체 토픽 URL입니다.",
+        "discord": "채널 통합의 웹훅 URL입니다.",
+        "webhook": "알림마다 JSON POST를 받습니다."
+      },
+      "types": {
+        "slack": "Slack",
+        "teams": "Microsoft Teams",
+        "ntfy": "ntfy",
+        "discord": "Discord",
+        "webhook": "웹훅"
+      },
+      "notificationTypes": {
+        "alert": "알림",
+        "event": "이벤트",
+        "migration": "마이그레이션",
+        "backup": "백업",
+        "replication": "복제",
+        "maintenance": "유지보수",
+        "report": "보고서"
+      },
+      "severities": {
+        "info": "정보 이상",
+        "success": "성공 이상",
+        "warning": "경고 및 심각",
+        "critical": "심각만"
+      }
+    }
   },
   "audit": {
     "title": "감사 및 로그",

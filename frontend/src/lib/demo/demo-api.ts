@@ -2003,6 +2003,50 @@ export const EXTRA_MOCKS: MockDataMap = {
     },
   },
 
+  // --- Notification channels (roadmap#47): shape read by NotificationChannelsCard ---
+  'GET:/api/v1/orchestrator/notifications/channels': {
+    data: [
+      {
+        id: 'demo-channel-slack',
+        name: 'Ops Slack',
+        type: 'slack',
+        enabled: true,
+        url_masked: 'https://hooks.slack.com/services/***',
+        has_secret: false,
+        has_header_value: false,
+        header_name: '',
+        types: ['alert', 'backup'],
+        min_severity: 'warning',
+        allow_private_network: false,
+        last_status: 'sent',
+        last_error: '',
+        last_sent_at: new Date(Date.now() - 12 * 60_000).toISOString(),
+        last_error_at: null,
+        sent_count: 42,
+        failed_count: 0,
+      },
+      {
+        id: 'demo-channel-teams',
+        name: 'NOC Teams',
+        type: 'teams',
+        enabled: true,
+        url_masked: 'https://prod-12.westeurope.logic.azure.com:443/workflows/***',
+        has_secret: false,
+        has_header_value: false,
+        header_name: '',
+        types: [],
+        min_severity: 'critical',
+        allow_private_network: false,
+        last_status: 'failed',
+        last_error: 'HTTP 400: The input body for trigger is invalid',
+        last_sent_at: new Date(Date.now() - 3 * 3_600_000).toISOString(),
+        last_error_at: new Date(Date.now() - 25 * 60_000).toISOString(),
+        sent_count: 17,
+        failed_count: 1,
+      },
+    ],
+  },
+
   // --- Auth providers (LDAP / OIDC) ---
   'GET:/api/v1/auth/ldap': {
     data: { enabled: false, url: '', baseDn: '', bindDn: '' },

@@ -4366,7 +4366,95 @@
     "inheritDefault": "Inherit (default)",
     "categorySeverityHelper": "Set a minimum severity per category, or inherit the global default.",
     "rateLimit": "Rate limit per hour",
-    "rateLimitHelper": "Spam protection (0 = unlimited)"
+    "rateLimitHelper": "Spam protection (0 = unlimited)",
+    "publicUrl": "ProxCenter public URL",
+    "publicUrlHelper": "Used for the links in channel messages (Slack, Teams, ntfy, Discord, webhook). Leave empty for no link.",
+    "channels": {
+      "title": "Notification channels",
+      "description": "Deliver the same notifications to Slack, Microsoft Teams, ntfy, Discord or a webhook. The global type and severity filters below apply first, then each channel's own filters.",
+      "add": "Add channel",
+      "empty": "No channel yet. Email stays the only recipient until one is added.",
+      "loadError": "Unable to load the channels:",
+      "saveError": "Save failed:",
+      "saved": "Channel saved",
+      "columns": {
+        "name": "Channel",
+        "target": "Target",
+        "filters": "Filters",
+        "activity": "Activity"
+      },
+      "allTypes": "All types",
+      "neverSent": "Nothing sent yet",
+      "lastSent": "Last sent {time}",
+      "lastError": "Last error: {error}",
+      "test": "Send test",
+      "testing": "Sending...",
+      "testOk": "Test message delivered.",
+      "testFailed": "Test failed:",
+      "showSecrets": "Show secrets",
+      "hideSecrets": "Hide secrets",
+      "keepCurrent": "Leave blank to keep {current}",
+      "keepStoredSecret": "A value is stored. Leave blank to keep it.",
+      "clearToken": "Remove the stored token",
+      "clearSigningSecret": "Remove the stored signing secret",
+      "clearHeaderValue": "Remove the stored header value",
+      "dialog": {
+        "addTitle": "Add a channel",
+        "editTitle": "Edit the channel"
+      },
+      "deleteConfirm": {
+        "title": "Delete the channel",
+        "body": "Delete the channel \"{name}\"? Notifications will no longer be sent to it."
+      },
+      "fields": {
+        "name": "Name",
+        "type": "Type",
+        "url": "URL",
+        "token": "Access token",
+        "tokenHelper": "Optional. Sent as a Bearer token to the ntfy server.",
+        "headerName": "Custom header name",
+        "headerValue": "Custom header value",
+        "signingSecret": "Signing secret",
+        "signingSecretHelper": "Optional. Each request then carries X-ProxCenter-Signature: sha256='<'HMAC-SHA256 of the body'>'.",
+        "types": "Notification types",
+        "typesHelper": "Empty means every type.",
+        "minSeverity": "Minimum severity",
+        "minSeverityHelper": "Resolved alerts are always sent.",
+        "allowPrivate": "Allow private network targets",
+        "allowPrivateHelper": "Loopback, link-local and private addresses are refused unless this is enabled.",
+        "allowPrivateWarning": "The orchestrator will post to addresses on its own networks. Only enable it for a receiver you control.",
+        "enabled": "Enabled"
+      },
+      "urlHelper": {
+        "slack": "Incoming webhook URL of the Slack app.",
+        "teams": "URL of a Teams workflow \"When a Teams webhook request is received\".",
+        "ntfy": "Full topic URL, on ntfy.sh or your own server.",
+        "discord": "Webhook URL from the channel integrations.",
+        "webhook": "Receives a JSON POST for each notification."
+      },
+      "types": {
+        "slack": "Slack",
+        "teams": "Microsoft Teams",
+        "ntfy": "ntfy",
+        "discord": "Discord",
+        "webhook": "Webhook"
+      },
+      "notificationTypes": {
+        "alert": "Alerts",
+        "event": "Events",
+        "migration": "Migrations",
+        "backup": "Backups",
+        "replication": "Replication",
+        "maintenance": "Maintenance",
+        "report": "Reports"
+      },
+      "severities": {
+        "info": "Info and above",
+        "success": "Success and above",
+        "warning": "Warnings and critical",
+        "critical": "Critical only"
+      }
+    }
   },
   "audit": {
     "title": "Audit & Logs",

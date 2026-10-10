@@ -65,8 +65,14 @@ export function useNodeTrends({ data, selectedConnections = [], timeRange, metri
     return grouped
   }, [nodesStableKey, selectedKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Fetch trends
+  // Fetch trends. The request is aborted and its result dropped once the
+  // effect is cleaned up: a late response must not set state on an unmounted
+  // widget (in tests, after jsdom is gone, React then throws "window is not
+  // defined").
   useEffect(() => {
+    const controller = new AbortController()
+    let cancelled = false
+
     const fetchTrends = async () => {
       const connIds = Object.keys(nodesByConnection)
 
@@ -84,6 +90,7 @@ export function useNodeTrends({ data, selectedConnections = [], timeRange, metri
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ items, timeframe: mapTimeRange(timeRange).trendsTimeframe }),
+              signal: controller.signal,
             })
 
             if (!res.ok) return {}
@@ -137,17 +144,24 @@ return json.data || {}
           }
         }
 
+        if (cancelled) return
         setNodeNames(sortedNames)
         setTrendsData(aggregated)
       } catch (e) {
+        if (cancelled) return
         console.error('Failed to fetch node trends:', e)
         setTrendsData([])
       } finally {
-        setLoading(false)
+        if (!cancelled) setLoading(false)
       }
     }
 
     void fetchTrends()
+
+    return () => {
+      cancelled = true
+      controller.abort()
+    }
   }, [nodesStableKey, selectedKey, metricsKey, timeRange]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return { trendsData, nodeNames, loading, allConnections }

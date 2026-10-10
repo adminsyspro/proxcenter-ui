@@ -191,3 +191,41 @@ describe('authenticateLdap', () => {
     expect(JSON.parse(fetchMock.mock.calls[0][1].body).config.ca_cert).toBe('')
   })
 })
+
+describe('authenticateLdapDetailed, failure reasons for the lockout policy', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    findUniqueMock.mockResolvedValue(ROW)
+  })
+
+  function orchestratorAnswers(body: Record<string, unknown>, ok = true) {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok, status: ok ? 200 : 502, json: async () => body, text: async () => '' }))
+  }
+
+  it('user_found false = user_not_found', async () => {
+    orchestratorAnswers({ success: false, error: 'Invalid credentials', user_found: false })
+    const { authenticateLdapDetailed } = await import('./ldap')
+    expect(await authenticateLdapDetailed('ghost', 'x')).toEqual({ user: null, failure: 'user_not_found' })
+  })
+
+  it('user_found true = invalid_password', async () => {
+    orchestratorAnswers({ success: false, error: 'Invalid credentials', user_found: true })
+    const { authenticateLdapDetailed } = await import('./ldap')
+    expect(await authenticateLdapDetailed('jdoe', 'x')).toEqual({ user: null, failure: 'invalid_password' })
+  })
+
+  it('an orchestrator without user_found is read as a refused bind', async () => {
+    orchestratorAnswers({ success: false, error: 'Invalid credentials' })
+    const { authenticateLdapDetailed } = await import('./ldap')
+    expect(await authenticateLdapDetailed('jdoe', 'x')).toEqual({ user: null, failure: 'invalid_password' })
+  })
+
+  it('an LDAP or orchestrator error is not a credential failure', async () => {
+    orchestratorAnswers({ success: false, error: 'Failed to connect to LDAP server: refused' })
+    const { authenticateLdapDetailed } = await import('./ldap')
+    expect(await authenticateLdapDetailed('jdoe', 'x')).toEqual({ user: null, failure: 'error' })
+
+    orchestratorAnswers({}, false)
+    expect(await authenticateLdapDetailed('jdoe', 'x')).toEqual({ user: null, failure: 'error' })
+  })
+})

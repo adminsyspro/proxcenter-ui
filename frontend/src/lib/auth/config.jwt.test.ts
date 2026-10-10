@@ -14,7 +14,8 @@ vi.mock('./sessions', async (orig) => {
   return { ...actual, createSession: createSessionMock, touchSession: touchSessionMock }
 })
 vi.mock('next/headers', () => ({
-  headers: async () => new Headers({ 'x-forwarded-for': '10.0.0.9, 172.16.0.1', 'user-agent': 'UA/1' }),
+  // A forged first hop, then the address the bundled nginx (1 trusted proxy) appended.
+  headers: async () => new Headers({ 'x-forwarded-for': '6.6.6.6, 10.0.0.9', 'user-agent': 'UA/1' }),
 }))
 
 import { authOptions } from './config'

@@ -4399,6 +4399,8 @@
       "login": "Inicio de sesión",
       "logout": "Cierre de sesión",
       "loginFailed": "Inicio de sesión fallido",
+      "loginLocked": "Inicio de sesión bloqueado",
+      "loginUnlocked": "Inicio de sesión desbloqueado",
       "passwordChange": "Cambio de contraseña",
       "create": "Crear",
       "read": "Leer",
@@ -8435,6 +8437,10 @@
     "maxFailedHelper": "0 = ilimitados",
     "lockoutDuration": "Duración del bloqueo (minutos)",
     "lockoutHelper": "Duración tras el máximo de intentos fallidos",
+    "ipMaxFailedAttempts": "Intentos fallidos máx. por IP de origen",
+    "ipMaxFailedHelper": "0 = desactivado. Bloquea todas las cuentas detrás de esa IP: los usuarios tras un mismo NAT o proxy la comparten, manténgalo muy por encima del valor por cuenta",
+    "trustedProxies": "Proxies inversos de confianza",
+    "trustedProxiesHelper": "Número de proxies inversos delante de ProxCenter (1 = el nginx incluido, 2 = un balanceador delante de él). Determina qué entrada de X-Forwarded-For es la IP del cliente, para el bloqueo por IP, el registro de auditoría, las sesiones y los tokens API; 0 = no se registra la IP del cliente",
     "auditPolicy": "Política de auditoría",
     "retentionDays": "Retención (días)",
     "retentionHelper": "Número de días que se conservan los logs de auditoría",
@@ -8493,6 +8499,19 @@
         "iso-27001-2022": "ISO/IEC 27001 es el estándar internacional para sistemas de gestión de seguridad de la información (ISMS). El Anexo A enumera 93 controles en ámbitos organizativos, de personas, físicos y tecnológicos.",
         "cis-controls-v8-1": "18 controles y 153 salvaguardas del Center for Internet Security. Solo identificadores y títulos breves; la puntuación es una tasa técnica de cumplimiento, no una certificación CIS."
       }
+    },
+    "loginLockouts": {
+      "title": "Cuentas e IP bloqueadas",
+      "description": "Cuentas e IP de origen rechazadas al iniciar sesión tras demasiados intentos fallidos. Se desbloquean solas al final de la duración del bloqueo, o al instante con Desbloquear.",
+      "empty": "Ninguna cuenta ni IP bloqueada.",
+      "subject": "Cuenta o IP",
+      "type": "Tipo",
+      "kindAccount": "Cuenta",
+      "kindIp": "Dirección IP",
+      "failedAttempts": "Intentos fallidos",
+      "lockedUntil": "Bloqueado hasta",
+      "unlock": "Desbloquear",
+      "unlockFailed": "No se pudo desbloquear, inténtelo de nuevo."
     }
   },
   "changes": {

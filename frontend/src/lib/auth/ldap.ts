@@ -95,23 +95,31 @@ export async function getLdapConfig(): Promise<LdapConfig | null> {
 }
 
 /**
- * Authenticate against LDAP via the Go orchestrator. The orchestrator does
- * the actual bind + group lookup; we forward the locally-stored config so
- * credentials never leave the server. Returns null on auth failure, throws
- * on transport / orchestrator-down failures so the caller can surface a
- * "service unavailable" rather than mistaking it for invalid creds.
+ * Why an LDAP sign-in failed, for the lockout policy: only `invalid_password`
+ * (the user was found in the directory, the bind was refused) counts against
+ * the account. `user_not_found` counts against the IP only, `error` (LDAP or
+ * orchestrator unreachable, misconfiguration) not at all.
  */
-export async function authenticateLdap(
+export type LdapAuthOutcome =
+  | { user: LdapUser; failure: null }
+  | { user: null; failure: "user_not_found" | "invalid_password" | "error" }
+
+// The orchestrator answers this exact text both for an unknown user and for
+// a refused bind. Newer orchestrators add `user_found` to tell them apart.
+const LDAP_INVALID_CREDENTIALS = "Invalid credentials"
+
+/** Same as authenticateLdap, with the reason of a failure. */
+export async function authenticateLdapDetailed(
   username: string,
   password: string,
-): Promise<LdapUser | null> {
+): Promise<LdapAuthOutcome> {
   if (!(await isLdapEnabled())) {
-    return null
+    return { user: null, failure: "error" }
   }
 
   const config = await getLdapConfig()
   if (!config || !config.enabled) {
-    return null
+    return { user: null, failure: "error" }
   }
 
   try {
@@ -149,25 +157,45 @@ export async function authenticateLdap(
     if (!res.ok) {
       const text = await res.text().catch(() => "")
       console.error(`Orchestrator LDAP auth failed: ${res.status} ${text}`)
-      return null
+      return { user: null, failure: "error" }
     }
 
     const data = await res.json()
     if (!data.success || !data.user) {
-      return null
+      if (data.error !== LDAP_INVALID_CREDENTIALS) return { user: null, failure: "error" }
+      // An orchestrator without `user_found` cannot tell: count it as a
+      // refused bind, the row cap bounds what unknown names can add.
+      return { user: null, failure: data.user_found === false ? "user_not_found" : "invalid_password" }
     }
 
     return {
-      dn: data.user.dn,
-      email: data.user.email,
-      name: data.user.name,
-      avatar: data.user.avatar || null,
-      groups: data.user.groups || [],
+      failure: null,
+      user: {
+        dn: data.user.dn,
+        email: data.user.email,
+        name: data.user.name,
+        avatar: data.user.avatar || null,
+        groups: data.user.groups || [],
+      },
     }
   } catch (error: any) {
     console.error("Erreur orchestrator LDAP auth:", error?.message || error)
     throw new Error("Erreur de communication avec l'orchestrator pour l'authentification LDAP")
   }
+}
+
+/**
+ * Authenticate against LDAP via the Go orchestrator. The orchestrator does
+ * the actual bind + group lookup; we forward the locally-stored config so
+ * credentials never leave the server. Returns null on auth failure, throws
+ * on transport / orchestrator-down failures so the caller can surface a
+ * "service unavailable" rather than mistaking it for invalid creds.
+ */
+export async function authenticateLdap(
+  username: string,
+  password: string,
+): Promise<LdapUser | null> {
+  return (await authenticateLdapDetailed(username, password)).user
 }
 
 /**

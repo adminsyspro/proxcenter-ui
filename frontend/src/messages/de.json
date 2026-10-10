@@ -4386,6 +4386,8 @@
       "login": "Anmelden",
       "logout": "Abmelden",
       "loginFailed": "Login fehlgeschlagen",
+      "loginLocked": "Anmeldung gesperrt",
+      "loginUnlocked": "Anmeldung entsperrt",
       "passwordChange": "Passwort change",
       "create": "Erstellen",
       "read": "Lesen",
@@ -8375,7 +8377,11 @@
     "maxFailedAttempts": "Max fehlgeschlagen attempts",
     "maxFailedHelper": "0 = unbegrenzt",
     "lockoutDuration": "Sperrdauer (Minuten)",
-    "lockoutHelper": "Duration after max fehlgeschlagen attempts",
+    "lockoutHelper": "Sperrdauer nach Erreichen der maximalen Fehlversuche",
+    "ipMaxFailedAttempts": "Max. Fehlversuche pro Quell-IP",
+    "ipMaxFailedHelper": "0 = deaktiviert. Sperrt alle Konten hinter dieser IP: Benutzer hinter demselben NAT oder Proxy teilen sie, daher deutlich über dem Wert pro Konto halten",
+    "trustedProxies": "Vertrauenswürdige Reverse-Proxys",
+    "trustedProxiesHelper": "Anzahl der Reverse-Proxys vor ProxCenter (1 = mitgeliefertes nginx, 2 = ein Load Balancer davor). Legt fest, welcher X-Forwarded-For-Eintrag die Client-IP ist, für die IP-Sperre, das Audit-Protokoll, Sitzungen und API-Tokens; 0 = keine Client-IP wird erfasst",
     "auditPolicy": "Audit-Richtlinie",
     "retentionDays": "Aufbewahrung (Tage)",
     "retentionHelper": "Anzahl der Tage für die Aufbewahrung von Audit-Logs",
@@ -8434,6 +8440,19 @@
         "iso-27001-2022": "ISO/IEC 27001 ist die internationale Norm für Informationssicherheits-Managementsysteme (ISMS). Anhang A umfasst 93 Maßnahmen in den Bereichen Organisation, Personal, Physisches und Technologie.",
         "cis-controls-v8-1": "18 Controls und 153 Safeguards des Center for Internet Security. Nur Kennungen und Kurztitel; der Wert ist eine technische Erfüllungsquote, keine CIS-Zertifizierung."
       }
+    },
+    "loginLockouts": {
+      "title": "Gesperrte Konten und IPs",
+      "description": "Konten und Quell-IPs, die nach zu vielen Fehlversuchen bei der Anmeldung abgewiesen werden. Sie werden am Ende der Sperrdauer automatisch entsperrt oder sofort über Entsperren.",
+      "empty": "Kein Konto und keine IP gesperrt.",
+      "subject": "Konto oder IP",
+      "type": "Typ",
+      "kindAccount": "Konto",
+      "kindIp": "IP-Adresse",
+      "failedAttempts": "Fehlversuche",
+      "lockedUntil": "Gesperrt bis",
+      "unlock": "Entsperren",
+      "unlockFailed": "Entsperren fehlgeschlagen, bitte erneut versuchen."
     }
   },
   "changes": {

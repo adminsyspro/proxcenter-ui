@@ -4403,6 +4403,8 @@
       "login": "登录",
       "logout": "登出",
       "loginFailed": "登录失败",
+      "loginLocked": "登录已锁定",
+      "loginUnlocked": "登录已解锁",
       "passwordChange": "密码更改",
       "create": "创建",
       "read": "读取",
@@ -8441,6 +8443,10 @@
     "maxFailedHelper": "0 = 无限制",
     "lockoutDuration": "锁定时长（分钟）",
     "lockoutHelper": "达到最大失败次数后的锁定时长",
+    "ipMaxFailedAttempts": "每个来源 IP 的最大失败次数",
+    "ipMaxFailedHelper": "0 = 禁用。会锁定该 IP 后的所有账户：同一 NAT 或代理后的用户共享该 IP，请设置为远高于每账户的值",
+    "trustedProxies": "受信任的反向代理数",
+    "trustedProxiesHelper": "ProxCenter 前面的反向代理数量（1 = 自带的 nginx，2 = 其前面还有负载均衡器）。决定将 X-Forwarded-For 中哪一项视为客户端 IP，用于 IP 锁定、审计日志、会话和 API 令牌；0 = 不记录客户端 IP",
     "auditPolicy": "审计策略",
     "retentionDays": "保留期（天）",
     "retentionHelper": "审计日志保留天数",
@@ -8499,6 +8505,19 @@
         "iso-27001-2022": "ISO/IEC 27001 是信息安全管理体系（ISMS）的国际标准。附录 A 列出了涵盖组织、人员、物理和技术四大主题的 93 项控制措施。",
         "cis-controls-v8-1": "来自 Center for Internet Security 的 18 项控制措施和 153 条保障措施。仅包含标识符和简短标题；分数为技术通过率，并非 CIS 认证。"
       }
+    },
+    "loginLockouts": {
+      "title": "已锁定的账户和 IP",
+      "description": "因失败次数过多而被拒绝登录的账户和来源 IP。锁定时长结束后自动解锁，也可点击解锁立即解除。",
+      "empty": "没有被锁定的账户或 IP。",
+      "subject": "账户或 IP",
+      "type": "类型",
+      "kindAccount": "账户",
+      "kindIp": "IP 地址",
+      "failedAttempts": "失败次数",
+      "lockedUntil": "锁定至",
+      "unlock": "解锁",
+      "unlockFailed": "解锁失败，请重试。"
     }
   },
   "changes": {

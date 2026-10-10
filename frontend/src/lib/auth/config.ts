@@ -8,11 +8,12 @@ import { nanoid } from "nanoid"
 import { prisma } from "@/lib/db/prisma"
 import { verifyPassword, hashPassword } from "./password"
 import { readGroupsClaim, isLdapGroupAllowed } from "./groupMapping"
-import { authenticateLdap, isLdapEnabled, getLdapConfig, resolveLdapRole, syncLdapRoleAssignment } from "./ldap"
+import { authenticateLdapDetailed, isLdapEnabled, getLdapConfig, resolveLdapRole, syncLdapRoleAssignment } from "./ldap"
 import { getOidcConfig, oidcSeedRoleId, syncOidcRoleAssignment } from "./oidc"
 import { loadJwtContext } from "./jwtContext"
 import { createSession, evaluateSession, touchSession } from "./sessions"
 import { sessionDurations } from "./durations"
+import { beginLoginAttempt } from "./loginLockout"
 
 export type UserRole = "super_admin" | "admin" | "operator" | "viewer"
 
@@ -77,9 +78,8 @@ async function requestOrigin(): Promise<{ ipAddress: string | null; userAgent: s
   try {
     const { headers } = await import("next/headers")
     const h = await headers()
-    const fwd = h.get("x-forwarded-for")
-    const ip = fwd ? fwd.split(",")[0]?.trim() : h.get("x-real-ip")
-    return { ipAddress: ip || null, userAgent: h.get("user-agent") }
+    const { clientIpFromHeaders } = await import("@/lib/net/clientIp")
+    return { ipAddress: await clientIpFromHeaders(h), userAgent: h.get("user-agent") }
   } catch {
     return { ipAddress: null, userAgent: null }
   }
@@ -146,12 +146,20 @@ export const authOptions: NextAuthOptions = {
         password: { label: "Password", type: "password" },
         totpCode: { label: "TOTP", type: "text" },
       },
-      async authorize(credentials) {
+      async authorize(credentials, req) {
         if (!credentials?.email || !credentials?.password) {
           throw new Error("Email et mot de passe requis")
         }
 
         const email = credentials.email.toLowerCase().trim()
+
+        // Lockout policy: a locked account or IP gets the same answer as a
+        // wrong password, checked before the password so a correct guess
+        // reveals nothing either.
+        const attempt = await beginLoginAttempt(email, req, "credentials")
+        if (attempt.locked) {
+          throw new Error("Identifiants invalides")
+        }
 
         // Chercher l'utilisateur
         const user = await prisma.user.findUnique({
@@ -169,8 +177,12 @@ export const authOptions: NextAuthOptions = {
           },
         })
 
-        // Fonction pour logger les échecs
-        const logFailure = async (reason: string) => {
+        // Fonction pour logger les échecs et les compter pour le verrouillage.
+        // `lockout`: "account" = compte local existant (compte + IP), "ip" =
+        // pas de compte local à verrouiller (IP seule), "none" = refus après
+        // une authentification réussie (non compté).
+        const logFailure = async (reason: string, lockout: "account" | "ip" | "none" = "account") => {
+          if (lockout !== "none") await attempt.fail(lockout === "account")
           const { audit } = await import("@/lib/audit")
 
           await audit({
@@ -184,18 +196,18 @@ export const authOptions: NextAuthOptions = {
         }
 
         if (!user) {
-          await logFailure("User not found")
+          await logFailure("User not found", "ip")
           throw new Error("Identifiants invalides")
         }
 
         if (!user.enabled) {
-          await logFailure("Account disabled")
+          await logFailure("Account disabled", user.password ? "account" : "ip")
           throw new Error("Compte désactivé")
         }
 
         // Vérifier le mot de passe
         if (!user.password) {
-          await logFailure("No local password")
+          await logFailure("No local password", "ip")
           throw new Error("Ce compte utilise une autre méthode d'authentification")
         }
 
@@ -247,7 +259,7 @@ export const authOptions: NextAuthOptions = {
             select: { id: true },
           })
           if (!isSuperAdmin) {
-            await logFailure("No tenant membership")
+            await logFailure("No tenant membership", "none")
             throw new Error("Compte sans tenant — contactez votre administrateur")
           }
           await prisma.userTenant.upsert({
@@ -256,6 +268,8 @@ export const authOptions: NextAuthOptions = {
             create: { userId: user.id, tenantId: "default", isDefault: true, joinedAt: loginNow },
           })
         }
+
+        await attempt.succeed()
 
         return {
           id: user.id,
@@ -276,7 +290,7 @@ export const authOptions: NextAuthOptions = {
         password: { label: "Password", type: "password" },
         totpCode: { label: "TOTP", type: "text" },
       },
-      async authorize(credentials) {
+      async authorize(credentials, req) {
         if (!credentials?.username || !credentials?.password) {
           throw new Error("Username et mot de passe requis")
         }
@@ -286,13 +300,22 @@ export const authOptions: NextAuthOptions = {
           throw new Error("Authentification LDAP non configurée")
         }
 
+        // Lockout policy, checked before the LDAP bind (see credentials above).
+        const attempt = await beginLoginAttempt(credentials.username, req, "ldap")
+        if (attempt.locked) {
+          throw new Error("Identifiants LDAP invalides")
+        }
+
         // Authentifier via LDAP
-        const ldapUser = await authenticateLdap(
+        const { user: ldapUser, failure } = await authenticateLdapDetailed(
           credentials.username,
           credentials.password
         )
 
         if (!ldapUser) {
+          // Lockout: a refused bind counts against the account, a user the
+          // directory does not know against the IP only, an LDAP error not at all.
+          if (failure !== "error") await attempt.fail(failure === "invalid_password")
           throw new Error("Identifiants LDAP invalides")
         }
 
@@ -411,9 +434,12 @@ export const authOptions: NextAuthOptions = {
           const { verifyTotpOrRecovery } = await import("@/lib/auth/verify-second-factor")
           const ok = await verifyTotpOrRecovery(user.id, credentials.totpCode, null)
           if (!ok) {
+            await attempt.fail(true)
             throw new Error("Identifiants LDAP invalides")
           }
         }
+
+        await attempt.succeed()
 
         return {
           id: user.id,

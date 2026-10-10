@@ -25,6 +25,8 @@ const mockGetReturn = {
   sessionMaxConcurrent: 0,
   loginMaxFailedAttempts: 0,
   loginLockoutDurationMinutes: 15,
+  loginIpMaxFailedAttempts: 0,
+  loginTrustedProxies: 1,
   auditRetentionDays: 90,
   auditAutoCleanup: false,
   require2faForSuperAdmin: false,

@@ -19,6 +19,7 @@ import {
 import { _impl } from '@/lib/auth/requireEnterprise'
 import { _resetLicenseVerdictCache } from '@/lib/api-tokens/licenseGate'
 import { _resetRateLimitCounters } from '@/lib/api-tokens/rateLimit'
+import { invalidateTrustedProxiesCache } from '@/lib/net/clientIp'
 import { getPrincipal, getTokenPrincipalContext } from './principal'
 
 beforeEach(async () => {
@@ -28,7 +29,8 @@ beforeEach(async () => {
   _resetRateLimitCounters()
   vi.spyOn(_impl, 'getServerLicense').mockResolvedValue(ENTERPRISE_WITH_API_ACCESS)
   getServerSessionMock.mockResolvedValue(null)
-  await truncate(['api_tokens', 'tenants'])
+  invalidateTrustedProxiesCache()
+  await truncate(['api_tokens', 'tenants', 'security_policies'])
   await seedDefaultTenant()
 })
 
@@ -276,6 +278,29 @@ describe('getPrincipal, last_used (step 11, D5)', () => {
     const row = await prismaTest.apiToken.findUnique({ where: { id } })
     expect(row?.lastUsedAt).not.toBeNull()
     expect(row?.lastUsedIp).toBe('203.0.113.9')
+  })
+
+  it('records the hop the trusted proxy appended as last_used_ip, never a forged first hop', async () => {
+    const { id, secret } = await seedApiToken()
+    const h = tokenHeaders(secret, 'vms-list', '/api/v1/vms')
+    h.set('x-forwarded-for', '6.6.6.6, 203.0.113.9')
+    setHeaders(h)
+    await getPrincipal({ recordUsage: true })
+    expect((await prismaTest.apiToken.findUnique({ where: { id } }))?.lastUsedIp).toBe('203.0.113.9')
+  })
+
+  it('records a null last_used_ip when the client IP cannot be resolved', async () => {
+    await prismaTest.securityPolicy.create({
+      data: { id: 'default', tenantId: 'default', loginTrustedProxies: 2, updatedAt: new Date() },
+    })
+    const { id, secret } = await seedApiToken()
+    const h = tokenHeaders(secret, 'vms-list', '/api/v1/vms')
+    h.set('x-forwarded-for', '203.0.113.9')
+    setHeaders(h)
+    await getPrincipal({ recordUsage: true })
+    const row = await prismaTest.apiToken.findUnique({ where: { id } })
+    expect(row?.lastUsedAt).not.toBeNull()
+    expect(row?.lastUsedIp).toBeNull()
   })
 })
 

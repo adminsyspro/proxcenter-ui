@@ -4399,6 +4399,8 @@
       "login": "Login",
       "logout": "Logout",
       "loginFailed": "Login failed",
+      "loginLocked": "Sign-in locked",
+      "loginUnlocked": "Sign-in unlocked",
       "passwordChange": "Password change",
       "create": "Create",
       "read": "Read",
@@ -8435,6 +8437,10 @@
     "maxFailedHelper": "0 = unlimited",
     "lockoutDuration": "Lockout duration (minutes)",
     "lockoutHelper": "Duration after max failed attempts",
+    "ipMaxFailedAttempts": "Max failed attempts per source IP",
+    "ipMaxFailedHelper": "0 = disabled. Locks every account behind that IP: users sharing a NAT or proxy share it, so keep it well above the per-account value",
+    "trustedProxies": "Trusted reverse proxies",
+    "trustedProxiesHelper": "Number of reverse proxies in front of ProxCenter (1 = the bundled nginx, 2 = a load balancer in front of it). Sets which X-Forwarded-For entry is the client IP, for IP lockout, the audit log, sessions and API tokens; 0 = no client IP is recorded",
     "auditPolicy": "Audit Policy",
     "retentionDays": "Retention (days)",
     "retentionHelper": "Number of days to keep audit logs",
@@ -8493,6 +8499,19 @@
         "iso-27001-2022": "ISO/IEC 27001 is the international standard for information security management systems (ISMS). Annex A lists 93 controls across organizational, people, physical, and technological themes.",
         "cis-controls-v8-1": "18 controls and 153 safeguards from the Center for Internet Security. Identifiers and short titles only; the score is a technical pass rate, not a CIS certification."
       }
+    },
+    "loginLockouts": {
+      "title": "Locked accounts and IPs",
+      "description": "Accounts and source IPs refused at sign-in after too many failed attempts. They unlock automatically at the end of the lockout duration, or right away with Unlock.",
+      "empty": "No account or IP is locked.",
+      "subject": "Account or IP",
+      "type": "Type",
+      "kindAccount": "Account",
+      "kindIp": "IP address",
+      "failedAttempts": "Failed attempts",
+      "lockedUntil": "Locked until",
+      "unlock": "Unlock",
+      "unlockFailed": "Could not unlock, please try again."
     }
   },
   "changes": {

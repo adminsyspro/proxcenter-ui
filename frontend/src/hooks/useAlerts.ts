@@ -1,10 +1,18 @@
 import { useSWRFetch } from './useSWRFetch'
 import { useRefreshInterval } from './useRefreshInterval'
 
-export function useOrchestratorAlerts(enabled: boolean) {
+// Statuses the orchestrator filters on itself. "all" and "silenced" (a label
+// the proxy adds) need the unfiltered feed.
+const SERVER_FILTERED_STATUSES = new Set(['active', 'acknowledged', 'resolved'])
+
+export function useOrchestratorAlerts(enabled: boolean, status?: string) {
   const refreshInterval = useRefreshInterval(30000)
+  // The status goes to the server so the list holds every alert the summary
+  // counts, instead of filtering a window of the newest rows (#1086).
+  const statusParam = status && SERVER_FILTERED_STATUSES.has(status) ? `&status=${status}` : ''
+
   return useSWRFetch(
-    enabled ? '/api/v1/orchestrator/alerts?limit=200' : null,
+    enabled ? `/api/v1/orchestrator/alerts?limit=1000${statusParam}` : null,
     { refreshInterval }
   )
 }

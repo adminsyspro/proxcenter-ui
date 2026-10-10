@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
 
-import { alertsApi } from '@/lib/orchestrator/client'
 import { demoResponse } from '@/lib/demo/demo-api'
 import { getCurrentTenantId, getSessionPrisma, getTenantConnectionIds } from '@/lib/tenant'
 import { getTenantInfrastructureScope, maskingScope } from '@/lib/tenant/infraScope'
@@ -8,6 +7,7 @@ import { checkPermission, PERMISSIONS, getCurrentRbacInfraScope } from '@/lib/rb
 import { isAlertVisibleToTenant } from '@/lib/alerts/visibility'
 import { getVdcVmidsByConnection } from '@/lib/alerts/vdcVmids'
 import { buildOrchestratorFingerprint } from '@/lib/alerts/orchestratorFingerprint'
+import { dedupeOrchestratorAlerts, fetchOrchestratorAlerts } from '@/lib/alerts/orchestratorAlertFeed'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -31,9 +31,10 @@ export async function GET(req: Request) {
     const infra = await getTenantInfrastructureScope(tenantId)
     const vdcScope = maskingScope(infra)
 
-    // Fetch all alerts to recompute summary from tenant-filtered data
-    const response = await alertsApi.getAlerts({ limit: 1000, offset: 0 })
-    const allAlerts = response.data?.data || response.data || []
+    // Recompute the summary from tenant-filtered data, with the same feed as
+    // the alerts list: every open alert, however old, plus recent resolved
+    // history. A window of the newest 1000 rows missed old open ones (#1086).
+    const allAlerts = await fetchOrchestratorAlerts()
     const vdcVmids = vdcScope ? await getVdcVmidsByConnection(tenantId) : undefined
     // Caller's RBAC infra scope (issue #525), honoured inside isAlertVisibleToTenant.
     const rbacScope = await getCurrentRbacInfraScope(PERMISSIONS.CONNECTION_VIEW)
@@ -70,16 +71,12 @@ export async function GET(req: Request) {
       // Table may not exist yet
     }
 
-    // Deduplicate by fingerprint before counting
-    const dedupMap = new Map<string, any>()
-    for (const a of filtered) {
-      const fp = buildOrchestratorFingerprint(a)
-      const existing = dedupMap.get(fp)
-      if (!existing || new Date(a.last_seen_at) > new Date(existing.last_seen_at)) {
-        dedupMap.set(fp, { ...a, _fp: fp })
-      }
-    }
-    const deduped = Array.from(dedupMap.values())
+    // Deduplicate before counting, by fingerprint and status like the list
+    const deduped = dedupeOrchestratorAlerts(
+      filtered.map((a: any) => ({ ...a, _fp: buildOrchestratorFingerprint(a) })),
+      (a: any) => a._fp,
+      (a: any) => a.status,
+    )
 
     const visible = deduped.filter((a: any) => !silencedFingerprints.has(a._fp))
     const active = visible.filter((a: any) => a.status === 'active')

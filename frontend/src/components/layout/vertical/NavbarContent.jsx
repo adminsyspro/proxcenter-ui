@@ -72,6 +72,7 @@ import { useTenant } from '@/contexts/TenantContext'
 
 import { useActiveAlerts, useVersionCheck, useOrchestratorHealth, useHaClusterHealth } from '@/hooks/useNavbarNotifications'
 import { useDRSRecommendations, useDRSSettings } from '@/hooks/useDRS'
+import { useAlertsSummary } from '@/hooks/useAlerts'
 import { useHaConfig } from '@/components/settings/ha/useHaConfig'
 
 // Version config
@@ -235,7 +236,14 @@ const NavbarContent = ({ targetLayout } = {}) => {
   const canViewDrs = hasPermission('automation.view')
 
   // SWR hooks for notifications — gated by permissions to avoid unnecessary fetches
-  const { data: alertsResponse, mutate: mutateAlerts } = useActiveAlerts(isEnterprise && canViewAlerts)
+  const { data: alertsResponse, mutate: mutateAlertRows } = useActiveAlerts(isEnterprise && canViewAlerts)
+  // The bell lists the 10 newest active alerts but counts them all, from the
+  // summary the alerts page shows, so both always agree (#1086).
+  const { data: alertsSummary, mutate: mutateAlertsSummary } = useAlertsSummary(isEnterprise && canViewAlerts)
+  const mutateAlerts = () => {
+    mutateAlertRows()
+    mutateAlertsSummary()
+  }
   // DRS placement is a provider concern in MSP/vDC mode (tenants don't pick
   // nodes and we just hid the migrate UI for them). Don't fetch DRS recs
   // for tenants — the messages would expose node names and the tenant has
@@ -266,14 +274,15 @@ const NavbarContent = ({ targetLayout } = {}) => {
     }))
   }, [alertsResponse])
 
-  const notifCount = notifications.length
+  const notifCount = alertsSummary?.total_active ?? notifications.length
   const notifStats = useMemo(() => {
+    if (alertsSummary) return { crit: alertsSummary.critical || 0, warn: alertsSummary.warning || 0 }
     const alerts = alertsResponse?.data || []
     return {
       crit: alerts.filter(a => a.severity === 'critical').length,
       warn: alerts.filter(a => a.severity === 'warning').length
     }
-  }, [alertsResponse])
+  }, [alertsResponse, alertsSummary])
 
   const drsRecommendations = useMemo(() => {
     return Array.isArray(drsRecsResponse) ? drsRecsResponse : []

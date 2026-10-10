@@ -274,7 +274,7 @@ return () => setPageInfo('', '', '')
     error: alertsError,
     isLoading: alertsLoading,
     mutate: mutateAlerts
-  } = useOrchestratorAlerts(isEnterprise)
+  } = useOrchestratorAlerts(isEnterprise, statusFilter)
 
   const {
     data: summaryData,

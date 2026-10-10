@@ -6,8 +6,8 @@ vi.mock('@/lib/orchestrator/client', () => ({ alertsApi: { getAlerts } }))
 
 import { fetchDashboardOrchAlerts } from '@/lib/alerts/dashboardOrchAlerts'
 
-const cpu = { connection_id: 'conn-1', type: 'cpu', resource: 'pve-1' }
-const ram = { connection_id: 'conn-2', type: 'memory', resource: 'pve-2' }
+const cpu = { connection_id: 'conn-1', type: 'cpu', resource: 'pve-1', status: 'active' }
+const ram = { connection_id: 'conn-2', type: 'memory', resource: 'pve-2', status: 'acknowledged' }
 
 describe('fetchDashboardOrchAlerts', () => {
   beforeEach(() => {
@@ -20,8 +20,8 @@ describe('fetchDashboardOrchAlerts', () => {
     }))
 
     expect(await fetchDashboardOrchAlerts()).toEqual({ active: [cpu], acknowledged: [ram] })
-    expect(getAlerts).toHaveBeenCalledWith({ status: 'active', limit: 100 })
-    expect(getAlerts).toHaveBeenCalledWith({ status: 'acknowledged', limit: 500 })
+    expect(getAlerts).toHaveBeenCalledWith(expect.objectContaining({ status: 'active', offset: 0 }))
+    expect(getAlerts).toHaveBeenCalledWith(expect.objectContaining({ status: 'acknowledged', offset: 0 }))
   })
 
   it('accepts a bare array and an empty payload', async () => {
@@ -33,11 +33,14 @@ describe('fetchDashboardOrchAlerts', () => {
   })
 
   it('applies the RBAC gate to both lists', async () => {
-    getAlerts.mockResolvedValue({ data: { data: [cpu, ram] } })
+    const ackedCpu = { ...cpu, status: 'acknowledged' }
+    getAlerts.mockImplementation(async ({ status }: { status: string }) => ({
+      data: { data: status === 'active' ? [cpu, { ...ram, status: 'active' }] : [ackedCpu, ram] },
+    }))
 
     const result = await fetchDashboardOrchAlerts(a => a.connection_id === 'conn-1')
 
-    expect(result).toEqual({ active: [cpu], acknowledged: [cpu] })
+    expect(result).toEqual({ active: [cpu], acknowledged: [ackedCpu] })
   })
 
   it('yields nothing when the orchestrator fails', async () => {

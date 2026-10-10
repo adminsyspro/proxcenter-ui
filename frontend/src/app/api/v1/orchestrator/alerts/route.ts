@@ -9,9 +9,16 @@ import { isAlertVisibleToTenant } from '@/lib/alerts/visibility'
 import { getVdcVmidsByConnection } from '@/lib/alerts/vdcVmids'
 import { clearVisibleTenantAlerts } from '@/lib/alerts/clearVisible'
 import { buildOrchestratorFingerprint } from '@/lib/alerts/orchestratorFingerprint'
+import {
+  dedupeOrchestratorAlerts,
+  fetchOrchestratorAlerts,
+  type OrchestratorAlertStatus,
+} from '@/lib/alerts/orchestratorAlertFeed'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
+
+const ORCHESTRATOR_STATUSES: OrchestratorAlertStatus[] = ['active', 'acknowledged', 'resolved']
 
 /**
  * GET /api/v1/orchestrator/alerts
@@ -31,7 +38,7 @@ export async function GET(req: Request) {
 
     const { searchParams } = new URL(req.url)
     const connectionId = searchParams.get('connection_id') || undefined
-    const status = searchParams.get('status') as 'active' | 'acknowledged' | 'resolved' | undefined
+    const status = searchParams.get('status') || undefined
     const limit = searchParams.get('limit') ? Number.parseInt(searchParams.get('limit')!) : 100
     const offset = searchParams.get('offset') ? Number.parseInt(searchParams.get('offset')!) : 0
 
@@ -48,17 +55,18 @@ export async function GET(req: Request) {
     const infra = await getTenantInfrastructureScope(tenantId)
     const vdcScope = maskingScope(infra)
 
-    const response = await alertsApi.getAlerts({
-      connection_id: connectionId,
-      status: status || undefined,
-      limit: 500, // fetch more, filter below
-      offset: 0
-    })
+    // Each status is fetched on its own: open alerts in full, resolved ones
+    // as recent history. A single window of the newest rows of any status
+    // dropped old open alerts that the bell and the summary still counted (#1086).
+    // "silenced" is a label added below, so it needs every status.
+    const statuses: OrchestratorAlertStatus[] = status && ORCHESTRATOR_STATUSES.includes(status as OrchestratorAlertStatus)
+      ? [status as OrchestratorAlertStatus]
+      : ORCHESTRATOR_STATUSES
 
     // Filter alerts: rule ownership AND resource scope. Both gates must
     // pass — a tenant-owned rule that fires on a neighbour tenant's node
     // (orchestrator is not tenant-aware) would otherwise leak through.
-    const allAlerts = response.data?.data || response.data || []
+    const allAlerts = await fetchOrchestratorAlerts(statuses, { connectionId })
     const vdcVmids = vdcScope ? await getVdcVmidsByConnection(tenantId) : undefined
     // Caller's RBAC infra scope (issue #525), honoured inside isAlertVisibleToTenant.
     const rbacScope = await getCurrentRbacInfraScope(PERMISSIONS.CONNECTION_VIEW)
@@ -119,18 +127,11 @@ export async function GET(req: Request) {
         })
       : filtered
 
-    // Deduplicate by fingerprint: keep only the most recent entry per unique alert
+    // Deduplicate by fingerprint and orchestrator status: keep only the most
+    // recent entry per unique alert, without letting an older resolved
+    // occurrence hide one that is still active.
     const deduped = Array.isArray(annotated)
-      ? Array.from(
-          annotated.reduce((map: Map<string, any>, a: any) => {
-            const fp = a._fingerprint
-            const existing = map.get(fp)
-            if (!existing || new Date(a.last_seen_at) > new Date(existing.last_seen_at)) {
-              map.set(fp, a)
-            }
-            return map
-          }, new Map()).values()
-        )
+      ? dedupeOrchestratorAlerts(annotated, (a: any) => a._fingerprint, (a: any) => a._original_status || a.status)
       : annotated
 
     // Apply post-annotation status filter (e.g. ?status=active should exclude silenced)
@@ -138,12 +139,21 @@ export async function GET(req: Request) {
       ? deduped.filter((a: any) => a.status === status)
       : deduped
 
-    const sliced = Array.isArray(finalFiltered) ? finalFiltered.slice(offset, offset + limit) : finalFiltered
+    // Open alerts first, newest first: a page cut never pushes an open alert
+    // out behind resolved history.
+    const isResolved = (a: any) => ((a._original_status || a.status) === 'resolved' ? 1 : 0)
+    const sorted = Array.isArray(finalFiltered)
+      ? [...finalFiltered].sort((a: any, b: any) =>
+          isResolved(a) - isResolved(b) ||
+          new Date(b.last_seen_at || 0).getTime() - new Date(a.last_seen_at || 0).getTime())
+      : finalFiltered
+    const sliced = Array.isArray(sorted) ? sorted.slice(offset, offset + limit) : sorted
 
     return NextResponse.json({
-      ...(response.data || {}),
       data: sliced,
-      total: Array.isArray(finalFiltered) ? finalFiltered.length : 0,
+      total: Array.isArray(sorted) ? sorted.length : 0,
+      limit,
+      offset,
     })
   } catch (error: any) {
     if ((error as any)?.code !== 'ORCHESTRATOR_UNAVAILABLE') {

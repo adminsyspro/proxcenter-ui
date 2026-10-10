@@ -178,3 +178,34 @@ describe('RBAC infra scope forwarding (issue #525)', () => {
     expect(forwardedRbacScope(isAlertVisibleToTenantMock)).toBeNull()
   })
 })
+
+describe('status handling (#1086)', () => {
+  const resolvedNewer = { ...alert1, resource: 'pve-node-2', status: 'resolved', last_seen_at: '2026-02-01T00:00:00Z' }
+  const resolvedSame = { ...alert1, status: 'resolved', last_seen_at: '2026-03-01T00:00:00Z' }
+
+  beforeEach(() => {
+    getTenantInfrastructureScopeMock.mockResolvedValue({ kind: 'provider' })
+    maskingScopeMock.mockReturnValue(null)
+    getAlertsMock.mockImplementation(async ({ status }: { status: string }) => ({
+      data: { data: [alert1, resolvedNewer, resolvedSame].filter(a => a.status === status) },
+    }))
+  })
+
+  it('asks the orchestrator for the requested status only', async () => {
+    const res = await GET(new Request('http://localhost/api/v1/orchestrator/alerts?status=active'))
+    const body = await res.json()
+
+    expect(body.data).toEqual([expect.objectContaining({ status: 'active', resource: 'pve-node-1' })])
+    expect(body.total).toBe(1)
+    expect(getAlertsMock).toHaveBeenCalledTimes(1)
+    expect(getAlertsMock).toHaveBeenCalledWith(expect.objectContaining({ status: 'active' }))
+  })
+
+  it('lists open alerts ahead of newer resolved history, without dedup across statuses', async () => {
+    const res = await GET(new Request('http://localhost/api/v1/orchestrator/alerts?limit=2'))
+    const body = await res.json()
+
+    expect(body.total).toBe(3)
+    expect(body.data.map((a: any) => a.status)).toEqual(['active', 'resolved'])
+  })
+})

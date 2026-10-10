@@ -1,4 +1,4 @@
-import { alertsApi } from '@/lib/orchestrator/client'
+import { fetchOrchestratorAlertsByStatus } from '@/lib/alerts/orchestratorAlertFeed'
 import type { RawOrchestratorAlert } from '@/lib/alerts/dashboardAlertMerge'
 
 /**
@@ -11,18 +11,17 @@ import type { RawOrchestratorAlert } from '@/lib/alerts/dashboardAlertMerge'
 export async function fetchDashboardOrchAlerts(
   inScope?: (alert: RawOrchestratorAlert) => boolean,
 ): Promise<{ active?: RawOrchestratorAlert[]; acknowledged?: RawOrchestratorAlert[] }> {
-  const fetchStatus = async (status: 'active' | 'acknowledged', limit: number) => {
-    const response = await alertsApi.getAlerts({ status, limit })
-    const data = response.data as any
-    const list: RawOrchestratorAlert[] = data?.data || (Array.isArray(data) ? data : [])
+  // Every open alert, like the bell and the alerts page (#1086).
+  const fetchStatus = async (status: 'active' | 'acknowledged') => {
+    const list: RawOrchestratorAlert[] = await fetchOrchestratorAlertsByStatus(status)
 
     return inScope ? list.filter(inScope) : list
   }
 
   try {
     const [active, acknowledged] = await Promise.all([
-      fetchStatus('active', 100),
-      fetchStatus('acknowledged', 500),
+      fetchStatus('active'),
+      fetchStatus('acknowledged'),
     ])
 
     return { active, acknowledged }

@@ -184,6 +184,21 @@ describe('BulkRestoreWizard: target step', () => {
     await waitFor(() => expect((screen.getByRole('button', { name: /^Next$/ }) as HTMLButtonElement).disabled).toBe(false))
   })
 
+  it('keeps the MACs when restoring to the original VMIDs and regenerates them for a fresh range', async () => {
+    renderWizard()
+    await screen.findByText('web-01')
+    await gotoTargetStep()
+
+    const uniqueMac = () => screen.getByText('Generate new MAC addresses').closest('label')!.querySelector('input')!
+    expect(uniqueMac().checked).toBe(true)
+
+    await chooseFromSelect(SELECT.vmidPolicy, /Original VMID/)
+    await waitFor(() => expect(uniqueMac().checked).toBe(false))
+
+    await chooseFromSelect(SELECT.vmidPolicy, /New VMIDs from a range/)
+    await waitFor(() => expect(uniqueMac().checked).toBe(true))
+  })
+
   it('skips the VMIDs already live on the target when allocating the range', async () => {
     renderWizard()
     await screen.findByText('web-01')

@@ -855,7 +855,7 @@
     "pbsRestoreTargetNode": "Nœud cible",
     "pbsRestoreOverrideName": "Renommer la VM",
     "pbsRestoreBandwidth": "Limite de bande passante (Kio/s)",
-    "pbsRestoreUniqueAutoEnabled": "Le VMID existe — MAC unique forcée",
+    "pbsRestoreTargetExists": "La VM {vmid} existe et sera écrasée",
     "pbsRestoreIpamNote": "L'allocation IP est réconciliée automatiquement à la fin de la restauration.",
     "pbsRestoreAsNew": "Restaurer en tant que nouvelle VM (alloue un VMID + des MAC uniques)",
     "pbsRestoreOverwriteConfirm": "Cette opération va remplacer la VM {vmid} par le contenu du backup. Cliquez à nouveau pour confirmer.",

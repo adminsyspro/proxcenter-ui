@@ -855,7 +855,7 @@
     "pbsRestoreTargetNode": "Nodo destino",
     "pbsRestoreOverrideName": "Sobrescribir nombre",
     "pbsRestoreBandwidth": "Límite de ancho de banda (KiB/s)",
-    "pbsRestoreUniqueAutoEnabled": "MAC exists — unique MAC enforced",
+    "pbsRestoreTargetExists": "La VM {vmid} existe y será sobrescrita",
     "pbsRestoreIpamNote": "La asignación IP se reconcilia automáticamente cuando finaliza la restauración.",
     "pbsRestoreAsNew": "Restaurar como una VM nueva (asigna automáticamente un VMID libre y MACs únicas)",
     "pbsRestoreOverwriteConfirm": "Esto reemplazará la VM {vmid} con el contenido del backup. Haz clic de nuevo para confirmar.",

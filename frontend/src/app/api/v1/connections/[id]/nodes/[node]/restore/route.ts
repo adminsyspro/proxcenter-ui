@@ -297,12 +297,11 @@ export async function POST(
     // into a fresh vmid with `unique=1`, PVE regenerates the MAC and
     // the helper allocates a fresh IP for it.
     //
-    // Caveat: restoring without `unique=1` into a vmid that doesn't
-    // collide with the source's still-running VM is rare but can
-    // produce duplicate (subnet, mac) allocations across vmids — the
-    // upcoming Restore UI will default unique=1 in that case. For
-    // now, the sync runs best-effort and any collision surfaces in
-    // the server logs.
+    // Caveat: restoring without `unique=1` into another vmid while the
+    // source VM still runs produces duplicate (subnet, mac) allocations
+    // across vmids. The Restore UI defaults unique=1 for that clone case
+    // but lets the user turn it off, so the sync runs best-effort and any
+    // collision surfaces in the server logs.
     // Resolve the tenant's vDC pool eagerly (cookies are gone after the
     // response is sent and `after()` runs). qmrestore/vzrestore land VMs
     // outside any pool — without this placement the restored VM is invisible

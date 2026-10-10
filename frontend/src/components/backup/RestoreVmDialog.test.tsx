@@ -303,8 +303,10 @@ describe('RestoreVmDialog - restore success', () => {
       <RestoreVmDialog {...makeProps({ onClose, onStarted })} />,
     )
 
-    // Wait for the VMID field to confirm the dialog is ready.
+    // Wait for the VMID field and the resources fetch: VMID 100 exists in
+    // the fixture, so the restore is an overwrite.
     await waitForDataLoad()
+    await screen.findByText(`VM ${SOURCE_VMID} exists and will be overwritten`)
 
     // canSubmit = !submitting && !!connectionId && !!node && vmidValid.
     // sourceVmid=100, which is a valid VMID (100..999999999).
@@ -316,6 +318,9 @@ describe('RestoreVmDialog - restore success', () => {
     expect(submitBtn).not.toBeDisabled()
 
     fireEvent.click(submitBtn!)
+    // VMID 100 already exists in the resources fixture, so the restore is an
+    // overwrite and needs the confirmation click.
+    fireEvent.click(await screen.findByRole('button', { name: 'Confirm overwrite' }))
 
     await waitFor(() => {
       expect(onStarted).toHaveBeenCalledWith(UPID)
@@ -323,6 +328,89 @@ describe('RestoreVmDialog - restore success', () => {
     await waitFor(() => {
       expect(onClose).toHaveBeenCalledTimes(1)
     })
+  })
+})
+
+describe('RestoreVmDialog - Unique MAC option follows the PVE restore logic', () => {
+  beforeEach(() => {
+    seedBaseHandlers()
+  })
+
+  function uniqueSwitch() {
+    return screen.getByLabelText('Unique (re-generate all MAC addresses)') as HTMLInputElement
+  }
+
+  function captureRestoreBody() {
+    const bodies: Record<string, any>[] = []
+    server.use(
+      http.post(
+        `*/api/v1/connections/${CONN_ID}/nodes/${NODE_NAME}/restore`,
+        async ({ request }) => {
+          bodies.push((await request.json()) as Record<string, any>)
+          return HttpResponse.json({ data: UPID })
+        },
+      ),
+    )
+    return bodies
+  }
+
+  function clickSubmit() {
+    const submitBtn = screen.getAllByRole('button').find(
+      (b) => b.textContent?.trim() === 'Restore VM',
+    )
+    fireEvent.click(submitBtn!)
+  }
+
+  it('keeps the original MACs and overwrites with force on a full restore over the source VMID', async () => {
+    const bodies = captureRestoreBody()
+    renderWithProviders(<RestoreVmDialog {...makeProps()} />)
+    await waitForDataLoad()
+
+    // VMID 100 exists in the resources fixture: the helper text says so
+    // once the fetch lands, and the Unique switch stays off and editable.
+    await screen.findByText(`VM ${SOURCE_VMID} exists and will be overwritten`)
+    expect(uniqueSwitch()).not.toBeChecked()
+    expect(uniqueSwitch()).not.toBeDisabled()
+
+    // First click only asks for confirmation, PVE needs force=1 to replace it.
+    clickSubmit()
+    const confirmBtn = await screen.findByRole('button', { name: 'Confirm overwrite' })
+    expect(bodies).toHaveLength(0)
+    fireEvent.click(confirmBtn)
+
+    await waitFor(() => expect(bodies).toHaveLength(1))
+    expect(bodies[0].vmid).toBe(SOURCE_VMID)
+    expect(bodies[0].force).toBe(true)
+    expect(bodies[0].unique).toBeUndefined()
+  })
+
+  it('defaults Unique on for a restore as a new VMID and lets the user turn it off', async () => {
+    const bodies = captureRestoreBody()
+    renderWithProviders(<RestoreVmDialog {...makeProps()} />)
+    await waitForDataLoad()
+
+    fireEvent.change(screen.getByLabelText('VMID'), { target: { value: '250' } })
+    await waitFor(() => expect(uniqueSwitch()).toBeChecked())
+    expect(uniqueSwitch()).not.toBeDisabled()
+
+    fireEvent.click(uniqueSwitch())
+    expect(uniqueSwitch()).not.toBeChecked()
+
+    clickSubmit()
+    await waitFor(() => expect(bodies).toHaveLength(1))
+    expect(bodies[0].vmid).toBe(250)
+    expect(bodies[0].unique).toBeUndefined()
+    expect(bodies[0].force).toBeUndefined()
+  })
+
+  it('switches back to keeping the MACs when the VMID returns to the source', async () => {
+    renderWithProviders(<RestoreVmDialog {...makeProps()} />)
+    await waitForDataLoad()
+
+    fireEvent.change(screen.getByLabelText('VMID'), { target: { value: '250' } })
+    await waitFor(() => expect(uniqueSwitch()).toBeChecked())
+    fireEvent.change(screen.getByLabelText('VMID'), { target: { value: String(SOURCE_VMID) } })
+    await waitFor(() => expect(uniqueSwitch()).not.toBeChecked())
   })
 })
 
@@ -352,6 +440,7 @@ describe('RestoreVmDialog - restore error', () => {
     )
 
     await waitForDataLoad()
+    await screen.findByText(`VM ${SOURCE_VMID} exists and will be overwritten`)
 
     const submitBtn = screen.getAllByRole('button').find(
       (b) => b.textContent?.trim() === 'Restore VM',
@@ -360,6 +449,7 @@ describe('RestoreVmDialog - restore error', () => {
     expect(submitBtn).not.toBeDisabled()
 
     fireEvent.click(submitBtn!)
+    fireEvent.click(await screen.findByRole('button', { name: 'Confirm overwrite' }))
 
     // Error message from the server response appears in the MUI Alert.
     await waitFor(() => {

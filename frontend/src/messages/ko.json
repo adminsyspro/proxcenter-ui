@@ -855,7 +855,7 @@
     "pbsRestoreTargetNode": "대상 노드",
     "pbsRestoreOverrideName": "이름 재정의",
     "pbsRestoreBandwidth": "대역폭 제한 (KiB/s)",
-    "pbsRestoreUniqueAutoEnabled": "VMID가 이미 존재함 — 고유 MAC이 강제 적용됩니다",
+    "pbsRestoreTargetExists": "VM {vmid}이(가) 이미 존재하며 덮어쓰게 됩니다",
     "pbsRestoreIpamNote": "IP 할당은 복원 완료 후 자동으로 재조정됩니다.",
     "pbsRestoreAsNew": "새 VM으로 복원 (새 VMID + 고유 MAC 자동 할당)",
     "pbsRestoreOverwriteConfirm": "VM {vmid}이(가) 백업 내용으로 대체됩니다. 확인하려면 다시 클릭하세요.",

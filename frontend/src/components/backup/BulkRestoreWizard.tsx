@@ -770,7 +770,15 @@ export default function BulkRestoreWizard({
             <Select
               value={mode}
               label={t('backups.bulkRestore.vmidPolicy')}
-              onChange={e => { setMode(e.target.value as TargetMode); setOverwriteConfirmed(false) }}
+              onChange={e => {
+                const next = e.target.value as TargetMode
+
+                setMode(next)
+                setOverwriteConfirmed(false)
+                // Same default as PVE: back to the source VMIDs is a full
+                // restore that keeps the MACs, a fresh range is a clone.
+                setUniqueMac(next === 'range')
+              }}
             >
               <MenuItem value='range'>
                 <OptionLabel icon='ri-add-circle-line' label={t('backups.bulkRestore.modeRange')} />

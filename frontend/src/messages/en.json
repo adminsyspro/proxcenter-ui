@@ -855,7 +855,7 @@
     "pbsRestoreTargetNode": "Target node",
     "pbsRestoreOverrideName": "Override name",
     "pbsRestoreBandwidth": "Bandwidth limit (KiB/s)",
-    "pbsRestoreUniqueAutoEnabled": "VMID exists — unique MAC enforced",
+    "pbsRestoreTargetExists": "VM {vmid} exists and will be overwritten",
     "pbsRestoreIpamNote": "IP allocation is reconciled automatically after the restore completes.",
     "pbsRestoreAsNew": "Restore as a new VM (auto-allocates a fresh VMID + unique MACs)",
     "pbsRestoreOverwriteConfirm": "This will replace VM {vmid} with the backup contents. Click again to confirm.",

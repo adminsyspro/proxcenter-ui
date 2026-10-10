@@ -266,15 +266,32 @@ export default function RestoreVmDialog({
     return () => { cancelled = true }
   }, [open, connectionId, node, type])
 
-  // Auto-default unique=1 when the target VMID is already taken (clone-like
-  // restore). This keeps the IPAM safe — same MAC across two live VMs would
-  // collide on (subnet, mac) UNIQUE.
+  // Same split as PVE: restoring over the source VMID is a full restore and
+  // keeps the backed-up MACs, restoring to another VMID is a clone and
+  // defaults to fresh MACs so it does not collide with the still-running
+  // source on L2 or in the IPAM (subnet, mac) UNIQUE. Either way the user
+  // can flip the switch; the default only moves when the case changes.
   const targetVmidNumber = Number.parseInt(vmid)
+  const isCloneVmid = (value: string) => {
+    const n = Number.parseInt(value)
+
+    return Number.isFinite(n) && n !== sourceVmid
+  }
+  const handleVmidChange = (value: string) => {
+    const next = value.replace(/[^0-9]/g, '')
+
+    if (isCloneVmid(next) !== isCloneVmid(vmid)) setUnique(isCloneVmid(next))
+    setVmid(next)
+    setAwaitingConfirm(false)
+  }
+
+  // PVE refuses a restore onto a VMID that already exists unless `force=1`
+  // is sent, so both paths that land on an existing VM go through the same
+  // two-click confirmation: the tenant overwrite toggle, and a provider
+  // whose typed VMID is taken (the source VM itself or any other guest).
   const targetExists = Number.isFinite(targetVmidNumber) && usedVmIds.has(targetVmidNumber)
-  useEffect(() => {
-    if (targetExists && !unique) setUnique(true)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [targetExists])
+  const overwriting = isVdcTenant ? !restoreAsNew : targetExists
+  const overwriteVmid = isVdcTenant ? sourceVmid : targetVmidNumber
 
   const vmidValid = useMemo(() => {
     if (!Number.isFinite(targetVmidNumber)) return false
@@ -294,10 +311,10 @@ export default function RestoreVmDialog({
   const handleSubmit = async () => {
     if (!canSubmit) return
 
-    // Tenant mode: overwrite is destructive — require a second click
-    // confirming the intent. The first click flips `awaitingConfirm`
-    // and surfaces a warning Alert; the second proceeds.
-    if (isVdcTenant && !restoreAsNew && !awaitingConfirm) {
+    // Overwrite is destructive — require a second click confirming the
+    // intent. The first click flips `awaitingConfirm` and surfaces a
+    // warning Alert; the second proceeds.
+    if (overwriting && !awaitingConfirm) {
       setAwaitingConfirm(true)
       return
     }
@@ -341,7 +358,7 @@ export default function RestoreVmDialog({
       }
       // Overwrite branch only — `force=1` lets PVE replace the existing
       // VMID. New-VM branch never sets it (the VMID is fresh).
-      if (isVdcTenant && !restoreAsNew) {
+      if (overwriting) {
         body.force = true
       }
       // Tenant + new VM → ensure unique MACs to avoid an L2 collision
@@ -462,11 +479,11 @@ export default function RestoreVmDialog({
               size="small"
               label={t('common.vmId')}
               value={vmid}
-              onChange={(e) => setVmid(e.target.value.replace(/[^0-9]/g, ''))}
+              onChange={(e) => handleVmidChange(e.target.value)}
               error={!!vmid && !vmidValid}
               helperText={
                 targetExists
-                  ? t('inventory.pbsRestoreUniqueAutoEnabled')
+                  ? t('inventory.pbsRestoreTargetExists', { vmid: targetVmidNumber })
                   : undefined
               }
               fullWidth
@@ -494,7 +511,7 @@ export default function RestoreVmDialog({
           {!isVdcTenant && (
             <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
               <FormControlLabel
-                control={<Switch checked={unique} onChange={(_, v) => setUnique(v)} disabled={targetExists} />}
+                control={<Switch checked={unique} onChange={(_, v) => setUnique(v)} />}
                 label={t('inventory.pbsRestoreUnique')}
               />
               <FormControlLabel
@@ -558,10 +575,10 @@ export default function RestoreVmDialog({
           )}
 
           {/* Confirmation banner for the destructive overwrite path —
-              only shown in tenant mode after the first submit click. */}
-          {isVdcTenant && !restoreAsNew && awaitingConfirm && (
+              only shown after the first submit click. */}
+          {overwriting && awaitingConfirm && (
             <Alert severity="warning" icon={<i className="ri-alert-line" style={{ fontSize: 18 }} />}>
-              {t('inventory.pbsRestoreOverwriteConfirm', { vmid: sourceVmid })}
+              {t('inventory.pbsRestoreOverwriteConfirm', { vmid: overwriteVmid })}
             </Alert>
           )}
 
@@ -587,13 +604,13 @@ export default function RestoreVmDialog({
         <Button onClick={onClose} disabled={submitting}>{t('common.cancel')}</Button>
         <Button
           variant="contained"
-          color={isVdcTenant && !restoreAsNew && awaitingConfirm ? 'warning' : 'primary'}
+          color={overwriting && awaitingConfirm ? 'warning' : 'primary'}
           onClick={handleSubmit}
           disabled={!canSubmit}
         >
           {submitting
             ? <CircularProgress size={16} />
-            : (isVdcTenant && !restoreAsNew && awaitingConfirm
+            : (overwriting && awaitingConfirm
                 ? t('inventory.pbsRestoreOverwriteConfirmButton')
                 : t('inventory.pbsRestoreVm'))}
         </Button>

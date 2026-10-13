@@ -616,3 +616,129 @@ describe("GET /api/v1/inventory/events tag/pool guest-derived delta gate", () =>
     expect(sent).toEqual([])
   })
 })
+
+// A consumer that stops reading without closing its connection
+// never fires cancel(), so the route has to release it on its own.
+describe("GET /api/v1/inventory/events consumer lifecycle", () => {
+  let handler: ((evs: any[]) => void) | null
+  let unsubscribe: ReturnType<typeof vi.fn>
+
+  // ~140 KiB of vm:update events per call, about a poll burst on a large estate.
+  const burst = () =>
+    Array.from({ length: 400 }, (_, i) => ({ ...VM_EVENT, vmid: i, name: "x".repeat(200) }))
+
+  beforeEach(() => {
+    getInfraMock.mockResolvedValue({ kind: "provider" })
+    handler = null
+    unsubscribe = vi.fn()
+    subscribeMock.mockImplementation((fn: (evs: any[]) => void) => {
+      handler = fn
+      return unsubscribe
+    })
+  })
+
+  it("drops a consumer that stops reading once its unread bytes pass the bound", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+    const { GET } = await import("./route")
+    const res = await callRoute(GET, { method: "GET" })
+
+    for (let i = 0; i < 6; i++) handler!(burst())
+    expect(unsubscribe).not.toHaveBeenCalled()
+
+    for (let i = 0; i < 2; i++) handler!(burst())
+    expect(unsubscribe).toHaveBeenCalledTimes(1)
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("Dropping an SSE consumer"))
+
+    // The queue is discarded: the body errors instead of replaying megabytes.
+    await expect(res.body!.getReader().read()).rejects.toThrow("SSE consumer stopped reading")
+    warn.mockRestore()
+  })
+
+  it("keeps a consumer that reads, however much it receives", async () => {
+    const { GET } = await import("./route")
+    const res = await callRoute(GET, { method: "GET" })
+    const reader = res.body!.getReader()
+
+    for (let i = 0; i < 40; i++) {
+      handler!(burst())
+      let drained = 0
+      while (drained < 400) {
+        const { value } = await reader.read()
+        drained += new TextDecoder().decode(value).split("event: vm:update").length - 1
+      }
+    }
+    expect(unsubscribe).not.toHaveBeenCalled()
+    reader.releaseLock()
+  })
+
+  it("unsubscribes when the request is aborted, even if cancel() never fires", async () => {
+    const { NextRequest } = await import("next/server")
+    const ac = new AbortController()
+    const { GET } = await import("./route")
+    await GET(new NextRequest("http://test.local/api/v1/inventory/events", { signal: ac.signal }))
+
+    expect(unsubscribe).not.toHaveBeenCalled()
+    ac.abort()
+    expect(unsubscribe).toHaveBeenCalledTimes(1)
+
+    // Idempotent with the later paths.
+    handler!(burst())
+    expect(unsubscribe).toHaveBeenCalledTimes(1)
+  })
+  it("tears down once even when the drop happens inside subscribe() and cancel() follows", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+    subscribeMock.mockImplementation((fn: (evs: any[]) => void) => {
+      handler = fn
+      for (let i = 0; i < 8; i++) fn(burst())
+      return unsubscribe
+    })
+    const { GET } = await import("./route")
+    const res = await callRoute(GET, { method: "GET" })
+
+    // Dropped before subscribe() returned: the route still unsubscribes.
+    expect(unsubscribe).toHaveBeenCalledTimes(1)
+    await res.body!.cancel().catch(() => {})
+    expect(unsubscribe).toHaveBeenCalledTimes(1)
+    warn.mockRestore()
+  })
+
+  it("tears down right away when the request is already aborted", async () => {
+    const { NextRequest } = await import("next/server")
+    const ac = new AbortController()
+    ac.abort()
+    const { GET } = await import("./route")
+    const res = await GET(new NextRequest("http://test.local/api/v1/inventory/events", { signal: ac.signal }))
+
+    expect(unsubscribe).toHaveBeenCalledTimes(1)
+    await res.body!.cancel()
+    expect(unsubscribe).toHaveBeenCalledTimes(1)
+  })
+
+  it("tears down when an event cannot be serialised", async () => {
+    const { GET } = await import("./route")
+    await callRoute(GET, { method: "GET" })
+
+    handler!([{ ...VM_EVENT, mem: BigInt(1) }])
+    expect(unsubscribe).toHaveBeenCalledTimes(1)
+  })
+
+  it("sends a heartbeat every 30 seconds and stops it on cancel", async () => {
+    vi.useFakeTimers()
+    try {
+      const { GET } = await import("./route")
+      const res = await callRoute(GET, { method: "GET" })
+      const reader = res.body!.getReader()
+      const decoder = new TextDecoder()
+
+      expect(decoder.decode((await reader.read()).value)).toContain("event: connected")
+      vi.advanceTimersByTime(30_000)
+      expect(decoder.decode((await reader.read()).value)).toContain("event: heartbeat")
+
+      await reader.cancel()
+      expect(unsubscribe).toHaveBeenCalledTimes(1)
+      expect(vi.getTimerCount()).toBe(0)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})

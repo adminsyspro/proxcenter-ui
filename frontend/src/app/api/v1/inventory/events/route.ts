@@ -8,6 +8,10 @@ import { demoResponse } from "@/lib/demo/demo-api"
 
 export const runtime = "nodejs"
 
+// What a consumer may leave unread before it is dropped. A live browser drains
+// a whole poll burst in milliseconds, far below this.
+const MAX_UNREAD_BYTES = 1024 * 1024
+
 /**
  * GET /api/v1/inventory/events
  *
@@ -67,15 +71,42 @@ export async function GET(request: NextRequest) {
   let heartbeatInterval: ReturnType<typeof setInterval> | null = null
   let closed = false
 
-  const stream = new ReadableStream({
+  // Releases everything this connection holds in the poller. Idempotent: it
+  // runs from cancel(), from the request abort, from a failed enqueue and when
+  // the consumer is dropped for not reading, whichever comes first.
+  const teardown = () => {
+    if (closed) return
+    closed = true
+    if (unsubscribe) unsubscribe()
+    unsubscribe = null
+    if (heartbeatInterval) clearInterval(heartbeatInterval)
+    heartbeatInterval = null
+    request.signal.removeEventListener('abort', teardown)
+  }
+
+  const stream = new ReadableStream<Uint8Array>({
     start(controller) {
       const send = (event: string, data: any) => {
         if (closed) return
         try {
           controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`))
         } catch {
-          // Client disconnected
-          closed = true
+          // The stream is already closed or errored.
+          teardown()
+          return
+        }
+
+        // Next stops pulling while the socket is backed up, so whatever the
+        // consumer leaves unread stays in this queue. A consumer that stopped
+        // reading without closing its TCP connection (a sleeping laptop, a
+        // stalled proxy, a half-open socket) never fires cancel(): without this
+        // bound the queue grew for as long as the process lived.
+        if ((controller.desiredSize ?? 0) < 0) {
+          console.warn(`[inventory-events] Dropping an SSE consumer that left more than ${MAX_UNREAD_BYTES} bytes unread`)
+          teardown()
+          // Erroring discards the queue and makes Next destroy the response; a
+          // live EventSource reconnects and reloads a fresh state.
+          controller.error(new Error('SSE consumer stopped reading'))
         }
       }
 
@@ -90,7 +121,7 @@ export async function GET(request: NextRequest) {
       // Subscribe to inventory changes — filter by tenant connections AND,
       // for VM events on a vDC-scoped tenant, by allowed pools.
       // Also filter by RBAC infra scope when the user is not an admin.
-      unsubscribe = subscribe((events: InventoryEvent[]) => {
+      const unsub = subscribe((events: InventoryEvent[]) => {
         if (closed) return
         for (const ev of events) {
           if (!tenantConnIds.has(ev.connId)) continue
@@ -133,14 +164,20 @@ export async function GET(request: NextRequest) {
           send(ev.event, ev)
         }
       })
+
+      // The handler may already have torn the connection down before subscribe
+      // returned its unsubscribe function.
+      if (closed) unsub()
+      else unsubscribe = unsub
+
+      if (request.signal.aborted) teardown()
+      else request.signal.addEventListener('abort', teardown)
     },
 
     cancel() {
-      closed = true
-      if (unsubscribe) unsubscribe()
-      if (heartbeatInterval) clearInterval(heartbeatInterval)
+      teardown()
     },
-  })
+  }, new ByteLengthQueuingStrategy({ highWaterMark: MAX_UNREAD_BYTES }))
 
   return new Response(stream, {
     headers: {

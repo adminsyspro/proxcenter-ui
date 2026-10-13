@@ -685,4 +685,60 @@ describe("GET /api/v1/inventory/events consumer lifecycle", () => {
     handler!(burst())
     expect(unsubscribe).toHaveBeenCalledTimes(1)
   })
+  it("tears down once even when the drop happens inside subscribe() and cancel() follows", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+    subscribeMock.mockImplementation((fn: (evs: any[]) => void) => {
+      handler = fn
+      for (let i = 0; i < 8; i++) fn(burst())
+      return unsubscribe
+    })
+    const { GET } = await import("./route")
+    const res = await callRoute(GET, { method: "GET" })
+
+    // Dropped before subscribe() returned: the route still unsubscribes.
+    expect(unsubscribe).toHaveBeenCalledTimes(1)
+    await res.body!.cancel().catch(() => {})
+    expect(unsubscribe).toHaveBeenCalledTimes(1)
+    warn.mockRestore()
+  })
+
+  it("tears down right away when the request is already aborted", async () => {
+    const { NextRequest } = await import("next/server")
+    const ac = new AbortController()
+    ac.abort()
+    const { GET } = await import("./route")
+    const res = await GET(new NextRequest("http://test.local/api/v1/inventory/events", { signal: ac.signal }))
+
+    expect(unsubscribe).toHaveBeenCalledTimes(1)
+    await res.body!.cancel()
+    expect(unsubscribe).toHaveBeenCalledTimes(1)
+  })
+
+  it("tears down when an event cannot be serialised", async () => {
+    const { GET } = await import("./route")
+    await callRoute(GET, { method: "GET" })
+
+    handler!([{ ...VM_EVENT, mem: BigInt(1) }])
+    expect(unsubscribe).toHaveBeenCalledTimes(1)
+  })
+
+  it("sends a heartbeat every 30 seconds and stops it on cancel", async () => {
+    vi.useFakeTimers()
+    try {
+      const { GET } = await import("./route")
+      const res = await callRoute(GET, { method: "GET" })
+      const reader = res.body!.getReader()
+      const decoder = new TextDecoder()
+
+      expect(decoder.decode((await reader.read()).value)).toContain("event: connected")
+      vi.advanceTimersByTime(30_000)
+      expect(decoder.decode((await reader.read()).value)).toContain("event: heartbeat")
+
+      await reader.cancel()
+      expect(unsubscribe).toHaveBeenCalledTimes(1)
+      expect(vi.getTimerCount()).toBe(0)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })

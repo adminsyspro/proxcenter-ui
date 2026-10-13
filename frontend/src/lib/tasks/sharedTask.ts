@@ -39,6 +39,13 @@ export interface SharedTask {
   totalBytes: number | null
   transferSpeed: string | null
   error: string | null
+  /**
+   * What the "Cutover now" control needs, so a detail dialog opened from the
+   * taskbar or the Task Center can offer it: the migrate dialog that started
+   * the run is gone as soon as the operator closes or reloads it.
+   */
+  projectedDowntimeSec: number | null
+  cutoverMode: "auto" | "manual" | null
   isMine: boolean
   createdByName: string
   createdAt: string
@@ -108,6 +115,8 @@ export function toSharedTask(
     totalBytes: job.totalBytes != null ? Number(job.totalBytes) : null,
     transferSpeed: job.transferSpeed ?? null,
     error: job.error ?? null,
+    projectedDowntimeSec: job.projectedDowntimeSec ?? null,
+    cutoverMode: (job.config as any)?.cutoverMode ?? null,
     isMine: opts.isMine,
     createdByName: opts.createdByName,
     createdAt: job.createdAt.toISOString(),

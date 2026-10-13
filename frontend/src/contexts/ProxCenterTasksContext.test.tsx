@@ -233,3 +233,30 @@ describe('an upload resumed after a reload', () => {
     expect(rows()).toBe('resumed-1:cancelled,kept-1:done')
   })
 })
+
+describe('restoreTask', () => {
+  it('reopens the task through its callback and says so', () => {
+    renderProvider()
+    const reopen = vi.fn()
+    act(() => ctx.current.registerOnRestore('migration-1', reopen))
+
+    let restored: boolean | undefined
+    act(() => { restored = ctx.current.restoreTask('migration-1') })
+
+    expect(reopen).toHaveBeenCalledTimes(1)
+    expect(restored).toBe(true)
+  })
+
+  // The migrate dialog unregisters its callback when the inventory unmounts:
+  // the taskbar needs to know nothing reopened, to fall back on the job detail.
+  it('answers false once the page that owned the task is gone', () => {
+    renderProvider()
+    act(() => ctx.current.registerOnRestore('migration-1', vi.fn()))
+    act(() => ctx.current.unregisterOnRestore('migration-1'))
+
+    let restored: boolean | undefined
+    act(() => { restored = ctx.current.restoreTask('migration-1') })
+
+    expect(restored).toBe(false)
+  })
+})

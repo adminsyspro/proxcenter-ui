@@ -9,6 +9,7 @@ import { useSWRFetch } from '@/hooks/useSWRFetch'
 import type { SharedTask } from '@/lib/tasks/sharedTask'
 import { parseSpeedMBps, etaSeconds, formatEta, stepLabelKey } from '@/lib/tasks/taskProgressDisplay'
 import StopTaskConfirmDialog from '@/components/tasks/StopTaskConfirmDialog'
+import WarmCutoverButton, { canRequestCutover } from '@/app/(dashboard)/infrastructure/inventory/components/WarmCutoverButton'
 
 type DetailResponse = { data: SharedTask & { logs?: unknown[] } }
 
@@ -26,6 +27,13 @@ export default function SharedTaskDetailDialog({ jobId, onClose }: { jobId: stri
   const [cancelling, setCancelling] = useState(false)
   const [cancelError, setCancelError] = useState<string | null>(null)
   const canCancel = !!task && task.kind === 'migration' && !['completed', 'failed', 'cancelled'].includes(task.status)
+  // Same reasoning for the switchover of a warm run holding for its operator:
+  // the migrate dialog that offered it is gone once closed or reloaded. The
+  // server enforces vm.migrate on the cutover route as well.
+  const cutoverJob = task
+    ? { id: task.id, status: task.status, projectedDowntimeSec: task.projectedDowntimeSec, config: { cutoverMode: task.cutoverMode } }
+    : null
+  const canCutover = canRequestCutover(cutoverJob)
 
   // Compact live readout under the progress bar, assembled from fields the
   // SharedTask payload already carries (the warm pipeline keeps currentDisk /
@@ -117,11 +125,20 @@ export default function SharedTaskDetailDialog({ jobId, onClose }: { jobId: stri
           </Box>
         )}
       </DialogContent>
-      {canCancel && (
+      {(canCancel || canCutover) && (
         <DialogActions sx={{ px: 3, py: 1.5 }}>
-          <Button color="error" onClick={() => setConfirmOpen(true)}>
-            {t('tasks.shared.cancelMigration')}
-          </Button>
+          {canCutover && (
+            <WarmCutoverButton
+              job={cutoverJob}
+              size="medium"
+              onRequested={() => { void mutateDetail(); void mutate('/api/v1/tasks/shared') }}
+            />
+          )}
+          {canCancel && (
+            <Button color="error" onClick={() => setConfirmOpen(true)}>
+              {t('tasks.shared.cancelMigration')}
+            </Button>
+          )}
         </DialogActions>
       )}
     </Dialog>

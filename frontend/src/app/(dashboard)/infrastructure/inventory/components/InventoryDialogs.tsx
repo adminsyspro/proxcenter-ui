@@ -3674,7 +3674,7 @@ return
                       // Register restore callback to reopen dialog
                       const savedVm = { ...esxiMigrateVm }
                       registerOnRestore(taskId, () => {
-                        setEsxiMigrateVm(savedVm)
+                        setEsxiMigrateVm({ ...savedVm, restoreJobId: jobId })
                         setMigJobId(jobId)
                       })
                     } else {

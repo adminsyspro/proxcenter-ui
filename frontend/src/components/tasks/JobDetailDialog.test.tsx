@@ -4,6 +4,10 @@ import userEvent from "@testing-library/user-event"
 
 import JobDetailDialog, { isAtTail, logsAsText } from "./JobDetailDialog"
 
+// The cutover control is the inventory's own component and reads its labels
+// through next-intl; echo the keys like the `t` prop below.
+vi.mock("next-intl", () => ({ useTranslations: () => (key: string) => key }))
+
 afterEach(() => {
   cleanup()
   vi.restoreAllMocks()
@@ -90,5 +94,47 @@ describe("JobDetailDialog logs panel", () => {
 
     await waitFor(() => expect(screen.getByText("jobsPage.noLogs")).toBeTruthy())
     expect(screen.queryByLabelText("common.copy")).toBeNull()
+  })
+})
+
+describe("JobDetailDialog cutover", () => {
+  const job = { id: "job-1", name: "Migration - DHCP01", type: "migration", status: "running", progress: 90, metadata: { cancellable: true } }
+  const t = (key: string) => key
+  const detail = (over: Record<string, unknown> = {}) => ({
+    ok: true,
+    json: async () => ({ data: { status: "delta_sync", projectedDowntimeSec: 60, cutoverMode: "manual", logs: [], ...over } }),
+  })
+
+  // The row of the Task Center only says "running": whether the run is holding
+  // for its operator comes from the detail the dialog fetches.
+  it("offers \"Cutover now\" next to Cancel on a manual hold", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => detail()))
+
+    render(<JobDetailDialog open job={job} onClose={() => {}} onAction={() => {}} actionError={null} isEnterprise t={t} />)
+
+    await waitFor(() => expect(screen.getByRole("button", { name: /cutoverNow/ })).toBeTruthy())
+    expect(screen.getByRole("button", { name: /cancelMigration/ })).toBeTruthy()
+  })
+
+  it("offers nothing while the full copy runs", async () => {
+    const fetchMock = vi.fn(async () => detail({ status: "full_copy", projectedDowntimeSec: null }))
+    vi.stubGlobal("fetch", fetchMock)
+
+    render(<JobDetailDialog open job={job} onClose={() => {}} onAction={() => {}} actionError={null} isEnterprise t={t} />)
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled())
+    await waitFor(() => expect(screen.getByText("jobsPage.noLogs")).toBeTruthy())
+    expect(screen.queryByRole("button", { name: /cutoverNow/ })).toBeNull()
+  })
+
+  it("never offers it on a job that is not a migration", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => detail()))
+
+    render(
+      <JobDetailDialog open job={{ ...job, type: "replication" }} onClose={() => {}} onAction={() => {}} actionError={null} isEnterprise t={t} />,
+    )
+
+    await waitFor(() => expect(screen.getByText("jobsPage.noLogs")).toBeTruthy())
+    expect(screen.queryByRole("button", { name: /cutoverNow/ })).toBeNull()
   })
 })

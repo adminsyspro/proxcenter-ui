@@ -93,4 +93,17 @@ describe("toSharedTask", () => {
     expect((st as any).createdBy).toBeUndefined()
     expect((st as any).logs).toBeUndefined()
   })
+
+  it("carries what the cutover control needs", () => {
+    const held = toSharedTask(
+      { ...baseJob, status: "delta_sync", projectedDowntimeSec: 60, config: { ...(baseJob as any).config, cutoverMode: "manual" } } as any,
+      { isMine: false, createdByName: "Alice" },
+    )
+    expect(held.projectedDowntimeSec).toBe(60)
+    expect(held.cutoverMode).toBe("manual")
+
+    const st = toSharedTask(baseJob as any, { isMine: true, createdByName: "Alice" })
+    expect(st.projectedDowntimeSec).toBeNull()
+    expect(st.cutoverMode).toBeNull()
+  })
 })

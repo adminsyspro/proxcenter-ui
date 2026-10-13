@@ -32,7 +32,8 @@ interface ProxCenterTasksContextValue {
   clearDone: () => void
   registerOnRestore: (id: string, cb: () => void) => void
   unregisterOnRestore: (id: string) => void
-  restoreTask: (id: string) => void
+  /** False when nothing is mounted to reopen the task (its page was left). */
+  restoreTask: (id: string) => boolean
   /** Stop the browser side of a task (the chunk loop of an upload). */
   registerOnCancel: (id: string, cb: () => void) => void
   unregisterOnCancel: (id: string) => void
@@ -190,7 +191,10 @@ export function ProxCenterTasksProvider({ children }: { children: React.ReactNod
 
   const restoreTask = useCallback((id: string) => {
     const cb = restoreCallbacks.current.get(id)
-    if (cb) cb()
+    if (!cb) return false
+    cb()
+
+    return true
   }, [])
 
   const registerOnCancel = useCallback((id: string, cb: () => void) => {

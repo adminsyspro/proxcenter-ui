@@ -974,7 +974,11 @@ export default function TasksFooter({
                         // single click. The others keep their own behaviour.
                         if (task.jobId && jobsById.has(task.jobId)) return
                         if (task.shared) return void setDetailJobId(task.jobId ?? task.id.replace(/^migration-/, ''))
-                        restoreTask(task.id)
+                        // The migrate dialog that owns this row only exists on
+                        // the inventory page. Anywhere else nothing reopens it,
+                        // so show the job's detail, which carries the same
+                        // cutover and cancel controls.
+                        if (!restoreTask(task.id) && task.id.startsWith('migration-')) setDetailJobId(task.id.replace(/^migration-/, ''))
                       }}
                       sx={{
                         // Same row height as the compact DataGrid of the

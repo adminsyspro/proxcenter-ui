@@ -333,7 +333,7 @@ export default function InventoryDetails({
   const [nodeActionLocalVms, setNodeActionLocalVms] = useState<Set<string>>(new Set())
   const [nodeActionStorageLoading, setNodeActionStorageLoading] = useState(false)
   const [nodeActionShutdownLocal, setNodeActionShutdownLocal] = useState(false)
-  const [esxiMigrateVm, setEsxiMigrateVm] = useState<{ vmid: string; name: string; connId: string; connName: string; cpu?: number; memoryMB?: number; committed?: number; guestOS?: string; licenseFull?: boolean; hostType?: string; connSubType?: string | null; diskPaths?: string[]; diskMountPaths?: string[]; vcenterDatacenter?: string; vcenterCluster?: string; vcenterHost?: string; status?: string; toolsStatus?: string; toolsRunningStatus?: string } | null>(null)
+  const [esxiMigrateVm, setEsxiMigrateVm] = useState<{ vmid: string; name: string; connId: string; connName: string; cpu?: number; memoryMB?: number; committed?: number; guestOS?: string; licenseFull?: boolean; hostType?: string; connSubType?: string | null; diskPaths?: string[]; diskMountPaths?: string[]; vcenterDatacenter?: string; vcenterCluster?: string; vcenterHost?: string; status?: string; toolsStatus?: string; toolsRunningStatus?: string; restoreJobId?: string } | null>(null)
   const [migTargetConn, setMigTargetConn] = useState('')
   const [migTargetNode, setMigTargetNode] = useState('')
   const [migTargetStorage, setMigTargetStorage] = useState('')
@@ -750,7 +750,11 @@ export default function InventoryDetails({
     setMigTargetVmid(''); setMigTargetVmidStatus('idle')
     setMigNodes([]); setMigStorages([]); setMigNodeOptions([])
     setMigStoragesLoading(false); setMigStoragesError(null)
-    if (esxiMigrateVm) { setMigJobId(null); setMigJob(null) }
+    // A dialog reopened from the taskbar is back on a run already started: keep
+    // showing that run. Clearing it here sent the operator to an empty form and
+    // took the "Cutover now" of a manual hold with it.
+    if (esxiMigrateVm?.restoreJobId) setMigJobId(esxiMigrateVm.restoreJobId)
+    else if (esxiMigrateVm) { setMigJobId(null); setMigJob(null) }
     fetch('/api/v1/connections').then(r => r.json()).then(async (d) => {
       const pveConns = (d.data || d || []).filter((c: any) => c.type === 'pve')
       setMigPveConnections(pveConns)

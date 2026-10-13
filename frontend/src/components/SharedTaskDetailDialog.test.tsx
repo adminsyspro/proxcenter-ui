@@ -72,6 +72,8 @@ function makeTask(overrides: Partial<SharedTask> = {}): SharedTask {
     totalBytes: 4096,
     transferSpeed: '100 MiB/s',
     error: null,
+    projectedDowntimeSec: null,
+    cutoverMode: null,
     isMine: false,
     createdByName: 'Alice',
     createdAt: '2026-07-29T10:00:00.000Z',
@@ -127,6 +129,58 @@ describe('SharedTaskDetailDialog - cancel button visibility', () => {
     state.task = null
     renderDialog()
     expect(screen.queryByRole('button', { name: 'Cancel migration' })).not.toBeInTheDocument()
+  })
+})
+
+// ------------------------------------------------------------------ //
+// 1a. Cutover of a warm run holding for its operator: the migrate dialog
+//     that offered it is gone once closed, this one must offer it too.
+// ------------------------------------------------------------------ //
+
+describe('SharedTaskDetailDialog - cutover', () => {
+  const held = { status: 'delta_sync', projectedDowntimeSec: 60, cutoverMode: 'manual' as const }
+
+  it('offers "Cutover now" on a manual hold that has a downtime estimate', () => {
+    state.task = makeTask(held)
+    renderDialog()
+    expect(screen.getByRole('button', { name: 'Cutover now' })).toBeInTheDocument()
+  })
+
+  it('offers it at the automatic gate too', () => {
+    state.task = makeTask({ ...held, status: 'awaiting_cutover', cutoverMode: 'auto' })
+    renderDialog()
+    expect(screen.getByRole('button', { name: 'Cutover now' })).toBeInTheDocument()
+  })
+
+  it.each([
+    ['during the full copy', { status: 'full_copy' }],
+    ['before the first delta pass has an estimate', { projectedDowntimeSec: null }],
+    ['once the run is over', { status: 'completed' }],
+  ])('hides it %s', (_label, overrides) => {
+    state.task = makeTask({ ...held, ...overrides })
+    renderDialog()
+    expect(screen.queryByRole('button', { name: 'Cutover now' })).not.toBeInTheDocument()
+  })
+
+  it('POSTs the cutover route after confirmation and revalidates both keys', async () => {
+    const posted = vi.fn()
+    server.use(http.post(`*/api/v1/migrations/${JOB_ID}/cutover`, () => {
+      posted()
+      return HttpResponse.json({ data: { status: 'cutover_requested' } })
+    }))
+    state.task = makeTask(held)
+    renderDialog()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cutover now' }))
+    const confirm = screen.getByText('Cut over now?').closest('[role="dialog"]') as HTMLElement
+    expect(posted).not.toHaveBeenCalled()
+    fireEvent.click(within(confirm).getByRole('button', { name: 'Cutover now' }))
+
+    await waitFor(() => expect(posted).toHaveBeenCalledTimes(1))
+    await waitFor(() => {
+      expect(mutateDetail).toHaveBeenCalled()
+      expect(mutateList).toHaveBeenCalledWith('/api/v1/tasks/shared')
+    })
   })
 })
 

@@ -25,6 +25,7 @@ import {
 
 import { extractLogs, jobActions, jobDetailUrl, normalizeLog, syntheticLogs } from '@/lib/tasks/jobActions'
 import { useCopyToClipboard } from '@/lib/clipboard'
+import WarmCutoverButton, { canRequestCutover } from '@/app/(dashboard)/infrastructure/inventory/components/WarmCutoverButton'
 
 import { StatusChip, TypeChip } from './JobChips'
 
@@ -111,7 +112,7 @@ export function logsAsText(entries) {
 export default function JobDetailDialog({ open, onClose, job, onAction, actionError, isEnterprise, t }) {
   // Keyed by job id: the dialog is never unmounted, so a plain array kept
   // showing the previous job's logs under the next job opened.
-  const [logState, setLogState] = useState({ jobId: null, entries: [], error: null })
+  const [logState, setLogState] = useState({ jobId: null, entries: [], error: null, detail: null })
   const forThisJob = logState.jobId && logState.jobId === job?.id
   const fetched = forThisJob ? logState.entries : []
   // Site Recovery has nothing to fetch: its record is the per-VM results the
@@ -151,9 +152,9 @@ export default function JobDetailDialog({ open, onClose, job, onAction, actionEr
       const res = await fetch(detailUrl)
       if (res.ok) {
         const data = await res.json()
-        setLogState({ jobId: job.id, entries: extractLogs(data), error: null })
+        setLogState({ jobId: job.id, entries: extractLogs(data), error: null, detail: data?.data ?? null })
       } else {
-        setLogState({ jobId: job.id, entries: [], error: `HTTP ${res.status}` })
+        setLogState({ jobId: job.id, entries: [], error: `HTTP ${res.status}`, detail: null })
       }
     } catch (e) {
       console.error('Error fetching job details:', e)
@@ -189,6 +190,17 @@ export default function JobDetailDialog({ open, onClose, job, onAction, actionEr
 
   const nodeStatuses = job.metadata?.nodeStatuses || []
   const actions = jobActions(job)
+
+  // A warm migration holding for its operator. The row this dialog was opened
+  // with only says "running"; the detail fetched above has the real step, the
+  // cutover mode and the downtime estimate. Without this the switchover was
+  // only reachable from the migrate dialog that started the run, gone as soon
+  // as it was closed or the page reloaded.
+  const migDetail = job.type === 'migration' && forThisJob ? logState.detail : null
+  const cutoverJob = migDetail
+    ? { id: job.id, status: migDetail.status, projectedDowntimeSec: migDetail.projectedDowntimeSec, config: { cutoverMode: migDetail.cutoverMode } }
+    : null
+  const showCutover = canRequestCutover(cutoverJob)
   const isRollingUpdate = job.type === 'rolling_update'
 
   return (
@@ -261,8 +273,11 @@ export default function JobDetailDialog({ open, onClose, job, onAction, actionEr
           </Box>
 
           {/* Actions */}
-          {actions.length > 0 && !confirmCancel && (
+          {(actions.length > 0 || showCutover) && !confirmCancel && (
             <Box sx={{ display: 'flex', gap: 1 }}>
+              {showCutover && (
+                <WarmCutoverButton job={cutoverJob} onRequested={() => fetchJobDetails({ silent: true })} />
+              )}
               {actions.includes('pause') && (
                 <Button
                   size="small"

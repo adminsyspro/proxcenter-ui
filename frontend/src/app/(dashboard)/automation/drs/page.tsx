@@ -81,7 +81,9 @@ import DRSSettingsPanel, {
 } from '@/components/automation/drs/DRSSettingsPanel'
 import PlacementConstraintsCard, {
   type PinnedGuest,
-  type BalancingDomain
+  type BalancingDomain,
+  type RestrictedGuest,
+  type ExcludedGuest
 } from '@/components/automation/drs/PlacementConstraintsCard'
 import MigrationHistoryTab from '@/components/automation/drs/MigrationHistoryTab'
 import AffinityRulesManager, {
@@ -128,6 +130,8 @@ interface DRSStatus {
   pinned_guests?: PinnedGuest[]
   pinned_guest_count?: number
   balancing_domains?: BalancingDomain[]
+  restricted_guests?: RestrictedGuest[]
+  excluded_guests?: ExcludedGuest[]
 }
 
 interface DRSRecommendation {
@@ -443,10 +447,11 @@ const ClusterCard = ({
   const theme = useTheme()
   const clusterRecs = recommendations.filter(r => r.connection_id === clusterId)
 
-  // What segments this cluster, if anything. The memory spread and the health
-  // score below are computed over every node, so on a segmented cluster they
-  // measure a gap no migration can close: the chip is what tells the operator
-  // that a low score here is a topology fact, not a DRS failure.
+  // What shapes placement on this cluster, if anything. Some guests can only
+  // move within part of the nodes because a bridge, an SDN zone or a storage
+  // they use exists there only: a valid, often intentional shape. The chip
+  // says how many guests that concerns and points at the placement card,
+  // where each one is named with its limiting resource.
   const placementConstraint = useMemo(() => {
     const domains = balancingDomains.filter(d => d.connection_id === clusterId)
 
@@ -459,8 +464,14 @@ const ClusterCard = ({
     const network = kinds.has('network')
     const storage = kinds.has('storage')
 
+    // The guests outside the widest domain are the ones with fewer places to
+    // go; the widest domain is where the free guests live.
+    const widest = Math.max(...domains.map(d => d.nodes.length))
+    const restricted = domains.filter(d => d.nodes.length < widest).reduce((sum, d) => sum + d.guests, 0)
+
     return {
       count: domains.length,
+      restricted,
       icon: network ? 'ri-git-branch-line' : 'ri-hard-drive-2-line',
       labelKey:
         network && storage
@@ -571,13 +582,16 @@ return 'neutral'
               {placementConstraint && (
                 <Tooltip
                   arrow
-                  title={t('drsPage.placementConstrainedTooltip', { count: placementConstraint.count })}
+                  title={t('drsPage.placementConstrainedTooltip', {
+                    count: placementConstraint.count,
+                    restricted: placementConstraint.restricted
+                  })}
                 >
                   <Chip
                     icon={<i className={placementConstraint.icon} style={{ fontSize: 14 }} />}
                     label={t(placementConstraint.labelKey)}
                     size="small"
-                    color="warning"
+                    color="info"
                     variant="outlined"
                     sx={{ height: 22, fontSize: '0.7rem', fontWeight: 600 }}
                   />
@@ -1439,6 +1453,8 @@ return () => setPageInfo('', '', '')
   // empty so an older orchestrator simply renders nothing extra.
   const pinnedGuests: PinnedGuest[] = status?.pinned_guests ?? []
   const balancingDomains: BalancingDomain[] = status?.balancing_domains ?? []
+  const restrictedGuests: RestrictedGuest[] = status?.restricted_guests ?? []
+  const excludedGuests: ExcludedGuest[] = status?.excluded_guests ?? []
 
   const { data: recommendationsRaw, mutate: mutateRecs, isLoading: recsLoading } = useDRSRecsHook(isEnterprise)
 
@@ -2364,11 +2380,15 @@ return next
       {/* Tab: Recommendations */}
       {tab === 1 && (
         <Stack spacing={2}>
-          {/* Why DRS is constrained here, on a zoned cluster */}
+          {/* How placement is shaped here, guest by guest, on a heterogeneous cluster */}
           <PlacementConstraintsCard
             pinnedGuests={pinnedGuests}
             balancingDomains={balancingDomains}
+            restrictedGuests={restrictedGuests}
+            excludedGuests={excludedGuests}
             connectionNames={connectionNames}
+            vmStatus={historyVmStatus}
+            nodeStatus={historyNodeStatus}
           />
 
           {/* Migrations actives en cours */}

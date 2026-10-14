@@ -36,7 +36,8 @@ export interface BalancingDomain {
 
 /** One resource that narrows where a guest can run, and where it exists. */
 export interface PlacementLimit {
-  kind: 'network' | 'storage' | string
+  /** 'network' (bridge or SDN VNet) or 'storage'; kept open for newer orchestrators. */
+  kind: string
   resource: string
   /** The SDN zone carrying a VNet's restriction. */
   zone?: string
@@ -62,7 +63,8 @@ export interface ExcludedGuest {
   name: string
   type?: string
   node: string
-  reason: 'tag' | 'local_disks' | 'guest_type' | string
+  /** 'tag', 'local_disks' or 'guest_type'; kept open for newer orchestrators. */
+  reason: string
   detail?: string
 }
 
@@ -85,7 +87,9 @@ const RESTRICTED_COLUMNS = '260px 150px 240px minmax(0, 1fr)'
 const EXCLUDED_COLUMNS = '260px 150px minmax(0, 1fr)'
 const PAGE_SIZES = [20, 50, 100]
 
-const domainKey = (nodes: string[]) => [...nodes].sort().join(',')
+const domainKey = (nodes: string[]) => [...nodes].sort((a, b) => a.localeCompare(b)).join(',')
+
+const EXCLUSION_ICONS: Record<string, string> = { tag: 'ri-price-tag-3-line', local_disks: 'ri-hard-drive-2-line' }
 
 /**
  * How placement is shaped on a cluster, guest by guest.
@@ -223,8 +227,7 @@ const PlacementConstraintsCard = ({
     return t('drsPage.excludedGuestType')
   }
 
-  const exclusionIcon = (reason: string) =>
-    reason === 'tag' ? 'ri-price-tag-3-line' : reason === 'local_disks' ? 'ri-hard-drive-2-line' : 'ri-filter-off-line'
+  const exclusionIcon = (reason: string) => EXCLUSION_ICONS[reason] || 'ri-filter-off-line'
 
   const node = (connId: string, name: string) => (
     <Box key={name} component='span' sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75, minWidth: 0 }}>
@@ -400,7 +403,7 @@ const PlacementConstraintsCard = ({
 }
 
 /** A list that pages itself past 20 rows, with the usual 20/50/100 choice. */
-function PagedRows<T>({ rows, rowKey, render }: { rows: T[]; rowKey: (row: T) => string; render: (row: T) => ReactNode }) {
+function PagedRows<T>({ rows, rowKey, render }: Readonly<{ rows: T[]; rowKey: (row: T) => string; render: (row: T) => ReactNode }>) {
   const t = useTranslations()
   const [page, setPage] = useState(0)
   const [size, setSize] = useState(PAGE_SIZES[0])

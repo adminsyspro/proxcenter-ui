@@ -223,6 +223,51 @@ describe('GET /api/v1/orchestrator/drs/status RBAC infra scoping', () => {
     expect(body.balancing_domains).toHaveLength(3)
   })
 
+  it('never names an invisible node through a limiting resource', async () => {
+    rbacScopeMock.mockResolvedValue(nodeScopedToN1)
+    getDRSStatusMock.mockResolvedValue({
+      data: {
+        enabled: true,
+        restricted_guests: [{
+          connection_id: 'mine',
+          vmid: 9101,
+          name: 'dmz-a',
+          node: 'n1',
+          nodes: ['n1'],
+          // The storage also exists on n2, a node this caller has no grant on.
+          limits: [{ kind: 'storage', resource: 'ceph-a', nodes: ['n1', 'n2'] }]
+        }]
+      }
+    })
+    const { GET } = await import('./route')
+    const body = await readBody(await callRoute(GET as any))
+
+    expect(body.restricted_guests).toHaveLength(1)
+    expect(body.restricted_guests[0].limits[0].nodes).toEqual(['n1'])
+    expect(JSON.stringify(body)).not.toContain('n2')
+  })
+
+  it('serves the free-text reason of a pinned guest only to a caller who sees the whole connection', async () => {
+    getDRSStatusMock.mockResolvedValue({
+      data: {
+        enabled: true,
+        pinned_guests: [{ connection_id: 'mine', vmid: 9101, name: 'dmz-a', node: 'n1', reason: 'network unavailable on node "n2"' }]
+      }
+    })
+    const { GET } = await import('./route')
+
+    rbacScopeMock.mockResolvedValue(nodeScopedToN1)
+    const scoped = await readBody(await callRoute(GET as any))
+
+    expect(scoped.pinned_guests[0].reason).toBe('')
+    expect(JSON.stringify(scoped)).not.toContain('n2')
+
+    rbacScopeMock.mockResolvedValue({ ...nodeScopedToN1, fullConnections: new Set(['mine']) })
+    const whole = await readBody(await callRoute(GET as any))
+
+    expect(whole.pinned_guests[0].reason).toContain('n2')
+  })
+
   it('drops a domain that names no node at all', async () => {
     rbacScopeMock.mockResolvedValue(null)
     getDRSStatusMock.mockResolvedValue({

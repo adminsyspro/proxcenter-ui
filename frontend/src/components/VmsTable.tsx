@@ -3,6 +3,7 @@
 import React, { useMemo, useEffect, useLayoutEffect, useRef, useState, useCallback } from 'react'
 import { useTranslations } from 'next-intl'
 import { getOsSvgIcon } from '@/lib/utils/osIcons'
+import { tagsSortValue } from '@/lib/inventory/guestSearch'
 import { useTagColors } from '@/contexts/TagColorContext'
 import { vmIconOpacity } from '@/app/(dashboard)/infrastructure/inventory/helpers'
 import { NodeIcon } from '@/app/(dashboard)/infrastructure/inventory/components/TreeIcons'
@@ -1222,6 +1223,8 @@ return (
         width: 120,
         minWidth: 60,
         renderHeader: headerIconOnly('ri-price-tag-3-line'),
+        // Sort on the joined tags, not on the array reference (#937).
+        valueGetter: (_value, row) => tagsSortValue(row.tags),
         renderCell: (params) => <TagsCell tags={params.row.tags || []} getTagColor={(tag) => getTagColor(tag, params.row.connId)} shape={getShape(params.row.connId)} />
       })
     }

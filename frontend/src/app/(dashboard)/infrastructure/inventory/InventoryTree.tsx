@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { fetchConnectionsNetworks, type HostBridgeItem, type HostVlanItem, type SdnVnetItem } from '@/lib/proxmox/fetchConnectionsNetworks'
+import { guestMatchesSearch } from '@/lib/inventory/guestSearch'
 import { bridgeLabel } from '@/lib/proxmox/hostVlanMap'
 import { sdnSegmentLabel, type SdnVnet } from '@/lib/proxmox/sdnVnetMap'
 
@@ -2009,12 +2010,8 @@ return next
             // Vérifier si le node match
             const nodeMatches = n.node.toLowerCase().includes(q)
 
-            // Filtrer les VMs qui matchent
-            const filteredVms = n.vms.filter(vm =>
-              vm.name.toLowerCase().includes(q) ||
-              vm.vmid.toLowerCase().includes(q) ||
-              vm.type.toLowerCase().includes(q)
-            )
+            // Filtrer les VMs qui matchent (nom, vmid, type ou tag, #937)
+            const filteredVms = n.vms.filter(vm => guestMatchesSearch(vm, q))
 
             // Garder le node si lui-même match OU si des VMs matchent
             if (nodeMatches || filteredVms.length > 0) {
@@ -2229,13 +2226,10 @@ return vms
     if (!q) return allVms
     
     return allVms.filter(vm =>
-      vm.name.toLowerCase().includes(q) ||
-      vm.vmid.toLowerCase().includes(q) ||
-      vm.type.toLowerCase().includes(q) ||
+      guestMatchesSearch(vm, q) ||
       vm.node.toLowerCase().includes(q) ||
       vm.connName.toLowerCase().includes(q) ||
-      (vm.pool && vm.pool.toLowerCase().includes(q)) ||
-      (vm.tags && vm.tags.toLowerCase().includes(q))
+      (vm.pool && vm.pool.toLowerCase().includes(q))
     )
   }, [allVms, search])
 

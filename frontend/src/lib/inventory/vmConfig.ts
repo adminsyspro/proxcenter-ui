@@ -10,6 +10,7 @@ import { pveFetch } from "@/lib/proxmox/client"
 
 import { mapWithConcurrency, PVEPROXY_CONCURRENCY } from "./concurrency"
 import { EMPTY_GUEST_NET_IDENTITY, parseGuestNetIdentity, type GuestNetIdentity } from "./guestNetIdentity"
+import { sumGuestConfigDisks } from "./guestConfigDisks"
 
 export type VmConfigFields = {
   cpuType: string | null
@@ -87,7 +88,7 @@ export async function enrichVmsWithConfig<T extends EnrichableVm>(
   // and skips the call entirely.
   onlineNodes: Set<string> | null,
   opts: { includeAgent?: boolean } = {},
-): Promise<Array<T & VmConfigFields & GuestNetIdentity & Partial<VmAgentProbe>>> {
+): Promise<Array<T & VmConfigFields & GuestNetIdentity & Partial<VmAgentProbe> & { diskTotal?: number | null }>> {
   return mapWithConcurrency(vms, PVEPROXY_CONCURRENCY, async (vm) => {
     // Confirmed-offline node: no call at all. Every per-guest call to a dead
     // node fails with HTTP 595 after about 1s (measured, spec section 9).
@@ -108,7 +109,8 @@ export async function enrichVmsWithConfig<T extends EnrichableVm>(
       // A failing /config never fails the route.
     }
     const fields = parseVmConfig(config)
-    const enriched = { ...vm, ...fields, ...parseGuestNetIdentity(config, kind) }
+    // #938: the sum of every disk, from the same read. null without a config.
+    const enriched = { ...vm, ...fields, ...parseGuestNetIdentity(config, kind), diskTotal: sumGuestConfigDisks(config, kind) }
 
     if (!opts.includeAgent) return enriched
     // The flag means "the admin ticked the box"; the probe means "the agent is

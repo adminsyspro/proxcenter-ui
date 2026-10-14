@@ -44,8 +44,12 @@ export type CachedInventory = {
 // Version of the CachedInventory payload shape. v1 had `storages` carrying two
 // incompatible shapes depending on the writer; v2 separates them. v3 adds
 // `pools` on every cluster (issue #978): a v2 entry carries none, and serving
-// it would keep hiding the empty pools until its TTL runs out.
-const SCHEMA_VERSION = 3
+// it would keep hiding the empty pools until its TTL runs out. v4 adds
+// `diskTotal` on every guest (#938): a v3 entry would keep showing the boot
+// disk alone in the Disk column. Since v4 the stream route also writes
+// `storageResources`, and fills a missing `storages` when it serves an entry
+// fetchRawInventory wrote: both readers of one key always get their half.
+const SCHEMA_VERSION = 4
 
 type CacheEntry = {
   data: CachedInventory

@@ -51,7 +51,7 @@ import { formatBytes } from '@/utils/format'
 import { useCopyToClipboard } from '@/lib/clipboard'
 import ExpandableChart from '../components/ExpandableChart'
 import NodesTable, { NodeRow, BulkAction } from '@/components/NodesTable'
-import VmsTable, { VmRow, TrendPoint } from '@/components/VmsTable'
+import VmsTable, { VmRow, TrendPoint, guestDiskBytes } from '@/components/VmsTable'
 import ClusterFirewallTab from '@/components/ClusterFirewallTab'
 import ClusterSdnTab from '@/components/cluster-sdn/ClusterSdnTab'
 import BackupJobsPanel from '../BackupJobsPanel'
@@ -2752,12 +2752,12 @@ export default function ClusterTabs(props: any) {
                                   </Typography>
                                   <Typography variant="caption" sx={{ opacity: 0.7, display: 'block', mt: 1 }}>{t('dashboard.widgets.provisioned')}</Typography>
                                   <Typography variant="body2" fontWeight={600} sx={{ color: (() => {
-                                    const provBytes = (allVms || []).reduce((sum: number, vm: any) => sum + (Number(vm.maxdisk) || 0), 0)
+                                    const provBytes = (allVms || []).reduce((sum: number, vm: any) => sum + guestDiskBytes(vm), 0)
                                     const totalBytes = clusterCephData.pgmap?.bytes_total || 0
                                     return totalBytes > 0 && provBytes > totalBytes ? 'warning.main' : 'text.primary'
                                   })() }}>
                                     {(() => {
-                                      const provBytes = (allVms || []).reduce((sum: number, vm: any) => sum + (Number(vm.maxdisk) || 0), 0)
+                                      const provBytes = (allVms || []).reduce((sum: number, vm: any) => sum + guestDiskBytes(vm), 0)
                                       const totalBytes = clusterCephData.pgmap?.bytes_total || 0
                                       const pct = totalBytes > 0 ? Math.round((provBytes / totalBytes) * 100) : 0
                                       return `${formatBytes(provBytes)} (${pct}%)`

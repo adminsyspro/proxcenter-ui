@@ -4,6 +4,7 @@ import { NextResponse } from "next/server"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { mapClusterResource } from "@/lib/proxmox/mappers"
+import { attachGuestDiskTotals, onlineNodeSet } from "@/lib/inventory/guestDiskTotals"
 import { getRBACContext, filterVmsByPermission, PERMISSIONS, checkPermission } from "@/lib/rbac"
 
 export const runtime = "nodejs"
@@ -29,6 +30,14 @@ export async function GET(
     let guests = raw
       .filter((r) => r?.type === "qemu" || r?.type === "lxc")
       .map(mapClusterResource)
+
+    // #938: `diskTotal` (sum of every disk) for the cluster and node panels.
+    // Answered from the cache the inventory keeps warm; this route never waits
+    // on N config reads, it only refreshes the missing figures behind itself.
+    await attachGuestDiskTotals(conn, id, guests, {
+      onlineNodes: onlineNodeSet(raw.filter((r) => r?.type === "node")),
+      blocking: false,
+    })
 
     // Apply RBAC scope filtering so scoped users only see their permitted VMs
     const rbacCtx = await getRBACContext()

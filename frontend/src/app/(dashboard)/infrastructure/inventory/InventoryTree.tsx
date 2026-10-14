@@ -118,6 +118,7 @@ export type AllVmItem = {
   maxmem?: number
   disk?: number
   maxdisk?: number
+  diskTotal?: number  // #938: sum of every attached disk; maxdisk is the boot disk only
   uptime?: number | string | null
   ip?: string | null
   snapshots?: number
@@ -226,7 +227,7 @@ type TreeCluster = {
     cpu?: number      // node-level CPU usage (fraction 0-1)
     mem?: number      // node-level used memory (bytes)
     maxmem?: number   // node-level total memory (bytes)
-    vms: { type: string; vmid: string; name: string; status?: string; cpu?: number; maxcpu?: number; mem?: number; maxmem?: number; disk?: number; maxdisk?: number; uptime?: number; pool?: string; tags?: string; template?: boolean; hastate?: string; hagroup?: string; lock?: string }[]
+    vms: { type: string; vmid: string; name: string; status?: string; cpu?: number; maxcpu?: number; mem?: number; maxmem?: number; disk?: number; maxdisk?: number; diskTotal?: number; uptime?: number; pool?: string; tags?: string; template?: boolean; hastate?: string; hagroup?: string; lock?: string }[]
   }[]
 }
 
@@ -1571,6 +1572,7 @@ return next
         maxmem: guest.maxmem,
         disk: guest.disk,
         maxdisk: guest.maxdisk,
+        diskTotal: guest.diskTotal,
         pool: guest.pool || null,
         tags: guest.tags || null,
         template: guest.template === 1 || guest.template === true,
@@ -2171,6 +2173,7 @@ return items
       maxmem?: number
       disk?: number
       maxdisk?: number
+      diskTotal?: number
       uptime?: number
       pool?: string | null
       tags?: string | null
@@ -2199,6 +2202,7 @@ return items
             maxmem: vm.maxmem,
             disk: vm.disk,
             maxdisk: vm.maxdisk,
+            diskTotal: vm.diskTotal,
             uptime: vm.uptime,
             pool: vm.pool,
             tags: vm.tags,
@@ -2255,6 +2259,7 @@ return vms
         maxmem: vm.maxmem,
         disk: vm.disk,
         maxdisk: vm.maxdisk,
+        diskTotal: vm.diskTotal,
         uptime: vm.uptime,
         tags: vm.tags?.split(';').filter(Boolean),
         pool: vm.pool,

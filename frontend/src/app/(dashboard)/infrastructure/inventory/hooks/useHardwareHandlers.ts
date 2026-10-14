@@ -196,8 +196,10 @@ export function useHardwareHandlers({
 
     if (!res.ok) {
       const err = await res.json().catch(() => ({}))
+      // A quota refusal names the usage it was weighed against (#938).
+      const violations = Array.isArray(err?.violations) ? err.violations.join(' ; ') : ''
 
-      throw new Error(err?.error || `HTTP ${res.status}`)
+      throw new Error([err?.error || `HTTP ${res.status}`, violations].filter(Boolean).join(': '))
     }
 
     // Recharger les données

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 
 import { pveFetch } from "@/lib/proxmox/client"
+import { invalidateGuestDiskTotal } from "@/lib/inventory/guestDiskTotals"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
 import { resizeDiskSchema } from "@/lib/schemas"
@@ -128,7 +129,10 @@ export async function POST(
         },
       }
     )
-    
+
+    // The guest's disk total grew: re-read it on the next inventory fetch (#938).
+    invalidateGuestDiskTotal(id, type, vmid)
+
     // Audit
     const { audit } = await import("@/lib/audit")
 

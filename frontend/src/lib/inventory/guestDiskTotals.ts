@@ -18,9 +18,9 @@
 import { pveFetch } from "@/lib/proxmox/client"
 
 import { mapWithConcurrency, PVEPROXY_CONCURRENCY } from "./concurrency"
-import { sumGuestConfigDisks } from "./guestConfigDisks"
+import { guestUnusedVolumes, sumGuestConfigDisks } from "./guestConfigDisks"
 
-export { isGuestDiskKey, sumGuestConfigDisks } from "./guestConfigDisks"
+export { guestUnusedVolumes, isGuestDiskKey, sumGuestConfigDisks } from "./guestConfigDisks"
 
 /** Same as the stale window of the inventory cache: no figure outlives it. */
 export const DISK_TOTAL_TTL_MS = 15 * 60 * 1_000
@@ -40,6 +40,9 @@ export type DiskTotalGuest = {
 type Entry = { total: number; expiresAt: number; maxdisk?: number }
 
 type FetchConfig = (node: string, type: "qemu" | "lxc", vmid: string) => Promise<unknown>
+
+/** Size in bytes of one storage volume, as the storage reports it. */
+type FetchVolumeSize = (node: string, volid: string) => Promise<number>
 
 export type DiskTotalOptions = {
   /**
@@ -115,6 +118,18 @@ function remember(key: string, total: number, guest: DiskTotalGuest, now: () => 
     expiresAt: now() + DISK_TOTAL_TTL_MS * (1 - JITTER * random()),
     maxdisk: typeof guest.maxdisk === "number" ? guest.maxdisk : undefined,
   })
+}
+
+function volumeSizeReader(connConfig: unknown): FetchVolumeSize {
+  return async (node, volid) => {
+    const storage = volid.split(":")[0]
+    const info = await pveFetch<any>(
+      connConfig as any,
+      `/nodes/${encodeURIComponent(node)}/storage/${encodeURIComponent(storage)}/content/${encodeURIComponent(volid)}`,
+    )
+
+    return Number(info?.size) || 0
+  }
 }
 
 function configReader(connConfig: unknown): FetchConfig {
@@ -217,29 +232,34 @@ export function onlineNodeSet(nodes: Array<{ node?: string; status?: string }> |
  * Exact disk bytes of each guest, for a quota check or a vDC usage figure:
  * every config is read NOW, never served from the cache (a create or a resize
  * must be weighed against the disks the pool holds at that moment), and the
- * answers refresh the cache on the way. A guest whose config cannot be read
- * falls back on its `maxdisk`, the floor Proxmox itself reports, and is
- * logged: never 0, which would let a tenant overrun its quota.
+ * answers refresh the cache on the way. Detached volumes (`unusedN`) still
+ * take room on their storage, so their size is asked of the storage and added:
+ * detaching a disk must not bring a tenant back under its quota. A guest whose
+ * config cannot be read falls back on its `maxdisk`, the floor Proxmox itself
+ * reports, and is logged: never 0, which would let a tenant overrun its quota.
  */
 export async function readGuestDiskBytes(
   connConfig: unknown,
   connId: string,
   guests: DiskTotalGuest[],
-  opts: { fetchConfig?: FetchConfig; now?: () => number; random?: () => number } = {},
+  opts: { fetchConfig?: FetchConfig; fetchVolumeSize?: FetchVolumeSize; now?: () => number; random?: () => number } = {},
 ): Promise<number[]> {
   const now = opts.now ?? Date.now
   const random = opts.random ?? Math.random
   const fetchConfig = opts.fetchConfig ?? configReader(connConfig)
+  const fetchVolumeSize = opts.fetchVolumeSize ?? volumeSizeReader(connConfig)
 
   return mapWithConcurrency(guests, PVEPROXY_CONCURRENCY, async guest => {
     const floor = Number(guest.maxdisk) || 0
     const kind = guestKind(guest)
     if (!kind) return floor
     let total: number | null = null
+    let config: unknown = null
     let reason = "no config"
     if (guest.node) {
       try {
-        total = sumGuestConfigDisks(await fetchConfig(guest.node, kind, String(guest.vmid)), kind)
+        config = await fetchConfig(guest.node, kind, String(guest.vmid))
+        total = sumGuestConfigDisks(config, kind)
       } catch (err: any) {
         reason = err?.message || String(err)
       }
@@ -253,6 +273,15 @@ export async function readGuestDiskBytes(
     }
     remember(diskTotalKey(connId, kind, guest.vmid), total, guest, now, random)
 
-    return Math.max(total, floor)
+    let unused = 0
+    for (const volid of guestUnusedVolumes(config)) {
+      try {
+        unused += await fetchVolumeSize(String(guest.node), volid)
+      } catch (err: any) {
+        console.warn(`[disk-total] ${kind}/${guest.vmid} on ${connId}: size of detached ${volid} unreadable (${err?.message || err})`)
+      }
+    }
+
+    return Math.max(total, floor) + unused
   })
 }

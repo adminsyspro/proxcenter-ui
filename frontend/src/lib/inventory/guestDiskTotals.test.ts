@@ -270,6 +270,46 @@ describe("readGuestDiskBytes (#938, vDC quotas)", () => {
     warn.mockRestore()
   })
 
+  it("adds the size of every detached volume, so detaching a disk never frees quota", async () => {
+    const list: DiskTotalGuest[] = [{ vmid: 300, type: "qemu", node: "pve1", maxdisk: 10 * G }]
+    const fetchConfig = vi.fn(async () => ({
+      scsi0: "local-lvm:vm-300-disk-0,size=10G",
+      unused0: "local-lvm:vm-300-disk-1",
+      unused1: "ceph:vm-300-disk-2",
+    }))
+    const fetchVolumeSize = vi.fn(async (_node: string, volid: string) => (volid.startsWith("ceph:") ? 30 * G : 50 * G))
+
+    const bytes = await readGuestDiskBytes(null, CONN, list, { fetchConfig, fetchVolumeSize })
+
+    expect(fetchVolumeSize).toHaveBeenCalledWith("pve1", "local-lvm:vm-300-disk-1")
+    expect(fetchVolumeSize).toHaveBeenCalledWith("pve1", "ceph:vm-300-disk-2")
+    expect(bytes).toEqual([90 * G])
+    // The inventory figure stays the attached disks: detached ones are a quota matter.
+    expect(peekGuestDiskTotal(CONN, "qemu", 300)).toBe(10 * G)
+  })
+
+  it("keeps the attached total and warns when a detached volume cannot be sized", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+    const list: DiskTotalGuest[] = [{ vmid: 301, type: "qemu", node: "pve1", maxdisk: 10 * G }]
+    const fetchConfig = vi.fn(async () => ({ scsi0: "local-lvm:vm-301-disk-0,size=10G", unused0: "local-lvm:vm-301-disk-1" }))
+    const fetchVolumeSize = vi.fn(async () => { throw new Error("HTTP 500") })
+
+    const bytes = await readGuestDiskBytes(null, CONN, list, { fetchConfig, fetchVolumeSize })
+
+    expect(bytes).toEqual([10 * G])
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("local-lvm:vm-301-disk-1"))
+    warn.mockRestore()
+  })
+
+  it("asks the storage content API for a detached volume by default", async () => {
+    pveFetchMock.mockImplementation(async (_conn: unknown, path: string) =>
+      path.endsWith("/config") ? { scsi0: "local-lvm:vm-302-disk-0,size=10G", unused0: "local-lvm:vm-302-disk-1" } : { size: 5 * G })
+    const bytes = await readGuestDiskBytes({ id: "c" }, CONN, [{ vmid: 302, type: "qemu", node: "pve1", maxdisk: 10 * G }])
+
+    expect(pveFetchMock).toHaveBeenCalledWith({ id: "c" }, "/nodes/pve1/storage/local-lvm/content/local-lvm%3Avm-302-disk-1")
+    expect(bytes).toEqual([15 * G])
+  })
+
   it("goes through pveFetch by default", async () => {
     pveFetchMock.mockResolvedValue(configs["qemu/104"])
     const bytes = await readGuestDiskBytes({ id: "c" }, CONN, guests().slice(0, 1))

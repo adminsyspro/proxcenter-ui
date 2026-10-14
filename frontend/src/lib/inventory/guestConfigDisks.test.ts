@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { isGuestDiskKey, sumGuestConfigDisks } from "./guestConfigDisks"
+import { guestUnusedVolumes, isGuestDiskKey, sumGuestConfigDisks } from "./guestConfigDisks"
 
 const G = 1024 ** 3
 
@@ -24,17 +24,29 @@ describe("sumGuestConfigDisks (#938)", () => {
     )
   })
 
-  it("counts no optical drive, empty slot or cloud-init seed, even when it carries a size", () => {
+  it("counts no ISO image or empty slot, even when it carries a size", () => {
     const config = {
       scsi0: "local-lvm:vm-1-disk-0,size=10G",
       ide2: "local:iso/debian.iso,media=cdrom,size=630M",
       ide0: "none,media=cdrom",
       ide1: "cdrom,media=cdrom",
       sata1: "none",
-      ide3: "local-lvm:vm-1-cloudinit,media=cdrom,size=4M",
+      sata2: "nfs-share:other/install.iso,media=cdrom,size=1G",
     }
 
     expect(sumGuestConfigDisks(config, "qemu")).toBe(10 * G)
+  })
+
+  it("still counts a disk volume marked media=cdrom, so it cannot hide from a quota", () => {
+    const config = {
+      scsi0: "local-lvm:vm-1-disk-0,size=10G",
+      // A cloud-init seed is a real volume on the guest storage.
+      ide3: "local-lvm:vm-1-cloudinit,media=cdrom,size=4M",
+      // Any images volume flagged as a cdrom still takes its room.
+      ide1: "local-lvm:vm-1-disk-3,media=cdrom,size=50G",
+    }
+
+    expect(sumGuestConfigDisks(config, "qemu")).toBe(60 * G + 4 * 1024 ** 2)
   })
 
   it("leaves detached volumes and pending changes out", () => {
@@ -76,6 +88,25 @@ describe("sumGuestConfigDisks (#938)", () => {
 
   it("ignores a disk key whose value is not a drive string", () => {
     expect(sumGuestConfigDisks({ scsi0: 42, scsi1: "s:v,size=1G" }, "qemu")).toBe(G)
+  })
+})
+
+describe("guestUnusedVolumes", () => {
+  it("lists the detached volumes of a VM or a container, and nothing else", () => {
+    expect(guestUnusedVolumes({
+      scsi0: "local-lvm:vm-1-disk-0,size=10G",
+      unused0: "local-lvm:vm-1-disk-1",
+      unused3: "ceph:vm-1-disk-7",
+      net0: "virtio=AA:BB:CC:DD:EE:FF,bridge=vmbr0",
+    })).toEqual(["local-lvm:vm-1-disk-1", "ceph:vm-1-disk-7"])
+    expect(guestUnusedVolumes({ rootfs: "local-lvm:subvol-2-disk-0,size=8G", unused0: "local-lvm:subvol-2-disk-1" }))
+      .toEqual(["local-lvm:subvol-2-disk-1"])
+  })
+
+  it("answers an empty list for a missing or malformed config", () => {
+    expect(guestUnusedVolumes(null)).toEqual([])
+    expect(guestUnusedVolumes([])).toEqual([])
+    expect(guestUnusedVolumes({ unused0: 42 })).toEqual([])
   })
 })
 

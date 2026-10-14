@@ -148,7 +148,7 @@ async function refreshOne(
   random: () => number,
 ): Promise<void> {
   const running = inflight().get(key)
-  if (running) return running
+  if (running !== undefined) return running
 
   const job = (async () => {
     let config: unknown = null
@@ -168,6 +168,52 @@ async function refreshOne(
   return job
 }
 
+type StaleGuest = { key: string; guest: DiskTotalGuest; kind: "qemu" | "lxc" }
+
+/** The cache keys of the listed guests, and those whose figure must be read again. */
+function collectStale(
+  connId: string,
+  guests: DiskTotalGuest[],
+  onlineNodes: Set<string> | null,
+  now: number,
+): { live: Set<string>; stale: StaleGuest[] } {
+  const cache = store()
+  const live = new Set<string>()
+  const stale: StaleGuest[] = []
+
+  for (const guest of guests) {
+    const kind = guestKind(guest)
+    if (!kind) continue
+    const key = diskTotalKey(connId, kind, guest.vmid)
+    live.add(key)
+    const reachable = !!guest.node && (!onlineNodes || onlineNodes.has(guest.node))
+    if (reachable && !isFresh(cache.get(key), guest, now)) stale.push({ key, guest, kind })
+  }
+
+  return { live, stale }
+}
+
+/** Drop the cached figures of the connection's guests that are no longer listed. */
+function dropDeparted(connId: string, live: Set<string>): void {
+  const cache = store()
+  const prefix = `${connId}::`
+
+  for (const key of cache.keys()) {
+    if (key.startsWith(prefix) && !live.has(key)) cache.delete(key)
+  }
+}
+
+/** Copy the cached figures onto the guests, in place. */
+function applyTotals(connId: string, guests: DiskTotalGuest[]): void {
+  const cache = store()
+
+  for (const guest of guests) {
+    const kind = guestKind(guest)
+    const entry = kind ? cache.get(diskTotalKey(connId, kind, guest.vmid)) : undefined
+    if (entry) guest.diskTotal = entry.total
+  }
+}
+
 /**
  * Set `diskTotal` on every qemu/lxc guest of ONE connection that has a figure,
  * in place. `guests` must be the connection's complete list: cached figures of
@@ -183,26 +229,9 @@ export async function attachGuestDiskTotals(
   const random = opts.random ?? Math.random
   const fetchConfig: FetchConfig = opts.fetchConfig ?? configReader(connConfig)
 
-  const cache = store()
-  const live = new Set<string>()
-  const stale: Array<{ key: string; guest: DiskTotalGuest; kind: "qemu" | "lxc" }> = []
+  const { live, stale } = collectStale(connId, guests, opts.onlineNodes, now())
 
-  for (const guest of guests) {
-    const kind = guestKind(guest)
-    if (!kind) continue
-    const key = diskTotalKey(connId, kind, guest.vmid)
-    live.add(key)
-    if (isFresh(cache.get(key), guest, now())) continue
-    if (!guest.node || (opts.onlineNodes && !opts.onlineNodes.has(guest.node))) continue
-    stale.push({ key, guest, kind })
-  }
-
-  if (guests.length > 0) {
-    const prefix = `${connId}::`
-    for (const key of cache.keys()) {
-      if (key.startsWith(prefix) && !live.has(key)) cache.delete(key)
-    }
-  }
+  if (guests.length > 0) dropDeparted(connId, live)
 
   const refresh = mapWithConcurrency(stale, PVEPROXY_CONCURRENCY, item =>
     refreshOne(item.key, item.guest, item.kind, fetchConfig, now, random))
@@ -213,12 +242,7 @@ export async function attachGuestDiskTotals(
     await refresh
   }
 
-  for (const guest of guests) {
-    const kind = guestKind(guest)
-    if (!kind) continue
-    const entry = cache.get(diskTotalKey(connId, kind, guest.vmid))
-    if (entry) guest.diskTotal = entry.total
-  }
+  applyTotals(connId, guests)
 }
 
 /** Online nodes of a `/nodes` answer, or `null` when that call failed and status is unknown. */
@@ -226,6 +250,58 @@ export function onlineNodeSet(nodes: Array<{ node?: string; status?: string }> |
   if (!nodes) return null
 
   return new Set(nodes.filter(n => n?.status === "online" && n.node).map(n => String(n.node)))
+}
+
+type ReadContext = {
+  connId: string
+  fetchConfig: FetchConfig
+  fetchVolumeSize: FetchVolumeSize
+  now: () => number
+  random: () => number
+}
+
+/** The guest config and the sum of its attached disks, or why it could not be read. */
+async function readConfigTotal(
+  guest: DiskTotalGuest,
+  kind: "qemu" | "lxc",
+  ctx: ReadContext,
+): Promise<{ config: unknown; total: number | null; reason: string }> {
+  if (!guest.node) return { config: null, total: null, reason: "no node" }
+  try {
+    const config = await ctx.fetchConfig(guest.node, kind, String(guest.vmid))
+
+    return { config, total: sumGuestConfigDisks(config, kind), reason: "no config" }
+  } catch (err: any) {
+    return { config: null, total: null, reason: err?.message || String(err) }
+  }
+}
+
+/** Size of every detached volume of the guest; one that cannot be sized is logged and skipped. */
+async function sumUnusedVolumes(guest: DiskTotalGuest, kind: string, config: unknown, ctx: ReadContext): Promise<number> {
+  const sizes = await Promise.all(guestUnusedVolumes(config).map(volid =>
+    ctx.fetchVolumeSize(String(guest.node), volid).catch((err: any) => {
+      console.warn(`[disk-total] ${kind}/${guest.vmid} on ${ctx.connId}: size of detached ${volid} unreadable (${err?.message || err})`)
+
+      return 0
+    })))
+
+  return sizes.reduce((sum, size) => sum + size, 0)
+}
+
+async function readOneGuestBytes(guest: DiskTotalGuest, ctx: ReadContext): Promise<number> {
+  const floor = Number(guest.maxdisk) || 0
+  const kind = guestKind(guest)
+  if (!kind) return floor
+
+  const { config, total, reason } = await readConfigTotal(guest, kind, ctx)
+  if (total === null) {
+    console.warn(`[disk-total] ${kind}/${guest.vmid} on ${ctx.connId}: config unreadable (${reason}), counting maxdisk`)
+
+    return floor
+  }
+  remember(diskTotalKey(ctx.connId, kind, guest.vmid), total, guest, ctx.now, ctx.random)
+
+  return Math.max(total, floor) + await sumUnusedVolumes(guest, kind, config, ctx)
 }
 
 /**
@@ -244,44 +320,13 @@ export async function readGuestDiskBytes(
   guests: DiskTotalGuest[],
   opts: { fetchConfig?: FetchConfig; fetchVolumeSize?: FetchVolumeSize; now?: () => number; random?: () => number } = {},
 ): Promise<number[]> {
-  const now = opts.now ?? Date.now
-  const random = opts.random ?? Math.random
-  const fetchConfig = opts.fetchConfig ?? configReader(connConfig)
-  const fetchVolumeSize = opts.fetchVolumeSize ?? volumeSizeReader(connConfig)
+  const ctx: ReadContext = {
+    connId,
+    fetchConfig: opts.fetchConfig ?? configReader(connConfig),
+    fetchVolumeSize: opts.fetchVolumeSize ?? volumeSizeReader(connConfig),
+    now: opts.now ?? Date.now,
+    random: opts.random ?? Math.random,
+  }
 
-  return mapWithConcurrency(guests, PVEPROXY_CONCURRENCY, async guest => {
-    const floor = Number(guest.maxdisk) || 0
-    const kind = guestKind(guest)
-    if (!kind) return floor
-    let total: number | null = null
-    let config: unknown = null
-    let reason = "no config"
-    if (guest.node) {
-      try {
-        config = await fetchConfig(guest.node, kind, String(guest.vmid))
-        total = sumGuestConfigDisks(config, kind)
-      } catch (err: any) {
-        reason = err?.message || String(err)
-      }
-    } else {
-      reason = "no node"
-    }
-    if (total === null) {
-      console.warn(`[disk-total] ${kind}/${guest.vmid} on ${connId}: config unreadable (${reason}), counting maxdisk`)
-
-      return floor
-    }
-    remember(diskTotalKey(connId, kind, guest.vmid), total, guest, now, random)
-
-    let unused = 0
-    for (const volid of guestUnusedVolumes(config)) {
-      try {
-        unused += await fetchVolumeSize(String(guest.node), volid)
-      } catch (err: any) {
-        console.warn(`[disk-total] ${kind}/${guest.vmid} on ${connId}: size of detached ${volid} unreadable (${err?.message || err})`)
-      }
-    }
-
-    return Math.max(total, floor) + unused
-  })
+  return mapWithConcurrency(guests, PVEPROXY_CONCURRENCY, guest => readOneGuestBytes(guest, ctx))
 }

@@ -57,6 +57,16 @@ const upstreamStatus = {
     { connection_id: 'mine', nodes: ['n1'], guests: 2, spread: 0 },
     { connection_id: 'theirs', nodes: ['their-node-a', 'their-node-b'], guests: 5, spread: 12.5 },
     { nodes: ['n9'], guests: 1, spread: 0 }
+  ],
+  restricted_guests: [
+    { connection_id: 'mine', vmid: 9501, name: 'stor-a', node: 'n1', nodes: ['n1', 'n2'], limits: [{ kind: 'storage', resource: 'CephTwo', nodes: ['n1', 'n2'] }] },
+    { connection_id: 'theirs', vmid: 501, name: 'their-restricted-vm', node: 'their-node', nodes: ['their-node'], limits: [] },
+    { vmid: 778, name: 'orphan-restricted', node: 'n9', nodes: ['n9'], limits: [] }
+  ],
+  excluded_guests: [
+    { connection_id: 'mine', vmid: 9190, name: 'excl', node: 'n1', reason: 'tag', detail: 'pxc_ignore' },
+    { connection_id: 'theirs', vmid: 502, name: 'their-excluded-vm', node: 'their-node', reason: 'tag' },
+    { vmid: 779, name: 'orphan-excluded', node: 'n9', reason: 'local_disks' }
   ]
 }
 
@@ -96,6 +106,17 @@ describe('GET /api/v1/orchestrator/drs/status tenant scoping', () => {
 
     expect(body.balancing_domains).toHaveLength(1)
     expect(body.balancing_domains[0].nodes).toEqual(['n1'])
+  })
+
+  it('keeps only the restricted and excluded guests of the caller s connections', async () => {
+    const { GET } = await import('./route')
+    const body = await readBody(await callRoute(GET as any))
+
+    expect(body.restricted_guests.map((g: any) => g.vmid)).toEqual([9501])
+    expect(body.excluded_guests.map((g: any) => g.vmid)).toEqual([9190])
+    expect(JSON.stringify(body)).not.toContain('their-restricted-vm')
+    expect(JSON.stringify(body)).not.toContain('their-excluded-vm')
+    expect(JSON.stringify(body)).not.toContain('orphan-')
   })
 
   it('drops a row with no connection_id rather than showing it to everyone', async () => {

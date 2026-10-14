@@ -27,6 +27,7 @@ import TaskLogButton from '@/components/tasks/TaskLogButton'
 import { DonutStatCard, DonutTotalCard } from '@/components/charts/DonutStatCards'
 import { formatDate, formatTime } from '@/lib/i18n/date'
 
+import { GuestGlyph, NodeGlyph } from './glyphs'
 import {
   filterMigrations,
   formatDurationMs,
@@ -57,30 +58,6 @@ const PAGE_SIZES = [20, 50, 100]
 // columns of its neighbours: time, guest, cluster, source, arrow, target,
 // reason (takes what is left), duration, status.
 const ROW_COLUMNS = '76px 240px 120px 120px 20px 120px minmax(0, 1fr) 64px 24px'
-
-// Same palette as the dashboard's Guests per Node widget, so a guest or a node
-// reads the same everywhere.
-const GUEST_STATUS_COLORS: Record<string, string> = { running: '#4caf50', stopped: '#f44336', paused: '#ff9800', suspended: '#ff9800' }
-const NODE_STATUS_COLORS: Record<string, string> = { online: '#4caf50', unknown: '#9e9e9e', maintenance: '#ff9800' }
-
-const guestStatusColor = (status?: string) => GUEST_STATUS_COLORS[status || ''] || '#616161'
-const nodeStatusColor = (status?: string) => (status ? NODE_STATUS_COLORS[status] || '#f44336' : '#9e9e9e')
-
-/** Guest glyph: type icon with the status dot, as in every guest list of the product. */
-const GuestGlyph = ({ type, status, dotBorder }: { type?: string; status?: string; dotBorder: string }) => (
-  <Box sx={{ position: 'relative', width: 16, height: 16, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-    <i className={type === 'lxc' ? 'ri-instance-line' : 'ri-computer-line'} style={{ fontSize: '0.9286rem', opacity: 0.8 }} />
-    <Box sx={{ position: 'absolute', bottom: -1, right: -2, width: 6, height: 6, borderRadius: '50%', bgcolor: guestStatusColor(status), border: `1px solid ${dotBorder}` }} />
-  </Box>
-)
-
-/** Node glyph: the Proxmox logo with the status dot, as on every node row of the product. */
-const NodeGlyph = ({ status, dark, dotBorder }: { status?: string; dark: boolean; dotBorder: string }) => (
-  <Box component='span' sx={{ position: 'relative', display: 'inline-flex', alignItems: 'center', width: 14, height: 14, flexShrink: 0 }}>
-    <img src={dark ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt='' width={14} height={14} style={{ opacity: 0.8 }} />
-    <Box component='span' sx={{ position: 'absolute', bottom: -1, right: -2, width: 6, height: 6, borderRadius: '50%', bgcolor: nodeStatusColor(status), border: `1px solid ${dotBorder}` }} />
-  </Box>
-)
 
 /**
  * The DRS "History" tab: what DRS actually moved, newest first, grouped by

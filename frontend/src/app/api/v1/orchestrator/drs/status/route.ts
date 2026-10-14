@@ -50,9 +50,24 @@ export async function GET() {
 
     // A pinned guest names both a node and a guest, so the row-level gate can
     // decide it outright.
-    const pinnedGuests = ownedRows(status.pinned_guests).filter((g: any) =>
+    const guestVisible = (g: any) =>
       isFlatRecordVisible(rbacScope, { connId: g.connection_id, node: g.node, vmid: g.vmid, nodeBound: true })
-    )
+
+    const pinnedGuests = ownedRows(status.pinned_guests).filter(guestVisible)
+
+    // The per-guest placement report names guests, nodes and the resources
+    // behind each restriction, so it goes through the same guest-level gate.
+    // The nodes a restricted guest can reach are part of what it says: a
+    // guest is kept only when every node it names is visible too.
+    const restrictedGuests = ownedRows(status.restricted_guests).filter((g: any) => {
+      if (!guestVisible(g)) return false
+
+      const nodes: string[] = Array.isArray(g.nodes) ? g.nodes : []
+
+      return nodes.every(node => isFlatRecordVisible(rbacScope, { connId: g.connection_id, node, nodeBound: true }))
+    })
+
+    const excludedGuests = ownedRows(status.excluded_guests).filter(guestVisible)
 
     // A domain names a set of nodes and no guest. It is kept only when every
     // node it names is visible: showing a partially visible domain would leak
@@ -76,6 +91,8 @@ export async function GET() {
       pinned_guests: pinnedGuests,
       pinned_guest_count: pinnedGuests.length,
       balancing_domains: balancingDomains,
+      restricted_guests: restrictedGuests,
+      excluded_guests: excludedGuests,
     })
   } catch (e: any) {
     if ((e as any)?.code !== 'ORCHESTRATOR_UNAVAILABLE') {
@@ -92,7 +109,9 @@ export async function GET() {
       approved_count: 0,
       pinned_guests: [],
       pinned_guest_count: 0,
-      balancing_domains: []
+      balancing_domains: [],
+      restricted_guests: [],
+      excluded_guests: []
     })
   }
 }

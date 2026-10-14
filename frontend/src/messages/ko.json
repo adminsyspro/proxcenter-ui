@@ -4077,7 +4077,8 @@
         "haAffinityRules": "HA 선호도 규칙",
         "sdnFabrics": "SDN 패브릭",
         "vnetFirewall": "VNet 방화벽",
-        "nestedPools": "중첩 풀"
+        "nestedPools": "중첩 풀",
+        "failover": "노드 페일오버(대체 주소)"
       },
       "hints": {
         "api": {
@@ -4091,7 +4092,9 @@
           "fallbackUnreachable": "대체 노드 {node} ({host})에 접근할 수 없습니다 ({error}). 이 노드로의 장애 조치가 동작하지 않습니다. 노드와 방화벽을 확인하거나 연결의 노드 목록에서 주소를 수정하세요.",
           "fallbackTlsRejected": "대체 노드 {node} ({host})이(가) 주소와 일치하지 않는 인증서를 제시합니다 ({reason}). 이 노드로의 장애 조치가 실패합니다. 연결에서 \"TLS 인증서 오류 무시\"를 활성화하거나 노드 주소를 인증서에 추가하세요.",
           "fallbackBehindProxy": "연결이 리버스 프록시를 거칩니다. 다른 노드로의 장애 조치가 비활성화되어 대체 호스트를 점검하지 않습니다.",
-          "noFallbackHosts": "알려진 대체 호스트가 없습니다. {host}이(가) 중단되면 ProxCenter는 다른 노드로 장애 조치할 수 없습니다. 인벤토리를 열거나 연결을 다시 저장하여 클러스터 노드를 검색하세요."
+          "noFallbackHosts": "알려진 대체 호스트가 없습니다. {host}이(가) 중단되면 ProxCenter는 다른 노드로 장애 조치할 수 없습니다. 인벤토리를 열거나 연결을 다시 저장하여 클러스터 노드를 검색하세요.",
+          "fallbackUnverifiedUnreachable": "대체 노드 {node}({host})에 연결할 수 없고({error}), 이 주소는 추정값입니다: 토큰이 인터페이스 목록에서 노드의 관리 브리지를 볼 수 없거나, 노드가 응답하지 않아 corosync 링크 주소가 저장되었습니다. pveum aclmod로 토큰에 /sdn/zones/localnetwork의 SDN.Audit(및 /의 Sys.Audit)을 부여한 뒤 연결을 다시 저장하여 관리 주소를 검색하세요.",
+          "fallbackOkUnverified": "대체 노드 {node}({host})가 {latencyMs} ms 안에 응답했지만 이 주소는 추정값입니다(토큰이 노드의 관리 브리지를 볼 수 없음): 페일오버는 검증된 주소 다음에 이 주소를 시도합니다. 토큰에 /sdn/zones/localnetwork의 SDN.Audit을 부여하고 연결을 다시 저장하세요."
         },
         "tls": {
           "ok": "{host}의 인증서는 신뢰할 수 있으며 {validTo}까지 유효합니다 ({days}일).",

@@ -4077,7 +4077,8 @@
         "haAffinityRules": "HA affinity rules",
         "sdnFabrics": "SDN fabrics",
         "vnetFirewall": "VNet firewall",
-        "nestedPools": "nested pools"
+        "nestedPools": "nested pools",
+        "failover": "node failover (fallback addresses)"
       },
       "hints": {
         "api": {
@@ -4091,7 +4092,9 @@
           "fallbackUnreachable": "Fallback {node} ({host}) is unreachable ({error}): failover to this node will not work. Check the node and the firewall, or fix its address in the connection node list.",
           "fallbackTlsRejected": "Fallback {node} ({host}) presents a certificate that does not match its address ({reason}): failover to this node will fail. Enable \"Ignore TLS certificate errors\" on the connection, or add the node address to its certificate.",
           "fallbackBehindProxy": "The connection goes through a reverse proxy: failover to other nodes is disabled, so fallback hosts are not probed.",
-          "noFallbackHosts": "No fallback host is known: if {host} goes down, ProxCenter cannot fail over to another node. Open the inventory or save the connection again to discover the cluster nodes."
+          "noFallbackHosts": "No fallback host is known: if {host} goes down, ProxCenter cannot fail over to another node. Open the inventory or save the connection again to discover the cluster nodes.",
+          "fallbackUnverifiedUnreachable": "Fallback {node} ({host}) is unreachable ({error}), and this address is a guess: the token could not see the node's management bridge in its interface list, or the node did not answer and this is its corosync link address. Grant the token SDN.Audit on /sdn/zones/localnetwork (and Sys.Audit on /) with pveum aclmod, then save the connection again to discover the management addresses.",
+          "fallbackOkUnverified": "Fallback {node} ({host}) answered in {latencyMs} ms, but this address is a guess (the token could not see the node's management bridge): failover tries it after the verified addresses. Grant the token SDN.Audit on /sdn/zones/localnetwork and save the connection again."
         },
         "tls": {
           "ok": "The certificate of {host} is trusted and valid until {validTo} ({days} days).",

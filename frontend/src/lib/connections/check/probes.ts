@@ -151,8 +151,14 @@ export async function probeApi(ctx: CheckContext, deps: CheckDeps): Promise<Chec
   )
   for (const { h, r } of results) {
     const id = `api.fallback.${h.node}`
-    if (r.ok === true) {
+    // A guessed address (roadmap#51) is named as such, reachable or not,
+    // instead of blaming the node or the firewall.
+    if (r.ok === true && h.verified === false) {
+      items.push(item(id, 'ok', 'api.fallbackOkUnverified', { node: h.node, host: h.ip, latencyMs: r.latencyMs, version: r.version }))
+    } else if (r.ok === true) {
       items.push(item(id, 'ok', 'api.fallbackOk', { node: h.node, host: h.ip, latencyMs: r.latencyMs, version: r.version }))
+    } else if (h.verified === false) {
+      items.push(item(id, 'warn', 'api.fallbackUnverifiedUnreachable', { node: h.node, host: h.ip, error: r.reason }))
     } else if (r.hint === 'api.tlsRejected') {
       items.push(item(id, 'warn', 'api.fallbackTlsRejected', { node: h.node, host: h.ip, reason: r.reason }))
     } else {

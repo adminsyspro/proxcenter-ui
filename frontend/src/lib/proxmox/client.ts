@@ -502,6 +502,8 @@ export async function pveFetch<T>(
         const hosts = await prisma.managedHost.findMany({
           where: { connectionId: connId, enabled: true, ip: { not: null } },
           select: { ip: true },
+          // A verified management address before a guess (roadmap#51).
+          orderBy: [{ ipVerified: "desc" }, { node: "asc" }],
         })
         const dbIps = hosts.map(h => h.ip!).filter(Boolean)
 

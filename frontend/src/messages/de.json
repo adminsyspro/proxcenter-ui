@@ -4064,7 +4064,8 @@
         "haAffinityRules": "HA-Affinitätsregeln",
         "sdnFabrics": "SDN-Fabrics",
         "vnetFirewall": "VNet-Firewall",
-        "nestedPools": "verschachtelte Pools"
+        "nestedPools": "verschachtelte Pools",
+        "failover": "Knoten-Failover (Ausweichadressen)"
       },
       "hints": {
         "api": {
@@ -4078,7 +4079,9 @@
           "fallbackUnreachable": "Ausweich-Node {node} ({host}) ist nicht erreichbar ({error}): ein Failover auf diesen Node wird nicht funktionieren. Prüfen Sie den Node und die Firewall oder korrigieren Sie seine Adresse in der Node-Liste der Verbindung.",
           "fallbackTlsRejected": "Ausweich-Node {node} ({host}) legt ein Zertifikat vor, das nicht zu seiner Adresse passt ({reason}): ein Failover auf diesen Node wird scheitern. Aktivieren Sie \"TLS-Zertifikatsfehler ignorieren\" an der Verbindung oder nehmen Sie die Node-Adresse in sein Zertifikat auf.",
           "fallbackBehindProxy": "Die Verbindung läuft über einen Reverse-Proxy: Failover auf andere Nodes ist deaktiviert, Ausweich-Hosts werden daher nicht geprüft.",
-          "noFallbackHosts": "Kein Ausweich-Host bekannt: fällt {host} aus, kann ProxCenter nicht auf einen anderen Node ausweichen. Öffnen Sie das Inventar oder speichern Sie die Verbindung erneut, um die Cluster-Nodes zu ermitteln."
+          "noFallbackHosts": "Kein Ausweich-Host bekannt: fällt {host} aus, kann ProxCenter nicht auf einen anderen Node ausweichen. Öffnen Sie das Inventar oder speichern Sie die Verbindung erneut, um die Cluster-Nodes zu ermitteln.",
+          "fallbackUnverifiedUnreachable": "Ausweichknoten {node} ({host}) ist nicht erreichbar ({error}), und diese Adresse ist nur geraten: das Token sieht die Management-Bridge des Knotens in seiner Schnittstellenliste nicht, oder der Knoten hat nicht geantwortet und dies ist die Adresse seines Corosync-Links. Erteilen Sie dem Token SDN.Audit auf /sdn/zones/localnetwork (und Sys.Audit auf /) mit pveum aclmod und speichern Sie die Verbindung erneut, um die Management-Adressen zu ermitteln.",
+          "fallbackOkUnverified": "Ausweichknoten {node} ({host}) hat in {latencyMs} ms geantwortet, aber diese Adresse ist nur geraten (das Token sieht die Management-Bridge des Knotens nicht): das Failover versucht sie nach den geprüften Adressen. Erteilen Sie dem Token SDN.Audit auf /sdn/zones/localnetwork und speichern Sie die Verbindung erneut."
         },
         "tls": {
           "ok": "Das Zertifikat von {host} ist vertrauenswürdig und gültig bis {validTo} ({days} Tage).",

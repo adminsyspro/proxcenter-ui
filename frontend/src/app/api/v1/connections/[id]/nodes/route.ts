@@ -4,7 +4,8 @@ import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { prisma as globalPrisma } from "@/lib/db/prisma"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
-import { resolveManagementIp } from "@/lib/proxmox/resolveManagementIp"
+import { resolveManagementAddress } from "@/lib/proxmox/resolveManagementIp"
+import { orderedIps, persistNodeIps } from "@/lib/proxmox/nodeIpPersistence"
 import { extractHostFromUrl, extractPortFromUrl } from "@/lib/proxmox/urlUtils"
 import { setNodeIps } from "@/lib/cache/nodeIpCache"
 import { getSessionPrisma, getCurrentTenantId } from "@/lib/tenant"
@@ -94,6 +95,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
       if (!nodeName) return node
 
       let ip: string | null = null
+      let ipVerified = false
       let accurateMem: { used: number; total: number } | null = null
       let pveversion: string | null = null
 
@@ -106,7 +108,9 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
             : Promise.resolve(null),
         ])
 
-        ip = resolveManagementIp(networks) || null
+        const address = resolveManagementAddress(networks)
+        ip = address?.ip ?? null
+        ipVerified = address?.verified ?? false
 
         // Detect bridge types (native Linux bridge vs OVS)
         if (networks && Array.isArray(networks)) {
@@ -138,12 +142,35 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
         ...node,
         ...(accurateMem ? { mem: accurateMem.used, maxmem: accurateMem.total } : {}),
         ip,
+        ipVerified,
         pveversion,
         hastate: hastateMap[nodeName] || null,
         bridges: (node as any)._bridges || null,
       }
     })
   )
+
+  // Persist node IPs in DB for failover after restart. A guess from a
+  // privilege-filtered interface list never replaces a stored management
+  // address, and the response carries the address on file (roadmap#51).
+  try {
+    const persisted = await persistNodeIps(hostDb, {
+      connectionId: id,
+      ...hostTenant,
+      nodes: enrichedNodes
+        .map((n: any) => ({ node: n.node || n.name, ip: n.ip ?? null, verified: !!n.ipVerified }))
+        .filter((n: any) => !!n.node),
+    })
+    for (const n of enrichedNodes as any[]) {
+      const effective = persisted.byNode.get(n.node || n.name)
+      if (effective) {
+        n.ip = effective.ip
+        n.ipVerified = effective.ipVerified
+      }
+    }
+  } catch {
+    // Non-blocking — don't break the API response
+  }
 
   // Detect which node is the API endpoint (connectedNode)
   const baseHost = extractHostFromUrl(conn.baseUrl)
@@ -158,10 +185,14 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     }
   }
 
-  // Populate the node IP cache for failover
-  const nodeIps = enrichedNodes
-    .map((n: any) => n.ip)
-    .filter((ip: any): ip is string => typeof ip === "string" && ip.length > 0)
+  // Populate the node IP cache for failover, verified addresses first
+  const nodeIps = orderedIps(
+    enrichedNodes.map((n: any) => ({
+      node: n.node || n.name,
+      ip: typeof n.ip === "string" && n.ip.length > 0 ? n.ip : null,
+      ipVerified: !!n.ipVerified,
+    }))
+  )
 
   if (nodeIps.length > 0) {
     try {
@@ -171,32 +202,6 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     } catch {
       // Invalid baseUrl — skip cache population
     }
-  }
-
-  // Persist node IPs in DB for failover after restart
-  const liveNodeNames: string[] = []
-  try {
-    await Promise.all(
-      enrichedNodes.map((n: any) => {
-        const nodeName = n.node || n.name
-        if (!nodeName) return Promise.resolve()
-        liveNodeNames.push(nodeName)
-        return hostDb.managedHost.upsert({
-          where: { connectionId_node: { connectionId: id, node: nodeName } },
-          update: { ip: n.ip || null },
-          create: { connectionId: id, node: nodeName, ip: n.ip || null, ...hostTenant },
-        })
-      })
-    )
-
-    // Cleanup stale ManagedHost entries for nodes removed from the cluster
-    if (liveNodeNames.length > 0) {
-      await hostDb.managedHost.deleteMany({
-        where: { connectionId: id, node: { notIn: liveNodeNames } },
-      })
-    }
-  } catch {
-    // Non-blocking — don't break the API response
   }
 
   // Fetch SSH address overrides from ManagedHost

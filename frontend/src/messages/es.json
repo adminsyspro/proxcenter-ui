@@ -4077,7 +4077,8 @@
         "haAffinityRules": "reglas de afinidad HA",
         "sdnFabrics": "fabrics SDN",
         "vnetFirewall": "cortafuegos VNet",
-        "nestedPools": "pools anidados"
+        "nestedPools": "pools anidados",
+        "failover": "conmutación por error de nodo (direcciones de respaldo)"
       },
       "hints": {
         "api": {
@@ -4091,7 +4092,9 @@
           "fallbackUnreachable": "El nodo de respaldo {node} ({host}) es inaccesible ({error}): la conmutación a este nodo no funcionará. Compruebe el nodo y el cortafuegos, o corrija su dirección en la lista de nodos de la conexión.",
           "fallbackTlsRejected": "El nodo de respaldo {node} ({host}) presenta un certificado que no coincide con su dirección ({reason}): la conmutación a este nodo fallará. Active \"Ignorar errores de certificado TLS\" en la conexión, o añada la dirección del nodo a su certificado.",
           "fallbackBehindProxy": "La conexión pasa por un proxy inverso: la conmutación a otros nodos está desactivada, por lo que no se sondean los hosts de respaldo.",
-          "noFallbackHosts": "No se conoce ningún host de respaldo: si {host} cae, ProxCenter no puede conmutar a otro nodo. Abra el inventario o guarde de nuevo la conexión para descubrir los nodos del clúster."
+          "noFallbackHosts": "No se conoce ningún host de respaldo: si {host} cae, ProxCenter no puede conmutar a otro nodo. Abra el inventario o guarde de nuevo la conexión para descubrir los nodos del clúster.",
+          "fallbackUnverifiedUnreachable": "El nodo de respaldo {node} ({host}) es inaccesible ({error}), y esta dirección es una suposición: el token no ve el bridge de gestión del nodo en su lista de interfaces, o el nodo no respondió y esta es la dirección de su enlace corosync. Conceda al token SDN.Audit en /sdn/zones/localnetwork (y Sys.Audit en /) con pveum aclmod, y vuelva a guardar la conexión para descubrir las direcciones de gestión.",
+          "fallbackOkUnverified": "El nodo de respaldo {node} ({host}) respondió en {latencyMs} ms, pero esta dirección es una suposición (el token no ve el bridge de gestión del nodo): la conmutación la prueba después de las direcciones verificadas. Conceda al token SDN.Audit en /sdn/zones/localnetwork y vuelva a guardar la conexión."
         },
         "tls": {
           "ok": "El certificado de {host} es de confianza y válido hasta el {validTo} ({days} días).",

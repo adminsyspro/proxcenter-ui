@@ -69,6 +69,7 @@ vi.mock("@/lib/rbac", () => ({
 vi.mock("@/lib/proxmox/client", () => ({ pveFetch: pveFetchMock }))
 vi.mock("@/lib/proxmox/resolveManagementIp", () => ({
   resolveManagementIp: () => "10.0.0.1",
+  resolveManagementAddress: () => ({ ip: "10.0.0.1", verified: true }),
 }))
 vi.mock("@/lib/proxmox/urlUtils", () => ({
   extractHostFromUrl: (u: string) => new URL(u).hostname,

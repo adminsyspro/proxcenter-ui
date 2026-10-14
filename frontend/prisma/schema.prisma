@@ -74,6 +74,12 @@ model ManagedHost {
   connection   Connection? @relation(fields: [connectionId], references: [id], onDelete: SetNull)
   node         String
   ip           String?
+  // False when `ip` is a guess rather than the node's management address: the
+  // token could not see the node's bridges in /nodes/{node}/network, or the
+  // node did not answer and this is its corosync link from /cluster/status.
+  // Failover tries a guess last, and a guess never replaces a verified
+  // address (roadmap#51).
+  ipVerified   Boolean     @default(true)
   sshAddress   String?
   sshPort      Int?
   displayName  String?

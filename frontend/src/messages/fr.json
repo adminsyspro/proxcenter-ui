@@ -4077,7 +4077,8 @@
         "haAffinityRules": "règles d'affinité HA",
         "sdnFabrics": "fabrics SDN",
         "vnetFirewall": "pare-feu VNet",
-        "nestedPools": "pools imbriqués"
+        "nestedPools": "pools imbriqués",
+        "failover": "bascule de nœud (adresses de repli)"
       },
       "hints": {
         "api": {
@@ -4091,7 +4092,9 @@
           "fallbackUnreachable": "Le nœud de repli {node} ({host}) est injoignable ({error}) : la bascule vers ce nœud ne fonctionnera pas. Vérifiez le nœud et le pare-feu, ou corrigez son adresse dans la liste des nœuds de la connexion.",
           "fallbackTlsRejected": "Le nœud de repli {node} ({host}) présente un certificat qui ne correspond pas à son adresse ({reason}) : la bascule vers ce nœud échouera. Activez « Ignorer les erreurs de certificat TLS » sur la connexion, ou ajoutez l'adresse du nœud à son certificat.",
           "fallbackBehindProxy": "La connexion passe par un reverse proxy : la bascule vers d'autres nœuds est désactivée, les hôtes de repli ne sont donc pas sondés.",
-          "noFallbackHosts": "Aucun hôte de repli connu : si {host} tombe, ProxCenter ne peut pas basculer sur un autre nœud. Ouvrez l'inventaire ou enregistrez à nouveau la connexion pour découvrir les nœuds du cluster."
+          "noFallbackHosts": "Aucun hôte de repli connu : si {host} tombe, ProxCenter ne peut pas basculer sur un autre nœud. Ouvrez l'inventaire ou enregistrez à nouveau la connexion pour découvrir les nœuds du cluster.",
+          "fallbackUnverifiedUnreachable": "Le nœud de repli {node} ({host}) est injoignable ({error}), et cette adresse est une supposition : le jeton ne voit pas le bridge de management du nœud dans sa liste d'interfaces, ou le nœud n'a pas répondu et c'est l'adresse de son lien corosync. Accordez au jeton SDN.Audit sur /sdn/zones/localnetwork (et Sys.Audit sur /) avec pveum aclmod, puis enregistrez à nouveau la connexion pour découvrir les adresses de management.",
+          "fallbackOkUnverified": "Le nœud de repli {node} ({host}) a répondu en {latencyMs} ms, mais cette adresse est une supposition (le jeton ne voit pas le bridge de management du nœud) : la bascule l'essaie après les adresses vérifiées. Accordez au jeton SDN.Audit sur /sdn/zones/localnetwork et enregistrez à nouveau la connexion."
         },
         "tls": {
           "ok": "Le certificat de {host} est reconnu et valide jusqu'au {validTo} ({days} jours).",

@@ -4081,7 +4081,8 @@
         "haAffinityRules": "HA 亲和规则",
         "sdnFabrics": "SDN Fabric",
         "vnetFirewall": "VNet 防火墙",
-        "nestedPools": "嵌套资源池"
+        "nestedPools": "嵌套资源池",
+        "failover": "节点故障转移（备用地址）"
       },
       "hints": {
         "api": {
@@ -4095,7 +4096,9 @@
           "fallbackUnreachable": "备用节点 {node}（{host}）不可达（{error}）：无法故障转移到该节点。请检查节点和防火墙，或在连接的节点列表中修正其地址。",
           "fallbackTlsRejected": "备用节点 {node}（{host}）出示的证书与其地址不匹配（{reason}）：故障转移到该节点将失败。请在连接上启用“忽略 TLS 证书错误”，或将节点地址加入其证书。",
           "fallbackBehindProxy": "连接经过反向代理：到其他节点的故障转移已禁用，因此不探测备用主机。",
-          "noFallbackHosts": "没有已知的备用主机：如果 {host} 宕机，ProxCenter 无法故障转移到其他节点。请打开清单或重新保存连接以发现集群节点。"
+          "noFallbackHosts": "没有已知的备用主机：如果 {host} 宕机，ProxCenter 无法故障转移到其他节点。请打开清单或重新保存连接以发现集群节点。",
+          "fallbackUnverifiedUnreachable": "备用节点 {node}（{host}）无法访问（{error}），且该地址只是猜测：令牌在接口列表中看不到该节点的管理网桥，或者节点未应答而这是其 corosync 链路地址。请使用 pveum aclmod 为令牌授予 /sdn/zones/localnetwork 上的 SDN.Audit（以及 / 上的 Sys.Audit），然后重新保存连接以发现管理地址。",
+          "fallbackOkUnverified": "备用节点 {node}（{host}）在 {latencyMs} ms 内应答，但该地址只是猜测（令牌看不到该节点的管理网桥）：故障转移会在已验证的地址之后再尝试它。请为令牌授予 /sdn/zones/localnetwork 上的 SDN.Audit，然后重新保存连接。"
         },
         "tls": {
           "ok": "{host} 的证书受信任，有效期至 {validTo}（{days} 天）。",

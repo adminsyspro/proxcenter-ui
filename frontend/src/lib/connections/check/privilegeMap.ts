@@ -37,6 +37,7 @@ export type FeatureId =
   | 'nodePower'
   | 'hardwareMappings'
   | 'compliance'
+  | 'failover'
   // Version-gated features (see versionGates.ts); listed here so the feature
   // vocabulary, and its translations, live in one place.
   | 'warmMigration'
@@ -71,6 +72,7 @@ export const FEATURE_IDS: FeatureId[] = [
   'nodePower',
   'hardwareMappings',
   'compliance',
+  'failover',
   'warmMigration',
   'haAffinityRules',
   'sdnFabrics',
@@ -133,6 +135,10 @@ export const PRIVILEGE_REQUIREMENTS: PrivilegeRequirement[] = [
   warn('node-power', '/nodes', ['Sys.PowerMgmt'], ['nodePower']),
   warn('sdn-audit', '/sdn', ['SDN.Audit'], ['sdn']),
   warn('sdn-allocate', '/sdn', ['SDN.Allocate'], ['sdn']),
+  // pve-manager hides every bridge of /nodes/{node}/network from a token
+  // without this, leaving only storage or transport VLANs to guess the
+  // failover address from (roadmap#51).
+  warn('local-bridges', '/sdn/zones/localnetwork', ['SDN.Audit'], ['failover']),
   warn('pool-audit', '/pool', ['Pool.Audit'], ['pools']),
   warn('pool-allocate', '/pool', ['Pool.Allocate'], ['pools']),
   warn('mapping-audit', '/mapping', ['Mapping.Audit'], ['hardwareMappings', 'notifications']),
@@ -231,6 +237,7 @@ const FAMILY_RULES: Array<[RegExp, string, FeatureId[]]> = [
   [/^\/nodes\/[^/]+\/(termproxy|vncshell|spiceshell)$/, 'node/shell', ['nodeShell']],
   [/^\/nodes\/[^/]+\/firewall(\/|$)/, 'node/firewall', ['firewall']],
   [/^\/nodes\/[^/]+\/apt(\/|$)/, 'node/apt', ['nodeUpdates']],
+  [/^\/nodes\/[^/]+\/network$/, 'node/network', ['nodes', 'failover']],
   [/^\/nodes\/[^/]+\/status$/, 'node', ['nodes', 'compliance']],
   [/^\/nodes\/[^/]+\/(vzdump|vzdump\/.*)$/, 'backup/vzdump', ['backups']],
   [/^\/nodes\/[^/]+\/storage\/[^/]+\/download-url$/, 'storage/download', ['templates']],

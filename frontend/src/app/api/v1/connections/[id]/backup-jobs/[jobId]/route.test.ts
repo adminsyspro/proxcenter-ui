@@ -8,11 +8,17 @@ const getConnectionByIdMock = vi.fn<(id: string) => Promise<any>>()
 const getAllowedJobPoolsMock = vi.fn<(...args: any[]) => Promise<any>>()
 const maskingScopeMock = vi.fn<(...args: any[]) => any>()
 const invalidateMock = vi.fn<(id: string) => void>()
+const perimeterMock = vi.fn<(...args: any[]) => Promise<any>>()
 
 vi.mock('@/lib/proxmox/client', () => ({ pveFetch: pveFetchMock }))
 vi.mock('@/lib/backups/vzdumpRunsService', () => ({ invalidateBackupRuns: invalidateMock }))
 vi.mock('@/lib/connections/getConnection', () => ({ getConnectionById: getConnectionByIdMock }))
 vi.mock('@/lib/rbac', () => ({
+  // Storage-scope helpers (#921): the id builder is the real shape, the
+  // perimeter is unrestricted unless a test overrides it.
+  buildStorageResourceId: (id: string, storage: string) => `${id}:${storage}`,
+  getRequestStorageGrantPerimeter: (...a: any[]) => perimeterMock(...a),
+  filterStoragesByGrant: (items: any[], p: any, of: (i: any) => string) => (p?.restricted ? items.filter((i: any) => p.storages.has(of(i))) : items),
   checkPermission: checkPermissionMock,
   PERMISSIONS: {
     BACKUP_JOB_RUN: 'backup_job.run',
@@ -146,5 +152,50 @@ describe('POST /api/v1/connections/[id]/backup-jobs/[jobId]?action=run', () => {
     job.vmid = '999'
     await run()
     expect(invalidateMock).not.toHaveBeenCalled()
+  })
+})
+
+describe('storage scope on one job (#921)', () => {
+  beforeEach(() => { perimeterMock.mockReset().mockResolvedValue(null) })
+
+  it('a caller granted the right on the job storage only gets through the connection denial', async () => {
+    checkPermissionMock.mockResolvedValue(Response.json({ error: 'denied' }, { status: 403 }))
+    perimeterMock.mockResolvedValue({ restricted: true, storages: new Set(['PBS']) })
+    job = { id: 'backup-1', storage: 'PBS', vmid: '105', enabled: 1 }
+    const { status } = await run()
+    expect(status).toBe(200)
+    expect(vzdumpCalls).toHaveLength(1)
+  })
+
+  it('and is refused on a job writing to a storage outside the grant', async () => {
+    checkPermissionMock.mockResolvedValue(Response.json({ error: 'denied' }, { status: 403 }))
+    perimeterMock.mockResolvedValue({ restricted: true, storages: new Set(['PBS']) })
+    job = { id: 'backup-1', storage: 'local', vmid: '105', enabled: 1 }
+    const { status, body } = await run()
+    expect(status).toBe(403)
+    expect(body.error).toBe('Permission denied: backup_job.run')
+    expect(vzdumpCalls).toHaveLength(0)
+  })
+
+  it('keeps the denial when no storage of the connection is granted', async () => {
+    checkPermissionMock.mockResolvedValue(Response.json({ error: 'denied' }, { status: 403 }))
+    perimeterMock.mockResolvedValue({ restricted: true, storages: new Set() })
+    expect((await run()).status).toBe(403)
+    expect(pveFetchMock).not.toHaveBeenCalled()
+  })
+
+  it('PUT judges a new destination and a fleecing storage on those storages', async () => {
+    job = { id: 'backup-1', storage: 'PBS', vmid: '105', enabled: 1 }
+    pveFetchMock.mockImplementation(async (_c: any, path: string, init?: any) => {
+      if (init?.method === 'PUT') return null
+      if (path.startsWith('/cluster/backup/')) return job
+      if (path === '/storage') return [{ storage: 'PBS2', type: 'pbs' }, { storage: 'PBS', type: 'pbs' }]
+      throw new Error('unexpected ' + path)
+    })
+    const { PUT } = await import('./route')
+    const res = await callRoute(PUT as any, { params: { id: 'conn-1', jobId: 'backup-1' }, method: 'PUT', body: { storage: 'PBS2', fleecing: true, fleecingStorage: 'local' } })
+    expect(res.status).toBe(200)
+    expect(checkPermissionMock).toHaveBeenCalledWith('backup_job.edit', 'storage', 'conn-1:PBS2')
+    expect(checkPermissionMock).toHaveBeenCalledWith('backup_job.edit', 'storage', 'conn-1:local')
   })
 })

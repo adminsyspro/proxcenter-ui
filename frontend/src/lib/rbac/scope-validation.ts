@@ -7,7 +7,10 @@
  */
 
 // Scope types an assignment may carry. "inherit" follows the role's default
-// scope; "global" is unscoped. Both carry no target.
+// scope; "global" is unscoped. Both carry no target. "storage" names one PVE
+// storage as `connectionId:storageId` (issue #921): it only ever satisfies a
+// check on that storage, so a role scoped to a storage carries no right on
+// the cluster, its nodes or its guests.
 export const ASSIGNMENT_SCOPE_TYPES = [
   "global",
   "connection",
@@ -15,12 +18,13 @@ export const ASSIGNMENT_SCOPE_TYPES = [
   "vm",
   "tag",
   "pool",
+  "storage",
   "inherit",
 ] as const
 
 // Scope types valid as a role's default scope. Excludes "global" (expressed as
 // an empty list) and "inherit" (a role cannot inherit from itself).
-export const ROLE_DEFAULT_SCOPE_TYPES = ["connection", "node", "vm", "tag", "pool"] as const
+export const ROLE_DEFAULT_SCOPE_TYPES = ["connection", "node", "vm", "tag", "pool", "storage"] as const
 
 const NO_TARGET = new Set<string>(["global", "inherit"])
 
@@ -29,6 +33,7 @@ const NO_TARGET = new Set<string>(["global", "inherit"])
 // is at most connection-wide, so it ranks with connection.
 const SCOPE_BREADTH: Record<string, number> = {
   vm: 0,
+  storage: 0,
   tag: 1,
   pool: 1,
   node: 2,

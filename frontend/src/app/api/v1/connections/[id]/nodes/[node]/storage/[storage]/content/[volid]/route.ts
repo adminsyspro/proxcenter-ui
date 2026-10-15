@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
-import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { buildStorageResourceId, checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { guardTenantStorageWrite, loadTenantSlugs, resolveUploadOwner } from "@/lib/vdc/scope"
 import { getTenantInfrastructureScope, maskingScope } from "@/lib/tenant/infraScope"
 import { getCurrentTenantId } from "@/lib/tenant"
@@ -23,7 +23,8 @@ export async function DELETE(
   try {
     const { id, node, storage, volid } = await ctx.params
 
-    const denied = await checkPermission(PERMISSIONS.STORAGE_DELETE, "connection", id)
+    // Judged on the storage itself (issue #921).
+    const denied = await checkPermission(PERMISSIONS.STORAGE_DELETE, "storage", buildStorageResourceId(id, storage))
     if (denied) return denied
 
     // The volid is URL-encoded; Proxmox expects the full volid (storage:path)

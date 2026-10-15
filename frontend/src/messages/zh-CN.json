@@ -4683,6 +4683,7 @@
       "clusterConnection": "集群 / 连接",
       "tag": "标签",
       "pool": "资源池",
+      "storage": "存储",
       "inherit": "继承自角色"
     },
     "cannotModifySystem": "无法修改系统角色",
@@ -7020,12 +7021,15 @@
     "limitedToTag": "限定到具有特定标签的 VM",
     "poolScope": "资源池",
     "limitedToPool": "限定到特定资源池中的 VM",
+    "storageScope": "存储",
+    "limitedToStorage": "限定到一个或多个存储（ISO 上传、备份目标）",
     "vdcScope": "vDC",
     "limitedToVdc": "仅限一个虚拟数据中心",
     "tagUsedByVms": "{count} 个 VM",
     "poolContainsVms": "{count} 个 VM",
     "tags": "标签",
-    "pools": "资源池"
+    "pools": "资源池",
+    "storages": "存储"
   },
   "drsPage": {
     "balanced": "已平衡",

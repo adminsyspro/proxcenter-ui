@@ -5,8 +5,12 @@ import { callRoute, readJson, deniedPermissionResponse } from '@/__tests__/setup
 vi.mock('@/lib/rbac', () => ({
   checkPermission: vi.fn<(...args: any[]) => Promise<Response | null>>(),
   getRequestGuestScopePerimeter: vi.fn<(...args: any[]) => Promise<any>>(),
+  // Node / storage scoped callers (#921); the pure rule itself stays real
+  // (the route imports it from @/lib/rbac/infraScope).
+  getCurrentRbacInfraScope: vi.fn<(...args: any[]) => Promise<any>>(async () => null),
   PERMISSIONS: {
     CONNECTION_VIEW: 'connection.view',
+    STORAGE_VIEW: 'storage.view',
     CONNECTION_MANAGE: 'connection.manage',
     BACKUP_VIEW: 'backup.view',
   },
@@ -42,7 +46,8 @@ vi.mock('@/lib/tenant/infraScope', () => ({
 }))
 
 import { GET, POST } from './route'
-import { checkPermission, getRequestGuestScopePerimeter, PERMISSIONS } from '@/lib/rbac'
+import { checkPermission, getCurrentRbacInfraScope, getRequestGuestScopePerimeter, PERMISSIONS } from '@/lib/rbac'
+import { deriveRbacInfraScope } from '@/lib/rbac/infraScope'
 import { getConnectionById } from '@/lib/connections/getConnection'
 import { pveFetch } from '@/lib/proxmox/client'
 import { getCurrentTenantId, getSessionPrisma } from '@/lib/tenant'
@@ -52,6 +57,7 @@ import { attachPbsStorage, PbsAttachError, type AttachPbsStorageResult } from '@
 
 const checkPermissionMock = checkPermission as any
 const getRequestGuestScopePerimeterMock = getRequestGuestScopePerimeter as any
+const getCurrentRbacInfraScopeMock = getCurrentRbacInfraScope as any
 const getConnectionByIdMock = getConnectionById as any
 const pveFetchMock = pveFetch as any
 const getCurrentTenantIdMock = getCurrentTenantId as any
@@ -347,5 +353,67 @@ describe('POST /api/v1/connections/[id]/storage', () => {
     expect(audit).toHaveBeenCalledWith(expect.objectContaining({
       status: 'failure', errorMessage: 'Attach failed', resourceId: 'pbs-main',
     }))
+  })
+})
+
+// Issue #921: a caller granted connection.view on a node or a storage of the
+// cluster gets the storages that grant covers instead of a 403.
+describe('GET /api/v1/connections/[id]/storage: node- and storage-scoped callers', () => {
+  const cluster = () => {
+    pveFetchMock.mockImplementation((_conn: any, path: string) => {
+      if (path === '/cluster/resources') {
+        return Promise.resolve([
+          { type: 'storage', storage: 'ceph', node: 'n1', disk: 1, maxdisk: 4, status: 'available' },
+          { type: 'storage', storage: 'ceph', node: 'n2', disk: 1, maxdisk: 4, status: 'available' },
+          { type: 'storage', storage: 'nfs-n2', node: 'n2', disk: 1, maxdisk: 4, status: 'available' },
+          { type: 'storage', storage: 'local', node: 'n1', disk: 1, maxdisk: 2, status: 'available' },
+          { type: 'storage', storage: 'local', node: 'n2', disk: 1, maxdisk: 2, status: 'available' },
+          { type: 'storage', storage: 'ISO', node: 'n1', disk: 1, maxdisk: 2, status: 'available' },
+        ])
+      }
+      if (path === '/storage') {
+        return Promise.resolve([
+          { storage: 'ceph', type: 'rbd', shared: 1, content: 'images' },
+          { storage: 'nfs-n2', type: 'nfs', shared: 1, content: 'images', nodes: 'n2' },
+          { storage: 'local', type: 'dir', content: 'iso,backup' },
+          { storage: 'ISO', type: 'dir', content: 'iso' },
+        ])
+      }
+      return Promise.resolve([])
+    })
+  }
+  const rows = async () => {
+    const res = await callRoute(GET as any, { params: { id: 'c1' } })
+    const body = await readJson<any>(res)
+    return { status: res.status, rows: (body.data || []).map((s: any) => `${s.storage}@${s.shared ? 'shared' : s.node}`).sort((a: string, b: string) => Number(a > b) - Number(a < b)) }
+  }
+
+  beforeEach(() => {
+    cluster()
+    checkPermissionMock.mockImplementation(async () => deniedPermissionResponse())
+    getRequestGuestScopePerimeterMock.mockResolvedValue({ restricted: false, holdsPermission: false, hasVisibleGuests: false, pools: new Set(), nodes: new Set() })
+    getCurrentTenantIdMock.mockResolvedValue('default')
+    getTenantInfrastructureScopeMock.mockResolvedValue({ kind: 'provider' })
+    maskingScopeMock.mockReturnValue(null)
+  })
+
+  it('a node grant lists that node local storages and the shared storages mounted on it', async () => {
+    getCurrentRbacInfraScopeMock.mockResolvedValue(deriveRbacInfraScope({ superAdmin: false, byScope: [{ scopeType: 'node', scopeTarget: 'c1:n1' }] }))
+    expect(await rows()).toEqual({ status: 200, rows: ['ISO@n1', 'ceph@shared', 'local@n1'] })
+    // Resolved on connection.view OR storage.view, the right the storage pages carry.
+    expect(getCurrentRbacInfraScopeMock).toHaveBeenCalledWith(['connection.view', 'storage.view'])
+  })
+
+  it('a storage grant lists that storage on every node and nothing else', async () => {
+    getCurrentRbacInfraScopeMock.mockResolvedValue(deriveRbacInfraScope({ superAdmin: false, byScope: [{ scopeType: 'storage', scopeTarget: 'c1:local' }] }))
+    expect(await rows()).toEqual({ status: 200, rows: ['local@n1', 'local@n2'] })
+  })
+
+  it('keeps the 403 for a grant on another cluster, and for a vm-only caller without visible guests', async () => {
+    getCurrentRbacInfraScopeMock.mockResolvedValue(deriveRbacInfraScope({ superAdmin: false, byScope: [{ scopeType: 'node', scopeTarget: 'c9:n1' }] }))
+    expect((await rows()).status).toBe(403)
+    getCurrentRbacInfraScopeMock.mockResolvedValue(deriveRbacInfraScope({ superAdmin: false, byScope: [{ scopeType: 'vm', scopeTarget: 'c1:n1:qemu:100' }] }))
+    expect((await rows()).status).toBe(403)
+    expect(pveFetchMock).not.toHaveBeenCalled()
   })
 })

@@ -4679,6 +4679,7 @@
       "clusterConnection": "Cluster / Connexion",
       "tag": "Tag",
       "pool": "Pool",
+      "storage": "Stockage",
       "inherit": "Hérité du rôle"
     },
     "cannotModifySystem": "Impossible de modifier un rôle système",
@@ -7016,12 +7017,15 @@
     "limitedToTag": "Limité aux VMs avec un tag spécifique",
     "poolScope": "Pool",
     "limitedToPool": "Limité aux VMs d'un pool spécifique",
+    "storageScope": "Stockage",
+    "limitedToStorage": "Limité à un ou plusieurs stockages (envoi d'ISO, destinations de sauvegarde)",
     "vdcScope": "vDC",
     "limitedToVdc": "Limité à un datacenter virtuel",
     "tagUsedByVms": "{count} VM(s)",
     "poolContainsVms": "{count} VM(s)",
     "tags": "tags",
-    "pools": "pools"
+    "pools": "pools",
+    "storages": "stockages"
   },
   "drsPage": {
     "balanced": "Équilibré",

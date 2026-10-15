@@ -4,6 +4,8 @@ import { createContext, useContext, useEffect, useState, useCallback, useRef } f
 
 import { useSession } from 'next-auth/react'
 
+import { hasGrantOn } from '@/lib/rbac/clientScope'
+
 /**
  * Contexte RBAC pour gérer les permissions de l'utilisateur connecté
  */
@@ -22,6 +24,8 @@ const RBACContext = createContext({
   hasPermission: (_p) => false,
   hasAnyPermission: (_perms) => false,
   hasAllPermissions: (_perms) => false,
+  // Resource-aware variant (issue #921): `hasPermissionOn('storage.upload', 'storage', 'connId:local')`.
+  hasPermissionOn: (_p, _type, _id) => false,
   refresh: () => {},
 })
 
@@ -38,6 +42,8 @@ export function RBACProvider({ children }) {
   const [loadedKey, setLoadedKey] = useState(null)
   const requestSequence = useRef(0)
   const [permissions, setPermissions] = useState([])
+  // Every (permission, scope) pair the user holds, for resource-aware checks.
+  const [grants, setGrants] = useState([])
   const [roles, setRoles] = useState([])
   const [isAdmin, setIsAdmin] = useState(false)
   const [scopeTypes, setScopeTypes] = useState([])
@@ -49,6 +55,7 @@ export function RBACProvider({ children }) {
     const requestId = ++requestSequence.current
     setLoading(true)
     setPermissions([])
+    setGrants([])
     setRoles([])
     setIsAdmin(false)
     setScopeTypes([])
@@ -73,6 +80,7 @@ return
 
       if (json.data) {
         setPermissions(json.data.permissions || [])
+        setGrants(Array.isArray(json.data.permission_details) ? json.data.permission_details : [])
         setRoles(json.data.roles || [])
         setIsAdmin(json.data.is_super_admin || false)
         setScopeTypes(json.data.scope_types || [])
@@ -115,6 +123,16 @@ return permissions.includes(permission)
 return perms.some(p => permissions.includes(p))
   }, [permissions, isAdmin, accessReady])
 
+  // Permission on ONE resource (issue #921): a storage-scoped grant only
+  // answers for the storage it names, a connection grant for the whole
+  // cluster, mirroring the server-side scopeMatches.
+  const hasPermissionOn = useCallback((permission, resourceType, resourceId) => {
+    if (!accessReady) return false
+    if (isAdmin) return true
+
+return hasGrantOn(grants, permission, resourceType, resourceId)
+  }, [grants, isAdmin, accessReady])
+
   // Vérifier si l'utilisateur a toutes les permissions
   const hasAllPermissions = useCallback((perms) => {
     if (!accessReady) return false
@@ -135,6 +153,7 @@ return perms.every(p => permissions.includes(p))
       hasPermission,
       hasAnyPermission,
       hasAllPermissions,
+      hasPermissionOn,
       refresh: loadPermissions,
     }}>
       {children}

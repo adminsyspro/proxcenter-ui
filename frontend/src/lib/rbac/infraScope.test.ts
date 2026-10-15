@@ -1,6 +1,6 @@
 // frontend/src/lib/rbac/infraScope.test.ts
 import { describe, it, expect } from 'vitest'
-import { deriveRbacInfraScope, isConnectionVisible, applyRbacInfraFilter, filterVisibleConnections, mayHaveVisibleGuests, filterCandidateConnections, pruneEmptyConnections, tokenInfraScope, isFlatRecordVisible, hasInfraGrant, type RbacInfraScope } from './infraScope'
+import { deriveRbacInfraScope, isConnectionVisible, applyRbacInfraFilter, filterVisibleConnections, mayHaveVisibleGuests, filterCandidateConnections, pruneEmptyConnections, tokenInfraScope, isFlatRecordVisible, hasInfraGrant, hasStorageGrant, isStorageVisible, filterStorageDataForRbac, type RbacInfraScope } from './infraScope'
 
 describe('deriveRbacInfraScope', () => {
   it('returns null (unrestricted) for super admins', () => {
@@ -412,5 +412,78 @@ describe('isFlatRecordVisible with vm grants, and hasInfraGrant (issue #525)', (
     expect(hasInfraGrant(vmOnly(), 'c1')).toBe(false)
     expect(hasInfraGrant(mixed(), 'c2')).toBe(false)
     expect(hasInfraGrant(derived({ scopeType: 'tag', scopeTarget: 'prod' }), 'c1')).toBe(false)
+  })
+})
+
+// Issue #921: storage scopes and the storage visibility rule.
+describe('storage visibility (issue #921)', () => {
+  const nodeScope = (): RbacInfraScope => deriveRbacInfraScope({ superAdmin: false, byScope: [
+    { scopeType: 'node', scopeTarget: 'connA:n1' },
+    { scopeType: 'storage', scopeTarget: 'connA:pbs-main' },
+    { scopeType: 'storage', scopeTarget: 'connB:local' },
+  ] })!
+
+  it('derives storageGrantsByConnection from storage scopes, touching no tree set', () => {
+    const s = nodeScope()
+    expect([...s.storageGrantsByConnection!.get('connA')!]).toEqual(['pbs-main'])
+    expect([...s.storageGrantsByConnection!.get('connB')!]).toEqual(['local'])
+    expect(s.nodesByConnection.has('connB')).toBe(false)
+    expect(isConnectionVisible(s, 'connB')).toBe(false)
+    expect(hasStorageGrant(s, 'connB')).toBe(true)
+    expect(hasStorageGrant(s, 'connC')).toBe(false)
+    expect(hasStorageGrant(null, 'connC')).toBe(true)
+  })
+
+  it('a node grant shows that node local storages and the shared ones mounted on it', () => {
+    const s = nodeScope()
+    expect(isStorageVisible(s, 'connA', { storage: 'local', node: 'n1' })).toBe(true)
+    expect(isStorageVisible(s, 'connA', { storage: 'local', node: 'n2' })).toBe(false)
+    expect(isStorageVisible(s, 'connA', { storage: 'ceph', shared: true, nodes: ['n1', 'n2'] })).toBe(true)
+    expect(isStorageVisible(s, 'connA', { storage: 'nfs-n2', shared: true, nodes: ['n2'] })).toBe(false)
+    // Streamed shape: a shared storage without its mount list is cluster-wide.
+    expect(isStorageVisible(s, 'connA', { storage: 'ceph', shared: true })).toBe(true)
+  })
+
+  it('a storage grant shows that storage wherever it is, and nothing else of the cluster', () => {
+    const s = nodeScope()
+    expect(isStorageVisible(s, 'connA', { storage: 'pbs-main', shared: true, nodes: ['n3'] })).toBe(true)
+    expect(isStorageVisible(s, 'connB', { storage: 'local', node: 'n9' })).toBe(true)
+    expect(isStorageVisible(s, 'connB', { storage: 'ceph', shared: true })).toBe(false)
+    expect(isStorageVisible(s, 'connB', { storage: 'other', node: 'n9' })).toBe(false)
+  })
+
+  it('admin and whole-connection grants see everything; vm, tag and pool grants see no storage', () => {
+    expect(isStorageVisible(null, 'connA', { storage: 'x', node: 'n9' })).toBe(true)
+    const full = deriveRbacInfraScope({ superAdmin: false, byScope: [{ scopeType: 'connection', scopeTarget: 'connA' }] })!
+    expect(isStorageVisible(full, 'connA', { storage: 'x', node: 'n9' })).toBe(true)
+    const flat = deriveRbacInfraScope({ superAdmin: false, byScope: [
+      { scopeType: 'vm', scopeTarget: 'connA:n1:qemu:100' },
+      { scopeType: 'pool', scopeTarget: 'p' },
+    ] })!
+    expect(isStorageVisible(flat, 'connA', { storage: 'local', node: 'n1' })).toBe(false)
+    expect(isStorageVisible(flat, 'connA', { storage: 'ceph', shared: true })).toBe(false)
+  })
+
+  it('filterStorageDataForRbac narrows the streamed tree and drops empty nodes', () => {
+    const data = {
+      connId: 'connA',
+      nodes: [
+        { node: 'n1', status: 'online', storages: [{ storage: 'local' }, { storage: 'ISO' }] },
+        { node: 'n2', status: 'online', storages: [{ storage: 'local' }] },
+      ],
+      sharedStorages: [{ storage: 'ceph' }, { storage: 'pbs-main' }],
+    }
+    const out = filterStorageDataForRbac(data, nodeScope())!
+    expect(out.nodes.map(n => `${n.node}:${n.storages.map(s => s.storage).join(',')}`)).toEqual(['n1:local,ISO'])
+    expect(out.sharedStorages.map(s => s.storage)).toEqual(['ceph', 'pbs-main'])
+    expect(filterStorageDataForRbac(data, null)).toBe(data)
+
+    const storageOnly = deriveRbacInfraScope({ superAdmin: false, byScope: [{ scopeType: 'storage', scopeTarget: 'connA:local' }] })!
+    const only = filterStorageDataForRbac(data, storageOnly)!
+    expect(only.nodes.map(n => `${n.node}:${n.storages.map(s => s.storage).join(',')}`)).toEqual(['n1:local', 'n2:local'])
+    expect(only.sharedStorages).toEqual([])
+
+    const elsewhere = deriveRbacInfraScope({ superAdmin: false, byScope: [{ scopeType: 'node', scopeTarget: 'connZ:n1' }] })!
+    expect(filterStorageDataForRbac(data, elsewhere)).toBeNull()
   })
 })

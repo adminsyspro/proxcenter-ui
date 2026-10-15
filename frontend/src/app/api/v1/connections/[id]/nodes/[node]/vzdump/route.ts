@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
-import { checkPermission, buildNodeResourceId, PERMISSIONS } from "@/lib/rbac"
+import { checkPermission, buildNodeResourceId, buildStorageResourceId, PERMISSIONS } from "@/lib/rbac"
 import { getCurrentTenantId, DEFAULT_TENANT_ID } from "@/lib/tenant"
 import { getTenantInfrastructureScope } from "@/lib/tenant/infraScope"
 import { writableStoragesFor, readOnlyLibraryError } from "@/lib/vdc/scope"
@@ -34,6 +34,13 @@ export async function POST(
     if (!storage) {
       return NextResponse.json({ error: "Storage is required" }, { status: 400 })
     }
+
+    // The destination is judged on its own (issue #921): a connection grant of
+    // vm.backup covers every storage of the cluster, a `storage` scope covers
+    // the one it names, a node or vm grant covers the guest but no storage.
+    const storageDenied = await checkPermission(PERMISSIONS.VM_BACKUP, "storage", buildStorageResourceId(id, String(storage)))
+
+    if (storageDenied) return storageDenied
 
     const tenantId = await getCurrentTenantId()
     if (tenantId && tenantId !== DEFAULT_TENANT_ID) {

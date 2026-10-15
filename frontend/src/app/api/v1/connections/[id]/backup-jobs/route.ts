@@ -4,10 +4,11 @@ import { applyMaxfilesTranslation, extractKeepLastFromPruneBackups } from "@/lib
 import { namespaceMismatchResponse, storageNamespace } from "@/lib/backups/pbsNamespace"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
-import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { buildStorageResourceId, checkPermission, filterStoragesByGrant, getRequestStorageGrantPerimeter, PERMISSIONS } from "@/lib/rbac"
 import { getCurrentTenantId } from "@/lib/tenant"
 import { getTenantInfrastructureScope, maskingScope } from "@/lib/tenant/infraScope"
 import { getAllowedJobPools, isJobOwnedByTenantPools, validateTenantJobBody, validateTenantJobInfra } from "@/lib/vdc/backupJobs"
+import { denyJobGuestsOutsideBackupRight, jobSelection } from "@/lib/backups/jobGuestScope"
 import { writableStoragesFor } from "@/lib/vdc/scope"
 
 export const runtime = "nodejs"
@@ -30,10 +31,24 @@ export async function GET(_req: Request, ctx: RouteContext) {
       return NextResponse.json({ error: "Missing connection ID" }, { status: 400 })
     }
 
-    // RBAC check - permission de voir les backup jobs
+    // RBAC check - permission de voir les backup jobs. A caller granted it on
+    // some storages only (issue #921) never matches the connection: let them
+    // in and narrow the jobs to the storages they hold the right on.
     const denied = await checkPermission(PERMISSIONS.BACKUP_JOB_VIEW, "connection", id)
+    const viewPerimeter = denied ? await getRequestStorageGrantPerimeter(id, PERMISSIONS.BACKUP_JOB_VIEW) : null
 
-    if (denied) return denied
+    if (denied && !(viewPerimeter?.restricted && viewPerimeter.storages.size > 0)) return denied
+
+    // Destinations offered by the pickers: only storages the caller may
+    // create or edit a job on (issue #921). Unrestricted on either right
+    // keeps the whole list, as before storage scopes existed.
+    const [createPerimeter, editPerimeter] = await Promise.all([
+      getRequestStorageGrantPerimeter(id, PERMISSIONS.BACKUP_JOB_CREATE),
+      getRequestStorageGrantPerimeter(id, PERMISSIONS.BACKUP_JOB_EDIT),
+    ])
+    const writeGranted = (storage: string) =>
+      !createPerimeter?.restricted || !editPerimeter?.restricted
+        || createPerimeter.storages.has(storage) || editPerimeter.storages.has(storage)
 
     const conn = await getConnectionById(id)
 
@@ -54,7 +69,8 @@ export async function GET(_req: Request, ctx: RouteContext) {
       // and are filtered out — see lib/vdc/backupJobs.ts for the reasoning.
       jobs = (jobs || []).filter((j: any) => isJobOwnedByTenantPools(j, allowedPools))
     }
-    
+    jobs = filterStoragesByGrant(jobs || [], viewPerimeter, (j: any) => String(j?.storage ?? ''))
+
     // Récupérer les storages disponibles pour les backups
     const storages = await pveFetch<any[]>(conn, `/storage`)
 
@@ -189,6 +205,7 @@ export async function GET(_req: Request, ctx: RouteContext) {
     // Writable set on purpose: a read-only ISO library (#894) is visible to
     // the tenant but can never be a backup target, so it stays out of the picker.
     const tenantStorageFilter = (storage: string) => {
+      if (!writeGranted(storage)) return false
       if (!scope) return true
       return writableStoragesFor(scope, id).has(storage)
     }
@@ -261,12 +278,36 @@ export async function POST(req: Request, ctx: RouteContext) {
       return NextResponse.json({ error: "Missing connection ID" }, { status: 400 })
     }
 
-    // RBAC check - permission de créer des backup jobs
-    const denied = await checkPermission(PERMISSIONS.BACKUP_JOB_CREATE, "connection", id)
+    // RBAC check - permission de créer des backup jobs, judged on the
+    // destination storage (issue #921): a connection grant covers every
+    // storage of the cluster, a `storage` scope covers the one it names. A
+    // body without a storage is malformed and the connection level check
+    // decides who is told so (400 below).
+    const target = typeof body.storage === 'string' && body.storage ? buildStorageResourceId(id, body.storage) : null
+    const denied = target
+      ? await checkPermission(PERMISSIONS.BACKUP_JOB_CREATE, "storage", target)
+      : await checkPermission(PERMISSIONS.BACKUP_JOB_CREATE, "connection", id)
 
     if (denied) return denied
 
+    // Fleecing writes to its storage too, so it takes the same right.
+    if (body.fleecing && typeof body.fleecingStorage === 'string' && body.fleecingStorage) {
+      const fleecingDenied = await checkPermission(
+        PERMISSIONS.BACKUP_JOB_CREATE, "storage", buildStorageResourceId(id, body.fleecingStorage),
+      )
+      if (fleecingDenied) return fleecingDenied
+    }
+
     const conn = await getConnectionById(id)
+
+    // A storage-scoped caller holds the destination, not the guests: the job
+    // must name its guests and each must carry vm.backup (issue #921).
+    const createPerimeter = target ? await getRequestStorageGrantPerimeter(id, PERMISSIONS.BACKUP_JOB_CREATE) : null
+    if (createPerimeter?.restricted) {
+      const guests = (await pveFetch<any[]>(conn, `/cluster/resources?type=vm`)) || []
+      const guestsDenied = await denyJobGuestsOutsideBackupRight(id, jobSelection(body), guests)
+      if (guestsDenied) return guestsDenied
+    }
 
     // Tenant guard: enforce pool-only selection bound to one of the
     // tenant's vDC pools on this connection AND keep the targeted

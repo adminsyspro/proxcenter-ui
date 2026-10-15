@@ -37,7 +37,13 @@ vi.mock('@/lib/storage/uploadClient', () => ({ uploadFileToStorage: h.uploadFile
 vi.mock('@/contexts/ProxCenterTasksContext', () => ({ useProxCenterTasks: () => h.tasks }))
 vi.mock('@/components/storage/TemplateDownloadDialog', () => ({ default: () => null }))
 vi.mock('@/contexts/RBACContext', () => ({
-  useRBAC: () => ({ hasPermission: (p: string) => h.permissions.has(p), isAdmin: false, loading: false }),
+  useRBAC: () => ({
+    hasPermission: (p: string) => h.permissions.has(p),
+    // Resource-aware check (#921): the fixture grants its rights on conn-1:local only.
+    hasPermissionOn: (p: string, type: string, id: string) => h.permissions.has(p) && type === 'storage' && id === 'conn-1:local',
+    isAdmin: false,
+    loading: false,
+  }),
 }))
 
 import StorageContentBrowser from './StorageContentBrowser'

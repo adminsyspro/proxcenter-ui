@@ -25,6 +25,11 @@ const {
 }))
 
 vi.mock("@/lib/rbac", () => ({
+  // Storage-scope helpers (#921): the id builder is the real shape, the
+  // perimeter is unrestricted unless a test overrides it.
+  buildStorageResourceId: (id: string, storage: string) => `${id}:${storage}`,
+  getRequestStorageGrantPerimeter: async () => null,
+  filterStoragesByGrant: (items: any[], p: any, of: (i: any) => string) => (p?.restricted ? items.filter((i: any) => p.storages.has(of(i))) : items),
   checkPermission: (...a: any[]) => checkPermissionMock(...a),
   guestPerimeterAllows: (...a: any[]) => guestPerimeterAllowsMock(...a),
   PERMISSIONS: { VM_VIEW: "vm.view", STORAGE_CONTENT: "storage.content" },
@@ -84,7 +89,7 @@ describe("GET .../nodes/[node]/storage/[storage]/content", () => {
     expect(res.status).toBe(200)
     expect(json.data).toEqual(ISOS)
     // Issue #920: browsing is gated on storage.content, no longer on vm.view.
-    expect(checkPermissionMock).toHaveBeenCalledWith("storage.content", "connection", "conn-1")
+    expect(checkPermissionMock).toHaveBeenCalledWith("storage.content", "storage", "conn-1:local")
     // Permission granted, so the guest-derived fallback is never consulted.
     expect(guestPerimeterAllowsMock).not.toHaveBeenCalled()
   })

@@ -28,6 +28,7 @@ import { formatBytes } from '@/utils/format'
 import { uploadFileToStorage } from '@/lib/storage/uploadClient'
 import { useProxCenterTasks } from '@/contexts/ProxCenterTasksContext'
 import { useRBAC } from '@/contexts/RBACContext'
+import { storageResourceId } from '@/lib/rbac/clientScope'
 import TemplateDownloadDialog from '@/components/storage/TemplateDownloadDialog'
 
 // ---------- Types ----------
@@ -736,10 +737,12 @@ export default function StorageContentBrowser({
 
   // readOnly hides every write control; otherwise each control follows the
   // right its route enforces (#920): uploads, URL and template downloads need
-  // storage.upload, deleting a volume needs storage.delete.
-  const { hasPermission } = useRBAC()
-  const canUpload = !readOnly && hasPermission('storage.upload')
-  const canDelete = !readOnly && hasPermission('storage.delete')
+  // storage.upload, deleting a volume needs storage.delete. Both are judged on
+  // THIS storage, so a storage-scoped grant opens no other one (#921).
+  const { hasPermissionOn } = useRBAC()
+  const storageRes = storageResourceId(connId, storage)
+  const canUpload = !readOnly && hasPermissionOn('storage.upload', 'storage', storageRes)
+  const canDelete = !readOnly && hasPermissionOn('storage.delete', 'storage', storageRes)
   const hasUploadableContent = canUpload && contentTypes.some(ct => CONTENT_MAP[ct]?.uploadable)
   const hasVztmpl = canUpload && contentTypes.includes('vztmpl')
 

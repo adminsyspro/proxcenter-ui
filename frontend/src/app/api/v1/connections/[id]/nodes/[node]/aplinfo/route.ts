@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
-import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { buildStorageResourceId, checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { audit } from "@/lib/audit"
 
 export const runtime = "nodejs"
@@ -42,17 +42,22 @@ export async function POST(
 ) {
   try {
     const { id, node } = await ctx.params
-
-    const denied = await checkPermission(PERMISSIONS.STORAGE_UPLOAD, "connection", id)
-    if (denied) return denied
-
-    const conn = await getConnectionById(id)
     const body = await req.json()
     const { storage, template } = body
+
+    // The download lands on `storage`, so the right is judged on that storage
+    // (issue #921); without one the request is malformed and the connection
+    // level check decides who is told so.
+    const denied = typeof storage === "string" && storage
+      ? await checkPermission(PERMISSIONS.STORAGE_UPLOAD, "storage", buildStorageResourceId(id, storage))
+      : await checkPermission(PERMISSIONS.STORAGE_UPLOAD, "connection", id)
+    if (denied) return denied
 
     if (!storage || !template) {
       return NextResponse.json({ error: "storage and template are required" }, { status: 400 })
     }
+
+    const conn = await getConnectionById(id)
 
     const data = await pveFetch<any>(
       conn,

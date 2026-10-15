@@ -26,6 +26,9 @@ import {
   pruneEmptyConnections,
   isFlatRecordVisible,
   hasInfraGrant,
+  hasStorageGrant,
+  isStorageVisible,
+  filterStorageDataForRbac,
   tokenInfraScope,
   type RbacInfraScope,
   type ScopePermissionFilter,
@@ -40,14 +43,26 @@ export {
   pruneEmptyConnections,
   isFlatRecordVisible,
   hasInfraGrant,
+  hasStorageGrant,
+  isStorageVisible,
+  filterStorageDataForRbac,
   type RbacInfraScope,
   type ScopePermissionFilter,
 }
 
+/**
+ * Resource kinds a permission check can name. "storage" carries
+ * `connectionId:storageId` (buildStorageResourceId, issue #921): a global or
+ * connection grant covers it like any other resource of the cluster, a
+ * `storage` scope covers exactly that pair, and node / vm / tag / pool grants
+ * never reach it.
+ */
+export type RbacResourceType = "connection" | "node" | "vm" | "global" | "pbs" | "storage"
+
 export interface PermissionCheck {
   userId: string
   permission: string
-  resourceType?: "connection" | "node" | "vm" | "global" | "pbs"
+  resourceType?: RbacResourceType
   resourceId?: string
   resourceMeta?: { tags?: string[]; pool?: string }
   tenantId?: string
@@ -446,6 +461,9 @@ function scopeMatches(
       // scopeTarget format: "connectionId:nodeName"
       // resourceId format for VM: "connectionId:nodeName:type:vmid"
       // resourceId format for node: "connectionId:nodeName"
+      // A storage id has the node id's shape ("connId:name"): a node grant
+      // must never open a storage named like the node (issue #921).
+      if (resourceType === "storage") return false
       if (scopeTarget) {
         // Check if resourceId starts with the node scope target
         // This handles both node resources and VM resources on that node
@@ -456,8 +474,8 @@ function scopeMatches(
 return false
 
     case "vm":
-      // VM scope matches exactly
-      return resourceId === scopeTarget
+      // VM scope matches exactly, and never a storage (issue #921)
+      return resourceType !== "storage" && resourceId === scopeTarget
 
     case "tag":
       if (!resourceMeta?.tags || !scopeTarget) return false
@@ -466,6 +484,11 @@ return false
     case "pool":
       if (!resourceMeta?.pool || !scopeTarget) return false
       return resourceMeta.pool === scopeTarget
+
+    case "storage":
+      // Exactly one storage of one connection (issue #921). The resource type
+      // is checked too: a node named like a storage must not open it.
+      return resourceType === "storage" && !!scopeTarget && resourceId === scopeTarget
 
     default:
       return false
@@ -580,6 +603,14 @@ export function buildNodeResourceId(connId: string, nodeName: string): string {
 }
 
 /**
+ * Build a storage resource ID from connection and storage name (issue #921).
+ * Format: "connId:storageId", the same form a `storage` scope target carries.
+ */
+export function buildStorageResourceId(connId: string, storage: string): string {
+  return `${connId}:${storage}`
+}
+
+/**
  * Get the current caller's RBAC context from the resolved principal
  * (session cookie or API token). Returns null if not authenticated.
  */
@@ -619,12 +650,13 @@ export async function hasTagOrPoolScopes(userId: string, tenantId?: string): Pro
 }
 
 function resolveTokenConnectionId(
-  resourceType?: "connection" | "node" | "vm" | "global" | "pbs",
+  resourceType?: RbacResourceType,
   resourceId?: string,
 ): string | null {
   if (!resourceType || !resourceId || resourceType === "global") return null
-  // "connection" and "pbs" carry a RAW connection id; "node" and "vm" carry
-  // prefixed ids (buildVmResourceId/buildNodeResourceId) whose first segment
+  // "connection" and "pbs" carry a RAW connection id; "node", "vm" and "storage"
+  // carry prefixed ids (buildVmResourceId / buildNodeResourceId /
+  // buildStorageResourceId) whose first segment
   // is the connection. NEVER inferred from the string shape (spec section 6).
   if (resourceType === "connection" || resourceType === "pbs") return resourceId
   return resourceId.split(":")[0] || null
@@ -633,7 +665,7 @@ function resolveTokenConnectionId(
 function checkTokenPermission(
   principal: Principal,
   permission: string,
-  resourceType?: "connection" | "node" | "vm" | "global" | "pbs",
+  resourceType?: RbacResourceType,
   resourceId?: string,
 ): NextResponse | null {
   const deny = () =>
@@ -665,7 +697,7 @@ function checkTokenPermission(
  */
 export async function checkPermission(
   permission: string,
-  resourceType?: "connection" | "node" | "vm" | "global" | "pbs",
+  resourceType?: RbacResourceType,
   resourceId?: string
 ): Promise<NextResponse | null> {
   const result = await getPrincipal()
@@ -715,7 +747,7 @@ export async function checkPermission(
  */
 export async function checkPermissions(
   permissions: string[],
-  resourceType?: "connection" | "node" | "vm" | "global" | "pbs",
+  resourceType?: RbacResourceType,
   resourceId?: string,
 ): Promise<NextResponse | null> {
   if (permissions.length === 0) return null
@@ -1195,4 +1227,85 @@ export async function getRequestGuestScopePerimeter(
 export async function guestPerimeterAllows(connId: string, permission: string): Promise<boolean> {
   const perimeter = await getRequestGuestScopePerimeter(connId, permission)
   return !!(perimeter?.holdsPermission && perimeter.hasVisibleGuests)
+}
+
+/**
+ * What a caller may do on the storages of ONE connection for one permission
+ * (issue #921).
+ *
+ * `restricted: false` means no narrowing: super admin, API token (its own
+ * perimeter is the connection allow-list, judged by checkTokenPermission), or
+ * a global / connection grant of `permission` covering the connection, which
+ * reaches every storage of the cluster exactly as before storage scopes
+ * existed. Otherwise `storages` holds the storage ids granted through a
+ * `storage` scope on this connection, possibly none. Node, vm, tag and pool
+ * grants never name a storage, so they add nothing here, the same answer
+ * `scopeMatches` gives them for a "storage" resource.
+ *
+ * Routes use it two ways: to filter the storage lists their pickers consume
+ * (a user is never offered a destination the server would refuse), and as a
+ * perimeter fallback when the connection-level check denied a caller who
+ * still holds the permission on some storage of that connection.
+ */
+export type StorageGrantPerimeter = {
+  restricted: boolean
+  storages: Set<string>
+}
+
+export async function getStorageGrantPerimeter(
+  principalOrUserId: string | Principal,
+  connId: string,
+  permission: string,
+  tenantId?: string,
+): Promise<StorageGrantPerimeter> {
+  const unrestricted: StorageGrantPerimeter = { restricted: false, storages: new Set<string>() }
+  if (asTokenPrincipal(principalOrUserId)) return unrestricted
+
+  const userId = toUserId(principalOrUserId)
+  const tid = resolveGrantTenantId(principalOrUserId, tenantId)
+  const grants = await loadUserGrants(userId, tid)
+  if (grants.superAdmin) return unrestricted
+
+  const storages = new Set<string>()
+  const prefix = `${connId}:`
+  for (const g of grants.byScope) {
+    if (!grantsPermission(g.permissions, permission)) continue
+    if (g.scopeType === "global") return unrestricted
+    if (g.scopeType === "connection" && g.scopeTarget === connId) return unrestricted
+    if (g.scopeType === "storage" && g.scopeTarget?.startsWith(prefix)) {
+      storages.add(g.scopeTarget.slice(prefix.length))
+    }
+  }
+  return { restricted: true, storages }
+}
+
+/**
+ * Request-scoped {@link getStorageGrantPerimeter}: resolves the caller from the
+ * session. Null when no principal resolves at all, which the route's own
+ * checkPermission has already turned into a 401.
+ */
+export async function getRequestStorageGrantPerimeter(
+  connId: string,
+  permission: string,
+): Promise<StorageGrantPerimeter | null> {
+  const ctx = await getRBACContext()
+  if (!ctx) return null
+  if (ctx.isAdmin) return { restricted: false, storages: new Set<string>() }
+  const principal = ctx.principal ?? ctx.userId
+  if (!principal) return null
+  return getStorageGrantPerimeter(principal, connId, permission, ctx.tenantId)
+}
+
+/**
+ * Keep only the storages of `connId` the caller holds `permission` on.
+ * `restricted: false` perimeters (and a null one, which only an unauthenticated
+ * caller produces and the route has already rejected) leave the list intact.
+ */
+export function filterStoragesByGrant<T>(
+  items: T[],
+  perimeter: StorageGrantPerimeter | null,
+  storageOf: (item: T) => string,
+): T[] {
+  if (!perimeter?.restricted) return items
+  return items.filter(item => perimeter.storages.has(storageOf(item)))
 }

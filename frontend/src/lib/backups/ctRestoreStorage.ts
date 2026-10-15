@@ -41,7 +41,7 @@ export async function resolveCtRestoreStorage(
     const config = await pveFetch<string>(conn, `${nodePath}/vzdump/extractconfig?volume=${encodeURIComponent(archive)}`)
     original = rootfsStorageOf(typeof config === 'string' ? config : '')
   } catch (err: any) {
-    console.error(`[restore] could not read the container backup config of ${safeLog(archive)}: ${safeLog(err?.message ?? err)}`)
+    console.error(`[restore] could not read the container backup config: ${safeLog(err?.message ?? err)}`)
   }
   if (!original) {
     return { error: 'Choose a target storage: the original storage of this container backup could not be determined.' }

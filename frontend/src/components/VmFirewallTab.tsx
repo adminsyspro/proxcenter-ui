@@ -226,13 +226,14 @@ export default function VmFirewallTab({ connectionId, node, vmType, vmid, vmName
     void fw.handleAddRule(payload)
   }
 
-  // Wrap update rule to clean source/dest
+  // Wrap update rule to clean source/dest. An emptied field is sent as '' so
+  // the update clears it on PVE; undefined would leave the old value (#1115).
   const handleUpdateRule = () => {
     if (!fw.editingRule) return
     const payload: firewallAPI.CreateRuleRequest = {
       ...fw.editingRule,
-      source: cleanSourceDest(fw.editingRule.source) || undefined,
-      dest: cleanSourceDest(fw.editingRule.dest) || undefined,
+      source: cleanSourceDest(fw.editingRule.source),
+      dest: cleanSourceDest(fw.editingRule.dest),
     }
 
     void fw.handleUpdateRule(payload)

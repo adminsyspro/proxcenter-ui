@@ -269,6 +269,31 @@ describe('rule update form (updateRuleToForm)', () => {
     expect(formOf(init).get('action')).toBe('DROP')
   })
 
+  it('clears a field sent as an empty string through PVE delete, leaving absent fields untouched (#1115)', async () => {
+    await updateSecurityGroupRule(conn, 'sg-web', 0, {
+      type: 'in', action: 'ACCEPT', enable: 1, proto: '', dport: '', sport: '',
+      source: '', dest: '10.0.0.1', iface: '', log: 'nolog', comment: '',
+    })
+
+    const form = formOf(callAt().init)
+
+    expect(form.get('delete')).toBe('source,proto,dport,sport,iface,comment')
+    expect(form.get('dest')).toBe('10.0.0.1')
+    expect(form.get('log')).toBe('nolog')
+    for (const key of ['source', 'proto', 'dport', 'sport', 'iface', 'comment', 'macro']) {
+      expect(form.has(key)).toBe(false)
+    }
+  })
+
+  it('sends no delete when no field is cleared', async () => {
+    await updateClusterRule(conn, 2, { source: '+lan', comment: 'kept' })
+
+    const form = formOf(callAt().init)
+
+    expect(form.has('delete')).toBe(false)
+    expect(form.get('source')).toBe('+lan')
+  })
+
   it('routes node rule updates and deletes to the node path', async () => {
     await updateNodeRule(conn, 'pve1', 2, { comment: 'edited' })
 

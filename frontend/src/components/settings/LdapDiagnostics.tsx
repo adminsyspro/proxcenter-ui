@@ -156,7 +156,7 @@ export function LdapUserLookupDiagnostic({ config, groupMappings, roleLabel, dis
             value={username}
             onChange={e => setUsername(e.target.value)}
             onKeyDown={e => {
-              if (e.key === 'Enter' && username.trim() && !running) run()
+              if (e.key === 'Enter' && username.trim() && !running) void run()
             }}
             disabled={disabled}
             helperText={t('ldap.diag.usernameHelper')}
@@ -165,7 +165,7 @@ export function LdapUserLookupDiagnostic({ config, groupMappings, roleLabel, dis
           />
           <Button
             variant='outlined'
-            onClick={run}
+            onClick={() => void run()}
             disabled={disabled || running || !username.trim() || !config.url}
             startIcon={running ? <CircularProgress size={16} /> : <i className='ri-search-eye-line' />}
           >

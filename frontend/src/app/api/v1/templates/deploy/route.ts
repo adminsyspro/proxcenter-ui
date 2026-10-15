@@ -12,7 +12,8 @@ import { pveFetch } from "@/lib/proxmox/client"
 import { downloadToStorage } from "@/lib/proxmox/download"
 import { selectDownloadStorage } from "@/lib/templates/downloadStorage"
 import { customImageToCloudImage } from "@/lib/templates/cloudImages"
-import { findCustomImageForTenant } from "@/lib/templates/customImageScope"
+import { findCustomImageForTenant, isProviderImageSlug } from "@/lib/templates/customImageScope"
+import { findBlueprintForTenant, CATALOG_NOT_GRANTED_IMAGE, CATALOG_NOT_GRANTED_BLUEPRINT } from "@/lib/templates/catalogGrants"
 import { authorizeImageVolume, imageSourceForConnection, SourceVolumeError, type ImageVolumeSource } from '@/lib/templates/sourceVolume'
 import { resolveBuiltInImage } from "@/lib/templates/catalogStore"
 import { supportsVmDisks } from "@/lib/proxmox/storage"
@@ -82,35 +83,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: vmidRangeCheck.error }, { status: vmidRangeCheck.status ?? 400 })
     }
 
-    let image = (await resolveBuiltInImage(body.imageSlug)) as any
-    let isCustom = false
-    let sourceType = 'url'
-    let volumeId: string | null = null
-    let volumeSource: ImageVolumeSource | null = null
-
-    if (!image) {
-      // Same scope as the catalogue: the tenant's own images plus the
-      // provider's shared entries. Looking only under the caller's tenant
-      // refused every shared template with "Unknown image slug".
-      const customRow = await findCustomImageForTenant(tenantId, body.imageSlug)
-      if (!customRow) {
-        return NextResponse.json({ error: "Unknown image slug" }, { status: 400 })
-      }
-      image = customImageToCloudImage(customRow)
-      isCustom = true
-      sourceType = customRow.sourceType
-      volumeId = customRow.volumeId
-      if (sourceType === 'volume') {
-        // A volume image deploys from the copy held by the target cluster:
-        // its source, or one its owner declared on another cluster (#44).
-        volumeSource = imageSourceForConnection(customRow, body.connectionId)
-        if (!volumeSource) {
-          return NextResponse.json({ error: IMAGE_NOT_ON_CLUSTER }, { status: 400 })
-        }
-        volumeId = volumeSource.volumeId ?? null
-      }
-    }
-
     // Resolve the tenant's vDC for this connection+node so we can pin
     // the VM to its PVE pool. Without this the inventory filter (which
     // lists VMs by `pool === vdc.pvePoolName`) wouldn't surface the
@@ -136,6 +108,54 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'No vDC on this connection — deploy not allowed' }, { status: 403 })
     }
 
+    // Resolve the image: built-in first, then a custom row within the
+    // caller's scope. The scope is the catalogue's (customImageScope): the
+    // tenant's own images, the provider's shared entries, and the provider
+    // entries granted to the tenant or to the TARGET vDC (#903). Looking only
+    // under the caller's tenant used to refuse every shared template with
+    // "Unknown image slug"; a provider slug outside the grants is a 403, so a
+    // revoked entry is refused here and not only hidden from the list.
+    let image = (await resolveBuiltInImage(body.imageSlug)) as any
+    let isCustom = false
+    let sourceType = 'url'
+    let volumeId: string | null = null
+    let volumeSource: ImageVolumeSource | null = null
+    const grantScope = { vdcId: vdcInfo?.vdcId ?? null }
+
+    if (!image) {
+      const customRow = await findCustomImageForTenant(tenantId, body.imageSlug, grantScope)
+      if (!customRow) {
+        if (isTenant && await isProviderImageSlug(body.imageSlug)) {
+          return NextResponse.json({ error: CATALOG_NOT_GRANTED_IMAGE }, { status: 403 })
+        }
+        return NextResponse.json({ error: "Unknown image slug" }, { status: 400 })
+      }
+      image = customImageToCloudImage(customRow)
+      isCustom = true
+      sourceType = customRow.sourceType
+      volumeId = customRow.volumeId
+      if (sourceType === 'volume') {
+        // A volume image deploys from the copy held by the target cluster:
+        // its source, or one its owner declared on another cluster (#44).
+        volumeSource = imageSourceForConnection(customRow, body.connectionId)
+        if (!volumeSource) {
+          return NextResponse.json({ error: IMAGE_NOT_ON_CLUSTER }, { status: 400 })
+        }
+        volumeId = volumeSource.volumeId ?? null
+      }
+    }
+
+    // A deployment "from a blueprint" is authorised on the blueprint too, not
+    // only on the image it names (#903): the recipe must be the caller's own,
+    // shared, or granted to the tenant or to the target vDC.
+    let blueprintRow: Awaited<ReturnType<typeof findBlueprintForTenant>> = null
+    if (body.blueprintId) {
+      blueprintRow = await findBlueprintForTenant(tenantId, String(body.blueprintId), grantScope)
+      if (!blueprintRow) {
+        return NextResponse.json({ error: CATALOG_NOT_GRANTED_BLUEPRINT }, { status: 403 })
+      }
+    }
+
     // vDC compute policy (#893). The policy constrains what the tenant
     // chooses, never what the PROVIDER put in a blueprint: a blueprint owned
     // by the provider tenant keeps its model even outside the allowed set.
@@ -154,14 +174,9 @@ export async function POST(req: Request) {
             .catch(() => undefined)
         : undefined
       let trustedModel: string | null = null
-      if (body.blueprintId) {
-        try {
-          const bp = await prisma.blueprint.findUnique({ where: { id: String(body.blueprintId) }, select: { hardware: true, tenantId: true } })
-          const bpHw = bp?.hardware as { cpu?: unknown } | null
-          if (bp?.tenantId === DEFAULT_TENANT_ID && typeof bpHw?.cpu === 'string') trustedModel = parseCpuProperty(bpHw.cpu).model || null
-        } catch {
-          trustedModel = null
-        }
+      if (blueprintRow) {
+        const bpHw = blueprintRow.hardware as { cpu?: unknown } | null
+        if (blueprintRow.tenantId === DEFAULT_TENANT_ID && typeof bpHw?.cpu === 'string') trustedModel = parseCpuProperty(bpHw.cpu).model || null
       }
       const allowed = resolveAllowedCpuModels(policy, caps)
       const requestedModel = parseCpuProperty(requestedCpu).model
@@ -356,7 +371,7 @@ export async function POST(req: Request) {
         if (volumeSource) {
           // Recheck before the background worker writes to PVE. A source
           // that disappeared or changed ownership must never be imported.
-          const currentRow = await findCustomImageForTenant(tenantId, body.imageSlug)
+          const currentRow = await findCustomImageForTenant(tenantId, body.imageSlug, grantScope)
           const currentSource = currentRow && imageSourceForConnection(currentRow, body.connectionId)
           if (!currentSource || currentSource.sourceType !== 'volume'
             || currentSource.volumeId !== volumeSource.volumeId

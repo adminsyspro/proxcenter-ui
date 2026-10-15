@@ -5874,6 +5874,19 @@
       "isoUploadNote": "ISO 파일은 부팅 미디어입니다. 배포 후 VM은 중지된 상태로 유지되며 noVNC 콘솔에서 OS 설치 프로그램을 수동으로 실행해야 합니다. cloud-init은 전혀 사용되지 않습니다.",
       "extraLocationTitle": "다른 클러스터의 사본 #{index}",
       "addExtraLocation": "다른 클러스터에 사본 추가",
+      "visibilityLabel": "공개 범위",
+      "visibilityPrivate": "비공개 (공급자만)",
+      "visibilityPrivateHelp": "공급자만 이 항목을 볼 수 있습니다. vDC는 자체 설정의 카탈로그 섹션에서 이 항목을 받을 수 있습니다.",
+      "visibilityEveryone": "모든 테넌트",
+      "visibilityTenants": "선택한 테넌트",
+      "visibilityTenantsPick": "테넌트",
+      "visibilityTenantsHelp": "나열된 테넌트만 이 항목을 보고 배포할 수 있습니다. vDC별 권한은 설정, 가상 데이터센터에서 각 vDC에 지정합니다.",
+      "visibilityVdcGrants": "{count, plural, other {# 개 vDC에도 부여됨, vDC 설정에서 관리합니다.}}",
+      "visibilityChipEveryone": "모든 테넌트",
+      "visibilityChipPrivate": "비공개",
+      "visibilityTenantsCount": "{count, plural, other {테넌트 #개}}",
+      "visibilityVdcsCount": "{count, plural, other {vDC #개}}",
+      "visibilityFromProvider": "공급자 제공",
       "extraLocationHelp": "다른 클러스터에 저장된 동일한 이미지를 선택하면 해당 클러스터에도 배포할 수 있습니다. 각 클러스터에는 해당 노드에서 접근 가능한 자체 사본이 필요합니다."
     },
     "blueprints": {
@@ -8977,6 +8990,12 @@
     "searchEnterHint": "Enter 키를 누르면 가장 일치하는 항목의 세부 정보가 열립니다"
   },
   "vdc": {
+    "catalogGrantTitle": "카탈로그",
+    "catalogGrantHint": "공급자의 사용자 지정 이미지와 블루프린트를 이 vDC에 부여합니다. 테넌트는 카탈로그에서 이를 보고 이 vDC에서만 배포할 수 있습니다. 모든 테넌트에 공유된 항목은 참고용으로 표시됩니다.",
+    "catalogGrantImages": "사용자 지정 이미지",
+    "catalogGrantBlueprints": "블루프린트",
+    "catalogGrantNone": "공급자 카탈로그에 사용자 지정 이미지나 블루프린트가 아직 없습니다.",
+    "catalogGrantShared": "모든 테넌트에 공유됨",
     "title": "가상 데이터센터",
     "subtitle": "쿼터와 함께 클러스터 리소스를 테넌트에 할당합니다",
     "create": "vDC 생성",

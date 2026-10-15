@@ -16,9 +16,11 @@ interface ImageCardProps {
   isCustom?: boolean
   onEdit?: (image: CloudImage) => void
   onDelete?: (image: CloudImage) => void
+  /** Who sees this entry (#903): provider-side visibility, or "from the provider" on a tenant. */
+  badge?: { label: string; color: 'default' | 'success' | 'info' }
 }
 
-export default function ImageCard({ versions, title, onDeploy, isCustom, onEdit, onDelete }: ImageCardProps) {
+export default function ImageCard({ versions, title, onDeploy, isCustom, onEdit, onDelete, badge }: ImageCardProps) {
   const t = useTranslations()
   const locale = useLocale()
   const [picked, setPicked] = useState<string | null>(null)
@@ -191,6 +193,17 @@ export default function ImageCard({ versions, title, onDeploy, isCustom, onEdit,
             variant="outlined"
             sx={{ height: 20, fontSize: '0.65rem', '& .MuiChip-icon': { color: 'inherit' } }}
           />
+          {badge && (
+            <Chip
+              icon={<Box component="i" className="ri-eye-line" sx={{ fontSize: 12, ml: 0.5 }} />}
+              label={badge.label}
+              size="small"
+              color={badge.color}
+              variant="outlined"
+              data-testid="catalog-visibility-badge"
+              sx={{ height: 20, fontSize: '0.65rem', '& .MuiChip-icon': { color: 'inherit' } }}
+            />
+          )}
           {image.tags.map(tag => (
             <Chip
               key={tag}

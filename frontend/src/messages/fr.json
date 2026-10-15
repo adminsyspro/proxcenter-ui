@@ -5874,6 +5874,19 @@
       "isoUploadNote": "Les fichiers ISO sont des médias bootables. Après le déploiement, la VM reste arrêtée et vous lancerez l'installeur manuellement via la console noVNC — il n'y a pas de cloud-init du tout.",
       "extraLocationTitle": "Copie sur un autre cluster n°{index}",
       "addExtraLocation": "Ajouter une copie sur un autre cluster",
+      "visibilityLabel": "Visibilité",
+      "visibilityPrivate": "Privée (fournisseur seulement)",
+      "visibilityPrivateHelp": "Seul le fournisseur voit cette entrée. Un vDC peut encore la recevoir depuis ses propres réglages, section Catalogue.",
+      "visibilityEveryone": "Tous les tenants",
+      "visibilityTenants": "Tenants choisis",
+      "visibilityTenantsPick": "Tenants",
+      "visibilityTenantsHelp": "Seuls les tenants listés voient et déploient cette entrée. Les accès par vDC se règlent sur chaque vDC, dans Paramètres, Datacenters virtuels.",
+      "visibilityVdcGrants": "{count, plural, one {Accordée aussi à # vDC, géré dans les réglages du vDC.} other {Accordée aussi à # vDC, gérés dans les réglages du vDC.}}",
+      "visibilityChipEveryone": "Tous les tenants",
+      "visibilityChipPrivate": "Privée",
+      "visibilityTenantsCount": "{count, plural, one {# tenant} other {# tenants}}",
+      "visibilityVdcsCount": "{count, plural, one {# vDC} other {# vDC}}",
+      "visibilityFromProvider": "Du fournisseur",
       "extraLocationHelp": "Sélectionnez la même image stockée sur un autre cluster pour pouvoir la déployer aussi là-bas. Chaque cluster a besoin de sa propre copie, accessible depuis ses nœuds."
     },
     "blueprints": {
@@ -8978,6 +8991,12 @@
     "searchEnterHint": "Entrée ouvre le détail du meilleur résultat"
   },
   "vdc": {
+    "catalogGrantTitle": "Catalogue",
+    "catalogGrantHint": "Accorder des images personnalisées et des blueprints du fournisseur à ce vDC. Le tenant les voit dans son catalogue et ne peut les déployer que dans ce vDC ; les entrées partagées avec tous les tenants sont listées pour information.",
+    "catalogGrantImages": "Images personnalisées",
+    "catalogGrantBlueprints": "Blueprints",
+    "catalogGrantNone": "Le catalogue du fournisseur ne contient encore aucune image personnalisée ni blueprint.",
+    "catalogGrantShared": "partagée avec tous les tenants",
     "title": "Datacenters Virtuels",
     "subtitle": "Allouer des ressources de cluster aux tenants avec des quotas",
     "create": "Créer un vDC",

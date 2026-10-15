@@ -204,6 +204,9 @@ model CustomImage {
   createdAt         DateTime @default(now()) @map("created_at")
   updatedAt         DateTime @updatedAt @map("updated_at")
 
+  // Per-tenant / per-vDC visibility (#903), on top of the isShared shortcut.
+  grants            CatalogGrant[]
+
   @@unique([tenantId, slug])
   @@map("custom_images")
 }
@@ -218,11 +221,44 @@ model Blueprint {
   cloudInit   Json?   @map("cloud_init") // { ciuser, sshKeys, ipconfig0, nameserver, searchdomain }
   tags        String?
   isPublic    Boolean  @default(true) @map("is_public")
+  // Provider catalogue flag (#903), same contract as CustomImage.isShared:
+  // visible to every tenant, only the provider tenant may set it.
+  isShared    Boolean  @default(false) @map("is_shared")
   createdBy   String?  @map("created_by")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
+  grants      CatalogGrant[]
+
   @@map("blueprints")
+}
+
+// Who may see (and deploy) one provider catalogue entry (#903). One row per
+// entry and grantee; the grantee is a tenant OR a vDC, the entry an image OR
+// a blueprint (CHECK constraints in the migration). `isShared` on the entry
+// remains the "everyone" shortcut, so a grant only ever widens visibility.
+// Reads go through the global prisma client: the grantee column is not the
+// owner of the row, so the tenant-scoped extension must not filter on it.
+model CatalogGrant {
+  id              String       @id @default(cuid())
+  imageId         String?      @map("image_id")
+  image           CustomImage? @relation(fields: [imageId], references: [id], onDelete: Cascade)
+  blueprintId     String?      @map("blueprint_id")
+  blueprint       Blueprint?   @relation(fields: [blueprintId], references: [id], onDelete: Cascade)
+  granteeTenantId String?      @map("grantee_tenant_id")
+  granteeTenant   Tenant?      @relation(fields: [granteeTenantId], references: [id], onDelete: Cascade)
+  vdcId           String?      @map("vdc_id")
+  vdc             Vdc?         @relation(fields: [vdcId], references: [id], onDelete: Cascade)
+  createdBy       String?      @map("created_by")
+  createdAt       DateTime     @default(now()) @map("created_at")
+
+  @@unique([imageId, granteeTenantId])
+  @@unique([imageId, vdcId])
+  @@unique([blueprintId, granteeTenantId])
+  @@unique([blueprintId, vdcId])
+  @@index([granteeTenantId])
+  @@index([vdcId])
+  @@map("catalog_grants")
 }
 
 model Deployment {
@@ -589,6 +625,7 @@ model Tenant {
   vdcs      Vdc[]
   apiTokens ApiToken[]
   tenantNetworks TenantNetwork[]
+  catalogGrants  CatalogGrant[]
 
   @@index([slug])
   @@map("tenants")
@@ -823,6 +860,7 @@ model Vdc {
   pbsNamespaces      VdcPbsNamespace[]
   isoLibraries       VdcIsoLibrary[]
   tenantNetworkMembers TenantNetworkMember[]
+  catalogGrants      CatalogGrant[]
 
   @@unique([tenantId, connectionId])
   @@unique([tenantId, slug])

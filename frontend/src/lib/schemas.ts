@@ -281,6 +281,7 @@ export const createCustomImageSchema = z.object({
   // the image becomes part of the shared catalogue visible to every tenant.
   // The route enforces the provider check; here we just accept the input.
   isShared: z.boolean().default(false),
+  grantTenantIds: z.array(z.string().min(1).max(64)).max(500).optional(),
 }).superRefine((data, ctx) => {
   if (data.sourceType === 'url' && !data.downloadUrl) {
     ctx.addIssue({
@@ -320,6 +321,9 @@ export const updateCustomImageSchema = z.object({
   ostype: z.string().max(20).optional(),
   tags: z.string().max(200).nullable().optional(),
   isShared: z.boolean().optional(),
+  // Provider-only (#903): tenants this entry is granted to, replacing the
+  // current per-tenant grants. Per-vDC grants live on the vDC (admin/vdcs).
+  grantTenantIds: z.array(z.string().min(1).max(64)).max(500).optional(),
 })
 
 // ─── Templates / Blueprints ──────────────────────────────────────────────────
@@ -351,6 +355,10 @@ export const createBlueprintSchema = z.object({
   }).nullable().optional(),
   tags: z.string().max(200).nullable().optional(),
   isPublic: z.boolean().default(true),
+  // Provider-only (#903), same contract as a custom image: `isShared` opens
+  // the blueprint to every tenant, `grantTenantIds` to the listed ones.
+  isShared: z.boolean().optional(),
+  grantTenantIds: z.array(z.string().min(1).max(64)).max(500).optional(),
 })
 
 /** POST /api/v1/templates/deploy — deploy a VM from image/blueprint */

@@ -12,13 +12,11 @@ import {
   DialogContent,
   DialogTitle,
   FormControl,
-  FormControlLabel,
   IconButton,
   InputLabel,
   MenuItem,
   Select,
   Stack,
-  Switch,
   TextField,
   ToggleButton,
   ToggleButtonGroup,
@@ -28,6 +26,7 @@ import {
 
 import NumericTextField from '@/components/ui/NumericTextField'
 import VolumeSourcePicker, { type VolumeLocation } from '@/components/templates/VolumeSourcePicker'
+import CatalogVisibilityField from '@/components/templates/CatalogVisibilityField'
 import { useTenant } from '@/contexts/TenantContext'
 
 interface CustomImageDialogProps {
@@ -61,8 +60,10 @@ export default function CustomImageDialog({ open, onClose, editData }: CustomIma
   const [recommendedCores, setRecommendedCores] = useState(2)
   const [ostype, setOstype] = useState('l26')
   const [tags, setTags] = useState('')
-  // Provider-only: publish to the shared catalogue (visible to every tenant).
+  // Provider-only: publish to the shared catalogue (visible to every tenant),
+  // or grant the image to a list of tenants (#903).
   const [isShared, setIsShared] = useState(false)
+  const [grantTenantIds, setGrantTenantIds] = useState<string[]>([])
 
   // Volume browser state
   const [connections, setConnections] = useState<any[]>([])
@@ -99,6 +100,7 @@ export default function CustomImageDialog({ open, onClose, editData }: CustomIma
       setOstype(editData.ostype || 'l26')
       setTags(editData.tags || '')
       setIsShared(!!(editData as any).isShared)
+      setGrantTenantIds(Array.isArray((editData as any).grants?.tenantIds) ? (editData as any).grants.tenantIds : [])
     } else {
       setName('')
       setVendor('custom')
@@ -116,6 +118,7 @@ export default function CustomImageDialog({ open, onClose, editData }: CustomIma
       setOstype('l26')
       setTags('')
       setIsShared(false)
+      setGrantTenantIds([])
     }
   }, [open, editData])
 
@@ -147,6 +150,7 @@ export default function CustomImageDialog({ open, onClose, editData }: CustomIma
       defaultDiskSize, minMemory, recommendedMemory, minCores, recommendedCores,
       ostype, tags: tags || null,
       isShared,
+      ...(isProviderTenant ? { grantTenantIds: isShared ? [] : grantTenantIds } : {}),
     }
 
     try {
@@ -173,7 +177,7 @@ export default function CustomImageDialog({ open, onClose, editData }: CustomIma
   }, [
     name, vendor, version, arch, format, sourceType, downloadUrl, checksumUrl,
     source, extraLocations, defaultDiskSize, minMemory, recommendedMemory, minCores,
-    recommendedCores, ostype, tags, isEdit, editData, onClose, isShared,
+    recommendedCores, ostype, tags, isEdit, editData, onClose, isShared, grantTenantIds, isProviderTenant,
   ])
 
   const canSave = name.trim() &&
@@ -428,29 +432,15 @@ export default function CustomImageDialog({ open, onClose, editData }: CustomIma
             helperText={t('templates.blueprints.tagsHelp')}
           />
 
-          {/* Shared catalogue toggle — provider only. Tenant uploads stay
-              private to that tenant; the provider can promote an image to
-              the shared catalogue visible by every tenant. */}
+          {/* Visibility, provider only (#903). Tenant uploads stay private to
+              that tenant; the provider can open an image to every tenant
+              (isShared) or to a list of tenants (per-tenant grants). Per-vDC
+              grants are set on the vDC, next to its ISO library. */}
           {isProviderTenant && (
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={isShared}
-                  onChange={e => setIsShared(e.target.checked)}
-                  size="small"
-                />
-              }
-              label={
-                <Box>
-                  <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                    {t('templates.catalog.shareWithTenants')}
-                  </Typography>
-                  <Typography variant="caption" sx={{ opacity: 0.65 }}>
-                    {t('templates.catalog.shareWithTenantsHelp')}
-                  </Typography>
-                </Box>
-              }
-              sx={{ alignItems: 'flex-start', m: 0 }}
+            <CatalogVisibilityField
+              value={{ isShared, grantTenantIds }}
+              onChange={next => { setIsShared(next.isShared); setGrantTenantIds(next.grantTenantIds) }}
+              vdcGrantCount={Array.isArray((editData as any)?.grants?.vdcIds) ? (editData as any).grants.vdcIds.length : 0}
             />
           )}
         </Stack>

@@ -5874,6 +5874,19 @@
       "isoUploadNote": "ISO files are boot media. After deploy the VM will stay stopped and you'll run the OS installer manually via the noVNC console — there's no cloud-init at all.",
       "extraLocationTitle": "Copy on another cluster #{index}",
       "addExtraLocation": "Add a copy on another cluster",
+      "visibilityLabel": "Visibility",
+      "visibilityPrivate": "Private (provider only)",
+      "visibilityPrivateHelp": "Only the provider sees this entry. A vDC can still receive it from its own settings, under Catalogue.",
+      "visibilityEveryone": "All tenants",
+      "visibilityTenants": "Selected tenants",
+      "visibilityTenantsPick": "Tenants",
+      "visibilityTenantsHelp": "Only the listed tenants see and deploy this entry. Per-vDC grants are set on each vDC, in Settings, Virtual datacenters.",
+      "visibilityVdcGrants": "{count, plural, one {Also granted to # vDC, managed in the vDC settings.} other {Also granted to # vDCs, managed in the vDC settings.}}",
+      "visibilityChipEveryone": "All tenants",
+      "visibilityChipPrivate": "Private",
+      "visibilityTenantsCount": "{count, plural, one {# tenant} other {# tenants}}",
+      "visibilityVdcsCount": "{count, plural, one {# vDC} other {# vDCs}}",
+      "visibilityFromProvider": "From the provider",
       "extraLocationHelp": "Pick the same image as stored on another cluster to make it deployable there too. Each cluster needs its own copy, reachable from its nodes."
     },
     "blueprints": {
@@ -8977,6 +8990,12 @@
     "searchEnterHint": "Press Enter to open the details of the top match"
   },
   "vdc": {
+    "catalogGrantTitle": "Catalogue",
+    "catalogGrantHint": "Grant provider custom images and blueprints to this vDC. The tenant sees them in its catalogue and may deploy them in this vDC only; entries shared with all tenants are listed for reference.",
+    "catalogGrantImages": "Custom images",
+    "catalogGrantBlueprints": "Blueprints",
+    "catalogGrantNone": "The provider catalogue has no custom image or blueprint yet.",
+    "catalogGrantShared": "shared with all tenants",
     "title": "Virtual Datacenters",
     "subtitle": "Allocate cluster resources to tenants with quotas",
     "create": "Create vDC",

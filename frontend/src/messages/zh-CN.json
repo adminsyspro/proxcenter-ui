@@ -5878,6 +5878,19 @@
       "isoUploadNote": "ISO 文件是可启动安装介质。部署后 VM 将保持停止状态，需通过 noVNC 控制台手动运行操作系统安装程序，不会执行 cloud-init。",
       "extraLocationTitle": "其他集群上的副本 #{index}",
       "addExtraLocation": "添加其他集群上的副本",
+      "visibilityLabel": "可见范围",
+      "visibilityPrivate": "私有（仅服务提供方）",
+      "visibilityPrivateHelp": "只有服务提供方能看到此条目。vDC 仍可在其自身设置的“目录”部分获得此条目。",
+      "visibilityEveryone": "所有租户",
+      "visibilityTenants": "选定的租户",
+      "visibilityTenantsPick": "租户",
+      "visibilityTenantsHelp": "只有列出的租户能看到并部署此条目。按 vDC 的授权在每个 vDC 上设置：设置，虚拟数据中心。",
+      "visibilityVdcGrants": "{count, plural, other {还已授权给 # 个 vDC，在 vDC 设置中管理。}}",
+      "visibilityChipEveryone": "所有租户",
+      "visibilityChipPrivate": "私有",
+      "visibilityTenantsCount": "{count, plural, other {# 个租户}}",
+      "visibilityVdcsCount": "{count, plural, other {# 个 vDC}}",
+      "visibilityFromProvider": "来自服务提供方",
       "extraLocationHelp": "选择存储在其他集群上的同一镜像，使其也可以在该集群部署。每个集群都需要自己的副本，且其节点可以访问。"
     },
     "blueprints": {
@@ -9137,6 +9150,12 @@
     }
   },
   "vdc": {
+    "catalogGrantTitle": "目录",
+    "catalogGrantHint": "将服务提供方的自定义镜像和蓝图授权给此 vDC。租户会在其目录中看到它们，且只能在此 vDC 中部署；已共享给所有租户的条目仅供参考列出。",
+    "catalogGrantImages": "自定义镜像",
+    "catalogGrantBlueprints": "蓝图",
+    "catalogGrantNone": "服务提供方目录中还没有自定义镜像或蓝图。",
+    "catalogGrantShared": "已共享给所有租户",
     "title": "虚拟数据中心",
     "subtitle": "按配额向租户分配集群资源",
     "create": "创建 vDC",

@@ -5853,6 +5853,19 @@
       "isoUploadNote": "ISO-Dateien sind Bootmedien. Nach der Bereitstellung bleibt die VM gestoppt und Sie führen das OS-Installationsprogramm manuell über die noVNC-Konsole aus — kein Cloud-Init.",
       "extraLocationTitle": "Kopie auf einem anderen Cluster Nr. {index}",
       "addExtraLocation": "Kopie auf einem anderen Cluster hinzufügen",
+      "visibilityLabel": "Sichtbarkeit",
+      "visibilityPrivate": "Privat (nur Anbieter)",
+      "visibilityPrivateHelp": "Nur der Anbieter sieht diesen Eintrag. Ein vDC kann ihn weiterhin über seine eigenen Einstellungen unter Katalog erhalten.",
+      "visibilityEveryone": "Alle Mandanten",
+      "visibilityTenants": "Ausgewählte Mandanten",
+      "visibilityTenantsPick": "Mandanten",
+      "visibilityTenantsHelp": "Nur die aufgeführten Mandanten sehen und verwenden diesen Eintrag. Freigaben pro vDC werden an jedem vDC unter Einstellungen, Virtuelle Rechenzentren gesetzt.",
+      "visibilityVdcGrants": "{count, plural, one {Zusätzlich für # vDC freigegeben, verwaltet in den vDC-Einstellungen.} other {Zusätzlich für # vDCs freigegeben, verwaltet in den vDC-Einstellungen.}}",
+      "visibilityChipEveryone": "Alle Mandanten",
+      "visibilityChipPrivate": "Privat",
+      "visibilityTenantsCount": "{count, plural, one {# Mandant} other {# Mandanten}}",
+      "visibilityVdcsCount": "{count, plural, one {# vDC} other {# vDCs}}",
+      "visibilityFromProvider": "Vom Anbieter",
       "extraLocationHelp": "Wählen Sie dasselbe Image auf einem anderen Cluster aus, um es auch dort bereitstellen zu können. Jeder Cluster benötigt eine eigene, von seinen Knoten erreichbare Kopie."
     },
     "blueprints": {
@@ -9066,6 +9079,12 @@
     }
   },
   "vdc": {
+    "catalogGrantTitle": "Katalog",
+    "catalogGrantHint": "Benutzerdefinierte Images und Blueprints des Anbieters für dieses vDC freigeben. Der Mandant sieht sie in seinem Katalog und kann sie nur in diesem vDC bereitstellen; für alle Mandanten freigegebene Einträge werden zur Information aufgeführt.",
+    "catalogGrantImages": "Benutzerdefinierte Images",
+    "catalogGrantBlueprints": "Blueprints",
+    "catalogGrantNone": "Der Anbieterkatalog enthält noch kein benutzerdefiniertes Image und keinen Blueprint.",
+    "catalogGrantShared": "für alle Mandanten freigegeben",
     "nameHelper": "Optional. Leer lassen, um den Standardnamen zu verwenden (Tenant — Cluster).",
     "primaryStorageTitle": "Hauptspeicher",
     "primaryStorageHint": "Einzelner Shared-Storage, der alle VM-Disks dieser vDC trägt. Lokale und ISO/Backup-only Speicher werden automatisch ausgefiltert.",

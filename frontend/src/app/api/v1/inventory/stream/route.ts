@@ -8,7 +8,7 @@ import { scopePbsDataForTenant, type PbsServerData, type PbsDatastoreData } from
 import { pveFetch } from "@/lib/proxmox/client"
 import { pbsFetch } from "@/lib/proxmox/pbs-client"
 import { aggregateStorage, isSharedStorage, type AggregatedStorage } from "@/lib/proxmox/storage"
-import { getRBACContext, filterVmsByPermission, PERMISSIONS, checkPermission, getRbacInfraScope, applyRbacInfraFilter, filterVisibleConnections, filterCandidateConnections, isConnectionVisible, mayHaveVisibleGuests, pruneEmptyConnections, type RbacInfraScope } from "@/lib/rbac"
+import { getRBACContext, filterVmsByPermission, PERMISSIONS, checkPermission, getRbacInfraScope, applyRbacInfraFilter, filterStorageDataForRbac, filterVisibleConnections, filterCandidateConnections, hasStorageGrant, isConnectionVisible, mayHaveVisibleGuests, pruneEmptyConnections, type RbacInfraScope } from "@/lib/rbac"
 import { resolveManagementIp } from "@/lib/proxmox/resolveManagementIp"
 import { readPools, readStorageResources, type PoolFacts } from "@/lib/inventory/proxmoxProjections"
 import { attachGuestDiskTotals, onlineNodeSet } from "@/lib/inventory/guestDiskTotals"
@@ -674,15 +674,19 @@ export async function GET(request: NextRequest) {
             // (issue #633).
             const visibleStorages = cached.storages.filter((s: any) =>
               (!mask || mask.connectionIds.has(s.connId)) &&
-              (!rbacScope || isConnectionVisible(rbacScope, s.connId))
+              (!rbacScope || isConnectionVisible(rbacScope, s.connId) || hasStorageGrant(rbacScope, s.connId))
             )
             for (const storage of visibleStorages) {
               // Shape guard: the tree reads nodes[] and sharedStorages[] and
               // dies on anything else. A cache written by another producer
               // under this key must be skipped, not forwarded.
               if (!Array.isArray(storage?.nodes) || !Array.isArray(storage?.sharedStorages)) continue
+              // Tenant mask, then the RBAC storage rule (issue #921): a node
+              // grant shows that node's storages and the shared ones, a storage
+              // grant shows the storage it names, nothing else of the cluster.
               const scoped = scopeStorageDataForTenant(storage, mask)
-              if (scoped) send('storage', scoped)
+              const visible = scoped ? filterStorageDataForRbac(scoped, rbacScope) : null
+              if (visible) send('storage', visible)
             }
           }
           if (visibleExt.length > 0) {
@@ -778,7 +782,7 @@ export async function GET(request: NextRequest) {
         // a tag-scoped user the storage layout of every connection (issue #633).
         const isInfraVisibleConn = (connId: string) =>
           (!vdcVisibleIds || vdcVisibleIds.has(connId)) &&
-          (!rbacScope || isConnectionVisible(rbacScope, connId))
+          (!rbacScope || isConnectionVisible(rbacScope, connId) || hasStorageGrant(rbacScope, connId))
 
         const visiblePveCount = pveConnections.filter(c => isVisibleConn(c.id)).length
 
@@ -819,8 +823,10 @@ export async function GET(request: NextRequest) {
           const storageData = await fetchStoragesForCluster(conn, cluster, allStorageResources)
           allStorages.push(storageData)
           if (isInfraVisibleConn(conn.id)) {
+            // Same two-step narrowing as the cached path above (issue #921).
             const scoped = scopeStorageDataForTenant(storageData, mask)
-            if (scoped) send('storage', scoped)
+            const visible = scoped ? filterStorageDataForRbac(scoped, rbacScope) : null
+            if (visible) send('storage', visible)
           }
         })
 

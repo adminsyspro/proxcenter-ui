@@ -38,3 +38,30 @@ describe('tenant-bound effective permissions', () => {
     await waitFor(() => expect(screen.getByText('denied')).toBeInTheDocument())
   })
 })
+
+// Issue #921: resource-aware check over the grant details of /api/v1/rbac/effective.
+function StorageAccess() {
+  const { loading, hasPermissionOn, hasPermission } = useRBAC()
+  if (loading) return <span>loading</span>
+  return (
+    <span>
+      {hasPermission('storage.upload') ? 'flat:yes' : 'flat:no'} {hasPermissionOn('storage.upload', 'storage', 'c1:local') ? 'local:yes' : 'local:no'} {hasPermissionOn('storage.upload', 'storage', 'c1:ISO') ? 'ISO:yes' : 'ISO:no'}
+    </span>
+  )
+}
+describe('hasPermissionOn', () => {
+  afterEach(() => { cleanup(); vi.unstubAllGlobals() })
+  it('answers per storage from the grant scopes while the flat check stays coarse', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ data: {
+      permissions: ['storage.upload'],
+      permission_details: [{ name: 'storage.upload', scope_type: 'storage', scope_target: 'c1:local' }],
+    } }) }))
+    render(<RBACProvider><StorageAccess /></RBACProvider>)
+    await screen.findByText('flat:yes local:yes ISO:no')
+  })
+  it('a super admin passes every resource check', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ data: { permissions: [], is_super_admin: true } }) }))
+    render(<RBACProvider><StorageAccess /></RBACProvider>)
+    await screen.findByText('flat:yes local:yes ISO:yes')
+  })
+})

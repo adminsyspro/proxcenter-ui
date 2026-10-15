@@ -6,10 +6,34 @@ import { invalidateBackupRuns } from "@/lib/backups/vzdumpRunsService"
 import { namespaceMismatchResponse } from "@/lib/backups/pbsNamespace"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
-import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { buildStorageResourceId, checkPermission, getRequestStorageGrantPerimeter, PERMISSIONS, type StorageGrantPerimeter } from "@/lib/rbac"
 import { getCurrentTenantId } from "@/lib/tenant"
 import { getTenantInfrastructureScope, maskingScope } from "@/lib/tenant/infraScope"
 import { getAllowedJobPools, isJobOwnedByTenantPools, validateTenantJobBody, validateTenantJobInfra } from "@/lib/vdc/backupJobs"
+
+/**
+ * Connection-level RBAC check with the storage-scope fallback (issue #921): a
+ * caller granted `permission` on some storages of this connection only never
+ * matches the connection. They get through here and `outsideJobStorage` then
+ * holds them to the storage the job writes to, once the job is loaded.
+ */
+async function checkJobPermission(
+  permission: string,
+  connectionId: string,
+): Promise<{ denied: NextResponse | null; perimeter: StorageGrantPerimeter | null }> {
+  const denied = await checkPermission(permission, "connection", connectionId)
+  if (!denied) return { denied: null, perimeter: null }
+  const perimeter = await getRequestStorageGrantPerimeter(connectionId, permission)
+  if (perimeter?.restricted && perimeter.storages.size > 0) return { denied: null, perimeter }
+  return { denied, perimeter: null }
+}
+
+/** 403 when a storage-scoped caller reaches a job writing to a storage they were not granted. */
+function outsideJobStorage(job: any, perimeter: StorageGrantPerimeter | null, permission: string): NextResponse | null {
+  if (!perimeter?.restricted) return null
+  if (typeof job?.storage === 'string' && perimeter.storages.has(job.storage)) return null
+  return NextResponse.json({ error: `Permission denied: ${permission}` }, { status: 403 })
+}
 
 /**
  * Tenant ownership check used by every per-job endpoint. Loads the job
@@ -62,7 +86,7 @@ export async function GET(_req: Request, ctx: RouteContext) {
     }
 
     // RBAC check - permission de voir les backup jobs
-    const denied = await checkPermission(PERMISSIONS.BACKUP_JOB_VIEW, "connection", id)
+    const { denied, perimeter } = await checkJobPermission(PERMISSIONS.BACKUP_JOB_VIEW, id)
 
     if (denied) return denied
 
@@ -70,6 +94,8 @@ export async function GET(_req: Request, ctx: RouteContext) {
 
     const owned = await loadJobForTenant(conn, id, jobId)
     if ('error' in owned) return owned.error
+    const outside = outsideJobStorage(owned.job, perimeter, PERMISSIONS.BACKUP_JOB_VIEW)
+    if (outside) return outside
     return NextResponse.json({ data: owned.job })
   } catch (e: any) {
     console.error("[backup-jobs] GET Error:", e)
@@ -93,15 +119,28 @@ export async function PUT(req: Request, ctx: RouteContext) {
     }
 
     // RBAC check - permission de modifier les backup jobs
-    const denied = await checkPermission(PERMISSIONS.BACKUP_JOB_EDIT, "connection", id)
+    const { denied, perimeter } = await checkJobPermission(PERMISSIONS.BACKUP_JOB_EDIT, id)
 
     if (denied) return denied
+
+    // Moving the job onto another storage, or fleecing through one, takes
+    // the right on that storage too (issue #921).
+    for (const target of [
+      typeof body.storage === 'string' && body.storage ? body.storage : null,
+      body.fleecing && typeof body.fleecingStorage === 'string' && body.fleecingStorage ? body.fleecingStorage : null,
+    ]) {
+      if (!target) continue
+      const targetDenied = await checkPermission(PERMISSIONS.BACKUP_JOB_EDIT, "storage", buildStorageResourceId(id, target))
+      if (targetDenied) return targetDenied
+    }
 
     const conn = await getConnectionById(id)
 
     // Tenant guard: must own the job before we let any field through.
     const owned = await loadJobForTenant(conn, id, jobId)
     if ('error' in owned) return owned.error
+    const outside = outsideJobStorage(owned.job, perimeter, PERMISSIONS.BACKUP_JOB_EDIT)
+    if (outside) return outside
     // And: if the body changes the selection (selectionMode/pool/vmid),
     // re-validate against the tenant's pools to keep them inside their
     // own vDC. Provider has no extra restriction.
@@ -293,7 +332,7 @@ export async function DELETE(_req: Request, ctx: RouteContext) {
     }
 
     // RBAC check - permission de supprimer les backup jobs
-    const denied = await checkPermission(PERMISSIONS.BACKUP_JOB_DELETE, "connection", id)
+    const { denied, perimeter } = await checkJobPermission(PERMISSIONS.BACKUP_JOB_DELETE, id)
 
     if (denied) return denied
 
@@ -301,6 +340,8 @@ export async function DELETE(_req: Request, ctx: RouteContext) {
 
     const owned = await loadJobForTenant(conn, id, jobId)
     if ('error' in owned) return owned.error
+    const outside = outsideJobStorage(owned.job, perimeter, PERMISSIONS.BACKUP_JOB_DELETE)
+    if (outside) return outside
 
     await pveFetch<any>(conn, `/cluster/backup/${encodeURIComponent(jobId)}`, {
       method: 'DELETE'
@@ -333,7 +374,7 @@ export async function POST(req: Request, ctx: RouteContext) {
     }
 
     // RBAC check - permission d'exécuter les backup jobs
-    const denied = await checkPermission(PERMISSIONS.BACKUP_JOB_RUN, "connection", id)
+    const { denied, perimeter } = await checkJobPermission(PERMISSIONS.BACKUP_JOB_RUN, id)
 
     if (denied) return denied
 
@@ -349,6 +390,8 @@ export async function POST(req: Request, ctx: RouteContext) {
       const owned = await loadJobForTenant(conn, id, jobId)
       if ('error' in owned) return owned.error
       const job = owned.job
+      const outside = outsideJobStorage(job, perimeter, PERMISSIONS.BACKUP_JOB_RUN)
+      if (outside) return outside
 
       const nodesList = (await pveFetch<any[]>(conn, `/nodes`)) || []
       const onlineNodes = nodesList

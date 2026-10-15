@@ -16,6 +16,11 @@ const { checkPermissionMock, guardMock, nameMock, getConnectionByIdMock, pveFetc
 }))
 
 vi.mock("@/lib/rbac", () => ({
+  // Storage-scope helpers (#921): the id builder is the real shape, the
+  // perimeter is unrestricted unless a test overrides it.
+  buildStorageResourceId: (id: string, storage: string) => `${id}:${storage}`,
+  getRequestStorageGrantPerimeter: async () => null,
+  filterStoragesByGrant: (items: any[], p: any, of: (i: any) => string) => (p?.restricted ? items.filter((i: any) => p.storages.has(of(i))) : items),
   checkPermission: (...a: any[]) => checkPermissionMock(...a),
   PERMISSIONS: { CONNECTION_VIEW: "connection.view", STORAGE_UPLOAD: "storage.upload" },
 }))
@@ -54,7 +59,7 @@ describe("POST download-url: RBAC (#920)", () => {
   it("gates the download on storage.upload for the connection", async () => {
     const res = await callRoute(POST, { method: "POST", params: PARAMS, body: BODY })
     expect(res.status).toBe(200)
-    expect(checkPermissionMock).toHaveBeenCalledWith("storage.upload", "connection", "conn-1")
+    expect(checkPermissionMock).toHaveBeenCalledWith("storage.upload", "storage", "conn-1:isolib")
   })
 
   it("403s without storage.upload and never reaches PVE", async () => {

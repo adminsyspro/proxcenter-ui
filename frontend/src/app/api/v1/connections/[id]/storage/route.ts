@@ -4,7 +4,8 @@ import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { isSharedStorage, vmDiskFormats } from "@/lib/proxmox/storage"
 import { formatBytes } from "@/utils/format"
-import { checkPermission, getRequestGuestScopePerimeter, PERMISSIONS } from "@/lib/rbac"
+import { checkPermission, getCurrentRbacInfraScope, getRequestGuestScopePerimeter, PERMISSIONS } from "@/lib/rbac"
+import { hasInfraGrant, hasStorageGrant, isStorageVisible } from "@/lib/rbac/infraScope"
 import { getCurrentTenantId, getSessionPrisma } from "@/lib/tenant"
 import { getTenantInfrastructureScope, maskingScope } from "@/lib/tenant/infraScope"
 import { attachPbsStorage, PbsAttachError } from "@/lib/storage/attachPbsStorage"
@@ -30,7 +31,15 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW, "connection", id)
     const perimeter = denied ? await getRequestGuestScopePerimeter(id) : null
 
-    if (denied && !(perimeter?.holdsPermission && perimeter.hasVisibleGuests)) return denied
+    // A caller holding connection.view, or storage.view (the right the storage
+    // pages carry), on a node or a storage of this cluster only (node or
+    // storage scope, issue #921) never matches the connection either. They
+    // get the list narrowed by isStorageVisible further down: their nodes'
+    // local storages, the shared ones, the storages they were granted.
+    const infraScope = denied ? await getCurrentRbacInfraScope([PERMISSIONS.CONNECTION_VIEW, PERMISSIONS.STORAGE_VIEW]) : null
+    const partial = !!infraScope && (hasInfraGrant(infraScope, id) || hasStorageGrant(infraScope, id))
+
+    if (denied && !partial && !(perimeter?.holdsPermission && perimeter.hasVisibleGuests)) return denied
 
     const conn = await getConnectionById(id)
 
@@ -218,6 +227,14 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
         const nodes: string[] = Array.isArray(s.nodes) ? s.nodes : s.node ? [s.node] : []
         return nodes.some(n => perimeter.nodes.has(n))
       })
+    }
+
+    // Node- and storage-scoped callers (issue #921): the aggregated rows carry
+    // the nodes mounting a shared storage, so the exact rule applies here.
+    if (partial && infraScope) {
+      result = result.filter((s: any) =>
+        isStorageVisible(infraScope, id, { storage: s.storage, shared: !!s.shared, node: s.node, nodes: Array.isArray(s.nodes) ? s.nodes : null }),
+      )
     }
 
     // Trier: partagés d'abord, puis par utilisation décroissante

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 
 import { downloadToStorage, PveDownloadPermissionError } from "@/lib/proxmox/download"
 import { getConnectionById } from "@/lib/connections/getConnection"
-import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { buildStorageResourceId, checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { guardTenantStorageWrite, tenantUploadFilename } from "@/lib/vdc/scope"
 
 export const runtime = "nodejs"
@@ -16,7 +16,8 @@ export async function POST(
   try {
     const { id, node, storage } = await ctx.params
 
-    const denied = await checkPermission(PERMISSIONS.STORAGE_UPLOAD, "connection", id)
+    // Judged on the storage itself (issue #921).
+    const denied = await checkPermission(PERMISSIONS.STORAGE_UPLOAD, "storage", buildStorageResourceId(id, storage))
     if (denied) return denied
 
     const body = await req.json()

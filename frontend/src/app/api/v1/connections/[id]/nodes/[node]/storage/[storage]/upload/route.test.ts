@@ -20,6 +20,11 @@ const { checkPermissionMock, guardMock, nameMock, getConnectionByIdMock, getPrin
 }))
 
 vi.mock("@/lib/rbac", () => ({
+  // Storage-scope helpers (#921): the id builder is the real shape, the
+  // perimeter is unrestricted unless a test overrides it.
+  buildStorageResourceId: (id: string, storage: string) => `${id}:${storage}`,
+  getRequestStorageGrantPerimeter: async () => null,
+  filterStoragesByGrant: (items: any[], p: any, of: (i: any) => string) => (p?.restricted ? items.filter((i: any) => p.storages.has(of(i))) : items),
   checkPermission: (...a: any[]) => checkPermissionMock(...a),
   PERMISSIONS: { CONNECTION_VIEW: "connection.view", STORAGE_UPLOAD: "storage.upload" },
 }))
@@ -109,7 +114,7 @@ describe("upload: RBAC (#920)", () => {
       body: "0123456789",
     })
     expect(res.status).toBe(403)
-    expect(checkPermissionMock).toHaveBeenCalledWith("storage.upload", "connection", "conn-1")
+    expect(checkPermissionMock).toHaveBeenCalledWith("storage.upload", "storage", "conn-1:isolib")
     expect(guardMock).not.toHaveBeenCalled()
     expect(getConnectionByIdMock).not.toHaveBeenCalled()
   })
@@ -122,7 +127,7 @@ describe("upload: RBAC (#920)", () => {
       headers: { "x-finalize": "1", "x-file-name": "x.iso", "x-upload-id": "u-rbac-2" },
     })
     expect(res.status).toBe(403)
-    expect(checkPermissionMock).toHaveBeenCalledWith("storage.upload", "connection", "conn-1")
+    expect(checkPermissionMock).toHaveBeenCalledWith("storage.upload", "storage", "conn-1:isolib")
     expect(guardMock).not.toHaveBeenCalled()
   })
 
@@ -130,7 +135,7 @@ describe("upload: RBAC (#920)", () => {
     checkPermissionMock.mockResolvedValue(new Response(JSON.stringify({ error: "denied" }), { status: 403 }))
     const res = await callRoute(DELETE as any, { params: PARAMS, method: "DELETE", headers: { "X-Upload-Id": "u-rbac-3" } })
     expect(res.status).toBe(403)
-    expect(checkPermissionMock).toHaveBeenCalledWith("storage.upload", "connection", "conn-1")
+    expect(checkPermissionMock).toHaveBeenCalledWith("storage.upload", "storage", "conn-1:isolib")
   })
 })
 

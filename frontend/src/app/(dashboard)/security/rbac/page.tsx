@@ -22,7 +22,7 @@ import { useRBAC } from '@/contexts/RBACContext'
 import { CardsSkeleton, TableSkeleton } from '@/components/skeletons'
 import { WIDGET_REGISTRY, WIDGET_CATEGORIES } from '@/components/dashboard/widgetRegistry'
 import RoleDefaultScopeEditor from './RoleDefaultScopeEditor'
-import { formatScopeTarget, buildVdcScopeOptions, buildVdcNameByPool, collectPoolCounts } from './scope-options'
+import { formatScopeTarget, buildScopeOptions, buildVdcScopeOptions, buildVdcNameByPool } from './scope-options'
 
 // Types
 interface Permission { id: string; name: string; category: string; description: string; is_dangerous: boolean }
@@ -32,7 +32,7 @@ interface User { id: string; email: string; name: string | null }
 interface Assignment { id: string; user: User; role: { id: string; name: string; color: string }; scope_type: string; scope_target: string | null; granted_at: string; granted_by_email: string | null }
 
 // Constants
-const scopeIcons = { global: 'ri-global-line', connection: 'ri-server-line', node: 'ri-computer-line', vm: 'ri-instance-line', tag: 'ri-price-tag-3-line', pool: 'ri-folder-shared-line', inherit: 'ri-links-line' }
+const scopeIcons = { global: 'ri-global-line', connection: 'ri-server-line', node: 'ri-computer-line', vm: 'ri-instance-line', tag: 'ri-price-tag-3-line', pool: 'ri-folder-shared-line', storage: 'ri-hard-drive-3-line', inherit: 'ri-links-line' }
 const catIcons = { vm: 'ri-instance-line', storage: 'ri-hard-drive-3-line', node: 'ri-computer-line', connection: 'ri-server-line', backup: 'ri-archive-line', admin: 'ri-shield-user-line' }
 
 // Roles that must NEVER be assigned in a non-default tenant. Two reasons
@@ -67,6 +67,7 @@ const getScopeLabels = (t: any) => ({
   vm: t('rbac.scopes.vmct'),
   tag: t('rbac.scopes.tag'),
   pool: t('rbac.scopes.pool'),
+  storage: t('rbac.scopes.storage'),
   inherit: t('rbac.scopes.inherit')
 })
 
@@ -312,6 +313,27 @@ return n })}>
   )
 }
 
+// Storage targets for the "storage" scope (issue #921). The inventory payload
+// carries clusters, nodes and guests only, so the dialogs attach the rows of
+// /api/v1/storage to it as `storages` for buildScopeOptions. Loaded once per
+// dialog opening, in parallel with the inventory, and never blocks it.
+function useInventoryWithStorages(open: boolean, inventory: any) {
+  const [storages, setStorages] = useState<any[] | null>(null)
+
+  useEffect(() => {
+    if (!open || storages) return
+    let active = true
+    fetch('/api/v1/storage')
+      .then(res => (res.ok ? res.json() : { data: [] }))
+      .then(json => { if (active) setStorages(Array.isArray(json?.data) ? json.data : []) })
+      .catch(() => { if (active) setStorages([]) })
+
+    return () => { active = false }
+  }, [open, storages])
+
+  return useMemo(() => (inventory ? { ...inventory, storages: storages ?? [] } : inventory), [inventory, storages])
+}
+
 // Assignment Dialog avec sélection dynamique des ressources
 function AssignmentDialog({ open, onClose, roles, users, assignments = [], tenants = [], enableTenantMgmt = false, currentTenantId = 'default', vdcs = [], onSave, t }) {
   const [user, setUser] = useState(null)
@@ -384,113 +406,19 @@ function AssignmentDialog({ open, onClose, roles, users, assignments = [], tenan
     })
   }, [tenantId])
 
+  const inventoryWithStorages = useInventoryWithStorages(open, inventory)
+
   // Construire les options selon le scope type
   const scopeOptions = useMemo(() => {
     // vDC = sugar over pool; options come from the vDC list, NOT from the
     // inventory guests (an empty vDC must be assignable), so this case must
-    // run before the inventory guard below can starve it.
+    // run before the inventory guard inside buildScopeOptions can starve it.
     if (scopeType === 'vdc') {
       return buildVdcScopeOptions(vdcs, tenantId)
     }
 
-    if (!inventory?.clusters) return []
-
-    switch (scopeType) {
-      case 'connection':
-        return inventory.clusters.map((c: any) => ({
-          id: c.id,
-          label: c.name,
-          sublabel: t('rbacPage.nodeCount', { count: c.nodes?.length || 0 }),
-          icon: 'ri-server-line',
-          status: c.status
-        }))
-
-      case 'node': {
-        const nodes: any[] = []
-
-        inventory.clusters.forEach((c: any) => {
-          c.nodes?.forEach((n: any) => {
-            nodes.push({
-              id: `${c.id}:${n.node}`,
-              label: n.node,
-              sublabel: c.name,
-              icon: 'ri-computer-line',
-              status: n.status,
-              cluster: c.name
-            })
-          })
-        })
-
-        return nodes
-      }
-
-      case 'vm': {
-        const vms: any[] = []
-
-        inventory.clusters.forEach((c: any) => {
-          c.nodes?.forEach((n: any) => {
-            n.guests?.forEach((g: any) => {
-              vms.push({
-                id: `${c.id}:${n.node}:${g.type}:${g.vmid}`,
-                label: g.name || `${g.type}/${g.vmid}`,
-                sublabel: `${g.type.toUpperCase()} ${g.vmid} • ${n.node} • ${c.name}`,
-                icon: g.type === 'lxc' ? 'ri-box-3-line' : 'ri-instance-line',
-                status: g.status,
-                vmid: g.vmid,
-                type: g.type,
-                node: n.node,
-                cluster: c.name
-              })
-            })
-          })
-        })
-
-        return vms
-      }
-
-      case 'tag': {
-        const tagMap = new Map<string, number>()
-
-        inventory.clusters.forEach((c: any) => {
-          c.nodes?.forEach((n: any) => {
-            n.guests?.forEach((g: any) => {
-              const tags = typeof g.tags === 'string'
-                ? g.tags.split(/[;,]/).map((t: string) => t.trim()).filter(Boolean)
-                : []
-              tags.forEach((tag: string) => {
-                tagMap.set(tag, (tagMap.get(tag) || 0) + 1)
-              })
-            })
-          })
-        })
-
-        return Array.from(tagMap.entries())
-          .sort((a, b) => a[0].localeCompare(b[0]))
-          .map(([tag, count]) => ({
-            id: tag,
-            label: tag,
-            sublabel: t('rbacPage.tagUsedByVms', { count }),
-            icon: 'ri-price-tag-3-line'
-          }))
-      }
-
-      case 'pool': {
-        // collectPoolCounts seeds the pools Proxmox declares before counting
-        // guests, so a pool with no guest is still selectable (issue #978).
-        return Array.from(collectPoolCounts(inventory).entries())
-          .sort((a, b) => a[0].localeCompare(b[0]))
-          .map(([pool, count]) => ({
-            id: pool,
-            label: pool,
-            sublabel: t('rbacPage.poolContainsVms', { count }),
-            icon: 'ri-folder-shared-line'
-          }))
-      }
-
-      default:
-        return []
-    }
-  }, [inventory, scopeType, vdcs, tenantId])
+    return buildScopeOptions(inventoryWithStorages, scopeType, t)
+  }, [inventoryWithStorages, scopeType, vdcs, tenantId, t])
 
   // Conflict detection: the backend already rejects duplicates and second
   // roles per tenant, but surfacing them client-side lets the operator fix the
@@ -764,6 +692,15 @@ return
                 <Box>
                   <Typography variant='body2'>{t('rbacPage.poolScope')}</Typography>
                   <Typography variant='caption' sx={{ opacity: 0.6 }}>{t('rbacPage.limitedToPool')}</Typography>
+                </Box>
+              </Box>
+            </MenuItem>
+            <MenuItem value='storage'>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <i className='ri-hard-drive-3-line' style={{ color: '#f97316' }} />
+                <Box>
+                  <Typography variant='body2'>{t('rbacPage.storageScope')}</Typography>
+                  <Typography variant='caption' sx={{ opacity: 0.6 }}>{t('rbacPage.limitedToStorage')}</Typography>
                 </Box>
               </Box>
             </MenuItem>
@@ -1261,7 +1198,7 @@ return groupedAssignments.filter(a =>
 
       if (row.scope_type === 'vm' && parts.length >= 4) {
         displayName = `${parts[2]}/${parts[3]}`
-      } else if (row.scope_type === 'node' && parts.length >= 2) {
+      } else if ((row.scope_type === 'node' || row.scope_type === 'storage') && parts.length >= 2) {
         displayName = parts[1]
       }
 
@@ -1279,7 +1216,7 @@ return (
     return (
       <Tooltip title={row.scope_targets.join('\n')}>
         <Chip
-          label={`${count} ${row.scope_type === 'vm' ? t('rbacPage.vmsCts') : row.scope_type === 'node' ? t('rbac.scopes.node') : t('rbac.scopes.connection')}`}
+          label={`${count} ${row.scope_type === 'vm' ? t('rbacPage.vmsCts') : row.scope_type === 'node' ? t('rbac.scopes.node') : row.scope_type === 'storage' ? t('rbacPage.storages') : t('rbac.scopes.connection')}`}
           size='small'
           variant='outlined'
           sx={{ height: 22, fontSize: '0.75rem' }}
@@ -1458,113 +1395,19 @@ function EditAssignmentDialog({ open, onClose, assignmentGroup, roles, enableTen
     }
   }, [assignmentGroup, open])
 
+  const inventoryWithStorages = useInventoryWithStorages(open, inventory)
+
   // Construire les options selon le scope type
   const scopeOptions = useMemo(() => {
     // vDC = sugar over pool; options come from the vDC list, NOT from the
     // inventory guests (an empty vDC must be assignable), so this case must
-    // run before the inventory guard below can starve it.
+    // run before the inventory guard inside buildScopeOptions can starve it.
     if (scopeType === 'vdc') {
       return buildVdcScopeOptions(vdcs, assignmentGroup?.tenant_id || 'default')
     }
 
-    if (!inventory?.clusters) return []
-
-    switch (scopeType) {
-      case 'connection':
-        return inventory.clusters.map((c: any) => ({
-          id: c.id,
-          label: c.name,
-          sublabel: t('rbacPage.nodeCount', { count: c.nodes?.length || 0 }),
-          icon: 'ri-server-line',
-          status: c.status
-        }))
-
-      case 'node': {
-        const nodes: any[] = []
-
-        inventory.clusters.forEach((c: any) => {
-          c.nodes?.forEach((n: any) => {
-            nodes.push({
-              id: `${c.id}:${n.node}`,
-              label: n.node,
-              sublabel: c.name,
-              icon: 'ri-computer-line',
-              status: n.status,
-              cluster: c.name
-            })
-          })
-        })
-
-        return nodes
-      }
-
-      case 'vm': {
-        const vms: any[] = []
-
-        inventory.clusters.forEach((c: any) => {
-          c.nodes?.forEach((n: any) => {
-            n.guests?.forEach((g: any) => {
-              vms.push({
-                id: `${c.id}:${n.node}:${g.type}:${g.vmid}`,
-                label: g.name || `${g.type}/${g.vmid}`,
-                sublabel: `${g.type.toUpperCase()} ${g.vmid} • ${n.node} • ${c.name}`,
-                icon: g.type === 'lxc' ? 'ri-box-3-line' : 'ri-instance-line',
-                status: g.status,
-                vmid: g.vmid,
-                type: g.type,
-                node: n.node,
-                cluster: c.name
-              })
-            })
-          })
-        })
-
-        return vms
-      }
-
-      case 'tag': {
-        const tagMap = new Map<string, number>()
-
-        inventory.clusters.forEach((c: any) => {
-          c.nodes?.forEach((n: any) => {
-            n.guests?.forEach((g: any) => {
-              const tags = typeof g.tags === 'string'
-                ? g.tags.split(/[;,]/).map((t: string) => t.trim()).filter(Boolean)
-                : []
-              tags.forEach((tag: string) => {
-                tagMap.set(tag, (tagMap.get(tag) || 0) + 1)
-              })
-            })
-          })
-        })
-
-        return Array.from(tagMap.entries())
-          .sort((a, b) => a[0].localeCompare(b[0]))
-          .map(([tag, count]) => ({
-            id: tag,
-            label: tag,
-            sublabel: t('rbacPage.tagUsedByVms', { count }),
-            icon: 'ri-price-tag-3-line'
-          }))
-      }
-
-      case 'pool': {
-        // collectPoolCounts seeds the pools Proxmox declares before counting
-        // guests, so a pool with no guest is still selectable (issue #978).
-        return Array.from(collectPoolCounts(inventory).entries())
-          .sort((a, b) => a[0].localeCompare(b[0]))
-          .map(([pool, count]) => ({
-            id: pool,
-            label: pool,
-            sublabel: t('rbacPage.poolContainsVms', { count }),
-            icon: 'ri-folder-shared-line'
-          }))
-      }
-
-      default:
-        return []
-    }
-  }, [inventory, scopeType, vdcs, assignmentGroup])
+    return buildScopeOptions(inventoryWithStorages, scopeType, t)
+  }, [inventoryWithStorages, scopeType, vdcs, assignmentGroup, t])
 
   // Toggle sélection d'un élément
   const toggleTarget = (id: string) => {
@@ -1880,6 +1723,15 @@ return
                 <Box>
                   <Typography variant='body2'>{t('rbacPage.poolScope')}</Typography>
                   <Typography variant='caption' sx={{ opacity: 0.6 }}>{t('rbacPage.limitedToPool')}</Typography>
+                </Box>
+              </Box>
+            </MenuItem>
+            <MenuItem value='storage'>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <i className='ri-hard-drive-3-line' style={{ color: '#f97316' }} />
+                <Box>
+                  <Typography variant='body2'>{t('rbacPage.storageScope')}</Typography>
+                  <Typography variant='caption' sx={{ opacity: 0.6 }}>{t('rbacPage.limitedToStorage')}</Typography>
                 </Box>
               </Box>
             </MenuItem>

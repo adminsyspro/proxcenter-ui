@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
-import { checkPermission, buildNodeResourceId, getRequestGuestScopePerimeter, PERMISSIONS } from "@/lib/rbac"
+import { checkPermission, buildNodeResourceId, filterStoragesByGrant, getRequestGuestScopePerimeter, getRequestStorageGrantPerimeter, PERMISSIONS } from "@/lib/rbac"
 import { vmDiskFormats } from "@/lib/proxmox/storage"
 import { getCurrentTenantId } from "@/lib/tenant"
 import { getTenantInfrastructureScope, maskingScope } from "@/lib/tenant/infraScope"
@@ -82,6 +82,14 @@ return contents.includes(contentFilter)
       })
     }
 
+    // The backup picker (on-demand vzdump) only offers destinations the
+    // caller holds vm.backup on, the right the vzdump route judges on the
+    // storage (issue #921). Unrestricted callers keep the whole list.
+    if (contentFilter === 'backup' && storages) {
+      const backupPerimeter = await getRequestStorageGrantPerimeter(id, PERMISSIONS.VM_BACKUP)
+      storages = filterStoragesByGrant(storages, backupPerimeter, (s: any) => String(s?.storage ?? ''))
+    }
+
     // Tenant filtering: restrict to storages explicitly attached to the
     // tenant's vDC scope (`primary_storage` + PBS pseudo-storages, see
     // lib/vdc/scope.ts). Super admin (scope === null) sees everything.
@@ -159,12 +167,16 @@ return contents.includes(contentFilter)
     // guardTenantStorageWrite lets through: iaas tenants may upload to an ISO
     // library whose grant allows it or to a writable non-shared storage;
     // provider and MSP callers are not restricted by the guard, so every row
-    // they see is uploadable.
+    // they see is uploadable. On top of the tenant rule, the caller must hold
+    // storage.upload on the storage, the right the upload route judges on it
+    // (issue #921): the picker never offers an upload the server would refuse.
+    const uploadPerimeter = await getRequestStorageGrantPerimeter(id, PERMISSIONS.STORAGE_UPLOAD)
+    const rbacCanUpload = (storage: string) => !uploadPerimeter?.restricted || uploadPerimeter.storages.has(storage)
     const withUpload = decorated.map((s: any) => {
-      if (!scope) return { ...s, tenantCanUpload: true }
+      if (!scope) return { ...s, tenantCanUpload: rbacCanUpload(s.storage) }
       const uploadLibrary = !!scope.uploadLibrariesByConnection?.get(id)?.has(s.storage)
       const writableLocal = writableStoragesFor(scope, id).has(s.storage) && !s.shared
-      return { ...s, tenantCanUpload: uploadLibrary || writableLocal }
+      return { ...s, tenantCanUpload: (uploadLibrary || writableLocal) && rbacCanUpload(s.storage) }
     })
 
     return NextResponse.json({ data: withUpload })

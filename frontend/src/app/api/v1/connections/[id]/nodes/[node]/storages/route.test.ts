@@ -3,10 +3,15 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { callRoute, readJson } from '@/__tests__/setup/route-test'
 
 vi.mock('@/lib/rbac', () => ({
+  // Storage-scope helpers (#921): the id builder is the real shape, the
+  // perimeter is unrestricted unless a test overrides it.
+  buildStorageResourceId: (id: string, storage: string) => `${id}:${storage}`,
+  getRequestStorageGrantPerimeter: vi.fn(async () => null),
+  filterStoragesByGrant: (items: any[], p: any, of: (i: any) => string) => (p?.restricted ? items.filter((i: any) => p.storages.has(of(i))) : items),
   checkPermission: vi.fn<(...args: any[]) => Promise<Response | null>>(),
   buildNodeResourceId: (id: string, node: string) => `${id}:${node}`,
   getRequestGuestScopePerimeter: vi.fn(),
-  PERMISSIONS: { CONNECTION_VIEW: 'connection.view', VM_VIEW: 'vm.view' },
+  PERMISSIONS: { CONNECTION_VIEW: 'connection.view', VM_VIEW: 'vm.view', VM_BACKUP: 'vm.backup', STORAGE_UPLOAD: 'storage.upload' },
 }))
 
 vi.mock('@/lib/connections/getConnection', () => ({
@@ -27,7 +32,7 @@ vi.mock('@/lib/tenant/infraScope', () => ({
 }))
 
 import { GET } from './route'
-import { checkPermission, getRequestGuestScopePerimeter } from '@/lib/rbac'
+import { checkPermission, getRequestGuestScopePerimeter, getRequestStorageGrantPerimeter } from '@/lib/rbac'
 import { getConnectionById } from '@/lib/connections/getConnection'
 import { pveFetch } from '@/lib/proxmox/client'
 import { getCurrentTenantId } from '@/lib/tenant'
@@ -200,5 +205,46 @@ describe('GET storages: ISO picker permission and perimeter', () => {
     expect((await request()).status).toBe(200)
     expect(checkPermissionMock).toHaveBeenCalledTimes(1)
     expect(getRequestGuestScopePerimeter).not.toHaveBeenCalled()
+  })
+})
+
+describe('storage scope (#921)', () => {
+  const storagePerimeterMock = getRequestStorageGrantPerimeter as any
+  const BACKUP_STORAGES = [
+    { storage: 'pbs', type: 'pbs', content: 'backup' },
+    { storage: 'local', type: 'dir', content: 'backup,iso' },
+    { storage: 'nas', type: 'nfs', content: 'images,iso' },
+  ]
+
+  beforeEach(() => {
+    checkPermissionMock.mockResolvedValue(null)
+    getConnectionByIdMock.mockResolvedValue({ id: 'conn-1' })
+    getCurrentTenantIdMock.mockResolvedValue('default')
+    getTenantInfrastructureScopeMock.mockResolvedValue({ kind: 'provider' })
+    maskingScopeMock.mockReturnValue(null)
+    pveFetchMock.mockImplementation((_c: any, path: string) => Promise.resolve(path === '/storage' ? [] : BACKUP_STORAGES))
+  })
+
+  it('the backup picker only lists destinations the caller holds vm.backup on', async () => {
+    storagePerimeterMock.mockImplementation(async (_id: string, perm: string) =>
+      perm === 'vm.backup' ? { restricted: true, storages: new Set(['pbs']) } : null)
+    const res = await callRoute(GET as any, { params: { id: 'conn-1', node: 'pve1' }, searchParams: { content: 'backup' } })
+    const body = await readJson<any>(res)
+    expect(body.data.map((s: any) => s.storage)).toEqual(['pbs'])
+  })
+
+  it('flags uploadable only the storages the caller holds storage.upload on', async () => {
+    storagePerimeterMock.mockImplementation(async (_id: string, perm: string) =>
+      perm === 'storage.upload' ? { restricted: true, storages: new Set(['local']) } : null)
+    const res = await callRoute(GET as any, { params: { id: 'conn-1', node: 'pve1' }, searchParams: { content: 'iso' } })
+    const body = await readJson<any>(res)
+    expect(body.data.map((s: any) => [s.storage, s.tenantCanUpload])).toEqual([['local', true], ['nas', false]])
+  })
+
+  it('an unrestricted caller keeps every row uploadable, as before', async () => {
+    storagePerimeterMock.mockResolvedValue(null)
+    const res = await callRoute(GET as any, { params: { id: 'conn-1', node: 'pve1' }, searchParams: { content: 'iso' } })
+    const body = await readJson<any>(res)
+    expect(body.data.every((s: any) => s.tenantCanUpload === true)).toBe(true)
   })
 })

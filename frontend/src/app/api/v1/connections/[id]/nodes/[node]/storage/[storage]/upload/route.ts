@@ -5,7 +5,7 @@ import { randomUUID } from "node:crypto"
 
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { getPrincipal } from "@/lib/auth/principal"
-import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { buildStorageResourceId, checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { guardTenantStorageWrite, tenantUploadFilename } from "@/lib/vdc/scope"
 import { setProgress, clearProgress } from "@/lib/upload-progress"
 import { licenseExcludedResponse } from "@/lib/api/response"
@@ -77,9 +77,9 @@ export async function DELETE(
   const uploadId = req.headers.get("x-upload-id")
 
   try {
-    const { id } = await ctx.params
+    const { id, storage } = await ctx.params
 
-    const denied = await checkPermission(PERMISSIONS.STORAGE_UPLOAD, "connection", id)
+    const denied = await checkPermission(PERMISSIONS.STORAGE_UPLOAD, "storage", buildStorageResourceId(id, storage))
     if (denied) return denied
 
     if (!uploadId) {
@@ -125,7 +125,7 @@ async function handleChunk(
   try {
     const { id, node, storage } = await ctx.params
 
-    const denied = await checkPermission(PERMISSIONS.STORAGE_UPLOAD, "connection", id)
+    const denied = await checkPermission(PERMISSIONS.STORAGE_UPLOAD, "storage", buildStorageResourceId(id, storage))
     if (denied) return denied
 
     // This write goes to Proxmox directly, not through pveFetch: the license
@@ -300,7 +300,7 @@ async function handleFinalize(
   try {
     const { id, node, storage } = await ctx.params
 
-    const denied = await checkPermission(PERMISSIONS.STORAGE_UPLOAD, "connection", id)
+    const denied = await checkPermission(PERMISSIONS.STORAGE_UPLOAD, "storage", buildStorageResourceId(id, storage))
     if (denied) return denied
 
     const finalizeName = req.headers.get("x-file-name")

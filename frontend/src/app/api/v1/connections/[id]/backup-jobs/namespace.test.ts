@@ -13,6 +13,11 @@ vi.mock('@/lib/proxmox/client', () => ({ pveFetch: pveFetchMock }))
 vi.mock('@/lib/backups/vzdumpRunsService', () => ({ invalidateBackupRuns: vi.fn() }))
 vi.mock('@/lib/connections/getConnection', () => ({ getConnectionById: async () => ({ id: 'conn-1', apiToken: 't' }) }))
 vi.mock('@/lib/rbac', () => ({
+  // Storage-scope helpers (#921): the id builder is the real shape, the
+  // perimeter is unrestricted unless a test overrides it.
+  buildStorageResourceId: (id: string, storage: string) => `${id}:${storage}`,
+  getRequestStorageGrantPerimeter: async () => null,
+  filterStoragesByGrant: (items: any[], p: any, of: (i: any) => string) => (p?.restricted ? items.filter((i: any) => p.storages.has(of(i))) : items),
   checkPermission: async () => null,
   PERMISSIONS: { BACKUP_JOB_CREATE: 'c', BACKUP_JOB_VIEW: 'v', BACKUP_JOB_EDIT: 'e', BACKUP_JOB_DELETE: 'd', BACKUP_JOB_RUN: 'r' },
 }))

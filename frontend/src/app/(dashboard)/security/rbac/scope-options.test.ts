@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 
 import {
   buildScopeOptions,
+  buildStorageScopeOptions,
   collectPoolCounts,
   resolveScopeTargetLabel,
   formatScopeTarget,
@@ -162,5 +163,40 @@ describe('collectPoolCounts', () => {
   it('answers an empty map on a missing inventory rather than throwing', () => {
     expect(collectPoolCounts(null).size).toBe(0)
     expect(collectPoolCounts({}).size).toBe(0)
+  })
+})
+
+// Issue #921: storage targets come from /api/v1/storage rows the dialogs
+// attach to the inventory as `storages`; the inventory itself has none.
+describe('storage scope options', () => {
+  const storages = [
+    { connId: 'c1', connName: 'Cluster 1', storage: 'local', type: 'dir', shared: false, node: 'n1' },
+    { connId: 'c1', connName: 'Cluster 1', storage: 'local', type: 'dir', shared: false, node: 'n2' },
+    { connId: 'c1', connName: 'Cluster 1', storage: 'pbs-main', type: 'pbs', shared: true },
+    { connId: 'c2', connName: 'DR', storage: 'local', type: 'dir', shared: false },
+  ]
+
+  it('offers one option per connection and storage, id connId:storage, sorted by name then cluster', () => {
+    const opts = buildScopeOptions({ ...inventory, storages }, 'storage', t)
+    expect(opts.map(o => o.id)).toEqual(['c1:local', 'c2:local', 'c1:pbs-main'])
+    expect(opts[0]).toMatchObject({ label: 'local', sublabel: 'dir · Cluster 1', icon: 'ri-hard-drive-3-line' })
+    expect(opts[2].icon).toBe('ri-shield-check-line')
+  })
+
+  it('names the cluster from the inventory when it is listed there, from the row otherwise', () => {
+    const opts = buildScopeOptions({ ...inventory, storages: [{ connId: 'c1', connName: 'stale', storage: 's' }, { connId: 'c9', storage: 's' }] }, 'storage', t)
+    expect(new Set(opts.map(o => o.sublabel))).toEqual(new Set(['Cluster 1', 'c9']))
+  })
+
+  it('offers nothing without the storage rows', () => {
+    expect(buildScopeOptions(inventory, 'storage', t)).toEqual([])
+    expect(buildStorageScopeOptions(undefined, inventory.clusters)).toEqual([])
+  })
+
+  it('resolves and formats a storage target as "storage · ConnectionName"', () => {
+    expect(resolveScopeTargetLabel({ ...inventory, storages }, 'storage', 'c1:pbs-main')).toBe('pbs-main')
+    expect(formatScopeTarget({ c1: 'Cluster 1' }, 'storage', 'c1:local')).toBe('local · Cluster 1')
+    expect(formatScopeTarget({}, 'storage', 'c1:local')).toBe('local · c1')
+    expect(formatScopeTarget({}, 'storage', 'broken')).toBe('broken')
   })
 })

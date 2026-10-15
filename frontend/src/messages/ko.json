@@ -4679,6 +4679,7 @@
       "clusterConnection": "클러스터 / 연결",
       "tag": "태그",
       "pool": "풀",
+      "storage": "스토리지",
       "inherit": "역할에서 상속됨"
     },
     "cannotModifySystem": "시스템 역할은 수정할 수 없습니다",
@@ -7016,12 +7017,15 @@
     "limitedToTag": "특정 태그가 있는 VM으로 제한",
     "poolScope": "풀",
     "limitedToPool": "특정 풀의 VM으로 제한",
+    "storageScope": "스토리지",
+    "limitedToStorage": "하나 이상의 스토리지로 제한 (ISO 업로드, 백업 대상)",
     "vdcScope": "vDC",
     "limitedToVdc": "가상 데이터센터로 제한",
     "tagUsedByVms": "VM {count}개",
     "poolContainsVms": "VM {count}개",
     "tags": "태그",
-    "pools": "풀"
+    "pools": "풀",
+    "storages": "스토리지"
   },
   "drsPage": {
     "balanced": "균형",

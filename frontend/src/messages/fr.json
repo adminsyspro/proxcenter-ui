@@ -6623,7 +6623,104 @@
     "requireGroup": "Exiger l'appartenance à un groupe pour se connecter",
     "allowedGroup": "Groupe autorisé",
     "addAllowedGroup": "Ajouter un groupe autorisé",
-    "groupMappingOrderDesc": "Les lignes sont lues de haut en bas : le premier groupe auquel appartient l'utilisateur détermine son rôle."
+    "groupMappingOrderDesc": "Les lignes sont lues de haut en bas : le premier groupe auquel appartient l'utilisateur détermine son rôle.",
+    "checks": {
+      "successSummary": "Connexion à l'annuaire réussie.",
+      "notCheckedHint": "Un test vert ne veut pas dire qu'un utilisateur peut se connecter. Lancez le diagnostic de recherche d'utilisateur ci-dessous avec un vrai nom d'utilisateur.",
+      "connect": "Connexion au serveur",
+      "bind": "Bind du compte de service",
+      "base_dn": "Base DN lisible",
+      "user_filter": "Syntaxe du filtre utilisateur",
+      "user_lookup": "Recherche d'un utilisateur avec le filtre",
+      "user_password": "Mot de passe utilisateur",
+      "group_membership": "Appartenance aux groupes et groupes autorisés",
+      "role_mapping": "Mapping groupes vers rôles",
+      "status": {
+        "passed": "vérifié",
+        "failed": "échec",
+        "warning": "avertissement",
+        "skipped": "non effectué",
+        "not_checked": "non vérifié"
+      }
+    },
+    "diag": {
+      "title": "Diagnostic de recherche d'utilisateur",
+      "description": "Recherche un nom d'utilisateur comme le fait la connexion (compte de service, Base DN, filtre utilisateur), puis applique les groupes autorisés et le mapping de rôles de ce formulaire, enregistré ou non. Lecture seule : aucun compte créé, aucun rôle affecté, rien n'est enregistré et le mot de passe n'est pas vérifié.",
+      "username": "Nom d'utilisateur de test",
+      "usernameHelper": "Saisissez-le comme l'utilisateur sur la page de connexion. Avec un filtre sAMAccountName, c'est le nom court, sans domaine.",
+      "run": "Rechercher l'utilisateur",
+      "running": "Recherche...",
+      "passwordNotChecked": "Le mot de passe n'est pas vérifié : un utilisateur trouvé ici peut encore être refusé pour un mot de passe faux ou expiré.",
+      "verdict": {
+        "ok": "{name} peut se connecter, si l'annuaire accepte son mot de passe.",
+        "invalid_filter": "Le filtre utilisateur est invalide, toute connexion LDAP échoue : {error}",
+        "lookup_error": "La recherche a échoué à l'étape {stage} : {error}",
+        "not_found": "Aucune entrée sous la Base DN ne correspond à ce nom d'utilisateur. La connexion est refusée comme identifiants invalides.",
+        "excluded_by_filter": "L'utilisateur existe dans l'annuaire, mais les autres clauses du filtre utilisateur l'excluent. La connexion est refusée avant le mapping de rôles.",
+        "ambiguous": "Plusieurs entrées correspondent à ce nom d'utilisateur. La connexion est refusée plutôt que d'en choisir une.",
+        "not_in_allowed_group": "L'utilisateur est trouvé, mais n'appartient à aucun des groupes autorisés. La connexion est refusée."
+      },
+      "stage": {
+        "input": "saisie",
+        "connect": "connexion",
+        "bind": "bind du compte de service",
+        "search": "recherche"
+      },
+      "search": "Recherche dans l'annuaire",
+      "filterUsed": "Filtre envoyé",
+      "baseDn": "Base DN",
+      "matches": "{count, plural, =0 {Aucune entrée trouvée} one {# entrée trouvée} other {# entrées trouvées}}",
+      "moreMatches": "(et plus)",
+      "identityFilter": "Même recherche avec les seules clauses du nom d'utilisateur",
+      "foundEntry": "Entrée examinée",
+      "groups": "Groupes renvoyés par l'annuaire ({attribute})",
+      "noGroups": "Aucun",
+      "nestedGroups": "Groupes atteints seulement par imbrication, que la connexion ne voit pas :",
+      "nestedVia": "via {group}",
+      "nestedTruncated": "L'exploration des groupes imbriqués s'est arrêtée avant la fin.",
+      "filterGroups": "Clauses de groupe du filtre utilisateur",
+      "clause": {
+        "direct": "membre direct",
+        "nested": "membre imbriqué seulement ({path}) : une clause memberOf simple ne le trouve pas",
+        "none": "non membre",
+        "unevaluated": "non évaluée, aucun utilisateur unique trouvé",
+        "recursive": "clause récursive, résolue par Active Directory"
+      },
+      "eligibility": "Groupes autorisés",
+      "allowed": {
+        "off": "Restriction désactivée : tout utilisateur trouvé par le filtre peut se connecter.",
+        "yes": "Membre d'un groupe autorisé.",
+        "no": "Membre d'aucun des groupes autorisés.",
+        "nestedOnly": "Atteints seulement par imbrication, donc non comptés : {groups}"
+      },
+      "role": {
+        "title": "Rôle à la connexion",
+        "titleIfAdmitted": "Rôle à la connexion, si l'utilisateur était admis",
+        "mapped": "{role}, par la ligne de mapping {group}.",
+        "defaultNew": "Aucune ligne de mapping ne correspond. Un nouveau compte reçoit le rôle par défaut : {role}.",
+        "keepExisting": "Aucune ligne de mapping ne correspond. Ce compte existant garde le rôle qu'il a déjà.",
+        "nestedOnly": "Lignes de mapping atteintes seulement par imbrication, donc ignorées : {groups}"
+      },
+      "account": {
+        "new": "Pas encore de compte ProxCenter pour {email} : la première connexion le crée.",
+        "existing": "Un compte ProxCenter existe déjà pour {email}.",
+        "disabled": "Un compte ProxCenter existe pour {email} mais il est désactivé."
+      },
+      "eligibilityVsRole": "Le filtre utilisateur et les groupes autorisés décident si l'utilisateur peut se connecter. Le mapping de rôles ne s'applique qu'ensuite et ne refuse jamais une connexion.",
+      "hint": {
+        "username_format": "Le nom d'utilisateur contient @ ou \\. Si le filtre cherche sAMAccountName, saisissez le nom court (jdupont), pas jdupont@domaine ni DOMAINE\\jdupont, ou cherchez plutôt userPrincipalName.",
+        "nested_membership": "ProxCenter ne lit que l'appartenance directe aux groupes. Sur Active Directory, la clause (memberOf:1.2.840.113556.1.4.1941:=CN=Groupe,OU=Groups,DC=exemple,DC=com) dans le filtre utilisateur trouve aussi les membres imbriqués, mais les groupes autorisés et le mapping de rôles comparent toujours les groupes directs.",
+        "placeholder_missing": "Le filtre utilisateur n'a pas de marqueur de nom d'utilisateur : chaque connexion cherche les mêmes entrées.",
+        "base_dn_scope": "Vérifiez que la Base DN contient l'entrée de l'utilisateur et que le compte de service peut la lire."
+      },
+      "error": {
+        "orchestrator_outdated": "L'orchestrateur est trop ancien pour ce diagnostic. Mettez-le à la même version que l'interface.",
+        "username_required": "Saisissez un nom d'utilisateur de test.",
+        "generic": "Le diagnostic a échoué : {error}"
+      }
+    },
+    "adUsernameHelp": "Nom d'utilisateur : avec un filtre sAMAccountName, les utilisateurs se connectent avec leur nom court (jdupont), sans domaine ni suffixe @.",
+    "adNestedHelp": "Groupes imbriqués : une clause memberOf simple ne trouve que les membres directs. Dans le filtre utilisateur, cette clause Active Directory admet aussi les membres imbriqués (les groupes autorisés et le mapping de rôles comparent toujours les groupes directs) :"
   },
   "oidc": {
     "description": "Configurez l'authentification OIDC/SSO pour permettre aux utilisateurs de se connecter via leur fournisseur d'identité d'entreprise (Keycloak, Azure AD, Okta, Google, Auth0, etc.).",

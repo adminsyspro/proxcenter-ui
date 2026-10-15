@@ -6597,7 +6597,104 @@
     "requireGroup": "Gruppenmitgliedschaft für Anmeldung erforderlich",
     "allowedGroup": "Erlaubte Gruppe",
     "addAllowedGroup": "Erlaubte Gruppe hinzufügen",
-    "groupMappingOrderDesc": "Die Zeilen werden von oben nach unten gelesen: Die erste Gruppe, der der Benutzer angehört, bestimmt seine Rolle."
+    "groupMappingOrderDesc": "Die Zeilen werden von oben nach unten gelesen: Die erste Gruppe, der der Benutzer angehört, bestimmt seine Rolle.",
+    "checks": {
+      "successSummary": "Verbindung zum Verzeichnis erfolgreich.",
+      "notCheckedHint": "Ein grüner Test bedeutet nicht, dass sich ein Benutzer anmelden kann. Führen Sie unten die Benutzersuche-Diagnose mit einem echten Benutzernamen aus.",
+      "connect": "Verbindung zum Server",
+      "bind": "Bind des Dienstkontos",
+      "base_dn": "Base DN lesbar",
+      "user_filter": "Syntax des Benutzerfilters",
+      "user_lookup": "Suche eines Benutzers mit dem Filter",
+      "user_password": "Benutzerpasswort",
+      "group_membership": "Gruppenmitgliedschaft und erlaubte Gruppen",
+      "role_mapping": "Zuordnung Gruppe zu Rolle",
+      "status": {
+        "passed": "geprüft",
+        "failed": "fehlgeschlagen",
+        "warning": "Warnung",
+        "skipped": "übersprungen",
+        "not_checked": "nicht geprüft"
+      }
+    },
+    "diag": {
+      "title": "Diagnose der Benutzersuche",
+      "description": "Sucht einen Benutzernamen wie die Anmeldung (Dienstkonto, Base DN, Benutzerfilter) und wendet dann die erlaubten Gruppen und die Rollenzuordnung dieses Formulars an, gespeichert oder nicht. Nur lesend: kein Konto wird angelegt, keine Rolle zugewiesen, nichts gespeichert, und das Passwort wird nicht geprüft.",
+      "username": "Test-Benutzername",
+      "usernameHelper": "So eingeben, wie der Benutzer es auf der Anmeldeseite tut. Mit einem sAMAccountName-Filter ist das der kurze Anmeldename ohne Domäne.",
+      "run": "Benutzer suchen",
+      "running": "Suche...",
+      "passwordNotChecked": "Das Passwort wird nicht geprüft: Ein hier gefundener Benutzer kann wegen eines falschen oder abgelaufenen Passworts trotzdem abgewiesen werden.",
+      "verdict": {
+        "ok": "{name} kann sich anmelden, sofern das Verzeichnis das Passwort akzeptiert.",
+        "invalid_filter": "Der Benutzerfilter ist ungültig, jede LDAP-Anmeldung schlägt fehl: {error}",
+        "lookup_error": "Die Suche ist im Schritt {stage} fehlgeschlagen: {error}",
+        "not_found": "Kein Eintrag unter der Base DN passt zu diesem Benutzernamen. Die Anmeldung wird als ungültige Anmeldedaten abgewiesen.",
+        "excluded_by_filter": "Der Benutzer existiert im Verzeichnis, aber die übrigen Klauseln des Benutzerfilters schließen ihn aus. Die Anmeldung wird vor der Rollenzuordnung abgewiesen.",
+        "ambiguous": "Mehrere Einträge passen zu diesem Benutzernamen. Die Anmeldung wird abgewiesen, statt einen auszuwählen.",
+        "not_in_allowed_group": "Der Benutzer wurde gefunden, gehört aber keiner der erlaubten Gruppen an. Die Anmeldung wird abgewiesen."
+      },
+      "stage": {
+        "input": "Eingabe",
+        "connect": "Verbindung",
+        "bind": "Bind des Dienstkontos",
+        "search": "Suche"
+      },
+      "search": "Verzeichnissuche",
+      "filterUsed": "Gesendeter Filter",
+      "baseDn": "Base DN",
+      "matches": "{count, plural, =0 {Kein passender Eintrag} one {# passender Eintrag} other {# passende Einträge}}",
+      "moreMatches": "(und weitere)",
+      "identityFilter": "Dieselbe Suche nur mit den Benutzernamen-Klauseln",
+      "foundEntry": "Untersuchter Eintrag",
+      "groups": "Vom Verzeichnis gelieferte Gruppen ({attribute})",
+      "noGroups": "Keine",
+      "nestedGroups": "Nur über Verschachtelung erreichte Gruppen, die die Anmeldung nicht sieht:",
+      "nestedVia": "über {group}",
+      "nestedTruncated": "Die Auflösung verschachtelter Gruppen wurde vorzeitig beendet.",
+      "filterGroups": "Gruppenklauseln des Benutzerfilters",
+      "clause": {
+        "direct": "direktes Mitglied",
+        "nested": "nur verschachteltes Mitglied ({path}): Eine einfache memberOf-Klausel findet es nicht",
+        "none": "kein Mitglied",
+        "unevaluated": "nicht ausgewertet, kein eindeutiger Benutzer gefunden",
+        "recursive": "rekursive Klausel, von Active Directory aufgelöst"
+      },
+      "eligibility": "Erlaubte Gruppen",
+      "allowed": {
+        "off": "Einschränkung aus: Jeder vom Filter gefundene Benutzer darf sich anmelden.",
+        "yes": "Mitglied einer erlaubten Gruppe.",
+        "no": "Mitglied keiner der erlaubten Gruppen.",
+        "nestedOnly": "Nur über Verschachtelung erreicht, daher nicht gezählt: {groups}"
+      },
+      "role": {
+        "title": "Rolle bei der Anmeldung",
+        "titleIfAdmitted": "Rolle bei der Anmeldung, falls der Benutzer zugelassen wäre",
+        "mapped": "{role}, aus der Zuordnungszeile {group}.",
+        "defaultNew": "Keine Zuordnungszeile passt. Ein neues Konto erhält die Standardrolle: {role}.",
+        "keepExisting": "Keine Zuordnungszeile passt. Dieses bestehende Konto behält seine bisherige Rolle.",
+        "nestedOnly": "Nur über Verschachtelung passende Zuordnungszeilen, daher ignoriert: {groups}"
+      },
+      "account": {
+        "new": "Noch kein ProxCenter-Konto für {email}: Die erste Anmeldung legt es an.",
+        "existing": "Für {email} besteht bereits ein ProxCenter-Konto.",
+        "disabled": "Für {email} besteht ein ProxCenter-Konto, es ist aber deaktiviert."
+      },
+      "eligibilityVsRole": "Benutzerfilter und erlaubte Gruppen entscheiden, ob sich der Benutzer überhaupt anmelden darf. Die Rollenzuordnung greift erst danach und weist nie eine Anmeldung ab.",
+      "hint": {
+        "username_format": "Der Benutzername enthält @ oder \\. Wenn der Filter sAMAccountName durchsucht, den kurzen Anmeldenamen (jdoe) eingeben, nicht jdoe@domäne oder DOMÄNE\\jdoe, oder stattdessen userPrincipalName durchsuchen.",
+        "nested_membership": "ProxCenter liest nur direkte Gruppenmitgliedschaften. Unter Active Directory findet die Klausel (memberOf:1.2.840.113556.1.4.1941:=CN=Gruppe,OU=Groups,DC=beispiel,DC=com) im Benutzerfilter auch verschachtelte Mitglieder, erlaubte Gruppen und Rollenzuordnung vergleichen aber weiterhin direkte Gruppen.",
+        "placeholder_missing": "Der Benutzerfilter hat keinen Platzhalter für den Benutzernamen: Jede Anmeldung sucht dieselben Einträge.",
+        "base_dn_scope": "Prüfen Sie, ob die Base DN den Benutzereintrag enthält und das Dienstkonto ihn lesen darf."
+      },
+      "error": {
+        "orchestrator_outdated": "Der Orchestrator ist für diese Diagnose zu alt. Aktualisieren Sie ihn auf dieselbe Version wie die Oberfläche.",
+        "username_required": "Geben Sie einen Test-Benutzernamen ein.",
+        "generic": "Die Diagnose ist fehlgeschlagen: {error}"
+      }
+    },
+    "adUsernameHelp": "Benutzername: Mit einem sAMAccountName-Filter melden sich Benutzer mit ihrem kurzen Anmeldenamen (jdoe) an, ohne Domäne oder @-Suffix.",
+    "adNestedHelp": "Verschachtelte Gruppen: Eine einfache memberOf-Klausel findet nur direkte Mitglieder. Im Benutzerfilter lässt diese Active-Directory-Klausel auch verschachtelte Mitglieder zu (erlaubte Gruppen und Rollenzuordnung vergleichen weiterhin direkte Gruppen):"
   },
   "oidc": {
     "description": "Konfigurieren Sie OIDC/SSO-Authentifizierung, damit Benutzer sich mit ihrem Unternehmens-Identity-Provider anmelden können (Keycloak, Azure AD, Okta, Google, Auth0 usw.).",

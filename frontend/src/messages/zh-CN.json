@@ -6627,7 +6627,104 @@
     "requireGroup": "登录时要求组成员资格",
     "allowedGroup": "允许的组",
     "addAllowedGroup": "添加允许的组",
-    "groupMappingOrderDesc": "各行自上而下读取：用户所属的第一个组决定其角色。"
+    "groupMappingOrderDesc": "各行自上而下读取：用户所属的第一个组决定其角色。",
+    "checks": {
+      "successSummary": "已成功连接到目录。",
+      "notCheckedHint": "测试通过并不代表用户可以登录。请在下方用真实用户名运行用户查找诊断。",
+      "connect": "连接服务器",
+      "bind": "服务账号绑定",
+      "base_dn": "Base DN 可读",
+      "user_filter": "用户过滤器语法",
+      "user_lookup": "用用户过滤器查找用户",
+      "user_password": "用户密码",
+      "group_membership": "组成员资格和允许的组",
+      "role_mapping": "组到角色的映射",
+      "status": {
+        "passed": "已检查",
+        "failed": "失败",
+        "warning": "警告",
+        "skipped": "已跳过",
+        "not_checked": "未检查"
+      }
+    },
+    "diag": {
+      "title": "用户查找诊断",
+      "description": "按登录的方式（服务账号、Base DN、用户过滤器）查找用户名，然后应用此表单中的允许组和角色映射，无论是否已保存。只读：不创建账号，不分配角色，不保存任何内容，也不检查密码。",
+      "username": "测试用户名",
+      "usernameHelper": "按用户在登录页面输入的方式填写。使用 sAMAccountName 过滤器时，即不带域名的短名称。",
+      "run": "查找用户",
+      "running": "正在查找...",
+      "passwordNotChecked": "不检查密码：在此找到的用户仍可能因密码错误或过期而被拒绝。",
+      "verdict": {
+        "ok": "只要目录接受其密码，{name} 即可登录。",
+        "invalid_filter": "用户过滤器无效，所有 LDAP 登录都会失败：{error}",
+        "lookup_error": "查找在 {stage} 步骤失败：{error}",
+        "not_found": "Base DN 下没有与该用户名匹配的条目。登录将以凭据无效被拒绝。",
+        "excluded_by_filter": "该用户存在于目录中，但用户过滤器的其他子句将其排除。登录在角色映射之前即被拒绝。",
+        "ambiguous": "有多个条目与该用户名匹配。登录被拒绝，而不是任选其一。",
+        "not_in_allowed_group": "找到了该用户，但其不属于任何允许的组。登录被拒绝。"
+      },
+      "stage": {
+        "input": "输入",
+        "connect": "连接",
+        "bind": "服务账号绑定",
+        "search": "搜索"
+      },
+      "search": "目录搜索",
+      "filterUsed": "发送的过滤器",
+      "baseDn": "Base DN",
+      "matches": "{count, plural, =0 {没有匹配的条目} other {# 个匹配的条目}}",
+      "moreMatches": "（还有更多）",
+      "identityFilter": "仅用用户名子句的同一搜索",
+      "foundEntry": "检查的条目",
+      "groups": "目录返回的组（{attribute}）",
+      "noGroups": "无",
+      "nestedGroups": "仅通过嵌套到达的组，登录时看不到：",
+      "nestedVia": "经由 {group}",
+      "nestedTruncated": "嵌套组展开已提前停止。",
+      "filterGroups": "用户过滤器中的组子句",
+      "clause": {
+        "direct": "直接成员",
+        "nested": "仅为嵌套成员（{path}）：普通 memberOf 子句无法匹配",
+        "none": "不是成员",
+        "unevaluated": "未评估，未找到唯一用户",
+        "recursive": "递归子句，由 Active Directory 解析"
+      },
+      "eligibility": "允许的组",
+      "allowed": {
+        "off": "限制已关闭：过滤器找到的任何用户都可以登录。",
+        "yes": "属于某个允许的组。",
+        "no": "不属于任何允许的组。",
+        "nestedOnly": "仅通过嵌套到达，因此不计入：{groups}"
+      },
+      "role": {
+        "title": "登录时的角色",
+        "titleIfAdmitted": "若用户被允许，登录时的角色",
+        "mapped": "{role}，来自映射行 {group}。",
+        "defaultNew": "没有匹配的映射行。新账号获得默认角色：{role}。",
+        "keepExisting": "没有匹配的映射行。此现有账号保留其已有角色。",
+        "nestedOnly": "仅通过嵌套匹配、因此被忽略的映射行：{groups}"
+      },
+      "account": {
+        "new": "{email} 尚无 ProxCenter 账号：首次登录时创建。",
+        "existing": "{email} 已有 ProxCenter 账号。",
+        "disabled": "{email} 有 ProxCenter 账号，但已被禁用。"
+      },
+      "eligibilityVsRole": "用户过滤器和允许的组决定用户能否登录。角色映射只在之后执行，从不拒绝登录。",
+      "hint": {
+        "username_format": "用户名包含 @ 或 \\。如果过滤器搜索 sAMAccountName，请输入短登录名（jdoe），而不是 jdoe@domain 或 DOMAIN\\jdoe，或改为搜索 userPrincipalName。",
+        "nested_membership": "ProxCenter 只读取直接组成员资格。在 Active Directory 中，用户过滤器里的 (memberOf:1.2.840.113556.1.4.1941:=CN=Group,OU=Groups,DC=example,DC=com) 子句也能匹配嵌套成员，但允许的组和角色映射仍只比较直接组。",
+        "placeholder_missing": "用户过滤器中没有用户名占位符：每次登录都会查找相同的条目。",
+        "base_dn_scope": "请确认 Base DN 包含该用户条目，且服务账号可以读取它。"
+      },
+      "error": {
+        "orchestrator_outdated": "编排器版本过旧，无法使用此诊断。请将其更新到与界面相同的版本。",
+        "username_required": "请输入测试用户名。",
+        "generic": "诊断失败：{error}"
+      }
+    },
+    "adUsernameHelp": "用户名：使用 sAMAccountName 过滤器时，用户以短登录名（jdoe）登录，不带域名或 @ 后缀。",
+    "adNestedHelp": "嵌套组：普通的 memberOf 子句只匹配直接成员。在用户过滤器中，下面的 Active Directory 子句也接纳嵌套成员（允许的组和角色映射仍只比较直接组）："
   },
   "oidc": {
     "description": "配置 OIDC/SSO 身份验证，允许用户使用企业身份提供商（Keycloak、Azure AD、Okta、Google、Auth0 等）登录。",

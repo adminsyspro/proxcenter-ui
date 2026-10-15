@@ -6623,7 +6623,104 @@
     "requireGroup": "Requerir pertenencia a grupo para iniciar sesión",
     "allowedGroup": "Grupo permitido",
     "addAllowedGroup": "Añadir grupo permitido",
-    "groupMappingOrderDesc": "Las filas se leen de arriba abajo: el primer grupo al que pertenece el usuario determina su rol."
+    "groupMappingOrderDesc": "Las filas se leen de arriba abajo: el primer grupo al que pertenece el usuario determina su rol.",
+    "checks": {
+      "successSummary": "Conexión con el directorio correcta.",
+      "notCheckedHint": "Una prueba en verde no significa que un usuario pueda iniciar sesión. Ejecute abajo el diagnóstico de búsqueda de usuario con un nombre de usuario real.",
+      "connect": "Conexión con el servidor",
+      "bind": "Bind de la cuenta de servicio",
+      "base_dn": "Base DN legible",
+      "user_filter": "Sintaxis del filtro de usuario",
+      "user_lookup": "Búsqueda de un usuario con el filtro",
+      "user_password": "Contraseña del usuario",
+      "group_membership": "Pertenencia a grupos y grupos permitidos",
+      "role_mapping": "Mapeo de grupos a roles",
+      "status": {
+        "passed": "verificado",
+        "failed": "fallido",
+        "warning": "advertencia",
+        "skipped": "omitido",
+        "not_checked": "no verificado"
+      }
+    },
+    "diag": {
+      "title": "Diagnóstico de búsqueda de usuario",
+      "description": "Busca un nombre de usuario como lo hace el inicio de sesión (cuenta de servicio, Base DN, filtro de usuario) y luego aplica los grupos permitidos y el mapeo de roles de este formulario, guardado o no. Solo lectura: no se crea ninguna cuenta, no se asigna ningún rol, no se guarda nada y no se verifica la contraseña.",
+      "username": "Nombre de usuario de prueba",
+      "usernameHelper": "Escríbalo como lo hace el usuario en la página de inicio de sesión. Con un filtro sAMAccountName, es el nombre corto, sin dominio.",
+      "run": "Buscar usuario",
+      "running": "Buscando...",
+      "passwordNotChecked": "La contraseña no se verifica: un usuario encontrado aquí aún puede ser rechazado por una contraseña incorrecta o caducada.",
+      "verdict": {
+        "ok": "{name} puede iniciar sesión, siempre que el directorio acepte su contraseña.",
+        "invalid_filter": "El filtro de usuario no es válido, todo inicio de sesión LDAP falla: {error}",
+        "lookup_error": "La búsqueda falló en el paso {stage}: {error}",
+        "not_found": "Ninguna entrada bajo la Base DN coincide con este nombre de usuario. El inicio de sesión se rechaza como credenciales no válidas.",
+        "excluded_by_filter": "El usuario existe en el directorio, pero las demás cláusulas del filtro de usuario lo excluyen. El inicio de sesión se rechaza antes del mapeo de roles.",
+        "ambiguous": "Varias entradas coinciden con este nombre de usuario. El inicio de sesión se rechaza en lugar de elegir una.",
+        "not_in_allowed_group": "El usuario existe, pero no pertenece a ninguno de los grupos permitidos. El inicio de sesión se rechaza."
+      },
+      "stage": {
+        "input": "entrada",
+        "connect": "conexión",
+        "bind": "bind de la cuenta de servicio",
+        "search": "búsqueda"
+      },
+      "search": "Búsqueda en el directorio",
+      "filterUsed": "Filtro enviado",
+      "baseDn": "Base DN",
+      "matches": "{count, plural, =0 {Ninguna entrada coincide} one {# entrada coincide} other {# entradas coinciden}}",
+      "moreMatches": "(y más)",
+      "identityFilter": "La misma búsqueda solo con las cláusulas del nombre de usuario",
+      "foundEntry": "Entrada examinada",
+      "groups": "Grupos devueltos por el directorio ({attribute})",
+      "noGroups": "Ninguno",
+      "nestedGroups": "Grupos alcanzados solo por anidamiento, que el inicio de sesión no ve:",
+      "nestedVia": "a través de {group}",
+      "nestedTruncated": "La expansión de grupos anidados se detuvo antes de terminar.",
+      "filterGroups": "Cláusulas de grupo del filtro de usuario",
+      "clause": {
+        "direct": "miembro directo",
+        "nested": "solo miembro anidado ({path}): una cláusula memberOf simple no lo encuentra",
+        "none": "no es miembro",
+        "unevaluated": "no evaluada, no se encontró un único usuario",
+        "recursive": "cláusula recursiva, resuelta por Active Directory"
+      },
+      "eligibility": "Grupos permitidos",
+      "allowed": {
+        "off": "Restricción desactivada: cualquier usuario que encuentre el filtro puede iniciar sesión.",
+        "yes": "Miembro de un grupo permitido.",
+        "no": "No es miembro de ninguno de los grupos permitidos.",
+        "nestedOnly": "Alcanzados solo por anidamiento, por lo tanto no cuentan: {groups}"
+      },
+      "role": {
+        "title": "Rol al iniciar sesión",
+        "titleIfAdmitted": "Rol al iniciar sesión, si el usuario fuera admitido",
+        "mapped": "{role}, por la fila de mapeo {group}.",
+        "defaultNew": "Ninguna fila de mapeo coincide. Una cuenta nueva recibe el rol por defecto: {role}.",
+        "keepExisting": "Ninguna fila de mapeo coincide. Esta cuenta existente conserva el rol que ya tiene.",
+        "nestedOnly": "Filas de mapeo alcanzadas solo por anidamiento, por lo tanto ignoradas: {groups}"
+      },
+      "account": {
+        "new": "Aún no hay cuenta de ProxCenter para {email}: el primer inicio de sesión la crea.",
+        "existing": "Ya existe una cuenta de ProxCenter para {email}.",
+        "disabled": "Existe una cuenta de ProxCenter para {email}, pero está desactivada."
+      },
+      "eligibilityVsRole": "El filtro de usuario y los grupos permitidos deciden si el usuario puede iniciar sesión. El mapeo de roles solo se aplica después y nunca rechaza un inicio de sesión.",
+      "hint": {
+        "username_format": "El nombre de usuario contiene @ o \\. Si el filtro busca sAMAccountName, escriba el nombre corto (jdoe), no jdoe@dominio ni DOMINIO\\jdoe, o busque en userPrincipalName.",
+        "nested_membership": "ProxCenter solo lee la pertenencia directa a grupos. En Active Directory, la cláusula (memberOf:1.2.840.113556.1.4.1941:=CN=Grupo,OU=Groups,DC=ejemplo,DC=com) en el filtro de usuario también encuentra miembros anidados, pero los grupos permitidos y el mapeo de roles siguen comparando grupos directos.",
+        "placeholder_missing": "El filtro de usuario no tiene marcador de nombre de usuario: cada inicio de sesión busca las mismas entradas.",
+        "base_dn_scope": "Compruebe que la Base DN contiene la entrada del usuario y que la cuenta de servicio puede leerla."
+      },
+      "error": {
+        "orchestrator_outdated": "El orquestador es demasiado antiguo para este diagnóstico. Actualícelo a la misma versión que la interfaz.",
+        "username_required": "Escriba un nombre de usuario de prueba.",
+        "generic": "El diagnóstico falló: {error}"
+      }
+    },
+    "adUsernameHelp": "Nombre de usuario: con un filtro sAMAccountName, los usuarios inician sesión con su nombre corto (jdoe), sin dominio ni sufijo @.",
+    "adNestedHelp": "Grupos anidados: una cláusula memberOf simple solo encuentra miembros directos. En el filtro de usuario, esta cláusula de Active Directory también admite miembros anidados (los grupos permitidos y el mapeo de roles siguen comparando grupos directos):"
   },
   "oidc": {
     "description": "Configure la autenticación OIDC/SSO para permitir que los usuarios inicien sesión con su proveedor de identidad corporativo (Keycloak, Azure AD, Okta, Google, Auth0, etc.).",

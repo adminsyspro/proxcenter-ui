@@ -33,3 +33,19 @@ describe("parseVmConfig disk bus position", () => {
     expect(d.unitNumber).toBeUndefined()
   })
 })
+
+describe("parseVmConfig CBT state", () => {
+  const withCbt = (val: string) => answer("") + `<propSet><name>config.changeTrackingEnabled</name><val xsi:type="xsd:boolean">${val}</val></propSet>`
+
+  it("reports CBT the customer already enabled, so a warm job leaves it on (roadmap#57)", () => {
+    expect(parseVmConfig(withCbt("true")).changeTrackingEnabled).toBe(true)
+  })
+
+  it("reports CBT off, so a warm job that enables it switches it back off", () => {
+    expect(parseVmConfig(withCbt("false")).changeTrackingEnabled).toBe(false)
+  })
+
+  it("leaves the state unknown when vSphere does not return it", () => {
+    expect(parseVmConfig(answer("")).changeTrackingEnabled).toBeUndefined()
+  })
+})

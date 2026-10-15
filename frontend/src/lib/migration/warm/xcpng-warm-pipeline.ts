@@ -30,7 +30,7 @@ import {
 } from "./apply"
 import { createTargetVmShell, provisionBlockTargets, markVolumesCopied } from "./target-provision"
 import { cleanShutdownAndConfirm, isXapiGuestAgentMissing, type PowerOffOps } from "./power-off"
-import { attachDisksAndBoot, verifySampledFirstBlock } from "./finish"
+import { attachDisksAndBoot, removeTargetVmOnFailure, unmapTargetVolumes, verifySampledFirstBlock } from "./finish"
 import { startXapiReader, stopXapiReader, readAllocatedExtents, type XapiReaderHandle } from "./xapi-reader"
 import { checkNbdNodePreflight } from "./xcpng-node-preflight"
 import { startSessionKeepAlive } from "./session-keepalive"
@@ -81,7 +81,21 @@ export async function runXcpngWarmMigration(jobId: string, config: WarmMigration
   const allocatedVolumes: AllocatedVolume[] = []
   const activeReaders: XapiReaderHandle[] = []
   const targetDev = new Map<number, string>()  // disk position -> device path
+  let pveConn: any = null
+  let createdVmid: number | null = null        // set once THIS job created the target VM
+  const cbtEnabledVdis: string[] = []          // VDIs whose CBT was off until we switched it on
   const stopHeartbeat = startJobHeartbeat({ jobId, prisma })
+
+  // Give the source back CBT the way we found it: off only where we switched it
+  // on, so the CBT a backup product relies on is never touched. Never throws.
+  const restoreSourceCbt = async () => {
+    if (!session) return
+    for (const ref of cbtEnabledVdis.splice(0)) {
+      await xapiDisableCbt(session, ref).catch(async (e: any) => {
+        await appendLog(jobId, `Could not disable CBT on source disk ${ref} again: ${e?.message || e}. It was off before the migration.`, "warn").catch(() => {})
+      })
+    }
+  }
 
   try {
     await updateJob(jobId, "planning")
@@ -97,7 +111,7 @@ export async function runXcpngWarmMigration(jobId: string, config: WarmMigration
     await appendLog(jobId, `Authenticated to ${session.baseUrl} as ${user}`, "success")
     stopKeepAlive = startSessionKeepAlive(() => xapiKeepAlive(session!), KEEPALIVE_MS)
 
-    const pveConn = await getConnectionById(config.targetConnectionId)
+    pveConn = await getConnectionById(config.targetConnectionId)
     nodeIp = await getNodeSshEndpointForMigration(prisma, config.targetConnectionId, config.targetNode, pveConn.baseUrl)
 
     vmRef = await xapiVmRefByUuid(session, config.sourceVmId)
@@ -124,12 +138,15 @@ export async function runXcpngWarmMigration(jobId: string, config: WarmMigration
     // ── enabling_cbt ──
     await updateJob(jobId, "enabling_cbt")
     if (useCbt) {
-      for (const d of vmConfig.disks) await xapiEnableCbt(session, d.vdiRef!)
-      await appendLog(jobId, "CBT enabled on source disks", "success")
+      for (const d of vmConfig.disks) if (await xapiEnableCbt(session, d.vdiRef!)) cbtEnabledVdis.push(d.vdiRef!)
+      await appendLog(jobId, cbtEnabledVdis.length === vmConfig.disks.length
+        ? "CBT enabled on source disks"
+        : `CBT enabled on ${cbtEnabledVdis.length} of ${vmConfig.disks.length} source disk(s), already on for the others (left as is)`, "success")
     }
     if (targetVmid == null) targetVmid = Number(await pveFetch<number | string>(pveConn as any, "/cluster/nextid"))
     const pveParams = mapXoToPveConfig(vmConfig, targetVmid, config.targetStorage, config.networkBridge, config.vlanTag, config.cpuType)
     const shellConf = await createTargetVmShell(pveConn as any, config.targetNode, pveParams)
+    createdVmid = targetVmid
     await updateJob(jobId, "enabling_cbt", { targetVmid })
     await appendLog(jobId, `Target VM ${targetVmid} created on ${config.targetNode}`, "success")
 
@@ -312,7 +329,7 @@ export async function runXcpngWarmMigration(jobId: string, config: WarmMigration
       await appendLog(jobId, "Source powered off (confirmed): applying final delta", "success")
       const fin = await runPass("cutover", baseline, { status: "cutover", currentStep: "cutover", rangeStart: 95, rangeEnd: 98 })
       await destroySnapshot(fin.snap)
-      for (const d of vmConfig.disks) await xapiDisableCbt(session, d.vdiRef!).catch(() => {})
+      await restoreSourceCbt()
     } else {
       // ── checksum fallback: source off for the whole copy, one block-diff pass per disk ──
       await updateJob(jobId, "full_copy", { currentStep: "source_shutdown", progress: 10 })
@@ -359,6 +376,7 @@ export async function runXcpngWarmMigration(jobId: string, config: WarmMigration
       })
     }
 
+    await unmapTargetVolumes(config.targetConnectionId, nodeIp, allocatedVolumes)
     await attachDisksAndBoot({
       jobId, pveConn: pveConn as any, node: config.targetNode, vmid: targetVmid, diskCount: vmConfig.disks.length, diskSlots: pveParams.diskSlots, bootDiskSlot: pveParams.bootDiskSlot,
       allocatedVolumes, startAfterMigration: config.startAfterMigration, convertDisksToQcow2: config.convertDisksToQcow2 === true, targetStorage: config.targetStorage,
@@ -390,11 +408,15 @@ export async function runXcpngWarmMigration(jobId: string, config: WarmMigration
       }
     }
     // Free the target volumes that never held a complete copy; keep the ones that do (#612).
+    await unmapTargetVolumes(config.targetConnectionId, nodeIp, allocatedVolumes)
     for (const v of volumesToFree(allocatedVolumes)) {
-      if (nodeIp && v.rbdMapped && v.devicePath) await executeSSH(config.targetConnectionId, nodeIp, `rbd unmap "${v.devicePath}" 2>/dev/null`).catch(() => {})
       if (nodeIp) await executeSSH(config.targetConnectionId, nodeIp, `pvesm free ${shellEscape(v.volumeId)} 2>/dev/null`, PVESM_FREE_TIMEOUT_MS).catch(() => {})
     }
     for (const v of volumesToKeep(allocatedVolumes)) await appendLog(jobId, `Kept target volume ${v.volumeId}: it holds a completed copy of the source disk. Remove it manually from the storage if you do not want it.`, "warn").catch(() => {})
+    if (createdVmid != null && pveConn) {
+      await removeTargetVmOnFailure({ jobId, pveConn, node: config.targetNode, vmid: createdVmid, allocatedVolumes })
+    }
+    await restoreSourceCbt()
     throw err
   } finally {
     stopHeartbeat()

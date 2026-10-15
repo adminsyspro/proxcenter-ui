@@ -227,6 +227,7 @@ export async function soapGetVmConfig(session: SoapSession, vmid: string): Promi
           <urn:pathSet>config.uuid</urn:pathSet>
           <urn:pathSet>config.firmware</urn:pathSet>
           <urn:pathSet>config.files.vmPathName</urn:pathSet>
+          <urn:pathSet>config.changeTrackingEnabled</urn:pathSet>
           <urn:pathSet>config.hardware.device</urn:pathSet>
           <urn:pathSet>runtime.powerState</urn:pathSet>
           <urn:pathSet>storage.perDatastoreUsage</urn:pathSet>
@@ -905,6 +906,12 @@ export interface EsxiVmConfig {
   toolsStatus?: string
   /** "guestToolsRunning" | "guestToolsNotRunning" | "guestToolsExecutingScripts". */
   toolsRunningStatus?: string
+  /**
+   * Changed Block Tracking state before we touch the VM. A warm migration only
+   * switches CBT back off when it was the one turning it on: a backup product
+   * (Veeam & co) relies on CBT the customer enabled.
+   */
+  changeTrackingEnabled?: boolean
 }
 
 /**
@@ -1023,10 +1030,13 @@ export function parseVmConfig(xml: string): EsxiVmConfig {
     extractProp(xml, "summary.guest.toolsRunningStatus") ||
     undefined
 
+  const cbt = extractProp(xml, "config.changeTrackingEnabled")
+
   return {
     name, guestOS, guestId, numCPU, numCoresPerSocket, sockets, memoryMB,
     firmware, uuid, vmxVersion, vmPathName, powerState, committed, disks, nics, snapshotCount,
     toolsStatus, toolsRunningStatus,
+    changeTrackingEnabled: cbt === "true" ? true : cbt === "false" ? false : undefined,
   }
 }
 

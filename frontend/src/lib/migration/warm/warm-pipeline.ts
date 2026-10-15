@@ -12,7 +12,7 @@ import {
 } from "@/lib/vmware/soap"
 import type { SoapSession, EsxiVmConfig, EsxiDiskInfo } from "@/lib/vmware/soap"
 import {
-  cbtEligibility, soapEnableCbt, queryAllChangedAreas, soapGetSnapshotChangeIds,
+  cbtEligibility, soapEnableCbt, soapDisableCbt, queryAllChangedAreas, soapGetSnapshotChangeIds,
   soapGuestShutdown, soapWaitPoweredOff, soapKeepAlive,
 } from "@/lib/vmware/cbt"
 import { mapEsxiToPveConfig } from "../configMapper"
@@ -41,7 +41,7 @@ import {
 } from "./apply"
 import { createTargetVmShell, provisionBlockTargets, markVolumesCopied } from "./target-provision"
 import { cleanShutdownAndConfirm, isVmwareToolsUnavailable, type PowerOffOps } from "./power-off"
-import { attachDisksAndBoot, verifySampledFirstBlock } from "./finish"
+import { attachDisksAndBoot, removeTargetVmOnFailure, unmapTargetVolumes, verifySampledFirstBlock } from "./finish"
 import { type SshTarget } from "@/lib/ssh/node-endpoint-core"
 
 // ── Pure convergence planning (unit-tested) ──
@@ -204,6 +204,9 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
   let stopKeepAlive: (() => void) | null = null
   let targetVmid: number | null = config.targetVmid ?? null
   let nodeIp: SshTarget = ""                                   // resolved in planning; used by failure cleanup
+  let pveConn: any = null
+  let createdVmid: number | null = null             // set once THIS job created the target VM
+  let cbtEnabledByUs = false                        // CBT was off on the source and we switched it on
   const vmKey = `${config.sourceConnectionId}:${config.sourceVmId}`
   let acquiredVmLock = false
   const ourSnapshots: string[] = []                 // MORs WE created — cleaned up by specific MOR
@@ -243,7 +246,7 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
     const esxiUrl = esxiConn.baseUrl.replace(/\/$/, "")
     const esxiHost = new URL(esxiUrl).hostname
 
-    const pveConn = await getConnectionById(config.targetConnectionId)
+    pveConn = await getConnectionById(config.targetConnectionId)
     nodeIp = await getNodeSshEndpointForMigration(prisma, config.targetConnectionId, config.targetNode, (pveConn as any).baseUrl)
 
     soapSession = await soapLogin(esxiUrl, username, password, esxiConn.insecureTLS)
@@ -316,11 +319,19 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
 
     // ── enabling_cbt: enable CBT + provision the target VM shell and raw volumes ──
     await updateJob(jobId, "enabling_cbt")
-    if (useCbt) { await soapEnableCbt(soapSession, config.sourceVmId); await appendLog(jobId, "CBT enabled on source", "success") }
+    if (useCbt && vmConfig.changeTrackingEnabled === true) {
+      // Someone else's CBT (a backup product, usually): use it, and leave it on.
+      await appendLog(jobId, "CBT already enabled on source, left as is", "info")
+    } else if (useCbt) {
+      await soapEnableCbt(soapSession, config.sourceVmId)
+      cbtEnabledByUs = true
+      await appendLog(jobId, "CBT enabled on source", "success")
+    }
 
     if (targetVmid == null) targetVmid = Number(await pveFetch<number | string>(pveConn as any, "/cluster/nextid"))
     const pveParams = mapEsxiToPveConfig(vmConfig, targetVmid, config.targetStorage, config.networkBridge, config.vlanTag, config.cpuType)
     const shellConf = await createTargetVmShell(pveConn, config.targetNode, pveParams)
+    createdVmid = targetVmid
     await updateJob(jobId, "enabling_cbt", { targetVmid })
     await appendLog(jobId, `Target VM ${targetVmid} created on ${config.targetNode}`, "success")
 
@@ -639,12 +650,16 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
         },
       })
     }
+    await unmapTargetVolumes(config.targetConnectionId, nodeIp, allocatedVolumes)
     await attachDisksAndBoot({
       jobId, pveConn, node: config.targetNode, vmid: targetVmid, diskCount: vmConfig.disks.length,
       diskSlots: pveParams.diskSlots, bootDiskSlot: pveParams.bootDiskSlot, allocatedVolumes,
       startAfterMigration: config.startAfterMigration, convertDisksToQcow2: config.convertDisksToQcow2 === true,
       targetStorage: config.targetStorage,
     })
+
+    // The source is powered off for good: give it back CBT the way we found it.
+    await restoreSourceCbt(jobId, soapSession, config.sourceVmId, cbtEnabledByUs)
 
     await updateJob(jobId, "completed", { progress: 100 })
     // Non-fatal: a failing log append after the terminal write must not throw
@@ -657,6 +672,12 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
     await appendLog(jobId, `Warm migration failed: ${err?.message || err}`, "error").catch(() => {})
     // Best-effort cleanup: stop readers, remove OUR snapshots (specific MOR), free orphan volumes.
     await cleanupOnFailure(jobId, config, soapSession, ourSnapshots, allocatedVolumes, activeReaders, nodeIp).catch(() => {})
+    // After the volumes: the VM goes only when it holds no completed copy (#612),
+    // and CBT only once our snapshots are gone, which vSphere requires.
+    if (createdVmid != null && pveConn) {
+      await removeTargetVmOnFailure({ jobId, pveConn, node: config.targetNode, vmid: createdVmid, allocatedVolumes })
+    }
+    await restoreSourceCbt(jobId, soapSession, config.sourceVmId, cbtEnabledByUs)
     throw err
   } finally {
     stopHeartbeat()
@@ -664,6 +685,20 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
     if (soapSession) await soapLogout(soapSession).catch(() => {})
     unregisterJob(jobId)
     if (acquiredVmLock) releaseVmLock(vmKey)
+  }
+}
+
+/**
+ * Switch CBT back off on the source when this job switched it on. Never throws:
+ * a source that keeps CBT is harmless, a cleanup that masks the real error is not.
+ */
+async function restoreSourceCbt(jobId: string, session: SoapSession | null, sourceVmId: string, enabledByUs: boolean): Promise<void> {
+  if (!enabledByUs || !session) return
+  try {
+    await soapDisableCbt(session, sourceVmId)
+    await appendLog(jobId, "CBT disabled on source again (it was off before the migration)", "info").catch(() => {})
+  } catch (e: any) {
+    await appendLog(jobId, `Could not disable CBT on the source again: ${e?.message || e}. It was off before the migration; switch it off in vSphere if you do not want it.`, "warn").catch(() => {})
   }
 }
 
@@ -700,11 +735,11 @@ async function cleanupOnFailure(
     await sweepWarmSnapshots(session, config.sourceVmId,
       msg => appendLog(jobId, msg, "warn")).catch(() => {})
   }
-  // Unmap RBD + free volumes the VM never referenced (orphans). volumesToFree also
+  // Unmap every RBD volume (a kept one too), then free the volumes the VM never referenced (orphans). volumesToFree also
   // covers a volume created by an allocation that reported a failure, and skips the
   // slots whose allocation never started.
+  await unmapTargetVolumes(config.targetConnectionId, nodeIp, allocatedVolumes)
   for (const v of volumesToFree(allocatedVolumes)) {
-    if (nodeIp && v.rbdMapped && v.devicePath) await executeSSH(config.targetConnectionId, nodeIp, `rbd unmap "${v.devicePath}" 2>/dev/null`).catch(() => {})
     // A `saferemove` LVM storage zeroes the volume before removing it, which takes
     // far longer than the 30 s executeSSH default.
     if (nodeIp) await executeSSH(config.targetConnectionId, nodeIp, `pvesm free ${shellEscape(v.volumeId)} 2>/dev/null`, PVESM_FREE_TIMEOUT_MS).catch(() => {})

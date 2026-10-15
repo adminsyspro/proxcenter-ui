@@ -385,7 +385,7 @@ describe('GET /api/v1/connections/[id]/storage: node- and storage-scoped callers
   const rows = async () => {
     const res = await callRoute(GET as any, { params: { id: 'c1' } })
     const body = await readJson<any>(res)
-    return { status: res.status, rows: (body.data || []).map((s: any) => `${s.storage}@${s.shared ? 'shared' : s.node}`).sort() }
+    return { status: res.status, rows: (body.data || []).map((s: any) => `${s.storage}@${s.shared ? 'shared' : s.node}`).sort((a: string, b: string) => Number(a > b) - Number(a < b)) }
   }
 
   beforeEach(() => {

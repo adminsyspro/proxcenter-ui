@@ -92,6 +92,18 @@ describe('checkPermission on a "storage" resource', () => {
     expect(statusOf(await checkPermission(PERMISSIONS.STORAGE_UPLOAD, 'node', `${CONN}:pve1`))).toBe(403)
   })
 
+  it('a node grant does not open a storage named like the node', async () => {
+    grantRoles([{ permissions: ['storage.upload'], scopeType: 'node', scopeTarget: `${CONN}:backup` }])
+    expect(statusOf(await checkPermission(PERMISSIONS.STORAGE_UPLOAD, 'storage', buildStorageResourceId(CONN, 'backup')))).toBe(403)
+    // The node itself and its guests are still covered.
+    expect(await checkPermission(PERMISSIONS.STORAGE_UPLOAD, 'node', `${CONN}:backup`)).toBeNull()
+  })
+
+  it('a vm grant whose target equals a storage id does not open the storage', async () => {
+    grantRoles([{ permissions: ['storage.upload'], scopeType: 'vm', scopeTarget: `${CONN}:backup` }])
+    expect(statusOf(await checkPermission(PERMISSIONS.STORAGE_UPLOAD, 'storage', buildStorageResourceId(CONN, 'backup')))).toBe(403)
+  })
+
   it('connection and global grants keep covering every storage of the cluster', async () => {
     grantRoles([{ permissions: ['storage.upload'], scopeType: 'connection', scopeTarget: CONN }])
     expect(await checkPermission(PERMISSIONS.STORAGE_UPLOAD, 'storage', LOCAL)).toBeNull()

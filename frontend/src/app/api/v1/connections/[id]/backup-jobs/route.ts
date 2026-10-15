@@ -8,6 +8,7 @@ import { buildStorageResourceId, checkPermission, filterStoragesByGrant, getRequ
 import { getCurrentTenantId } from "@/lib/tenant"
 import { getTenantInfrastructureScope, maskingScope } from "@/lib/tenant/infraScope"
 import { getAllowedJobPools, isJobOwnedByTenantPools, validateTenantJobBody, validateTenantJobInfra } from "@/lib/vdc/backupJobs"
+import { denyJobGuestsOutsideBackupRight, jobSelection } from "@/lib/backups/jobGuestScope"
 import { writableStoragesFor } from "@/lib/vdc/scope"
 
 export const runtime = "nodejs"
@@ -298,6 +299,15 @@ export async function POST(req: Request, ctx: RouteContext) {
     }
 
     const conn = await getConnectionById(id)
+
+    // A storage-scoped caller holds the destination, not the guests: the job
+    // must name its guests and each must carry vm.backup (issue #921).
+    const createPerimeter = target ? await getRequestStorageGrantPerimeter(id, PERMISSIONS.BACKUP_JOB_CREATE) : null
+    if (createPerimeter?.restricted) {
+      const guests = (await pveFetch<any[]>(conn, `/cluster/resources?type=vm`)) || []
+      const guestsDenied = await denyJobGuestsOutsideBackupRight(id, jobSelection(body), guests)
+      if (guestsDenied) return guestsDenied
+    }
 
     // Tenant guard: enforce pool-only selection bound to one of the
     // tenant's vDC pools on this connection AND keep the targeted

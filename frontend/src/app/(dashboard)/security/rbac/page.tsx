@@ -1213,10 +1213,16 @@ return (
     }
 
     // Plusieurs ressources
+    const countLabelKey: Record<string, string> = {
+      vm: 'rbacPage.vmsCts',
+      node: 'rbac.scopes.node',
+      storage: 'rbacPage.storages',
+    }
+
     return (
       <Tooltip title={row.scope_targets.join('\n')}>
         <Chip
-          label={`${count} ${row.scope_type === 'vm' ? t('rbacPage.vmsCts') : row.scope_type === 'node' ? t('rbac.scopes.node') : row.scope_type === 'storage' ? t('rbacPage.storages') : t('rbac.scopes.connection')}`}
+          label={`${count} ${t(countLabelKey[row.scope_type] ?? 'rbac.scopes.connection')}`}
           size='small'
           variant='outlined'
           sx={{ height: 22, fontSize: '0.75rem' }}

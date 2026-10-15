@@ -42,6 +42,11 @@ describe('hasGrantOn (client mirror of scopeMatches, #921)', () => {
     expect(grantCoversResource({ scope_type: 'bogus', scope_target: 'c1' }, 'storage', 'c1:local')).toBe(false)
   })
 
+  it('a node named like a storage does not open the storage', () => {
+    expect(grantCoversResource({ scope_type: 'node', scope_target: 'c1:backup' }, 'storage', 'c1:backup')).toBe(false)
+    expect(grantCoversResource({ scope_type: 'node', scope_target: 'c1:backup' }, 'node', 'c1:backup')).toBe(true)
+  })
+
   it('a storage named like a node does not open the node', () => {
     expect(grantCoversResource({ scope_type: 'storage', scope_target: 'c1:pve1' }, 'node', 'c1:pve1')).toBe(false)
     expect(grantCoversResource({ scope_type: 'vm', scope_target: 'c1:pve1' }, 'node', 'c1:pve1')).toBe(false)

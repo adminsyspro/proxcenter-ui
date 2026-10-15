@@ -10,6 +10,7 @@ import { buildStorageResourceId, checkPermission, getRequestStorageGrantPerimete
 import { getCurrentTenantId } from "@/lib/tenant"
 import { getTenantInfrastructureScope, maskingScope } from "@/lib/tenant/infraScope"
 import { getAllowedJobPools, isJobOwnedByTenantPools, validateTenantJobBody, validateTenantJobInfra } from "@/lib/vdc/backupJobs"
+import { denyJobGuestsOutsideBackupRight, jobSelection } from "@/lib/backups/jobGuestScope"
 
 /**
  * Connection-level RBAC check with the storage-scope fallback (issue #921): a
@@ -141,6 +142,13 @@ export async function PUT(req: Request, ctx: RouteContext) {
     if ('error' in owned) return owned.error
     const outside = outsideJobStorage(owned.job, perimeter, PERMISSIONS.BACKUP_JOB_EDIT)
     if (outside) return outside
+    // A storage-scoped editor holds the destination, not the guests: the job
+    // as edited must name its guests and each must carry vm.backup (issue #921).
+    if (perimeter?.restricted) {
+      const guests = (await pveFetch<any[]>(conn, `/cluster/resources?type=vm`)) || []
+      const guestsDenied = await denyJobGuestsOutsideBackupRight(id, jobSelection(body, owned.job), guests)
+      if (guestsDenied) return guestsDenied
+    }
     // And: if the body changes the selection (selectionMode/pool/vmid),
     // re-validate against the tenant's pools to keep them inside their
     // own vDC. Provider has no extra restriction.

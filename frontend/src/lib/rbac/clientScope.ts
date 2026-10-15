@@ -40,8 +40,10 @@ export function grantCoversResource(
     case 'global':
       return true
     case 'connection':
-    case 'node':
       return !!target && (resourceId === target || resourceId.startsWith(`${target}:`))
+    case 'node':
+      // A storage id has a node id's shape: a node grant never opens one (#921).
+      return resourceType !== 'storage' && !!target && (resourceId === target || resourceId.startsWith(`${target}:`))
     case 'vm':
       return resourceType === 'vm' && !!target && resourceId === target
     case 'storage':

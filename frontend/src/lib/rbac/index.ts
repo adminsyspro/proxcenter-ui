@@ -461,6 +461,9 @@ function scopeMatches(
       // scopeTarget format: "connectionId:nodeName"
       // resourceId format for VM: "connectionId:nodeName:type:vmid"
       // resourceId format for node: "connectionId:nodeName"
+      // A storage id has the node id's shape ("connId:name"): a node grant
+      // must never open a storage named like the node (issue #921).
+      if (resourceType === "storage") return false
       if (scopeTarget) {
         // Check if resourceId starts with the node scope target
         // This handles both node resources and VM resources on that node
@@ -471,8 +474,8 @@ function scopeMatches(
 return false
 
     case "vm":
-      // VM scope matches exactly
-      return resourceId === scopeTarget
+      // VM scope matches exactly, and never a storage (issue #921)
+      return resourceType !== "storage" && resourceId === scopeTarget
 
     case "tag":
       if (!resourceMeta?.tags || !scopeTarget) return false

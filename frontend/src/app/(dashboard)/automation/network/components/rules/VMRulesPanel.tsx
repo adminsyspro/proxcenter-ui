@@ -517,7 +517,7 @@ export default function VMRulesPanel({ vmFirewallData, securityGroups, loadingVM
           </Box>
           <IconButton onClick={() => setVmRuleDialogOpen(false)} size="small"><i className="ri-close-line" /></IconButton>
         </DialogTitle>
-        <DialogContent sx={{ pt: 2 }}>
+        <DialogContent sx={{ pt: '20px !important' }}>
           <Grid container spacing={2.5}>
             <Grid size={{ xs: 6, sm: 2.5 }}>
               <FormControl fullWidth size="small">

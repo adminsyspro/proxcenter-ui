@@ -297,6 +297,8 @@ export interface RestoreOptions {
   nameSuffix?: string
   /** Only sent in source+overwrite mode. */
   force?: boolean
+  /** false restores the guests without their backed-up tags (#965). */
+  restoreTags?: boolean
 }
 
 export interface RestoreRequest {
@@ -309,6 +311,7 @@ export interface RestoreRequest {
   start?: boolean
   force?: boolean
   name?: string
+  restoreTags?: false
 }
 
 /**
@@ -345,6 +348,8 @@ export function buildRestoreRequest(
   // ones, and two live guests sharing a MAC collide on the IPAM's
   // (subnet, mac) unique index as well as on the wire.
   if (options.unique) body.unique = true
+  // Only the opt-out goes on the wire: absent keeps PVE's behaviour.
+  if (options.restoreTags === false) body.restoreTags = false
 
   const suffix = (options.nameSuffix || '').trim()
   if (suffix && !isLxc && entry.guest.vmName) {
@@ -362,6 +367,8 @@ export interface RestoreJob {
   vmid: number
   targetVmid: number | null
   label: string
+  /** Guest type of the restore, for the post-restore tags check (#965). */
+  type?: 'qemu' | 'lxc'
   status: RestoreJobStatus
   upid?: string
   error?: string

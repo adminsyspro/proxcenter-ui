@@ -138,7 +138,8 @@ describe("POST /api/v1/connections/[id]/nodes/[node]/restore -- raw archive voli
     const res = await callRoute(POST, {
       method: "POST",
       params: { id: "pve-1", node: "node1" },
-      body: { vmid: 111, archive: VZDUMP_LXC_VOLID, type: "lxc" },
+      // An explicit target: the "default storage" resolution has its own block.
+      body: { vmid: 111, archive: VZDUMP_LXC_VOLID, type: "lxc", storage: "local-lvm" },
     })
 
     expect(res.status).toBe(200)
@@ -354,5 +355,241 @@ describe("POST /api/v1/connections/[id]/nodes/[node]/restore -- read-only ISO li
     })
 
     expect(res.status).not.toBe(403)
+  })
+})
+
+describe("POST restore -- restoreTags option (#965)", () => {
+  const PBS_VOLID = "pbs:backup/vm/111/2026-10-14T07:26:09Z"
+
+  it("keeps PVE's behaviour when restoreTags is absent or true: no tags override", async () => {
+    const { POST } = await import("./route")
+
+    for (const extra of [{}, { restoreTags: true }]) {
+      pveFetchMock.mockClear()
+      const res = await callRoute(POST, {
+        method: "POST",
+        params: { id: "pve-1", node: "node1" },
+        body: { vmid: 111, archive: PBS_VOLID, type: "qemu", ...extra },
+      })
+      expect(res.status).toBe(200)
+      expect(postedParams(pveFetchMock.mock.calls[0]).has("tags")).toBe(false)
+    }
+  })
+
+  it("qemu: restoreTags=false sends an empty tags override with the restore itself, start and live-restore included", async () => {
+    const { POST } = await import("./route")
+
+    const res = await callRoute(POST, {
+      method: "POST",
+      params: { id: "pve-1", node: "node1" },
+      body: { vmid: 111, archive: PBS_VOLID, type: "qemu", restoreTags: false, start: true, live: true },
+    })
+
+    expect(res.status).toBe(200)
+    expect(pveFetchMock).toHaveBeenCalledTimes(1)
+    const params = postedParams(pveFetchMock.mock.calls[0])
+    expect(params.has("tags")).toBe(true)
+    expect(params.get("tags")).toBe("")
+    expect(params.get("start")).toBe("1")
+    expect(params.get("live-restore")).toBe("1")
+  })
+
+  it("lxc: restoreTags=false sends the same override on the pct restore", async () => {
+    const { POST } = await import("./route")
+
+    const res = await callRoute(POST, {
+      method: "POST",
+      params: { id: "pve-1", node: "node1" },
+      body: { vmid: 111, archive: VZDUMP_LXC_VOLID, type: "lxc", storage: "local-lvm", restoreTags: false },
+    })
+
+    expect(res.status).toBe(200)
+    const call = pveFetchMock.mock.calls[0]
+    expect(call[1]).toBe("/nodes/node1/lxc")
+    expect(postedParams(call).get("tags")).toBe("")
+  })
+
+  it("does not take a truthy non-boolean as an opt-out", async () => {
+    const { POST } = await import("./route")
+
+    await callRoute(POST, {
+      method: "POST",
+      params: { id: "pve-1", node: "node1" },
+      body: { vmid: 111, archive: PBS_VOLID, type: "qemu", restoreTags: "false" },
+    })
+
+    expect(postedParams(pveFetchMock.mock.calls[0]).has("tags")).toBe(false)
+  })
+
+  it("after the task, removes the blank tags line the override leaves", async () => {
+    const { POST } = await import("./route")
+    pveFetchMock.mockImplementation(async (_conn: unknown, path: string, opts?: { method?: string }) => {
+      if (path === "/nodes/node1/lxc") return "UPID:x"
+      if (path === "/nodes/node1/lxc/111/config" && !opts?.method) return { hostname: "ct", tags: " " }
+      return null
+    })
+
+    await callRoute(POST, {
+      method: "POST",
+      params: { id: "pve-1", node: "node1" },
+      body: { vmid: 111, archive: VZDUMP_LXC_VOLID, type: "lxc", storage: "local-lvm", restoreTags: false },
+    })
+    expect(afterCbs).toHaveLength(1)
+    await afterCbs[0]()
+
+    const put = pveFetchMock.mock.calls.find(c => c[1] === "/nodes/node1/lxc/111/config" && c[2]?.method === "PUT")
+    expect(put).toBeTruthy()
+    expect(postedParams(put!).get("delete")).toBe("tags")
+  })
+
+  it("still cleans up when the task ended in warnings, and leaves the guest alone when tags were kept", async () => {
+    const { POST } = await import("./route")
+    waitForTaskMock.mockRejectedValueOnce(new Error("PVE task failed: WARNINGS: 1"))
+    pveFetchMock.mockImplementation(async (_conn: unknown, path: string, opts?: { method?: string }) => {
+      if (path === "/nodes/node1/qemu") return "UPID:x"
+      if (path === "/nodes/node1/qemu/111/config" && !opts?.method) return { name: "vm" }
+      return null
+    })
+
+    await callRoute(POST, {
+      method: "POST",
+      params: { id: "pve-1", node: "node1" },
+      body: { vmid: 111, archive: PBS_VOLID, type: "qemu", restoreTags: false },
+    })
+    await afterCbs[0]()
+
+    // No tags line at all: nothing to delete, and the failed task stops the rest.
+    expect(pveFetchMock.mock.calls.some(c => c[2]?.method === "PUT")).toBe(false)
+    expect(syncIpamForVmConfigMock).not.toHaveBeenCalled()
+  })
+
+  it("never touches the restored config's tags when the option is left on", async () => {
+    const { POST } = await import("./route")
+    pveFetchMock.mockImplementation(async (_conn: unknown, path: string, opts?: { method?: string }) => {
+      if (path === "/nodes/node1/qemu") return "UPID:x"
+      if (path === "/nodes/node1/qemu/111/config" && !opts?.method) return { name: "vm", tags: "prod;proxcenter-replica" }
+      return null
+    })
+
+    await callRoute(POST, {
+      method: "POST",
+      params: { id: "pve-1", node: "node1" },
+      body: { vmid: 111, archive: PBS_VOLID, type: "qemu" },
+    })
+    await afterCbs[0]()
+
+    expect(pveFetchMock.mock.calls.some(c => c[2]?.method === "PUT")).toBe(false)
+  })
+})
+
+describe("POST restore -- container on the default storage (#965 follow-up)", () => {
+  // pct restore without `storage` puts every volume on 'local', which on most
+  // clusters cannot hold containers: the route resolves the backup's own
+  // rootfs storage instead, or refuses before calling PVE.
+  function lxcLab(opts: { config?: string | Error; rootdir?: string[] } = {}) {
+    pveFetchMock.mockImplementation(async (_conn: unknown, path: string) => {
+      if (path.includes("/vzdump/extractconfig")) {
+        if (opts.config instanceof Error) throw opts.config
+        return opts.config ?? "arch: amd64\nrootfs: CephStoragePool:vm-111-disk-0,size=2G\ntags: a;b\n"
+      }
+      if (path.includes("/storage?content=rootdir")) return (opts.rootdir ?? ["ZFS-Pool", "CephStoragePool"]).map(storage => ({ storage }))
+      if (path === "/nodes/node1/lxc") return "UPID:x"
+      return null
+    })
+  }
+  const restoreCall = () => pveFetchMock.mock.calls.find(c => c[1] === "/nodes/node1/lxc")
+
+  it("restores the container on the storage its backup came from", async () => {
+    const { POST } = await import("./route")
+    lxcLab()
+
+    const res = await callRoute(POST, {
+      method: "POST",
+      params: { id: "pve-1", node: "node1" },
+      body: { vmid: 111, archive: VZDUMP_LXC_VOLID, type: "lxc" },
+    })
+
+    expect(res.status).toBe(200)
+    const extract = pveFetchMock.mock.calls.find(c => String(c[1]).includes("extractconfig"))
+    expect(extract?.[1]).toBe(`/nodes/node1/vzdump/extractconfig?volume=${encodeURIComponent(VZDUMP_LXC_VOLID)}`)
+    expect(postedParams(restoreCall()!).get("storage")).toBe("CephStoragePool")
+  })
+
+  it("refuses, without calling PVE, when that storage cannot hold containers on the target node", async () => {
+    const { POST } = await import("./route")
+    lxcLab({ rootdir: ["ZFS-Pool"] })
+
+    const res = await callRoute(POST, {
+      method: "POST",
+      params: { id: "pve-1", node: "node1" },
+      body: { vmid: 111, archive: VZDUMP_LXC_VOLID, type: "lxc" },
+    })
+
+    expect(res.status).toBe(400)
+    expect((await readJson<{ error: string }>(res))?.error).toMatch(/Choose a target storage: "CephStoragePool"/)
+    expect(restoreCall()).toBeUndefined()
+  })
+
+  it("refuses when the backed-up config cannot be read or has no volume rootfs", async () => {
+    const { POST } = await import("./route")
+    vi.spyOn(console, "error").mockImplementation(() => {})
+
+    for (const config of [new Error("500"), "arch: amd64\nrootfs: /srv/ct,size=0T\n", "arch: amd64\n"]) {
+      pveFetchMock.mockReset()
+      lxcLab({ config })
+      const res = await callRoute(POST, {
+        method: "POST",
+        params: { id: "pve-1", node: "node1" },
+        body: { vmid: 111, archive: VZDUMP_LXC_VOLID, type: "lxc" },
+      })
+      expect(res.status).toBe(400)
+      expect((await readJson<{ error: string }>(res))?.error).toMatch(/could not be determined/)
+      expect(restoreCall()).toBeUndefined()
+    }
+  })
+
+  it("keeps an explicit target and never resolves anything for a VM", async () => {
+    const { POST } = await import("./route")
+    lxcLab()
+
+    await callRoute(POST, {
+      method: "POST",
+      params: { id: "pve-1", node: "node1" },
+      body: { vmid: 111, archive: VZDUMP_LXC_VOLID, type: "lxc", storage: "ZFS-Pool" },
+    })
+    expect(postedParams(restoreCall()!).get("storage")).toBe("ZFS-Pool")
+
+    pveFetchMock.mockClear()
+    await callRoute(POST, {
+      method: "POST",
+      params: { id: "pve-1", node: "node1" },
+      body: { vmid: 111, archive: VZDUMP_QEMU_VOLID, type: "qemu" },
+    })
+    expect(pveFetchMock.mock.calls.some(c => String(c[1]).includes("extractconfig"))).toBe(false)
+  })
+
+  it("judges a tenant restore on the resolved storage", async () => {
+    getCurrentTenantIdMock.mockResolvedValue("tenant-x")
+    resolveVdcForTenantMock.mockResolvedValue({ id: "vdc-1" })
+    getInfraMock.mockResolvedValue({
+      kind: "iaas",
+      vdcScope: {
+        connectionIds: new Set(["pve-1"]),
+        storagesByConnection: new Map([["pve-1", new Set(["local"])]]),
+        storagePoliciesByConnection: new Map(),
+      },
+    })
+    const { POST } = await import("./route")
+    lxcLab()
+
+    const res = await callRoute(POST, {
+      method: "POST",
+      params: { id: "pve-1", node: "node1" },
+      body: { vmid: 111, archive: VZDUMP_LXC_VOLID, type: "lxc" },
+    })
+
+    expect(res.status).toBe(403)
+    expect((await readJson<{ error: string }>(res))?.error).toMatch(/CephStoragePool/)
+    expect(restoreCall()).toBeUndefined()
   })
 })

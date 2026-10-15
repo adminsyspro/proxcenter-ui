@@ -14,6 +14,7 @@ import { generateZoneName, isZoneNameTaken, createZone, deleteZone, deleteVnetPv
 import { clearVdcScopeCache } from './scope'
 import { validateVlanPoolsInput, assertNoCrossVdcOverlap, assertPoolShrinkSafe, type VlanPoolInput } from './vlan'
 import { getVdcStorageUsedMb } from './quota'
+import { readGuestDiskBytes } from '@/lib/inventory/guestDiskTotals'
 import { DEFAULT_COMPUTE_POLICY, normalizeComputePolicyInput, type VdcComputePolicy } from './computePolicy'
 import {
   normalizeTransportInput,
@@ -1076,11 +1077,14 @@ export async function refreshVdcUsage(vdcId: string): Promise<VdcUsage> {
   let usedSnapshots = 0
   let usedBackups = 0
 
-  for (const vm of vmMembers) {
+  // #938: every disk of every member, from its config. `maxdisk` is the boot
+  // disk alone, 0 for a VM whose boot order names no disk.
+  const diskBytes = await readGuestDiskBytes(conn, vdc.connectionId, vmMembers)
+  vmMembers.forEach((vm: any, i: number) => {
     usedVcpus += vm.maxcpu || 0
     usedRamMb += Math.round((vm.maxmem || 0) / 1048576)
-    usedStorageMb += Math.round((vm.maxdisk || 0) / 1048576)
-  }
+    usedStorageMb += Math.round(diskBytes[i] / 1048576)
+  })
 
   // Per-tier usage for display (spec §7): same content-listing meter as the
   // enforcement path, stored as JSON on the usage cache row.

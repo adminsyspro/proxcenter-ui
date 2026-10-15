@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 
 import { pveFetch } from "@/lib/proxmox/client"
+import { invalidateGuestDiskTotal } from "@/lib/inventory/guestDiskTotals"
 import { writeGuestConfig, type GuestConfigWriteResult } from "@/lib/proxmox/guestConfigWrite"
 import { mergeMemoryProperty } from "@/lib/proxmox/memoryProperty"
 import { isVmConfigNotFoundError, locateVmInCluster, type GuestType } from "@/lib/proxmox/locateVm"
@@ -503,6 +504,10 @@ export async function PUT(
       }
       throw err
     }
+
+    // A disk may have been added, detached or removed: the next inventory
+    // fetch re-reads this guest's disk total instead of serving it cached (#938).
+    invalidateGuestDiskTotal(id, type, vmid)
 
     // Audit
     const { audit } = await import("@/lib/audit")

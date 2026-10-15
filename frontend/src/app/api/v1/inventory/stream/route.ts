@@ -7,10 +7,11 @@ import { getConnectionById, getPbsConnectionByIdUnscoped } from "@/lib/connectio
 import { scopePbsDataForTenant, type PbsServerData, type PbsDatastoreData } from "@/lib/inventory/scopePbs"
 import { pveFetch } from "@/lib/proxmox/client"
 import { pbsFetch } from "@/lib/proxmox/pbs-client"
-import { isSharedStorage } from "@/lib/proxmox/storage"
+import { aggregateStorage, isSharedStorage, type AggregatedStorage } from "@/lib/proxmox/storage"
 import { getRBACContext, filterVmsByPermission, PERMISSIONS, checkPermission, getRbacInfraScope, applyRbacInfraFilter, filterVisibleConnections, filterCandidateConnections, isConnectionVisible, mayHaveVisibleGuests, pruneEmptyConnections, type RbacInfraScope } from "@/lib/rbac"
 import { resolveManagementIp } from "@/lib/proxmox/resolveManagementIp"
-import { readPools, type PoolFacts } from "@/lib/inventory/proxmoxProjections"
+import { readPools, readStorageResources, type PoolFacts } from "@/lib/inventory/proxmoxProjections"
+import { attachGuestDiskTotals, onlineNodeSet } from "@/lib/inventory/guestDiskTotals"
 import {
   getInventoryFromCache,
   setCachedInventory,
@@ -73,6 +74,8 @@ type GuestData = {
   hastate?: string
   hagroup?: string
   lock?: string  // PVE lock type: "migrate", "backup", "snapshot", etc.
+  /** Sum of every attached disk, from the guest config (#938). */
+  diskTotal?: number
 }
 
 type HaResource = {
@@ -154,6 +157,20 @@ function scopeStorageDataForTenant(
 // @/lib/inventory/scopePbs (testable module; route files cannot export
 // non-handler symbols).
 
+/** The tree's storages for clusters read from the cache: the connection's
+ *  owner tenant is not part of the cached cluster, so it is read back first. */
+async function fetchStoragesForCachedClusters(clusters: ClusterData[]): Promise<StorageData[]> {
+  if (clusters.length === 0) return []
+  const conns = await globalPrisma.connection.findMany({
+    where: { id: { in: clusters.map(c => c.id) } },
+    select: { id: true, name: true, type: true, tenantId: true },
+  })
+  const byId = new Map(conns.map(c => [c.id, c]))
+
+  return Promise.all(clusters.map(cluster =>
+    fetchStoragesForCluster(byId.get(cluster.id) ?? { id: cluster.id, name: cluster.name, type: cluster.type }, cluster)))
+}
+
 /* ------------------------------------------------------------------ */
 /* Per-connection fetch functions (reused from inventory route)         */
 /* ------------------------------------------------------------------ */
@@ -170,6 +187,7 @@ async function fetchOneCluster(conn: {
     // Call /nodes FIRST to establish failover cache if the primary is down.
     // This prevents the race condition where parallel calls fail before failover activates.
     let nodes: NodeData[] = []
+    let nodesKnown = true
     try {
       nodes = await pveFetch<NodeData[]>(connConfig, '/nodes') || []
     } catch {
@@ -178,6 +196,7 @@ async function fetchOneCluster(conn: {
         nodes = await pveFetch<NodeData[]>(connConfig, '/nodes') || []
       } catch {
         // Still failing — continue with empty nodes, VMs will create synthetic entries
+        nodesKnown = false
       }
     }
 
@@ -296,6 +315,14 @@ async function fetchOneCluster(conn: {
       })
     }
 
+    // #938: one /config per guest, cached across polls (guestDiskTotals.ts).
+    await attachGuestDiskTotals(
+      connConfig,
+      conn.id,
+      Array.from(nodeMap.values()).flatMap(n => n.guests),
+      { onlineNodes: nodesKnown ? onlineNodeSet(nodes) : null },
+    )
+
     const nodesArray = Array.from(nodeMap.values())
     const onlineNodes = nodesArray.filter(n => n.status === 'online').length
     const totalNodes = nodesArray.length
@@ -338,7 +365,7 @@ async function fetchOneCluster(conn: {
 
 async function fetchStoragesForCluster(conn: {
   id: string; name: string; type: string; tenantId?: string | null
-}, clusterData: ClusterData): Promise<StorageData> {
+}, clusterData: ClusterData, rollup?: AggregatedStorage[]): Promise<StorageData> {
   try {
     // Pass the connection's own tenantId so the provider (global query) can
     // fetch storages for clusters owned by MSP tenants, not just default-owned.
@@ -352,6 +379,10 @@ async function fetchStoragesForCluster(conn: {
 
     const resources: any[] = resourcesResult.status === 'fulfilled' ? resourcesResult.value || [] : []
     const configs: any[] = configResult.status === 'fulfilled' ? configResult.value || [] : []
+    // The metrics rollup fetchRawInventory caches as `storageResources`, from
+    // the same rows: an entry this route writes is then complete for both
+    // readers of the shared cache.
+    rollup?.push(...aggregateStorage(readStorageResources(resources, conn.id, conn.name)))
 
     // Build config lookup map
     const configMap = new Map<string, any>()
@@ -626,6 +657,15 @@ export async function GET(request: NextRequest) {
             const scoped = await scopePbsDataForTenant(pbs, mask)
             if (scoped) send('pbs', scoped)
           }
+          // The cache has two producers (#938 recette, #921): fetchRawInventory,
+          // behind /api/v1/inventory and the Prometheus scrape, writes the
+          // entry WITHOUT the tree's `storages`. Serving it as is left the tree
+          // with no STORAGE section until the next cache miss. The two storage
+          // calls per cluster are fetched here instead, and kept on the entry
+          // (same object as the cache's) for the next reader.
+          if (!Array.isArray(cached.storages)) {
+            cached.storages = await fetchStoragesForCachedClusters(cached.clusters)
+          }
           if (cached.storages) {
             // Storage is keyed by connId, not id, so the RBAC gate is spelled out
             // here. Strict on purpose, same predicate as the cache-miss path: a
@@ -763,6 +803,7 @@ export async function GET(request: NextRequest) {
         const allClusters: ClusterData[] = []
         const allPbsServers: PbsServerData[] = []
         const allStorages: StorageData[] = []
+        const allStorageResources: AggregatedStorage[] = []
 
         const clusterPromises = pveConnections.map(async (conn) => {
           const cluster = await fetchOneCluster(conn)
@@ -775,7 +816,7 @@ export async function GET(request: NextRequest) {
           }
 
           // Fetch storage data for this cluster and emit immediately (only if visible)
-          const storageData = await fetchStoragesForCluster(conn, cluster)
+          const storageData = await fetchStoragesForCluster(conn, cluster, allStorageResources)
           allStorages.push(storageData)
           if (isInfraVisibleConn(conn.id)) {
             const scoped = scopeStorageDataForTenant(storageData, mask)
@@ -826,6 +867,7 @@ export async function GET(request: NextRequest) {
           pbsServers: allPbsServers,
           externalHypervisors: externalConnections,
           storages: allStorages,
+          storageResources: allStorageResources,
           stats,
         }, tenantId, vdcContext)
 

@@ -84,6 +84,7 @@ return next
     maxmem: vm.maxmem,
     disk: vm.disk,
     maxdisk: vm.maxdisk,
+    diskTotal: vm.diskTotal,
     uptime: vm.uptime,
     ip: vm.ip,
     snapshots: vm.snapshots,

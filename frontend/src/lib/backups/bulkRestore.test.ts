@@ -322,6 +322,12 @@ describe('buildRestoreRequest', () => {
     })
   })
 
+  it('only puts the tags opt-out on the wire (#965)', () => {
+    expect(buildRestoreRequest(entry, 'pbs-1', { restoreTags: false })?.restoreTags).toBe(false)
+    expect(buildRestoreRequest(entry, 'pbs-1', { restoreTags: true })).not.toHaveProperty('restoreTags')
+    expect(buildRestoreRequest(entry, 'pbs-1')).not.toHaveProperty('restoreTags')
+  })
+
   it('drops a zero or negative bandwidth limit instead of sending it', () => {
     expect(buildRestoreRequest(entry, 'pbs-1', { bwlimit: 0 })?.bwlimit).toBeUndefined()
     expect(buildRestoreRequest(entry, 'pbs-1', { bwlimit: -5 })?.bwlimit).toBeUndefined()

@@ -14,6 +14,8 @@ import { getTenantInfrastructureScope } from "@/lib/tenant/infraScope"
 import { safeLog } from "@/lib/log/sanitize"
 import { type DriveQosCaps } from "@/lib/vdc/drives"
 import { restampGuestDrives } from "@/lib/vdc/driveGuard"
+import { clearRestoredTags } from "@/lib/backups/restoreTagsCleanup"
+import { resolveCtRestoreStorage } from "@/lib/backups/ctRestoreStorage"
 
 export const runtime = "nodejs"
 
@@ -46,6 +48,7 @@ export async function POST(
       sockets,
       pbsBackup,
       force,
+      restoreTags,
     } = body
 
     if (!vmid) {
@@ -231,12 +234,26 @@ export async function POST(
           { status: 403 },
         )
       }
-      if (typeof storage === 'string' && storage.length > 0 && !(writableStorages ?? allowedStorages).has(storage)) {
-        return NextResponse.json(
-          { error: allowedStorages.has(storage) ? readOnlyLibraryError(storage) : `Target storage "${storage}" is not authorised for this tenant.` },
-          { status: 403 },
-        )
+    }
+
+    // Container restored on the "default" storage: PVE would put every volume
+    // on 'local' (see resolveCtRestoreStorage). Resolve it to the storage the
+    // backup came from, or refuse with a usable message. Done before the
+    // target check below so a tenant's restore is judged on the real target.
+    let targetStorage: string | undefined = typeof storage === 'string' && storage ? storage : undefined
+    if (type === 'lxc' && !targetStorage) {
+      const resolved = await resolveCtRestoreStorage(conn, node, archive)
+      if ('error' in resolved) {
+        return NextResponse.json({ error: resolved.error }, { status: 400 })
       }
+      targetStorage = resolved.storage
+    }
+
+    if (allowedStorages !== null && targetStorage && !(writableStorages ?? allowedStorages).has(targetStorage)) {
+      return NextResponse.json(
+        { error: allowedStorages.has(targetStorage) ? readOnlyLibraryError(targetStorage) : `Target storage "${targetStorage}" is not authorised for this tenant.` },
+        { status: 403 },
+      )
     }
 
     // PVE has no /qmrestore or /vzrestore REST endpoint — those are CLI
@@ -261,7 +278,7 @@ export async function POST(
       params.archive = archive
     }
 
-    if (storage) params.storage = storage
+    if (targetStorage) params.storage = targetStorage
     if (bwlimit) params.bwlimit = String(bwlimit)
     if (unique) params.unique = '1'
     if (start) params.start = '1'
@@ -270,6 +287,16 @@ export async function POST(
     // tenant chooses "Restore on top of source VM". Without it PVE
     // refuses with "VM/CT <id> already exists".
     if (force) params.force = '1'
+    // "Restore tags" off (#965): an empty `tags` override. PVE merges it into
+    // the backed-up config it writes once the disks are restored, and that is
+    // BEFORE it starts the guest (`start`) or boots it for a live restore, so
+    // the guest is never tagged, not even for a moment, and a tag-based
+    // Site Recovery job or DRS rule cannot pick it up. Works for qmrestore
+    // (VMA and PBS) and pct restore alike; a PVE that cannot honour it fails
+    // the call or the task, it never restores the tags silently. Absent or
+    // true keeps PVE's behaviour: the backed-up tags come back.
+    const omitTags = restoreTags === false
+    if (omitTags) params.tags = ''
 
     // Override settings
     if (name) params.name = name
@@ -328,12 +355,19 @@ export async function POST(
       const upid = String(result)
       const numericVmid = Number(vmid)
       after(async () => {
+        let taskError: unknown = null
         try {
           await waitForTask(conn, node, upid)
         } catch (err: any) {
           console.error(`[restore] waitForTask failed for vmid=${safeLog(vmid)}: ${safeLog(err?.message ?? err)}`)
-          return
+          taskError = err
         }
+
+        // Drop the blank `tags:` line the empty override leaves behind. Also
+        // after a task that ended in warnings: the guest exists all the same.
+        if (omitTags) await clearRestoredTags({ conn, node, isLxc, vmid: numericVmid })
+
+        if (taskError) return
 
         // Pool placement (tenant vDC scope only — provider doesn't auto-pool).
         // Applies to both qemu and lxc since both are scoped via PVE pools.
@@ -422,7 +456,7 @@ export async function POST(
       category: "backups",
       resourceType: "vm",
       resourceId: String(vmid),
-      details: { node, connectionId: id, archive, storage, type },
+      details: { node, connectionId: id, archive, storage: targetStorage, type, ...(omitTags ? { restoreTags: false } : {}) },
     })
 
     return NextResponse.json({

@@ -93,6 +93,33 @@ describe('useTaskTracker', () => {
     expect(onSuccess).toHaveBeenCalledTimes(1)
   })
 
+  it('reports a failed verification as a failure, never as a success (#965)', async () => {
+    stubFetch(async () => okResponse({ status: 'stopped', exitstatus: 'OK' }))
+    const onSuccess = vi.fn()
+    const onError = vi.fn()
+    const verify = vi.fn(async () => 'tags kept: prod')
+
+    await trackAndRun(baseTask({ onSuccess, onError, verify }))
+
+    expect(verify).toHaveBeenCalledTimes(1)
+    expect(toast.success).not.toHaveBeenCalled()
+    expect(toast.error).toHaveBeenCalledWith('taskTracker.failed')
+    expect(onError).toHaveBeenCalledWith('tags kept: prod')
+    expect(onSuccess).not.toHaveBeenCalled()
+  })
+
+  it('announces success once the verification passes, and skips it for a failed task', async () => {
+    stubFetch(async () => okResponse({ status: 'stopped', exitstatus: 'OK' }))
+    const verify = vi.fn(async () => null)
+    await trackAndRun(baseTask({ verify }))
+    expect(toast.success).toHaveBeenCalledWith('taskTracker.completed')
+
+    stubFetch(async () => okResponse({ status: 'stopped', exitstatus: 'disk full' }))
+    const verifyFailed = vi.fn(async () => 'never asked')
+    await trackAndRun(baseTask({ upid: 'UPID:pve1:0002', verify: verifyFailed }))
+    expect(verifyFailed).not.toHaveBeenCalled()
+  })
+
   it('reports the exitstatus on failure', async () => {
     stubFetch(async () => okResponse({ status: 'stopped', exitstatus: 'disk full' }))
     const onError = vi.fn()

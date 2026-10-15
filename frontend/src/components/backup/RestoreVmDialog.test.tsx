@@ -52,7 +52,15 @@ vi.mock('@/contexts/TenantContext', () => ({
 
 beforeEach(() => {
   useTenantMock.mockReturnValue({ currentTenant: null, loading: false })
+  trackTaskMock.mockClear()
 })
+
+// The dialog follows the restore task itself only when tags are omitted
+// (#965); the tracker's own polling and toasts are covered by its tests.
+const { trackTaskMock } = vi.hoisted(() => ({ trackTaskMock: vi.fn(async () => {}) }))
+vi.mock('@/hooks/useTaskTracker', () => ({
+  useTaskTracker: () => ({ trackTask: trackTaskMock }),
+}))
 
 // ------------------------------------------------------------------ //
 // Constants
@@ -259,6 +267,17 @@ describe('RestoreVmDialog - type branch', () => {
     expect(heading).not.toHaveTextContent('Restore VM')
   })
 
+  it('labels the submit button after the guest type (#965 follow-up)', () => {
+    const { unmount } = renderWithProviders(<RestoreVmDialog {...makeProps({ type: 'lxc' })} />)
+    const ctButtons = screen.getAllByRole('button').map((b) => b.textContent?.trim())
+    expect(ctButtons).toContain('Restore CT')
+    expect(ctButtons).not.toContain('Restore VM')
+    unmount()
+
+    renderWithProviders(<RestoreVmDialog {...makeProps({ type: 'qemu' })} />)
+    expect(screen.getAllByRole('button').map((b) => b.textContent?.trim())).toContain('Restore VM')
+  })
+
   it('renders the Live restore toggle for type=qemu but not for type=lxc', async () => {
     // qemu path -- Live restore switch is type-guarded in JSX
     const { unmount } = renderWithProviders(<RestoreVmDialog {...makeProps({ type: 'qemu' })} />)
@@ -411,6 +430,78 @@ describe('RestoreVmDialog - Unique MAC option follows the PVE restore logic', ()
     await waitFor(() => expect(uniqueSwitch()).toBeChecked())
     fireEvent.change(screen.getByLabelText('VMID'), { target: { value: String(SOURCE_VMID) } })
     await waitFor(() => expect(uniqueSwitch()).not.toBeChecked())
+  })
+})
+
+describe('RestoreVmDialog - Restore tags option (#965)', () => {
+  beforeEach(() => {
+    seedBaseHandlers()
+  })
+
+  function captureRestoreBody() {
+    const bodies: Record<string, any>[] = []
+    server.use(
+      http.post(
+        `*/api/v1/connections/${CONN_ID}/nodes/${NODE_NAME}/restore`,
+        async ({ request }) => {
+          bodies.push((await request.json()) as Record<string, any>)
+          return HttpResponse.json({ data: UPID })
+        },
+      ),
+    )
+    return bodies
+  }
+
+  async function submitAsNewVmid() {
+    await waitForDataLoad()
+    fireEvent.change(screen.getByLabelText('VMID'), { target: { value: '250' } })
+    const submitBtn = screen.getAllByRole('button').find((b) => b.textContent?.trim() === 'Restore VM')
+    fireEvent.click(submitBtn!)
+  }
+
+  it('keeps the tags by default and does not follow the task', async () => {
+    const bodies = captureRestoreBody()
+    renderWithProviders(<RestoreVmDialog {...makeProps()} />)
+    await waitForDataLoad()
+
+    expect(screen.getByLabelText('Restore tags')).toBeChecked()
+    await submitAsNewVmid()
+
+    await waitFor(() => expect(bodies).toHaveLength(1))
+    expect(bodies[0]).not.toHaveProperty('restoreTags')
+    expect(trackTaskMock).not.toHaveBeenCalled()
+  })
+
+  it('sends the opt-out and verifies the restored config before announcing it', async () => {
+    const bodies = captureRestoreBody()
+    server.use(
+      http.get(`*/api/v1/connections/${CONN_ID}/guests/qemu/${NODE_NAME}/250/config`, () =>
+        HttpResponse.json({ data: { name: 'vm', tags: 'prod;proxcenter-replica' } }),
+      ),
+    )
+    renderWithProviders(<RestoreVmDialog {...makeProps()} />)
+    await waitForDataLoad()
+
+    fireEvent.click(screen.getByLabelText('Restore tags'))
+    expect(screen.getByText(/restored without any tag/)).toBeInTheDocument()
+    await submitAsNewVmid()
+
+    await waitFor(() => expect(bodies).toHaveLength(1))
+    expect(bodies[0].restoreTags).toBe(false)
+    await waitFor(() => expect(trackTaskMock).toHaveBeenCalledTimes(1))
+
+    const task = (trackTaskMock.mock.calls[0] as any[])[0]
+    expect(task).toMatchObject({ upid: UPID, connId: CONN_ID, node: NODE_NAME })
+    expect(task.timeoutMs).toBeGreaterThan(300_000)
+    // A guest that still carries tags makes the verification fail.
+    await expect(task.verify()).resolves.toMatch(/prod, proxcenter-replica/)
+  }, 15_000)
+
+  it('hides the option from a vDC tenant, who keeps the tags', async () => {
+    useTenantMock.mockReturnValue({ currentTenant: { id: 't1', operatingModel: 'iaas' }, loading: false })
+    renderWithProviders(<RestoreVmDialog {...makeProps()} />)
+    await screen.findByText(/VM 100/)
+    expect(screen.queryByLabelText('Restore tags')).toBeNull()
   })
 })
 

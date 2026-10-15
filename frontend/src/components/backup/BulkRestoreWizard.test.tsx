@@ -261,3 +261,44 @@ describe('BulkRestoreWizard: dispatch queue', () => {
     expect(await screen.findByText(/Finished: 1 restored, 1 failed/, {}, { timeout: 3000 })).toBeTruthy()
   })
 })
+
+describe('BulkRestoreWizard: Restore tags option (#965)', () => {
+  it('restores without tags on request and fails the guest whose config still carries some', async () => {
+    server.use(
+      http.get('*/api/v1/connections/:id/guests/:type/:node/:vmid/config', ({ params }) =>
+        HttpResponse.json({ data: params.vmid === '9001' ? { tags: 'prod;proxcenter-replica' } : { tags: ' ' } }),
+      ),
+    )
+    renderWizard()
+    await screen.findByText('web-01')
+    await gotoTargetStep()
+
+    const tagsSwitch = screen.getByLabelText('Restore tags') as HTMLInputElement
+    expect(tagsSwitch.checked).toBe(true)
+    fireEvent.click(tagsSwitch)
+    expect(tagsSwitch.checked).toBe(false)
+
+    fireEvent.click(screen.getByRole('button', { name: /^Next$/ }))
+    fireEvent.click(await screen.findByRole('button', { name: /Restore 2 guests/ }))
+
+    await waitFor(() => expect(restorePosts.length).toBe(1))
+    expect(restorePosts[0].restoreTags).toBe(false)
+    finishTask(9001)
+    await waitFor(() => expect(restorePosts.length).toBe(2), { timeout: 3000 })
+    expect(restorePosts[1].restoreTags).toBe(false)
+    finishTask(9002)
+
+    expect(await screen.findByText(/Finished: 1 restored, 1 failed/, {}, { timeout: 3000 })).toBeTruthy()
+  })
+
+  it('leaves the tags option off the wire by default', async () => {
+    renderWizard()
+    await screen.findByText('web-01')
+    await gotoTargetStep()
+    fireEvent.click(screen.getByRole('button', { name: /^Next$/ }))
+    fireEvent.click(await screen.findByRole('button', { name: /Restore 2 guests/ }))
+
+    await waitFor(() => expect(restorePosts.length).toBe(1))
+    expect(restorePosts[0]).not.toHaveProperty('restoreTags')
+  })
+})

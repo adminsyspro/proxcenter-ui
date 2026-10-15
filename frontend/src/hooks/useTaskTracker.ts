@@ -14,6 +14,10 @@ interface TaskInfo {
   queryParams?: Record<string, string>
   /** How long to follow the task before giving up. Default 5 minutes. */
   timeoutMs?: number
+  /** Runs once the task ended OK, before anything is announced. A non-empty
+   *  string means the task did not do everything asked of it (#965: the
+   *  restore kept its tags): it is reported as a failure, never a success. */
+  verify?: () => Promise<string | null | undefined>
 }
 
 interface TaskStatus {
@@ -67,7 +71,7 @@ export function useTaskTracker() {
   }, [])
 
   const trackTask = useCallback((taskInfo: TaskInfo) => {
-    const { upid, connId, node, description, onSuccess, onError, queryParams, timeoutMs } = taskInfo
+    const { upid, connId, node, description, onSuccess, onError, queryParams, timeoutMs, verify } = taskInfo
 
     // Éviter de tracker la même tâche deux fois
     if (activeTasksRef.current.has(upid)) {
@@ -92,7 +96,12 @@ export function useTaskTracker() {
           // Tâche terminée
           activeTasksRef.current.delete(upid)
 
-          if (status.exitstatus === 'OK') {
+          const verifyError = status.exitstatus === 'OK' && verify ? await verify() : null
+
+          if (verifyError) {
+            toast.error(t('taskTracker.failed', { description, error: verifyError }))
+            onError?.(verifyError)
+          } else if (status.exitstatus === 'OK') {
             toast.success(t('taskTracker.completed', { description }))
             onSuccess?.()
           } else {

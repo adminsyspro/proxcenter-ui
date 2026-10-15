@@ -97,7 +97,7 @@ describe("upload: cluster outside the license (roadmap#58)", () => {
     expect(res.status).toBe(403)
     expect(await res.json()).toMatchObject({ code: "CONNECTION_LICENSE_EXCLUDED" })
     expect(excludedMock).toHaveBeenCalledWith("conn-1")
-    expect(checkPermissionMock).toHaveBeenCalledWith("storage.upload", "connection", "conn-1")
+    expect(checkPermissionMock).toHaveBeenCalledWith("storage.upload", "storage", "conn-1:isolib")
     expect(guardMock).not.toHaveBeenCalled()
     expect(getConnectionByIdMock).not.toHaveBeenCalled()
     expect(fakeHttps.request).not.toHaveBeenCalled()

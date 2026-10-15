@@ -34,6 +34,9 @@ model Connection {
   // a later step. Defaults to today's behavior (full_admin) so existing
   // connections are unchanged.
   accessProfile String @default("full_admin") @map("access_profile")
+  // Outside the license (roadmap#58): visible and readable, counted in no
+  // quota, every write to it refused by the orchestrator and by pveFetch.
+  licenseExcluded Boolean @default(false) @map("license_excluded")
 
   // Custom ProxCenter tags (semicolon-separated)
   tags String?

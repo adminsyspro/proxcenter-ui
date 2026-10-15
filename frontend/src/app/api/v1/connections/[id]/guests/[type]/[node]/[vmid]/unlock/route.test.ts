@@ -45,6 +45,7 @@ import { pveFetch } from '@/lib/proxmox/client'
 import { checkPermission } from '@/lib/rbac'
 import { executeSSH } from '@/lib/ssh/exec'
 import { getNodeIp } from '@/lib/ssh/node-ip'
+import { PveLicenseExcludedError } from '@/lib/license/exclusions'
 
 const getConnectionByIdMock = getConnectionById as any
 const pveFetchMock = pveFetch as any
@@ -92,6 +93,17 @@ describe('POST .../unlock — happy path', () => {
     })
     expect(res.status).toBe(400)
     expect(executeSSHMock).not.toHaveBeenCalled()
+  })
+
+  it('answers 403 with its code when the cluster is outside the license (roadmap#58)', async () => {
+    // executeSSH refused the unlock itself, before any SSH: the route must
+    // say so with the code the UI recognises, not a generic 500.
+    executeSSHMock.mockRejectedValue(new PveLicenseExcludedError(CONN_ID))
+    const res = await callRoute(POST as any, { method: 'POST', params: baseParams })
+    expect(res.status).toBe(403)
+    const body = await readJson<any>(res)
+    expect(body).toMatchObject({ code: 'CONNECTION_LICENSE_EXCLUDED' })
+    expect(body.error).toBe('This cluster is outside the license: ProxCenter refuses any change on it.')
   })
 })
 

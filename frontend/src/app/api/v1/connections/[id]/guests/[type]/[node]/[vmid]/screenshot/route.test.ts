@@ -104,6 +104,8 @@ describe('GET .../screenshot — display detection', () => {
     // JPEG Start-Of-Image marker.
     expect([bytes[0], bytes[1]]).toEqual([0xff, 0xd8])
     expect(executeSSHMock).toHaveBeenCalledTimes(1)
+    // The screendump only reads, so a cluster outside the license keeps its pictures (roadmap#58).
+    expect(executeSSHMock.mock.calls[0][4]).toEqual({ readOnly: true })
   })
 
   it('treats an absent vga (default std) as graphical and proceeds to SSH', async () => {

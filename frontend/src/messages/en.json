@@ -3245,6 +3245,7 @@
       },
       "actions": {
         "addNodes": "Add nodes",
+        "excludeCluster": "Exclude a cluster",
         "renew": "Renew",
         "sync": "Sync now",
         "retry": "Retry",
@@ -3269,12 +3270,28 @@
         "pool": "Shared pool",
         "moved": "{days, plural, =0 {Moved · less than a day here} one {Moved · # day here} other {Moved · # days here}}",
         "movedEnded": "Moved · no longer valid here",
+        "exceededCovered": "Overflow covered by the fleet's spare capacity",
         "state": {
           "active": "Active",
           "expired": "Expired",
           "invalid": "Invalid",
+          "exceeded": "Exceeded",
           "unknown": "Unknown"
         }
+      },
+      "excluded": {
+        "title": "Clusters outside the license",
+        "help": "A cluster outside the license does not count in the quota: it stays visible, but ProxCenter refuses any change on it, consoles and shells included.",
+        "none": "No cluster outside the license",
+        "nodes": "{count, plural, one {# node} other {# nodes}}",
+        "exclude": "Exclude from the quota",
+        "excludeOne": "Exclude",
+        "include": "Include again",
+        "dialogTitle": "Exclude a cluster from the quota",
+        "allExcluded": "Every cluster is already outside the license",
+        "excludedOk": "Cluster excluded from the quota",
+        "includedOk": "Cluster counted in the quota again",
+        "failed": "Could not change the exclusion"
       },
       "connection": {
         "sync": "Sync"
@@ -3877,6 +3894,7 @@
     "licenseImportConnNone": "Floating (no cluster)",
     "licenseImportSubmit": "Import",
     "licenseImportSuccess": "License imported",
+    "licenseImportReplaced": "License updated in place, its clusters are kept.",
     "licenseImportFailed": "Import failed",
     "licenseInstallFingerprint": "Install fingerprint",
     "licenseInstallFingerprintHint": "Identifies this ProxCenter deployment. Give it to support, and generate a license request to obtain a key bound to it.",
@@ -6038,7 +6056,8 @@
     "apiError": "API error",
     "notFound": "Not found",
     "pageNotFound": "Page not found",
-    "httpError": "Error {status}"
+    "httpError": "Error {status}",
+    "connectionLicenseExcluded": "This cluster is outside the license: ProxCenter refuses any change on it."
   },
   "errorPages": {
     "401": {

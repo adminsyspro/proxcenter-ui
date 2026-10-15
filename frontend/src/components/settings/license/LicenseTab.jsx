@@ -16,6 +16,7 @@ import { optionDisplayName } from '@/lib/license/features'
 import { buildLicenseAlerts, buildLicenseSummary } from '@/lib/license/summary'
 import { buildLicenseTableRows, computePerTenantRollup } from '@/lib/license/view'
 
+import ExcludedClustersSection from './ExcludedClustersSection'
 import LicenseActions, { FingerprintRow } from './LicenseActions'
 import LicenseAlerts from './LicenseAlerts'
 import LicenseSummaryCard from './LicenseSummaryCard'
@@ -212,6 +213,8 @@ export default function LicenseTab() {
   const [editMapTarget, setEditMapTarget] = useState(null) // {rowId, licenseId} | null
   const [editMapSelected, setEditMapSelected] = useState([])
   const [savingMap, setSavingMap] = useState(false)
+  const [excludeOpen, setExcludeOpen] = useState(false) // the dialog that declares a cluster outside the license
+  const [excluding, setExcluding] = useState(null) // connection id whose exclusion is being changed
 
   const loadImports = async () => {
     try {
@@ -275,7 +278,7 @@ export default function LicenseTab() {
     const extra = [...heldById.values()].filter(h => h.lost && !listed.has(h.license_id)).map(h => ({
       rowId: `held-${h.license_id}`, licenseId: h.license_id, role: h.kind === 'option' ? 'option' : 'import', edition: '', label: h.label,
       licensedTo: '', usedNodes: 0, maxNodes: 0, unlimited: false, expiresAt: null, clusterUuid: null, connectionIds: [], state: 'unknown',
-      capabilities: [], heldOnly: true,
+      exceeded: false, capabilities: [], heldOnly: true,
     }))
 
     return extra.length ? [...licenseRows, ...extra] : licenseRows
@@ -323,7 +326,9 @@ export default function LicenseTab() {
 
       if (!res.ok) throw new Error(data?.error || t('settings.licenseImportFailed'))
       setImportOpen(false); setImportBlob(''); setImportConnId('')
-      setSuccess(t('settings.licenseImportSuccess'))
+      // A newer key with the same license id replaced the stored one in
+      // place, its clusters kept (roadmap#58).
+      setSuccess(t(data?.replaced ? 'settings.licenseImportReplaced' : 'settings.licenseImportSuccess'))
       await loadImports(); await loadLicenseStatus()
     } catch (e) {
       setError(e?.message || t('settings.licenseImportFailed'))
@@ -376,6 +381,33 @@ export default function LicenseTab() {
     } finally { setSavingMap(false) }
   }
 
+  // ── Clusters outside the license (roadmap#58) ──
+  const excluded = useMemo(() => licenseStatus?.node_status?.excluded || [], [licenseStatus])
+  const countedConns = useMemo(() => {
+    const out = new Set(excluded.map(e => e.connection_id))
+
+    return pveConns.filter(c => !out.has(c.id))
+  }, [pveConns, excluded])
+
+  const setExclusion = async (connectionId, value) => {
+    setExcluding(connectionId); setError(null); setSuccess(null)
+    try {
+      const res = await fetch(`/api/v1/license/exclusions/${encodeURIComponent(connectionId)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ excluded: value }),
+      })
+      const data = await res.json().catch(() => ({}))
+
+      if (!res.ok) throw new Error(data?.error || t('settings.licenseTab.excluded.failed'))
+      if (value) setExcludeOpen(false)
+      setSuccess(t(value ? 'settings.licenseTab.excluded.excludedOk' : 'settings.licenseTab.excluded.includedOk'))
+      await loadImports(); await loadLicenseStatus()
+    } catch (e) {
+      setError(e?.message || t('settings.licenseTab.excluded.failed'))
+    } finally { setExcluding(null) }
+  }
+
   const summary = useMemo(() => (licenseStatus ? buildLicenseSummary(licenseStatus, tableRows) : null), [licenseStatus, tableRows])
   const alerts = useMemo(() => (licenseStatus ? buildLicenseAlerts(licenseStatus, { bindingMismatch: !!bindingMismatch }) : []), [licenseStatus, bindingMismatch])
 
@@ -412,6 +444,8 @@ export default function LicenseTab() {
   const portalLinked = connectable && licenseStatus?.binding === 'connected'
   const alertHandlers = {
     addNodes: SUBSCRIBE_URL,
+    // Only a multi-license orchestrator knows how to exclude a cluster.
+    ...(mlEnabled ? { excludeCluster: () => setExcludeOpen(true) } : {}),
     renew: portalLinked ? portalAccountUrl(connection?.portal_url) : SUBSCRIBE_URL,
     openAccount: portalAccountUrl(connection?.portal_url),
     sync: handleCheckinNow,
@@ -462,11 +496,17 @@ export default function LicenseTab() {
           {showTable && (
             <LicensesSection
               rows={tableRows} held={heldById} t={t} locale={locale} connName={connName} canImport={mlEnabled} perTenant={perTenant}
-              effectiveLicenseId={standIn ? licenseStatus.effective_source.license_id : null}
+              effectiveLicenseId={standIn ? licenseStatus.effective_source.license_id : null} fleetExceeded={!!licenseStatus.node_status?.exceeded}
               onImport={() => { setImportBlob(''); setImportConnId(''); setImportOpen(true) }}
               onEditMapping={openEditMapping}
               onRemove={row => setRemoveTarget({ rowId: row.rowId, licenseId: row.licenseId })}
               onDeactivate={() => setDeactivateDialogOpen(true)}
+            />
+          )}
+          {mlEnabled && licensed && (
+            <ExcludedClustersSection
+              excluded={excluded} connName={connName} t={t} busyId={excluding}
+              onExclude={() => setExcludeOpen(true)} onInclude={id => setExclusion(id, false)}
             />
           )}
         </>
@@ -608,6 +648,37 @@ export default function LicenseTab() {
         <DialogActions sx={{ px: 3, pb: 2 }}>
           <Button onClick={() => setRemoveTarget(null)} variant='outlined'>{t('common.cancel')}</Button>
           <Button onClick={confirmRemove} variant='contained' color='error' startIcon={<i className='ri-delete-bin-line' />}>{t('settings.licenseRemoveImport')}</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Declare a cluster outside the license */}
+      <Dialog open={excludeOpen} onClose={() => setExcludeOpen(false)} maxWidth='sm' fullWidth>
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <i className='ri-forbid-line' style={{ fontSize: 22 }} />
+          {t('settings.licenseTab.excluded.dialogTitle')}
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant='caption' sx={{ opacity: 0.7, display: 'block', mb: 1.5 }}>{t('settings.licenseTab.excluded.help')}</Typography>
+          {countedConns.length === 0 ? (
+            <Typography variant='body2' color='text.secondary'>{t('settings.licenseTab.excluded.allExcluded')}</Typography>
+          ) : (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+              {countedConns.map(c => (
+                <Box key={c.id} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  {(c.hosts?.length || 0) > 1
+                    ? <i className='ri-server-line' style={{ fontSize: 16, opacity: 0.7 }} />
+                    : <img src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt='' width={16} height={16} />}
+                  <Typography variant='body2' sx={{ flex: 1, minWidth: 0 }} noWrap>{c.name}</Typography>
+                  <Button size='small' variant='outlined' disabled={!!excluding} onClick={() => setExclusion(c.id, true)}>
+                    {t('settings.licenseTab.excluded.excludeOne')}
+                  </Button>
+                </Box>
+              ))}
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setExcludeOpen(false)} variant='outlined'>{t('common.close')}</Button>
         </DialogActions>
       </Dialog>
 

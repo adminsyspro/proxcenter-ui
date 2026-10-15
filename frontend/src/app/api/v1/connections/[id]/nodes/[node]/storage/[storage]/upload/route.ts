@@ -8,6 +8,8 @@ import { getPrincipal } from "@/lib/auth/principal"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { guardTenantStorageWrite, tenantUploadFilename } from "@/lib/vdc/scope"
 import { setProgress, clearProgress } from "@/lib/upload-progress"
+import { licenseExcludedResponse } from "@/lib/api/response"
+import { isConnectionLicenseExcluded, licenseExcludedError } from "@/lib/license/exclusions"
 
 export const runtime = "nodejs"
 export const maxDuration = 600
@@ -125,6 +127,13 @@ async function handleChunk(
 
     const denied = await checkPermission(PERMISSIONS.STORAGE_UPLOAD, "connection", id)
     if (denied) return denied
+
+    // This write goes to Proxmox directly, not through pveFetch: the license
+    // guard of a cluster declared outside the license applies by hand
+    // (roadmap#58), before any byte is streamed.
+    if (await isConnectionLicenseExcluded(id)) {
+      return licenseExcludedResponse(await licenseExcludedError(id))!
+    }
 
     const chunkIndex = Number.parseInt(req.headers.get("x-chunk-index") || "0", 10)
     const totalSize = Number.parseInt(req.headers.get("x-total-size") || "0", 10)

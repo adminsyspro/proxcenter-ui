@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { licenseExcludedResponse } from "@/lib/api/response"
 
 import { pveFetch } from "@/lib/proxmox/client"
 import { invalidateGuestDiskTotal } from "@/lib/inventory/guestDiskTotals"
@@ -150,6 +151,8 @@ export async function POST(
       message: `Disque ${disk} redimensionné de ${size}`
     })
   } catch (e: any) {
+    const excluded = licenseExcludedResponse(e)
+    if (excluded) return excluded
     console.error('Error resizing disk:', e)
 
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })

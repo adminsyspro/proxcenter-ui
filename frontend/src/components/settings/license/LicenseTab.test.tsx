@@ -562,3 +562,142 @@ describe('LicenseTab connection behaviour', () => {
     expect(refreshContext).not.toHaveBeenCalled()
   })
 })
+
+describe('LicenseTab clusters outside the license (roadmap#58)', () => {
+  const conns = [
+    { id: 'c-a', name: 'Cluster A', type: 'pve', tenantId: 'default', hosts: [{}, {}] },
+    { id: 'c-x', name: 'Lab X', type: 'pve', tenantId: 'default', hosts: [{}] },
+  ]
+  let calls: Array<[string, any]> = []
+  let importAnswer: any = { id: 'imp-a', license_id: 'I1' }
+
+  // The connections carry their names; the exclusion route answers whatever
+  // it was asked for; everything else keeps the default stub's shape.
+  beforeEach(() => {
+    calls = []
+    multiLicense = true
+    importAnswer = { id: 'imp-a', license_id: 'I1' }
+    management.licenseStatus.node_status = { current_nodes: 6, max_nodes: 8, exceeded: false, excluded: [], per_license: [{ license_id: 'P1', max_nodes: 8, used_nodes: 6, is_primary: true }] }
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: any) => {
+      calls.push([url, init])
+      if (url.endsWith('/api/v1/connections')) return { ok: true, status: 200, json: async () => ({ data: conns }) }
+      if (url.includes('/api/v1/license/exclusions/')) {
+        return { ok: true, status: 200, json: async () => ({ connection_id: decodeURIComponent(url.split('/').pop()!), excluded: JSON.parse(init.body).excluded }) }
+      }
+      if (url.endsWith('/api/v1/license/import') && init?.method === 'POST') return { ok: true, status: 200, json: async () => importAnswer }
+
+      return { ok: true, status: url.endsWith('/imports') && !multiLicense ? 404 : 200, json: async () => ({ imports: importsPayload, data: [] }) }
+    }))
+  })
+
+  const exclusionCalls = () => calls.filter(([url]) => url.includes('/api/v1/license/exclusions/')).map(([url, init]) => [url, init.method, JSON.parse(init.body)])
+
+  it('lists the clusters outside the license by name with their nodes, and includes one again', async () => {
+    management.licenseStatus.node_status.excluded = [{ connection_id: 'c-x', nodes: 3 }]
+    const { container } = await mountTab()
+
+    expect(container.textContent).toContain('settings.licenseTab.excluded.title')
+    expect(container.textContent).toContain('settings.licenseTab.excluded.help')
+    expect(container.textContent).toContain('Lab X')
+    expect(container.textContent).toContain('settings.licenseTab.excluded.nodes {"count":3}')
+    await act(async () => fireEvent.click(button('settings.licenseTab.excluded.include')))
+    expect(exclusionCalls()).toEqual([['/api/v1/license/exclusions/c-x', 'PUT', { excluded: false }]])
+    expect(management.setSuccess).toHaveBeenCalledWith('settings.licenseTab.excluded.includedOk')
+    expect(management.loadLicenseStatus).toHaveBeenCalled()
+  })
+
+  it('says when no cluster is outside the license, and still offers to exclude one', async () => {
+    const { container } = await mountTab()
+
+    expect(container.textContent).toContain('settings.licenseTab.excluded.none')
+    expect(screen.queryByRole('button', { name: 'settings.licenseTab.excluded.include' })).toBeNull()
+    expect(button('settings.licenseTab.excluded.exclude')).toBeTruthy()
+  })
+
+  it('excludes a cluster from the quota through the dialog, which lists only the clusters still counted', async () => {
+    management.licenseStatus.node_status.excluded = [{ connection_id: 'c-x', nodes: 3 }]
+    await mountTab()
+
+    fireEvent.click(button('settings.licenseTab.excluded.exclude'))
+    const dialog = screen.getByRole('dialog')
+
+    expect(dialog.textContent).toContain('settings.licenseTab.excluded.dialogTitle')
+    expect(dialog.textContent).toContain('Cluster A')
+    expect(dialog.textContent).not.toContain('Lab X')
+    await act(async () => fireEvent.click(within(dialog).getByRole('button', { name: 'settings.licenseTab.excluded.excludeOne' })))
+    expect(exclusionCalls()).toEqual([['/api/v1/license/exclusions/c-a', 'PUT', { excluded: true }]])
+    expect(management.setSuccess).toHaveBeenCalledWith('settings.licenseTab.excluded.excludedOk')
+    // The dialog leaves through its exit transition, driven by the fake clock.
+    await act(async () => { vi.advanceTimersByTime(1000) })
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('offers to exclude a cluster from the quota alert', async () => {
+    management.licenseStatus.node_status = { ...management.licenseStatus.node_status, current_nodes: 10, max_nodes: 8, exceeded: true }
+    await mountTab()
+    const alert = screen.getByRole('alert')
+
+    fireEvent.click(within(alert).getByRole('button', { name: 'settings.licenseTab.actions.excludeCluster' }))
+    expect(screen.getByRole('dialog').textContent).toContain('settings.licenseTab.excluded.dialogTitle')
+  })
+
+  it('reports a failed exclusion and keeps the dialog', async () => {
+    vi.mocked(fetch).mockImplementation(async (url: any) => (url.includes('/license/exclusions/')
+      ? { ok: false, status: 404, json: async () => ({ error: 'connection not found' }) }
+      : { ok: true, status: 200, json: async () => ({ imports: [], data: conns }) }) as any)
+    await mountTab()
+
+    fireEvent.click(button('settings.licenseTab.excluded.exclude'))
+    await act(async () => fireEvent.click(within(screen.getByRole('dialog')).getAllByRole('button', { name: 'settings.licenseTab.excluded.excludeOne' })[0]))
+    expect(management.setError).toHaveBeenCalledWith('connection not found')
+    expect(screen.getByRole('dialog')).toBeTruthy()
+  })
+
+  it('tells a re-import that updated the license in place, clusters kept', async () => {
+    importAnswer = { id: 'imp-a', license_id: 'I1', replaced: true }
+    await mountTab()
+
+    fireEvent.click(button('settings.licenseTab.licenses.import'))
+    fireEvent.change(within(screen.getByRole('dialog')).getByRole('textbox'), { target: { value: 'KEY' } })
+    await act(async () => fireEvent.click(button('settings.licenseImportSubmit')))
+    expect(management.setSuccess).toHaveBeenCalledWith('settings.licenseImportReplaced')
+    expect(management.setSuccess).not.toHaveBeenCalledWith('settings.licenseImportSuccess')
+  })
+
+  it('keeps the plain message for a first import', async () => {
+    await mountTab()
+
+    fireEvent.click(button('settings.licenseTab.licenses.import'))
+    fireEvent.change(within(screen.getByRole('dialog')).getByRole('textbox'), { target: { value: 'KEY' } })
+    await act(async () => fireEvent.click(button('settings.licenseImportSubmit')))
+    expect(management.setSuccess).toHaveBeenCalledWith('settings.licenseImportSuccess')
+  })
+
+  it('shows a license carrying more nodes than it allows as exceeded, covered by the fleet when the total holds', async () => {
+    importsPayload = [{ id: 'imp-a', license_id: 'I1', edition: 'enterprise', max_nodes: 10, expires_at: at(200), state: 'active', connection_ids: ['c-a'], customer: 'Client Durand' }]
+    management.licenseStatus.node_status = {
+      current_nodes: 18, max_nodes: 20, exceeded: false, excluded: [],
+      per_license: [{ license_id: 'P1', max_nodes: 10, used_nodes: 2, is_primary: true }, { license_id: 'I1', max_nodes: 10, used_nodes: 16, exceeded: true, connections: ['c-a'] }],
+    }
+    await mountTab()
+    const row = screen.getAllByRole('row')[2]
+
+    expect(row.textContent).toContain('16 / 10')
+    expect(row.textContent).toContain('settings.licenseTab.licenses.state.exceeded')
+    expect(within(row).getByLabelText('settings.licenseTab.licenses.exceededCovered')).toBeTruthy()
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('drops the covered-by-the-fleet note once the fleet itself is exceeded', async () => {
+    importsPayload = [{ id: 'imp-a', license_id: 'I1', edition: 'enterprise', max_nodes: 10, expires_at: at(200), state: 'active', connection_ids: ['c-a'], customer: 'Client Durand' }]
+    management.licenseStatus.node_status = {
+      current_nodes: 26, max_nodes: 20, exceeded: true, excluded: [],
+      per_license: [{ license_id: 'P1', max_nodes: 10, used_nodes: 10, is_primary: true }, { license_id: 'I1', max_nodes: 10, used_nodes: 16, exceeded: true, connections: ['c-a'] }],
+    }
+    await mountTab()
+    const row = screen.getAllByRole('row')[2]
+
+    expect(row.textContent).toContain('settings.licenseTab.licenses.state.exceeded')
+    expect(within(row).queryByLabelText('settings.licenseTab.licenses.exceededCovered')).toBeNull()
+  })
+})

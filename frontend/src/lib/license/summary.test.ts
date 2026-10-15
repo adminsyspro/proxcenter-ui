@@ -21,7 +21,7 @@ const base = (over: Partial<LicenseStatus> = {}): LicenseStatus => ({
 
 const row = (over: Partial<LicenseTableRow>): LicenseTableRow => ({
   rowId: 'primary', licenseId: 'P1', role: 'primary', edition: 'enterprise', licensedTo: 'Lab SAS', usedNodes: 6, maxNodes: 8,
-  unlimited: false, expiresAt: at(365), clusterUuid: null, connectionIds: [], state: 'active', capabilities: [], ...over,
+  unlimited: false, expiresAt: at(365), clusterUuid: null, connectionIds: [], state: 'active', exceeded: false, capabilities: [], ...over,
 })
 
 const ids = (status: LicenseStatus, extra = {}) => buildLicenseAlerts(status, extra, NOW).map(a => a.id)
@@ -193,7 +193,14 @@ describe('buildLicenseAlerts', () => {
   it('reports an exceeded quota with how many nodes to remove', () => {
     const [alert] = buildLicenseAlerts(base({ node_status: { current_nodes: 10, max_nodes: 8, exceeded: true } }), {}, NOW)
 
-    expect(alert).toEqual({ id: 'quota', severity: 'error', values: { used: 10, max: 8, over: 2 }, actions: ['addNodes'] })
+    // Excluding a cluster from the quota is the other way out (roadmap#58).
+    expect(alert).toEqual({ id: 'quota', severity: 'error', values: { used: 10, max: 8, over: 2 }, actions: ['addNodes', 'excludeCluster'] })
+  })
+
+  it('accepts the clusters outside the license in the status, and still counts the quota from the fleet only', () => {
+    const status = base({ node_status: { current_nodes: 8, max_nodes: 8, exceeded: false, excluded: [{ connection_id: 'c-x', nodes: 3 }] } })
+
+    expect(ids(status)).toEqual([])
   })
 
   it('explains an import standing in for the primary, with the fix the primary needs', () => {

@@ -116,7 +116,9 @@ export function parsePreflightOutput(output: string, libdir: string): VddkPrefli
  * the actionable message to the operator before starting a migration.
  */
 export async function checkVddkPreflight(connectionId: string, nodeIp: SshTarget, libdir: string): Promise<VddkPreflightResult> {
-  const res = await executeSSH(connectionId, nodeIp, buildPreflightCmd(libdir))
+  // Only reads (command -v, find, ls, readlink): allowed on a cluster outside
+  // the license, where the migration itself is then refused (roadmap#58).
+  const res = await executeSSH(connectionId, nodeIp, buildPreflightCmd(libdir), undefined, { readOnly: true })
   if (!res.success) {
     return { ok: false, missing: [], error: `VDDK preflight probe could not run on ${formatSshEndpoint(nodeIp)}: ${res.error || res.output}` }
   }

@@ -126,6 +126,8 @@ describe("checkVddkPreflight", () => {
     mockSSH.mockResolvedValue({ success: true, output: ALL_PRESENT })
     const r = await checkVddkPreflight("conn", "10.99.99.201", "/opt/vddk")
     expect(r.ok).toBe(true)
+    // The probe only reads, so it may run on a cluster outside the license (roadmap#58).
+    expect(mockSSH.mock.calls[0][4]).toEqual({ readOnly: true })
   })
   it("surfaces a clear error when the SSH probe itself fails", async () => {
     mockSSH.mockResolvedValue({ success: false, error: "connection refused" })
@@ -149,13 +151,13 @@ describe("runWarmNodePreflight", () => {
     // Engine parity: getNodeSshEndpointForMigration(prisma, connId, node, baseUrl)
     expect(mockNodeIp).toHaveBeenCalledWith(expect.anything(), "conn", "pve1", "https://pve.local:8006")
     // Probe ran against the resolved host and per-node port, with the engine's default libdir.
-    expect(mockSSH).toHaveBeenCalledWith("conn", { host: "10.0.0.7", port: 2201, source: "override" }, expect.stringContaining("vmware-vix-disklib"))
+    expect(mockSSH).toHaveBeenCalledWith("conn", { host: "10.0.0.7", port: 2201, source: "override" }, expect.stringContaining("vmware-vix-disklib"), undefined, { readOnly: true })
   })
 
   it("honours a custom vddkLibdir so the verdict matches the migration's libdir", async () => {
     mockSSH.mockResolvedValue({ success: true, output: ALL_PRESENT })
     await runWarmNodePreflight("conn", "pve1", "/opt/vddk")
-    expect(mockSSH).toHaveBeenCalledWith("conn", { host: "10.0.0.7", port: 2201, source: "override" }, expect.stringContaining("'/opt/vddk'/lib64/libvixDiskLib.so"))
+    expect(mockSSH).toHaveBeenCalledWith("conn", { host: "10.0.0.7", port: 2201, source: "override" }, expect.stringContaining("'/opt/vddk'/lib64/libvixDiskLib.so"), undefined, { readOnly: true })
   })
 
   it("returns no-go with the missing deps when the node is not prepared", async () => {

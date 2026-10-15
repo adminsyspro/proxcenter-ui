@@ -40,9 +40,13 @@ interface NodeSFlowStatus {
 //
 // Tries the hosts in turn: one reachable node answers for the whole cluster, and
 // depending on a single one would lose the whole table whenever that node is down.
+// Every probe of this route only reads, so a cluster outside the license is
+// still listed with its sFlow state (roadmap#58); configuring it is refused.
+const READ_ONLY = { readOnly: true }
+
 async function collectGuestMACs(connId: string, ips: NodeSshEndpoint[]): Promise<Record<string, number>> {
   for (const ip of ips) {
-    const result = await executeSSH(connId, ip, GUEST_MACS_COMMAND)
+    const result = await executeSSH(connId, ip, GUEST_MACS_COMMAND, undefined, READ_ONLY)
     if (!result.success) continue
 
     const macs = parseGuestMACs(result.output ?? "")
@@ -91,12 +95,12 @@ async function probeHost(
   }
 
   try {
-    const bridgesResult = await executeSSH(connId, ssh, "ovs-vsctl list-br 2>/dev/null || true")
+    const bridgesResult = await executeSSH(connId, ssh, "ovs-vsctl list-br 2>/dev/null || true", undefined, READ_ONLY)
     let hasBridges = bridgesResult.success && !!bridgesResult.output?.trim()
 
     if (!hasBridges) {
       // Fallback: ovs-vsctl may not be in PATH — probe with which
-      const whichResult = await executeSSH(connId, ssh, "which ovs-vsctl 2>/dev/null && ovs-vsctl list-br")
+      const whichResult = await executeSSH(connId, ssh, "which ovs-vsctl 2>/dev/null && ovs-vsctl list-br", undefined, READ_ONLY)
       if (whichResult.success && whichResult.output?.trim()) {
         const lines = whichResult.output.trim().split("\n").filter(Boolean)
         if (lines.length > 0 && lines[0].includes("ovs-vsctl")) {
@@ -115,9 +119,9 @@ async function probeHost(
 
       // Run the three remaining probes concurrently since they're independent
       const [versionResult, sflowResult, ipLinkResult] = await Promise.all([
-        executeSSH(connId, ssh, "ovs-vsctl --version 2>/dev/null | head -1 || true"),
-        executeSSH(connId, ssh, "ovs-vsctl list sflow 2>/dev/null | grep -E 'targets|agent|sampling' || true"),
-        executeSSH(connId, ssh, "ip -o link 2>/dev/null"),
+        executeSSH(connId, ssh, "ovs-vsctl --version 2>/dev/null | head -1 || true", undefined, READ_ONLY),
+        executeSSH(connId, ssh, "ovs-vsctl list sflow 2>/dev/null | grep -E 'targets|agent|sampling' || true", undefined, READ_ONLY),
+        executeSSH(connId, ssh, "ip -o link 2>/dev/null", undefined, READ_ONLY),
       ])
 
       if (versionResult.success && versionResult.output?.trim()) {

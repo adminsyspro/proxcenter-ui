@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach } from "vitest"
+import { describe, it, expect, vi, afterEach, beforeEach } from "vitest"
 
 // Mock the ssh2 Client so executeSSHDirect can be driven end-to-end without a
 // real network/host. A tiny event-emitter stands in for both the connection and
@@ -54,10 +54,19 @@ vi.mock("@/lib/db/prisma", () => ({
 }))
 vi.mock("@/lib/crypto/secret", () => ({ decryptSecret: () => "pw" }))
 
+// The license guard asks whether the connection is outside the license
+// (roadmap#58). The answer is scripted here, the error class stays real.
+const lic = vi.hoisted(() => ({ excluded: vi.fn(async (_id: string) => false) }))
+vi.mock("@/lib/license/exclusions", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/license/exclusions")>()),
+  isConnectionLicenseExcluded: lic.excluded,
+}))
+
 import {
   buildConnectConfig, isOrchestratorTimeoutError, isOrchestratorNotReachedError, createInactivityTimer,
   executeSSH, executeSSHDirect,
 } from "./exec"
+import { PveLicenseExcludedError } from "@/lib/license/exclusions"
 
 const flush = () => new Promise<void>((r) => setTimeout(r, 0))
 
@@ -299,5 +308,73 @@ describe("executeSSH (orchestrator first, ssh2 fallback)", () => {
     c._stream!.emit("close", 0)
     await expect(p).resolves.toMatchObject({ success: true })
     expect(chunks).toEqual(["1 GB copied"])
+  })
+})
+
+describe("executeSSH on a connection outside the license (roadmap#58)", () => {
+  /**
+   * Such a connection is read-only for ProxCenter: a shell command reaches it
+   * only when its caller vouches that it only reads. The refusal is decided
+   * before any credential is read, so neither the orchestrator nor ssh2 ever
+   * sees the command.
+   */
+  const fetchMock = vi.fn()
+
+  beforeEach(() => {
+    vi.stubGlobal("fetch", fetchMock)
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ success: true, output: "ok" }), { status: 200 }))
+  })
+
+  afterEach(() => {
+    fetchMock.mockReset()
+    vi.unstubAllGlobals()
+    h.clients.length = 0
+    lic.excluded.mockReset().mockResolvedValue(false)
+  })
+
+  it("refuses a command before any orchestrator or ssh2 call", async () => {
+    lic.excluded.mockResolvedValue(true)
+    const err = await executeSSH("excluded-1", "10.0.0.9", "qm unlock 100").then(() => null, (e: unknown) => e) as PveLicenseExcludedError
+    expect(err).toBeInstanceOf(PveLicenseExcludedError)
+    expect(err.statusCode).toBe(403)
+    expect(err.code).toBe("CONNECTION_LICENSE_EXCLUDED")
+    expect(err.connectionId).toBe("excluded-1")
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(h.clients).toHaveLength(0)
+  })
+
+  it("refuses a streaming command too, which would otherwise go straight to ssh2", async () => {
+    lic.excluded.mockResolvedValue(true)
+    await expect(executeSSH("excluded-1", "10.0.0.9", "dd status=progress", 60_000, { onData: () => {} }))
+      .rejects.toBeInstanceOf(PveLicenseExcludedError)
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(h.clients).toHaveLength(0)
+  })
+
+  it("lets a command through when its caller vouches that it only reads", async () => {
+    lic.excluded.mockResolvedValue(true)
+    await expect(executeSSH("excluded-1", "10.0.0.9", "hostname -s", 30_000, { readOnly: true }))
+      .resolves.toEqual({ success: true, output: "ok", error: undefined })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it("names the connection to the orchestrator, which keeps its own exclusion guard", async () => {
+    await executeSSH("conn-1", "10.0.0.9", "qm unlock 100")
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).connectionId).toBe("conn-1")
+  })
+
+  it("never re-runs a write over ssh2 when the orchestrator refuses it for the license", async () => {
+    // The frontend lookup can lag (30 s cache, fail-open on a database error):
+    // the orchestrator's refusal then has the last word, it is not a whitelist miss.
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ success: false, error: "excluded", code: "CONNECTION_LICENSE_EXCLUDED" }), { status: 403 }))
+    await expect(executeSSH("conn-1", "10.0.0.9", "qm unlock 100")).rejects.toBeInstanceOf(PveLicenseExcludedError)
+    expect(h.clients).toHaveLength(0)
+  })
+
+  it("lets every command through to a connection inside the license", async () => {
+    await expect(executeSSH("licensed-1", "10.0.0.9", "qm unlock 100"))
+      .resolves.toEqual({ success: true, output: "ok", error: undefined })
+    expect(lic.excluded).toHaveBeenCalledWith("licensed-1")
+    expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 })

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { licenseExcludedResponse } from '@/lib/api/response'
 
 import { pveFetch, PveApplicationError } from '@/lib/proxmox/client'
 import { getConnectionById } from '@/lib/connections/getConnection'
@@ -153,6 +154,8 @@ function pveRefusalMessage(e: any): string {
 }
 
 function pveError(e: any) {
+  const excluded = licenseExcludedResponse(e)
+  if (excluded) return excluded
   const status = e instanceof PveApplicationError && e.statusCode >= 400 && e.statusCode < 500 ? e.statusCode : 500
 
   return NextResponse.json({ error: pveRefusalMessage(e) }, { status })

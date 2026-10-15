@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 
 import { pveFetch } from "@/lib/proxmox/client"
+import { licenseExcludedResponse } from "@/lib/api/response"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
 import { putSingleUse, takeSingleUse } from "@/lib/console/session"
@@ -60,7 +61,7 @@ export async function POST(
     const message = e?.message || String(e)
     await auditConsole("failure", { connectionName: conn.name }, message)
 
-    return NextResponse.json({ error: message }, { status: 500 })
+    return licenseExcludedResponse(e) ?? NextResponse.json({ error: message }, { status: 500 })
   }
 
   // Only the UPID is kept: the ticket, port and certificate are session

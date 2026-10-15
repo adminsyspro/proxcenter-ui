@@ -48,6 +48,7 @@ import { pveFetch } from '@/lib/proxmox/client'
 import { checkPermission } from '@/lib/rbac'
 import { executeSSH } from '@/lib/ssh/exec'
 import { getNodeIp } from '@/lib/ssh/node-ip'
+import { PveLicenseExcludedError } from '@/lib/license/exclusions'
 
 const getConnectionByIdMock = getConnectionById as any
 const pveFetchMock = pveFetch as any
@@ -227,6 +228,17 @@ describe('POST /api/v1/connections/[id]/nodes/[node]/maintenance', () => {
     const body = await readJson<any>(res)
     expect(body.error).toBe('SSH connection refused')
   })
+
+  it('403 with its code when the cluster is outside the license (roadmap#58)', async () => {
+    // executeSSH refused the command itself, before any SSH: the route must
+    // say so with the code the UI recognises, not a generic 500.
+    executeSSHMock.mockRejectedValue(new PveLicenseExcludedError(CONN_ID))
+    const res = await callRoute(POST as any, { method: 'POST', params: baseParams })
+    expect(res.status).toBe(403)
+    const body = await readJson<any>(res)
+    expect(body).toMatchObject({ code: 'CONNECTION_LICENSE_EXCLUDED' })
+    expect(body.error).toBe('This cluster is outside the license: ProxCenter refuses any change on it.')
+  })
 })
 
 // ---------------------------------------------------------------------------
@@ -300,6 +312,13 @@ describe('DELETE /api/v1/connections/[id]/nodes/[node]/maintenance', () => {
     expect(res.status).toBe(500)
     const body = await readJson<any>(res)
     expect(body.error).toBe('timeout')
+  })
+
+  it('403 with its code when the cluster is outside the license (roadmap#58)', async () => {
+    executeSSHMock.mockRejectedValue(new PveLicenseExcludedError(CONN_ID))
+    const res = await callRoute(DELETE as any, { method: 'DELETE', params: baseParams })
+    expect(res.status).toBe(403)
+    expect(await readJson<any>(res)).toMatchObject({ code: 'CONNECTION_LICENSE_EXCLUDED' })
   })
 })
 

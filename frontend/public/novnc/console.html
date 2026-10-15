@@ -457,6 +457,16 @@ node bundle-novnc.js
         
         if (!res.ok) {
           const errText = await res.text();
+          let refusal = null;
+          try { refusal = JSON.parse(errText); } catch (e) {}
+          // A cluster outside the license refuses consoles for good: say why, once, no retries.
+          if (refusal && refusal.code === 'CONNECTION_LICENSE_EXCLUDED') {
+            showError(refusal.error);
+            setStatus('error', 'Error');
+            loadingText.textContent = refusal.error;
+            loadingSubtext.textContent = '';
+            return;
+          }
           throw new Error(`HTTP ${res.status}: ${errText}`);
         }
         

@@ -35,12 +35,7 @@ export async function PUT(req: Request, ctx: { params: Promise<{ connectionId: s
     return NextResponse.json(data)
   } catch (e: any) {
     const msg = e?.message || ""
-    if (
-      msg.includes("ECONNREFUSED") ||
-      msg.includes("fetch failed") ||
-      msg.includes("ENOTFOUND") ||
-      msg.includes("timeout")
-    ) {
+    if (/ECONNREFUSED|fetch failed|ENOTFOUND|timeout/.test(msg)) {
       return NextResponse.json(
         { error: "The ProxCenter backend (orchestrator) is not reachable.", code: "ORCHESTRATOR_UNAVAILABLE" },
         { status: 503 },

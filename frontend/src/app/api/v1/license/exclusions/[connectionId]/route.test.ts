@@ -68,6 +68,21 @@ describe('PUT /api/v1/license/exclusions/[connectionId]', () => {
     expect(await readJson(res)).toEqual({ error: 'connection not found' })
     expect(invalidateMock).not.toHaveBeenCalled()
   })
+  it('falls back to the HTTP status when the orchestrator error has no JSON body', async () => {
+    fetchMock.mockResolvedValue(new Response('bad gateway', { status: 502 }))
+    const res = await callRoute(await exclusionsPUT(), { method: 'PUT', params: { connectionId: 'c-a' }, body: { excluded: true } })
+    expect(res.status).toBe(502)
+    expect(await readJson(res)).toEqual({ error: 'HTTP 502' })
+    expect(invalidateMock).not.toHaveBeenCalled()
+  })
+  it('500s with the error message for any other failure, and a default one when it has none', async () => {
+    fetchMock.mockRejectedValueOnce(new Error('boom')).mockRejectedValueOnce(new Error(''))
+    const first = await callRoute(await exclusionsPUT(), { method: 'PUT', params: { connectionId: 'c-a' }, body: { excluded: true } })
+    expect(first.status).toBe(500)
+    expect(await readJson(first)).toEqual({ error: 'boom' })
+    const second = await callRoute(await exclusionsPUT(), { method: 'PUT', params: { connectionId: 'c-a' }, body: { excluded: true } })
+    expect(await readJson(second)).toEqual({ error: 'Failed to update the license exclusion' })
+  })
   it('503s with ORCHESTRATOR_UNAVAILABLE when the orchestrator is down', async () => {
     fetchMock.mockRejectedValue(new Error('fetch failed: ECONNREFUSED'))
     const res = await callRoute(await exclusionsPUT(), { method: 'PUT', params: { connectionId: 'c-a' }, body: { excluded: true } })

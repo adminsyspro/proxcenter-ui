@@ -6,11 +6,13 @@ import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 export const runtime = "nodejs"
 
 // GET - Get a specific metric server
+// Manage, not view: the full config carries the OpenTelemetry HTTP headers, which may hold an
+// Authorization token. Only the edit dialog reads it; the list stays on view.
 export async function GET(req: Request, ctx: { params: Promise<{ id: string; serverId: string }> }) {
   try {
     const { id, serverId } = await ctx.params
     if (!id || !serverId) return NextResponse.json({ error: "Missing params" }, { status: 400 })
-    const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW, "connection", id)
+    const denied = await checkPermission(PERMISSIONS.CONNECTION_MANAGE, "connection", id)
     if (denied) return denied
     const conn = await getConnectionById(id)
     const server = await pveFetch<any>(conn, `/cluster/metrics/server/${encodeURIComponent(serverId)}`)

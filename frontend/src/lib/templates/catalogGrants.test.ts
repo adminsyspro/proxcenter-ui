@@ -35,8 +35,10 @@ import {
   customImageVisibilityWhere,
   findBlueprintForTenant,
   granteeVdcIds,
+  isProviderBlueprint,
   listVisibleBlueprints,
   loadGrantSummaries,
+  loadGrantSummary,
   normalizeIdList,
   replaceTenantGrants,
   replaceVdcCatalogGrants,
@@ -208,6 +210,46 @@ describe('vDC grants', () => {
     await replaceVdcCatalogGrants('v1', { blueprintIds: ['b-new'] }, null)
     const ops = m.transaction.mock.calls[0][0]
     expect(ops[1].args.data).toEqual([{ imageId: 'i-keep', vdcId: 'v1', createdBy: null }, { blueprintId: 'b-new', vdcId: 'v1', createdBy: null }])
+  })
+})
+
+describe('grant summaries of blueprints and single entries', () => {
+  it('keys blueprint grants by blueprint id', async () => {
+    m.grantFindMany.mockResolvedValue([
+      { imageId: null, blueprintId: 'b1', granteeTenantId: 't1', vdcId: null },
+      { imageId: null, blueprintId: 'b1', granteeTenantId: null, vdcId: 'v2' },
+    ])
+    expect((await loadGrantSummaries('blueprint', ['b1'])).get('b1')).toEqual({ tenantIds: ['t1'], vdcIds: ['v2'] })
+    expect(m.grantFindMany).toHaveBeenCalledWith(expect.objectContaining({ where: { blueprintId: { in: ['b1'] } } }))
+  })
+
+  it('answers one entry, empty when it has no grant', async () => {
+    m.grantFindMany.mockResolvedValue([{ imageId: 'i1', blueprintId: null, granteeTenantId: 't1', vdcId: null }])
+    expect(await loadGrantSummary('image', 'i1')).toEqual({ tenantIds: ['t1'], vdcIds: [] })
+    m.grantFindMany.mockResolvedValue([])
+    expect(await loadGrantSummary('image', 'i2')).toEqual({ tenantIds: [], vdcIds: [] })
+  })
+
+  it('tells a hidden provider blueprint from an unknown one', async () => {
+    m.blueprintFindFirst.mockResolvedValueOnce({ id: 'b1' })
+    expect(await isProviderBlueprint('b1')).toBe(true)
+    expect(m.blueprintFindFirst).toHaveBeenCalledWith({ where: { id: 'b1', tenantId: 'default' }, select: { id: true } })
+    expect(await isProviderBlueprint('b-unknown')).toBe(false)
+  })
+})
+
+describe('vDC grants, refusals and purge', () => {
+  it("refuses a blueprint the provider does not own", async () => {
+    m.blueprintFindMany.mockResolvedValue([{ id: 'b-ok' }])
+    await expect(replaceVdcCatalogGrants('v1', { imageIds: [], blueprintIds: ['b-ok', 'b-tenant'] }, null)).rejects.toThrow(/provider blueprints.*b-tenant/)
+    expect(m.transaction).not.toHaveBeenCalled()
+  })
+
+  it('two empty lists purge the vDC grants without creating any', async () => {
+    await replaceVdcCatalogGrants('v1', { imageIds: [], blueprintIds: [] }, null)
+    const ops = m.transaction.mock.calls[0][0]
+    expect(ops).toEqual([{ op: 'delete', args: { where: { vdcId: 'v1' } } }])
+    expect(m.grantFindMany).not.toHaveBeenCalled()
   })
 })
 

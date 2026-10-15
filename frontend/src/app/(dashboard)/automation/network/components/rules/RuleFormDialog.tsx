@@ -69,7 +69,7 @@ export default function RuleFormDialog({
           <Chip label={scopeLabel} size="small" sx={{ ml: 1, height: 22, fontSize: 11, fontWeight: 600, bgcolor: alpha(scopeColor, 0.15), color: scopeColor }} />
         </Box>
       </DialogTitle>
-      <DialogContent sx={{ pt: 2 }}>
+      <DialogContent sx={{ pt: '20px !important' }}>
         <Grid container spacing={2}>
           <Grid size={{ xs: 12, sm: 4 }}>
             <FormControl fullWidth size="small">

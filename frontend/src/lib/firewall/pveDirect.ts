@@ -120,6 +120,9 @@ function ruleToForm(rule: CreateRuleRequest): URLSearchParams {
   return form
 }
 
+/** Optional rule properties PVE can drop through the PUT `delete` parameter. */
+const CLEARABLE_RULE_FIELDS = ['source', 'dest', 'proto', 'dport', 'sport', 'macro', 'iface', 'log', 'comment'] as const
+
 function updateRuleToForm(rule: UpdateRuleRequest): URLSearchParams {
   const form = new URLSearchParams()
 
@@ -128,15 +131,19 @@ function updateRuleToForm(rule: UpdateRuleRequest): URLSearchParams {
   // Pointer semantics in Go: only send enable when the caller provided it,
   // and send an explicit 0 as-is.
   if (rule.enable != null) form.set('enable', String(rule.enable))
-  setIf(form, 'source', rule.source)
-  setIf(form, 'dest', rule.dest)
-  setIf(form, 'proto', rule.proto)
-  setIf(form, 'dport', rule.dport)
-  setIf(form, 'sport', rule.sport)
-  setIf(form, 'macro', rule.macro)
-  setIf(form, 'iface', rule.iface)
-  setIf(form, 'log', rule.log)
-  setIf(form, 'comment', rule.comment)
+
+  // PVE keeps any property the PUT omits, so a field the user emptied
+  // (present as '') must go through `delete`, an absent one stays as is (#1115).
+  const cleared: string[] = []
+
+  for (const key of CLEARABLE_RULE_FIELDS) {
+    const value = rule[key]
+
+    if (value === '') cleared.push(key)
+    else setIf(form, key, value)
+  }
+
+  if (cleared.length > 0) form.set('delete', cleared.join(','))
   if (rule.moveto != null) form.set('moveto', String(rule.moveto))
 
   return form

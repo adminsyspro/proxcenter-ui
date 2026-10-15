@@ -250,7 +250,7 @@ describe('VmFirewallTab', () => {
     expect(tip).toHaveTextContent('Refresh')
   })
 
-  it('strips "any" from the edited rule before sending the update', async () => {
+  it('sends "any" as an empty source so the update clears it (#1115)', async () => {
     api.getVMRules.mockResolvedValue([
       { pos: 3, type: 'in', action: 'ACCEPT', enable: 1, proto: 'tcp', dport: '443', source: 'any', dest: '10.0.0.5', log: 'nolog', comment: 'https' },
     ])
@@ -267,7 +267,7 @@ describe('VmFirewallTab', () => {
 
     await waitFor(() => expect(api.updateVMRule).toHaveBeenCalledTimes(1))
     expect(api.updateVMRule).toHaveBeenCalledWith(CONN_ID, NODE, 'qemu', VMID, 3, expect.objectContaining({
-      source: undefined,
+      source: '',
       dest: '10.0.0.5',
       dport: '443',
       comment: 'https',

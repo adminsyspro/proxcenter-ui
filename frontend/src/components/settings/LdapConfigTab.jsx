@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 
 import MappingOrderButtons from './MappingOrderButtons'
+import { LdapTestChecks, LdapUserLookupDiagnostic } from './LdapDiagnostics'
 import { moveMappingRow } from '@/lib/settings/mappingOrder'
 
 import {
@@ -185,10 +186,13 @@ export default function LdapConfigTab() {
 
       const data = await res.json()
 
+      // With `checks` (orchestrator >= roadmap#38) the list says what was and
+      // was not verified; the summary line then stays short and localized.
+      const checks = Array.isArray(data.checks) ? data.checks : []
       if (res.ok && data.success) {
-        setTestResult({ success: true, message: data.message || t('ldap.testSuccess') })
+        setTestResult({ success: true, message: checks.length ? t('ldap.checks.successSummary') : (data.message || t('ldap.testSuccess')), checks })
       } else {
-        setTestResult({ success: false, message: data.error || data.message || t('ldap.testFailed') })
+        setTestResult({ success: false, message: data.error || data.message || t('ldap.testFailed'), checks })
       }
     } catch (e) {
       setTestResult({ success: false, message: t('ldap.connectionError') })
@@ -225,8 +229,10 @@ export default function LdapConfigTab() {
           severity={testResult.success ? 'success' : 'error'} 
           onClose={() => setTestResult(null)}
           icon={testResult.success ? <i className='ri-check-line' /> : <i className='ri-error-warning-line' />}
+          data-testid='ldap-test-result'
         >
           {testResult.message}
+          <LdapTestChecks checks={testResult.checks} />
         </Alert>
       )}
 
@@ -569,6 +575,18 @@ export default function LdapConfigTab() {
         </CardContent>
       </Card>
 
+      {/* Diagnostic de recherche d'utilisateur (roadmap#38), en lecture seule */}
+      <LdapUserLookupDiagnostic
+        config={config}
+        groupMappings={groupMappings}
+        disabled={!config.enabled}
+        roleLabel={roleId => {
+          const role = availableRoles.find(r => r.id === roleId)
+          if (!role) return roleId
+          return role.is_system ? t(`rbac.roles.${role.id}`) : role.name
+        }}
+      />
+
       {/* Aide Active Directory */}
       <Card variant='outlined' sx={{ bgcolor: 'action.hover' }}>
         <CardContent>
@@ -615,6 +633,16 @@ export default function LdapConfigTab() {
             <li>
               <Typography variant='body2'>
                 <strong>Group Attribute :</strong> <code>memberOf</code>
+              </Typography>
+            </li>
+            <li>
+              <Typography variant='body2'>
+                {t('ldap.adUsernameHelp')}
+              </Typography>
+            </li>
+            <li>
+              <Typography variant='body2'>
+                {t('ldap.adNestedHelp')} <code>(memberOf:1.2.840.113556.1.4.1941:=CN=ProxCenter-Users,OU=Groups,DC=votredomaine,DC=com)</code>
               </Typography>
             </li>
           </Box>

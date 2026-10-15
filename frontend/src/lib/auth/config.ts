@@ -68,6 +68,29 @@ import {
 } from './cookies'
 
 /**
+ * Record why an LDAP sign-in was refused, for the administrator only (server
+ * log + `login_failed` audit row). Before roadmap#38 every refusal collapsed
+ * into the generic message with no trace of its cause, so a filter excluding
+ * a user looked exactly like a wrong password. Never carries the password.
+ */
+async function logLdapRefusal(username: string, reason: string, detail?: string): Promise<void> {
+  console.warn(`[ldap] sign-in refused for "${username}": ${reason}${detail ? ` (${detail})` : ""}`)
+  try {
+    const { audit } = await import("@/lib/audit")
+    await audit({
+      action: "login_failed",
+      category: "auth",
+      userEmail: username,
+      details: { reason, provider: "ldap", ...(detail ? { detail } : {}) },
+      status: "failure",
+      errorMessage: reason,
+    })
+  } catch (e) {
+    console.error("[ldap] cannot audit the refused sign-in:", e)
+  }
+}
+
+/**
  * Best-effort request origin for a new session row.
  *
  * The jwt callback receives no request object, so this reads the ambient
@@ -307,15 +330,20 @@ export const authOptions: NextAuthOptions = {
         }
 
         // Authentifier via LDAP
-        const { user: ldapUser, failure } = await authenticateLdapDetailed(
+        const outcome = await authenticateLdapDetailed(
           credentials.username,
           credentials.password
         )
+        const ldapUser = outcome.user
 
         if (!ldapUser) {
           // Lockout: a refused bind counts against the account, a user the
           // directory does not know against the IP only, an LDAP error not at all.
+          const { failure, reason, detail } = outcome as Extract<typeof outcome, { user: null }>
           if (failure !== "error") await attempt.fail(failure === "invalid_password")
+          // The cause stays server-side (log + audit trail, roadmap#38): the
+          // person signing in sees the same message whatever the reason.
+          await logLdapRefusal(credentials.username, reason, detail)
           throw new Error("Identifiants LDAP invalides")
         }
 
@@ -323,6 +351,7 @@ export const authOptions: NextAuthOptions = {
         const ldapConfigForRestriction = await getLdapConfig()
         if (ldapConfigForRestriction?.requireGroup && ldapConfigForRestriction.allowedGroups.length > 0) {
           if (!isLdapGroupAllowed(ldapUser.groups, ldapConfigForRestriction.allowedGroups)) {
+            await logLdapRefusal(credentials.username, "not_in_allowed_group", `${ldapUser.dn} holds ${ldapUser.groups.length} group(s), none of them allowed`)
             throw new Error("Access denied: your LDAP account is not in an authorized group")
           }
         }

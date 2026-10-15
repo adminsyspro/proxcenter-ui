@@ -2,8 +2,7 @@
 import { NextResponse } from "next/server"
 
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
-import { prisma } from "@/lib/db/prisma"
-import { decryptSecret } from "@/lib/crypto/secret"
+import { bindPasswordOrSaved } from "@/lib/auth/ldap"
 
 export const runtime = "nodejs"
 
@@ -46,17 +45,7 @@ export async function POST(req: Request) {
     // If bind_password is empty but a saved password exists in DB, use it
     // (the form only exposes a "hasBindPassword" hint via GET, never the
     // ciphertext, so the user can re-test without re-entering the secret).
-    if (bind_dn && !bind_password) {
-      try {
-        const config = await prisma.ldapConfig.findUnique({
-          where: { id: "default" },
-          select: { bindPasswordEnc: true },
-        })
-        if (config?.bindPasswordEnc) {
-          bind_password = decryptSecret(config.bindPasswordEnc)
-        }
-      } catch {}
-    }
+    bind_password = await bindPasswordOrSaved(bind_dn, bind_password)
 
     // Toujours utiliser l'orchestrator pour le test LDAP
     const result = await testLdapViaOrchestrator({
@@ -88,15 +77,19 @@ export async function POST(req: Request) {
       errorMessage: result.success ? undefined : result.message,
     })
 
+    // `checks` says what the test verified and what it did not (roadmap#38):
+    // a green test never meant that a user can find their way in.
     if (result.success) {
-      return NextResponse.json({ 
-        success: true, 
-        message: result.message 
+      return NextResponse.json({
+        success: true,
+        message: result.message,
+        checks: result.checks,
       })
     } else {
-      return NextResponse.json({ 
-        success: false, 
-        error: result.message 
+      return NextResponse.json({
+        success: false,
+        error: result.message,
+        checks: result.checks,
       })
     }
   } catch (error: any) {
@@ -107,6 +100,13 @@ export async function POST(req: Request) {
       error: error?.message || "Erreur lors du test LDAP" 
     }, { status: 500 })
   }
+}
+
+/** One line of the connection test verdict, as the orchestrator reports it. */
+interface LdapTestCheck {
+  id: string
+  status: "passed" | "failed" | "warning" | "skipped" | "not_checked"
+  detail?: string
 }
 
 /**
@@ -120,7 +120,7 @@ async function testLdapViaOrchestrator(config: {
   user_filter?: string
   tls_insecure?: boolean
   ca_cert?: string
-}): Promise<{ success: boolean; message: string }> {
+}): Promise<{ success: boolean; message: string; checks?: LdapTestCheck[] }> {
   try {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -150,6 +150,8 @@ async function testLdapViaOrchestrator(config: {
     return {
       success: data.success || false,
       message: data.message || data.error || 'Unknown error',
+      // Absent on an orchestrator older than roadmap#38: the UI then shows the message alone.
+      checks: Array.isArray(data.checks) ? data.checks : undefined,
     }
   } catch (error: any) {
     return {

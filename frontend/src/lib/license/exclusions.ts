@@ -75,7 +75,7 @@ export async function isConnectionLicenseExcluded(id: string): Promise<boolean> 
     // goes through the orchestrator, so nothing else would refuse it: a
     // database hiccup simply leaves writes allowed for the TTL. That miss is
     // cached like an answer, so it is not retried on every write either.
-    console.warn(`[license] Could not read the exclusion of connection ${safeLog(id)}, writes stay allowed:`, (e as Error)?.message)
+    console.warn("[license] Could not read a connection's exclusion, writes stay allowed:", safeLog(id).replace(/[\r\n]/g, ""), safeLog((e as Error)?.message))
   }
 
   cache.set(id, { excluded, expiry: now + CACHE_TTL_MS })

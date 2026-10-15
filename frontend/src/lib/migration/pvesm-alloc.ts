@@ -125,6 +125,19 @@ export function volumesToKeep(allocatedVolumes: AllocatedVolume[]): AllocatedVol
 }
 
 /**
+ * Whether failure cleanup must keep the target VM a warm job created.
+ *
+ * True as soon as one volume holds a completed copy, attached or not: an attached
+ * one IS the migrated disk, and a kept unattached one is named `vm-<vmid>-disk-N`,
+ * so destroying the VM with `destroy-unreferenced-disks` would delete the very
+ * copy `volumesToKeep` protects (#612). Otherwise the VM is an empty shell that
+ * only blocks the VMID of a retry (roadmap#57).
+ */
+export function keepTargetVm(allocatedVolumes: AllocatedVolume[]): boolean {
+  return allocatedVolumes.some(v => v.volumeId && v.copied)
+}
+
+/**
  * Name for the next data disk of `targetVmid` on the target storage.
  *
  * Numbering starts after the highest `vm-<vmid>-disk-<n>` already referenced by the
@@ -301,7 +314,11 @@ export async function allocateBlockVolumeAndResolvePath(
   //   - Ceph:    "successfully created 'storage:vm-vmid-disk-N'"
   //   - LVM on iSCSI multipath: prints '/dev/<vg>/<lv>' between quotes
   //     instead of the volume ID — calling `pvesm path` on that fails.
-  const quotedMatch = allocOutput.match(/'([^']+)'/)
+  // The output also carries whatever PVE warns on stderr while loading its storage
+  // plugins (a custom plugin on an older storage API warns on every call, roadmap#57),
+  // so read the quoted value of the "successfully created" line, not the first quote
+  // anywhere in the output.
+  const quotedMatch = allocOutput.match(/successfully created '([^']+)'/) ?? allocOutput.match(/'([^']+)'/)
   const captured = quotedMatch ? quotedMatch[1] : allocOutput
 
   if (captured.startsWith("/dev/")) {
@@ -312,14 +329,22 @@ export async function allocateBlockVolumeAndResolvePath(
   }
 
   const volumeId = captured
+
+  // The path is the command's whole stdout, so stderr must not reach it. PVE warns
+  // on stderr while loading its storage plugins, on every call, and the orchestrator
+  // merges both streams: with a custom plugin on an older storage API, that warning
+  // became the first line of the "device path" and failed every migration to the
+  // node (roadmap#57). Discarding stderr is safe because `pvesm path` changes
+  // nothing: on a failure it runs again with stderr kept, for the diagnosis.
   const pathResult = await executeSSH(
     connectionId,
     nodeIp,
-    `pvesm path ${shellEscape(volumeId)} 2>&1`,
+    `pvesm path ${shellEscape(volumeId)} 2>/dev/null`,
   )
 
   if (!pathResult.success || !pathResult.output?.trim()) {
-    const message = (pathResult.output || pathResult.error || "no output from pvesm path").trim()
+    const diag = await executeSSH(connectionId, nodeIp, `pvesm path ${shellEscape(volumeId)} 2>&1`)
+    const message = (diag.output || diag.error || pathResult.error || "no output from pvesm path").trim()
     throw new Error(`Failed to resolve device path for ${volumeId}: ${message}`)
   }
 

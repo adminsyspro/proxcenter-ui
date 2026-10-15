@@ -6623,7 +6623,104 @@
     "requireGroup": "로그인에 그룹 멤버십 필수",
     "allowedGroup": "허용된 그룹",
     "addAllowedGroup": "허용 그룹 추가",
-    "groupMappingOrderDesc": "행은 위에서 아래로 읽습니다. 사용자가 속한 첫 번째 그룹이 역할을 결정합니다."
+    "groupMappingOrderDesc": "행은 위에서 아래로 읽습니다. 사용자가 속한 첫 번째 그룹이 역할을 결정합니다.",
+    "checks": {
+      "successSummary": "디렉터리 연결에 성공했습니다.",
+      "notCheckedHint": "테스트가 성공해도 사용자가 로그인할 수 있다는 뜻은 아닙니다. 아래에서 실제 사용자 이름으로 사용자 조회 진단을 실행하세요.",
+      "connect": "서버 연결",
+      "bind": "서비스 계정 바인드",
+      "base_dn": "Base DN 읽기",
+      "user_filter": "사용자 필터 구문",
+      "user_lookup": "사용자 필터로 사용자 찾기",
+      "user_password": "사용자 비밀번호",
+      "group_membership": "그룹 멤버십 및 허용 그룹",
+      "role_mapping": "그룹-역할 매핑",
+      "status": {
+        "passed": "확인됨",
+        "failed": "실패",
+        "warning": "경고",
+        "skipped": "건너뜀",
+        "not_checked": "확인 안 함"
+      }
+    },
+    "diag": {
+      "title": "사용자 조회 진단",
+      "description": "로그인과 같은 방식(서비스 계정, Base DN, 사용자 필터)으로 사용자 이름을 조회한 뒤, 저장 여부와 관계없이 이 양식의 허용 그룹과 역할 매핑을 적용합니다. 읽기 전용: 계정을 만들거나 역할을 할당하거나 저장하지 않으며 비밀번호도 확인하지 않습니다.",
+      "username": "테스트 사용자 이름",
+      "usernameHelper": "사용자가 로그인 페이지에 입력하는 그대로 입력하세요. sAMAccountName 필터라면 도메인 없는 짧은 이름입니다.",
+      "run": "사용자 조회",
+      "running": "조회 중...",
+      "passwordNotChecked": "비밀번호는 확인하지 않습니다. 여기서 찾은 사용자도 잘못되었거나 만료된 비밀번호로 거부될 수 있습니다.",
+      "verdict": {
+        "ok": "디렉터리가 비밀번호를 수락하면 {name} 사용자는 로그인할 수 있습니다.",
+        "invalid_filter": "사용자 필터가 잘못되어 모든 LDAP 로그인이 실패합니다: {error}",
+        "lookup_error": "{stage} 단계에서 조회가 실패했습니다: {error}",
+        "not_found": "Base DN 아래에 이 사용자 이름과 일치하는 항목이 없습니다. 로그인은 잘못된 자격 증명으로 거부됩니다.",
+        "excluded_by_filter": "사용자는 디렉터리에 있지만 사용자 필터의 다른 절이 제외합니다. 역할 매핑 전에 로그인이 거부됩니다.",
+        "ambiguous": "이 사용자 이름과 일치하는 항목이 여러 개입니다. 하나를 고르지 않고 로그인을 거부합니다.",
+        "not_in_allowed_group": "사용자를 찾았지만 허용 그룹에 속하지 않습니다. 로그인이 거부됩니다."
+      },
+      "stage": {
+        "input": "입력",
+        "connect": "연결",
+        "bind": "서비스 계정 바인드",
+        "search": "검색"
+      },
+      "search": "디렉터리 검색",
+      "filterUsed": "전송된 필터",
+      "baseDn": "Base DN",
+      "matches": "{count, plural, =0 {일치하는 항목 없음} other {일치하는 항목 #개}}",
+      "moreMatches": "(그 이상)",
+      "identityFilter": "사용자 이름 절만으로 한 같은 검색",
+      "foundEntry": "검토한 항목",
+      "groups": "디렉터리가 반환한 그룹 ({attribute})",
+      "noGroups": "없음",
+      "nestedGroups": "중첩으로만 도달하는 그룹(로그인 시 보이지 않음):",
+      "nestedVia": "{group} 경유",
+      "nestedTruncated": "중첩 그룹 확장이 일찍 중단되었습니다.",
+      "filterGroups": "사용자 필터의 그룹 절",
+      "clause": {
+        "direct": "직접 멤버",
+        "nested": "중첩 멤버만 해당({path}): 단순 memberOf 절로는 찾을 수 없습니다",
+        "none": "멤버 아님",
+        "unevaluated": "평가 안 됨, 단일 사용자를 찾지 못함",
+        "recursive": "재귀 절, Active Directory가 처리"
+      },
+      "eligibility": "허용 그룹",
+      "allowed": {
+        "off": "제한 꺼짐: 필터가 찾은 모든 사용자가 로그인할 수 있습니다.",
+        "yes": "허용 그룹의 멤버입니다.",
+        "no": "어떤 허용 그룹의 멤버도 아닙니다.",
+        "nestedOnly": "중첩으로만 도달하므로 인정되지 않음: {groups}"
+      },
+      "role": {
+        "title": "로그인 시 역할",
+        "titleIfAdmitted": "사용자가 허용된다면 로그인 시 역할",
+        "mapped": "매핑 행 {group}에 따른 {role}.",
+        "defaultNew": "일치하는 매핑 행이 없습니다. 새 계정은 기본 역할 {role}을(를) 받습니다.",
+        "keepExisting": "일치하는 매핑 행이 없습니다. 기존 계정은 현재 역할을 유지합니다.",
+        "nestedOnly": "중첩으로만 일치하여 무시된 매핑 행: {groups}"
+      },
+      "account": {
+        "new": "{email}의 ProxCenter 계정이 아직 없습니다. 첫 로그인 시 생성됩니다.",
+        "existing": "{email}의 ProxCenter 계정이 이미 있습니다.",
+        "disabled": "{email}의 ProxCenter 계정이 있지만 비활성화되어 있습니다."
+      },
+      "eligibilityVsRole": "로그인 가능 여부는 사용자 필터와 허용 그룹이 결정합니다. 역할 매핑은 그 다음에만 적용되며 로그인을 거부하지 않습니다.",
+      "hint": {
+        "username_format": "사용자 이름에 @ 또는 \\ 가 있습니다. 필터가 sAMAccountName을 검색한다면 jdoe@domain 이나 DOMAIN\\jdoe 가 아닌 짧은 이름(jdoe)을 입력하거나 userPrincipalName을 검색하세요.",
+        "nested_membership": "ProxCenter는 직접 그룹 멤버십만 읽습니다. Active Directory에서는 사용자 필터의 (memberOf:1.2.840.113556.1.4.1941:=CN=Group,OU=Groups,DC=example,DC=com) 절이 중첩 멤버도 찾지만, 허용 그룹과 역할 매핑은 여전히 직접 그룹을 비교합니다.",
+        "placeholder_missing": "사용자 필터에 사용자 이름 자리 표시자가 없어 모든 로그인이 같은 항목을 조회합니다.",
+        "base_dn_scope": "Base DN에 사용자 항목이 포함되어 있고 서비스 계정이 읽을 수 있는지 확인하세요."
+      },
+      "error": {
+        "orchestrator_outdated": "이 진단을 사용하기에는 오케스트레이터가 너무 오래되었습니다. 인터페이스와 같은 버전으로 업데이트하세요.",
+        "username_required": "테스트 사용자 이름을 입력하세요.",
+        "generic": "진단에 실패했습니다: {error}"
+      }
+    },
+    "adUsernameHelp": "사용자 이름: sAMAccountName 필터에서는 도메인이나 @ 접미사 없이 짧은 로그온 이름(jdoe)으로 로그인합니다.",
+    "adNestedHelp": "중첩 그룹: 단순 memberOf 절은 직접 멤버만 찾습니다. 사용자 필터에서 다음 Active Directory 절은 중첩 멤버도 허용합니다(허용 그룹과 역할 매핑은 여전히 직접 그룹만 비교합니다):"
   },
   "oidc": {
     "description": "사용자가 회사 ID 공급자(Keycloak, Azure AD, Okta, Google, Auth0 등)로 로그인할 수 있도록 OIDC/SSO 인증을 구성합니다.",

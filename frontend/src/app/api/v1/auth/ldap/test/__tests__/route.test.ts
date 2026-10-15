@@ -80,4 +80,31 @@ describe("POST /api/v1/auth/ldap/test", () => {
     expect(res.status).toBe(400)
     expect(fetchMock).not.toHaveBeenCalled()
   })
+
+  // roadmap#38: the verdict lists what was and was not checked.
+  it("passes the orchestrator checks through, on success and on failure", async () => {
+    const checks = [
+      { id: "connect", status: "passed" },
+      { id: "user_lookup", status: "not_checked" },
+    ]
+    fetchMock.mockResolvedValue({ json: async () => ({ success: true, message: "ok", checks }) })
+    const POST = await importPOST()
+    let payload = await readJson<any>(await callRoute(POST as any, { body: { url: "ldap://dc" } }))
+    expect(payload.checks).toEqual(checks)
+
+    fetchMock.mockResolvedValue({ json: async () => ({ success: false, message: "User filter is invalid", checks }) })
+    payload = await readJson<any>(await callRoute(POST as any, { body: { url: "ldap://dc" } }))
+    expect(payload).toMatchObject({ success: false, error: "User filter is invalid", checks })
+
+    fetchMock.mockResolvedValue({ json: async () => ({ success: true, message: "LDAP connection successful" }) })
+    payload = await readJson<any>(await callRoute(POST as any, { body: { url: "ldap://dc" } }))
+    expect(payload.checks).toBeUndefined()
+  })
+
+  it("re-tests with the saved bind password when the form leaves it blank", async () => {
+    findUniqueMock.mockResolvedValue({ bindPasswordEnc: "enc:saved" })
+    const POST = await importPOST()
+    await callRoute(POST as any, { body: { url: "ldap://dc", bind_dn: "cn=svc" } })
+    expect(orchestratorPayload().bind_password).toBe("saved")
+  })
 })

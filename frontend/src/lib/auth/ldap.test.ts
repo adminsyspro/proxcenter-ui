@@ -205,27 +205,75 @@ describe('authenticateLdapDetailed, failure reasons for the lockout policy', () 
   it('user_found false = user_not_found', async () => {
     orchestratorAnswers({ success: false, error: 'Invalid credentials', user_found: false })
     const { authenticateLdapDetailed } = await import('./ldap')
-    expect(await authenticateLdapDetailed('ghost', 'x')).toEqual({ user: null, failure: 'user_not_found' })
+    expect(await authenticateLdapDetailed('ghost', 'x')).toMatchObject({ user: null, failure: 'user_not_found', reason: 'user_not_found' })
   })
 
   it('user_found true = invalid_password', async () => {
     orchestratorAnswers({ success: false, error: 'Invalid credentials', user_found: true })
     const { authenticateLdapDetailed } = await import('./ldap')
-    expect(await authenticateLdapDetailed('jdoe', 'x')).toEqual({ user: null, failure: 'invalid_password' })
+    expect(await authenticateLdapDetailed('jdoe', 'x')).toMatchObject({ user: null, failure: 'invalid_password', reason: 'invalid_password' })
   })
 
   it('an orchestrator without user_found is read as a refused bind', async () => {
     orchestratorAnswers({ success: false, error: 'Invalid credentials' })
     const { authenticateLdapDetailed } = await import('./ldap')
-    expect(await authenticateLdapDetailed('jdoe', 'x')).toEqual({ user: null, failure: 'invalid_password' })
+    expect(await authenticateLdapDetailed('jdoe', 'x')).toMatchObject({ user: null, failure: 'invalid_password' })
   })
 
   it('an LDAP or orchestrator error is not a credential failure', async () => {
     orchestratorAnswers({ success: false, error: 'Failed to connect to LDAP server: refused' })
     const { authenticateLdapDetailed } = await import('./ldap')
-    expect(await authenticateLdapDetailed('jdoe', 'x')).toEqual({ user: null, failure: 'error' })
+    expect(await authenticateLdapDetailed('jdoe', 'x')).toMatchObject({ user: null, failure: 'error', reason: 'directory_error' })
 
     orchestratorAnswers({}, false)
-    expect(await authenticateLdapDetailed('jdoe', 'x')).toEqual({ user: null, failure: 'error' })
+    expect(await authenticateLdapDetailed('jdoe', 'x')).toMatchObject({ user: null, failure: 'error', reason: 'orchestrator_error' })
+  })
+
+  // roadmap#38: the precise cause travels with the failure so sign-in can
+  // log and audit it, without changing what the lockout counts.
+  it('keeps the orchestrator reason and error text', async () => {
+    orchestratorAnswers({ success: false, error: 'Invalid credentials', user_found: false, reason: 'user_not_found' })
+    const { authenticateLdapDetailed } = await import('./ldap')
+    expect(await authenticateLdapDetailed('bob', 'x')).toEqual({
+      user: null, failure: 'user_not_found', reason: 'user_not_found', detail: 'Invalid credentials',
+    })
+
+    orchestratorAnswers({ success: false, error: 'Ambiguous user filter: several directory entries match this username', reason: 'ambiguous_match' })
+    expect(await authenticateLdapDetailed('dup', 'x')).toMatchObject({ failure: 'error', reason: 'ambiguous_match' })
+  })
+
+  it('reports a disabled configuration', async () => {
+    findUniqueMock.mockResolvedValue({ ...ROW, enabled: false })
+    const { authenticateLdapDetailed } = await import('./ldap')
+    expect(await authenticateLdapDetailed('jdoe', 'x')).toMatchObject({ failure: 'error', reason: 'disabled' })
+  })
+})
+
+describe('matchLdapRoleEntry', () => {
+  it('returns the winning row, not only its role', async () => {
+    const { matchLdapRoleEntry } = await import('./ldap')
+    const mapping = [{ group: 'ops', role: 'role_operator' }, { group: 'dcvCenter Admins', role: 'role_vm_admin' }]
+    expect(matchLdapRoleEntry(['cn=dcvCenter Admins,ou=groups,dc=r38,dc=lab'], mapping)).toEqual(mapping[1])
+    expect(matchLdapRoleEntry(['cn=other,dc=x'], mapping)).toBeNull()
+    expect(matchLdapRoleEntry(['ops'], null)).toBeNull()
+  })
+})
+
+describe('bindPasswordOrSaved', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('keeps the typed password', async () => {
+    const { bindPasswordOrSaved } = await import('./ldap')
+    expect(await bindPasswordOrSaved('cn=svc', 'typed')).toBe('typed')
+    expect(findUniqueMock).not.toHaveBeenCalled()
+  })
+
+  it('falls back to the saved one only with a bind DN', async () => {
+    findUniqueMock.mockResolvedValue({ bindPasswordEnc: 'enc:saved' })
+    const { bindPasswordOrSaved } = await import('./ldap')
+    expect(await bindPasswordOrSaved('cn=svc', '')).toBe('saved')
+    expect(await bindPasswordOrSaved('', '')).toBeUndefined()
+    findUniqueMock.mockRejectedValue(new Error('db down'))
+    expect(await bindPasswordOrSaved('cn=svc', '')).toBeUndefined()
   })
 })

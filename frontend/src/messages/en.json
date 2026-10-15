@@ -6623,7 +6623,104 @@
     "requireGroup": "Require group membership to log in",
     "allowedGroup": "Allowed group",
     "addAllowedGroup": "Add allowed group",
-    "groupMappingOrderDesc": "The rows are read from top to bottom: the first group the user belongs to gives their role."
+    "groupMappingOrderDesc": "The rows are read from top to bottom: the first group the user belongs to gives their role.",
+    "checks": {
+      "successSummary": "Connection to the directory succeeded.",
+      "notCheckedHint": "A green test does not mean that a user can sign in. Run the user lookup diagnostic below with a real username.",
+      "connect": "Connection to the server",
+      "bind": "Service account bind",
+      "base_dn": "Base DN readable",
+      "user_filter": "User filter syntax",
+      "user_lookup": "Finding a user with the user filter",
+      "user_password": "User password",
+      "group_membership": "Group membership and allowed groups",
+      "role_mapping": "Group to role mapping",
+      "status": {
+        "passed": "checked",
+        "failed": "failed",
+        "warning": "warning",
+        "skipped": "skipped",
+        "not_checked": "not checked"
+      }
+    },
+    "diag": {
+      "title": "User lookup diagnostic",
+      "description": "Looks up a username the way sign-in does (service account, Base DN, user filter), then applies the allowed groups and the role mapping of this form, saved or not. Read-only: no account is created, no role is assigned, nothing is saved, and the password is not checked.",
+      "username": "Test username",
+      "usernameHelper": "Type it as the user does on the sign-in page. With a sAMAccountName filter, that is the short logon name, without domain.",
+      "run": "Look up user",
+      "running": "Looking up...",
+      "passwordNotChecked": "The password is not checked: a user found here can still be refused for a wrong or expired password.",
+      "verdict": {
+        "ok": "{name} can sign in, provided the directory accepts their password.",
+        "invalid_filter": "The user filter is invalid, every LDAP sign-in fails: {error}",
+        "lookup_error": "The lookup failed at the {stage} step: {error}",
+        "not_found": "No entry under the Base DN matches this username. Sign-in is refused as invalid credentials.",
+        "excluded_by_filter": "The user exists in the directory, but the other clauses of the user filter exclude them. Sign-in is refused before role mapping runs.",
+        "ambiguous": "Several entries match this username. Sign-in is refused rather than picking one.",
+        "not_in_allowed_group": "The user is found, but belongs to none of the allowed groups. Sign-in is refused."
+      },
+      "stage": {
+        "input": "input",
+        "connect": "connection",
+        "bind": "service account bind",
+        "search": "search"
+      },
+      "search": "Directory search",
+      "filterUsed": "Filter sent",
+      "baseDn": "Base DN",
+      "matches": "{count, plural, =0 {No matching entry} one {# matching entry} other {# matching entries}}",
+      "moreMatches": "(and more)",
+      "identityFilter": "Same search with only the username clauses",
+      "foundEntry": "Entry examined",
+      "groups": "Groups returned by the directory ({attribute})",
+      "noGroups": "None",
+      "nestedGroups": "Groups reached only through nesting, which sign-in does not see:",
+      "nestedVia": "via {group}",
+      "nestedTruncated": "The nested group expansion stopped early.",
+      "filterGroups": "Group clauses of the user filter",
+      "clause": {
+        "direct": "direct member",
+        "nested": "nested member only ({path}): a plain memberOf clause does not match it",
+        "none": "not a member",
+        "unevaluated": "not evaluated, no single user was found",
+        "recursive": "recursive clause, resolved by Active Directory"
+      },
+      "eligibility": "Allowed groups",
+      "allowed": {
+        "off": "Restriction off: any user the filter finds may sign in.",
+        "yes": "Member of an allowed group.",
+        "no": "Member of none of the allowed groups.",
+        "nestedOnly": "Reached only through nesting, therefore not counted: {groups}"
+      },
+      "role": {
+        "title": "Role at sign-in",
+        "titleIfAdmitted": "Role at sign-in, if the user were admitted",
+        "mapped": "{role}, from the mapping row {group}.",
+        "defaultNew": "No mapping row matches. A new account gets the default role: {role}.",
+        "keepExisting": "No mapping row matches. This existing account keeps the role it already has.",
+        "nestedOnly": "Mapping rows matched only through nesting, therefore ignored: {groups}"
+      },
+      "account": {
+        "new": "No ProxCenter account for {email} yet: the first sign-in creates it.",
+        "existing": "A ProxCenter account already exists for {email}.",
+        "disabled": "A ProxCenter account exists for {email} but is disabled."
+      },
+      "eligibilityVsRole": "The user filter and the allowed groups decide whether the user may sign in at all. Role mapping only runs afterwards and never refuses a sign-in.",
+      "hint": {
+        "username_format": "The username contains @ or \\. If the filter searches sAMAccountName, enter the short logon name (jdoe), not jdoe@domain or DOMAIN\\jdoe, or search userPrincipalName instead.",
+        "nested_membership": "ProxCenter reads direct group membership only. On Active Directory, the clause (memberOf:1.2.840.113556.1.4.1941:=CN=Group,OU=Groups,DC=example,DC=com) in the user filter also matches nested members, but the allowed groups and the role mapping still compare direct groups.",
+        "placeholder_missing": "The user filter has no username placeholder: every sign-in looks up the same entries.",
+        "base_dn_scope": "Check that the Base DN contains the user entry and that the service account may read it."
+      },
+      "error": {
+        "orchestrator_outdated": "The orchestrator is too old for this diagnostic. Update it to the same version as the interface.",
+        "username_required": "Enter a test username.",
+        "generic": "The diagnostic failed: {error}"
+      }
+    },
+    "adUsernameHelp": "Username: with a sAMAccountName filter, users sign in with their short logon name (jdoe), without domain or @ suffix.",
+    "adNestedHelp": "Nested groups: a plain memberOf clause only matches direct members. In the user filter, this Active Directory clause also admits nested members (allowed groups and role mapping still compare direct groups):"
   },
   "oidc": {
     "description": "Configure OIDC/SSO authentication to allow users to sign in with their corporate identity provider (Keycloak, Azure AD, Okta, Google, Auth0, etc.).",

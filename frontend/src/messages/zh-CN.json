@@ -3249,6 +3249,7 @@
       },
       "actions": {
         "addNodes": "添加节点",
+        "excludeCluster": "排除集群",
         "renew": "续订",
         "sync": "立即同步",
         "retry": "重试",
@@ -3273,12 +3274,28 @@
         "pool": "共享池",
         "moved": "{days, plural, =0 {已迁移 · 此处不到一天} other {已迁移 · 此处还剩 # 天}}",
         "movedEnded": "已迁移 · 此处不再有效",
+        "exceededCovered": "超出部分由整体剩余容量覆盖",
         "state": {
           "active": "有效",
           "expired": "已过期",
           "invalid": "无效",
+          "exceeded": "已超出",
           "unknown": "未知"
         }
+      },
+      "excluded": {
+        "title": "许可证之外的集群",
+        "help": "许可证之外的集群不计入配额：它仍然可见，但 ProxCenter 拒绝对其进行任何修改，包括控制台和 Shell。",
+        "none": "没有许可证之外的集群",
+        "nodes": "{count, plural, other {# 个节点}}",
+        "exclude": "从配额中排除",
+        "excludeOne": "排除",
+        "include": "重新计入",
+        "dialogTitle": "从配额中排除集群",
+        "allExcluded": "所有集群都已在许可证之外",
+        "excludedOk": "集群已从配额中排除",
+        "includedOk": "集群已重新计入配额",
+        "failed": "无法更改排除设置"
       },
       "connection": {
         "sync": "同步"
@@ -3881,6 +3898,7 @@
     "licenseImportConnNone": "浮动（不绑定集群）",
     "licenseImportSubmit": "导入",
     "licenseImportSuccess": "许可证已导入",
+    "licenseImportReplaced": "许可证已就地更新，其集群保持不变。",
     "licenseImportFailed": "导入失败",
     "licenseInstallFingerprint": "安装指纹",
     "licenseInstallFingerprintHint": "用于标识此 ProxCenter 部署。可提供给技术支持，并生成许可证请求以获取绑定到该指纹的密钥。",
@@ -6042,7 +6060,8 @@
     "apiError": "API 错误",
     "notFound": "未找到",
     "pageNotFound": "页面未找到",
-    "httpError": "错误 {status}"
+    "httpError": "错误 {status}",
+    "connectionLicenseExcluded": "此集群不在许可范围内：ProxCenter 拒绝对其进行任何更改。"
   },
   "errorPages": {
     "401": {

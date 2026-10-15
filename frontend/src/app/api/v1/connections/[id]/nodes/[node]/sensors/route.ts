@@ -80,7 +80,8 @@ export async function GET(
     }
 
     const nodeIp = await resolveNodeSshEndpoint(conn, node)
-    const result = await executeSSH(id, nodeIp, HWMON_COMMAND, SSH_TIMEOUT_MS)
+    // A sysfs read: still answers on a cluster outside the license (roadmap#58).
+    const result = await executeSSH(id, nodeIp, HWMON_COMMAND, SSH_TIMEOUT_MS, { readOnly: true })
 
     // SSH disabled on the connection, host unreachable, credentials rejected:
     // all indistinguishable to the caller and all mean the same thing on

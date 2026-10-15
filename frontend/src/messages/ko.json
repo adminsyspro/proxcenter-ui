@@ -3245,6 +3245,7 @@
       },
       "actions": {
         "addNodes": "노드 추가",
+        "excludeCluster": "클러스터 제외",
         "renew": "갱신",
         "sync": "지금 동기화",
         "retry": "다시 시도",
@@ -3269,12 +3270,28 @@
         "pool": "공유 풀",
         "moved": "{days, plural, =0 {이동됨 · 여기서 하루 미만} other {이동됨 · 여기서 #일}}",
         "movedEnded": "이동됨 · 여기서 더 이상 유효하지 않음",
+        "exceededCovered": "초과분은 전체 라이선스의 여유 용량으로 충당됩니다",
         "state": {
           "active": "활성",
           "expired": "만료됨",
           "invalid": "유효하지 않음",
+          "exceeded": "초과됨",
           "unknown": "알 수 없음"
         }
+      },
+      "excluded": {
+        "title": "라이선스 제외 클러스터",
+        "help": "라이선스에서 제외된 클러스터는 할당량에 포함되지 않습니다. 계속 표시되지만 ProxCenter는 콘솔과 셸을 포함해 해당 클러스터의 모든 변경을 거부합니다.",
+        "none": "라이선스에서 제외된 클러스터가 없습니다",
+        "nodes": "{count, plural, other {노드 #개}}",
+        "exclude": "할당량에서 제외",
+        "excludeOne": "제외",
+        "include": "다시 포함",
+        "dialogTitle": "할당량에서 클러스터 제외",
+        "allExcluded": "모든 클러스터가 이미 라이선스에서 제외되어 있습니다",
+        "excludedOk": "클러스터가 할당량에서 제외되었습니다",
+        "includedOk": "클러스터가 다시 할당량에 포함되었습니다",
+        "failed": "제외 설정을 변경할 수 없습니다"
       },
       "connection": {
         "sync": "동기화"
@@ -3877,6 +3894,7 @@
     "licenseImportConnNone": "유동 (클러스터 없음)",
     "licenseImportSubmit": "가져오기",
     "licenseImportSuccess": "라이선스를 가져왔습니다",
+    "licenseImportReplaced": "라이선스가 제자리에서 업데이트되었으며 클러스터는 유지됩니다.",
     "licenseImportFailed": "가져오기 실패",
     "licenseInstallFingerprint": "설치 지문",
     "licenseInstallFingerprintHint": "이 ProxCenter 배포를 식별합니다. 지원팀에 전달하고, 이 지문에 바인딩된 키를 받으려면 라이선스 요청을 생성하세요.",
@@ -6038,7 +6056,8 @@
     "apiError": "API 오류",
     "notFound": "찾을 수 없음",
     "pageNotFound": "페이지를 찾을 수 없음",
-    "httpError": "오류 {status}"
+    "httpError": "오류 {status}",
+    "connectionLicenseExcluded": "이 클러스터는 라이선스 범위 밖에 있습니다. ProxCenter는 이 클러스터의 모든 변경을 거부합니다."
   },
   "errorPages": {
     "401": {

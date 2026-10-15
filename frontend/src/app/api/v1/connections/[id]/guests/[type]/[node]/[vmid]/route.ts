@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { licenseExcludedResponse } from "@/lib/api/response"
 
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
@@ -139,6 +140,8 @@ export async function DELETE(
       ...(ipamWarning ? { warning: ipamWarning } : {}),
     })
   } catch (e: any) {
+    const excluded = licenseExcludedResponse(e)
+    if (excluded) return excluded
     console.error("[DELETE VM] Error:", e)
 
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })

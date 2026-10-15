@@ -151,3 +151,48 @@ describe('computePerTenantRollup', () => {
     expect(rows[0].usedNodes).toBe(99)
   })
 })
+
+describe('per-license overflow (roadmap#58)', () => {
+  const imp = (id: string, licenseId: string, over: Record<string, unknown> = {}) => ({
+    id, license_id: licenseId, edition: 'enterprise', max_nodes: 10, cluster_uuid: null, expires_at: '2027-01-01T00:00:00Z', state: 'active', connection_ids: [], ...over,
+  })
+
+  it('reads a license carrying more nodes than it allows as exceeded, whatever the fleet total says', () => {
+    const s = {
+      license_id: 'P',
+      node_status: {
+        current_nodes: 16, max_nodes: 20, exceeded: false,
+        per_license: [
+          { license_id: 'P', max_nodes: 10, used_nodes: 16, is_primary: true, exceeded: true, connections: ['c-a'] },
+          { license_id: 'I1', max_nodes: 10, used_nodes: 0, exceeded: false },
+        ],
+      },
+    }
+    const rows = buildLicenseTableRows(s as any, [imp('imp-1', 'I1')] as any)
+    expect(rows[0]).toMatchObject({ role: 'primary', usedNodes: 16, maxNodes: 10, state: 'exceeded', exceeded: true })
+    expect(rows[1]).toMatchObject({ role: 'import', state: 'active', exceeded: false })
+  })
+
+  it('marks an exceeded import, and lets expired or invalid win over it', () => {
+    const now = Date.parse('2026-09-30T12:00:00Z')
+    const s = {
+      license_id: 'P',
+      node_status: {
+        per_license: [
+          { license_id: 'P', max_nodes: 10, used_nodes: 4, is_primary: true },
+          { license_id: 'I1', max_nodes: 10, used_nodes: 12, exceeded: true },
+          { license_id: 'I2', max_nodes: 10, used_nodes: 12, exceeded: true },
+          { license_id: 'I3', max_nodes: 10, used_nodes: 12, exceeded: true },
+        ],
+      },
+    }
+    const rows = buildLicenseTableRows(s as any, [
+      imp('imp-1', 'I1'),
+      imp('imp-2', 'I2', { expires_at: '2026-01-01T00:00:00Z' }),
+      imp('imp-3', 'I3', { binding_error: 'bound elsewhere' }),
+    ] as any, now)
+    expect(rows.map(r => [r.licenseId, r.state, r.exceeded])).toEqual([
+      ['P', 'active', false], ['I1', 'exceeded', true], ['I2', 'expired', true], ['I3', 'invalid', true],
+    ])
+  })
+})

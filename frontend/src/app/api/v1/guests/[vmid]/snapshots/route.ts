@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { licenseExcludedResponse } from "@/lib/api/response"
 
 import { pveFetch } from "@/lib/proxmox/client"
 import { waitForTask } from "@/lib/proxmox/tasks"
@@ -182,6 +183,8 @@ export async function POST(
       }
     })
   } catch (e: any) {
+    const excluded = licenseExcludedResponse(e)
+    if (excluded) return excluded
     console.error("Snapshot create error:", e)
 
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
@@ -254,6 +257,8 @@ export async function DELETE(
       }
     })
   } catch (e: any) {
+    const excluded = licenseExcludedResponse(e)
+    if (excluded) return excluded
     console.error("Snapshot delete error:", String(e?.message || e).replace(/[\r\n]/g, ''))
 
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })

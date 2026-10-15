@@ -3245,6 +3245,7 @@
       },
       "actions": {
         "addNodes": "Ajouter des nœuds",
+        "excludeCluster": "Exclure un cluster",
         "renew": "Renouveler",
         "sync": "Synchroniser",
         "retry": "Réessayer",
@@ -3269,12 +3270,28 @@
         "pool": "Réserve partagée",
         "moved": "{days, plural, =0 {Déplacée · moins d'un jour ici} one {Déplacée · # jour ici} other {Déplacée · # jours ici}}",
         "movedEnded": "Déplacée · plus valable ici",
+        "exceededCovered": "Débordement couvert par la capacité restante du parc",
         "state": {
           "active": "Active",
           "expired": "Expirée",
           "invalid": "Invalide",
+          "exceeded": "Dépassée",
           "unknown": "Inconnu"
         }
+      },
+      "excluded": {
+        "title": "Clusters hors licence",
+        "help": "Un cluster hors licence ne compte pas dans le quota : il reste visible, mais ProxCenter refuse toute modification dessus, consoles et shells compris.",
+        "none": "Aucun cluster hors licence",
+        "nodes": "{count, plural, one {# nœud} other {# nœuds}}",
+        "exclude": "Exclure du quota",
+        "excludeOne": "Exclure",
+        "include": "Réinclure",
+        "dialogTitle": "Exclure un cluster du quota",
+        "allExcluded": "Tous les clusters sont déjà hors licence",
+        "excludedOk": "Cluster exclu du quota",
+        "includedOk": "Cluster de nouveau compté dans le quota",
+        "failed": "Impossible de modifier l'exclusion"
       },
       "connection": {
         "sync": "Synchroniser"
@@ -3877,6 +3894,7 @@
     "licenseImportConnNone": "Flottante (aucun cluster)",
     "licenseImportSubmit": "Importer",
     "licenseImportSuccess": "Licence importée",
+    "licenseImportReplaced": "Licence mise à jour en place, ses clusters sont conservés.",
     "licenseImportFailed": "Échec de l'import",
     "licenseInstallFingerprint": "Empreinte d'installation",
     "licenseInstallFingerprintHint": "Identifie ce déploiement ProxCenter. Donnez-la au support, et générez une demande de licence pour obtenir une clé qui lui est liée.",
@@ -6038,7 +6056,8 @@
     "apiError": "Erreur API",
     "notFound": "Non trouvé",
     "pageNotFound": "Page non trouvée",
-    "httpError": "Erreur {status}"
+    "httpError": "Erreur {status}",
+    "connectionLicenseExcluded": "Ce cluster est hors licence : ProxCenter refuse toute modification dessus."
   },
   "errorPages": {
     "401": {

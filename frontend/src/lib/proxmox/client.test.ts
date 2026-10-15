@@ -40,7 +40,8 @@ import type { AddressInfo } from "node:net"
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
 import { errors as undiciErrors } from "undici"
 
-import { classifyPveError, isFailoverWorthy, PveApplicationError, type PveErrorClass } from "./client"
+import { classifyPveError, isFailoverWorthy, pveFetch, PveApplicationError, PveLicenseExcludedError, type PveErrorClass } from "./client"
+import { isConnectionLicenseExcluded } from "../license/exclusions"
 import { isVmConfigNotFoundError } from "./locateVm"
 
 // client.ts pulls `invalidateConnectionCache` from the connections module,
@@ -48,6 +49,13 @@ import { isVmConfigNotFoundError } from "./locateVm"
 // so the import is stubbed to keep the suite DB-free and fast.
 vi.mock("../connections/getConnection", () => ({
   invalidateConnectionCache: vi.fn(),
+}))
+
+// The write guard asks the database whether a connection is outside the
+// license (roadmap#58). The answer is scripted here, the error class is real.
+vi.mock("../license/exclusions", async importOriginal => ({
+  ...(await importOriginal<typeof import("../license/exclusions")>()),
+  isConnectionLicenseExcluded: vi.fn(async () => false),
 }))
 
 /** Builds an Error carrying arbitrary transport-style properties. */
@@ -749,5 +757,86 @@ describe("pveFetch failover onto another cluster node", () => {
     expect(hits[2]).toBe(`127.0.0.1:${port}/api2/json/version`)
 
     await client.getDefaultAgent().destroy()
+  })
+})
+
+describe("the license exclusion guard inside pveFetch (roadmap#58)", () => {
+  /**
+   * A connection declared outside the license stays readable, but no write
+   * may reach it. The guard decides before any request, so the local server
+   * records exactly what got through.
+   */
+  let server: Server
+  let baseUrl = ""
+  const hits: string[] = []
+
+  beforeAll(async () => {
+    const { createServer } = await import("node:http")
+    server = createServer((req, res) => {
+      hits.push(`${req.method} ${req.url}`)
+      res.writeHead(200, { "Content-Type": "application/json" })
+      res.end(JSON.stringify({ data: { ok: true } }))
+    })
+    await new Promise<void>(resolve => server.listen(0, "127.0.0.1", () => resolve()))
+    baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`
+  })
+
+  afterAll(async () => {
+    server.closeAllConnections()
+    await new Promise<void>(resolve => server.close(() => resolve()))
+  })
+
+  beforeEach(() => {
+    hits.length = 0
+    vi.mocked(isConnectionLicenseExcluded).mockReset().mockResolvedValue(false)
+  })
+
+  const conn = (id?: string) => ({ baseUrl, apiToken: "root@pam!vitest=secret", id })
+
+  it.each(["POST", "PUT", "DELETE"])("refuses a %s to an excluded connection before any request", async method => {
+    vi.mocked(isConnectionLicenseExcluded).mockResolvedValue(true)
+
+    const err = await pveFetch(conn("excluded-1"), "/nodes/pve1/qemu/100/status/start", { method })
+      .then(() => null)
+      .catch((e: unknown) => e) as PveLicenseExcludedError
+
+    expect(err).toBeInstanceOf(PveLicenseExcludedError)
+    expect(err.statusCode).toBe(403)
+    expect(err.code).toBe("CONNECTION_LICENSE_EXCLUDED")
+    expect(err.connectionId).toBe("excluded-1")
+    expect(hits).toEqual([])
+    expect(isConnectionLicenseExcluded).toHaveBeenCalledWith("excluded-1")
+  })
+
+  it("lets a read through to an excluded connection without even asking", async () => {
+    vi.mocked(isConnectionLicenseExcluded).mockResolvedValue(true)
+
+    await expect(pveFetch(conn("excluded-1"), "/nodes")).resolves.toEqual({ ok: true })
+    expect(hits).toEqual(["GET /api2/json/nodes"])
+    expect(isConnectionLicenseExcluded).not.toHaveBeenCalled()
+  })
+
+  it("lets a write through when the connection is inside the license", async () => {
+    await expect(pveFetch(conn("licensed-1"), "/nodes/pve1/qemu/100/status/start", { method: "POST" })).resolves.toEqual({ ok: true })
+    expect(hits).toEqual(["POST /api2/json/nodes/pve1/qemu/100/status/start"])
+    expect(isConnectionLicenseExcluded).toHaveBeenCalledWith("licensed-1")
+  })
+
+  it("cannot act on a write that does not identify its connection", async () => {
+    // Nothing to look up: the guard stays out of the way rather than
+    // refusing a write it cannot attribute. The call-site audit is what keeps
+    // every write carrying its id.
+    vi.mocked(isConnectionLicenseExcluded).mockResolvedValue(true)
+
+    await expect(pveFetch(conn(), "/nodes/pve1/qemu/100/status/start", { method: "POST" })).resolves.toEqual({ ok: true })
+    expect(hits).toHaveLength(1)
+    expect(isConnectionLicenseExcluded).not.toHaveBeenCalled()
+  })
+
+  it("is an application error, never failover evidence", () => {
+    const err = new PveLicenseExcludedError("excluded-1")
+
+    expect(classifyPveError(err)).toBe("application")
+    expect(isFailoverWorthy(classifyPveError(err), false, false)).toBe(false)
   })
 })

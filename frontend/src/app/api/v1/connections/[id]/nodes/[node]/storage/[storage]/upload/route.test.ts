@@ -10,12 +10,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { callRoute } from "@/__tests__/setup/route-test"
 
-const { checkPermissionMock, guardMock, nameMock, getConnectionByIdMock, getPrincipalMock } = vi.hoisted(() => ({
+const { checkPermissionMock, guardMock, nameMock, getConnectionByIdMock, getPrincipalMock, excludedMock } = vi.hoisted(() => ({
   checkPermissionMock: vi.fn(),
   guardMock: vi.fn(),
   nameMock: vi.fn(),
   getConnectionByIdMock: vi.fn(),
   getPrincipalMock: vi.fn(),
+  excludedMock: vi.fn(),
 }))
 
 vi.mock("@/lib/rbac", () => ({
@@ -35,6 +36,12 @@ vi.mock("@/lib/auth/principal", () => ({
   getPrincipal: (...a: any[]) => getPrincipalMock(...a),
 }))
 vi.mock("@/lib/upload-progress", () => ({ setProgress: vi.fn(), clearProgress: vi.fn() }))
+// The license exclusion of the cluster (roadmap#58) is read from the
+// database by the real module; scripted here, the error class stays real.
+vi.mock("@/lib/license/exclusions", async importOriginal => ({
+  ...(await importOriginal<typeof import("@/lib/license/exclusions")>()),
+  isConnectionLicenseExcluded: (...a: any[]) => excludedMock(...a),
+}))
 
 // Fake Proxmox endpoint: the route opens ONE https request on the first chunk
 // and reads its response on finalize. `fakeHttps.request` hands back a
@@ -68,6 +75,28 @@ beforeEach(() => {
   nameMock.mockReset().mockImplementation(async (_c: string, _s: string, f: string) => f)
   getConnectionByIdMock.mockReset().mockResolvedValue({ id: "conn-1", baseUrl: "https://pve:8006", apiToken: "t" })
   getPrincipalMock.mockReset().mockResolvedValue({ ok: true, principal: { userId: "u1" } })
+  excludedMock.mockReset().mockResolvedValue(false)
+})
+
+describe("upload: cluster outside the license (roadmap#58)", () => {
+  it("chunk leg: refuses the first chunk with 403 and the code, after RBAC and before the guard or PVE", async () => {
+    // This upload dials Proxmox itself instead of going through pveFetch, so
+    // the write guard applies by hand: no session, no socket, nothing streamed.
+    excludedMock.mockResolvedValue(true)
+    const res = await callRoute(POST, {
+      method: "POST",
+      params: PARAMS,
+      headers: { "x-chunk-index": "0", "x-total-size": "10", "x-file-name": "x.iso", "x-upload-id": "u-excluded-1" },
+      body: "0123456789",
+    })
+    expect(res.status).toBe(403)
+    expect(await res.json()).toMatchObject({ code: "CONNECTION_LICENSE_EXCLUDED" })
+    expect(excludedMock).toHaveBeenCalledWith("conn-1")
+    expect(checkPermissionMock).toHaveBeenCalledWith("storage.upload", "connection", "conn-1")
+    expect(guardMock).not.toHaveBeenCalled()
+    expect(getConnectionByIdMock).not.toHaveBeenCalled()
+    expect(fakeHttps.request).not.toHaveBeenCalled()
+  })
 })
 
 describe("upload: RBAC (#920)", () => {

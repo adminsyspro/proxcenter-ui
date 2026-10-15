@@ -17,6 +17,7 @@
  * process alive by itself, and an error path that can never throw.
  */
 import { prisma } from "@/lib/db/prisma"
+import { isConnectionLicenseExcluded } from "@/lib/license/exclusions"
 import { executeSSH } from "@/lib/ssh/exec"
 import { managedHostSshEndpoint } from "@/lib/ssh/node-endpoint-core"
 import { applySFlowOnNode, SFLOW_PROBE_COMMAND, type SFlowDesiredConfig } from "@/lib/sflow/configure"
@@ -76,12 +77,15 @@ export async function reconcileSFlow(): Promise<SFlowReconcileReport> {
     for (const conn of connections) {
       if (conn.tenantId !== setting.tenantId) continue
       if (!conn.sshKeyEnc && !conn.sshPassEnc) continue
+      // A cluster outside the license is read-only for ProxCenter: nothing to
+      // put back there, and executeSSH would refuse the re-apply (roadmap#58).
+      if (await isConnectionLicenseExcluded(conn.id)) continue
 
       for (const host of conn.hosts) {
         if (!host.enabled || !(host.ip || host.sshAddress)) continue
         const target = managedHostSshEndpoint(host, conn.sshPort)
 
-        const probe = await executeSSH(conn.id, target, SFLOW_PROBE_COMMAND)
+        const probe = await executeSSH(conn.id, target, SFLOW_PROBE_COMMAND, undefined, { readOnly: true })
         if (!probe.success) continue // unreachable, not drifted
 
         report.checked++

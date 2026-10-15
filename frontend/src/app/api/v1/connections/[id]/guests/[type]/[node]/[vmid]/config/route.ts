@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { licenseExcludedResponse } from "@/lib/api/response"
 
 import { pveFetch } from "@/lib/proxmox/client"
 import { invalidateGuestDiskTotal } from "@/lib/inventory/guestDiskTotals"
@@ -532,6 +533,8 @@ export async function PUT(
     return NextResponse.json({ data: write.upid, success: true })
   } catch (e: any) {
     if (e instanceof NicConfigError) return NextResponse.json({ error: e.message }, { status: 400 })
+    const excluded = licenseExcludedResponse(e)
+    if (excluded) return excluded
     console.error("[PUT config] Error:", e)
 
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })

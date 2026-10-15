@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 
+import { licenseExcludedResponse } from "@/lib/api/response"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
@@ -84,6 +85,10 @@ export async function POST(
     }
 
   } catch (e: any) {
+    // The cluster is outside the license: executeSSH refused the unlock
+    // itself (roadmap#58), with the code the UI recognises.
+    const excluded = licenseExcludedResponse(e)
+    if (excluded) return excluded
     console.error(`[unlock] Error:`, e)
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }

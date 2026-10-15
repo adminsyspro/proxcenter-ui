@@ -6,12 +6,18 @@ const {
   connectionFindManyMock,
   executeSSHMock,
   applySFlowOnNodeMock,
+  isConnectionLicenseExcludedMock,
 } = vi.hoisted(() => ({
   settingUpsertMock: vi.fn(),
   settingFindManyMock: vi.fn(),
   connectionFindManyMock: vi.fn(),
   executeSSHMock: vi.fn(),
   applySFlowOnNodeMock: vi.fn(),
+  isConnectionLicenseExcludedMock: vi.fn(async (_id: string) => false),
+}))
+
+vi.mock("@/lib/license/exclusions", () => ({
+  isConnectionLicenseExcluded: isConnectionLicenseExcludedMock,
 }))
 
 vi.mock("@/lib/db/prisma", () => ({
@@ -133,7 +139,24 @@ describe("reconcileSFlow", () => {
 
     await expect(reconcileSFlow()).resolves.toEqual({ checked: 1, reapplied: 0, failed: 0 })
     expect(executeSSHMock).toHaveBeenCalledTimes(1)
-    expect(executeSSHMock).toHaveBeenCalledWith("right-tenant", expect.objectContaining({ host: "10.0.0.1", port: 22 }), "sflow-probe-command")
+    // The probe only reads, so it may run on a cluster outside the license (roadmap#58).
+    expect(executeSSHMock).toHaveBeenCalledWith("right-tenant", expect.objectContaining({ host: "10.0.0.1", port: 22 }), "sflow-probe-command", undefined, { readOnly: true })
+  })
+
+  it("leaves a cluster outside the license alone: neither probed nor re-applied (roadmap#58)", async () => {
+    // executeSSH would refuse the re-apply there; skipping the connection
+    // keeps that refusal from aborting the pass for every other cluster.
+    settingFindManyMock.mockResolvedValue([{ tenantId: "tenant-1", value: desiredConfig }])
+    connectionFindManyMock.mockResolvedValue([connection({ id: "excluded" }), connection({ id: "licensed" })])
+    isConnectionLicenseExcludedMock.mockImplementation(async (id: string) => id === "excluded")
+    executeSSHMock.mockResolvedValue({ success: true, output: "0\n" })
+    applySFlowOnNodeMock.mockResolvedValue({ success: true, bridgesConfigured: 1, failedBridges: [] })
+
+    await expect(reconcileSFlow()).resolves.toEqual({ checked: 1, reapplied: 1, failed: 0 })
+    expect(executeSSHMock).toHaveBeenCalledTimes(1)
+    expect(executeSSHMock.mock.calls[0][0]).toBe("licensed")
+    expect(applySFlowOnNodeMock).toHaveBeenCalledTimes(1)
+    expect(applySFlowOnNodeMock.mock.calls[0][0]).toBe("licensed")
   })
 
   it("skips connections without SSH credentials and unusable hosts", async () => {

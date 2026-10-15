@@ -283,6 +283,10 @@ describe('GET /sflow/agents: node probing and port map push', () => {
     )
     expect(data[1]).toEqual(expect.objectContaining({ node: 'pve2', hasOvs: false, sflowConfigured: false }))
 
+    // Every probe only reads, so a cluster outside the license is still listed (roadmap#58).
+    expect(executeSSHMock.mock.calls.length).toBeGreaterThan(0)
+    for (const call of executeSSHMock.mock.calls) expect(call[4]).toEqual({ readOnly: true })
+
     // One push, for the OVS node only, carrying the cluster-wide MAC table.
     expect(orchestratorFetchMock).toHaveBeenCalledTimes(1)
     const [path, init] = orchestratorFetchMock.mock.calls[0]

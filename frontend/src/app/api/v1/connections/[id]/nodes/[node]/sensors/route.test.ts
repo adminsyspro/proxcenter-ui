@@ -75,11 +75,13 @@ describe('GET .../nodes/[node]/sensors', () => {
 
     await get()
 
-    const [, ip, command] = executeSSHMock.mock.calls[0]
+    const [, ip, command, , execOpts] = executeSSHMock.mock.calls[0]
 
     expect(ip).toMatchObject({ host: '10.0.0.1', port: 22 })
     expect(command).toContain('/sys/class/hwmon/')
     expect(command).not.toContain('pve')
+    // A sysfs read: still answers on a cluster outside the license (roadmap#58).
+    expect(execOpts).toEqual({ readOnly: true })
   })
 
   it('reports unavailable rather than failing when SSH is off', async () => {

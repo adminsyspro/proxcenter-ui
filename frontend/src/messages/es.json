@@ -3245,6 +3245,7 @@
       },
       "actions": {
         "addNodes": "Añadir nodos",
+        "excludeCluster": "Excluir un clúster",
         "renew": "Renovar",
         "sync": "Sincronizar ahora",
         "retry": "Reintentar",
@@ -3269,12 +3270,28 @@
         "pool": "Reserva compartida",
         "moved": "{days, plural, =0 {Movida · menos de un día aquí} one {Movida · # día aquí} other {Movida · # días aquí}}",
         "movedEnded": "Movida · ya no es válida aquí",
+        "exceededCovered": "Exceso cubierto por la capacidad restante del parque",
         "state": {
           "active": "Activa",
           "expired": "Vencida",
           "invalid": "No válida",
+          "exceeded": "Superada",
           "unknown": "Desconocido"
         }
+      },
+      "excluded": {
+        "title": "Clústeres fuera de la licencia",
+        "help": "Un clúster fuera de la licencia no cuenta en la cuota: sigue visible, pero ProxCenter rechaza cualquier modificación en él, consolas y shells incluidos.",
+        "none": "Ningún clúster fuera de la licencia",
+        "nodes": "{count, plural, one {# nodo} other {# nodos}}",
+        "exclude": "Excluir de la cuota",
+        "excludeOne": "Excluir",
+        "include": "Volver a incluir",
+        "dialogTitle": "Excluir un clúster de la cuota",
+        "allExcluded": "Todos los clústeres ya están fuera de la licencia",
+        "excludedOk": "Clúster excluido de la cuota",
+        "includedOk": "Clúster contado de nuevo en la cuota",
+        "failed": "No se pudo cambiar la exclusión"
       },
       "connection": {
         "sync": "Sincronizar"
@@ -3877,6 +3894,7 @@
     "licenseImportConnNone": "Floating (Sin cluster)",
     "licenseImportSubmit": "Importar",
     "licenseImportSuccess": "Licencia importada",
+    "licenseImportReplaced": "Licencia actualizada en su lugar, sus clústeres se conservan.",
     "licenseImportFailed": "Importación fallida",
     "licenseInstallFingerprint": "Huella de la instalación",
     "licenseInstallFingerprintHint": "Identifica este despliegue de ProxCenter. Facilítala al soporte y genera una solicitud de licencia para obtener una clave vinculada a ella.",
@@ -6038,7 +6056,8 @@
     "apiError": "Error de API",
     "notFound": "No encontrado",
     "pageNotFound": "Página no encontrada",
-    "httpError": "Error {status}"
+    "httpError": "Error {status}",
+    "connectionLicenseExcluded": "Este clúster está fuera de la licencia: ProxCenter rechaza cualquier cambio en él."
   },
   "errorPages": {
     "401": {

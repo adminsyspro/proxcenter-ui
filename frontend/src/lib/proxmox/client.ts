@@ -4,7 +4,10 @@ import { Agent, request } from "undici"
 import { extractHostFromUrl, extractPortFromUrl, replaceHostInUrl } from "./urlUtils"
 import { getNodeIps, setNodeIps, getFailoverLock, setFailoverLock, incrementFailures, resetFailures, getFailureCount, FAILURE_THRESHOLD } from "../cache/nodeIpCache"
 import { invalidateConnectionCache } from "../connections/getConnection"
+import { isConnectionLicenseExcluded, licenseExcludedError, PveLicenseExcludedError } from "../license/exclusions"
 import { safeLog } from "../log/sanitize"
+
+export { PveLicenseExcludedError }
 
 // Connect timeout: 5s max for TCP handshake. Undici's default (10-30s) is too
 // high — when a node is down, every request blocks until the OS TCP timeout.
@@ -187,9 +190,10 @@ export function isFailoverWorthy(
 }
 
 export function classifyPveError(err: unknown): PveErrorClass {
-  // First: an answer we rejected ourselves. Checked before the substring based
-  // predicates so a remote body can never be mistaken for a transport failure.
-  if (err instanceof PveApplicationError) return "application"
+  // First: an answer we rejected ourselves, or a write we refused ourselves.
+  // Checked before the substring based predicates so a remote body can never
+  // be mistaken for a transport failure.
+  if (err instanceof PveApplicationError || err instanceof PveLicenseExcludedError) return "application"
   if (isCallerAbortError(err)) return "caller-abort"
   if (isConnectTimeoutError(err)) return "connect-timeout"
   if (isHardNetworkError(err)) return "hard-network"
@@ -283,6 +287,13 @@ export async function pveFetch<T>(
   // Only a read may be replayed on another node. PVE keeps applying a write we
   // stopped waiting for, so a failover would apply it twice (#743).
   const replaySafe = method === "GET" || method === "HEAD" || method === "OPTIONS"
+
+  // A connection outside the license stays readable, but ProxCenter refuses
+  // every write to it (roadmap#58). Decided before any request, and only for a
+  // caller that names its connection: a bare baseUrl cannot be looked up.
+  if (!replaySafe && opts.id && await isConnectionLicenseExcluded(opts.id)) {
+    throw await licenseExcludedError(opts.id)
+  }
 
   const isUnreachableEvidence = (err: unknown) =>
     isFailoverWorthy(classifyPveError(err), hasLongBudget, replaySafe)

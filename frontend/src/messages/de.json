@@ -3232,6 +3232,7 @@
       },
       "actions": {
         "addNodes": "Nodes hinzufügen",
+        "excludeCluster": "Cluster ausschließen",
         "renew": "Erneuern",
         "sync": "Jetzt synchronisieren",
         "retry": "Erneut versuchen",
@@ -3256,12 +3257,28 @@
         "pool": "Gemeinsamer Pool",
         "moved": "{days, plural, =0 {Verschoben · hier weniger als ein Tag} one {Verschoben · hier # Tag} other {Verschoben · hier # Tage}}",
         "movedEnded": "Verschoben · hier nicht mehr gültig",
+        "exceededCovered": "Überschreitung durch die freie Kapazität der Flotte gedeckt",
         "state": {
           "active": "Aktiv",
           "expired": "Abgelaufen",
           "invalid": "Ungültig",
+          "exceeded": "Überschritten",
           "unknown": "Unbekannt"
         }
+      },
+      "excluded": {
+        "title": "Cluster außerhalb der Lizenz",
+        "help": "Ein Cluster außerhalb der Lizenz zählt nicht zum Kontingent: Er bleibt sichtbar, aber ProxCenter lehnt jede Änderung daran ab, Konsolen und Shells eingeschlossen.",
+        "none": "Kein Cluster außerhalb der Lizenz",
+        "nodes": "{count, plural, one {# Node} other {# Nodes}}",
+        "exclude": "Vom Kontingent ausschließen",
+        "excludeOne": "Ausschließen",
+        "include": "Wieder einbeziehen",
+        "dialogTitle": "Ein Cluster vom Kontingent ausschließen",
+        "allExcluded": "Alle Cluster sind bereits außerhalb der Lizenz",
+        "excludedOk": "Cluster vom Kontingent ausgeschlossen",
+        "includedOk": "Cluster wird wieder im Kontingent gezählt",
+        "failed": "Der Ausschluss konnte nicht geändert werden"
       },
       "connection": {
         "sync": "Synchronisieren"
@@ -3864,6 +3881,7 @@
     "licenseImportConnNone": "Schwebend (kein Cluster)",
     "licenseImportSubmit": "Importieren",
     "licenseImportSuccess": "Lizenz importiert",
+    "licenseImportReplaced": "Lizenz an Ort und Stelle aktualisiert, ihre Cluster bleiben erhalten.",
     "licenseImportFailed": "Import fehlgeschlagen",
     "licenseInstallFingerprint": "Installations-Fingerabdruck",
     "licenseInstallFingerprintHint": "Identifiziert diese ProxCenter-Installation. Geben Sie ihn dem Support und erzeugen Sie eine Lizenzanforderung, um einen daran gebundenen Schlüssel zu erhalten.",
@@ -6017,7 +6035,8 @@
     "apiError": "API Fehler",
     "notFound": "Nicht gefunden",
     "pageNotFound": "Page nicht gefunden",
-    "httpError": "Fehler {status}"
+    "httpError": "Fehler {status}",
+    "connectionLicenseExcluded": "Dieser Cluster liegt außerhalb der Lizenz: ProxCenter lehnt jede Änderung daran ab."
   },
   "errorPages": {
     "401": {

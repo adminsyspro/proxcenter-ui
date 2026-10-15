@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { licenseExcludedResponse } from "@/lib/api/response"
 
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
@@ -321,6 +322,8 @@ export async function POST(
     })
   } catch (e: any) {
     if (e instanceof NicConfigError) return NextResponse.json({ error: e.message }, { status: 400 })
+    const excluded = licenseExcludedResponse(e)
+    if (excluded) return excluded
     console.error('Error creating guest:', e)
 
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })

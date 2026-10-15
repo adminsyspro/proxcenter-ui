@@ -34,6 +34,9 @@ export interface LicenseTableRow {
   clusterUuid: string | null
   connectionIds: string[]
   state: string
+  // More nodes than the license allows (node_status.per_license[].exceeded):
+  // state reads 'exceeded' unless an expired or invalid import says worse.
+  exceeded: boolean
   capabilities: string[]
 }
 export interface TenantRollupRow {
@@ -88,7 +91,8 @@ export function buildLicenseTableRows(
       expiresAt: status.expires_at || null,
       clusterUuid: null,
       connectionIds: primaryUsage.connections || [],
-      state: 'active',
+      state: primaryUsage.exceeded ? 'exceeded' : 'active',
+      exceeded: !!primaryUsage.exceeded,
       capabilities: [],
     })
   }
@@ -96,6 +100,7 @@ export function buildLicenseTableRows(
   for (const imp of imports || []) {
     const isOption = imp.type === 'option'
     const usage = usageByLicenseId.get(imp.license_id)
+    const state = importState(imp, now)
     rows.push({
       rowId: imp.id,
       licenseId: imp.license_id,
@@ -108,7 +113,8 @@ export function buildLicenseTableRows(
       expiresAt: imp.expires_at || null,
       clusterUuid: imp.cluster_uuid || null,
       connectionIds: imp.connection_ids || [],
-      state: importState(imp, now),
+      state: state === 'active' && usage?.exceeded ? 'exceeded' : state,
+      exceeded: !!usage?.exceeded,
       capabilities: imp.capabilities || [],
     })
   }

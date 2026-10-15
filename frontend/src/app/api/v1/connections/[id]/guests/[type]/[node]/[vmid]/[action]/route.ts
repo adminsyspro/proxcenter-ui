@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { licenseExcludedResponse } from "@/lib/api/response"
 
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
@@ -91,6 +92,8 @@ export async function POST(_req: Request, ctx: RouteContext) {
       message: `Action '${action}' executed on ${type}/${vmid}`
     })
   } catch (e: any) {
+    const excluded = licenseExcludedResponse(e)
+    if (excluded) return excluded
     console.error(`[guest/action] Error:`, e)
 
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })

@@ -25,7 +25,7 @@ import { allocateIp, releaseIp, IpamExhaustedError } from "@/lib/vdc/ipam"
 import { scanUsedIpsForSubnet, scannedToIntSet } from "@/lib/vdc/ipamScan"
 import { parseCidr } from "@/lib/vdc/network"
 import { waitForTask } from "@/lib/proxmox/tasks"
-import { getVdcScope, writableStoragesFor, readOnlyLibraryError } from "@/lib/vdc/scope"
+import { getVdcScope, writableStoragesFor, stagingStoragesFor, readOnlyLibraryError } from "@/lib/vdc/scope"
 import { policyQosSuffix } from "@/lib/vdc/drives"
 import { DEFAULT_TENANT_ID } from "@/lib/tenant"
 import { checkVmidAgainstTenantRange } from "@/lib/tenant/vmidRange"
@@ -117,6 +117,16 @@ export async function POST(req: Request) {
     // revoked entry is refused here and not only hidden from the list.
     let image = (await resolveBuiltInImage(body.imageSlug)) as any
     let isCustom = false
+    // Built-in and provider catalogue images are provider content; a tenant's
+    // own image is not, which narrows where it may be staged (#1120).
+    let providerContent = true
+    // Base name of the file a custom URL image is staged under. Keyed on the
+    // image id, not on its slug: slugs are only unique per tenant, so
+    // `custom-<tenant>-<name>` of one tenant can equal another tenant's or a
+    // provider image's, and an existing staged file is reused without being
+    // downloaded again. A cuid has no '-', so this name never falls in a
+    // tenant's `custom-<slug>-` namespace either (#1120).
+    let stagingName: string | null = null
     let sourceType = 'url'
     let volumeId: string | null = null
     let volumeSource: ImageVolumeSource | null = null
@@ -132,6 +142,8 @@ export async function POST(req: Request) {
       }
       image = customImageToCloudImage(customRow)
       isCustom = true
+      providerContent = customRow.tenantId === DEFAULT_TENANT_ID
+      stagingName = `custom-${customRow.id}`
       sourceType = customRow.sourceType
       volumeId = customRow.volumeId
       if (sourceType === 'volume') {
@@ -197,7 +209,7 @@ export async function POST(req: Request) {
     // `if (isTenant)` scope block: provider deploys never fetch scope, so
     // this stays '' for them by construction.
     let dataDiskQosSuffix = ''
-    let tenantWritableStorages: Set<string> | null = null
+    let tenantStagingStorages: Set<string> | null = null
 
     // vDC quota enforcement. Mirrors the create-VM route on
     // /connections/[id]/guests/[type]/[node] so a tenant can't bypass
@@ -247,7 +259,7 @@ export async function POST(req: Request) {
       // set so a read-only ISO library (#894) is refused even when visible.
       const visibleStorages = scope.storagesByConnection.get(body.connectionId) ?? new Set<string>()
       const writableStorages = writableStoragesFor(scope, body.connectionId)
-      tenantWritableStorages = writableStorages
+      tenantStagingStorages = stagingStoragesFor(scope, body.connectionId, providerContent)
       if (!writableStorages.has(body.storage)) {
         return NextResponse.json(
           { error: visibleStorages.has(body.storage) ? readOnlyLibraryError(body.storage) : `Storage "${body.storage}" is not authorised for this tenant.` },
@@ -394,6 +406,7 @@ export async function POST(req: Request) {
             body,
             image,
             isCustom,
+            stagingName,
             sourceType,
             volumeId,
             vdcInfo,
@@ -418,13 +431,11 @@ export async function POST(req: Request) {
           //  - Built-in images (Ubuntu official, etc.): keep the upstream
           //    filename so all tenants share the same downloaded artefact
           //    (natural deduplication on the same PVE storage).
-          //  - Custom images: derive from the slug, which is already
-          //    tenant-prefixed for private images (e.g. `custom-acme-myapp`)
-          //    by the POST /custom-images route. Two tenants that upload the
-          //    same source URL therefore land in distinct files and can't
-          //    overwrite each other's image on a shared storage.
+          //  - Custom images: derive from the image id (`stagingName`), so
+          //    two images never share a staged file, even when their slugs
+          //    collide across tenants.
           const rawFilename = isCustom
-            ? `${image.slug}.${image.format}`
+            ? `${stagingName}.${image.format}`
             : (image.downloadUrl.split("/").pop() || `${image.slug}.${image.format}`)
           // PVE import content type requires .qcow2/.raw/.vmdk extension — rename .img to .qcow2
           const urlFilename = rawFilename.replace(/\.img$/, ".qcow2")
@@ -463,11 +474,12 @@ export async function POST(req: Request) {
             conn,
             `/nodes/${encodeURIComponent(body.node)}/storage`,
           )
-          const downloadStorage = selectDownloadStorage(nodeStorages, body.storage, tenantWritableStorages)
+          const downloadStorage = selectDownloadStorage(nodeStorages, body.storage, tenantStagingStorages)
           if (!downloadStorage) {
             throw new Error(
               `No active, writable file-based storage with Import content enabled is available on node '${body.node}'. ` +
-              `Ask your Proxmox administrator to configure an import storage and, for a tenant, allow it in the vDC. ` +
+              `Ask your Proxmox administrator to configure an import storage and, for a tenant, add it to the vDC ` +
+              `(as an ISO library, or a storage policy). ` +
               `ProxCenter does not change storage content types automatically.`,
             )
           }
@@ -735,6 +747,8 @@ async function runIsoDeploy(args: {
   body: any
   image: any
   isCustom: boolean
+  /** Staged file base name of a custom image (see the POST handler). */
+  stagingName: string | null
   sourceType: string
   volumeId: string | null
   vdcInfo: { poolName?: string | null } | null
@@ -747,7 +761,7 @@ async function runIsoDeploy(args: {
    *  throws (waitForTask timeout, audit failure, etc.). */
   onIpamAllocation?: (alloc: { subnetId: string; ip: string }) => void
 }): Promise<void> {
-  const { deploymentId, deploymentConfig, conn, body, image, isCustom, sourceType, volumeId, vdcInfo, dataDiskQosSuffix, onIpamAllocation } = args
+  const { deploymentId, deploymentConfig, conn, body, image, isCustom, stagingName, sourceType, volumeId, vdcInfo, dataDiskQosSuffix, onIpamAllocation } = args
   const hw = body.hardware
   const isoStorage: string = body.isoStorage
 
@@ -763,7 +777,7 @@ async function runIsoDeploy(args: {
   } else {
     // URL mode: download to the user-selected ISO storage with content=iso.
     const rawFilename = isCustom
-      ? `${image.slug}.iso`
+      ? `${stagingName}.iso`
       : (image.downloadUrl?.split("/").pop() || `${image.slug}.iso`)
     const isoFilename = rawFilename.toLowerCase().endsWith('.iso') ? rawFilename : `${rawFilename}.iso`
 

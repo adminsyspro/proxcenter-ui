@@ -2169,7 +2169,13 @@
     "poolCreated": "Pool {pool} créé",
     "poolUpdated": "Pool {pool} modifié",
     "poolDeleted": "Pool {pool} supprimé",
-    "poolOwnedByVdc": "Ce pool appartient au vDC {vdc} : supprimez plutôt le vDC."
+    "poolOwnedByVdc": "Ce pool appartient au vDC {vdc} : supprimez plutôt le vDC.",
+    "nodeActionDrainStep": "Drain du nœud : {done}/{total} invité(s) traité(s)...",
+    "nodeActionDrainPartial": "{count} invité(s) sont encore sur le nœud après le drain",
+    "nodeActionDrainPartialDesc": "Le nœud n'est pas vidé. Forcez le {action} pour laisser Proxmox VE les arrêter, ou annulez et déplacez-les vous-même. Le drain est listé dans le Task Center.",
+    "nodeActionForceOption": "Forcer le {action} malgré tout, ces invités seront arrêtés",
+    "nodeActionDrainDesc": "Les invités sur stockage partagé sont évacués par l'orchestrateur, chacun vers le nœud choisi par le moteur de placement. Suivez-les dans le Task Center.",
+    "nodeActionDrainFailed": "Le drain n'a pas pu démarrer : {error}"
   },
   "inventoryPage": {
     "newTag": "Nouveau tag...",
@@ -4909,7 +4915,11 @@
     "total": "Total",
     "running": "En cours",
     "pending": "En attente",
-    "failed": "Échoué"
+    "failed": "Échoué",
+    "typeHostDrain": "Drain d'hôte",
+    "drainGuests": "Invités",
+    "drainRemaining": "{count} encore sur {node}",
+    "drainMaintenanceEnabled": "Nœud en maintenance"
   },
   "tasks": {
     "stop": {
@@ -9994,5 +10004,43 @@
     "deletedCaption": "vDC supprimé, échantillons conservés {days} jours après leur prise",
     "emptyDeleted": "Aucun échantillon de ce vDC sur cette période.",
     "dialogTitleDeleted": "Historique d'usage : {name} (supprimé)"
+  },
+  "hostDrain": {
+    "introMaintenance": "Le nœud entre en maintenance HA Proxmox et ses invités sont évacués : les invités gérés par HA sont déplacés par Proxmox HA, les autres sont migrés par ProxCenter, chacun vers le nœud choisi par le moteur de placement (charge projetée, plafond mémoire, règles d'affinité, réseau et stockage).",
+    "introMigrateAll": "Tous les invités de ce nœud sont migrés par ProxCenter, chacun vers le nœud choisi par le moteur de placement. Le nœud reste disponible pour de nouveaux invités : utilisez Entrer en maintenance pour l'en exclure.",
+    "evacuateGuests": "Évacuer les invités",
+    "evacuateGuestsOff": "Maintenance seule : Proxmox HA déplace les invités gérés par HA, les autres restent sur le nœud.",
+    "placement": "Placement",
+    "placementAuto": "Automatique (réparti selon la charge projetée)",
+    "placementManual": "Un seul nœud cible",
+    "targetNode": "Nœud cible",
+    "maxParallel": "Migrations en parallèle",
+    "memCeiling": "Plafond mémoire des cibles",
+    "memCeilingHelp": "Un nœud cible ne reçoit plus d'invités dès qu'ils porteraient sa mémoire au-delà de ce seuil.",
+    "includeStopped": "Déplacer aussi les invités arrêtés (migration hors ligne)",
+    "projectionTitle": "Charge projetée après le drain",
+    "projectionMem": "Mémoire",
+    "projectionCpu": "CPU",
+    "projectionHelp": "Charge actuelle → une fois les invités prévus déplacés. Une cible compte la mémoire configurée de chaque invité ; un invité arrêté ne pèse rien tant qu'il n'est pas démarré. +n / −n : invités arrivant / partant.",
+    "projectionHaUnplaced": "{count} invité(s) HA sont placés par Proxmox HA et ne sont comptés sur aucune cible.",
+    "applyToAll": "Appliquer à tous",
+    "perGuest": "par invité",
+    "automaticPlacement": "Placement automatique",
+    "keepOnNode": "Laisser sur le nœud",
+    "targetOf": "Cible de {name}",
+    "planEmpty": "Aucun invité sur ce nœud.",
+    "planSkipped": "reste",
+    "planHa": "Proxmox HA",
+    "modeLive": "à chaud",
+    "modeRestart": "redémarrage",
+    "modeOffline": "hors ligne",
+    "modeHa": "HA",
+    "requiresSsh": "L'entrée en maintenance lance ha-manager via SSH : SSH doit être configuré sur cette connexion.",
+    "start": "Lancer le drain",
+    "started": "Drain de {node} lancé, suivez chaque invité dans le Task Center",
+    "orchestratorUnavailable": "L'orchestrateur est injoignable, le drain ne peut pas s'exécuter.",
+    "runsInOrchestrator": "S'exécute dans l'orchestrateur : vous pouvez fermer cette fenêtre et suivre chaque invité dans le Task Center.",
+    "candidates": "Cibles éligibles : {nodes}",
+    "noCandidates": "Aucun nœud cible éligible."
   }
 }

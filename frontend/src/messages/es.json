@@ -2169,7 +2169,13 @@
     "poolCreated": "Pool {pool} creado",
     "poolUpdated": "Pool {pool} actualizado",
     "poolDeleted": "Pool {pool} eliminado",
-    "poolOwnedByVdc": "Este pool pertenece al vDC {vdc}: elimine el vDC en su lugar."
+    "poolOwnedByVdc": "Este pool pertenece al vDC {vdc}: elimine el vDC en su lugar.",
+    "nodeActionDrainStep": "Drenando el nodo: {done}/{total} invitado(s) procesado(s)...",
+    "nodeActionDrainPartial": "{count} invitado(s) siguen en el nodo tras el drenaje",
+    "nodeActionDrainPartialDesc": "El nodo no está vacío. Fuerce el {action} para que Proxmox VE los detenga, o cancele y muévalos usted mismo. El drenaje aparece en el Task Center.",
+    "nodeActionForceOption": "Forzar el {action} de todos modos, estos invitados se detendrán",
+    "nodeActionDrainDesc": "Los invitados en almacenamiento compartido los evacua el orquestador, cada uno al nodo elegido por el motor de ubicación. Sígalos en el Task Center.",
+    "nodeActionDrainFailed": "El drenaje no pudo iniciarse: {error}"
   },
   "inventoryPage": {
     "newTag": "Nueva etiqueta...",
@@ -4909,7 +4915,11 @@
     "total": "Total",
     "running": "En ejecución",
     "pending": "Pendiente",
-    "failed": "Fallido"
+    "failed": "Fallido",
+    "typeHostDrain": "Drenaje de host",
+    "drainGuests": "Invitados",
+    "drainRemaining": "{count} aún en {node}",
+    "drainMaintenanceEnabled": "Nodo en mantenimiento"
   },
   "tasks": {
     "stop": {
@@ -9993,5 +10003,43 @@
     "deletedCaption": "vDC eliminado, muestras conservadas {days} días tras su toma",
     "emptyDeleted": "No hay muestras de este vDC en este periodo.",
     "dialogTitleDeleted": "Historial de uso: {name} (eliminado)"
+  },
+  "hostDrain": {
+    "introMaintenance": "El nodo entra en mantenimiento HA de Proxmox y sus invitados se evacuan: los gestionados por HA los reubica Proxmox HA, los demás los migra ProxCenter, cada uno al nodo elegido por el motor de ubicación (carga proyectada, techo de memoria, reglas de afinidad, red y almacenamiento).",
+    "introMigrateAll": "Todos los invitados de este nodo se migran con ProxCenter, cada uno al nodo elegido por el motor de ubicación. El nodo sigue disponible para nuevos invitados: use Entrar en mantenimiento para excluirlo.",
+    "evacuateGuests": "Evacuar los invitados",
+    "evacuateGuestsOff": "Solo mantenimiento: Proxmox HA reubica los invitados gestionados por HA, los demás permanecen en el nodo.",
+    "placement": "Ubicación",
+    "placementAuto": "Automática (repartida según la carga proyectada)",
+    "placementManual": "Un único nodo de destino",
+    "targetNode": "Nodo de destino",
+    "maxParallel": "Migraciones en paralelo",
+    "memCeiling": "Techo de memoria en los destinos",
+    "memCeilingHelp": "Un nodo destino no recibe más invitados en cuanto llevarían su memoria por encima de este umbral.",
+    "includeStopped": "Mover también los invitados detenidos (migración sin conexión)",
+    "projectionTitle": "Carga prevista tras el vaciado",
+    "projectionMem": "Memoria",
+    "projectionCpu": "CPU",
+    "projectionHelp": "Carga actual → una vez movidos los invitados previstos. Un destino cuenta la memoria configurada de cada invitado; un invitado detenido no pesa nada hasta que se inicia. +n / −n: invitados que llegan / salen.",
+    "projectionHaUnplaced": "{count} invitado(s) HA los coloca Proxmox HA y no se cuentan en ningún destino.",
+    "applyToAll": "Aplicar a todos",
+    "perGuest": "por invitado",
+    "automaticPlacement": "Ubicación automática",
+    "keepOnNode": "Dejar en el nodo",
+    "targetOf": "Destino de {name}",
+    "planEmpty": "No hay invitados en este nodo.",
+    "planSkipped": "se queda",
+    "planHa": "Proxmox HA",
+    "modeLive": "en vivo",
+    "modeRestart": "reinicio",
+    "modeOffline": "sin conexión",
+    "modeHa": "HA",
+    "requiresSsh": "Entrar en mantenimiento ejecuta ha-manager por SSH: SSH debe estar configurado en esta conexión.",
+    "start": "Iniciar el drenaje",
+    "started": "Drenaje de {node} iniciado, siga cada invitado en el Task Center",
+    "orchestratorUnavailable": "El orquestador no responde, el drenaje no puede ejecutarse.",
+    "runsInOrchestrator": "Se ejecuta en el orquestador: puede cerrar esta ventana y seguir cada invitado en el Task Center.",
+    "candidates": "Destinos elegibles: {nodes}",
+    "noCandidates": "Ningún nodo de destino elegible."
   }
 }

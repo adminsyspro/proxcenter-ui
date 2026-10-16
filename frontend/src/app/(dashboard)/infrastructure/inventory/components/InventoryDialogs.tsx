@@ -63,9 +63,11 @@ import { MigrateVmDialog, CrossClusterMigrateParams } from '@/components/Migrate
 
 import { BULK_MIG_CONCURRENCY } from '../bulkMigrationConfig'
 import { migrateGuestAndWait, migrationFailureText, runInBatches } from '@/lib/migration/guestMigrateClient'
+import { isNodeActionDrainOver, nodeActionDrainConfig, nodeActionDrainProgress, nodeActionDrainReason, nodeActionDrainRemaining, type NodeActionDrain } from '@/lib/tasks/nodeActionDrain'
 import FailureReasonText from '@/components/tasks/FailureReasonText'
 import TaskLogButton from '@/components/tasks/TaskLogButton'
 import PendingChangesWarning from '@/components/migration/PendingChangesWarning'
+import HostDrainDialog from '@/components/HostDrainDialog'
 import CreateVmDialog from '../CreateVmDialog'
 import CreateLxcDialog from '../CreateLxcDialog'
 import HaGroupDialog from '../HaGroupDialog'
@@ -74,7 +76,7 @@ import HaRuleDialog from '../HaRuleDialog'
 import type { InventorySelection, DetailsPayload } from '../types'
 import { parseNodeId, parseVmId, HOTPLUG_DEVICES, LXC_FEATURES, canEditLxcFeature, parseLxcFeatures, toggleLxcFeature } from '../helpers'
 import { AllVmItem, HostItem } from '../InventoryTree'
-import { PlayArrowIcon, StopIcon, PowerSettingsNewIcon, MoveUpIcon } from './IconWrappers'
+import { PlayArrowIcon, StopIcon, PowerSettingsNewIcon } from './IconWrappers'
 import { StatusIcon } from './TreeIcons'
 import { vsanBlocksMigrationType, vsanBlocksDirectEsxiRun, requiredTempBytes, warmNeedsBlockStorage, isDowntimeBudgetValid, DOWNTIME_BUDGET_PRESETS, DOWNTIME_BUDGET_DEFAULT_SEC, DOWNTIME_BUDGET_MIN_SEC, DOWNTIME_BUDGET_MAX_SEC, downtimeBudgetIndex, formatDowntimeBudget } from './migrationGuards'
 import WarmCutoverButton from './WarmCutoverButton'
@@ -500,6 +502,11 @@ export default function InventoryDialogs(props: InventoryDialogsProps) {
   const theme = useTheme()
   const toast = useToast()
   const { addTask: addPCTask, registerOnRestore } = useProxCenterTasks()
+  // Node reboot/shutdown: the evacuation is a host drain (#248). Placement is
+  // automatic unless the operator names one target; the last drain is kept
+  // so a partial one can be forced past explicitly.
+  const [nodeActionPlacement, setNodeActionPlacement] = useState<'auto' | 'manual'>('auto')
+  const [nodeActionDrain, setNodeActionDrain] = useState<NodeActionDrain | null>(null)
 
   // virtio-win ISO download progress (background curl + polling)
   const [virtioWinProgress, setVirtioWinProgress] = useState<{ downloading: boolean; percent: number; sizeBytes: number } | null>(null)
@@ -1192,7 +1199,7 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
         return (
                 <Dialog
                   open={nodeActionDialog !== null}
-                  onClose={() => { if (!nodeActionBusy) { setNodeActionDialog(null); setNodeActionStep(null); setNodeActionMigrateTarget(''); setNodeActionFailedVms([]); setNodeActionShutdownFailed(false); setNodeActionShutdownLocal(false) } }}
+                  onClose={() => { if (!nodeActionBusy) { setNodeActionDialog(null); setNodeActionStep(null); setNodeActionMigrateTarget(''); setNodeActionFailedVms([]); setNodeActionShutdownFailed(false); setNodeActionShutdownLocal(false); setNodeActionDrain(null); setNodeActionPlacement('auto') } }}
                   maxWidth="sm"
                   fullWidth
                 >
@@ -1271,47 +1278,70 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
                         </Alert>
                       )}
 
-                      {/* Target node selector — only if there are VMs to migrate */}
+                      {/* Placement of the evacuated guests (#248): the engine spreads
+                          them, or one target when the operator insists on it. */}
                       {!nodeActionStorageLoading && isClusterNode && sharedVms.length > 0 && (
-                        <FormControl fullWidth size="small">
-                          <InputLabel>{t('inventory.nodeActionMigrateTarget')}</InputLabel>
-                          <Select
-                            value={nodeActionMigrateTarget}
-                            label={t('inventory.nodeActionMigrateTarget')}
-                            onChange={(e) => setNodeActionMigrateTarget(e.target.value)}
-                            disabled={nodeActionBusy}
-                          >
-                            {otherOnlineNodes.map(h => (
-                              <MenuItem key={h.node} value={h.node}>
-                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                  <Box sx={{ position: 'relative', display: 'inline-flex', alignItems: 'center', width: 14, height: 14, flexShrink: 0 }}>
-                                    <img src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" style={{ width: 14, height: 14, opacity: 0.8 }} />
-                                    <Box sx={{ position: 'absolute', bottom: -2, right: -2, width: 7, height: 7, borderRadius: '50%', bgcolor: 'success.main', border: '1.5px solid', borderColor: 'background.paper' }} />
-                                  </Box>
-                                  {h.node}
-                                </Box>
-                              </MenuItem>
-                            ))}
-                          </Select>
-                        </FormControl>
+                        <>
+                          <Alert severity="info" icon={<i className="ri-logout-box-r-line" style={{ fontSize: 20 }} />}>
+                            <Typography variant="body2">{t('inventory.nodeActionDrainDesc')}</Typography>
+                          </Alert>
+                          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+                            <FormControl fullWidth size="small">
+                              <InputLabel>{t('hostDrain.placement')}</InputLabel>
+                              <Select
+                                value={nodeActionPlacement}
+                                label={t('hostDrain.placement')}
+                                onChange={(e) => { setNodeActionPlacement(e.target.value as 'auto' | 'manual'); if (e.target.value === 'auto') setNodeActionMigrateTarget('') }}
+                                disabled={nodeActionBusy}
+                                inputProps={{ 'aria-label': t('hostDrain.placement') }}
+                              >
+                                <MenuItem value="auto">{t('hostDrain.placementAuto')}</MenuItem>
+                                <MenuItem value="manual">{t('hostDrain.placementManual')}</MenuItem>
+                              </Select>
+                            </FormControl>
+                            {nodeActionPlacement === 'manual' && (
+                              <FormControl fullWidth size="small">
+                                <InputLabel>{t('inventory.nodeActionMigrateTarget')}</InputLabel>
+                                <Select
+                                  value={nodeActionMigrateTarget}
+                                  label={t('inventory.nodeActionMigrateTarget')}
+                                  onChange={(e) => setNodeActionMigrateTarget(e.target.value)}
+                                  disabled={nodeActionBusy}
+                                >
+                                  {otherOnlineNodes.map(h => (
+                                    <MenuItem key={h.node} value={h.node}>
+                                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                        <Box sx={{ position: 'relative', display: 'inline-flex', alignItems: 'center', width: 14, height: 14, flexShrink: 0 }}>
+                                          <img src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" style={{ width: 14, height: 14, opacity: 0.8 }} />
+                                          <Box sx={{ position: 'absolute', bottom: -2, right: -2, width: 7, height: 7, borderRadius: '50%', bgcolor: 'success.main', border: '1.5px solid', borderColor: 'background.paper' }} />
+                                        </Box>
+                                        {h.node}
+                                      </Box>
+                                    </MenuItem>
+                                  ))}
+                                </Select>
+                              </FormControl>
+                            )}
+                          </Stack>
+                        </>
                       )}
 
                       {/* Failed VMs after migration attempt */}
                       {nodeActionFailedVms.length > 0 && (
-                        <Alert severity="error" icon={<i className="ri-error-warning-line" style={{ fontSize: 20 }} />}>
+                        <Alert severity="error" icon={<i className="ri-error-warning-line" style={{ fontSize: 20 }} />} data-testid="node-action-remaining">
                           <Typography variant="body2" fontWeight={600}>
-                            {t('inventory.nodeActionMigrateFailed', { count: nodeActionFailedVms.length })}
+                            {t('inventory.nodeActionDrainPartial', { count: nodeActionFailedVms.length })}
                           </Typography>
                           <Typography variant="body2" sx={{ mt: 0.5, opacity: 0.85 }}>
-                            {t('inventory.nodeActionMigrateFailedDesc')}
+                            {t('inventory.nodeActionDrainPartialDesc', { action: nodeActionDialog?.action })}
                           </Typography>
                           <NodeActionGuestList vms={nodeActionFailedVms.map(vm => ({ ...vm, status: 'running' }))} limit={nodeActionFailedVms.length} />
                           <Box
                             onClick={() => !nodeActionBusy && setNodeActionShutdownFailed(!nodeActionShutdownFailed)}
                               sx={{ mt: 1.5, display: 'flex', alignItems: 'center', gap: 1, cursor: nodeActionBusy ? 'default' : 'pointer' }}
                             >
-                              <Checkbox size="small" checked={nodeActionShutdownFailed} disabled={nodeActionBusy} sx={{ p: 0 }} />
-                              <Typography variant="body2">{t('inventory.nodeActionShutdownFailedOption')}</Typography>
+                              <Checkbox size="small" checked={nodeActionShutdownFailed} disabled={nodeActionBusy} sx={{ p: 0 }} inputProps={{ 'aria-label': t('inventory.nodeActionForceOption', { action: nodeActionDialog?.action }) }} />
+                              <Typography variant="body2">{t('inventory.nodeActionForceOption', { action: nodeActionDialog?.action })}</Typography>
                             </Box>
                           </Alert>
                         )}
@@ -1361,7 +1391,7 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
                         if (isClusterNode && runningVmsOnNode.length > 0) {
                           const hasShared = runningVmsOnNode.length > nodeActionLocalVms.size
                           const hasLocal = nodeActionLocalVms.size > 0
-                          if (hasShared && !nodeActionMigrateTarget) return true
+                          if (hasShared && nodeActionPlacement === 'manual' && !nodeActionMigrateTarget) return true
                           if (hasLocal && !nodeActionShutdownLocal) return true
                         }
                         return false
@@ -1374,44 +1404,57 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
                         const node = resolvedNode
   
                         try {
-                          // Step 1: Migrate the shared-storage VMs off a cluster node
-                          if (runningVmsOnNode.length > 0) {
-                            if (isClusterNode) {
-                              const sharedVms = runningVmsOnNode.filter(vm => !nodeActionLocalVms.has(`${vm.connId}:${vm.vmid}`))
-
-                              if (sharedVms.length > 0 && nodeActionMigrateTarget && nodeActionFailedVms.length === 0) {
-                                setNodeActionStep(t('inventory.nodeActionMigratingStep', { done: 0, total: sharedVms.length }))
-                                // #926: a guest has left the node once its PVE task ended OK,
-                                // not when the POST was accepted; the node command waits for it.
-                                const failed: NodeActionFailedVm[] = []
-                                await runInBatches(
-                                  sharedVms,
-                                  3,
-                                  async vm => {
-                                    const outcome = await migrateGuestAndWait(vm, { target: nodeActionMigrateTarget, online: true })
-                                    if (!outcome.ok) {
-                                      failed.push({ vmid: vm.vmid, name: vm.name, connId: vm.connId, type: vm.type, node: vm.node, error: migrationFailureText(outcome, t), upid: outcome.upid, taskNode: outcome.node })
-                                    }
-                                  },
-                                  (_vm, _result, done) => setNodeActionStep(t('inventory.nodeActionMigratingStep', { done, total: sharedVms.length })),
-                                )
-                                if (failed.length > 0) {
-                                  setNodeActionFailedVms(failed)
-                                  setNodeActionStep(null)
-                                  setNodeActionBusy(false)
-                                  return
+                          // Step 1 (#248): drain the node through the orchestrator. Each
+                          // guest is placed by the engine, the node enters HA maintenance
+                          // (cluster), and the action only follows a complete drain. A
+                          // partial one stops here with the guests still on the node; the
+                          // operator has to force explicitly. Guests on local storage are
+                          // refused by the drain and listed the same way.
+                          let maintenanceDone = false
+                          if (runningVmsOnNode.length > 0 && isClusterNode) {
+                            const sharedVms = runningVmsOnNode.filter(vm => !nodeActionLocalVms.has(`${vm.connId}:${vm.vmid}`))
+                            if (sharedVms.length > 0 && nodeActionFailedVms.length === 0) {
+                              setNodeActionStep(t('inventory.nodeActionDrainStep', { done: 0, total: sharedVms.length }))
+                              const config = nodeActionDrainConfig({ cluster: true, targetNode: nodeActionPlacement === 'manual' ? nodeActionMigrateTarget : '' })
+                              const startRes = await fetch('/api/v1/orchestrator/host-drains', {
+                                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ connection_id: connId, node, config }),
+                              })
+                              const startJson = await startRes.json().catch(() => ({}))
+                              if (!startRes.ok) throw new Error(t('inventory.nodeActionDrainFailed', { error: startJson?.error || `HTTP ${startRes.status}` }))
+                              let drain: NodeActionDrain = startJson?.data ?? startJson
+                              setNodeActionDrain(drain)
+                              while (!isNodeActionDrainOver(drain.status)) {
+                                await new Promise(r => setTimeout(r, 3000))
+                                const res = await fetch(`/api/v1/orchestrator/host-drains/${encodeURIComponent(drain.id)}`)
+                                const json = await res.json().catch(() => ({}))
+                                if (res.ok) {
+                                  drain = json?.data ?? json
+                                  setNodeActionDrain(drain)
+                                  setNodeActionStep(t('inventory.nodeActionDrainStep', nodeActionDrainProgress(drain)))
                                 }
                               }
+                              maintenanceDone = !!drain.maintenance_enabled
+                              if (drain.status !== 'completed') {
+                                const remaining = nodeActionDrainRemaining(drain)
+                                setNodeActionFailedVms(remaining.map(g => ({
+                                  vmid: String(g.vmid), name: g.name || `VM ${g.vmid}`, connId, type: g.type || 'qemu', node,
+                                  error: nodeActionDrainReason(g), upid: g.task_id || null, taskNode: node,
+                                })))
+                                setNodeActionStep(null)
+                                setNodeActionBusy(false)
+                                return
+                              }
                             }
-                            // Guests that stay on the node (standalone node, local storage,
-                            // failed migration) are left to PVE: the node command stops them
+                            // Guests that stay on the node (local storage, forced past a
+                            // partial drain) are left to PVE: the node command stops them
                             // through pve-guests.service. Stopping them from here first would
                             // also stop ProxCenter when it runs in one of them, and the node
                             // command below would never be sent (#1001).
                           }
   
-                          // Step 2: Enter maintenance mode (cluster only)
-                          if (isClusterNode) {
+                          // Step 2: Enter maintenance mode (cluster only), unless the drain did
+                          if (isClusterNode && !maintenanceDone && !nodeActionDrain?.maintenance_enabled) {
                             setNodeActionStep(t('inventory.nodeActionMaintenanceStep'))
                             try {
                               await fetch(
@@ -1434,6 +1477,8 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
   
                           toast.success(nodeActionDialog.action === 'reboot' ? t('inventory.nodeRebootSuccess') : t('inventory.nodeShutdownSuccess'))
                           setNodeActionDialog(null)
+                          setNodeActionDrain(null)
+                          setNodeActionPlacement('auto')
                           setNodeActionStep(null)
                           setNodeActionMigrateTarget('')
                           setNodeActionFailedVms([])
@@ -2337,9 +2382,25 @@ return
         </Dialog>
       )}
 
+      {/* "Migrate all VMs" is a host drain (#248): the orchestrator places
+          each guest instead of the browser sending everything to one node. */}
+      {bulkActionDialog.open && bulkActionDialog.action === 'migrate-all' && bulkActionDialog.node && (
+        <HostDrainDialog
+          open
+          mode="migrate-all"
+          connId={bulkActionDialog.node.connId}
+          node={bulkActionDialog.node.node}
+          otherNodes={((data?.nodesData || []) as any[])
+            .filter((n: any) => n.node !== bulkActionDialog.node?.node && n.status === 'online')
+            .map((n: any) => n.node as string)}
+          onClose={() => setBulkActionDialog({ open: false, action: null, node: null, targetNode: '' })}
+          onStarted={() => setTimeout(() => fetch('/api/v1/inventory/poll', { method: 'POST' }).catch(() => {}), 2000)}
+        />
+      )}
+
       {/* Dialog de confirmation pour les bulk actions */}
       <Dialog
-        open={bulkActionDialog.open}
+        open={bulkActionDialog.open && bulkActionDialog.action !== 'migrate-all'}
         onClose={() => setBulkActionDialog({ open: false, action: null, node: null, targetNode: '' })}
         maxWidth="xs"
         fullWidth
@@ -2353,9 +2414,6 @@ return
           )}
           {bulkActionDialog.action === 'stop-all' && (
             <><StopIcon sx={{ color: 'error.main' }} />{t('bulkActions.stopAllVms')}</>
-          )}
-          {bulkActionDialog.action === 'migrate-all' && (
-            <><MoveUpIcon sx={{ color: 'primary.main' }} />{t('bulkActions.migrateAllVms')}</>
           )}
         </DialogTitle>
         <DialogContent>
@@ -2383,40 +2441,6 @@ return
               {t('bulkActions.confirmStopAll')}
             </Alert>
           )}
-          {bulkActionDialog.action === 'migrate-all' && (
-            <>
-              <Alert severity="info" sx={{ mb: 2 }}>
-                {t('bulkActions.confirmMigrateAll')}
-              </Alert>
-              {/* #926: preflight for the running guests, migrated live */}
-              <PendingChangesWarning
-                guests={((data?.allVms as any[]) || []).filter((vm: any) => vm.node === bulkActionDialog.node?.name && !vm.template && vm.status === 'running')}
-              />
-              <FormControl fullWidth size="small" sx={{ mt: 2 }}>
-                <InputLabel>{t('bulkActions.targetNode')}</InputLabel>
-                <Select
-                  value={bulkActionDialog.targetNode}
-                  label={t('bulkActions.targetNode')}
-                  onChange={(e) => setBulkActionDialog(prev => ({ ...prev, targetNode: e.target.value }))}
-                >
-                  {(data?.nodesData || [])
-                    .filter((n: any) => n.node !== bulkActionDialog.node?.name && n.status === 'online')
-                    .map((n: any) => (
-                      <MenuItem key={n.node} value={n.node}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <Box sx={{ position: 'relative', display: 'inline-flex', alignItems: 'center', width: 14, height: 14, flexShrink: 0 }}>
-                            <img src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" style={{ width: 14, height: 14, opacity: 0.8 }} />
-                            <Box sx={{ position: 'absolute', bottom: -2, right: -2, width: 7, height: 7, borderRadius: '50%', bgcolor: 'success.main', border: '1.5px solid', borderColor: 'background.paper' }} />
-                          </Box>
-                          {n.node}
-                        </Box>
-                      </MenuItem>
-                    ))
-                  }
-                </Select>
-              </FormControl>
-            </>
-          )}
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
           <Button onClick={() => setBulkActionDialog({ open: false, action: null, node: null, targetNode: '' })}>
@@ -2430,7 +2454,6 @@ return
               bulkActionDialog.action === 'shutdown-all' ? 'warning' : 'primary'
             }
             onClick={executeBulkAction}
-            disabled={bulkActionDialog.action === 'migrate-all' && !bulkActionDialog.targetNode}
           >
             {t('common.confirm')}
           </Button>

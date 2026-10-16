@@ -60,7 +60,6 @@ import { showsClusterLevel } from '@/lib/rbac/scopeKinds'
 import { useTagColors } from '@/contexts/TagColorContext'
 import { useTenant } from '@/contexts/TenantContext'
 import { useTaskTracker } from '@/hooks/useTaskTracker'
-import { startTrackedMigration } from '@/lib/migration/guestMigrateClient'
 import { useMyVdcs } from '@/hooks/useMyVdcs'
 import { readVdcContextCookie } from '@/lib/vdc/contextCookie'
 import { describeVmLoadFailure, describeVmLoadTimeout, externalVmFetchTimeoutMs } from '@/lib/inventory/externalVmFetch'
@@ -1162,16 +1161,17 @@ return migratingVmIds.has(`${connId}:${vmid}`)
     handleCloseNodeContextMenu()
   }
 
-  const handleMaintenanceConfirm = async () => {
-    if (!maintenanceTarget) return
+  // Exit maintenance, or enter it WITHOUT evacuating (the drain dialog's
+  // "maintenance only" switch). Entering with evacuation is a host drain run
+  // by the orchestrator, see HostDrainDialog (#248).
+  const handleMaintenanceConfirm = async (): Promise<boolean> => {
+    if (!maintenanceTarget) return false
     const { connId, node, maintenance } = maintenanceTarget
     const entering = !maintenance
 
     setMaintenanceBusy(true)
     setMaintenanceError(null)
     try {
-      // HA-managed guests are evacuated automatically by Proxmox node-maintenance.
-      // Non-HA guests are left for the operator to handle (see dialog note).
       const res = await fetch(
         `/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/maintenance`,
         { method: entering ? 'POST' : 'DELETE' }
@@ -1179,12 +1179,14 @@ return migratingVmIds.has(`${connId}:${vmid}`)
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
         setMaintenanceError(data?.error || res.statusText)
-        return
+        return false
       }
       setMaintenanceTarget(null)
       setReloadTick(x => x + 1)
+      return true
     } catch (e: any) {
       setMaintenanceError(e?.message || t('inventory.unknownError'))
+      return false
     } finally {
       setMaintenanceBusy(false)
     }
@@ -1220,7 +1222,7 @@ return migratingVmIds.has(`${connId}:${vmid}`)
   }
 
   const handleBulkActionConfirm = async () => {
-    const { action, connId, node, targetNode } = bulkActionDialog
+    const { action, connId, node } = bulkActionDialog
     if (!action) return
 
     const vms = getNodeVms(connId, node)
@@ -1237,10 +1239,8 @@ return migratingVmIds.has(`${connId}:${vmid}`)
         apiAction = 'shutdown'
         break
       case 'migrate-all':
-        if (!targetNode) return
-        vmsToProcess = vms
-        apiAction = 'migrate'
-        break
+        // Handled by HostDrainDialog (#248): never reaches this path.
+        return
     }
 
     if (vmsToProcess.length === 0) {
@@ -1255,14 +1255,6 @@ return migratingVmIds.has(`${connId}:${vmid}`)
         const batch = vmsToProcess.slice(i, i + batchSize)
         await Promise.all(batch.map(async (vm) => {
           try {
-            if (apiAction === 'migrate') {
-              // #926: each migration is followed to its end, which toasts the
-              // outcome with the reason; the POST alone proves nothing.
-              await startTrackedMigration(trackTask, { connId, node, type: vm.type, vmid: vm.vmid }, { target: targetNode, online: vm.status === 'running' }, {
-                description: `${vm.name || `VM ${vm.vmid}`}: ${t('vmActions.migrate')}`,
-              })
-              return
-            }
             await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/guests/${vm.type}/${encodeURIComponent(node)}/${encodeURIComponent(vm.vmid)}/${apiAction}`, { method: 'POST' })
           } catch {}
         }))

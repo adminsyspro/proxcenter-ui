@@ -2169,7 +2169,13 @@
     "poolCreated": "풀 {pool} 생성됨",
     "poolUpdated": "풀 {pool} 업데이트됨",
     "poolDeleted": "풀 {pool} 삭제됨",
-    "poolOwnedByVdc": "이 풀은 vDC {vdc}에 속합니다. 대신 vDC를 삭제하세요."
+    "poolOwnedByVdc": "이 풀은 vDC {vdc}에 속합니다. 대신 vDC를 삭제하세요.",
+    "nodeActionDrainStep": "노드 드레인 중: {done}/{total}개 게스트 처리됨...",
+    "nodeActionDrainPartial": "드레인 후에도 {count}개 게스트가 노드에 남아 있습니다",
+    "nodeActionDrainPartialDesc": "노드가 비워지지 않았습니다. {action}을(를) 강제하면 Proxmox VE가 해당 게스트를 중지합니다. 또는 취소하고 직접 이동하세요. 드레인은 Task Center에 표시됩니다.",
+    "nodeActionForceOption": "그래도 {action} 강제 실행, 이 게스트들은 중지됩니다",
+    "nodeActionDrainDesc": "공유 스토리지의 게스트는 오케스트레이터가 배치 엔진이 선택한 노드로 각각 비웁니다. Task Center에서 확인하세요.",
+    "nodeActionDrainFailed": "드레인을 시작할 수 없습니다: {error}"
   },
   "inventoryPage": {
     "newTag": "새 태그...",
@@ -4909,7 +4915,11 @@
     "total": "전체",
     "running": "실행 중",
     "pending": "대기 중",
-    "failed": "실패"
+    "failed": "실패",
+    "typeHostDrain": "호스트 드레인",
+    "drainGuests": "게스트",
+    "drainRemaining": "{node}에 {count}개 남음",
+    "drainMaintenanceEnabled": "유지 관리 중인 노드"
   },
   "tasks": {
     "stop": {
@@ -9993,5 +10003,43 @@
     "deletedCaption": "vDC 삭제됨, 샘플은 수집 후 {days}일 동안 보관됩니다",
     "emptyDeleted": "이 기간에는 이 vDC의 샘플이 없습니다.",
     "dialogTitleDeleted": "사용량 기록: {name} (삭제됨)"
+  },
+  "hostDrain": {
+    "introMaintenance": "노드가 Proxmox HA 유지 관리 모드로 전환되고 게스트가 비워집니다. HA 관리 게스트는 Proxmox HA가 이동하고, 나머지는 ProxCenter가 배치 엔진이 선택한 노드(예상 부하, 메모리 상한, 어피니티 규칙, 네트워크 및 스토리지)로 각각 마이그레이션합니다.",
+    "introMigrateAll": "이 노드의 모든 게스트를 ProxCenter가 배치 엔진이 선택한 노드로 각각 마이그레이션합니다. 노드는 새 게스트에 계속 사용 가능합니다. 이를 막으려면 유지 관리 모드 시작을 사용하세요.",
+    "evacuateGuests": "게스트 비우기",
+    "evacuateGuestsOff": "유지 관리만: Proxmox HA가 HA 관리 게스트를 이동하고 나머지는 노드에 남습니다.",
+    "placement": "배치",
+    "placementAuto": "자동 (예상 부하에 따라 분산)",
+    "placementManual": "단일 대상 노드",
+    "targetNode": "대상 노드",
+    "maxParallel": "병렬 마이그레이션 수",
+    "memCeiling": "대상 메모리 상한",
+    "memCeilingHelp": "대상 노드는 게스트로 인해 메모리 사용률이 이 비율을 넘게 되면 더 이상 게스트를 받지 않습니다.",
+    "includeStopped": "중지된 게스트도 이동 (오프라인 마이그레이션)",
+    "projectionTitle": "드레인 후 예상 부하",
+    "projectionMem": "메모리",
+    "projectionCpu": "CPU",
+    "projectionHelp": "현재 부하 → 계획된 게스트 이동 후. 대상은 각 게스트의 구성된 메모리를 계산하며, 중지된 게스트는 시작되기 전까지 부하가 없습니다. +n / −n: 들어오는 / 나가는 게스트.",
+    "projectionHaUnplaced": "HA 게스트 {count}개는 Proxmox HA가 배치하므로 어느 대상에도 계산되지 않습니다.",
+    "applyToAll": "모두에 적용",
+    "perGuest": "게스트별",
+    "automaticPlacement": "자동 배치",
+    "keepOnNode": "노드에 그대로 두기",
+    "targetOf": "{name}의 대상",
+    "planEmpty": "이 노드에 게스트가 없습니다.",
+    "planSkipped": "유지",
+    "planHa": "Proxmox HA",
+    "modeLive": "라이브",
+    "modeRestart": "재시작",
+    "modeOffline": "오프라인",
+    "modeHa": "HA",
+    "requiresSsh": "유지 관리 모드 시작은 SSH로 ha-manager를 실행합니다. 이 연결에 SSH가 구성되어야 합니다.",
+    "start": "드레인 시작",
+    "started": "{node} 드레인이 시작되었습니다. Task Center에서 각 게스트를 확인하세요",
+    "orchestratorUnavailable": "오케스트레이터에 연결할 수 없어 드레인을 실행할 수 없습니다.",
+    "runsInOrchestrator": "오케스트레이터에서 실행됩니다. 이 창을 닫고 Task Center에서 각 게스트를 확인할 수 있습니다.",
+    "candidates": "가능한 대상: {nodes}",
+    "noCandidates": "가능한 대상 노드가 없습니다."
   }
 }

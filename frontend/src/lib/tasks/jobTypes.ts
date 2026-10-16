@@ -15,6 +15,8 @@ export const JOB_TYPE_ICONS: Record<string, string> = {
   // Same icon as the Site Recovery menu entry (menuData.js).
   site_recovery: 'ri-shield-star-line',
   migration: 'ri-swap-box-line',
+  // A node being emptied (#248).
+  host_drain: 'ri-logout-box-r-line',
 }
 
 export const JOB_TYPE_LABEL_KEYS: Record<string, string> = {
@@ -23,6 +25,7 @@ export const JOB_TYPE_LABEL_KEYS: Record<string, string> = {
   drs: 'jobsPage.typeDrs',
   site_recovery: 'jobsPage.typeSiteRecovery',
   migration: 'jobsPage.typeMigration',
+  host_drain: 'jobsPage.typeHostDrain',
 }
 
 /** Shown only if a type ever reaches the UI without a message-catalogue key. */
@@ -32,6 +35,7 @@ export const JOB_TYPE_FALLBACK_LABELS: Record<string, string> = {
   drs: 'DRS',
   site_recovery: 'Site Recovery',
   migration: 'Migration',
+  host_drain: 'Host drain',
 }
 
 export const JOB_TYPE_FALLBACK_ICON = 'ri-file-list-line'

@@ -490,6 +490,7 @@ export default function JobsPage() {
                 <MenuItem value='drs'>{t('jobsPage.typeDrs')}</MenuItem>
                 <MenuItem value='migration'>{t('jobsPage.typeMigration')}</MenuItem>
                 <MenuItem value='site_recovery'>{t('jobsPage.typeSiteRecovery')}</MenuItem>
+                <MenuItem value='host_drain'>{t('jobsPage.typeHostDrain')}</MenuItem>
               </Select>
             </FormControl>
 

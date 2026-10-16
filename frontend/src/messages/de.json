@@ -2156,7 +2156,13 @@
     "poolCreated": "Pool {pool} erstellt",
     "poolUpdated": "Pool {pool} aktualisiert",
     "poolDeleted": "Pool {pool} gelöscht",
-    "poolOwnedByVdc": "Dieser Pool gehört zum vDC {vdc}: Löschen Sie stattdessen den vDC."
+    "poolOwnedByVdc": "Dieser Pool gehört zum vDC {vdc}: Löschen Sie stattdessen den vDC.",
+    "nodeActionDrainStep": "Knoten wird geleert: {done}/{total} Gast/Gäste abgeschlossen...",
+    "nodeActionDrainPartial": "{count} Gast/Gäste sind nach dem Drain noch auf dem Knoten",
+    "nodeActionDrainPartialDesc": "Der Knoten ist nicht geleert. Erzwingen Sie {action}, damit Proxmox VE sie stoppt, oder brechen Sie ab und verschieben Sie sie selbst. Der Drain steht im Task Center.",
+    "nodeActionForceOption": "{action} trotzdem erzwingen, diese Gäste werden gestoppt",
+    "nodeActionDrainDesc": "Gäste auf Shared Storage werden vom Orchestrator evakuiert, jeder auf den Knoten, den die Platzierungs-Engine wählt. Verfolgen Sie sie im Task Center.",
+    "nodeActionDrainFailed": "Der Drain konnte nicht starten: {error}"
   },
   "inventoryPage": {
     "newTag": "Neuer Tag...",
@@ -4888,7 +4894,11 @@
     "total": "Gesamt",
     "running": "Laufend",
     "pending": "Ausstehend",
-    "failed": "Fehlgeschlagen"
+    "failed": "Fehlgeschlagen",
+    "typeHostDrain": "Host-Drain",
+    "drainGuests": "Gäste",
+    "drainRemaining": "{count} noch auf {node}",
+    "drainMaintenanceEnabled": "Knoten im Wartungsmodus"
   },
   "tasks": {
     "stop": {
@@ -9655,5 +9665,43 @@
     "deletedCaption": "vDC gelöscht, Messungen werden {days} Tage nach der Erfassung aufbewahrt",
     "emptyDeleted": "Keine Messung dieses vDC in diesem Zeitraum.",
     "dialogTitleDeleted": "Nutzungsverlauf: {name} (gelöscht)"
+  },
+  "hostDrain": {
+    "introMaintenance": "Der Knoten wechselt in den Proxmox-HA-Wartungsmodus und seine Gäste werden evakuiert: HA-verwaltete Gäste verschiebt Proxmox HA, die übrigen migriert ProxCenter, jeden auf den Knoten, den die Platzierungs-Engine wählt (projizierte Last, Speicherobergrenze, Affinitätsregeln, Netzwerk und Storage).",
+    "introMigrateAll": "Alle Gäste dieses Knotens werden von ProxCenter migriert, jeder auf den Knoten, den die Platzierungs-Engine wählt. Der Knoten bleibt für neue Gäste verfügbar: nutzen Sie Wartungsmodus aktivieren, um das zu verhindern.",
+    "evacuateGuests": "Gäste evakuieren",
+    "evacuateGuestsOff": "Nur Wartungsmodus: Proxmox HA verschiebt die HA-verwalteten Gäste, die übrigen bleiben auf dem Knoten.",
+    "placement": "Platzierung",
+    "placementAuto": "Automatisch (nach projizierter Last verteilt)",
+    "placementManual": "Ein einzelner Zielknoten",
+    "targetNode": "Zielknoten",
+    "maxParallel": "Parallele Migrationen",
+    "memCeiling": "Speicherobergrenze der Ziele",
+    "memCeilingHelp": "Ein Zielknoten nimmt keine Gäste mehr auf, sobald sie seinen Speicher über diesen Anteil bringen würden.",
+    "includeStopped": "Auch gestoppte Gäste verschieben (Offline-Migration)",
+    "projectionTitle": "Voraussichtliche Last nach dem Drain",
+    "projectionMem": "Speicher",
+    "projectionCpu": "CPU",
+    "projectionHelp": "Aktuelle Last → nachdem die geplanten Gäste verschoben wurden. Ein Ziel zählt den konfigurierten Speicher jedes Gasts; gestoppte Gäste zählen erst, wenn sie gestartet werden. +n / −n: ankommende / abgehende Gäste.",
+    "projectionHaUnplaced": "{count} HA-Gast/Gäste werden von Proxmox HA platziert und auf keinem Ziel gezählt.",
+    "applyToAll": "Auf alle anwenden",
+    "perGuest": "pro Gast",
+    "automaticPlacement": "Automatische Platzierung",
+    "keepOnNode": "Auf dem Knoten lassen",
+    "targetOf": "Ziel von {name}",
+    "planEmpty": "Kein Gast auf diesem Knoten.",
+    "planSkipped": "bleibt",
+    "planHa": "Proxmox HA",
+    "modeLive": "live",
+    "modeRestart": "Neustart",
+    "modeOffline": "offline",
+    "modeHa": "HA",
+    "requiresSsh": "Der Wartungsmodus führt ha-manager über SSH aus: SSH muss für diese Verbindung konfiguriert sein.",
+    "start": "Drain starten",
+    "started": "Drain von {node} gestartet, verfolgen Sie jeden Gast im Task Center",
+    "orchestratorUnavailable": "Der Orchestrator ist nicht erreichbar, der Drain kann nicht laufen.",
+    "runsInOrchestrator": "Läuft im Orchestrator: Sie können dieses Fenster schließen und jeden Gast im Task Center verfolgen.",
+    "candidates": "Mögliche Ziele: {nodes}",
+    "noCandidates": "Kein geeigneter Zielknoten."
   }
 }

@@ -2173,7 +2173,13 @@
     "poolCreated": "资源池 {pool} 已创建",
     "poolUpdated": "资源池 {pool} 已更新",
     "poolDeleted": "资源池 {pool} 已删除",
-    "poolOwnedByVdc": "此资源池属于 vDC {vdc}：请改为删除该 vDC。"
+    "poolOwnedByVdc": "此资源池属于 vDC {vdc}：请改为删除该 vDC。",
+    "nodeActionDrainStep": "正在清空节点：已处理 {done}/{total} 个客户机...",
+    "nodeActionDrainPartial": "清空后仍有 {count} 个客户机在节点上",
+    "nodeActionDrainPartialDesc": "节点未清空。强制执行 {action} 以让 Proxmox VE 停止这些客户机，或取消并自行迁移。清空任务已列在 Task Center 中。",
+    "nodeActionForceOption": "仍然强制执行 {action}，这些客户机将被停止",
+    "nodeActionDrainDesc": "共享存储上的客户机由编排器清空，每个客户机都迁往放置引擎选择的节点。可在 Task Center 中跟踪。",
+    "nodeActionDrainFailed": "无法启动清空：{error}"
   },
   "inventoryPage": {
     "newTag": "新标签...",
@@ -4913,7 +4919,11 @@
     "total": "总计",
     "running": "运行中",
     "pending": "等待中",
-    "failed": "失败"
+    "failed": "失败",
+    "typeHostDrain": "主机清空",
+    "drainGuests": "客户机",
+    "drainRemaining": "{count} 个仍在 {node} 上",
+    "drainMaintenanceEnabled": "节点处于维护模式"
   },
   "tasks": {
     "stop": {
@@ -9999,5 +10009,43 @@
     "deletedCaption": "vDC 已删除，样本在采集后保留 {days} 天",
     "emptyDeleted": "此期间没有该 vDC 的样本。",
     "dialogTitleDeleted": "使用量历史：{name}（已删除）"
+  },
+  "hostDrain": {
+    "introMaintenance": "节点进入 Proxmox HA 维护模式并清空其客户机：HA 管理的客户机由 Proxmox HA 迁移，其余由 ProxCenter 迁移，每个客户机都迁往放置引擎选择的节点（预计负载、内存上限、亲和规则、网络和存储）。",
+    "introMigrateAll": "此节点的所有客户机由 ProxCenter 迁移，每个客户机都迁往放置引擎选择的节点。节点仍可接收新客户机：如需排除，请使用进入维护模式。",
+    "evacuateGuests": "清空客户机",
+    "evacuateGuestsOff": "仅维护模式：Proxmox HA 迁移 HA 管理的客户机，其余留在节点上。",
+    "placement": "放置",
+    "placementAuto": "自动（按预计负载分散）",
+    "placementManual": "单一目标节点",
+    "targetNode": "目标节点",
+    "maxParallel": "并行迁移数",
+    "memCeiling": "目标内存上限",
+    "memCeilingHelp": "一旦客户机会使目标节点的内存超过此比例，该节点便不再接收客户机。",
+    "includeStopped": "同时迁移已停止的客户机（离线迁移）",
+    "projectionTitle": "迁移后的预计负载",
+    "projectionMem": "内存",
+    "projectionCpu": "CPU",
+    "projectionHelp": "当前负载 → 计划的客户机迁移之后。目标按每个客户机的配置内存计算；已停止的客户机在启动前不占负载。+n / −n：迁入 / 迁出的客户机。",
+    "projectionHaUnplaced": "{count} 个 HA 客户机由 Proxmox HA 放置，不计入任何目标。",
+    "applyToAll": "应用到全部",
+    "perGuest": "按客户机",
+    "automaticPlacement": "自动放置",
+    "keepOnNode": "留在节点上",
+    "targetOf": "{name} 的目标",
+    "planEmpty": "此节点上没有客户机。",
+    "planSkipped": "留在原处",
+    "planHa": "Proxmox HA",
+    "modeLive": "在线",
+    "modeRestart": "重启",
+    "modeOffline": "离线",
+    "modeHa": "HA",
+    "requiresSsh": "进入维护模式通过 SSH 运行 ha-manager：此连接必须配置 SSH。",
+    "start": "开始清空",
+    "started": "{node} 的清空已开始，请在 Task Center 中跟踪每个客户机",
+    "orchestratorUnavailable": "无法连接编排器，无法执行清空。",
+    "runsInOrchestrator": "在编排器中运行：您可以关闭此窗口并在 Task Center 中跟踪每个客户机。",
+    "candidates": "可用目标：{nodes}",
+    "noCandidates": "没有可用的目标节点。"
   }
 }

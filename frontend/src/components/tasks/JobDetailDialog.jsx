@@ -189,6 +189,8 @@ export default function JobDetailDialog({ open, onClose, job, onAction, actionEr
   if (!job) return null
 
   const nodeStatuses = job.metadata?.nodeStatuses || []
+  // Host drain (#248): one entry per guest, with where it went or why it stayed.
+  const drainGuests = job.type === 'host_drain' && Array.isArray(job.metadata?.guests) ? job.metadata.guests : []
   const actions = jobActions(job)
 
   // A warm migration holding for its operator. The row this dialog was opened
@@ -369,6 +371,48 @@ export default function JobDetailDialog({ open, onClose, job, onAction, actionEr
             <Box sx={{ p: 2, bgcolor: 'error.main', color: 'error.contrastText', borderRadius: 1 }}>
               <Typography variant="body2">{actionError || job.metadata.error}</Typography>
             </Box>
+          )}
+
+          {/* Host drain guests */}
+          {drainGuests.length > 0 && (
+            <Card variant="outlined">
+              <CardContent>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                  <Typography variant="subtitle2" fontWeight={700}>
+                    {t('jobsPage.drainGuests')}
+                  </Typography>
+                  {job.metadata?.maintenanceEnabled && (
+                    <Chip size="small" color="warning" variant="outlined" label={t('jobsPage.drainMaintenanceEnabled')} />
+                  )}
+                  {Array.isArray(job.metadata?.remaining) && job.metadata.remaining.length > 0 && job.status !== 'running' && (
+                    <Chip size="small" color="error" label={t('jobsPage.drainRemaining', { count: job.metadata.remaining.length, node: job.metadata.node })} />
+                  )}
+                </Box>
+                <List dense>
+                  {drainGuests.map((g) => {
+                    const left = g.status === 'completed'
+                    const stayed = g.status === 'failed' || g.status === 'skipped'
+                    const where = left || g.target_node ? `${job.metadata.node} → ${g.target_node || (g.mode === 'ha' ? 'HA' : '?')}` : job.metadata.node
+                    const why = g.failure_reason || g.error || (g.status === 'skipped' ? g.reason : '')
+                    return (
+                      <ListItem key={g.vmid} data-testid={`drain-guest-${g.vmid}`}>
+                        <ListItemIcon sx={{ minWidth: 40 }}>
+                          {left ? <CheckCircleIcon color="success" fontSize="small" />
+                            : stayed ? <ErrorIcon color="error" fontSize="small" />
+                            : g.status === 'migrating' ? <CircularProgress size={18} />
+                            : <InfoIcon color="disabled" fontSize="small" />}
+                        </ListItemIcon>
+                        <ListItemText
+                          primary={`${g.type === 'lxc' ? 'CT' : 'VM'} ${g.vmid}${g.name ? ` (${g.name})` : ''}`}
+                          secondary={`${where}${g.mode ? ` • ${g.mode}` : ''}${why ? ` • ${why}` : ''}`}
+                        />
+                        {g.ha && <Chip size="small" label="HA" sx={{ ml: 1 }} />}
+                      </ListItem>
+                    )
+                  })}
+                </List>
+              </CardContent>
+            </Card>
           )}
 
           {/* Node statuses */}

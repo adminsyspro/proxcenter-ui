@@ -1,5 +1,9 @@
 // src/lib/api/firewall.ts
 
+import type { FirewallLogResult, FirewallLogScope } from '@/lib/firewall/logs'
+
+export type { FirewallLogResult, FirewallLogRow, FirewallLogScope, FirewallLogWarning } from '@/lib/firewall/logs'
+
 // ================================================================================
 // TYPES
 // ================================================================================
@@ -384,6 +388,30 @@ export interface FirewallLogEntry {
 
 export async function getVMFirewallLog(connectionId: string, node: string, vmType: string, vmid: number, limit = 50): Promise<FirewallLogEntry[]> {
   return fetchAPI<FirewallLogEntry[]>(`/api/v1/firewall/vms/${connectionId}/${node}/${vmType}/${vmid}/log?limit=${limit}`)
+}
+
+/**
+ * The parsed log of a guest (its own lines plus the security group hits on
+ * its interfaces), of a security group across the cluster, of a node (its
+ * whole log) or of the cluster's host rules, newest first, over the last
+ * `windowSec` seconds (ui#1114).
+ */
+export async function getFirewallLog(connectionId: string, scope: FirewallLogScope, windowSec: number): Promise<FirewallLogResult> {
+  const q = new URLSearchParams({ window: String(windowSec) })
+
+  q.set('scope', scope.kind)
+
+  if (scope.kind === 'group') {
+    q.set('group', scope.group)
+  } else if (scope.kind === 'node') {
+    q.set('node', scope.node)
+  } else if (scope.kind === 'vm') {
+    q.set('node', scope.node)
+    q.set('vmType', scope.vmType)
+    q.set('vmid', String(scope.vmid))
+  }
+
+  return fetchAPI<FirewallLogResult>(`/api/v1/firewall/logs/${connectionId}?${q}`)
 }
 
 export async function getVMRules(connectionId: string, node: string, vmType: string, vmid: number): Promise<FirewallRule[]> {

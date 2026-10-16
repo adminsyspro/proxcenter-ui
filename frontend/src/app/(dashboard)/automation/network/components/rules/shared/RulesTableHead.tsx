@@ -21,6 +21,8 @@ interface RulesTableHeadProps {
    * column is opt-in rather than rendered empty.
    */
   showAppliedTo?: boolean
+  /** Rows carry a terminal icon opening the rule's log: a wider actions column. */
+  withLogs?: boolean
 }
 
 /**
@@ -30,7 +32,7 @@ interface RulesTableHeadProps {
  * pin the same widths, so a change here must be mirrored in the row cells
  * (see RuleTableCells.tsx).
  */
-export default function RulesTableHead({ showAppliedTo = false }: RulesTableHeadProps) {
+export default function RulesTableHead({ showAppliedTo = false, withLogs = false }: RulesTableHeadProps) {
   const theme = useTheme()
   const t = useTranslations()
 
@@ -48,7 +50,7 @@ export default function RulesTableHead({ showAppliedTo = false }: RulesTableHead
         <TableCell sx={{ ...headCellSx, width: 90 }}>{t('firewall.action')}</TableCell>
         <TableCell sx={{ ...headCellSx, width: 80 }}>{t('firewall.logLevelShort')}</TableCell>
         <TableCell sx={headCellSx}>{t('network.comment')}</TableCell>
-        <TableCell sx={{ width: 70 }}></TableCell>
+        <TableCell sx={{ width: withLogs ? 100 : 70 }}></TableCell>
       </TableRow>
     </TableHead>
   )

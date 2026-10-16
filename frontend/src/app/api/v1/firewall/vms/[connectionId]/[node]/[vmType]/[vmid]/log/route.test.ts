@@ -50,6 +50,16 @@ describe('GET /api/v1/firewall/vms/[connectionId]/[node]/[vmType]/[vmid]/log', (
     expect(getConnectionByIdMock).not.toHaveBeenCalled()
   })
 
+  it('forwards a since/until window to the orchestrator', async () => {
+    orchestrator.get.mockResolvedValueOnce({ data: [], status: 200 })
+
+    const { GET } = handlersOf(await import('./route'))
+    const res = await callRoute(GET, { params: PARAMS, searchParams: { limit: '0', since: '1760565600', until: '1760569200' } })
+
+    expect(res.status).toBe(200)
+    expect(orchestrator.get).toHaveBeenCalledWith('/firewall/vms/conn-1/pve1/lxc/204/log?limit=0&since=1760565600&until=1760569200')
+  })
+
   it('defaults the limit to 50 when the query param is absent', async () => {
     orchestrator.get.mockResolvedValueOnce({ data: [], status: 200 })
 
@@ -72,7 +82,7 @@ describe('GET /api/v1/firewall/vms/[connectionId]/[node]/[vmType]/[vmid]/log', (
 
     // pveFetch builds `?limit=`, so the string from the query string must have
     // become a number here — 200, not '200'.
-    expect(getVMFirewallLogMock).toHaveBeenCalledWith(CONN, 'pve1', 'lxc', '204', 200)
+    expect(getVMFirewallLogMock).toHaveBeenCalledWith(CONN, 'pve1', 'lxc', '204', 200, { since: undefined, until: undefined })
 
     // Bare array, exactly what the orchestrator would have returned.
     expect(await readJson<any>(res)).toEqual(ENTRIES)
@@ -86,7 +96,7 @@ describe('GET /api/v1/firewall/vms/[connectionId]/[node]/[vmType]/[vmid]/log', (
     const res = await callRoute(GET, { params: PARAMS })
 
     expect(res.status).toBe(200)
-    expect(getVMFirewallLogMock).toHaveBeenCalledWith(CONN, 'pve1', 'lxc', '204', 50)
+    expect(getVMFirewallLogMock).toHaveBeenCalledWith(CONN, 'pve1', 'lxc', '204', 50, { since: undefined, until: undefined })
     expect(await readJson<any>(res)).toEqual([])
   })
 

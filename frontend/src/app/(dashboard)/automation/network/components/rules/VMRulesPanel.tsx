@@ -1,6 +1,6 @@
 'use client'
 
-import { Fragment, useState, useMemo, useCallback, useRef, useEffect } from 'react'
+import { Fragment, useState, useMemo } from 'react'
 import { useTranslations } from 'next-intl'
 
 import {
@@ -16,6 +16,8 @@ import { ruleToFormData } from './shared/ruleToFormData'
 import { VMFirewallInfo } from '@/hooks/useVMFirewallRules'
 import { useToast } from '@/contexts/ToastContext'
 import LogLevelSelect from '@/components/firewall/LogLevelSelect'
+import FirewallLogDialog from '@/components/firewall/FirewallLogDialog'
+import type { LogRuleFilter } from '@/components/firewall/FirewallLogDialog'
 import { LOG_LEVELS, DEFAULT_LOG_LEVEL } from '@/components/firewall/logLevels'
 import { DEFAULT_RULE } from '../../types'
 import { PVE_DEFAULT_POLICY_IN, PVE_DEFAULT_POLICY_OUT } from '@/lib/firewall/pveDefaults'
@@ -120,53 +122,19 @@ export default function VMRulesPanel({ vmFirewallData, securityGroups, loadingVM
     }
   }
 
-  // ── Log viewer state ──
-  const [logDialog, setLogDialog] = useState<{ open: boolean; vm: VMFirewallInfo | null }>({ open: false, vm: null })
-  const [logEntries, setLogEntries] = useState<firewallAPI.FirewallLogEntry[]>([])
-  const [loadingLogs, setLoadingLogs] = useState(false)
-  const logEndRef = useRef<HTMLDivElement>(null)
-  const logIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
-
-  const fetchLogs = useCallback(async (vm: VMFirewallInfo) => {
-    if (!selectedConnection) return
-    try {
-      const logs = await firewallAPI.getVMFirewallLog(selectedConnection, vm.node, vm.type, vm.vmid, 200)
-      setLogEntries(logs)
-    } catch { /* silently fail on auto-refresh */ }
-  }, [selectedConnection])
-
-  const openLogDialog = async (vm: VMFirewallInfo) => {
-    setLogDialog({ open: true, vm })
-    setLogEntries([])
-    setLoadingLogs(true)
-    try {
-      const logs = await firewallAPI.getVMFirewallLog(selectedConnection, vm.node, vm.type, vm.vmid, 200)
-      setLogEntries(logs)
-    } catch (err: any) {
-      showToast(err.message || t('networkPage.error'), 'error')
-    } finally {
-      setLoadingLogs(false)
-    }
+  // ── Log viewer ──
+  // Keyed, not a snapshot: a log level change reloads the guest, and the
+  // dialog's selects must show the reloaded options.
+  const [logVmKey, setLogVmKey] = useState<string | null>(null)
+  // Set when the log was opened from one rule's terminal icon.
+  const [logRule, setLogRule] = useState<{ filter: LogRuleFilter; pos: number } | null>(null)
+  const logVm = logVmKey ? vmFirewallData.find(v => `${v.node}/${v.vmid}` === logVmKey) ?? null : null
+  const openLogDialog = (vm: VMFirewallInfo, rule?: firewallAPI.FirewallRule) => {
+    setLogVmKey(`${vm.node}/${vm.vmid}`)
+    setLogRule(rule
+      ? { pos: rule.pos, filter: rule.type === 'group' ? { kind: 'groupRef', group: rule.action } : { kind: 'guestRule', pos: rule.pos } }
+      : null)
   }
-
-  const closeLogDialog = () => {
-    setLogDialog({ open: false, vm: null })
-    setLogEntries([])
-    if (logIntervalRef.current) { clearInterval(logIntervalRef.current); logIntervalRef.current = null }
-  }
-
-  // Auto-refresh logs every 5s while dialog is open
-  useEffect(() => {
-    if (logDialog.open && logDialog.vm) {
-      logIntervalRef.current = setInterval(() => fetchLogs(logDialog.vm!), 5000)
-      return () => { if (logIntervalRef.current) clearInterval(logIntervalRef.current) }
-    }
-  }, [logDialog.open, logDialog.vm, fetchLogs])
-
-  // Auto-scroll to bottom when new logs arrive
-  useEffect(() => {
-    logEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [logEntries])
 
   // ── Log level change ──
   const handleVMLogLevelChange = async (vm: VMFirewallInfo, field: 'log_level_in' | 'log_level_out', value: string) => {
@@ -311,7 +279,7 @@ export default function VMRulesPanel({ vmFirewallData, securityGroups, loadingVM
       ) : filteredVMData.length > 0 ? (
         <TableContainer component={Paper} sx={{ border: `1px solid ${alpha(theme.palette.divider, 0.1)}` }}>
           <Table size="small">
-            <RulesTableHead />
+            <RulesTableHead withLogs />
             <TableBody>
               {vlanGroups.map(([vlanKey, vms], vlanIdx) => {
                 const isUntagged = vlanKey === '__untagged__'
@@ -475,6 +443,7 @@ export default function VMRulesPanel({ vmFirewallData, securityGroups, loadingVM
                           <RuleRowActionsCell
                             onEdit={() => openVMRuleDialog(vm, rule)}
                             onDelete={() => setDeleteVMRuleConfirm({ vm, pos: rule.pos })}
+                            logs={{ rule, onOpen: () => openLogDialog(vm, rule) }}
                           />
                         </TableRow>
                       )
@@ -649,34 +618,22 @@ export default function VMRulesPanel({ vmFirewallData, securityGroups, loadingVM
       </Dialog>
 
       {/* Firewall Log Dialog */}
-      <Dialog open={logDialog.open} onClose={closeLogDialog} maxWidth="lg" fullWidth>
-        <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', pb: 1 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <i className="ri-terminal-box-line" style={{ color: theme.palette.primary.main }} />
-            {t('networkPage.firewallLogs')}
-            {logDialog.vm && <Chip label={`${logDialog.vm.name} (${logDialog.vm.vmid})`} size="small" sx={{ ml: 1 }} />}
-          </Box>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Tooltip title={t('networkPage.refresh')}>
-              <span>
-                <IconButton aria-label={t('networkPage.refresh')} size="small" onClick={() => fetchLogs(logDialog.vm!)} disabled={loadingLogs || !logDialog.vm}>
-                  <i className={`ri-refresh-line ${loadingLogs ? 'animate-spin' : ''}`} style={{ fontSize: 18 }} />
-                </IconButton>
-              </span>
-            </Tooltip>
-            <IconButton onClick={closeLogDialog} size="small"><i className="ri-close-line" /></IconButton>
-          </Box>
-        </DialogTitle>
-        <DialogContent sx={{ p: 0 }}>
-          {/* Log level controls */}
-          {logDialog.vm && (
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, px: 2, py: 1.5, borderBottom: `1px solid ${alpha(theme.palette.divider, 0.15)}` }}>
+      {logVm && (
+        <FirewallLogDialog
+          open
+          onClose={() => { setLogVmKey(null); setLogRule(null) }}
+          connectionId={selectedConnection}
+          scope={{ kind: 'vm', node: logVm.node, vmType: logVm.type, vmid: logVm.vmid }}
+          subject={logRule ? t('firewallLog.ruleSubject', { name: `${logVm.name} (${logVm.vmid})`, pos: logRule.pos }) : `${logVm.name} (${logVm.vmid})`}
+          ruleFilter={logRule?.filter}
+          headerExtra={
+            <>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary', fontSize: 11 }}>Log IN:</Typography>
                 <FormControl size="small">
                   <Select
-                    value={logDialog.vm.options?.log_level_in || DEFAULT_LOG_LEVEL}
-                    onChange={(e) => { if (logDialog.vm) void handleVMLogLevelChange(logDialog.vm, 'log_level_in', e.target.value) }}
+                    value={logVm.options?.log_level_in || DEFAULT_LOG_LEVEL}
+                    onChange={(e) => { void handleVMLogLevelChange(logVm, 'log_level_in', e.target.value) }}
                     sx={{ fontSize: 11, height: 28, minWidth: 90, '& .MuiSelect-select': { py: 0.3 } }}
                     disabled={!selectedConnection}
                   >
@@ -688,8 +645,8 @@ export default function VMRulesPanel({ vmFirewallData, securityGroups, loadingVM
                 <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary', fontSize: 11 }}>Log OUT:</Typography>
                 <FormControl size="small">
                   <Select
-                    value={logDialog.vm.options?.log_level_out || DEFAULT_LOG_LEVEL}
-                    onChange={(e) => { if (logDialog.vm) void handleVMLogLevelChange(logDialog.vm, 'log_level_out', e.target.value) }}
+                    value={logVm.options?.log_level_out || DEFAULT_LOG_LEVEL}
+                    onChange={(e) => { void handleVMLogLevelChange(logVm, 'log_level_out', e.target.value) }}
                     sx={{ fontSize: 11, height: 28, minWidth: 90, '& .MuiSelect-select': { py: 0.3 } }}
                     disabled={!selectedConnection}
                   >
@@ -697,34 +654,10 @@ export default function VMRulesPanel({ vmFirewallData, securityGroups, loadingVM
                   </Select>
                 </FormControl>
               </Box>
-            </Box>
-          )}
-          <Box sx={{
-            bgcolor: '#1e1e1e', color: '#d4d4d4', fontFamily: '"JetBrains Mono", monospace',
-            fontSize: 12, lineHeight: 1.6, p: 2, minHeight: 300, maxHeight: 500, overflow: 'auto',
-          }}>
-            {loadingLogs ? (
-              <Box sx={{ py: 4, textAlign: 'center' }}>
-                <LinearProgress sx={{ mb: 2 }} />
-                <Typography variant="body2" sx={{ color: '#888' }}>{t('networkPage.loadingFirewallRules')}</Typography>
-              </Box>
-            ) : logEntries.length > 0 ? (
-              logEntries.map((entry) => (
-                <Box key={entry.n} sx={{ py: 0.2, '&:hover': { bgcolor: 'rgba(255,255,255,0.05)' } }}>
-                  <span style={{ color: '#888', marginRight: 8, userSelect: 'none' }}>{String(entry.n).padStart(4, ' ')}</span>
-                  <span>{entry.t}</span>
-                </Box>
-              ))
-            ) : (
-              <Box sx={{ py: 6, textAlign: 'center' }}>
-                <i className="ri-file-list-line" style={{ fontSize: 32, opacity: 0.3 }} />
-                <Typography variant="body2" sx={{ color: '#888', mt: 1 }}>{t('networkPage.noLogs')}</Typography>
-              </Box>
-            )}
-            <div ref={logEndRef} />
-          </Box>
-        </DialogContent>
-      </Dialog>
+            </>
+          }
+        />
+      )}
     </>
   )
 }

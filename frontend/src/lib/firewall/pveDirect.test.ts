@@ -49,6 +49,7 @@ import {
   updateVMRule,
   deleteVMRule,
   getVMFirewallLog,
+  getNodeFirewallLog,
   toggleVMNICFirewall,
   getFirewallStatus,
 } from './pveDirect'
@@ -502,6 +503,23 @@ describe('getVMFirewallLog', () => {
 
     expect(await getVMFirewallLog(conn, 'pve1', 'lxc', 200, 200)).toEqual([{ n: 1, t: 'line' }])
     expect(callAt().path).toBe('/nodes/pve1/lxc/200/firewall/log?limit=200')
+  })
+
+  // PVE counts limit from the OLDEST line: a since window with limit 0 is
+  // how the newest lines are reached (ui#1114).
+  it('sends a since/until window with limit 0', async () => {
+    await getVMFirewallLog(conn, 'pve1', 'qemu', 100, 0, { since: 1760565600, until: 1760569200 })
+
+    expect(callAt().path).toBe('/nodes/pve1/qemu/100/firewall/log?limit=0&since=1760565600&until=1760569200')
+  })
+})
+
+describe('getNodeFirewallLog', () => {
+  it('reads the node log with the window', async () => {
+    mockPve.mockResolvedValue([{ n: 1, t: 'line' }] as any)
+
+    expect(await getNodeFirewallLog(conn, 'pve2', 0, { since: 1760565600 })).toEqual([{ n: 1, t: 'line' }])
+    expect(callAt().path).toBe('/nodes/pve2/firewall/log?limit=0&since=1760565600')
   })
 })
 

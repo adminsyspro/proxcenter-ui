@@ -5,6 +5,7 @@ import { getSessionPrisma, getCurrentTenantId, DEFAULT_TENANT_ID } from "@/lib/t
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { updateCustomImageSchema } from "@/lib/schemas"
 import { authorizeImageLocations, authorizeImageVolume, extraImageLocations, SourceVolumeError } from '@/lib/templates/sourceVolume'
+import { loadGrantSummary, replaceTenantGrants } from '@/lib/templates/catalogGrants'
 
 export const runtime = "nodejs"
 
@@ -20,7 +21,9 @@ export async function GET(req: Request, ctx: Ctx) {
     const image = await prisma.customImage.findUnique({ where: { id } })
     if (!image) return NextResponse.json({ error: "Not found" }, { status: 404 })
 
-    return NextResponse.json({ data: image })
+    const tenantId = await getCurrentTenantId()
+    if (tenantId !== DEFAULT_TENANT_ID) return NextResponse.json({ data: image })
+    return NextResponse.json({ data: { ...image, grants: await loadGrantSummary('image', image.id) } })
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
@@ -73,10 +76,17 @@ export async function PUT(req: Request, ctx: Ctx) {
     if (data.isShared !== undefined && tenantId !== DEFAULT_TENANT_ID) {
       delete data.isShared
     }
+    // Per-tenant grants (#903) are provider-only too; the field never reaches
+    // the row, it is a separate table.
+    const grantTenantIds: string[] | undefined = data.grantTenantIds
+    delete data.grantTenantIds
     const image = await prisma.customImage.update({
       where: { id },
       data,
     })
+    if (grantTenantIds && tenantId === DEFAULT_TENANT_ID) {
+      await replaceTenantGrants('image', image.id, grantTenantIds, null)
+    }
 
     const { audit } = await import("@/lib/audit")
     await audit({

@@ -37,6 +37,7 @@ import type {
   UpdateVdcInput,
   VdcIsoLibraryGrant,
   VdcIsoLibraryInput,
+  VdcCatalogGrantsDto,
 } from './types'
 
 // Re-export all types
@@ -256,6 +257,10 @@ function buildVdcWithDetails(row: any, pbsConnNames?: Map<string, string>): VdcW
     storageId: l.storageId,
     allowUploads: l.allowUploads === true,
   }))
+  const catalogGrants: VdcCatalogGrantsDto = {
+    imageIds: (row.catalogGrants ?? []).map((g: any) => g.imageId).filter((x: unknown): x is string => typeof x === 'string'),
+    blueprintIds: (row.catalogGrants ?? []).map((g: any) => g.blueprintId).filter((x: unknown): x is string => typeof x === 'string'),
+  }
   const pbsBindings = row.pbsNamespaces.map((b: any) => ({
     id: b.id,
     vdcId: b.vdcId,
@@ -286,6 +291,7 @@ function buildVdcWithDetails(row: any, pbsConnNames?: Map<string, string>): VdcW
     storagePolicies,
     pbsBindings,
     isoLibraries,
+    catalogGrants,
   }
 }
 
@@ -294,6 +300,7 @@ const vdcWithDetailsInclude = {
   nodes: true,
   storages: true,
   isoLibraries: { orderBy: { storageId: 'asc' as const } },
+  catalogGrants: { select: { imageId: true, blueprintId: true } },
   quota: true,
   usageCache: true,
   sharedBridges: { orderBy: { bridge: 'asc' as const } },
@@ -633,6 +640,13 @@ export async function createVdc(input: CreateVdcInput, createdBy: string | null)
     throw err
   }
 
+  // Catalogue grants (#903): a separate table keyed by the new vDC id; the
+  // entries were validated against the provider's rows inside the helper.
+  if (input.catalogGrants) {
+    const { replaceVdcCatalogGrants } = await import('@/lib/templates/catalogGrants')
+    await replaceVdcCatalogGrants(id, input.catalogGrants, createdBy)
+  }
+
   try {
     await applySdn(conn)
   } catch (err: any) {
@@ -829,6 +843,11 @@ export async function updateVdc(id: string, input: UpdateVdcInput): Promise<VdcW
   // A member of a stretched tenant network (#901) whose own peers changed
   // must be re-learnt by the other members' zones.
   if (zoneChanged) await syncNetworksOfVdc(id)
+
+  if (input.catalogGrants) {
+    const { replaceVdcCatalogGrants } = await import('@/lib/templates/catalogGrants')
+    await replaceVdcCatalogGrants(id, input.catalogGrants, null)
+  }
 
   clearVdcScopeCache(existing.tenantId)
 

@@ -2,22 +2,31 @@
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 
-import { getSessionPrisma } from "@/lib/tenant"
+import { getSessionPrisma, getCurrentTenantId, DEFAULT_TENANT_ID } from "@/lib/tenant"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { authOptions } from "@/lib/auth/config"
 import { createBlueprintSchema } from "@/lib/schemas"
+import { listVisibleBlueprints, loadGrantSummaries, replaceTenantGrants } from "@/lib/templates/catalogGrants"
 
 export const runtime = "nodejs"
 
 export async function GET() {
   try {
-    const prisma = await getSessionPrisma()
     const denied = await checkPermission(PERMISSIONS.VM_VIEW)
     if (denied) return denied
 
-    const blueprints = await prisma.blueprint.findMany({
-      orderBy: { createdAt: "desc" },
-    })
+    // Own rows, plus the provider blueprints shared with everyone or granted
+    // to this tenant / the vDC in view (#903). The provider only ever sees
+    // its own rows and gets their grants for the visibility column.
+    const tenantId = await getCurrentTenantId()
+    const rows = await listVisibleBlueprints(tenantId)
+    const isProvider = tenantId === DEFAULT_TENANT_ID
+    const grants = isProvider ? await loadGrantSummaries('blueprint', rows.map(r => r.id)) : new Map()
+    const blueprints = rows.map(row => ({
+      ...row,
+      ownedByCaller: row.tenantId === tenantId,
+      ...(isProvider ? { grants: grants.get(row.id) ?? { tenantIds: [], vdcIds: [] } } : {}),
+    }))
 
     return NextResponse.json({ data: blueprints })
   } catch (e: any) {
@@ -44,6 +53,8 @@ export async function POST(req: Request) {
     }
 
     const d = parseResult.data
+    const tenantId = await getCurrentTenantId()
+    const isProvider = tenantId === DEFAULT_TENANT_ID
 
     const blueprint = await prisma.blueprint.create({
       data: {
@@ -54,9 +65,15 @@ export async function POST(req: Request) {
         cloudInit: d.cloudInit ?? null,
         tags: d.tags ?? null,
         isPublic: d.isPublic,
+        // Sharing and granting are provider decisions (#903); a tenant's
+        // request silently keeps its blueprint private, as for images.
+        isShared: isProvider && d.isShared === true,
         createdBy: session?.user?.id || null,
       },
     })
+    if (isProvider && d.grantTenantIds) {
+      await replaceTenantGrants('blueprint', blueprint.id, d.grantTenantIds, session?.user?.id || null)
+    }
 
     const { audit } = await import("@/lib/audit")
     await audit({

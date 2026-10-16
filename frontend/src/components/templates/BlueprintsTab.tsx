@@ -16,6 +16,8 @@ import { useToast } from '@/contexts/ToastContext'
 import { useRBAC } from '@/contexts/RBACContext'
 import EmptyState from '@/components/EmptyState'
 import CreateBlueprintDialog from './CreateBlueprintDialog'
+import { visibilityBadge } from './CatalogVisibilityField'
+import { useTenant } from '@/contexts/TenantContext'
 
 interface Blueprint {
   id: string
@@ -26,6 +28,10 @@ interface Blueprint {
   cloudInit: string | null
   tags: string | null
   isPublic: boolean
+  isShared?: boolean
+  /** False on a provider blueprint a tenant only sees through sharing or a grant (#903). */
+  ownedByCaller?: boolean
+  grants?: { tenantIds: string[]; vdcIds: string[] }
   createdBy: string | null
   createdAt: string
   updatedAt: string
@@ -39,6 +45,7 @@ export default function BlueprintsTab({ onDeploy }: BlueprintsTabProps) {
   const t = useTranslations()
   const { showToast } = useToast()
   const { hasPermission } = useRBAC()
+  const { isProvider } = useTenant()
   const canManage = hasPermission('vm.create')
   const [blueprints, setBlueprints] = useState<Blueprint[]>([])
   const [loading, setLoading] = useState(true)
@@ -116,14 +123,17 @@ export default function BlueprintsTab({ onDeploy }: BlueprintsTabProps) {
       width: 200,
       renderCell: (p) => {
         try {
-          const hw = JSON.parse(p.value)
+          // The API returns hardware as a parsed object (JSONB); older cached
+          // clients may still hold the string shape.
+          const hw = typeof p.value === 'string' ? JSON.parse(p.value) : p.value
+          if (!hw || typeof hw !== 'object') return null
           return (
             <Typography variant="caption" sx={{ opacity: 0.7 }}>
               {hw.cores}C / {hw.memory >= 1024 ? `${hw.memory / 1024}GB` : `${hw.memory}MB`} / {hw.diskSize}
             </Typography>
           )
         } catch {
-          return <Typography variant="caption">—</Typography>
+          return null
         }
       },
     },
@@ -140,6 +150,21 @@ export default function BlueprintsTab({ onDeploy }: BlueprintsTabProps) {
             ))}
           </Box>
         )
+      },
+    },
+    {
+      // Visibility (#903): who sees the recipe. The provider reads the grant
+      // summary, a tenant sees which rows come from the provider.
+      field: 'visibility',
+      headerName: t('templates.catalog.visibilityLabel'),
+      width: 170,
+      sortable: false,
+      renderCell: (p) => {
+        const badge = isProvider
+          ? visibilityBadge(t, p.row)
+          : (p.row.ownedByCaller === false ? { label: t('templates.catalog.visibilityFromProvider'), color: 'info' as const } : null)
+        if (!badge) return null
+        return <Chip label={badge.label} color={badge.color} size="small" variant="outlined" sx={{ height: 20, fontSize: '0.65rem' }} />
       },
     },
     {
@@ -166,14 +191,14 @@ export default function BlueprintsTab({ onDeploy }: BlueprintsTabProps) {
             </IconButton>
           </Tooltip>
           )}
-          {canManage && (
+          {canManage && p.row.ownedByCaller !== false && (
             <Tooltip title={t('common.edit')}>
               <IconButton size="small" onClick={() => handleEdit(p.row)}>
                 <i className="ri-edit-line" style={{ fontSize: 18 }} />
               </IconButton>
             </Tooltip>
           )}
-          {canManage && (
+          {canManage && p.row.ownedByCaller !== false && (
             <Tooltip title={t('common.delete')}>
               <IconButton size="small" color="error" onClick={() => handleDelete(p.row.id)}>
                 <i className="ri-delete-bin-line" style={{ fontSize: 18 }} />
@@ -183,7 +208,7 @@ export default function BlueprintsTab({ onDeploy }: BlueprintsTabProps) {
         </Box>
       ),
     },
-  ], [t, onDeploy, handleEdit, handleDelete, canManage])
+  ], [t, onDeploy, handleEdit, handleDelete, canManage, isProvider])
 
   if (!loading && blueprints.length === 0) {
     return (

@@ -33,6 +33,7 @@ import NumericTextField from '@/components/ui/NumericTextField'
 import { useToast } from '@/contexts/ToastContext'
 import { useTenant } from '@/contexts/TenantContext'
 import VendorLogo from './VendorLogo'
+import CatalogVisibilityField from './CatalogVisibilityField'
 
 function safeJsonParse(s: string): any {
   try { return JSON.parse(s) } catch { return null }
@@ -47,6 +48,8 @@ interface Blueprint {
   cloudInit: string | null
   tags: string | null
   isPublic: boolean
+  isShared?: boolean
+  grants?: { tenantIds: string[]; vdcIds: string[] }
 }
 
 interface CreateBlueprintDialogProps {
@@ -88,6 +91,9 @@ export default function CreateBlueprintDialog({ open, onClose, blueprint }: Crea
   const [imageSlug, setImageSlug] = useState('')
   const [tags, setTags] = useState('')
   const [isPublic, setIsPublic] = useState(true)
+  // Provider only (#903): every tenant, or the listed ones.
+  const [isShared, setIsShared] = useState(false)
+  const [grantTenantIds, setGrantTenantIds] = useState<string[]>([])
   const [hardware, setHardware] = useState({ ...defaultHardware })
   const [cloudInit, setCloudInit] = useState({ ...defaultCloudInit })
 
@@ -120,6 +126,8 @@ export default function CreateBlueprintDialog({ open, onClose, blueprint }: Crea
       setImageSlug(blueprint.imageSlug)
       setTags(blueprint.tags || '')
       setIsPublic(blueprint.isPublic)
+      setIsShared(!!blueprint.isShared)
+      setGrantTenantIds(Array.isArray(blueprint.grants?.tenantIds) ? blueprint.grants.tenantIds : [])
       // hardware/cloudInit are JSONB on the API since step 2.5; the API
       // returns them as parsed objects. Tolerate the legacy string shape
       // for any cached client that hasn't reloaded yet.
@@ -148,6 +156,8 @@ export default function CreateBlueprintDialog({ open, onClose, blueprint }: Crea
       setImageSlug(CLOUD_IMAGES[0]?.slug || '')
       setTags('')
       setIsPublic(true)
+      setIsShared(false)
+      setGrantTenantIds([])
       setHardware({ ...defaultHardware })
       setCloudInit({ ...defaultCloudInit })
       setUseDhcp(true)
@@ -235,6 +245,7 @@ export default function CreateBlueprintDialog({ open, onClose, blueprint }: Crea
         cloudInit: hasMeaningfulCloudInit(cloudInit) ? cloudInit : null,
         tags: tags.trim() || null,
         isPublic,
+        ...(isProvider ? { isShared, grantTenantIds: isShared ? [] : grantTenantIds } : {}),
       }
 
       const url = blueprint
@@ -262,7 +273,7 @@ export default function CreateBlueprintDialog({ open, onClose, blueprint }: Crea
     } finally {
       setSaving(false)
     }
-  }, [name, description, imageSlug, hardware, cloudInit, tags, isPublic, blueprint, onClose, showToast, t, useDhcp, ipCidrValid])
+  }, [name, description, imageSlug, hardware, cloudInit, tags, isPublic, isShared, grantTenantIds, isProvider, blueprint, onClose, showToast, t, useDhcp, ipCidrValid])
 
   // Disk size as integer GB
   const parsedDiskGb = Number.parseInt(hardware.diskSize)
@@ -570,6 +581,14 @@ export default function CreateBlueprintDialog({ open, onClose, blueprint }: Crea
             <FormControlLabel
               control={<Switch checked={isPublic} onChange={(_, v) => setIsPublic(v)} size="small" />}
               label={t('templates.blueprints.public')}
+            />
+          )}
+          {/* Cross-tenant visibility (#903): same selector as a custom image. */}
+          {isProvider && (
+            <CatalogVisibilityField
+              value={{ isShared, grantTenantIds }}
+              onChange={next => { setIsShared(next.isShared); setGrantTenantIds(next.grantTenantIds) }}
+              vdcGrantCount={blueprint?.grants?.vdcIds?.length ?? 0}
             />
           )}
         </Stack>

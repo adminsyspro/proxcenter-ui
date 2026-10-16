@@ -42,6 +42,13 @@ export interface VdcWithDetails extends Vdc {
   /** ISO storages granted to the tenant (#894): read-only catalogue, plus an
    *  optional upload area for the tenant's own `custom-<slug>-*` files. */
   isoLibraries: VdcIsoLibraryGrant[]
+  /** Provider catalogue entries granted to this vDC (#903). */
+  catalogGrants: VdcCatalogGrantsDto
+}
+
+export interface VdcCatalogGrantsDto {
+  imageIds: string[]
+  blueprintIds: string[]
 }
 
 export interface VdcIsoLibraryGrant {
@@ -193,6 +200,7 @@ export interface CreateVdcInput {
   computePolicy?: Partial<VdcComputePolicy>
   isoLibraries?: VdcIsoLibraryInput[]
   transport?: Partial<VdcTransport>
+  catalogGrants?: Partial<VdcCatalogGrantsDto>
 }
 
 export interface UpdateVdcInput {
@@ -208,4 +216,5 @@ export interface UpdateVdcInput {
   computePolicy?: Partial<VdcComputePolicy>
   isoLibraries?: VdcIsoLibraryInput[]
   transport?: Partial<VdcTransport>
+  catalogGrants?: Partial<VdcCatalogGrantsDto>
 }

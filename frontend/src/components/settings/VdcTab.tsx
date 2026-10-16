@@ -392,6 +392,36 @@ export default function VdcTab() {
   const [isoLibraries, setIsoLibraries] = useState<Array<{ storageId: string; allowUploads: boolean }>>([])
   const [isoStorageCandidates, setIsoStorageCandidates] = useState<Array<{ storage: string; type: string; shared: boolean }>>([])
 
+  // Catalogue grants (#903): provider images and blueprints opened to this
+  // vDC. Candidates are the provider's own rows; entries already shared with
+  // every tenant are listed for reference and cannot be ticked.
+  const [catalogGrants, setCatalogGrants] = useState<{ imageIds: string[]; blueprintIds: string[] }>({ imageIds: [], blueprintIds: [] })
+  const [catalogCandidates, setCatalogCandidates] = useState<{
+    images: Array<{ id: string; name: string; slug: string; isShared: boolean }>
+    blueprints: Array<{ id: string; name: string; imageSlug: string; isShared: boolean }>
+  }>({ images: [], blueprints: [] })
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      try {
+        const [imgRes, bpRes] = await Promise.all([
+          fetch('/api/v1/templates/custom-images'),
+          fetch('/api/v1/templates/blueprints'),
+        ])
+        const imgJson = imgRes.ok ? await imgRes.json() : { data: [] }
+        const bpJson = bpRes.ok ? await bpRes.json() : { data: [] }
+        if (cancelled) return
+        setCatalogCandidates({
+          images: (Array.isArray(imgJson?.data) ? imgJson.data : []).map((i: any) => ({ id: String(i.id), name: String(i.name ?? i.slug), slug: String(i.slug ?? ''), isShared: i.isShared === true })),
+          blueprints: (Array.isArray(bpJson?.data) ? bpJson.data : []).map((b: any) => ({ id: String(b.id), name: String(b.name), imageSlug: String(b.imageSlug ?? ''), isShared: b.isShared === true })),
+        })
+      } catch (err) {
+        console.error('Failed to load the provider catalogue', err)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [])
+
   // VXLAN transport (#899): how the vDC's zone reaches its peers, the node
   // addresses / devices of the cluster that feed the section, and the zone
   // status (desired vs live on Proxmox) shown in edit mode.
@@ -922,6 +952,7 @@ export default function VdcTab() {
     setVdcPolicies([])
     setComputePolicy(emptyComputePolicy)
     setIsoLibraries([])
+    setCatalogGrants({ imageIds: [], blueprintIds: [] })
     setTransport(emptyTransport)
     setZoneStatus(null)
     setZoneMessage(null)
@@ -997,6 +1028,10 @@ export default function VdcTab() {
             .filter((l: { storageId: string }) => l.storageId)
         : [],
     )
+    setCatalogGrants({
+      imageIds: Array.isArray(vdc.catalogGrants?.imageIds) ? vdc.catalogGrants.imageIds : [],
+      blueprintIds: Array.isArray(vdc.catalogGrants?.blueprintIds) ? vdc.catalogGrants.blueprintIds : [],
+    })
     setTransport(transportFormFrom(vdc.transport))
     setZoneStatus(null)
     setZoneMessage(null)
@@ -1104,6 +1139,7 @@ export default function VdcTab() {
           storagePolicies: storagePoliciesPayload,
           computePolicy: computePolicyPayload,
           isoLibraries,
+          catalogGrants,
           transport: transportPayload,
           quota,
         }
@@ -1138,6 +1174,7 @@ export default function VdcTab() {
           storagePolicies: storagePoliciesPayload,
           computePolicy: computePolicyPayload,
           isoLibraries,
+          catalogGrants,
           transport: transportPayload,
           quota: Object.keys(quota).some((k) => quota[k] !== null) ? quota : undefined,
         }
@@ -2461,6 +2498,69 @@ export default function VdcTab() {
                       </Box>
                     )
                   })()}
+
+                  {/* Catalogue grants (#903): provider images and blueprints this
+                      vDC may see and deploy, next to the ISO library grant. An
+                      entry shared with every tenant is already visible. */}
+                  <Box sx={{ p: 2, border: 1, borderColor: 'divider', borderRadius: 1 }} data-testid="vdc-catalog-grants">
+                    <Typography variant="subtitle2" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <i className="ri-instance-line" />
+                      {t('vdc.catalogGrantTitle')}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">{t('vdc.catalogGrantHint')}</Typography>
+                    {catalogCandidates.images.length + catalogCandidates.blueprints.length === 0 ? (
+                      <Typography variant="body2" sx={{ mt: 1, fontStyle: 'italic' }}>{t('vdc.catalogGrantNone')}</Typography>
+                    ) : (
+                      <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ mt: 1 }}>
+                        {([
+                          { key: 'imageIds' as const, title: t('vdc.catalogGrantImages'), rows: catalogCandidates.images.map((i) => ({ id: i.id, name: i.name, detail: i.slug, isShared: i.isShared })) },
+                          { key: 'blueprintIds' as const, title: t('vdc.catalogGrantBlueprints'), rows: catalogCandidates.blueprints.map((b) => ({ id: b.id, name: b.name, detail: b.imageSlug, isShared: b.isShared })) },
+                        ]).map((group) => (
+                          <Box key={group.key} sx={{ flex: 1, minWidth: 0 }}>
+                            <Typography variant="caption" sx={{ fontWeight: 600, display: 'block' }}>{group.title}</Typography>
+                            {group.rows.length === 0 ? (
+                              <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic' }}>{t('common.noData')}</Typography>
+                            ) : (
+                              <Stack spacing={0}>
+                                {group.rows.map((row) => {
+                                  const checked = row.isShared || catalogGrants[group.key].includes(row.id)
+                                  return (
+                                    <FormControlLabel
+                                      key={row.id}
+                                      sx={{ mr: 0 }}
+                                      control={
+                                        <Checkbox
+                                          size="small"
+                                          checked={checked}
+                                          disabled={row.isShared}
+                                          onChange={(e) => {
+                                            setCatalogGrants((prev) => ({
+                                              ...prev,
+                                              [group.key]: e.target.checked
+                                                ? (prev[group.key].includes(row.id) ? prev[group.key] : [...prev[group.key], row.id])
+                                                : prev[group.key].filter((id) => id !== row.id),
+                                            }))
+                                          }}
+                                        />
+                                      }
+                                      label={
+                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
+                                          <Typography variant="body2" noWrap>{row.name}</Typography>
+                                          <Typography variant="caption" color="text.secondary" noWrap>
+                                            {row.isShared ? t('vdc.catalogGrantShared') : row.detail}
+                                          </Typography>
+                                        </Box>
+                                      }
+                                    />
+                                  )
+                                })}
+                              </Stack>
+                            )}
+                          </Box>
+                        ))}
+                      </Stack>
+                    )}
+                  </Box>
 
                   {/* PBS bindings (only when editing an existing vDC).
                       The Pool / Nodes / Storages summary that used to live

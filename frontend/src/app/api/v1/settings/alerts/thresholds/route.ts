@@ -68,6 +68,16 @@ const DEFAULT_THRESHOLDS = {
   // 1 = the orchestrator raises one alert per uncovered guest and resolves it
   // once covered. Off by default: a fleet without jobs would alert on every guest.
   backup_coverage_alerts: 0,
+  // sFlow telemetry (roadmap#52): 1 = one alert per configured node the
+  // collector stops hearing from, resolved when its datagrams return. On by
+  // default: it only concerns nodes the operator configured sFlow on.
+  sflow_telemetry_alerts: 1,
+  // Seconds a reporting agent may stay silent before it is missing; 0 derives
+  // it from the agent's counter polling interval (4 polls, at least 2 min).
+  sflow_telemetry_timeout_seconds: 0,
+  // Seconds a freshly configured agent, or every agent after a collector
+  // restart, may stay silent before it is missing.
+  sflow_telemetry_grace_seconds: 300,
 }
 
 type Thresholds = typeof DEFAULT_THRESHOLDS
@@ -87,6 +97,9 @@ function coerceThresholds(raw: any): Thresholds {
   // would refuse as a tag falls back to a usable setting instead.
   t.backup_coverage_grace_hours = normalizeGraceHours(t.backup_coverage_grace_hours)
   t.backup_coverage_exclude_tag = normalizeExcludeTag(t.backup_coverage_exclude_tag) ?? DEFAULT_COVERAGE_SETTINGS.excludeTag
+  // Whole seconds for the Go side (int fields), never negative.
+  t.sflow_telemetry_timeout_seconds = Math.max(0, Math.trunc(t.sflow_telemetry_timeout_seconds as number))
+  t.sflow_telemetry_grace_seconds = Math.max(0, Math.trunc(t.sflow_telemetry_grace_seconds as number))
   return t as Thresholds
 }
 

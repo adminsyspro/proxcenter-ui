@@ -42,6 +42,7 @@ vi.mock('@/lib/api/firewall', () => ({
   getAliases: vi.fn(),
   getIPSets: vi.fn(),
   getVMFirewallLog: vi.fn(),
+  getFirewallLog: vi.fn(),
 }))
 
 import * as firewallAPI from '@/lib/api/firewall'
@@ -55,11 +56,6 @@ const VMID = 100
 const PROPS = { connectionId: CONN_ID, node: NODE, vmType: 'qemu' as const, vmid: VMID, vmName: 'web-01' }
 
 const api = firewallAPI as unknown as Record<string, ReturnType<typeof vi.fn>>
-
-// The log dialog auto-scrolls to its last line; jsdom implements no layout, so
-// scrollIntoView does not exist there. Stubbed locally rather than in the
-// shared jsdom setup, since only this component needs it.
-Element.prototype.scrollIntoView ??= vi.fn()
 
 const LOG_LABEL = 'Log level'
 
@@ -109,7 +105,7 @@ describe('VmFirewallTab', () => {
     api.addVMRule.mockResolvedValue(undefined)
     api.updateVMRule.mockResolvedValue(undefined)
     api.updateVMOptions.mockResolvedValue(undefined)
-    api.getVMFirewallLog.mockResolvedValue([])
+    api.getFirewallLog.mockResolvedValue({ rows: [], warnings: [], truncated: false })
     seedConfig()
   })
 
@@ -229,7 +225,7 @@ describe('VmFirewallTab', () => {
     // refresh IconButton renders disabled. MUI drops the tooltip when its
     // direct child is a disabled <button>; the <span> wrapper is what keeps
     // the hover listeners alive.
-    api.getVMFirewallLog.mockReturnValue(new Promise(() => {}))
+    api.getFirewallLog.mockReturnValue(new Promise(() => {}))
 
     await renderTab()
 
@@ -282,14 +278,15 @@ describe('VmFirewallTab', () => {
 
       fireEvent.click(screen.getByRole('button', { name: 'Firewall Logs' }))
 
-      await waitFor(() => expect(api.getVMFirewallLog).toHaveBeenCalledTimes(1))
-      expect(api.getVMFirewallLog).toHaveBeenLastCalledWith(CONN_ID, NODE, 'qemu', VMID, 50)
+      await waitFor(() => expect(api.getFirewallLog).toHaveBeenCalledTimes(1))
+      // The guest scope: its own log plus the security group hits on its NICs.
+      expect(api.getFirewallLog).toHaveBeenLastCalledWith(CONN_ID, { kind: 'vm', node: NODE, vmType: 'qemu', vmid: VMID }, 3600)
 
       vi.advanceTimersByTime(5000)
-      await waitFor(() => expect(api.getVMFirewallLog).toHaveBeenCalledTimes(2))
+      await waitFor(() => expect(api.getFirewallLog).toHaveBeenCalledTimes(2))
 
       vi.advanceTimersByTime(5000)
-      await waitFor(() => expect(api.getVMFirewallLog).toHaveBeenCalledTimes(3))
+      await waitFor(() => expect(api.getFirewallLog).toHaveBeenCalledTimes(3))
     } finally {
       vi.useRealTimers()
     }

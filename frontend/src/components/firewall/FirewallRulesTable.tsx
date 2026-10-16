@@ -23,6 +23,7 @@ import {
 import type { FirewallRule, SecurityGroup } from './types'
 import { ActionChip, formatService } from './shared'
 import { formatLogLevel } from './logLevels'
+import RuleLogsButton from './RuleLogsButton'
 
 export type TableVariant = 'vm' | 'node'
 
@@ -45,6 +46,8 @@ interface FirewallRulesTableProps {
   onDrop: (e: React.DragEvent, toPos: number) => void
   /** Extra buttons to render in the header next to Add Rule */
   headerExtra?: React.ReactNode
+  /** Opens the firewall log narrowed to one rule (ui#1114); no icon when absent. */
+  onShowRuleLogs?: (rule: FirewallRule) => void
 }
 
 export default function FirewallRulesTable({
@@ -65,6 +68,7 @@ export default function FirewallRulesTable({
   onDragLeave,
   onDrop,
   headerExtra,
+  onShowRuleLogs,
 }: FirewallRulesTableProps) {
   const theme = useTheme()
   const t = useTranslations()
@@ -142,7 +146,7 @@ export default function FirewallRulesTable({
                     column layouts in step with the body cells. */}
                 <TableCell sx={{ fontWeight: 700, p: 0.5, width: 80 }}>{t('firewall.logLevel')}</TableCell>
                 <TableCell sx={{ fontWeight: 700, p: 0.5 }}>{t('network.comment')}</TableCell>
-                <TableCell sx={{ width: 90 }}></TableCell>
+                <TableCell sx={{ width: onShowRuleLogs ? 120 : 90 }}></TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -322,6 +326,7 @@ export default function FirewallRulesTable({
                     {/* Actions */}
                     <TableCell sx={{ p: 0.5 }}>
                       <Box sx={{ display: 'flex', gap: 0 }}>
+                        {onShowRuleLogs && <RuleLogsButton rule={rule} onClick={() => onShowRuleLogs(rule)} />}
                         <Tooltip title={t('common.edit')}>
                           <IconButton size="small" onClick={() => onEditRule(rule)}>
                             <i className="ri-edit-line" style={{ fontSize: 14 }} />

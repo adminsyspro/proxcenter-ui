@@ -381,8 +381,28 @@ export async function deleteVMRule(conn: PveConn, node: string, vmType: string, 
   return del(conn, `/nodes/${node}/${vmType}/${vmid}/firewall/rules/${pos}`)
 }
 
-export async function getVMFirewallLog(conn: PveConn, node: string, vmType: string, vmid: number | string, limit = 50): Promise<FirewallLogEntry[]> {
-  return (await pveFetch<FirewallLogEntry[]>(conn, `/nodes/${node}/${vmType}/${vmid}/firewall/log?limit=${limit}`)) ?? []
+/** Mirrors the Go LogQuery: PVE counts `limit` from the oldest line, 0 = all. */
+export interface LogWindow {
+  since?: number
+  until?: number
+}
+
+function logQuery(limit: number, window?: LogWindow): string {
+  const q = new URLSearchParams({ limit: String(limit) })
+
+  if (window?.since) q.set('since', String(window.since))
+  if (window?.until) q.set('until', String(window.until))
+
+  return q.toString()
+}
+
+export async function getVMFirewallLog(conn: PveConn, node: string, vmType: string, vmid: number | string, limit = 50, window?: LogWindow): Promise<FirewallLogEntry[]> {
+  return (await pveFetch<FirewallLogEntry[]>(conn, `/nodes/${node}/${vmType}/${vmid}/firewall/log?${logQuery(limit, window)}`)) ?? []
+}
+
+/** The node's whole firewall log: the only place security group hits land (VMID 0). */
+export async function getNodeFirewallLog(conn: PveConn, node: string, limit = 50, window?: LogWindow): Promise<FirewallLogEntry[]> {
+  return (await pveFetch<FirewallLogEntry[]>(conn, `/nodes/${node}/firewall/log?${logQuery(limit, window)}`)) ?? []
 }
 
 // ================================================================================

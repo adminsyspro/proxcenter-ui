@@ -1,0 +1,128 @@
+export const dynamic = "force-dynamic"
+// src/app/api/v1/firewall/logs/[connectionId]/route.ts
+// GET the parsed firewall log of a guest (?scope=vm&node=&vmType=&vmid=), of a
+// security group (?scope=group&group=), of a node (?scope=node&node=) or of the
+// cluster's host rules (?scope=cluster), over the last `window` seconds
+// (ui#1114). See lib/firewall/logs.ts for which PVE log each scope reads.
+import { NextRequest, NextResponse } from 'next/server'
+
+import { getOrchestratorClient } from '@/lib/orchestrator/client'
+import { verifyConnectionOwnership } from '@/lib/tenant'
+import { checkPermission, PERMISSIONS } from '@/lib/rbac'
+import { getConnectionById } from '@/lib/connections/getConnection'
+import { pveFetch } from '@/lib/proxmox/client'
+import { orchestratorOrPve } from '@/lib/firewall/withPveFallback'
+import { collectFirewallLog } from '@/lib/firewall/logs'
+import * as pveDirect from '@/lib/firewall/pveDirect'
+
+import type { FirewallLogScope, LogWindowSec } from '@/lib/firewall/logs'
+import type { Alias, FirewallLogEntry, FirewallRule, IPSet, SecurityGroup } from '@/lib/api/firewall'
+
+type RouteContext = { params: Promise<{ connectionId: string }> }
+
+/** The window the UI offers tops out at 7 days; older reads are refused, not clamped. */
+const MAX_WINDOW_SEC = 7 * 24 * 3600
+const DEFAULT_WINDOW_SEC = 3600
+
+const NODE_RE = /^[A-Za-z0-9][A-Za-z0-9.-]*$/
+const GROUP_RE = /^[A-Za-z][A-Za-z0-9_-]*$/
+
+function badRequest(message: string) {
+  return NextResponse.json({ error: message }, { status: 400 })
+}
+
+export async function GET(req: NextRequest, ctx: RouteContext) {
+  try {
+    const { connectionId } = await ctx.params
+    const ownershipDenied = await verifyConnectionOwnership(connectionId)
+    if (ownershipDenied) return ownershipDenied
+
+    const denied = await checkPermission(PERMISSIONS.NODE_VIEW, "connection", connectionId)
+    if (denied) return denied
+
+    const params = new URL(req.url).searchParams
+    const windowSec = params.has('window') ? Number(params.get('window')) : DEFAULT_WINDOW_SEC
+
+    if (!Number.isInteger(windowSec) || windowSec <= 0 || windowSec > MAX_WINDOW_SEC) return badRequest('invalid window')
+
+    let scope: FirewallLogScope
+
+    if (params.get('scope') === 'group') {
+      const group = params.get('group') || ''
+
+      if (!GROUP_RE.test(group)) return badRequest('invalid group')
+      scope = { kind: 'group', group }
+    } else if (params.get('scope') === 'vm') {
+      const node = params.get('node') || ''
+      const vmType = params.get('vmType')
+      const vmid = Number(params.get('vmid'))
+
+      if (!NODE_RE.test(node)) return badRequest('invalid node')
+      if (vmType !== 'qemu' && vmType !== 'lxc') return badRequest('invalid vmType')
+      if (!Number.isInteger(vmid) || vmid <= 0) return badRequest('invalid vmid')
+      scope = { kind: 'vm', node, vmType, vmid }
+    } else if (params.get('scope') === 'node') {
+      const node = params.get('node') || ''
+
+      if (!NODE_RE.test(node)) return badRequest('invalid node')
+      scope = { kind: 'node', node }
+    } else if (params.get('scope') === 'cluster') {
+      scope = { kind: 'cluster' }
+    } else {
+      return badRequest('scope must be vm, group, node or cluster')
+    }
+
+    const window: LogWindowSec = { since: Math.floor(Date.now() / 1000) - windowSec }
+    const orchestrator = getOrchestratorClient()
+    let conn: ReturnType<typeof getConnectionById> | null = null
+    // Loaded once, and only when a PVE call needs it (Community fallback, node list).
+    const pve = () => (conn ??= getConnectionById(connectionId))
+    // limit=0: PVE counts the limit from the oldest line, the window bounds the read.
+    const q = `limit=0&since=${window.since}`
+
+    const result = await collectFirewallLog(scope, window, {
+      vmLog: (node, vmType, vmid) => orchestratorOrPve<FirewallLogEntry[]>(
+        'firewall/logs',
+        () => orchestrator.get(`/firewall/vms/${connectionId}/${node}/${vmType}/${vmid}/log?${q}`),
+        async () => pveDirect.getVMFirewallLog(await pve(), node, vmType, vmid, 0, window),
+      ),
+      nodeLog: node => orchestratorOrPve<FirewallLogEntry[]>(
+        'firewall/logs',
+        () => orchestrator.get(`/firewall/nodes/${connectionId}/${node}/log?${q}`),
+        async () => pveDirect.getNodeFirewallLog(await pve(), node, 0, window),
+      ),
+      nodes: async () => (await pveFetch<{ node: string; status?: string }[]>(await pve(), '/nodes')) ?? [],
+      groups: () => orchestratorOrPve<SecurityGroup[]>(
+        'firewall/logs',
+        () => orchestrator.get(`/firewall/groups/${connectionId}`),
+        async () => pveDirect.getSecurityGroups(await pve()),
+      ),
+      vmRules: (node, vmType, vmid) => orchestratorOrPve<FirewallRule[]>(
+        'firewall/logs',
+        () => orchestrator.get(`/firewall/vms/${connectionId}/${node}/${vmType}/${vmid}/rules`),
+        async () => pveDirect.getVMRules(await pve(), node, vmType, vmid),
+      ),
+      addressBook: async () => {
+        const [aliases, ipsets] = await Promise.all([
+          orchestratorOrPve<Alias[]>(
+            'firewall/logs',
+            () => orchestrator.get(`/firewall/aliases/${connectionId}`),
+            async () => pveDirect.getAliases(await pve()),
+          ).catch(() => [] as Alias[]),
+          orchestratorOrPve<IPSet[]>(
+            'firewall/logs',
+            () => orchestrator.get(`/firewall/ipsets/${connectionId}`),
+            async () => pveDirect.getIPSets(await pve()),
+          ).catch(() => [] as IPSet[]),
+        ])
+
+        return { aliases: aliases || [], ipsets: ipsets || [] }
+      },
+    })
+
+    return NextResponse.json(result)
+  } catch (e: any) {
+    console.error("[firewall/logs] GET error:", e)
+    return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
+  }
+}

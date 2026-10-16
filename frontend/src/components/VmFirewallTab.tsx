@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { useTranslations } from 'next-intl'
 import { useRBAC } from '@/contexts/RBACContext'
 
@@ -11,12 +11,8 @@ import {
   CardContent,
   Chip,
   CircularProgress,
-  Dialog,
-  DialogContent,
-  DialogTitle,
   FormControl,
   IconButton,
-  LinearProgress,
   MenuItem,
   Select,
   Snackbar,
@@ -30,8 +26,6 @@ import {
   TableRow,
   Tooltip,
   Typography,
-  alpha,
-  useTheme,
 } from '@mui/material'
 import * as firewallAPI from '@/lib/api/firewall'
 
@@ -40,7 +34,9 @@ import { PVE_DEFAULT_POLICY_IN, PVE_DEFAULT_POLICY_OUT } from '@/lib/firewall/pv
 import { LOG_LEVELS, DEFAULT_LOG_LEVEL, cleanSourceDest } from './firewall/shared'
 import FirewallRulesTable from './firewall/FirewallRulesTable'
 import FirewallDialogs from './firewall/FirewallDialogs'
-import type { FirewallAPIAdapter, NicInfo, FirewallLogEntry } from './firewall/types'
+import FirewallLogDialog from './firewall/FirewallLogDialog'
+import type { LogRuleFilter } from './firewall/FirewallLogDialog'
+import type { FirewallAPIAdapter, NicInfo } from './firewall/types'
 
 /* ═══════════════════════════════════════════════════════════════════════════
    TYPES
@@ -59,7 +55,6 @@ interface Props {
 ═══════════════════════════════════════════════════════════════════════════ */
 
 export default function VmFirewallTab({ connectionId, node, vmType, vmid, vmName }: Props) {
-  const theme = useTheme()
   const t = useTranslations()
   const { hasPermission } = useRBAC()
   const canConfig = hasPermission('vm.config')
@@ -81,11 +76,9 @@ export default function VmFirewallTab({ connectionId, node, vmType, vmid, vmName
   const [aliases, setAliases] = useState<firewallAPI.Alias[]>([])
   const [ipsets, setIpsets] = useState<firewallAPI.IPSet[]>([])
   const [nics, setNics] = useState<NicInfo[]>([])
-  const [logs, setLogs] = useState<FirewallLogEntry[]>([])
-  const [logsLoading, setLogsLoading] = useState(false)
   const [logDialogOpen, setLogDialogOpen] = useState(false)
-  const logEndRef = useRef<HTMLDivElement>(null)
-  const logIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  // Set when the log was opened from one rule's terminal icon.
+  const [logRule, setLogRule] = useState<{ filter: LogRuleFilter; pos: number } | null>(null)
 
   // Autocomplete options for source/dest (aliases + ipsets)
   const autocompleteOptions = useMemo(() => {
@@ -154,53 +147,10 @@ export default function VmFirewallTab({ connectionId, node, vmType, vmid, vmName
     }
   }, [connectionId, node, vmType, vmid])
 
-  // Load logs
-  const loadLogs = useCallback(async () => {
-    setLogsLoading(true)
-
-    try {
-      const data = await firewallAPI.getVMFirewallLog(connectionId, node, vmType, vmid, 50)
-      setLogs(Array.isArray(data) ? data : [])
-    } catch (err) {
-      console.error('Failed to load firewall logs:', err)
-    } finally {
-      setLogsLoading(false)
-    }
-  }, [connectionId, node, vmType, vmid])
-
   useEffect(() => {
     void fw.loadFirewallData()
     void loadVmData()
   }, [fw.loadFirewallData, loadVmData])
-
-  // Auto-refresh logs every 5s when log dialog is open
-  useEffect(() => {
-    if (logDialogOpen) {
-      void loadLogs()
-      logIntervalRef.current = setInterval(() => {
-        void loadLogs()
-      }, 5000)
-    } else {
-      if (logIntervalRef.current) {
-        clearInterval(logIntervalRef.current)
-        logIntervalRef.current = null
-      }
-    }
-
-    return () => {
-      if (logIntervalRef.current) {
-        clearInterval(logIntervalRef.current)
-        logIntervalRef.current = null
-      }
-    }
-  }, [logDialogOpen, loadLogs])
-
-  // Auto-scroll logs to bottom when new entries arrive
-  useEffect(() => {
-    if (logDialogOpen && logEndRef.current) {
-      logEndRef.current.scrollIntoView({ behavior: 'smooth' })
-    }
-  }, [logs, logDialogOpen])
 
   // Change log level IN or OUT
   const handleLogLevelChange = async (field: 'log_level_in' | 'log_level_out', value: string) => {
@@ -320,6 +270,10 @@ export default function VmFirewallTab({ connectionId, node, vmType, vmid, vmName
               onDragOver={canConfig ? fw.handleDragOver : undefined}
               onDragLeave={canConfig ? fw.handleDragLeave : undefined}
               onDrop={canConfig ? fw.handleDrop : undefined}
+              onShowRuleLogs={(rule) => {
+                setLogRule({ pos: rule.pos, filter: rule.type === 'group' ? { kind: 'groupRef', group: rule.action } : { kind: 'guestRule', pos: rule.pos } })
+                setLogDialogOpen(true)
+              }}
               headerExtra={
                 <>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mr: 0.5 }}>
@@ -360,7 +314,7 @@ export default function VmFirewallTab({ connectionId, node, vmType, vmid, vmName
                   <Typography variant="caption" sx={{ fontWeight: 600, color: fw.options.enable === 1 ? '#22c55e' : 'text.secondary', fontSize: 11, minWidth: 24 }}>
                     {fw.options.enable === 1 ? 'ON' : 'OFF'}
                   </Typography>
-                  <Tooltip title="Firewall Logs">
+                  <Tooltip title={t('networkPage.firewallLogs')}>
                     <IconButton size="small" onClick={() => setLogDialogOpen(true)}>
                       <i className="ri-terminal-box-line" style={{ fontSize: 16 }} />
                     </IconButton>
@@ -401,27 +355,15 @@ export default function VmFirewallTab({ connectionId, node, vmType, vmid, vmName
       />
 
       {/* Firewall Log Dialog */}
-      <Dialog open={logDialogOpen} onClose={() => setLogDialogOpen(false)} maxWidth="lg" fullWidth>
-        <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', pb: 1 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <i className="ri-terminal-box-line" style={{ color: theme.palette.primary.main }} />
-            Firewall Logs
-            {vmName && <Chip label={vmName} size="small" sx={{ ml: 1 }} />}
-          </Box>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Tooltip title={t('common.refresh')}>
-              <span>
-                <IconButton aria-label={t('common.refresh')} size="small" onClick={loadLogs} disabled={logsLoading}>
-                  <i className={`ri-refresh-line ${logsLoading ? 'animate-spin' : ''}`} style={{ fontSize: 18 }} />
-                </IconButton>
-              </span>
-            </Tooltip>
-            <IconButton onClick={() => setLogDialogOpen(false)} size="small"><i className="ri-close-line" /></IconButton>
-          </Box>
-        </DialogTitle>
-        <DialogContent sx={{ p: 0 }}>
-          {/* Log level controls */}
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, px: 2, py: 1.5, borderBottom: `1px solid ${alpha(theme.palette.divider, 0.15)}` }}>
+      <FirewallLogDialog
+        open={logDialogOpen}
+        onClose={() => { setLogDialogOpen(false); setLogRule(null) }}
+        connectionId={connectionId}
+        scope={{ kind: 'vm', node, vmType, vmid }}
+        subject={logRule ? t('firewallLog.ruleSubject', { name: vmName || String(vmid), pos: logRule.pos }) : vmName}
+        ruleFilter={logRule?.filter}
+        headerExtra={
+          <>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary', fontSize: 11 }}>Log IN:</Typography>
               <FormControl size="small">
@@ -448,39 +390,9 @@ export default function VmFirewallTab({ connectionId, node, vmType, vmid, vmName
                 </Select>
               </FormControl>
             </Box>
-          </Box>
-          <Box sx={{
-            bgcolor: '#1e1e1e', color: '#d4d4d4', fontFamily: '"JetBrains Mono", ui-monospace, monospace',
-            fontSize: 12, lineHeight: 1.6, p: 2, minHeight: 300, maxHeight: 500, overflow: 'auto',
-          }}>
-            {logsLoading && logs.length === 0 ? (
-              <Box sx={{ py: 4, textAlign: 'center' }}>
-                <LinearProgress sx={{ mb: 2 }} />
-                <Typography variant="body2" sx={{ color: '#888' }}>Loading logs...</Typography>
-              </Box>
-            ) : logs.length > 0 ? (
-              logs.map((entry) => (
-                <Box key={entry.n} sx={{ py: 0.2, '&:hover': { bgcolor: 'rgba(255,255,255,0.05)' } }}>
-                  <span style={{ color: '#888', marginRight: 8, userSelect: 'none' }}>{String(entry.n).padStart(4, ' ')}</span>
-                  <span style={{
-                    color: entry.t.includes('DROP') ? '#f85149' :
-                           entry.t.includes('REJECT') ? '#d29922' :
-                           entry.t.includes('ACCEPT') ? '#3fb950' : '#d4d4d4'
-                  }}>
-                    {entry.t}
-                  </span>
-                </Box>
-              ))
-            ) : (
-              <Box sx={{ py: 6, textAlign: 'center' }}>
-                <i className="ri-file-list-line" style={{ fontSize: 32, opacity: 0.3 }} />
-                <Typography variant="body2" sx={{ color: '#888', mt: 1 }}>{t('common.noData')}</Typography>
-              </Box>
-            )}
-            <div ref={logEndRef} />
-          </Box>
-        </DialogContent>
-      </Dialog>
+          </>
+        }
+      />
 
       {/* Snackbar */}
       <Snackbar

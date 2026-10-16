@@ -13,10 +13,6 @@
  * The jsdom setup errors on unhandled requests, so a route called without a
  * fixture fails the test.
  *
- * `scrollIntoView` is stubbed because the log dialog auto-scrolls to its
- * last line on every log update and jsdom implements no layout — the same
- * stub VmFirewallTab.test.tsx needs, kept local for the same reason.
- *
  * The VM rule dialog labels its fields directly (no next-intl), and its
  * Selects carry an InputLabel but no `labelId`, so their combobox has no
  * accessible name and is located from the rendered label element — same
@@ -45,6 +41,7 @@ vi.mock('@/lib/api/firewall', () => ({
   updateVMRule: vi.fn(),
   deleteVMRule: vi.fn(),
   getVMFirewallLog: vi.fn(),
+  getFirewallLog: vi.fn(),
 }))
 
 vi.mock('@/contexts/ToastContext', () => ({
@@ -59,9 +56,14 @@ const api = firewallAPI as unknown as Record<string, ReturnType<typeof vi.fn>>
 
 const CONN = 'conn-1'
 
-// The log dialog auto-scrolls to its last line; jsdom has no layout, so
-// scrollIntoView does not exist there.
-Element.prototype.scrollIntoView ??= vi.fn()
+const GUEST_SCOPE = { kind: 'vm', node: 'pve1', vmType: 'qemu', vmid: 100 }
+
+/** One parsed log row, as /api/v1/firewall/logs returns it. */
+const logOf = (src: string, action: string) => ({
+  rows: [{ id: src, node: 'pve1', ts: Date.UTC(2026, 9, 15), level: 6, chain: 'tap100i0-IN', direction: 'in', action, actionInferred: false, policy: false, origin: 'guest', vmid: 100, src, dst: '10.0.0.5', proto: 'TCP', dport: 443, raw: `100 6 tap100i0-IN ${action}: SRC=${src}` }],
+  warnings: [],
+  truncated: false,
+})
 
 /** A rule where every optional PVE field is set. */
 const FULL_RULE: firewallAPIType.FirewallRule = {
@@ -152,7 +154,7 @@ describe('VMRulesPanel', () => {
     api.addVMRule.mockResolvedValue(undefined)
     api.updateVMRule.mockResolvedValue(undefined)
     api.deleteVMRule.mockResolvedValue(undefined)
-    api.getVMFirewallLog.mockResolvedValue([])
+    api.getFirewallLog.mockResolvedValue({ rows: [], warnings: [], truncated: false })
   })
 
   it('groups guests by their primary VLAN, untagged last', () => {
@@ -484,14 +486,14 @@ describe('VMRulesPanel', () => {
   })
 
   it('shows the firewall log of a guest and its two log-level pickers', async () => {
-    api.getVMFirewallLog.mockResolvedValue([{ n: 1, t: 'DROP IN 10.0.0.1' }])
+    api.getFirewallLog.mockResolvedValue(logOf('10.0.0.1', 'DROP'))
     renderPanel()
     fireEvent.click(screen.getByText('VLAN 20'))
 
     fireEvent.click(within(rowOf('web-01')).getByRole('button', { name: 'Firewall Logs' }))
 
-    await waitFor(() => expect(screen.getByText('DROP IN 10.0.0.1')).toBeInTheDocument())
-    expect(api.getVMFirewallLog).toHaveBeenCalledWith(CONN, 'pve1', 'qemu', 100, 200)
+    await waitFor(() => expect(screen.getByText('10.0.0.1')).toBeInTheDocument())
+    expect(api.getFirewallLog).toHaveBeenCalledWith(CONN, GUEST_SCOPE, 3600)
 
     // The guest's stored levels drive the two selects.
     const logIn = within(screen.getByText('Log IN:').parentElement!).getByRole('combobox')
@@ -505,12 +507,12 @@ describe('VMRulesPanel', () => {
   })
 
   it('changes the outbound log level from the log dialog', async () => {
-    api.getVMFirewallLog.mockResolvedValue([{ n: 1, t: 'ACCEPT OUT 10.0.0.9' }])
+    api.getFirewallLog.mockResolvedValue(logOf('10.0.0.9', 'ACCEPT'))
     renderPanel()
     fireEvent.click(screen.getByText('VLAN 20'))
 
     fireEvent.click(within(rowOf('web-01')).getByRole('button', { name: 'Firewall Logs' }))
-    await waitFor(() => expect(screen.getByText('ACCEPT OUT 10.0.0.9')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('10.0.0.9')).toBeInTheDocument())
 
     const logOut = within(screen.getByText('Log OUT:').parentElement!).getByRole('combobox')
 
@@ -523,22 +525,22 @@ describe('VMRulesPanel', () => {
   })
 
   it('refreshes the firewall log from the dialog button once the log has loaded', async () => {
-    api.getVMFirewallLog.mockResolvedValue([{ n: 1, t: 'DROP IN 10.0.0.1' }])
+    api.getFirewallLog.mockResolvedValue(logOf('10.0.0.1', 'DROP'))
     renderPanel()
     fireEvent.click(screen.getByText('VLAN 20'))
 
     fireEvent.click(within(rowOf('web-01')).getByRole('button', { name: 'Firewall Logs' }))
 
-    await waitFor(() => expect(screen.getByText('DROP IN 10.0.0.1')).toBeInTheDocument())
-    const fetches = api.getVMFirewallLog.mock.calls.length
+    await waitFor(() => expect(screen.getByText('10.0.0.1')).toBeInTheDocument())
+    const fetches = api.getFirewallLog.mock.calls.length
 
     const refresh = within(screen.getByRole('dialog')).getByRole('button', { name: 'Refresh' })
 
     expect(refresh).toBeEnabled()
     fireEvent.click(refresh)
 
-    await waitFor(() => expect(api.getVMFirewallLog).toHaveBeenCalledTimes(fetches + 1))
-    expect(api.getVMFirewallLog).toHaveBeenLastCalledWith(CONN, 'pve1', 'qemu', 100, 200)
+    await waitFor(() => expect(api.getFirewallLog).toHaveBeenCalledTimes(fetches + 1))
+    expect(api.getFirewallLog).toHaveBeenLastCalledWith(CONN, GUEST_SCOPE, 3600)
   })
 
   it('says so when a guest has no firewall log line', async () => {
@@ -547,7 +549,7 @@ describe('VMRulesPanel', () => {
 
     fireEvent.click(within(rowOf('db-01')).getByRole('button', { name: 'Firewall Logs' }))
 
-    await waitFor(() => expect(screen.getByText('No firewall log entries')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('No entry over this period.')).toBeInTheDocument())
 
     // A guest with no options falls back to PVE's own default level.
     expect(within(screen.getByText('Log OUT:').parentElement!).getByRole('combobox')).toHaveTextContent('nolog')
@@ -598,7 +600,7 @@ describe('VMRulesPanel', () => {
 
   it('keeps the Refresh tooltip on the log dialog button while the log is loading', async () => {
     // Never settles, so the dialog stays in its loading state for the whole test.
-    api.getVMFirewallLog.mockImplementation(() => new Promise<never>(() => {}))
+    api.getFirewallLog.mockImplementation(() => new Promise<never>(() => {}))
     renderPanel()
     fireEvent.click(screen.getByText('VLAN 20'))
 

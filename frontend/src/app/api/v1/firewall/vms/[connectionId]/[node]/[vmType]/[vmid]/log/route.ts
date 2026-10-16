@@ -23,12 +23,18 @@ export async function GET(req: NextRequest, ctx: RouteContext) {
 
     const url = new URL(req.url)
     const limit = url.searchParams.get('limit') || '50'
+    const since = Number(url.searchParams.get('since')) || undefined
+    const until = Number(url.searchParams.get('until')) || undefined
+    const query = new URLSearchParams({ limit })
+
+    if (since) query.set('since', String(since))
+    if (until) query.set('until', String(until))
 
     const orchestrator = getOrchestratorClient()
     const result = await orchestratorOrPve(
       'firewall/vms/log',
-      () => orchestrator.get(`/firewall/vms/${connectionId}/${node}/${vmType}/${vmid}/log?limit=${limit}`),
-      async () => pveDirect.getVMFirewallLog(await getConnectionById(connectionId), node, vmType, vmid, Number(limit)),
+      () => orchestrator.get(`/firewall/vms/${connectionId}/${node}/${vmType}/${vmid}/log?${query}`),
+      async () => pveDirect.getVMFirewallLog(await getConnectionById(connectionId), node, vmType, vmid, Number(limit), { since, until }),
     )
 
     return NextResponse.json(result)

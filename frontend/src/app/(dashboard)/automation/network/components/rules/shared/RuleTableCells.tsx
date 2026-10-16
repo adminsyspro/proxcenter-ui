@@ -6,6 +6,7 @@ import { Box, Chip, IconButton, Switch, TableCell, Tooltip, useTheme, alpha } fr
 
 import * as firewallAPI from '@/lib/api/firewall'
 import { formatLogLevel } from '@/components/firewall/logLevels'
+import RuleLogsButton from '@/components/firewall/RuleLogsButton'
 
 /**
  * The cells a firewall rule row is made of, shared by the four rules tables
@@ -147,12 +148,18 @@ export function RuleLogCommentCells({ rule }: { rule: firewallAPI.FirewallRule }
 }
 
 /** Trailing edit / delete buttons. */
-export function RuleRowActionsCell({ onEdit, onDelete }: { onEdit: () => void; onDelete: () => void }) {
+export function RuleRowActionsCell({ onEdit, onDelete, logs }: {
+  onEdit: () => void
+  onDelete: () => void
+  /** The rule's terminal icon, opening its firewall log (ui#1114). */
+  logs?: { rule: Pick<firewallAPI.FirewallRule, 'type' | 'log'>; onOpen: () => void }
+}) {
   const t = useTranslations()
 
   return (
-    <TableCell sx={{ p: 0.5, width: 70 }}>
+    <TableCell sx={{ p: 0.5, width: logs ? 100 : 70 }}>
       <Box sx={{ display: 'flex', gap: 0 }}>
+        {logs && <RuleLogsButton rule={logs.rule} onClick={logs.onOpen} />}
         <Tooltip title={t('networkPage.edit')}>
           <IconButton size="small" onClick={onEdit}>
             <i className="ri-pencil-line" style={{ fontSize: 14 }} />

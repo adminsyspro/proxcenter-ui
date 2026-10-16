@@ -5358,7 +5358,9 @@
       "failedOver": "Basculé",
       "skipped": "Ignoré (invité occupé)",
       "reseed_required": "Réinitialisation requise",
-      "source_missing": "Invité source absent"
+      "source_missing": "Invité source absent",
+      "failingOver": "Bascule en cours",
+      "failingBack": "Retour en cours"
     },
     "planStatus": {
       "ready": "Prêt",
@@ -5366,7 +5368,8 @@
       "executing": "En cours",
       "failed": "Échoué",
       "not_ready": "Non prêt",
-      "failed_over": "Basculé"
+      "failed_over": "Basculé",
+      "partially_failed_over": "Partiellement basculé"
     },
     "dashboard": {
       "primary": "Primaire",
@@ -5754,7 +5757,20 @@
       "startVMBody": "La réplique (VMID {vmid}) démarre sur le site DR à partir du point de restauration choisi.",
       "startPausesJob": "{count, plural, =0 {Cette VM est la seule que porte son job de réplication, donc le job est mis en pause pendant que la réplique tourne.} one {Seule cette VM cesse de répliquer pendant que sa réplique tourne. L'autre VM de son job continue.} other {Seule cette VM cesse de répliquer pendant que sa réplique tourne. Les # autres VM de son job continuent.}}",
       "startVMJobSyncing": "Le job de réplication de cette VM est en train de synchroniser. Le démarrage de la réplique est refusé tant qu'un transfert écrit sur ses disques : attendez la fin du sync, ce bouton se débloque tout seul.",
-      "restorePointKeepsNewer": "La réplique démarre sur ce snapshot et les points de restauration plus récents sont conservés : l'arrêter puis reprendre la réplication ramène l'image sur le plus récent."
+      "restorePointKeepsNewer": "La réplique démarre sur ce snapshot et les points de restauration plus récents sont conservés : l'arrêter puis reprendre la réplication ramène l'image sur le plus récent.",
+      "startReplica": "Démarrer la réplique sur le site DR (test, pas un failover)",
+      "stopReplica": "Arrêter la réplique sur le site DR",
+      "failoverVM": "Failover de cette VM",
+      "failbackVM": "Failback de cette VM",
+      "openGuestFailback": "Ouvrir le failback de cette VM",
+      "guestFailingOver": "Failover en cours",
+      "guestFailedOver": "Basculée : la production tourne sur le site DR",
+      "guestFailingBack": "Retour vers le site source en cours",
+      "guestActionsLocked": "Cette VM est basculée : la réplique est la production. Passez par son failback.",
+      "guestBusy": "Une exécution agit sur cette VM",
+      "planBusyForGuest": "Le plan est occupé : attendez la fin de son exécution",
+      "planGuestsOver": "{over, plural, one {# invité sur {total} basculé} other {# invités sur {total} basculés}}",
+      "planFailbackPartial": "Ramène sur le site source chaque invité basculé de ce plan"
     },
     "simulation": {
       "title": "Simulation de panne de nœud",
@@ -5809,7 +5825,33 @@
       "zfs": "ZFS"
     },
     "discoveryError": "La découverte du stockage a échoué pour une connexion. Les opérations de reprise existantes restent disponibles.",
-    "discoveryLoading": "Découverte des stockages de réplication…"
+    "discoveryLoading": "Découverte des stockages de réplication…",
+    "guestDR": {
+      "failoverTitle": "Failover de {name} vers le site DR",
+      "failoverDescription": "Failover de production d'une seule VM. Sa source est arrêtée et sa réplique (VMID {vmid}) prend le relais sur le site DR, les points de restauration plus récents sont supprimés. La réplication de cette VM s'arrête jusqu'à son failback.",
+      "failoverSiblings": "{count, plural, =0 {Aucun autre invité du plan n'est concerné.} one {L'autre invité du plan continue de répliquer.} other {Les # autres invités du plan continuent de répliquer.}}",
+      "typeToConfirm": "Saisissez {name} pour confirmer",
+      "confirmFailover": "Failover de cette VM",
+      "inProgress": "Failover en cours",
+      "failoverDone": "{name} tourne sur le site DR sous le VMID {vmid}. Sa réplication est suspendue jusqu'à son failback.",
+      "failoverFailed": "Le failover de {name} ne s'est pas terminé. Sa source est arrêtée : passez par le failback pour la ramener.",
+      "failoverUntouched": "Le failover de {name} s'est arrêté avant tout changement : la VM réplique toujours.",
+      "failbackTitle": "Failback de {name} vers le site source",
+      "failbackDescription": "La réplication inverse recopie vers la source ce que {name} a écrit sur le site DR, réplique en ligne. Lancez le cutover quand la dernière synchro inverse est assez fraîche : la réplique s'arrête, le dernier delta est appliqué et la VM source démarre.",
+      "startFailback": "Lancer le failback",
+      "cutoverInProgress": "Cutover en cours",
+      "cutoverConfirm": "Arrêter la réplique de {name}, appliquer le dernier delta et démarrer la VM source ?",
+      "cancelConfirm": "Arrêter la réplication inverse de {name} et la laisser basculée ? Rien n'est modifié sur les VM.",
+      "failbackDone": "{name} tourne de nouveau sur le site source et la réplication la protège dans le sens d'origine.",
+      "cutoverFailed": "Le cutover de {name} a échoué. La réplication inverse continue : corrigez la cause et relancez le cutover.",
+      "flowFrom": "Tourne sur le site DR",
+      "flowTo": "Reçoit les changements",
+      "traceChecks": "Contrôles",
+      "traceLog": "Journal",
+      "traceEmpty": "En attente du premier événement…",
+      "lastReverseSync": "Dernière synchro inverse",
+      "transferred": "Transféré"
+    }
   },
   "templates": {
     "title": "Templates",

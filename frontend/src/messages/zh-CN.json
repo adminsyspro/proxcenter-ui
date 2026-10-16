@@ -5362,7 +5362,9 @@
       "failedOver": "已故障转移",
       "skipped": "已跳过（客户机忙碌）",
       "reseed_required": "需要重新初始化",
-      "source_missing": "源客户机不存在"
+      "source_missing": "源客户机不存在",
+      "failingOver": "故障转移中",
+      "failingBack": "故障回切中"
     },
     "planStatus": {
       "ready": "就绪",
@@ -5370,7 +5372,8 @@
       "executing": "执行中",
       "failed": "失败",
       "not_ready": "未就绪",
-      "failed_over": "已故障转移"
+      "failed_over": "已故障转移",
+      "partially_failed_over": "部分已故障转移"
     },
     "dashboard": {
       "primary": "主站点",
@@ -5758,7 +5761,20 @@
       "startVMBody": "副本（VMID {vmid}）将在灾备站点从所选还原点启动。",
       "startPausesJob": "{count, plural, =0 {该虚拟机是其复制作业中唯一的成员，因此副本运行期间整个作业会暂停。} other {副本运行期间只有该虚拟机停止复制，同一作业的另外 # 台虚拟机继续运行。}}",
       "startVMJobSyncing": "该虚拟机的复制作业正在同步。传输正在写入其磁盘期间，副本启动会被拒绝：请等待同步结束，此按钮会自动恢复可用。",
-      "restorePointKeepsNewer": "副本从该快照启动，更新的还原点会保留：停止副本并恢复复制会把镜像前滚到最新的还原点。"
+      "restorePointKeepsNewer": "副本从该快照启动，更新的还原点会保留：停止副本并恢复复制会把镜像前滚到最新的还原点。",
+      "startReplica": "在 DR 站点启动副本（测试，不是故障转移）",
+      "stopReplica": "在 DR 站点停止副本",
+      "failoverVM": "故障转移此虚拟机",
+      "failbackVM": "故障回切此虚拟机",
+      "openGuestFailback": "打开此虚拟机的故障回切",
+      "guestFailingOver": "故障转移进行中",
+      "guestFailedOver": "已故障转移：生产在 DR 站点运行",
+      "guestFailingBack": "正在回切到源站点",
+      "guestActionsLocked": "此虚拟机已故障转移：副本就是生产。请使用其故障回切。",
+      "guestBusy": "有一个执行正在处理此虚拟机",
+      "planBusyForGuest": "计划正忙：请等待其执行结束",
+      "planGuestsOver": "{over, plural, other {{total} 个客户机中有 # 个已故障转移}}",
+      "planFailbackPartial": "将此计划中每个已故障转移的客户机带回源站点"
     },
     "simulation": {
       "title": "节点故障模拟",
@@ -5813,7 +5829,33 @@
       "zfs": "ZFS"
     },
     "discoveryError": "某个连接的存储发现失败。现有恢复操作仍然可用。",
-    "discoveryLoading": "正在发现复制存储…"
+    "discoveryLoading": "正在发现复制存储…",
+    "guestDR": {
+      "failoverTitle": "将 {name} 故障转移到 DR 站点",
+      "failoverDescription": "单台虚拟机的生产故障转移。其源虚拟机被停止，副本（VMID {vmid}）在 DR 站点接管，较新的恢复点将被丢弃。此虚拟机的复制将暂停，直到故障回切。",
+      "failoverSiblings": "{count, plural, =0 {计划中的其他客户机不受影响。} other {计划中的其他 # 个客户机继续复制。}}",
+      "typeToConfirm": "输入 {name} 以确认",
+      "confirmFailover": "故障转移此虚拟机",
+      "inProgress": "故障转移进行中",
+      "failoverDone": "{name} 以 VMID {vmid} 在 DR 站点运行。其复制将暂停，直到故障回切。",
+      "failoverFailed": "{name} 的故障转移未完成。其源虚拟机已停止：请使用故障回切将其带回。",
+      "failoverUntouched": "{name} 的故障转移在任何更改之前停止：该虚拟机仍在复制。",
+      "failbackTitle": "将 {name} 故障回切到源站点",
+      "failbackDescription": "反向复制会在副本保持在线的同时，把 {name} 在 DR 站点写入的数据复制回源站点。当最近一次反向同步足够新时触发切换：副本停止，应用最后的增量，然后启动源虚拟机。",
+      "startFailback": "开始故障回切",
+      "cutoverInProgress": "切换进行中",
+      "cutoverConfirm": "停止 {name} 的副本，应用最后的增量并启动源虚拟机？",
+      "cancelConfirm": "停止 {name} 的反向复制并保持其故障转移状态？虚拟机不会有任何更改。",
+      "failbackDone": "{name} 已再次在源站点运行，复制按原方向保护它。",
+      "cutoverFailed": "{name} 的切换失败。反向复制继续：请修复原因并重新运行切换。",
+      "flowFrom": "在灾备站点运行",
+      "flowTo": "正在接收变更",
+      "traceChecks": "检查",
+      "traceLog": "日志",
+      "traceEmpty": "等待第一个事件…",
+      "lastReverseSync": "最近一次反向同步",
+      "transferred": "已传输"
+    }
   },
   "templates": {
     "title": "模板",

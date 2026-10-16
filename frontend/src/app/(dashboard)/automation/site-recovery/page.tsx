@@ -34,8 +34,11 @@ import {
   CreateJobDialog,
   CreatePlanDialog,
   EditJobDialog,
-  FailoverDialog
+  FailoverDialog,
+  GuestFailoverDialog
 } from '@/components/automation/site-recovery'
+import type { DRReadyVM } from '@/components/automation/site-recovery/EmergencyDRTab'
+import type { GuestDialogTarget, GuestPlacements, GuestRestorePointsState } from '@/components/automation/site-recovery/GuestFailoverDialog'
 
 import type {
   RecoveryPlan, RecoveryExecution, StorageEngine, UpdateReplicationJobRequest, TestFailoverOptions
@@ -43,10 +46,15 @@ import type {
 
 import {
   buildVmStatesByConn,
+  cancelGuestFailback,
+  cutoverGuestFailback,
+  failoverGuest,
+  guestStateOf,
   loadVMRestorePoints as loadVMRestorePointsRequest,
   saveRecoveryPlan,
   scheduleRefreshes,
   startDRVM,
+  startGuestFailback,
   stopDRVM,
 } from '@/lib/site-recovery/emergencyActions'
 
@@ -74,6 +82,13 @@ export default function SiteRecoveryPage() {
     planId: string | null
     type: 'test' | 'failover' | 'failback'
   }>({ open: false, planId: null, type: 'test' })
+
+  // Per-guest failover and failback (ui#943): the row being acted on, the
+  // execution the dialog follows, and the orchestrator's last refusal.
+  const [guestDialog, setGuestDialog] = useState<{ open: boolean; mode: 'failover' | 'failback'; target: GuestDialogTarget | null }>({ open: false, mode: 'failover', target: null })
+  const [guestExecution, setGuestExecution] = useState<RecoveryExecution | null>(null)
+  const [guestError, setGuestError] = useState<string | null>(null)
+  const [guestRestorePoints, setGuestRestorePoints] = useState<GuestRestorePointsState>({ loading: false, data: null, failed: false })
 
   // Selection states
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null)
@@ -564,6 +579,150 @@ export default function SiteRecoveryPage() {
   // (not with the tab: one probe per guest, only for the row being started).
   const loadVMRestorePoints = useCallback((jobId: string, vmId: number) => loadVMRestorePointsRequest(jobId, vmId), [])
 
+  // ── Per-guest failover and failback (ui#943) ───────────────────────
+
+  // Where the guest of the open dialog runs on each site right now (node and
+  // power state), from the inventory the page refreshes after every action.
+  const guestPlacements = useMemo((): GuestPlacements | null => {
+    const target = guestDialog.target
+
+    if (!target) return null
+    const placementOf = (connId: string | undefined, vmid: number) => {
+      const vm = allVMs.find((v: any) => v.connId === connId && Number(v.vmid) === vmid)
+
+      return vm ? { node: vm.node || undefined, status: vm.status || undefined } : null
+    }
+
+    return { source: placementOf(target.sourceCluster, target.vmId), dr: placementOf(target.targetCluster, target.targetVmId) }
+  }, [guestDialog.target, allVMs])
+
+  const guestTargetOf = (vm: DRReadyVM): GuestDialogTarget => ({
+    planId: vm.planId || '',
+    planName: vm.planName || '',
+    vmId: vm.vmId,
+    vmName: vm.vmName,
+    targetVmId: vm.targetVmId,
+    jobId: vm.jobId,
+    siblingCount: vm.siblingCount ?? 0,
+    sourceCluster: vm.sourceCluster,
+    targetCluster: vm.targetCluster,
+    sourceSite: connections.find(connection => connection.id === vm.sourceCluster)?.name || vm.sourceCluster,
+    targetSite: connections.find(connection => connection.id === vm.targetCluster)?.name || vm.targetCluster,
+  })
+
+  const fetchExecution = useCallback(async (executionId: string) => {
+    const res = await fetch(`/api/v1/orchestrator/replication/executions/${executionId}`)
+
+    return res.ok ? res.json() : null
+  }, [])
+
+  // Opens the dialog on one row. A guest already in flight (its failover or
+  // failback started before this page load) is rehydrated from the execution
+  // its plan state points at, so the dialog lands on the live view.
+  const openGuestDialog = useCallback((vm: DRReadyVM, mode: 'failover' | 'failback') => {
+    setGuestError(null)
+    setGuestExecution(null)
+    setGuestDialog({ open: true, mode, target: guestTargetOf(vm) })
+
+    const plan = (plans || []).find((p: RecoveryPlan) => p.id === vm.planId)
+    const guest = guestStateOf(plan, vm.vmId)
+
+    if (guest?.executionId && (guest.state === 'failing_over' || guest.state === 'failing_back')) {
+      fetchExecution(guest.executionId).then(data => { if (data) setGuestExecution(data) }).catch(() => { /* the dialog shows the start screen instead */ })
+    }
+
+    if (mode === 'failover') {
+      setGuestRestorePoints({ loading: true, data: null, failed: false })
+      loadVMRestorePointsRequest(vm.jobId, vm.vmId)
+        .then(data => setGuestRestorePoints({ loading: false, data, failed: false }))
+        .catch(() => setGuestRestorePoints({ loading: false, data: null, failed: true }))
+    }
+  }, [plans, fetchExecution])
+
+  const closeGuestDialog = useCallback(() => {
+    setGuestDialog(prev => ({ ...prev, open: false }))
+    void mutatePlans()
+  }, [mutatePlans])
+
+  const runGuestAction = useCallback(async (action: () => Promise<any>, onDone: (data: any) => void) => {
+    try {
+      const data = await action()
+
+      setGuestError(null)
+      onDone(data)
+    } catch (e: any) {
+      setGuestError(e?.message || String(e))
+    } finally {
+      void mutatePlans()
+      refreshAfterEmergencyAction()
+    }
+  }, [mutatePlans, refreshAfterEmergencyAction])
+
+  const handleGuestFailover = useCallback((restorePoint?: string) => {
+    const target = guestDialog.target
+
+    if (!target) return
+    void runGuestAction(() => failoverGuest(target.planId, target.vmId, restorePoint), data => setGuestExecution(data))
+  }, [guestDialog.target, runGuestAction])
+
+  const handleGuestStartFailback = useCallback(() => {
+    const target = guestDialog.target
+
+    if (!target) return
+    void runGuestAction(() => startGuestFailback(target.planId, target.vmId), data => setGuestExecution(data))
+  }, [guestDialog.target, runGuestAction])
+
+  const handleGuestCutover = useCallback(() => {
+    const target = guestDialog.target
+    const executionId = guestExecution?.id
+
+    if (!target) return
+    void runGuestAction(() => cutoverGuestFailback(target.planId, target.vmId), () => {
+      // Pick the 'cutover' phase up right away rather than at the next poll.
+      if (executionId) fetchExecution(executionId).then(data => { if (data) setGuestExecution(data) }).catch(() => { /* next poll */ })
+    })
+  }, [guestDialog.target, guestExecution?.id, runGuestAction, fetchExecution])
+
+  const handleGuestCancelFailback = useCallback(() => {
+    const target = guestDialog.target
+
+    if (!target) return
+    void runGuestAction(() => cancelGuestFailback(target.planId, target.vmId), () => {
+      setGuestExecution(null)
+      setGuestDialog(prev => ({ ...prev, open: false }))
+    })
+  }, [guestDialog.target, runGuestAction])
+
+  // Follow the guest's execution while it runs, like the plan dialog does.
+  const guestExecutionId = guestExecution?.id
+  const guestExecutionRunning = guestExecution?.status === 'running'
+
+  useEffect(() => {
+    if (!guestDialog.open || !guestExecutionId || !guestExecutionRunning) return
+    const interval = setInterval(async () => {
+      try {
+        const data = await fetchExecution(guestExecutionId)
+
+        if (!data) return
+        setGuestExecution(data)
+        if (data.status !== 'running') {
+          clearInterval(interval)
+          void mutatePlans()
+          refreshAfterEmergencyAction()
+        }
+      } catch (e) {
+        console.error('Failed to poll guest execution:', e)
+      }
+    }, 3000)
+
+    return () => clearInterval(interval)
+  }, [guestDialog.open, guestExecutionId, guestExecutionRunning, fetchExecution, mutatePlans, refreshAfterEmergencyAction])
+
+  const guestDialogPlan = useMemo(() =>
+    (plans || []).find((p: RecoveryPlan) => p.id === guestDialog.target?.planId) || null
+  , [plans, guestDialog.target?.planId])
+  const guestDialogState = guestDialog.target ? guestStateOf(guestDialogPlan, guestDialog.target.vmId)?.state || null : null
+
   // Poll execution status every 3s while running
   useEffect(() => {
     if (!activeExecution || activeExecution.status !== 'running') return
@@ -738,6 +897,8 @@ export default function SiteRecoveryPage() {
             onExecuteFailover={(planId) => openFailoverDialog(planId, 'failover')}
             onExecuteFailback={(planId) => openFailoverDialog(planId, 'failback')}
             onDeletePlan={handleDeletePlan}
+            onGuestFailover={(vm) => openGuestDialog(vm, 'failover')}
+            onGuestFailback={(vm) => openGuestDialog(vm, 'failback')}
           />
         )}
 
@@ -746,6 +907,22 @@ export default function SiteRecoveryPage() {
         )}
 
         {/* Dialogs */}
+        <GuestFailoverDialog
+          open={guestDialog.open}
+          mode={guestDialog.mode}
+          target={guestDialog.target}
+          guestState={guestDialogState}
+          execution={guestExecution}
+          errorMessage={guestError}
+          placements={guestPlacements}
+          restorePoints={guestRestorePoints}
+          onClose={closeGuestDialog}
+          onFailover={handleGuestFailover}
+          onStartFailback={handleGuestStartFailback}
+          onCutover={handleGuestCutover}
+          onCancelFailback={handleGuestCancelFailback}
+        />
+
         <CreateJobDialog
           open={createJobOpen}
           onClose={() => setCreateJobOpen(false)}

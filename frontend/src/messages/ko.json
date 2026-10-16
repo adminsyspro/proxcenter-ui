@@ -5358,7 +5358,9 @@
       "failedOver": "페일오버됨",
       "skipped": "건너뜀 (게스트 사용 중)",
       "reseed_required": "재초기화 필요",
-      "source_missing": "원본 게스트 없음"
+      "source_missing": "원본 게스트 없음",
+      "failingOver": "페일오버 중",
+      "failingBack": "페일백 중"
     },
     "planStatus": {
       "ready": "준비됨",
@@ -5366,7 +5368,8 @@
       "executing": "실행 중",
       "failed": "실패",
       "not_ready": "준비되지 않음",
-      "failed_over": "페일오버됨"
+      "failed_over": "페일오버됨",
+      "partially_failed_over": "부분 페일오버됨"
     },
     "dashboard": {
       "primary": "주 사이트",
@@ -5754,7 +5757,20 @@
       "startVMBody": "복제본(VMID {vmid})이 선택한 복원 지점에서 DR 사이트에 부팅됩니다.",
       "startPausesJob": "{count, plural, =0 {이 게스트는 해당 복제 작업의 유일한 게스트이므로, 복제본이 실행되는 동안 작업이 일시 중지됩니다.} other {복제본이 실행되는 동안 이 게스트만 복제를 멈춥니다. 같은 작업의 다른 게스트 #대는 계속됩니다.}}",
       "startVMJobSyncing": "이 게스트의 복제 작업이 지금 동기화 중입니다. 전송이 디스크에 기록하는 동안에는 복제본 시작이 거부됩니다. 동기화가 끝날 때까지 기다리면 이 버튼은 자동으로 활성화됩니다.",
-      "restorePointKeepsNewer": "복제본은 해당 스냅샷에서 부팅하며 더 최신 복원 지점은 유지됩니다. 복제본을 중지하고 복제를 재개하면 이미지는 가장 최신 지점으로 되돌아갑니다."
+      "restorePointKeepsNewer": "복제본은 해당 스냅샷에서 부팅하며 더 최신 복원 지점은 유지됩니다. 복제본을 중지하고 복제를 재개하면 이미지는 가장 최신 지점으로 되돌아갑니다.",
+      "startReplica": "DR 사이트에서 복제본 시작 (테스트, 페일오버 아님)",
+      "stopReplica": "DR 사이트에서 복제본 중지",
+      "failoverVM": "이 VM 페일오버",
+      "failbackVM": "이 VM 페일백",
+      "openGuestFailback": "이 VM의 페일백 열기",
+      "guestFailingOver": "페일오버 진행 중",
+      "guestFailedOver": "페일오버됨: 프로덕션이 DR 사이트에서 실행 중",
+      "guestFailingBack": "원본 사이트로 페일백 중",
+      "guestActionsLocked": "이 VM은 페일오버되었습니다. 복제본이 프로덕션입니다. 페일백을 사용하세요.",
+      "guestBusy": "이 VM에 대한 실행이 진행 중입니다",
+      "planBusyForGuest": "플랜이 사용 중입니다. 실행이 끝날 때까지 기다리세요",
+      "planGuestsOver": "{over, plural, other {게스트 {total}개 중 #개 페일오버됨}}",
+      "planFailbackPartial": "이 플랜의 페일오버된 모든 게스트를 원본 사이트로 되돌립니다"
     },
     "simulation": {
       "title": "노드 장애 시뮬레이션",
@@ -5809,7 +5825,33 @@
       "zfs": "ZFS"
     },
     "discoveryError": "연결의 스토리지 검색에 실패했습니다. 기존 복구 작업은 계속 사용할 수 있습니다.",
-    "discoveryLoading": "복제 스토리지 검색 중…"
+    "discoveryLoading": "복제 스토리지 검색 중…",
+    "guestDR": {
+      "failoverTitle": "{name}을(를) DR 사이트로 페일오버",
+      "failoverDescription": "VM 한 대의 프로덕션 페일오버입니다. 원본이 중지되고 복제본(VMID {vmid})이 DR 사이트에서 서비스를 이어받으며, 더 최신 복원 지점은 삭제됩니다. 이 VM의 복제는 페일백할 때까지 중단됩니다.",
+      "failoverSiblings": "{count, plural, =0 {플랜의 다른 게스트에는 영향이 없습니다.} other {플랜의 다른 게스트 #개는 계속 복제됩니다.}}",
+      "typeToConfirm": "확인하려면 {name}을(를) 입력하세요",
+      "confirmFailover": "이 VM 페일오버",
+      "inProgress": "페일오버 진행 중",
+      "failoverDone": "{name}이(가) DR 사이트에서 VMID {vmid}(으)로 실행 중입니다. 페일백할 때까지 복제가 보류됩니다.",
+      "failoverFailed": "{name}의 페일오버가 완료되지 않았습니다. 원본은 중지되어 있습니다. 페일백으로 되돌리세요.",
+      "failoverUntouched": "{name}의 페일오버가 아무 변경 없이 중단되었습니다. VM은 계속 복제됩니다.",
+      "failbackTitle": "{name}을(를) 원본 사이트로 페일백",
+      "failbackDescription": "역방향 복제는 {name}이(가) DR 사이트에서 기록한 내용을 복제본이 온라인인 상태로 원본에 다시 복사합니다. 마지막 역방향 동기화가 충분히 최근이면 컷오버를 실행하세요. 복제본이 중지되고 마지막 델타가 적용된 뒤 원본 VM이 시작됩니다.",
+      "startFailback": "페일백 시작",
+      "cutoverInProgress": "컷오버 진행 중",
+      "cutoverConfirm": "{name}의 복제본을 중지하고 마지막 델타를 적용한 뒤 원본 VM을 시작할까요?",
+      "cancelConfirm": "{name}의 역방향 복제를 중지하고 페일오버 상태로 둘까요? VM에는 아무 변경도 없습니다.",
+      "failbackDone": "{name}이(가) 다시 원본 사이트에서 실행 중이며 복제가 원래 방향으로 보호합니다.",
+      "cutoverFailed": "{name}의 컷오버가 실패했습니다. 역방향 복제는 계속됩니다. 원인을 해결하고 컷오버를 다시 실행하세요.",
+      "flowFrom": "DR 사이트에서 실행 중",
+      "flowTo": "변경 사항 수신 중",
+      "traceChecks": "점검",
+      "traceLog": "로그",
+      "traceEmpty": "첫 번째 이벤트 대기 중…",
+      "lastReverseSync": "마지막 역방향 동기화",
+      "transferred": "전송됨"
+    }
   },
   "templates": {
     "title": "템플릿",

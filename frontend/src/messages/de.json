@@ -5337,7 +5337,9 @@
       "failedOver": "Umgeschaltet",
       "skipped": "Übersprungen (Gast beschäftigt)",
       "reseed_required": "Neuinitialisierung erforderlich",
-      "source_missing": "Quellgast fehlt"
+      "source_missing": "Quellgast fehlt",
+      "failingOver": "Umschaltung läuft",
+      "failingBack": "Rückschaltung läuft"
     },
     "planStatus": {
       "ready": "Bereit",
@@ -5345,7 +5347,8 @@
       "executing": "Wird ausgeführt",
       "failed": "Fehlgeschlagen",
       "not_ready": "Nicht bereit",
-      "failed_over": "fehlgeschlagen Over"
+      "failed_over": "fehlgeschlagen Over",
+      "partially_failed_over": "Teilweise umgeschaltet"
     },
     "dashboard": {
       "primary": "Primär",
@@ -5733,7 +5736,20 @@
       "startVMBody": "Das Replikat (VMID {vmid}) startet am DR-Standort ab dem gewählten Wiederherstellungspunkt.",
       "startPausesJob": "{count, plural, =0 {Dieser Gast ist der einzige seines Replikationsjobs, daher pausiert der Job, solange das Replikat läuft.} one {Nur dieser Gast repliziert nicht mehr, solange sein Replikat läuft. Der andere Gast seines Jobs läuft weiter.} other {Nur dieser Gast repliziert nicht mehr, solange sein Replikat läuft. Die # anderen Gäste seines Jobs laufen weiter.}}",
       "startVMJobSyncing": "Der Replikationsjob dieses Gasts synchronisiert gerade. Der Start des Replikats wird abgelehnt, solange eine Übertragung auf seine Festplatten schreibt: Warten Sie das Ende der Synchronisierung ab, diese Schaltfläche wird von selbst wieder aktiv.",
-      "restorePointKeepsNewer": "Das Replikat startet ab diesem Snapshot, neuere Wiederherstellungspunkte bleiben erhalten: Stoppen und Fortsetzen der Replikation setzt das Image wieder auf den neuesten."
+      "restorePointKeepsNewer": "Das Replikat startet ab diesem Snapshot, neuere Wiederherstellungspunkte bleiben erhalten: Stoppen und Fortsetzen der Replikation setzt das Image wieder auf den neuesten.",
+      "startReplica": "Replikat am DR-Standort starten (Test, kein Failover)",
+      "stopReplica": "Replikat am DR-Standort stoppen",
+      "failoverVM": "Failover dieser VM",
+      "failbackVM": "Failback dieser VM",
+      "openGuestFailback": "Failback dieser VM öffnen",
+      "guestFailingOver": "Failover läuft",
+      "guestFailedOver": "Umgeschaltet: die Produktion läuft am DR-Standort",
+      "guestFailingBack": "Rückschaltung zum Quellstandort läuft",
+      "guestActionsLocked": "Diese VM ist umgeschaltet: das Replikat ist die Produktion. Nutzen Sie ihr Failback.",
+      "guestBusy": "Eine Ausführung bearbeitet diese VM",
+      "planBusyForGuest": "Der Plan ist beschäftigt: warten Sie auf das Ende seiner Ausführung",
+      "planGuestsOver": "{over, plural, one {# von {total} Gästen umgeschaltet} other {# von {total} Gästen umgeschaltet}}",
+      "planFailbackPartial": "Holt jeden umgeschalteten Gast dieses Plans zum Quellstandort zurück"
     },
     "simulation": {
       "title": "Node-Ausfallsimulation",
@@ -5788,7 +5804,33 @@
       "zfs": "ZFS"
     },
     "discoveryError": "Die Speichererkennung ist für eine Verbindung fehlgeschlagen. Bestehende Wiederherstellungsvorgänge bleiben verfügbar.",
-    "discoveryLoading": "Replikationsspeicher werden ermittelt…"
+    "discoveryLoading": "Replikationsspeicher werden ermittelt…",
+    "guestDR": {
+      "failoverTitle": "Failover von {name} zum DR-Standort",
+      "failoverDescription": "Produktions-Failover einer einzelnen VM. Ihre Quelle wird gestoppt und ihr Replikat (VMID {vmid}) übernimmt am DR-Standort, neuere Wiederherstellungspunkte werden verworfen. Die Replikation dieser VM ruht bis zu ihrem Failback.",
+      "failoverSiblings": "{count, plural, =0 {Kein anderer Gast des Plans ist betroffen.} one {Der andere Gast des Plans repliziert weiter.} other {Die # anderen Gäste des Plans replizieren weiter.}}",
+      "typeToConfirm": "Geben Sie {name} zur Bestätigung ein",
+      "confirmFailover": "Failover dieser VM",
+      "inProgress": "Failover läuft",
+      "failoverDone": "{name} läuft am DR-Standort als VMID {vmid}. Ihre Replikation ruht bis zu ihrem Failback.",
+      "failoverFailed": "Das Failover von {name} wurde nicht abgeschlossen. Ihre Quelle ist gestoppt: nutzen Sie das Failback, um sie zurückzuholen.",
+      "failoverUntouched": "Das Failover von {name} brach vor jeder Änderung ab: die VM repliziert weiterhin.",
+      "failbackTitle": "Failback von {name} zum Quellstandort",
+      "failbackDescription": "Die Rückreplikation kopiert, was {name} am DR-Standort geschrieben hat, zur Quelle zurück, während das Replikat online bleibt. Lösen Sie das Cutover aus, sobald die letzte Rücksynchronisation frisch genug ist: das Replikat stoppt, das letzte Delta wird angewendet und die Quell-VM startet.",
+      "startFailback": "Failback starten",
+      "cutoverInProgress": "Cutover läuft",
+      "cutoverConfirm": "Replikat von {name} stoppen, letztes Delta anwenden und die Quell-VM starten?",
+      "cancelConfirm": "Rückreplikation von {name} stoppen und sie umgeschaltet lassen? An den VMs wird nichts geändert.",
+      "failbackDone": "{name} läuft wieder am Quellstandort und die Replikation schützt sie in der ursprünglichen Richtung.",
+      "cutoverFailed": "Das Cutover von {name} ist fehlgeschlagen. Die Rückreplikation läuft weiter: beheben Sie die Ursache und starten Sie das Cutover erneut.",
+      "flowFrom": "Läuft am DR-Standort",
+      "flowTo": "Empfängt die Änderungen",
+      "traceChecks": "Prüfungen",
+      "traceLog": "Protokoll",
+      "traceEmpty": "Warten auf das erste Ereignis…",
+      "lastReverseSync": "Letzte Rücksynchronisation",
+      "transferred": "Übertragen"
+    }
   },
   "templates": {
     "title": "Vorlagen",

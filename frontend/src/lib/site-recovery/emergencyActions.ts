@@ -142,3 +142,76 @@ export async function saveRecoveryPlan(data: unknown, planId: string | null): Pr
 
   return { error: null }
 }
+
+// ---------------------------------------------------------------------------
+// Per-guest failover and failback (ui#943)
+// ---------------------------------------------------------------------------
+
+export type GuestDRState = 'failing_over' | 'failed_over' | 'failing_back'
+
+/** The DR state of one guest of a plan, null when it simply replicates. */
+export function guestStateOf(
+  plan: { guests?: Array<{ vm_id: number; state: string; execution_id?: string }> } | null | undefined,
+  vmId: number,
+): { state: GuestDRState; executionId: string } | null {
+  const entry = (plan?.guests || []).find(g => g.vm_id === vmId)
+
+  if (!entry) return null
+
+  return { state: entry.state as GuestDRState, executionId: entry.execution_id || '' }
+}
+
+/**
+ * How many guests of the plan run on the DR site, for the plan chip: the
+ * ones failed over, and the ones failing back, which stay on the DR site
+ * until their cutover. A guest still failing over is not there yet.
+ */
+export function countGuestsFailedOver(plan: { guests?: Array<{ state: string }> } | null | undefined): number {
+  return (plan?.guests || []).filter(g => g.state === 'failed_over' || g.state === 'failing_back').length
+}
+
+export class GuestActionError extends Error {
+  status: number
+  code?: string
+
+  constructor(message: string, status: number, code?: string) {
+    super(message)
+    this.status = status
+    this.code = code
+  }
+}
+
+async function postGuestAction(planId: string, vmId: number, action: string, body: unknown, fallback: string): Promise<any> {
+  const res = await fetch(`/api/v1/orchestrator/replication/plans/${planId}/guests/${vmId}/${action}`, {
+    method: 'POST',
+    headers: body === undefined ? {} : { 'Content-Type': 'application/json' },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  })
+  const data = await res.json().catch(() => ({}))
+
+  // The orchestrator's refusal names the reason (guest busy, failed over,
+  // plan executing): it is shown as it comes rather than replaced.
+  if (!res.ok) throw new GuestActionError(data?.error || fallback, res.status, data?.code)
+
+  return data
+}
+
+/** Fails ONE guest of the plan over to the DR site, optionally from an older restore point. */
+export function failoverGuest(planId: string, vmId: number, restorePoint?: string): Promise<any> {
+  return postGuestAction(planId, vmId, 'failover', restorePoint ? { restore_point: restorePoint } : {}, 'Failed to fail the guest over')
+}
+
+/** Starts the reverse replication of ONE failed-over guest back to its source. */
+export function startGuestFailback(planId: string, vmId: number): Promise<any> {
+  return postGuestAction(planId, vmId, 'failback', undefined, 'Failed to start the guest failback')
+}
+
+/** Cuts ONE guest over: stops its replica, applies the final delta, starts the source VM. */
+export function cutoverGuestFailback(planId: string, vmId: number): Promise<any> {
+  return postGuestAction(planId, vmId, 'failback-cutover', undefined, 'Failed to start the guest failback cutover')
+}
+
+/** Stops the reverse replication of ONE guest and leaves it failed over. */
+export function cancelGuestFailback(planId: string, vmId: number): Promise<any> {
+  return postGuestAction(planId, vmId, 'failback-cancel', undefined, 'Failed to cancel the guest failback')
+}

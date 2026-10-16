@@ -70,6 +70,21 @@ export function writableStoragesFor(scope: VdcScope, connId: string): Set<string
     ?? new Set<string>()
 }
 
+/**
+ * Storages where a template deploy may stage the cloud image it downloads for
+ * a tenant (#1120). ProxCenter writes the file, not the tenant, so the vDC's
+ * ISO libraries qualify for provider content (built-in or provider catalogue
+ * images): on a Ceph-only cluster the CephFS library is the only file storage
+ * that can carry `import`. A tenant's own URL image is tenant content, so it
+ * lands on a library only when that library accepts tenant uploads.
+ */
+export function stagingStoragesFor(scope: VdcScope, connId: string, providerContent: boolean): Set<string> {
+  const libraries = providerContent
+    ? scope.isoLibrariesByConnection?.get(connId)
+    : scope.uploadLibrariesByConnection?.get(connId)
+  return new Set([...writableStoragesFor(scope, connId), ...(libraries ?? [])])
+}
+
 /** 403 body for a write aimed at a storage the tenant only reaches as an ISO library. */
 export function readOnlyLibraryError(storage: string): string {
   return `Storage "${storage}" is a read-only ISO library`

@@ -1049,7 +1049,16 @@ export async function deleteVdc(id: string): Promise<void> {
 // refreshVdcUsage
 // ---------------------------------------------------------------------------
 
-export async function refreshVdcUsage(vdcId: string): Promise<VdcUsage> {
+export interface RefreshVdcUsageOptions {
+  /**
+   * Throw instead of counting zero when the pool cannot be read. The scheduled
+   * sampler (#902) sets it: an unreachable cluster must leave a gap in the
+   * usage history, never a sample claiming the vDC consumed nothing.
+   */
+  strict?: boolean
+}
+
+export async function refreshVdcUsage(vdcId: string, options: RefreshVdcUsageOptions = {}): Promise<VdcUsage> {
   // 1. Load vDC
   const row = await prisma.vdc.findUnique({ where: { id: vdcId } })
   if (!row) {
@@ -1067,6 +1076,7 @@ export async function refreshVdcUsage(vdcId: string): Promise<VdcUsage> {
     const poolData = await pveFetch<{ members?: any[] }>(conn, `/pools/${encodeURIComponent(vdc.pvePoolName)}`)
     members = poolData?.members || []
   } catch (err: any) {
+    if (options.strict) throw err
     console.warn(`[vdc] Failed to fetch pool members for "${vdc.pvePoolName}": ${err?.message}`)
   }
 

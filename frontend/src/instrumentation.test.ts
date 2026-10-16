@@ -4,12 +4,15 @@ import { Agent, getGlobalDispatcher } from 'undici'
 
 const importDiskAssetsMock = vi.fn()
 const sweepMock = vi.fn()
+const startSamplerMock = vi.fn()
 
 vi.mock('@/lib/branding/importDiskAssets', () => ({
   importDiskAssets: importDiskAssetsMock,
 }))
 
 vi.mock('@/lib/db/prisma', () => ({ prisma: {} }))
+
+vi.mock('@/lib/vdc/usageHistory/sampler', () => ({ startVdcUsageSampler: startSamplerMock }))
 
 vi.mock('@/lib/migration/orphan-sweep', () => ({
   sweepOrphanedMigrationJobs: sweepMock,
@@ -96,5 +99,39 @@ describe('instrumentation register (orphaned migration sweep)', () => {
     vi.stubEnv('DEMO_MODE', 'true')
     await register()
     expect(sweepMock).not.toHaveBeenCalled()
+  })
+})
+
+// #902: the vDC usage history is collected whether or not anybody opens a page.
+describe('instrumentation register (vDC usage sampler)', () => {
+  beforeEach(() => {
+    importDiskAssetsMock.mockReset()
+    importDiskAssetsMock.mockResolvedValue({ imported: 0, skipped: 0 })
+    sweepMock.mockReset()
+    sweepMock.mockResolvedValue({ owned: 0, foreign: 0, total: 0 })
+    startSamplerMock.mockReset()
+    vi.unstubAllEnvs()
+  })
+
+  it('starts the sampler on the nodejs runtime', async () => {
+    vi.stubEnv('NEXT_RUNTIME', 'nodejs')
+    await register()
+    expect(startSamplerMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('never throws when the sampler cannot start', async () => {
+    vi.stubEnv('NEXT_RUNTIME', 'nodejs')
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    startSamplerMock.mockImplementation(() => { throw new Error('boom') })
+    await expect(register()).resolves.toBeUndefined()
+    expect(error).toHaveBeenCalledWith('[startup] vDC usage sampler failed to start (non-fatal):', expect.any(Error))
+    error.mockRestore()
+  })
+
+  it('does not start in demo mode', async () => {
+    vi.stubEnv('NEXT_RUNTIME', 'nodejs')
+    vi.stubEnv('DEMO_MODE', 'true')
+    await register()
+    expect(startSamplerMock).not.toHaveBeenCalled()
   })
 })

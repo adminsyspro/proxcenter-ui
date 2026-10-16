@@ -28,6 +28,9 @@ function tierBar(): HTMLElement {
 vi.mock('./MyVmsMetricsCharts', () => ({ default: () => null }))
 vi.mock('./MyDatacentersMapCard', () => ({ default: () => null }))
 vi.mock('./MyGreenCard', () => ({ default: () => null }))
+vi.mock('@/components/vdc/VdcUsageHistoryChart', () => ({
+  default: ({ historyUrl }: { historyUrl: string }) => <div data-testid="usage-history-chart">{historyUrl}</div>,
+}))
 
 import MyVdcOverview from './MyVdcOverview'
 
@@ -156,5 +159,15 @@ describe('MyVdcOverview, per-tier storage usage bars', () => {
 
     expect(bar).toHaveAttribute('aria-valuenow', '0')
     expect(bar.className).not.toContain('colorError')
+  })
+})
+
+describe('MyVdcOverview, usage history (#902)', () => {
+  afterEach(cleanup)
+
+  it('shows the usage history of this vDC through the tenant route', () => {
+    renderWithProviders(<MyVdcOverview vdc={makeVdc({ id: 'vdc/1' })} />)
+
+    expect(screen.getByTestId('usage-history-chart')).toHaveTextContent('/api/v1/vdcs/vdc%2F1/usage/history')
   })
 })

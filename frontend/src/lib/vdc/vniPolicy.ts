@@ -36,6 +36,14 @@ export function normalizeRequestedVni(raw: unknown): number | null {
   return n
 }
 
+/** Who holds a VNI; `label` is for the provider, never shown to a tenant. */
+export interface VniHolder {
+  /** The vDC of the network holding it, null outside any vDC. */
+  vdcId: string | null
+  network?: string
+  label: string
+}
+
 /**
  * Every VNI taken on the transport of `connectionId`, with who holds it:
  * VXLAN VNets ProxCenter created on the cluster, the live PVE tag set of
@@ -43,19 +51,21 @@ export function normalizeRequestedVni(raw: unknown): number | null {
  * 400 as the backstop), and the stretched tenant networks, whose VNI is
  * reserved on every cluster.
  */
-export async function takenVnisOnTransport(connectionId: string, conn?: any): Promise<Map<number, string>> {
-  const taken = new Map<number, string>()
+export async function takenVnisOnTransport(connectionId: string, conn?: any): Promise<Map<number, VniHolder>> {
+  const taken = new Map<number, VniHolder>()
 
   const vnets = await prisma.vdcVnet.findMany({
     where: { type: 'vxlan', vdc: { connectionId } },
-    select: { tag: true, displayName: true, pveName: true, vdc: { select: { name: true } } },
+    select: { tag: true, displayName: true, pveName: true, vdcId: true, vdc: { select: { name: true } } },
   })
   for (const v of vnets) {
-    if (!taken.has(v.tag)) taken.set(v.tag, `network "${v.displayName ?? v.pveName}" of vDC "${v.vdc.name}"`)
+    if (!taken.has(v.tag)) {
+      taken.set(v.tag, { vdcId: v.vdcId, network: v.displayName ?? v.pveName, label: `network "${v.displayName ?? v.pveName}" of vDC "${v.vdc.name}"` })
+    }
   }
 
   const networks = await prisma.tenantNetwork.findMany({ select: { vni: true, name: true } })
-  for (const n of networks) if (!taken.has(n.vni)) taken.set(n.vni, `tenant network "${n.name}"`)
+  for (const n of networks) if (!taken.has(n.vni)) taken.set(n.vni, { vdcId: null, label: `tenant network "${n.name}"` })
 
   if (conn) {
     try {
@@ -68,7 +78,7 @@ export async function takenVnisOnTransport(connectionId: string, conn?: any): Pr
       for (const v of await listVnetsPve(conn)) {
         if (!Number.isFinite(v.tag)) continue
         if (overlayZones && !overlayZones.has(String(v.zone))) continue
-        if (!taken.has(v.tag)) taken.set(v.tag, `VNet "${v.vnet}" of zone "${v.zone}" on the cluster`)
+        if (!taken.has(v.tag)) taken.set(v.tag, { vdcId: null, label: `VNet "${v.vnet}" of zone "${v.zone}" on the cluster` })
       }
     } catch {
       // Best effort, see above.
@@ -92,9 +102,18 @@ export async function reservedRangesOnTransport(connectionId: string, vdcId: str
     .map(r => ({ start: r.vniRangeStart!, end: r.vniRangeEnd!, vdcName: r.name }))
 }
 
-function reservedBy(vni: number, ranges: Array<{ start: number; end: number; vdcName: string }>): string | null {
-  const hit = ranges.find(r => vni >= r.start && vni <= r.end)
-  return hit ? `the VNI range ${hit.start}-${hit.end} assigned to vDC "${hit.vdcName}"` : null
+function isReserved(vni: number, ranges: Array<{ start: number; end: number }>): boolean {
+  return ranges.some(r => vni >= r.start && vni <= r.end)
+}
+
+/**
+ * The refusal a tenant reads for a VNI already taken. It names the holder
+ * only when it is a network of the tenant's own vDC: the networks, vDCs,
+ * zones and ranges of the other tenants of the cluster stay private.
+ */
+function takenMessage(vni: number, vdcId: string, holder: VniHolder | undefined): string {
+  if (holder?.vdcId === vdcId) return `VNI ${vni} is already used by your network "${holder.network}".`
+  return `VNI ${vni} is already in use on this transport.`
 }
 
 export interface PickVniInput {
@@ -128,8 +147,10 @@ export async function pickVni(input: PickVniInput): Promise<number> {
       throw new VniError(`VNI ${vni} is outside the range ${rangeText(policy)} assigned to your vDC on this transport.`, 400)
     }
     const taken = await takenVnisOnTransport(input.connectionId, input.conn)
-    const holder = taken.get(vni) ?? reservedBy(vni, await reservedRangesOnTransport(input.connectionId, input.vdcId))
-    if (holder) throw new VniError(`VNI ${vni} is already in use on this transport by ${holder}.`, 409)
+    const holder = taken.get(vni)
+    if (holder || isReserved(vni, await reservedRangesOnTransport(input.connectionId, input.vdcId))) {
+      throw new VniError(takenMessage(vni, input.vdcId, holder), 409)
+    }
     return vni
   }
 
@@ -146,7 +167,7 @@ export async function pickVni(input: PickVniInput): Promise<number> {
   // stepping over the ranges reserved for the other vDCs of the cluster.
   const reserved = await reservedRangesOnTransport(input.connectionId, input.vdcId)
   let vni = await allocateVni(input.vdcId, input.conn)
-  while (vni <= VNI_MAX && (taken.has(vni) || reservedBy(vni, reserved))) vni++
+  while (vni <= VNI_MAX && (taken.has(vni) || isReserved(vni, reserved))) vni++
   if (vni > VNI_MAX) throw new VniError(`No free VNI left below ${VNI_MAX} on this transport.`, 409)
   return vni
 }

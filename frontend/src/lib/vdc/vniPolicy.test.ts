@@ -87,9 +87,9 @@ describe('takenVnisOnTransport', () => {
 
     const taken = await takenVnisOnTransport('conn-1', conn)
     expect([...taken.keys()].sort((x, y) => x - y)).toEqual([777, 888, 10000, 10001, 50000])
-    expect(taken.get(10000)).toBe('network "lan" of vDC "vdc-a"')
-    expect(taken.get(50000)).toBe('tenant network "stretch"')
-    expect(taken.get(777)).toBe('VNet "old" of zone "legacy" on the cluster')
+    expect(taken.get(10000)).toEqual({ vdcId: 'vdc-a', network: 'lan', label: 'network "lan" of vDC "vdc-a"' })
+    expect(taken.get(50000)).toEqual({ vdcId: null, label: 'tenant network "stretch"' })
+    expect(taken.get(777)).toEqual({ vdcId: null, label: 'VNet "old" of zone "legacy" on the cluster' })
   })
 
   it('survives an unreachable cluster', async () => {
@@ -134,7 +134,18 @@ describe('pickVni', () => {
     expect(await pickVni({ ...base, transport: shared(), requested: null })).toBe(10004)
     // vdc-a dedicated: a choice inside vdc-b's range is a collision.
     await expect(pickVni({ ...base, transport: dedicated, requested: 10002 }))
-      .rejects.toThrow(/already in use on this transport by the VNI range 10000-10003 assigned to vDC "vdc-b"/)
+      .rejects.toThrow(/^VNI 10002 is already in use on this transport\.$/)
+  })
+
+  it('names the holder only when it is a network of the same vDC, never another tenant', async () => {
+    await vnet('vdc-a', 'va', 20001, 'mine')
+    await vnet('vdc-b', 'vb', 20002, 'theirs')
+    const transport = shared(20000, 20009)
+    await expect(pickVni({ ...base, transport, requested: 20001 }))
+      .rejects.toThrow('VNI 20001 is already used by your network "mine".')
+    const refused = await pickVni({ ...base, transport, requested: 20002 }).catch(e => e)
+    expect(refused).toMatchObject({ status: 409, message: 'VNI 20002 is already in use on this transport.' })
+    expect(refused.message).not.toMatch(/theirs|vdc-b/)
   })
 
   it('a VNI held on another cluster does not block this transport', async () => {

@@ -309,7 +309,7 @@ describe('createVnetForTenant (VNI policy, roadmap#18)', () => {
     await seedVdc({ id: 'vdc-1', tenantId: 'tenant-a', sdnZoneName: 'zacme', vniRange: [10000, 10005] })
     await expect(createVnetForTenant({
       vdcId: 'vdc-1', tenantId: 'tenant-a', displayName: 'lan', vni: 10000, createdBy: null,
-    })).rejects.toThrow(/VNI 10000 is already in use on this transport by network "lan" of vDC "vdc-b"/)
+    })).rejects.toThrow(/^VNI 10000 is already in use on this transport\.$/)
     // Automatic allocation skips it.
     expect((await createVnetForTenant({ vdcId: 'vdc-1', tenantId: 'tenant-a', displayName: 'lan', createdBy: null })).tag).toBe(10001)
     expect(pveCalls('POST', '/cluster/sdn/vnets')).toHaveLength(1)
@@ -328,7 +328,7 @@ describe('createVnetForTenant (VNI policy, roadmap#18)', () => {
 
     await expect(createVnetForTenant({
       vdcId: 'vdc-1', tenantId: 'tenant-a', displayName: 'a', vni: 777, createdBy: null,
-    })).rejects.toThrow(/already in use on this transport by VNet "old1" of zone "legacy"/)
+    })).rejects.toThrow(/^VNI 777 is already in use on this transport\.$/)
     // The VLAN VNet's tag does not block the VNI space.
     expect((await createVnetForTenant({ vdcId: 'vdc-1', tenantId: 'tenant-a', displayName: 'a', vni: 778, createdBy: null })).tag).toBe(778)
     expect((await createVnetForTenant({ vdcId: 'vdc-1', tenantId: 'tenant-a', displayName: 'b', vni: 16777215, createdBy: null })).tag).toBe(16777215)

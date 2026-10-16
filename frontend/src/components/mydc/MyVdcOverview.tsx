@@ -3,13 +3,14 @@
 import { useMemo } from 'react'
 import { useTranslations } from 'next-intl'
 
-import { Box, CircularProgress, Divider, IconButton, LinearProgress, Paper, Stack, Tooltip, Typography } from '@mui/material'
+import { Box, Chip, CircularProgress, Divider, IconButton, LinearProgress, Paper, Stack, Tooltip, Typography } from '@mui/material'
 import { alpha, useTheme } from '@mui/material/styles'
 
 import QuotaDonut from './QuotaDonut'
 import MyVmsMetricsCharts from './MyVmsMetricsCharts'
 import MyGreenCard from './MyGreenCard'
 import MyDatacentersMapCard from './MyDatacentersMapCard'
+import { DEFAULT_TRANSPORT, vniPolicyFor } from '@/lib/vdc/transport'
 
 interface Props {
   vdc: any
@@ -36,6 +37,16 @@ export default function MyVdcOverview({ vdc, onRefresh, refreshing = false }: Pr
     () => (vdc.connectionId ? [vdc.connectionId] : []),
     [vdc.connectionId],
   )
+
+  // Network model (#904, roadmap#18): who provides the L3 edge and what the
+  // tenant may do with the VNIs of its networks. Both are provider-set.
+  const platformEdge = vdc.edgeModel === 'platform'
+  const tr = vdc.transport ?? null
+  const vniPolicy = vniPolicyFor({
+    sharing: tr?.sharing === 'dedicated' ? 'dedicated' : DEFAULT_TRANSPORT.sharing,
+    vniRangeStart: typeof tr?.vniRangeStart === 'number' ? tr.vniRangeStart : null,
+    vniRangeEnd: typeof tr?.vniRangeEnd === 'number' ? tr.vniRangeEnd : null,
+  })
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -205,6 +216,48 @@ export default function MyVdcOverview({ vdc, onRefresh, refreshing = false }: Pr
             </>
           )}
         </Box>
+      </Paper>
+
+      {/* Network model: the L3 edge responsibility and the VNI policy of the
+          transport, so the tenant knows what to bring before its first guest
+          cannot reach anything. */}
+      <Paper variant="outlined" sx={{ p: 2 }} data-testid="vdc-network-model">
+        <Typography variant="subtitle1" sx={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
+          <i className="ri-router-line" />
+          {t('myVdc.networkModelTitle')}
+        </Typography>
+        <Stack spacing={1.25}>
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} alignItems={{ sm: 'flex-start' }}>
+            <Typography variant="caption" color="text.secondary" sx={{ width: { sm: 160 }, flexShrink: 0, pt: 0.25 }}>
+              {t('myVdc.edgeModelLabel')}
+            </Typography>
+            <Stack spacing={0.5} sx={{ minWidth: 0 }}>
+              <Chip
+                size="small"
+                color={platformEdge ? 'primary' : 'default'}
+                variant="outlined"
+                icon={<i className={platformEdge ? 'ri-router-line' : 'ri-user-settings-line'} style={{ fontSize: 13 }} />}
+                label={t(platformEdge ? 'myVdc.edgePlatform' : 'myVdc.edgeTenant')}
+                sx={{ height: 22, width: 'fit-content' }}
+              />
+              <Typography variant="body2" color="text.secondary">
+                {t(platformEdge ? 'myVdc.edgePlatformSupply' : 'myVdc.edgeTenantSupply')}
+              </Typography>
+            </Stack>
+          </Stack>
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} alignItems={{ sm: 'flex-start' }}>
+            <Typography variant="caption" color="text.secondary" sx={{ width: { sm: 160 }, flexShrink: 0, pt: 0.25 }}>
+              {t('myVdc.vniPolicyLabel')}
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              {vniPolicy.sharing === 'dedicated'
+                ? t('myVdc.vniPolicyDedicated')
+                : vniPolicy.range
+                  ? t('myVdc.vniPolicyShared', { start: vniPolicy.range.start, end: vniPolicy.range.end })
+                  : t('myVdc.vniPolicySharedAuto')}
+            </Typography>
+          </Stack>
+        </Stack>
       </Paper>
 
       {/* Per-VM consumption charts — CPU%, RAM%, Network in+out, Disk r/w

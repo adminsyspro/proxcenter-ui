@@ -23,8 +23,10 @@ import {
   checkVnetQuota,
   createVnetForTenant,
   getAllowedNetworksForTenant,
+  listVnetsForTenant,
   resolveSubnetForBridge,
   resolveVdcForVnet,
+  updateVnetForTenant,
   validateNetAgainstScope,
 } from './vnets'
 import type { AllowedNetwork } from './vnets'
@@ -86,6 +88,9 @@ interface VdcSeed {
   slug?: string
   sdnZoneName?: string | null
   enabled?: boolean
+  edgeModel?: 'tenant' | 'platform'
+  transportSharing?: 'shared' | 'dedicated'
+  vniRange?: [number, number]
 }
 
 async function seedVdc(opts: VdcSeed): Promise<string> {
@@ -100,6 +105,13 @@ async function seedVdc(opts: VdcSeed): Promise<string> {
       pvePoolName: `pool-${id}`,
       sdnZoneName: opts.sdnZoneName === undefined ? `z${id}` : opts.sdnZoneName,
       enabled: opts.enabled ?? true,
+      edgeModel: opts.edgeModel ?? 'tenant',
+      transportSharing: opts.transportSharing ?? 'shared',
+      // A dedicated transport cannot be the cluster network.
+      vxlanTransportMode: opts.transportSharing === 'dedicated' ? 'peers' : 'cluster',
+      vxlanPeers: opts.transportSharing === 'dedicated' ? ['10.0.0.1'] : [],
+      vniRangeStart: opts.vniRange?.[0] ?? null,
+      vniRangeEnd: opts.vniRange?.[1] ?? null,
     },
   })
   return id
@@ -216,6 +228,120 @@ describe('createVnetForTenant (VXLAN)', () => {
     })).rejects.toThrow(/vDC has no SDN zone - VXLAN networks are unavailable/)
 
     expect(pveCalls('POST', '/cluster/sdn/vnets')).toHaveLength(0)
+  })
+})
+
+describe('createVnetForTenant (pure L2, roadmap#18)', () => {
+  it('creates a network without any IP configuration: VNet on PVE, no subnet row, listed with subnet null', async () => {
+    await seedVdc({ tenantId: 'tenant-a', sdnZoneName: 'zacme' })
+
+    const vnet = await createVnetForTenant({
+      vdcId: 'vdc-1', tenantId: 'tenant-a', displayName: 'l2', createdBy: 'user-1',
+    })
+
+    expect(vnet.subnet).toBeNull()
+    expect(vnet.tag).toBe(10000)
+    expect(pveCalls('POST', '/cluster/sdn/vnets')).toHaveLength(1)
+    expect(await prismaTest.vdcSubnet.count()).toBe(0)
+
+    const listed = await listVnetsForTenant('vdc-1')
+    expect(listed).toHaveLength(1)
+    expect(listed[0].subnet).toBeNull()
+    // No IPAM target for the deploy hooks: the guest keeps DHCP / manual.
+    expect(await resolveSubnetForBridge('conn-1', vnet.pveName)).toBeNull()
+  })
+
+  it('a platform-provided edge (#904) needs the subnet and leaves PVE untouched', async () => {
+    await seedVdc({ tenantId: 'tenant-a', sdnZoneName: 'zacme', edgeModel: 'platform' })
+
+    await expect(createVnetForTenant({
+      vdcId: 'vdc-1', tenantId: 'tenant-a', displayName: 'l2', subnet: null, createdBy: null,
+    })).rejects.toThrow(/define the subnet/)
+    expect(pveCalls('POST', '/cluster/sdn/vnets')).toHaveLength(0)
+
+    const vnet = await createVnetForTenant({
+      vdcId: 'vdc-1', tenantId: 'tenant-a', displayName: 'lan', subnet: SUBNET, createdBy: null,
+    })
+    expect(vnet.subnet?.cidr).toBe(SUBNET.cidr)
+  })
+
+  it('refuses a DNS edit on a pure L2 network', async () => {
+    await seedVdc({ tenantId: 'tenant-a', sdnZoneName: 'zacme' })
+    await createVnetForTenant({ vdcId: 'vdc-1', tenantId: 'tenant-a', displayName: 'l2', createdBy: null })
+    await expect(updateVnetForTenant('vdc-1', 'tenant-a', 'l2', { subnet: { dnsServers: ['1.1.1.1'] } }))
+      .rejects.toThrow(/pure L2 network/)
+  })
+})
+
+describe('createVnetForTenant (VNI policy, roadmap#18)', () => {
+  it('shared transport without a range: the tenant cannot choose, allocation is automatic', async () => {
+    await seedVdc({ tenantId: 'tenant-a', sdnZoneName: 'zacme' })
+    await expect(createVnetForTenant({
+      vdcId: 'vdc-1', tenantId: 'tenant-a', displayName: 'lan', vni: 12345, createdBy: null,
+    })).rejects.toThrow(/has not assigned a VNI range/)
+    expect(pveCalls('POST', '/cluster/sdn/vnets')).toHaveLength(0)
+  })
+
+  it('shared transport with a range: first free of the range, a typed VNI must sit inside it', async () => {
+    await seedVdc({ tenantId: 'tenant-a', sdnZoneName: 'zacme', vniRange: [20000, 20002] })
+    const auto = await createVnetForTenant({ vdcId: 'vdc-1', tenantId: 'tenant-a', displayName: 'a', createdBy: null })
+    expect(auto.tag).toBe(20000)
+
+    await expect(createVnetForTenant({
+      vdcId: 'vdc-1', tenantId: 'tenant-a', displayName: 'b', vni: 30000, createdBy: null,
+    })).rejects.toThrow(/outside the range 20000-20002/)
+
+    const chosen = await createVnetForTenant({ vdcId: 'vdc-1', tenantId: 'tenant-a', displayName: 'b', vni: 20002, createdBy: null })
+    expect(chosen.tag).toBe(20002)
+    expect((pveCalls('POST', '/cluster/sdn/vnets')[1][2].body as URLSearchParams).get('tag')).toBe('20002')
+
+    // 20001 is the only one left, then the range is exhausted.
+    expect((await createVnetForTenant({ vdcId: 'vdc-1', tenantId: 'tenant-a', displayName: 'c', createdBy: null })).tag).toBe(20001)
+    await expect(createVnetForTenant({ vdcId: 'vdc-1', tenantId: 'tenant-a', displayName: 'd', createdBy: null }))
+      .rejects.toThrow(/No free VNI left in the range/)
+  })
+
+  it('refuses a VNI another vDC of the cluster already carries, on a shared and on a dedicated transport', async () => {
+    // Another tenant's vDC on the same connection holds VNI 10000.
+    await seedVdc({ id: 'vdc-b', tenantId: 'tenant-b', sdnZoneName: 'zother' })
+    await prismaTest.vdcVnet.create({ data: { id: 'b-lan', vdcId: 'vdc-b', pveName: 'vb000001', displayName: 'lan', tag: 10000 } })
+
+    await seedVdc({ id: 'vdc-1', tenantId: 'tenant-a', sdnZoneName: 'zacme', vniRange: [10000, 10005] })
+    await expect(createVnetForTenant({
+      vdcId: 'vdc-1', tenantId: 'tenant-a', displayName: 'lan', vni: 10000, createdBy: null,
+    })).rejects.toThrow(/VNI 10000 is already in use on this transport by network "lan" of vDC "vdc-b"/)
+    // Automatic allocation skips it.
+    expect((await createVnetForTenant({ vdcId: 'vdc-1', tenantId: 'tenant-a', displayName: 'lan', createdBy: null })).tag).toBe(10001)
+    expect(pveCalls('POST', '/cluster/sdn/vnets')).toHaveLength(1)
+  })
+
+  it('dedicated transport: any valid VNI, still unique on the cluster and in the live PVE set', async () => {
+    await seedVdc({ tenantId: 'tenant-a', sdnZoneName: 'zacme', transportSharing: 'dedicated' })
+    // A legacy VXLAN zone on the cluster carries tag 777 outside ProxCenter.
+    pveFetchMock.mockImplementation(async (_conn: any, path: string, opts?: any) => {
+      const method = String(opts?.method ?? 'GET').toUpperCase()
+      if (method !== 'GET') return undefined
+      if (path === '/cluster/sdn/zones') return [{ zone: 'legacy', type: 'vxlan' }, { zone: 'vl', type: 'vlan' }]
+      if (path === '/cluster/sdn/vnets') return [{ vnet: 'old1', zone: 'legacy', tag: 777 }, { vnet: 'vlan1', zone: 'vl', tag: 778 }]
+      return []
+    })
+
+    await expect(createVnetForTenant({
+      vdcId: 'vdc-1', tenantId: 'tenant-a', displayName: 'a', vni: 777, createdBy: null,
+    })).rejects.toThrow(/already in use on this transport by VNet "old1" of zone "legacy"/)
+    // The VLAN VNet's tag does not block the VNI space.
+    expect((await createVnetForTenant({ vdcId: 'vdc-1', tenantId: 'tenant-a', displayName: 'a', vni: 778, createdBy: null })).tag).toBe(778)
+    expect((await createVnetForTenant({ vdcId: 'vdc-1', tenantId: 'tenant-a', displayName: 'b', vni: 16777215, createdBy: null })).tag).toBe(16777215)
+    await expect(createVnetForTenant({ vdcId: 'vdc-1', tenantId: 'tenant-a', displayName: 'c', vni: 16777216, createdBy: null }))
+      .rejects.toThrow(/between 1 and 16777215/)
+  })
+
+  it('vni is a VXLAN property: refused on a VLAN network', async () => {
+    await seedVdc({ tenantId: 'tenant-a' })
+    await addPool('vdc-1', 'vmbr0', 100, 199)
+    await expect(createVnetForTenant({
+      vdcId: 'vdc-1', tenantId: 'tenant-a', displayName: 'lan', type: 'vlan', bridge: 'vmbr0', vni: 5, createdBy: null,
+    })).rejects.toThrow(/vni applies to VXLAN/)
   })
 })
 

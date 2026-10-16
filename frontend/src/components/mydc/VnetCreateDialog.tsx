@@ -13,12 +13,23 @@ import {
   parseCidr, gatewayValidForCidr, usableHostCount, ipToInt, intToIp,
 } from '@/lib/vdc/network'
 import { readVdcContextCookie } from '@/lib/vdc/contextCookie'
+import { DEFAULT_TRANSPORT, VNI_MAX, vniPolicyFor } from '@/lib/vdc/transport'
 
 /** A VLAN range the provider dedicated to this vDC on a given bridge.
  *  Comes straight from `/api/v1/vdcs` (`VdcWithDetails.vlanPools`). */
 interface VlanPoolOption { bridge: string; rangeStart: number; rangeEnd: number }
 
-interface VdcOption { id: string; name: string; vlanPools?: VlanPoolOption[] }
+/** VNI policy of the vDC transport (roadmap#18), straight from `VdcWithDetails.transport`. */
+interface TransportOption { sharing?: string; vniRangeStart?: number | null; vniRangeEnd?: number | null }
+
+interface VdcOption {
+  id: string
+  name: string
+  vlanPools?: VlanPoolOption[]
+  transport?: TransportOption | null
+  /** `platform` (#904): the provider operates the L3 edge, so every network declares its subnet. */
+  edgeModel?: string | null
+}
 
 interface Props {
   open: boolean
@@ -60,6 +71,11 @@ export default function VnetCreateDialog({ open, vdcs, defaultVdcId, onClose, on
   const [bridgeChoice, setBridgeChoice] = useState('')
   const [vlanTag, setVlanTag] = useState('')              // '' = auto-allocate
   const [externalAddressing, setExternalAddressing] = useState(false)
+  // Pure L2 (roadmap#18): the tenant may leave the IP configuration out and
+  // address the network itself; a platform-provided edge forces it in (#904).
+  const [withSubnet, setWithSubnet] = useState(true)
+  // Tenant-chosen VNI (roadmap#18), '' = let ProxCenter allocate.
+  const [vni, setVni] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -69,6 +85,7 @@ export default function VnetCreateDialog({ open, vdcs, defaultVdcId, onClose, on
   // selection into the POST.
   const resetVlanForm = useCallback(() => {
     setNetType('vxlan'); setBridgeChoice(''); setVlanTag(''); setExternalAddressing(false)
+    setWithSubnet(true); setVni('')
   }, [])
 
   useEffect(() => {
@@ -94,6 +111,35 @@ export default function VnetCreateDialog({ open, vdcs, defaultVdcId, onClose, on
   const tagValid = tagNum === null
     || (Number.isInteger(tagNum) && bridgeRanges.some(p => tagNum >= p.rangeStart && tagNum <= p.rangeEnd))
 
+  // VNI policy of the vDC transport (roadmap#18): a dedicated transport lets
+  // the tenant pick any VNI, a shared one only inside the provider range, and
+  // a shared one without a range leaves the allocation to ProxCenter.
+  const vniPolicy = useMemo(() => {
+    const tr = selectedVdc?.transport
+    return vniPolicyFor({
+      sharing: tr?.sharing === 'dedicated' ? 'dedicated' : DEFAULT_TRANSPORT.sharing,
+      vniRangeStart: typeof tr?.vniRangeStart === 'number' ? tr.vniRangeStart : null,
+      vniRangeEnd: typeof tr?.vniRangeEnd === 'number' ? tr.vniRangeEnd : null,
+    })
+  }, [selectedVdc])
+  const vniNum = vni === '' ? null : Number(vni)
+  const vniValid = vniNum === null || (
+    Number.isInteger(vniNum) && vniNum >= 1 && vniNum <= VNI_MAX
+    && (!vniPolicy.range || (vniNum >= vniPolicy.range.start && vniNum <= vniPolicy.range.end))
+  )
+  // How the VLAN tag / VNI gets picked. A shared range already reads in the
+  // VNI field helper, so no caption repeats it.
+  let allocationCaption: string | null = t('myVdc.vnetVniAutoAllocated')
+  if (netType === 'vlan') allocationCaption = t('myVdc.vnetVlanAutoAllocated')
+  else if (vniPolicy.sharing === 'dedicated') allocationCaption = t('myVdc.vnetVniDedicatedTransport')
+  else if (vniPolicy.range) allocationCaption = null
+
+  // A platform-provided edge (#904) needs the subnet to serve it.
+  const platformEdge = selectedVdc?.edgeModel === 'platform'
+  const subnetOn = withSubnet || platformEdge
+  let ipConfigCaption = subnetOn ? t('myVdc.vnetIpConfigHelp') : t('myVdc.vnetL2OnlyHelp')
+  if (platformEdge) ipConfigCaption = t('myVdc.vnetIpConfigRequiredPlatform')
+
   // CIDR / gateway live validation — drives helper text + Submit gate.
   const cidrInfo = useMemo(() => parseCidr(cidr), [cidr])
   const cidrValid = !!cidrInfo
@@ -110,9 +156,9 @@ export default function VnetCreateDialog({ open, vdcs, defaultVdcId, onClose, on
   }, [cidrInfo, gateway])
 
   const nameValid = displayName === '' || NAME_REGEX.test(displayName)
-  const subnetValid = cidrValid && !!gateway && gatewayValid
+  const subnetValid = !subnetOn || (cidrValid && !!gateway && gatewayValid)
   const canSubmit = !!vdcId && !!displayName && nameValid && subnetValid && !saving
-    && (netType === 'vxlan' || (!!bridge && tagValid))
+    && (netType === 'vxlan' ? vniValid : (!!bridge && tagValid))
 
   const handleSubmit = async () => {
     if (!vdcId) {
@@ -125,13 +171,16 @@ export default function VnetCreateDialog({ open, vdcs, defaultVdcId, onClose, on
     }
     setSaving(true); setError(null)
     try {
-      const subnet = {
-        cidr,
-        gateway,
-        dnsServers: dnsServers
-          ? dnsServers.split(',').map(s => s.trim()).filter(Boolean)
-          : undefined,
-      }
+      // Null subnet = pure L2 network (roadmap#18).
+      const subnet = subnetOn
+        ? {
+            cidr,
+            gateway,
+            dnsServers: dnsServers
+              ? dnsServers.split(',').map(s => s.trim()).filter(Boolean)
+              : undefined,
+          }
+        : null
       const res = await fetch(`/api/v1/vdcs/${encodeURIComponent(vdcId)}/vnets`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -140,6 +189,7 @@ export default function VnetCreateDialog({ open, vdcs, defaultVdcId, onClose, on
           description: description || undefined,
           firewall,
           subnet,
+          ...(netType === 'vxlan' && vni !== '' ? { vni: Number(vni) } : {}),
           ...(netType === 'vlan' ? {
             type: 'vlan',
             bridge,
@@ -244,12 +294,36 @@ export default function VnetCreateDialog({ open, vdcs, defaultVdcId, onClose, on
               />
             </>
           )}
-          <Typography variant="caption" color="text.secondary">
-            {t(netType === 'vlan' ? 'myVdc.vnetVlanAutoAllocated' : 'myVdc.vnetVniAutoAllocated')}
-          </Typography>
+          {netType === 'vxlan' && vniPolicy.tenantChoice && (
+            <TextField
+              label={t('myVdc.vnetVni')}
+              value={vni}
+              onChange={(e) => setVni(e.target.value.trim())}
+              error={!vniValid}
+              helperText={vniPolicy.range
+                ? t('myVdc.vnetVniRangeHint', { start: vniPolicy.range.start, end: vniPolicy.range.end })
+                : t('myVdc.vnetVniFreeHint', { max: VNI_MAX })}
+              type="number"
+              fullWidth
+              size="small"
+              slotProps={{ htmlInput: { min: vniPolicy.range?.start ?? 1, max: vniPolicy.range?.end ?? VNI_MAX } }}
+            />
+          )}
+          {allocationCaption && (
+            <Typography variant="caption" color="text.secondary">{allocationCaption}</Typography>
+          )}
 
           <Stack spacing={1.5} sx={{ pt: 1 }}>
-            <Typography variant="subtitle2">{t('myVdc.subnetSectionTitle')}</Typography>
+            {/* Pure L2 (roadmap#18): the tenant keeps its own addressing; a
+                platform-provided edge (#904) needs the subnet and locks it in. */}
+            <FormControlLabel
+              control={<Switch checked={subnetOn} disabled={platformEdge} onChange={(e) => setWithSubnet(e.target.checked)} />}
+              label={t('myVdc.vnetIpConfigToggle')}
+            />
+            <Typography variant="caption" color="text.secondary">
+              {ipConfigCaption}
+            </Typography>
+            {subnetOn && (<>
             <TextField
               label={t('myVdc.subnetCidr')}
               value={cidr}
@@ -308,6 +382,7 @@ export default function VnetCreateDialog({ open, vdcs, defaultVdcId, onClose, on
                 )}
               </>
             )}
+            </>)}
           </Stack>
 
           {error && <Alert severity="error">{error}</Alert>}

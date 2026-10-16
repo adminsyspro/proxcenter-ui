@@ -59,9 +59,13 @@ import {
   parseCidr,
   suggestNodeAddresses,
   transportIfaceName,
+  TRANSPORT_SHARINGS,
+  VNI_MAX,
+  type TransportSharing,
   type VdcTransport,
   type VxlanTransportMode,
 } from '@/lib/vdc/transport'
+import { EDGE_MODELS, type VdcEdgeModel } from '@/lib/vdc/types'
 
 const KNOWN_CPU_TYPES = listKnownCpuTypes()
 
@@ -104,6 +108,11 @@ function sanitizeDefaultModel(policy: ComputePolicyForm, customModels: string[])
 // VXLAN transport (#899): the dialog keeps text fields, the API gets numbers.
 interface TransportForm {
   mode: VxlanTransportMode
+  /** VNI policy (roadmap#18): who else rides on the transport, and the range
+   *  handed to this vDC on a shared one. Strings, the API gets numbers. */
+  sharing: TransportSharing
+  vniRangeStart: string
+  vniRangeEnd: string
   /** `peers` mode: the whole list. `transport` mode: the additional endpoints. */
   peersText: string
   mtu: string
@@ -115,6 +124,9 @@ interface TransportForm {
 
 const emptyTransport: TransportForm = {
   mode: 'cluster',
+  sharing: 'shared',
+  vniRangeStart: '',
+  vniRangeEnd: '',
   peersText: '',
   mtu: '',
   vlanId: '',
@@ -146,6 +158,16 @@ interface NodeAddressEntry {
 // the selects of this dialog on the text fields.
 // Two classes in the selector: with an end adornment MUI's own rule would
 // otherwise win on `minHeight` and the 2px come back.
+const SHARING_KEYS: Record<TransportSharing, { label: string; hint: string }> = {
+  shared: { label: 'vdc.transportSharingShared', hint: 'vdc.transportSharingSharedHint' },
+  dedicated: { label: 'vdc.transportSharingDedicated', hint: 'vdc.transportSharingDedicatedHint' },
+}
+
+const EDGE_MODEL_KEYS: Record<VdcEdgeModel, { label: string; hint: string }> = {
+  tenant: { label: 'vdc.edgeModelTenant', hint: 'vdc.edgeModelTenantHint' },
+  platform: { label: 'vdc.edgeModelPlatform', hint: 'vdc.edgeModelPlatformHint' },
+}
+
 const SMALL_SELECT_SX = { '& .MuiInputBase-input.MuiSelect-select': { minHeight: '1.4375em', lineHeight: '1.4375em' } } as const
 
 interface ZoneStatus {
@@ -194,6 +216,9 @@ function transportFormFrom(t: VdcTransport | null | undefined): TransportForm {
   if (!t) return emptyTransport
   return {
     mode: TRANSPORT_MODES.includes(t.mode) ? t.mode : 'cluster',
+    sharing: TRANSPORT_SHARINGS.includes(t.sharing) ? t.sharing : 'shared',
+    vniRangeStart: t.vniRangeStart != null ? String(t.vniRangeStart) : '',
+    vniRangeEnd: t.vniRangeEnd != null ? String(t.vniRangeEnd) : '',
     peersText: Array.isArray(t.peers) ? t.peers.join('\n') : '',
     mtu: t.mtu != null ? String(t.mtu) : '',
     vlanId: t.vlanId != null ? String(t.vlanId) : '',
@@ -212,6 +237,9 @@ function transportPayloadFrom(f: TransportForm): Partial<VdcTransport> {
   }
   return {
     mode: f.mode,
+    sharing: f.sharing,
+    vniRangeStart: f.vniRangeStart.trim() ? Number(f.vniRangeStart) : null,
+    vniRangeEnd: f.vniRangeEnd.trim() ? Number(f.vniRangeEnd) : null,
     peers: splitPeers(f.peersText),
     mtu: f.mtu.trim() ? Number(f.mtu) : null,
     vlanId: f.vlanId.trim() ? Number(f.vlanId) : null,
@@ -225,6 +253,9 @@ function transportPayloadFrom(f: TransportForm): Partial<VdcTransport> {
 function transportFingerprint(p: Partial<VdcTransport>): string {
   return JSON.stringify({
     mode: p.mode,
+    sharing: p.sharing ?? 'shared',
+    vniRangeStart: p.vniRangeStart ?? null,
+    vniRangeEnd: p.vniRangeEnd ?? null,
     peers: [...new Set(p.peers ?? [])].sort((a, b) => a.localeCompare(b)),
     mtu: p.mtu ?? null,
     vlanId: p.vlanId ?? null,
@@ -426,6 +457,8 @@ export default function VdcTab() {
   // addresses / devices of the cluster that feed the section, and the zone
   // status (desired vs live on Proxmox) shown in edit mode.
   const [transport, setTransport] = useState<TransportForm>(emptyTransport)
+  // L3 edge model (#904): who provides gateway, DHCP and NAT on the vDC networks.
+  const [edgeModel, setEdgeModel] = useState<VdcEdgeModel>('tenant')
   const [nodeAddressInfo, setNodeAddressInfo] = useState<{ nodes: NodeAddressEntry[]; devices: string[] }>({ nodes: [], devices: [] })
   const [zoneStatus, setZoneStatus] = useState<ZoneStatus | null>(null)
   // Stretched tenant networks (#901) this vDC carries, read-only here: the
@@ -954,6 +987,7 @@ export default function VdcTab() {
     setIsoLibraries([])
     setCatalogGrants({ imageIds: [], blueprintIds: [] })
     setTransport(emptyTransport)
+    setEdgeModel('tenant')
     setZoneStatus(null)
     setZoneMessage(null)
     setProvisionResults(null)
@@ -1033,6 +1067,7 @@ export default function VdcTab() {
       blueprintIds: Array.isArray(vdc.catalogGrants?.blueprintIds) ? vdc.catalogGrants.blueprintIds : [],
     })
     setTransport(transportFormFrom(vdc.transport))
+    setEdgeModel(EDGE_MODELS.includes(vdc.edgeModel) ? vdc.edgeModel : 'tenant')
     setZoneStatus(null)
     setZoneMessage(null)
     setProvisionResults(null)
@@ -1141,6 +1176,7 @@ export default function VdcTab() {
           isoLibraries,
           catalogGrants,
           transport: transportPayload,
+          edgeModel,
           quota,
         }
 
@@ -1176,6 +1212,7 @@ export default function VdcTab() {
           isoLibraries,
           catalogGrants,
           transport: transportPayload,
+          edgeModel,
           quota: Object.keys(quota).some((k) => quota[k] !== null) ? quota : undefined,
         }
 
@@ -1418,6 +1455,27 @@ export default function VdcTab() {
       headerName: t('vdc.connection'),
       width: 150,
       renderCell: (params) => getConnectionName(params.value),
+    },
+    {
+      field: 'edgeModel',
+      headerName: t('vdc.edgeModel'),
+      width: 150,
+      sortable: false,
+      renderCell: (params) => {
+        const model: VdcEdgeModel = EDGE_MODELS.includes(params.value) ? params.value : 'tenant'
+        return (
+          <Tooltip title={t(EDGE_MODEL_KEYS[model].hint)} arrow disableInteractive>
+            <Chip
+              size="small"
+              variant="outlined"
+              color={model === 'platform' ? 'primary' : 'default'}
+              icon={<i className={model === 'platform' ? 'ri-router-line' : 'ri-user-settings-line'} style={{ fontSize: 13 }} />}
+              label={t(EDGE_MODEL_KEYS[model].label)}
+              sx={{ height: 22, fontSize: '0.7rem' }}
+            />
+          </Tooltip>
+        )
+      },
     },
     {
       field: 'nodes',
@@ -1851,6 +1909,13 @@ export default function VdcTab() {
   const invalidPeer = firstInvalidAddress(peerEntries)
   const validPeers = peerEntries.filter((p) => ipFamily(p) !== null)
   const missingPeerNodes = transport.mode === 'peers' ? nodesWithoutPeer(validPeers, nodeAddressInfo.nodes) : []
+  // VNI range (roadmap#18): both bounds or none, inside the 24-bit space, ordered.
+  const vniStart = transport.vniRangeStart.trim() ? Number(transport.vniRangeStart) : null
+  const vniEnd = transport.vniRangeEnd.trim() ? Number(transport.vniRangeEnd) : null
+  const vniBoundInvalid = (n: number | null) => n !== null && (!Number.isInteger(n) || n < 1 || n > VNI_MAX)
+  const vniRangeInvalid = vniBoundInvalid(vniStart) || vniBoundInvalid(vniEnd)
+    || ((vniStart === null) !== (vniEnd === null))
+    || (vniStart !== null && vniEnd !== null && vniStart > vniEnd)
   const mtuNumber = transport.mtu.trim() ? Number(transport.mtu) : null
   const mtuInvalid = mtuNumber !== null && (!Number.isInteger(mtuNumber) || mtuNumber < ZONE_MTU_MIN || mtuNumber > ZONE_MTU_MAX)
   const vlanNumber = /^\d+$/.test(transport.vlanId.trim()) ? Number(transport.vlanId) : null
@@ -2792,6 +2857,35 @@ export default function VdcTab() {
           <TabPanel value={dialogTab} index={3}>
             {connectionGated(
               <>
+                  {/* L3 edge (#904): who provides gateway, DHCP and NAT on the
+                      vDC networks. A declaration of responsibility shown to the
+                      tenant, not an automation: ProxCenter deploys no edge. */}
+                  <Box sx={{ p: 2, border: 1, borderColor: 'divider', borderRadius: 1 }}>
+                    <Typography variant="subtitle2" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <i className="ri-door-open-line" />
+                      {t('vdc.edgeModelTitle')}
+                      {hintIcon(t('vdc.edgeModelHint'), false, true)}
+                    </Typography>
+                    <Stack spacing={1.5} sx={{ mt: 2 }}>
+                      <TextField
+                        select
+                        size="small"
+                        fullWidth
+                        sx={SMALL_SELECT_SX}
+                        label={t('vdc.edgeModel')}
+                        value={edgeModel}
+                        onChange={(e) => setEdgeModel(e.target.value as VdcEdgeModel)}
+                      >
+                        {EDGE_MODELS.map((m) => (
+                          <MenuItem key={m} value={m}>{t(EDGE_MODEL_KEYS[m].label)}</MenuItem>
+                        ))}
+                      </TextField>
+                      <Alert severity={edgeModel === 'platform' ? 'warning' : 'info'} sx={{ py: 0 }}>
+                        {t(EDGE_MODEL_KEYS[edgeModel].hint)}
+                      </Alert>
+                    </Stack>
+                  </Box>
+
                   {/* VXLAN transport (#899): how the tenant zone reaches its peers */}
                   <Box sx={{ p: 2, border: 1, borderColor: 'divider', borderRadius: 1 }}>
                     <Stack direction="row" alignItems="center" justifyContent="space-between" flexWrap="wrap" useFlexGap spacing={1.5}>
@@ -2869,6 +2963,56 @@ export default function VdcTab() {
                             input: { endAdornment: hintAdornment(t('vdc.transportMtuHint')) },
                           }}
                         />
+                      </Stack>
+
+                      {/* VNI policy (roadmap#18): shared transport = provider range,
+                          dedicated transport = the tenant picks freely. */}
+                      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+                        <TextField
+                          select
+                          size="small"
+                          fullWidth
+                          sx={SMALL_SELECT_SX}
+                          label={t('vdc.transportSharing')}
+                          value={transport.sharing}
+                          onChange={(e) => setTransport((p) => ({ ...p, sharing: e.target.value as TransportSharing }))}
+                          error={transport.sharing === 'dedicated' && transport.mode === 'cluster'}
+                          helperText={transport.sharing === 'dedicated' && transport.mode === 'cluster'
+                            ? t('vdc.transportSharingDedicatedNeedsSegment')
+                            : t(SHARING_KEYS[transport.sharing].hint)}
+                        >
+                          {TRANSPORT_SHARINGS.map((s) => (
+                            <MenuItem key={s} value={s}>{t(SHARING_KEYS[s].label)}</MenuItem>
+                          ))}
+                        </TextField>
+                        {transport.sharing === 'shared' && (
+                          <>
+                            <TextField
+                              size="small"
+                              type="number"
+                              label={t('vdc.vniRangeStart')}
+                              sx={{ width: { xs: '100%', sm: 170 }, flexShrink: 0 }}
+                              value={transport.vniRangeStart}
+                              onChange={(e) => setTransport((p) => ({ ...p, vniRangeStart: e.target.value }))}
+                              error={vniRangeInvalid}
+                              slotProps={{ htmlInput: { min: 1, max: VNI_MAX } }}
+                            />
+                            <TextField
+                              size="small"
+                              type="number"
+                              label={t('vdc.vniRangeEnd')}
+                              sx={{ width: { xs: '100%', sm: 170 }, flexShrink: 0 }}
+                              value={transport.vniRangeEnd}
+                              onChange={(e) => setTransport((p) => ({ ...p, vniRangeEnd: e.target.value }))}
+                              error={vniRangeInvalid}
+                              helperText={vniRangeInvalid ? t('vdc.vniRangeInvalid', { max: VNI_MAX }) : undefined}
+                              slotProps={{
+                                htmlInput: { min: 1, max: VNI_MAX },
+                                input: { endAdornment: hintAdornment(t('vdc.vniRangeHint'), { wide: true }) },
+                              }}
+                            />
+                          </>
+                        )}
                       </Stack>
 
                       <TransportModeDiagram

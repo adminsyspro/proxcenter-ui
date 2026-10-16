@@ -6,8 +6,10 @@ import { randomUUID } from 'crypto'
 import { getConnectionById } from '@/lib/connections/getConnection'
 import { prisma } from '@/lib/db/prisma'
 
-import type { VdcVnet, VdcSubnet } from './types'
+import { rowToEdgeModel, type VdcEdgeModel, type VdcVnet, type VdcSubnet } from './types'
 import { clearVdcScopeCache } from './scope'
+import { transportFromRow, type VdcTransport } from './transport'
+import { normalizeRequestedVni, pickVni } from './vniPolicy'
 import {
   parseCidr,
   gatewayValidForCidr,
@@ -17,7 +19,6 @@ import {
   createVnetPve,
   setVnetFirewallEnabled,
   deleteVnetPve,
-  allocateVni,
   applySdn,
   countVnetAttachments,
   generatePveVnetId,
@@ -35,12 +36,20 @@ interface ResolvedVdc {
   /** Null on a VLAN-only vDC: the VXLAN zone is provisioned per vDC, VLAN
    *  networks live in a shared per-(connection, bridge) zone instead. */
   sdnZoneName: string | null
+  /** VNI policy of the zone's transport (roadmap#18). */
+  transport: VdcTransport
+  /** Who owns the L3 edge (#904): `tenant` allows pure L2 networks. */
+  edgeModel: VdcEdgeModel
 }
 
 export async function resolveVdcForVnet(vdcId: string, tenantId: string): Promise<ResolvedVdc | null> {
   const row = await prisma.vdc.findFirst({
     where: { id: vdcId, tenantId },
-    select: { id: true, tenantId: true, connectionId: true, sdnZoneName: true, enabled: true },
+    select: {
+      id: true, tenantId: true, connectionId: true, sdnZoneName: true, enabled: true, edgeModel: true,
+      vxlanTransportMode: true, transportSharing: true, vniRangeStart: true, vniRangeEnd: true,
+      vxlanPeers: true, vxlanMtu: true, transportVlanId: true, transportDevice: true, transportCidr: true, transportNodeAddresses: true,
+    },
   })
   if (!row) return null
   if (row.enabled === false) return null
@@ -49,6 +58,8 @@ export async function resolveVdcForVnet(vdcId: string, tenantId: string): Promis
     tenantId: row.tenantId,
     connectionId: row.connectionId,
     sdnZoneName: row.sdnZoneName,
+    transport: transportFromRow(row),
+    edgeModel: rowToEdgeModel(row.edgeModel),
   }
 }
 
@@ -94,18 +105,12 @@ function rowToSubnet(r: any): VdcSubnet | null {
 }
 
 function rowToVnet(r: any): VdcVnet {
+  // Null for a pure L2 network (roadmap#18): the tenant addresses it itself.
   const subnet = rowToSubnet(r.subnet)
   // A member of a stretched tenant network (#901) shows the network's shared
   // pool: its own row only mirrors the addressing.
   const network = r.tenantNetworkMember?.tenantNetwork ?? null
   if (subnet && network?.subnet?.id) subnet.id = network.subnet.id
-  if (!subnet) {
-    // The schema enforces a 1-1 between VNet and subnet now (subnet is
-    // created in the same transaction as the VNet). A missing row means
-    // legacy data we couldn't migrate or hand-corrupted state — surface
-    // it loudly rather than silently returning a half-broken VNet.
-    throw new Error(`VNet ${r.id} has no subnet — DB migration required`)
-  }
   return {
     id: r.id,
     vdcId: r.vdcId,
@@ -161,15 +166,18 @@ export interface CreateVnetInput {
   displayName: string
   description?: string
   firewall?: boolean
-  /** L3 + IPAM config attached at create time. Mandatory: ProxCenter's IPAM
-   *  is the only working IP allocator on VXLAN (PVE-native IPAM/DHCP are
-   *  broken on PVE 9.x VXLAN zones), so a VNet without a subnet would have
-   *  no way to assign IPs to its VMs. */
-  subnet: {
+  /** L3 + IPAM config attached at create time. Optional (roadmap#18): without
+   *  it the network is pure L2, ProxCenter assigns no IP and the tenant brings
+   *  its own addressing (its DHCP, or static / CloudInit manual at deploy).
+   *  Mandatory when the vDC's edge model is `platform` (#904). */
+  subnet?: {
     cidr: string
     gateway: string
     dnsServers?: string[]
-  }
+  } | null
+  /** VXLAN: the VNI the tenant wants (roadmap#18). Allowed on a dedicated
+   *  transport, or inside the provider range on a shared one. Null = automatic. */
+  vni?: number | string | null
   /** 'vxlan' (default) or 'vlan'. VLAN requires `bridge` and a matching vDC pool. */
   type?: 'vxlan' | 'vlan'
   bridge?: string
@@ -214,8 +222,17 @@ export async function createVnetForTenant(input: CreateVnetInput): Promise<VdcVn
     throw new Error('Invalid VNet name (1-20 chars, lowercase letters / digits / dashes, must start with a letter)')
   }
 
-  // Subnet is mandatory — IPAM only works with a CIDR + gateway.
-  validateSubnetInput(input.subnet)
+  // Pure L2 (no subnet) is the tenant's call when it owns the L3 edge; a
+  // platform-provided edge needs the subnet to exist to serve it (#904).
+  const subnetInput = input.subnet ?? null
+  if (subnetInput) validateSubnetInput(subnetInput)
+  else if (vdc.edgeModel === 'platform') {
+    throw new Error('This vDC gets its gateway, DHCP and NAT from the platform: define the subnet (CIDR and gateway) of the network.')
+  }
+  const requestedVni = normalizeRequestedVni(input.vni)
+  if (requestedVni !== null && input.type === 'vlan') {
+    throw new Error('vni applies to VXLAN networks only; use vlanTag for a VLAN network.')
+  }
 
   // Display name uniqueness is scoped to the vDC — two tenants can both
   // legitimately have a "lan". The unique index on (vdc_id, display_name)
@@ -254,10 +271,10 @@ export async function createVnetForTenant(input: CreateVnetInput): Promise<VdcVn
       throw new Error('vDC has no SDN zone - VXLAN networks are unavailable on this vDC')
     }
     zoneName = vdc.sdnZoneName
-    // Pass the PVE connection so allocateVni can union our DB's max tag
-    // with the live `/cluster/sdn/vnets` set, avoids handing back a tag a
-    // legacy zone already booked under our feet.
-    tag = await allocateVni(vdc.id, conn)
+    // The transport policy decides (roadmap#18): the tenant's VNI when it may
+    // choose, else the first free of the provider range, else next above the
+    // highest tag. Every path refuses a VNI taken anywhere on the cluster.
+    tag = await pickVni({ vdcId: vdc.id, connectionId: vdc.connectionId, transport: vdc.transport, requested: requestedVni, conn })
   }
 
   const firewall = input.firewall !== false
@@ -316,28 +333,30 @@ export async function createVnetForTenant(input: CreateVnetInput): Promise<VdcVn
   }
 
   // Subnet lives only in our DB now — no PVE-side subnet (see sdn.ts comment
-  // about why mirroring it had no functional value on VXLAN zones).
-  const dnsList = (input.subnet.dnsServers ?? []).map(s => s.trim()).filter(Boolean)
-  const subnetId = randomUUID()
-  try {
-    await prisma.vdcSubnet.create({
-      data: {
-        id: subnetId,
-        vnetId: id,
-        cidr: input.subnet.cidr,
-        gateway: input.subnet.gateway,
-        dnsServers: dnsList.length > 0 ? dnsList.join(',') : null,
-        // External addressing = the tenant runs its own DHCP/IPAM on this
-        // network; we keep the CIDR declarative and never hand out IPs.
-        ipamEnabled: input.externalAddressing === true ? false : true,
-        createdAt: now,
-      },
-    })
-  } catch (err: any) {
-    await prisma.vdcVnet.delete({ where: { id } }).catch(() => undefined)
-    try { await deleteVnetPve(conn, pveName) } catch {}
-    try { await applySdn(conn) } catch {}
-    throw new Error(`Failed to persist subnet: ${err?.message}`)
+  // about why mirroring it had no functional value on VXLAN zones). A pure
+  // L2 network has no row at all.
+  if (subnetInput) {
+    const dnsList = (subnetInput.dnsServers ?? []).map(s => s.trim()).filter(Boolean)
+    try {
+      await prisma.vdcSubnet.create({
+        data: {
+          id: randomUUID(),
+          vnetId: id,
+          cidr: subnetInput.cidr,
+          gateway: subnetInput.gateway,
+          dnsServers: dnsList.length > 0 ? dnsList.join(',') : null,
+          // External addressing = the tenant runs its own DHCP/IPAM on this
+          // network; we keep the CIDR declarative and never hand out IPs.
+          ipamEnabled: input.externalAddressing === true ? false : true,
+          createdAt: now,
+        },
+      })
+    } catch (err: any) {
+      await prisma.vdcVnet.delete({ where: { id } }).catch(() => undefined)
+      try { await deleteVnetPve(conn, pveName) } catch {}
+      try { await applySdn(conn) } catch {}
+      throw new Error(`Failed to persist subnet: ${err?.message}`)
+    }
   }
 
   const created = await prisma.vdcVnet.findUnique({
@@ -387,7 +406,7 @@ export async function updateVnetForTenant(
   // DNS edits are DB-only — CloudInit pushes them to VMs at create time.
   if (patch.subnet?.dnsServers !== undefined) {
     if (!row.subnet) {
-      throw new Error(`VNet "${displayName}" has no subnet — DB migration required`)
+      throw new Error(`VNet "${displayName}" is a pure L2 network: it has no subnet and no DNS to edit.`)
     }
     const dnsCsv = patch.subnet.dnsServers.length > 0
       ? patch.subnet.dnsServers.map(s => s.trim()).filter(Boolean).join(',')

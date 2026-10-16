@@ -765,6 +765,81 @@ describe('template download regressions (#967)', () => {
   })
 })
 
+describe('template staging on a vDC ISO library (#1120)', () => {
+  // A Ceph-only vDC: the primary is RBD, and the only file storage carrying
+  // `import` is the CephFS ISO library the provider attached to the vDC.
+  function cephOnlyVdc(uploadLibraries: string[] = []) {
+    resolveVdcForTenantMock.mockResolvedValue({ poolName: 'pool-a', quota: null, storagePolicies: [] })
+    getVdcScopeMock.mockResolvedValue({
+      storagesByConnection: new Map([['conn-1', new Set(['ceph-vm', 'ceph-fs'])]]),
+      writableStoragesByConnection: new Map([['conn-1', new Set(['ceph-vm'])]]),
+      isoLibrariesByConnection: new Map([['conn-1', new Set(['ceph-fs'])]]),
+      uploadLibrariesByConnection: new Map([['conn-1', new Set(uploadLibraries)]]),
+      storagePoliciesByConnection: new Map([['conn-1', new Map()]]),
+    })
+    stubPveFetchForDeploy()
+    const original = pveFetchMock.getMockImplementation()!
+    pveFetchMock.mockImplementation(async (...args) => {
+      if (args[1] === '/nodes/pve1/storage') return [
+        { storage: 'ceph-vm', type: 'rbd', content: 'images,rootdir', active: 1, enabled: 1 },
+        { storage: 'ceph-fs', type: 'cephfs', content: 'backup,import,iso,vztmpl', active: 1, enabled: 1 },
+        { storage: 'local', type: 'dir', content: 'backup,import,iso,vztmpl', active: 1, enabled: 1 },
+      ]
+      if (args[1] === '/storage/ceph-vm' && !args[2]?.method) return { type: 'rbd', content: 'images,rootdir' }
+      return original(...args)
+    })
+  }
+
+  async function deploy(body: any = { ...baseBody, storage: 'ceph-vm' }) {
+    const res = await callRoute(await loadPost(), { body })
+    expect(res.status).toBe(200)
+    await runAfters()
+  }
+  const finalUpdate = () => deploymentUpdateMock.mock.calls.at(-1)?.[0].data
+  const downloadTargets = () => pveFetchMock.mock.calls.filter(([, path]) => String(path).endsWith('/download-url')).map(([, path]) => path)
+
+  it('stages a built-in image on the vDC ISO library, never on a storage outside the vDC', async () => {
+    getImageBySlugMock.mockReturnValue({ slug: 'debian-12', format: 'qcow2', downloadUrl: 'https://image.test/debian.qcow2' })
+    cephOnlyVdc()
+    await deploy()
+    expect(downloadTargets()).toEqual(['/nodes/pve1/storage/ceph-fs/download-url'])
+    expect(qemuCreateParams().get('scsi0')).toContain('import-from=ceph-fs:import/debian.qcow2')
+    expect(finalUpdate()).toMatchObject({ status: 'completed' })
+  })
+
+  it('stages a provider catalogue image granted to the tenant on the library', async () => {
+    const { customImageToCloudImage } = await import('@/lib/templates/cloudImages')
+    vi.mocked(customImageToCloudImage).mockImplementation((row: any) => row)
+    findCustomImageForTenantMock.mockResolvedValue({ tenantId: 'default', isShared: false, visibleViaGrant: true, slug: 'custom-golden', format: 'qcow2', sourceType: 'url', downloadUrl: 'https://image.test/golden.qcow2' })
+    cephOnlyVdc()
+    await deploy({ ...baseBody, storage: 'ceph-vm', imageSlug: 'custom-golden' })
+    expect(downloadTargets()).toEqual(['/nodes/pve1/storage/ceph-fs/download-url'])
+    expect(finalUpdate()).toMatchObject({ status: 'completed' })
+  })
+
+  describe("a tenant's own URL image", () => {
+    beforeEach(async () => {
+      const { customImageToCloudImage } = await import('@/lib/templates/cloudImages')
+      vi.mocked(customImageToCloudImage).mockImplementation((row: any) => row)
+      findCustomImageForTenantMock.mockResolvedValue({ tenantId: 'tenant-1', isShared: false, slug: 'custom-acme-app', format: 'qcow2', sourceType: 'url', downloadUrl: 'https://acme.test/app.qcow2' })
+    })
+
+    it('is not written onto a read-only library', async () => {
+      cephOnlyVdc()
+      await deploy({ ...baseBody, storage: 'ceph-vm', imageSlug: 'custom-acme-app' })
+      expect(finalUpdate()).toMatchObject({ status: 'failed', error: expect.stringContaining('Import content enabled') })
+      expect(downloadTargets()).toEqual([])
+    })
+
+    it('stages on a library that accepts tenant uploads', async () => {
+      cephOnlyVdc(['ceph-fs'])
+      await deploy({ ...baseBody, storage: 'ceph-vm', imageSlug: 'custom-acme-app' })
+      expect(downloadTargets()).toEqual(['/nodes/pve1/storage/ceph-fs/download-url'])
+      expect(finalUpdate()).toMatchObject({ status: 'completed' })
+    })
+  })
+})
+
 describe('POST templates/deploy: source volume authorization', () => {
   const source = {
     tenantId: 'tenant-1', isShared: false, sourceType: 'volume', format: 'qcow2',

@@ -9,11 +9,12 @@ type NodeStorage = {
 }
 
 /** Only use an existing import area. Selection must not depend on PVE's
- *  unordered storage response or change the cluster's storage configuration. */
-export function selectDownloadStorage(storages: NodeStorage[], target: string, writable: Set<string> | null): string | null {
+ *  unordered storage response or change the cluster's storage configuration.
+ *  `allowed` is the tenant's staging set (stagingStoragesFor), null for the provider. */
+export function selectDownloadStorage(storages: NodeStorage[], target: string, allowed: Set<string> | null): string | null {
   const candidates = storages.filter(s =>
     isFileBasedStorage(s.type) && s.active === 1 && s.enabled === 1 &&
-    (!writable || writable.has(s.storage)) &&
+    (!allowed || allowed.has(s.storage)) &&
     String(s.content || '').split(',').some(c => c.trim() === 'import'),
   )
   if (candidates.some(s => s.storage === target)) return target

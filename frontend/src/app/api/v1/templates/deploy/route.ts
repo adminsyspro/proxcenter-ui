@@ -25,7 +25,7 @@ import { allocateIp, releaseIp, IpamExhaustedError } from "@/lib/vdc/ipam"
 import { scanUsedIpsForSubnet, scannedToIntSet } from "@/lib/vdc/ipamScan"
 import { parseCidr } from "@/lib/vdc/network"
 import { waitForTask } from "@/lib/proxmox/tasks"
-import { getVdcScope, writableStoragesFor, readOnlyLibraryError } from "@/lib/vdc/scope"
+import { getVdcScope, writableStoragesFor, stagingStoragesFor, readOnlyLibraryError } from "@/lib/vdc/scope"
 import { policyQosSuffix } from "@/lib/vdc/drives"
 import { DEFAULT_TENANT_ID } from "@/lib/tenant"
 import { checkVmidAgainstTenantRange } from "@/lib/tenant/vmidRange"
@@ -117,6 +117,9 @@ export async function POST(req: Request) {
     // revoked entry is refused here and not only hidden from the list.
     let image = (await resolveBuiltInImage(body.imageSlug)) as any
     let isCustom = false
+    // Built-in and provider catalogue images are provider content; a tenant's
+    // own image is not, which narrows where it may be staged (#1120).
+    let providerContent = true
     let sourceType = 'url'
     let volumeId: string | null = null
     let volumeSource: ImageVolumeSource | null = null
@@ -132,6 +135,7 @@ export async function POST(req: Request) {
       }
       image = customImageToCloudImage(customRow)
       isCustom = true
+      providerContent = customRow.tenantId === DEFAULT_TENANT_ID
       sourceType = customRow.sourceType
       volumeId = customRow.volumeId
       if (sourceType === 'volume') {
@@ -197,7 +201,7 @@ export async function POST(req: Request) {
     // `if (isTenant)` scope block: provider deploys never fetch scope, so
     // this stays '' for them by construction.
     let dataDiskQosSuffix = ''
-    let tenantWritableStorages: Set<string> | null = null
+    let tenantStagingStorages: Set<string> | null = null
 
     // vDC quota enforcement. Mirrors the create-VM route on
     // /connections/[id]/guests/[type]/[node] so a tenant can't bypass
@@ -247,7 +251,7 @@ export async function POST(req: Request) {
       // set so a read-only ISO library (#894) is refused even when visible.
       const visibleStorages = scope.storagesByConnection.get(body.connectionId) ?? new Set<string>()
       const writableStorages = writableStoragesFor(scope, body.connectionId)
-      tenantWritableStorages = writableStorages
+      tenantStagingStorages = stagingStoragesFor(scope, body.connectionId, providerContent)
       if (!writableStorages.has(body.storage)) {
         return NextResponse.json(
           { error: visibleStorages.has(body.storage) ? readOnlyLibraryError(body.storage) : `Storage "${body.storage}" is not authorised for this tenant.` },
@@ -463,11 +467,12 @@ export async function POST(req: Request) {
             conn,
             `/nodes/${encodeURIComponent(body.node)}/storage`,
           )
-          const downloadStorage = selectDownloadStorage(nodeStorages, body.storage, tenantWritableStorages)
+          const downloadStorage = selectDownloadStorage(nodeStorages, body.storage, tenantStagingStorages)
           if (!downloadStorage) {
             throw new Error(
               `No active, writable file-based storage with Import content enabled is available on node '${body.node}'. ` +
-              `Ask your Proxmox administrator to configure an import storage and, for a tenant, allow it in the vDC. ` +
+              `Ask your Proxmox administrator to configure an import storage and, for a tenant, add it to the vDC ` +
+              `(as an ISO library, or a storage policy). ` +
               `ProxCenter does not change storage content types automatically.`,
             )
           }

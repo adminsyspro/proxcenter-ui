@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from 'vitest'
 
-import { readOnlyLibraryError, writableStoragesFor, type VdcScope } from './scope'
+import { readOnlyLibraryError, stagingStoragesFor, writableStoragesFor, type VdcScope } from './scope'
 
 const CONN = 'conn-1'
 
@@ -43,6 +43,21 @@ describe('writableStoragesFor', () => {
 
   it('is empty for a connection the scope does not know', () => {
     expect(writableStoragesFor(scopeWith({}), 'elsewhere').size).toBe(0)
+  })
+})
+
+describe('stagingStoragesFor (#1120)', () => {
+  it('lets provider content stage on any ISO library of the vDC, besides the writable set', () => {
+    expect([...stagingStoragesFor(scopeWith({}), CONN, true)].sort()).toEqual(['ceph', 'isolib'])
+  })
+
+  it('keeps tenant content off a read-only library', () => {
+    expect([...stagingStoragesFor(scopeWith({}), CONN, false)]).toEqual(['ceph'])
+  })
+
+  it('lets tenant content stage on a library that accepts tenant uploads', () => {
+    const uploads = scopeWith({ uploadLibrariesByConnection: new Map([[CONN, new Set(['isolib'])]]) })
+    expect([...stagingStoragesFor(uploads, CONN, false)].sort()).toEqual(['ceph', 'isolib'])
   })
 })
 

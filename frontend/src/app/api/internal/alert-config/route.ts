@@ -43,6 +43,11 @@ const DEFAULT_THRESHOLDS = {
   backup_coverage_exclude_tag: 'no-backup',
   // 0/1 switch, float64 on the Go side like replication_failure_alerts.
   backup_coverage_alerts: 0,
+  // sFlow telemetry (roadmap#52), see the settings route. The two delays are
+  // ints on the Go side, hence their place in INT_THRESHOLD_KEYS.
+  sflow_telemetry_alerts: 1,
+  sflow_telemetry_timeout_seconds: 0,
+  sflow_telemetry_grace_seconds: 300,
 }
 
 type Thresholds = typeof DEFAULT_THRESHOLDS
@@ -57,6 +62,8 @@ const INT_THRESHOLD_KEYS: ReadonlySet<keyof Thresholds> = new Set([
   'disk_latency_retention_days',
   'metrics_interval_seconds',
   'backup_coverage_grace_hours',
+  'sflow_telemetry_timeout_seconds',
+  'sflow_telemetry_grace_seconds',
 ])
 
 function coerceThresholds(raw: unknown): Thresholds {

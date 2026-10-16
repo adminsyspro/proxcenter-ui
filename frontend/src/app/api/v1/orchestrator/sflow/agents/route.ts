@@ -9,6 +9,7 @@ import { audit } from "@/lib/audit"
 import { applySFlowOnNode, type SFlowDesiredConfig } from "@/lib/sflow/configure"
 import { GUEST_MACS_COMMAND, parseGuestMACs } from "@/lib/sflow/guestMacs"
 import { saveDesiredSFlowConfig } from "@/lib/sflow/reconciler"
+import { reportExpectedAgents, type ExpectedAgentReport } from "@/lib/sflow/expectedAgents"
 
 // sFlow collector target: an "ip:port" / "host:port" string. Constrain it to
 // hostname / IPv4 / IPv6 characters plus the port colon so it can be safely
@@ -28,10 +29,40 @@ interface NodeSFlowStatus {
   sflowConfigured: boolean
   sflowTarget: string
   sflowSampling: number
+  // Counter polling interval in seconds, the cadence a healthy agent speaks
+  // at even with every guest powered off (roadmap#52).
+  sflowPolling: number
   bridges: string[]
   // Why the port map push failed, when it did. Swallowing it made a node that
   // could never attribute a flow look identical to one waiting for traffic.
   portMapError: string
+}
+
+// Tell the orchestrator which nodes it should hear from (roadmap#52). Only the
+// nodes the probe reached: an unreachable node is unknown, not unconfigured,
+// so it is left as the orchestrator knows it, and its cluster is not reported
+// as complete (which would drop it).
+function expectedAgentsFrom(statuses: NodeSFlowStatus[], connectionIds: string[]) {
+  const unreachable = new Set(statuses.filter(n => !n.online).map(n => n.connectionId))
+
+  return {
+    connection_ids: connectionIds.filter(id => !unreachable.has(id)),
+    agents: statuses.filter(n => n.online).map(n => toExpectedAgent(n)),
+  }
+}
+
+function toExpectedAgent(n: NodeSFlowStatus, reconfigured = false): ExpectedAgentReport {
+  return {
+    connection_id: n.connectionId,
+    connection_name: n.connectionName,
+    node: n.node,
+    agent_ip: n.ip,
+    target: n.sflowTarget,
+    polling_interval: n.sflowPolling,
+    sampling_rate: n.sflowSampling,
+    configured: n.hasOvs && n.sflowConfigured,
+    reconfigured,
+  }
 }
 
 // Read every guest NIC MAC of a cluster, from any one of its nodes. The command
@@ -90,6 +121,7 @@ async function probeHost(
     sflowConfigured: false,
     sflowTarget: "",
     sflowSampling: 0,
+    sflowPolling: 0,
     bridges: [],
     portMapError: "",
   }
@@ -120,7 +152,7 @@ async function probeHost(
       // Run the three remaining probes concurrently since they're independent
       const [versionResult, sflowResult, ipLinkResult] = await Promise.all([
         executeSSH(connId, ssh, "ovs-vsctl --version 2>/dev/null | head -1 || true", undefined, READ_ONLY),
-        executeSSH(connId, ssh, "ovs-vsctl list sflow 2>/dev/null | grep -E 'targets|agent|sampling' || true", undefined, READ_ONLY),
+        executeSSH(connId, ssh, "ovs-vsctl list sflow 2>/dev/null | grep -E 'targets|agent|sampling|polling' || true", undefined, READ_ONLY),
         executeSSH(connId, ssh, "ip -o link 2>/dev/null", undefined, READ_ONLY),
       ])
 
@@ -135,6 +167,8 @@ async function probeHost(
         if (targetMatch) nodeStatus.sflowTarget = targetMatch[1]
         const samplingMatch = sflowResult.output.match(/sampling\s*:\s*(\d+)/)
         if (samplingMatch) nodeStatus.sflowSampling = Number.parseInt(samplingMatch[1], 10)
+        const pollingMatch = sflowResult.output.match(/polling\s*:\s*(\d+)/)
+        if (pollingMatch) nodeStatus.sflowPolling = Number.parseInt(pollingMatch[1], 10)
       }
 
       // Refresh the Go orchestrator port map so sFlow samples can be attributed
@@ -216,6 +250,8 @@ export async function GET() {
       include: { hosts: true },
     })
 
+    // Clusters probed in full, the ones the orchestrator may trust as complete.
+    const probedConnectionIds: string[] = []
     const nested = await Promise.all(
       connections.map(async (conn): Promise<NodeSFlowStatus[]> => {
         if (!conn.sshKeyEnc && !conn.sshPassEnc) return []
@@ -226,6 +262,7 @@ export async function GET() {
             return { node: h.node, ip: h.ip || endpoint.host, endpoint }
           })
         if (targets.length === 0) return []
+        probedConnectionIds.push(conn.id)
 
         // Cluster-wide, so the first node that answers covers every guest.
         const guestMacs = await collectGuestMACs(conn.id, targets.map(h => h.endpoint))
@@ -234,6 +271,9 @@ export async function GET() {
       })
     )
     const results: NodeSFlowStatus[] = nested.flat()
+
+    // The orchestrator keys the telemetry health on this inventory (roadmap#52).
+    await reportExpectedAgents(expectedAgentsFrom(results, probedConnectionIds))
 
     agentsCache.set(tenantId, { at: Date.now(), data: results })
     return NextResponse.json({ data: results })
@@ -295,6 +335,9 @@ export async function POST(request: NextRequest) {
       error?: string
       bridgesConfigured?: number
     }> = []
+    // The nodes just set, for the orchestrator to start expecting them now:
+    // the grace period before "telemetry missing" runs from this run.
+    const configuredNow: ExpectedAgentReport[] = []
 
     for (const nodeReq of nodes) {
       const { ip, connectionId } = nodeReq
@@ -309,7 +352,9 @@ export async function POST(request: NextRequest) {
         // stands in for a node this connection no longer lists.
         const host = conn.hosts?.find(h => h.node === nodeReq.node)
         const target = host ? managedHostSshEndpoint({ ...host, ip: host.ip || ip }, conn.sshPort) : ip
-        const applied = await applySFlowOnNode(conn.id, target, desiredConfig)
+        // The agent is pinned to the address the table and the port map key the
+        // node on, the same `ip` the GET reports for it.
+        const applied = await applySFlowOnNode(conn.id, target, desiredConfig, host?.ip || ip)
 
         results.push({
           node: nodeReq.node,
@@ -318,6 +363,19 @@ export async function POST(request: NextRequest) {
           error: applied.error,
           bridgesConfigured: applied.bridgesConfigured,
         })
+        if (applied.success) {
+          configuredNow.push({
+            connection_id: conn.id,
+            connection_name: conn.name,
+            node: nodeReq.node,
+            agent_ip: host?.ip || ip,
+            target: collectorTarget,
+            polling_interval: safePolling,
+            sampling_rate: safeSampling,
+            configured: true,
+            reconfigured: true,
+          })
+        }
       } catch (e: any) {
         results.push({ node: nodeReq.node, ip, success: false, error: e.message })
       }
@@ -333,6 +391,7 @@ export async function POST(request: NextRequest) {
     // node loses its OVS database. Only worth storing if it worked somewhere.
     if (successCount > 0) {
       await saveDesiredSFlowConfig(tenantId, desiredConfig)
+      await reportExpectedAgents({ connection_ids: [], agents: configuredNow })
     }
 
     await recordSFlowConfigureAudit(results, collectorTarget)

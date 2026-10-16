@@ -86,7 +86,8 @@ describe('POST /sflow/agents — happy path', () => {
     // shell's single quotes. A bare host:port is rejected by ovs-vsctl.
     expect(cmd).toContain(`target='"10.0.0.5:6343"'`)
     expect(cmd).not.toContain('clear Bridge')
-    expect(cmd).not.toContain('agent=')
+    // #1066: the agent is pinned to the node address the table is keyed on.
+    expect(cmd).toContain(`agent='"10.0.0.1"'`)
     expect(cmd).toContain('sampling=1024')
     expect(cmd).toContain('polling=15')
 
@@ -107,6 +108,50 @@ describe('POST /sflow/agents — happy path', () => {
     const [, , cmd] = executeSSHMock.mock.calls[0]
     expect(cmd).toContain('sampling=256')
     expect(cmd).toContain('polling=20')
+  })
+})
+
+describe('POST /sflow/agents: expected agents (roadmap#52)', () => {
+  it('tells the orchestrator to expect the nodes just configured, with a fresh grace period', async () => {
+    getSessionPrismaMock.mockResolvedValue({
+      connection: {
+        findMany: vi.fn().mockResolvedValue([{
+          id: 'conn-1', name: 'LAB', sshKeyEnc: 'enc',
+          hosts: [{ node: 'pve1', ip: '10.0.0.1', enabled: true }, { node: 'pve2', ip: '10.0.0.2', enabled: true }],
+        }]),
+      },
+    })
+    executeSSHMock.mockImplementation(async (_c: string, target: { host: string }) =>
+      target.host === '10.0.0.2' ? { success: true, output: 'SFLOW_FAILED:vmbr0\n' } : ONE_BRIDGE_OK)
+    orchestratorFetchMock.mockResolvedValue({})
+
+    const res = await callRoute(POST as any, {
+      method: 'POST',
+      body: { nodes: [NODE_REQ, NODE_REQ_2], collectorTarget: '10.0.0.5:6343', samplingRate: 256, pollingInterval: 20 },
+    })
+    expect(res.status).toBe(200)
+
+    const calls = orchestratorFetchMock.mock.calls.filter((c: any[]) => c[0] === '/sflow/expected-agents')
+    expect(calls).toHaveLength(1)
+    // Partial report (no connection_ids): the failed node is left as the
+    // orchestrator knows it, the next probe will say.
+    expect(calls[0][1]).toEqual({
+      method: 'PUT',
+      body: {
+        connection_ids: [],
+        agents: [{
+          connection_id: 'conn-1', connection_name: 'LAB', node: 'pve1', agent_ip: '10.0.0.1',
+          target: '10.0.0.5:6343', polling_interval: 20, sampling_rate: 256, configured: true, reconfigured: true,
+        }],
+      },
+    })
+  })
+
+  it('reports nothing when no node was configured', async () => {
+    executeSSHMock.mockResolvedValue({ success: false, error: 'ssh: connection refused' })
+    const res = await callRoute(POST as any, { method: 'POST', body: { nodes: [NODE_REQ], collectorTarget: '10.0.0.5:6343' } })
+    expect(res.status).toBe(502)
+    expect(orchestratorFetchMock.mock.calls.filter((c: any[]) => c[0] === '/sflow/expected-agents')).toHaveLength(0)
   })
 })
 
@@ -227,7 +272,7 @@ describe('GET /sflow/agents: node probing and port map push', () => {
       if (cmd.startsWith('which ovs-vsctl')) return { success: true, output: '' }
       if (cmd.startsWith('ovs-vsctl --version')) return { success: true, output: 'ovs-vsctl (Open vSwitch) 3.5.0\n' }
       if (cmd.startsWith('ovs-vsctl list sflow')) {
-        return { success: true, output: opts.sflowOn.includes(ip) ? 'agent : []\nsampling : 1\ntargets : ["10.0.0.5:6343"]\n' : '' }
+        return { success: true, output: opts.sflowOn.includes(ip) ? 'agent : []\npolling : 30\nsampling : 1\ntargets : ["10.0.0.5:6343"]\n' : '' }
       }
       if (cmd.startsWith('ip -o link')) return { success: true, output: '10: ln_CLIENT: <BROADCAST> mtu 1500\n' }
       throw new Error(`unexpected command ${cmd}`)
@@ -277,6 +322,7 @@ describe('GET /sflow/agents: node probing and port map push', () => {
         sflowConfigured: true,
         sflowTarget: '10.0.0.5:6343',
         sflowSampling: 1,
+        sflowPolling: 30,
         bridges: ['vmbr1'],
         portMapError: '',
       }),
@@ -287,15 +333,74 @@ describe('GET /sflow/agents: node probing and port map push', () => {
     expect(executeSSHMock.mock.calls.length).toBeGreaterThan(0)
     for (const call of executeSSHMock.mock.calls) expect(call[4]).toEqual({ readOnly: true })
 
-    // One push, for the OVS node only, carrying the cluster-wide MAC table.
-    expect(orchestratorFetchMock).toHaveBeenCalledTimes(1)
-    const [path, init] = orchestratorFetchMock.mock.calls[0]
-    expect(path).toBe('/sflow/portmap')
-    expect(init.body).toEqual({
+    // One port map push, for the OVS node only, carrying the cluster-wide MAC table.
+    const portmapCalls = orchestratorFetchMock.mock.calls.filter((c: any[]) => c[0] === '/sflow/portmap')
+    expect(portmapCalls).toHaveLength(1)
+    expect(portmapCalls[0][1].body).toEqual({
       agent_ip: '10.0.0.1',
       ip_link_output: expect.stringContaining('ln_CLIENT'),
       guest_macs: { 'bc:24:11:b6:00:5d': 101, 'aa:bb:cc:dd:ee:ff': 109 },
     })
+
+    // roadmap#52: the probe tells the orchestrator what to expect. Both nodes
+    // answered, so the cluster is reported in full; the node without sFlow is
+    // reported as not configured, the one with it carries its target and
+    // polling interval, and no grace restart (a probe is not a configure run).
+    const expectedCalls = orchestratorFetchMock.mock.calls.filter((c: any[]) => c[0] === '/sflow/expected-agents')
+    expect(expectedCalls).toHaveLength(1)
+    expect(expectedCalls[0][1]).toEqual({
+      method: 'PUT',
+      body: {
+        connection_ids: ['conn-1'],
+        agents: [
+          {
+            connection_id: 'conn-1', connection_name: 'LAB', node: 'pve1', agent_ip: '10.0.0.1',
+            target: '10.0.0.5:6343', polling_interval: 30, sampling_rate: 1, configured: true, reconfigured: false,
+          },
+          {
+            connection_id: 'conn-1', connection_name: 'LAB', node: 'pve2', agent_ip: '10.0.0.2',
+            target: '', polling_interval: 0, sampling_rate: 0, configured: false, reconfigured: false,
+          },
+        ],
+      },
+    })
+  })
+
+  it('does not report a cluster as complete while one of its nodes is unreachable', async () => {
+    getCurrentTenantIdMock.mockResolvedValue('tenant-get-3')
+    getSessionPrismaMock.mockResolvedValue(prismaWithHosts())
+    const byCommand = sshByCommand({ macsFrom: '10.0.0.1', ovsOn: ['10.0.0.1'], sflowOn: ['10.0.0.1'] })
+    executeSSHMock.mockImplementation(async (conn: string, target: { host: string }, cmd: string) => {
+      // pve2 is down: every command to it throws, which probeHost reads as offline.
+      if (target.host === '10.0.0.2') throw new Error('ssh: connect timed out')
+      return byCommand(conn, target, cmd)
+    })
+    orchestratorFetchMock.mockResolvedValue({})
+
+    const res = await callRoute(GET as any, { method: 'GET' })
+    const { data } = await readJson<any>(res)
+    expect(data.find((d: any) => d.node === 'pve2').online).toBe(false)
+
+    const [, init] = orchestratorFetchMock.mock.calls.find((c: any[]) => c[0] === '/sflow/expected-agents')!
+    // The offline node is not mentioned (unknown, not unconfigured), and the
+    // cluster is left out of connection_ids so the orchestrator keeps its row.
+    expect(init.body.connection_ids).toEqual([])
+    expect(init.body.agents.map((a: any) => a.node)).toEqual(['pve1'])
+  })
+
+  it('still answers when the orchestrator refuses the expected agents report', async () => {
+    getCurrentTenantIdMock.mockResolvedValue('tenant-get-4')
+    getSessionPrismaMock.mockResolvedValue(prismaWithHosts())
+    executeSSHMock.mockImplementation(sshByCommand({ macsFrom: '10.0.0.1', ovsOn: ['10.0.0.1'], sflowOn: ['10.0.0.1'] }))
+    orchestratorFetchMock.mockImplementation(async (path: string) => {
+      if (path === '/sflow/expected-agents') throw Object.assign(new Error('404'), { code: 'ORCHESTRATOR_UNAVAILABLE' })
+      return {}
+    })
+
+    const res = await callRoute(GET as any, { method: 'GET' })
+    expect(res.status).toBe(200)
+    const { data } = await readJson<any>(res)
+    expect(data[0]).toEqual(expect.objectContaining({ node: 'pve1', sflowConfigured: true, portMapError: '' }))
   })
 
   it('reports a failed port map push on the node instead of swallowing it, with an empty MAC table when no node answers', async () => {
@@ -314,7 +419,8 @@ describe('GET /sflow/agents: node probing and port map push', () => {
       expect(node.sflowConfigured).toBe(false)
       expect(node.portMapError).toBe('orchestrator unreachable')
     }
-    expect(orchestratorFetchMock).toHaveBeenCalledTimes(2)
-    expect(orchestratorFetchMock.mock.calls[0][1].body.guest_macs).toEqual({})
+    const portmapCalls = orchestratorFetchMock.mock.calls.filter((c: any[]) => c[0] === '/sflow/portmap')
+    expect(portmapCalls).toHaveLength(2)
+    expect(portmapCalls[0][1].body.guest_macs).toEqual({})
   })
 })

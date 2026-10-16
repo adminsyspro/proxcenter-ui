@@ -39,6 +39,14 @@ import {
 import { formatBytes } from '@/utils/format'
 import NumericTextField from '@/components/ui/NumericTextField'
 import dynamic from 'next/dynamic'
+import {
+  formatElapsed,
+  summarizeTelemetry,
+  telemetryChip,
+  telemetryOf,
+  type TelemetryHealth,
+  type TelemetryState,
+} from '@/lib/sflow/telemetryState'
 
 const SankeyChart = dynamic(() => import('./SankeyChart'), { ssr: false })
 
@@ -46,7 +54,7 @@ const SankeyChart = dynamic(() => import('./SankeyChart'), { ssr: false })
 interface SFlowStatus {
   enabled: boolean
   listen_address: string
-  agents: Array<{ agent_ip: string; node: string; last_seen: string; flow_rate: number; sample_count: number; active: boolean }>
+  agents: Array<{ agent_ip: string; node: string; last_seen: string; flow_rate: number; sample_count: number; active: boolean; datagram_count?: number; counter_count?: number; source_ip?: string }>
   total_flows: number
   flow_rate: number
   active_vms: number
@@ -133,6 +141,9 @@ export default function FlowsTab() {
   const [subTab, setSubTab] = useState(0)
 
   const [status, setStatus] = useState<SFlowStatus | null>(null)
+  // Per-node telemetry verdict of the orchestrator (roadmap#52): configured
+  // over SSH is one thing, heard by the collector is another.
+  const [health, setHealth] = useState<TelemetryHealth | null>(null)
   const [topTalkers, setTopTalkers] = useState<TopTalker[]>([])
   const [topPairs, setTopPairs] = useState<IPPair[]>([])
   const [topPorts, setTopPorts] = useState<TopPort[]>([])
@@ -364,6 +375,7 @@ export default function FlowsTab() {
       })
 
       await loadAgents()
+      await loadHealth()
     } catch (e: any) {
       setConfigResult({
         configured: 0,
@@ -375,6 +387,17 @@ export default function FlowsTab() {
     }
   }
 
+  // Best effort on its own: an orchestrator older than this route must not
+  // take the flow panels down with it.
+  const loadHealth = useCallback(async () => {
+    try {
+      const data = await fetchSFlow('health')
+      setHealth(data && Array.isArray(data.agents) ? data : null)
+    } catch {
+      setHealth(null)
+    }
+  }, [])
+
   const loadData = useCallback(async () => {
     try {
       setError(null)
@@ -383,6 +406,7 @@ export default function FlowsTab() {
         fetchSFlow('top-talkers', { n: '100' }),
         fetchSFlow('ip-pairs', { n: '500' }),
         fetchSFlow('top-ports', { n: '10' }),
+        loadHealth(),
       ])
       setStatus(statusData)
       setTopTalkers(Array.isArray(talkersData) ? talkersData : [])
@@ -393,7 +417,7 @@ export default function FlowsTab() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [loadHealth])
 
   useEffect(() => {
     void loadData()
@@ -415,8 +439,21 @@ export default function FlowsTab() {
 
   // ── sFlow collector status ──
   const collectorOff = !!(status && !status.enabled)
-  const activeAgents = status?.agents?.filter(a => a.active).length || 0
-  const totalAgents = status?.agents?.length || 0
+  const collectorEnabled = !!status?.enabled
+  // The agents KPI counts the configured nodes the collector hears from, not
+  // the addresses it ever heard: the verdict, when there is one.
+  const telemetryCounts = summarizeTelemetry(health?.agents)
+  const expectedAgents = health?.agents?.length ?? 0
+  const activeAgents = expectedAgents > 0 ? (telemetryCounts.receiving ?? 0) : (status?.agents?.filter(a => a.active).length || 0)
+  const totalAgents = expectedAgents > 0 ? expectedAgents : (status?.agents?.length || 0)
+  const telemetrySummary = (['receiving', 'awaiting', 'missing', 'identity_unknown', 'host_offline'] as TelemetryState[])
+    .filter(state => (telemetryCounts[state] ?? 0) > 0)
+  // Agents the collector hears from that no node row is keyed on. Before #1066
+  // the agent address was left to Open vSwitch, which reports the source of its
+  // route to the collector: samples then arrived under an address the table
+  // never showed, and the node looked configured but silent. Active ones only:
+  // the collector keeps an agent forever, also after the node was reconfigured.
+  const unmatchedAgents = (status?.agents || []).filter(a => a.active && !nodeAgents.some(n => n.ip === a.agent_ip))
 
   return (
     <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 2, height: '100%' }}>
@@ -506,19 +543,49 @@ export default function FlowsTab() {
                       size="small"
                       sx={{ height: 20, fontSize: '0.65rem', fontWeight: 700 }}
                     />
+                    {/* One chip per telemetry state in use, the verdict of the
+                        collector rather than of the configuration. */}
+                    {collectorEnabled && telemetrySummary.map(state => {
+                      const chip = telemetryChip({ hasOvs: true, sflowConfigured: true }, { state } as any, true)
+                      return (
+                        <Chip
+                          key={state}
+                          data-testid={`telemetry-summary-${state}`}
+                          label={`${telemetryCounts[state]} ${t(`networkFlows.${chip.labelKey}`).toLowerCase()}`}
+                          size="small"
+                          color={chip.color}
+                          variant={chip.variant}
+                          sx={{ height: 20, fontSize: '0.65rem' }}
+                        />
+                      )
+                    })}
                     <i className={agentsExpanded ? 'ri-arrow-up-s-line' : 'ri-arrow-down-s-line'} style={{ fontSize: 18, opacity: 0.5 }} />
                   </Box>
-                  {nodeAgents.some(n => n.hasOvs && !n.sflowConfigured) && (
-                    <Button
-                      size="small"
-                      variant="contained"
-                      startIcon={configuringNodes ? <CircularProgress size={16} color="inherit" /> : <i className="ri-settings-3-line" style={{ fontSize: 14 }} />}
-                      disabled={configuringNodes}
-                      onClick={(e) => { e.stopPropagation(); handleOpenConfigDialog() }}
-                    >
-                      {t('networkFlows.configureAll')}
-                    </Button>
-                  )}
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    {collectorEnabled && nodeAgents.some(n => n.hasOvs && n.sflowConfigured) && (
+                      <MuiTooltip title={t('networkFlows.verifyReceptionHelp')}>
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          startIcon={<i className="ri-refresh-line" style={{ fontSize: 14 }} />}
+                          onClick={(e) => { e.stopPropagation(); setAgentsExpanded(true); void loadHealth() }}
+                        >
+                          {t('networkFlows.verifyReception')}
+                        </Button>
+                      </MuiTooltip>
+                    )}
+                    {nodeAgents.some(n => n.hasOvs && !n.sflowConfigured) && (
+                      <Button
+                        size="small"
+                        variant="contained"
+                        startIcon={configuringNodes ? <CircularProgress size={16} color="inherit" /> : <i className="ri-settings-3-line" style={{ fontSize: 14 }} />}
+                        disabled={configuringNodes}
+                        onClick={(e) => { e.stopPropagation(); handleOpenConfigDialog() }}
+                      >
+                        {t('networkFlows.configureAll')}
+                      </Button>
+                    )}
+                  </Box>
                 </Box>
                 {configResult && (
                   <Alert
@@ -529,11 +596,49 @@ export default function FlowsTab() {
                     <AlertTitle sx={{ fontSize: '0.85rem' }}>
                       {t('networkFlows.configureOutcome', { configured: configResult.configured, total: configResult.total })}
                     </AlertTitle>
+                    {/* Success here means the OVS configuration was applied, not
+                        that a datagram arrived: the table says that, per node. */}
+                    {configResult.configured > 0 && (
+                      <Typography variant="body2">{t('networkFlows.configureAppliedAwaiting')}</Typography>
+                    )}
                     {configResult.failures.map((f, i) => (
                       <Typography key={`${f.node}-${i}`} variant="body2">
                         {f.node ? `${f.node}: ${f.error}` : f.error}
                       </Typography>
                     ))}
+                  </Alert>
+                )}
+                {/* One line per node whose telemetry is missing: the same text
+                    the alert and the notification carry, so the operator
+                    reads the diagnostics without opening the Alerts page. */}
+                {collectorEnabled && (() => {
+                  const missing = (health?.agents ?? []).filter(a => a.state === 'missing')
+                  // Never heard, while an unknown address is: a diagnostic, listed
+                  // with its explanation, never an alert.
+                  const unknown = (health?.agents ?? []).filter(a => a.state === 'identity_unknown')
+                  if (missing.length === 0 && unknown.length === 0) return null
+                  return (
+                    <Alert severity={missing.length > 0 ? 'error' : 'warning'} sx={{ mx: 1, mb: 1 }} data-testid="telemetry-missing-alert">
+                      {missing.length > 0 && (
+                        <AlertTitle sx={{ fontSize: '0.85rem' }}>{t('networkFlows.telemetryMissingTitle', { count: missing.length })}</AlertTitle>
+                      )}
+                      {[...missing, ...unknown].map(a => (
+                        <Typography key={`${a.connection_id}-${a.node}`} variant="body2" sx={{ mb: 0.5 }}>
+                          <strong>{a.node}</strong> ({a.agent_ip}): {a.detail}
+                        </Typography>
+                      ))}
+                      {missing.length > 0 && !health?.alerts_enabled && (
+                        <Typography variant="caption" color="text.secondary">{t('networkFlows.telemetryAlertsOff')}</Typography>
+                      )}
+                    </Alert>
+                  )
+                })()}
+                {unmatchedAgents.length > 0 && (
+                  <Alert severity="info" sx={{ mx: 1, mb: 1 }}>
+                    <AlertTitle sx={{ fontSize: '0.85rem' }}>{t('networkFlows.unmatchedAgentsTitle')}</AlertTitle>
+                    <Typography variant="body2">
+                      {t('networkFlows.unmatchedAgentsDesc', { agents: unmatchedAgents.map(a => a.agent_ip).join(', ') })}
+                    </Typography>
                   </Alert>
                 )}
                 <Collapse in={agentsExpanded}>
@@ -544,12 +649,12 @@ export default function FlowsTab() {
                           <TableCell sx={{ fontWeight: 600, fontSize: '0.75rem', py: 0.5 }}>Node</TableCell>
                           <TableCell sx={{ fontWeight: 600, fontSize: '0.75rem', py: 0.5 }}>IP</TableCell>
                           <TableCell sx={{ fontWeight: 600, fontSize: '0.75rem', py: 0.5 }}>OVS</TableCell>
-                          <TableCell sx={{ fontWeight: 600, fontSize: '0.75rem', py: 0.5 }}>sFlow</TableCell>
+                          <TableCell sx={{ fontWeight: 600, fontSize: '0.75rem', py: 0.5 }}>{t('networkFlows.telemetryColumn')}</TableCell>
                           <TableCell sx={{ fontWeight: 600, fontSize: '0.75rem', py: 0.5 }}>Target</TableCell>
                           <TableCell sx={{ fontWeight: 600, fontSize: '0.75rem', py: 0.5 }}>Sampling</TableCell>
                           <TableCell align="right" sx={{ fontWeight: 600, fontSize: '0.75rem', py: 0.5 }}>Flow Rate</TableCell>
                           <TableCell align="right" sx={{ fontWeight: 600, fontSize: '0.75rem', py: 0.5 }}>Samples</TableCell>
-                          <TableCell sx={{ fontWeight: 600, fontSize: '0.75rem', py: 0.5 }}>Last Seen</TableCell>
+                          <TableCell sx={{ fontWeight: 600, fontSize: '0.75rem', py: 0.5 }}>{t('networkFlows.lastReceived')}</TableCell>
                           <TableCell sx={{ fontWeight: 600, fontSize: '0.75rem', py: 0.5 }}></TableCell>
                         </TableRow>
                       </TableHead>
@@ -592,13 +697,23 @@ export default function FlowsTab() {
                                   )}
                                 </TableCell>
                                 <TableCell sx={{ py: 0.75 }}>
-                                  {agent.sflowConfigured ? (
-                                    <Chip label={t('networkFlows.active')} size="small" color="success" sx={{ height: 20, fontSize: '0.65rem' }} />
-                                  ) : agent.hasOvs ? (
-                                    <Chip label={t('networkFlows.notConfigured')} size="small" color="warning" variant="outlined" sx={{ height: 20, fontSize: '0.65rem' }} />
-                                  ) : (
-                                    <Chip label="—" size="small" color="default" variant="outlined" sx={{ height: 20, fontSize: '0.65rem' }} />
-                                  )}
+                                  {(() => {
+                                    const verdict = telemetryOf(health, agent)
+                                    const chip = telemetryChip(agent, verdict, collectorEnabled)
+                                    return (
+                                      <MuiTooltip title={verdict?.detail || (chip.kind === 'configured' && agent.sflowConfigured ? t('networkFlows.telemetryNotEvaluated') : '')}>
+                                        <Chip
+                                          data-testid={`telemetry-${agent.node}`}
+                                          data-state={chip.kind}
+                                          label={t(`networkFlows.${chip.labelKey}`)}
+                                          size="small"
+                                          color={chip.color}
+                                          variant={chip.variant}
+                                          sx={{ height: 20, fontSize: '0.65rem' }}
+                                        />
+                                      </MuiTooltip>
+                                    )
+                                  })()}
                                   {/* Only surfaced when the port map push actually failed. Before,
                                       that failure was swallowed and a node that could never attribute
                                       a flow looked identical to one simply waiting for traffic. */}
@@ -616,15 +731,35 @@ export default function FlowsTab() {
                                 </TableCell>
                                 {(() => {
                                   const sflowAgent = status?.agents?.find(a => a.agent_ip === agent.ip)
+                                  const verdict = telemetryOf(health, agent)
+                                  const lastSeen = verdict?.last_seen ?? sflowAgent?.last_seen
+                                  const elapsed = formatElapsed(verdict?.seconds_since_seen)
+                                  const neverLabel = agent.sflowConfigured && verdict ? t('networkFlows.neverReceived') : '—'
+                                  const lastReceived = lastSeen ? new Date(lastSeen).toLocaleTimeString() : neverLabel
+                                  // Counter datagrams are reception too: a DR node
+                                  // with every guest off shows 0 samples and keeps
+                                  // receiving, so the datagram count is shown next
+                                  // to the samples.
+                                  const datagrams = verdict?.datagram_count ?? sflowAgent?.datagram_count
                                   return (<>
                                     <TableCell align="right" sx={{ py: 0.75, fontSize: '0.75rem', fontFamily: 'monospace', color: 'text.secondary' }}>
                                       {sflowAgent ? `${sflowAgent.flow_rate.toFixed(1)} f/s` : '—'}
                                     </TableCell>
                                     <TableCell align="right" sx={{ py: 0.75, fontSize: '0.75rem', fontFamily: 'monospace', color: 'text.secondary' }}>
                                       {sflowAgent ? sflowAgent.sample_count.toLocaleString() : '—'}
+                                      {datagrams != null && datagrams > 0 && (
+                                        <Typography variant="caption" display="block" sx={{ fontSize: '0.65rem', color: 'text.disabled' }}>
+                                          {t('networkFlows.datagramCount', { count: datagrams })}
+                                        </Typography>
+                                      )}
                                     </TableCell>
-                                    <TableCell sx={{ py: 0.75, fontSize: '0.75rem', color: 'text.secondary' }}>
-                                      {sflowAgent?.last_seen ? new Date(sflowAgent.last_seen).toLocaleTimeString() : '—'}
+                                    <TableCell sx={{ py: 0.75, fontSize: '0.75rem', color: 'text.secondary' }} data-testid={`last-received-${agent.node}`}>
+                                      {lastReceived}
+                                      {elapsed && (
+                                        <Typography variant="caption" display="block" sx={{ fontSize: '0.65rem', color: verdict?.state === 'missing' ? 'error.main' : 'text.disabled' }}>
+                                          {t('networkFlows.elapsedAgo', { elapsed })}
+                                        </Typography>
+                                      )}
                                     </TableCell>
                                   </>)
                                 })()}

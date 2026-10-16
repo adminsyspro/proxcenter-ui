@@ -49,6 +49,11 @@ const DEFAULTS = {
   backup_coverage_grace_hours: 24,
   backup_coverage_exclude_tag: 'no-backup',
   backup_coverage_alerts: 0,
+  // sFlow telemetry (roadmap#52): 0 s timeout = derived from the agent's
+  // polling interval by the orchestrator.
+  sflow_telemetry_alerts: 1,
+  sflow_telemetry_timeout_seconds: 0,
+  sflow_telemetry_grace_seconds: 300,
 }
 
 // The tab grew to eleven cards: one row per family stopped reading as a
@@ -59,6 +64,7 @@ const SECTIONS = [
   { id: 'performance', label: 'alerts.performanceReplication', icon: 'ri-timer-flash-line' },
   { id: 'snapshots', label: 'alerts.snapshots', icon: 'ri-camera-line' },
   { id: 'collection', label: 'alerts.collectionRecovery', icon: 'ri-timer-line' },
+  { id: 'network', label: 'alerts.networkFlows', icon: 'ri-radar-line' },
 ]
 
 export default function AlertThresholdsTab() {
@@ -105,6 +111,11 @@ export default function AlertThresholdsTab() {
       fetch('/api/v1/orchestrator/alerts/backup-coverage/check', { method: 'POST' })
         .then(res => { if (!res.ok) console.warn('[backup coverage] immediate check not started:', res.status) })
         .catch(err => console.warn('[backup coverage] immediate check not started:', err))
+      // Same for the sFlow telemetry pass (roadmap#52): a timeout or grace
+      // change takes effect now, not at the next 30 s tick.
+      fetch('/api/v1/orchestrator/sflow/health/check', { method: 'POST' })
+        .then(res => { if (!res.ok) console.warn('[sflow telemetry] immediate check not run:', res.status) })
+        .catch(err => console.warn('[sflow telemetry] immediate check not run:', err))
       setSnackbar({ open: true, severity: 'success', message: t('settings.alertThresholds.saved') })
     } catch (e) {
       setSnackbar({ open: true, severity: 'error', message: e.message || t('settings.alertThresholds.saveError') })
@@ -390,6 +401,16 @@ export default function AlertThresholdsTab() {
       </Box>
       )}
 
+      {section === 'network' && (
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '1fr 1fr 1fr' }, gap: 2 }}>
+        <SFlowTelemetryCard
+          thresholds={thresholds}
+          onChange={(patch) => setThresholds(th => ({ ...th, ...patch }))}
+          t={t}
+        />
+      </Box>
+      )}
+
       {section === 'collection' && (
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '1fr 1fr 1fr' }, gap: 2 }}>
         <MetricsIntervalCard
@@ -643,6 +664,73 @@ function SingleThresholdCard({
         </>
       ) : (
         <DisabledCaption text={tDisabled} />
+      )}
+    </CardShell>
+  )
+}
+
+/**
+ * sFlow telemetry (roadmap#52): one alert per configured node the collector
+ * stops hearing from. Two delays, both in seconds: how long a reporting agent
+ * may stay silent (0 = the orchestrator derives it from the agent's counter
+ * polling interval: four polls, at least two minutes, which absorbs WAN
+ * jitter), and the grace after a configuration or a collector restart.
+ */
+function SFlowTelemetryCard({ thresholds, onChange, t }) {
+  const enabled = thresholds.sflow_telemetry_alerts > 0
+  const timeout = thresholds.sflow_telemetry_timeout_seconds || 0
+  const grace = thresholds.sflow_telemetry_grace_seconds || 300
+
+  return (
+    <CardShell
+      icon='ri-radar-line'
+      label={t('alerts.sflowTelemetry')}
+      enabled={enabled}
+      onToggle={(checked) => onChange({ sflow_telemetry_alerts: checked ? 1 : 0 })}
+    >
+      <CardDescription text={t('alerts.sflowTelemetryDesc')} enabled={enabled} />
+      {enabled ? (
+        <>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mt: 2 }}>
+            <NumericTextField
+              type='number'
+              size='small'
+              value={timeout}
+              onChange={(seconds) => onChange({ sflow_telemetry_timeout_seconds: Math.min(86400, Math.trunc(seconds)) })}
+              fallback={0}
+              min={0}
+              slotProps={{ htmlInput: { min: 0, max: 86400, step: 30, 'aria-label': t('alerts.sflowTelemetryTimeout') } }}
+              sx={{ width: 90 }}
+            />
+            <Typography variant='body2' color='text.secondary'>{t('alerts.sflowTelemetryTimeout')}</Typography>
+          </Box>
+          <Typography variant='caption' color='text.secondary' display='block' sx={{ mt: 0.5 }}>
+            {timeout > 0
+              ? t('alerts.sflowTelemetryTimeoutFixed', { duration: formatSeconds(Math.max(30, timeout)) })
+              : t('alerts.sflowTelemetryTimeoutAuto')}
+          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mt: 2 }}>
+            <NumericTextField
+              type='number'
+              size='small'
+              value={grace}
+              onChange={(seconds) => onChange({ sflow_telemetry_grace_seconds: Math.min(86400, Math.trunc(seconds)) })}
+              fallback={300}
+              min={30}
+              slotProps={{ htmlInput: { min: 30, max: 86400, step: 30, 'aria-label': t('alerts.sflowTelemetryGrace') } }}
+              sx={{ width: 90 }}
+            />
+            <Typography variant='body2' color='text.secondary'>{t('alerts.sflowTelemetryGrace')}</Typography>
+          </Box>
+          <Typography variant='caption' color='text.secondary' display='block' sx={{ mt: 0.5 }}>
+            {t('alerts.sflowTelemetryGraceHelp', { duration: formatSeconds(grace) })}
+          </Typography>
+          <Typography variant='caption' color='text.secondary' display='block' sx={{ mt: 1.5 }}>
+            {t('alerts.sflowTelemetryNote')}
+          </Typography>
+        </>
+      ) : (
+        <DisabledCaption text={t('alerts.snapshotDisabled')} />
       )}
     </CardShell>
   )

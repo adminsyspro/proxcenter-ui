@@ -11,6 +11,7 @@ import MyVmsMetricsCharts from './MyVmsMetricsCharts'
 import MyGreenCard from './MyGreenCard'
 import MyDatacentersMapCard from './MyDatacentersMapCard'
 import { DEFAULT_TRANSPORT, vniPolicyFor } from '@/lib/vdc/transport'
+import VdcUsageHistoryChart from '@/components/vdc/VdcUsageHistoryChart'
 
 interface Props {
   vdc: any
@@ -259,6 +260,13 @@ export default function MyVdcOverview({ vdc, onRefresh, refreshing = false }: Pr
           </Stack>
         </Stack>
       </Paper>
+
+      {/* Usage history (#902): the quota counters over time, sampled on a
+          schedule, with the CSV export of the shown range. */}
+      <VdcUsageHistoryChart
+        historyUrl={`/api/v1/vdcs/${encodeURIComponent(vdc.id)}/usage/history`}
+        quota={quota}
+      />
 
       {/* Per-VM consumption charts — CPU%, RAM%, Network in+out, Disk r/w
           over the last hour. The full VM list and VNet management have been

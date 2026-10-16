@@ -16,6 +16,7 @@ import { resolveInstanceId, sweepOrphanedMigrationJobs } from '@/lib/migration/o
 import { startSFlowReconciler } from '@/lib/sflow/reconciler'
 import { startCatalogRefresher } from '@/lib/templates/catalogRefresher'
 import { isCatalogAutoUpdateEnabled } from '@/lib/templates/catalogStore'
+import { startVdcUsageSampler } from '@/lib/vdc/usageHistory/sampler'
 
 export async function registerNode(): Promise<void> {
   // undici 8 negotiates HTTP/2 through ALPN by default. Every hypervisor API we
@@ -69,6 +70,17 @@ export async function registerNode(): Promise<void> {
     // Boot must never depend on this: the nodes simply stay as they are and
     // the next boot retries starting the reconciler.
     console.error('[startup] sFlow reconciler failed to start (non-fatal):', err)
+  }
+
+  try {
+    // vDC usage history (#902): measures every vDC at the cadence set in the
+    // vDC settings, whether or not anybody opens a page. Every replica starts
+    // it; a database lease lets exactly one of them sample.
+    startVdcUsageSampler()
+  } catch (err) {
+    // Boot must never depend on this: the history simply misses the periods
+    // until the next boot starts the sampler.
+    console.error('[startup] vDC usage sampler failed to start (non-fatal):', err)
   }
 
   try {

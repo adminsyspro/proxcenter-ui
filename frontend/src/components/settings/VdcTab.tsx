@@ -42,8 +42,11 @@ import StoragePoliciesSection from './StoragePoliciesSection'
 import VdcPbsBindingsSection from './VdcPbsBindingsSection'
 import TenantNetworksSection from './TenantNetworksSection'
 import VdcHelpSection from './VdcHelpSection'
+import VdcUsageHistorySettings from './VdcUsageHistorySettings'
+import DeletedVdcUsageHistory from './DeletedVdcUsageHistory'
 import TransportModeDiagram, { TRANSPORT_MODE_KEYS } from './TransportModeDiagram'
 import QuotaDonut from '@/components/mydc/QuotaDonut'
+import VdcUsageHistoryChart from '@/components/vdc/VdcUsageHistoryChart'
 import { NodeIcon } from '@/app/(dashboard)/infrastructure/inventory/components/TreeIcons'
 import { extractCustomCpuModels, listKnownCpuTypes } from '@/lib/inventory/cpuModels'
 import type { CpuModelMode } from '@/lib/vdc/computePolicy'
@@ -363,7 +366,7 @@ export default function VdcTab() {
   const [dialogTab, setDialogTab] = useState(0)
   // Sub-tabs: the vDC list and the connection-level storage policies are
   // separate concerns; showing both stacked made the page too long.
-  const [activeSection, setActiveSection] = useState<'vdcs' | 'policies' | 'networks' | 'help'>('vdcs')
+  const [activeSection, setActiveSection] = useState<'vdcs' | 'policies' | 'networks' | 'usage-history' | 'help'>('vdcs')
   const [editingVdc, setEditingVdc] = useState<any>(null)
   const [saving, setSaving] = useState(false)
 
@@ -380,6 +383,8 @@ export default function VdcTab() {
 
   // Delete confirmation
   const [deleteVdc, setDeleteVdc] = useState<any>(null)
+  // vDC whose usage history dialog is open (#902)
+  const [historyVdc, setHistoryVdc] = useState<any>(null)
 
   // Shared bridges (SDN)
   const [providerBridges, setProviderBridges] = useState<Array<{ iface: string; nodes: string[]; type: string }>>([])
@@ -1704,10 +1709,15 @@ export default function VdcTab() {
     {
       field: 'actions',
       headerName: '',
-      width: 100,
+      width: 136,
       sortable: false,
       renderCell: (params) => (
         <Box sx={{ display: 'flex', gap: 0.5 }}>
+          <Tooltip title={t('vdcUsageHistory.title')}>
+            <IconButton size="small" aria-label={t('vdcUsageHistory.title')} onClick={() => setHistoryVdc(params.row)}>
+              <i className="ri-line-chart-line" />
+            </IconButton>
+          </Tooltip>
           <Tooltip title={t('common.edit')}>
             <IconButton size="small" onClick={() => handleEdit(params.row)}>
               <i className="ri-pencil-line" />
@@ -2053,6 +2063,15 @@ export default function VdcTab() {
           }
         />
         <Tab
+          value="usage-history"
+          label={
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <i className="ri-line-chart-line" style={{ fontSize: 18 }} />
+              {t('vdcUsageHistory.title')}
+            </Box>
+          }
+        />
+        <Tab
           value="help"
           label={
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -2065,6 +2084,12 @@ export default function VdcTab() {
 
       {activeSection === 'policies' && <StoragePoliciesSection connections={connections} />}
       {activeSection === 'networks' && <TenantNetworksSection tenants={tenants} vdcs={vdcs} connections={connections} />}
+      {activeSection === 'usage-history' && (
+        <>
+          <VdcUsageHistorySettings />
+          <DeletedVdcUsageHistory />
+        </>
+      )}
       {activeSection === 'help' && <VdcHelpSection />}
 
       {activeSection === 'vdcs' && (
@@ -3500,6 +3525,23 @@ export default function VdcTab() {
           >
             {saving ? t('vdc.saving') : editingVdc ? t('common.update') : t('common.create')}
           </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Usage history of one vDC (#902) */}
+      <Dialog open={!!historyVdc} onClose={() => setHistoryVdc(null)} maxWidth="md" fullWidth>
+        <DialogTitle>{t('vdcUsageHistory.dialogTitle', { name: historyVdc?.name || '' })}</DialogTitle>
+        <DialogContent>
+          {historyVdc && (
+            <VdcUsageHistoryChart
+              bare
+              historyUrl={`/api/v1/admin/vdcs/${encodeURIComponent(historyVdc.id)}/usage/history`}
+              quota={historyVdc.quota}
+            />
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setHistoryVdc(null)}>{t('common.close')}</Button>
         </DialogActions>
       </Dialog>
 

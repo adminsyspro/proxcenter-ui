@@ -958,6 +958,47 @@ model VdcUsageCache {
   @@map("vdc_usage_cache")
 }
 
+/// One usage sample of a vDC (#902): the counters of VdcUsageCache at the time
+/// the scheduled sampler read them. The cache row is overwritten on every
+/// refresh; this table keeps the series, for invoicing, charts and audit.
+/// No foreign key on vdc_id on purpose: the history of a deleted vDC stays
+/// until the retention set in the vDC settings purges it, so its last month
+/// can still be invoiced. Each row therefore carries what identifies the vDC
+/// once it is gone (name, tenant, cluster, pool), as they were when sampled.
+model VdcUsageSample {
+  id                   String   @id
+  vdcId                String   @map("vdc_id")
+  vdcName              String   @map("vdc_name")
+  tenantId             String   @map("tenant_id")
+  tenantName           String   @map("tenant_name")
+  connectionId         String   @map("connection_id")
+  pvePoolName          String   @map("pve_pool_name")
+  sampledAt            DateTime @default(now()) @map("sampled_at")
+  usedVcpus            Int      @default(0) @map("used_vcpus")
+  usedRamMb            Int      @default(0) @map("used_ram_mb")
+  usedStorageMb        Int      @default(0) @map("used_storage_mb")
+  usedVms              Int      @default(0) @map("used_vms")
+  usedSnapshots        Int      @default(0) @map("used_snapshots")
+  usedBackups          Int      @default(0) @map("used_backups")
+  usedStorageByStorage Json?    @map("used_storage_by_storage")
+
+  @@index([vdcId, sampledAt])
+  @@index([sampledAt])
+  @@index([tenantId])
+  @@map("vdc_usage_history")
+}
+
+/// A named lease that elects the single process allowed to run a periodic
+/// job when several frontends share the database (HA replicas). Taken and
+/// renewed with one conditional upsert; a dead holder loses it at expiresAt.
+model SchedulerLease {
+  name      String   @id
+  holder    String
+  expiresAt DateTime @map("expires_at")
+
+  @@map("scheduler_leases")
+}
+
 model VdcSharedBridge {
   id        String   @id
   vdcId     String   @map("vdc_id")

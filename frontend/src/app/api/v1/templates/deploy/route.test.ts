@@ -810,10 +810,11 @@ describe('template staging on a vDC ISO library (#1120)', () => {
   it('stages a provider catalogue image granted to the tenant on the library', async () => {
     const { customImageToCloudImage } = await import('@/lib/templates/cloudImages')
     vi.mocked(customImageToCloudImage).mockImplementation((row: any) => row)
-    findCustomImageForTenantMock.mockResolvedValue({ tenantId: 'default', isShared: false, visibleViaGrant: true, slug: 'custom-golden', format: 'qcow2', sourceType: 'url', downloadUrl: 'https://image.test/golden.qcow2' })
+    findCustomImageForTenantMock.mockResolvedValue({ id: 'cmgolden1', tenantId: 'default', isShared: false, visibleViaGrant: true, slug: 'custom-golden', format: 'qcow2', sourceType: 'url', downloadUrl: 'https://image.test/golden.qcow2' })
     cephOnlyVdc()
     await deploy({ ...baseBody, storage: 'ceph-vm', imageSlug: 'custom-golden' })
     expect(downloadTargets()).toEqual(['/nodes/pve1/storage/ceph-fs/download-url'])
+    expect(qemuCreateParams().get('scsi0')).toContain('import-from=ceph-fs:import/custom-cmgolden1.qcow2')
     expect(finalUpdate()).toMatchObject({ status: 'completed' })
   })
 
@@ -821,7 +822,7 @@ describe('template staging on a vDC ISO library (#1120)', () => {
     beforeEach(async () => {
       const { customImageToCloudImage } = await import('@/lib/templates/cloudImages')
       vi.mocked(customImageToCloudImage).mockImplementation((row: any) => row)
-      findCustomImageForTenantMock.mockResolvedValue({ tenantId: 'tenant-1', isShared: false, slug: 'custom-acme-app', format: 'qcow2', sourceType: 'url', downloadUrl: 'https://acme.test/app.qcow2' })
+      findCustomImageForTenantMock.mockResolvedValue({ id: 'cmacmeapp1', tenantId: 'tenant-1', isShared: false, slug: 'custom-acme-app', format: 'qcow2', sourceType: 'url', downloadUrl: 'https://acme.test/app.qcow2' })
     })
 
     it('is not written onto a read-only library', async () => {
@@ -835,7 +836,22 @@ describe('template staging on a vDC ISO library (#1120)', () => {
       cephOnlyVdc(['ceph-fs'])
       await deploy({ ...baseBody, storage: 'ceph-vm', imageSlug: 'custom-acme-app' })
       expect(downloadTargets()).toEqual(['/nodes/pve1/storage/ceph-fs/download-url'])
+      expect(qemuCreateParams().get('scsi0')).toContain('import-from=ceph-fs:import/custom-cmacmeapp1.qcow2')
       expect(finalUpdate()).toMatchObject({ status: 'completed' })
+    })
+
+    it('never reuses a staged file named after its slug, which another tenant can also own', async () => {
+      // Tenant `acme-app` + image "x" and tenant `acme` + image "app x" share
+      // the slug-derived name: a file already there may be the other one's.
+      cephOnlyVdc(['ceph-fs'])
+      const staged = pveFetchMock.getMockImplementation()!
+      pveFetchMock.mockImplementation(async (...args) =>
+        args[1] === '/nodes/pve1/storage/ceph-fs/content?content=import'
+          ? [{ volid: 'ceph-fs:import/custom-acme-app.qcow2' }]
+          : staged(...args))
+      await deploy({ ...baseBody, storage: 'ceph-vm', imageSlug: 'custom-acme-app' })
+      expect(downloadTargets()).toEqual(['/nodes/pve1/storage/ceph-fs/download-url'])
+      expect(qemuCreateParams().get('scsi0')).not.toContain('custom-acme-app.qcow2')
     })
   })
 })

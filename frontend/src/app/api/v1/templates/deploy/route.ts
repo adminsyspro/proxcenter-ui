@@ -120,6 +120,13 @@ export async function POST(req: Request) {
     // Built-in and provider catalogue images are provider content; a tenant's
     // own image is not, which narrows where it may be staged (#1120).
     let providerContent = true
+    // Base name of the file a custom URL image is staged under. Keyed on the
+    // image id, not on its slug: slugs are only unique per tenant, so
+    // `custom-<tenant>-<name>` of one tenant can equal another tenant's or a
+    // provider image's, and an existing staged file is reused without being
+    // downloaded again. A cuid has no '-', so this name never falls in a
+    // tenant's `custom-<slug>-` namespace either (#1120).
+    let stagingName: string | null = null
     let sourceType = 'url'
     let volumeId: string | null = null
     let volumeSource: ImageVolumeSource | null = null
@@ -136,6 +143,7 @@ export async function POST(req: Request) {
       image = customImageToCloudImage(customRow)
       isCustom = true
       providerContent = customRow.tenantId === DEFAULT_TENANT_ID
+      stagingName = `custom-${customRow.id}`
       sourceType = customRow.sourceType
       volumeId = customRow.volumeId
       if (sourceType === 'volume') {
@@ -398,6 +406,7 @@ export async function POST(req: Request) {
             body,
             image,
             isCustom,
+            stagingName,
             sourceType,
             volumeId,
             vdcInfo,
@@ -422,13 +431,11 @@ export async function POST(req: Request) {
           //  - Built-in images (Ubuntu official, etc.): keep the upstream
           //    filename so all tenants share the same downloaded artefact
           //    (natural deduplication on the same PVE storage).
-          //  - Custom images: derive from the slug, which is already
-          //    tenant-prefixed for private images (e.g. `custom-acme-myapp`)
-          //    by the POST /custom-images route. Two tenants that upload the
-          //    same source URL therefore land in distinct files and can't
-          //    overwrite each other's image on a shared storage.
+          //  - Custom images: derive from the image id (`stagingName`), so
+          //    two images never share a staged file, even when their slugs
+          //    collide across tenants.
           const rawFilename = isCustom
-            ? `${image.slug}.${image.format}`
+            ? `${stagingName}.${image.format}`
             : (image.downloadUrl.split("/").pop() || `${image.slug}.${image.format}`)
           // PVE import content type requires .qcow2/.raw/.vmdk extension — rename .img to .qcow2
           const urlFilename = rawFilename.replace(/\.img$/, ".qcow2")
@@ -740,6 +747,8 @@ async function runIsoDeploy(args: {
   body: any
   image: any
   isCustom: boolean
+  /** Staged file base name of a custom image (see the POST handler). */
+  stagingName: string | null
   sourceType: string
   volumeId: string | null
   vdcInfo: { poolName?: string | null } | null
@@ -752,7 +761,7 @@ async function runIsoDeploy(args: {
    *  throws (waitForTask timeout, audit failure, etc.). */
   onIpamAllocation?: (alloc: { subnetId: string; ip: string }) => void
 }): Promise<void> {
-  const { deploymentId, deploymentConfig, conn, body, image, isCustom, sourceType, volumeId, vdcInfo, dataDiskQosSuffix, onIpamAllocation } = args
+  const { deploymentId, deploymentConfig, conn, body, image, isCustom, stagingName, sourceType, volumeId, vdcInfo, dataDiskQosSuffix, onIpamAllocation } = args
   const hw = body.hardware
   const isoStorage: string = body.isoStorage
 
@@ -768,7 +777,7 @@ async function runIsoDeploy(args: {
   } else {
     // URL mode: download to the user-selected ISO storage with content=iso.
     const rawFilename = isCustom
-      ? `${image.slug}.iso`
+      ? `${stagingName}.iso`
       : (image.downloadUrl?.split("/").pop() || `${image.slug}.iso`)
     const isoFilename = rawFilename.toLowerCase().endsWith('.iso') ? rawFilename : `${rawFilename}.iso`
 

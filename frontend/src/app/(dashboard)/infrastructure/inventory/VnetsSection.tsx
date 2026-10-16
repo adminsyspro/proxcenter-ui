@@ -35,6 +35,10 @@ interface Vdc {
   /** Provider-dedicated VLAN ranges; drives the VLAN branch of the create
    *  dialog. Absent (or empty) means the tenant only gets VXLAN. */
   vlanPools?: VlanPool[]
+  /** VNI policy of the transport (roadmap#18) and L3 edge model (#904), both
+   *  provider-set and forwarded to the create dialog. */
+  transport?: { sharing?: string; vniRangeStart?: number | null; vniRangeEnd?: number | null } | null
+  edgeModel?: string | null
 }
 
 interface SubnetView {
@@ -288,7 +292,11 @@ export default function VnetsSection({ connectionIds }: Props) {
                         <TableCell sx={{ py: 1, fontSize: 12, opacity: 0.85 }}>{r.vdcName}</TableCell>
                       )}
                       <TableCell sx={{ py: 1, fontSize: 12 }}>
-                        {sn?.cidr ?? <span style={{ opacity: 0.45 }}>—</span>}
+                        {sn?.cidr ?? (
+                          <Tooltip title={t('myVdc.vnetL2OnlyTooltip')} arrow placement="top">
+                            <Chip size="small" variant="outlined" label={t('myVdc.vnetL2Only')} sx={{ height: 20, fontSize: 11 }} />
+                          </Tooltip>
+                        )}
                       </TableCell>
                       <TableCell sx={{ py: 1, fontSize: 12 }}>
                         {sn?.gateway ?? <span style={{ opacity: 0.45 }}>—</span>}
@@ -366,7 +374,7 @@ export default function VnetsSection({ connectionIds }: Props) {
 
       <VnetCreateDialog
         open={createOpen}
-        vdcs={vdcs.map(v => ({ id: v.id, name: v.name, vlanPools: v.vlanPools ?? [] }))}
+        vdcs={vdcs.map(v => ({ id: v.id, name: v.name, vlanPools: v.vlanPools ?? [], transport: v.transport ?? null, edgeModel: v.edgeModel ?? null }))}
         onClose={() => setCreateOpen(false)}
         onCreated={() => { setCreateOpen(false); void reload(); notifyTreeChanged() }}
       />

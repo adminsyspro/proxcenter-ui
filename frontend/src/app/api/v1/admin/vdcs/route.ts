@@ -88,6 +88,7 @@ export async function POST(req: NextRequest) {
           ? { imageIds: normalizeIdList(body.catalogGrants.imageIds), blueprintIds: normalizeIdList(body.catalogGrants.blueprintIds) }
           : undefined,
         transport: body.transport && typeof body.transport === 'object' ? body.transport : undefined,
+        edgeModel: typeof body.edgeModel === 'string' ? body.edgeModel : undefined,
         quota: body.quota,
       },
       session?.user?.id ?? null

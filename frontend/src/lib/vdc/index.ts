@@ -24,12 +24,14 @@ import {
   sameZoneConfig,
   type VdcTransport,
 } from './transport'
-import { assertNoTransportConflict } from './transportOps'
+import { assertNoTransportConflict, assertNoVniRangeOverlap } from './transportOps'
 import { memberPeersForVdc, withMemberPeers } from './stretchPeers'
 import { syncNetworksOfVdc } from './tenantNetworkMembers'
 
+import { EDGE_MODELS, rowToEdgeModel } from './types'
 import type {
   Vdc,
+  VdcEdgeModel,
   VdcWithDetails,
   VdcQuota,
   VdcUsage,
@@ -63,15 +65,26 @@ type VdcRow = {
   cpuDefaultModel?: string | null
   cpuAdvancedSettings?: boolean | null
   vxlanTransportMode?: string | null
+  transportSharing?: string | null
+  vniRangeStart?: number | null
+  vniRangeEnd?: number | null
   vxlanPeers?: string[] | null
   vxlanMtu?: number | null
   transportVlanId?: number | null
   transportDevice?: string | null
   transportCidr?: string | null
   transportNodeAddresses?: unknown
+  edgeModel?: string | null
   createdBy: string | null
   createdAt: Date
   updatedAt: Date
+}
+
+function normalizeEdgeModelInput(raw: unknown): VdcEdgeModel {
+  if (!EDGE_MODELS.includes(raw as VdcEdgeModel)) {
+    throw new Error(`edgeModel must be one of: ${EDGE_MODELS.join(', ')}`)
+  }
+  return raw as VdcEdgeModel
 }
 
 export function rowToComputePolicy(row: Pick<VdcRow, 'cpuModelMode' | 'cpuAllowedModels' | 'cpuDefaultModel' | 'cpuAdvancedSettings'>): VdcComputePolicy {
@@ -96,6 +109,7 @@ function rowToVdc(row: VdcRow): Vdc {
     primaryStorage: row.primaryStorage ?? null,
     computePolicy: rowToComputePolicy(row),
     transport: rowToTransport(row),
+    edgeModel: rowToEdgeModel(row.edgeModel),
     enabled: row.enabled !== false,
     createdBy: row.createdBy ?? null,
     createdAt: row.createdAt.toISOString(),
@@ -481,6 +495,8 @@ export async function createVdc(input: CreateVdcInput, createdBy: string | null)
   // VLAN interface on the same nodes.
   const transport = normalizeTransportInput(input.transport)
   await assertNoTransportConflict(input.connectionId, null, transport)
+  await assertNoVniRangeOverlap(input.connectionId, null, transport)
+  const edgeModel: VdcEdgeModel = input.edgeModel === undefined ? 'tenant' : normalizeEdgeModelInput(input.edgeModel)
 
   // 4. Create PVE pool (existing behavior)
   const poolName = generatePoolName(tenantSlug, input.slug)
@@ -546,6 +562,7 @@ export async function createVdc(input: CreateVdcInput, createdBy: string | null)
           primaryStorage: input.primaryStorage ?? null,
           ...computePolicyToRow(normalizeComputePolicyInput(input.computePolicy)),
           ...transportToRow(transport),
+          edgeModel,
           enabled: true,
           createdBy,
           createdAt: now,
@@ -670,13 +687,16 @@ export async function updateVdc(id: string, input: UpdateVdcInput): Promise<VdcW
     select: {
       id: true, tenantId: true, connectionId: true, sdnZoneName: true,
       cpuModelMode: true, cpuAllowedModels: true, cpuDefaultModel: true, cpuAdvancedSettings: true,
-      vxlanTransportMode: true, vxlanPeers: true, vxlanMtu: true,
+      vxlanTransportMode: true, transportSharing: true, vniRangeStart: true, vniRangeEnd: true,
+      vxlanPeers: true, vxlanMtu: true,
       transportVlanId: true, transportDevice: true, transportCidr: true, transportNodeAddresses: true,
     },
   })
   if (!existing) {
     throw new Error(`vDC not found: ${id}`)
   }
+
+  const nextEdgeModel: VdcEdgeModel | null = input.edgeModel === undefined ? null : normalizeEdgeModelInput(input.edgeModel)
 
   if (input.vlanPools) {
     validateVlanPoolsInput(input.vlanPools)
@@ -711,6 +731,7 @@ export async function updateVdc(id: string, input: UpdateVdcInput): Promise<VdcW
     const prevTransport = rowToTransport(existing)
     nextTransport = normalizeTransportInput(input.transport, prevTransport)
     await assertNoTransportConflict(existing.connectionId, id, nextTransport)
+    await assertNoVniRangeOverlap(existing.connectionId, id, nextTransport)
     if (existing.sdnZoneName) {
       const zoneOwner = await getConnectionOwnerTenantId(existing.connectionId)
       zoneConn = await getConnectionById(existing.connectionId, zoneOwner)
@@ -741,6 +762,7 @@ export async function updateVdc(id: string, input: UpdateVdcInput): Promise<VdcW
       Object.assign(updateData, computePolicyToRow(normalizeComputePolicyInput(input.computePolicy, rowToComputePolicy(existing))))
     }
     if (nextTransport) Object.assign(updateData, transportToRow(nextTransport))
+    if (nextEdgeModel) updateData.edgeModel = nextEdgeModel
 
     await tx.vdc.update({ where: { id }, data: updateData })
 

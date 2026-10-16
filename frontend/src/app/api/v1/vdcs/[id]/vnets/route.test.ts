@@ -24,6 +24,7 @@ vi.mock("@/lib/vdc/vnets", () => ({
 vi.mock("@/lib/vdc/ipam", () => ({ getSubnetUsage: h.getSubnetUsage }))
 
 import { POST } from "./route"
+import { VniError } from "@/lib/vdc/vniPolicy"
 import { callRoute, readJson } from "@/__tests__/setup/route-test"
 
 const BODY = {
@@ -73,5 +74,55 @@ describe("POST /api/v1/vdcs/[id]/vnets", () => {
     const res = await post({ ...BODY, type: "vlan", bridge: "vmbr0" })
     expect(res.status).toBe(409)
     expect((await readJson<any>(res))?.error).toMatch(/already exist/)
+  })
+
+  describe("pure L2 network and tenant VNI (roadmap#18)", () => {
+    it("forwards a null subnet when none is given, or when it is left empty", async () => {
+      expect((await post({ displayName: "l2" })).status).toBe(201)
+      expect(h.createVnetForTenant).toHaveBeenLastCalledWith(expect.objectContaining({ subnet: null, vni: null }))
+      expect((await post({ displayName: "l2", subnet: { cidr: " ", gateway: "" } })).status).toBe(201)
+      expect(h.createVnetForTenant).toHaveBeenLastCalledWith(expect.objectContaining({ subnet: null }))
+    })
+
+    it("400 on a subnet that is not an object, or with a CIDR and no gateway", async () => {
+      const notObject = await post({ displayName: "l2", subnet: "10.0.0.0/24" })
+      expect(notObject.status).toBe(400)
+      expect((await readJson<any>(notObject))?.error).toMatch(/or null for a pure L2 network/)
+      const noGateway = await post({ displayName: "l2", subnet: { cidr: "10.0.0.0/24" } })
+      expect(noGateway.status).toBe(400)
+      expect((await readJson<any>(noGateway))?.error).toMatch(/required when a subnet is given/)
+      expect(h.createVnetForTenant).not.toHaveBeenCalled()
+    })
+
+    it("parses DNS servers from an array or a comma-separated string", async () => {
+      await post({ ...BODY, subnet: { ...BODY.subnet, dnsServers: [" 1.1.1.1 ", ""] } })
+      expect(h.createVnetForTenant).toHaveBeenLastCalledWith(expect.objectContaining({
+        subnet: { cidr: "10.42.0.0/24", gateway: "10.42.0.1", dnsServers: ["1.1.1.1"] },
+      }))
+      await post({ ...BODY, subnet: { ...BODY.subnet, dnsServers: "1.1.1.1, 9.9.9.9" } })
+      expect(h.createVnetForTenant).toHaveBeenLastCalledWith(expect.objectContaining({
+        subnet: { cidr: "10.42.0.0/24", gateway: "10.42.0.1", dnsServers: ["1.1.1.1", "9.9.9.9"] },
+      }))
+      await post({ ...BODY, subnet: { ...BODY.subnet, dnsServers: 42 } })
+      expect(h.createVnetForTenant).toHaveBeenLastCalledWith(expect.objectContaining({
+        subnet: { cidr: "10.42.0.0/24", gateway: "10.42.0.1", dnsServers: undefined },
+      }))
+    })
+
+    it("forwards the chosen VNI and maps a VniError to its own status", async () => {
+      h.createVnetForTenant.mockRejectedValueOnce(new VniError("VNI 20005 is already in use", 409))
+      const taken = await post({ displayName: "l2", vni: 20005 })
+      expect(h.createVnetForTenant).toHaveBeenLastCalledWith(expect.objectContaining({ vni: 20005 }))
+      expect(taken.status).toBe(409)
+      h.createVnetForTenant.mockRejectedValueOnce(new VniError("VNI 30000 is outside the range", 400))
+      expect((await post({ displayName: "l2", vni: 30000 })).status).toBe(400)
+    })
+
+    it("400 when a platform edge needs the subnet, or on a VNI for a VLAN network", async () => {
+      h.createVnetForTenant.mockRejectedValueOnce(new Error("Your provider operates the L3 edge: define the subnet"))
+      expect((await post({ displayName: "l2" })).status).toBe(400)
+      h.createVnetForTenant.mockRejectedValueOnce(new Error("vni applies to VXLAN networks only"))
+      expect((await post({ displayName: "l2", type: "vlan", bridge: "vmbr0", vni: 5 })).status).toBe(400)
+    })
   })
 })

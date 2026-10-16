@@ -844,6 +844,18 @@ model Vdc {
   transportDevice        String?  @map("transport_device")
   transportCidr          String?  @map("transport_cidr")
   transportNodeAddresses Json?    @map("transport_node_addresses")
+  // VNI policy of the transport (roadmap#18). `shared`: the transport carries
+  // several tenants, the provider hands this vDC a permitted VNI range and a
+  // tenant may only pick inside it. `dedicated`: the transport segment belongs
+  // to this tenant alone, which picks any protocol-valid VNI.
+  transportSharing       String   @default("shared") @map("transport_sharing")
+  vniRangeStart          Int?     @map("vni_range_start")
+  vniRangeEnd            Int?     @map("vni_range_end")
+  // Who owns the L3 edge of the vDC networks (#904). `tenant`: the tenant
+  // brings its router / firewall / DHCP, pure L2 networks are allowed.
+  // `platform`: the provider operates the edge, so every network declares
+  // its subnet.
+  edgeModel              String   @default("tenant") @map("edge_model")
   createdBy      String?  @map("created_by")
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @default(now()) @map("updated_at")

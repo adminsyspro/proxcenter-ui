@@ -16,6 +16,7 @@ import {
   transportFromRow,
   transportIfaceName,
   underlayMtuFor,
+  vniRangesOverlap,
   zoneConfigFor,
   type TransportConflict,
   type VdcTransport,
@@ -41,6 +42,39 @@ function conflictMessage(conflict: TransportConflict, iface: string, cidr: strin
       return `${head}interface "${iface}" ${owner}, which gives node "${conflict.node}" the address ${conflict.detail}.`
     case 'addressReuse':
       return `${head}interface "${iface}" ${owner}, which gives the address ${conflict.detail} to node "${conflict.node}".`
+    case 'dedicated':
+      return `${head}interface "${iface}" ${owner} and one of the two declares it dedicated to its tenant. A dedicated transport carries one vDC.`
+  }
+}
+
+/**
+ * Refuses a VNI range that overlaps the range of another vDC of the same
+ * cluster (roadmap#18). The transport scope is the connection: every vDC of
+ * the cluster competes for the same 24-bit space, whatever segment carries
+ * it. Carries "is in use by vDC" so the route answers 409.
+ */
+export async function assertNoVniRangeOverlap(
+  connectionId: string,
+  vdcId: string | null,
+  transport: VdcTransport,
+): Promise<void> {
+  if (transport.vniRangeStart === null || transport.vniRangeEnd === null) return
+  const others = await prisma.vdc.findMany({
+    where: {
+      connectionId,
+      vniRangeStart: { not: null },
+      ...(vdcId ? { id: { not: vdcId } } : {}),
+    },
+    select: { name: true, vniRangeStart: true, vniRangeEnd: true },
+  })
+  for (const other of others) {
+    const range = { vniRangeStart: other.vniRangeStart ?? null, vniRangeEnd: other.vniRangeEnd ?? null }
+    if (vniRangesOverlap(transport, range)) {
+      throw new Error(
+        `VXLAN transport: VNI range ${transport.vniRangeStart}-${transport.vniRangeEnd} is in use by vDC "${other.name}" ` +
+        `(${range.vniRangeStart}-${range.vniRangeEnd}) on this cluster. Ranges of one transport must not overlap.`,
+      )
+    }
   }
 }
 

@@ -58,6 +58,27 @@ function makeVdc(overrides: Record<string, unknown> = {}) {
   }
 }
 
+describe('MyVdcOverview, network model (#904, roadmap#18)', () => {
+  it('shows the tenant-provided edge and automatic VNIs by default', () => {
+    renderWithProviders(<MyVdcOverview vdc={makeVdc()} />)
+    expect(screen.getByText('Tenant provided edge')).toBeTruthy()
+    expect(screen.getByText(/Pure L2 networks without IP configuration are allowed/)).toBeTruthy()
+    expect(screen.getByText(/allocates the VNI of each network automatically/)).toBeTruthy()
+  })
+
+  it('shows the platform-provided edge and the assigned VNI range', () => {
+    renderWithProviders(<MyVdcOverview vdc={makeVdc({ edgeModel: 'platform', transport: { sharing: 'shared', vniRangeStart: 20000, vniRangeEnd: 20009 } })} />)
+    expect(screen.getByText('Platform provided edge')).toBeTruthy()
+    expect(screen.getByText(/Every network must declare its subnet/)).toBeTruthy()
+    expect(screen.getByText(/VNIs 20000 to 20009 are reserved for you/)).toBeTruthy()
+  })
+
+  it('shows a dedicated transport', () => {
+    renderWithProviders(<MyVdcOverview vdc={makeVdc({ transport: { sharing: 'dedicated' } })} />)
+    expect(screen.getByText(/Dedicated transport: you choose the VNI/)).toBeTruthy()
+  })
+})
+
 describe('MyVdcOverview, per-tier storage usage bars', () => {
   afterEach(cleanup)
 

@@ -74,6 +74,7 @@ export async function PUT(req: Request, ctx: RouteContext) {
         ? { imageIds: normalizeIdList(body.catalogGrants.imageIds), blueprintIds: normalizeIdList(body.catalogGrants.blueprintIds) }
         : undefined,
       transport: body.transport && typeof body.transport === 'object' ? body.transport : undefined,
+      edgeModel: typeof body.edgeModel === 'string' ? body.edgeModel : undefined,
       quota: body.quota,
     })
 

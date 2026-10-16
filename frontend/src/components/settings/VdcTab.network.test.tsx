@@ -194,7 +194,15 @@ describe('VdcTab: Network tab of the edit dialog', () => {
     fireEvent.click(saveBtn)
 
     await waitFor(() => expect(putBody).toBeDefined())
-    expect(putBody.transport).toEqual({ ...TRANSPORT, nodeAddresses: { pve1: '198.51.100.1', pve2: '198.51.100.2' } })
+    // A transport saved before the VNI policy existed comes back with the
+    // defaults: shared, no range.
+    expect(putBody.transport).toEqual({
+      ...TRANSPORT,
+      sharing: 'shared',
+      vniRangeStart: null,
+      vniRangeEnd: null,
+      nodeAddresses: { pve1: '198.51.100.1', pve2: '198.51.100.2' },
+    })
   })
 
   it('syncs the zone, then provisions the transport interface on the nodes', async () => {

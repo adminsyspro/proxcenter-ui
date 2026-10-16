@@ -24,6 +24,9 @@ import {
   transportFromRow,
   transportIfaceName,
   underlayMtuFor,
+  VNI_MAX,
+  vniPolicyFor,
+  vniRangesOverlap,
   zoneConfigFor,
 } from './transport'
 
@@ -130,6 +133,7 @@ describe('normalizeTransportInput', () => {
       nodeAddresses: { pve1: '10.100.5.1', pve2: '10.100.5.2' },
     }
     expect(normalizeTransportInput(base)).toEqual({
+      ...DEFAULT_TRANSPORT,
       mode: 'transport', peers: [], mtu: null, vlanId: 4000, device: 'bond0',
       cidr: '10.100.5.0/24', nodeAddresses: base.nodeAddresses,
     })
@@ -166,6 +170,73 @@ describe('normalizeTransportInput', () => {
     expect(t.cidr).toBe('fd00::/64')
     expect(t.nodeAddresses.pve1).toBe('fd00::1')
     expect(t.peers).toEqual(['fd00::fe'])
+  })
+})
+
+describe('transport sharing and VNI range (roadmap#18)', () => {
+  const peers = { mode: 'peers' as const, peers: ['10.0.0.1'] }
+
+  it('defaults to a shared transport without a range', () => {
+    const t = normalizeTransportInput({ mode: 'cluster' })
+    expect(t.sharing).toBe('shared')
+    expect(t.vniRangeStart).toBeNull()
+    expect(t.vniRangeEnd).toBeNull()
+  })
+
+  it('refuses a dedicated cluster network: every vDC of the cluster rides on it', () => {
+    expect(() => normalizeTransportInput({ mode: 'cluster', sharing: 'dedicated' })).toThrow(/cannot be dedicated/)
+    expect(normalizeTransportInput({ ...peers, sharing: 'dedicated' }).sharing).toBe('dedicated')
+  })
+
+  it('a dedicated transport drops the range: the tenant chooses freely', () => {
+    const t = normalizeTransportInput({ ...peers, sharing: 'dedicated', vniRangeStart: 100, vniRangeEnd: 200 })
+    expect(t.vniRangeStart).toBeNull()
+    expect(t.vniRangeEnd).toBeNull()
+  })
+
+  it('validates the range: both bounds, 24-bit, ordered, numeric strings accepted', () => {
+    expect(normalizeTransportInput({ vniRangeStart: '20000' as any, vniRangeEnd: '20009' as any }))
+      .toMatchObject({ vniRangeStart: 20000, vniRangeEnd: 20009 })
+    expect(() => normalizeTransportInput({ vniRangeStart: 20000 })).toThrow(/both its start and its end/)
+    expect(() => normalizeTransportInput({ vniRangeStart: 20, vniRangeEnd: 10 })).toThrow(/above its end/)
+    expect(() => normalizeTransportInput({ vniRangeStart: 0, vniRangeEnd: 10 })).toThrow(/between 1 and/)
+    expect(() => normalizeTransportInput({ vniRangeStart: 1, vniRangeEnd: VNI_MAX + 1 })).toThrow(/between 1 and/)
+    // Clearing both bounds on a partial PUT.
+    const stored = normalizeTransportInput({ vniRangeStart: 1, vniRangeEnd: 9 })
+    expect(normalizeTransportInput({ vniRangeStart: null, vniRangeEnd: null }, stored).vniRangeStart).toBeNull()
+  })
+
+  it('falls back to the base sharing for an unknown value', () => {
+    expect(normalizeTransportInput({ sharing: 'private' as any }).sharing).toBe('shared')
+  })
+
+  it('round-trips through the row and degrades an unknown stored sharing', () => {
+    const t = normalizeTransportInput({ ...peers, sharing: 'dedicated' })
+    expect(transportFromRow({ vxlanTransportMode: 'peers', vxlanPeers: ['10.0.0.1'], transportSharing: 'dedicated' })).toEqual(t)
+    expect(transportFromRow({ transportSharing: 'weird', vniRangeStart: 5, vniRangeEnd: 9 })).toMatchObject({ sharing: 'shared', vniRangeStart: 5, vniRangeEnd: 9 })
+  })
+
+  it('vniPolicyFor: dedicated = free choice, shared with range = choice inside, shared without = automatic', () => {
+    expect(vniPolicyFor({ sharing: 'dedicated', vniRangeStart: null, vniRangeEnd: null })).toEqual({ sharing: 'dedicated', range: null, tenantChoice: true })
+    expect(vniPolicyFor({ sharing: 'shared', vniRangeStart: 100, vniRangeEnd: 200 })).toEqual({ sharing: 'shared', range: { start: 100, end: 200 }, tenantChoice: true })
+    expect(vniPolicyFor({ sharing: 'shared', vniRangeStart: null, vniRangeEnd: null })).toEqual({ sharing: 'shared', range: null, tenantChoice: false })
+  })
+
+  it('vniRangesOverlap is inclusive and ignores a vDC without a range', () => {
+    const r = (s: number | null, e: number | null) => ({ vniRangeStart: s, vniRangeEnd: e })
+    expect(vniRangesOverlap(r(100, 200), r(200, 300))).toBe(true)
+    expect(vniRangesOverlap(r(100, 200), r(201, 300))).toBe(false)
+    expect(vniRangesOverlap(r(100, 200), r(null, null))).toBe(false)
+  })
+
+  it('transportConflict refuses a segment one side declares dedicated', () => {
+    const seg = (sharing: 'shared' | 'dedicated') => ({
+      ...DEFAULT_TRANSPORT, mode: 'transport' as const, sharing, vlanId: 4000, device: 'vmbr0',
+      cidr: '10.100.5.0/24', nodeAddresses: { pve1: '10.100.5.1' },
+    })
+    expect(transportConflict(seg('shared'), seg('dedicated'))).toEqual({ reason: 'dedicated', detail: 'vmbr0.4000' })
+    expect(transportConflict(seg('dedicated'), seg('shared'))).toEqual({ reason: 'dedicated', detail: 'vmbr0.4000' })
+    expect(transportConflict(seg('shared'), seg('shared'))).toBeNull()
   })
 })
 

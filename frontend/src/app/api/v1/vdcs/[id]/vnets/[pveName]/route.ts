@@ -30,21 +30,21 @@ export async function GET(_req: Request, ctx: RouteContext) {
     })
 
     if (!row) return NextResponse.json({ error: "VNet not found" }, { status: 404 })
-    if (!row.subnet) {
-      return NextResponse.json({ error: "VNet has no subnet — DB migration required" }, { status: 500 })
-    }
 
-    const subnet = {
-      id: row.subnet.id,
-      vnetId: row.subnet.vnetId,
-      cidr: row.subnet.cidr,
-      gateway: row.subnet.gateway,
-      dnsServers: row.subnet.dnsServers
-        ? row.subnet.dnsServers.split(',').map((s: string) => s.trim()).filter(Boolean)
-        : [],
-      ipamEnabled: row.subnet.ipamEnabled,
-      createdAt: row.subnet.createdAt.toISOString(),
-    }
+    // Null for a pure L2 network (roadmap#18).
+    const subnet = row.subnet
+      ? {
+          id: row.subnet.id,
+          vnetId: row.subnet.vnetId,
+          cidr: row.subnet.cidr,
+          gateway: row.subnet.gateway,
+          dnsServers: row.subnet.dnsServers
+            ? row.subnet.dnsServers.split(',').map((s: string) => s.trim()).filter(Boolean)
+            : [],
+          ipamEnabled: row.subnet.ipamEnabled,
+          createdAt: row.subnet.createdAt.toISOString(),
+        }
+      : null
 
     return NextResponse.json({
       data: {
@@ -111,6 +111,8 @@ export async function PUT(req: Request, ctx: RouteContext) {
       }
       // A VNet of a stretched tenant network is the provider's (#901).
       if (msg.includes("is managed by the provider")) return NextResponse.json({ error: msg }, { status: 403 })
+      // DNS edit on a pure L2 network (roadmap#18).
+      if (msg.includes("pure L2 network")) return NextResponse.json({ error: msg }, { status: 400 })
       throw err
     }
   } catch (e: any) {

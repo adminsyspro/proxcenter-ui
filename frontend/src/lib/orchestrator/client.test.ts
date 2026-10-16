@@ -518,3 +518,27 @@ describe('Emergency DR calls of the orchestrator client', () => {
     expect(JSON.parse(init.body).resume_replication).toBe(false)
   })
 })
+
+describe('per-guest Site Recovery calls (ui#943)', () => {
+  it('posts each guest action to its own route and reads the execution log after a cursor', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({}))
+    const { getOrchestratorClient } = await import('./client')
+    const client = getOrchestratorClient()
+
+    await client.guestFailover('plan-1', 9943, { restore_point: 'mirror-1' })
+    await client.guestFailback('plan-1', 9943)
+    await client.guestFailbackCutover('plan-1', 9943)
+    await client.guestFailbackCancel('plan-1', 9943)
+    await client.getExecutionEvents('exec-1')
+    await client.getExecutionEvents('exec-1', 12)
+
+    const urls = fetchMock.mock.calls.map(c => String(c[0]))
+    expect(urls[0]).toContain('/replication/plans/plan-1/guests/9943/failover')
+    expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toEqual({ restore_point: 'mirror-1' })
+    expect(urls[1]).toContain('/replication/plans/plan-1/guests/9943/failback')
+    expect(urls[2]).toContain('/replication/plans/plan-1/guests/9943/failback-cutover')
+    expect(urls[3]).toContain('/replication/plans/plan-1/guests/9943/failback-cancel')
+    expect(urls[4]).toMatch(/\/replication\/executions\/exec-1\/events$/)
+    expect(urls[5]).toMatch(/\/replication\/executions\/exec-1\/events\?after=12$/)
+  })
+})

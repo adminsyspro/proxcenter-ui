@@ -228,6 +228,31 @@ describe("GET /api/v1/orchestrator/jobs — tenant scoping", () => {
     expect(exec.detail).toBe("pve1.example.com → Deleted connection (c-provid) (0 VMs)")
   })
 
+  it("provider: an execution scoped to one guest names it, by name or by VMID (ui#943)", async () => {
+    getCurrentTenantIdMock.mockResolvedValue("default")
+    getInfraMock.mockResolvedValue({ kind: "provider" })
+    tenantConnectionIdsMock.mockResolvedValue(new Set(["c1", "c2"]))
+
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url.includes("/replication/plans") && url.includes("/history")) {
+        return { ok: true, json: async () => ({ data: [
+          { id: "exec-a", type: "failover", status: "completed", started_at: "2026-01-01T00:00:00Z", scope_vmid: 9943, vm_results: [{ vm_id: 9943, vm_name: "i943-a" }] },
+          { id: "exec-b", type: "failback", status: "completed", started_at: "2026-01-01T00:00:00Z", scope_vmid: 9944, vm_results: [] },
+        ] }) }
+      }
+      if (url.includes("/replication/plans")) {
+        return { ok: true, json: async () => ({ data: [{ id: "plan-1", name: "dr-plan", source_cluster: "c1", target_cluster: "c2", last_failover: "2026-01-01T00:00:00Z" }] }) }
+      }
+      return { ok: true, json: async () => ({ data: [] }) }
+    })
+
+    const { GET } = await import("./route")
+    const body = await (await callRoute(GET as any, { method: "GET" })).json()
+
+    expect(body.data.find((j: any) => j.id === "exec-a").name).toBe("Failover - dr-plan (i943-a)")
+    expect(body.data.find((j: any) => j.id === "exec-b").name).toBe("Failback - dr-plan (VM 9944)")
+  })
+
   it("provider: external migrations are listed, with the fleet query unfiltered", async () => {
     getCurrentTenantIdMock.mockResolvedValue("default")
     getInfraMock.mockResolvedValue({ kind: "provider" })

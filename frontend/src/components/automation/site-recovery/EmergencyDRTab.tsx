@@ -32,19 +32,14 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material'
+import { useTheme } from '@mui/material/styles'
 
-import type { ReplicationJob, RecoveryPlan, VMRestorePoints } from '@/lib/orchestrator/site-recovery.types'
+import type { ReplicationJob, RecoveryPlan, RecoveryPlanGuestState, VMRestorePoints } from '@/lib/orchestrator/site-recovery.types'
+import { countGuestsFailedOver, guestStateOf } from '@/lib/site-recovery/emergencyActions'
+import { GuestGlyph } from '@/components/automation/drs/glyphs'
 
-/**
- * Guest glyph, without the status dot the rest of the product carries: this
- * screen is about the DR site, where every replica sits stopped by design,
- * and the one power state that matters here already has its own column.
- */
-const GuestGlyph = () => (
-  <Box sx={{ width: 16, height: 16, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-    <i className="ri-computer-line" style={{ fontSize: '0.9286rem', opacity: 0.8 }} />
-  </Box>
-)
+/** The title of the first case that holds: the reason a row action reads as it does. */
+const firstReason = (...cases: Array<[boolean, string]>) => cases.find(([holds]) => holds)?.[1] ?? ''
 
 // The replication job state as one icon: the word lives in the tooltip, so a
 // row carries glyphs instead of a wall of chips. An unknown value keeps a
@@ -63,6 +58,9 @@ const JOB_STATUS_ICONS: Record<string, { icon: string; color: string; label: str
   // would tell the operator the opposite of what happens to that guest.
   replica_started: { icon: 'ri-skip-forward-line', color: 'warning.main', label: 'status.replicaStarted' },
   failed_over: { icon: 'ri-alarm-warning-line', color: 'error.main', label: 'status.failedOver' },
+  // Per-guest DR states (ui#943): the guest's own state wins over its job's.
+  failing_over: { icon: 'ri-loader-4-line', color: 'error.main', label: 'status.failingOver' },
+  failing_back: { icon: 'ri-arrow-go-back-line', color: 'info.main', label: 'status.failingBack' },
 }
 
 // Mirror the Go destinationVMID logic
@@ -74,7 +72,7 @@ function destinationVMID(prefix: number, vmid: number): number {
   return prefix * multiplier + vmid
 }
 
-interface DRReadyVM {
+export interface DRReadyVM {
   vmId: number
   vmName: string
   targetVmId: number
@@ -86,8 +84,14 @@ interface DRReadyVM {
   rpoTarget: number
   planId?: string
   planName?: string
+  planStatus?: string
+  planActiveTest?: boolean
   tier?: number
   bootOrder?: number
+  /** The guest's own DR state inside its plan (ui#943); null while it replicates. */
+  guestState?: RecoveryPlanGuestState | null
+  /** How many OTHER guests of the plan keep replicating while this one is on the DR site. */
+  siblingCount?: number
 }
 
 interface EmergencyDRTabProps {
@@ -105,13 +109,18 @@ interface EmergencyDRTabProps {
   onExecuteFailover: (planId: string) => void
   onExecuteFailback: (planId: string) => void
   onDeletePlan?: (planId: string) => void
+  /** Production failover of ONE guest of its plan (ui#943), distinct from starting its replica. */
+  onGuestFailover?: (vm: DRReadyVM) => void
+  /** Failback of ONE failed-over guest, or the follow-up of one already failing back. */
+  onGuestFailback?: (vm: DRReadyVM) => void
 }
 
 export default function EmergencyDRTab({
   jobs, plans, loading, connections, vmNamesByConn, vmStatesByConn, onStartVM, onStopVM, loadRestorePoints,
-  onExecuteFailover, onExecuteFailback, onDeletePlan
+  onExecuteFailover, onExecuteFailback, onDeletePlan, onGuestFailover, onGuestFailback
 }: EmergencyDRTabProps) {
   const t = useTranslations('siteRecovery')
+  const theme = useTheme()
   const tc = useTranslations('common')
   const [loadingVMs, setLoadingVMs] = useState<Record<string, 'starting' | 'stopping'>>({})
   const [deletePlanId, setDeletePlanId] = useState<string | null>(null)
@@ -166,8 +175,17 @@ export default function EmergencyDRTab({
         if (drvm) {
           drvm.planId = plan.id
           drvm.planName = plan.name
+          drvm.planStatus = plan.status
+          drvm.planActiveTest = !!plan.active_test_execution_id
           drvm.tier = pvm.tier
           drvm.bootOrder = pvm.boot_order
+          drvm.siblingCount = Math.max(0, (plan.vms || []).length - 1)
+          // The guest's own DR state replaces its job's status on the row:
+          // a job reading "synced" says nothing about a guest whose replica
+          // is production on the DR site.
+          const guest = guestStateOf(plan, pvm.vm_id)
+          drvm.guestState = guest?.state || null
+          if (guest) drvm.jobStatus = guest.state
         }
       }
     }
@@ -283,14 +301,34 @@ export default function EmergencyDRTab({
   // The plan status is a raw enum ("failed_over", "failing_back"): the same
   // translated labels RecoveryPlansTab uses, so the panic screen never shows
   // a key with an underscore in it. An unknown value falls back to itself.
-  const planStatusLabel = (status: string) => {
+  // A partially failed over plan counts its guests (ui#943).
+  const planStatusLabel = (plan: RecoveryPlan) => {
+    const status = plan.status as string
+
     if (status === 'failing_back') return t('plans.statusFailingBack')
+    if (status === 'partially_failed_over') {
+      return t('emergencyDR.planGuestsOver', { over: countGuestsFailedOver(plan), total: (plan.vms || []).length })
+    }
 
     const key = `planStatus.${status}`
     const label = t.has(key) ? t(key) : status
 
     return label
   }
+
+  const planStatusColor = (status: string): 'success' | 'error' | 'info' | 'warning' => {
+    if (status === 'ready') return 'success'
+    if (status === 'failed_over') return 'error'
+    if (status === 'executing' || status === 'failing_back') return 'info'
+
+    return 'warning'
+  }
+
+  // Which per-guest action the row offers (ui#943). The plan's own
+  // execution, a test on the DR site or the plan failed over as a whole
+  // lock the failover; the guest's own state decides between the rest.
+  const planBusy = (vm: DRReadyVM) =>
+    vm.planStatus === 'executing' || vm.planStatus === 'failing_back' || vm.planStatus === 'failed_over' || !!vm.planActiveTest
 
   // started / stopped / unknown, never the raw PVE word: "running" there also
   // covers a paused guest, and an operator reading "running" on a DR row in
@@ -388,12 +426,34 @@ export default function EmergencyDRTab({
             const state = replicaState(vm)
             const replicaStarted = state === 'running' || state === 'paused'
             const replicaStopped = state === 'stopped'
+            // A failed over guest's replica IS production: starting it again
+            // would roll it back, stopping it would hand it to the next sync.
+            // Both actions step aside for the failback (ui#943).
+            const guestLocked = !!vm.guestState
+            const startTitle = firstReason(
+              [guestLocked, t('emergencyDR.guestActionsLocked')],
+              [replicaStarted, t('emergencyDR.startVMAlreadyStarted')],
+              [true, t('emergencyDR.startReplica')],
+            )
+            const stopTitle = firstReason(
+              [guestLocked, t('emergencyDR.guestActionsLocked')],
+              [replicaStopped, t('emergencyDR.stopVMAlreadyStopped')],
+              [true, t('emergencyDR.stopReplica')],
+            )
+            const failoverTitle = firstReason(
+              [vm.guestState === 'failing_over', t('emergencyDR.guestFailingOver')],
+              [!!vm.guestState, t('emergencyDR.guestActionsLocked')],
+              [planBusy(vm), t('emergencyDR.planBusyForGuest')],
+              [true, t('emergencyDR.failoverVM')],
+            )
+            const failbackTitle = vm.guestState === 'failing_back' ? t('emergencyDR.openGuestFailback') : t('emergencyDR.failbackVM')
 
             return (
               <TableRow key={key} hover>
                 <TableCell>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <GuestGlyph />
+                    {/* The source VM, with its power dot like every guest row of the product. */}
+                    <GuestGlyph status={vmStatesByConn[vm.sourceCluster]?.[vm.vmId]} dotBorder={theme.palette.background.paper} />
                     <Typography variant="body2" fontWeight={500}>{vm.vmName}</Typography>
                   </Box>
                 </TableCell>
@@ -416,11 +476,11 @@ export default function EmergencyDRTab({
                 )}
                 <TableCell align="right">
                   <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'flex-end' }}>
-                    <Tooltip title={replicaStarted ? t('emergencyDR.startVMAlreadyStarted') : t('emergencyDR.startVM')}>
+                    <Tooltip title={startTitle}>
                       <span>
                         <IconButton
                           size="small"
-                          disabled={!!vmLoading || replicaStarted}
+                          disabled={!!vmLoading || replicaStarted || guestLocked}
                           onClick={() => openStartDialog(vm)}
                           sx={{ color: 'success.main', '&:hover': { bgcolor: 'success.main', color: 'white' } }}
                         >
@@ -428,11 +488,11 @@ export default function EmergencyDRTab({
                         </IconButton>
                       </span>
                     </Tooltip>
-                    <Tooltip title={replicaStopped ? t('emergencyDR.stopVMAlreadyStopped') : t('emergencyDR.stopVM')}>
+                    <Tooltip title={stopTitle}>
                       <span>
                         <IconButton
                           size="small"
-                          disabled={!!vmLoading || replicaStopped}
+                          disabled={!!vmLoading || replicaStopped || guestLocked}
                           onClick={() => openStopDialog(vm)}
                           sx={{ color: 'warning.main', '&:hover': { bgcolor: 'warning.main', color: 'white' } }}
                         >
@@ -440,6 +500,41 @@ export default function EmergencyDRTab({
                         </IconButton>
                       </span>
                     </Tooltip>
+                    {/* Production failover and failback of this ONE guest (ui#943):
+                        the plan keeps replicating its other guests. Only a guest
+                        of a plan carries them, a standalone replica has no plan
+                        to hold its state. */}
+                    {vm.planId && onGuestFailover && (
+                      vm.guestState === 'failed_over' || vm.guestState === 'failing_back' ? (
+                        <Tooltip title={failbackTitle}>
+                          <span>
+                            <IconButton
+                              size="small"
+                              data-testid={`guest-failback-${vm.vmId}`}
+                              disabled={!!vmLoading || !onGuestFailback}
+                              onClick={() => onGuestFailback?.(vm)}
+                              sx={{ color: 'info.main', '&:hover': { bgcolor: 'info.main', color: 'white' } }}
+                            >
+                              <i className="ri-arrow-go-back-line" style={{ fontSize: 18 }} />
+                            </IconButton>
+                          </span>
+                        </Tooltip>
+                      ) : (
+                        <Tooltip title={failoverTitle}>
+                          <span>
+                            <IconButton
+                              size="small"
+                              data-testid={`guest-failover-${vm.vmId}`}
+                              disabled={!!vmLoading || guestLocked || planBusy(vm)}
+                              onClick={() => onGuestFailover(vm)}
+                              sx={{ color: 'error.main', '&:hover': { bgcolor: 'error.main', color: 'white' } }}
+                            >
+                              {vm.guestState === 'failing_over' ? <CircularProgress size={16} color="error" /> : <i className="ri-shield-star-line" style={{ fontSize: 18 }} />}
+                            </IconButton>
+                          </span>
+                        </Tooltip>
+                      )
+                    )}
                   </Box>
                 </TableCell>
               </TableRow>
@@ -483,11 +578,7 @@ export default function EmergencyDRTab({
                 <Typography variant="body2" color="text.secondary">
                   {connMap[plan.source_cluster] || plan.source_cluster} → {connMap[plan.target_cluster] || plan.target_cluster}
                 </Typography>
-                <Chip size="small" label={planStatusLabel(plan.status)} color={
-                  plan.status === 'ready' ? 'success' :
-                  plan.status === 'failed_over' ? 'error' :
-                  plan.status === 'executing' ? 'info' : 'warning'
-                } />
+                <Chip size="small" label={planStatusLabel(plan)} color={planStatusColor(plan.status)} />
                 <Chip size="small" label={`${vms.length} VMs`} variant="outlined" />
               </Box>
             }
@@ -504,7 +595,7 @@ export default function EmergencyDRTab({
                   {t('emergencyDR.emergencyFailover')}
                 </Button>
                 <Tooltip
-                  title={t('emergencyDR.planFailbackDisabled')}
+                  title={plan.status === 'partially_failed_over' ? t('emergencyDR.planFailbackPartial') : t('emergencyDR.planFailbackDisabled')}
                   disableHoverListener={plan.status === 'failed_over' || plan.status === 'failing_back'}
                   arrow
                 >
@@ -514,7 +605,7 @@ export default function EmergencyDRTab({
                       size="small"
                       startIcon={<i className="ri-arrow-go-back-line" />}
                       onClick={() => onExecuteFailback(planId)}
-                      disabled={plan.status !== 'failed_over' && plan.status !== 'failing_back'}
+                      disabled={plan.status !== 'failed_over' && plan.status !== 'failing_back' && plan.status !== 'partially_failed_over'}
                     >
                       {plan.status === 'failing_back' ? t('emergencyDR.openPlanFailback') : t('emergencyDR.planFailback')}
                     </Button>

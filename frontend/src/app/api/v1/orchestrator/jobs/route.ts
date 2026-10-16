@@ -418,13 +418,17 @@ export async function GET(req: Request) {
               // from the task row, so the chip has to say so.
 
               const typeLabel = exec.type === "failover" ? "Failover" : exec.type === "failback" ? "Failback" : "Test Failover"
+              // An execution scoped to one guest names it (ui#943).
+              const scopedGuest = exec.scope_vmid
+                ? (exec.vm_results || []).find((vm: any) => vm.vm_id === exec.scope_vmid)?.vm_name || `VM ${exec.scope_vmid}`
+                : null
 
               const planSource = resolve(plan.source_cluster)
               const planTarget = resolve(plan.target_cluster)
 
               jobs.push({
                 id: exec.id,
-                name: `${typeLabel} - ${plan.name}`,
+                name: scopedGuest ? `${typeLabel} - ${plan.name} (${scopedGuest})` : `${typeLabel} - ${plan.name}`,
                 // A failover, a failback or a test failover is Site Recovery,
                 // not maintenance: the old "maintenance" type made the Type
                 // column lie about what the operator had run.

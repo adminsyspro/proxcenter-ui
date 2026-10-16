@@ -88,6 +88,12 @@ export type AuditAction =
   // SDN
   | "sdn.apply"
 
+  // Site Recovery, one guest of a plan (ui#943)
+  | "dr.guest_failover"
+  | "dr.guest_failback"
+  | "dr.guest_failback_cutover"
+  | "dr.guest_failback_cancel"
+
   // Proxmox resource pools
   | "pool.create"
   | "pool.update"

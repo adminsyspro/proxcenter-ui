@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 
-import { getCurrentTenantId, getSessionPrisma } from "@/lib/tenant"
+import { getCurrentTenantId, getSessionPrisma, requireProviderTenant } from "@/lib/tenant"
 import { orchestratorFetch } from "@/lib/orchestrator"
 import { executeSSH } from "@/lib/ssh/exec"
 import { managedHostSshEndpoint, type NodeSshEndpoint } from "@/lib/ssh/node-endpoint-core"
@@ -273,7 +273,10 @@ export async function GET() {
     const results: NodeSFlowStatus[] = nested.flat()
 
     // The orchestrator keys the telemetry health on this inventory (roadmap#52).
-    await reportExpectedAgents(expectedAgentsFrom(results, probedConnectionIds))
+    // It is fleet-wide state that drives alerts, so only the provider writes it.
+    if (!(await requireProviderTenant())) {
+      await reportExpectedAgents(expectedAgentsFrom(results, probedConnectionIds))
+    }
 
     agentsCache.set(tenantId, { at: Date.now(), data: results })
     return NextResponse.json({ data: results })
@@ -391,7 +394,9 @@ export async function POST(request: NextRequest) {
     // node loses its OVS database. Only worth storing if it worked somewhere.
     if (successCount > 0) {
       await saveDesiredSFlowConfig(tenantId, desiredConfig)
-      await reportExpectedAgents({ connection_ids: [], agents: configuredNow })
+      if (!(await requireProviderTenant())) {
+        await reportExpectedAgents({ connection_ids: [], agents: configuredNow })
+      }
     }
 
     await recordSFlowConfigureAudit(results, collectorTarget)

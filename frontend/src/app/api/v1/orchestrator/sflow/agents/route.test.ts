@@ -5,6 +5,7 @@ import { callRoute, readJson } from '@/__tests__/setup/route-test'
 vi.mock('@/lib/tenant', () => ({
   getCurrentTenantId: vi.fn<() => Promise<string>>(),
   getSessionPrisma: vi.fn<() => Promise<any>>(),
+  requireProviderTenant: vi.fn<() => Promise<Response | null>>(async () => null),
 }))
 
 vi.mock('@/lib/orchestrator', () => ({
@@ -31,7 +32,7 @@ vi.mock('@/lib/sflow/reconciler', () => ({
 }))
 
 import { GET, POST } from './route'
-import { getCurrentTenantId, getSessionPrisma } from '@/lib/tenant'
+import { getCurrentTenantId, getSessionPrisma, requireProviderTenant } from '@/lib/tenant'
 import { checkPermission } from '@/lib/rbac'
 import { executeSSH } from '@/lib/ssh/exec'
 import { orchestratorFetch } from '@/lib/orchestrator'
@@ -386,6 +387,19 @@ describe('GET /sflow/agents: node probing and port map push', () => {
     // cluster is left out of connection_ids so the orchestrator keeps its row.
     expect(init.body.connection_ids).toEqual([])
     expect(init.body.agents.map((a: any) => a.node)).toEqual(['pve1'])
+  })
+
+  it('lets only the provider write the fleet-wide expected agents inventory', async () => {
+    getCurrentTenantIdMock.mockResolvedValue('tenant-get-5')
+    vi.mocked(requireProviderTenant).mockResolvedValueOnce(new Response(null, { status: 403 }))
+    getSessionPrismaMock.mockResolvedValue(prismaWithHosts())
+    executeSSHMock.mockImplementation(sshByCommand({ macsFrom: '10.0.0.1', ovsOn: ['10.0.0.1'], sflowOn: ['10.0.0.1'] }))
+    orchestratorFetchMock.mockResolvedValue({})
+
+    const res = await callRoute(GET as any, { method: 'GET' })
+
+    expect(res.status).toBe(200)
+    expect(orchestratorFetchMock.mock.calls.filter((c: any[]) => c[0] === '/sflow/expected-agents')).toHaveLength(0)
   })
 
   it('still answers when the orchestrator refuses the expected agents report', async () => {

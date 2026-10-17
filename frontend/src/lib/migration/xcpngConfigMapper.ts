@@ -75,7 +75,7 @@ export function mapXoToPveConfig(
     bootDiskSlot,
     diskSlots,
     agent: "1",
-    net0: `${nicModel},bridge=${networkBridge}${tagSuffix}`,
+    nets: { net0: `${nicModel},bridge=${networkBridge}${tagSuffix}` },
   }
 
   if (isEfi) {

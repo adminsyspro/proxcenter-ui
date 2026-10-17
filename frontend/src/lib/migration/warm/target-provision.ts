@@ -152,8 +152,10 @@ export async function createTargetVmShell(pveConn: any, node: string, pveParams:
     vmid: String(pveParams.vmid), name: pveParams.name, ostype: pveParams.ostype,
     cores: String(pveParams.cores), sockets: String(pveParams.sockets), memory: String(pveParams.memory),
     cpu: pveParams.cpu, scsihw: pveParams.scsihw, bios: pveParams.bios, machine: pveParams.machine,
-    net0: pveParams.net0, agent: pveParams.agent, serial0: "socket",
+    agent: pveParams.agent, serial0: "socket",
   })
+  // Every source NIC, net0 to netN (#317).
+  for (const [key, value] of Object.entries(pveParams.nets)) createBody.set(key, value)
   if (pveParams.efidisk0) createBody.set("efidisk0", pveParams.efidisk0)
   const created = await pveFetch<any>(pveConn, `/nodes/${encodeURIComponent(node)}/qemu`, { method: "POST", body: createBody })
   if (created) await waitForPveTask(pveConn, node, String(created))

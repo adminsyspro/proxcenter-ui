@@ -928,6 +928,30 @@ export function vmwareToolsState(c: Pick<EsxiVmConfig, "toolsStatus" | "toolsRun
 }
 
 /** Parse full VM config from SOAP XML */
+/**
+ * Network adapters of a `config.hardware.device` property, in device order.
+ *
+ * Device order is what vSphere shows as "Network adapter 1, 2, ...", and it is
+ * the order the migration dialog and the mappers index NICs by (#317): the
+ * review step's row N is the mapper's `netN`. The former per-type passes
+ * (every Vmxnet3 first, then every E1000) reordered mixed-model guests.
+ */
+export function parseNicDevices(devicesXml: string): EsxiNicInfo[] {
+  const nics: EsxiNicInfo[] = []
+  const nicRegex = /xsi:type="Virtual(Vmxnet3|E1000e|E1000|Vmxnet2|Vmxnet)">([\s\S]*?)(?=<VirtualDevice|$)/g
+  let nicMatch
+  while ((nicMatch = nicRegex.exec(devicesXml)) !== null) {
+    const n = nicMatch[2]
+    nics.push({
+      label: n.match(/<label>([^<]*)<\/label>/)?.[1] || "",
+      type: nicMatch[1],
+      macAddress: n.match(/<macAddress>([^<]*)<\/macAddress>/)?.[1] || "",
+      network: n.match(/<summary>([^<]*)<\/summary>/)?.[1] || "",
+    })
+  }
+  return nics
+}
+
 export function parseVmConfig(xml: string): EsxiVmConfig {
   const name = extractProp(xml, "name")
   const guestOS = extractProp(xml, "config.guestFullName")
@@ -995,21 +1019,7 @@ export function parseVmConfig(xml: string): EsxiVmConfig {
   }
 
   // NICs
-  const nics: EsxiNicInfo[] = []
-  const nicTypes = ["Vmxnet3", "E1000e", "E1000", "Vmxnet2", "Vmxnet"]
-  for (const nicType of nicTypes) {
-    const nicRegex = new RegExp(`xsi:type="Virtual${nicType}">([\\s\\S]*?)(?=<VirtualDevice|$)`, "g")
-    let nicMatch
-    while ((nicMatch = nicRegex.exec(devicesXml)) !== null) {
-      const n = nicMatch[1]
-      nics.push({
-        label: n.match(/<label>([^<]*)<\/label>/)?.[1] || "",
-        type: nicType,
-        macAddress: n.match(/<macAddress>([^<]*)<\/macAddress>/)?.[1] || "",
-        network: n.match(/<summary>([^<]*)<\/summary>/)?.[1] || "",
-      })
-    }
-  }
+  const nics = parseNicDevices(devicesXml)
 
   // Snapshots
   const snapshotXml = extractProp(xml, "snapshot")

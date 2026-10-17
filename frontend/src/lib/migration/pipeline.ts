@@ -26,6 +26,7 @@ import { executeSSH, shellEscape } from "@/lib/ssh/exec"
 import { formatSshEndpoint, resolveSshTargetPort, sshTargetHost, type SshTarget } from "@/lib/ssh/node-endpoint-core"
 import { soapLogin, soapLogout, soapGetVmConfig, parseVmConfig, buildVmdkDownloadUrl, buildVmdkDescriptorUrl, extractProp, soapCreateSnapshot, soapRemoveAllSnapshots, soapPowerOffVm, soapExportVm, soapWaitForNfcLease, soapNfcLeaseProgress, soapNfcLeaseComplete, soapNfcLeaseAbort, SNAPSHOT_REMOVE_TERMINAL_TIMEOUT_MS } from "@/lib/vmware/soap"
 import { mapEsxiToPveConfig, isWindowsVm } from "./configMapper"
+import { describeOverrides, type MigrationHardwareOverrides, type MigrationNicMapping } from "./target-overrides"
 import type { SoapSession, EsxiVmConfig, EsxiDiskInfo, NfcLeaseDeviceUrl } from "@/lib/vmware/soap"
 import {
   allocateAndMapBlockVolume, nextFreeDiskName, volumesToFree,
@@ -68,6 +69,10 @@ interface MigrationConfig {
    * by the route; absent means the Proxmox default, x86-64-v2-AES.
    */
   cpuType?: string
+  /** Operator hardware overrides of the created VM (#317): cores, sockets, memory. */
+  hardware?: MigrationHardwareOverrides
+  /** Per-source-NIC target bridge, VLAN tag and model (#317); unmapped NICs use networkBridge. */
+  nics?: MigrationNicMapping[]
   migrationType?: "cold" | "live" | "sshfs_boot"
   transferMode?: "https" | "sshfs" | "auto"
   // User-selected temp directory on the PVE node for large intermediate files
@@ -407,8 +412,11 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
     }
     await updateJob(jobId, "creating_vm", { targetVmid })
 
-    const pveParams = mapEsxiToPveConfig(vmConfig, targetVmid, config.targetStorage, config.networkBridge, config.vlanTag, config.cpuType)
-    await appendLog(jobId, `Creating VM: ${pveParams.name} (${pveParams.ostype}, ${pveParams.bios}, ${pveParams.scsihw})...`)
+    const overrides = { hardware: config.hardware, nics: config.nics }
+    const pveParams = mapEsxiToPveConfig(vmConfig, targetVmid, config.targetStorage, config.networkBridge, config.vlanTag, config.cpuType, overrides)
+    const overridesLine = describeOverrides(overrides)
+    if (overridesLine) await appendLog(jobId, overridesLine)
+    await appendLog(jobId, `Creating VM: ${pveParams.name} (${pveParams.ostype}, ${pveParams.bios}, ${pveParams.scsihw}, ${Object.keys(pveParams.nets).length} NIC(s))...`)
 
     // Build URLSearchParams for VM creation (without disks — we import them separately)
     const createBody = new URLSearchParams({
@@ -422,10 +430,11 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       scsihw: pveParams.scsihw,
       bios: pveParams.bios,
       machine: pveParams.machine,
-      net0: pveParams.net0,
       agent: pveParams.agent,
       serial0: "socket",
     })
+    // Every source NIC, net0 to netN (#317).
+    for (const [key, value] of Object.entries(pveParams.nets)) createBody.set(key, value)
     if (pveParams.efidisk0) {
       createBody.set("efidisk0", pveParams.efidisk0)
     }

@@ -48,6 +48,8 @@ import { NFC_CONCURRENCY_MIN, NFC_CONCURRENCY_MAX } from '@/lib/migration/nfc-pr
 import { isZeroRateLimitValid, describeZeroRateLimit } from '@/lib/migration/warm/zero-rate'
 import ZeroRateSlider from '@/components/migration/ZeroRateSlider'
 import { MIGRATION_CPU_TYPES, MIGRATION_CPU_TYPE_DEFAULT, type MigrationCpuType } from '@/lib/migration/cpu-type'
+import MigrationReviewStep from './MigrationReviewStep'
+import { initialHardwareState, initialNicState, reviewIsValid, buildHardwarePayload, buildNicsPayload, type ReviewSource, type ReviewHardwareState, type ReviewNicState } from './migrationReview'
 import { usedVmidsOnConnection, nextVmidOnConnection } from '@/components/hardware/utils'
 import { tooltipSlotProps } from '@/components/settings/ha/tooltipSlotProps'
 // Dependency-free eligibility check (NOT ./cbt, which pulls the server-only SOAP client).
@@ -300,8 +302,15 @@ export interface InventoryDialogsProps {
   migZeroRateLimit: string
   setMigZeroRateLimit: (v: string) => void
   setMigConvertToQcow2: (v: boolean) => void
-  migCpuType: MigrationCpuType
-  setMigCpuType: (v: MigrationCpuType) => void
+  migCpuType: string
+  setMigCpuType: (v: string) => void
+  // Two-step VMware dialog (#317): the review step and its editable state.
+  migStep: 'config' | 'review'
+  setMigStep: (v: 'config' | 'review') => void
+  migHardware: ReviewHardwareState
+  setMigHardware: (v: ReviewHardwareState) => void
+  migNics: ReviewNicState[]
+  setMigNics: (v: ReviewNicState[]) => void
   migDiskPaths: string
   setMigDiskPaths: (v: string) => void
   migTempStorage: string
@@ -443,6 +452,16 @@ function NodeActionGuestList({ vms, limit = 8 }: { vms: NodeActionGuest[]; limit
   )
 }
 
+/**
+ * The migration type the API gets: Hyper-V and Nutanix are cold only, and a
+ * vCenter source has no SSHFS boot mode (virt-v2v), so that choice runs cold.
+ */
+export function requestedMigrationType(hostType: string | undefined, migType: string): string {
+  if (hostType === 'hyperv' || hostType === 'nutanix') return 'cold'
+  if (hostType === 'vcenter' && migType === 'sshfs_boot') return 'cold'
+  return migType
+}
+
 export default function InventoryDialogs(props: InventoryDialogsProps) {
   const { hasPermission } = useRBAC()
   const canEditHardware = hasPermission('vm.config.hardware')
@@ -487,6 +506,7 @@ export default function InventoryDialogs(props: InventoryDialogsProps) {
     migNetworkBridge, setMigNetworkBridge, migVlanTag, setMigVlanTag, migBridges,
     migStartAfter, setMigStartAfter, migConvertToQcow2, setMigConvertToQcow2,
     migCpuType, setMigCpuType,
+    migStep, setMigStep, migHardware, setMigHardware, migNics, setMigNics,
     migManualCutover, setMigManualCutover,
     migDowntimeBudget, setMigDowntimeBudget,
     migZeroRateLimit, setMigZeroRateLimit,
@@ -701,7 +721,10 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
   // keeps the VMware-specific CBT-fallback warning below silent for them.
   const [sourceDatastores, setSourceDatastores] = useState<string[]>([])
   const [sourceDatastoresLoading, setSourceDatastoresLoading] = useState(false)
-  const [sourceVmDetail, setSourceVmDetail] = useState<{ snapshotCount: number; vmxVersion: string; disks: { diskMode?: string; sharing?: string }[] } | null>(null)
+  // The review step (#317) reads the hardware and the NIC list from the same
+  // answer: `nics` is parsed server side in the order the pipelines index them.
+  const [sourceVmDetail, setSourceVmDetail] = useState<({ snapshotCount: number; vmxVersion: string; disks: { diskMode?: string; sharing?: string }[] } & ReviewSource) | null>(null)
+  const isVmwareSource = esxiMigrateVm?.hostType === 'vmware' || esxiMigrateVm?.hostType === 'vcenter'
   React.useEffect(() => {
     if (!esxiMigrateVm) { setSourceDatastores([]); setSourceVmDetail(null); return }
     if (esxiMigrateVm.hostType === 'hyperv' || esxiMigrateVm.hostType === 'nutanix' || esxiMigrateVm.hostType === 'xcpng') {
@@ -734,6 +757,13 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
           snapshotCount: Number(detail.snapshotCount) || 0,
           vmxVersion: String(detail.vmxVersion || ''),
           disks,
+          numCPU: Number(detail.numCPU) || 0,
+          numCoresPerSocket: Number(detail.numCoresPerSocket) || 0,
+          sockets: Number(detail.sockets) || 0,
+          memoryMB: Number(detail.memoryMB) || 0,
+          nics: Array.isArray(detail.nics)
+            ? detail.nics.map((n: any) => ({ label: String(n?.label || ''), type: String(n?.type || ''), macAddress: String(n?.macAddress || ''), network: String(n?.network || '') }))
+            : [],
         } : null)
       })
       .catch(() => { if (!cancelled) { setSourceDatastores([]); setSourceVmDetail(null) } })
@@ -1243,6 +1273,139 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
     const res = await fetch(`/api/v1/migrations/${migJobId}/cancel`, { method: 'POST' })
     const d = await res.json().catch(() => ({}))
     if (d.data) setMigJob(d.data)
+  }
+
+  // Two-step VMware dialog (#317): "Review" seeds the hardware fields and the
+  // NIC rows from the source VM and opens the review step; "Start" posts the
+  // job. The review state is seeded again when the source answer lands after
+  // the step was opened (slow vCenter), as long as nothing was typed yet.
+  const enterReview = () => {
+    setMigHardware(initialHardwareState(sourceVmDetail))
+    setMigNics(initialNicState(sourceVmDetail, migNetworkBridge, canEditVlan ? migVlanTag : ''))
+    setMigStep('review')
+  }
+  React.useEffect(() => {
+    if (migStep !== 'review' || !sourceVmDetail) return
+    if (migHardware.cores === '' && migHardware.sockets === '' && migHardware.memoryMB === '') setMigHardware(initialHardwareState(sourceVmDetail))
+    if (migNics.length === 0 && sourceVmDetail.nics.length > 0) setMigNics(initialNicState(sourceVmDetail, migNetworkBridge, canEditVlan ? migVlanTag : ''))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [migStep, sourceVmDetail])
+  const launchMigration = async () => {
+    const reviewHardware = buildHardwarePayload(migHardware, sourceVmDetail)
+    const reviewNics = buildNicsPayload(migNics, canEditVlan)
+    if (!esxiMigrateVm) return
+    setMigStarting(true)
+    try {
+      const res = await fetch('/api/v1/migrations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sourceConnectionId: esxiMigrateVm.connId,
+          sourceVmId: esxiMigrateVm.vmid,
+          sourceVmName: esxiMigrateVm.name,
+          targetConnectionId: migTargetConn,
+          targetNode: migTargetNode,
+          targetStorage: migTargetStorage,
+          ...(migTargetVmid && /^\d+$/.test(migTargetVmid.trim()) && {
+            targetVmid: Number(migTargetVmid.trim()),
+          }),
+          networkBridge: migNetworkBridge,
+          // 802.1Q VLAN tag (1-4094). Empty input means untagged
+          // access port — omit from the payload so the server-side
+          // schema treats it as undefined rather than Number.NaN.
+          ...(canEditVlan && migVlanTag !== '' && Number(migVlanTag) >= 1 && Number(migVlanTag) <= 4094 && {
+            vlanTag: Number(migVlanTag),
+          }),
+          // vCenter supports cold + warm via the v2v pipeline.
+          // Hyper-V / Nutanix are still cold only.
+          migrationType: requestedMigrationType(esxiMigrateVm.hostType, migType),
+          transferMode: (esxiMigrateVm.hostType === 'vcenter' || esxiMigrateVm.hostType === 'hyperv' || esxiMigrateVm.hostType === 'nutanix') ? 'v2v' : migTransferMode,
+          startAfterMigration: migStartAfter,
+          // Gated on the storage type so a toggle left on while an
+          // LVM storage was selected never leaks into a run against
+          // a storage the option is hidden for.
+          convertDisksToQcow2: migConvertToQcow2 && migTargetIsThickLvm,
+          // CPU type of the created VM (roadmap#24).
+          cpuType: migCpuType,
+          // Review-step overrides (#317), VMware sources only: hardware values
+          // that differ from the source, and one target bridge per source NIC.
+          ...(isVmwareSource && migStep === 'review' && reviewHardware && { hardware: reviewHardware }),
+          ...(isVmwareSource && migStep === 'review' && reviewNics && { nics: reviewNics }),
+          // Warm only, and single-VM only: the switch is hidden
+          // everywhere else, so the payload is gated on the type too
+          // rather than trusting the UI state.
+          ...(migType === 'warm' && migManualCutover && { cutoverMode: 'manual' as const }),
+          ...(migType === 'warm' && !migManualCutover && migDowntimeBudget.trim() !== '' && {
+            downtimeBudgetSec: Number(migDowntimeBudget.trim()),
+          }),
+          // Thick zeroing cap (roadmap#45); empty keeps the global default.
+          ...(showZeroRateLimit && migZeroRateLimit.trim() !== '' && {
+            zeroRateLimitMBps: Number(migZeroRateLimit.trim()),
+          }),
+          // Forward tempStorage for every source type — v2v uses it as virt-v2v's -os,
+          // direct-ESXi uses it as the base path for SSHFS mount + VMDK dumps + clones.
+          ...(migTempStorage !== '/tmp' && {
+            tempStorage: migTempStorage,
+          }),
+          // virt-v2v root filesystem override (#738); omitted when empty.
+          ...(migV2vRoot.trim() && { v2vRoot: migV2vRoot.trim() }),
+          // Parallel NFC downloads (#807): cold vCenter only, gated like the slider.
+          ...(esxiMigrateVm.hostType === 'vcenter' && migType !== 'warm' && { nfcConcurrency: migNfcConcurrency }),
+          ...(esxiMigrateVm.hostType === 'hyperv' && migDiskPaths.trim() && {
+            diskPaths: migDiskPaths.trim().split('\n').map((p: string) => p.trim()).filter(Boolean),
+          }),
+          // vCenter inventory path resolved server-side via SOAP and threaded
+          // down through esxiMigrateVm. Required by libvirt's vpx driver to
+          // locate the VM in the vCenter inventory hierarchy.
+          // We deliberately DO NOT gate on hostType==='vcenter' here: the
+          // backend route decides whether to invoke the v2v pipeline based on
+          // the connection's subType (DB-side), and the frontend hostType has
+          // historically only been set to 'vmware' for both ESXi and vCenter.
+          // Sending these fields unconditionally is harmless for ESXi (where
+          // they're always undefined and the spreads no-op) and unblocks
+          // vCenter regardless of how the host derived hostType.
+          ...((esxiMigrateVm as any).vcenterDatacenter && {
+            vcenterDatacenter: (esxiMigrateVm as any).vcenterDatacenter,
+          }),
+          ...((esxiMigrateVm as any).vcenterCluster && {
+            vcenterCluster: (esxiMigrateVm as any).vcenterCluster,
+          }),
+          ...((esxiMigrateVm as any).vcenterHost && {
+            vcenterHost: (esxiMigrateVm as any).vcenterHost,
+          }),
+        }),
+      })
+      const d = await res.json()
+      if (d.data?.jobId) {
+        const jobId = d.data.jobId
+        setMigJobId(jobId)
+        // Add task to ProxCenter TasksBar
+        const taskId = `migration-${jobId}`
+        const vmLabel = esxiMigrateVm.name || esxiMigrateVm.vmid
+        const sourceType = esxiMigrateVm.hostType === 'xcpng' ? 'XCP-ng' : esxiMigrateVm.hostType === 'vcenter' ? 'vCenter' : esxiMigrateVm.hostType === 'hyperv' ? 'Hyper-V' : esxiMigrateVm.hostType === 'nutanix' ? 'Nutanix' : 'ESXi'
+        addPCTask({
+          id: taskId,
+          type: 'generic',
+          label: `${t('inventoryPage.esxiMigration.migrating')} ${vmLabel} (${sourceType} → Proxmox)`,
+          detail: t('inventoryPage.esxiMigration.preflight'),
+          progress: 0,
+          status: 'running',
+          createdAt: Date.now(),
+        })
+        // Register restore callback to reopen dialog
+        const savedVm = { ...esxiMigrateVm }
+        registerOnRestore(taskId, () => {
+          setEsxiMigrateVm({ ...savedVm, restoreJobId: jobId })
+          setMigJobId(jobId)
+        })
+      } else {
+        throw new Error(d.error || 'Failed to start migration')
+      }
+    } catch (e: any) {
+      showSnackbar(e.message || 'Migration failed to start', 'error')
+    } finally {
+      setMigStarting(false)
+    }
   }
 
   return (
@@ -2523,14 +2686,23 @@ return
       </Dialog>
 
       {/* ESXi / XCP-ng Migration Dialog */}
-      <Dialog open={!!esxiMigrateVm} onClose={() => { if (!migStarting) setEsxiMigrateVm(null) }} maxWidth="sm" fullWidth>
+      {/* The review step (#317) carries a five-column NIC table: it gets the wider dialog. */}
+      <Dialog open={!!esxiMigrateVm} onClose={() => { if (!migStarting) setEsxiMigrateVm(null) }} maxWidth={!migJobId ? 'md' : 'sm'} fullWidth>
         <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
           <img src={esxiMigrateVm?.hostType === 'nutanix' ? '/images/nutanix-logo.svg' : esxiMigrateVm?.hostType === 'hyperv' ? '/images/hyperv-logo.svg' : esxiMigrateVm?.hostType === 'xcpng' ? '/images/xcpng-logo.svg' : '/images/esxi-logo.svg'} alt="" width={22} height={22} />
           {t('inventoryPage.esxiMigration.migrateToProxmox')}
         </DialogTitle>
         <DialogContent>
-          {esxiMigrateVm && !migJobId && (
+          {/* Step 1, the form. Anything but an explicit 'review' shows it, so a
+              caller not wired for the review step (#317) still gets the form. */}
+          {esxiMigrateVm && !migJobId && migStep !== 'review' && (
             <Stack spacing={2.5} sx={{ mt: 1 }}>
+              {/* Two columns (#317): where the VM goes on the left, how it gets
+                  there on the right; stacked on a narrow screen. */}
+              {/* Both columns end on the same line: the grid stretches them, the
+                  Target card grows to fill the left one. */}
+              <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2.5, alignItems: 'stretch' }}>
+              <Stack spacing={2.5} data-testid="migration-column-target">
               {/* Source VM info */}
               <Box sx={{ p: 2, borderRadius: 1.5, bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)', border: '1px solid', borderColor: 'divider' }}>
                 <Typography variant="subtitle2" sx={{ mb: 1, color: 'text.secondary', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5 }}>{t('inventoryPage.esxiMigration.sourceVm')}</Typography>
@@ -2547,7 +2719,7 @@ return
               </Box>
 
               {/* Target config */}
-              <Box sx={{ p: 2, borderRadius: 1.5, bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)', border: '1px solid', borderColor: 'divider' }}>
+              <Box sx={{ flexGrow: 1, p: 2, borderRadius: 1.5, bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)', border: '1px solid', borderColor: 'divider' }}>
                 <Typography variant="subtitle2" sx={{ mb: 1.5, color: 'text.secondary', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5 }}>{t('inventoryPage.esxiMigration.targetProxmox')}</Typography>
                 <Stack spacing={2}>
                   <FormControl fullWidth size="small">
@@ -2752,6 +2924,14 @@ return
                       ) : undefined,
                     }}
                   />
+                </Stack>
+              </Box>
+              </Stack>
+
+              {/* Right column: the migration itself, type and tuning */}
+              <Box sx={{ p: 2, borderRadius: 1.5, bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)', border: '1px solid', borderColor: 'divider' }} data-testid="migration-column-settings">
+                <Typography variant="subtitle2" sx={{ mb: 1.5, color: 'text.secondary', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5 }}>{t('inventoryPage.esxiMigration.migrationSettings')}</Typography>
+                <Stack spacing={2}>
                   {/* Migration type selector — hidden for Hyper-V / Nutanix (cold only).
                       vCenter and direct ESXi both support cold + warm. */}
                   {esxiMigrateVm?.hostType !== 'hyperv' && esxiMigrateVm?.hostType !== 'nutanix' && (
@@ -3367,7 +3547,8 @@ return
                     </Box>
                   )}
 
-                  {renderCpuTypeSelect()}
+                  {/* VMware sources pick the CPU model in the review step (#317), next to the node's own list. */}
+                  {!isVmwareSource && renderCpuTypeSelect()}
 
                   <FormControlLabel
                     control={<Switch size="small" checked={migStartAfter} onChange={(_, v) => setMigStartAfter(v)} />}
@@ -3380,6 +3561,7 @@ return
                   {renderZeroRateLimitField()}
                   {renderQcow2ConvertSwitch()}
                 </Stack>
+              </Box>
               </Box>
 
               {/* SSH warning — not needed for vCenter (virt-v2v handles connection) */}
@@ -3429,6 +3611,25 @@ return
                 </Typography>
               </Box>
             </Stack>
+          )}
+
+          {/* Step 2 (#317, VMware sources): review and customize the target VM */}
+          {esxiMigrateVm && !migJobId && migStep === 'review' && (
+            <MigrationReviewStep
+              source={sourceVmDetail}
+              sourceLoading={sourceDatastoresLoading}
+              sourceName={esxiMigrateVm.name}
+              targetConnId={migTargetConn}
+              targetNode={migTargetNode === '__auto__' ? (migNodeOptions.find((o: any) => o.connId === migTargetConn)?.node || '') : migTargetNode}
+              defaultBridge={migNetworkBridge}
+              canEditVlan={canEditVlan}
+              cpuType={migCpuType}
+              onCpuTypeChange={setMigCpuType}
+              hardware={migHardware}
+              onHardwareChange={setMigHardware}
+              nics={migNics}
+              onNicsChange={setMigNics}
+            />
           )}
 
           {/* Migration in progress / completed / failed */}
@@ -3581,10 +3782,21 @@ return
         <DialogActions sx={{ px: 3, pb: 2 }}>
           {!migJobId ? (
             <>
-              <Button onClick={() => setEsxiMigrateVm(null)} disabled={migStarting}>{t('common.cancel')}</Button>
+              {migStep === 'review' ? (
+                <Button onClick={() => setMigStep('config')} disabled={migStarting} startIcon={<i className="ri-arrow-left-line" style={{ fontSize: 16 }} />} sx={{ textTransform: 'none' }}>
+                  {t('inventoryPage.esxiMigration.back')}
+                </Button>
+              ) : (
+                <Button onClick={() => setEsxiMigrateVm(null)} disabled={migStarting}>{t('common.cancel')}</Button>
+              )}
               <Button
                 variant="outlined"
+                data-testid="migration-launch"
                 disabled={(() => {
+                  // Review step (#317): the edited values can block the launch,
+                  // and every form gate below keeps applying, so a preflight or
+                  // space verdict that changes meanwhile still holds the job.
+                  if (migStep === 'review' && !reviewIsValid(migHardware, migNics)) return true
                   // Base requirements (always apply)
                   if (!migTargetConn || !migTargetNode || !migTargetStorage || migStarting) return true
                   // Block migration when the user picked a VMID that conflicts
@@ -3665,120 +3877,9 @@ return
                 })()}
                 sx={{ textTransform: 'none' }}
                 startIcon={migStarting ? <CircularProgress size={16} color="inherit" /> : <img src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" width={16} height={16} />}
-                onClick={async () => {
-                  if (!esxiMigrateVm) return
-                  setMigStarting(true)
-                  try {
-                    const res = await fetch('/api/v1/migrations', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({
-                        sourceConnectionId: esxiMigrateVm.connId,
-                        sourceVmId: esxiMigrateVm.vmid,
-                        sourceVmName: esxiMigrateVm.name,
-                        targetConnectionId: migTargetConn,
-                        targetNode: migTargetNode,
-                        targetStorage: migTargetStorage,
-                        ...(migTargetVmid && /^\d+$/.test(migTargetVmid.trim()) && {
-                          targetVmid: Number(migTargetVmid.trim()),
-                        }),
-                        networkBridge: migNetworkBridge,
-                        // 802.1Q VLAN tag (1-4094). Empty input means untagged
-                        // access port — omit from the payload so the server-side
-                        // schema treats it as undefined rather than Number.NaN.
-                        ...(canEditVlan && migVlanTag !== '' && Number(migVlanTag) >= 1 && Number(migVlanTag) <= 4094 && {
-                          vlanTag: Number(migVlanTag),
-                        }),
-                        // vCenter supports cold + warm via the v2v pipeline.
-                        // Hyper-V / Nutanix are still cold only.
-                        migrationType: (esxiMigrateVm.hostType === 'hyperv' || esxiMigrateVm.hostType === 'nutanix') ? 'cold'
-                          : (esxiMigrateVm.hostType === 'vcenter' ? (migType === 'sshfs_boot' ? 'cold' : migType) : migType),
-                        transferMode: (esxiMigrateVm.hostType === 'vcenter' || esxiMigrateVm.hostType === 'hyperv' || esxiMigrateVm.hostType === 'nutanix') ? 'v2v' : migTransferMode,
-                        startAfterMigration: migStartAfter,
-                        // Gated on the storage type so a toggle left on while an
-                        // LVM storage was selected never leaks into a run against
-                        // a storage the option is hidden for.
-                        convertDisksToQcow2: migConvertToQcow2 && migTargetIsThickLvm,
-                        // CPU type of the created VM (roadmap#24).
-                        cpuType: migCpuType,
-                        // Warm only, and single-VM only: the switch is hidden
-                        // everywhere else, so the payload is gated on the type too
-                        // rather than trusting the UI state.
-                        ...(migType === 'warm' && migManualCutover && { cutoverMode: 'manual' as const }),
-                        ...(migType === 'warm' && !migManualCutover && migDowntimeBudget.trim() !== '' && {
-                          downtimeBudgetSec: Number(migDowntimeBudget.trim()),
-                        }),
-                        // Thick zeroing cap (roadmap#45); empty keeps the target connection's.
-                        ...(showZeroRateLimit && migZeroRateLimit.trim() !== '' && {
-                          zeroRateLimitMBps: Number(migZeroRateLimit.trim()),
-                        }),
-                        // Forward tempStorage for every source type — v2v uses it as virt-v2v's -os,
-                        // direct-ESXi uses it as the base path for SSHFS mount + VMDK dumps + clones.
-                        ...(migTempStorage !== '/tmp' && {
-                          tempStorage: migTempStorage,
-                        }),
-                        // virt-v2v root filesystem override (#738); omitted when empty.
-                        ...(migV2vRoot.trim() && { v2vRoot: migV2vRoot.trim() }),
-                        // Parallel NFC downloads (#807): cold vCenter only, gated like the slider.
-                        ...(esxiMigrateVm.hostType === 'vcenter' && migType !== 'warm' && { nfcConcurrency: migNfcConcurrency }),
-                        ...(esxiMigrateVm.hostType === 'hyperv' && migDiskPaths.trim() && {
-                          diskPaths: migDiskPaths.trim().split('\n').map((p: string) => p.trim()).filter(Boolean),
-                        }),
-                        // vCenter inventory path resolved server-side via SOAP and threaded
-                        // down through esxiMigrateVm. Required by libvirt's vpx driver to
-                        // locate the VM in the vCenter inventory hierarchy.
-                        // We deliberately DO NOT gate on hostType==='vcenter' here: the
-                        // backend route decides whether to invoke the v2v pipeline based on
-                        // the connection's subType (DB-side), and the frontend hostType has
-                        // historically only been set to 'vmware' for both ESXi and vCenter.
-                        // Sending these fields unconditionally is harmless for ESXi (where
-                        // they're always undefined and the spreads no-op) and unblocks
-                        // vCenter regardless of how the host derived hostType.
-                        ...((esxiMigrateVm as any).vcenterDatacenter && {
-                          vcenterDatacenter: (esxiMigrateVm as any).vcenterDatacenter,
-                        }),
-                        ...((esxiMigrateVm as any).vcenterCluster && {
-                          vcenterCluster: (esxiMigrateVm as any).vcenterCluster,
-                        }),
-                        ...((esxiMigrateVm as any).vcenterHost && {
-                          vcenterHost: (esxiMigrateVm as any).vcenterHost,
-                        }),
-                      }),
-                    })
-                    const d = await res.json()
-                    if (d.data?.jobId) {
-                      const jobId = d.data.jobId
-                      setMigJobId(jobId)
-                      // Add task to ProxCenter TasksBar
-                      const taskId = `migration-${jobId}`
-                      const vmLabel = esxiMigrateVm.name || esxiMigrateVm.vmid
-                      const sourceType = esxiMigrateVm.hostType === 'xcpng' ? 'XCP-ng' : esxiMigrateVm.hostType === 'vcenter' ? 'vCenter' : esxiMigrateVm.hostType === 'hyperv' ? 'Hyper-V' : esxiMigrateVm.hostType === 'nutanix' ? 'Nutanix' : 'ESXi'
-                      addPCTask({
-                        id: taskId,
-                        type: 'generic',
-                        label: `${t('inventoryPage.esxiMigration.migrating')} ${vmLabel} (${sourceType} → Proxmox)`,
-                        detail: t('inventoryPage.esxiMigration.preflight'),
-                        progress: 0,
-                        status: 'running',
-                        createdAt: Date.now(),
-                      })
-                      // Register restore callback to reopen dialog
-                      const savedVm = { ...esxiMigrateVm }
-                      registerOnRestore(taskId, () => {
-                        setEsxiMigrateVm({ ...savedVm, restoreJobId: jobId })
-                        setMigJobId(jobId)
-                      })
-                    } else {
-                      throw new Error(d.error || 'Failed to start migration')
-                    }
-                  } catch (e: any) {
-                    showSnackbar(e.message || 'Migration failed to start', 'error')
-                  } finally {
-                    setMigStarting(false)
-                  }
-                }}
+                onClick={() => { if (isVmwareSource && migStep === 'config') enterReview(); else void launchMigration() }}
               >
-                {t('inventoryPage.esxiMigration.startMigration')}
+                {isVmwareSource && migStep === 'config' ? t('inventoryPage.esxiMigration.review') : t('inventoryPage.esxiMigration.startMigration')}
               </Button>
             </>
           ) : (

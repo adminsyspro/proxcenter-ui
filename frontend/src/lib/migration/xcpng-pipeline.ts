@@ -374,10 +374,10 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
       scsihw: pveParams.scsihw,
       bios: pveParams.bios,
       machine: pveParams.machine,
-      net0: pveParams.net0,
       agent: pveParams.agent,
       serial0: "socket",
     })
+    for (const [key, value] of Object.entries(pveParams.nets)) createBody.set(key, value)
     if (pveParams.efidisk0) {
       createBody.set("efidisk0", pveParams.efidisk0)
     }

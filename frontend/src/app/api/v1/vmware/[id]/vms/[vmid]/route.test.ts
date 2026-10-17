@@ -100,3 +100,20 @@ describe("GET /api/v1/vmware/[id]/vms/[vmid] — disk parsing", () => {
     expect(res.status).toBe(404)
   })
 })
+
+describe("GET /api/v1/vmware/[id]/vms/[vmid]: source NICs for the review step (#317)", () => {
+  it("returns nics in device order with label, type, MAC and vSphere network", async () => {
+    const devices =
+      `<VirtualDevice xsi:type="VirtualE1000"><deviceInfo><label>Network adapter 1</label><summary>VM Network</summary></deviceInfo><macAddress>00:50:56:aa:00:01</macAddress></VirtualDevice>` +
+      `<VirtualDevice xsi:type="VirtualDisk"><label>Hard disk 1</label><capacityInBytes>1</capacityInBytes><fileName>[ds1] a/a.vmdk</fileName></VirtualDevice>` +
+      `<VirtualDevice xsi:type="VirtualVmxnet3"><deviceInfo><label>Network adapter 2</label><summary>i317-net</summary></deviceInfo><macAddress>00:50:56:aa:00:02</macAddress></VirtualDevice>`
+    h.soapText = [prop("name", "web-01"), prop("config.hardware.numCPU", "2"), prop("config.hardware.device", devices)].join("")
+    const res = await callRoute(GET, { params: { id: "conn-1", vmid: "42" } })
+    expect(res.status).toBe(200)
+    const data = (await readJson<any>(res)).data
+    expect(data.nics).toEqual([
+      { label: "Network adapter 1", type: "E1000", macAddress: "00:50:56:aa:00:01", network: "VM Network" },
+      { label: "Network adapter 2", type: "Vmxnet3", macAddress: "00:50:56:aa:00:02", network: "i317-net" },
+    ])
+  })
+})

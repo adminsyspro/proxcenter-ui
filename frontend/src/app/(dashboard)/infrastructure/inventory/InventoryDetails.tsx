@@ -401,6 +401,7 @@ export default function InventoryDetails({
     migDowntimeBudget, setMigDowntimeBudget,
     migZeroRateLimit, setMigZeroRateLimit,
     migCpuType, setMigCpuType,
+    migStep, setMigStep, migHardware, setMigHardware, migNics, setMigNics,
   } = useMigrationOptions({ esxiMigrateVm, bulkMigOpen })
   // Shared with InventoryDialogs.tsx — see bulkMigrationConfig.ts. Used here
   // by the queued-job poller below to decide how many slots are free; must
@@ -4690,6 +4691,12 @@ return vm?.isCluster ?? false
         setMigConvertToQcow2={setMigConvertToQcow2}
         migCpuType={migCpuType}
         setMigCpuType={setMigCpuType}
+        migStep={migStep}
+        setMigStep={setMigStep}
+        migHardware={migHardware}
+        setMigHardware={setMigHardware}
+        migNics={migNics}
+        setMigNics={setMigNics}
         migDiskPaths={migDiskPaths}
         setMigDiskPaths={setMigDiskPaths}
         migTempStorage={migTempStorage}

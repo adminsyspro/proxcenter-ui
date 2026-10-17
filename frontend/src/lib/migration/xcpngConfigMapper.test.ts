@@ -24,7 +24,7 @@ describe("mapXoToPveConfig — controller and boot disk bus (#653)", () => {
   it("uses virtio-scsi-single + virtio NIC for Linux, boot disk on scsi0", () => {
     const p = mapXoToPveConfig(makeConfig(), 100, "local-lvm", "vmbr0")
     expect(p.scsihw).toBe("virtio-scsi-single")
-    expect(p.net0.startsWith("virtio,")).toBe(true)
+    expect(p.nets.net0.startsWith("virtio,")).toBe(true)
     expect(p.bootDiskSlot).toBe("scsi0")
     expect(p.boot).toBe("order=scsi0")
   })
@@ -35,7 +35,7 @@ describe("mapXoToPveConfig — controller and boot disk bus (#653)", () => {
       100, "local-lvm", "vmbr0",
     )
     expect(p.scsihw).toBe("virtio-scsi-single")
-    expect(p.net0.startsWith("e1000,")).toBe(true)
+    expect(p.nets.net0.startsWith("e1000,")).toBe(true)
     expect(p.bootDiskSlot).toBe("sata0")
     expect(p.boot).toBe("order=sata0")
   })

@@ -16,6 +16,7 @@ import {
   soapGuestShutdown, soapWaitPoweredOff, soapKeepAlive,
 } from "@/lib/vmware/cbt"
 import { mapEsxiToPveConfig } from "../configMapper"
+import { describeOverrides } from "../target-overrides"
 import { volumesToFree, volumesToKeep, PVESM_FREE_TIMEOUT_MS, type AllocatedVolume } from "../pvesm-alloc"
 import { getNodeSshEndpointForMigration } from "../pve-tasks"
 import { decideNextPass, type PassStat, type ConvergenceConfig, type ConvergenceDecision } from "./convergence"
@@ -340,11 +341,14 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
     }
 
     if (targetVmid == null) targetVmid = Number(await pveFetch<number | string>(pveConn as any, "/cluster/nextid"))
-    const pveParams = mapEsxiToPveConfig(vmConfig, targetVmid, config.targetStorage, config.networkBridge, config.vlanTag, config.cpuType)
+    const overrides = { hardware: config.hardware, nics: config.nics }
+    const pveParams = mapEsxiToPveConfig(vmConfig, targetVmid, config.targetStorage, config.networkBridge, config.vlanTag, config.cpuType, overrides)
+    const overridesLine = describeOverrides(overrides)
+    if (overridesLine) await appendLog(jobId, overridesLine)
     const shellConf = await createTargetVmShell(pveConn, config.targetNode, pveParams)
     createdVmid = targetVmid
     await updateJob(jobId, "enabling_cbt", { targetVmid })
-    await appendLog(jobId, `Target VM ${targetVmid} created on ${config.targetNode}`, "success")
+    await appendLog(jobId, `Target VM ${targetVmid} created on ${config.targetNode} (${Object.keys(pveParams.nets).length} NIC(s))`, "success")
 
     // ── preparing_disks: allocate a raw block volume per disk, zero the thick ones ──
     const provisioned = await provisionBlockTargets({

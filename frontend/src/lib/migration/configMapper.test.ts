@@ -38,7 +38,7 @@ describe("mapEsxiToPveConfig — VM name sanitising", () => {
 describe("mapEsxiToPveConfig — NIC MAC preservation", () => {
   it("preserves the source NIC MAC on net0", () => {
     const p = mapEsxiToPveConfig(makeConfig(), 100, "local-lvm", "vmbr0")
-    expect(p.net0).toContain(",macaddr=00:50:56:aa:bb:cc")
+    expect(p.nets.net0).toContain(",macaddr=00:50:56:aa:bb:cc")
   })
 
   it("omits macaddr when the source NIC has no MAC", () => {
@@ -46,7 +46,7 @@ describe("mapEsxiToPveConfig — NIC MAC preservation", () => {
       makeConfig({ nics: [{ label: "nic1", type: "Vmxnet3", macAddress: "", network: "VM Network" }] }),
       100, "local-lvm", "vmbr0",
     )
-    expect(p.net0).not.toContain("macaddr=")
+    expect(p.nets.net0).not.toContain("macaddr=")
   })
 
   it("omits macaddr when the source MAC is malformed", () => {
@@ -54,13 +54,13 @@ describe("mapEsxiToPveConfig — NIC MAC preservation", () => {
       makeConfig({ nics: [{ label: "nic1", type: "Vmxnet3", macAddress: "not-a-mac", network: "VM Network" }] }),
       100, "local-lvm", "vmbr0",
     )
-    expect(p.net0).not.toContain("macaddr=")
+    expect(p.nets.net0).not.toContain("macaddr=")
   })
 
   it("keeps both the preserved MAC and the VLAN tag", () => {
     const p = mapEsxiToPveConfig(makeConfig(), 100, "local-lvm", "vmbr0", 42)
-    expect(p.net0).toContain(",macaddr=00:50:56:aa:bb:cc")
-    expect(p.net0).toContain(",tag=42")
+    expect(p.nets.net0).toContain(",macaddr=00:50:56:aa:bb:cc")
+    expect(p.nets.net0).toContain(",tag=42")
   })
 
   it("preserves the MAC for a Windows guest (e1000 model)", () => {
@@ -68,7 +68,7 @@ describe("mapEsxiToPveConfig — NIC MAC preservation", () => {
       makeConfig({ guestId: "windows2019srv_64Guest", guestOS: "Microsoft Windows Server 2019 (64-bit)" }),
       100, "local-lvm", "vmbr0",
     )
-    expect(p.net0).toMatch(/^e1000,bridge=vmbr0,macaddr=00:50:56:aa:bb:cc$/)
+    expect(p.nets.net0).toMatch(/^e1000,bridge=vmbr0,macaddr=00:50:56:aa:bb:cc$/)
   })
 })
 
@@ -76,7 +76,7 @@ describe("mapEsxiToPveConfig — controller and boot disk bus (#653)", () => {
   it("uses virtio-scsi-single + virtio NIC for Linux, boot disk on scsi0", () => {
     const p = mapEsxiToPveConfig(makeConfig(), 100, "local-lvm", "vmbr0")
     expect(p.scsihw).toBe("virtio-scsi-single")
-    expect(p.net0.startsWith("virtio,")).toBe(true)
+    expect(p.nets.net0.startsWith("virtio,")).toBe(true)
     expect(p.bootDiskSlot).toBe("scsi0")
     expect(p.boot).toBe("order=scsi0")
   })
@@ -87,7 +87,7 @@ describe("mapEsxiToPveConfig — controller and boot disk bus (#653)", () => {
       100, "local-lvm", "vmbr0",
     )
     expect(p.scsihw).toBe("virtio-scsi-single")
-    expect(p.net0.startsWith("e1000,")).toBe(true)
+    expect(p.nets.net0.startsWith("e1000,")).toBe(true)
     expect(p.bootDiskSlot).toBe("sata0")
     expect(p.boot).toBe("order=sata0")
   })
@@ -186,5 +186,47 @@ describe("mapEsxiToPveConfig — CPU type (roadmap#24)", () => {
 
   it("applies the CPU type the operator picked", () => {
     expect(mapEsxiToPveConfig(makeConfig(), 100, "local-lvm", "vmbr0", undefined, "host").cpu).toBe("host")
+  })
+})
+
+describe("mapEsxiToPveConfig: every NIC and the review-step overrides (#317)", () => {
+  const twoNics = [
+    { label: "Network adapter 1", type: "Vmxnet3", macAddress: "00:50:56:aa:00:01", network: "VM Network" },
+    { label: "Network adapter 2", type: "E1000", macAddress: "00:50:56:aa:00:02", network: "dmz" },
+  ]
+
+  it("emits one netN per source NIC, in source order, on the default bridge", () => {
+    const p = mapEsxiToPveConfig(makeConfig({ nics: twoNics }), 100, "local-lvm", "vmbr0", 7)
+    expect(Object.keys(p.nets)).toEqual(["net0", "net1"])
+    expect(p.nets.net0).toBe("virtio,bridge=vmbr0,macaddr=00:50:56:aa:00:01,tag=7")
+    expect(p.nets.net1).toBe("e1000,bridge=vmbr0,macaddr=00:50:56:aa:00:02,tag=7")
+  })
+
+  it("puts each mapped NIC on its own bridge, tag and model, the rest on the defaults", () => {
+    const p = mapEsxiToPveConfig(makeConfig({ nics: twoNics }), 100, "local-lvm", "vmbr0", undefined, "host", {
+      nics: [{ index: 1, bridge: "vf95117a", vlanTag: 20, model: "virtio" }],
+    })
+    expect(p.nets.net0).toBe("virtio,bridge=vmbr0,macaddr=00:50:56:aa:00:01")
+    expect(p.nets.net1).toBe("virtio,bridge=vf95117a,macaddr=00:50:56:aa:00:02,tag=20")
+    expect(p.cpu).toBe("host")
+  })
+
+  it("lets an explicit model override the Windows e1000 rule", () => {
+    const win = makeConfig({ nics: twoNics, guestId: "windows2019srv_64Guest", guestOS: "Microsoft Windows Server 2019 (64-bit)" })
+    const p = mapEsxiToPveConfig(win, 100, "local-lvm", "vmbr0", undefined, undefined, { nics: [{ index: 0, bridge: "vmbr0", model: "virtio" }] })
+    expect(p.nets.net0.startsWith("virtio,")).toBe(true)
+    expect(p.nets.net1.startsWith("e1000,")).toBe(true)
+  })
+
+  it("applies cores, sockets and memory overrides on top of the source values", () => {
+    const p = mapEsxiToPveConfig(makeConfig(), 100, "local-lvm", "vmbr0", undefined, undefined, { hardware: { cores: 4, sockets: 1, memoryMB: 8192 } })
+    expect([p.cores, p.sockets, p.memory]).toEqual([4, 1, 8192])
+    const partial = mapEsxiToPveConfig(makeConfig(), 100, "local-lvm", "vmbr0", undefined, undefined, { hardware: { memoryMB: 512 } })
+    expect([partial.cores, partial.sockets, partial.memory]).toEqual([1, 2, 512])
+  })
+
+  it("still creates one default NIC for a source without any adapter", () => {
+    const p = mapEsxiToPveConfig(makeConfig({ nics: [] }), 100, "local-lvm", "vmbr0", 5)
+    expect(p.nets).toEqual({ net0: "virtio,bridge=vmbr0,tag=5" })
   })
 })

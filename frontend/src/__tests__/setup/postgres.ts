@@ -3,26 +3,32 @@
  *
  * Each `npm test` run:
  *   1. Connects to the Postgres pointed to by POSTGRES_TEST_URL_BASE.
- *   2. Creates a uniquely-named schema (`test_<timestamp>_<rand>`).
- *   3. Sets DATABASE_URL=...&schema=<that schema> for the test workers.
- *   4. Runs `prisma migrate deploy` so the schema mirrors prod.
- *   5. Drops the schema in teardown — keeps the dev DB pristine.
+ *   2. Creates one uniquely-named schema per worker slot
+ *      (`test_<timestamp>_<rand>_w1` … `_wN`, see ./test-dsn.ts).
+ *   3. Runs `prisma migrate deploy` on each so they mirror prod.
+ *   4. Drops them in teardown — keeps the dev DB pristine.
+ *
+ * ./postgres-worker.ts then points each worker's DATABASE_URL at its own
+ * schema, which is what lets the node project run its files in parallel.
  *
  * Locally we point at the dev Postgres that already runs in
  * docker-compose.override.yml (127.0.0.1:5432). In CI the docker-publish
  * workflow spins a `postgres:16-alpine` service with the same DSN.
  *
- * Tests truncate the tables they touch in a `beforeEach`; the schema
- * itself stays in place for the entire run so we don't pay the migration
+ * Tests truncate the tables they touch in a `beforeEach`; the schemas
+ * themselves stay in place for the entire run so we don't pay the migration
  * cost per test file.
  */
 
-import { execFileSync } from 'node:child_process'
+import { execFile, execFileSync } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
 import { writeFileSync, unlinkSync } from 'node:fs'
-import path from 'node:path'
+import os from 'node:os'
+import { promisify } from 'node:util'
 
-const TEST_DSN_FILE = path.resolve(__dirname, '..', '..', '..', '.test-dsn')
+import type { TestProject } from 'vitest/node'
+
+import { TEST_DSN_FILE, withSchema, workerSchema, type TestDsnFile } from './test-dsn'
 
 function readBaseUrl(): string {
   const base = process.env.POSTGRES_TEST_URL_BASE
@@ -36,34 +42,47 @@ function readBaseUrl(): string {
   return base
 }
 
-let testSchema = ''
+// Same resolution as vitest's own pool (resolveMaxWorkers): the pool hands
+// out VITEST_POOL_ID 1..maxWorkers, so that is how many schemas we need.
+function resolveWorkerSlots(project: TestProject): number {
+  const configured = project.config.maxWorkers || project.vitest.config.maxWorkers
+  if (configured) return configured
+  const cpus = typeof os.availableParallelism === 'function' ? os.availableParallelism() : os.cpus().length
+  return project.vitest.config.watch ? Math.max(Math.floor(cpus / 2), 1) : Math.max(cpus - 1, 1)
+}
 
-export async function setup(): Promise<void> {
+let testSchemas: string[] = []
+
+export async function setup(project: TestProject): Promise<void> {
   const base = readBaseUrl()
-  testSchema = `test_${Date.now()}_${randomBytes(3).toString('hex')}`
+  const prefix = `test_${Date.now()}_${randomBytes(3).toString('hex')}`
+  const slots = resolveWorkerSlots(project)
+  testSchemas = Array.from({ length: slots }, (_, i) => workerSchema(prefix, i + 1))
 
-  // execFileSync (not execSync) so the schema name + DSN never reach a
+  // execFileSync (not execSync) so the schema names + DSN never reach a
   // shell. The values are server-generated, but we keep the safer call.
-  execFileSync('psql', [base, '-c', `CREATE SCHEMA "${testSchema}"`], { stdio: 'inherit' })
-
-  const dsn = `${base}${base.includes('?') ? '&' : '?'}schema=${testSchema}`
-  process.env.DATABASE_URL = dsn
+  execFileSync('psql', [base, '-c', testSchemas.map((s) => `CREATE SCHEMA "${s}";`).join(' ')], { stdio: 'inherit' })
 
   // Hand the DSN to test workers via a tmp file — vitest globalSetup
   // process.env mutations don't always propagate to the worker pool.
-  writeFileSync(TEST_DSN_FILE, dsn, 'utf8')
+  const file: TestDsnFile = { base, prefix }
+  writeFileSync(TEST_DSN_FILE, JSON.stringify(file), 'utf8')
 
-  execFileSync('npx', ['prisma', 'migrate', 'deploy'], {
-    stdio: 'inherit',
-    env: { ...process.env, DATABASE_URL: dsn },
-  })
+  // ~1.5 s each, so run them side by side rather than one per slot in a row.
+  await Promise.all(
+    testSchemas.map((s) =>
+      promisify(execFile)('npx', ['prisma', 'migrate', 'deploy'], {
+        env: { ...process.env, DATABASE_URL: withSchema(base, s) },
+      }),
+    ),
+  )
 }
 
 export async function teardown(): Promise<void> {
-  if (!testSchema) return
+  if (testSchemas.length === 0) return
   const base = readBaseUrl()
   try {
-    execFileSync('psql', [base, '-c', `DROP SCHEMA "${testSchema}" CASCADE`], { stdio: 'inherit' })
+    execFileSync('psql', [base, '-c', testSchemas.map((s) => `DROP SCHEMA "${s}" CASCADE;`).join(' ')], { stdio: 'inherit' })
   } catch {
     // best-effort — leftover schemas are harmless and easy to spot.
   }

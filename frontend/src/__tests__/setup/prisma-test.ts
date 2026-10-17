@@ -1,34 +1,17 @@
 /**
  * Prisma client used by tests, plus a `truncate(...)` helper.
  *
- * Reads the DSN written by globalSetup (../setup/postgres.ts) so each test
- * worker connects to the per-run schema. Importing this module from any
- * test file is enough to share a single Prisma connection.
+ * Connects to this worker's schema (see ./test-dsn.ts), the same one
+ * `@/lib/db/prisma` uses. Importing this module from any test file is
+ * enough to share a single Prisma connection.
  */
-
-import { readFileSync } from 'node:fs'
-import path from 'node:path'
 
 import { PrismaClient } from '@prisma/client'
 import { PrismaPg } from '@prisma/adapter-pg'
 
-const DSN_FILE = path.resolve(__dirname, '..', '..', '..', '.test-dsn')
+import { workerTestDsn } from './test-dsn'
 
-function readDsn(): string {
-  try {
-    const dsn = readFileSync(DSN_FILE, 'utf8').trim()
-    if (!dsn) throw new Error('empty DSN')
-    return dsn
-  } catch (err) {
-    throw new Error(
-      '[test/setup/prisma-test] Could not read the test DSN at ' + DSN_FILE + '. ' +
-      'Run vitest with the `globalSetup` configured (vitest.config.ts) — it writes ' +
-      'this file before any test starts. Underlying error: ' + (err as Error).message,
-    )
-  }
-}
-
-const dsn = readDsn()
+const dsn = workerTestDsn()
 
 /**
  * PrismaPg ignores the libpq-style `?schema=` query parameter on the

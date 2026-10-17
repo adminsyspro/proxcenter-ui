@@ -196,6 +196,10 @@ export default function BackupsPage() {
   const canEditCoverage = !isVdcTenant && !rbac.loading && rbac.hasPermission('admin.settings')
   // Adding an uncovered guest to a job edits provider jobs: same permission as the job editor.
   const canAddToJob = !isVdcTenant && !rbac.loading && rbac.hasPermission('backup.job.edit')
+  // Snapshot actions follow the rights their routes check.
+  const canDeleteSnapshot = !rbac.loading && rbac.hasPermission('backup.delete')
+  const canVerifySnapshot = !rbac.loading && rbac.hasPermission('backup.job.run')
+  const canRestoreSnapshot = !rbac.loading && rbac.hasAllPermissions(['vm.backup', 'backup.restore'])
   const [jobCreateRequest, setJobCreateRequest] = useState(null)
   const [coverageRefresh, setCoverageRefresh] = useState(0)
   const requestJobCreate = useCallback(guest => {
@@ -1201,7 +1205,7 @@ return () => clearTimeout(timer)
                   target cluster / node / storage / VMID, which a vDC tenant
                   never picks. The per-backup Restore in the detail dialog stays
                   their entry point. */}
-              {!isVdcTenant && (
+              {!isVdcTenant && canRestoreSnapshot && (
                 <Button
                   size='small'
                   variant='outlined'
@@ -1340,6 +1344,9 @@ return () => clearTimeout(timer)
         onDelete={handleDelete}
         deleting={deleting}
         deleteAwaitingConfirm={deleteAwaitingConfirm}
+        canDelete={canDeleteSnapshot}
+        canVerify={canVerifySnapshot}
+        canRestore={canRestoreSnapshot}
         timeAgo={timeAgo}
         t={t}
         locale={locale}

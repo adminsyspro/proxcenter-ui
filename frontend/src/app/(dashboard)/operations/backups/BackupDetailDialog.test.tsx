@@ -74,6 +74,15 @@ describe('BackupDetailDialog', () => {
     expect(screen.getByRole('heading', { name: 'host/101' })).toBeInTheDocument()
   })
 
+  it('shows each snapshot action only with the right its route checks', () => {
+    render(<BackupDetailDialog {...base} backup={older} canDelete={false} canVerify={false} canRestore={false} />)
+    expect(screen.queryByRole('button', { name: 'common.delete' })).not.toBeInTheDocument()
+    expect(screen.queryByText('backups.deleteProtectedHint')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'backups.verifyAction' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'audit.actions.restore' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'common.close' })).toBeInTheDocument()
+  })
+
   it('renders the explorer tab content and hides that tab from tenants', () => {
     const { rerender } = render(<BackupDetailDialog {...base} backup={newer} tab={1} />)
     expect(screen.getByText('explorer-panel')).toBeInTheDocument()

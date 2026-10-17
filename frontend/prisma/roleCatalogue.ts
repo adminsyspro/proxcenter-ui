@@ -134,6 +134,9 @@ export const ROLES: RoleSeed[] = [
       "vm.snapshot", "vm.backup",
       "storage.content",
       "node.view", "node.console", "connection.view", "backup.view",
+      // Restore, PBS snapshot delete and verify were reachable through
+      // vm.backup / backup.view before their own keys were enforced.
+      "backup.restore", "backup.delete", "backup.job.run",
       "events.view", "tasks.view", "alerts.view", "automation.view", "reports.view",
     ],
   },
@@ -147,7 +150,9 @@ export const ROLES: RoleSeed[] = [
       "vm.snapshot", "vm.backup", "vm.clone", "vm.migrate", "vm.config", "vm.delete", "vm.create",
       "storage.view", "storage.content", "storage.upload", "storage.delete",
       "node.view", "node.console", "node.manage", "connection.view",
-      "backup.view", "backup.restore",
+      // backup.delete / backup.job.run: PBS snapshot delete and verify were
+      // reachable through backup.view before their own keys were enforced.
+      "backup.view", "backup.restore", "backup.delete", "backup.job.run",
       "events.view", "tasks.view", "storage.admin",
       "alerts.view", "alerts.manage", "automation.view", "automation.manage", "reports.view",
     ],

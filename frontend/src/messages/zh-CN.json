@@ -874,6 +874,7 @@
     "pbsRestoreTagsUnverified": "客户机已恢复，但无法检查其标签：{error}",
     "pbsRestoreBandwidth": "Bandwidth limit (KiB/s)",
     "pbsRestoreTargetExists": "VM {vmid} 已存在，将被覆盖",
+    "pbsRestoreTargetExistsNoOverwrite": "VM {vmid} 已存在，您无权覆盖它：请选择一个空闲的 VMID",
     "pbsRestoreIpamNote": "IP allocation is reconciled automatically after the restore completes.",
     "pbsRestoreAsNew": "Restore as a new VM (auto-allocates a fresh VMID + unique MACs)",
     "pbsRestoreOverwriteConfirm": "This will replace VM {vmid} with the backup contents. Click again to confirm.",

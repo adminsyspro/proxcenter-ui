@@ -15,8 +15,6 @@ const {
   waitForTaskMock,
   syncIpamForVmConfigMock,
   releaseAllocationsForVmMock,
-  getPrincipalMock,
-  checkTenantGuestScopeMock,
   afterCbs,
 } = vi.hoisted(() => ({
   getConnectionByIdMock: vi.fn(),
@@ -28,8 +26,6 @@ const {
   waitForTaskMock: vi.fn(),
   syncIpamForVmConfigMock: vi.fn(),
   releaseAllocationsForVmMock: vi.fn(),
-  getPrincipalMock: vi.fn(),
-  checkTenantGuestScopeMock: vi.fn(),
   afterCbs: [] as Array<() => Promise<void>>,
 }))
 
@@ -59,15 +55,15 @@ vi.mock("@/lib/rbac", () => ({
   buildVmResourceId: (...a: any[]) => a.join(":"),
   PERMISSIONS: { VM_BACKUP: "vm.backup", BACKUP_RESTORE: "backup.restore", VM_DELETE: "vm.delete" },
 }))
-vi.mock("@/lib/auth/principal", () => ({ getPrincipal: () => getPrincipalMock() }))
-vi.mock("@/lib/vdc/guestScope", () => ({
-  checkTenantGuestScope: (...a: any[]) => checkTenantGuestScopeMock(...a),
-}))
+
 vi.mock("@/lib/tenant", () => ({
   getCurrentTenantId: () => getCurrentTenantIdMock(),
   DEFAULT_TENANT_ID: "default",
 }))
-vi.mock("@/lib/tenant/infraScope", () => ({
+// Spread the real module: the real checkTenantGuestScope (force path) reads
+// maskingScope from it.
+vi.mock("@/lib/tenant/infraScope", async (io) => ({
+  ...(await io<typeof import("@/lib/tenant/infraScope")>()),
   getTenantInfrastructureScope: (...a: any[]) => getInfraMock(...a),
 }))
 vi.mock("@/lib/vdc/quota", () => ({
@@ -115,8 +111,6 @@ beforeEach(() => {
   waitForTaskMock.mockReset().mockResolvedValue(undefined)
   syncIpamForVmConfigMock.mockReset().mockResolvedValue({ bodyOverrides: {}, rollback: vi.fn() })
   releaseAllocationsForVmMock.mockReset()
-  getPrincipalMock.mockReset().mockResolvedValue({ ok: true, principal: { kind: "session", userId: "u1", tenantId: "default", connectionIds: null } })
-  checkTenantGuestScopeMock.mockReset().mockResolvedValue(null)
 })
 
 /** Decode the URL-encoded form body of a pveFetch(conn, path, opts) call. */
@@ -705,36 +699,58 @@ describe("POST restore -- backup.restore and the guest that force overwrites", (
     expect(restorePosts()).toHaveLength(0)
   })
 
-  it("token caller with force: the overwritten guest must be inside its vDC", async () => {
-    getPrincipalMock.mockResolvedValue({ ok: true, principal: { kind: "token", tokenId: "tok-1", tenantId: "default", connectionIds: null } })
-    wireGuests([{ vmid: 111, node: "node2", type: "qemu", pool: "other-tenant" }])
-    checkTenantGuestScopeMock.mockResolvedValue(
-      new Response(JSON.stringify({ error: "Guest outside your vDC scope" }), { status: 403 }))
+  /** A vDC tenant whose vDC holds node1 and node2 and the pool "pool-1". */
+  function iaasTenant() {
+    getCurrentTenantIdMock.mockResolvedValue("tenant-x")
+    getInfraMock.mockResolvedValue({
+      kind: "iaas",
+      vdcScope: {
+        connectionIds: new Set(["pve-1"]),
+        pbsConnectionIds: new Set<string>(),
+        nodesByConnection: new Map([["pve-1", new Set(["node1", "node2"])]]),
+        storagesByConnection: new Map([["pve-1", new Set(["local"])]]),
+        writableStoragesByConnection: new Map([["pve-1", new Set(["local"])]]),
+        storagePoliciesByConnection: new Map<string, Map<string, any>>(),
+        poolsByConnection: new Map([["pve-1", new Set(["pool-1"])]]),
+        vnetsByConnection: new Map<string, Set<string>>(),
+        sharedBridgesByConnection: new Map<string, Set<string>>(),
+        pbsNamespacesByConnection: new Map<string, Array<{ datastore: string; namespace: string }>>(),
+        pbsNamespacesByPveConnection: new Map<string, Set<string>>(),
+      },
+    })
+    resolveVdcForTenantMock.mockResolvedValue({ vdcId: "vdc-1", poolName: "pool-1", quota: null })
+  }
+
+  // Every caller of a vDC tenant (session or token) is judged on the guest
+  // it would overwrite, not only on the node it restores to.
+  it("iaas session with force on a guest outside its vDC: 403, nothing restored", async () => {
+    iaasTenant()
+    wireGuests([{ vmid: 111, node: "node2", type: "qemu", pool: "other-tenant-pool" }])
 
     const res = await restore({ force: true })
 
     expect(res.status).toBe(403)
-    expect(checkTenantGuestScopeMock).toHaveBeenCalledWith("default", expect.objectContaining({ id: "pve-1" }), "pve-1", "qemu", "node2", "111")
+    expect((await readJson<{ error: string }>(res))?.error).toMatch(/outside your vDC/i)
     expect(restorePosts()).toHaveLength(0)
   })
 
-  it("token caller with force on its own guest goes through", async () => {
-    getPrincipalMock.mockResolvedValue({ ok: true, principal: { kind: "token", tokenId: "tok-1", tenantId: "default", connectionIds: null } })
-    wireGuests([{ vmid: 111, node: "node2", type: "qemu", pool: "p1" }])
+  it("iaas session with force on its own vDC guest goes through", async () => {
+    iaasTenant()
+    wireGuests([{ vmid: 111, node: "node2", type: "qemu", pool: "pool-1" }])
 
     const res = await restore({ force: true })
 
     expect(res.status).toBe(200)
-    expect(checkTenantGuestScopeMock).toHaveBeenCalledTimes(1)
     expect(restorePosts()).toHaveLength(1)
   })
 
-  it("session caller with force: the vDC guest check stays as today (not called)", async () => {
+  it("provider with force on an existing guest: the vDC guest check is a no-op", async () => {
     wireGuests([{ vmid: 111, node: "node2", type: "qemu" }])
 
     const res = await restore({ force: true })
 
     expect(res.status).toBe(200)
-    expect(checkTenantGuestScopeMock).not.toHaveBeenCalled()
+    // One lookup for the vm.delete target; the vDC check makes none for a provider.
+    expect(pveFetchMock.mock.calls.filter(c => c[1] === "/cluster/resources?type=vm")).toHaveLength(1)
   })
 })

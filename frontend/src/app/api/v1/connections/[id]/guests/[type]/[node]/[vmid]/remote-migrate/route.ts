@@ -104,15 +104,6 @@ export async function POST(
     const denied = await checkPermission(PERMISSIONS.VM_MIGRATE, "vm", resourceId)
     if (denied) return denied
 
-    const body = await req.json()
-
-    // The guest lands on the TARGET cluster: vm.migrate is checked there too.
-    // A missing target falls through to the 400 below.
-    if (body?.targetConnectionId) {
-      const targetDenied = await checkPermission(PERMISSIONS.VM_MIGRATE, "connection", String(body.targetConnectionId))
-      if (targetDenied) return targetDenied
-    }
-
     // VM placement is a whole-cluster operation: the provider may migrate any
     // cluster it manages; an MSP tenant may migrate within clusters it OWNS;
     // vDC/iaas tenants get an abstracted slice and cannot migrate.
@@ -124,6 +115,21 @@ export async function POST(
         { status: 403 },
       )
     }
+
+    const body = await req.json().catch(() => null)
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 })
+    }
+    if (!body.targetConnectionId) {
+      return NextResponse.json({ error: "targetConnectionId is required" }, { status: 400 })
+    }
+    if (typeof body.targetConnectionId !== 'string') {
+      return NextResponse.json({ error: "targetConnectionId must be a string" }, { status: 400 })
+    }
+
+    // The guest lands on the TARGET cluster: vm.migrate is checked there too.
+    const targetDenied = await checkPermission(PERMISSIONS.VM_MIGRATE, "connection", body.targetConnectionId)
+    if (targetDenied) return targetDenied
 
     body.restore = parseRestoreRequest(body.restore)
     const {
@@ -137,11 +143,6 @@ export async function POST(
       bwlimit,
       restore,
     } = body
-
-    // Validation des paramètres requis
-    if (!targetConnectionId) {
-      return NextResponse.json({ error: "targetConnectionId is required" }, { status: 400 })
-    }
 
     // MSP tenants must also own the target connection
     if (infra.kind === 'msp' && !infra.connectionIds.has(targetConnectionId)) {

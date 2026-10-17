@@ -870,6 +870,7 @@
     "pbsRestoreTagsUnverified": "l'invité a été restauré mais ses tags n'ont pas pu être vérifiés : {error}",
     "pbsRestoreBandwidth": "Limite de bande passante (Kio/s)",
     "pbsRestoreTargetExists": "La VM {vmid} existe et sera écrasée",
+    "pbsRestoreTargetExistsNoOverwrite": "La VM {vmid} existe et vous n'avez pas le droit de l'écraser : choisissez un VMID libre",
     "pbsRestoreIpamNote": "L'allocation IP est réconciliée automatiquement à la fin de la restauration.",
     "pbsRestoreAsNew": "Restaurer en tant que nouvelle VM (alloue un VMID + des MAC uniques)",
     "pbsRestoreOverwriteConfirm": "Cette opération va remplacer la VM {vmid} par le contenu du backup. Cliquez à nouveau pour confirmer.",

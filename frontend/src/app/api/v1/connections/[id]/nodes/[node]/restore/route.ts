@@ -16,7 +16,6 @@ import { type DriveQosCaps } from "@/lib/vdc/drives"
 import { restampGuestDrives } from "@/lib/vdc/driveGuard"
 import { clearRestoredTags } from "@/lib/backups/restoreTagsCleanup"
 import { resolveCtRestoreStorage } from "@/lib/backups/ctRestoreStorage"
-import { getPrincipal } from "@/lib/auth/principal"
 import { checkTenantGuestScope } from "@/lib/vdc/guestScope"
 
 export const runtime = "nodejs"
@@ -139,13 +138,11 @@ export async function POST(
           PERMISSIONS.VM_DELETE, "vm", buildVmResourceId(id, existingNode, existingType, String(vmid)),
         )
         if (deleteDenied) return deleteDenied
-        // A vDC tenant token must stay inside its own vDC: a vmid of another
-        // tenant on the same provider connection is not its to overwrite.
-        const principalResult = await getPrincipal()
-        if (!principalResult.ok || principalResult.principal?.kind === 'token') {
-          const scopeDenied = await checkTenantGuestScope(tenantId, conn, id, existingType, existingNode, String(vmid))
-          if (scopeDenied) return scopeDenied
-        }
+        // A vDC tenant stays inside its own vDC: a vmid of another tenant on
+        // the same provider connection is not its to overwrite. No-op for
+        // the provider and MSP tenants.
+        const scopeDenied = await checkTenantGuestScope(tenantId, conn, id, existingType, existingNode, String(vmid))
+        if (scopeDenied) return scopeDenied
       }
     }
 

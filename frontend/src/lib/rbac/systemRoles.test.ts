@@ -92,4 +92,21 @@ describe('system roles keep the backup actions the routes now check (API tokens 
   it.each(rows(r => holds(r, 'backup.job.edit')))('%s holds backup.job.edit, so backup.job.run', (_id, role) => {
     expect(holds(role, 'backup.job.run')).toBe(true)
   })
+
+  const role = (id: string) => ROLES.find(r => r.id === id)!
+
+  // The roles that delete and verify PBS snapshots and restore today keep doing it.
+  it.each(['role_vm_admin', 'role_operator'])('%s keeps PBS snapshot delete and verify', (id) => {
+    expect(role(id).permissions).toEqual(expect.arrayContaining(['backup.delete', 'backup.job.run']))
+  })
+
+  it.each(['role_vm_admin', 'role_operator'])('%s keeps restore', (id) => {
+    expect(role(id).permissions).toContain('backup.restore')
+  })
+
+  // Read-only roles losing PBS snapshot delete and verify is the fix itself.
+  it.each(['role_viewer', 'role_tenant_viewer', 'role_tenant_operator'])('%s holds neither backup.delete nor backup.job.run', (id) => {
+    expect(role(id).permissions).not.toContain('backup.delete')
+    expect(role(id).permissions).not.toContain('backup.job.run')
+  })
 })

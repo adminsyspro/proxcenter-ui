@@ -222,6 +222,29 @@ describe("POST .../remote-migrate — vm.migrate on the target connection", () =
     expect((await res.json()).error).toMatch(/targetConnectionId is required/)
     expect(checkPermissionMock).not.toHaveBeenCalledWith("vm.migrate", "connection", expect.anything())
   })
+
+  it("400 on a non-string targetConnectionId, before the target check", async () => {
+    const res = await post({ ...VALID_BODY, targetConnectionId: ["conn-tgt"] })
+
+    expect(res.status).toBe(400)
+    expect((await res.json()).error).toMatch(/targetConnectionId must be a string/)
+    expect(checkPermissionMock).not.toHaveBeenCalledWith("vm.migrate", "connection", expect.anything())
+  })
+
+  it("400 on a malformed JSON body", async () => {
+    const res = await post("{not json")
+
+    expect(res.status).toBe(400)
+    expect((await res.json()).error).toMatch(/invalid json body/i)
+  })
+
+  it("the tenant gate still answers first for an iaas tenant, even with a malformed body", async () => {
+    getInfraMock.mockResolvedValue({ kind: "iaas", vdcScope: { connectionIds: new Set(["conn-src"]) } })
+    const res = await post("{not json")
+
+    expect(res.status).toBe(403)
+    expect((await res.json()).error).toMatch(/migration is restricted/i)
+  })
 })
 
 // The [vmid] segment reaches `qm unlock ${vmid}` in the cleanup watcher and the

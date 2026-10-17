@@ -858,6 +858,7 @@
     "pbsRestoreTagsUnverified": "der Gast wurde wiederhergestellt, aber seine Tags konnten nicht geprüft werden: {error}",
     "pbsRestoreBandwidth": "Bandwidth limit (KiB/s)",
     "pbsRestoreTargetExists": "VM {vmid} existiert und wird überschrieben",
+    "pbsRestoreTargetExistsNoOverwrite": "VM {vmid} existiert und Sie dürfen sie nicht überschreiben: wählen Sie eine freie VMID",
     "pbsRestoreIpamNote": "IP allocation is reconciled automatically after the restore completes.",
     "pbsRestoreAsNew": "Restore as a new VM (auto-allocates a fresh VMID + unique MACs)",
     "pbsRestoreOverwriteConfirm": "This will replace VM {vmid} with the backup contents. Click again to confirm.",

@@ -179,7 +179,7 @@ export async function getPrincipal(options: GetPrincipalOptions = {}): Promise<P
 
   // 10. Re-verify x-pxc-path against the ONE designated entry (never a free
   //     re-match), then anyOf scope check (empty list = any valid token).
-  if (!matchesEntry(entry, path)) return reject(INVALID_TOKEN)
+  if (!matchesEntry(entry, path, method)) return reject(INVALID_TOKEN)
   const scopes = Array.isArray(token.scopes) ? (token.scopes as string[]) : []
   if (entry.requiredScopes.length > 0 && !entry.requiredScopes.some(s => scopes.includes(s))) {
     return reject({

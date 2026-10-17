@@ -9,21 +9,52 @@ export type AllowlistQueryParam = {
   required?: boolean
 }
 
+export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE"
+
+export type ApiTag =
+  | "Monitoring" | "VMs" | "Snapshots" | "Backups" | "Storage"
+  | "HA" | "Pools" | "Network" | "Firewall" | "Tasks"
+
+export type BodyOrQueryField = { source: "body" | "query"; field: string }
+
+export type GuestScopeSpec =
+  | { connection: string; node: string; type: string; vmid: string } // path segment names
+  | { vmKey: string } // segment "conn:type:node:vmid"
+  | { connection: string; vmidField: BodyOrQueryField } // vmid in body/query, any node/type
+
 export type AllowlistEntry = {
   /** Stable id, carried by the internal x-pxc-entry header. */
   id: string
-  method: "GET"
+  method: HttpMethod
   /** Segment-per-segment pattern; {name} = one named dynamic segment. */
   pattern: string
   /** anyOf semantics; empty list = any valid token (health). */
   requiredScopes: string[]
   /** Name of the dynamic segment carrying a RAW connection id, if any (spec layer 1). */
   connectionSegment?: string
+  /** Composite segment "conn:type:node:vmid"; the connection is its first field. */
+  vmKeySegment?: string
+  /** Connection id carried in the body or query string. */
+  connectionField?: BodyOrQueryField
+  /** The handler resolves the connection itself (pinned list). */
+  perimeter?: "handler"
+  /** Closed value set for a dynamic segment; keeps {action} from swallowing sibling literals. */
+  segmentEnum?: Record<string, readonly string[]>
+  /** The ONE segment allowed to contain %2F (its decoded value is validated). */
+  encodedSlashSegment?: string
+  guestScope?: GuestScopeSpec
+  clusterObject?: boolean
+  secondaryConnections?: BodyOrQueryField[]
+  /** Permission keys the handler may check beyond its scope. */
+  secondaryPermissions?: string[]
+  tag: ApiTag
   /** Route module, repo-frontend-relative; consumed by the contract tests. */
   routeFile: string
   summary: string
   description: string
   queryParams?: AllowlistQueryParam[]
+  /** Key into REQUEST_SCHEMAS (openapiSchemas.ts), for entries with a body. */
+  requestSchemaRef?: string
   /** Key into RESPONSE_SCHEMAS (openapiSchemas.ts). */
   responseSchemaRef: string
 }
@@ -32,6 +63,7 @@ export const PUBLIC_API_ALLOWLIST: AllowlistEntry[] = [
   {
     id: "vms-list",
     method: "GET",
+    tag: "Monitoring",
     pattern: "/api/v1/vms",
     requiredScopes: ["vms:read"],
     routeFile: "src/app/api/v1/vms/route.ts",
@@ -47,6 +79,7 @@ export const PUBLIC_API_ALLOWLIST: AllowlistEntry[] = [
   {
     id: "inventory-tree",
     method: "GET",
+    tag: "Monitoring",
     pattern: "/api/v1/inventory",
     requiredScopes: ["nodes:read"],
     routeFile: "src/app/api/v1/inventory/route.ts",
@@ -59,6 +92,7 @@ export const PUBLIC_API_ALLOWLIST: AllowlistEntry[] = [
   {
     id: "storage-list",
     method: "GET",
+    tag: "Monitoring",
     pattern: "/api/v1/storage",
     requiredScopes: ["storage:read"],
     routeFile: "src/app/api/v1/storage/route.ts",
@@ -69,6 +103,7 @@ export const PUBLIC_API_ALLOWLIST: AllowlistEntry[] = [
   {
     id: "pbs-backups",
     method: "GET",
+    tag: "Monitoring",
     pattern: "/api/v1/pbs/{id}/backups",
     requiredScopes: ["backups:read"],
     connectionSegment: "id",
@@ -89,6 +124,7 @@ export const PUBLIC_API_ALLOWLIST: AllowlistEntry[] = [
   {
     id: "public-backups",
     method: "GET",
+    tag: "Monitoring",
     pattern: "/api/v1/public/backups",
     requiredScopes: ["backups:read"],
     routeFile: "src/app/api/v1/public/backups/route.ts",
@@ -100,6 +136,7 @@ export const PUBLIC_API_ALLOWLIST: AllowlistEntry[] = [
   {
     id: "public-metrics",
     method: "GET",
+    tag: "Monitoring",
     pattern: "/api/v1/public/metrics",
     requiredScopes: ["nodes:read", "vms:read", "backups:read"],
     routeFile: "src/app/api/v1/public/metrics/route.ts",
@@ -111,6 +148,7 @@ export const PUBLIC_API_ALLOWLIST: AllowlistEntry[] = [
   {
     id: "public-health",
     method: "GET",
+    tag: "Monitoring",
     pattern: "/api/v1/public/health",
     requiredScopes: [],
     routeFile: "src/app/api/v1/public/health/route.ts",
@@ -128,14 +166,10 @@ export function getAllowlistEntryById(id: string): AllowlistEntry | null {
 }
 
 /**
- * Pre-match rejections (spec section 8): encoded slash or backslash, empty
- * segment (double slash), '.' or '..' segments, trailing slash on a non-root
- * path. Rejection = no match = the existing proxy cookie 401, nothing
- * is disclosed.
+ * Structural pre-match rejections (spec section 8): empty segment (double
+ * slash), '.' or '..' segments, trailing slash on a non-root path.
  */
-export function isRejectedPath(pathname: string): boolean {
-  const lower = pathname.toLowerCase()
-  if (lower.includes("%2f") || lower.includes("%5c")) return true
+function hasStructuralRejection(pathname: string): boolean {
   if (pathname !== "/" && pathname.endsWith("/")) return true
   const segments = pathname.split("/").slice(1)
   for (const segment of segments) {
@@ -144,16 +178,52 @@ export function isRejectedPath(pathname: string): boolean {
   return false
 }
 
-function matchPattern(pattern: string, pathname: string): Record<string, string> | null {
-  const patternSegments = pattern.split("/").slice(1)
+function hasEncodedSlash(value: string): boolean {
+  const lower = value.toLowerCase()
+  return lower.includes("%2f") || lower.includes("%5c")
+}
+
+/**
+ * Pre-match rejections: the structural ones plus an encoded slash or
+ * backslash anywhere. Only an entry declaring encodedSlashSegment lifts the
+ * latter, for that one segment (see matchPattern). Rejection = no match = the
+ * existing proxy cookie 401, nothing is disclosed.
+ */
+export function isRejectedPath(pathname: string): boolean {
+  return hasEncodedSlash(pathname) || hasStructuralRejection(pathname)
+}
+
+/** Decoded value of the encodedSlashSegment: no backslash, no empty/'.'/'..' sub-segment. */
+function isSafeEncodedSlashValue(raw: string): boolean {
+  let decoded: string
+  try {
+    decoded = decodeURIComponent(raw)
+  } catch {
+    return false
+  }
+  if (decoded.includes("\\")) return false
+  return !decoded.split("/").some(part => part === "" || part === "." || part === "..")
+}
+
+function matchPattern(entry: AllowlistEntry, pathname: string): Record<string, string> | null {
+  if (hasStructuralRejection(pathname)) return null
+  const patternSegments = entry.pattern.split("/").slice(1)
   const pathSegments = pathname.split("/").slice(1)
   if (patternSegments.length !== pathSegments.length) return null
   const params: Record<string, string> = {}
   for (let i = 0; i < patternSegments.length; i++) {
     const p = patternSegments[i]
-    if (p.startsWith("{") && p.endsWith("}")) {
-      params[p.slice(1, -1)] = pathSegments[i]
-    } else if (p !== pathSegments[i]) {
+    const value = pathSegments[i]
+    const isDynamic = p.startsWith("{") && p.endsWith("}")
+    const name = isDynamic ? p.slice(1, -1) : null
+    if (hasEncodedSlash(value)) {
+      if (name === null || name !== entry.encodedSlashSegment || !isSafeEncodedSlashValue(value)) return null
+    }
+    if (name !== null) {
+      const allowed = entry.segmentEnum?.[name]
+      if (allowed && !allowed.includes(value)) return null
+      params[name] = value
+    } else if (p !== value) {
       return null
     }
   }
@@ -162,22 +232,45 @@ function matchPattern(pattern: string, pathname: string): Record<string, string>
 
 export type AllowlistMatch = { ok: boolean; entryId?: string; params?: Record<string, string> }
 
-/** THE single shared matcher: the proxy and getPrincipal both use it. */
-export function matchPublicApiPath(pathname: string): AllowlistMatch {
-  if (isRejectedPath(pathname)) return { ok: false }
-  for (const entry of PUBLIC_API_ALLOWLIST) {
-    const params = matchPattern(entry.pattern, pathname)
+/** HEAD is served by the GET entry. */
+function effectiveMethod(method: string): string {
+  return method === "HEAD" ? "GET" : method
+}
+
+/** Matcher core, exported for tests that inject synthetic entries. */
+export function _matchAgainst(entries: AllowlistEntry[], pathname: string, method: string): AllowlistMatch {
+  const wanted = effectiveMethod(method)
+  for (const entry of entries) {
+    if (entry.method !== wanted) continue
+    const params = matchPattern(entry, pathname)
     if (params !== null) return { ok: true, entryId: entry.id, params }
   }
   return { ok: false }
 }
 
-/** Re-verification against ONE designated entry (getPrincipal step 10): never a free re-match. */
-export function matchEntryParams(entry: AllowlistEntry, pathname: string): Record<string, string> | null {
-  if (isRejectedPath(pathname)) return null
-  return matchPattern(entry.pattern, pathname)
+/** THE single shared matcher: the proxy and getPrincipal both use it. */
+export function matchPublicApiPath(pathname: string, method: string): AllowlistMatch {
+  return _matchAgainst(PUBLIC_API_ALLOWLIST, pathname, method)
 }
 
-export function matchesEntry(entry: AllowlistEntry, pathname: string): boolean {
-  return matchEntryParams(entry, pathname) !== null
+/** Methods an allowlisted path answers to (any method), for 405 handling. */
+export function allowedMethodsForPath(pathname: string): HttpMethod[] {
+  const methods: HttpMethod[] = []
+  for (const entry of PUBLIC_API_ALLOWLIST) {
+    if (!methods.includes(entry.method) && matchPattern(entry, pathname) !== null) methods.push(entry.method)
+  }
+  return methods
+}
+
+/** Re-verification against ONE designated entry (getPrincipal step 10): never a free re-match. */
+export function matchEntryParams(entry: AllowlistEntry, pathname: string): Record<string, string> | null {
+  return matchPattern(entry, pathname)
+}
+
+export function matchesEntry(entry: AllowlistEntry, pathname: string, method: string): boolean {
+  return entry.method === effectiveMethod(method) && matchPattern(entry, pathname) !== null
+}
+
+export function isWriteEntry(entry: AllowlistEntry): boolean {
+  return entry.method !== "GET"
 }

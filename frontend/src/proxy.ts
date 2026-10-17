@@ -347,7 +347,7 @@ export async function proxy(request: NextRequest) {
   const hasApiTokenBearer =
     isApiPath && (request.headers.get('authorization') || '').startsWith('Bearer pxc_')
   if (isApiPath) {
-    const matched = matchPublicApiPath(pathname)
+    const matched = matchPublicApiPath(pathname, request.method === 'OPTIONS' ? 'GET' : request.method)
     if (matched.ok) {
       // Server-to-server only (spec section 8): explicit 405 to any OPTIONS
       // on the exposed surface, answered by the proxy itself.

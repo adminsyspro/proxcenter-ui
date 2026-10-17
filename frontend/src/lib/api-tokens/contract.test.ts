@@ -114,13 +114,31 @@ function walkImportGraph(entryFile: string): Map<string, string> {
  * files ever stops being an offender (fixed, or the comment is reworded),
  * the second assertion in the test body fails too, forcing a conscious
  * update instead of leaving a stale exception in place.
+ *
+ * The guest file restore routes share `lib/guestFileRestore/guard.ts`, whose
+ * `isProviderCaller` reads the raw session claim ON PURPOSE (a tenant user
+ * must never be promoted by getCurrentTenantId's "default" fallback) and
+ * whose `requireGuestFileRestoreAdmin` guards the settings route only. For a
+ * token principal `isProviderCaller` answers false BEFORE any session read
+ * (pinned in guard.test.ts), so a cookie riding along a pxc_ bearer is never
+ * consulted; config.ts / jwtContext.ts are the same textual false positives
+ * as above, reached through its `authOptions` import.
  */
+const GFR_SESSION_READ_EXCEPTIONS = [
+  path.join('lib', 'guestFileRestore', 'guard.ts'),
+  path.join('lib', 'auth', 'config.ts'),
+  path.join('lib', 'auth', 'jwtContext.ts'),
+]
 const KNOWN_SESSION_READ_EXCEPTIONS: Record<string, string[]> = {
   'storage-list': [
     path.join('lib', 'storage', 'fleetScope.ts'),
     path.join('lib', 'auth', 'config.ts'),
     path.join('lib', 'auth', 'jwtContext.ts'),
   ],
+  'gfr-probe': GFR_SESSION_READ_EXCEPTIONS,
+  'gfr-jobs-list': GFR_SESSION_READ_EXCEPTIONS,
+  'gfr-job-create': GFR_SESSION_READ_EXCEPTIONS,
+  'gfr-job-cancel': GFR_SESSION_READ_EXCEPTIONS,
 }
 
 describe('allowlist contract: two assertions per route (spec D2)', () => {

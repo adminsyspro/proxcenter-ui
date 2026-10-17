@@ -16,10 +16,11 @@ import { getPbsConnectionById, getPbsConnectionByIdUnscoped } from '@/lib/connec
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { assertVdcPbsAccess } from '@/lib/vdc/scope'
 import { invalidatePbsBackupCache } from '@/lib/cache/pbsBackupCache'
+import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
 
 export const runtime = 'nodejs'
 
-export async function DELETE(
+async function handler(
   req: Request,
   ctx: { params: Promise<{ id: string; backupId: string }> | { id: string; backupId: string } },
 ) {
@@ -86,3 +87,5 @@ export async function DELETE(
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const DELETE = withPublicApiGuard("pbs-backup-delete", handler)

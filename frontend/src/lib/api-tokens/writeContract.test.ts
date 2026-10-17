@@ -30,10 +30,19 @@ const EXPECTED_WRITE_IDS: Record<string, string[]> = {
     'vm-remote-migrate-check', 'vm-remote-migrate-prepare', 'vm-delete', 'vm-notes-update',
     'vm-snapshot-create', 'vm-snapshot-delete', 'vm-snapshot-rollback', 'vm-snapshot-update',
   ],
+  backups: [
+    'backup-job-create', 'backup-job-update', 'backup-job-delete', 'backup-job-run', 'backup-job-guests',
+    'vm-backup-now', 'vm-restore', 'pbs-backup-delete', 'pbs-backup-verify',
+    'pbs-job-prune-create', 'pbs-job-sync-create', 'pbs-job-verify-create', 'pbs-job-tape-create',
+    'pbs-job-prune-update', 'pbs-job-sync-update', 'pbs-job-verify-update', 'pbs-job-tape-update',
+    'pbs-job-prune-delete', 'pbs-job-sync-delete', 'pbs-job-verify-delete', 'pbs-job-tape-delete',
+    'pbs-job-sync-run', 'pbs-job-verify-run', 'pbs-job-tape-run', 'pbs-job-gc-run',
+    'gfr-probe', 'gfr-job-create', 'gfr-job-cancel',
+  ],
 }
 
 /** The only entries allowed to resolve their connection inside the handler. */
-const HANDLER_PERIMETER_IDS = ['gfr-job-cancel', 'vdc-vnet-create', 'vdc-vnet-update', 'vdc-vnet-delete']
+const HANDLER_PERIMETER_IDS = ['gfr-probe', 'gfr-job-create', 'gfr-job-cancel', 'vdc-vnet-create', 'vdc-vnet-update', 'vdc-vnet-delete']
 
 /** GET handlers of a file opened in write that stay closed (spec: consoles only). */
 const CLOSED_GET_NEIGHBOUR_FILES: string[] = []

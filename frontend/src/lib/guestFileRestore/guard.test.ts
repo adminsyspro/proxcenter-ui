@@ -1,11 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { sessionMock, checkPermissionMock, superAdminMock, requireFeatureMock, getPrincipalMock } = vi.hoisted(() => ({
+const { sessionMock, checkPermissionMock, superAdminMock, requireFeatureMock, getPrincipalMock, visibleMock, guestScopeMock } = vi.hoisted(() => ({
   sessionMock: vi.fn(),
   checkPermissionMock: vi.fn(),
   superAdminMock: vi.fn(),
   requireFeatureMock: vi.fn(),
   getPrincipalMock: vi.fn(),
+  visibleMock: vi.fn(),
+  guestScopeMock: vi.fn(),
 }))
 
 vi.mock('next-auth', () => ({ getServerSession: () => sessionMock() }))
@@ -21,8 +23,12 @@ vi.mock('@/lib/rbac', () => ({
   checkPermission: (...a: any[]) => checkPermissionMock(...a),
   isUserSuperAdmin: (...a: any[]) => superAdminMock(...a),
 }))
+vi.mock('@/lib/api-tokens/scope', () => ({ resolveVisibleConnectionIds: (...a: any[]) => visibleMock(...a) }))
+vi.mock('@/lib/vdc/guestScope', () => ({ checkTenantGuestScope: (...a: any[]) => guestScopeMock(...a) }))
 
-import { authorizeRestoreTarget, isProviderCaller, requireGuestFileRestoreAdmin, requireGuestFileRestoreUser } from './guard'
+import {
+  authorizeRestoreTarget, denyTokenOutsideRestoreScope, isProviderCaller, requireGuestFileRestoreAdmin, requireGuestFileRestoreUser,
+} from './guard'
 
 beforeEach(() => {
   sessionMock.mockReset().mockResolvedValue({ user: { id: 'u1', tenantId: 'default', email: 'u1@example.com' } })
@@ -30,6 +36,8 @@ beforeEach(() => {
   superAdminMock.mockReset().mockResolvedValue(true)
   requireFeatureMock.mockReset().mockResolvedValue(null)
   getPrincipalMock.mockReset().mockResolvedValue({ ok: true, principal: { kind: 'session', userId: 'u1', userEmail: 'u1@example.com', tenantId: 'default' } })
+  visibleMock.mockReset().mockResolvedValue(new Set(['c1', 'pbs1']))
+  guestScopeMock.mockReset().mockResolvedValue(null)
 })
 
 describe('requireGuestFileRestoreAdmin', () => {
@@ -93,6 +101,39 @@ describe('isProviderCaller', () => {
     expect(await isProviderCaller({ kind: 'session', userId: 'u2', tenantId: 'default' } as any)).toBe(false)
     sessionMock.mockResolvedValue({ user: { id: 'u3' } })
     expect(await isProviderCaller({ kind: 'session', userId: 'u3', tenantId: 'default' } as any)).toBe(false)
-    expect(await isProviderCaller({ kind: 'token', tenantId: 'default' } as any)).toBe(false)
+    // A token never reads the session, even with a provider super admin cookie riding along.
+    sessionMock.mockClear().mockResolvedValue({ user: { id: 'u1', tenantId: 'default' } })
+    expect(await isProviderCaller({ kind: 'token', userId: 'u1', tenantId: 'default' } as any)).toBe(false)
+    expect(sessionMock).not.toHaveBeenCalled()
+  })
+})
+
+describe('denyTokenOutsideRestoreScope', () => {
+  const conn = { id: 'c1' }
+  const target = { connId: 'c1', node: 'pve1', type: 'qemu' as const, vmid: 100 }
+  const token = { kind: 'token', tokenId: 't1', tenantId: 'tenant-a', connectionIds: ['c1', 'pbs1'] } as any
+
+  it('leaves a session caller to RBAC alone', async () => {
+    expect(await denyTokenOutsideRestoreScope({ kind: 'session', userId: 'u1', tenantId: 'default', connectionIds: null }, conn as any, target, 'elsewhere')).toBeNull()
+    expect(visibleMock).not.toHaveBeenCalled()
+    expect(guestScopeMock).not.toHaveBeenCalled()
+  })
+
+  it('refuses a token whose target or source connection is outside its perimeter', async () => {
+    const outsideTarget = await denyTokenOutsideRestoreScope(token, conn as any, { ...target, connId: 'c9' })
+    expect(outsideTarget?.status).toBe(403)
+    expect(await outsideTarget?.json()).toEqual({ error: 'Connection not in token scope', connection: 'c9' })
+    const outsideSource = await denyTokenOutsideRestoreScope(token, conn as any, target, 'pbs9')
+    expect(await outsideSource?.json()).toEqual({ error: 'Connection not in token scope', connection: 'pbs9' })
+    expect(visibleMock).toHaveBeenCalledWith(token)
+    expect(guestScopeMock).not.toHaveBeenCalled()
+  })
+
+  it('confines the target guest to the vDC of the token tenant', async () => {
+    expect(await denyTokenOutsideRestoreScope(token, conn as any, target, 'pbs1')).toBeNull()
+    expect(guestScopeMock).toHaveBeenCalledWith('tenant-a', conn, 'c1', 'qemu', 'pve1', '100')
+    const refusal = new Response(JSON.stringify({ error: 'Guest outside your vDC scope' }), { status: 403 })
+    guestScopeMock.mockResolvedValue(refusal)
+    expect(await denyTokenOutsideRestoreScope(token, conn as any, target)).toBe(refusal)
   })
 })

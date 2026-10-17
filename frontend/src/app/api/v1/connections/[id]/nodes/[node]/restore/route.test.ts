@@ -1,5 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
+// The API token guard is covered by routeGuard.test.ts and writeContract.test.ts:
+// pass-through so this file keeps testing the handler, as for a session caller.
+vi.mock("@/lib/api-tokens/routeGuard", () => ({
+  withPublicApiGuard: (_entryId: string, handler: any) => handler,
+}))
+
 import { callRoute, readJson } from "@/__tests__/setup/route-test"
 
 // Hoisted mocks -- referenced from vi.mock factories below, which vitest
@@ -15,6 +21,7 @@ const {
   waitForTaskMock,
   syncIpamForVmConfigMock,
   releaseAllocationsForVmMock,
+  resolveVisibleMock,
   afterCbs,
 } = vi.hoisted(() => ({
   getConnectionByIdMock: vi.fn(),
@@ -26,6 +33,7 @@ const {
   waitForTaskMock: vi.fn(),
   syncIpamForVmConfigMock: vi.fn(),
   releaseAllocationsForVmMock: vi.fn(),
+  resolveVisibleMock: vi.fn(),
   afterCbs: [] as Array<() => Promise<void>>,
 }))
 
@@ -92,6 +100,7 @@ vi.mock("@/lib/db/prisma", () => ({
 // Dynamically imported by the route (`await import("@/lib/audit")`); vi.mock
 // intercepts dynamic imports too.
 vi.mock("@/lib/audit", () => ({ audit: vi.fn().mockResolvedValue("audit-1") }))
+vi.mock("@/lib/api-tokens/scope", () => ({ resolveVisibleConnectionIds: (...a: any[]) => resolveVisibleMock(...a) }))
 
 beforeEach(() => {
   afterCbs.length = 0
@@ -752,5 +761,44 @@ describe("POST restore -- backup.restore and the guest that force overwrites", (
     expect(res.status).toBe(200)
     // One lookup for the vm.delete target; the vDC check makes none for a provider.
     expect(pveFetchMock.mock.calls.filter(c => c[1] === "/cluster/resources?type=vm")).toHaveLength(1)
+  })
+})
+
+describe("POST restore -- API token and the nested PBS source", () => {
+  const token = { kind: "token", tokenId: "tok-1", tenantId: "default", connectionIds: ["pve-1", "pbs-in"] }
+  const pbsBody = (pbsId: string) => ({
+    vmid: 111, type: "qemu", pbsBackup: { pbsId, datastore: "ds1", backupPath: "backup/vm/111/2026-08-11T15:51:33Z" },
+  })
+  const call = async (body: object, principal?: object) => {
+    const { POST } = await import("./route")
+    const req = new Request("http://test.local/_", { method: "POST", body: JSON.stringify(body), headers: { "content-type": "application/json" } })
+    return POST(req, { params: Promise.resolve({ id: "pve-1", node: "node1" }), ...(principal ? { principal } : {}) } as any)
+  }
+
+  beforeEach(async () => {
+    resolveVisibleMock.mockReset().mockResolvedValue(new Set(["pve-1", "pbs-in"]))
+    const { prisma } = await import("@/lib/db/prisma")
+    vi.mocked(prisma.connection.findUnique).mockReset().mockResolvedValue(null as any)
+  })
+
+  it("refuses a pbsId outside the token perimeter before touching the PBS connection", async () => {
+    const res = await call(pbsBody("pbs-out"), token)
+
+    expect(res.status).toBe(403)
+    expect(await readJson(res)).toEqual({ error: "Connection not in token scope", connection: "pbs-out" })
+    expect(resolveVisibleMock).toHaveBeenCalledWith(token)
+    const { prisma } = await import("@/lib/db/prisma")
+    expect(prisma.connection.findUnique).not.toHaveBeenCalled()
+    expect(pveFetchMock).not.toHaveBeenCalled()
+  })
+
+  it("lets a pbsId inside the perimeter through, and never consults it for a session", async () => {
+    const { prisma } = await import("@/lib/db/prisma")
+    expect((await call(pbsBody("pbs-in"), token)).status).toBe(404)
+    expect(prisma.connection.findUnique).toHaveBeenCalledWith(expect.objectContaining({ where: { id: "pbs-in" } }))
+
+    resolveVisibleMock.mockClear()
+    expect((await call(pbsBody("pbs-out"))).status).toBe(404)
+    expect(resolveVisibleMock).not.toHaveBeenCalled()
   })
 })

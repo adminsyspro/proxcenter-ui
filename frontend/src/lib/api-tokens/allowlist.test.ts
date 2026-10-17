@@ -122,6 +122,27 @@ describe('shared canonical matcher', () => {
       'vm-snapshot-update': `${vmKey}/snapshots/before-upgrade`,
       'vm-tasks-list': `${vmKey}/tasks`,
       'task-status': '/api/v1/tasks/c1/pve1/UPID:pve1:0000ABCD:00001234:6A000000:qmstart:100:root@pam:',
+      'backup-jobs-list': '/api/v1/connections/c1/backup-jobs',
+      'backup-job-create': '/api/v1/connections/c1/backup-jobs',
+      'backup-job-get': '/api/v1/connections/c1/backup-jobs/backup-1a2b',
+      'backup-job-update': '/api/v1/connections/c1/backup-jobs/backup-1a2b',
+      'backup-job-delete': '/api/v1/connections/c1/backup-jobs/backup-1a2b',
+      'backup-job-run': '/api/v1/connections/c1/backup-jobs/backup-1a2b',
+      'backup-job-guests': '/api/v1/connections/c1/backup-jobs/backup-1a2b/guests',
+      'vm-backup-now': '/api/v1/connections/c1/nodes/pve1/vzdump',
+      'vm-restore': '/api/v1/connections/c1/nodes/pve1/restore',
+      'pbs-backup-delete': '/api/v1/pbs/p1/backups/ds1%2Fvm%2F100%2F1760000000',
+      'pbs-backup-verify': '/api/v1/pbs/p1/backups/ds1%2Fns1%2Fvm%2F100%2F1760000000/verify',
+      ...Object.fromEntries(['prune', 'sync', 'verify', 'tape'].flatMap(kind => [
+        [`pbs-job-${kind}-create`, `/api/v1/pbs/p1/jobs/${kind}`],
+        [`pbs-job-${kind}-update`, `/api/v1/pbs/p1/jobs/${kind}/job-1`],
+        [`pbs-job-${kind}-delete`, `/api/v1/pbs/p1/jobs/${kind}/job-1`],
+      ])),
+      ...Object.fromEntries(['sync', 'verify', 'tape', 'gc'].map(kind => [`pbs-job-${kind}-run`, `/api/v1/pbs/p1/jobs/${kind}/job-1/run`])),
+      'gfr-probe': '/api/v1/guest-file-restore/probe',
+      'gfr-jobs-list': '/api/v1/guest-file-restore/jobs',
+      'gfr-job-create': '/api/v1/guest-file-restore/jobs',
+      'gfr-job-cancel': '/api/v1/guest-file-restore/jobs/j1/cancel',
     }
     for (const entry of PUBLIC_API_ALLOWLIST) {
       const path = samplePathById[entry.id]
@@ -164,6 +185,24 @@ describe('method-aware matching', () => {
     expect(allowedMethodsForPath(`${guest}/unlock`).sort()).toEqual(['GET', 'POST'])
   })
 
+  it('backup-jobs/{jobId} never swallows its static sibling backup-jobs/runs', () => {
+    const jobs = '/api/v1/connections/c1/backup-jobs'
+    expect(matchPublicApiPath(`${jobs}/backup-1a2b`, 'GET').entryId).toBe('backup-job-get')
+    for (const method of ['GET', 'PUT', 'DELETE', 'POST']) {
+      expect(matchPublicApiPath(`${jobs}/runs`, method).ok, method).toBe(false)
+    }
+    expect(allowedMethodsForPath(`${jobs}/runs`)).toEqual([])
+    expect(matchPublicApiPath(`${jobs}/runs/guests`, 'POST').entryId).toBe('backup-job-guests')
+  })
+
+  it('a PBS snapshot id carries its slashes encoded in its one segment only', () => {
+    const snap = '/api/v1/pbs/p1/backups/ds1%2Fvm%2F100%2F1760000000'
+    expect(matchPublicApiPath(snap, 'DELETE')).toMatchObject({ entryId: 'pbs-backup-delete', params: { backupId: 'ds1%2Fvm%2F100%2F1760000000' } })
+    expect(matchPublicApiPath(`${snap}/verify`, 'POST').entryId).toBe('pbs-backup-verify')
+    expect(matchPublicApiPath('/api/v1/pbs/p1/backups/ds1%2F..%2Fvm%2F100%2F1', 'DELETE').ok).toBe(false)
+    expect(matchPublicApiPath('/api/v1/pbs/p1%2Fx/backups/ds1%2Fvm%2F100%2F1', 'DELETE').ok).toBe(false)
+  })
+
   it('matchesEntry checks the method and isWriteEntry flags non-GET', () => {
     const vms = getAllowlistEntryById('vms-list')!
     expect(matchesEntry(vms, '/api/v1/vms', 'HEAD')).toBe(true)
@@ -174,7 +213,7 @@ describe('method-aware matching', () => {
 })
 
 describe('segmentEnum and encodedSlashSegment (synthetic entries)', () => {
-  const base = { requiredScopes: [], tag: 'VMs', routeFile: 'x', summary: 's', description: 'd', responseSchemaRef: 'R' } as const
+  const base = { requiredScopes: [] as string[], tag: 'VMs', routeFile: 'x', summary: 's', description: 'd', responseSchemaRef: 'R' } as const
   const entry = (e: Partial<AllowlistEntry> & Pick<AllowlistEntry, 'id' | 'method' | 'pattern'>): AllowlistEntry => ({ ...base, ...e })
 
   it('segmentEnum keeps {action} from swallowing a sibling literal', () => {

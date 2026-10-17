@@ -11,10 +11,12 @@
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 
+import { resolveVisibleConnectionIds } from '@/lib/api-tokens/scope'
 import { authOptions } from '@/lib/auth/config'
 import { getPrincipal, rejectionToResponse } from '@/lib/auth/principal'
 import type { Principal } from '@/lib/auth/principal'
 import { PERMISSIONS, buildVmResourceId, checkPermission, isUserSuperAdmin } from '@/lib/rbac'
+import { checkTenantGuestScope } from '@/lib/vdc/guestScope'
 
 import type { GuestRestoreTarget } from './types'
 
@@ -68,6 +70,28 @@ export async function authorizeRestoreTarget(target: GuestRestoreTarget): Promis
     'vm',
     buildVmResourceId(target.connId, target.node, target.type, String(target.vmid)),
   )
+}
+
+/**
+ * API tokens only (perimeter "handler" in the allowlist): the connections a
+ * restore names sit in nested body fields the token guard does not read, so
+ * they are held to the token perimeter here, and a vDC tenant token reaches
+ * the guests of its own vDC only. Sessions stay judged by RBAC alone.
+ */
+export async function denyTokenOutsideRestoreScope(
+  principal: Principal,
+  conn: Parameters<typeof checkTenantGuestScope>[1],
+  target: GuestRestoreTarget,
+  sourceConnectionId?: string,
+): Promise<Response | null> {
+  if (principal.kind !== 'token') return null
+  const visible = await resolveVisibleConnectionIds(principal)
+  for (const connection of [target.connId, sourceConnectionId]) {
+    if (connection !== undefined && !visible.has(connection)) {
+      return NextResponse.json({ error: 'Connection not in token scope', connection }, { status: 403 })
+    }
+  }
+  return checkTenantGuestScope(principal.tenantId, conn, target.connId, target.type, target.node, String(target.vmid))
 }
 
 /**

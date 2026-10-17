@@ -66,6 +66,7 @@ async function loadJobForTenant(conn: any, connectionId: string, jobId: string) 
   }
   return { job, allowedPools, scope }
 }
+import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 
 export const runtime = "nodejs"
 
@@ -78,7 +79,7 @@ type RouteContext = {
  *
  * Récupère les détails d'un backup job
  */
-export async function GET(_req: Request, ctx: RouteContext) {
+async function getHandler(_req: Request, ctx: RouteContext) {
   try {
     const { id, jobId } = await ctx.params
 
@@ -110,7 +111,7 @@ return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
  *
  * Modifie un backup job existant
  */
-export async function PUT(req: Request, ctx: RouteContext) {
+async function putHandler(req: Request, ctx: RouteContext) {
   try {
     const { id, jobId } = await ctx.params
     const body = await req.json()
@@ -331,7 +332,7 @@ return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
  *
  * Supprime un backup job
  */
-export async function DELETE(_req: Request, ctx: RouteContext) {
+async function deleteHandler(_req: Request, ctx: RouteContext) {
   try {
     const { id, jobId } = await ctx.params
 
@@ -371,7 +372,7 @@ return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
  * Exécute immédiatement un backup job
  * Action: run
  */
-export async function POST(req: Request, ctx: RouteContext) {
+async function postHandler(req: Request, ctx: RouteContext) {
   try {
     const { id, jobId } = await ctx.params
     const { searchParams } = new URL(req.url)
@@ -473,3 +474,8 @@ export async function POST(req: Request, ctx: RouteContext) {
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const GET = withPublicApiGuard("backup-job-get", getHandler)
+export const PUT = withPublicApiGuard("backup-job-update", putHandler)
+export const DELETE = withPublicApiGuard("backup-job-delete", deleteHandler)
+export const POST = withPublicApiGuard("backup-job-run", postHandler)

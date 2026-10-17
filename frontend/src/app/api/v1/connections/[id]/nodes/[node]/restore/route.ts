@@ -17,14 +17,17 @@ import { restampGuestDrives } from "@/lib/vdc/driveGuard"
 import { clearRestoredTags } from "@/lib/backups/restoreTagsCleanup"
 import { resolveCtRestoreStorage } from "@/lib/backups/ctRestoreStorage"
 import { checkTenantGuestScope } from "@/lib/vdc/guestScope"
+import type { Principal } from "@/lib/auth/principal"
+import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
+import { resolveVisibleConnectionIds } from "@/lib/api-tokens/scope"
 
 export const runtime = "nodejs"
 
 // POST /api/v1/connections/{id}/nodes/{node}/restore
 // Restore a VM or CT from a backup (vzdump/PBS)
-export async function POST(
+async function handler(
   req: Request,
-  ctx: { params: Promise<{ id: string; node: string }> }
+  ctx: { params: Promise<{ id: string; node: string }>; principal?: Principal }
 ) {
   try {
     const { id, node } = await ctx.params
@@ -165,6 +168,12 @@ export async function POST(
       }
       if (!pbsId || !datastore || !backupPath) {
         return NextResponse.json({ error: "pbsBackup requires pbsId, datastore, and backupPath" }, { status: 400 })
+      }
+      // The PBS source sits in a nested body field the API token guard does
+      // not read: an API token reads backups of its perimeter only.
+      const principal = ctx.principal
+      if (principal?.kind === "token" && !(await resolveVisibleConnectionIds(principal)).has(pbsId)) {
+        return NextResponse.json({ error: "Connection not in token scope", connection: pbsId }, { status: 403 })
       }
       // Tenant guard on the PBS source: assertVdcPbsAccess returns admin
       // for the provider, the binding tuples for an authorised tenant,
@@ -499,3 +508,5 @@ export async function POST(
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const POST = withPublicApiGuard("vm-restore", handler)

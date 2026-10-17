@@ -1,9 +1,9 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "ProxCenter public read-only API",
+    "title": "ProxCenter public API",
     "version": "1",
-    "description": "Read-only API for external monitoring tooling, authenticated by a pxc_ service-account token. GET and HEAD only. Server to server: no CORS header is emitted."
+    "description": "API for external tooling, authenticated by a pxc_ service-account token. Reading and writing depend on the scopes granted to the token. Write operations act on the real infrastructure immediately. Server to server: no CORS header is emitted."
   },
   "servers": [
     {
@@ -18,6 +18,38 @@
   "security": [
     {
       "bearerAuth": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "Monitoring"
+    },
+    {
+      "name": "VMs"
+    },
+    {
+      "name": "Snapshots"
+    },
+    {
+      "name": "Backups"
+    },
+    {
+      "name": "Storage"
+    },
+    {
+      "name": "HA"
+    },
+    {
+      "name": "Pools"
+    },
+    {
+      "name": "Network"
+    },
+    {
+      "name": "Firewall"
+    },
+    {
+      "name": "Tasks"
     }
   ],
   "components": {
@@ -365,6 +397,16 @@
           }
         }
       },
+      "TaskStartedResponse": {
+        "type": "object",
+        "description": "A Proxmox task was started. `data` is its UPID; follow it with GET /api/v1/tasks/{connectionId}/{node}/{upid}.",
+        "properties": {
+          "data": {
+            "type": "string",
+            "description": "Proxmox task UPID"
+          }
+        }
+      },
       "PrometheusExposition": {
         "type": "string",
         "description": "Prometheus text exposition format (version 0.0.4)."
@@ -481,6 +523,9 @@
         "operationId": "vms-list",
         "summary": "List all VMs and containers across visible connections",
         "description": "Aggregated VM/LXC list with status, usage and config-derived fields (cpuType, scsihw, agentEnabled, bios, ostype, onboot, description, macs) served by default. `ips` merges the addresses pinned in the config with the last known guest agent / LXC addresses from a background index; `staleIps` lists the last known addresses a guest could not re-confirm (stopped, agent down) and `ipIndexWarming` tells that the index is still being built. Pass include=agent to probe the QEMU guest agent on running VMs (about 7x slower).",
+        "tags": [
+          "Monitoring"
+        ],
         "x-required-scopes": [
           "vms:read"
         ],
@@ -678,11 +723,11 @@
             }
           },
           "405": {
-            "description": "API tokens are read-only",
+            "description": "Method not allowed for this API token route",
             "content": {
               "application/json": {
                 "example": {
-                  "error": "API tokens are read-only",
+                  "error": "Method not allowed for this API token route",
                   "method": "POST"
                 }
               }
@@ -707,6 +752,9 @@
         "operationId": "inventory-tree",
         "summary": "Multi-cluster inventory tree (clusters, nodes, guests, PBS)",
         "description": "Full inventory tree served from the shared SWR cache, filtered by tenant, vDC and token connection perimeter.",
+        "tags": [
+          "Monitoring"
+        ],
         "x-required-scopes": [
           "nodes:read"
         ],
@@ -808,11 +856,11 @@
             }
           },
           "405": {
-            "description": "API tokens are read-only",
+            "description": "Method not allowed for this API token route",
             "content": {
               "application/json": {
                 "example": {
-                  "error": "API tokens are read-only",
+                  "error": "Method not allowed for this API token route",
                   "method": "POST"
                 }
               }
@@ -837,6 +885,9 @@
         "operationId": "storage-list",
         "summary": "All storages across visible PVE connections",
         "description": "Aggregated storage list with capacity and usage per storage.",
+        "tags": [
+          "Monitoring"
+        ],
         "x-required-scopes": [
           "storage:read"
         ],
@@ -908,11 +959,11 @@
             }
           },
           "405": {
-            "description": "API tokens are read-only",
+            "description": "Method not allowed for this API token route",
             "content": {
               "application/json": {
                 "example": {
-                  "error": "API tokens are read-only",
+                  "error": "Method not allowed for this API token route",
                   "method": "POST"
                 }
               }
@@ -937,6 +988,9 @@
         "operationId": "pbs-backups",
         "summary": "Snapshots of one PBS server",
         "description": "All snapshots of the given PBS connection (all datastores and namespaces), paginated and filterable. {id} is a raw connection id, validated against the token perimeter before the handler runs.",
+        "tags": [
+          "Monitoring"
+        ],
         "x-required-scopes": [
           "backups:read"
         ],
@@ -1061,22 +1115,32 @@
             }
           },
           "403": {
-            "description": "Token holds none of the required scopes",
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
             "content": {
               "application/json": {
-                "example": {
-                  "error": "Route not available to API tokens",
-                  "route": "/api/v1/pbs/{id}/backups"
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/pbs/{id}/backups"
+                    }
+                  },
+                  "perimeter": {
+                    "value": {
+                      "error": "Connection not in token scope",
+                      "connection": "conn-1"
+                    }
+                  }
                 }
               }
             }
           },
           "405": {
-            "description": "API tokens are read-only",
+            "description": "Method not allowed for this API token route",
             "content": {
               "application/json": {
                 "example": {
-                  "error": "API tokens are read-only",
+                  "error": "Method not allowed for this API token route",
                   "method": "POST"
                 }
               }
@@ -1101,6 +1165,9 @@
         "operationId": "public-backups",
         "summary": "Fleet-wide backup freshness per guest",
         "description": "For every guest in the token perimeter: most recent backup date, age in seconds, datastore, PBS server, size and verification state. Guests without any backup are present with a null age.",
+        "tags": [
+          "Monitoring"
+        ],
         "x-required-scopes": [
           "backups:read"
         ],
@@ -1250,11 +1317,11 @@
             }
           },
           "405": {
-            "description": "API tokens are read-only",
+            "description": "Method not allowed for this API token route",
             "content": {
               "application/json": {
                 "example": {
-                  "error": "API tokens are read-only",
+                  "error": "Method not allowed for this API token route",
                   "method": "POST"
                 }
               }
@@ -1279,6 +1346,9 @@
         "operationId": "public-metrics",
         "summary": "Prometheus exposition of fleet metrics",
         "description": "Prometheus text exposition served from the inventory and PBS caches (never amplified to the hypervisor). Series families are filtered by scope: proxcenter_node_* needs nodes:read, proxcenter_vm_* needs vms:read, proxcenter_backup_* needs backups:read.",
+        "tags": [
+          "Monitoring"
+        ],
         "x-required-scopes": [
           "nodes:read",
           "vms:read",
@@ -1339,11 +1409,11 @@
             }
           },
           "405": {
-            "description": "API tokens are read-only",
+            "description": "Method not allowed for this API token route",
             "content": {
               "application/json": {
                 "example": {
-                  "error": "API tokens are read-only",
+                  "error": "Method not allowed for this API token route",
                   "method": "POST"
                 }
               }
@@ -1368,6 +1438,9 @@
         "operationId": "public-health",
         "summary": "Application status and per-connection reachability",
         "description": "Authenticated variant of the public liveness probe: application status plus per-connection reachability derived from the inventory cache, filtered by tenant. Any valid token can call it.",
+        "tags": [
+          "Monitoring"
+        ],
         "x-required-scopes": [],
         "parameters": [],
         "responses": {
@@ -1466,11 +1539,11 @@
             }
           },
           "405": {
-            "description": "API tokens are read-only",
+            "description": "Method not allowed for this API token route",
             "content": {
               "application/json": {
                 "example": {
-                  "error": "API tokens are read-only",
+                  "error": "Method not allowed for this API token route",
                   "method": "POST"
                 }
               }

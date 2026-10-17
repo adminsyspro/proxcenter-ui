@@ -1,6 +1,10 @@
 // Response schemas maintained NEXT TO the allowlist entries: the allowlist is
 // not reducible to a pattern plus scopes (spec D8), the generator builds the
 // spec skeleton from these metadata.
+// Request body schemas, keyed by AllowlistEntry.requestSchemaRef. Naming
+// convention: <PascalEntryId>Request. Filled by the domain tasks.
+export const REQUEST_SCHEMAS: Record<string, Record<string, unknown>> = {}
+
 export const RESPONSE_SCHEMAS: Record<string, Record<string, unknown>> = {
   VmsResponse: {
     type: "object",
@@ -130,6 +134,12 @@ export const RESPONSE_SCHEMAS: Record<string, Record<string, unknown>> = {
         },
       },
     },
+  },
+  TaskStartedResponse: {
+    type: "object",
+    description:
+      "A Proxmox task was started. `data` is its UPID; follow it with GET /api/v1/tasks/{connectionId}/{node}/{upid}.",
+    properties: { data: { type: "string", description: "Proxmox task UPID" } },
   },
   PrometheusExposition: {
     type: "string",

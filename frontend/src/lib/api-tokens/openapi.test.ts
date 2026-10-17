@@ -4,14 +4,14 @@ import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 import { buildOpenApiDocument } from './openapi'
-import { PUBLIC_API_ALLOWLIST } from './allowlist'
+import { PUBLIC_API_ALLOWLIST, type AllowlistEntry } from './allowlist'
 
 const doc = buildOpenApiDocument() as any
 
 describe('buildOpenApiDocument', () => {
   it('declares OpenAPI 3.1 and the bearer security scheme', () => {
     expect(doc.openapi).toBe('3.1.0')
-    expect(doc.info.title).toBe('ProxCenter public read-only API')
+    expect(doc.info.title).toBe('ProxCenter public API')
     expect(doc.components.securitySchemes.bearerAuth).toEqual({
       type: 'http', scheme: 'bearer', description: expect.stringContaining('pxc_'),
     })
@@ -43,7 +43,7 @@ describe('buildOpenApiDocument', () => {
       error: 'Invalid or expired API token',
     })
     expect(responses['405'].content['application/json'].example).toEqual({
-      error: 'API tokens are read-only', method: 'POST',
+      error: 'Method not allowed for this API token route', method: 'POST',
     })
     expect(responses['429'].content['application/json'].example).toEqual({
       error: 'Rate limit exceeded', retryAfter: 42,
@@ -56,6 +56,82 @@ describe('buildOpenApiDocument', () => {
   it('uses text/plain for the Prometheus exposition and JSON elsewhere', () => {
     expect(doc.paths['/api/v1/public/metrics'].get.responses['200'].content).toHaveProperty('text/plain')
     expect(doc.paths['/api/v1/public/backups'].get.responses['200'].content).toHaveProperty('application/json')
+  })
+
+  describe('write operations', () => {
+    const base = {
+      requiredScopes: ['vms:write'], routeFile: 'x', summary: 's', description: 'd',
+      responseSchemaRef: 'TaskStartedResponse',
+    } as const
+    const post: AllowlistEntry = {
+      ...base, id: 'vm-start', method: 'POST', tag: 'VMs',
+      pattern: '/api/v1/connections/{connId}/vms/{vmKey}/start',
+      connectionSegment: 'connId', vmKeySegment: 'vmKey',
+      guestScope: { vmKey: 'vmKey' }, requestSchemaRef: 'VmStartRequest',
+    }
+    const get: AllowlistEntry = {
+      ...base, id: 'vm-start-get', method: 'GET', tag: 'Snapshots', requiredScopes: ['vms:read'],
+      pattern: post.pattern, responseSchemaRef: 'VmsResponse',
+    }
+    const wdoc = buildOpenApiDocument([post]) as any
+    const mdoc = buildOpenApiDocument([post, get]) as any
+
+    it('keys operations by lowercase method and does not invent a get', () => {
+      expect(wdoc.paths[post.pattern].post.operationId).toBe('vm-start')
+      expect(wdoc.paths[post.pattern].get).toBeUndefined()
+    })
+
+    it('merges entries sharing a pattern', () => {
+      expect(Object.keys(mdoc.paths[post.pattern]).sort()).toEqual(['get', 'post'])
+      expect(mdoc.paths[post.pattern].get.operationId).toBe('vm-start-get')
+    })
+
+    it('tags operations and lists top-level tags in ApiTag order', () => {
+      expect(wdoc.paths[post.pattern].post.tags).toEqual(['VMs'])
+      expect(mdoc.paths[post.pattern].get.tags).toEqual(['Snapshots'])
+      expect(wdoc.tags.map((t: any) => t.name)).toEqual([
+        'Monitoring', 'VMs', 'Snapshots', 'Backups', 'Storage', 'HA', 'Pools', 'Network', 'Firewall', 'Tasks',
+      ])
+    })
+
+    it('adds a request body only when requestSchemaRef is set', () => {
+      const op = wdoc.paths[post.pattern].post
+      expect(op.requestBody.required).toBe(true)
+      expect(op.requestBody.content['application/json'].schema).toBeDefined()
+      expect(mdoc.paths[post.pattern].get.requestBody).toBeUndefined()
+    })
+
+    it('describes the shared task response and the 405 on every operation', () => {
+      const op = wdoc.paths[post.pattern].post
+      expect(op.responses['200'].content['application/json'].schema).toEqual(wdoc.components.schemas.TaskStartedResponse)
+      expect(wdoc.components.schemas.TaskStartedResponse.properties.data.type).toBe('string')
+      expect(wdoc.components.schemas.TaskStartedResponse.description).toContain('/api/v1/tasks/{connectionId}/{node}/{upid}')
+      const e405 = op.responses['405'].content['application/json'].example
+      expect(e405.error).toBe('Method not allowed for this API token route')
+      expect(e405.method).not.toBe('POST')
+    })
+
+    it('documents the perimeter and guest refusals as named 403 examples', () => {
+      const ex = wdoc.paths[post.pattern].post.responses['403'].content['application/json'].examples
+      expect(ex.perimeter.value).toEqual({ error: 'Connection not in token scope', connection: 'conn-1' })
+      expect(ex.guestScope.value).toEqual({ error: 'Guest outside your vDC scope' })
+      expect(ex.scope.value).toEqual({ error: 'Route not available to API tokens', route: post.pattern })
+      expect(ex.clusterObject).toBeUndefined()
+    })
+
+    it('documents cluster objects and segment enums', () => {
+      const co: AllowlistEntry = {
+        ...post, id: 'co', pattern: '/api/v1/connections/{connId}/x/{action}', vmKeySegment: undefined,
+        guestScope: undefined, clusterObject: true, requestSchemaRef: undefined,
+        segmentEnum: { action: ['start', 'stop'] },
+      }
+      const d = buildOpenApiDocument([co]) as any
+      const op = d.paths[co.pattern].post
+      expect(op.responses['403'].content['application/json'].examples.clusterObject.value).toEqual({
+        error: 'Cluster-level object not available to a vDC tenant token',
+      })
+      expect(op.parameters.find((p: any) => p.name === 'action').schema.enum).toEqual(['start', 'stop'])
+    })
   })
 
   // The in-product reference (#827) renders the committed file, not the

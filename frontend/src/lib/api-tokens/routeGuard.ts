@@ -1,14 +1,13 @@
 // Explicit route-boundary guard for allowlisted routes (spec D2). Resolves
-// the principal ONCE (recordUsage), enforces layer 1 (declared connection
-// segment vs resolveVisibleConnectionIds BEFORE the handler), forwards the
-// principal via ctx, and stamps RateLimit-* on token responses.
-import { NextResponse } from "next/server"
+// the principal ONCE (recordUsage), runs the token guards of writeGuards.ts
+// (connection perimeter, vDC confinement, live creator check) BEFORE the
+// handler, forwards the principal via ctx, journals token writes, and stamps
+// RateLimit-* on token responses.
 import { headers } from "next/headers"
 
-import { getPrincipal, rejectionToResponse, type Principal, type PrincipalRejection } from "@/lib/auth/principal"
+import { getPrincipal, rejectionToResponse, type Principal } from "@/lib/auth/principal"
 import { getAllowlistEntryById, matchEntryParams } from "./allowlist"
-import { resolveVisibleConnectionIds } from "./scope"
-import { extractTokenPrefix } from "./tokenCrypto"
+import { auditTokenDenied, auditTokenWrite, runTokenEntryGuards } from "./writeGuards"
 
 export type GuardedRouteContext = {
   params?: Promise<Record<string, string>> | Record<string, string>
@@ -44,57 +43,29 @@ export function withPublicApiGuard(entryId: string, handler: GuardedHandler): Gu
     const hdrs = await headers()
     if (hdrs.get("x-pxc-entry") !== entryId) return rejectionToResponse()
 
-    // Layer 1 (spec section 6): the entry declares its raw-connection-id
-    // segment; validate it against the token perimeter BEFORE the handler
-    // runs, independently of what the handler passes to checkPermission.
-    if (entry.connectionSegment) {
-      const params = matchEntryParams(entry, hdrs.get("x-pxc-path") || "")
-      const connId = params ? params[entry.connectionSegment] : undefined
-      if (!connId) return rejectionToResponse()
-      const visible = await resolveVisibleConnectionIds(principal)
-      if (!visible.has(connId)) {
-        return NextResponse.json(
-          { error: "Connection not in token scope", connection: connId },
-          { status: 403 },
-        )
-      }
-    }
+    // Params are re-derived from the same x-pxc-path getPrincipal verified,
+    // never trusted from that earlier verification: a path that no longer
+    // matches this entry fails closed.
+    const params = matchEntryParams(entry, hdrs.get("x-pxc-path") || "")
+    if (!params) return rejectionToResponse()
 
-    const res = await handler(req, { ...(ctx || {}), principal })
+    const denied = await runTokenEntryGuards(entry, principal, req, params)
+    if (denied) return denied
+
+    let res: Response
+    try {
+      res = await handler(req, { ...(ctx || {}), principal })
+    } catch (err) {
+      // A write that blew up mid-way may still have acted: journal it too.
+      await auditTokenWrite(entry, principal, req, new Response(null, { status: 500 }))
+      throw err
+    }
+    await auditTokenWrite(entry, principal, req, res)
     if (result.rateLimit) {
       res.headers.set("RateLimit-Limit", String(result.rateLimit.limit))
       res.headers.set("RateLimit-Remaining", String(result.rateLimit.remaining))
       res.headers.set("RateLimit-Reset", String(result.rateLimit.reset))
     }
     return res
-  }
-}
-
-// Journals every rejection at the route boundary (D13): a successful call is
-// NOT logged (last_used_* already carries that), but a refusal is, with the
-// token prefix only — never the secret — in details. Reads the Authorization
-// header via headers() (next/headers), the same source getPrincipal itself
-// and this file's entry-pin check already use, rather than a `req` param.
-async function auditTokenDenied(rejection?: PrincipalRejection): Promise<void> {
-  try {
-    const { audit } = await import("@/lib/audit")
-    const hdrs = await headers()
-    const authorization = hdrs.get("authorization") || ""
-    const prefix = authorization.startsWith("Bearer ")
-      ? extractTokenPrefix(authorization.slice("Bearer ".length))
-      : null
-    await audit({
-      action: "apitoken.denied",
-      category: "api_tokens",
-      status: "failure",
-      details: {
-        status: rejection?.status ?? 401,
-        reason: (rejection?.body as Record<string, unknown> | undefined)?.error ?? "invalid",
-        // Prefix ONLY, never the secret (spec section 10).
-        tokenPrefix: prefix ?? undefined,
-      },
-    })
-  } catch {
-    // Auditing a denial must never mask the denial itself.
   }
 }

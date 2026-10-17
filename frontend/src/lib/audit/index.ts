@@ -107,6 +107,7 @@ export type AuditAction =
   | "apitoken.delete"
   | "apitoken.revoke"
   | "apitoken.denied"
+  | "apitoken.write"
 
   // 2FA
   | "2fa_enrolled"

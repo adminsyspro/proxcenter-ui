@@ -28,6 +28,7 @@ export const TOKEN_VIEW_SELECT = {
   lastUsedAt: true,
   lastUsedIp: true,
   rateLimitPerMin: true,
+  writeRateLimitPerMin: true,
   createdByUserId: true,
   // Frozen copy of the creator's email (#632). createdByUserId goes NULL when
   // the account is deleted while the token stays valid, so it cannot answer

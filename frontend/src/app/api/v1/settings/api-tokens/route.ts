@@ -7,7 +7,8 @@ import { getCurrentTenantId, userHasAccessToTenant } from "@/lib/tenant"
 import { requireFeature } from "@/lib/auth/requireEnterprise"
 import { Features } from "@/lib/license/features"
 import { generateApiToken } from "@/lib/api-tokens/tokenCrypto"
-import { ALL_SCOPE_IDS } from "@/lib/api-tokens/scopes"
+import { ALL_SCOPE_IDS, isWriteScope } from "@/lib/api-tokens/scopes"
+import { firstUngrantableScope } from "@/lib/api-tokens/grantable"
 import { audit } from "@/lib/audit"
 
 import { requireApiTokenAdmin, TOKEN_VIEW_SELECT } from "./_shared"
@@ -93,6 +94,16 @@ export async function POST(req: Request) {
     }
   }
 
+  if (!ctx.isAdmin) {
+    // Fail closed: without a user id nothing can be proven held.
+    const ungrantable = ctx.userId
+      ? await firstUngrantableScope(ctx.userId, tenantId, scopes as string[], connectionIds)
+      : (scopes as string[]).find(isWriteScope)
+    if (ungrantable) {
+      return NextResponse.json({ error: "You cannot grant a scope you do not hold", scope: ungrantable }, { status: 403 })
+    }
+  }
+
   let expiresAt: Date | null = null
   if (body?.expiresInDays !== undefined && body?.expiresInDays !== null) {
     const days = Number(body.expiresInDays)
@@ -108,6 +119,13 @@ export async function POST(req: Request) {
     Number(body.rateLimitPerMin) > 0
       ? Math.floor(Number(body.rateLimitPerMin))
       : 600
+
+  const writeRateLimitPerMin =
+    body?.writeRateLimitPerMin !== undefined &&
+    Number.isFinite(Number(body.writeRateLimitPerMin)) &&
+    Number(body.writeRateLimitPerMin) > 0
+      ? Math.floor(Number(body.writeRateLimitPerMin))
+      : 60
 
   const generated = generateApiToken()
 
@@ -138,6 +156,7 @@ export async function POST(req: Request) {
           connectionIds,
           expiresAt,
           rateLimitPerMin,
+          writeRateLimitPerMin,
           createdByUserId: ctx.userId ?? null,
           createdByEmail: creator?.email ?? null,
         },
@@ -151,7 +170,7 @@ export async function POST(req: Request) {
           resourceType: "api_token",
           resourceId: created.id,
           resourceName: name,
-          details: { tenantId, scopes, connectionIds, expiresAt: expiresAt?.toISOString() ?? null },
+          details: { tenantId, scopes, connectionIds, expiresAt: expiresAt?.toISOString() ?? null, writeRateLimitPerMin },
         },
         tx,
       )

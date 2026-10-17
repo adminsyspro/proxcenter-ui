@@ -4,10 +4,11 @@
 // a revoked right takes at most one TTL to bite. Under control-plane HA each
 // node keeps its own cache (accepted, same as the rate limiter).
 import { prisma } from "@/lib/db/prisma"
-import { holdsBroadPermission, isUserSuperAdmin } from "@/lib/rbac"
+import { isUserSuperAdmin } from "@/lib/rbac"
 import { userHasAccessToTenant } from "@/lib/tenant"
 
-import { isWriteScope, WRITE_SCOPE_DEFINITIONS } from "./scopes"
+import { holdsWriteScope } from "./grantable"
+import { isWriteScope } from "./scopes"
 
 const TTL_MS = 60_000
 
@@ -32,9 +33,6 @@ function sweep(nowMs: number): void {
 
 async function compute(token: CreatorToken, scopeId: string): Promise<boolean> {
   if (!token.creatorUserId || !isWriteScope(scopeId)) return false
-  const keys = WRITE_SCOPE_DEFINITIONS[scopeId]
-  if (!keys) return false
-
   const userId = token.creatorUserId
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { enabled: true } })
   if (!user || user.enabled === false) return false
@@ -44,10 +42,7 @@ async function compute(token: CreatorToken, scopeId: string): Promise<boolean> {
 
   if (!(await userHasAccessToTenant(userId, token.tenantId))) return false
 
-  for (const key of keys) {
-    if (!(await holdsBroadPermission(userId, token.tenantId, key, token.connectionIds))) return false
-  }
-  return true
+  return holdsWriteScope(userId, token.tenantId, scopeId, token.connectionIds)
 }
 
 export async function creatorStillHolds(token: CreatorToken, scopeId: string): Promise<boolean> {

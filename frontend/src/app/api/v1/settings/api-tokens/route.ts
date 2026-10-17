@@ -15,6 +15,9 @@ import { requireApiTokenAdmin, TOKEN_VIEW_SELECT } from "./_shared"
 
 export const runtime = "nodejs"
 
+const DEFAULT_RATE_LIMIT_PER_MIN = 600
+const DEFAULT_WRITE_RATE_LIMIT_PER_MIN = 60
+
 // Management stays readable after option expiry (control_plane_ha
 // precedent, spec D6): GET is NOT license-gated, only POST (creation) and
 // the token usage path are.
@@ -96,9 +99,14 @@ export async function POST(req: Request) {
 
   if (!ctx.isAdmin) {
     // Fail closed: without a user id nothing can be proven held.
-    const ungrantable = ctx.userId
-      ? await firstUngrantableScope(ctx.userId, tenantId, scopes as string[], connectionIds)
-      : (scopes as string[]).find(isWriteScope)
+    let ungrantable: string | null | undefined
+    try {
+      ungrantable = ctx.userId
+        ? await firstUngrantableScope(ctx.userId, tenantId, scopes as string[], connectionIds)
+        : (scopes as string[]).find(isWriteScope)
+    } catch (e: any) {
+      return NextResponse.json({ error: e?.message || "Internal server error" }, { status: 500 })
+    }
     if (ungrantable) {
       return NextResponse.json({ error: "You cannot grant a scope you do not hold", scope: ungrantable }, { status: 403 })
     }
@@ -118,14 +126,14 @@ export async function POST(req: Request) {
     Number.isFinite(Number(body.rateLimitPerMin)) &&
     Number(body.rateLimitPerMin) > 0
       ? Math.floor(Number(body.rateLimitPerMin))
-      : 600
+      : DEFAULT_RATE_LIMIT_PER_MIN
 
   const writeRateLimitPerMin =
     body?.writeRateLimitPerMin !== undefined &&
     Number.isFinite(Number(body.writeRateLimitPerMin)) &&
     Number(body.writeRateLimitPerMin) > 0
       ? Math.floor(Number(body.writeRateLimitPerMin))
-      : 60
+      : DEFAULT_WRITE_RATE_LIMIT_PER_MIN
 
   const generated = generateApiToken()
 

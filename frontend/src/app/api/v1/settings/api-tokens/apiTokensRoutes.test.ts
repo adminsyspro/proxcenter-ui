@@ -205,12 +205,23 @@ describe('POST /api/v1/settings/api-tokens', () => {
       expect(holdsMock).not.toHaveBeenCalled()
     })
 
-    it('accepts a write scope the creator holds, checked against the final tenant and connections', async () => {
+    it('checks held rights against the final tenant and connections, not the ambient ones', async () => {
       asUser()
+      const now = new Date()
+      await prismaTest.tenant.create({ data: { id: 't2', slug: 't2', name: 'T2', operatingModel: 'msp', createdAt: now, updatedAt: now } })
+      await prismaTest.connection.create({
+        data: { id: 'c1', tenantId: 't2', name: 'c1', baseUrl: 'https://pve-c1:8006', apiTokenEnc: 'enc' },
+      })
       const { POST } = await import('./route')
-      const res = await callRoute(POST, { body: { name: 'x', scopes: ['vms:snapshot'] } })
-      expect(res.status).toBe(201)
-      expect(holdsMock).toHaveBeenCalledWith('admin-1', 'default', 'vm.snapshot', null)
+      const body = { name: 'x', tenantId: 't2', connectionIds: ['c1'], scopes: ['vms:snapshot'] }
+      const ok = await callRoute(POST, { body })
+      expect(ok.status).toBe(201)
+      expect(holdsMock).toHaveBeenCalledWith('admin-1', 't2', 'vm.snapshot', ['c1'])
+
+      holdsMock.mockImplementation(async (_u, tenant) => tenant !== 't2')
+      const denied = await callRoute(POST, { body: { ...body, name: 'y' } })
+      expect(denied.status).toBe(403)
+      expect((await readJson<any>(denied)).scope).toBe('vms:snapshot')
     })
 
     it('lets a super admin mint any scope without checks', async () => {

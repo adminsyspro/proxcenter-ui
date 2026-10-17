@@ -185,6 +185,12 @@ services:
       # directly on the node (no ports: mapping needed).
       PROXCENTER_SFLOW_ENABLED: "true"
       PROXCENTER_SFLOW_LISTEN_ADDRESS: 0.0.0.0:6343
+      # Outbound HTTP proxy (CVE feeds, portal), from .env. Empty keeps
+      # direct connections. Proxmox and the HA probes of the cluster nodes
+      # never go through it.
+      HTTP_PROXY: ${HTTP_PROXY:-}
+      HTTPS_PROXY: ${HTTPS_PROXY:-}
+      NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,frontend,postgres,orchestrator,weasyprint}
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:8080/api/v1/health"]
       interval: 10s

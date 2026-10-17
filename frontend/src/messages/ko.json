@@ -2391,6 +2391,8 @@
       "downtimeBudget": "다운타임 예산",
       "downtimeBudgetTooltip": "예상 다운타임이 이 예산에 들어오면 자동으로 전환합니다. 기본값은 300초입니다.",
       "downtimeBudgetSeconds": "초",
+      "zeroRateLimit": "제로화 속도 제한 (MB/s)",
+      "zeroRateLimitHelp": "Thick LVM 대상은 복사 전에 전체가 0으로 채워집니다. 이 제한은 쓰기 속도를 제한하여 다른 VM과 공유하는 LUN이 계속 서비스하도록 합니다.",
       "windowsVirtioNote": "Windows 게스트: VM이 SATA 디스크와 e1000 NIC(Windows 기본 드라이버)로 Proxmox에서 부팅됩니다. 더 나은 디스크 및 네트워크 성능을 위해 부팅 후 VM 내부에 VirtIO 드라이버를 설치하세요. 다운로드: https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/virtio-win.iso — 설치 가이드: https://pve.proxmox.com/wiki/Windows_VirtIO_Drivers",
       "requiresLicensedEsxi": "ESXi 연결에 SSH 구성이 필요합니다",
       "enterpriseRequired": "Enterprise 플랜 필요",
@@ -2418,7 +2420,9 @@
       "autoDistribute": "자동 — 노드 간 분산",
       "autoDistributeDesc": "VM이 사용 가능한 모든 노드에 고르게 분산됩니다 (라운드 로빈)",
       "sharedStorageName": "공유 스토리지 이름 (예: ceph-pool)",
-      "sharedStorageHint": "모든 노드에서 사용 가능한 공유 스토리지 이름을 입력하세요"
+      "sharedStorageHint": "모든 노드에서 사용 가능한 공유 스토리지 이름을 입력하세요",
+      "zeroRateUseCluster": "클러스터 제한 사용({cap})",
+      "zeroRateUseClusterHelp": "웜 복사 전에 ProxCenter는 대상의 thick LVM 볼륨 전체에 0을 기록하여 이전 VM의 데이터가 남지 않도록 합니다. 프로덕션과 공유하는 스토리지(iSCSI/FC LUN)에서는 이 쓰기가 어레이를 포화시킬 수 있습니다. 클러스터 제한({cap})은 대상 Proxmox 연결의 Settings > Connections > 마이그레이션 탭에서 설정합니다. 이 마이그레이션에만 더 낮은 제한을 쓰려면 선택을 해제하세요. 마이그레이션은 클러스터 제한을 초과할 수 없습니다."
     },
     "extDashboard": {
       "hosts": "호스트",
@@ -4302,7 +4306,19 @@
         "api_tokens": "API 토큰"
       },
       "destinations": "대상"
-    }
+    },
+    "warmMigrationTarget": "이 클러스터로의 웜 마이그레이션",
+    "warmMigrationTargetInfo": "소스(VMware, XCP-ng...)와 관계없이 이 클러스터를 대상으로 하는 모든 웜 마이그레이션에 적용됩니다.",
+    "warmZeroRateLimit": "Thick 제로화 속도 제한(MB/s)",
+    "warmZeroRateLimitPlaceholder": "무제한",
+    "warmZeroRateLimitHelper": "첫 번째 복사 패스 전에 thick LVM 대상 볼륨은 다른 VM의 데이터가 남지 않도록 전체가 0으로 채워집니다. 이 제한은 이 클러스터 스토리지에서 해당 단계의 쓰기 속도를 제한하여 프로덕션과 공유하는 LUN이 계속 서비스하도록 합니다. 비우거나 0 = 무제한. 마이그레이션 대화 상자에 입력한 값이 해당 실행에 우선합니다.",
+    "warmZeroRateLimitInvalid": "0(무제한) 또는 1에서 {max} MB/s 사이의 정수를 입력하세요.",
+    "connectionTabGeneral": "일반",
+    "connectionTabAuth": "인증",
+    "connectionTabSsh": "SSH",
+    "connectionTabMigrations": "마이그레이션",
+    "warmZeroRateLimitLabel": "Thick 제로화 속도 제한:",
+    "warmZeroRateLimitCaption": "이 클러스터로의 웜 복사 전에 thick LVM 대상의 제로화 속도를 조절합니다. 마이그레이션 대화 상자에 입력한 값이 해당 실행에 우선합니다."
   },
   "green": {
     "score": {

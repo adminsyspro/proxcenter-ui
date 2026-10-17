@@ -29,6 +29,8 @@ import {
   type PassWindow, type PassProgress,
 } from "./apply"
 import { createTargetVmShell, provisionBlockTargets, markVolumesCopied } from "./target-provision"
+import { resolveWarmZeroRateLimit } from "./zero-rate-target"
+import { sweepOrphanReaders } from "./orphan-readers"
 import { cleanShutdownAndConfirm, isXapiGuestAgentMissing, type PowerOffOps } from "./power-off"
 import { attachDisksAndBoot, removeTargetVmOnFailure, unmapTargetVolumes, verifySampledFirstBlock } from "./finish"
 import { startXapiReader, stopXapiReader, readAllocatedExtents, type XapiReaderHandle } from "./xapi-reader"
@@ -126,6 +128,12 @@ export async function runXcpngWarmMigration(jobId: string, config: WarmMigration
     const pf = await checkNbdNodePreflight(config.targetConnectionId, nodeIp)
     if (!pf.ok) throw new Error(pf.error || `Proxmox node is missing the NBD tooling for warm migration (${pf.missing.join(", ")}). Install with: apt install nbdkit nbd-client libnbd-bin`)
     await appendLog(jobId, "NBD tooling preflight OK on Proxmox node", "success")
+    // Same sweep as the VMware engine (roadmap#45): readers of finished jobs
+    // are stopped, live ones left alone, failures never fail the job.
+    await sweepOrphanReaders({
+      connectionId: config.targetConnectionId, nodeIp, nodeName: config.targetNode, currentJobId: jobId,
+      log: (msg, level) => appendLog(jobId, msg, level),
+    }).catch(async (e: any) => { await appendLog(jobId, `Leftover reader sweep skipped: ${e?.message || e}`, "warn").catch(() => {}) })
     if (!(await xapiNbdEnabled(session))) {
       const net = await xapiManagementNetworkUuid(session).catch(() => "<network uuid>")
       throw new Error(`NBD is not enabled on any network of the XCP-ng pool. Run once on the pool master: xe network-param-add uuid=${net} param-name=purpose param-key=nbd`)
@@ -154,6 +162,7 @@ export async function runXcpngWarmMigration(jobId: string, config: WarmMigration
     const devByKey = await provisionBlockTargets({
       jobId, connectionId: config.targetConnectionId, nodeIp, targetStorage: config.targetStorage, storageType: storageInfo?.type || "",
       targetVmid, shellConf, disks: vmConfig.disks.map(d => ({ key: d.position, capacityBytes: d.sizeBytes })), allocatedVolumes,
+      zeroRateLimitMBps: await resolveWarmZeroRateLimit(config.zeroRateLimitMBps, config.targetConnectionId),
     })
     for (const [k, dev] of devByKey) targetDev.set(k, dev)
 

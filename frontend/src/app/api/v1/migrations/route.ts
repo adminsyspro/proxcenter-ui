@@ -18,6 +18,9 @@ import { sanitizeV2vRoot } from "@/lib/migration/v2v-root-select"
 import { persistedV2vInputs } from "@/lib/migration/retry-dispatch"
 import { parseNfcConcurrency, NFC_CONCURRENCY_MIN, NFC_CONCURRENCY_MAX } from "@/lib/migration/nfc-progress"
 import { MIGRATION_CPU_TYPES, resolveMigrationCpuType } from "@/lib/migration/cpu-type"
+import { parseZeroRateLimit, ZERO_RATE_LIMIT_MIN_MBPS, ZERO_RATE_LIMIT_MAX_MBPS } from "@/lib/migration/warm/zero-rate"
+import { hasServerFeature } from "@/lib/auth/requireEnterprise"
+import { Features } from "@/lib/license/features"
 import { TERMINAL_STATUSES } from "@/lib/tasks/sharedTask"
 
 export const runtime = "nodejs"
@@ -126,6 +129,18 @@ export async function POST(req: Request) {
       }
       downtimeBudgetSec = n
     }
+
+    // Warm only (roadmap#45): cap on the thick-target zeroing write rate, MB/s,
+    // 0 = unlimited. Absent means the cap of the target PVE connection,
+    // resolved by the engine at run time. Rejected rather than defaulted on a
+    // bad value: a silent "unlimited" is what the operator is trying to avoid.
+    const parsedZeroRate = parseZeroRateLimit(body.zeroRateLimitMBps)
+    if (parsedZeroRate === null) {
+      return NextResponse.json({ error: `zeroRateLimitMBps must be 0 (unlimited) or an integer between ${ZERO_RATE_LIMIT_MIN_MBPS} and ${ZERO_RATE_LIMIT_MAX_MBPS} MB/s` }, { status: 400 })
+    }
+    // Enterprise setting: without the migration feature the value is dropped.
+    // With it, the engine still only lets it tighten the target cluster's cap.
+    const zeroRateLimitMBps = parsedZeroRate !== undefined && await hasServerFeature(Features.VMWARE_MIGRATION) ? parsedZeroRate : undefined
 
     // Who owns the warm switchover. "manual" holds the run in delta_sync,
     // replicating, until the operator triggers the cutover (#443). Rejected
@@ -246,7 +261,7 @@ export async function POST(req: Request) {
         // Warm-only options (vddkLibdir, downtimeBudgetSec) are persisted here so a
         // retry — which rebuilds the config from job.config — keeps them instead of
         // silently reverting to the defaults.
-        config: { sourceConnectionId, sourceVmId, sourceVmName: body.sourceVmName, targetConnectionId, targetNode, targetStorage, networkBridge, vlanTag, startAfterMigration, convertDisksToQcow2, cpuType, migrationType, transferMode, ...(targetVmid !== undefined && { targetVmid }), ...(body.vddkLibdir && { vddkLibdir: body.vddkLibdir }), ...(downtimeBudgetSec !== undefined && { downtimeBudgetSec }), ...(cutoverMode !== undefined && { cutoverMode }),
+        config: { sourceConnectionId, sourceVmId, sourceVmName: body.sourceVmName, targetConnectionId, targetNode, targetStorage, networkBridge, vlanTag, startAfterMigration, convertDisksToQcow2, cpuType, migrationType, transferMode, ...(targetVmid !== undefined && { targetVmid }), ...(body.vddkLibdir && { vddkLibdir: body.vddkLibdir }), ...(downtimeBudgetSec !== undefined && { downtimeBudgetSec }), ...(cutoverMode !== undefined && { cutoverMode }), ...(zeroRateLimitMBps !== undefined && { zeroRateLimitMBps }),
           // Source type and virt-v2v inputs (disk paths, vCenter placement, temp
           // storage, root override): persisted so a retry rebuilds the same job.
           sourceType: effectiveSourceType,
@@ -295,6 +310,7 @@ export async function POST(req: Request) {
           ...(body.vddkLibdir && { vddkLibdir: body.vddkLibdir as string }),
           ...(downtimeBudgetSec !== undefined && { downtimeBudgetSec }),
           ...(cutoverMode !== undefined && { cutoverMode }),
+          ...(zeroRateLimitMBps !== undefined && { zeroRateLimitMBps }),
         }, tenantId)
         return
       }
@@ -308,6 +324,7 @@ export async function POST(req: Request) {
           ...(targetVmid !== undefined && { targetVmid }),
           ...(downtimeBudgetSec !== undefined && { downtimeBudgetSec }),
           ...(cutoverMode !== undefined && { cutoverMode }),
+          ...(zeroRateLimitMBps !== undefined && { zeroRateLimitMBps }),
         }, tenantId)
         return
       }

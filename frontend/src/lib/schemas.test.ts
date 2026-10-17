@@ -100,3 +100,18 @@ describe('connection schemas replicationNetwork', () => {
     if (!r.success) expect(r.error.issues[0].path).toEqual(['replicationNetwork'])
   })
 })
+
+describe('connection schemas warmZeroRateLimitMBps (roadmap#45)', () => {
+  const pve = { name: 'p', type: 'pve' as const, baseUrl: 'https://10.0.0.1:8006', apiToken: 't' }
+  it('accepts 0 (unlimited), a bounded integer and null', () => {
+    for (const v of [0, 150, 100_000, null]) {
+      expect(createConnectionSchema.safeParse({ ...pve, warmZeroRateLimitMBps: v }).success, String(v)).toBe(true)
+      expect(updateConnectionSchema.safeParse({ warmZeroRateLimitMBps: v }).success, String(v)).toBe(true)
+    }
+  })
+  it('refuses a negative, fractional or too large value', () => {
+    for (const v of [-1, 1.5, 100_001, '150']) {
+      expect(updateConnectionSchema.safeParse({ warmZeroRateLimitMBps: v }).success, String(v)).toBe(false)
+    }
+  })
+})

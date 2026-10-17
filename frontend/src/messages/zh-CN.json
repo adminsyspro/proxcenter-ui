@@ -2395,6 +2395,8 @@
       "downtimeBudget": "停机时间预算",
       "downtimeBudgetTooltip": "预计停机时间符合该预算后自动切换。默认值为 300 秒。",
       "downtimeBudgetSeconds": "秒",
+      "zeroRateLimit": "置零速率上限 (MB/s)",
+      "zeroRateLimitHelp": "Thick LVM 目标在复制前会被完全清零。此上限限制写入速率，使与其他虚拟机共享的 LUN 能继续为其服务。",
       "windowsVirtioNote": "Windows 客户机：虚拟机将在 Proxmox 上使用 SATA 磁盘和 e1000 网卡（Windows 内置驱动）启动。为了获得更好的磁盘和网络性能，请在虚拟机启动后在其中安装 VirtIO 驱动程序。下载：https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/virtio-win.iso — 安装指南：https://pve.proxmox.com/wiki/Windows_VirtIO_Drivers",
       "requiresLicensedEsxi": "需要在 ESXi 连接上配置 SSH",
       "enterpriseRequired": "需要企业版计划",
@@ -2422,7 +2424,9 @@
       "autoDistribute": "自动 — 分布到各节点",
       "autoDistributeDesc": "虚拟机将均匀分布到所有可用节点（轮询方式）",
       "sharedStorageName": "共享存储名称（例如 ceph-pool）",
-      "sharedStorageHint": "输入所有节点上可用的共享存储名称"
+      "sharedStorageHint": "输入所有节点上可用的共享存储名称",
+      "zeroRateUseCluster": "使用集群上限（{cap}）",
+      "zeroRateUseClusterHelp": "在热迁移复制之前，ProxCenter 会向目标的整个 thick LVM 卷写入零，确保不残留以前虚拟机的数据。在与生产共享的存储（iSCSI/FC LUN）上，这些写入可能使存储阵列饱和。集群上限（{cap}）在目标 Proxmox 连接中设置：Settings > Connections > 迁移选项卡。取消勾选可仅为本次迁移使用更低的上限；迁移永远不能超过集群上限。"
     },
     "extDashboard": {
       "hosts": "主机",
@@ -4306,7 +4310,19 @@
         "api_tokens": "API 令牌"
       },
       "destinations": "目标"
-    }
+    },
+    "warmMigrationTarget": "迁移到此集群的热迁移",
+    "warmMigrationTargetInfo": "适用于以此集群为目标的所有热迁移，无论来源（VMware、XCP-ng……）。",
+    "warmZeroRateLimit": "Thick 清零速率上限（MB/s）",
+    "warmZeroRateLimitPlaceholder": "不限",
+    "warmZeroRateLimitHelper": "在第一次复制之前，thick LVM 目标卷会被完全清零，确保不残留其他虚拟机的数据。此上限限制该步骤在本集群存储上的写入速率，使与生产共享的 LUN 能继续提供服务。留空或 0 = 不限。迁移对话框中输入的值对该次迁移优先。",
+    "warmZeroRateLimitInvalid": "请输入 0（不限）或 1 到 {max} MB/s 之间的整数。",
+    "connectionTabGeneral": "常规",
+    "connectionTabAuth": "认证",
+    "connectionTabSsh": "SSH",
+    "connectionTabMigrations": "迁移",
+    "warmZeroRateLimitLabel": "Thick 清零速率上限：",
+    "warmZeroRateLimitCaption": "控制热迁移复制到此集群之前 thick LVM 目标的清零速率。迁移对话框中输入的值对该次迁移优先。"
   },
   "green": {
     "score": {

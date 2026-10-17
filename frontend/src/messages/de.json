@@ -2378,6 +2378,8 @@
       "downtimeBudget": "Ausfallzeit-Budget",
       "downtimeBudgetTooltip": "Schaltet automatisch um, sobald die prognostizierte Ausfallzeit in dieses Budget passt. Standard: 300 s.",
       "downtimeBudgetSeconds": "Sekunden",
+      "zeroRateLimit": "Maximale Nullschreibrate (MB/s)",
+      "zeroRateLimitHelp": "Ein Thick-LVM-Ziel wird vor dem Kopieren vollständig genullt. Diese Grenze drosselt die Schreibrate, damit eine mit anderen VMs geteilte LUN diese weiter bedient.",
       "windowsVirtioNote": "Windows-Gast: Die VM bootet auf Proxmox mit SATA-Disk und e1000-NIC (integrierte Windows-Treiber). Fur bessere Disk- und Netzwerk-Performance installieren Sie die VirtIO-Treiber in der VM nach dem Boot. Download: https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/virtio-win.iso — Installationsanleitung: https://pve.proxmox.com/wiki/Windows_VirtIO_Drivers",
       "requiresLicensedEsxi": "Erfordert SSH-Konfiguration auf der ESXi-Verbindung",
       "enterpriseRequired": "Enterprise-Plan erforderlich",
@@ -2405,7 +2407,9 @@
       "autoDistribute": "Auto — distribute across Nodes",
       "autoDistributeDesc": "VMs werden gleichmäßig auf alle verfügbaren Nodes verteilt (Round-Robin)",
       "sharedStorageName": "Name des gemeinsamen Storage (z.B. ceph-pool)",
-      "sharedStorageHint": "Geben Sie den Namen eines Shared Storage ein, der auf allen Nodes verfügbar ist"
+      "sharedStorageHint": "Geben Sie den Namen eines Shared Storage ein, der auf allen Nodes verfügbar ist",
+      "zeroRateUseCluster": "Grenze des Clusters verwenden ({cap})",
+      "zeroRateUseClusterHelp": "Vor der Warm-Kopie schreibt ProxCenter Nullen über das gesamte Thick-LVM-Volume des Ziels, damit keine Daten einer früheren VM zurückbleiben. Auf einem mit der Produktion geteilten Speicher (iSCSI/FC-LUN) kann dieses Schreiben das Array sättigen. Die Grenze des Clusters ({cap}) wird in der Proxmox-Zielverbindung eingestellt: Settings > Connections > Reiter Migrationen. Deaktivieren Sie die Option, um nur für diese Migration eine niedrigere Grenze zu verwenden; eine Migration kann die Grenze des Clusters nie überschreiten."
     },
     "extDashboard": {
       "hosts": "Hosts",
@@ -4289,7 +4293,19 @@
         "api_tokens": "API-Token"
       },
       "destinations": "Ziele"
-    }
+    },
+    "warmMigrationTarget": "Warm-Migrationen in diesen Cluster",
+    "warmMigrationTargetInfo": "Gilt für jede Warm-Migration mit diesem Cluster als Ziel, unabhängig von der Quelle (VMware, XCP-ng...).",
+    "warmZeroRateLimit": "Nullungs-Ratenlimit für Thick (MB/s)",
+    "warmZeroRateLimitPlaceholder": "Unbegrenzt",
+    "warmZeroRateLimitHelper": "Vor dem ersten Kopierdurchlauf wird ein Thick-LVM-Zielvolume vollständig genullt, damit keine Daten einer anderen VM zurückbleiben. Diese Grenze drosselt die Schreibrate dieses Schritts auf dem Speicher dieses Clusters, damit eine mit der Produktion geteilte LUN diese weiter bedient. Leer oder 0 = unbegrenzt. Ein im Migrationsdialog eingegebener Wert hat für diesen Lauf Vorrang.",
+    "warmZeroRateLimitInvalid": "Geben Sie 0 (unbegrenzt) oder eine ganze Zahl zwischen 1 und {max} MB/s ein.",
+    "connectionTabGeneral": "Allgemein",
+    "connectionTabAuth": "Authentifizierung",
+    "connectionTabSsh": "SSH",
+    "connectionTabMigrations": "Migrationen",
+    "warmZeroRateLimitLabel": "Nullungs-Ratenlimit für Thick:",
+    "warmZeroRateLimitCaption": "Drosselt das Nullen von Thick-LVM-Zielen vor einer Warm-Kopie in diesen Cluster. Ein im Migrationsdialog eingegebener Wert hat für diesen Lauf Vorrang."
   },
   "green": {
     "score": {

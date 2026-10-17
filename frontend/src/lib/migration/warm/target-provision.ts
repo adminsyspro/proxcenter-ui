@@ -6,6 +6,7 @@ import { waitForPveTask } from "../pve-tasks"
 import { parseDdProgress } from "./dd-progress"
 import { updateJob, updateJobLive, appendLog } from "./job-control"
 import { scaleWarmProgress, APPLY_TIMEOUT_MS, APPLY_INACTIVITY_MS, PROGRESS_LOG_INTERVAL_MS } from "./apply"
+import { ZERO_RATE_MIB, zeroSliceBytes, describeZeroRateLimit } from "./zero-rate"
 import { type SshTarget } from "@/lib/ssh/node-endpoint-core"
 
 // Parallel ranges for the streamed zero fallback. One dd is queue depth 1: the
@@ -13,6 +14,17 @@ import { type SshTarget } from "@/lib/ssh/node-endpoint-core"
 // with concurrency, i.e. 2 h 30 min to zero 3.1 TiB. FC/iSCSI arrays scale with
 // outstanding I/O, so a handful of concurrent streams recovers most of it.
 export const ZERO_PARALLEL_CHUNKS = 4
+
+export interface ThickZeroOptions {
+  /** Parallel dd streams per slice on the streamed fallback (default ZERO_PARALLEL_CHUNKS). */
+  chunks?: number
+  /** Average write rate the zeroing may not exceed, in MB/s; 0 or absent = unlimited (roadmap#45). */
+  rateLimitMBps?: number
+}
+
+/** Marker lines the script prints so the caller can name the zeroing mode in the job log. */
+export const ZERO_MODE_OFFLOAD_MARKER = "zero-mode: offload"
+export const ZERO_MODE_STREAM_MARKER = "zero-mode: stream"
 
 /**
  * Build the node-side command that zeroes a freshly-allocated *thick* block
@@ -22,53 +34,100 @@ export const ZERO_PARALLEL_CHUNKS = 4
  * correctness AND information-leak bug). We prefer `blkdiscard -z` (offloaded
  * write-zeroes where the array supports it) and fall back to streaming zeros.
  * When the array refuses the offload, the script says so with a parseable
- * `blkdiscard-refused: <reason>` line — previously that reason was only visible
- * if the whole script failed, so the slow path ran with no explanation (#606).
+ * `blkdiscard-refused: <reason>` line, so the slow path never runs without an
+ * explanation (#606), and it names the path it took with `zero-mode: offload`
+ * or `zero-mode: stream` (roadmap#45).
+ *
+ * The device is walked in SLICES (`blkdiscard -z -o <off> -l <len>`, or the
+ * same range split into `chunks` bounded dd streams on the fallback), never in
+ * one call, for two reasons (roadmap#45):
+ *   - progress: a whole-device `blkdiscard -z` emits nothing, so the job log
+ *     read "zeroed 0.0 of N GB" for the whole phase; after every slice the
+ *     script prints one line in dd's summary format (`<bytes> bytes copied,
+ *     <s> s`), which parseDdProgress consumes unchanged, so the caller drives
+ *     the progress bar, shows the real average rate and keeps the SSH stream
+ *     within the same inactivity guard as the copy;
+ *   - pacing: a write-zeroes offload ran at 1.6 GB/s for 25 minutes on a LUN
+ *     shared with production VMs (multipath checks 62 s, pvestatd 352 s). With
+ *     `rateLimitMBps` set, the script sleeps after a slice until the bytes done
+ *     so far divided by the elapsed time are back under the cap, and the slice
+ *     shrinks to about a quarter second of the allowed rate so the array sees
+ *     short bursts. Unlimited keeps the historical behaviour, in 1 GiB slices.
  *
  * The fallback streams `head -c <bytes> /dev/zero | dd …` rather than the earlier
  * `dd if=/dev/zero of=DEV` (no count): a bare unbounded dd fills the device and
  * then issues one write *past* end-of-device, which returns ENOSPC and makes dd
- * exit 1 — even though every block was already zeroed — so the thick-zero step
- * could never succeed (this is what broke #445's disk 1 after a full 45-min
- * zero). The device is split into `chunks` equal 4 MiB-aligned ranges (the last
- * takes the remainder) and each range gets its own bounded stream, run in
- * parallel and reaped with `wait` (#606). Every stream is still bounded to its
- * exact range, so the #445 ENOSPC-past-EOF failure cannot come back.
- * `iflag=fullblock` reassembles 4 MiB blocks across the pipe so O_DIRECT
- * accepts every write, including a sub-4 MiB final block (still logical-block
- * aligned because a device size is always a sector multiple).
- *
- * The step used to run `status=none` — hours of total silence on a multi-TB LV,
- * indistinguishable from a hang (#606). Now each range dd writes
- * `status=progress` to its own temp file and a background poller sums the last
- * counter of every range every 10 s into ONE line in dd's own summary format
- * (`<bytes> bytes copied, <s> s`), so parseDdProgress consumes it unchanged,
- * the caller can drive the progress bar, and the SSH stream stays alive for the
- * same inactivity guard as the copy. On a range failure the dd error text (kept
- * in the temp files) is replayed to stdout so the caller surfaces the real cause.
+ * exit 1 (this is what broke #445's disk 1 after a full 45-min zero). Every
+ * stream is bounded to its exact range inside the slice, so that failure cannot
+ * come back. `iflag=fullblock` reassembles 4 MiB blocks across the pipe so
+ * O_DIRECT accepts every write; a sub-4 MiB final block is still logical-block
+ * aligned because a device size is always a sector multiple. A slice is a
+ * multiple of 4 MiB, the last one takes the remainder. On a range failure the
+ * dd error text (kept in temp files) is replayed to stdout so the caller
+ * surfaces the real cause. The whole-device size is read once so the caller's
+ * own byte accounting stays authoritative.
  */
-export function buildThickZeroScript(dev: string, chunks: number = ZERO_PARALLEL_CHUNKS): string {
+export function buildThickZeroScript(dev: string, opts: ThickZeroOptions | number = {}): string {
+  const o: ThickZeroOptions = typeof opts === "number" ? { chunks: opts } : opts
   const d = shellEscape(dev)
-  const n = Math.max(1, Math.floor(chunks))
+  const n = Math.max(1, Math.floor(o.chunks ?? ZERO_PARALLEL_CHUNKS))
+  const cap = Math.max(0, Math.floor(o.rateLimitMBps ?? 0)) * ZERO_RATE_MIB
+  const slice = zeroSliceBytes(cap)
   const lines = [
-    `sz=$(blockdev --getsize64 ${d})`,
+    // Fail closed: without a size the loop below would not run and the script
+    // would exit 0 on a target it never zeroed, exposing stale data.
+    `sz=$(blockdev --getsize64 ${d}) || { echo "zero-error: cannot read the size of ${d}"; exit 1; }`,
+    `case "$sz" in ''|*[!0-9]*) echo "zero-error: unexpected size '$sz' for ${d}"; exit 1;; esac`,
+    `[ "$sz" -gt 0 ] || { echo "zero-error: ${d} reports a size of 0"; exit 1; }`,
     `t=$(mktemp -d)`,
-    `start=$(date +%s)`,
-    `( while :; do sleep 10; b=0; for f in "$t"/z*; do [ -s "$f" ] || continue; v=$(tr '\\r' '\\n' < "$f" | awk '/ bytes /{n=$1} END{print n+0}'); b=$((b+v)); done; echo "$b bytes copied, $(($(date +%s)-start)) s"; done ) & poller=$!`,
-    `trap 'kill $poller 2>/dev/null; rm -rf "$t"' EXIT`,
-    `if out=$(blkdiscard -z ${d} 2>&1); then echo "$sz bytes copied, $(($(date +%s)-start)) s"; exit 0; fi`,
-    `echo "blkdiscard-refused: $out"`,
-    `per=$((sz / ${n} / 4194304 * 4194304))`,
+    `trap 'rm -rf "$t"' EXIT`,
+    `start=$(($(date +%s%N) / 1000000))`,
+    `cap=${cap}`,
+    `slice=${slice}`,
+    `off=0`,
+    `mode=offload`,
+    // Elapsed milliseconds; the progress line carries them as "<s>.<ms> s".
+    `ms() { echo $(($(date +%s%N) / 1000000 - start)); }`,
+    `report() { e=$(ms); echo "$off bytes copied, $((e / 1000)).$(printf %03d $((e % 1000))) s"; }`,
+    // Token bucket over the whole run: with `off` bytes done, we may not be
+    // earlier than off/cap seconds in; sleep the difference. Integer math in
+    // milliseconds keeps every term far below 2^63 for any realistic device.
+    `pace() { [ "$cap" -gt 0 ] || return 0; e=$(ms); due=$((off * 1000 / cap)); [ "$due" -gt "$e" ] || return 0; w=$((due - e)); sleep "$((w / 1000)).$(printf %03d $((w % 1000)))"; }`,
+    `while [ "$off" -lt "$sz" ]; do`,
+    `  len=$((sz - off)); [ "$len" -le "$slice" ] || len=$slice`,
+    `  if [ "$mode" = offload ]; then`,
+    `    if out=$(blkdiscard -z -o "$off" -l "$len" ${d} 2>&1); then`,
+    `      [ "$off" -ne 0 ] || echo "${ZERO_MODE_OFFLOAD_MARKER}"`,
+    `    else`,
+    // Whatever the array refused (first slice or mid-way), the SAME slice is
+    // redone by streaming, and every following one too.
+    `      echo "blkdiscard-refused: $out"; echo "${ZERO_MODE_STREAM_MARKER}"; mode=stream; continue`,
+    `    fi`,
+    `  else`,
+    `    per=$((len / ${n} / 4194304 * 4194304))`,
   ]
   for (let i = 0; i < n; i++) {
-    const bound = i === n - 1 ? `"$((sz - ${i} * per))"` : `"$per"`
-    lines.push(`head -c ${bound} /dev/zero | dd of=${d} bs=4M iflag=fullblock oflag=seek_bytes,direct conv=notrunc status=progress seek=$((${i} * per)) 2>"$t/z${i}" & p${i}=$!`)
+    const bound = i === n - 1 ? `"$((len - ${i} * per))"` : `"$per"`
+    lines.push(`    head -c ${bound} /dev/zero | dd of=${d} bs=4M iflag=fullblock oflag=seek_bytes,direct conv=notrunc status=none seek=$((off + ${i} * per)) 2>"$t/z${i}" & p${i}=$!`)
   }
-  lines.push(`fail=0`)
-  for (let i = 0; i < n; i++) lines.push(`wait $p${i} || fail=1`)
-  lines.push(`if [ "$fail" -ne 0 ]; then for f in "$t"/z*; do tr '\\r' '\\n' < "$f" | grep -v ' bytes \\|records '; done; exit 1; fi`)
-  lines.push(`echo "$sz bytes copied, $(($(date +%s)-start)) s"`)
+  lines.push(`    fail=0`)
+  for (let i = 0; i < n; i++) lines.push(`    wait $p${i} || fail=1`)
+  lines.push(
+    `    if [ "$fail" -ne 0 ]; then cat "$t"/z*; exit 1; fi`,
+    `  fi`,
+    `  off=$((off + len)); pace; report`,
+    `done`,
+    `[ "$off" -eq "$sz" ] || { echo "zero-error: stopped at $off of $sz bytes"; exit 1; }`,
+  )
   return lines.join("\n")
+}
+
+/** "4 min 05 s" style duration for the job log. */
+export function formatZeroElapsed(totalSec: number): string {
+  const s = Math.max(0, Math.round(totalSec))
+  if (s < 60) return `${s} s`
+  if (s < 3600) return `${Math.floor(s / 60)} min ${String(s % 60).padStart(2, "0")} s`
+  return `${Math.floor(s / 3600)} h ${String(Math.floor((s % 3600) / 60)).padStart(2, "0")} min`
 }
 
 /**
@@ -117,8 +176,12 @@ export async function provisionBlockTargets(a: {
   jobId: string; connectionId: string; nodeIp: SshTarget
   targetStorage: string; storageType: string; targetVmid: number
   shellConf: Record<string, any>; disks: ProvisionDisk[]; allocatedVolumes: AllocatedVolume[]
+  /** Cap on the thick zeroing write rate in MB/s; 0 or absent = unlimited (roadmap#45). */
+  zeroRateLimitMBps?: number
 }): Promise<Map<number, string>> {
   const { jobId, connectionId, nodeIp, targetStorage, storageType, targetVmid, shellConf, disks, allocatedVolumes } = a
+  const rateLimitMBps = a.zeroRateLimitMBps && a.zeroRateLimitMBps > 0 ? Math.floor(a.zeroRateLimitMBps) : 0
+  const sliceMiB = zeroSliceBytes(rateLimitMBps * ZERO_RATE_MIB) / ZERO_RATE_MIB
   const targetDev = new Map<number, string>()
   await updateJob(jobId, "preparing_disks")
   const zeroTotalBytes = disks.reduce((s, d) => s + d.capacityBytes, 0)
@@ -141,7 +204,7 @@ export async function provisionBlockTargets(a: {
     // Unwritten regions MUST read as zero: the CBT pass writes only the
     // allocated/changed map, so any block it skips is left as-is on the target.
     // Thin pools (LVM-thin / ZFS / Ceph RBD) hand back pre-zeroed volumes, so a
-    // cheap discard suffices. Plain (thick) LVM does NOT — a bare DISCARD only
+    // cheap discard suffices. Plain (thick) LVM does NOT: a bare DISCARD only
     // *permits* zero reads, it does not guarantee them, so a freshly-alloc'd
     // thick LV can surface a previous tenant's bytes (a correctness AND
     // information-leak bug). Write-zero those (slow but mandatory); fail hard if
@@ -151,22 +214,35 @@ export async function provisionBlockTargets(a: {
       await executeSSH(connectionId, nodeIp, `blkdiscard ${shellEscape(dev)} 2>/dev/null || true`)
     } else {
       // #606: this step used to be hours of total silence (no start line, no
-      // output, status stuck on enabling_cbt) — operators cancelled healthy
-      // runs. Announce it, stream the script's aggregated dd progress through
-      // the same inactivity guard as the copy, and surface why the blkdiscard
+      // output, status stuck on enabling_cbt) and operators cancelled healthy
+      // runs. Announce it, stream the script's per-slice progress through the
+      // same inactivity guard as the copy, name the mode the script took
+      // (offload or streamed zeros, roadmap#45) and surface why the blkdiscard
       // offload was refused when the streamed slow path runs.
       const capGB = (disk.capacityBytes / 1073741824).toFixed(1)
-      await appendLog(jobId, `Disk ${i}: zeroing thick target ${dev} (${capGB} GB) — mandatory on thick storage and can take a long time; live throughput follows`)
-      let headBuf = ""              // first KBs of output; carries the refusal marker
+      await appendLog(jobId, `Disk ${i}: zeroing thick target ${dev} (${capGB} GB): mandatory on thick storage and can take a long time. Rate limit ${describeZeroRateLimit(rateLimitMBps)}, ${sliceMiB} MiB slices; mode and progress follow`)
+      let markerBuf = ""              // first KBs of output; carries the mode and refusal markers
+      let modeLogged = false
       let refusalLogged = false
+      // An object, not a `let`: TypeScript does not see assignments made from the
+      // onData closure, and would narrow a plain variable to its initial value.
+      const zeroMode: { value: "offload" | "stream" | "unknown" } = { value: "unknown" }
       let lastFlush = 0
+      const zeroStart = Date.now()
       const onData = (chunk: string): void => {
-        if (!refusalLogged && headBuf.length < 8192) {
-          headBuf += chunk
-          const m = /blkdiscard-refused: ([^\r\n]*)/.exec(headBuf)
-          if (m) {
+        if ((!modeLogged || !refusalLogged) && markerBuf.length < 16384) {
+          markerBuf += chunk
+          if (!modeLogged && markerBuf.includes(ZERO_MODE_OFFLOAD_MARKER)) {
+            modeLogged = true
+            zeroMode.value = "offload"
+            void appendLog(jobId, `Disk ${i}: the array accepted the write-zeroes offload (blkdiscard -z); zeroing in ${sliceMiB} MiB slices`).catch(() => {})
+          }
+          const m = /blkdiscard-refused: ([^\r\n]*)/.exec(markerBuf)
+          if (!refusalLogged && m) {
             refusalLogged = true
-            void appendLog(jobId, `Disk ${i}: array refused the blkdiscard write-zeroes offload (${m[1].trim() || "no reason given"}) — streaming zeros in ${ZERO_PARALLEL_CHUNKS} parallel ranges instead`, "warn").catch(() => {})
+            modeLogged = true
+            zeroMode.value = "stream"
+            void appendLog(jobId, `Disk ${i}: the array refused the write-zeroes offload (${m[1].trim() || "no reason given"}); streaming zeros from /dev/zero in ${ZERO_PARALLEL_CHUNKS} parallel ranges per ${sliceMiB} MiB slice instead`, "warn").catch(() => {})
           }
         }
         const p = parseDdProgress(chunk)
@@ -177,20 +253,26 @@ export async function provisionBlockTargets(a: {
         const diskBytes = Math.min(p.bytes, disk.capacityBytes)
         const pct = Math.max(lastZeroPct, scaleWarmProgress(0, 10, zeroedBytes + diskBytes, zeroTotalBytes))
         lastZeroPct = pct
-        // Progress first, then the log line — appendLog stamps each entry with
+        // Progress first, then the log line: appendLog stamps each entry with
         // the job's current progress, which is why the lines used to read 0 (#502).
         void (async () => {
-          await updateJobLive(jobId, "preparing_disks", { progress: pct, transferSpeed: `Zeroing: ${(p.bytesPerSec / 1048576).toFixed(0)} MB/s` })
-          await appendLog(jobId, `Disk ${i}: zeroed ${(diskBytes / 1073741824).toFixed(1)} of ${capGB} GB`)
+          await updateJobLive(jobId, "preparing_disks", { progress: pct, transferSpeed: `Zeroing: ${(p.bytesPerSec / ZERO_RATE_MIB).toFixed(0)} MB/s` })
+          await appendLog(jobId, `Disk ${i}: zeroed ${(diskBytes / 1073741824).toFixed(1)} of ${capGB} GB (${(p.bytesPerSec / ZERO_RATE_MIB).toFixed(0)} MB/s average)`)
         })().catch(() => {})
       }
-      const z = await executeSSH(connectionId, nodeIp, buildThickZeroScript(dev), APPLY_TIMEOUT_MS, { inactivityMs: APPLY_INACTIVITY_MS, onData })
+      const z = await executeSSH(connectionId, nodeIp, buildThickZeroScript(dev, { rateLimitMBps }), APPLY_TIMEOUT_MS, { inactivityMs: APPLY_INACTIVITY_MS, onData })
       // Surface z.output first: the script replays the range dd errors to
       // stdout, so the real cause (e.g. "No space left on device", an array
       // I/O error) lands in output while error is just "Exit code N" on the
       // ssh2 path.
       if (!z.success) throw new Error(`Failed to zero thick target ${dev} before warm copy (unwritten regions would expose stale data): ${z.output || z.error}`)
-      await appendLog(jobId, `Disk ${i}: zeroed thick target ${dev}`)
+      // Every slice that was zeroed prints its mode first: a run that ends
+      // without one never zeroed anything, whatever its exit status.
+      if (zeroMode.value === "unknown") throw new Error(`Failed to zero thick target ${dev} before warm copy (unwritten regions would expose stale data): the zeroing script reported no zeroed slice. ${z.output || ""}`.trim())
+      const elapsedSec = Math.max(0.001, (Date.now() - zeroStart) / 1000)
+      const avgMBps = disk.capacityBytes / elapsedSec / ZERO_RATE_MIB
+      const modeLabel = zeroMode.value === "stream" ? "streamed zeros" : "write-zeroes offload"
+      await appendLog(jobId, `Disk ${i}: zeroed thick target ${dev} in ${formatZeroElapsed(elapsedSec)} (${modeLabel}, ${avgMBps.toFixed(0)} MB/s average, limit ${describeZeroRateLimit(rateLimitMBps)})`, "success")
     }
     zeroedBytes += disk.capacityBytes
     await appendLog(jobId, `Disk ${i}: target ${vol.volumeId} → ${dev} (${(disk.capacityBytes / 1073741824).toFixed(1)} GB)`)

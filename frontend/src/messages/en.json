@@ -2391,6 +2391,8 @@
       "downtimeBudget": "Downtime budget",
       "downtimeBudgetTooltip": "Cut over automatically once the projected downtime fits this budget. The default is 300 s.",
       "downtimeBudgetSeconds": "Seconds",
+      "zeroRateLimit": "Zeroing rate limit (MB/s)",
+      "zeroRateLimitHelp": "A thick LVM target is zeroed in full before the copy. This caps the write rate so a LUN shared with other VMs keeps serving them.",
       "windowsVirtioNote": "Windows guest: the VM will boot on Proxmox with SATA disk and e1000 NIC (built-in Windows drivers). For better disk and network performance, install the VirtIO drivers inside the VM after it boots. Download: https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/virtio-win.iso — install guide: https://pve.proxmox.com/wiki/Windows_VirtIO_Drivers",
       "requiresLicensedEsxi": "Requires SSH configured on the ESXi connection",
       "enterpriseRequired": "Enterprise Plan Required",
@@ -2418,7 +2420,9 @@
       "autoDistribute": "Auto — distribute across nodes",
       "autoDistributeDesc": "VMs will be spread evenly across all available nodes (round-robin)",
       "sharedStorageName": "Shared storage name (e.g. ceph-pool)",
-      "sharedStorageHint": "Enter the name of a shared storage available on all nodes"
+      "sharedStorageHint": "Enter the name of a shared storage available on all nodes",
+      "zeroRateUseCluster": "Use the cluster cap ({cap})",
+      "zeroRateUseClusterHelp": "Before the warm copy, ProxCenter writes zeros over the whole thick LVM volume on the target, so no data of a former VM can remain. On storage shared with production (iSCSI/FC LUN), that write can saturate the array. The cluster cap ({cap}) is set on the target Proxmox connection, Settings > Connections > Migrations tab. Uncheck to use a lower cap for this migration only; a migration can never go above the cluster cap."
     },
     "extDashboard": {
       "hosts": "Hosts",
@@ -4302,7 +4306,19 @@
         "api_tokens": "API tokens"
       },
       "destinations": "Destinations"
-    }
+    },
+    "warmMigrationTarget": "Warm migrations into this cluster",
+    "warmMigrationTargetInfo": "Applies to every warm migration whose target is this cluster, whatever the source (VMware, XCP-ng...).",
+    "warmZeroRateLimit": "Thick zeroing rate limit (MB/s)",
+    "warmZeroRateLimitPlaceholder": "Unlimited",
+    "warmZeroRateLimitHelper": "Before the first copy pass, a thick LVM target volume is zeroed in full so no data of another VM can remain. This caps the write rate of that step on this cluster's storage, so a LUN shared with production keeps serving it. Empty or 0 = unlimited. A value typed in the migration dialog wins for that run.",
+    "warmZeroRateLimitInvalid": "Enter 0 (unlimited) or a whole number between 1 and {max} MB/s.",
+    "connectionTabGeneral": "General",
+    "connectionTabAuth": "Authentication",
+    "connectionTabSsh": "SSH",
+    "connectionTabMigrations": "Migrations",
+    "warmZeroRateLimitLabel": "Thick zeroing rate limit:",
+    "warmZeroRateLimitCaption": "Paces the zeroing of thick LVM targets before a warm copy into this cluster. A value typed in the migration dialog wins for that run."
   },
   "green": {
     "score": {

@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 // Capture the after() callbacks so the test can run the background dispatch.
 const h = vi.hoisted(() => ({
   afterCbs: [] as Array<() => Promise<void>>,
+  licensed: true,
   prisma: {
     connection: { findUnique: vi.fn() },
     migrationJob: { create: vi.fn(async () => ({ id: "job-1" })), findFirst: vi.fn(async () => null) },
@@ -15,6 +16,7 @@ vi.mock("next/server", async (io) => {
 })
 vi.mock("next-auth", () => ({ getServerSession: vi.fn(async () => ({ user: { id: "u1" } })) }))
 vi.mock("@/lib/auth/config", () => ({ authOptions: {} }))
+vi.mock("@/lib/auth/requireEnterprise", () => ({ hasServerFeature: vi.fn(async () => h.licensed) }))
 vi.mock("@/lib/rbac", () => ({ checkPermission: vi.fn(async () => null), PERMISSIONS: { VM_MIGRATE: "vm.migrate" } }))
 vi.mock("@/lib/tenant", () => ({
   getSessionPrisma: vi.fn(async () => h.prisma),
@@ -116,6 +118,36 @@ describe("POST /api/v1/migrations — warm routing", () => {
     expect(h.prisma.migrationJob.create).not.toHaveBeenCalled()
     await runAfters()
     expect(warm).not.toHaveBeenCalled()
+  })
+
+  // roadmap#45: a bad zeroing cap is refused, never turned into "unlimited",
+  // which is exactly what the operator is trying to avoid on a shared LUN.
+  it.each([-1, 1.5, "abc", 100_001])("rejects the zeroing cap %j before creating a job", async (cap) => {
+    const res = await callRoute(POST, { body: { ...body, zeroRateLimitMBps: cap } })
+    expect(res.status).toBe(400)
+    expect((await readJson<any>(res))?.error).toMatch(/zeroRateLimitMBps/)
+    expect(h.prisma.migrationJob.create).not.toHaveBeenCalled()
+    await runAfters()
+    expect(warm).not.toHaveBeenCalled()
+  })
+
+  it("keeps the zeroing cap of the job on Enterprise and drops it without the migration feature", async () => {
+    const pair = () => h.prisma.connection.findUnique
+      .mockResolvedValueOnce({ id: "src", type: "vmware", subType: null, name: "esxi", baseUrl: "https://esxi" })
+      .mockResolvedValueOnce({ id: "tgt", type: "pve", name: "pve" })
+
+    pair()
+    expect((await callRoute(POST, { body: { ...body, zeroRateLimitMBps: 150 } })).status).toBe(200)
+    expect(h.prisma.migrationJob.create.mock.calls[0][0].data.config).toMatchObject({ zeroRateLimitMBps: 150 })
+
+    h.licensed = false
+    try {
+      pair()
+      expect((await callRoute(POST, { body: { ...body, zeroRateLimitMBps: 0 } })).status).toBe(200)
+      expect(h.prisma.migrationJob.create.mock.calls[1][0].data.config).not.toHaveProperty("zeroRateLimitMBps")
+    } finally {
+      h.licensed = true
+    }
   })
 
   it("rejects a malformed downtimeBudgetSec before creating a job", async () => {

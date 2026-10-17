@@ -399,6 +399,7 @@ export default function InventoryDetails({
     migConvertToQcow2, setMigConvertToQcow2,
     migManualCutover, setMigManualCutover,
     migDowntimeBudget, setMigDowntimeBudget,
+    migZeroRateLimit, setMigZeroRateLimit,
     migCpuType, setMigCpuType,
   } = useMigrationOptions({ esxiMigrateVm, bulkMigOpen })
   // Shared with InventoryDialogs.tsx — see bulkMigrationConfig.ts. Used here
@@ -418,7 +419,7 @@ export default function InventoryDetails({
   // of them. A ref, not a closure flag, because a state update restarts the
   // effect and its interval while the previous tick is still in flight.
   const bulkMigTickInFlightRef = useRef(false)
-  const bulkMigConfigRef = useRef<{ sourceConnectionId: string; targetConnectionId: string; targetStorage: string; networkBridge: string; vlanTag?: number; migrationType: string; transferMode: string; startAfterMigration: boolean; convertDisksToQcow2: boolean; sourceType: string; tempStorage?: string; v2vRoot?: string; nfcConcurrency?: number; cpuType?: string } | null>(null)
+  const bulkMigConfigRef = useRef<{ sourceConnectionId: string; targetConnectionId: string; targetStorage: string; networkBridge: string; vlanTag?: number; migrationType: string; transferMode: string; startAfterMigration: boolean; convertDisksToQcow2: boolean; sourceType: string; tempStorage?: string; v2vRoot?: string; nfcConcurrency?: number; cpuType?: string; zeroRateLimitMBps?: number } | null>(null)
   // Snapshot of host info when bulk dialog opens (avoids null data when selection changes)
   const [bulkMigHostInfo, setBulkMigHostInfo] = useState<any>(null)
   const [extHostMigrations, setExtHostMigrations] = useState<any[]>([])
@@ -1094,6 +1095,8 @@ export default function InventoryDetails({
                   ...(cfg.v2vRoot && { v2vRoot: cfg.v2vRoot }),
                   // Parallel NFC downloads (#807), captured with the batch like the other options.
                   ...(typeof cfg.nfcConcurrency === 'number' && { nfcConcurrency: cfg.nfcConcurrency }),
+                  // Thick zeroing cap of a warm batch (roadmap#45), captured with the batch.
+                  ...(typeof cfg.zeroRateLimitMBps === 'number' && { zeroRateLimitMBps: cfg.zeroRateLimitMBps }),
                   // CPU type of the created VM (roadmap#24), captured with the batch.
                   ...(cfg.cpuType && { cpuType: cfg.cpuType }),
                 }),
@@ -4682,6 +4685,8 @@ return vm?.isCluster ?? false
         setMigManualCutover={setMigManualCutover}
         migDowntimeBudget={migDowntimeBudget}
         setMigDowntimeBudget={setMigDowntimeBudget}
+        migZeroRateLimit={migZeroRateLimit}
+        setMigZeroRateLimit={setMigZeroRateLimit}
         setMigConvertToQcow2={setMigConvertToQcow2}
         migCpuType={migCpuType}
         setMigCpuType={setMigCpuType}

@@ -2391,6 +2391,8 @@
       "downtimeBudget": "Presupuesto de downtime",
       "downtimeBudgetTooltip": "Conmuta automáticamente en cuanto el downtime previsto quepa en este presupuesto. Por defecto, 300 s.",
       "downtimeBudgetSeconds": "Segundos",
+      "zeroRateLimit": "Límite de velocidad de puesta a cero (MB/s)",
+      "zeroRateLimitHelp": "Un destino LVM thick se pone a cero por completo antes de la copia. Este límite reduce la velocidad de escritura para que un LUN compartido con otras VM siga atendiéndolas.",
       "windowsVirtioNote": "Guest Windows: la VM arrancará en Proxmox con disco SATA y NIC e1000 (drivers integrados de Windows). Para mejorar el rendimiento de disco y red, instala los drivers VirtIO dentro de la VM después del arranque. Descarga: https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/virtio-win.iso — guía de instalación: https://pve.proxmox.com/wiki/Windows_VirtIO_Drivers",
       "requiresLicensedEsxi": "Requiere SSH configurado en la conexión ESXi",
       "enterpriseRequired": "Se requiere plan Enterprise",
@@ -2418,7 +2420,9 @@
       "autoDistribute": "Auto — distribuir entre nodos",
       "autoDistributeDesc": "Las VMs se repartirán uniformemente entre todos los nodos disponibles (round-robin)",
       "sharedStorageName": "Nombre del almacenamiento compartido (p. ej. ceph-pool)",
-      "sharedStorageHint": "Introduce el nombre de un almacenamiento compartido disponible en todos los nodos"
+      "sharedStorageHint": "Introduce el nombre de un almacenamiento compartido disponible en todos los nodos",
+      "zeroRateUseCluster": "Usar el límite del clúster ({cap})",
+      "zeroRateUseClusterHelp": "Antes de la copia warm, ProxCenter escribe ceros en todo el volumen LVM thick del destino, para que no quede ningún dato de una VM anterior. En un almacenamiento compartido con producción (LUN iSCSI/FC), esa escritura puede saturar la cabina. El límite del clúster ({cap}) se configura en la conexión Proxmox de destino, Settings > Connections > pestaña Migraciones. Desmarque para usar un límite más bajo solo para esta migración; una migración nunca puede superar el límite del clúster."
     },
     "extDashboard": {
       "hosts": "Hosts",
@@ -4302,7 +4306,19 @@
         "api_tokens": "Tokens de API"
       },
       "destinations": "Destinos"
-    }
+    },
+    "warmMigrationTarget": "Migraciones warm hacia este clúster",
+    "warmMigrationTargetInfo": "Se aplica a toda migración warm cuyo destino sea este clúster, sea cual sea el origen (VMware, XCP-ng...).",
+    "warmZeroRateLimit": "Límite de puesta a cero thick (MB/s)",
+    "warmZeroRateLimitPlaceholder": "Ilimitado",
+    "warmZeroRateLimitHelper": "Antes de la primera pasada de copia, un volumen de destino LVM thick se pone a cero por completo para que no quede ningún dato de otra VM. Este límite reduce la velocidad de escritura de ese paso en el almacenamiento de este clúster, para que un LUN compartido con producción siga atendiéndola. Vacío o 0 = ilimitado. Un valor introducido en el diálogo de migración prevalece para esa migración.",
+    "warmZeroRateLimitInvalid": "Introduzca 0 (ilimitado) o un número entero entre 1 y {max} MB/s.",
+    "connectionTabGeneral": "General",
+    "connectionTabAuth": "Autenticación",
+    "connectionTabSsh": "SSH",
+    "connectionTabMigrations": "Migraciones",
+    "warmZeroRateLimitLabel": "Límite de puesta a cero thick:",
+    "warmZeroRateLimitCaption": "Regula la puesta a cero de los destinos LVM thick antes de una copia warm hacia este clúster. Un valor introducido en el diálogo de migración prevalece para esa migración."
   },
   "green": {
     "score": {

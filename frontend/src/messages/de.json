@@ -2428,7 +2428,11 @@
       "reviewNoNic": "Kein Netzwerkadapter auf der Quell-VM erkannt: Das Ziel erhält eine Standard-Netzwerkkarte auf {bridge}.",
       "reviewInvalid": "Korrigieren Sie die markierten Felder, bevor Sie die Migration starten.",
       "migrationSettings": "Migrationseinstellungen",
-      "reviewMemory": "Arbeitsspeicher"
+      "reviewMemory": "Arbeitsspeicher",
+      "reviewVtpmWarning": "Diese VM hat ein virtuelles TPM. Sein Zustand wird nie kopiert (vSphere hält ihn verschlüsselt): das Ziel erhält ein leeres TPM 2.0, damit Windows 11 / Server 2022 ein TPM-Gerät behalten, aber BitLocker oder die Geräteverschlüsselung fragt beim ersten Start nach dem Wiederherstellungsschlüssel und Windows Hello muss neu eingerichtet werden. Halten Sie den BitLocker-Wiederherstellungsschlüssel bereit.",
+      "integrityNote": "Integritätsprüfung nach dem Kopieren: etwa {seconds} s pro Festplatte, am Ziel-Cluster eingestellt.",
+      "integrityNoteWarm": "Integritätsprüfung beim Cutover: etwa {seconds} s pro Festplatte, zur Unterbrechung hinzugefügt. Am Ziel-Cluster eingestellt.",
+      "integrityNoteOff": "Integritätsprüfung am Ziel-Cluster aus: die Festplatten werden ungeprüft übergeben."
     },
     "extDashboard": {
       "hosts": "Hosts",
@@ -4313,8 +4317,8 @@
       },
       "destinations": "Ziele"
     },
-    "warmMigrationTarget": "Warm-Migrationen in diesen Cluster",
-    "warmMigrationTargetInfo": "Gilt für jede Warm-Migration mit diesem Cluster als Ziel, unabhängig von der Quelle (VMware, XCP-ng...).",
+    "warmMigrationTarget": "Migrationen in diesen Cluster",
+    "warmMigrationTargetInfo": "Gilt für jede Migration mit diesem Cluster als Ziel, unabhängig von der Quelle (VMware, XCP-ng...).",
     "warmZeroRateLimit": "Nullungs-Ratenlimit für Thick (MB/s)",
     "warmZeroRateLimitPlaceholder": "Unbegrenzt",
     "warmZeroRateLimitHelper": "Vor dem ersten Kopierdurchlauf wird ein Thick-LVM-Zielvolume vollständig genullt, damit keine Daten einer anderen VM zurückbleiben. Diese Grenze drosselt die Schreibrate dieses Schritts auf dem Speicher dieses Clusters, damit eine mit der Produktion geteilte LUN diese weiter bedient. Leer oder 0 = unbegrenzt. Ein im Migrationsdialog eingegebener Wert hat für diesen Lauf Vorrang.",
@@ -4324,7 +4328,13 @@
     "connectionTabSsh": "SSH",
     "connectionTabMigrations": "Migrationen",
     "warmZeroRateLimitLabel": "Nullungs-Ratenlimit für Thick:",
-    "warmZeroRateLimitCaption": "Drosselt das Nullen von Thick-LVM-Zielen vor einer Warm-Kopie in diesen Cluster. Ein im Migrationsdialog eingegebener Wert hat für diesen Lauf Vorrang."
+    "warmZeroRateLimitCaption": "Drosselt das Nullen von Thick-LVM-Zielen vor einer Warm-Kopie in diesen Cluster. Ein im Migrationsdialog eingegebener Wert hat für diesen Lauf Vorrang.",
+    "integrityCheck": "Jede kopierte Festplatte vor der Übergabe der VM prüfen",
+    "integrityCheckHelper": "Nach dem Kopieren werden der erste, der letzte und N verteilte Bereiche jeder Festplatte auf Quelle und Ziel gehasht; jede Abweichung lässt die Migration vor der Übergabe der VM fehlschlagen. Standardmäßig aktiv.",
+    "integrityRegionCount": "Verteilte Bereiche:",
+    "integrityRegionSize": "Bereichsgröße:",
+    "integrityCost": "Fügt jeder Migration in diesen Cluster etwa {seconds} s pro Festplatte hinzu (bei Warm zur Cutover-Unterbrechung), unabhängig von der Festplattengröße.",
+    "integrityOff": "Aus: Festplatten werden ungeprüft übergeben."
   },
   "green": {
     "score": {

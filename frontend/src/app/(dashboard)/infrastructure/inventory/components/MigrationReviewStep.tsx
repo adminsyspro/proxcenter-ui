@@ -237,6 +237,11 @@ export default function MigrationReviewStep({
       {!sourceLoading && !source && (
         <Alert severity="warning" sx={{ fontSize: 12 }}>{t('inventoryPage.esxiMigration.reviewLoadFailed')}</Alert>
       )}
+      {source?.hasVtpm && (
+        <Alert severity="warning" sx={{ fontSize: 12 }} data-testid="review-vtpm-warning">
+          {t('inventoryPage.esxiMigration.reviewVtpmWarning')}
+        </Alert>
+      )}
 
       <Box sx={sectionSx}>
         <Typography variant="subtitle2" sx={titleSx}>{t('inventoryPage.esxiMigration.reviewHardware')}</Typography>

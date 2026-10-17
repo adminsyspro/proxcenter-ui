@@ -2441,7 +2441,11 @@
       "reviewNoNic": "원본 VM에서 네트워크 어댑터가 감지되지 않았습니다. 대상에는 {bridge}의 기본 NIC 하나가 생성됩니다.",
       "reviewInvalid": "마이그레이션을 시작하기 전에 강조된 필드를 수정하세요.",
       "migrationSettings": "마이그레이션 설정",
-      "reviewMemory": "메모리"
+      "reviewMemory": "메모리",
+      "reviewVtpmWarning": "이 VM에는 가상 TPM이 있습니다. TPM 상태는 복사되지 않습니다(vSphere가 암호화해 보관). 대상에는 빈 TPM 2.0이 만들어져 Windows 11 / Server 2022가 TPM 장치를 유지하지만, BitLocker 또는 장치 암호화는 첫 부팅 시 복구 키를 요구하고 Windows Hello는 다시 등록해야 합니다. BitLocker 복구 키를 준비해 두세요.",
+      "integrityNote": "복사 후 무결성 검사: 디스크당 약 {seconds}초, 대상 클러스터에서 설정.",
+      "integrityNoteWarm": "컷오버 시 무결성 검사: 디스크당 약 {seconds}초, 중단 시간에 추가됩니다. 대상 클러스터에서 설정.",
+      "integrityNoteOff": "대상 클러스터에서 무결성 검사가 꺼져 있습니다: 디스크가 검증 없이 인계됩니다."
     },
     "extDashboard": {
       "hosts": "호스트",
@@ -4326,8 +4330,8 @@
       },
       "destinations": "대상"
     },
-    "warmMigrationTarget": "이 클러스터로의 웜 마이그레이션",
-    "warmMigrationTargetInfo": "소스(VMware, XCP-ng...)와 관계없이 이 클러스터를 대상으로 하는 모든 웜 마이그레이션에 적용됩니다.",
+    "warmMigrationTarget": "이 클러스터로의 마이그레이션",
+    "warmMigrationTargetInfo": "소스(VMware, XCP-ng...)와 관계없이 이 클러스터를 대상으로 하는 모든 마이그레이션에 적용됩니다.",
     "warmZeroRateLimit": "Thick 제로화 속도 제한(MB/s)",
     "warmZeroRateLimitPlaceholder": "무제한",
     "warmZeroRateLimitHelper": "첫 번째 복사 패스 전에 thick LVM 대상 볼륨은 다른 VM의 데이터가 남지 않도록 전체가 0으로 채워집니다. 이 제한은 이 클러스터 스토리지에서 해당 단계의 쓰기 속도를 제한하여 프로덕션과 공유하는 LUN이 계속 서비스하도록 합니다. 비우거나 0 = 무제한. 마이그레이션 대화 상자에 입력한 값이 해당 실행에 우선합니다.",
@@ -4337,7 +4341,13 @@
     "connectionTabSsh": "SSH",
     "connectionTabMigrations": "마이그레이션",
     "warmZeroRateLimitLabel": "Thick 제로화 속도 제한:",
-    "warmZeroRateLimitCaption": "이 클러스터로의 웜 복사 전에 thick LVM 대상의 제로화 속도를 조절합니다. 마이그레이션 대화 상자에 입력한 값이 해당 실행에 우선합니다."
+    "warmZeroRateLimitCaption": "이 클러스터로의 웜 복사 전에 thick LVM 대상의 제로화 속도를 조절합니다. 마이그레이션 대화 상자에 입력한 값이 해당 실행에 우선합니다.",
+    "integrityCheck": "VM 인계 전에 복사된 각 디스크 검증",
+    "integrityCheckHelper": "복사 후 각 디스크의 첫 번째, 마지막 및 N개의 분산 영역을 소스와 대상에서 해시합니다. 차이가 있으면 VM을 인계하기 전에 마이그레이션이 실패합니다. 기본적으로 켜져 있습니다.",
+    "integrityRegionCount": "분산 영역:",
+    "integrityRegionSize": "영역 크기:",
+    "integrityCost": "디스크 크기와 관계없이 이 클러스터로의 각 마이그레이션에 디스크당 약 {seconds}초가 추가됩니다(웜에서는 컷오버 중단 시간에 추가).",
+    "integrityOff": "꺼짐: 디스크가 검증 없이 인계됩니다."
   },
   "green": {
     "score": {

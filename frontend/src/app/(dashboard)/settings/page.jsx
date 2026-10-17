@@ -384,6 +384,9 @@ function ConnectionsTab() {
     loadNutanixConnections,
     loadHypervConnections,
   } = useConnectionsManagement()
+  // Migration settings of a PVE target only matter once a source hypervisor
+  // is configured: the tab is hidden otherwise, and its values are not sent.
+  const migrationSourcesConfigured = [vmwareConnections, xcpngConnections, nutanixConnections, hypervConnections].some(l => (l?.length ?? 0) > 0)
 
   // Tenant name map for ownership badges: id -> name
   const [tenantNameMap, setTenantNameMap] = useState({})
@@ -500,8 +503,11 @@ function ConnectionsTab() {
       }),
       // Warm migration zeroing cap of this PVE target (roadmap#45), Enterprise
       // only; empty = unlimited (null clears a value saved before).
-      ...(addConnType === 'pve' && migrationAvailable && {
+      ...(addConnType === 'pve' && migrationAvailable && migrationSourcesConfigured && {
         warmZeroRateLimitMBps: formData.warmZeroRateLimitMBps?.trim() ? Number(formData.warmZeroRateLimitMBps.trim()) : null,
+        integrityCheckEnabled: formData.integrityCheckEnabled,
+        integrityRegionCount: formData.integrityRegionCount,
+        integrityRegionSizeMiB: formData.integrityRegionSizeMiB,
       }),
       // Provider-only create-with-owner: own the connection by an MSP tenant
       ...(!editingConn?.id && formData.ownerTenantId && { ownerTenantId: formData.ownerTenantId }),
@@ -1734,6 +1740,8 @@ function ConnectionsTab() {
         type={addConnType}
         initialData={editingConn}
         mode={editingConn ? 'edit' : 'create'}
+        // The Migrations tab only matters once a source hypervisor is set up.
+        migrationSourcesConfigured={migrationSourcesConfigured}
       />
 
       {/* Diagnostic modal */}

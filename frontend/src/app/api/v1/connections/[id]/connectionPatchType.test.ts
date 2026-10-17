@@ -82,3 +82,16 @@ describe('PATCH /api/v1/connections/[id] warm zeroing cap (roadmap#45)', () => {
     expect(updateMock.mock.calls[1][0].data).not.toHaveProperty('warmZeroRateLimitMBps')
   })
 })
+
+describe('PATCH /api/v1/connections/[id] integrity settings (roadmap#1)', () => {
+  it('stores the post-copy integrity settings of a PVE connection on Enterprise only', async () => {
+    const { PATCH } = await import('./route')
+    findUniqueMock.mockResolvedValue({ type: 'pve' })
+    await callRoute(PATCH, { method: 'PATCH', params: { id: 'pve-1' }, body: { integrityCheckEnabled: false, integrityRegionCount: 2, integrityRegionSizeMiB: 16 } })
+    expect(updateMock.mock.calls[0][0].data).toMatchObject({ integrityCheckEnabled: false, integrityRegionCount: 2, integrityRegionSizeMiB: 16 })
+
+    hasServerFeatureMock.mockResolvedValue(false)
+    await callRoute(PATCH, { method: 'PATCH', params: { id: 'pve-1' }, body: { integrityCheckEnabled: false, name: 'x' } })
+    expect(updateMock.mock.calls[1][0].data).not.toHaveProperty('integrityCheckEnabled')
+  })
+})

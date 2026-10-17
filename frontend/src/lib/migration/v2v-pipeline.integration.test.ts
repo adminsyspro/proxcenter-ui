@@ -171,6 +171,9 @@ async function sshRouter(_connId: string, _host: string, command: string) {
     return ok("Successfully imported disk as 'unused0:local:120/vm-120-disk-0.qcow2'")
   }
   if (command.startsWith("du -sb ")) return ok("1073741824")
+  // Post-copy integrity check (roadmap#1): a clean qcow2 of the expected size.
+  if (command.startsWith("qemu-img check ")) return ok('{"corruptions": 0, "leaks": 0, "check-errors": 0}\nQEMU_IMG_CHECK_RC=0')
+  if (command.startsWith("qemu-img info ")) return ok('{"virtual-size": 1073741824, "format": "qcow2"}')
   // mkdir -p, rm -f, rm -rf, find ... -delete, kill, umount: plain success
   return ok("")
 }

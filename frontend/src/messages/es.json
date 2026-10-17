@@ -2441,7 +2441,11 @@
       "reviewNoNic": "No se detectó ningún adaptador de red en la VM de origen: el destino recibe una tarjeta predeterminada en {bridge}.",
       "reviewInvalid": "Corrija los campos marcados antes de iniciar la migración.",
       "migrationSettings": "Ajustes de la migración",
-      "reviewMemory": "Memoria"
+      "reviewMemory": "Memoria",
+      "reviewVtpmWarning": "Esta VM tiene un TPM virtual. Su estado nunca se copia (vSphere lo guarda cifrado): el destino recibe un TPM 2.0 vacío para que Windows 11 / Server 2022 conserven un dispositivo TPM, pero BitLocker o el cifrado del dispositivo pedirá la clave de recuperación en el primer arranque y Windows Hello deberá registrarse de nuevo. Tenga a mano la clave de recuperación de BitLocker.",
+      "integrityNote": "Verificación de integridad tras la copia: unos {seconds} s por disco, configurada en el clúster de destino.",
+      "integrityNoteWarm": "Verificación de integridad en el cutover: unos {seconds} s por disco, añadidos a la interrupción. Configurada en el clúster de destino.",
+      "integrityNoteOff": "Verificación de integridad desactivada en el clúster de destino: los discos se entregan sin verificar."
     },
     "extDashboard": {
       "hosts": "Hosts",
@@ -4326,8 +4330,8 @@
       },
       "destinations": "Destinos"
     },
-    "warmMigrationTarget": "Migraciones warm hacia este clúster",
-    "warmMigrationTargetInfo": "Se aplica a toda migración warm cuyo destino sea este clúster, sea cual sea el origen (VMware, XCP-ng...).",
+    "warmMigrationTarget": "Migraciones hacia este clúster",
+    "warmMigrationTargetInfo": "Se aplica a toda migración cuyo destino sea este clúster, sea cual sea el origen (VMware, XCP-ng...).",
     "warmZeroRateLimit": "Límite de puesta a cero thick (MB/s)",
     "warmZeroRateLimitPlaceholder": "Ilimitado",
     "warmZeroRateLimitHelper": "Antes de la primera pasada de copia, un volumen de destino LVM thick se pone a cero por completo para que no quede ningún dato de otra VM. Este límite reduce la velocidad de escritura de ese paso en el almacenamiento de este clúster, para que un LUN compartido con producción siga atendiéndola. Vacío o 0 = ilimitado. Un valor introducido en el diálogo de migración prevalece para esa migración.",
@@ -4337,7 +4341,13 @@
     "connectionTabSsh": "SSH",
     "connectionTabMigrations": "Migraciones",
     "warmZeroRateLimitLabel": "Límite de puesta a cero thick:",
-    "warmZeroRateLimitCaption": "Regula la puesta a cero de los destinos LVM thick antes de una copia warm hacia este clúster. Un valor introducido en el diálogo de migración prevalece para esa migración."
+    "warmZeroRateLimitCaption": "Regula la puesta a cero de los destinos LVM thick antes de una copia warm hacia este clúster. Un valor introducido en el diálogo de migración prevalece para esa migración.",
+    "integrityCheck": "Verificar cada disco copiado antes de entregar la VM",
+    "integrityCheckHelper": "Tras la copia, la primera, la última y N zonas repartidas de cada disco se hashean en el origen y en el destino; cualquier diferencia hace fallar la migración antes de entregar la VM. Activado por defecto.",
+    "integrityRegionCount": "Zonas repartidas:",
+    "integrityRegionSize": "Tamaño de zona:",
+    "integrityCost": "Añade unos {seconds} s por disco a cada migración hacia este clúster (a la interrupción del cutover en warm), sea cual sea el tamaño del disco.",
+    "integrityOff": "Desactivado: los discos se entregan sin verificar."
   },
   "green": {
     "score": {

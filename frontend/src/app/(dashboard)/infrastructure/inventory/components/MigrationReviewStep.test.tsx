@@ -128,4 +128,19 @@ describe('MigrationReviewStep', () => {
     expect(screen.getByText(/could not be read/)).toBeTruthy()
     expect(screen.getByText(/No network adapter/)).toBeTruthy()
   })
+
+  it('warns about a source vTPM: its state is never copied and the recovery key is needed', () => {
+    seedNode()
+    renderStep({ source: { ...source, hasVtpm: true } })
+    const alert = screen.getByTestId('review-vtpm-warning')
+    expect(alert.textContent).toMatch(/virtual TPM/)
+    expect(alert.textContent).toMatch(/BitLocker/)
+    expect(alert.textContent).toMatch(/recovery key/)
+  })
+
+  it('shows no TPM warning for a source without one', () => {
+    seedNode()
+    renderStep()
+    expect(screen.queryByTestId('review-vtpm-warning')).toBeNull()
+  })
 })

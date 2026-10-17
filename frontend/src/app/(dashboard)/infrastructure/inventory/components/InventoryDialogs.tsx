@@ -47,6 +47,7 @@ import NumericTextField from '@/components/ui/NumericTextField'
 import { NFC_CONCURRENCY_MIN, NFC_CONCURRENCY_MAX } from '@/lib/migration/nfc-progress'
 import { isZeroRateLimitValid, describeZeroRateLimit } from '@/lib/migration/warm/zero-rate'
 import ZeroRateSlider from '@/components/migration/ZeroRateSlider'
+import { estimateIntegritySecondsPerDisk, integritySettingsFromConnection } from '@/lib/migration/integrity-settings'
 import { MIGRATION_CPU_TYPES, MIGRATION_CPU_TYPE_DEFAULT, type MigrationCpuType } from '@/lib/migration/cpu-type'
 import MigrationReviewStep from './MigrationReviewStep'
 import { initialHardwareState, initialNicState, reviewIsValid, buildHardwarePayload, buildNicsPayload, type ReviewSource, type ReviewHardwareState, type ReviewNicState } from './migrationReview'
@@ -764,6 +765,7 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
           nics: Array.isArray(detail.nics)
             ? detail.nics.map((n: any) => ({ label: String(n?.label || ''), type: String(n?.type || ''), macAddress: String(n?.macAddress || ''), network: String(n?.network || '') }))
             : [],
+          hasVtpm: detail.hasVtpm === true,
         } : null)
       })
       .catch(() => { if (!cancelled) { setSourceDatastores([]); setSourceVmDetail(null) } })
@@ -992,12 +994,30 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
   // (Settings > Connections), read here so the field says what it is.
   const showZeroRateLimit = migType === 'warm' && migTargetIsThickLvm
   const zeroRateLimitInvalid = showZeroRateLimit && !isZeroRateLimitValid(migZeroRateLimit)
-  const { data: targetConnection } = useSWR<{ data?: { warmZeroRateLimitMBps?: number | null } }>(
-    showZeroRateLimit && migTargetConn ? `/api/v1/connections/${encodeURIComponent(migTargetConn)}` : null,
+  // The target connection carries the migration settings of its cluster: the
+  // zeroing cap (roadmap#45) and the post-copy integrity check (roadmap#1).
+  const { data: targetConnection } = useSWR<{ data?: { warmZeroRateLimitMBps?: number | null; integrityCheckEnabled?: boolean | null; integrityRegionCount?: number | null; integrityRegionSizeMiB?: number | null } }>(
+    migTargetConn ? `/api/v1/connections/${encodeURIComponent(migTargetConn)}` : null,
     (url: string) => fetch(url).then(r => (r.ok ? r.json() : null)),
     { revalidateOnFocus: false },
   )
   const zeroRateGlobalDefault = describeZeroRateLimit(targetConnection?.data?.warmZeroRateLimitMBps)
+
+  // Post-copy integrity check (roadmap#1): what it adds to this migration, from
+  // the target cluster's settings. In warm it runs at cutover, the source off,
+  // so the time is part of the downtime. Not on XCP-ng (its own sample check).
+  const integrity = integritySettingsFromConnection(targetConnection?.data)
+  const integritySeconds = estimateIntegritySecondsPerDisk(integrity)
+  let integrityNoteKey = 'inventoryPage.esxiMigration.integrityNoteOff'
+  if (integrity.enabled) integrityNoteKey = migType === 'warm' ? 'inventoryPage.esxiMigration.integrityNoteWarm' : 'inventoryPage.esxiMigration.integrityNote'
+  const renderIntegrityNote = (hostType: string | undefined) => migTargetConn && hostType !== 'xcpng' && (
+    <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 0.75, px: 0.5 }} data-testid="migration-integrity-note">
+      <Box component="i" className={integrity.enabled ? 'ri-shield-check-line' : 'ri-shield-line'} sx={{ fontSize: 16, mt: '1px', color: integrity.enabled ? 'success.main' : 'warning.main' }} />
+      <Typography variant="caption" color={integrity.enabled ? 'text.secondary' : 'warning.main'}>
+        {t(integrityNoteKey, { seconds: integritySeconds })}
+      </Typography>
+    </Box>
+  )
 
   // Rendered identically by the single-VM and the bulk dialog. Kept as one
   // helper rather than two copies of the same JSX: an identical block repeated
@@ -3559,6 +3579,7 @@ return
                   {renderAutomaticCutoverSwitch()}
                   {renderDowntimeBudgetField()}
                   {renderZeroRateLimitField()}
+                  {renderIntegrityNote(esxiMigrateVm?.hostType)}
                   {renderQcow2ConvertSwitch()}
                 </Stack>
               </Box>

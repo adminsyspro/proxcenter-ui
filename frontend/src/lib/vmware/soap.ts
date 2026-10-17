@@ -912,6 +912,16 @@ export interface EsxiVmConfig {
    * (Veeam & co) relies on CBT the customer enabled.
    */
   changeTrackingEnabled?: boolean
+  /**
+   * The source carries a virtual TPM (a `VirtualTPM` device). Its state is
+   * never copied; the pipelines warn and create an empty tpmstate0 (roadmap#1).
+   */
+  hasVtpm?: boolean
+}
+
+/** Is there a `VirtualTPM` device in a `config.hardware.device` property? */
+export function hasVirtualTpm(devicesXml: string): boolean {
+  return /xsi:type="VirtualTPM"/.test(devicesXml || "")
 }
 
 /**
@@ -1047,6 +1057,7 @@ export function parseVmConfig(xml: string): EsxiVmConfig {
     firmware, uuid, vmxVersion, vmPathName, powerState, committed, disks, nics, snapshotCount,
     toolsStatus, toolsRunningStatus,
     changeTrackingEnabled: cbt === "true" ? true : cbt === "false" ? false : undefined,
+    hasVtpm: hasVirtualTpm(devicesXml),
   }
 }
 

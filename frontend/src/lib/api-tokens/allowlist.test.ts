@@ -14,12 +14,13 @@ import {
 } from './allowlist'
 
 describe('PUBLIC_API_ALLOWLIST data', () => {
-  it('contains exactly the 7 phase-1 entries with the spec scopes', () => {
+  it('keeps exactly the 7 phase-1 Monitoring entries with the spec scopes', () => {
     const byId = Object.fromEntries(PUBLIC_API_ALLOWLIST.map(e => [e.id, e]))
-    expect(Object.keys(byId).sort()).toEqual([
+    expect(PUBLIC_API_ALLOWLIST.filter(e => e.tag === 'Monitoring').map(e => e.id).sort()).toEqual([
       'inventory-tree', 'pbs-backups', 'public-backups', 'public-health',
       'public-metrics', 'storage-list', 'vms-list',
     ])
+    expect(new Set(PUBLIC_API_ALLOWLIST.map(e => e.id)).size).toBe(PUBLIC_API_ALLOWLIST.length)
     expect(byId['vms-list'].pattern).toBe('/api/v1/vms')
     expect(byId['vms-list'].requiredScopes).toEqual(['vms:read'])
     expect(byId['inventory-tree'].requiredScopes).toEqual(['nodes:read'])
@@ -32,7 +33,7 @@ describe('PUBLIC_API_ALLOWLIST data', () => {
     expect(byId['public-health'].requiredScopes).toEqual([])
     for (const entry of PUBLIC_API_ALLOWLIST) {
       expect(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']).toContain(entry.method)
-      expect(entry.tag).toBe('Monitoring')
+      expect(['Monitoring', 'VMs', 'Snapshots', 'Backups', 'Storage', 'HA', 'Pools', 'Network', 'Firewall', 'Tasks']).toContain(entry.tag)
       expect(entry.routeFile).toMatch(/^src\/app\/api\/v1\/.+\/route\.ts$/)
       expect(entry.summary.length).toBeGreaterThan(0)
       expect(entry.responseSchemaRef.length).toBeGreaterThan(0)
@@ -86,6 +87,8 @@ describe('shared canonical matcher', () => {
   })
 
   it('the edge match and the server-side re-check against the resolved entry never disagree, and no path matches two entries', () => {
+    const guest = '/api/v1/connections/c1/guests/qemu/pve1/100'
+    const vmKey = '/api/v1/guests/c1:qemu:pve1:100'
     const samplePathById: Record<string, string> = {
       'vms-list': '/api/v1/vms',
       'inventory-tree': '/api/v1/inventory',
@@ -94,20 +97,46 @@ describe('shared canonical matcher', () => {
       'public-backups': '/api/v1/public/backups',
       'public-metrics': '/api/v1/public/metrics',
       'public-health': '/api/v1/public/health',
+      'vm-create': '/api/v1/connections/c1/guests/qemu/pve1',
+      'vm-config-get': `${guest}/config`,
+      'vm-config-update': `${guest}/config`,
+      'vm-power': `${guest}/shutdown`,
+      'vm-clone': `${guest}/clone`,
+      'vm-template': `${guest}/template`,
+      'vm-disk-resize': `${guest}/disk/resize`,
+      'vm-disk-move': `${guest}/disk/move`,
+      'vm-unlock-get': `${guest}/unlock`,
+      'vm-unlock': `${guest}/unlock`,
+      'vm-migrate': `${guest}/migrate`,
+      'vm-remote-migrate': `${guest}/remote-migrate`,
+      'vm-remote-migrate-check': `${guest}/remote-migrate/check`,
+      'vm-remote-migrate-prepare-get': `${guest}/remote-migrate/prepare`,
+      'vm-remote-migrate-prepare': `${guest}/remote-migrate/prepare`,
+      'vm-delete': guest,
+      'vm-notes-get': `${vmKey}/notes`,
+      'vm-notes-update': `${vmKey}/notes`,
+      'vm-snapshots-list': `${vmKey}/snapshots`,
+      'vm-snapshot-create': `${vmKey}/snapshots`,
+      'vm-snapshot-delete': `${vmKey}/snapshots`,
+      'vm-snapshot-rollback': `${vmKey}/snapshots/before-upgrade`,
+      'vm-snapshot-update': `${vmKey}/snapshots/before-upgrade`,
+      'vm-tasks-list': `${vmKey}/tasks`,
+      'task-status': '/api/v1/tasks/c1/pve1/UPID:pve1:0000ABCD:00001234:6A000000:qmstart:100:root@pam:',
     }
     for (const entry of PUBLIC_API_ALLOWLIST) {
       const path = samplePathById[entry.id]
-      const edgeMatch = matchPublicApiPath(path, 'GET')
+      expect(path, `sample path for ${entry.id}`).toBeDefined()
+      const edgeMatch = matchPublicApiPath(path, entry.method)
       expect(edgeMatch.ok).toBe(true)
       expect(edgeMatch.entryId).toBe(entry.id)
 
       const resolvedEntry = getAllowlistEntryById(edgeMatch.entryId!)!
-      expect(matchesEntry(resolvedEntry, path, 'GET')).toBe(true)
+      expect(matchesEntry(resolvedEntry, path, entry.method)).toBe(true)
       expect(matchEntryParams(resolvedEntry, path)).toEqual(edgeMatch.params)
 
       for (const other of PUBLIC_API_ALLOWLIST) {
         if (other.id === entry.id) continue
-        expect(matchesEntry(other, path, 'GET')).toBe(false)
+        expect(matchesEntry(other, path, entry.method)).toBe(false)
       }
     }
   })
@@ -120,6 +149,19 @@ describe('method-aware matching', () => {
     expect(matchPublicApiPath('/api/v1/vms', 'POST').ok).toBe(false)
     expect(allowedMethodsForPath('/api/v1/vms')).toEqual(['GET'])
     expect(allowedMethodsForPath('/api/v1/nope')).toEqual([])
+  })
+
+  it('the VM {action} entry never swallows clone, template, unlock or migrate', () => {
+    const guest = '/api/v1/connections/c1/guests/qemu/pve1/100'
+    expect(matchPublicApiPath(`${guest}/start`, 'POST').entryId).toBe('vm-power')
+    expect(matchPublicApiPath(`${guest}/resume`, 'POST').entryId).toBe('vm-power')
+    for (const literal of ['clone', 'template', 'unlock', 'migrate']) {
+      expect(matchPublicApiPath(`${guest}/${literal}`, 'POST').entryId).toBe(`vm-${literal}`)
+    }
+    expect(matchPublicApiPath(`${guest}/console`, 'POST').ok).toBe(false)
+    expect(matchPublicApiPath(`${guest}/config`, 'POST').ok).toBe(false)
+    expect(allowedMethodsForPath(`${guest}/config`).sort()).toEqual(['GET', 'PUT'])
+    expect(allowedMethodsForPath(`${guest}/unlock`).sort()).toEqual(['GET', 'POST'])
   })
 
   it('matchesEntry checks the method and isWriteEntry flags non-GET', () => {

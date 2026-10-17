@@ -11,12 +11,13 @@ import { writableStoragesFor, readOnlyLibraryError } from "@/lib/vdc/scope"
 import { resolveVdcForTenant, checkVdcQuota } from "@/lib/vdc/quota"
 import { parseDriveString, parsePveSizeToMb, stampDriveQos, type DriveQosCaps } from "@/lib/vdc/drives"
 import { waitForTask } from "@/lib/proxmox/tasks"
+import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 
 export const runtime = "nodejs"
 
 // POST /api/v1/connections/{id}/guests/{type}/{node}/{vmid}/disk/move
 // Déplace un disque vers un autre stockage
-export async function POST(
+async function handler(
   req: Request,
   ctx: { params: Promise<{ id: string; type: string; node: string; vmid: string }> }
 ) {
@@ -171,3 +172,5 @@ export async function POST(
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const POST = withPublicApiGuard("vm-disk-move", handler)

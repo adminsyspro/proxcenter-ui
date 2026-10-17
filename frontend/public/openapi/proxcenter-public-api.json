@@ -61,6 +61,424 @@
       }
     },
     "schemas": {
+      "VmCreateRequest": {
+        "type": "object",
+        "description": "Proxmox create parameters (qm create for qemu, pct create for lxc), forwarded as JSON once the vDC rules have run. A vDC tenant gets its pool and CPU model applied when absent.",
+        "required": [
+          "vmid"
+        ],
+        "properties": {
+          "vmid": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "New guest id"
+          },
+          "pool": {
+            "type": "string",
+            "description": "Resource pool; required for a caller scoped to several pools"
+          },
+          "name": {
+            "type": "string"
+          },
+          "cores": {
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "sockets": {
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "memory": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "MiB"
+          },
+          "cpu": {
+            "type": "string"
+          },
+          "nameserver": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true
+      },
+      "VmConfigUpdateRequest": {
+        "type": "object",
+        "description": "Proxmox configuration keys to write. QEMU: name, description, tags, onboot, protection, startup, cores, sockets, cpu, vcpus, cpulimit, cpuunits, numa, memory, balloon, shares, boot, bootdisk, bios, machine, agent, scsihw, vga, ostype, hotplug, tablet, localtime, freeze, kvm, acpi, args, cloud-init keys, netN, scsiN/virtioN/ideN/sataN, unusedN, hostpciN, usbN, ipconfigN, efidiskN, tpmstateN, serialN, audioN, rng0. LXC: hostname, description, tags, onboot, protection, startup, cores, cpulimit, cpuunits, memory, swap, unprivileged, features, netN, unusedN. Other keys are dropped.",
+        "properties": {
+          "delete": {
+            "type": "string",
+            "description": "Comma-separated keys to remove"
+          },
+          "revert": {
+            "type": "string",
+            "description": "Comma-separated pending changes to undo"
+          },
+          "digest": {
+            "type": "string",
+            "description": "Config digest the change was prepared on; required to stay current when an optical drive changes"
+          }
+        },
+        "additionalProperties": true
+      },
+      "VmCloneRequest": {
+        "type": "object",
+        "description": "Other Proxmox clone parameters pass through.",
+        "required": [
+          "newid"
+        ],
+        "properties": {
+          "newid": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "minimum": 100,
+            "description": "Id of the clone"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "pool": {
+            "type": "string"
+          },
+          "snapname": {
+            "type": "string"
+          },
+          "storage": {
+            "type": "string"
+          },
+          "format": {
+            "type": "string",
+            "enum": [
+              "raw",
+              "qcow2",
+              "vmdk"
+            ]
+          },
+          "full": {
+            "type": [
+              "boolean",
+              "number"
+            ]
+          },
+          "target": {
+            "type": "string",
+            "description": "Target node"
+          }
+        },
+        "additionalProperties": true
+      },
+      "VmDiskResizeRequest": {
+        "type": "object",
+        "required": [
+          "disk",
+          "size"
+        ],
+        "properties": {
+          "disk": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Disk key, e.g. scsi0"
+          },
+          "size": {
+            "type": "string",
+            "minLength": 1,
+            "description": "New size or growth, e.g. +10G"
+          }
+        }
+      },
+      "VmDiskMoveRequest": {
+        "type": "object",
+        "required": [
+          "disk",
+          "storage"
+        ],
+        "properties": {
+          "disk": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Disk key, e.g. scsi0"
+          },
+          "storage": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Target storage"
+          },
+          "deleteSource": {
+            "type": "boolean",
+            "default": true
+          },
+          "format": {
+            "type": "string"
+          }
+        }
+      },
+      "VmMigrateRequest": {
+        "type": "object",
+        "required": [
+          "target"
+        ],
+        "properties": {
+          "target": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Target node"
+          },
+          "online": {
+            "type": "boolean",
+            "default": true
+          },
+          "targetstorage": {
+            "type": "string"
+          },
+          "withLocalDisks": {
+            "type": "boolean"
+          }
+        }
+      },
+      "VmRemoteMigrateRequest": {
+        "type": "object",
+        "required": [
+          "targetConnectionId",
+          "targetNode",
+          "targetStorage",
+          "targetBridge"
+        ],
+        "properties": {
+          "targetConnectionId": {
+            "type": "string",
+            "description": "Target connection id; must be inside the token perimeter"
+          },
+          "targetNode": {
+            "type": "string"
+          },
+          "targetVmid": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Defaults to the source vmid"
+          },
+          "targetStorage": {
+            "type": "string"
+          },
+          "targetBridge": {
+            "type": "string"
+          },
+          "online": {
+            "type": "boolean",
+            "default": true
+          },
+          "delete": {
+            "type": "boolean",
+            "default": false,
+            "description": "Delete the source VM once the migration succeeded"
+          },
+          "bwlimit": {
+            "type": "number",
+            "description": "KiB/s"
+          },
+          "restore": {
+            "type": "object",
+            "description": "Replay of the prerequisites cleared by remote-migrate/prepare once the VM landed. Ignored when malformed.",
+            "required": [
+              "capture"
+            ],
+            "properties": {
+              "capture": {
+                "type": "object",
+                "description": "Prerequisites removed from the source guest, as captured before removal.",
+                "properties": {
+                  "ha": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "sid": {
+                        "type": "string"
+                      },
+                      "state": {
+                        "type": "string"
+                      },
+                      "group": {
+                        "type": "string"
+                      },
+                      "comment": {
+                        "type": "string"
+                      },
+                      "maxRestart": {
+                        "type": "number"
+                      },
+                      "maxRelocate": {
+                        "type": "number"
+                      },
+                      "failback": {
+                        "type": "number"
+                      },
+                      "autoRebalance": {
+                        "type": "number"
+                      }
+                    }
+                  },
+                  "replication": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "guest": {
+                          "type": "integer"
+                        },
+                        "target": {
+                          "type": "string"
+                        },
+                        "schedule": {
+                          "type": "string"
+                        },
+                        "rate": {
+                          "type": "number"
+                        },
+                        "comment": {
+                          "type": "string"
+                        },
+                        "disable": {
+                          "type": "number"
+                        }
+                      }
+                    }
+                  },
+                  "snapshotsDeleted": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "restoreHa": {
+                "type": "boolean"
+              },
+              "haState": {
+                "type": "string"
+              },
+              "restoreReplication": {
+                "type": "boolean"
+              },
+              "replicationTarget": {
+                "type": "string"
+              },
+              "replicationSchedule": {
+                "type": "string"
+              },
+              "replicationRate": {
+                "type": "number"
+              },
+              "rollbackOnFailure": {
+                "type": "boolean",
+                "description": "Put the capture back on the source if the migration fails"
+              }
+            }
+          }
+        }
+      },
+      "VmRemoteMigrateCheckRequest": {
+        "type": "object",
+        "required": [
+          "targetConnectionId",
+          "targetNode",
+          "targetStorage",
+          "targetBridge"
+        ],
+        "properties": {
+          "targetConnectionId": {
+            "type": "string",
+            "description": "Target connection id; must be inside the token perimeter"
+          },
+          "targetNode": {
+            "type": "string"
+          },
+          "targetStorage": {
+            "type": "string"
+          },
+          "targetBridge": {
+            "type": "string"
+          }
+        }
+      },
+      "VmRemoteMigratePrepareRequest": {
+        "type": "object",
+        "properties": {
+          "removeHa": {
+            "type": "boolean",
+            "default": false
+          },
+          "removeReplication": {
+            "type": "boolean",
+            "default": false
+          },
+          "removeSnapshots": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": "Snapshot names; irreversible"
+          }
+        }
+      },
+      "VmNotesUpdateRequest": {
+        "type": "object",
+        "required": [
+          "content"
+        ],
+        "properties": {
+          "content": {
+            "type": "string"
+          }
+        }
+      },
+      "VmSnapshotCreateRequest": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]+$"
+          },
+          "description": {
+            "type": "string"
+          },
+          "vmstate": {
+            "type": "boolean",
+            "description": "QEMU only: also save the RAM"
+          }
+        }
+      },
+      "VmSnapshotUpdateRequest": {
+        "type": "object",
+        "properties": {
+          "description": {
+            "type": "string"
+          }
+        }
+      },
       "VmsResponse": {
         "type": "object",
         "properties": {
@@ -407,6 +825,798 @@
           "data": {
             "type": "string",
             "description": "Proxmox task UPID"
+          }
+        }
+      },
+      "VmCreateResponse": {
+        "type": "object",
+        "description": "A Proxmox task was started. `data` is its UPID; follow it with GET /api/v1/tasks/{connectionId}/{node}/{upid}.",
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "type": "string",
+            "description": "Proxmox task UPID"
+          },
+          "message": {
+            "type": "string"
+          },
+          "allocatedIps": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "VmPowerResponse": {
+        "type": "object",
+        "description": "A Proxmox task was started. `data` is its UPID; follow it with GET /api/v1/tasks/{connectionId}/{node}/{upid}.",
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "type": "string",
+            "description": "Proxmox task UPID"
+          },
+          "node": {
+            "type": "string"
+          },
+          "connId": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "VmTaskMessageResponse": {
+        "type": "object",
+        "description": "A Proxmox task was started. `data` is its UPID; follow it with GET /api/v1/tasks/{connectionId}/{node}/{upid}.",
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "type": "string",
+            "description": "Proxmox task UPID"
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "VmSuccessTaskResponse": {
+        "type": "object",
+        "description": "A Proxmox task was started. `data` is its UPID; follow it with GET /api/v1/tasks/{connectionId}/{node}/{upid}.",
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "type": "string",
+            "description": "Proxmox task UPID"
+          },
+          "success": {
+            "type": "boolean"
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "VmDeleteResponse": {
+        "type": "object",
+        "description": "A Proxmox task was started. `data` is its UPID; follow it with GET /api/v1/tasks/{connectionId}/{node}/{upid}.",
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "type": "string",
+            "description": "Proxmox task UPID"
+          },
+          "success": {
+            "type": "boolean"
+          },
+          "message": {
+            "type": "string"
+          },
+          "warning": {
+            "type": "string",
+            "description": "Present when the IPAM addresses could not be released"
+          }
+        }
+      },
+      "VmRemoteMigrateResponse": {
+        "type": "object",
+        "description": "A Proxmox task was started. `data` is its UPID; follow it with GET /api/v1/tasks/{connectionId}/{node}/{upid}.",
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "type": "string",
+            "description": "Proxmox task UPID"
+          },
+          "success": {
+            "type": "boolean"
+          },
+          "message": {
+            "type": "string"
+          },
+          "details": {
+            "type": "object",
+            "properties": {
+              "sourceCluster": {
+                "type": "string"
+              },
+              "targetCluster": {
+                "type": "string"
+              },
+              "targetNode": {
+                "type": "string"
+              },
+              "targetStorage": {
+                "type": "string"
+              },
+              "targetBridge": {
+                "type": "string"
+              },
+              "online": {
+                "type": "boolean"
+              },
+              "deleteSource": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
+      },
+      "VmConfigUpdateResponse": {
+        "type": "object",
+        "description": "200 once Proxmox applied the change. 202 with `pending: true` when its task outlived the request: follow `upid` on `node` with GET /api/v1/tasks/{connectionId}/{node}/{upid}.",
+        "properties": {
+          "data": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Proxmox task UPID, null when Proxmox ran no task"
+          },
+          "success": {
+            "type": "boolean"
+          },
+          "pending": {
+            "type": "boolean"
+          },
+          "upid": {
+            "type": "string"
+          },
+          "node": {
+            "type": "string"
+          }
+        }
+      },
+      "VmConfigResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "description": "Effective Proxmox configuration keys",
+            "properties": {
+              "pending": {
+                "type": "object",
+                "description": "Changes waiting for a reboot",
+                "additionalProperties": true
+              }
+            },
+            "additionalProperties": true
+          },
+          "movedTo": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Current node when the guest left the URL node"
+          }
+        }
+      },
+      "VmLockStateResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "locked": {
+                "type": "boolean"
+              },
+              "lockType": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          }
+        }
+      },
+      "VmUnlockResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "unlocked": {
+                "type": "boolean"
+              },
+              "reason": {
+                "type": "string",
+                "enum": [
+                  "not_locked"
+                ]
+              },
+              "previousLock": {
+                "type": "string"
+              },
+              "method": {
+                "type": "string",
+                "enum": [
+                  "ssh"
+                ]
+              },
+              "output": {
+                "type": "string"
+              }
+            }
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "VmRemoteMigrateCheckResponse": {
+        "type": "object",
+        "properties": {
+          "valid": {
+            "type": "boolean"
+          },
+          "issues": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "error",
+                    "warning"
+                  ]
+                },
+                "code": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                },
+                "details": {
+                  "type": "string"
+                },
+                "context": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": [
+                      "string",
+                      "number"
+                    ]
+                  }
+                },
+                "remediation": {
+                  "type": "object",
+                  "description": "Present when remote-migrate/prepare can clear this blocker"
+                },
+                "siteRecovery": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "summary": {
+            "type": "object",
+            "properties": {
+              "errors": {
+                "type": "integer"
+              },
+              "warnings": {
+                "type": "integer"
+              }
+            }
+          }
+        }
+      },
+      "VmMigratePrerequisitesResponse": {
+        "type": "object",
+        "properties": {
+          "ha": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "sid": {
+                "type": "string"
+              },
+              "state": {
+                "type": "string"
+              },
+              "group": {
+                "type": "string"
+              },
+              "comment": {
+                "type": "string"
+              },
+              "maxRestart": {
+                "type": "number"
+              },
+              "maxRelocate": {
+                "type": "number"
+              },
+              "failback": {
+                "type": "number"
+              },
+              "autoRebalance": {
+                "type": "number"
+              }
+            }
+          },
+          "replication": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "guest": {
+                  "type": "integer"
+                },
+                "target": {
+                  "type": "string"
+                },
+                "schedule": {
+                  "type": "string"
+                },
+                "rate": {
+                  "type": "number"
+                },
+                "comment": {
+                  "type": "string"
+                },
+                "disable": {
+                  "type": "number"
+                }
+              }
+            }
+          },
+          "snapshots": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "siteRecoveryJobs": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "otherVmids": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer"
+                  }
+                },
+                "byTag": {
+                  "type": "boolean"
+                }
+              }
+            }
+          }
+        }
+      },
+      "VmRemoteMigratePrepareResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "capture": {
+            "type": "object",
+            "description": "Prerequisites removed from the source guest, as captured before removal.",
+            "properties": {
+              "ha": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "sid": {
+                    "type": "string"
+                  },
+                  "state": {
+                    "type": "string"
+                  },
+                  "group": {
+                    "type": "string"
+                  },
+                  "comment": {
+                    "type": "string"
+                  },
+                  "maxRestart": {
+                    "type": "number"
+                  },
+                  "maxRelocate": {
+                    "type": "number"
+                  },
+                  "failback": {
+                    "type": "number"
+                  },
+                  "autoRebalance": {
+                    "type": "number"
+                  }
+                }
+              },
+              "replication": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "guest": {
+                      "type": "integer"
+                    },
+                    "target": {
+                      "type": "string"
+                    },
+                    "schedule": {
+                      "type": "string"
+                    },
+                    "rate": {
+                      "type": "number"
+                    },
+                    "comment": {
+                      "type": "string"
+                    },
+                    "disable": {
+                      "type": "number"
+                    }
+                  }
+                }
+              },
+              "snapshotsDeleted": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "cleared": {
+            "type": "object",
+            "properties": {
+              "ha": {
+                "type": "boolean"
+              },
+              "replicationJobs": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "snapshots": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "pending": {
+            "type": "object",
+            "properties": {
+              "replicationJobs": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "VmNotesResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "content": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "VmNotesUpdateResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "success": {
+                "type": "boolean"
+              },
+              "content": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "VmSnapshotsResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "snapshots": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "description": {
+                      "type": "string"
+                    },
+                    "snaptime": {
+                      "type": "integer",
+                      "description": "Epoch seconds"
+                    },
+                    "vmstate": {
+                      "type": [
+                        "boolean",
+                        "integer"
+                      ]
+                    },
+                    "parent": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              },
+              "count": {
+                "type": "integer"
+              }
+            }
+          }
+        }
+      },
+      "VmSnapshotTaskResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "success": {
+                "type": "boolean"
+              },
+              "upid": {
+                "type": "string",
+                "description": "Proxmox task UPID; follow it with GET /api/v1/tasks/{connectionId}/{node}/{upid}"
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "VmSnapshotUpdateResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "success": {
+                "type": "boolean"
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "VmTasksResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "tasks": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "upid": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "running",
+                        "success",
+                        "warning",
+                        "error"
+                      ]
+                    },
+                    "statusText": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "starttime": {
+                      "type": "integer"
+                    },
+                    "endtime": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "duration": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "durationFormatted": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "user": {
+                      "type": "string"
+                    },
+                    "node": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "count": {
+                "type": "integer"
+              }
+            }
+          }
+        }
+      },
+      "TaskStatusResponse": {
+        "type": "object",
+        "properties": {
+          "upid": {
+            "type": "string"
+          },
+          "node": {
+            "type": "string"
+          },
+          "type": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Task object id, the vmid for guest tasks"
+          },
+          "user": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "description": "`running` or `stopped`"
+          },
+          "exitstatus": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`OK` on success"
+          },
+          "failureReason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "starttime": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "endtime": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "duration": {
+            "type": "string"
+          },
+          "durationSec": {
+            "type": "integer"
+          },
+          "progress": {
+            "type": "number"
+          },
+          "message": {
+            "type": "string"
+          },
+          "speed": {
+            "type": "string"
+          },
+          "eta": {
+            "type": "string"
+          },
+          "totalLogLines": {
+            "type": "integer"
+          },
+          "logs": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "n": {
+                  "type": "integer"
+                },
+                "t": {
+                  "type": "string"
+                }
+              }
+            }
           }
         }
       },
@@ -1537,6 +2747,4709 @@
                 "example": {
                   "error": "Route not available to API tokens",
                   "route": "/api/v1/public/health"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "POST"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/connections/{id}/guests/{type}/{node}": {
+      "post": {
+        "operationId": "vm-create",
+        "summary": "Create a VM or a container",
+        "description": "Creates a QEMU VM ({type} = qemu) or an LXC container ({type} = lxc) on {node}. The body is the Proxmox create parameter set, forwarded once the vDC rules have run: a vDC tenant gets its pool, CPU policy, storage, network and quota enforced, and an IPAM address injected on managed bridges. Setting a NIC MAC or VLAN as a vDC tenant also needs vm.config.nic.mac / vm.config.nic.vlan, which no scope grants.",
+        "tags": [
+          "VMs"
+        ],
+        "x-required-scopes": [
+          "vms:write"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Raw connection id; must be inside the token connection perimeter."
+          },
+          {
+            "name": "type",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          },
+          {
+            "name": "node",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "description": "Proxmox create parameters (qm create for qemu, pct create for lxc), forwarded as JSON once the vDC rules have run. A vDC tenant gets its pool and CPU model applied when absent.",
+                "required": [
+                  "vmid"
+                ],
+                "properties": {
+                  "vmid": {
+                    "type": [
+                      "integer",
+                      "string"
+                    ],
+                    "description": "New guest id"
+                  },
+                  "pool": {
+                    "type": "string",
+                    "description": "Resource pool; required for a caller scoped to several pools"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "cores": {
+                    "type": [
+                      "integer",
+                      "string"
+                    ]
+                  },
+                  "sockets": {
+                    "type": [
+                      "integer",
+                      "string"
+                    ]
+                  },
+                  "memory": {
+                    "type": [
+                      "integer",
+                      "string"
+                    ],
+                    "description": "MiB"
+                  },
+                  "cpu": {
+                    "type": "string"
+                  },
+                  "nameserver": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": true
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "A Proxmox task was started. `data` is its UPID; follow it with GET /api/v1/tasks/{connectionId}/{node}/{upid}.",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "string",
+                      "description": "Proxmox task UPID"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "allocatedIps": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/connections/{id}/guests/{type}/{node}"
+                    }
+                  },
+                  "perimeter": {
+                    "value": {
+                      "error": "Connection not in token scope",
+                      "connection": "conn-1"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "DELETE"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/connections/{id}/guests/{type}/{node}/{vmid}/config": {
+      "get": {
+        "operationId": "vm-config-get",
+        "summary": "Guest configuration",
+        "description": "The effective Proxmox configuration of the guest, with `pending` listing the changes that wait for a reboot. When the guest has moved to another node of the cluster since the URL was built, the configuration is read from its current node and `movedTo` names it.",
+        "tags": [
+          "VMs"
+        ],
+        "x-required-scopes": [
+          "vms:read",
+          "vms:power",
+          "vms:write",
+          "vms:snapshot",
+          "vms:migrate",
+          "vms:delete"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Raw connection id; must be inside the token connection perimeter."
+          },
+          {
+            "name": "type",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          },
+          {
+            "name": "node",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          },
+          {
+            "name": "vmid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "description": "Effective Proxmox configuration keys",
+                      "properties": {
+                        "pending": {
+                          "type": "object",
+                          "description": "Changes waiting for a reboot",
+                          "additionalProperties": true
+                        }
+                      },
+                      "additionalProperties": true
+                    },
+                    "movedTo": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "Current node when the guest left the URL node"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/connections/{id}/guests/{type}/{node}/{vmid}/config"
+                    }
+                  },
+                  "perimeter": {
+                    "value": {
+                      "error": "Connection not in token scope",
+                      "connection": "conn-1"
+                    }
+                  },
+                  "guestScope": {
+                    "value": {
+                      "error": "Guest outside your vDC scope"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "POST"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "vm-config-update",
+        "summary": "Update the guest configuration",
+        "description": "Writes the given Proxmox configuration keys (CPU, memory, disks, NICs, options, cloud-init, `delete`, `revert`). Keys the route does not forward for this guest type are dropped. Answers 202 with `pending: true` when the Proxmox task outlives the request; follow its UPID. Changing a NIC MAC or VLAN as a vDC tenant also needs vm.config.nic.mac / vm.config.nic.vlan, which no scope grants.",
+        "tags": [
+          "VMs"
+        ],
+        "x-required-scopes": [
+          "vms:write"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Raw connection id; must be inside the token connection perimeter."
+          },
+          {
+            "name": "type",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          },
+          {
+            "name": "node",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          },
+          {
+            "name": "vmid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "description": "Proxmox configuration keys to write. QEMU: name, description, tags, onboot, protection, startup, cores, sockets, cpu, vcpus, cpulimit, cpuunits, numa, memory, balloon, shares, boot, bootdisk, bios, machine, agent, scsihw, vga, ostype, hotplug, tablet, localtime, freeze, kvm, acpi, args, cloud-init keys, netN, scsiN/virtioN/ideN/sataN, unusedN, hostpciN, usbN, ipconfigN, efidiskN, tpmstateN, serialN, audioN, rng0. LXC: hostname, description, tags, onboot, protection, startup, cores, cpulimit, cpuunits, memory, swap, unprivileged, features, netN, unusedN. Other keys are dropped.",
+                "properties": {
+                  "delete": {
+                    "type": "string",
+                    "description": "Comma-separated keys to remove"
+                  },
+                  "revert": {
+                    "type": "string",
+                    "description": "Comma-separated pending changes to undo"
+                  },
+                  "digest": {
+                    "type": "string",
+                    "description": "Config digest the change was prepared on; required to stay current when an optical drive changes"
+                  }
+                },
+                "additionalProperties": true
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "200 once Proxmox applied the change. 202 with `pending: true` when its task outlived the request: follow `upid` on `node` with GET /api/v1/tasks/{connectionId}/{node}/{upid}.",
+                  "properties": {
+                    "data": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "Proxmox task UPID, null when Proxmox ran no task"
+                    },
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "pending": {
+                      "type": "boolean"
+                    },
+                    "upid": {
+                      "type": "string"
+                    },
+                    "node": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/connections/{id}/guests/{type}/{node}/{vmid}/config"
+                    }
+                  },
+                  "perimeter": {
+                    "value": {
+                      "error": "Connection not in token scope",
+                      "connection": "conn-1"
+                    }
+                  },
+                  "guestScope": {
+                    "value": {
+                      "error": "Guest outside your vDC scope"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "POST"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/connections/{id}/guests/{type}/{node}/{vmid}/{action}": {
+      "post": {
+        "operationId": "vm-power",
+        "summary": "Power action on a guest",
+        "description": "Starts, stops (hard), shuts down (ACPI), reboots, resets, suspends or resumes the guest. No body.",
+        "tags": [
+          "VMs"
+        ],
+        "x-required-scopes": [
+          "vms:power"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Raw connection id; must be inside the token connection perimeter."
+          },
+          {
+            "name": "type",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          },
+          {
+            "name": "node",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          },
+          {
+            "name": "vmid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          },
+          {
+            "name": "action",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "start",
+                "stop",
+                "shutdown",
+                "reboot",
+                "reset",
+                "suspend",
+                "resume"
+              ]
+            },
+            "description": "Path parameter."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "A Proxmox task was started. `data` is its UPID; follow it with GET /api/v1/tasks/{connectionId}/{node}/{upid}.",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "string",
+                      "description": "Proxmox task UPID"
+                    },
+                    "node": {
+                      "type": "string"
+                    },
+                    "connId": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/connections/{id}/guests/{type}/{node}/{vmid}/{action}"
+                    }
+                  },
+                  "perimeter": {
+                    "value": {
+                      "error": "Connection not in token scope",
+                      "connection": "conn-1"
+                    }
+                  },
+                  "guestScope": {
+                    "value": {
+                      "error": "Guest outside your vDC scope"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "DELETE"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/connections/{id}/guests/{type}/{node}/{vmid}/clone": {
+      "post": {
+        "operationId": "vm-clone",
+        "summary": "Clone a guest",
+        "description": "Clones the guest (or a template) to `newid`. Other Proxmox clone parameters pass through. A vDC tenant clone stays in its pool, storages and quota.",
+        "tags": [
+          "VMs"
+        ],
+        "x-required-scopes": [
+          "vms:write"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Raw connection id; must be inside the token connection perimeter."
+          },
+          {
+            "name": "type",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          },
+          {
+            "name": "node",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          },
+          {
+            "name": "vmid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "description": "Other Proxmox clone parameters pass through.",
+                "required": [
+                  "newid"
+                ],
+                "properties": {
+                  "newid": {
+                    "type": [
+                      "integer",
+                      "string"
+                    ],
+                    "minimum": 100,
+                    "description": "Id of the clone"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "pool": {
+                    "type": "string"
+                  },
+                  "snapname": {
+                    "type": "string"
+                  },
+                  "storage": {
+                    "type": "string"
+                  },
+                  "format": {
+                    "type": "string",
+                    "enum": [
+                      "raw",
+                      "qcow2",
+                      "vmdk"
+                    ]
+                  },
+                  "full": {
+                    "type": [
+                      "boolean",
+                      "number"
+                    ]
+                  },
+                  "target": {
+                    "type": "string",
+                    "description": "Target node"
+                  }
+                },
+                "additionalProperties": true
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "A Proxmox task was started. `data` is its UPID; follow it with GET /api/v1/tasks/{connectionId}/{node}/{upid}.",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "string",
+                      "description": "Proxmox task UPID"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/connections/{id}/guests/{type}/{node}/{vmid}/clone"
+                    }
+                  },
+                  "perimeter": {
+                    "value": {
+                      "error": "Connection not in token scope",
+                      "connection": "conn-1"
+                    }
+                  },
+                  "guestScope": {
+                    "value": {
+                      "error": "Guest outside your vDC scope"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "DELETE"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/connections/{id}/guests/{type}/{node}/{vmid}/template": {
+      "post": {
+        "operationId": "vm-template",
+        "summary": "Convert a guest to a template",
+        "description": "Irreversible. The guest must be stopped. No body.",
+        "tags": [
+          "VMs"
+        ],
+        "x-required-scopes": [
+          "vms:write"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Raw connection id; must be inside the token connection perimeter."
+          },
+          {
+            "name": "type",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          },
+          {
+            "name": "node",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          },
+          {
+            "name": "vmid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "A Proxmox task was started. `data` is its UPID; follow it with GET /api/v1/tasks/{connectionId}/{node}/{upid}.",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "string",
+                      "description": "Proxmox task UPID"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/connections/{id}/guests/{type}/{node}/{vmid}/template"
+                    }
+                  },
+                  "perimeter": {
+                    "value": {
+                      "error": "Connection not in token scope",
+                      "connection": "conn-1"
+                    }
+                  },
+                  "guestScope": {
+                    "value": {
+                      "error": "Guest outside your vDC scope"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "DELETE"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/connections/{id}/guests/{type}/{node}/{vmid}/disk/resize": {
+      "post": {
+        "operationId": "vm-disk-resize",
+        "summary": "Resize a guest disk",
+        "description": "Grows a disk (e.g. size `+10G`). A vDC tenant growth counts against its storage quota.",
+        "tags": [
+          "VMs"
+        ],
+        "x-required-scopes": [
+          "vms:write"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Raw connection id; must be inside the token connection perimeter."
+          },
+          {
+            "name": "type",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          },
+          {
+            "name": "node",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          },
+          {
+            "name": "vmid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "disk",
+                  "size"
+                ],
+                "properties": {
+                  "disk": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Disk key, e.g. scsi0"
+                  },
+                  "size": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "New size or growth, e.g. +10G"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "A Proxmox task was started. `data` is its UPID; follow it with GET /api/v1/tasks/{connectionId}/{node}/{upid}.",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "string",
+                      "description": "Proxmox task UPID"
+                    },
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/connections/{id}/guests/{type}/{node}/{vmid}/disk/resize"
+                    }
+                  },
+                  "perimeter": {
+                    "value": {
+                      "error": "Connection not in token scope",
+                      "connection": "conn-1"
+                    }
+                  },
+                  "guestScope": {
+                    "value": {
+                      "error": "Guest outside your vDC scope"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "DELETE"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/connections/{id}/guests/{type}/{node}/{vmid}/disk/move": {
+      "post": {
+        "operationId": "vm-disk-move",
+        "summary": "Move a guest disk to another storage",
+        "description": "Moves a disk to `storage`. A vDC tenant may only target its own writable storages, within quota.",
+        "tags": [
+          "VMs"
+        ],
+        "x-required-scopes": [
+          "vms:write"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Raw connection id; must be inside the token connection perimeter."
+          },
+          {
+            "name": "type",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          },
+          {
+            "name": "node",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          },
+          {
+            "name": "vmid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "disk",
+                  "storage"
+                ],
+                "properties": {
+                  "disk": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Disk key, e.g. scsi0"
+                  },
+                  "storage": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Target storage"
+                  },
+                  "deleteSource": {
+                    "type": "boolean",
+                    "default": true
+                  },
+                  "format": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "A Proxmox task was started. `data` is its UPID; follow it with GET /api/v1/tasks/{connectionId}/{node}/{upid}.",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "string",
+                      "description": "Proxmox task UPID"
+                    },
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/connections/{id}/guests/{type}/{node}/{vmid}/disk/move"
+                    }
+                  },
+                  "perimeter": {
+                    "value": {
+                      "error": "Connection not in token scope",
+                      "connection": "conn-1"
+                    }
+                  },
+                  "guestScope": {
+                    "value": {
+                      "error": "Guest outside your vDC scope"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "DELETE"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/connections/{id}/guests/{type}/{node}/{vmid}/unlock": {
+      "get": {
+        "operationId": "vm-unlock-get",
+        "summary": "Guest lock state",
+        "description": "Whether the guest carries a Proxmox lock (backup, migrate, snapshot, ...) and which one.",
+        "tags": [
+          "VMs"
+        ],
+        "x-required-scopes": [
+          "vms:read",
+          "vms:power",
+          "vms:write",
+          "vms:snapshot",
+          "vms:migrate",
+          "vms:delete"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Raw connection id; must be inside the token connection perimeter."
+          },
+          {
+            "name": "type",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          },
+          {
+            "name": "node",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          },
+          {
+            "name": "vmid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "locked": {
+                          "type": "boolean"
+                        },
+                        "lockType": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/connections/{id}/guests/{type}/{node}/{vmid}/unlock"
+                    }
+                  },
+                  "perimeter": {
+                    "value": {
+                      "error": "Connection not in token scope",
+                      "connection": "conn-1"
+                    }
+                  },
+                  "guestScope": {
+                    "value": {
+                      "error": "Guest outside your vDC scope"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "DELETE"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "vm-unlock",
+        "summary": "Remove the lock of a guest",
+        "description": "Runs `qm unlock` / `pct unlock` on the node over SSH. A guest that is not locked answers `unlocked: false`. No body.",
+        "tags": [
+          "VMs"
+        ],
+        "x-required-scopes": [
+          "vms:write"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Raw connection id; must be inside the token connection perimeter."
+          },
+          {
+            "name": "type",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          },
+          {
+            "name": "node",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          },
+          {
+            "name": "vmid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "unlocked": {
+                          "type": "boolean"
+                        },
+                        "reason": {
+                          "type": "string",
+                          "enum": [
+                            "not_locked"
+                          ]
+                        },
+                        "previousLock": {
+                          "type": "string"
+                        },
+                        "method": {
+                          "type": "string",
+                          "enum": [
+                            "ssh"
+                          ]
+                        },
+                        "output": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/connections/{id}/guests/{type}/{node}/{vmid}/unlock"
+                    }
+                  },
+                  "perimeter": {
+                    "value": {
+                      "error": "Connection not in token scope",
+                      "connection": "conn-1"
+                    }
+                  },
+                  "guestScope": {
+                    "value": {
+                      "error": "Guest outside your vDC scope"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "DELETE"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/connections/{id}/guests/{type}/{node}/{vmid}/migrate": {
+      "post": {
+        "operationId": "vm-migrate",
+        "summary": "Migrate a guest to another node of its cluster",
+        "description": "Intra-cluster migration to `target`. Refused while snapshots block the migration.",
+        "tags": [
+          "VMs"
+        ],
+        "x-required-scopes": [
+          "vms:migrate"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Raw connection id; must be inside the token connection perimeter."
+          },
+          {
+            "name": "type",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          },
+          {
+            "name": "node",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          },
+          {
+            "name": "vmid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "target"
+                ],
+                "properties": {
+                  "target": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Target node"
+                  },
+                  "online": {
+                    "type": "boolean",
+                    "default": true
+                  },
+                  "targetstorage": {
+                    "type": "string"
+                  },
+                  "withLocalDisks": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "A Proxmox task was started. `data` is its UPID; follow it with GET /api/v1/tasks/{connectionId}/{node}/{upid}.",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "string",
+                      "description": "Proxmox task UPID"
+                    },
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/connections/{id}/guests/{type}/{node}/{vmid}/migrate"
+                    }
+                  },
+                  "perimeter": {
+                    "value": {
+                      "error": "Connection not in token scope",
+                      "connection": "conn-1"
+                    }
+                  },
+                  "guestScope": {
+                    "value": {
+                      "error": "Guest outside your vDC scope"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "DELETE"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/connections/{id}/guests/{type}/{node}/{vmid}/remote-migrate": {
+      "post": {
+        "operationId": "vm-remote-migrate",
+        "summary": "Migrate a VM to another cluster",
+        "description": "Cross-cluster migration (Proxmox remote_migrate) of a QEMU VM. `targetConnectionId` must also be inside the token perimeter. Reserved to the provider and to the MSP tenant that owns both connections.",
+        "tags": [
+          "VMs"
+        ],
+        "x-required-scopes": [
+          "vms:migrate"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Raw connection id; must be inside the token connection perimeter."
+          },
+          {
+            "name": "type",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          },
+          {
+            "name": "node",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          },
+          {
+            "name": "vmid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "targetConnectionId",
+                  "targetNode",
+                  "targetStorage",
+                  "targetBridge"
+                ],
+                "properties": {
+                  "targetConnectionId": {
+                    "type": "string",
+                    "description": "Target connection id; must be inside the token perimeter"
+                  },
+                  "targetNode": {
+                    "type": "string"
+                  },
+                  "targetVmid": {
+                    "type": [
+                      "integer",
+                      "string"
+                    ],
+                    "description": "Defaults to the source vmid"
+                  },
+                  "targetStorage": {
+                    "type": "string"
+                  },
+                  "targetBridge": {
+                    "type": "string"
+                  },
+                  "online": {
+                    "type": "boolean",
+                    "default": true
+                  },
+                  "delete": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Delete the source VM once the migration succeeded"
+                  },
+                  "bwlimit": {
+                    "type": "number",
+                    "description": "KiB/s"
+                  },
+                  "restore": {
+                    "type": "object",
+                    "description": "Replay of the prerequisites cleared by remote-migrate/prepare once the VM landed. Ignored when malformed.",
+                    "required": [
+                      "capture"
+                    ],
+                    "properties": {
+                      "capture": {
+                        "type": "object",
+                        "description": "Prerequisites removed from the source guest, as captured before removal.",
+                        "properties": {
+                          "ha": {
+                            "type": [
+                              "object",
+                              "null"
+                            ],
+                            "properties": {
+                              "sid": {
+                                "type": "string"
+                              },
+                              "state": {
+                                "type": "string"
+                              },
+                              "group": {
+                                "type": "string"
+                              },
+                              "comment": {
+                                "type": "string"
+                              },
+                              "maxRestart": {
+                                "type": "number"
+                              },
+                              "maxRelocate": {
+                                "type": "number"
+                              },
+                              "failback": {
+                                "type": "number"
+                              },
+                              "autoRebalance": {
+                                "type": "number"
+                              }
+                            }
+                          },
+                          "replication": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "guest": {
+                                  "type": "integer"
+                                },
+                                "target": {
+                                  "type": "string"
+                                },
+                                "schedule": {
+                                  "type": "string"
+                                },
+                                "rate": {
+                                  "type": "number"
+                                },
+                                "comment": {
+                                  "type": "string"
+                                },
+                                "disable": {
+                                  "type": "number"
+                                }
+                              }
+                            }
+                          },
+                          "snapshotsDeleted": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        }
+                      },
+                      "restoreHa": {
+                        "type": "boolean"
+                      },
+                      "haState": {
+                        "type": "string"
+                      },
+                      "restoreReplication": {
+                        "type": "boolean"
+                      },
+                      "replicationTarget": {
+                        "type": "string"
+                      },
+                      "replicationSchedule": {
+                        "type": "string"
+                      },
+                      "replicationRate": {
+                        "type": "number"
+                      },
+                      "rollbackOnFailure": {
+                        "type": "boolean",
+                        "description": "Put the capture back on the source if the migration fails"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "A Proxmox task was started. `data` is its UPID; follow it with GET /api/v1/tasks/{connectionId}/{node}/{upid}.",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "string",
+                      "description": "Proxmox task UPID"
+                    },
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "type": "object",
+                      "properties": {
+                        "sourceCluster": {
+                          "type": "string"
+                        },
+                        "targetCluster": {
+                          "type": "string"
+                        },
+                        "targetNode": {
+                          "type": "string"
+                        },
+                        "targetStorage": {
+                          "type": "string"
+                        },
+                        "targetBridge": {
+                          "type": "string"
+                        },
+                        "online": {
+                          "type": "boolean"
+                        },
+                        "deleteSource": {
+                          "type": "boolean"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/connections/{id}/guests/{type}/{node}/{vmid}/remote-migrate"
+                    }
+                  },
+                  "perimeter": {
+                    "value": {
+                      "error": "Connection not in token scope",
+                      "connection": "conn-1"
+                    }
+                  },
+                  "guestScope": {
+                    "value": {
+                      "error": "Guest outside your vDC scope"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "DELETE"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/connections/{id}/guests/{type}/{node}/{vmid}/remote-migrate/check": {
+      "post": {
+        "operationId": "vm-remote-migrate-check",
+        "summary": "Preflight a cross-cluster migration",
+        "description": "Validates a cross-cluster migration before launching it: blocking errors and warnings (HA, replication, snapshots, CPU, storage, bridge, VMID collision). Changes nothing. `targetConnectionId` must also be inside the token perimeter.",
+        "tags": [
+          "VMs"
+        ],
+        "x-required-scopes": [
+          "vms:migrate"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Raw connection id; must be inside the token connection perimeter."
+          },
+          {
+            "name": "type",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          },
+          {
+            "name": "node",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          },
+          {
+            "name": "vmid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "targetConnectionId",
+                  "targetNode",
+                  "targetStorage",
+                  "targetBridge"
+                ],
+                "properties": {
+                  "targetConnectionId": {
+                    "type": "string",
+                    "description": "Target connection id; must be inside the token perimeter"
+                  },
+                  "targetNode": {
+                    "type": "string"
+                  },
+                  "targetStorage": {
+                    "type": "string"
+                  },
+                  "targetBridge": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "valid": {
+                      "type": "boolean"
+                    },
+                    "issues": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "error",
+                              "warning"
+                            ]
+                          },
+                          "code": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          },
+                          "details": {
+                            "type": "string"
+                          },
+                          "context": {
+                            "type": "object",
+                            "additionalProperties": {
+                              "type": [
+                                "string",
+                                "number"
+                              ]
+                            }
+                          },
+                          "remediation": {
+                            "type": "object",
+                            "description": "Present when remote-migrate/prepare can clear this blocker"
+                          },
+                          "siteRecovery": {
+                            "type": "object"
+                          }
+                        }
+                      }
+                    },
+                    "summary": {
+                      "type": "object",
+                      "properties": {
+                        "errors": {
+                          "type": "integer"
+                        },
+                        "warnings": {
+                          "type": "integer"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/connections/{id}/guests/{type}/{node}/{vmid}/remote-migrate/check"
+                    }
+                  },
+                  "perimeter": {
+                    "value": {
+                      "error": "Connection not in token scope",
+                      "connection": "conn-1"
+                    }
+                  },
+                  "guestScope": {
+                    "value": {
+                      "error": "Guest outside your vDC scope"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "DELETE"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/connections/{id}/guests/{type}/{node}/{vmid}/remote-migrate/prepare": {
+      "get": {
+        "operationId": "vm-remote-migrate-prepare-get",
+        "summary": "Cross-cluster migration prerequisites of a VM",
+        "description": "The HA resource, replication jobs, snapshots and Site Recovery jobs that stand in the way of a cross-cluster migration.",
+        "tags": [
+          "VMs"
+        ],
+        "x-required-scopes": [
+          "vms:read",
+          "vms:power",
+          "vms:write",
+          "vms:snapshot",
+          "vms:migrate",
+          "vms:delete"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Raw connection id; must be inside the token connection perimeter."
+          },
+          {
+            "name": "type",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          },
+          {
+            "name": "node",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          },
+          {
+            "name": "vmid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ha": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "sid": {
+                          "type": "string"
+                        },
+                        "state": {
+                          "type": "string"
+                        },
+                        "group": {
+                          "type": "string"
+                        },
+                        "comment": {
+                          "type": "string"
+                        },
+                        "maxRestart": {
+                          "type": "number"
+                        },
+                        "maxRelocate": {
+                          "type": "number"
+                        },
+                        "failback": {
+                          "type": "number"
+                        },
+                        "autoRebalance": {
+                          "type": "number"
+                        }
+                      }
+                    },
+                    "replication": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "guest": {
+                            "type": "integer"
+                          },
+                          "target": {
+                            "type": "string"
+                          },
+                          "schedule": {
+                            "type": "string"
+                          },
+                          "rate": {
+                            "type": "number"
+                          },
+                          "comment": {
+                            "type": "string"
+                          },
+                          "disable": {
+                            "type": "number"
+                          }
+                        }
+                      }
+                    },
+                    "snapshots": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "siteRecoveryJobs": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "otherVmids": {
+                            "type": "array",
+                            "items": {
+                              "type": "integer"
+                            }
+                          },
+                          "byTag": {
+                            "type": "boolean"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/connections/{id}/guests/{type}/{node}/{vmid}/remote-migrate/prepare"
+                    }
+                  },
+                  "perimeter": {
+                    "value": {
+                      "error": "Connection not in token scope",
+                      "connection": "conn-1"
+                    }
+                  },
+                  "guestScope": {
+                    "value": {
+                      "error": "Guest outside your vDC scope"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "DELETE"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "vm-remote-migrate-prepare",
+        "summary": "Clear cross-cluster migration prerequisites",
+        "description": "Captures, then removes, the requested blockers: HA resource and replication jobs (also need node.manage on the connection) and the named snapshots (also need vm.snapshot, irreversible). The capture is returned so the migration can restore it.",
+        "tags": [
+          "VMs"
+        ],
+        "x-required-scopes": [
+          "vms:migrate"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Raw connection id; must be inside the token connection perimeter."
+          },
+          {
+            "name": "type",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          },
+          {
+            "name": "node",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          },
+          {
+            "name": "vmid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "removeHa": {
+                    "type": "boolean",
+                    "default": false
+                  },
+                  "removeReplication": {
+                    "type": "boolean",
+                    "default": false
+                  },
+                  "removeSnapshots": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "description": "Snapshot names; irreversible"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "capture": {
+                      "type": "object",
+                      "description": "Prerequisites removed from the source guest, as captured before removal.",
+                      "properties": {
+                        "ha": {
+                          "type": [
+                            "object",
+                            "null"
+                          ],
+                          "properties": {
+                            "sid": {
+                              "type": "string"
+                            },
+                            "state": {
+                              "type": "string"
+                            },
+                            "group": {
+                              "type": "string"
+                            },
+                            "comment": {
+                              "type": "string"
+                            },
+                            "maxRestart": {
+                              "type": "number"
+                            },
+                            "maxRelocate": {
+                              "type": "number"
+                            },
+                            "failback": {
+                              "type": "number"
+                            },
+                            "autoRebalance": {
+                              "type": "number"
+                            }
+                          }
+                        },
+                        "replication": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "guest": {
+                                "type": "integer"
+                              },
+                              "target": {
+                                "type": "string"
+                              },
+                              "schedule": {
+                                "type": "string"
+                              },
+                              "rate": {
+                                "type": "number"
+                              },
+                              "comment": {
+                                "type": "string"
+                              },
+                              "disable": {
+                                "type": "number"
+                              }
+                            }
+                          }
+                        },
+                        "snapshotsDeleted": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    },
+                    "cleared": {
+                      "type": "object",
+                      "properties": {
+                        "ha": {
+                          "type": "boolean"
+                        },
+                        "replicationJobs": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "snapshots": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    },
+                    "pending": {
+                      "type": "object",
+                      "properties": {
+                        "replicationJobs": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    },
+                    "warnings": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/connections/{id}/guests/{type}/{node}/{vmid}/remote-migrate/prepare"
+                    }
+                  },
+                  "perimeter": {
+                    "value": {
+                      "error": "Connection not in token scope",
+                      "connection": "conn-1"
+                    }
+                  },
+                  "guestScope": {
+                    "value": {
+                      "error": "Guest outside your vDC scope"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "DELETE"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/connections/{id}/guests/{type}/{node}/{vmid}": {
+      "delete": {
+        "operationId": "vm-delete",
+        "summary": "Delete a guest",
+        "description": "Destroys the guest. It must be stopped and unlocked. Its IPAM addresses are released.",
+        "tags": [
+          "VMs"
+        ],
+        "x-required-scopes": [
+          "vms:delete"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Raw connection id; must be inside the token connection perimeter."
+          },
+          {
+            "name": "type",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          },
+          {
+            "name": "node",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          },
+          {
+            "name": "vmid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          },
+          {
+            "name": "purge",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Set to '1' to also remove the guest from backup jobs, replication and HA"
+          },
+          {
+            "name": "destroy-unreferenced-disks",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Set to '1' to also destroy disks not referenced in the config"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "A Proxmox task was started. `data` is its UPID; follow it with GET /api/v1/tasks/{connectionId}/{node}/{upid}.",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "string",
+                      "description": "Proxmox task UPID"
+                    },
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "warning": {
+                      "type": "string",
+                      "description": "Present when the IPAM addresses could not be released"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/connections/{id}/guests/{type}/{node}/{vmid}"
+                    }
+                  },
+                  "perimeter": {
+                    "value": {
+                      "error": "Connection not in token scope",
+                      "connection": "conn-1"
+                    }
+                  },
+                  "guestScope": {
+                    "value": {
+                      "error": "Guest outside your vDC scope"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "POST"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/guests/{vmid}/notes": {
+      "get": {
+        "operationId": "vm-notes-get",
+        "summary": "Guest notes",
+        "description": "The guest description (notes). {vmid} is the composite key connId:type:node:vmid.",
+        "tags": [
+          "VMs"
+        ],
+        "x-required-scopes": [
+          "vms:read",
+          "vms:power",
+          "vms:write",
+          "vms:snapshot",
+          "vms:migrate",
+          "vms:delete"
+        ],
+        "parameters": [
+          {
+            "name": "vmid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Composite guest key connId:type:node:vmid; the connection must be inside the token connection perimeter."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "content": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/guests/{vmid}/notes"
+                    }
+                  },
+                  "perimeter": {
+                    "value": {
+                      "error": "Connection not in token scope",
+                      "connection": "conn-1"
+                    }
+                  },
+                  "guestScope": {
+                    "value": {
+                      "error": "Guest outside your vDC scope"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "POST"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "vm-notes-update",
+        "summary": "Update the guest notes",
+        "description": "Replaces the guest description (notes). {vmid} is the composite key connId:type:node:vmid.",
+        "tags": [
+          "VMs"
+        ],
+        "x-required-scopes": [
+          "vms:write"
+        ],
+        "parameters": [
+          {
+            "name": "vmid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Composite guest key connId:type:node:vmid; the connection must be inside the token connection perimeter."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "content"
+                ],
+                "properties": {
+                  "content": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "success": {
+                          "type": "boolean"
+                        },
+                        "content": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/guests/{vmid}/notes"
+                    }
+                  },
+                  "perimeter": {
+                    "value": {
+                      "error": "Connection not in token scope",
+                      "connection": "conn-1"
+                    }
+                  },
+                  "guestScope": {
+                    "value": {
+                      "error": "Guest outside your vDC scope"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "POST"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/guests/{vmid}/snapshots": {
+      "get": {
+        "operationId": "vm-snapshots-list",
+        "summary": "Guest snapshots",
+        "description": "Snapshots of the guest, newest first. {vmid} is the composite key connId:type:node:vmid.",
+        "tags": [
+          "Snapshots"
+        ],
+        "x-required-scopes": [
+          "vms:read",
+          "vms:power",
+          "vms:write",
+          "vms:snapshot",
+          "vms:migrate",
+          "vms:delete"
+        ],
+        "parameters": [
+          {
+            "name": "vmid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Composite guest key connId:type:node:vmid; the connection must be inside the token connection perimeter."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "snapshots": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string"
+                              },
+                              "description": {
+                                "type": "string"
+                              },
+                              "snaptime": {
+                                "type": "integer",
+                                "description": "Epoch seconds"
+                              },
+                              "vmstate": {
+                                "type": [
+                                  "boolean",
+                                  "integer"
+                                ]
+                              },
+                              "parent": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              }
+                            }
+                          }
+                        },
+                        "count": {
+                          "type": "integer"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/guests/{vmid}/snapshots"
+                    }
+                  },
+                  "perimeter": {
+                    "value": {
+                      "error": "Connection not in token scope",
+                      "connection": "conn-1"
+                    }
+                  },
+                  "guestScope": {
+                    "value": {
+                      "error": "Guest outside your vDC scope"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "PUT"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "vm-snapshot-create",
+        "summary": "Take a snapshot",
+        "description": "Takes a snapshot of the guest. `vmstate` (QEMU only) also saves the RAM. {vmid} is the composite key connId:type:node:vmid.",
+        "tags": [
+          "Snapshots"
+        ],
+        "x-required-scopes": [
+          "vms:snapshot"
+        ],
+        "parameters": [
+          {
+            "name": "vmid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Composite guest key connId:type:node:vmid; the connection must be inside the token connection perimeter."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "name"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "pattern": "^[a-zA-Z0-9_-]+$"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "vmstate": {
+                    "type": "boolean",
+                    "description": "QEMU only: also save the RAM"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "success": {
+                          "type": "boolean"
+                        },
+                        "upid": {
+                          "type": "string",
+                          "description": "Proxmox task UPID; follow it with GET /api/v1/tasks/{connectionId}/{node}/{upid}"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/guests/{vmid}/snapshots"
+                    }
+                  },
+                  "perimeter": {
+                    "value": {
+                      "error": "Connection not in token scope",
+                      "connection": "conn-1"
+                    }
+                  },
+                  "guestScope": {
+                    "value": {
+                      "error": "Guest outside your vDC scope"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "PUT"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "vm-snapshot-delete",
+        "summary": "Delete a snapshot",
+        "description": "Deletes the snapshot named by `name`. {vmid} is the composite key connId:type:node:vmid.",
+        "tags": [
+          "Snapshots"
+        ],
+        "x-required-scopes": [
+          "vms:snapshot"
+        ],
+        "parameters": [
+          {
+            "name": "vmid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Composite guest key connId:type:node:vmid; the connection must be inside the token connection perimeter."
+          },
+          {
+            "name": "name",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Snapshot name"
+          },
+          {
+            "name": "wait",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Set to '1' to answer once the Proxmox task has finished"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "success": {
+                          "type": "boolean"
+                        },
+                        "upid": {
+                          "type": "string",
+                          "description": "Proxmox task UPID; follow it with GET /api/v1/tasks/{connectionId}/{node}/{upid}"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/guests/{vmid}/snapshots"
+                    }
+                  },
+                  "perimeter": {
+                    "value": {
+                      "error": "Connection not in token scope",
+                      "connection": "conn-1"
+                    }
+                  },
+                  "guestScope": {
+                    "value": {
+                      "error": "Guest outside your vDC scope"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "PUT"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/guests/{vmid}/snapshots/{snapname}": {
+      "post": {
+        "operationId": "vm-snapshot-rollback",
+        "summary": "Roll a guest back to a snapshot",
+        "description": "Rolls the guest back to {snapname}. No body. {vmid} is the composite key connId:type:node:vmid.",
+        "tags": [
+          "Snapshots"
+        ],
+        "x-required-scopes": [
+          "vms:snapshot"
+        ],
+        "parameters": [
+          {
+            "name": "vmid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Composite guest key connId:type:node:vmid; the connection must be inside the token connection perimeter."
+          },
+          {
+            "name": "snapname",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "success": {
+                          "type": "boolean"
+                        },
+                        "upid": {
+                          "type": "string",
+                          "description": "Proxmox task UPID; follow it with GET /api/v1/tasks/{connectionId}/{node}/{upid}"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/guests/{vmid}/snapshots/{snapname}"
+                    }
+                  },
+                  "perimeter": {
+                    "value": {
+                      "error": "Connection not in token scope",
+                      "connection": "conn-1"
+                    }
+                  },
+                  "guestScope": {
+                    "value": {
+                      "error": "Guest outside your vDC scope"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "DELETE"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "vm-snapshot-update",
+        "summary": "Update a snapshot description",
+        "description": "Replaces the description of {snapname}. {vmid} is the composite key connId:type:node:vmid.",
+        "tags": [
+          "Snapshots"
+        ],
+        "x-required-scopes": [
+          "vms:snapshot"
+        ],
+        "parameters": [
+          {
+            "name": "vmid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Composite guest key connId:type:node:vmid; the connection must be inside the token connection perimeter."
+          },
+          {
+            "name": "snapname",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "description": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "success": {
+                          "type": "boolean"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/guests/{vmid}/snapshots/{snapname}"
+                    }
+                  },
+                  "perimeter": {
+                    "value": {
+                      "error": "Connection not in token scope",
+                      "connection": "conn-1"
+                    }
+                  },
+                  "guestScope": {
+                    "value": {
+                      "error": "Guest outside your vDC scope"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "DELETE"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/guests/{vmid}/tasks": {
+      "get": {
+        "operationId": "vm-tasks-list",
+        "summary": "Recent tasks of a guest",
+        "description": "The last 50 Proxmox tasks of the guest on its node, newest first. {vmid} is the composite key connId:type:node:vmid.",
+        "tags": [
+          "Tasks"
+        ],
+        "x-required-scopes": [
+          "vms:read",
+          "vms:power",
+          "vms:write",
+          "vms:snapshot",
+          "vms:migrate",
+          "vms:delete"
+        ],
+        "parameters": [
+          {
+            "name": "vmid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Composite guest key connId:type:node:vmid; the connection must be inside the token connection perimeter."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "tasks": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "upid": {
+                                "type": "string"
+                              },
+                              "type": {
+                                "type": "string"
+                              },
+                              "status": {
+                                "type": "string",
+                                "enum": [
+                                  "running",
+                                  "success",
+                                  "warning",
+                                  "error"
+                                ]
+                              },
+                              "statusText": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "starttime": {
+                                "type": "integer"
+                              },
+                              "endtime": {
+                                "type": [
+                                  "integer",
+                                  "null"
+                                ]
+                              },
+                              "duration": {
+                                "type": [
+                                  "integer",
+                                  "null"
+                                ]
+                              },
+                              "durationFormatted": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "user": {
+                                "type": "string"
+                              },
+                              "node": {
+                                "type": "string"
+                              }
+                            }
+                          }
+                        },
+                        "count": {
+                          "type": "integer"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/guests/{vmid}/tasks"
+                    }
+                  },
+                  "perimeter": {
+                    "value": {
+                      "error": "Connection not in token scope",
+                      "connection": "conn-1"
+                    }
+                  },
+                  "guestScope": {
+                    "value": {
+                      "error": "Guest outside your vDC scope"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "POST"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tasks/{connectionId}/{node}/{upid}": {
+      "get": {
+        "operationId": "task-status",
+        "summary": "Status of a Proxmox task",
+        "description": "Status, progress and log of the task {upid} started on {node}, as returned by every write that answers with a UPID. Poll it until `status` is `stopped`, then read `exitstatus` (`OK` on success) and `failureReason`. Any write scope opens it. A vDC tenant token only reads the tasks of its own guests.",
+        "tags": [
+          "Tasks"
+        ],
+        "x-required-scopes": [
+          "vms:power",
+          "vms:write",
+          "vms:snapshot",
+          "vms:migrate",
+          "vms:delete",
+          "backups:write",
+          "backups:restore",
+          "backups:delete",
+          "storage:write",
+          "ha:write",
+          "pools:write",
+          "network:write",
+          "firewall:write"
+        ],
+        "parameters": [
+          {
+            "name": "connectionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Raw connection id; must be inside the token connection perimeter."
+          },
+          {
+            "name": "node",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          },
+          {
+            "name": "upid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          },
+          {
+            "name": "summary",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Set to '1' to skip the log lines"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "upid": {
+                      "type": "string"
+                    },
+                    "node": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "id": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "Task object id, the vmid for guest tasks"
+                    },
+                    "user": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "type": "string",
+                      "description": "`running` or `stopped`"
+                    },
+                    "exitstatus": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "`OK` on success"
+                    },
+                    "failureReason": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "starttime": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "endtime": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "duration": {
+                      "type": "string"
+                    },
+                    "durationSec": {
+                      "type": "integer"
+                    },
+                    "progress": {
+                      "type": "number"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "speed": {
+                      "type": "string"
+                    },
+                    "eta": {
+                      "type": "string"
+                    },
+                    "totalLogLines": {
+                      "type": "integer"
+                    },
+                    "logs": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "n": {
+                            "type": "integer"
+                          },
+                          "t": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/tasks/{connectionId}/{node}/{upid}"
+                    }
+                  },
+                  "perimeter": {
+                    "value": {
+                      "error": "Connection not in token scope",
+                      "connection": "conn-1"
+                    }
+                  }
                 }
               }
             }

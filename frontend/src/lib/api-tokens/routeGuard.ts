@@ -14,9 +14,16 @@ export type GuardedRouteContext = {
   principal?: Principal
 }
 
-type GuardedHandler = (req: Request, ctx: GuardedRouteContext) => Promise<Response>
+type GuardedHandler<C extends GuardedRouteContext> = (req: Request, ctx: C) => Promise<Response>
 
-export function withPublicApiGuard(entryId: string, handler: GuardedHandler): GuardedHandler {
+/**
+ * Generic over the handler context so a wrapped export keeps the exact
+ * `{ params }` type Next checks route handlers against.
+ */
+export function withPublicApiGuard<C extends GuardedRouteContext = GuardedRouteContext>(
+  entryId: string,
+  handler: GuardedHandler<C>,
+): GuardedHandler<C & GuardedRouteContext> {
   return async (req, ctx) => {
     const result = await getPrincipal({ recordUsage: true })
     if (!result.ok) {
@@ -28,7 +35,7 @@ export function withPublicApiGuard(entryId: string, handler: GuardedHandler): Gu
     if (!principal || principal.kind !== "token") {
       // Session (or anonymous) caller: unchanged bit for bit, the handler's
       // own checkPermission does the work.
-      return handler(req, ctx || {})
+      return handler(req, ctx || ({} as C))
     }
 
     const entry = getAllowlistEntryById(entryId)
@@ -54,7 +61,7 @@ export function withPublicApiGuard(entryId: string, handler: GuardedHandler): Gu
 
     let res: Response
     try {
-      res = await handler(req, { ...(ctx || {}), principal })
+      res = await handler(req, { ...(ctx || {}), principal } as C)
     } catch (err) {
       // A write that blew up mid-way may still have acted: journal it too.
       await auditTokenWrite(entry, principal, req, new Response(null, { status: 500 }))

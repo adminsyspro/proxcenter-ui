@@ -8,6 +8,10 @@ import { getConnectionById, type PveConn } from '@/lib/connections/getConnection
 import { formatBytes as formatSize } from '@/utils/format'
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { assertVmid } from '@/lib/ssh/validate'
+import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
+import type { Principal } from '@/lib/auth/principal'
+import { getTenantInfrastructureScope } from '@/lib/tenant/infraScope'
+import { checkTenantGuestScope } from '@/lib/vdc/guestScope'
 
 export const runtime = 'nodejs'
 
@@ -531,14 +535,36 @@ function parseGenericProgress(logs: TaskLogEntry[]): { progress: number; message
   return { progress, message, speed, eta }
 }
 
-export async function GET(
+/** The guest id a task runs on: the `id` field of `UPID:node:pid:pstart:starttime:type:id:user:`, when it is a vmid. */
+function upidGuestId(upid: string): string | null {
+  const parts = upid.split(':')
+  return parts[0] === 'UPID' && /^\d+$/.test(parts[6] || '') ? parts[6] : null
+}
+
+/**
+ * A vDC tenant token only follows the tasks of its own guests: a task of
+ * another tenant's guest on a shared provider connection stays hidden.
+ */
+async function taskOutsideTokenScope(principal: Principal, connection: PveConn, connectionId: string, upid: string) {
+  const infra = await getTenantInfrastructureScope(principal.tenantId, { ignoreVdcContext: true })
+  if (infra.kind !== 'iaas') return null
+  const vmid = upidGuestId(upid)
+  if (vmid) {
+    const refused = await checkTenantGuestScope(principal.tenantId, connection, connectionId, null, null, vmid)
+    // null: a guest of the vDC. A 503 (scope unverifiable) is returned as is.
+    if (!refused || refused.status !== 403) return refused
+  }
+  return NextResponse.json({ error: 'Task outside your vDC scope' }, { status: 403 })
+}
+
+async function handler(
   req: Request,
-  { params }: { params: Promise<{ connectionId: string; node: string; upid: string }> }
+  { params, principal }: { params: Promise<{ connectionId: string; node: string; upid: string }>; principal?: Principal }
 ) {
   try {
     const { connectionId, node, upid } = await params
 
-    const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW)
+    const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW, 'connection', connectionId)
     if (denied) return denied
 
     const decodedUpid = decodeURIComponent(upid)
@@ -547,6 +573,11 @@ export async function GET(
 
     if (!connection) {
       return NextResponse.json({ error: 'Connection not found' }, { status: 404 })
+    }
+
+    if (principal?.kind === 'token') {
+      const outside = await taskOutsideTokenScope(principal, connection, connectionId, decodedUpid)
+      if (outside) return outside
     }
 
     let status: TaskStatus
@@ -709,3 +740,5 @@ export async function DELETE(
     )
   }
 }
+
+export const GET = withPublicApiGuard("task-status", handler)

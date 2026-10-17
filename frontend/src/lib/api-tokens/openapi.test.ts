@@ -19,10 +19,10 @@ describe('buildOpenApiDocument', () => {
     expect(doc.security).toEqual([{ bearerAuth: [] }])
   })
 
-  it('emits one GET operation per allowlist entry, keyed by the OpenAPI pattern', () => {
+  it('emits one operation per allowlist entry, keyed by the OpenAPI pattern and the entry method', () => {
     expect(Object.keys(doc.paths).sort()).toEqual([...new Set(PUBLIC_API_ALLOWLIST.map(e => e.pattern))].sort())
     for (const entry of PUBLIC_API_ALLOWLIST) {
-      const op = doc.paths[entry.pattern].get
+      const op = doc.paths[entry.pattern][entry.method.toLowerCase()]
       expect(op.operationId).toBe(entry.id)
       expect(op.summary).toBe(entry.summary)
       expect(op['x-required-scopes']).toEqual(entry.requiredScopes)

@@ -17,6 +17,7 @@ import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
 import { assertVmid, assertNodeName } from "@/lib/ssh/validate"
 import { getCurrentTenantId } from "@/lib/tenant"
 import { getTenantInfrastructureScope, canMigrateConnections } from "@/lib/tenant/infraScope"
+import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 
 export const runtime = "nodejs"
 
@@ -28,7 +29,7 @@ type PrepareBody = {
 }
 
 /** Capture reversible prerequisites before clearing the explicitly requested blockers. */
-export async function POST(
+async function postHandler(
   req: Request,
   ctx: { params: Promise<{ id: string; type: string; node: string; vmid: string }> },
 ) {
@@ -181,7 +182,7 @@ export async function POST(
  * preflight (../check) still owns everything that genuinely depends on the
  * target: CPU model, MTU, storage capacity, VMID collision.
  */
-export async function GET(
+async function getHandler(
   _req: Request,
   ctx: { params: Promise<{ id: string; type: string; node: string; vmid: string }> },
 ) {
@@ -231,3 +232,6 @@ export async function GET(
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const POST = withPublicApiGuard("vm-remote-migrate-prepare", postHandler)
+export const GET = withPublicApiGuard("vm-remote-migrate-prepare-get", getHandler)

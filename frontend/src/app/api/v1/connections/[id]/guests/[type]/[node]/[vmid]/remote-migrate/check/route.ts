@@ -6,6 +6,7 @@ import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
 
 import { captureReplicationJobs, findHaRulesForSid, findSiteRecoveryJobsForGuest } from '@/lib/migration/ccm-prereqs'
 import type { SiteRecoveryJobRef } from '@/lib/migration/ccm-prereqs.types'
+import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
 
 export const runtime = "nodejs"
 
@@ -47,7 +48,7 @@ type ValidationIssue = {
  * - targetStorage: string - Stockage cible
  * - targetBridge: string - Bridge réseau cible
  */
-export async function POST(
+async function handler(
   req: Request,
   ctx: { params: Promise<{ id: string; type: string; node: string; vmid: string }> }
 ) {
@@ -512,3 +513,5 @@ export async function POST(
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const POST = withPublicApiGuard("vm-remote-migrate-check", handler)

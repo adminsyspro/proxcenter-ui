@@ -18,6 +18,7 @@ import { validateCpuAgainstPolicy, parseCpuProperty, loadCpuCapabilitiesIfNeeded
 import { enforceTenantDrives, meterImportRefs, DriveScopeError } from "@/lib/vdc/driveGuard"
 import { getAllowedNetworksForTenant, validateNetAgainstScope } from "@/lib/vdc/vnets"
 import { syncIpamForVmConfig, IpamHintUnavailableError, IpamExhaustedError } from "@/lib/vdc/ipamSync"
+import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 
 export const runtime = "nodejs"
 
@@ -100,7 +101,7 @@ function isForwardedConfigKey(key: string, type: 'qemu' | 'lxc'): boolean {
 }
 
 // GET: Récupérer la configuration de la VM
-export async function GET(
+async function getHandler(
   req: Request,
   ctx: { params: Promise<{ id: string; type: string; node: string; vmid: string }> }
 ) {
@@ -185,7 +186,7 @@ export async function GET(
 }
 
 // PUT: Mettre à jour la configuration de la VM
-export async function PUT(
+async function putHandler(
   req: Request,
   ctx: { params: Promise<{ id: string; type: string; node: string; vmid: string }> }
 ) {
@@ -505,3 +506,5 @@ return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
 
+export const GET = withPublicApiGuard("vm-config-get", getHandler)
+export const PUT = withPublicApiGuard("vm-config-update", putHandler)

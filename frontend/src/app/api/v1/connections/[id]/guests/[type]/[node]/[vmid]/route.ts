@@ -6,6 +6,7 @@ import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
 import { releaseAllocationsForVm } from "@/lib/vdc/ipam"
 import { deleteGuestIpEntry, guestKey } from "@/lib/cache/guestIpCache"
+import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 
 export const runtime = "nodejs"
 
@@ -13,7 +14,7 @@ const ALLOWED_TYPES = new Set(["qemu", "lxc"])
 
 // DELETE /api/v1/connections/{id}/guests/{type}/{node}/{vmid}
 // Supprime une VM ou un conteneur LXC
-export async function DELETE(
+async function handler(
   req: Request,
   ctx: { params: Promise<{ id: string; type: string; node: string; vmid: string }> }
 ) {
@@ -147,3 +148,5 @@ export async function DELETE(
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const DELETE = withPublicApiGuard("vm-delete", handler)

@@ -10,6 +10,7 @@ import { assertVmid, assertNodeName } from "@/lib/ssh/validate"
 import { getNodeIp } from "@/lib/ssh/node-ip"
 
 import { captureReplicationJobs, type CcmRestorePlan } from '@/lib/migration/ccm-prereqs'
+import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
 
 export const runtime = "nodejs"
 
@@ -70,7 +71,7 @@ function parseRestoreRequest(value: unknown): RestoreRequest | undefined {
  * - delete?: boolean - Supprimer la VM source après migration réussie (défaut: false)
  * - bwlimit?: number - Limite de bande passante en KiB/s (optionnel)
  */
-export async function POST(
+async function handler(
   req: Request,
   ctx: { params: Promise<{ id: string; type: string; node: string; vmid: string }> }
 ) {
@@ -386,3 +387,5 @@ export async function POST(
     return NextResponse.json({ error: errorMessage }, { status: 500 })
   }
 }
+
+export const POST = withPublicApiGuard("vm-remote-migrate", handler)

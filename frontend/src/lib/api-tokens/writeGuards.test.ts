@@ -282,7 +282,16 @@ describe('runTokenEntryGuards', () => {
       const params = { ...pathParams, node: 'pve%2D1' }
       expect(await runTokenEntryGuards(pathEntry, principal, post({}), params)).toBeNull()
       expect(getConnectionMock).toHaveBeenCalledWith('conn-a', 'tenant-x')
-      expect(guestScopeMock).toHaveBeenCalledWith('tenant-x', { id: 'conn-a' }, 'conn-a', 'qemu', 'pve-1', '100')
+      expect(guestScopeMock).toHaveBeenCalledWith('tenant-x', { id: 'conn-a' }, 'conn-a', 'qemu', 'pve-1', '100', false)
+    })
+
+    it('iaas: allowMovedNode is forwarded only when the entry declares it', async () => {
+      infraMock.mockResolvedValue(iaas())
+      const moved = entry({ ...pathEntry, guestScope: { connection: 'id', type: 'type', node: 'node', vmid: 'vmid', allowMovedNode: true } })
+      expect(await runTokenEntryGuards(moved, principal, post({}), pathParams)).toBeNull()
+      expect(guestScopeMock).toHaveBeenLastCalledWith('tenant-x', { id: 'conn-a' }, 'conn-a', 'qemu', 'pve1', '100', true)
+      await runTokenEntryGuards(pathEntry, principal, post({}), pathParams)
+      expect(guestScopeMock.mock.lastCall?.[6]).toBe(false)
     })
 
     it('iaas: the helper refusal is returned and audited', async () => {
@@ -306,7 +315,7 @@ describe('runTokenEntryGuards', () => {
       infraMock.mockResolvedValue(iaas())
       const e = entry({ connectionSegment: undefined, vmKeySegment: 'vmid', guestScope: { vmKey: 'vmid' } })
       expect(await runTokenEntryGuards(e, principal, post({}), { vmid: 'conn-a:lxc:pve2:205' })).toBeNull()
-      expect(guestScopeMock).toHaveBeenCalledWith('tenant-x', { id: 'conn-a' }, 'conn-a', 'lxc', 'pve2', '205')
+      expect(guestScopeMock).toHaveBeenCalledWith('tenant-x', { id: 'conn-a' }, 'conn-a', 'lxc', 'pve2', '205', false)
     })
 
     describe('vmidField', () => {
@@ -319,7 +328,7 @@ describe('runTokenEntryGuards', () => {
         infraMock.mockResolvedValue(iaas())
         const req = post({ vmid: 100, storage: 'pbs' })
         expect(await runTokenEntryGuards(e, principal, req, { id: 'conn-a', node: 'pve1' })).toBeNull()
-        expect(guestScopeMock).toHaveBeenCalledWith('tenant-x', { id: 'conn-a' }, 'conn-a', null, null, '100')
+        expect(guestScopeMock).toHaveBeenCalledWith('tenant-x', { id: 'conn-a' }, 'conn-a', null, null, '100', false)
         expect(await req.json()).toEqual({ vmid: 100, storage: 'pbs' })
       })
 
@@ -346,7 +355,7 @@ describe('runTokenEntryGuards', () => {
         infraMock.mockResolvedValue(iaas())
         const q = entry({ guestScope: { connection: 'id', vmidField: { source: 'query', field: 'vmid' } } })
         expect(await runTokenEntryGuards(q, principal, post({}, 'http://t/x?vmid=300'), { id: 'conn-a' })).toBeNull()
-        expect(guestScopeMock).toHaveBeenCalledWith('tenant-x', { id: 'conn-a' }, 'conn-a', null, null, '300')
+        expect(guestScopeMock).toHaveBeenCalledWith('tenant-x', { id: 'conn-a' }, 'conn-a', null, null, '300', false)
       })
     })
 

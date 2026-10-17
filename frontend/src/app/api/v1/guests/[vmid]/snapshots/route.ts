@@ -7,6 +7,7 @@ import { getConnectionByIdOrNull } from "@/lib/connections/getConnection"
 import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
 import { getCurrentTenantId } from "@/lib/tenant"
 import { resolveVdcForTenant, checkVdcQuota } from "@/lib/vdc/quota"
+import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 
 export const runtime = "nodejs"
 
@@ -35,7 +36,7 @@ return {
  * Liste les snapshots d'une VM
  * vmid format: connId:type:node:vmid
  */
-export async function GET(
+async function getHandler(
   req: Request,
   ctx: { params: Promise<Params> }
 ) {
@@ -91,7 +92,7 @@ return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
  * Créer un nouveau snapshot
  * Body: { name: string, description?: string, vmstate?: boolean }
  */
-export async function POST(
+async function postHandler(
   req: Request,
   ctx: { params: Promise<Params> }
 ) {
@@ -196,7 +197,7 @@ return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
  * Supprimer un snapshot
  * Query: ?name=snapshot_name
  */
-export async function DELETE(
+async function deleteHandler(
   req: Request,
   ctx: { params: Promise<Params> }
 ) {
@@ -264,3 +265,7 @@ export async function DELETE(
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const GET = withPublicApiGuard("vm-snapshots-list", getHandler)
+export const POST = withPublicApiGuard("vm-snapshot-create", postHandler)
+export const DELETE = withPublicApiGuard("vm-snapshot-delete", deleteHandler)

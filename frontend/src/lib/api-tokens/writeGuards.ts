@@ -90,7 +90,7 @@ async function guestTargets(
   spec: GuestScopeSpec,
   params: Record<string, string>,
   readField: FieldReader,
-): Promise<{ connection: string; type: string | null; node: string | null; vmids: string[] } | null> {
+): Promise<{ connection: string; type: string | null; node: string | null; vmids: string[]; allowMovedNode?: true } | null> {
   if ("vmKey" in spec) {
     const key = parseVmKey(decodeParam(params, spec.vmKey))
     return key ? { connection: key.connection, type: key.type, node: key.node, vmids: [key.vmid] } : null
@@ -113,7 +113,7 @@ async function guestTargets(
   const type = decodeParam(params, spec.type)
   const node = decodeParam(params, spec.node)
   const vmid = decodeParam(params, spec.vmid)
-  return type && node && vmid ? { connection, type, node, vmids: [vmid] } : null
+  return type && node && vmid ? { connection, type, node, vmids: [vmid], allowMovedNode: spec.allowMovedNode } : null
 }
 
 /**
@@ -191,7 +191,9 @@ export async function runTokenEntryGuards(
       return deny({ status: 503, body: { error: "Unable to verify guest vDC scope" } })
     }
     for (const vmid of target.vmids) {
-      const refused = await checkTenantGuestScope(principal.tenantId, conn, target.connection, target.type, target.node, vmid)
+      const refused = await checkTenantGuestScope(
+        principal.tenantId, conn, target.connection, target.type, target.node, vmid, target.allowMovedNode === true,
+      )
       if (refused) {
         const body = await refused.clone().json().catch(() => ({ error: GUEST_OUTSIDE }))
         await auditTokenDenied({ status: refused.status, body }, { tokenId: principal.tokenId, entryId: entry.id })

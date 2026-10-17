@@ -15,13 +15,12 @@ import { truncate } from '@/__tests__/setup/prisma-test'
 import { ENTERPRISE_WITH_API_ACCESS, seedApiToken, seedDefaultTenant, tokenHeaders } from '@/__tests__/setup/apiTokens'
 import { getPrincipal } from '@/lib/auth/principal'
 import { _impl } from '@/lib/auth/requireEnterprise'
-import { PERMISSIONS } from '@/lib/rbac'
-import { SENSITIVE_NIC_PERMISSIONS } from '@/lib/rbac/nicPermissions'
+import { PERMISSIONS, grantsPermission } from '@/lib/rbac'
 
-import { PUBLIC_API_ALLOWLIST, isWriteEntry, matchPublicApiPath, matchesEntry, type AllowlistEntry } from './allowlist'
+import { PUBLIC_API_ALLOWLIST, getAllowlistEntryById, isWriteEntry, matchPublicApiPath, matchesEntry, type AllowlistEntry } from './allowlist'
 import { _resetLicenseVerdictCache } from './licenseGate'
 import { _resetRateLimitCounters } from './rateLimit'
-import { READ_SCOPE_IDS, expandScopes, isWriteScope } from './scopes'
+import { READ_SCOPE_IDS, WRITE_SCOPE_IDS, expandScopes, isWriteScope } from './scopes'
 
 /** Write entry ids, per domain task. A missing or an undeclared write entry fails. */
 const EXPECTED_WRITE_IDS: Record<string, string[]> = {
@@ -56,17 +55,6 @@ function samplePath(entry: AllowlistEntry): string {
     if (allowed) return allowed[0]
     return name === vmKey ? 'x1:qemu:n1:100' : `${name}1`
   }).join('/')
-}
-
-/** Same rule as rbac grantsPermission: a parent key implies its children, never MAC/VLAN. */
-function covers(granted: Set<string>, key: string): boolean {
-  if (granted.has(key)) return true
-  if ((SENSITIVE_NIC_PERMISSIONS as readonly string[]).includes(key)) return false
-  const parts = key.split('.')
-  for (let i = parts.length - 1; i >= 2; i--) {
-    if (granted.has(parts.slice(0, i).join('.'))) return true
-  }
-  return false
 }
 
 function hasBodyField(entry: AllowlistEntry): boolean {
@@ -105,6 +93,8 @@ describe('write contract: declared entries', () => {
     expect(handlerResolved.filter(id => !HANDLER_PERIMETER_IDS.includes(id))).toEqual([])
   })
 
+  // (d) only sees literal PERMISSIONS.X in the route file itself, not keys
+  // built at runtime (classifier, NIC helpers) nor those checked in imported modules.
   it.each(writeRouteFiles)('(d) every permission checked in %s is granted by its entries', (file, entries) => {
     const granted = new Set<string>()
     for (const entry of entries) {
@@ -115,7 +105,7 @@ describe('write contract: declared entries', () => {
     const names = [...new Set([...source.matchAll(/PERMISSIONS\.([A-Z0-9_]+)/g)].map(m => m[1]))]
     const permissions = PERMISSIONS as Record<string, string>
     for (const name of names) expect(permissions[name], `unknown PERMISSIONS.${name}`).toBeDefined()
-    expect(names.filter(name => !covers(granted, permissions[name]))).toEqual([])
+    expect(names.filter(name => !grantsPermission(granted, permissions[name]))).toEqual([])
   })
 
   it.each(PUBLIC_API_ALLOWLIST.filter(hasBodyField).map(e => [e.id, e] as const))(
@@ -130,7 +120,7 @@ describe('write contract: declared entries', () => {
       if (CLOSED_GET_NEIGHBOUR_FILES.includes(file)) continue
       const writes = entries.filter(isWriteEntry)
       const source = readFileSync(path.join(FRONTEND_ROOT, file), 'utf8')
-      const exportsGet = /export (?:async function|const) GET\b/.test(source)
+      const exportsGet = /export\s+(?:async\s+)?(?:function|const|let)\s+GET\b|export\s*\{[^}]*\bGET\b/.test(source)
       const gets = entries.filter(e => e.method === 'GET')
       expect(gets.length, `${file} exports GET`).toBe(exportsGet ? 1 : 0)
       for (const get of gets) {
@@ -172,6 +162,20 @@ describe('write contract: a read-only token is refused every write (getPrincipal
         status: 403,
         body: { error: 'Route not available to API tokens', route: sample },
       })
+    }
+  })
+
+  it('task-status opens to any write scope and to no read-only token', async () => {
+    const entry = getAllowlistEntryById('task-status')!
+    expect(entry.requiredScopes).toEqual(WRITE_SCOPE_IDS)
+    const sample = samplePath(entry)
+    const readOnly = await seedApiToken({ scopes: [...READ_SCOPE_IDS] })
+    headersMock.mockResolvedValue(tokenHeaders(readOnly.secret, entry.id, sample, 'GET'))
+    expect((await getPrincipal()).rejection).toMatchObject({ status: 403 })
+    for (const scope of WRITE_SCOPE_IDS) {
+      const writer = await seedApiToken({ scopes: [scope] })
+      headersMock.mockResolvedValue(tokenHeaders(writer.secret, entry.id, sample, 'GET'))
+      expect((await getPrincipal()).ok, scope).toBe(true)
     }
   })
 })

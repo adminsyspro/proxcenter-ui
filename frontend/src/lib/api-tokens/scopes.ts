@@ -27,13 +27,14 @@ export const READ_SCOPE_DEFINITIONS: Record<string, readonly string[]> = {
 }
 
 export const WRITE_SCOPE_DEFINITIONS: Record<string, readonly string[]> = {
-  "vms:power": ["vm.view", "vm.start", "vm.stop", "vm.restart", "vm.suspend"],
+  "vms:power": ["vm.view", "connection.view", "vm.start", "vm.stop", "vm.restart", "vm.suspend"],
   "vms:write": ["vm.view", "connection.view", "vm.create", "vm.clone", "vm.config"],
-  "vms:snapshot": ["vm.view", "vm.snapshot"],
-  "vms:migrate": ["vm.view", "vm.migrate"],
-  "vms:delete": ["vm.view", "vm.delete"],
+  "vms:snapshot": ["vm.view", "connection.view", "vm.snapshot"],
+  "vms:migrate": ["vm.view", "connection.view", "vm.migrate"],
+  "vms:delete": ["vm.view", "connection.view", "vm.delete"],
   "backups:write": [
     "backup.view",
+    "connection.view",
     "backup.job.view",
     "backup.job.create",
     "backup.job.edit",
@@ -41,8 +42,8 @@ export const WRITE_SCOPE_DEFINITIONS: Record<string, readonly string[]> = {
     "backup.job.run",
     "vm.backup",
   ],
-  "backups:restore": ["backup.view", "vm.backup", "backup.restore"],
-  "backups:delete": ["backup.view", "backup.delete"],
+  "backups:restore": ["backup.view", "connection.view", "vm.backup", "backup.restore"],
+  "backups:delete": ["backup.view", "connection.view", "backup.delete"],
   "storage:write": [
     "storage.view",
     "storage.content",

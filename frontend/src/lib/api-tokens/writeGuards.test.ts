@@ -442,6 +442,14 @@ describe('auditTokenWrite', () => {
     expect(await res.json()).toEqual({ data: 'UPID:pve1:0001:0002:0003:qmstart:100:root@pam:' })
   })
 
+  it('reads the UPID from data.upid too (the /guests/{vmid} envelope), only when it is one', async () => {
+    const upid = 'UPID:pve1:0001:0002:0003:qmsnapshot:100:root@pam:'
+    await auditTokenWrite(entry(), principal, post({}), NextResponse.json({ data: { success: true, upid } }))
+    await auditTokenWrite(entry(), principal, post({}), NextResponse.json({ data: { upid: 'not-a-task' } }))
+    await auditTokenWrite(entry(), principal, post({}), NextResponse.json({ data: null }))
+    expect(auditMock.mock.calls.map(c => c[0].details.upid)).toEqual([upid, null, null])
+  })
+
   it('a failed write is journaled as a failure, without a UPID', async () => {
     await auditTokenWrite(entry(), principal, post({}), NextResponse.json({ error: 'nope' }, { status: 409 }))
     expect(auditMock.mock.calls[0][0]).toMatchObject({ status: 'failure', details: { httpStatus: 409, upid: null } })

@@ -10,7 +10,7 @@ import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { assertVmid } from '@/lib/ssh/validate'
 import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
 import type { Principal } from '@/lib/auth/principal'
-import { getTenantInfrastructureScope } from '@/lib/tenant/infraScope'
+import { prisma } from '@/lib/db/prisma'
 import { checkTenantGuestScope } from '@/lib/vdc/guestScope'
 
 export const runtime = 'nodejs'
@@ -535,26 +535,52 @@ function parseGenericProgress(logs: TaskLogEntry[]): { progress: number; message
   return { progress, message, speed, eta }
 }
 
-/** The guest id a task runs on: the `id` field of `UPID:node:pid:pstart:starttime:type:id:user:`, when it is a vmid. */
-function upidGuestId(upid: string): string | null {
+const TASK_OUTSIDE = 'Task outside your vDC scope'
+
+/** `UPID:node:pid:pstart:starttime:type:id:user:`: its node, and its guest when the id is a vmid. */
+function parseTaskUpid(upid: string): { node: string; vmid: string | null } | null {
   const parts = upid.split(':')
-  return parts[0] === 'UPID' && /^\d+$/.test(parts[6] || '') ? parts[6] : null
+  if (parts[0] !== 'UPID' || !parts[1]) return null
+  return { node: parts[1], vmid: /^\d+$/.test(parts[6] || '') ? parts[6] : null }
+}
+
+/** Whether this token journaled the UPID in its own apitoken.write line, i.e. started the task. */
+async function startedByToken(principal: Principal, upid: string): Promise<boolean> {
+  if (!principal.tokenId) return false
+  const row = await prisma.auditLog.findFirst({
+    where: {
+      action: 'apitoken.write',
+      apiTokenId: principal.tokenId,
+      tenantId: principal.tenantId,
+      details: { path: ['upid'], equals: upid },
+    },
+    select: { id: true },
+  })
+  return row !== null
 }
 
 /**
- * A vDC tenant token only follows the tasks of its own guests: a task of
- * another tenant's guest on a shared provider connection stays hidden.
+ * A vDC tenant token only follows the tasks of its own guests, or the tasks it
+ * started itself (the destroy task of a guest that is gone, for one): a task of
+ * another tenant's guest on a shared provider connection stays hidden. The
+ * helper lets every other tenant through. A task on another node than the URL
+ * one, or of no guest, is checked with an empty vmid, which matches no guest.
  */
-async function taskOutsideTokenScope(principal: Principal, connection: PveConn, connectionId: string, upid: string) {
-  const infra = await getTenantInfrastructureScope(principal.tenantId, { ignoreVdcContext: true })
-  if (infra.kind !== 'iaas') return null
-  const vmid = upidGuestId(upid)
-  if (vmid) {
-    const refused = await checkTenantGuestScope(principal.tenantId, connection, connectionId, null, null, vmid)
-    // null: a guest of the vDC. A 503 (scope unverifiable) is returned as is.
-    if (!refused || refused.status !== 403) return refused
+async function taskOutsideTokenScope(
+  principal: Principal, connection: PveConn, connectionId: string, node: string, upid: string,
+): Promise<Response | null> {
+  const task = parseTaskUpid(upid)
+  const sameNode = task?.node === node
+  let refused: Response | null
+  try {
+    refused = await checkTenantGuestScope(principal.tenantId, connection, connectionId, null, node, (sameNode && task?.vmid) || '', true)
+  } catch {
+    return NextResponse.json({ error: 'Unable to verify guest vDC scope' }, { status: 503 })
   }
-  return NextResponse.json({ error: 'Task outside your vDC scope' }, { status: 403 })
+  // null: inside the vDC (or not a vDC tenant). A 503 (scope unverifiable) is returned as is.
+  if (!refused || refused.status !== 403) return refused
+  if (sameNode && (await startedByToken(principal, upid))) return null
+  return NextResponse.json({ error: TASK_OUTSIDE }, { status: 403 })
 }
 
 async function handler(
@@ -564,7 +590,13 @@ async function handler(
   try {
     const { connectionId, node, upid } = await params
 
-    const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW, 'connection', connectionId)
+    // Tokens are judged on the connection of the task. Sessions keep the
+    // resource-less check: a vm/node/pool-scoped grant never matches a
+    // "connection" resource, and those users poll their tasks here (#378).
+    const isToken = principal?.kind === 'token'
+    const denied = isToken
+      ? await checkPermission(PERMISSIONS.CONNECTION_VIEW, 'connection', connectionId)
+      : await checkPermission(PERMISSIONS.CONNECTION_VIEW)
     if (denied) return denied
 
     const decodedUpid = decodeURIComponent(upid)
@@ -575,10 +607,14 @@ async function handler(
       return NextResponse.json({ error: 'Connection not found' }, { status: 404 })
     }
 
-    if (principal?.kind === 'token') {
-      const outside = await taskOutsideTokenScope(principal, connection, connectionId, decodedUpid)
+    if (isToken) {
+      const outside = await taskOutsideTokenScope(principal, connection, connectionId, node, decodedUpid)
       if (outside) return outside
     }
+
+    // Reading a finished migration releases the source lock (SSH qm unlock):
+    // a token only triggers that side effect when it may migrate.
+    const mayReleaseMigrationLock = !isToken || !!principal.scopes?.includes('vms:migrate')
 
     let status: TaskStatus
 
@@ -622,7 +658,7 @@ return NextResponse.json({ error: `Failed to fetch task status: ${e.message}` },
         message = 'Completed successfully'
         const taskType = status?.type || ''
         const vmid = status?.id || ''
-        if (vmid && (taskType === 'qmigrate' || taskType.includes('migrate'))) {
+        if (mayReleaseMigrationLock && vmid && (taskType === 'qmigrate' || taskType.includes('migrate'))) {
           await handleSourceVmCleanupAfterMigration({
             connection, connectionId, node, vmid,
           })
@@ -638,7 +674,7 @@ return NextResponse.json({ error: `Failed to fetch task status: ${e.message}` },
           message = 'Migration completed (with cleanup warnings)'
           const taskType = status?.type || ''
           const vmid = status?.id || ''
-          if (vmid && (taskType === 'qmigrate' || taskType.includes('migrate'))) {
+          if (mayReleaseMigrationLock && vmid && (taskType === 'qmigrate' || taskType.includes('migrate'))) {
             await handleSourceVmCleanupAfterMigration({
               connection, connectionId, node, vmid,
             })

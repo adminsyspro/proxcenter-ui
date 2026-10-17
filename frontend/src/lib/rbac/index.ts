@@ -207,7 +207,7 @@ async function loadUserGrants(userId: string, tenantId: string): Promise<LoadedG
  * (`vm.config.media`, `vm.config.nic.link`, …), excluding explicit MAC/VLAN grants. The walk is O(depth),
  * which is at most 2-3 for the deepest permission (`vm.config.nic.link`).
  */
-function grantsPermission(grantedSet: Set<string>, requested: string): boolean {
+export function grantsPermission(grantedSet: Set<string>, requested: string): boolean {
   if (grantedSet.has(requested)) return true
   if ((SENSITIVE_NIC_PERMISSIONS as readonly string[]).includes(requested)) return false
   const parts = requested.split('.')

@@ -1653,6 +1653,7 @@
       ],
       "vms:power": [
         "vm.view",
+        "connection.view",
         "vm.start",
         "vm.stop",
         "vm.restart",
@@ -1667,18 +1668,22 @@
       ],
       "vms:snapshot": [
         "vm.view",
+        "connection.view",
         "vm.snapshot"
       ],
       "vms:migrate": [
         "vm.view",
+        "connection.view",
         "vm.migrate"
       ],
       "vms:delete": [
         "vm.view",
+        "connection.view",
         "vm.delete"
       ],
       "backups:write": [
         "backup.view",
+        "connection.view",
         "backup.job.view",
         "backup.job.create",
         "backup.job.edit",
@@ -1688,11 +1693,13 @@
       ],
       "backups:restore": [
         "backup.view",
+        "connection.view",
         "vm.backup",
         "backup.restore"
       ],
       "backups:delete": [
         "backup.view",
+        "connection.view",
         "backup.delete"
       ],
       "storage:write": [

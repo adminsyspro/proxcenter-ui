@@ -223,12 +223,15 @@ export async function runTokenEntryGuards(
   return null
 }
 
-/** `data` of a JSON response when it is a PVE task id. */
+const isUpid = (value: unknown): value is string => typeof value === "string" && value.startsWith("UPID:")
+
+/** The PVE task id of a JSON response: `data` itself, or `data.upid` (the /guests/{vmid} envelope). */
 async function responseUpid(res: Response): Promise<string | null> {
   if (!(res.headers.get("content-type") || "").includes("application/json")) return null
   try {
     const data = (await res.clone().json())?.data
-    return typeof data === "string" && data.startsWith("UPID:") ? data : null
+    if (isUpid(data)) return data
+    return isUpid(data?.upid) ? data.upid : null
   } catch {
     return null
   }

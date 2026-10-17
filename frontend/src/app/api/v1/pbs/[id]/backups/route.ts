@@ -13,6 +13,8 @@ import { setCachedPbsBackups } from "@/lib/cache/pbsBackupCache"
 import { fetchAllPbsBackups, getAllBackups, type CachedBackup } from "@/lib/backups/pbsSnapshots"
 import { withPublicApiGuard, type GuardedRouteContext } from "@/lib/api-tokens/routeGuard"
 
+import { groupBackupMachines } from "@/lib/backups/machineGroups"
+
 export const runtime = "nodejs"
 
 // Connection perimeter for THIS route is layered elsewhere on purpose (spec
@@ -191,9 +193,15 @@ async function handler(req: Request, ctx: GuardedRouteContext) {
     }
 
     // Pagination
-    const totalPages = Math.ceil(filteredBackups.length / pageSize)
+    const groups = url.searchParams.get('groupBy') === 'machine'
+      ? groupBackupMachines(filteredBackups)
+      : null
+    const totalItems = groups ? groups.length : filteredBackups.length
+    const totalPages = Math.ceil(totalItems / pageSize)
     const startIndex = (page - 1) * pageSize
-    const paginatedBackups = filteredBackups.slice(startIndex, startIndex + pageSize)
+    const paginatedBackups = groups
+      ? groups.slice(startIndex, startIndex + pageSize).flatMap(group => group.points)
+      : filteredBackups.slice(startIndex, startIndex + pageSize)
 
     // `slim=1` drops the two fat per-snapshot fields (the file list and the
     // full verification record). The bulk restore wizard pulls EVERY snapshot
@@ -218,7 +226,7 @@ async function handler(req: Request, ctx: GuardedRouteContext) {
           page,
           pageSize,
           totalPages,
-          totalItems: filteredBackups.length,
+          totalItems,
           hasNext: page < totalPages,
           hasPrev: page > 1,
         }

@@ -2506,6 +2506,15 @@
     }
   },
   "backups": {
+    "restorePoints": "복원 지점",
+    "latestPoint": "최신",
+    "identity": "식별 정보",
+    "snapshotPath": "PBS 스냅샷",
+    "encryption": "암호화",
+    "cryptNone": "암호화 안 됨",
+    "cryptEncrypt": "암호화됨",
+    "cryptSignOnly": "서명만",
+    "machinesPerPage": "페이지당 머신 수:",
     "title": "백업",
     "subtitle": "PBS 백업 관리",
     "count": "백업 ({count})",

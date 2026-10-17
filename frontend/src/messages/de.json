@@ -2493,6 +2493,15 @@
     }
   },
   "backups": {
+    "restorePoints": "Wiederherstellungspunkte",
+    "latestPoint": "Neuester",
+    "identity": "Identität",
+    "snapshotPath": "PBS-Snapshot",
+    "encryption": "Verschlüsselung",
+    "cryptNone": "Nicht verschlüsselt",
+    "cryptEncrypt": "Verschlüsselt",
+    "cryptSignOnly": "Nur signiert",
+    "machinesPerPage": "Maschinen pro Seite:",
     "title": "Backups",
     "subtitle": "PBS-Backup-Verwaltung",
     "count": "Backups ({count})",

@@ -2506,6 +2506,15 @@
     }
   },
   "backups": {
+    "restorePoints": "Points de restauration",
+    "latestPoint": "Dernier",
+    "identity": "Identité",
+    "snapshotPath": "Snapshot PBS",
+    "encryption": "Chiffrement",
+    "cryptNone": "Non chiffré",
+    "cryptEncrypt": "Chiffré",
+    "cryptSignOnly": "Signé uniquement",
+    "machinesPerPage": "Machines par page :",
     "title": "Sauvegardes",
     "subtitle": "Gestion des sauvegardes PBS",
     "count": "Sauvegardes ({count})",

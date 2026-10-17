@@ -6000,7 +6000,10 @@
         "noWritableStorage": "No hay almacenamiento de discos de VM con acceso de escritura en este vDC.",
         "storagesLoadError": "No se pudo cargar la lista de almacenamientos. Reinténtelo o contacte con su proveedor.",
         "imageNotOnCluster": "Esta imagen no tiene copia en el clúster seleccionado. Elija otro clúster o pida al propietario de la imagen que añada este.",
-        "imageNotOnClusterUse": "Esta imagen no tiene copia en el clúster seleccionado. Despliéguela en: {clusters}."
+        "imageNotOnClusterUse": "Esta imagen no tiene copia en el clúster seleccionado. Despliéguela en: {clusters}.",
+        "destination": "Destino",
+        "destinationProvider": "Infraestructura del proveedor (sin vDC)",
+        "destinationVdcHint": "La VM se crea en el vDC {vdc} de {tenant}: se une al pool del vDC, cuenta en su cuota y solo se ofrecen los nodos, almacenamientos y redes del vDC."
       },
       "hardware": {
         "title": "Hardware",
@@ -8941,7 +8944,8 @@
     "vmidRangeHelp": "Las nuevas VMs y contenedores creados a través de ProxCenter reciben un VMID de este rango. Los invitados existentes no se ven afectados.",
     "vmidRangeIncomplete": "Complete ambos extremos del rango o deje ambos vacíos",
     "vmidRangeBounds": "Los VMID deben estar entre 100 y 999999999",
-    "vmidRangeInvalid": "El primer VMID debe ser menor o igual que el último VMID"
+    "vmidRangeInvalid": "El primer VMID debe ser menor o igual que el último VMID",
+    "noRbacRole": "Sin rol en este tenant"
   },
   "languages": {
     "fr": "Francés",

@@ -116,6 +116,8 @@ export default function TemplatesPage() {
         node: deployment.node,
         storage: config?.storage,
         vmName: config?.vmName,
+        // A provider deployment into a tenant vDC retries into that vDC.
+        targetVdcId: config?.targetVdcId,
       },
     })
     setWizardOpen(true)

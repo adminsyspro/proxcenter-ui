@@ -670,6 +670,10 @@ export async function getTenantUsers(tenantId: string): Promise<
     enabled: boolean
     is_default: boolean
     is_super_admin: boolean
+    /** Active RBAC roles held in THIS tenant: what the member can do here.
+     *  `role` above is the legacy users.role column, kept for API callers
+     *  but never the effective RBAC role (roadmap#65). */
+    rbac_roles: Array<{ id: string; name: string; is_system: boolean }>
     joined_at: string
   }>
 > {
@@ -693,6 +697,23 @@ export async function getTenantUsers(tenantId: string): Promise<
     : []
   const superAdminIds = new Set(superAdminRows.map(r => r.userId))
 
+  const tenantGrantRows = userIds.length > 0
+    ? await prisma.rbacUserRole.findMany({
+        where: {
+          userId: { in: userIds },
+          tenantId,
+          OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+        },
+        select: { userId: true, role: { select: { id: true, name: true, isSystem: true } } },
+      })
+    : []
+  const rolesByUser = new Map<string, Map<string, { id: string; name: string; is_system: boolean }>>()
+  for (const row of tenantGrantRows) {
+    let roles = rolesByUser.get(row.userId)
+    if (!roles) { roles = new Map(); rolesByUser.set(row.userId, roles) }
+    roles.set(row.role.id, { id: row.role.id, name: row.role.name, is_system: row.role.isSystem })
+  }
+
   return memberships.map(m => ({
     id: m.user.id,
     email: m.user.email,
@@ -701,6 +722,7 @@ export async function getTenantUsers(tenantId: string): Promise<
     enabled: m.user.enabled,
     is_default: m.isDefault,
     is_super_admin: superAdminIds.has(m.user.id),
+    rbac_roles: [...(rolesByUser.get(m.user.id)?.values() ?? [])],
     joined_at: m.joinedAt.toISOString(),
   }))
 }

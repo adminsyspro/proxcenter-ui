@@ -12,6 +12,7 @@ import {
   noteRecentVmidAllocation,
   withRecentVmidAllocations,
 } from "@/lib/tenant/vmidRange"
+import { resolveScopeTenant } from "@/lib/vdc/providerTarget"
 
 export const runtime = "nodejs"
 
@@ -43,7 +44,11 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
     // next free VMID inside the range across ALL of the tenant's clusters.
     // PVE's own /cluster/nextid can't do this (per-cluster, and its default
     // upper bound never reaches high ranges like 189334001).
-    const tenantId = await getCurrentTenantId()
+    // `?targetVdcId=` (provider only): pick inside that vDC tenant's range,
+    // for a provider deploying into it (roadmap#65).
+    const scopeTenant = await resolveScopeTenant(req, id, getCurrentTenantId)
+    if (!scopeTenant.ok) return scopeTenant.response
+    const tenantId = scopeTenant.tenantId
     const range = await resolveTenantVmidRange(tenantId)
 
     if (range) {

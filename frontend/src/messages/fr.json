@@ -6000,7 +6000,10 @@
         "noWritableStorage": "Aucun stockage de disques VM accessible en écriture dans ce vDC.",
         "storagesLoadError": "La liste des stockages n’a pas pu être chargée. Réessayez ou contactez votre fournisseur.",
         "imageNotOnCluster": "Cette image n'a pas de copie sur le cluster sélectionné. Choisissez un autre cluster, ou demandez au propriétaire de l'image d'y ajouter celui-ci.",
-        "imageNotOnClusterUse": "Cette image n'a pas de copie sur le cluster sélectionné. Déployez-la sur : {clusters}."
+        "imageNotOnClusterUse": "Cette image n'a pas de copie sur le cluster sélectionné. Déployez-la sur : {clusters}.",
+        "destination": "Destination",
+        "destinationProvider": "Infrastructure du provider (sans vDC)",
+        "destinationVdcHint": "La VM est créée dans le vDC {vdc} de {tenant} : elle rejoint le pool du vDC, compte dans son quota, et seuls les nœuds, stockages et réseaux du vDC sont proposés."
       },
       "hardware": {
         "title": "Matériel",
@@ -8942,7 +8945,8 @@
     "vmidRangeHelp": "Les nouvelles VM et conteneurs créés via ProxCenter reçoivent un VMID de cette plage. Les invités existants ne sont pas affectés.",
     "vmidRangeIncomplete": "Renseignez les deux bornes de la plage, ou laissez les deux vides",
     "vmidRangeBounds": "Les VMID doivent être compris entre 100 et 999999999",
-    "vmidRangeInvalid": "Le premier VMID doit être inférieur ou égal au dernier VMID"
+    "vmidRangeInvalid": "Le premier VMID doit être inférieur ou égal au dernier VMID",
+    "noRbacRole": "Aucun rôle dans ce tenant"
   },
   "languages": {
     "fr": "Français",

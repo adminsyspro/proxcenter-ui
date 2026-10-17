@@ -6004,7 +6004,10 @@
         "noWritableStorage": "此 vDC 中没有可写的虚拟机磁盘存储。",
         "storagesLoadError": "无法加载存储列表。请重试或联系您的提供商。",
         "imageNotOnCluster": "此镜像在所选集群上没有副本。请选择其他集群，或请镜像所有者添加此集群。",
-        "imageNotOnClusterUse": "此镜像在所选集群上没有副本。可部署到：{clusters}。"
+        "imageNotOnClusterUse": "此镜像在所选集群上没有副本。可部署到：{clusters}。",
+        "destination": "目标",
+        "destinationProvider": "提供商基础设施（无 vDC）",
+        "destinationVdcHint": "虚拟机将创建在 {tenant} 的 vDC {vdc} 中：它会加入该 vDC 的资源池并计入其配额，且只提供该 vDC 的节点、存储和网络。"
       },
       "hardware": {
         "title": "硬件",
@@ -8947,7 +8950,8 @@
     "vmidRangeHelp": "通过 ProxCenter 创建的新虚拟机和容器将从此范围内获取 VMID。现有客户机不受影响。",
     "vmidRangeIncomplete": "请填写范围的两端，或都留空",
     "vmidRangeBounds": "VMID 必须在 100 到 999999999 之间",
-    "vmidRangeInvalid": "起始 VMID 必须小于或等于结束 VMID"
+    "vmidRangeInvalid": "起始 VMID 必须小于或等于结束 VMID",
+    "noRbacRole": "在此租户中无角色"
   },
   "languages": {
     "fr": "法语",

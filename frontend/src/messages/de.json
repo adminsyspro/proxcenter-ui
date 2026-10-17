@@ -5979,7 +5979,10 @@
         "noWritableStorage": "In diesem vDC ist kein beschreibbarer Speicher für VM-Festplatten verfügbar.",
         "storagesLoadError": "Die Speicherliste konnte nicht geladen werden. Versuchen Sie es erneut oder wenden Sie sich an Ihren Anbieter.",
         "imageNotOnCluster": "Dieses Image hat keine Kopie auf dem ausgewählten Cluster. Wählen Sie einen anderen Cluster oder bitten Sie den Besitzer des Images, diesen hinzuzufügen.",
-        "imageNotOnClusterUse": "Dieses Image hat keine Kopie auf dem ausgewählten Cluster. Stellen Sie es bereit auf: {clusters}."
+        "imageNotOnClusterUse": "Dieses Image hat keine Kopie auf dem ausgewählten Cluster. Stellen Sie es bereit auf: {clusters}.",
+        "destination": "Ziel",
+        "destinationProvider": "Provider-Infrastruktur (ohne vDC)",
+        "destinationVdcHint": "Die VM wird im vDC {vdc} von {tenant} erstellt: Sie wird dem Pool des vDC zugeordnet, zählt zu seinem Kontingent, und es werden nur die Knoten, Speicher und Netzwerke des vDC angeboten."
       },
       "hardware": {
         "title": "Hardware",
@@ -8881,7 +8884,8 @@
     "vmidRangeHelp": "Neue über ProxCenter erstellte VMs und Container erhalten eine VMID aus diesem Bereich. Bestehende Gäste sind nicht betroffen.",
     "vmidRangeIncomplete": "Beide Grenzen des Bereichs angeben oder beide leer lassen",
     "vmidRangeBounds": "VMIDs müssen zwischen 100 und 999999999 liegen",
-    "vmidRangeInvalid": "Die erste VMID muss kleiner oder gleich der letzten VMID sein"
+    "vmidRangeInvalid": "Die erste VMID muss kleiner oder gleich der letzten VMID sein",
+    "noRbacRole": "Keine Rolle in diesem Tenant"
   },
   "languages": {
     "fr": "Französisch",

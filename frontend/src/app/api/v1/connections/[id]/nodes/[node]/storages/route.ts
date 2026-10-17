@@ -5,8 +5,9 @@ import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, buildNodeResourceId, filterStoragesByGrant, getRequestGuestScopePerimeter, getRequestStorageGrantPerimeter, PERMISSIONS } from "@/lib/rbac"
 import { vmDiskFormats } from "@/lib/proxmox/storage"
 import { getCurrentTenantId } from "@/lib/tenant"
-import { getTenantInfrastructureScope, maskingScope } from "@/lib/tenant/infraScope"
+import { maskingScope } from "@/lib/tenant/infraScope"
 import { isLibraryOnlyStorage, writableStoragesFor } from "@/lib/vdc/scope"
+import { resolveScopeTenant, scopeTenantInfrastructure } from "@/lib/vdc/providerTarget"
 
 export const runtime = "nodejs"
 
@@ -44,10 +45,14 @@ export async function GET(
       }
     }
 
-    const tenantId = await getCurrentTenantId()
+    // `?targetVdcId=` (provider only): list what that vDC's tenant would see,
+    // for a provider deploying into it (roadmap#65).
+    const scopeTenant = await resolveScopeTenant(req, id, getCurrentTenantId)
+    if (!scopeTenant.ok) return scopeTenant.response
+    const tenantId = scopeTenant.tenantId
     // Provider/MSP retain their infrastructure visibility; iaas ISO sources
     // must belong to this connection and node before resolving its client.
-    const scope = maskingScope(await getTenantInfrastructureScope(tenantId))
+    const scope = maskingScope(await scopeTenantInfrastructure(scopeTenant))
     if (scope && contentFilter === 'iso') {
       if (!scope.storagesByConnection.get(id)?.size) {
         return NextResponse.json({ error: "Storage not accessible" }, { status: 403 })

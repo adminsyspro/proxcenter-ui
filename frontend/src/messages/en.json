@@ -6000,7 +6000,10 @@
         "noWritableStorage": "No writable VM disk storage is available in this vDC.",
         "storagesLoadError": "The storage list could not be loaded. Retry, or contact your provider.",
         "imageNotOnCluster": "This image has no copy on the selected cluster. Pick another cluster, or ask the image owner to add this one to the image.",
-        "imageNotOnClusterUse": "This image has no copy on the selected cluster. Deploy it on: {clusters}."
+        "imageNotOnClusterUse": "This image has no copy on the selected cluster. Deploy it on: {clusters}.",
+        "destination": "Destination",
+        "destinationProvider": "Provider infrastructure (no vDC)",
+        "destinationVdcHint": "The VM is created in the {vdc} vDC of {tenant}: it joins the vDC pool, counts against its quota, and only the vDC nodes, storage and networks are offered."
       },
       "hardware": {
         "title": "Hardware",
@@ -8941,7 +8944,8 @@
     "vmidRangeHelp": "New VMs and containers created through ProxCenter get a VMID from this range. Existing guests are not affected.",
     "vmidRangeIncomplete": "Set both ends of the range, or leave both empty",
     "vmidRangeBounds": "VMIDs must be between 100 and 999999999",
-    "vmidRangeInvalid": "First VMID must be less than or equal to last VMID"
+    "vmidRangeInvalid": "First VMID must be less than or equal to last VMID",
+    "noRbacRole": "No role in this tenant"
   },
   "languages": {
     "fr": "French",

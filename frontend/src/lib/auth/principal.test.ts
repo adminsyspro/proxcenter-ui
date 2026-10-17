@@ -117,7 +117,7 @@ describe('getPrincipal, method check (step 4)', () => {
     expect((await getPrincipal()).ok).toBe(true)
   })
 
-  it('lets a POST entry called with POST past step 4 (no DB lookup needed to reach 401 on an unknown token)', async () => {
+  it('lets a POST entry called with POST past step 4 (proves step 4 let it through: the unknown token then fails with 401)', async () => {
     const postEntry = { id: 'test-post', method: 'POST', pattern: '/api/v1/test-post', requiredScopes: [] }
     const spy = vi.spyOn(allowlist, 'getAllowlistEntryById').mockImplementation(id =>
       id === 'test-post' ? (postEntry as any) : null,
@@ -137,6 +137,37 @@ describe('getPrincipal, method check (step 4)', () => {
     const { secret } = await seedApiToken()
     setHeaders(tokenHeaders(secret, 'test-post', '/api/v1/test-post', 'POST'))
     expect((await getPrincipal()).ok).toBe(true)
+  })
+
+  it('lists every method of the path (plus HEAD) in the 405 Allow header', async () => {
+    const getE = { id: 'multi-get', method: 'GET', pattern: '/api/v1/multi', requiredScopes: [] }
+    const postE = { id: 'multi-post', method: 'POST', pattern: '/api/v1/multi', requiredScopes: [] }
+    allowlist.PUBLIC_API_ALLOWLIST.push(getE as any, postE as any)
+    try {
+      vi.spyOn(allowlist, 'getAllowlistEntryById').mockImplementation(id => (id === 'multi-get' ? (getE as any) : null))
+      const { secret } = await seedApiToken()
+      setHeaders(tokenHeaders(secret, 'multi-get', '/api/v1/multi', 'PUT'))
+      const result = await getPrincipal()
+      expect(result.rejection?.status).toBe(405)
+      expect(result.rejection?.headers).toEqual({ Allow: 'GET, POST, HEAD' })
+    } finally {
+      allowlist.PUBLIC_API_ALLOWLIST.splice(-2, 2)
+    }
+  })
+
+  it('answers 405 with Allow: POST to a GET on a POST-only entry', async () => {
+    const postE = { id: 'only-post', method: 'POST', pattern: '/api/v1/only-post', requiredScopes: [] }
+    allowlist.PUBLIC_API_ALLOWLIST.push(postE as any)
+    try {
+      vi.spyOn(allowlist, 'getAllowlistEntryById').mockImplementation(id => (id === 'only-post' ? (postE as any) : null))
+      const { secret } = await seedApiToken()
+      setHeaders(tokenHeaders(secret, 'only-post', '/api/v1/only-post', 'GET'))
+      const result = await getPrincipal()
+      expect(result.rejection?.status).toBe(405)
+      expect(result.rejection?.headers).toEqual({ Allow: 'POST' })
+    } finally {
+      allowlist.PUBLIC_API_ALLOWLIST.splice(-1, 1)
+    }
   })
 
   it('exposes the token creator as principal.creatorUserId', async () => {

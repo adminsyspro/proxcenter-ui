@@ -262,6 +262,12 @@ export function allowedMethodsForPath(pathname: string): HttpMethod[] {
   return methods
 }
 
+/** Value of the Allow header for a path: its entry methods, plus HEAD when GET is present. Empty string when unlisted. */
+export function allowHeaderForPath(pathname: string): string {
+  const methods: string[] = allowedMethodsForPath(pathname)
+  return (methods.includes("GET") ? [...methods, "HEAD"] : methods).join(", ")
+}
+
 /** Re-verification against ONE designated entry (getPrincipal step 10): never a free re-match. */
 export function matchEntryParams(entry: AllowlistEntry, pathname: string): Record<string, string> | null {
   return matchPattern(entry, pathname)

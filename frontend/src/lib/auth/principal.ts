@@ -11,7 +11,7 @@ import { prisma } from "@/lib/db/prisma"
 import { DEFAULT_TENANT_ID } from "@/lib/tenant/constants"
 import { extractTokenPrefix, verifyTokenHash } from "@/lib/api-tokens/tokenCrypto"
 import { touchTokenUsage } from "@/lib/api-tokens/lastUsed"
-import { getAllowlistEntryById, matchesEntry } from "@/lib/api-tokens/allowlist"
+import { allowHeaderForPath, getAllowlistEntryById, matchesEntry } from "@/lib/api-tokens/allowlist"
 import { expandScopes } from "@/lib/api-tokens/scopes"
 import { isApiAccessLicensed } from "@/lib/api-tokens/licenseGate"
 import { consumeRateLimit } from "@/lib/api-tokens/rateLimit"
@@ -120,7 +120,7 @@ export async function getPrincipal(options: GetPrincipalOptions = {}): Promise<P
     return reject({
       status: 405,
       body: { error: "Method not allowed for this API token route", method },
-      headers: { Allow: entry.method === "GET" ? "GET, HEAD" : entry.method },
+      headers: { Allow: allowHeaderForPath(path) || entry.method },
     })
   }
 

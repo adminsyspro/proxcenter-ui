@@ -1919,6 +1919,10 @@
           }
         }
       },
+      "PrometheusExposition": {
+        "type": "string",
+        "description": "Prometheus text exposition format (version 0.0.4)."
+      },
       "TaskStartedResponse": {
         "type": "object",
         "description": "A Proxmox task was started. `data` is its UPID; follow it with GET /api/v1/tasks/{connectionId}/{node}/{upid}.",
@@ -3277,10 +3281,6 @@
             }
           }
         }
-      },
-      "PrometheusExposition": {
-        "type": "string",
-        "description": "Prometheus text exposition format (version 0.0.4)."
       }
     },
     "x-scopes": {

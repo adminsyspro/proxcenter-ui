@@ -516,44 +516,60 @@ describe('InventoryDialogs', () => {
       expect(calls.guestShutdowns).toEqual([])
     })
 
-    // #926: HTTP 200 on the POST only means PVE accepted the task.
-    function migrationTask(finalStatus: Record<string, unknown>) {
-      const UPID = `UPID:${NODE_NAME}:0000ABCD:00001234:6A000000:qmigrate:100:root@pam:`
+    // #248: the evacuation is a host drain run by the orchestrator. The dialog
+    // starts it, polls it, and acts on its verdict.
+    function drainOutcome(final: Record<string, unknown>) {
+      const requests: any[] = []
       server.use(
-        http.post('*/api/v1/connections/:id/guests/:type/:node/:vmid/migrate', () => HttpResponse.json({ success: true, data: UPID })),
-        http.get('*/api/v1/tasks/:conn/:node/:upid', () => HttpResponse.json({ status: 'stopped', ...finalStatus })),
+        http.post('*/api/v1/orchestrator/host-drains', async ({ request }) => {
+          requests.push(await request.json())
+          return HttpResponse.json({ data: { id: 'd-1', node: NODE_NAME, status: 'running', guests: [] } })
+        }),
+        http.get('*/api/v1/orchestrator/host-drains/:id', () => HttpResponse.json({ data: { id: 'd-1', node: NODE_NAME, ...final } })),
         http.get('*/api/v1/connections/:id/guests/:type/:node/:vmid/migrate/pending-check', () => HttpResponse.json({ data: { changes: [] } })),
       )
-      return UPID
+      return requests
     }
 
-    it('does not reboot when a migration PVE accepted then failed, and keeps the reason and the task', async () => {
+    it('does not reboot when the drain is partial, and keeps the reason and the task of each leftover', async () => {
       const calls = recordRequests()
-      const upid = migrationTask({ exitstatus: 'migration aborted', failureReason: "can't migrate VM which uses local devices: hostpci0" })
+      const upid = `UPID:${NODE_NAME}:0000ABCD:00001234:6A000000:qmigrate:100:root@pam:`
+      const requests = drainOutcome({
+        status: 'partial', maintenance_enabled: true,
+        guests: [
+          { vmid: 100, name: 'vm100', type: 'qemu', running: true, status: 'failed', error: 'task failed: migration aborted', failure_reason: "can't migrate VM which uses local devices: hostpci0", task_id: upid },
+          { vmid: 101, name: 'vm101', type: 'qemu', running: true, status: 'completed', target_node: 'pve2' },
+        ],
+      })
       const setNodeActionFailedVms = vi.fn()
       renderWithProviders(<InventoryDialogs {...makeProps({
         nodeActionDialog: { action: 'reboot', nodeName: NODE_NAME, connId: CONN_ID, node: NODE_NAME },
-        allVms: [runningVm('100')],
+        allVms: [runningVm('100'), runningVm('101')],
         hosts: [host(NODE_NAME), host('pve2')],
-        nodeActionMigrateTarget: 'pve2',
         setNodeActionFailedVms,
       })} />)
 
       fireEvent.click(screen.getByRole('button', { name: /confirm/i }))
 
-      await waitFor(() => expect(setNodeActionFailedVms).toHaveBeenCalled())
+      await waitFor(() => expect(setNodeActionFailedVms).toHaveBeenCalled(), { timeout: 10000 })
       expect(setNodeActionFailedVms).toHaveBeenCalledWith([expect.objectContaining({
         vmid: '100',
         error: "can't migrate VM which uses local devices: hostpci0",
         upid,
         taskNode: NODE_NAME,
       })])
+      expect(requests[0]).toEqual({
+        connection_id: CONN_ID, node: NODE_NAME,
+        config: { target_node: '', max_concurrent_migrations: 2, include_stopped: false, enter_maintenance: true },
+      })
       expect(calls.nodeCommands).toEqual([])
     })
 
-    it('reboots once every migration task ended OK', async () => {
+    it('reboots once the drain completed, without entering maintenance twice', async () => {
       const calls = recordRequests()
-      migrationTask({ exitstatus: 'OK' })
+      let maintenanceCalls = 0
+      server.use(http.post('*/api/v1/connections/:id/nodes/:node/maintenance', () => { maintenanceCalls++; return HttpResponse.json({ data: null }) }))
+      drainOutcome({ status: 'completed', maintenance_enabled: true, guests: [{ vmid: 100, name: 'vm100', type: 'qemu', running: true, status: 'completed', target_node: 'pve2' }] })
       const setNodeActionDialog = vi.fn()
       const setNodeActionFailedVms = vi.fn()
       renderWithProviders(<InventoryDialogs {...makeProps({
@@ -561,23 +577,40 @@ describe('InventoryDialogs', () => {
         setNodeActionDialog,
         allVms: [runningVm('100')],
         hosts: [host(NODE_NAME), host('pve2')],
-        nodeActionMigrateTarget: 'pve2',
         setNodeActionFailedVms,
       })} />)
 
       fireEvent.click(screen.getByRole('button', { name: /confirm/i }))
 
-      await waitFor(() => expect(setNodeActionDialog).toHaveBeenCalledWith(null))
+      await waitFor(() => expect(setNodeActionDialog).toHaveBeenCalledWith(null), { timeout: 10000 })
       expect(calls.nodeCommands).toEqual(['reboot'])
+      expect(maintenanceCalls).toBe(0)
       expect(setNodeActionFailedVms).not.toHaveBeenCalledWith(expect.arrayContaining([expect.anything()]))
     })
 
-    it('shows why a guest could not be moved, with its task log, on the failed row', () => {
+    it('sends a manual target to the drain when the operator insists on one', async () => {
+      recordRequests()
+      const requests = drainOutcome({ status: 'completed', maintenance_enabled: true, guests: [] })
       renderWithProviders(<InventoryDialogs {...makeProps({
         nodeActionDialog: { action: 'reboot', nodeName: NODE_NAME, connId: CONN_ID, node: NODE_NAME },
         allVms: [runningVm('100')],
         hosts: [host(NODE_NAME), host('pve2')],
         nodeActionMigrateTarget: 'pve2',
+      })} />)
+
+      fireEvent.mouseDown(screen.getByLabelText('Placement'))
+      fireEvent.click(await screen.findByRole('option', { name: 'Single target node' }))
+      fireEvent.click(screen.getByRole('button', { name: /confirm/i }))
+
+      await waitFor(() => expect(requests).toHaveLength(1), { timeout: 10000 })
+      expect(requests[0].config.target_node).toBe('pve2')
+    })
+
+    it('shows why a guest could not be moved, with its task log, on the leftover row', () => {
+      renderWithProviders(<InventoryDialogs {...makeProps({
+        nodeActionDialog: { action: 'reboot', nodeName: NODE_NAME, connId: CONN_ID, node: NODE_NAME },
+        allVms: [runningVm('100')],
+        hosts: [host(NODE_NAME), host('pve2')],
         nodeActionFailedVms: [{
           vmid: '100', name: 'vm100', connId: CONN_ID, type: 'qemu', node: NODE_NAME,
           error: 'CT is locked (backup)', upid: `UPID:${NODE_NAME}:1:2:3:qmigrate:100:root@pam:`, taskNode: NODE_NAME,
@@ -585,11 +618,14 @@ describe('InventoryDialogs', () => {
       })} />)
 
       expect(screen.getByText('CT is locked (backup)')).toBeInTheDocument()
+      expect(screen.getByText('1 guest(s) are still on the node after the drain')).toBeInTheDocument()
+      expect(screen.getByLabelText('Force the reboot anyway, these guests will be stopped')).toBeInTheDocument()
       expect(screen.getByRole('button', { name: /tasks\.viewLog|view log/i })).toBeInTheDocument()
     })
 
-    it('cluster reboot leaves the guests whose migration failed to PVE', async () => {
+    it('cluster reboot forced past a partial drain leaves the leftover guests to PVE and starts no new drain', async () => {
       const calls = recordRequests()
+      const requests = drainOutcome({ status: 'completed', guests: [] })
       const setNodeActionDialog = vi.fn()
       renderWithProviders(<InventoryDialogs {...makeProps({
         nodeActionDialog: { action: 'reboot', nodeName: NODE_NAME, connId: CONN_ID, node: NODE_NAME },
@@ -606,6 +642,7 @@ describe('InventoryDialogs', () => {
       await waitFor(() => expect(setNodeActionDialog).toHaveBeenCalledWith(null))
       expect(calls.nodeCommands).toEqual(['reboot'])
       expect(calls.guestShutdowns).toEqual([])
+      expect(requests).toEqual([])
     })
   })
 

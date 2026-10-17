@@ -2,11 +2,13 @@ import { NextResponse } from "next/server"
 
 import { prisma as globalPrisma } from "@/lib/db/prisma"
 import { getCurrentTenantId, getTenantConnectionIds } from "@/lib/tenant"
-import { getTenantInfrastructureScope, maskingScope } from "@/lib/tenant/infraScope"
+import { canMigrateConnections, getTenantInfrastructureScope, maskingScope } from "@/lib/tenant/infraScope"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { orchestratorHeaders } from "@/lib/orchestrator/headers"
 import { TERMINAL_STATUSES, sourceTypeLabel } from "@/lib/tasks/sharedTask"
 import { replicationJobStatus } from "@/lib/tasks/replicationJobStatus"
+import { hostDrainJobRows } from "@/lib/tasks/hostDrainRows"
+import { filterViewableDrains } from "@/lib/hostDrain/access"
 
 export const runtime = "nodejs"
 
@@ -271,6 +273,28 @@ export async function GET(req: Request) {
     } catch (e) {
       if ((e as any)?.code !== 'ORCHESTRATOR_UNAVAILABLE') {
         console.error("Failed to fetch DRS migrations:", e)
+      }
+    }
+
+    // Fetch host drains (#248): one row for the drain, one per guest. The
+    // orchestrator keeps them fleet-wide.
+    try {
+      const drainRes = await fetch(`${ORCHESTRATOR_URL}/api/v1/host-drains?limit=50`, {
+        headers: orchestratorHeaders({ "Content-Type": "application/json" }),
+      })
+
+      if (drainRes.ok) {
+        const drainData = await drainRes.json()
+        const drains: any[] = Array.isArray(drainData) ? drainData : (drainData?.data || [])
+        // A drain lists every guest of the node: only on clusters the caller
+        // owns, never on one a vDC merely shares (the perimeter filter below
+        // would keep those, and other tenants' guest names with them).
+        const owned = drains.filter(d => d?.connection_id && canMigrateConnections(infra, d.connection_id))
+        jobs.push(...hostDrainJobRows(await filterViewableDrains(owned), resolve))
+      }
+    } catch (e) {
+      if ((e as any)?.code !== 'ORCHESTRATOR_UNAVAILABLE') {
+        console.error("Failed to fetch host drains:", e)
       }
     }
 

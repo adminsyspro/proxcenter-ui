@@ -37,7 +37,7 @@ import { usedVmidsOnConnection, nextVmidOnConnection } from '@/components/hardwa
 import { crossClusterMigrate } from '@/lib/migration/crossClusterMigrate'
 import { startTrackedMigration } from '@/lib/migration/guestMigrateClient'
 import { useTaskTracker } from '@/hooks/useTaskTracker'
-import PendingChangesWarning from '@/components/migration/PendingChangesWarning'
+import HostDrainDialog from '@/components/HostDrainDialog'
 import { NodeIcon, ClusterIcon, StatusIcon } from './TreeIcons'
 import { useTenant } from '@/contexts/TenantContext'
 
@@ -269,7 +269,7 @@ export interface TreeDialogsProps {
   maintenanceTarget: { connId: string; node: string; maintenance?: string } | null
   setMaintenanceTarget: React.Dispatch<React.SetStateAction<{ connId: string; node: string; maintenance?: string } | null>>
   maintenanceError: string | null
-  handleMaintenanceConfirm: () => Promise<void>
+  handleMaintenanceConfirm: () => Promise<boolean>
   getNodeVms: (connId: string, nodeName: string) => any[]
   getOtherNodes: (connId: string, nodeName: string) => string[]
 
@@ -698,10 +698,31 @@ export default function TreeDialogs(props: TreeDialogsProps) {
         ]}
       </Menu>
 
-      {/* Dialog confirmation maintenance */}
+      {/* Entering maintenance drains the node through the orchestrator (#248):
+          every guest is placed individually, HA guests by Proxmox HA, the
+          others by the placement engine. Leaving maintenance stays a plain
+          confirmation. */}
       {(() => {
-        const entering = maintenanceTarget && !maintenanceTarget.maintenance
+        const entering = !!maintenanceTarget && !maintenanceTarget.maintenance
         const mSshEnabled = !!clusters.find(c => c.connId === maintenanceTarget?.connId)?.sshEnabled
+        if (entering) {
+          return (
+            <HostDrainDialog
+              open
+              mode="maintenance"
+              connId={maintenanceTarget!.connId}
+              node={maintenanceTarget!.node}
+              otherNodes={getOtherNodes(maintenanceTarget!.connId, maintenanceTarget!.node)}
+              sshEnabled={mSshEnabled}
+              onClose={() => { if (!maintenanceBusy) setMaintenanceTarget(null) }}
+              onStarted={() => setReloadTick(x => x + 1)}
+              onMaintenanceOnly={async () => {
+                const ok = await handleMaintenanceConfirm()
+                if (!ok) throw new Error(maintenanceError || t('inventory.unknownError'))
+              }}
+            />
+          )
+        }
         return (
         <Dialog
           open={maintenanceTarget !== null}
@@ -728,15 +749,6 @@ export default function TreeDialogs(props: TreeDialogsProps) {
                 ? t('inventory.confirmExitMaintenance')
                 : t('inventory.confirmEnterMaintenance')}
             </DialogContentText>
-
-            {/* Non-HA guests are not evacuated by node-maintenance; operator handles them */}
-            {entering && (
-              <Alert severity="warning" icon={<i className="ri-information-line" style={{ fontSize: 20 }} />}>
-                <Typography variant="body2">
-                  {t('inventory.maintenanceNonHaNote')}
-                </Typography>
-              </Alert>
-            )}
 
             {!mSshEnabled && (
               <Alert severity="warning" icon={<i className="ri-ssh-line" style={{ fontSize: 18 }} />}>
@@ -770,9 +782,23 @@ export default function TreeDialogs(props: TreeDialogsProps) {
         )
       })()}
 
+      {/* "Migrate all VMs" is a host drain (#248): placed per guest by the
+          orchestrator instead of everything on one node from the browser. */}
+      {bulkActionDialog.open && bulkActionDialog.action === 'migrate-all' && (
+        <HostDrainDialog
+          open
+          mode="migrate-all"
+          connId={bulkActionDialog.connId}
+          node={bulkActionDialog.node}
+          otherNodes={getOtherNodes(bulkActionDialog.connId, bulkActionDialog.node)}
+          onClose={() => setBulkActionDialog({ open: false, action: null, connId: '', node: '', targetNode: '' })}
+          onStarted={() => setTimeout(() => fetch('/api/v1/inventory/poll', { method: 'POST' }).catch(() => {}), 2000)}
+        />
+      )}
+
       {/* Dialog confirmation bulk action */}
       <Dialog
-        open={bulkActionDialog.open}
+        open={bulkActionDialog.open && bulkActionDialog.action !== 'migrate-all'}
         onClose={() => setBulkActionDialog({ open: false, action: null, connId: '', node: '', targetNode: '' })}
         maxWidth="xs"
         fullWidth
@@ -780,22 +806,19 @@ export default function TreeDialogs(props: TreeDialogsProps) {
         <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
           <Box sx={{
             width: 40, height: 40, borderRadius: 2,
-            bgcolor: bulkActionDialog.action === 'start-all' ? 'rgba(76,175,80,0.12)' : bulkActionDialog.action === 'migrate-all' ? 'rgba(33,150,243,0.12)' : 'rgba(255,152,0,0.12)',
+            bgcolor: bulkActionDialog.action === 'start-all' ? 'rgba(76,175,80,0.12)' : 'rgba(255,152,0,0.12)',
             display: 'flex', alignItems: 'center', justifyContent: 'center'
           }}>
             {bulkActionDialog.action === 'start-all' && <PlayArrowIcon fontSize="small" sx={{ color: 'success.main' }} />}
             {bulkActionDialog.action === 'shutdown-all' && <PowerSettingsNewIcon fontSize="small" sx={{ color: 'warning.main' }} />}
-            {bulkActionDialog.action === 'migrate-all' && <RemixIcon name="ri-exchange-line" fontSize="small" sx={{ color: 'info.main' }} />}
           </Box>
           {bulkActionDialog.action === 'start-all' && t('bulkActions.startAllVms')}
           {bulkActionDialog.action === 'shutdown-all' && t('bulkActions.shutdownAllVms')}
-          {bulkActionDialog.action === 'migrate-all' && t('bulkActions.migrateAllVms')}
         </DialogTitle>
         <DialogContent>
           <DialogContentText>
             {bulkActionDialog.action === 'start-all' && t('bulkActions.confirmStartAll')}
             {bulkActionDialog.action === 'shutdown-all' && t('bulkActions.confirmShutdownAll')}
-            {bulkActionDialog.action === 'migrate-all' && t('bulkActions.confirmMigrateAll')}
           </DialogContentText>
           <Typography variant="body2" fontWeight={600} sx={{ mt: 1.5 }}>
             {t('inventory.node')}: {bulkActionDialog.node}
@@ -810,35 +833,6 @@ export default function TreeDialogs(props: TreeDialogsProps) {
               {getNodeVms(bulkActionDialog.connId, bulkActionDialog.node).filter(v => v.status === 'running').length} VMs
             </Typography>
           )}
-          {bulkActionDialog.action === 'migrate-all' && (
-            // #926: preflight for the running guests, migrated live
-            <PendingChangesWarning
-              sx={{ mt: 2 }}
-              guests={getNodeVms(bulkActionDialog.connId, bulkActionDialog.node)
-                .filter(v => v.status === 'running')
-                .map(v => ({ connId: bulkActionDialog.connId, node: bulkActionDialog.node, type: v.type, vmid: v.vmid, name: v.name }))}
-            />
-          )}
-          {bulkActionDialog.action === 'migrate-all' && (
-            <FormControl fullWidth sx={{ mt: 2 }}>
-              <InputLabel size="small">{t('bulkActions.targetNode')}</InputLabel>
-              <Select
-                size="small"
-                value={bulkActionDialog.targetNode}
-                label={t('bulkActions.targetNode')}
-                onChange={(e) => setBulkActionDialog(prev => ({ ...prev, targetNode: e.target.value }))}
-              >
-                {getOtherNodes(bulkActionDialog.connId, bulkActionDialog.node).map(n => (
-                  <MenuItem key={n} value={n}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <NodeIcon status="online" size={14} />
-                      {n}
-                    </Box>
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-          )}
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
           <Button
@@ -850,8 +844,8 @@ export default function TreeDialogs(props: TreeDialogsProps) {
           <Button
             onClick={handleBulkActionConfirm}
             variant="contained"
-            color={bulkActionDialog.action === 'start-all' ? 'success' : bulkActionDialog.action === 'migrate-all' ? 'primary' : 'warning'}
-            disabled={bulkActionBusy || (bulkActionDialog.action === 'migrate-all' && !bulkActionDialog.targetNode)}
+            color={bulkActionDialog.action === 'start-all' ? 'success' : 'warning'}
+            disabled={bulkActionBusy}
             startIcon={bulkActionBusy ? <CircularProgress size={16} /> : undefined}
           >
             {t('common.confirm')}

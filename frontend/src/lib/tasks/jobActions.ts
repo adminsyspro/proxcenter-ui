@@ -23,6 +23,8 @@ export type JobLike = {
   metadata?: Record<string, any> | null
 } | null | undefined
 
+import { HOST_DRAIN_JOB_TYPE, isHostDrainGuestRow } from './hostDrainRows'
+
 export type JobAction = 'pause' | 'resume' | 'approve' | 'cancel'
 
 /** `UPID:pve1:0000ABCD:...` -> `pve1`. */
@@ -63,6 +65,12 @@ export function jobDetailUrl(job: JobLike): string | null {
 
   if (job.type === 'rolling_update') return `/api/v1/orchestrator/rolling-updates/${job.id}`
 
+  // A host drain keeps its log on the orchestrator record; a guest row of it
+  // has no log of its own (its outcome is in the row), so nothing to fetch.
+  if (job.type === HOST_DRAIN_JOB_TYPE) {
+    return isHostDrainGuestRow(job.id) ? null : `/api/v1/orchestrator/host-drains/${job.id}`
+  }
+
   // Migrations: the shared-task detail is gated on the same tasks.view
   // permission as this page (/api/v1/migrations/{id} requires vm.migrate).
   // history=1 drops its 30-minute recency window, which exists for the tasks
@@ -98,6 +106,12 @@ export function jobActions(job: JobLike): JobAction[] {
   // metadata.cancellable is set by the jobs route from the row status: the
   // cancel endpoint answers 400 on an already-finished migration.
   if (job.type === 'migration') return job.metadata?.cancellable ? ['cancel'] : []
+
+  // A running drain can be cancelled as a whole (nothing new is started, the
+  // migrations Proxmox already runs finish). A guest row cannot: it is one
+  // Proxmox migration task, stopping it half-way would leave the guest in an
+  // undefined state.
+  if (job.type === HOST_DRAIN_JOB_TYPE) return job.status === 'running' && !isHostDrainGuestRow(job.id) ? ['cancel'] : []
 
   // A DRS migration is a qmigrate running ON the node: the orchestrator only
   // polls the UPID it recorded, so cancelling it "in ProxCenter" would stop
@@ -138,6 +152,10 @@ export function jobActionRequest(job: JobLike, action: JobAction): JobActionRequ
     return { url: `/api/v1/migrations/${job.id}/cancel`, method: 'POST' }
   }
 
+  if (job.type === HOST_DRAIN_JOB_TYPE && action === 'cancel' && !isHostDrainGuestRow(job.id)) {
+    return { url: `/api/v1/orchestrator/host-drains/${job.id}/cancel`, method: 'POST' }
+  }
+
   if (job.type === 'drs' && action === 'cancel') {
     const url = pveTaskUrl(job)
 
@@ -174,6 +192,8 @@ export function jobActionPermission(job: JobLike): string | null {
   if (job?.type === 'rolling_update') return 'automation.execute'
   if (job?.type === 'migration') return 'vm.migrate'
   if (job?.type === 'drs') return PVE_TASK_STOP_PERMISSION
+  // Cancelling a drain is acting on the node, like starting it.
+  if (job?.type === HOST_DRAIN_JOB_TYPE) return PVE_TASK_STOP_PERMISSION
   if (job?.type === 'replication' || job?.type === 'site_recovery') return 'automation.manage'
 
   return null

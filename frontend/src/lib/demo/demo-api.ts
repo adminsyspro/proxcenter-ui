@@ -2253,6 +2253,8 @@ export const EXTRA_MOCKS: MockDataMap = {
   // No rolling update in flight. The route returns a bare array, so the
   // `{ data: [] }` fallback was the wrong TYPE, not just an empty answer.
   'GET:/api/v1/orchestrator/rolling-updates': [],
+  // No host drain in flight either (#248), same bare-array contract.
+  'GET:/api/v1/orchestrator/host-drains': [],
 
   get 'GET:/api/v1/changes/recent'() {
     return { data: generateChangeEntries().slice(0, 10) }

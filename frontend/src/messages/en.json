@@ -2169,7 +2169,13 @@
     "poolCreated": "Pool {pool} created",
     "poolUpdated": "Pool {pool} updated",
     "poolDeleted": "Pool {pool} deleted",
-    "poolOwnedByVdc": "This pool belongs to the vDC {vdc}: delete the vDC instead."
+    "poolOwnedByVdc": "This pool belongs to the vDC {vdc}: delete the vDC instead.",
+    "nodeActionDrainStep": "Draining the node: {done}/{total} guest(s) settled...",
+    "nodeActionDrainPartial": "{count} guest(s) are still on the node after the drain",
+    "nodeActionDrainPartialDesc": "The node is not drained. Force the {action} to let Proxmox VE stop them, or cancel and move them yourself. The drain is listed in the Task Center.",
+    "nodeActionForceOption": "Force the {action} anyway, these guests will be stopped",
+    "nodeActionDrainDesc": "Guests on shared storage are evacuated by the orchestrator, each one to the node the placement engine picks. Follow them in the Task Center.",
+    "nodeActionDrainFailed": "The drain could not start: {error}"
   },
   "inventoryPage": {
     "newTag": "New tag...",
@@ -4918,7 +4924,11 @@
     "total": "Total",
     "running": "Running",
     "pending": "Pending",
-    "failed": "Failed"
+    "failed": "Failed",
+    "typeHostDrain": "Host drain",
+    "drainGuests": "Guests",
+    "drainRemaining": "{count} still on {node}",
+    "drainMaintenanceEnabled": "Node in maintenance"
   },
   "tasks": {
     "stop": {
@@ -10002,5 +10012,43 @@
     "deletedCaption": "vDC deleted, samples kept {days} days after they were taken",
     "emptyDeleted": "No sample of this vDC in this period.",
     "dialogTitleDeleted": "Usage history: {name} (deleted)"
+  },
+  "hostDrain": {
+    "introMaintenance": "The node enters Proxmox HA maintenance and its guests are evacuated: HA-managed guests are relocated by Proxmox HA, the others are migrated by ProxCenter, each one to the node the placement engine picks (projected load, memory ceiling, affinity rules, network and storage).",
+    "introMigrateAll": "Every guest of this node is migrated by ProxCenter, each one to the node the placement engine picks. The node stays available for new guests: use Enter maintenance to keep them off it.",
+    "evacuateGuests": "Evacuate the guests",
+    "evacuateGuestsOff": "Maintenance only: Proxmox HA relocates the HA-managed guests, the others stay on the node.",
+    "placement": "Placement",
+    "placementAuto": "Automatic (spread by projected load)",
+    "placementManual": "Single target node",
+    "targetNode": "Target node",
+    "maxParallel": "Parallel migrations",
+    "memCeiling": "Memory ceiling on targets",
+    "memCeilingHelp": "A target node takes no more guests once they would bring its memory above this share.",
+    "includeStopped": "Also move stopped guests (offline migration)",
+    "projectionTitle": "Projected load after the drain",
+    "projectionMem": "Memory",
+    "projectionCpu": "CPU",
+    "projectionHelp": "Current load → once the planned guests have moved. A target counts each guest's configured memory; stopped guests weigh nothing until started. +n / −n: guests arriving / leaving.",
+    "projectionHaUnplaced": "{count} HA guest(s) are placed by Proxmox HA and not counted on any target.",
+    "applyToAll": "Apply to all",
+    "perGuest": "per guest",
+    "automaticPlacement": "Automatic placement",
+    "keepOnNode": "Leave on the node",
+    "targetOf": "Target of {name}",
+    "planEmpty": "No guest on this node.",
+    "planSkipped": "stays",
+    "planHa": "Proxmox HA",
+    "modeLive": "live",
+    "modeRestart": "restart",
+    "modeOffline": "offline",
+    "modeHa": "HA",
+    "requiresSsh": "Entering maintenance runs ha-manager over SSH: SSH must be configured on this connection.",
+    "start": "Start the drain",
+    "started": "Drain of {node} started, follow each guest in the Task Center",
+    "orchestratorUnavailable": "The orchestrator is unreachable, the drain cannot run.",
+    "runsInOrchestrator": "Runs in the orchestrator: you can close this window and follow each guest in the Task Center.",
+    "candidates": "Eligible targets: {nodes}",
+    "noCandidates": "No eligible target node."
   }
 }

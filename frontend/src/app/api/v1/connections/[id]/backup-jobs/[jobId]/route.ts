@@ -11,6 +11,7 @@ import { getCurrentTenantId } from "@/lib/tenant"
 import { getTenantInfrastructureScope, maskingScope } from "@/lib/tenant/infraScope"
 import { getAllowedJobPools, isJobOwnedByTenantPools, validateTenantJobBody, validateTenantJobInfra } from "@/lib/vdc/backupJobs"
 import { denyJobGuestsOutsideBackupRight, jobSelection } from "@/lib/backups/jobGuestScope"
+import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 
 /**
  * Connection-level RBAC check with the storage-scope fallback (issue #921): a
@@ -66,7 +67,6 @@ async function loadJobForTenant(conn: any, connectionId: string, jobId: string) 
   }
   return { job, allowedPools, scope }
 }
-import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 
 export const runtime = "nodejs"
 

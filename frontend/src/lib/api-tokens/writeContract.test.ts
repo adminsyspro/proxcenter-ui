@@ -2,7 +2,7 @@
 // opened with them). Each domain task appends its ids to EXPECTED_WRITE_IDS;
 // everything else below applies to the new entries automatically.
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import path from 'node:path'
 
 const { headersMock } = vi.hoisted(() => ({ headersMock: vi.fn<() => Promise<Headers>>() }))
@@ -17,7 +17,9 @@ import { getPrincipal } from '@/lib/auth/principal'
 import { _impl } from '@/lib/auth/requireEnterprise'
 import { PERMISSIONS, grantsPermission } from '@/lib/rbac'
 
-import { PUBLIC_API_ALLOWLIST, getAllowlistEntryById, isWriteEntry, matchPublicApiPath, matchesEntry, type AllowlistEntry } from './allowlist'
+import {
+  PUBLIC_API_ALLOWLIST, _matchAgainst, getAllowlistEntryById, isWriteEntry, matchPublicApiPath, matchesEntry, type AllowlistEntry,
+} from './allowlist'
 import { _resetLicenseVerdictCache } from './licenseGate'
 import { _resetRateLimitCounters } from './rateLimit'
 import { READ_SCOPE_IDS, WRITE_SCOPE_IDS, expandScopes, isWriteScope } from './scopes'
@@ -146,6 +148,104 @@ describe('write contract: declared entries', () => {
       const others = PUBLIC_API_ALLOWLIST.filter(o => o.id !== entry.id && matchesEntry(o, sample, entry.method))
       expect(others.map(o => o.id), sample).toEqual([])
     }
+  })
+})
+
+// ── Next routing: a dynamic segment never swallows a static sibling route ──
+const APP_ROOT = path.join(FRONTEND_ROOT, 'src', 'app')
+/** A value no route folder carries, standing for any other dynamic segment. */
+const ANY_VALUE = 'pxc-sample-value'
+
+function subfolders(dir: string): string[] {
+  return readdirSync(dir).filter(name => statSync(path.join(dir, name)).isDirectory())
+}
+
+/**
+ * The route.ts Next serves for `segments` under `dir`, null when none: a
+ * static folder wins over [dynamic], then [...catchAll] / [[...optional]];
+ * route groups (x) are transparent, _private and @slot folders never route.
+ * A dead end backtracks to the next candidate, like Next's matcher.
+ */
+function resolveNextRoute(dir: string, segments: string[]): string | null {
+  const folders = subfolders(dir)
+  for (const group of folders.filter(f => f.startsWith('('))) {
+    const found = resolveNextRoute(path.join(dir, group), segments)
+    if (found) return found
+  }
+  const route = path.join(dir, 'route.ts')
+  if (segments.length === 0) {
+    const optional = folders.find(f => f.startsWith('[[...'))
+    if (existsSync(route)) return route
+    return optional && existsSync(path.join(dir, optional, 'route.ts')) ? path.join(dir, optional, 'route.ts') : null
+  }
+  const [head, ...rest] = segments
+  const ordered = [
+    ...folders.filter(f => f === head && !/^[[(_@]/.test(f)),
+    ...folders.filter(f => /^\[[^.[]/.test(f)),
+  ]
+  for (const folder of ordered) {
+    const found = resolveNextRoute(path.join(dir, folder), rest)
+    if (found) return found
+  }
+  const catchAll = folders.find(f => f.startsWith('[...') || f.startsWith('[[...'))
+  return catchAll && existsSync(path.join(dir, catchAll, 'route.ts')) ? path.join(dir, catchAll, 'route.ts') : null
+}
+
+function exportsMethod(file: string, method: string): boolean {
+  const source = readFileSync(file, 'utf8')
+  return new RegExp(`export\\s+(?:async\\s+)?(?:function|const|let)\\s+${method}\\b|export\\s*\\{[^}]*\\b${method}\\b`).test(source)
+}
+
+/**
+ * (g) For each dynamic segment of an entry, every static sibling folder is
+ * tried in its place: when Next would serve that path from ANOTHER route file
+ * answering the method, the shared matcher must not hand it this entry's
+ * verdict (segmentExclude it, or let that file's own entry match).
+ */
+function swallowedSiblings(entry: AllowlistEntry, entries: AllowlistEntry[] = PUBLIC_API_ALLOWLIST): string[] {
+  const dirs = entry.routeFile.replace(/^src\/app\//, '').replace(/\/route\.ts$/, '').split('/')
+  const pattern = entry.pattern.split('/').slice(1)
+  const own = path.join(FRONTEND_ROOT, entry.routeFile)
+  const found: string[] = []
+  pattern.forEach((segment, i) => {
+    if (!segment.startsWith('{')) return
+    const parent = path.join(APP_ROOT, ...dirs.slice(0, i))
+    for (const sibling of subfolders(parent).filter(f => !/^[[(_@]/.test(f))) {
+      const sample = pattern.map((p, j) => {
+        if (j === i) return sibling
+        if (!p.startsWith('{')) return p
+        return entry.segmentEnum?.[p.slice(1, -1)]?.[0] ?? ANY_VALUE
+      })
+      const served = resolveNextRoute(APP_ROOT, sample)
+      if (!served || served === own || !exportsMethod(served, entry.method)) continue
+      const samplePath = `/${sample.join('/')}`
+      if (_matchAgainst(entries, samplePath, entry.method).entryId === entry.id) {
+        found.push(`${entry.method} ${samplePath} -> ${path.relative(FRONTEND_ROOT, served)}`)
+      }
+    }
+  })
+  return found
+}
+
+describe('write contract: Next static-over-dynamic routing', () => {
+  it('every entry route file mirrors its pattern, one folder per segment', () => {
+    for (const entry of PUBLIC_API_ALLOWLIST) {
+      const dirs = entry.routeFile.replace(/^src\/app\//, '').replace(/\/route\.ts$/, '').split('/')
+      expect(dirs.map(d => d.replace(/^\[(.+)\]$/, '{$1}')), entry.id).toEqual(entry.pattern.split('/').slice(1))
+    }
+  })
+
+  it.each(PUBLIC_API_ALLOWLIST.map(e => [e.id, e] as const))('(g) %s never swallows a static sibling route', (_id, entry) => {
+    expect(swallowedSiblings(entry)).toEqual([])
+  })
+
+  it('(g) bites: without its runs exclusion, backup-job-get would serve backup-jobs/runs', () => {
+    const entry = getAllowlistEntryById('backup-job-get')!
+    const unexcluded = { ...entry, segmentExclude: undefined }
+    const entries = PUBLIC_API_ALLOWLIST.map(e => (e.id === entry.id ? unexcluded : e))
+    expect(swallowedSiblings(unexcluded, entries)).toEqual([
+      'GET /api/v1/connections/pxc-sample-value/backup-jobs/runs -> src/app/api/v1/connections/[id]/backup-jobs/runs/route.ts',
+    ])
   })
 })
 

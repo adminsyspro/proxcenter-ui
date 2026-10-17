@@ -192,6 +192,10 @@ describe('method-aware matching', () => {
       expect(matchPublicApiPath(`${jobs}/runs`, method).ok, method).toBe(false)
     }
     expect(allowedMethodsForPath(`${jobs}/runs`)).toEqual([])
+    // Fail closed on an escaped spelling of an excluded value, and on any escape in that segment.
+    for (const spelling of ['%72uns', 'ru%6Es', 'backup%2D1']) {
+      expect(matchPublicApiPath(`${jobs}/${spelling}`, 'GET').ok, spelling).toBe(false)
+    }
     expect(matchPublicApiPath(`${jobs}/runs/guests`, 'POST').entryId).toBe('backup-job-guests')
   })
 

@@ -194,6 +194,16 @@ describe('allowlist contract: two assertions per route (spec D2)', () => {
     },
   )
 
+  it('guestFileRestore/guard.ts reads the session in exactly two places: requireGuestFileRestoreAdmin and isProviderCaller', () => {
+    const source = readFileSync(path.join(SRC_ROOT, 'lib', 'guestFileRestore', 'guard.ts'), 'utf8')
+    const functions = [...source.matchAll(/^export (?:async )?function (\w+)/gm)].map(m => ({ name: m[1], at: m.index ?? 0 }))
+    const callers = [...source.matchAll(/getServerSession\s*\(/g)].map(call => {
+      const enclosing = functions.filter(f => f.at < (call.index ?? 0)).pop()
+      return enclosing?.name ?? '(module scope)'
+    })
+    expect(callers.sort()).toEqual(['isProviderCaller', 'requireGuestFileRestoreAdmin'])
+  })
+
   it('every entry declares scopes that exist in the scope table', async () => {
     const { ALL_SCOPE_IDS } = await import('./scopes')
     for (const entry of PUBLIC_API_ALLOWLIST) {

@@ -840,7 +840,9 @@ function matchPattern(entry: AllowlistEntry, pathname: string): Record<string, s
     if (name !== null) {
       const allowed = entry.segmentEnum?.[name]
       if (allowed && !allowed.includes(value)) return null
-      if (entry.segmentExclude?.[name]?.includes(value)) return null
+      // An escaped spelling (%72uns) is refused, never decoded and compared.
+      const excluded = entry.segmentExclude?.[name]
+      if (excluded && (value.includes("%") || excluded.includes(value))) return null
       params[name] = value
     } else if (p !== value) {
       return null

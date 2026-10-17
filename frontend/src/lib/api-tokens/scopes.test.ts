@@ -1,6 +1,16 @@
 import { describe, expect, it } from 'vitest'
 
-import { SCOPE_DEFINITIONS, ALL_SCOPE_IDS, expandScopes } from './scopes'
+import {
+  SCOPE_DEFINITIONS,
+  READ_SCOPE_DEFINITIONS,
+  WRITE_SCOPE_DEFINITIONS,
+  ALL_SCOPE_IDS,
+  READ_SCOPE_IDS,
+  WRITE_SCOPE_IDS,
+  DESTRUCTIVE_SCOPE_IDS,
+  isWriteScope,
+  expandScopes,
+} from './scopes'
 import { ALL_PERMISSIONS } from '../../../prisma/roleCatalogue'
 
 describe('scope to permission resolver (spec section 7)', () => {
@@ -12,7 +22,15 @@ describe('scope to permission resolver (spec section 7)', () => {
     expect(SCOPE_DEFINITIONS['automation:read']).toEqual(['automation.view'])
     expect(SCOPE_DEFINITIONS['alerts:read']).toEqual(['alerts.view', 'events.view'])
     expect(SCOPE_DEFINITIONS['reports:read']).toEqual(['reports.view'])
-    expect(ALL_SCOPE_IDS).toHaveLength(7)
+    expect(READ_SCOPE_IDS).toHaveLength(7)
+    expect(Object.keys(READ_SCOPE_DEFINITIONS)).toEqual(READ_SCOPE_IDS)
+  })
+
+  it('offers 20 scopes: 7 read and 13 write', () => {
+    expect(ALL_SCOPE_IDS).toHaveLength(20)
+    expect(WRITE_SCOPE_IDS).toHaveLength(13)
+    expect(ALL_SCOPE_IDS).toEqual([...READ_SCOPE_IDS, ...WRITE_SCOPE_IDS])
+    expect(Object.keys(SCOPE_DEFINITIONS)).toEqual(ALL_SCOPE_IDS)
   })
 
   it('does not offer compliance:read (#632)', () => {
@@ -28,8 +46,8 @@ describe('scope to permission resolver (spec section 7)', () => {
 
   it('every resolved key already exists in ALL_PERMISSIONS (seeded catalogue)', () => {
     const known = new Set(ALL_PERMISSIONS.map(p => p.id))
-    for (const keys of Object.values(SCOPE_DEFINITIONS)) {
-      for (const key of keys) expect(known.has(key)).toBe(true)
+    for (const [scope, keys] of Object.entries(SCOPE_DEFINITIONS)) {
+      for (const key of keys) expect(known.has(key), `scope ${scope} maps to unknown key ${key}`).toBe(true)
     }
   })
 
@@ -39,11 +57,11 @@ describe('scope to permission resolver (spec section 7)', () => {
   // write-capable permission is always a naming lie — and one that goes
   // live silently as soon as an unrelated change allowlists a route that
   // checks it. Fail here instead, at the moment the scope is written.
-  it('never bundles a dangerous or write-capable permission', () => {
+  it('read scopes never bundle a dangerous or write-capable permission', () => {
     const catalogue = new Map(ALL_PERMISSIONS.map(p => [p.id, p]))
     const READ_SUFFIXES = ['.view', '.content']
 
-    for (const [scope, keys] of Object.entries(SCOPE_DEFINITIONS)) {
+    for (const [scope, keys] of Object.entries(READ_SCOPE_DEFINITIONS)) {
       for (const key of keys) {
         const entry = catalogue.get(key)
 
@@ -66,5 +84,65 @@ describe('scope to permission resolver (spec section 7)', () => {
     )
     expect(expandScopes(['bogus:scope'])).toEqual(new Set())
     expect(expandScopes([])).toEqual(new Set())
+  })
+
+  it('write scopes carry exactly their spec permission keys', () => {
+    expect(WRITE_SCOPE_DEFINITIONS).toEqual({
+      'vms:power': ['vm.view', 'vm.start', 'vm.stop', 'vm.restart', 'vm.suspend'],
+      'vms:write': ['vm.view', 'connection.view', 'vm.create', 'vm.clone', 'vm.config'],
+      'vms:snapshot': ['vm.view', 'vm.snapshot'],
+      'vms:migrate': ['vm.view', 'vm.migrate'],
+      'vms:delete': ['vm.view', 'vm.delete'],
+      'backups:write': [
+        'backup.view', 'backup.job.view', 'backup.job.create', 'backup.job.edit',
+        'backup.job.delete', 'backup.job.run', 'vm.backup',
+      ],
+      'backups:restore': ['backup.view', 'vm.backup', 'backup.restore'],
+      'backups:delete': ['backup.view', 'backup.delete'],
+      'storage:write': [
+        'storage.view', 'storage.content', 'storage.upload', 'storage.delete',
+        'connection.view', 'connection.manage', 'backup.view',
+      ],
+      'ha:write': ['node.view', 'connection.view', 'node.manage', 'connection.manage'],
+      'pools:write': ['connection.view', 'connection.manage'],
+      'network:write': [
+        'node.view', 'connection.view', 'node.network', 'connection.manage',
+        'sdn.vnet.create', 'sdn.vnet.edit', 'sdn.vnet.delete',
+      ],
+      'firewall:write': ['node.view', 'connection.view', 'node.manage'],
+    })
+  })
+
+  it('write scopes never bundle admin, automation, console or NIC mac/vlan keys', () => {
+    const forbidden = (key: string) =>
+      key.startsWith('admin.') ||
+      key.startsWith('automation.') ||
+      key === 'vm.console' ||
+      key === 'node.console' ||
+      key === 'vm.config.nic.mac' ||
+      key === 'vm.config.nic.vlan'
+
+    for (const [scope, keys] of Object.entries(WRITE_SCOPE_DEFINITIONS)) {
+      for (const key of keys) {
+        expect(forbidden(key), `write scope ${scope} bundles forbidden key ${key}`).toBe(false)
+      }
+    }
+  })
+
+  it('isWriteScope tells write scopes from read and unknown ones', () => {
+    expect(isWriteScope('vms:read')).toBe(false)
+    expect(isWriteScope('vms:write')).toBe(true)
+    expect(isWriteScope('bogus:scope')).toBe(false)
+    for (const id of WRITE_SCOPE_IDS) expect(isWriteScope(id)).toBe(true)
+    for (const id of READ_SCOPE_IDS) expect(isWriteScope(id)).toBe(false)
+  })
+
+  it('flags the destructive scopes', () => {
+    expect([...DESTRUCTIVE_SCOPE_IDS]).toEqual(['vms:delete', 'backups:delete'])
+    for (const id of DESTRUCTIVE_SCOPE_IDS) expect(isWriteScope(id)).toBe(true)
+  })
+
+  it('expandScopes resolves write scopes', () => {
+    expect(expandScopes(['vms:snapshot'])).toEqual(new Set(['vm.view', 'vm.snapshot']))
   })
 })

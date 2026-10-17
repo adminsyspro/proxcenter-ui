@@ -395,6 +395,83 @@
       ],
       "reports:read": [
         "reports.view"
+      ],
+      "vms:power": [
+        "vm.view",
+        "vm.start",
+        "vm.stop",
+        "vm.restart",
+        "vm.suspend"
+      ],
+      "vms:write": [
+        "vm.view",
+        "connection.view",
+        "vm.create",
+        "vm.clone",
+        "vm.config"
+      ],
+      "vms:snapshot": [
+        "vm.view",
+        "vm.snapshot"
+      ],
+      "vms:migrate": [
+        "vm.view",
+        "vm.migrate"
+      ],
+      "vms:delete": [
+        "vm.view",
+        "vm.delete"
+      ],
+      "backups:write": [
+        "backup.view",
+        "backup.job.view",
+        "backup.job.create",
+        "backup.job.edit",
+        "backup.job.delete",
+        "backup.job.run",
+        "vm.backup"
+      ],
+      "backups:restore": [
+        "backup.view",
+        "vm.backup",
+        "backup.restore"
+      ],
+      "backups:delete": [
+        "backup.view",
+        "backup.delete"
+      ],
+      "storage:write": [
+        "storage.view",
+        "storage.content",
+        "storage.upload",
+        "storage.delete",
+        "connection.view",
+        "connection.manage",
+        "backup.view"
+      ],
+      "ha:write": [
+        "node.view",
+        "connection.view",
+        "node.manage",
+        "connection.manage"
+      ],
+      "pools:write": [
+        "connection.view",
+        "connection.manage"
+      ],
+      "network:write": [
+        "node.view",
+        "connection.view",
+        "node.network",
+        "connection.manage",
+        "sdn.vnet.create",
+        "sdn.vnet.edit",
+        "sdn.vnet.delete"
+      ],
+      "firewall:write": [
+        "node.view",
+        "connection.view",
+        "node.manage"
       ]
     }
   },

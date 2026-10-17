@@ -2422,7 +2422,7 @@
       "sharedStorageName": "Nom du stockage partagé (ex: ceph-pool)",
       "sharedStorageHint": "Entrez le nom d'un stockage partagé disponible sur tous les nœuds",
       "zeroRateUseCluster": "Utiliser le plafond du cluster ({cap})",
-      "zeroRateUseClusterHelp": "Avant la copie warm, ProxCenter écrit des zéros sur tout le volume LVM thick de la cible, pour qu'aucune donnée d'une ancienne VM ne subsiste. Sur un stockage partagé avec la production (LUN iSCSI/FC), cette écriture peut saturer la baie. Le plafond du cluster ({cap}) se règle sur la connexion Proxmox cible, Settings > Connections > onglet Migrations. Décochez pour utiliser un autre plafond pour cette migration seulement."
+      "zeroRateUseClusterHelp": "Avant la copie warm, ProxCenter écrit des zéros sur tout le volume LVM thick de la cible, pour qu'aucune donnée d'une ancienne VM ne subsiste. Sur un stockage partagé avec la production (LUN iSCSI/FC), cette écriture peut saturer la baie. Le plafond du cluster ({cap}) se règle sur la connexion Proxmox cible, Settings > Connections > onglet Migrations. Décochez pour utiliser un plafond plus bas pour cette migration seulement ; une migration ne peut jamais dépasser le plafond du cluster."
     },
     "extDashboard": {
       "hosts": "Hôtes",

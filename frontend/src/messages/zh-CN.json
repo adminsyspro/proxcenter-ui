@@ -2426,7 +2426,7 @@
       "sharedStorageName": "共享存储名称（例如 ceph-pool）",
       "sharedStorageHint": "输入所有节点上可用的共享存储名称",
       "zeroRateUseCluster": "使用集群上限（{cap}）",
-      "zeroRateUseClusterHelp": "在热迁移复制之前，ProxCenter 会向目标的整个 thick LVM 卷写入零，确保不残留以前虚拟机的数据。在与生产共享的存储（iSCSI/FC LUN）上，这些写入可能使存储阵列饱和。集群上限（{cap}）在目标 Proxmox 连接中设置：Settings > Connections > 迁移选项卡。取消勾选可仅为本次迁移使用其他上限。"
+      "zeroRateUseClusterHelp": "在热迁移复制之前，ProxCenter 会向目标的整个 thick LVM 卷写入零，确保不残留以前虚拟机的数据。在与生产共享的存储（iSCSI/FC LUN）上，这些写入可能使存储阵列饱和。集群上限（{cap}）在目标 Proxmox 连接中设置：Settings > Connections > 迁移选项卡。取消勾选可仅为本次迁移使用更低的上限；迁移永远不能超过集群上限。"
     },
     "extDashboard": {
       "hosts": "主机",

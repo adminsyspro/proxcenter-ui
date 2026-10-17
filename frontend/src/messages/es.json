@@ -2422,7 +2422,7 @@
       "sharedStorageName": "Nombre del almacenamiento compartido (p. ej. ceph-pool)",
       "sharedStorageHint": "Introduce el nombre de un almacenamiento compartido disponible en todos los nodos",
       "zeroRateUseCluster": "Usar el límite del clúster ({cap})",
-      "zeroRateUseClusterHelp": "Antes de la copia warm, ProxCenter escribe ceros en todo el volumen LVM thick del destino, para que no quede ningún dato de una VM anterior. En un almacenamiento compartido con producción (LUN iSCSI/FC), esa escritura puede saturar la cabina. El límite del clúster ({cap}) se configura en la conexión Proxmox de destino, Settings > Connections > pestaña Migraciones. Desmarque para usar otro límite solo para esta migración."
+      "zeroRateUseClusterHelp": "Antes de la copia warm, ProxCenter escribe ceros en todo el volumen LVM thick del destino, para que no quede ningún dato de una VM anterior. En un almacenamiento compartido con producción (LUN iSCSI/FC), esa escritura puede saturar la cabina. El límite del clúster ({cap}) se configura en la conexión Proxmox de destino, Settings > Connections > pestaña Migraciones. Desmarque para usar un límite más bajo solo para esta migración; una migración nunca puede superar el límite del clúster."
     },
     "extDashboard": {
       "hosts": "Hosts",

@@ -1121,6 +1121,8 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
       />
       {zeroRateOverridden && (
         <ZeroRateSlider
+          // A migration may only tighten the cluster's cap (the engine enforces it).
+          max={zeroRateClusterCap > 0 ? zeroRateClusterCap : undefined}
           value={Number(migZeroRateLimit) || 0}
           onChange={v => setMigZeroRateLimit(String(v))}
           label={t('settings.warmZeroRateLimitLabel')}

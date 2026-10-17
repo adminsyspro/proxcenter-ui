@@ -2422,7 +2422,7 @@
       "sharedStorageName": "Shared storage name (e.g. ceph-pool)",
       "sharedStorageHint": "Enter the name of a shared storage available on all nodes",
       "zeroRateUseCluster": "Use the cluster cap ({cap})",
-      "zeroRateUseClusterHelp": "Before the warm copy, ProxCenter writes zeros over the whole thick LVM volume on the target, so no data of a former VM can remain. On storage shared with production (iSCSI/FC LUN), that write can saturate the array. The cluster cap ({cap}) is set on the target Proxmox connection, Settings > Connections > Migrations tab. Uncheck to use another cap for this migration only."
+      "zeroRateUseClusterHelp": "Before the warm copy, ProxCenter writes zeros over the whole thick LVM volume on the target, so no data of a former VM can remain. On storage shared with production (iSCSI/FC LUN), that write can saturate the array. The cluster cap ({cap}) is set on the target Proxmox connection, Settings > Connections > Migrations tab. Uncheck to use a lower cap for this migration only; a migration can never go above the cluster cap."
     },
     "extDashboard": {
       "hosts": "Hosts",

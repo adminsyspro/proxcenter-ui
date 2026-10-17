@@ -2422,7 +2422,7 @@
       "sharedStorageName": "공유 스토리지 이름 (예: ceph-pool)",
       "sharedStorageHint": "모든 노드에서 사용 가능한 공유 스토리지 이름을 입력하세요",
       "zeroRateUseCluster": "클러스터 제한 사용({cap})",
-      "zeroRateUseClusterHelp": "웜 복사 전에 ProxCenter는 대상의 thick LVM 볼륨 전체에 0을 기록하여 이전 VM의 데이터가 남지 않도록 합니다. 프로덕션과 공유하는 스토리지(iSCSI/FC LUN)에서는 이 쓰기가 어레이를 포화시킬 수 있습니다. 클러스터 제한({cap})은 대상 Proxmox 연결의 Settings > Connections > 마이그레이션 탭에서 설정합니다. 이 마이그레이션에만 다른 제한을 쓰려면 선택을 해제하세요."
+      "zeroRateUseClusterHelp": "웜 복사 전에 ProxCenter는 대상의 thick LVM 볼륨 전체에 0을 기록하여 이전 VM의 데이터가 남지 않도록 합니다. 프로덕션과 공유하는 스토리지(iSCSI/FC LUN)에서는 이 쓰기가 어레이를 포화시킬 수 있습니다. 클러스터 제한({cap})은 대상 Proxmox 연결의 Settings > Connections > 마이그레이션 탭에서 설정합니다. 이 마이그레이션에만 더 낮은 제한을 쓰려면 선택을 해제하세요. 마이그레이션은 클러스터 제한을 초과할 수 없습니다."
     },
     "extDashboard": {
       "hosts": "호스트",

@@ -5,8 +5,9 @@ import { checkPermission, buildNodeResourceId, PERMISSIONS } from "@/lib/rbac"
 import { canMigrateConnections, getTenantInfrastructureScope } from "@/lib/tenant/infraScope"
 import { orchestratorHeaders } from "@/lib/orchestrator/headers"
 import { DrainConfigError, sanitizeDrainConfig } from "@/lib/hostDrain/config"
-import { DrainTargetDenied, restrictDrainTargets } from "@/lib/hostDrain/access"
+import { drainCluster, DrainTargetDenied, restrictDrainTargets } from "@/lib/hostDrain/access"
 import { assertNodeName } from "@/lib/ssh/validate"
+import { isConnectionNotFoundError } from "@/lib/connections/getConnection"
 
 export const runtime = "nodejs"
 
@@ -45,9 +46,11 @@ export async function POST(req: Request) {
 
     let config
     try {
-      config = await restrictDrainTargets(prisma, connectionId, safeNode, sanitizeDrainConfig(body.config))
+      const requested = sanitizeDrainConfig(body.config)
+      config = await restrictDrainTargets(await drainCluster(connectionId), connectionId, safeNode, requested)
     } catch (e) {
       if (e instanceof DrainConfigError) return NextResponse.json({ error: e.message }, { status: 400 })
+      if (isConnectionNotFoundError(e)) return NextResponse.json({ error: "Connection not found" }, { status: 404 })
       if (e instanceof DrainTargetDenied) return NextResponse.json({ error: e.message }, { status: 403 })
       throw e
     }

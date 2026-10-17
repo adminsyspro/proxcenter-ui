@@ -31,8 +31,17 @@ vi.mock("@/lib/tenant/infraScope", async (orig) => ({
 vi.mock("@/lib/rbac", () => ({
   checkPermission: (...a: any[]) => checkPermissionMock(...a),
   buildNodeResourceId: (connId: string, node: string) => `${connId}:${node}`,
-  PERMISSIONS: { NODE_MANAGE: "node.manage", NODE_VIEW: "node.view" },
+  buildVmResourceId: (connId: string, node: string, type: string, vmid: string) => `${connId}:${node}:${type}:${vmid}`,
+  PERMISSIONS: { NODE_MANAGE: "node.manage", NODE_VIEW: "node.view", VM_MIGRATE: "vm.migrate" },
 }))
+
+const { pveFetchMock, getConnectionMock } = vi.hoisted(() => ({ pveFetchMock: vi.fn(), getConnectionMock: vi.fn() }))
+
+vi.mock("@/lib/connections/getConnection", async (orig) => ({
+  ...(await orig<typeof import("@/lib/connections/getConnection")>()),
+  getConnectionById: (...a: any[]) => getConnectionMock(...a),
+}))
+vi.mock("@/lib/proxmox/client", () => ({ pveFetch: (...a: any[]) => pveFetchMock(...a) }))
 
 vi.mock("@/lib/orchestrator/headers", () => ({
   orchestratorHeaders: (extra: Record<string, string> = {}) => extra,
@@ -46,6 +55,8 @@ const PLAN = { node: "pve3", guests: [], candidates: ["pve1", "pve2"], movable: 
 
 beforeEach(() => {
   vi.clearAllMocks()
+  getConnectionMock.mockResolvedValue({ id: "c1" })
+  pveFetchMock.mockResolvedValue([{ type: "node", node: "pve1" }, { type: "node", node: "pve2" }, { type: "node", node: "pve3" }, { type: "qemu", node: "pve3", vmid: 105, status: "running" }])
   checkPermissionMock.mockResolvedValue(null)
   connFindUniqueMock.mockResolvedValue({ id: "c1" })
   hostFindManyMock.mockResolvedValue([{ node: "pve1" }, { node: "pve2" }, { node: "pve3" }])
@@ -103,6 +114,23 @@ describe("POST /api/v1/orchestrator/host-drains/plan", () => {
     checkPermissionMock.mockImplementation(async (perm: string, _t?: string, id?: string) => (perm === "node.manage" && id === "c1:pve2" ? new Response(null, { status: 403 }) : null))
     res = await callRoute(POST, { body: { connection_id: "c1", node: "pve3", config: { guest_targets: { 105: "pve2" } } } })
     expect(res.status).toBe(403)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it("refuses a guest the caller may not migrate, and fails closed when Proxmox cannot be read", async () => {
+    checkPermissionMock.mockImplementation(async (perm: string, _t?: string, id?: string) => (perm === "vm.migrate" && id === "c1:pve3:qemu:105" ? new Response(null, { status: 403 }) : null))
+    let res = await callRoute(POST, { body: { connection_id: "c1", node: "pve3" } })
+    expect(res.status).toBe(403)
+    expect((await res.json()).error).toBe("You cannot migrate guest(s) 105")
+
+    checkPermissionMock.mockResolvedValue(null)
+    pveFetchMock.mockRejectedValueOnce(new Error("pve unreachable"))
+    res = await callRoute(POST, { body: { connection_id: "c1", node: "pve3" } })
+    expect(res.status).toBe(500)
+
+    getConnectionMock.mockRejectedValueOnce(Object.assign(new Error("Connection not found"), { code: "CONNECTION_NOT_FOUND" }))
+    res = await callRoute(POST, { body: { connection_id: "c1", node: "pve3" } })
+    expect(res.status).toBe(404)
     expect(fetchMock).not.toHaveBeenCalled()
   })
 

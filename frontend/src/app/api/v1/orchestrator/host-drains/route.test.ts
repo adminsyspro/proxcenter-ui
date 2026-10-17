@@ -33,10 +33,19 @@ vi.mock("@/lib/tenant/infraScope", async (orig) => ({
 vi.mock("@/lib/rbac", () => ({
   checkPermission: (...a: any[]) => checkPermissionMock(...a),
   buildNodeResourceId: (connId: string, node: string) => `${connId}:${node}`,
-  PERMISSIONS: { TASKS_VIEW: "tasks.view", NODE_MANAGE: "node.manage", NODE_VIEW: "node.view" },
+  buildVmResourceId: (connId: string, node: string, type: string, vmid: string) => `${connId}:${node}:${type}:${vmid}`,
+  PERMISSIONS: { TASKS_VIEW: "tasks.view", NODE_MANAGE: "node.manage", NODE_VIEW: "node.view", VM_MIGRATE: "vm.migrate" },
 }))
 
 vi.mock("@/lib/crypto/secret", () => ({ decryptSecret: (s: string) => `plain:${s}` }))
+
+const { pveFetchMock, getConnectionMock } = vi.hoisted(() => ({ pveFetchMock: vi.fn(), getConnectionMock: vi.fn() }))
+
+vi.mock("@/lib/connections/getConnection", async (orig) => ({
+  ...(await orig<typeof import("@/lib/connections/getConnection")>()),
+  getConnectionById: (...a: any[]) => getConnectionMock(...a),
+}))
+vi.mock("@/lib/proxmox/client", () => ({ pveFetch: (...a: any[]) => pveFetchMock(...a) }))
 
 vi.mock("@/lib/orchestrator/headers", () => ({
   orchestratorHeaders: (extra: Record<string, string> = {}) => extra,
@@ -49,6 +58,8 @@ import { GET, POST } from "./route"
 
 beforeEach(() => {
   vi.clearAllMocks()
+  getConnectionMock.mockResolvedValue({ id: "c1" })
+  pveFetchMock.mockResolvedValue([{ type: "node", node: "pve1" }, { type: "node", node: "pve2" }, { type: "node", node: "pve3" }, { type: "qemu", node: "pve3", vmid: 105, status: "running" }])
   checkPermissionMock.mockResolvedValue(null)
   connFindUniqueMock.mockResolvedValue({
     id: "c1", sshEnabled: true, sshPort: 2222, sshUser: "root", sshAuthMethod: "password", sshKeyEnc: null, sshPassEnc: "pw",
@@ -78,7 +89,6 @@ describe("POST /api/v1/orchestrator/host-drains", () => {
   })
 
   it("refuses a forced target the caller does not manage, and excludes the others from automatic placement", async () => {
-    hostFindManyMock.mockResolvedValue([{ node: "pve1" }, { node: "pve2" }, { node: "pve3" }])
     checkPermissionMock.mockImplementation(async (_p: string, _t: string, id: string) => (id === "c1:pve2" ? new Response(null, { status: 403 }) : null))
 
     const forced = await callRoute(POST, { body: { connection_id: "c1", node: "pve3", config: { target_node: "pve2" } } })

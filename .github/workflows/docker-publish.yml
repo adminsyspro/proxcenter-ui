@@ -62,9 +62,16 @@ jobs:
   # ========================================
   # Run Frontend Tests
   # ========================================
-  test:
+  # Split over three runners; `test` below gathers them under the check name
+  # branch protection requires.
+  vitest:
+    name: vitest (${{ matrix.shard }}/3)
     needs: [dispatch-guard]
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
     defaults:
       run:
         working-directory: ./frontend
@@ -121,18 +128,34 @@ jobs:
       - name: Run tests
         env:
           POSTGRES_TEST_URL_BASE: postgresql://proxcenter:test-pass@localhost:5432/proxcenter
-        run: npx vitest run
+          SHARD: ${{ matrix.shard }}
+        run: npx vitest run --shard="$SHARD/3"
+
+  test:
+    needs: [vitest]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: All test shards passed
+        env:
+          RESULT: ${{ needs.vitest.result }}
+        run: |
+          echo "vitest shards: $RESULT"
+          [ "$RESULT" = "success" ]
 
   # ========================================
   # Build Frontend Image
   # ========================================
+  # Every build job starts with the tests instead of after them: it builds
+  # without pushing, waits for the tests (.github/scripts/wait-for-tests.sh),
+  # then pushes the same build from the builder's local cache.
   build-frontend:
-    needs: [test, test-backend]
-    if: ${{ always() && needs.test.result == 'success' && (needs.test-backend.result == 'success' || github.actor == 'dependabot[bot]') }}
+    needs: [dispatch-guard]
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
+      actions: read
 
     steps:
       - name: Checkout repository
@@ -193,19 +216,48 @@ jobs:
             type=raw,value=${{ steps.resolve.outputs.version }},enable=${{ steps.resolve.outputs.version != 'dev' }}
             type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') && !inputs.staging }}
 
-      - name: Build and push Frontend
+      - name: Build Frontend
         uses: docker/build-push-action@v7
         with:
           context: ./frontend
           file: ./frontend/Dockerfile
-          push: ${{ github.event_name != 'pull_request' }}
+          push: false
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             GIT_SHA=${{ steps.src.outputs.sha }}
             APP_VERSION=${{ steps.resolve.outputs.version }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,mode=max,scope=frontend
+          platforms: linux/amd64
+
+      # From the dispatched ref, like dispatch-guard: a staging build checks
+      # out older sources (frontend_ref) that may not carry this script.
+      - name: Check out the CI scripts
+        if: github.event_name != 'pull_request'
+        uses: actions/checkout@v7
+        with:
+          path: ci-scripts
+          sparse-checkout: .github/scripts
+
+      - name: Wait for the tests
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash ci-scripts/.github/scripts/wait-for-tests.sh
+
+      - name: Push Frontend
+        if: github.event_name != 'pull_request'
+        uses: docker/build-push-action@v7
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            GIT_SHA=${{ steps.src.outputs.sha }}
+            APP_VERSION=${{ steps.resolve.outputs.version }}
           platforms: linux/amd64
 
       - name: Make Frontend package public
@@ -221,12 +273,13 @@ jobs:
   # Build Demo Image
   # ========================================
   build-demo:
-    needs: [test, test-backend]
-    if: ${{ always() && !inputs.staging && needs.test.result == 'success' && (needs.test-backend.result == 'success' || github.actor == 'dependabot[bot]') }}
+    needs: [dispatch-guard]
+    if: ${{ !inputs.staging }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
+      actions: read
 
     steps:
       - name: Checkout repository
@@ -242,7 +295,29 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push Demo
+      - name: Build Demo
+        if: github.event_name != 'pull_request'
+        uses: docker/build-push-action@v7
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          push: false
+          tags: ${{ env.FRONTEND_IMAGE }}:demo
+          build-args: |
+            GIT_SHA=${{ github.sha }}
+            APP_VERSION=demo
+            DEMO_MODE=true
+          cache-from: type=gha,scope=demo
+          cache-to: type=gha,mode=max,scope=demo
+          platforms: linux/amd64
+
+      - name: Wait for the tests
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .github/scripts/wait-for-tests.sh
+
+      - name: Push Demo
         if: github.event_name != 'pull_request'
         uses: docker/build-push-action@v7
         with:
@@ -254,8 +329,6 @@ jobs:
             GIT_SHA=${{ github.sha }}
             APP_VERSION=demo
             DEMO_MODE=true
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
           platforms: linux/amd64
 
   # ========================================
@@ -266,12 +339,12 @@ jobs:
   # Enterprise deployments can pull a pinned image instead of rebuilding
   # locally on every `docker-compose up`.
   build-weasyprint:
-    needs: [test, test-backend]
-    if: ${{ always() && needs.test.result == 'success' && (needs.test-backend.result == 'success' || github.actor == 'dependabot[bot]') }}
+    needs: [dispatch-guard]
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
+      actions: read
 
     steps:
       - name: Checkout repository
@@ -320,16 +393,41 @@ jobs:
             type=raw,value=${{ steps.resolve.outputs.version }},enable=${{ steps.resolve.outputs.version != 'dev' }}
             type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') && !inputs.staging }}
 
-      - name: Build and push WeasyPrint
+      - name: Build WeasyPrint
         uses: docker/build-push-action@v7
         with:
           context: ./weasyprint
           file: ./weasyprint/Dockerfile
-          push: ${{ github.event_name != 'pull_request' }}
+          push: false
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=weasyprint
+          cache-to: type=gha,mode=max,scope=weasyprint
+          platforms: linux/amd64
+
+      # From the dispatched ref: a staging build checks out frontend_ref.
+      - name: Check out the CI scripts
+        if: github.event_name != 'pull_request'
+        uses: actions/checkout@v7
+        with:
+          path: ci-scripts
+          sparse-checkout: .github/scripts
+
+      - name: Wait for the tests
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash ci-scripts/.github/scripts/wait-for-tests.sh
+
+      - name: Push WeasyPrint
+        if: github.event_name != 'pull_request'
+        uses: docker/build-push-action@v7
+        with:
+          context: ./weasyprint
+          file: ./weasyprint/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
           platforms: linux/amd64
 
       # The proxcenter-weasyprint package stays PRIVATE on GHCR (Enterprise
@@ -348,12 +446,13 @@ jobs:
   # nodes: nodes need ghcr.io egress only. Both packages stay PRIVATE
   # (Enterprise-only); nodes authenticate with GHCR_TOKEN from .env.
   build-ha-images:
-    needs: [test, test-backend]
-    if: ${{ always() && !inputs.staging && needs.test.result == 'success' && (needs.test-backend.result == 'success' || github.actor == 'dependabot[bot]') }}
+    needs: [dispatch-guard]
+    if: ${{ !inputs.staging }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
+      actions: read
     strategy:
       matrix:
         include:
@@ -407,16 +506,33 @@ jobs:
             type=raw,value=${{ steps.resolve.outputs.version }},enable=${{ steps.resolve.outputs.version != 'dev' }}
             type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
 
-      - name: Build and push ${{ matrix.image }}
+      - name: Build ${{ matrix.image }}
         uses: docker/build-push-action@v7
         with:
           context: ./config/ha
           file: ./config/ha/${{ matrix.dockerfile }}
-          push: ${{ github.event_name != 'pull_request' }}
+          push: false
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=${{ matrix.image }}
           cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+          platforms: linux/amd64
+
+      - name: Wait for the tests
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .github/scripts/wait-for-tests.sh
+
+      - name: Push ${{ matrix.image }}
+        if: github.event_name != 'pull_request'
+        uses: docker/build-push-action@v7
+        with:
+          context: ./config/ha
+          file: ./config/ha/${{ matrix.dockerfile }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
           platforms: linux/amd64
 
   # ========================================
@@ -534,11 +650,12 @@ jobs:
   # ========================================
   build-orchestrator:
     if: github.actor != 'dependabot[bot]'
-    needs: [test, test-backend]
+    needs: [dispatch-guard]
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
+      actions: read
 
     steps:
       - name: Checkout repository
@@ -658,18 +775,37 @@ jobs:
             type=raw,value=${{ steps.resolve.outputs.version }},enable=${{ steps.resolve.outputs.version != 'dev' }}
             type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') && !inputs.staging }}
 
-      - name: Build and push Orchestrator
+      - name: Build Orchestrator
         uses: docker/build-push-action@v7
         with:
           context: ./backend
           file: ./backend/Dockerfile
-          push: ${{ github.event_name != 'pull_request' }}
+          push: false
           build-args: |
             VERSION=${{ steps.resolve.outputs.version }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=orchestrator
+          cache-to: type=gha,mode=max,scope=orchestrator
+          platforms: linux/amd64
+
+      - name: Wait for the tests
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .github/scripts/wait-for-tests.sh
+
+      - name: Push Orchestrator
+        if: github.event_name != 'pull_request'
+        uses: docker/build-push-action@v7
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: true
+          build-args: |
+            VERSION=${{ steps.resolve.outputs.version }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
           platforms: linux/amd64
 
   # ========================================

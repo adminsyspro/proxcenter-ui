@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest'
 
 import { buildOpenApiDocument } from './openapi'
 import { PUBLIC_API_ALLOWLIST, type AllowlistEntry } from './allowlist'
+import { RESPONSE_SCHEMAS } from './openapiSchemas'
 
 const doc = buildOpenApiDocument() as any
 
@@ -19,7 +20,7 @@ describe('buildOpenApiDocument', () => {
   })
 
   it('emits one GET operation per allowlist entry, keyed by the OpenAPI pattern', () => {
-    expect(Object.keys(doc.paths).sort()).toEqual(PUBLIC_API_ALLOWLIST.map(e => e.pattern).sort())
+    expect(Object.keys(doc.paths).sort()).toEqual([...new Set(PUBLIC_API_ALLOWLIST.map(e => e.pattern))].sort())
     for (const entry of PUBLIC_API_ALLOWLIST) {
       const op = doc.paths[entry.pattern].get
       expect(op.operationId).toBe(entry.id)
@@ -73,8 +74,10 @@ describe('buildOpenApiDocument', () => {
       ...base, id: 'vm-start-get', method: 'GET', tag: 'Snapshots', requiredScopes: ['vms:read'],
       pattern: post.pattern, responseSchemaRef: 'VmsResponse',
     }
-    const wdoc = buildOpenApiDocument([post]) as any
-    const mdoc = buildOpenApiDocument([post, get]) as any
+    const startSchema = { type: 'object', properties: { force: { type: 'boolean' } } }
+    const schemas = { request: { VmStartRequest: startSchema }, response: RESPONSE_SCHEMAS }
+    const wdoc = buildOpenApiDocument([post], schemas) as any
+    const mdoc = buildOpenApiDocument([post, get], schemas) as any
 
     it('keys operations by lowercase method and does not invent a get', () => {
       expect(wdoc.paths[post.pattern].post.operationId).toBe('vm-start')
@@ -97,7 +100,7 @@ describe('buildOpenApiDocument', () => {
     it('adds a request body only when requestSchemaRef is set', () => {
       const op = wdoc.paths[post.pattern].post
       expect(op.requestBody.required).toBe(true)
-      expect(op.requestBody.content['application/json'].schema).toBeDefined()
+      expect(op.requestBody.content['application/json'].schema).toEqual(startSchema)
       expect(mdoc.paths[post.pattern].get.requestBody).toBeUndefined()
     })
 
@@ -117,6 +120,12 @@ describe('buildOpenApiDocument', () => {
       expect(ex.guestScope.value).toEqual({ error: 'Guest outside your vDC scope' })
       expect(ex.scope.value).toEqual({ error: 'Route not available to API tokens', route: post.pattern })
       expect(ex.clusterObject).toBeUndefined()
+    })
+
+    it('throws on an unknown request or response schema ref', () => {
+      expect(() => buildOpenApiDocument([post])).toThrow('Unknown requestSchemaRef VmStartRequest for vm-start')
+      expect(() => buildOpenApiDocument([{ ...post, requestSchemaRef: undefined, responseSchemaRef: 'Nope' }]))
+        .toThrow('Unknown responseSchemaRef Nope for vm-start')
     })
 
     it('documents cluster objects and segment enums', () => {

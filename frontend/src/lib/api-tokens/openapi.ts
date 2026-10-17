@@ -36,8 +36,11 @@ function forbiddenResponse(entry: AllowlistEntry) {
   return jsonErrorExamples("Token holds none of the required scopes, or the target is outside the token perimeter", examples)
 }
 
-function successResponse(entry: AllowlistEntry) {
-  const schema = RESPONSE_SCHEMAS[entry.responseSchemaRef]
+type SchemaSets = { request: Record<string, Record<string, unknown>>; response: Record<string, Record<string, unknown>> }
+
+function successResponse(entry: AllowlistEntry, schemas: SchemaSets) {
+  const schema = schemas.response[entry.responseSchemaRef]
+  if (!schema) throw new Error(`Unknown responseSchemaRef ${entry.responseSchemaRef} for ${entry.id}`)
   const mediaType = entry.responseSchemaRef === "PrometheusExposition" ? "text/plain" : "application/json"
   return {
     description: entry.responseSchemaRef === "TaskStartedResponse"
@@ -85,7 +88,7 @@ function parameters(entry: AllowlistEntry) {
   return params
 }
 
-function operation(entry: AllowlistEntry, refusedMethod: HttpMethod) {
+function operation(entry: AllowlistEntry, refusedMethod: HttpMethod, schemas: SchemaSets) {
   const op: Record<string, unknown> = {
     operationId: entry.id,
     summary: entry.summary,
@@ -95,13 +98,12 @@ function operation(entry: AllowlistEntry, refusedMethod: HttpMethod) {
     parameters: parameters(entry),
   }
   if (entry.requestSchemaRef) {
-    op.requestBody = {
-      required: true,
-      content: { "application/json": { schema: REQUEST_SCHEMAS[entry.requestSchemaRef] ?? { type: "object" } } },
-    }
+    const requestSchema = schemas.request[entry.requestSchemaRef]
+    if (!requestSchema) throw new Error(`Unknown requestSchemaRef ${entry.requestSchemaRef} for ${entry.id}`)
+    op.requestBody = { required: true, content: { "application/json": { schema: requestSchema } } }
   }
   op.responses = {
-    "200": successResponse(entry),
+    "200": successResponse(entry, schemas),
     "401": jsonError("Unknown, invalid, revoked or expired token", {
       error: "Invalid or expired API token",
     }),
@@ -118,7 +120,10 @@ function operation(entry: AllowlistEntry, refusedMethod: HttpMethod) {
   return op
 }
 
-export function buildOpenApiDocument(entries: AllowlistEntry[] = PUBLIC_API_ALLOWLIST): Record<string, unknown> {
+export function buildOpenApiDocument(
+  entries: AllowlistEntry[] = PUBLIC_API_ALLOWLIST,
+  schemas: SchemaSets = { request: REQUEST_SCHEMAS, response: RESPONSE_SCHEMAS },
+): Record<string, unknown> {
   const declared = new Map<string, Set<HttpMethod>>()
   for (const entry of entries) {
     const methods = declared.get(entry.pattern) ?? new Set<HttpMethod>()
@@ -131,7 +136,7 @@ export function buildOpenApiDocument(entries: AllowlistEntry[] = PUBLIC_API_ALLO
     const methods = declared.get(entry.pattern)!
     const refusedMethod = REFUSAL_METHODS.find((m) => !methods.has(m)) ?? "PATCH"
     paths[entry.pattern] ??= {}
-    paths[entry.pattern][entry.method.toLowerCase()] = operation(entry, refusedMethod)
+    paths[entry.pattern][entry.method.toLowerCase()] = operation(entry, refusedMethod, schemas)
   }
 
   return {
@@ -153,7 +158,7 @@ export function buildOpenApiDocument(entries: AllowlistEntry[] = PUBLIC_API_ALLO
           description: "Send the full secret as `Authorization: Bearer pxc_...`.",
         },
       },
-      schemas: { ...REQUEST_SCHEMAS, ...RESPONSE_SCHEMAS },
+      schemas: { ...schemas.request, ...schemas.response },
       "x-scopes": SCOPE_DEFINITIONS,
     },
     paths,

@@ -139,6 +139,7 @@ export const RESPONSE_SCHEMAS: Record<string, Record<string, unknown>> = {
     type: "object",
     description:
       "A Proxmox task was started. `data` is its UPID; follow it with GET /api/v1/tasks/{connectionId}/{node}/{upid}.",
+    required: ["data"],
     properties: { data: { type: "string", description: "Proxmox task UPID" } },
   },
   PrometheusExposition: {

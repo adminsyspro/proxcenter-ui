@@ -183,6 +183,13 @@ describe('allowlist contract: two assertions per route (spec D2)', () => {
     }
   })
 
+  it('every entry with a requestSchemaRef has it in REQUEST_SCHEMAS', async () => {
+    const { REQUEST_SCHEMAS } = await import('./openapiSchemas')
+    for (const entry of PUBLIC_API_ALLOWLIST) {
+      if (entry.requestSchemaRef) expect(REQUEST_SCHEMAS[entry.requestSchemaRef]).toBeDefined()
+    }
+  })
+
   it('every entry has a response schema and the generated spec is committed and current', async () => {
     const { RESPONSE_SCHEMAS } = await import('./openapiSchemas')
     for (const entry of PUBLIC_API_ALLOWLIST) {

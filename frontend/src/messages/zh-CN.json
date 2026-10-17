@@ -2516,6 +2516,15 @@
     }
   },
   "backups": {
+    "restorePoints": "还原点",
+    "latestPoint": "最新",
+    "identity": "标识",
+    "snapshotPath": "PBS 快照",
+    "encryption": "加密",
+    "cryptNone": "未加密",
+    "cryptEncrypt": "已加密",
+    "cryptSignOnly": "仅签名",
+    "machinesPerPage": "每页机器数：",
     "title": "备份",
     "subtitle": "PBS 备份管理",
     "count": "备份 ({count})",

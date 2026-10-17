@@ -6,7 +6,11 @@ export interface PassStat { deltaBytes: number; throughputBytesPerSec: number }
  *    cutover is requested, so the projection stays fresh and the downtime at
  *    switchover is the one shown, however long the wait (issue #443).
  */
-export interface ConvergenceConfig { downtimeBudgetSec: number; maxPasses: number; shutdownSec: number; bootSec: number; cutoverMode?: "auto" | "manual" }
+export interface ConvergenceConfig {
+  downtimeBudgetSec: number; maxPasses: number; shutdownSec: number; bootSec: number; cutoverMode?: "auto" | "manual"
+  /** Post-copy integrity check run at cutover, source off: part of the downtime (roadmap#1). */
+  verifySec?: number
+}
 export type ConvergenceDecision =
   | { action: "cutover"; projectedDowntimeSec: number }
   | { action: "delta"; pass: number; projectedDowntimeSec: number }
@@ -26,7 +30,7 @@ export function decideNextPass(passIndex: number, last: PassStat, cfg: Convergen
   // No data left to copy → zero transfer time. Empty/thin VMs copy 0 bytes and
   // report 0 throughput, which must not read as an "infinite" downtime.
   const transferSec = last.deltaBytes <= 0 ? 0 : (last.throughputBytesPerSec > 0 ? last.deltaBytes / last.throughputBytesPerSec : Infinity)
-  const projected = cfg.shutdownSec + cfg.bootSec + transferSec
+  const projected = cfg.shutdownSec + cfg.bootSec + (cfg.verifySec ?? 0) + transferSec
   // Clamp to the projected_downtime_sec column's INTEGER range; an unbounded
   // sentinel would overflow Postgres and fail the migrationJob update.
   const PG_INT_MAX = 2_147_483_647

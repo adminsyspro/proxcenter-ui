@@ -57,6 +57,11 @@ model Connection {
   // the copy into this PVE cluster, MB/s, so a LUN shared with production is
   // not saturated. Null or 0 = unlimited. Enterprise (migration feature).
   warmZeroRateLimitMBps Int?
+  // Post-copy integrity check of migrations INTO this cluster (roadmap#1):
+  // null = the defaults (on, 8 spread regions of 4 MiB). Enterprise.
+  integrityCheckEnabled  Boolean?
+  integrityRegionCount   Int?
+  integrityRegionSizeMiB Int?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

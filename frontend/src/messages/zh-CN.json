@@ -2445,7 +2445,11 @@
       "reviewNoNic": "未在源虚拟机上检测到网络适配器：目标将在 {bridge} 上获得一个默认网卡。",
       "reviewInvalid": "请先修正标记的字段，再开始迁移。",
       "migrationSettings": "迁移设置",
-      "reviewMemory": "内存"
+      "reviewMemory": "内存",
+      "reviewVtpmWarning": "此虚拟机带有虚拟 TPM。其状态不会被复制（vSphere 以加密方式保存）：目标会获得一个空的 TPM 2.0，使 Windows 11 / Server 2022 保留 TPM 设备，但 BitLocker 或设备加密会在首次启动时要求恢复密钥，Windows Hello 需要重新注册。请准备好 BitLocker 恢复密钥。",
+      "integrityNote": "复制后的完整性校验：每个磁盘约 {seconds} 秒，在目标集群上设置。",
+      "integrityNoteWarm": "切换时的完整性校验：每个磁盘约 {seconds} 秒，计入停机时间。在目标集群上设置。",
+      "integrityNoteOff": "目标集群已关闭完整性校验：磁盘未经校验即交付。"
     },
     "extDashboard": {
       "hosts": "主机",
@@ -4330,8 +4334,8 @@
       },
       "destinations": "目标"
     },
-    "warmMigrationTarget": "迁移到此集群的热迁移",
-    "warmMigrationTargetInfo": "适用于以此集群为目标的所有热迁移，无论来源（VMware、XCP-ng……）。",
+    "warmMigrationTarget": "迁移到此集群",
+    "warmMigrationTargetInfo": "适用于以此集群为目标的所有迁移，无论来源（VMware、XCP-ng……）。",
     "warmZeroRateLimit": "Thick 清零速率上限（MB/s）",
     "warmZeroRateLimitPlaceholder": "不限",
     "warmZeroRateLimitHelper": "在第一次复制之前，thick LVM 目标卷会被完全清零，确保不残留其他虚拟机的数据。此上限限制该步骤在本集群存储上的写入速率，使与生产共享的 LUN 能继续提供服务。留空或 0 = 不限。迁移对话框中输入的值对该次迁移优先。",
@@ -4341,7 +4345,13 @@
     "connectionTabSsh": "SSH",
     "connectionTabMigrations": "迁移",
     "warmZeroRateLimitLabel": "Thick 清零速率上限：",
-    "warmZeroRateLimitCaption": "控制热迁移复制到此集群之前 thick LVM 目标的清零速率。迁移对话框中输入的值对该次迁移优先。"
+    "warmZeroRateLimitCaption": "控制热迁移复制到此集群之前 thick LVM 目标的清零速率。迁移对话框中输入的值对该次迁移优先。",
+    "integrityCheck": "在交付虚拟机前校验每个已复制的磁盘",
+    "integrityCheckHelper": "复制完成后，在源端和目标端对每个磁盘的第一个、最后一个以及 N 个分布区域计算哈希；任何差异都会在交付虚拟机前使迁移失败。默认开启。",
+    "integrityRegionCount": "分布区域：",
+    "integrityRegionSize": "区域大小：",
+    "integrityCost": "每次迁移到此集群时，每个磁盘约增加 {seconds} 秒（热迁移时计入切换停机时间），与磁盘大小无关。",
+    "integrityOff": "关闭：磁盘未经校验即交付。"
   },
   "green": {
     "score": {

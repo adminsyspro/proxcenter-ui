@@ -31,6 +31,10 @@ import type { Extent } from "./extents"
 import { startSoapKeepAlive } from "./session-keepalive"
 import { startJobHeartbeat } from "../job-heartbeat"
 import { resolveWarmZeroRateLimit } from "./zero-rate-target"
+import { resolveIntegritySettings } from "../integrity-target"
+import { faultInjectionFromEnv } from "../integrity"
+import { estimateIntegritySecondsPerDisk } from "../integrity-settings"
+import { vtpmPreflightWarning, vtpmCreatedLine } from "../vtpm"
 import { sweepOrphanReaders } from "./orphan-readers"
 import type { WarmMigrationConfig } from "./types"
 import {
@@ -44,7 +48,7 @@ import {
 } from "./apply"
 import { createTargetVmShell, provisionBlockTargets, markVolumesCopied } from "./target-provision"
 import { cleanShutdownAndConfirm, isVmwareToolsUnavailable, type PowerOffOps } from "./power-off"
-import { attachDisksAndBoot, removeTargetVmOnFailure, unmapTargetVolumes, verifySampledFirstBlock } from "./finish"
+import { attachDisksAndBoot, removeTargetVmOnFailure, unmapTargetVolumes, verifyWarmDiskIntegrity } from "./finish"
 import { type SshTarget } from "@/lib/ssh/node-endpoint-core"
 
 // ── Pure convergence planning (unit-tested) ──
@@ -273,6 +277,9 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
     if (tools !== "running" && tools !== "unknown") {
       await appendLog(jobId, `VMware Tools are ${tools === "not-installed" ? "not installed" : "not running"} on the source: a clean shutdown will not be possible, so the source will be powered off hard at cutover (crash-consistent final delta)`, "warn")
     }
+    // vTPM awareness (roadmap#1): say it at planning time, hours before the
+    // cutover, so the operator has the BitLocker recovery key ready.
+    if (vmConfig.hasVtpm) await appendLog(jobId, vtpmPreflightWarning(), "warn")
 
     // Warm patches the target by byte offset, which is only valid on a raw
     // block device. A file-based target (dir/NFS qcow2) would be silently
@@ -349,6 +356,7 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
     createdVmid = targetVmid
     await updateJob(jobId, "enabling_cbt", { targetVmid })
     await appendLog(jobId, `Target VM ${targetVmid} created on ${config.targetNode} (${Object.keys(pveParams.nets).length} NIC(s))`, "success")
+    if (pveParams.tpmstate0) await appendLog(jobId, vtpmCreatedLine(config.targetStorage), "info")
 
     // ── preparing_disks: allocate a raw block volume per disk, zero the thick ones ──
     const provisioned = await provisionBlockTargets({
@@ -504,7 +512,10 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
       await appendLog(jobId, `Full copy done: ${(fullBytes / 1073741824).toFixed(2)} GB at ${(throughput / 1048576).toFixed(0)} MB/s`, "success")
 
       // ── delta_sync: converge by downtime budget, or hold for the operator ──
-      const cfg: ConvergenceConfig = { downtimeBudgetSec: budget, maxPasses, shutdownSec: 20, bootSec: 30, cutoverMode }
+      // The integrity check runs at cutover with the source off (roadmap#1): its
+      // time is part of the downtime the budget is measured against.
+      const verifySec = estimateIntegritySecondsPerDisk(await resolveIntegritySettings(config.targetConnectionId)) * vmConfig.disks.length
+      const cfg: ConvergenceConfig = { downtimeBudgetSec: budget, maxPasses, shutdownSec: 20, bootSec: 30, verifySec, cutoverMode }
       if (cutoverMode === "manual") {
         await appendLog(jobId, `Manual cutover: replication will keep running and the migration will wait for you. Click "Cutover now" when your window opens.`, "info")
       }
@@ -536,7 +547,7 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
         await updateJob(jobId, "delta_sync", { currentStep: `delta_${pass + 1}`, projectedDowntimeSec: decision.projectedDowntimeSec, progress: Math.round(deltaWindow.rangeEnd) })
         if (decision.action === "cutover") break
         if (decision.action === "operator-gate") {
-          await awaitOperatorCutover(jobId, decision.projectedDowntimeSec, budget, maxPasses, { floorSec: cfg.shutdownSec + cfg.bootSec })
+          await awaitOperatorCutover(jobId, decision.projectedDowntimeSec, budget, maxPasses, { floorSec: cfg.shutdownSec + cfg.bootSec + verifySec })
           break
         }
         // A converged source yields empty passes; without pacing they would
@@ -645,20 +656,25 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
       }
     }
 
-    // ── verify (sampled, defense-in-depth) ──
-    // The no-loss property is algorithmic (CBT + post-shutdown final delta), not a
-    // product of this check. We sample the first block of each disk: the source is
-    // now powered off, so its current disk == the cutover state (no snapshot param).
-    // A mismatch is a loud warning, never a hard failure; the authoritative full
-    // cmp is the lab runbook.
+    // ── verify (sampled regions, blocking) ──
+    // The no-loss property is algorithmic (CBT + post-shutdown final delta); this
+    // check catches what the algorithm cannot see (a transport or a storage that
+    // lied). The source is now powered off, so its current disk == the cutover
+    // state (no snapshot param). First, last and N spread regions of every disk
+    // are hashed on both sides; a difference FAILS the job before the disks are
+    // attached (roadmap#1). The baseline and the intermediate deltas never run
+    // it: only this final copy is the one handed over. Knobs: the target PVE connection (Migrations tab).
     await updateJob(jobId, "verify", { progress: 98 })
+    const integrity = await resolveIntegritySettings(config.targetConnectionId)
+    const fault = faultInjectionFromEnv()
     for (let i = 0; i < vmConfig.disks.length; i++) {
       const disk = vmConfig.disks[i]
       const dev = targetDev.get(disk.deviceKey)!
       const sock = `/tmp/proxcenter-vddk-${jobId}-vrfy-${disk.deviceKey}.sock`
       const pwFile = `/tmp/proxcenter-vddk-${jobId}-vrfy-${disk.deviceKey}.pw`
-      await verifySampledFirstBlock({
+      await verifyWarmDiskIntegrity({
         jobId, connectionId: config.targetConnectionId, nodeIp, diskIndex: i, dev,
+        capacityBytes: disk.capacityBytes, settings: integrity, fault,
         openReader: async () => {
           const reader = await startVddkReader(config.targetConnectionId, nodeIp,
             { sock, libdir, server: esxiHost, user: username, passwordFile: pwFile, thumbprint, moref: config.sourceVmId, diskPath: disk.fileName }, password)

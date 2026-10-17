@@ -157,6 +157,9 @@ export async function createTargetVmShell(pveConn: any, node: string, pveParams:
   // Every source NIC, net0 to netN (#317).
   for (const [key, value] of Object.entries(pveParams.nets)) createBody.set(key, value)
   if (pveParams.efidisk0) createBody.set("efidisk0", pveParams.efidisk0)
+  // Empty TPM 2.0 state for a source with a vTPM (roadmap#1); it takes a
+  // vm-<vmid>-disk-N number too, which the data disks are numbered after.
+  if (pveParams.tpmstate0) createBody.set("tpmstate0", pveParams.tpmstate0)
   const created = await pveFetch<any>(pveConn, `/nodes/${encodeURIComponent(node)}/qemu`, { method: "POST", body: createBody })
   if (created) await waitForPveTask(pveConn, node, String(created))
 

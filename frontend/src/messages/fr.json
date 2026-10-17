@@ -2441,7 +2441,11 @@
       "reviewNoNic": "Aucune carte réseau détectée sur la VM source : la cible reçoit une carte par défaut sur {bridge}.",
       "reviewInvalid": "Corrigez les champs en erreur avant de lancer la migration.",
       "migrationSettings": "Réglages de la migration",
-      "reviewMemory": "Mémoire"
+      "reviewMemory": "Mémoire",
+      "reviewVtpmWarning": "Cette VM possède un TPM virtuel. Son état n'est jamais copié (vSphere le garde chiffré) : la cible reçoit un TPM 2.0 vide pour que Windows 11 / Server 2022 gardent un périphérique TPM, mais BitLocker ou le chiffrement de l'appareil demandera la clé de récupération au premier démarrage et Windows Hello devra être réinscrit. Gardez la clé de récupération BitLocker sous la main.",
+      "integrityNote": "Contrôle d'intégrité après la copie : environ {seconds} s par disque, réglé sur le cluster cible.",
+      "integrityNoteWarm": "Contrôle d'intégrité au cutover : environ {seconds} s par disque, ajoutées à l'interruption. Réglé sur le cluster cible.",
+      "integrityNoteOff": "Contrôle d'intégrité désactivé sur le cluster cible : les disques sont livrés sans vérification."
     },
     "extDashboard": {
       "hosts": "Hôtes",
@@ -4326,8 +4330,8 @@
       },
       "destinations": "Destinations"
     },
-    "warmMigrationTarget": "Migrations warm vers ce cluster",
-    "warmMigrationTargetInfo": "S'applique à toute migration warm dont la cible est ce cluster, quelle que soit la source (VMware, XCP-ng...).",
+    "warmMigrationTarget": "Migrations vers ce cluster",
+    "warmMigrationTargetInfo": "S'applique à toute migration dont la cible est ce cluster, quelle que soit la source (VMware, XCP-ng...).",
     "warmZeroRateLimit": "Plafond de mise à zéro thick (MB/s)",
     "warmZeroRateLimitPlaceholder": "Illimité",
     "warmZeroRateLimitHelper": "Avant la première passe de copie, un volume cible LVM thick est entièrement mis à zéro pour qu'aucune donnée d'une autre VM ne subsiste. Ce plafond limite le débit d'écriture de cette étape sur le stockage de ce cluster, pour qu'un LUN partagé avec la production continue de la servir. Vide ou 0 = illimité. Une valeur saisie dans le dialogue de migration l'emporte pour cette migration.",
@@ -4337,7 +4341,13 @@
     "connectionTabSsh": "SSH",
     "connectionTabMigrations": "Migrations",
     "warmZeroRateLimitLabel": "Plafond de mise à zéro thick :",
-    "warmZeroRateLimitCaption": "Cadence la mise à zéro des cibles LVM thick avant une copie warm vers ce cluster. Une valeur saisie dans le dialogue de migration l'emporte pour cette migration."
+    "warmZeroRateLimitCaption": "Cadence la mise à zéro des cibles LVM thick avant une copie warm vers ce cluster. Une valeur saisie dans le dialogue de migration l'emporte pour cette migration.",
+    "integrityCheck": "Vérifier chaque disque copié avant de livrer la VM",
+    "integrityCheckHelper": "Après la copie, la première, la dernière et N zones réparties de chaque disque sont hachées sur la source et sur la cible ; la moindre différence fait échouer la migration avant de livrer la VM. Activé par défaut.",
+    "integrityRegionCount": "Zones réparties :",
+    "integrityRegionSize": "Taille d'une zone :",
+    "integrityCost": "Ajoute environ {seconds} s par disque à chaque migration vers ce cluster (à l'interruption du cutover en warm), quelle que soit la taille du disque.",
+    "integrityOff": "Désactivé : les disques sont livrés sans vérification."
   },
   "green": {
     "score": {

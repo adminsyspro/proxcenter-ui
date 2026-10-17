@@ -30,6 +30,7 @@ import {
   InputLabel,
   MenuItem,
   Select,
+  Slider,
   Switch,
   Tab,
   Tabs,
@@ -52,6 +53,7 @@ import { formatSshEndpoint } from '@/lib/ssh/node-endpoint-core'
 import { useLicense, Features } from '@/contexts/LicenseContext'
 import { isZeroRateLimitValid, ZERO_RATE_LIMIT_MAX_MBPS } from '@/lib/migration/warm/zero-rate'
 import ZeroRateSlider from '@/components/migration/ZeroRateSlider'
+import { DEFAULT_INTEGRITY_SETTINGS, INTEGRITY_REGION_COUNT_MAX, INTEGRITY_REGION_SIZE_MIB_MAX, estimateIntegritySecondsPerDisk, integritySettingsFromConnection } from '@/lib/migration/integrity-settings'
 
 export type ConnectionFormData = {
   name: string
@@ -84,6 +86,10 @@ export type ConnectionFormData = {
   replicationNetwork: string
   /** Warm migration zeroing cap of this PVE target, MB/s as typed; '' = unlimited (roadmap#45). */
   warmZeroRateLimitMBps: string
+  /** Post-copy integrity check of migrations into this cluster (roadmap#1). */
+  integrityCheckEnabled: boolean
+  integrityRegionCount: number
+  integrityRegionSizeMiB: number
   // Provider-only, create mode: own the connection by an MSP tenant ('' = pool)
   ownerTenantId: string
 }
@@ -92,6 +98,12 @@ type ConnectionDialogProps = {
   open: boolean
   onClose: () => void
   onSave: (data: ConnectionFormData) => Promise<void>
+  /**
+   * At least one source hypervisor (VMware, XCP-ng, Nutanix, Hyper-V) is
+   * configured. Without one, nothing migrates into a cluster and the
+   * Migrations tab of a PVE connection has no meaning, so it is hidden.
+   */
+  migrationSourcesConfigured?: boolean
   type: 'pve' | 'pbs' | 'vmware' | 'xcpng' | 'hyperv' | 'nutanix'
   initialData?: Partial<ConnectionFormData> & { 
     id?: string
@@ -127,6 +139,9 @@ const defaultFormData: ConnectionFormData = {
   sshUseSudo: false,
   replicationNetwork: '',
   warmZeroRateLimitMBps: '',
+  integrityCheckEnabled: DEFAULT_INTEGRITY_SETTINGS.enabled,
+  integrityRegionCount: DEFAULT_INTEGRITY_SETTINGS.regionCount,
+  integrityRegionSizeMiB: DEFAULT_INTEGRITY_SETTINGS.regionSizeMiB,
   ownerTenantId: '',
 }
 
@@ -181,7 +196,8 @@ export default function ConnectionDialog({
   onSave,
   type,
   initialData,
-  mode = 'create'
+  mode = 'create',
+  migrationSourcesConfigured = false,
 }: ConnectionDialogProps) {
   const t = useTranslations()
   const [tab, setTab] = useState<ConnectionTabId>('general')
@@ -259,6 +275,10 @@ export default function ConnectionDialog({
           // The list payload hands back null when no replication network is set
           replicationNetwork: (initialData as any).replicationNetwork || '',
           warmZeroRateLimitMBps: (initialData as any).warmZeroRateLimitMBps ? String((initialData as any).warmZeroRateLimitMBps) : '',
+          ...(() => {
+            const i = integritySettingsFromConnection(initialData as any)
+            return { integrityCheckEnabled: i.enabled, integrityRegionCount: i.regionCount, integrityRegionSizeMiB: i.regionSizeMiB }
+          })(),
           subType: editSubType,
           // External hypervisors keep "user:password" encrypted; the list payload
           // hands the user back as apiUser (never the password). Without it the
@@ -611,13 +631,16 @@ export default function ConnectionDialog({
 
   // Tabs shown for this connection type; the SSH condition is the one the SSH
   // section always had (PVE and standalone ESXi only).
+ // Migration settings of a target cluster: Enterprise, PVE, and only once a
+  // source hypervisor exists to migrate from.
+  const showMigrationsTab = type === 'pve' && migrationAvailable && migrationSourcesConfigured
   const showSshTab = !isPbs && !isXcpng && !isHyperv && !isNutanix && !(isVmware && form.subType === 'vcenter')
   const visibleTabs: { id: ConnectionTabId; label: string; icon: string }[] = [
     { id: 'general', label: t('settings.connectionTabGeneral'), icon: 'ri-settings-3-line' },
     { id: 'auth', label: t('settings.connectionTabAuth'), icon: 'ri-key-2-line' },
     ...(showSshTab ? [{ id: 'ssh' as const, label: t('settings.connectionTabSsh'), icon: 'ri-terminal-line' }] : []),
     ...(type === 'pve' ? [{ id: 'siteRecovery' as const, label: t('settings.siteRecovery'), icon: 'ri-refresh-line' }] : []),
-    ...(type === 'pve' && migrationAvailable ? [{ id: 'migrations' as const, label: t('settings.connectionTabMigrations'), icon: 'ri-exchange-line' }] : []),
+    ...(showMigrationsTab ? [{ id: 'migrations' as const, label: t('settings.connectionTabMigrations'), icon: 'ri-exchange-line' }] : []),
     ...(!isExternalHypervisor ? [{ id: 'location' as const, label: t('settings.location'), icon: 'ri-map-pin-line' }] : []),
   ]
   // A tab that no longer applies (e.g. ESXi switched to vCenter) falls back to General.
@@ -1482,7 +1505,7 @@ export default function ConnectionDialog({
         </Box>
 
         <Box role="tabpanel" hidden={currentTab !== 'migrations'} sx={{ pt: 1 }}>
-        {type === 'pve' && migrationAvailable && (
+        {showMigrationsTab && (
           <>
             {/* Section: warm migrations INTO this cluster (roadmap#45, Enterprise).
                 The zeroing cap protects the array behind this cluster's thick
@@ -1503,6 +1526,48 @@ export default function ConnectionDialog({
                 {t('settings.warmZeroRateLimitCaption')}
               </Typography>
             </Box>
+
+            {/* Post-copy integrity check (roadmap#1): every copied disk is
+                sampled on both sides before the VM is handed over. */}
+            <Divider sx={{ my: 2.5 }} />
+            <FormControlLabel
+              control={<Switch checked={form.integrityCheckEnabled} onChange={e => handleChange('integrityCheckEnabled', e.target.checked)} data-testid="connection-integrity-enabled" />}
+              label={
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                  <Typography variant="body2">{t('settings.integrityCheck')}</Typography>
+                  <InfoTooltip text={t('settings.integrityCheckHelper')} size={16} />
+                </Box>
+              }
+            />
+            {form.integrityCheckEnabled && (
+              <Box sx={{ mt: 1 }}>
+                {([
+                  ['integrityRegionCount', t('settings.integrityRegionCount'), 0, INTEGRITY_REGION_COUNT_MAX, [0, 8, 16, 32, 64], (v: number) => `${v}`],
+                  ['integrityRegionSizeMiB', t('settings.integrityRegionSize'), 1, INTEGRITY_REGION_SIZE_MIB_MAX, [1, 16, 32, 64], (v: number) => `${v} MiB`],
+                ] as const).map(([field, label, min, max, marks, fmt]) => (
+                  <Box key={field} sx={{ mb: 1 }}>
+                    <Typography variant="body2">
+                      {label} <Box component="span" sx={{ fontWeight: 600 }} data-testid={`connection-${field}-value`}>{fmt(form[field])}</Box>
+                    </Typography>
+                    <Slider
+                      sx={{ mx: 4, width: 'calc(100% - 64px)' }}
+                      value={form[field]}
+                      min={min}
+                      max={max}
+                      step={1}
+                      marks={marks.map(v => ({ value: v, label: fmt(v) }))}
+                      onChange={(_e, v) => handleChange(field, v as number)}
+                      slotProps={{ input: { 'aria-label': label, 'data-testid': `connection-${field}` } as any }}
+                    />
+                  </Box>
+                ))}
+              </Box>
+            )}
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }} data-testid="connection-integrity-cost">
+              {form.integrityCheckEnabled
+                ? t('settings.integrityCost', { seconds: estimateIntegritySecondsPerDisk({ enabled: true, regionCount: form.integrityRegionCount, regionSizeMiB: form.integrityRegionSizeMiB }) })
+                : t('settings.integrityOff')}
+            </Typography>
           </>
         )}
 

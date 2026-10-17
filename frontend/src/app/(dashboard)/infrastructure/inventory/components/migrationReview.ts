@@ -25,6 +25,8 @@ export interface ReviewSource {
   sockets: number
   memoryMB: number
   nics: ReviewSourceNic[]
+  /** The source carries a virtual TPM; its state is never copied (roadmap#1). */
+  hasVtpm?: boolean
 }
 
 export interface ReviewHardwareState {

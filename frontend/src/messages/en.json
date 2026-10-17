@@ -2441,7 +2441,11 @@
       "reviewNoNic": "No network adapter detected on the source VM: the target gets one default NIC on {bridge}.",
       "reviewInvalid": "Fix the highlighted fields before starting the migration.",
       "migrationSettings": "Migration settings",
-      "reviewMemory": "Memory"
+      "reviewMemory": "Memory",
+      "reviewVtpmWarning": "This VM has a virtual TPM. Its state is never copied (vSphere keeps it encrypted): the target gets an empty TPM 2.0 so Windows 11 / Server 2022 keep a TPM device, but BitLocker or Device Encryption will ask for the recovery key at first boot and Windows Hello must be re-enrolled. Keep the BitLocker recovery key at hand.",
+      "integrityNote": "Integrity check after the copy: about {seconds} s per disk, set on the target cluster.",
+      "integrityNoteWarm": "Integrity check at cutover: about {seconds} s per disk, added to the downtime. Set on the target cluster.",
+      "integrityNoteOff": "Integrity check off on the target cluster: the disks are handed over unverified."
     },
     "extDashboard": {
       "hosts": "Hosts",
@@ -4326,8 +4330,8 @@
       },
       "destinations": "Destinations"
     },
-    "warmMigrationTarget": "Warm migrations into this cluster",
-    "warmMigrationTargetInfo": "Applies to every warm migration whose target is this cluster, whatever the source (VMware, XCP-ng...).",
+    "warmMigrationTarget": "Migrations into this cluster",
+    "warmMigrationTargetInfo": "Applies to every migration whose target is this cluster, whatever the source (VMware, XCP-ng...).",
     "warmZeroRateLimit": "Thick zeroing rate limit (MB/s)",
     "warmZeroRateLimitPlaceholder": "Unlimited",
     "warmZeroRateLimitHelper": "Before the first copy pass, a thick LVM target volume is zeroed in full so no data of another VM can remain. This caps the write rate of that step on this cluster's storage, so a LUN shared with production keeps serving it. Empty or 0 = unlimited. A value typed in the migration dialog wins for that run.",
@@ -4337,7 +4341,13 @@
     "connectionTabSsh": "SSH",
     "connectionTabMigrations": "Migrations",
     "warmZeroRateLimitLabel": "Thick zeroing rate limit:",
-    "warmZeroRateLimitCaption": "Paces the zeroing of thick LVM targets before a warm copy into this cluster. A value typed in the migration dialog wins for that run."
+    "warmZeroRateLimitCaption": "Paces the zeroing of thick LVM targets before a warm copy into this cluster. A value typed in the migration dialog wins for that run.",
+    "integrityCheck": "Verify every copied disk before handing the VM over",
+    "integrityCheckHelper": "After the copy, the first, the last and N spread regions of each disk are hashed on the source and on the target; any difference fails the migration before the VM is handed over. On by default.",
+    "integrityRegionCount": "Spread regions:",
+    "integrityRegionSize": "Region size:",
+    "integrityCost": "Adds about {seconds} s per disk to each migration into this cluster (to the cutover downtime in warm), whatever the disk size.",
+    "integrityOff": "Off: disks are handed over unverified."
   },
   "green": {
     "score": {

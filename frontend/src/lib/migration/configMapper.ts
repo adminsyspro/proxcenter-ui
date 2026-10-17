@@ -6,6 +6,7 @@ import type { EsxiVmConfig, EsxiDiskInfo } from "@/lib/vmware/soap"
 import { vmwareToolsState } from "@/lib/vmware/soap"
 import { MIGRATION_CPU_TYPE_DEFAULT } from "./cpu-type"
 import { applyHardwareOverrides, buildNetValue, resolveNicTarget, type MigrationTargetOverrides } from "./target-overrides"
+import { tpmstate0Param } from "./vtpm"
 
 export interface PveVmCreateParams {
   vmid: number
@@ -31,6 +32,8 @@ export interface PveVmCreateParams {
   nets: Record<string, string>
   // EFI disk (only if firmware=efi)
   efidisk0?: string
+  /** Empty TPM 2.0 state, only when the source has a vTPM (roadmap#1). */
+  tpmstate0?: string
 }
 
 /** Map ESXi guest ID / guest full name to Proxmox ostype */
@@ -245,6 +248,12 @@ export function mapEsxiToPveConfig(
     // Secure Boot verification after migration. Using =0 caused silent
     // boot failures when the source VM had Secure Boot enabled.
     params.efidisk0 = `${targetStorage}:1,efitype=4m,pre-enrolled-keys=1`
+  }
+  // A source with a virtual TPM keeps a TPM device on the target: an empty
+  // TPM 2.0 state (the vSphere one is encrypted and never copied, roadmap#1).
+  // Windows 11 / Server 2022 refuse to boot without one once installed with it.
+  if (esxiConfig.hasVtpm) {
+    params.tpmstate0 = tpmstate0Param(targetStorage)
   }
 
   return params

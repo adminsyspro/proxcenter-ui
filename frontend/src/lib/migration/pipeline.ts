@@ -40,6 +40,9 @@ import { buildUefiInjectScript } from "./uefi-inject"
 import { startJobHeartbeat } from "./job-heartbeat"
 import { capturePipelineStatus, writePipelineExit } from "./pipe-exit"
 import { interpretPollExit, MAX_CONSECUTIVE_POLL_FAILURES } from "./poll-exit"
+import { verifyDiskIntegrity, faultInjectionFromEnv, type RegionSource } from "./integrity"
+import { resolveIntegritySettings } from "./integrity-target"
+import { vtpmPreflightWarning, vtpmCreatedLine } from "./vtpm"
 
 type MigrationStatus = "pending" | "preflight" | "creating_vm" | "transferring" | "configuring" | "converting_disks" | "completed" | "failed" | "cancelled"
 
@@ -257,6 +260,13 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       totalDisks: vmConfig.disks.length,
       totalBytes: BigInt(vmConfig.disks.reduce((sum, d) => sum + d.capacityBytes, 0)),
     })
+    // vTPM awareness (roadmap#1): the TPM state stays in vSphere; the target
+    // gets an empty TPM 2.0 and the operator needs the BitLocker recovery key.
+    if (vmConfig.hasVtpm) await appendLog(jobId, vtpmPreflightWarning(), "warn")
+    // Post-copy integrity check (roadmap#1): knobs from the target PVE connection (Migrations tab),
+    // read once per job; the test hook is an env var of dev builds only.
+    const integrity = await resolveIntegritySettings(config.targetConnectionId)
+    const fault = faultInjectionFromEnv()
 
     // Handle VM power state based on migration type
     const isLive = config.migrationType === "live"
@@ -438,6 +448,11 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
     if (pveParams.efidisk0) {
       createBody.set("efidisk0", pveParams.efidisk0)
     }
+    // Empty TPM 2.0 state for a source with a vTPM (roadmap#1); nextFreeDiskName
+    // already numbers the data disks after it.
+    if (pveParams.tpmstate0) {
+      createBody.set("tpmstate0", pveParams.tpmstate0)
+    }
 
     const createResult = await pveFetch<any>(
       pveConn,
@@ -451,6 +466,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       await waitForPveTask(pveConn, config.targetNode, String(createResult))
     }
     await appendLog(jobId, `VM ${targetVmid} created on ${config.targetNode}`, "success")
+    if (pveParams.tpmstate0) await appendLog(jobId, vtpmCreatedLine(config.targetStorage), "info")
 
     if (isCancelled(jobId)) throw new Error("Migration cancelled")
 
@@ -505,6 +521,31 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       } catch (attachErr: any) {
         await appendLog(jobId, `Warning: Could not auto-attach ${diskSlot}: ${attachErr.message}`, "warn")
       }
+    }
+
+    // Post-copy integrity check of one disk (roadmap#1): first, last and N spread
+    // regions hashed on the source and on the target, plus `qemu-img check` on a
+    // qcow2 target. Runs BEFORE the disk is attached (block) or adopted (file), so
+    // a difference throws into the failure path, which destroys the partial VM.
+    // Live mode copies a vmkfstools clone that is deleted before this could run,
+    // so it is the one mode left unverified, and the log says so.
+    async function verifyCopiedDisk(i: number, disk: EsxiDiskInfo, source: RegionSource, target: RegionSource, checkImage?: string) {
+      if (isLive) {
+        await appendLog(jobId, `Integrity check, Disk ${i + 1}: not available in live mode (the source clone is removed before the check could run)`)
+        return
+      }
+      await verifyDiskIntegrity({
+        connectionId: config.targetConnectionId, nodeIp, diskIndex: i, diskLabel: `Disk ${i + 1}`,
+        capacityBytes: disk.capacityBytes, source, target,
+        ...(checkImage ? { checkImage: { path: checkImage, format: "qcow2" as const } } : {}),
+        settings: integrity, fault, log: (m, l) => appendLog(jobId, m, l),
+      })
+    }
+
+    // The ESXi datastore file of a disk as a region source: HTTPS range requests
+    // on the same URL the download used, with the SOAP session cookie.
+    function esxiHttpsSource(disk: EsxiDiskInfo): RegionSource {
+      return { kind: "https", url: buildVmdkDownloadUrl(esxiUrl, disk), cookie: soapSession!.cookie.replaceAll('"', "") }
     }
 
     // Helper: stream a disk from ESXi to a pre-allocated block device via HTTPS
@@ -625,6 +666,10 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       const elapsed = (Date.now() - startTime) / 1000
       await updateJob(jobId, "transferring", { bytesTransferred: BigInt(transferredBytes), transferSpeed })
       await appendLog(jobId, `Streaming complete: ${(transferredBytes / 1073741824).toFixed(1)} GB in ${elapsed.toFixed(0)}s (${transferSpeed})`, "success")
+
+      // Source bytes straight from the datastore (range requests), target bytes
+      // from the still-mapped device (roadmap#1).
+      await verifyCopiedDisk(i, disk, esxiHttpsSource(disk), { kind: "raw", path: devicePath })
 
       // Unmap RBD device if we mapped it
       const allocVol = allocatedVolumes.find(v => v.devicePath === devicePath)
@@ -1378,6 +1423,12 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       const transferSpeed = speedBps > 1048576 ? `${(speedBps / 1048576).toFixed(1)} MB/s` : `${(speedBps / 1024).toFixed(0)} KB/s`
       await appendLog(jobId, `Conversion complete: ${diskSizeGB} GB in ${elapsed.toFixed(0)}s (${transferSpeed}), output ${(outputSize / 1073741824).toFixed(1)} GB`, "success")
 
+      // The converted qcow2 is the future volume (adopted by rename): sample it
+      // against the mounted source and check its structure before it is attached.
+      await verifyCopiedDisk(i, disk,
+        inputFormat === "vmdk" ? { kind: "image", path: sourcePath, format: "vmdk" } : { kind: "raw", path: sourcePath },
+        { kind: "image", path: outputFile, format: "qcow2" }, outputFile)
+
       // Import into Proxmox storage
       await appendLog(jobId, `Adding disk to storage "${config.targetStorage}"...`)
       await updateJob(jobId, "transferring", { currentStep: `importing_disk_${i + 1}` })
@@ -1544,6 +1595,13 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       const speedBps = elapsed > 0 ? transferredBytes / elapsed : 0
       const transferSpeed = speedBps > 1048576 ? `${(speedBps / 1048576).toFixed(1)} MB/s` : `${(speedBps / 1024).toFixed(0)} KB/s`
       await appendLog(jobId, `SSHFS streaming complete: ${(transferredBytes / 1073741824).toFixed(1)} GB in ${elapsed.toFixed(0)}s (${transferSpeed})`, "success")
+
+      // Source bytes from the mounted datastore (the flat file, or the VMDK
+      // descriptor through qemu-nbd on vSAN), target bytes from the still-mapped
+      // device (roadmap#1).
+      await verifyCopiedDisk(i, disk,
+        useVmdkDescriptor ? { kind: "image", path: sshfsDiskPath, format: "vmdk" } : { kind: "raw", path: sshfsDiskPath },
+        { kind: "raw", path: devicePath })
 
       // Unmap RBD device if we mapped it
       const allocVol = allocatedVolumes.find(v => v.devicePath === devicePath)
@@ -1823,6 +1881,11 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       }
       await appendLog(jobId, `Conversion to ${importFormat} complete`, "success")
       await executeSSH(config.targetConnectionId, nodeIp, `rm -f "${tmpFile}.vmdk"`)
+
+      // The converted qcow2 is the future volume (adopted by rename): sample it
+      // against the datastore file (range requests) and check its structure.
+      await verifyCopiedDisk(i, vmConfig.disks[i], esxiHttpsSource(vmConfig.disks[i]),
+        { kind: "image", path: `${tmpFile}.${importFormat}`, format: "qcow2" }, `${tmpFile}.${importFormat}`)
 
       if (isCancelled(jobId)) throw new Error("Migration cancelled")
 

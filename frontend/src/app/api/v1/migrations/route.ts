@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth"
 
 import { getSessionPrisma, getCurrentTenantId, getTenantPrisma } from "@/lib/tenant"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
-import { sensitiveNicPermissions, NicConfigError } from "@/lib/rbac/nicPermissions"
+import { NicConfigError } from "@/lib/rbac/nicPermissions"
 import { authOptions } from "@/lib/auth/config"
 import { runMigrationPipeline } from "@/lib/migration/pipeline"
 import { runXcpngMigrationPipeline } from "@/lib/migration/xcpng-pipeline"
@@ -23,7 +23,7 @@ import { parseZeroRateLimit, ZERO_RATE_LIMIT_MIN_MBPS, ZERO_RATE_LIMIT_MAX_MBPS 
 import { hasServerFeature } from "@/lib/auth/requireEnterprise"
 import { Features } from "@/lib/license/features"
 import { TERMINAL_STATUSES } from "@/lib/tasks/sharedTask"
-import { canMigrateConnections, getTenantInfrastructureScope } from "@/lib/tenant/infraScope"
+import { authorizeMigrationTarget } from "@/lib/migration/authorize"
 
 export const runtime = "nodejs"
 
@@ -122,29 +122,10 @@ export async function POST(req: Request) {
     const nics: MigrationNicMapping[] | undefined = nicsParsed.value
 
     const tenantId = await getCurrentTenantId()
-    // A migration lands guests on whole clusters (any bridge, VNet or storage
-    // of the target, one per NIC since #317): only a tenant that owns BOTH
-    // clusters may run it, as for a remote migration. A vDC tenant never does;
-    // an MSP only between its own clusters. 404 rather than 403: the caller
-    // learns nothing about connections outside its perimeter.
-    if (!canMigrateConnections(await getTenantInfrastructureScope(tenantId), sourceConnectionId, targetConnectionId)) {
-      return NextResponse.json({ error: "Connection not found" }, { status: 404 })
-    }
-    if (tenantId !== 'default') {
-      // Every NIC the job will create, so a tenant without the VLAN or bridge
-      // permission cannot slip a tag or a bridge through a per-NIC mapping.
-      const requestedNets: Record<string, string> = { net0: `virtio,bridge=${networkBridge}${vlanTag ? `,tag=${vlanTag}` : ''}` }
-      for (const n of nics ?? []) {
-        const tag = n.vlanTag ?? vlanTag
-        requestedNets[`net${n.index}`] = `virtio,bridge=${n.bridge}${tag ? `,tag=${tag}` : ''}`
-      }
-      for (const permission of sensitiveNicPermissions(requestedNets)) {
-        const identityDenied = await checkPermission(permission,
-          targetVmid === undefined ? 'connection' : 'vm',
-          targetVmid === undefined ? targetConnectionId : `${targetConnectionId}:${targetNode}:qemu:${targetVmid}`)
-        if (identityDenied) return identityDenied
-      }
-    }
+    const unauthorized = await authorizeMigrationTarget({
+      tenantId, sourceConnectionId, targetConnectionId, targetNode, targetVmid, networkBridge, vlanTag, nics,
+    })
+    if (unauthorized) return unauthorized
 
     // Optional warm-migration cutover downtime budget (seconds). Validate up
     // front: a malformed value would coerce to NaN and make the convergence

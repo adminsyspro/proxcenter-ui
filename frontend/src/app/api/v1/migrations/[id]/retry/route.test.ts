@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 // Capture the after() callbacks so the test can run the background dispatch.
 const h = vi.hoisted(() => ({
   afterCbs: [] as Array<() => Promise<void>>,
+  infra: { kind: "provider" } as any,
   prisma: {
     migrationJob: { findUnique: vi.fn(), create: vi.fn(async () => ({ id: "job-2" })) },
     connection: { findUnique: vi.fn() },
@@ -16,6 +17,10 @@ vi.mock("next/server", async (io) => {
 vi.mock("next-auth", () => ({ getServerSession: vi.fn(async () => ({ user: { id: "u1" } })) }))
 vi.mock("@/lib/auth/config", () => ({ authOptions: {} }))
 vi.mock("@/lib/rbac", () => ({ checkPermission: vi.fn(async () => null), PERMISSIONS: { VM_MIGRATE: "vm.migrate" } }))
+vi.mock("@/lib/tenant/infraScope", async (orig) => ({
+  ...(await orig<typeof import("@/lib/tenant/infraScope")>()),
+  getTenantInfrastructureScope: vi.fn(async () => h.infra),
+}))
 vi.mock("@/lib/tenant", () => ({
   getSessionPrisma: vi.fn(async () => h.prisma),
   getCurrentTenantId: vi.fn(async () => "default"),
@@ -210,5 +215,42 @@ describe("POST /api/v1/migrations/[id]/retry", () => {
       migrationType: "live",
     }), "default")
     expect(cold).not.toHaveBeenCalled()
+  })
+})
+
+describe("POST /api/v1/migrations/[id]/retry, the retrying user is checked again (#317)", () => {
+  it("refuses a vDC tenant, as the creation route does, and creates nothing", async () => {
+    const { getCurrentTenantId } = await import("@/lib/tenant")
+    vi.mocked(getCurrentTenantId).mockResolvedValueOnce("tenant-1")
+    h.infra = { kind: "iaas", vdcScope: {} }
+    try {
+      h.prisma.migrationJob.findUnique.mockResolvedValueOnce(failedJob)
+      const res = await callRoute(POST, { params: { id: "job-1" }, method: "POST" })
+      expect(res.status).toBe(404)
+      expect(h.prisma.migrationJob.create).not.toHaveBeenCalled()
+    } finally {
+      h.infra = { kind: "provider" }
+    }
+  })
+
+  it("refuses to replay a saved per-NIC VLAN for a user without the VLAN permission", async () => {
+    const { getCurrentTenantId } = await import("@/lib/tenant")
+    const { checkPermission } = await import("@/lib/rbac")
+    vi.mocked(getCurrentTenantId).mockResolvedValueOnce("tenant-1")
+    h.infra = { kind: "msp", connectionIds: new Set(["src", "tgt"]) }
+    vi.mocked(checkPermission)
+      .mockImplementationOnce(async () => null) // vm.migrate
+      .mockImplementationOnce(async () => Response.json({ error: "denied" }, { status: 403 }) as any) // VLAN on the saved NIC
+    try {
+      h.prisma.migrationJob.findUnique.mockResolvedValueOnce({
+        ...failedJob,
+        config: { ...failedJob.config, networkBridge: "vmbr0", nics: [{ index: 1, bridge: "vmbr1", vlanTag: 42 }] },
+      })
+      const res = await callRoute(POST, { params: { id: "job-1" }, method: "POST" })
+      expect(res.status).toBe(403)
+      expect(h.prisma.migrationJob.create).not.toHaveBeenCalled()
+    } finally {
+      h.infra = { kind: "provider" }
+    }
   })
 })

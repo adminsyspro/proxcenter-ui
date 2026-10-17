@@ -3,7 +3,7 @@ import { NextResponse } from "next/server"
 import { getSessionPrisma } from "@/lib/tenant"
 import { decryptSecret } from "@/lib/crypto/secret"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
-import { soapLogin, soapLogout, soapRequest, extractProp, soapResolveHostInventoryPaths, parseNicDevices } from "@/lib/vmware/soap"
+import { soapLogin, soapLogout, soapRequest, extractProp, soapResolveHostInventoryPaths, parseNicDevices, hasVirtualTpm } from "@/lib/vmware/soap"
 
 export const runtime = "nodejs"
 
@@ -163,6 +163,9 @@ export async function GET(
       // parser as parseVmConfig, in device order, so row N of the review step
       // is the mapper's netN. `networks` above stays for the inventory views.
       const nics = parseNicDevices(devicesXml)
+      // A vTPM on the source: the review step warns that its state is never
+      // copied and that the target gets an empty TPM 2.0 (roadmap#1).
+      const hasVtpm = hasVirtualTpm(devicesXml)
 
       // Snapshots count
       const snapshotXml = extractProp(xml, 'snapshot')
@@ -228,6 +231,7 @@ export async function GET(
           disks,
           networks,
           nics,
+          hasVtpm,
           snapshotCount,
           connectionId: conn.id,
           connectionName: conn.name,

@@ -3,6 +3,7 @@
 
 import { z } from 'zod'
 import { ZERO_RATE_LIMIT_MAX_MBPS, ZERO_RATE_UNLIMITED } from './migration/warm/zero-rate'
+import { INTEGRITY_REGION_COUNT_MAX, INTEGRITY_REGION_SIZE_MIB_MAX } from './migration/integrity-settings'
 
 import type { BroadcastInput } from '@/lib/broadcast/types'
 import { isValidCidr } from '@/lib/net/cidr'
@@ -66,6 +67,11 @@ export const createConnectionSchema = z.object({
   // Warm migration zeroing cap (roadmap#45), PVE only: MB/s, 0 = unlimited,
   // null clears it. Ignored without the migration feature (Enterprise).
   warmZeroRateLimitMBps: z.number().int().min(ZERO_RATE_UNLIMITED).max(ZERO_RATE_LIMIT_MAX_MBPS).nullable().optional(),
+  // Post-copy integrity check of migrations into this cluster (roadmap#1),
+  // PVE only, Enterprise only; null = the default.
+  integrityCheckEnabled: z.boolean().nullable().optional(),
+  integrityRegionCount: z.number().int().min(0).max(INTEGRITY_REGION_COUNT_MAX).nullable().optional(),
+  integrityRegionSizeMiB: z.number().int().min(1).max(INTEGRITY_REGION_SIZE_MIB_MAX).nullable().optional(),
 }).superRefine((data, ctx) => {
   // PVE/PBS require apiToken
   if ((data.type === 'pve' || data.type === 'pbs') && !data.apiToken) {
@@ -162,6 +168,11 @@ export const updateConnectionSchema = z.object({
   // Warm migration zeroing cap (roadmap#45), PVE only: MB/s, 0 = unlimited,
   // null clears it. Ignored without the migration feature (Enterprise).
   warmZeroRateLimitMBps: z.number().int().min(ZERO_RATE_UNLIMITED).max(ZERO_RATE_LIMIT_MAX_MBPS).nullable().optional(),
+  // Post-copy integrity check of migrations into this cluster (roadmap#1),
+  // PVE only, Enterprise only; null = the default.
+  integrityCheckEnabled: z.boolean().nullable().optional(),
+  integrityRegionCount: z.number().int().min(0).max(INTEGRITY_REGION_COUNT_MAX).nullable().optional(),
+  integrityRegionSizeMiB: z.number().int().min(1).max(INTEGRITY_REGION_SIZE_MIB_MAX).nullable().optional(),
 }).superRefine((data, ctx) => {
   refineReplicationNetwork(data, ctx)
 })

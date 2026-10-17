@@ -230,3 +230,16 @@ describe("mapEsxiToPveConfig: every NIC and the review-step overrides (#317)", (
     expect(p.nets).toEqual({ net0: "virtio,bridge=vmbr0,tag=5" })
   })
 })
+
+describe("mapEsxiToPveConfig: vTPM (roadmap#1)", () => {
+  it("creates an empty TPM 2.0 state on the target storage when the source has a vTPM", () => {
+    const p = mapEsxiToPveConfig(makeConfig({ firmware: "efi", hasVtpm: true }), 100, "CephStoragePool", "vmbr0")
+    expect(p.tpmstate0).toBe("CephStoragePool:1,version=v2.0")
+    expect(p.efidisk0).toBe("CephStoragePool:1,efitype=4m,pre-enrolled-keys=1")
+  })
+  it("adds no TPM when the source has none", () => {
+    expect(mapEsxiToPveConfig(makeConfig(), 100, "local-lvm", "vmbr0").tpmstate0).toBeUndefined()
+    expect(mapEsxiToPveConfig(makeConfig({ hasVtpm: false }), 100, "local-lvm", "vmbr0").tpmstate0).toBeUndefined()
+  })
+})
+

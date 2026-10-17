@@ -97,6 +97,9 @@ export async function GET(req: Request) {
       sshUseSudo: boolean
       replicationNetwork: string | null
       warmZeroRateLimitMBps: number | null
+      integrityCheckEnabled: boolean | null
+      integrityRegionCount: number | null
+      integrityRegionSizeMiB: number | null
       apiTokenEnc: string | null
       sshKeyEnc: string | null
       sshPassEnc: string | null
@@ -136,6 +139,9 @@ export async function GET(req: Request) {
         sshUseSudo: true,
         replicationNetwork: true,
         warmZeroRateLimitMBps: true,
+        integrityCheckEnabled: true,
+        integrityRegionCount: true,
+        integrityRegionSizeMiB: true,
         apiTokenEnc: true,
         sshKeyEnc: true,
         sshPassEnc: true,
@@ -231,6 +237,7 @@ export async function POST(req: Request) {
       sshEnabled, sshPort, sshUser, sshAuthMethod,
       sshKey, sshPassphrase, sshPassword, sshUseSudo, replicationNetwork,
       warmZeroRateLimitMBps,
+      integrityCheckEnabled, integrityRegionCount, integrityRegionSizeMiB,
       ownerTenantId,
     } = parseResult.data
 
@@ -324,6 +331,12 @@ export async function POST(req: Request) {
     // with the migration feature (Enterprise); Community never stores one.
     if (type === 'pve' && typeof warmZeroRateLimitMBps === 'number' && await migrationFeatureLicensed()) {
       data.warmZeroRateLimitMBps = warmZeroRateLimitMBps
+    }
+    // Post-copy integrity check (roadmap#1): same gate, null keeps the default.
+    if (type === 'pve' && await migrationFeatureLicensed()) {
+      if (typeof integrityCheckEnabled === 'boolean') data.integrityCheckEnabled = integrityCheckEnabled
+      if (typeof integrityRegionCount === 'number') data.integrityRegionCount = integrityRegionCount
+      if (typeof integrityRegionSizeMiB === 'number') data.integrityRegionSizeMiB = integrityRegionSizeMiB
     }
 
     // SSH config (PVE + VMware)
@@ -478,6 +491,7 @@ export async function POST(req: Request) {
           locationLabel: true, country: true, sshEnabled: true, sshPort: true,
           sshUser: true, sshAuthMethod: true, sshUseSudo: true, replicationNetwork: true,
           warmZeroRateLimitMBps: true,
+          integrityCheckEnabled: true, integrityRegionCount: true, integrityRegionSizeMiB: true,
           createdAt: true, updatedAt: true,
         },
       })

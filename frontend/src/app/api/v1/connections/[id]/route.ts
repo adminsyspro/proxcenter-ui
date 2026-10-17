@@ -196,9 +196,14 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     }
     // Warm migration zeroing cap (roadmap#45): PVE only, Enterprise only; null
     // clears it. A Community server ignores it rather than failing the save.
-    if (body.warmZeroRateLimitMBps !== undefined && await migrationFeatureLicensed()) {
+    // The post-copy integrity settings (roadmap#1) follow the same gate; null
+    // puts a value back to its default.
+    const migrationFields = ['warmZeroRateLimitMBps', 'integrityCheckEnabled', 'integrityRegionCount', 'integrityRegionSizeMiB'] as const
+    if (migrationFields.some(f => body[f] !== undefined) && await migrationFeatureLicensed()) {
       const current = await prisma.connection.findUnique({ where: { id }, select: { type: true } })
-      if (current?.type === 'pve') data.warmZeroRateLimitMBps = body.warmZeroRateLimitMBps
+      if (current?.type === 'pve') {
+        for (const f of migrationFields) if (body[f] !== undefined) data[f] = body[f]
+      }
     }
     if (body.sshAuthMethod !== undefined) {
       data.sshAuthMethod = body.sshAuthMethod || null

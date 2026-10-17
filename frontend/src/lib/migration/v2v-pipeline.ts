@@ -62,6 +62,9 @@ import { MIGRATION_CPU_TYPE_DEFAULT } from "./cpu-type"
 import { sanitizeV2vRoot, planV2vRootRetry } from "./v2v-root-select"
 import type { V2vRootCandidate } from "./v2v-root-select"
 import { formatSshEndpoint, type SshTarget } from '@/lib/ssh/node-endpoint-core'
+import { verifyDiskIntegrity, verifyConvertedImage, faultInjectionFromEnv, buildQemuImgInfoCmd, parseQemuImgInfo, type RegionSource } from "./integrity"
+import { resolveIntegritySettings } from "./integrity-target"
+import { tpmstate0Param, vtpmPreflightWarning, vtpmCreatedLine } from "./vtpm"
 
 type MigrationStatus = "pending" | "preflight" | "creating_vm" | "transferring" | "configuring" | "converting_disks" | "completed" | "failed" | "cancelled"
 
@@ -1664,6 +1667,9 @@ export async function runV2vMigrationPipeline(
         `Source VM has ${sourceVmwareConfig.disks.length} disk(s) on datastores: ` +
         `${datastoreNames.join(", ") || "(none parsed)"}. Using NFC transport (vCenter canonical API).`,
       )
+      // vTPM awareness (roadmap#1): the TPM state stays in vSphere; the target
+      // gets an empty TPM 2.0 and the operator needs the BitLocker recovery key.
+      if (sourceVmwareConfig.hasVtpm) await appendLog(jobId, vtpmPreflightWarning(), "warn")
 
       // virt-v2v's `-i disk` / `-i libvirtxml` input modes need two Debian
       // packages: nbdkit (exposes the local VMDK over NBD during opening /
@@ -2357,6 +2363,8 @@ export async function runV2vMigrationPipeline(
         vmConfig.memory = realMemMB
         vmConfig.firmware = realFirmware
         vmConfig.ostype = realOstype
+        // virt-v2v never emits the vTPM in its domain XML; vCenter knows (roadmap#1).
+        vmConfig.hasVtpm = sourceVmwareConfig.hasVtpm === true
 
         // NIC mapping: preserve MAC addresses for guest network continuity (DHCP
         // reservations, license activations tied to MAC, etc.). We map each source
@@ -2422,6 +2430,11 @@ export async function runV2vMigrationPipeline(
         // boot failures when the source VM had Secure Boot enabled.
         body.set("efidisk0", `${config.targetStorage}:1,efitype=4m,pre-enrolled-keys=1`)
       }
+      // Empty TPM 2.0 state for a source with a vTPM (roadmap#1). It also takes
+      // a vm-<vmid>-disk-N number, which nextFreeDiskName reads from the config.
+      if (vmConfig?.hasVtpm) {
+        body.set("tpmstate0", tpmstate0Param(config.targetStorage))
+      }
       return body
     }
 
@@ -2456,6 +2469,7 @@ export async function runV2vMigrationPipeline(
         }
         await updateJob(jobId, "creating_vm", { targetVmid })
         await appendLog(jobId, `VM ${targetVmid} created on ${config.targetNode}`, "success")
+        if (vmConfig?.hasVtpm) await appendLog(jobId, vtpmCreatedLine(config.targetStorage), "info")
         break
       } catch (err: any) {
         const errMsg = err?.message || String(err)
@@ -2523,6 +2537,15 @@ export async function runV2vMigrationPipeline(
     // already qcow2 and already the VM's disks.
     const adoptedVolumes: AllocatedVolume[] = []
 
+    // Post-copy integrity check (roadmap#1). virt-v2v rewrote the guest, so the
+    // source bytes cannot be compared: what IS verified is the copy from the
+    // converted image to the final volume (block targets), the qcow2 structure
+    // (`qemu-img check`) and the virtual size against the vCenter capacity.
+    const integrity = await resolveIntegritySettings(config.targetConnectionId)
+    const fault = faultInjectionFromEnv()
+    const sourceCapacityOf = (i: number): number | undefined =>
+      sourceVmwareConfig && sourceVmwareConfig.disks.length === diskFiles.length ? sourceVmwareConfig.disks[i]?.capacityBytes : undefined
+
     // When virt-v2v can't inject virtio-scsi (`--block-driver` missing), it falls
     // back to virtio-blk (viostor.sys) as the boot-critical driver on Windows.
     // Attaching on scsi0 in that case yields INACCESSIBLE_BOOT_DEVICE (0x7B) at
@@ -2574,6 +2597,18 @@ export async function runV2vMigrationPipeline(
         // shared helper owns the guard rails and the attach. sourceFormat marks
         // the file raw unless we asked virt-v2v for qcow2, so a raw image is
         // converted by the import fallback rather than misnamed.
+        if (directWriteDir) {
+          // The qcow2 virt-v2v wrote IS the future volume (adopted by rename):
+          // check its structure and size now, before it is attached.
+          await verifyDiskIntegrity({
+            connectionId: config.targetConnectionId, nodeIp, diskIndex: i, diskLabel: `Disk ${i + 1}`,
+            capacityBytes: sourceCapacityOf(i) ?? 0, source: null, target: { kind: "image", path: diskPath, format: "qcow2" },
+            checkImage: { path: diskPath, format: "qcow2" }, expectedVirtualSize: sourceCapacityOf(i),
+            settings: integrity, fault, log: (m, l) => appendLog(jobId, m, l),
+          })
+        } else {
+          await appendLog(jobId, `Integrity check, Disk ${i + 1}: the raw staging image is converted again by qm disk import, which validates it; no region check is possible on this path`)
+        }
         const { volumeId: diskVolume, adopted } = await adoptImportAndAttachFileVolume({
           pveConn,
           targetNode: config.targetNode,
@@ -2661,6 +2696,16 @@ export async function runV2vMigrationPipeline(
         if (!importResult.success) {
           throw new Error(`Block write failed for ${diskFile}: ${importResult.error || importResult.output}`)
         }
+
+        // The copy that was just made (converted image -> block device) is the
+        // one handed over: sample it on both sides before the attach (roadmap#1).
+        // virt-v2v's output is raw here (qcow2 only in direct-write mode), but
+        // the format is read from the image rather than assumed.
+        await verifyConvertedImage({
+          connectionId: config.targetConnectionId, nodeIp, diskIndex: i, imagePath: diskPath, devicePath,
+          fallbackSizeBytes: sizeBytes, sourceCapacityBytes: sourceCapacityOf(i),
+          settings: integrity, fault, log: (m, l) => appendLog(jobId, m, l),
+        })
 
         // Unmap RBD if we mapped it
         if (rbdMapped) {

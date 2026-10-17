@@ -16,6 +16,8 @@ export interface V2vVmConfig {
   scsihw: string // virtio-scsi-single
   nics: { model: string; mac?: string }[]
   disks: { file: string; format: string; device: string }[]
+  /** Set from the vCenter source config: the guest had a vTPM (roadmap#1). */
+  hasVtpm?: boolean
 }
 
 function trimDotsAndDashes(value: string): string {

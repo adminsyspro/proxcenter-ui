@@ -67,3 +67,12 @@ describe("parseVmConfig NICs (#317)", () => {
     ])
   })
 })
+
+describe("parseVmConfig vTPM (roadmap#1)", () => {
+  it("flags a source that carries a VirtualTPM device", () => {
+    const tpm = `<VirtualDevice xsi:type="VirtualTPM"><key>11000</key><deviceInfo><label>Trusted Platform Module</label></deviceInfo></VirtualDevice>`
+    expect(parseVmConfig(answer(ctrl("VirtualLsiLogicController", 1000, 0) + tpm)).hasVtpm).toBe(true)
+    expect(parseVmConfig(answer(ctrl("VirtualLsiLogicController", 1000, 0))).hasVtpm).toBe(false)
+  })
+})
+

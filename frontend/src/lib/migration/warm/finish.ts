@@ -2,6 +2,7 @@ import { pveFetch } from "@/lib/proxmox/client"
 import { keepTargetVm, type AllocatedVolume } from "../pvesm-alloc"
 import { destroyPveVm, pveSetVmConfig } from "../pve-vm-config"
 import { convertDisksToQcow2 } from "../qcow2-convert"
+import { verifyDiskIntegrity, type FaultInjection, type IntegritySettings } from "../integrity"
 import { scanBlockChecksums } from "./checksum-detector"
 import { updateJob, appendLog } from "./job-control"
 import { type SshTarget } from "@/lib/ssh/node-endpoint-core"
@@ -59,8 +60,8 @@ export async function attachDisksAndBoot(a: {
 
 /**
  * Sampled first-block checksum of one disk, source vs target (defense in depth,
- * never a hard failure). `openReader` exposes the source disk as a block device
- * on the node; the source-specific reader stays with the caller.
+ * never a hard failure). Still used by the XCP-ng warm pipeline; the VMware
+ * warm pipeline runs the blocking verifyWarmDiskIntegrity below instead.
  */
 export async function verifySampledFirstBlock(a: {
   jobId: string; connectionId: string; nodeIp: SshTarget; diskIndex: number; dev: string
@@ -129,5 +130,44 @@ export async function unmapTargetVolumes(connectionId: string, nodeIp: SshTarget
     if (!v.rbdMapped || !v.devicePath) continue
     const r = await executeSSH(connectionId, nodeIp, `rbd unmap ${shellEscape(v.devicePath)} 2>/dev/null`).catch(() => null)
     if (r?.success) v.rbdMapped = false
+  }
+}
+
+/**
+ * Post-cutover integrity check of one disk, source vs target (roadmap#1): the
+ * first, the last and N spread regions are hashed on both sides, and any
+ * difference, or a region that cannot be read, throws and fails the job before
+ * the disks are attached. The source is powered off at this point, so its
+ * current disk is the cutover state. `openReader` exposes the source disk as a
+ * block device on the node; the source-specific reader stays with the caller.
+ * Replaces the former first-256-MiB md5 sample that only logged a warning.
+ */
+export async function verifyWarmDiskIntegrity(a: {
+  jobId: string; connectionId: string; nodeIp: SshTarget; diskIndex: number; dev: string
+  capacityBytes: number; settings: IntegritySettings; fault?: FaultInjection | null
+  openReader: () => Promise<{ nbdDev: string; close: () => Promise<void> }>
+}): Promise<void> {
+  const { jobId, connectionId, nodeIp, diskIndex: i, dev } = a
+  if (!a.settings.enabled) {
+    await appendLog(jobId, `Integrity check disabled on the target cluster (Settings > Connections > Migrations tab): disk ${i} is handed over unverified`, "warn")
+    return
+  }
+  let reader: { nbdDev: string; close: () => Promise<void> }
+  try {
+    reader = await a.openReader()
+  } catch (e: any) {
+    // Blocking by design: a disk that cannot be re-read on the source cannot be
+    // verified, and the check exists to never hand over an unverified copy.
+    throw new Error(`Integrity check could not open the source disk ${i} for verification: ${e?.message || e}. The copied volumes are kept; retry once the source is reachable, or disable the check on the target cluster (Settings > Connections > Migrations tab).`)
+  }
+  try {
+    await verifyDiskIntegrity({
+      connectionId, nodeIp, diskIndex: i, diskLabel: `Disk ${i + 1}`, capacityBytes: a.capacityBytes,
+      source: { kind: "raw", path: reader.nbdDev }, target: { kind: "raw", path: dev },
+      settings: a.settings, fault: a.fault,
+      log: (m, l) => appendLog(jobId, m, l),
+    })
+  } finally {
+    await reader.close().catch(() => {})
   }
 }

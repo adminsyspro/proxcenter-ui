@@ -33,6 +33,16 @@ describe("planPasses", () => {
     expect(actions[actions.length - 1].action).toBe("operator-gate")
   })
 
+  it("counts the integrity check run at cutover in the projected downtime (roadmap#1)", () => {
+    // 20 s shutdown + 30 s boot + 1 s transfer = 51 s fits 60 s; + 20 s of checks does not
+    const stat = { deltaBytes: 100 * MiB, throughputBytesPerSec: 100 * MiB }
+    const budget = { ...cfg, downtimeBudgetSec: 60 }
+    expect(planPasses([stat], budget)[0].action).toBe("cutover")
+    const withCheck = planPasses([stat], { ...budget, verifySec: 20 })
+    expect(withCheck[0].action).not.toBe("cutover")
+    expect(withCheck[0].projectedDowntimeSec).toBe(71)
+  })
+
   it("keeps issuing delta passes while above budget and below the cap", () => {
     const stats = Array.from({ length: 3 }, () => ({ deltaBytes: 50 * GiB, throughputBytesPerSec: 100 * MiB }))
     const actions = planPasses(stats, cfg)

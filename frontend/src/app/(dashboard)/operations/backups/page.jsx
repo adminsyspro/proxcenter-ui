@@ -14,7 +14,6 @@ import {
   Chip,
   CircularProgress,
   Divider,
-  Drawer,
   FormControl,
   IconButton,
   InputAdornment,
@@ -37,11 +36,13 @@ import {
   useTheme
 } from '@mui/material'
 
-import { DataGrid } from '@mui/x-data-grid'
+import BackupDetailDialog from './BackupDetailDialog'
+import BackupGroupsTable from './BackupGroupsTable'
 
 import { usePageTitle } from '@/contexts/PageTitleContext'
 import { formatBytes } from '@/utils/format'
 import { formatDateTime } from '@/lib/i18n/date'
+import { groupBackupMachines } from '@/lib/backups/machineGroups'
 import BackupJobsTabs from './BackupJobsTabs'
 import BackupCoverageCard from './BackupCoverageCard'
 import BackupTrendsChart from './BackupTrendsChart'
@@ -184,7 +185,7 @@ export default function BackupsPage() {
   const theme = useTheme()
   const { setPageInfo } = usePageTitle()
   const timeAgo = useTimeAgo(t)
-  // Tenant-vDC users get a simpler drawer: the Explorer tab exposes raw
+  // Tenant-vDC users get a simpler detail dialog: the Explorer tab exposes raw
   // PBS internals (catalog browse, .blob downloads of the qm config, etc.)
   // that don't map onto the abstraction we sell to tenants. Provider /
   // 'default' tenant keeps both tabs.
@@ -239,10 +240,10 @@ return () => setPageInfo('', '', '')
   const [namespaceFilter, setNamespaceFilter] = useState('all')
   const [typeFilter, setTypeFilter] = useState('all')
 
-  // Drawer
-  const [drawerOpen, setDrawerOpen] = useState(false)
+  // Detail dialog
+  const [detailOpen, setDetailOpen] = useState(false)
   const [selectedBackup, setSelectedBackup] = useState(null)
-  const [drawerTab, setDrawerTab] = useState(0) // 0 = Infos, 1 = Explorer
+  const [detailTab, setDetailTab] = useState(0) // 0 = Infos, 1 = Explorer
 
   // Restore dialog (cross-PVE — user picks target cluster + node).
   const [restoreOpen, setRestoreOpen] = useState(false)
@@ -507,14 +508,14 @@ return () => setPageInfo('', '', '')
 
   // Charger le contenu quand on change d'onglet vers Explorer
   useEffect(() => {
-    if (drawerTab === 1 && selectedBackup && explorerArchives.length === 0) {
+    if (detailTab === 1 && selectedBackup && explorerArchives.length === 0) {
       loadBackupContent(selectedBackup)
     }
-  }, [drawerTab, selectedBackup, explorerArchives.length, loadBackupContent])
+  }, [detailTab, selectedBackup, explorerArchives.length, loadBackupContent])
 
   // Liste des guests (une fois), pour présélectionner la cible d'une restauration dans un guest
   useEffect(() => {
-    if (drawerTab !== 1 || isVdcTenant || guestCandidates) return
+    if (detailTab !== 1 || isVdcTenant || guestCandidates) return
     let cancelled = false
 
     fetch('/api/v1/vms', { cache: 'no-store' })
@@ -523,7 +524,7 @@ return () => setPageInfo('', '', '')
       .catch(() => { if (!cancelled) setGuestCandidates([]) })
 
     return () => { cancelled = true }
-  }, [drawerTab, isVdcTenant, guestCandidates])
+  }, [detailTab, isVdcTenant, guestCandidates])
 
   // Reset explorer quand on change de backup
   useEffect(() => {
@@ -534,15 +535,14 @@ return () => setPageInfo('', '', '')
     setExplorerError(null)
     setExplorerPve(null)
     setPveStoragePicker(null)
-    setDrawerTab(0)
   }, [selectedBackup?.id])
 
   // Tenant guard: if the user was on the Explorer tab when their tenant
   // role flipped (rare but cheap to defend against), bounce them back to
   // the Information tab so they don't see an empty panel.
   useEffect(() => {
-    if (isVdcTenant && drawerTab !== 0) setDrawerTab(0)
-  }, [isVdcTenant, drawerTab])
+    if (isVdcTenant && detailTab !== 0) setDetailTab(0)
+  }, [isVdcTenant, detailTab])
 
   // Force refresh — increment to bypass server cache on next fetch only.
   // Declared before the verify/delete handlers so they can call it
@@ -603,7 +603,7 @@ return () => setPageInfo('', '', '')
         setDeleteAwaitingConfirm(false)
       } else {
         toast.success(t('backups.deleteSuccess'))
-        setDrawerOpen(false)
+        setDetailOpen(false)
         setSelectedBackup(null)
         handleRefresh()
       }
@@ -701,13 +701,16 @@ return () => setPageInfo('', '', '')
     const useNoCache = noCacheRef.current
     noCacheRef.current = false // Reset immediately so filter/page changes don't bypass cache
 
+    const controller = new AbortController()
     const loadBackups = async () => {
+      setBackups([])
       setLoading(true)
       setError(null)
       setWarnings([])
 
       try {
         const params = new URLSearchParams({
+          groupBy: 'machine',
           page: String(paginationModel.page + 1), // API commence à 1
           pageSize: String(paginationModel.pageSize),
         })
@@ -719,12 +722,14 @@ return () => setPageInfo('', '', '')
         if (useNoCache) params.set('noCache', '1')
 
         const res = await fetch(
-          `/api/v1/pbs/${encodeURIComponent(selectedPbs)}/backups?${params}`
+          `/api/v1/pbs/${encodeURIComponent(selectedPbs)}/backups?${params}`,
+          { signal: controller.signal }
         )
 
         if (res.ok) {
           const json = await res.json()
 
+          if (controller.signal.aborted) return
           setBackups(json?.data?.backups || [])
           setBackupStats(json?.data?.stats || null)
           setTotalRows(json?.data?.pagination?.totalItems || 0)
@@ -734,16 +739,17 @@ return () => setPageInfo('', '', '')
         } else {
           const errJson = await res.json().catch(() => ({}))
 
-          setError(errJson?.error || t('ceph.errorStatus', { status: res.status }))
+          if (!controller.signal.aborted) setError(errJson?.error || t('ceph.errorStatus', { status: res.status }))
         }
       } catch (e) {
-        setError(e?.message || t('errors.connectionError'))
+        if (!controller.signal.aborted) setError(e?.message || t('errors.connectionError'))
       } finally {
-        setLoading(false)
+        if (!controller.signal.aborted) setLoading(false)
       }
     }
 
     loadBackups()
+    return () => controller.abort()
   }, [selectedPbs, paginationModel, datastoreFilter, namespaceFilter, typeFilter, search, refreshToken])
 
   // Debounce search pour éviter trop de requêtes
@@ -767,6 +773,16 @@ return () => clearTimeout(timer)
     }
     return m
   }, [bindings])
+
+  // Every restore point of the open backup's machine, newest first. A page
+  // holds whole machines, so the loaded rows already carry the full history.
+  const detailPoints = useMemo(() => {
+    if (!selectedBackup) return []
+    const sameMachine = backups.filter(b => b.datastore === selectedBackup.datastore
+      && (b.namespace || '') === (selectedBackup.namespace || '')
+      && b.backupType === selectedBackup.backupType && b.backupId === selectedBackup.backupId)
+    return groupBackupMachines(sameMachine.length ? sameMachine : [selectedBackup])[0].points
+  }, [backups, selectedBackup])
 
   // Group available namespaces by vDC for the filter dropdown. A namespace can
   // appear in several vDCs if bound on multiple datastores; in that case it
@@ -800,7 +816,6 @@ return () => clearTimeout(timer)
 
   // Colonnes du DataGrid
   const columns = useMemo(() => [
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     {
       field: 'backupId',
       headerName: 'ID',
@@ -955,7 +970,8 @@ return () => clearTimeout(timer)
           <Tooltip title={t('common.details')}>
             <IconButton size='small' onClick={() => {
               setSelectedBackup(params.row)
-              setDrawerOpen(true)
+              setDetailTab(0)
+              setDetailOpen(true)
             }}>
               <i className='ri-eye-line' style={{ fontSize: 16 }} />
             </IconButton>
@@ -977,7 +993,7 @@ return () => clearTimeout(timer)
         </Box>
       )
     }
-  ], [t, vdcByPair])
+  ], [t, locale, vdcByPair])
 
   // KPI values
   const currentPbs = pbsConnections.find(p => p.id === selectedPbs)
@@ -1093,7 +1109,7 @@ return () => clearTimeout(timer)
           <CardContent>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
               <i className='ri-archive-line' style={{ fontSize: 22, color: theme.palette.primary.main }} />
-              <Typography variant='h6'>{t('backups.backupsCount', { count: totalRows })}</Typography>
+              <Typography variant='h6'>{t('backups.backupsCount', { count: backupStats?.total || 0 })}</Typography>
             </Box>
 
             <Box sx={{ display: 'flex', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 1 }}>
@@ -1108,6 +1124,12 @@ return () => clearTimeout(timer)
                     value={selectedPbs}
                     onChange={e => {
                       setSelectedPbs(e.target.value)
+                      setBackups([])
+                      setPaginationModel(prev => ({ ...prev, page: 0 }))
+                      setDatastoreFilter('all')
+                      setSelectedBackup(null)
+                      setDetailOpen(false)
+                      setRestoreOpen(false)
                       setNamespaceFilter('all')
                       setAvailableNamespaces([])
                     }}
@@ -1177,7 +1199,7 @@ return () => clearTimeout(timer)
               )}
               {/* Bulk restore (#983): provider-side only. The wizard drives
                   target cluster / node / storage / VMID, which a vDC tenant
-                  never picks. The per-backup Restore in the drawer stays
+                  never picks. The per-backup Restore in the detail dialog stays
                   their entry point. */}
               {!isVdcTenant && (
                 <Button
@@ -1279,36 +1301,20 @@ return () => clearTimeout(timer)
                   size="large"
                 />
               ) : (
-              <DataGrid
-                rows={backups}
+              <BackupGroupsTable
+                key={`${selectedPbs}:${datastoreFilter}:${namespaceFilter}:${typeFilter}:${search}`}
+                pbsId={selectedPbs}
+                backups={backups}
                 columns={columns}
                 loading={loading}
-                getRowId={r => r.id}
-                density='compact'
-
-                // Pagination côté serveur
-                paginationMode='server'
-                rowCount={totalRows}
+                totalRows={totalRows}
                 paginationModel={paginationModel}
                 onPaginationModelChange={setPaginationModel}
-                pageSizeOptions={[25, 50, 100]}
-                disableRowSelectionOnClick
-                sx={{
-                  '& .MuiDataGrid-row': {
-                    minHeight: '36px !important',
-                    maxHeight: '36px !important',
-                  },
-                  '& .MuiDataGrid-cell': {
-                    py: 0.5,
-                  },
-                  '& .MuiDataGrid-row:hover': {
-                    backgroundColor: 'action.hover',
-                    cursor: 'pointer'
-                  }
-                }}
-                onRowClick={params => {
-                  setSelectedBackup(params.row)
-                  setDrawerOpen(true)
+                t={t}
+                onSnapshotClick={backup => {
+                  setSelectedBackup(backup)
+                  setDetailTab(0)
+                  setDetailOpen(true)
                 }}
               />
               )}
@@ -1317,404 +1323,260 @@ return () => clearTimeout(timer)
         </Card>
       )}
 
-      {/* Drawer détail backup */}
-      <Drawer
-        anchor='right'
-        open={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
-        PaperProps={{ sx: { width: { xs: '100%', sm: 560 } } }}
-      >
-        <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-          {selectedBackup ? (
-            <>
-              {/* Header */}
-              <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider' }}>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                  <Box>
-                    <Typography variant='h6' sx={{ fontWeight: 800 }}>
-                      {selectedBackup.vmName || selectedBackup.backupId}
-                    </Typography>
-                    <Typography variant='body2' sx={{ opacity: 0.7 }}>
-                      {selectedBackup.datastore}{selectedBackup.namespace ? ` / ${selectedBackup.namespace}` : ''} • {selectedBackup.backupTime ? formatDateTime(selectedBackup.backupTime * 1000, locale) : selectedBackup.backupTimeFormatted}
-                    </Typography>
-                  </Box>
-                  <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-                    <TypeChip type={selectedBackup.backupType} />
-                    <IconButton size='small' onClick={() => setDrawerOpen(false)}>
-                      <i className='ri-close-line' />
-                    </IconButton>
-                  </Box>
-                </Box>
-
-                {/* Tabs */}
-                <Tabs value={drawerTab} onChange={(e, v) => setDrawerTab(v)} sx={{ mt: 1 }}>
-                  <Tab label={t('backups.informations')} icon={<i className='ri-information-line' />} iconPosition='start' />
-                  {!isVdcTenant && (
-                    <Tab label={t('backups.explorer')} icon={<i className='ri-folder-open-line' />} iconPosition='start' />
-                  )}
-                </Tabs>
+      <BackupDetailDialog
+        open={detailOpen}
+        onClose={() => setDetailOpen(false)}
+        backup={selectedBackup}
+        points={detailPoints}
+        onSelectPoint={setSelectedBackup}
+        tab={detailTab}
+        onTabChange={setDetailTab}
+        showExplorer={!isVdcTenant}
+        vdc={selectedBackup ? vdcByPair.get(`${selectedBackup.datastore}|${selectedBackup.namespace}`) : null}
+        typeChip={selectedBackup ? <TypeChip type={selectedBackup.backupType} /> : null}
+        onRestore={() => setRestoreOpen(true)}
+        onVerify={handleVerify}
+        verifying={verifying}
+        onDelete={handleDelete}
+        deleting={deleting}
+        deleteAwaitingConfirm={deleteAwaitingConfirm}
+        timeAgo={timeAgo}
+        t={t}
+        locale={locale}
+        explorer={detailTab === 1 && !isVdcTenant && (
+          <Box>
+            {explorerLoading && (
+              <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+                <CircularProgress size={32} />
               </Box>
+            )}
 
-              {/* Tab Content */}
-              <Box sx={{ flex: 1, overflow: 'auto', p: 2 }}>
-                {/* Onglet Informations */}
-                {drawerTab === 0 && (
-                  <Stack spacing={2}>
-                    <Box>
-                      <Typography variant='overline' sx={{ opacity: 0.7 }}>{t('backups.informations')}</Typography>
-                      <Stack spacing={1} sx={{ mt: 1 }}>
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                          <Typography variant='body2' sx={{ opacity: 0.7 }}>ID</Typography>
-                          <Typography variant='body2' sx={{ fontWeight: 600 }}>{selectedBackup.backupId}</Typography>
-                        </Box>
-                        {selectedBackup.vmName && (
-                          <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                            <Typography variant='body2' sx={{ opacity: 0.7 }}>{t('common.name')}</Typography>
-                            <Typography variant='body2' sx={{ fontWeight: 600 }}>{selectedBackup.vmName}</Typography>
-                          </Box>
-                        )}
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                          <Typography variant='body2' sx={{ opacity: 0.7 }}>{t('common.size')}</Typography>
-                          <Typography variant='body2' sx={{ fontWeight: 600 }}>{selectedBackup.sizeFormatted}</Typography>
-                        </Box>
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                          <Typography variant='body2' sx={{ opacity: 0.7 }}>{t('backups.owner')}</Typography>
-                          <Typography variant='body2' sx={{ fontWeight: 600 }}>{selectedBackup.owner || '-'}</Typography>
-                        </Box>
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                          <Typography variant='body2' sx={{ opacity: 0.7 }}>{t('backups.protected')}</Typography>
-                          <Typography variant='body2' sx={{ fontWeight: 600 }}>{selectedBackup.protected ? t('backups.protectedYes') + ' 🔒' : t('backups.protectedNo')}</Typography>
-                        </Box>
-                      </Stack>
-                    </Box>
+            {explorerError && (
+              <Alert severity='warning' sx={{ mb: 2 }}>{explorerError}</Alert>
+            )}
 
-                    <Divider />
+            {/* Liste des archives (niveau racine) */}
+            {!explorerArchive && !explorerLoading && (
+              <>
+                <Typography variant='subtitle2' sx={{ mb: 1, opacity: 0.7 }}>
+                  {t('backups.backupArchives')}
+                </Typography>
+                {pveStoragePicker && (
+                  <FormControl size='small' fullWidth sx={{ mb: 1 }}>
+                    <InputLabel>{t('backups.pickPveStorage')}</InputLabel>
+                    <Select
+                      label={t('backups.pickPveStorage')}
+                      value=''
+                      sx={SMALL_SELECT_SX}
+                      onChange={(e) => {
+                        const chosen = pveStoragePicker.options.find(o => `${o.connId}|${o.storage}` === e.target.value)
 
-                    <Box>
-                      <Typography variant='overline' sx={{ opacity: 0.7 }}>{t('backups.verified')}</Typography>
-                      <Box sx={{ mt: 1 }}>
-                        <VerifyChip verified={selectedBackup.verified} t={t} />
-                        {(selectedBackup.verification?.['last-run'] || selectedBackup.verifiedAt) && (
-                          <Typography variant='caption' sx={{ ml: 1, opacity: 0.7 }}>
-                            {selectedBackup.verification?.['last-run']
-                              ? formatDateTime(selectedBackup.verification['last-run'] * 1000, locale)
-                              : selectedBackup.verifiedAt}
+                        if (!chosen) return
+                        setPveStorageChoice(e.target.value)
+                        setPveStoragePicker(null)
+                        browseArchive(pveStoragePicker.archive, '/', { connId: chosen.connId, connName: chosen.connName, storage: chosen.storage })
+                      }}
+                    >
+                      {pveStoragePicker.options.map(o => (
+                        <MenuItem key={`${o.connId}|${o.storage}`} value={`${o.connId}|${o.storage}`}>
+                          {o.connName} · {o.storage}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                )}
+                <List dense>
+                  {explorerArchives.map((file, idx) => {
+                    // .blob → direct download via /file-download
+                    // .pxar.didx → browsable
+                    // .img.fidx → browsed through a PVE storage bound to this datastore
+                    const isBlob = typeof file.name === 'string' && file.name.endsWith('.blob')
+                    const isImgIdx = typeof file.name === 'string' && file.name.endsWith('.img.fidx')
+                    const handleClick = () => {
+                      if (file.browsable) {
+                        browseArchive(file.name, '/', null)
+                      } else if (isImgIdx) {
+                        openImageArchive(file.name)
+                      } else if (isBlob) {
+                        // Trigger the browser download. The route streams
+                        // the bytes with Content-Disposition: attachment.
+                        const params = new URLSearchParams({ file: file.name })
+                        if (selectedBackup?.namespace) params.set('ns', selectedBackup.namespace)
+                        const href = `/api/v1/pbs/${encodeURIComponent(selectedPbs)}/backups/${encodeURIComponent(selectedBackup.id)}/download?${params}`
+                        window.open(href, '_blank', 'noopener')
+                      }
+                    }
+                    const secondary = file.browsable
+                      ? t('backups.clickToExplore')
+                      : isBlob
+                        ? t('backups.clickToDownload')
+                        : isImgIdx
+                          ? t('backups.vmImageBrowseHint')
+                          : t('backups.notExplorable')
+                    const trailingIcon = file.browsable || isImgIdx
+                      ? 'ri-arrow-right-s-line'
+                      : isBlob
+                        ? 'ri-download-2-line'
+                        : null
+                    return (
+                    <ListItem key={idx} disablePadding>
+                      <ListItemButton
+                        onClick={handleClick}
+                        disabled={!file.browsable && !isBlob && !isImgIdx}
+                      >
+                        <ListItemIcon sx={{ minWidth: 36 }}>
+                          <FileIcon type={file.type} name={file.name} />
+                        </ListItemIcon>
+                        <ListItemText
+                          primary={file.name}
+                          secondary={secondary}
+                          primaryTypographyProps={{ variant: 'body2' }}
+                          secondaryTypographyProps={{ variant: 'caption' }}
+                        />
+                        {file.sizeFormatted && file.sizeFormatted !== '-' && (
+                          <Typography
+                            variant='caption'
+                            sx={{ opacity: 0.6, fontFamily: 'monospace', mr: 1, whiteSpace: 'nowrap' }}
+                          >
+                            {file.sizeFormatted}
                           </Typography>
                         )}
-                      </Box>
-                    </Box>
+                        {trailingIcon && (
+                          <i className={trailingIcon} style={{ opacity: 0.5 }} />
+                        )}
+                      </ListItemButton>
+                    </ListItem>
+                    )
+                  })}
+                  {explorerArchives.length === 0 && !explorerLoading && (
+                    <Typography variant='body2' sx={{ opacity: 0.5, py: 2, textAlign: 'center' }}>
+                      {t('backups.noArchiveFound')}
+                    </Typography>
+                  )}
+                </List>
+              </>
+            )}
 
-                    {selectedBackup.comment && (
-                      <>
-                        <Divider />
-                        <Box>
-                          <Typography variant='overline' sx={{ opacity: 0.7 }}>{t('network.comment')}</Typography>
-                          <Typography variant='body2' sx={{ mt: 1 }}>{selectedBackup.comment}</Typography>
-                        </Box>
-                      </>
-                    )}
+            {/* Navigation dans une archive */}
+            {explorerArchive && !explorerLoading && (
+              <>
+                {/* Breadcrumb */}
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                  <IconButton size='small' onClick={backToArchives}>
+                    <i className='ri-arrow-left-line' />
+                  </IconButton>
+                  <Breadcrumbs separator='›' sx={{ flex: 1 }}>
+                    <Typography
+                      variant='body2'
+                      sx={{ cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }}
+                      onClick={backToArchives}
+                    >
+                      {explorerArchive.replaceAll('.pxar.didx', '').replaceAll('.img.fidx', '')}
+                      {explorerPve ? ` (${explorerPve.connName || explorerPve.connId} · ${explorerPve.storage})` : ''}
+                    </Typography>
+                    {explorerPath !== '/' && explorerPath.split('/').filter(Boolean).map((part, idx) => (
+                      <Typography
+                        key={idx}
+                        variant='body2'
+                        sx={{ cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }}
+                        onClick={() => navigateToBreadcrumb(idx)}
+                      >
+                        {part}
+                      </Typography>
+                    ))}
+                  </Breadcrumbs>
+                </Box>
 
-                    <Divider />
-
-                    <Box>
-                      <Typography variant='overline' sx={{ opacity: 0.7 }}>{t('common.actions')}</Typography>
-                      <Box sx={{ display: 'flex', gap: 1, mt: 1, flexWrap: 'wrap' }}>
-                        <Button
-                          size='small'
-                          variant='contained'
-                          disabled={selectedBackup.backupType === 'host'}
-                          onClick={() => setRestoreOpen(true)}
-                          startIcon={<i className='ri-history-line' />}
-                        >
-                          {t('audit.actions.restore')}
-                        </Button>
-                        <Button
-                          size='small'
-                          variant='outlined'
-                          onClick={handleVerify}
-                          disabled={verifying}
-                          startIcon={verifying
-                            ? <CircularProgress size={14} />
-                            : <i className='ri-shield-check-line' />}
-                        >
-                          {t('backups.verifyAction')}
-                        </Button>
-                        <Button
-                          size='small'
-                          variant='outlined'
-                          color={deleteAwaitingConfirm ? 'warning' : 'error'}
-                          onClick={handleDelete}
-                          disabled={deleting || selectedBackup.protected}
-                          startIcon={deleting
-                            ? <CircularProgress size={14} />
-                            : <i className={deleteAwaitingConfirm ? 'ri-alert-line' : 'ri-delete-bin-line'} />}
-                        >
-                          {deleteAwaitingConfirm
-                            ? t('backups.deleteConfirmButton')
-                            : t('common.delete')}
-                        </Button>
-                      </Box>
-                      {selectedBackup.protected && (
-                        <Typography variant='caption' sx={{ display: 'block', mt: 1, opacity: 0.7 }}>
-                          {t('backups.deleteProtectedHint')}
-                        </Typography>
-                      )}
-                      {deleteAwaitingConfirm && !deleting && (
-                        <Alert severity='warning' sx={{ mt: 1 }} icon={<i className='ri-alert-line' style={{ fontSize: 18 }} />}>
-                          {t('backups.deleteConfirm', {
-                            name: selectedBackup.vmName || selectedBackup.backupId,
-                            id: selectedBackup.backupId,
-                            date: selectedBackup.backupTime ? formatDateTime(selectedBackup.backupTime * 1000, locale) : selectedBackup.backupTimeFormatted,
-                          })}
-                        </Alert>
-                      )}
-                    </Box>
-                  </Stack>
+                {/* Bouton remonter */}
+                {explorerPath !== '/' && (
+                  <ListItemButton onClick={navigateUp} sx={{ mb: 1, borderRadius: 1 }}>
+                    <ListItemIcon sx={{ minWidth: 36 }}>
+                      <i className='ri-arrow-up-line' style={{ fontSize: 20 }} />
+                    </ListItemIcon>
+                    <ListItemText primary='..' primaryTypographyProps={{ variant: 'body2' }} />
+                  </ListItemButton>
                 )}
 
-                {/* Onglet Explorer */}
-                {drawerTab === 1 && !isVdcTenant && (
-                  <Box>
-                    {explorerLoading && (
-                      <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-                        <CircularProgress size={32} />
-                      </Box>
-                    )}
+                {/* Liste des fichiers */}
+                <List dense sx={{ maxHeight: 'calc(100vh - 350px)', overflow: 'auto' }}>
+                  {explorerFiles.map((file, idx) => {
+                    const isNavigable = explorerPve ? !!file.browsable : file.type === 'directory'
+                    const canDownload = !!explorerPve && (file.type === 'file' || file.type === 'directory' || file.type === 'virtual')
+                    const guestInnerPath = explorerPath === '/' ? `/${file.name}` : `${explorerPath}/${file.name}`
+                    // Never a whole disk, partition or LV node: only entries inside a filesystem.
+                    const canRestoreToGuest = (file.type === 'file' || file.type === 'directory')
+                      && isRestorableItemPath(explorerPve ? 'pve' : 'pbs', explorerPve ? `/${explorerArchive}${guestInnerPath}` : guestInnerPath)
+                    const actionCount = (canDownload ? 1 : 0) + (canRestoreToGuest ? 1 : 0)
 
-                    {explorerError && (
-                      <Alert severity='warning' sx={{ mb: 2 }}>{explorerError}</Alert>
-                    )}
-
-                    {/* Liste des archives (niveau racine) */}
-                    {!explorerArchive && !explorerLoading && (
-                      <>
-                        <Typography variant='subtitle2' sx={{ mb: 1, opacity: 0.7 }}>
-                          {t('backups.backupArchives')}
-                        </Typography>
-                        {pveStoragePicker && (
-                          <FormControl size='small' fullWidth sx={{ mb: 1 }}>
-                            <InputLabel>{t('backups.pickPveStorage')}</InputLabel>
-                            <Select
-                              label={t('backups.pickPveStorage')}
-                              value=''
-                              sx={SMALL_SELECT_SX}
-                              onChange={(e) => {
-                                const chosen = pveStoragePicker.options.find(o => `${o.connId}|${o.storage}` === e.target.value)
-
-                                if (!chosen) return
-                                setPveStorageChoice(e.target.value)
-                                setPveStoragePicker(null)
-                                browseArchive(pveStoragePicker.archive, '/', { connId: chosen.connId, connName: chosen.connName, storage: chosen.storage })
-                              }}
-                            >
-                              {pveStoragePicker.options.map(o => (
-                                <MenuItem key={`${o.connId}|${o.storage}`} value={`${o.connId}|${o.storage}`}>
-                                  {o.connName} · {o.storage}
-                                </MenuItem>
-                              ))}
-                            </Select>
-                          </FormControl>
-                        )}
-                        <List dense>
-                          {explorerArchives.map((file, idx) => {
-                            // .blob → direct download via /file-download
-                            // .pxar.didx → browsable
-                            // .img.fidx → browsed through a PVE storage bound to this datastore
-                            const isBlob = typeof file.name === 'string' && file.name.endsWith('.blob')
-                            const isImgIdx = typeof file.name === 'string' && file.name.endsWith('.img.fidx')
-                            const handleClick = () => {
-                              if (file.browsable) {
-                                browseArchive(file.name, '/', null)
-                              } else if (isImgIdx) {
-                                openImageArchive(file.name)
-                              } else if (isBlob) {
-                                // Trigger the browser download. The route streams
-                                // the bytes with Content-Disposition: attachment.
-                                const params = new URLSearchParams({ file: file.name })
-                                if (selectedBackup?.namespace) params.set('ns', selectedBackup.namespace)
-                                const href = `/api/v1/pbs/${encodeURIComponent(selectedPbs)}/backups/${encodeURIComponent(selectedBackup.id)}/download?${params}`
-                                window.open(href, '_blank', 'noopener')
-                              }
-                            }
-                            const secondary = file.browsable
-                              ? t('backups.clickToExplore')
-                              : isBlob
-                                ? t('backups.clickToDownload')
-                                : isImgIdx
-                                  ? t('backups.vmImageBrowseHint')
-                                  : t('backups.notExplorable')
-                            const trailingIcon = file.browsable || isImgIdx
-                              ? 'ri-arrow-right-s-line'
-                              : isBlob
-                                ? 'ri-download-2-line'
-                                : null
-                            return (
-                            <ListItem key={idx} disablePadding>
-                              <ListItemButton
-                                onClick={handleClick}
-                                disabled={!file.browsable && !isBlob && !isImgIdx}
+                    return (
+                    <ListItem
+                      key={idx}
+                      disablePadding
+                      // MUI pads the row button by 48px whenever there is a secondary
+                      // action, through a nested selector the button's own sx cannot beat.
+                      // In px: the theme spacing unit is not 8. Each small icon button is
+                      // ~30px wide, the action block sits 16px from the edge.
+                      sx={actionCount > 0 ? { '& > .MuiListItemButton-root': { pr: `${24 + actionCount * 30}px` } } : undefined}
+                      secondaryAction={actionCount > 0 && (
+                        <Stack direction='row' spacing={0}>
+                          {canDownload && (
+                            <Tooltip title={t('common.download')}>
+                              <IconButton
+                                size='small'
+                                edge={canRestoreToGuest ? false : 'end'}
+                                onClick={(e) => { e.stopPropagation(); downloadPveEntry(file) }}
                               >
-                                <ListItemIcon sx={{ minWidth: 36 }}>
-                                  <FileIcon type={file.type} name={file.name} />
-                                </ListItemIcon>
-                                <ListItemText
-                                  primary={file.name}
-                                  secondary={secondary}
-                                  primaryTypographyProps={{ variant: 'body2' }}
-                                  secondaryTypographyProps={{ variant: 'caption' }}
-                                />
-                                {file.sizeFormatted && file.sizeFormatted !== '-' && (
-                                  <Typography
-                                    variant='caption'
-                                    sx={{ opacity: 0.6, fontFamily: 'monospace', mr: 1, whiteSpace: 'nowrap' }}
-                                  >
-                                    {file.sizeFormatted}
-                                  </Typography>
-                                )}
-                                {trailingIcon && (
-                                  <i className={trailingIcon} style={{ opacity: 0.5 }} />
-                                )}
-                              </ListItemButton>
-                            </ListItem>
-                            )
-                          })}
-                          {explorerArchives.length === 0 && !explorerLoading && (
-                            <Typography variant='body2' sx={{ opacity: 0.5, py: 2, textAlign: 'center' }}>
-                              {t('backups.noArchiveFound')}
-                            </Typography>
+                                <i className='ri-download-2-line' style={{ fontSize: 18 }} />
+                              </IconButton>
+                            </Tooltip>
                           )}
-                        </List>
-                      </>
-                    )}
-
-                    {/* Navigation dans une archive */}
-                    {explorerArchive && !explorerLoading && (
-                      <>
-                        {/* Breadcrumb */}
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-                          <IconButton size='small' onClick={backToArchives}>
-                            <i className='ri-arrow-left-line' />
-                          </IconButton>
-                          <Breadcrumbs separator='›' sx={{ flex: 1 }}>
-                            <Typography
-                              variant='body2'
-                              sx={{ cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }}
-                              onClick={backToArchives}
-                            >
-                              {explorerArchive.replaceAll('.pxar.didx', '').replaceAll('.img.fidx', '')}
-                              {explorerPve ? ` (${explorerPve.connName || explorerPve.connId} · ${explorerPve.storage})` : ''}
-                            </Typography>
-                            {explorerPath !== '/' && explorerPath.split('/').filter(Boolean).map((part, idx) => (
-                              <Typography
-                                key={idx}
-                                variant='body2'
-                                sx={{ cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }}
-                                onClick={() => navigateToBreadcrumb(idx)}
+                          {canRestoreToGuest && (
+                            <Tooltip title={t('guestFileRestore.restoreIntoGuest')}>
+                              <IconButton
+                                size='small'
+                                edge='end'
+                                onClick={(e) => { e.stopPropagation(); openRestoreToGuest(file) }}
                               >
-                                {part}
-                              </Typography>
-                            ))}
-                          </Breadcrumbs>
-                        </Box>
-
-                        {/* Bouton remonter */}
-                        {explorerPath !== '/' && (
-                          <ListItemButton onClick={navigateUp} sx={{ mb: 1, borderRadius: 1 }}>
-                            <ListItemIcon sx={{ minWidth: 36 }}>
-                              <i className='ri-arrow-up-line' style={{ fontSize: 20 }} />
-                            </ListItemIcon>
-                            <ListItemText primary='..' primaryTypographyProps={{ variant: 'body2' }} />
-                          </ListItemButton>
-                        )}
-
-                        {/* Liste des fichiers */}
-                        <List dense sx={{ maxHeight: 'calc(100vh - 350px)', overflow: 'auto' }}>
-                          {explorerFiles.map((file, idx) => {
-                            const isNavigable = explorerPve ? !!file.browsable : file.type === 'directory'
-                            const canDownload = !!explorerPve && (file.type === 'file' || file.type === 'directory' || file.type === 'virtual')
-                            const guestInnerPath = explorerPath === '/' ? `/${file.name}` : `${explorerPath}/${file.name}`
-                            // Never a whole disk, partition or LV node: only entries inside a filesystem.
-                            const canRestoreToGuest = (file.type === 'file' || file.type === 'directory')
-                              && isRestorableItemPath(explorerPve ? 'pve' : 'pbs', explorerPve ? `/${explorerArchive}${guestInnerPath}` : guestInnerPath)
-                            const actionCount = (canDownload ? 1 : 0) + (canRestoreToGuest ? 1 : 0)
-
-                            return (
-                            <ListItem
-                              key={idx}
-                              disablePadding
-                              // MUI pads the row button by 48px whenever there is a secondary
-                              // action, through a nested selector the button's own sx cannot beat.
-                              // In px: the theme spacing unit is not 8. Each small icon button is
-                              // ~30px wide, the action block sits 16px from the edge.
-                              sx={actionCount > 0 ? { '& > .MuiListItemButton-root': { pr: `${24 + actionCount * 30}px` } } : undefined}
-                              secondaryAction={actionCount > 0 && (
-                                <Stack direction='row' spacing={0}>
-                                  {canDownload && (
-                                    <Tooltip title={t('common.download')}>
-                                      <IconButton
-                                        size='small'
-                                        edge={canRestoreToGuest ? false : 'end'}
-                                        onClick={(e) => { e.stopPropagation(); downloadPveEntry(file) }}
-                                      >
-                                        <i className='ri-download-2-line' style={{ fontSize: 18 }} />
-                                      </IconButton>
-                                    </Tooltip>
-                                  )}
-                                  {canRestoreToGuest && (
-                                    <Tooltip title={t('guestFileRestore.restoreIntoGuest')}>
-                                      <IconButton
-                                        size='small'
-                                        edge='end'
-                                        onClick={(e) => { e.stopPropagation(); openRestoreToGuest(file) }}
-                                      >
-                                        <i className='ri-folder-transfer-line' style={{ fontSize: 18 }} />
-                                      </IconButton>
-                                    </Tooltip>
-                                  )}
-                                </Stack>
-                              )}
-                            >
-                              <ListItemButton
-                                onClick={() => isNavigable && navigateToFolder(file.name)}
-                                sx={{ borderRadius: 1 }}
-                              >
-                                <ListItemIcon sx={{ minWidth: 36 }}>
-                                  {file.type === 'virtual'
-                                    ? <i className='ri-hard-drive-2-fill' style={{ color: '#42A5F5', fontSize: 20 }} />
-                                    : <FileIcon type={file.type} name={file.name} />}
-                                </ListItemIcon>
-                                <ListItemText
-                                  primary={file.name}
-                                  secondary={isNavigable ? null : file.sizeFormatted}
-                                  primaryTypographyProps={{ variant: 'body2', noWrap: true }}
-                                  secondaryTypographyProps={{ variant: 'caption' }}
-                                />
-                                {isNavigable && (
-                                  <i className='ri-arrow-right-s-line' style={{ opacity: 0.5 }} />
-                                )}
-                              </ListItemButton>
-                            </ListItem>
-                            )
-                          })}
-                          {explorerFiles.length === 0 && (
-                            <Typography variant='body2' sx={{ opacity: 0.5, py: 2, textAlign: 'center' }}>
-                              {t('backups.emptyFolder')}
-                            </Typography>
+                                <i className='ri-folder-transfer-line' style={{ fontSize: 18 }} />
+                              </IconButton>
+                            </Tooltip>
                           )}
-                        </List>
-                      </>
-                    )}
-                  </Box>
-                )}
-              </Box>
-            </>
-          ) : (
-            <Box sx={{ p: 3 }}>
-              <Alert severity='info'>{t('common.select')}</Alert>
-            </Box>
-          )}
-        </Box>
-      </Drawer>
+                        </Stack>
+                      )}
+                    >
+                      <ListItemButton
+                        onClick={() => isNavigable && navigateToFolder(file.name)}
+                        sx={{ borderRadius: 1 }}
+                      >
+                        <ListItemIcon sx={{ minWidth: 36 }}>
+                          {file.type === 'virtual'
+                            ? <i className='ri-hard-drive-2-fill' style={{ color: '#42A5F5', fontSize: 20 }} />
+                            : <FileIcon type={file.type} name={file.name} />}
+                        </ListItemIcon>
+                        <ListItemText
+                          primary={file.name}
+                          secondary={isNavigable ? null : file.sizeFormatted}
+                          primaryTypographyProps={{ variant: 'body2', noWrap: true }}
+                          secondaryTypographyProps={{ variant: 'caption' }}
+                        />
+                        {isNavigable && (
+                          <i className='ri-arrow-right-s-line' style={{ opacity: 0.5 }} />
+                        )}
+                      </ListItemButton>
+                    </ListItem>
+                    )
+                  })}
+                  {explorerFiles.length === 0 && (
+                    <Typography variant='body2' sx={{ opacity: 0.5, py: 2, textAlign: 'center' }}>
+                      {t('backups.emptyFolder')}
+                    </Typography>
+                  )}
+                </List>
+              </>
+            )}
+          </Box>
+        )}
+      />
 
       {bulkRestoreOpen && selectedPbs && (
         <BulkRestoreWizard

@@ -44,6 +44,11 @@ const EXPECTED_WRITE_IDS: Record<string, string[]> = {
   storage: [
     'storage-attach-pbs', 'storage-detach', 'storage-content-delete', 'storage-download-url', 'aplinfo-download',
   ],
+  ha: [
+    'ha-resource-upsert', 'ha-resource-delete', 'ha-group-create', 'ha-group-update', 'ha-group-delete',
+    'ha-affinity-create', 'ha-affinity-update', 'ha-affinity-delete', 'ha-auto-update', 'ha-auto-sync',
+  ],
+  pools: ['pool-create', 'pool-update', 'pool-delete'],
 }
 
 /** The only entries allowed to resolve their connection inside the handler. */

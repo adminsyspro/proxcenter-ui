@@ -3,14 +3,21 @@ import { NextResponse } from "next/server"
 import { getSetting } from "@/lib/db/settings"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
+import type { Principal } from "@/lib/auth/principal"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 
 export const runtime = "nodejs"
 
-export async function POST(_req: Request, ctx: { params: Promise<{ id: string }> }) {
+async function postHandler(_req: Request, ctx: { params: Promise<{ id: string }>; principal?: Principal }) {
   try {
     const { id } = await ctx.params
-    const denied = await checkPermission(PERMISSIONS.NODE_MANAGE)
+    // An API token is judged on this connection. A session keeps the
+    // resource-less check: the Auto-HA card is offered to node-scoped
+    // node.manage holders, who never match a connection-scoped check.
+    const denied = ctx.principal?.kind === "token"
+      ? await checkPermission(PERMISSIONS.NODE_MANAGE, "connection", id)
+      : await checkPermission(PERMISSIONS.NODE_MANAGE)
     if (denied) return denied
 
     // Read Auto-HA settings
@@ -77,3 +84,5 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const POST = withPublicApiGuard("ha-auto-sync", postHandler)

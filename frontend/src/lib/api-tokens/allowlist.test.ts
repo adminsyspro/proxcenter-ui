@@ -150,6 +150,26 @@ describe('shared canonical matcher', () => {
       'storage-download-url': '/api/v1/connections/c1/nodes/pve1/storage/local/download-url',
       'aplinfo-list': '/api/v1/connections/c1/nodes/pve1/aplinfo',
       'aplinfo-download': '/api/v1/connections/c1/nodes/pve1/aplinfo',
+      'ha-resource-get': '/api/v1/connections/c1/ha/vm:100',
+      'ha-resource-upsert': '/api/v1/connections/c1/ha/vm:100',
+      'ha-resource-delete': '/api/v1/connections/c1/ha/ct:101',
+      'ha-groups-list': '/api/v1/connections/c1/ha/groups',
+      'ha-group-create': '/api/v1/connections/c1/ha/groups',
+      'ha-group-get': '/api/v1/connections/c1/ha/groups/g1',
+      'ha-group-update': '/api/v1/connections/c1/ha/groups/g1',
+      'ha-group-delete': '/api/v1/connections/c1/ha/groups/g1',
+      'ha-affinity-list': '/api/v1/connections/c1/ha/affinity-rules',
+      'ha-affinity-create': '/api/v1/connections/c1/ha/affinity-rules',
+      'ha-affinity-get': '/api/v1/connections/c1/ha/affinity-rules/keep-apart',
+      'ha-affinity-update': '/api/v1/connections/c1/ha/affinity-rules/keep-apart',
+      'ha-affinity-delete': '/api/v1/connections/c1/ha/affinity-rules/keep-apart',
+      'ha-auto-get': '/api/v1/connections/c1/ha/auto-ha',
+      'ha-auto-update': '/api/v1/connections/c1/ha/auto-ha',
+      'ha-auto-sync': '/api/v1/connections/c1/ha/auto-ha/sync',
+      'pools-list': '/api/v1/connections/c1/pools',
+      'pool-create': '/api/v1/connections/c1/pools',
+      'pool-update': '/api/v1/connections/c1/pools',
+      'pool-delete': '/api/v1/connections/c1/pools',
     }
     for (const entry of PUBLIC_API_ALLOWLIST) {
       const path = samplePathById[entry.id]
@@ -212,6 +232,22 @@ describe('method-aware matching', () => {
     expect(matchPublicApiPath(`${snap}/verify`, 'POST').entryId).toBe('pbs-backup-verify')
     expect(matchPublicApiPath('/api/v1/pbs/p1/backups/ds1%2F..%2Fvm%2F100%2F1', 'DELETE').ok).toBe(false)
     expect(matchPublicApiPath('/api/v1/pbs/p1%2Fx/backups/ds1%2Fvm%2F100%2F1', 'DELETE').ok).toBe(false)
+  })
+
+  it('ha/{sid} never swallows its static siblings groups, affinity-rules and auto-ha', () => {
+    const ha = '/api/v1/connections/c1/ha'
+    expect(matchPublicApiPath(`${ha}/vm:100`, 'POST').entryId).toBe('ha-resource-upsert')
+    expect(matchPublicApiPath(`${ha}/groups`, 'GET').entryId).toBe('ha-groups-list')
+    expect(matchPublicApiPath(`${ha}/affinity-rules`, 'POST').entryId).toBe('ha-affinity-create')
+    expect(matchPublicApiPath(`${ha}/auto-ha`, 'GET').entryId).toBe('ha-auto-get')
+    for (const sibling of ['groups', 'affinity-rules', 'auto-ha']) {
+      expect(matchPublicApiPath(`${ha}/${sibling}`, 'DELETE').ok, sibling).toBe(false)
+    }
+    expect(matchPublicApiPath(`${ha}/auto-ha`, 'POST').ok).toBe(false)
+    // An escaped spelling of a sibling, or of the sid itself, fails closed.
+    for (const spelling of ['%67roups', 'auto%2Dha', 'vm%3A100']) {
+      expect(matchPublicApiPath(`${ha}/${spelling}`, 'POST').ok, spelling).toBe(false)
+    }
   })
 
   it('a storage volid carries its slash encoded in its one segment only', () => {

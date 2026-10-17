@@ -1662,6 +1662,234 @@
           }
         }
       },
+      "HaResourceUpsertRequest": {
+        "type": "object",
+        "description": "Absent fields are not sent to Proxmox: they keep their value on an update and their default on a creation.",
+        "properties": {
+          "group": {
+            "type": "string",
+            "description": "HA group (Proxmox VE 8)"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "started",
+              "stopped",
+              "enabled",
+              "disabled",
+              "ignored"
+            ]
+          },
+          "max_restart": {
+            "type": "integer"
+          },
+          "max_relocate": {
+            "type": "integer"
+          },
+          "failback": {
+            "type": "boolean",
+            "description": "Proxmox VE 9 and later"
+          },
+          "comment": {
+            "type": "string"
+          }
+        }
+      },
+      "HaGroupCreateRequest": {
+        "type": "object",
+        "required": [
+          "group",
+          "nodes"
+        ],
+        "properties": {
+          "group": {
+            "type": "string"
+          },
+          "nodes": {
+            "type": "string",
+            "description": "Comma-separated nodes, optionally with a priority: node1:2,node2:1"
+          },
+          "restricted": {
+            "type": "boolean"
+          },
+          "nofailback": {
+            "type": "boolean"
+          },
+          "comment": {
+            "type": "string"
+          }
+        }
+      },
+      "HaGroupUpdateRequest": {
+        "type": "object",
+        "properties": {
+          "nodes": {
+            "type": "string",
+            "description": "Comma-separated nodes, optionally with a priority: node1:2,node2:1"
+          },
+          "restricted": {
+            "type": "boolean"
+          },
+          "nofailback": {
+            "type": "boolean"
+          },
+          "comment": {
+            "type": "string"
+          },
+          "delete": {
+            "type": "string",
+            "description": "Comma-separated properties to clear"
+          }
+        }
+      },
+      "HaAffinityCreateRequest": {
+        "type": "object",
+        "required": [
+          "type",
+          "rule"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "node-affinity",
+              "resource-affinity"
+            ]
+          },
+          "rule": {
+            "type": "string",
+            "description": "Rule id"
+          },
+          "resources": {
+            "type": "string",
+            "description": "Comma-separated HA resources: vm:100,ct:101"
+          },
+          "nodes": {
+            "type": "string",
+            "description": "node-affinity only. Comma-separated nodes, optionally with a priority: node1:2,node2:1"
+          },
+          "strict": {
+            "type": "boolean",
+            "description": "node-affinity only"
+          },
+          "affinity": {
+            "type": "string",
+            "enum": [
+              "positive",
+              "negative"
+            ],
+            "description": "resource-affinity only: keep together or apart"
+          },
+          "disable": {
+            "type": "boolean"
+          },
+          "comment": {
+            "type": "string"
+          }
+        }
+      },
+      "HaAffinityUpdateRequest": {
+        "type": "object",
+        "properties": {
+          "resources": {
+            "type": "string"
+          },
+          "nodes": {
+            "type": "string",
+            "description": "Comma-separated nodes, optionally with a priority: node1:2,node2:1"
+          },
+          "strict": {
+            "type": "boolean"
+          },
+          "affinity": {
+            "type": "string",
+            "enum": [
+              "positive",
+              "negative"
+            ]
+          },
+          "disable": {
+            "type": "boolean"
+          },
+          "comment": {
+            "type": "string"
+          },
+          "delete": {
+            "type": "string",
+            "description": "Comma-separated properties to clear"
+          },
+          "digest": {
+            "type": "string",
+            "description": "Digest of the rule as read; refused when it changed since"
+          }
+        }
+      },
+      "HaAutoUpdateRequest": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "started",
+              "stopped",
+              "enabled",
+              "disabled"
+            ]
+          },
+          "group": {
+            "type": "string",
+            "description": "HA group; empty = none"
+          },
+          "max_restart": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10
+          },
+          "max_relocate": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10
+          },
+          "comment": {
+            "type": "string"
+          }
+        }
+      },
+      "PoolCreateRequest": {
+        "type": "object",
+        "required": [
+          "poolid"
+        ],
+        "properties": {
+          "poolid": {
+            "type": "string",
+            "description": "Pool id, e.g. prod or prod/web"
+          },
+          "comment": {
+            "type": "string"
+          }
+        }
+      },
+      "PoolUpdateRequest": {
+        "type": "object",
+        "required": [
+          "poolid",
+          "comment"
+        ],
+        "properties": {
+          "poolid": {
+            "type": "string",
+            "description": "Pool id, e.g. prod or prod/web"
+          },
+          "comment": {
+            "type": "string",
+            "description": "Empty string clears it"
+          }
+        }
+      },
       "VmsResponse": {
         "type": "object",
         "properties": {
@@ -3534,6 +3762,189 @@
               "type": "object",
               "description": "Proxmox template entry (template, package, os, version, headline...)",
               "additionalProperties": true
+            }
+          }
+        }
+      },
+      "HaResourceResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "description": "Null when the guest is not HA-managed",
+            "additionalProperties": true
+          }
+        }
+      },
+      "HaWriteResponse": {
+        "type": "object",
+        "properties": {
+          "data": {},
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "HaListResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "description": "As Proxmox returns it",
+              "additionalProperties": true
+            }
+          }
+        }
+      },
+      "HaObjectResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "description": "As Proxmox returns it",
+            "additionalProperties": true
+          }
+        }
+      },
+      "HaAffinityRulesResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "description": "As Proxmox returns it",
+              "additionalProperties": true
+            }
+          },
+          "unsupported": {
+            "type": "boolean",
+            "description": "Present and true on a cluster older than Proxmox VE 9"
+          }
+        }
+      },
+      "AutoHaSettingsResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "enabled": {
+                "type": "boolean"
+              },
+              "state": {
+                "type": "string",
+                "enum": [
+                  "started",
+                  "stopped",
+                  "enabled",
+                  "disabled"
+                ]
+              },
+              "group": {
+                "type": "string",
+                "description": "HA group; empty = none"
+              },
+              "max_restart": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 10
+              },
+              "max_relocate": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 10
+              },
+              "comment": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "AutoHaSyncResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "added": {
+                "type": "integer"
+              },
+              "skipped": {
+                "type": "integer",
+                "description": "Guests already HA-managed"
+              },
+              "errors": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "One `<sid>: <reason>` per guest Proxmox refused"
+              }
+            }
+          }
+        }
+      },
+      "PoolsResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "poolid": {
+                  "type": "string"
+                },
+                "comment": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              }
+            }
+          },
+          "restricted": {
+            "type": "boolean",
+            "description": "The list is narrowed to the pools of the caller's guests"
+          }
+        }
+      },
+      "PoolWriteResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "poolid": {
+                "type": "string"
+              },
+              "comment": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          }
+        }
+      },
+      "PoolDeleteResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "success": {
+                "type": "boolean"
+              }
             }
           }
         }
@@ -16006,6 +16417,2897 @@
                 "example": {
                   "error": "Method not allowed for this API token route",
                   "method": "DELETE"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/connections/{id}/ha/{sid}": {
+      "get": {
+        "operationId": "ha-resource-get",
+        "summary": "HA configuration of a guest",
+        "description": "The HA resource {sid} as Proxmox stores it; `data` is null when the guest is not HA-managed. {sid} is `vm:<vmid>` or `ct:<vmid>`, sent as is (a percent-encoded `:` is refused).",
+        "tags": [
+          "HA"
+        ],
+        "x-required-scopes": [
+          "nodes:read",
+          "ha:write"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Raw connection id; must be inside the token connection perimeter."
+          },
+          {
+            "name": "sid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "description": "Null when the guest is not HA-managed",
+                      "additionalProperties": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/connections/{id}/ha/{sid}"
+                    }
+                  },
+                  "perimeter": {
+                    "value": {
+                      "error": "Connection not in token scope",
+                      "connection": "conn-1"
+                    }
+                  },
+                  "clusterObject": {
+                    "value": {
+                      "error": "Cluster-level object not available to a vDC tenant token"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "PUT"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "ha-resource-upsert",
+        "summary": "Put a guest under HA, or update its HA configuration",
+        "description": "Creates the HA resource {sid} when the guest is not HA-managed yet, otherwise updates it with the given fields; `message` says which. {sid} is `vm:<vmid>` or `ct:<vmid>`, sent as is (a percent-encoded `:` is refused). Only from the provider tenant. Not available to a vDC tenant token.",
+        "tags": [
+          "HA"
+        ],
+        "x-required-scopes": [
+          "ha:write"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Raw connection id; must be inside the token connection perimeter."
+          },
+          {
+            "name": "sid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "description": "Absent fields are not sent to Proxmox: they keep their value on an update and their default on a creation.",
+                "properties": {
+                  "group": {
+                    "type": "string",
+                    "description": "HA group (Proxmox VE 8)"
+                  },
+                  "state": {
+                    "type": "string",
+                    "enum": [
+                      "started",
+                      "stopped",
+                      "enabled",
+                      "disabled",
+                      "ignored"
+                    ]
+                  },
+                  "max_restart": {
+                    "type": "integer"
+                  },
+                  "max_relocate": {
+                    "type": "integer"
+                  },
+                  "failback": {
+                    "type": "boolean",
+                    "description": "Proxmox VE 9 and later"
+                  },
+                  "comment": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {},
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/connections/{id}/ha/{sid}"
+                    }
+                  },
+                  "perimeter": {
+                    "value": {
+                      "error": "Connection not in token scope",
+                      "connection": "conn-1"
+                    }
+                  },
+                  "clusterObject": {
+                    "value": {
+                      "error": "Cluster-level object not available to a vDC tenant token"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "PUT"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "ha-resource-delete",
+        "summary": "Take a guest out of HA",
+        "description": "Removes the HA resource {sid}; the guest itself is left as it is. {sid} is `vm:<vmid>` or `ct:<vmid>`, sent as is (a percent-encoded `:` is refused). Only from the provider tenant. Not available to a vDC tenant token.",
+        "tags": [
+          "HA"
+        ],
+        "x-required-scopes": [
+          "ha:write"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Raw connection id; must be inside the token connection perimeter."
+          },
+          {
+            "name": "sid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {},
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/connections/{id}/ha/{sid}"
+                    }
+                  },
+                  "perimeter": {
+                    "value": {
+                      "error": "Connection not in token scope",
+                      "connection": "conn-1"
+                    }
+                  },
+                  "clusterObject": {
+                    "value": {
+                      "error": "Cluster-level object not available to a vDC tenant token"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "PUT"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/connections/{id}/ha/groups": {
+      "get": {
+        "operationId": "ha-groups-list",
+        "summary": "HA groups of a cluster",
+        "description": "The HA groups of the cluster (Proxmox VE 8; version 9 replaced them with node affinity rules).",
+        "tags": [
+          "HA"
+        ],
+        "x-required-scopes": [
+          "nodes:read",
+          "ha:write"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Raw connection id; must be inside the token connection perimeter."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "description": "As Proxmox returns it",
+                        "additionalProperties": true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/connections/{id}/ha/groups"
+                    }
+                  },
+                  "perimeter": {
+                    "value": {
+                      "error": "Connection not in token scope",
+                      "connection": "conn-1"
+                    }
+                  },
+                  "clusterObject": {
+                    "value": {
+                      "error": "Cluster-level object not available to a vDC tenant token"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "DELETE"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "ha-group-create",
+        "summary": "Create an HA group",
+        "description": "Creates the HA group `group` over `nodes` (Proxmox VE 8). Not available to a vDC tenant token.",
+        "tags": [
+          "HA"
+        ],
+        "x-required-scopes": [
+          "ha:write"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Raw connection id; must be inside the token connection perimeter."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "group",
+                  "nodes"
+                ],
+                "properties": {
+                  "group": {
+                    "type": "string"
+                  },
+                  "nodes": {
+                    "type": "string",
+                    "description": "Comma-separated nodes, optionally with a priority: node1:2,node2:1"
+                  },
+                  "restricted": {
+                    "type": "boolean"
+                  },
+                  "nofailback": {
+                    "type": "boolean"
+                  },
+                  "comment": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {},
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/connections/{id}/ha/groups"
+                    }
+                  },
+                  "perimeter": {
+                    "value": {
+                      "error": "Connection not in token scope",
+                      "connection": "conn-1"
+                    }
+                  },
+                  "clusterObject": {
+                    "value": {
+                      "error": "Cluster-level object not available to a vDC tenant token"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "DELETE"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/connections/{id}/ha/groups/{groupId}": {
+      "get": {
+        "operationId": "ha-group-get",
+        "summary": "HA group",
+        "description": "The HA group {groupId}; 404 when it does not exist.",
+        "tags": [
+          "HA"
+        ],
+        "x-required-scopes": [
+          "nodes:read",
+          "ha:write"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Raw connection id; must be inside the token connection perimeter."
+          },
+          {
+            "name": "groupId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "description": "As Proxmox returns it",
+                      "additionalProperties": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/connections/{id}/ha/groups/{groupId}"
+                    }
+                  },
+                  "perimeter": {
+                    "value": {
+                      "error": "Connection not in token scope",
+                      "connection": "conn-1"
+                    }
+                  },
+                  "clusterObject": {
+                    "value": {
+                      "error": "Cluster-level object not available to a vDC tenant token"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "POST"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "ha-group-update",
+        "summary": "Update an HA group",
+        "description": "Changes the given properties of the HA group {groupId}; `delete` lists the properties to clear. Not available to a vDC tenant token.",
+        "tags": [
+          "HA"
+        ],
+        "x-required-scopes": [
+          "ha:write"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Raw connection id; must be inside the token connection perimeter."
+          },
+          {
+            "name": "groupId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "nodes": {
+                    "type": "string",
+                    "description": "Comma-separated nodes, optionally with a priority: node1:2,node2:1"
+                  },
+                  "restricted": {
+                    "type": "boolean"
+                  },
+                  "nofailback": {
+                    "type": "boolean"
+                  },
+                  "comment": {
+                    "type": "string"
+                  },
+                  "delete": {
+                    "type": "string",
+                    "description": "Comma-separated properties to clear"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {},
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/connections/{id}/ha/groups/{groupId}"
+                    }
+                  },
+                  "perimeter": {
+                    "value": {
+                      "error": "Connection not in token scope",
+                      "connection": "conn-1"
+                    }
+                  },
+                  "clusterObject": {
+                    "value": {
+                      "error": "Cluster-level object not available to a vDC tenant token"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "POST"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "ha-group-delete",
+        "summary": "Delete an HA group",
+        "description": "Removes the HA group {groupId}. Not available to a vDC tenant token.",
+        "tags": [
+          "HA"
+        ],
+        "x-required-scopes": [
+          "ha:write"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Raw connection id; must be inside the token connection perimeter."
+          },
+          {
+            "name": "groupId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {},
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/connections/{id}/ha/groups/{groupId}"
+                    }
+                  },
+                  "perimeter": {
+                    "value": {
+                      "error": "Connection not in token scope",
+                      "connection": "conn-1"
+                    }
+                  },
+                  "clusterObject": {
+                    "value": {
+                      "error": "Cluster-level object not available to a vDC tenant token"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "POST"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/connections/{id}/ha/affinity-rules": {
+      "get": {
+        "operationId": "ha-affinity-list",
+        "summary": "HA affinity rules of a cluster",
+        "description": "The HA rules of the cluster (Proxmox VE 9 and later). On an older cluster `data` is empty and `unsupported` is true.",
+        "tags": [
+          "HA"
+        ],
+        "x-required-scopes": [
+          "nodes:read",
+          "ha:write"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Raw connection id; must be inside the token connection perimeter."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "description": "As Proxmox returns it",
+                        "additionalProperties": true
+                      }
+                    },
+                    "unsupported": {
+                      "type": "boolean",
+                      "description": "Present and true on a cluster older than Proxmox VE 9"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/connections/{id}/ha/affinity-rules"
+                    }
+                  },
+                  "perimeter": {
+                    "value": {
+                      "error": "Connection not in token scope",
+                      "connection": "conn-1"
+                    }
+                  },
+                  "clusterObject": {
+                    "value": {
+                      "error": "Cluster-level object not available to a vDC tenant token"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "DELETE"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "ha-affinity-create",
+        "summary": "Create an HA affinity rule",
+        "description": "Creates the HA rule `rule`: a node-affinity rule keeps `resources` on `nodes`, a resource-affinity rule keeps them together (positive) or apart (negative). Proxmox VE 9 and later. Not available to a vDC tenant token.",
+        "tags": [
+          "HA"
+        ],
+        "x-required-scopes": [
+          "ha:write"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Raw connection id; must be inside the token connection perimeter."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "type",
+                  "rule"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "node-affinity",
+                      "resource-affinity"
+                    ]
+                  },
+                  "rule": {
+                    "type": "string",
+                    "description": "Rule id"
+                  },
+                  "resources": {
+                    "type": "string",
+                    "description": "Comma-separated HA resources: vm:100,ct:101"
+                  },
+                  "nodes": {
+                    "type": "string",
+                    "description": "node-affinity only. Comma-separated nodes, optionally with a priority: node1:2,node2:1"
+                  },
+                  "strict": {
+                    "type": "boolean",
+                    "description": "node-affinity only"
+                  },
+                  "affinity": {
+                    "type": "string",
+                    "enum": [
+                      "positive",
+                      "negative"
+                    ],
+                    "description": "resource-affinity only: keep together or apart"
+                  },
+                  "disable": {
+                    "type": "boolean"
+                  },
+                  "comment": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {},
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/connections/{id}/ha/affinity-rules"
+                    }
+                  },
+                  "perimeter": {
+                    "value": {
+                      "error": "Connection not in token scope",
+                      "connection": "conn-1"
+                    }
+                  },
+                  "clusterObject": {
+                    "value": {
+                      "error": "Cluster-level object not available to a vDC tenant token"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "DELETE"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/connections/{id}/ha/affinity-rules/{ruleId}": {
+      "get": {
+        "operationId": "ha-affinity-get",
+        "summary": "HA affinity rule",
+        "description": "The HA rule {ruleId}; 404 when it does not exist.",
+        "tags": [
+          "HA"
+        ],
+        "x-required-scopes": [
+          "nodes:read",
+          "ha:write"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Raw connection id; must be inside the token connection perimeter."
+          },
+          {
+            "name": "ruleId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "description": "As Proxmox returns it",
+                      "additionalProperties": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/connections/{id}/ha/affinity-rules/{ruleId}"
+                    }
+                  },
+                  "perimeter": {
+                    "value": {
+                      "error": "Connection not in token scope",
+                      "connection": "conn-1"
+                    }
+                  },
+                  "clusterObject": {
+                    "value": {
+                      "error": "Cluster-level object not available to a vDC tenant token"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "POST"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "ha-affinity-update",
+        "summary": "Update an HA affinity rule",
+        "description": "Changes the given properties of the HA rule {ruleId}; `delete` lists the properties to clear, `digest` guards against a concurrent change. Not available to a vDC tenant token.",
+        "tags": [
+          "HA"
+        ],
+        "x-required-scopes": [
+          "ha:write"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Raw connection id; must be inside the token connection perimeter."
+          },
+          {
+            "name": "ruleId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "resources": {
+                    "type": "string"
+                  },
+                  "nodes": {
+                    "type": "string",
+                    "description": "Comma-separated nodes, optionally with a priority: node1:2,node2:1"
+                  },
+                  "strict": {
+                    "type": "boolean"
+                  },
+                  "affinity": {
+                    "type": "string",
+                    "enum": [
+                      "positive",
+                      "negative"
+                    ]
+                  },
+                  "disable": {
+                    "type": "boolean"
+                  },
+                  "comment": {
+                    "type": "string"
+                  },
+                  "delete": {
+                    "type": "string",
+                    "description": "Comma-separated properties to clear"
+                  },
+                  "digest": {
+                    "type": "string",
+                    "description": "Digest of the rule as read; refused when it changed since"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {},
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/connections/{id}/ha/affinity-rules/{ruleId}"
+                    }
+                  },
+                  "perimeter": {
+                    "value": {
+                      "error": "Connection not in token scope",
+                      "connection": "conn-1"
+                    }
+                  },
+                  "clusterObject": {
+                    "value": {
+                      "error": "Cluster-level object not available to a vDC tenant token"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "POST"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "ha-affinity-delete",
+        "summary": "Delete an HA affinity rule",
+        "description": "Removes the HA rule {ruleId}. Not available to a vDC tenant token.",
+        "tags": [
+          "HA"
+        ],
+        "x-required-scopes": [
+          "ha:write"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Raw connection id; must be inside the token connection perimeter."
+          },
+          {
+            "name": "ruleId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {},
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/connections/{id}/ha/affinity-rules/{ruleId}"
+                    }
+                  },
+                  "perimeter": {
+                    "value": {
+                      "error": "Connection not in token scope",
+                      "connection": "conn-1"
+                    }
+                  },
+                  "clusterObject": {
+                    "value": {
+                      "error": "Cluster-level object not available to a vDC tenant token"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "POST"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/connections/{id}/ha/auto-ha": {
+      "get": {
+        "operationId": "ha-auto-get",
+        "summary": "Auto-HA settings of a cluster",
+        "description": "The ProxCenter Auto-HA settings of the cluster: when enabled, every new guest is put under HA with these defaults.",
+        "tags": [
+          "HA"
+        ],
+        "x-required-scopes": [
+          "nodes:read",
+          "ha:write"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Raw connection id; must be inside the token connection perimeter."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean"
+                        },
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "started",
+                            "stopped",
+                            "enabled",
+                            "disabled"
+                          ]
+                        },
+                        "group": {
+                          "type": "string",
+                          "description": "HA group; empty = none"
+                        },
+                        "max_restart": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 10
+                        },
+                        "max_relocate": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 10
+                        },
+                        "comment": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/connections/{id}/ha/auto-ha"
+                    }
+                  },
+                  "perimeter": {
+                    "value": {
+                      "error": "Connection not in token scope",
+                      "connection": "conn-1"
+                    }
+                  },
+                  "clusterObject": {
+                    "value": {
+                      "error": "Cluster-level object not available to a vDC tenant token"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "POST"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "ha-auto-update",
+        "summary": "Update the Auto-HA settings of a cluster",
+        "description": "Changes the given Auto-HA settings; absent or invalid fields keep their value, `max_restart` and `max_relocate` are clamped to 0-10. Needs node.manage on this connection. Not available to a vDC tenant token.",
+        "tags": [
+          "HA"
+        ],
+        "x-required-scopes": [
+          "ha:write"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Raw connection id; must be inside the token connection perimeter."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "enabled": {
+                    "type": "boolean"
+                  },
+                  "state": {
+                    "type": "string",
+                    "enum": [
+                      "started",
+                      "stopped",
+                      "enabled",
+                      "disabled"
+                    ]
+                  },
+                  "group": {
+                    "type": "string",
+                    "description": "HA group; empty = none"
+                  },
+                  "max_restart": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 10
+                  },
+                  "max_relocate": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 10
+                  },
+                  "comment": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean"
+                        },
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "started",
+                            "stopped",
+                            "enabled",
+                            "disabled"
+                          ]
+                        },
+                        "group": {
+                          "type": "string",
+                          "description": "HA group; empty = none"
+                        },
+                        "max_restart": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 10
+                        },
+                        "max_relocate": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 10
+                        },
+                        "comment": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/connections/{id}/ha/auto-ha"
+                    }
+                  },
+                  "perimeter": {
+                    "value": {
+                      "error": "Connection not in token scope",
+                      "connection": "conn-1"
+                    }
+                  },
+                  "clusterObject": {
+                    "value": {
+                      "error": "Cluster-level object not available to a vDC tenant token"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "POST"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/connections/{id}/ha/auto-ha/sync": {
+      "post": {
+        "operationId": "ha-auto-sync",
+        "summary": "Apply Auto-HA to the existing guests now",
+        "description": "Puts every guest of the cluster that is not HA-managed yet (templates excepted) under HA with the Auto-HA defaults. 400 when Auto-HA is disabled. No body. Needs node.manage on this connection. Not available to a vDC tenant token.",
+        "tags": [
+          "HA"
+        ],
+        "x-required-scopes": [
+          "ha:write"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Raw connection id; must be inside the token connection perimeter."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "added": {
+                          "type": "integer"
+                        },
+                        "skipped": {
+                          "type": "integer",
+                          "description": "Guests already HA-managed"
+                        },
+                        "errors": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          },
+                          "description": "One `<sid>: <reason>` per guest Proxmox refused"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/connections/{id}/ha/auto-ha/sync"
+                    }
+                  },
+                  "perimeter": {
+                    "value": {
+                      "error": "Connection not in token scope",
+                      "connection": "conn-1"
+                    }
+                  },
+                  "clusterObject": {
+                    "value": {
+                      "error": "Cluster-level object not available to a vDC tenant token"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "DELETE"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/connections/{id}/pools": {
+      "get": {
+        "operationId": "pools-list",
+        "summary": "Resource pools of a cluster",
+        "description": "The Proxmox resource pools of the cluster with their comment.",
+        "tags": [
+          "Pools"
+        ],
+        "x-required-scopes": [
+          "nodes:read",
+          "pools:write"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Raw connection id; must be inside the token connection perimeter."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "poolid": {
+                            "type": "string"
+                          },
+                          "comment": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        }
+                      }
+                    },
+                    "restricted": {
+                      "type": "boolean",
+                      "description": "The list is narrowed to the pools of the caller's guests"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/connections/{id}/pools"
+                    }
+                  },
+                  "perimeter": {
+                    "value": {
+                      "error": "Connection not in token scope",
+                      "connection": "conn-1"
+                    }
+                  },
+                  "clusterObject": {
+                    "value": {
+                      "error": "Cluster-level object not available to a vDC tenant token"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "PATCH"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "pool-create",
+        "summary": "Create a resource pool",
+        "description": "Creates the pool `poolid`. `poolid` starts with a letter and nests up to three levels with `/` (Proxmox VE 8.1 and later). Answers 201. Not available to a vDC tenant token.",
+        "tags": [
+          "Pools"
+        ],
+        "x-required-scopes": [
+          "pools:write"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Raw connection id; must be inside the token connection perimeter."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "poolid"
+                ],
+                "properties": {
+                  "poolid": {
+                    "type": "string",
+                    "description": "Pool id, e.g. prod or prod/web"
+                  },
+                  "comment": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "poolid": {
+                          "type": "string"
+                        },
+                        "comment": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/connections/{id}/pools"
+                    }
+                  },
+                  "perimeter": {
+                    "value": {
+                      "error": "Connection not in token scope",
+                      "connection": "conn-1"
+                    }
+                  },
+                  "clusterObject": {
+                    "value": {
+                      "error": "Cluster-level object not available to a vDC tenant token"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "PATCH"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "pool-update",
+        "summary": "Update the comment of a resource pool",
+        "description": "Sets the comment of the pool `poolid` (named in the body); an empty comment clears it. Not available to a vDC tenant token.",
+        "tags": [
+          "Pools"
+        ],
+        "x-required-scopes": [
+          "pools:write"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Raw connection id; must be inside the token connection perimeter."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "poolid",
+                  "comment"
+                ],
+                "properties": {
+                  "poolid": {
+                    "type": "string",
+                    "description": "Pool id, e.g. prod or prod/web"
+                  },
+                  "comment": {
+                    "type": "string",
+                    "description": "Empty string clears it"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "poolid": {
+                          "type": "string"
+                        },
+                        "comment": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/connections/{id}/pools"
+                    }
+                  },
+                  "perimeter": {
+                    "value": {
+                      "error": "Connection not in token scope",
+                      "connection": "conn-1"
+                    }
+                  },
+                  "clusterObject": {
+                    "value": {
+                      "error": "Cluster-level object not available to a vDC tenant token"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "PATCH"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "pool-delete",
+        "summary": "Delete a resource pool",
+        "description": "Deletes the pool named by the `poolid` query parameter. Proxmox refuses a pool that still has members; a pool backing a vDC answers 409 `POOL_OWNED_BY_VDC`. No body. Not available to a vDC tenant token.",
+        "tags": [
+          "Pools"
+        ],
+        "x-required-scopes": [
+          "pools:write"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Raw connection id; must be inside the token connection perimeter."
+          },
+          {
+            "name": "poolid",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "The pool to delete"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "success": {
+                          "type": "boolean"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/connections/{id}/pools"
+                    }
+                  },
+                  "perimeter": {
+                    "value": {
+                      "error": "Connection not in token scope",
+                      "connection": "conn-1"
+                    }
+                  },
+                  "clusterObject": {
+                    "value": {
+                      "error": "Cluster-level object not available to a vDC tenant token"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "PATCH"
                 }
               }
             }

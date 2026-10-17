@@ -5,8 +5,10 @@
 // One module per domain; this index assembles them and holds the matchers
 // that read the whole list.
 import { BACKUP_ENTRIES } from "./backups"
+import { HA_ENTRIES } from "./ha"
 import { _matchAgainst, matchEntryParams, type AllowlistMatch } from "./matcher"
 import { MONITORING_ENTRIES } from "./monitoring"
+import { POOLS_ENTRIES } from "./pools"
 import { STORAGE_ENTRIES } from "./storage"
 import type { AllowlistEntry, HttpMethod } from "./types"
 import { VM_ENTRIES } from "./vms"
@@ -19,7 +21,7 @@ export {
 } from "./matcher"
 
 export const PUBLIC_API_ALLOWLIST: AllowlistEntry[] = [
-  ...MONITORING_ENTRIES, ...VM_ENTRIES, ...BACKUP_ENTRIES, ...STORAGE_ENTRIES,
+  ...MONITORING_ENTRIES, ...VM_ENTRIES, ...BACKUP_ENTRIES, ...STORAGE_ENTRIES, ...HA_ENTRIES, ...POOLS_ENTRIES,
 ]
 
 const ENTRIES_BY_ID = new Map(PUBLIC_API_ALLOWLIST.map(e => [e.id, e]))

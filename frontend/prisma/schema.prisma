@@ -518,6 +518,9 @@ model ApiToken {
   lastUsedAt      DateTime? @map("last_used_at")
   lastUsedIp      String?   @map("last_used_ip")
   rateLimitPerMin Int       @default(600) @map("rate_limit_per_min")
+  // Write requests are counted in their own bucket so a runaway automation
+  // cannot spend the read quota, and reads cannot hide a write flood.
+  writeRateLimitPerMin Int  @default(60) @map("write_rate_limit_per_min")
   createdByUserId String?   @map("created_by_user_id")
   // Denormalised on purpose (#632): createdByUserId is SetNull, so deleting
   // the account erases "who minted this credential" from the row while the

@@ -276,6 +276,31 @@ describe('getPrincipal, quota and scopes (steps 9-10)', () => {
     expect((await getPrincipal()).ok).toBe(true)
   })
 
+  it('counts writes in their own bucket, separate from the read bucket', async () => {
+    const postE = { id: 'quota-post', method: 'POST', pattern: '/api/v1/quota-post', requiredScopes: [] }
+    allowlist.PUBLIC_API_ALLOWLIST.push(postE as any)
+    try {
+      const realLookup = allowlist.getAllowlistEntryById
+      vi.spyOn(allowlist, 'getAllowlistEntryById').mockImplementation(id =>
+        id === 'quota-post' ? (postE as any) : realLookup(id),
+      )
+      const { secret } = await seedApiToken({ rateLimitPerMin: 600, writeRateLimitPerMin: 2 })
+      setHeaders(tokenHeaders(secret, 'quota-post', '/api/v1/quota-post', 'POST'))
+      expect((await getPrincipal({ recordUsage: true })).rateLimit?.limit).toBe(2)
+      expect((await getPrincipal({ recordUsage: true })).ok).toBe(true)
+      const denied = await getPrincipal({ recordUsage: true })
+      expect(denied.rejection?.status).toBe(429)
+      expect(denied.rejection?.headers?.['RateLimit-Limit']).toBe('2')
+
+      setHeaders(tokenHeaders(secret, 'vms-list', '/api/v1/vms'))
+      const read = await getPrincipal({ recordUsage: true })
+      expect(read.ok).toBe(true)
+      expect(read.rateLimit?.limit).toBe(600)
+    } finally {
+      allowlist.PUBLIC_API_ALLOWLIST.splice(-1, 1)
+    }
+  })
+
   it('quota is consumed by every authenticated call BEFORE the scope check', async () => {
     const { secret } = await seedApiToken({ scopes: ['storage:read'], rateLimitPerMin: 1 })
     setHeaders(tokenHeaders(secret, 'vms-list', '/api/v1/vms'))

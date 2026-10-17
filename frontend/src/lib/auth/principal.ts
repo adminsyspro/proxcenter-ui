@@ -11,7 +11,7 @@ import { prisma } from "@/lib/db/prisma"
 import { DEFAULT_TENANT_ID } from "@/lib/tenant/constants"
 import { extractTokenPrefix, verifyTokenHash } from "@/lib/api-tokens/tokenCrypto"
 import { touchTokenUsage } from "@/lib/api-tokens/lastUsed"
-import { allowHeaderForPath, getAllowlistEntryById, matchesEntry } from "@/lib/api-tokens/allowlist"
+import { allowHeaderForPath, getAllowlistEntryById, isWriteEntry, matchesEntry } from "@/lib/api-tokens/allowlist"
 import { expandScopes } from "@/lib/api-tokens/scopes"
 import { isApiAccessLicensed } from "@/lib/api-tokens/licenseGate"
 import { consumeRateLimit } from "@/lib/api-tokens/rateLimit"
@@ -165,7 +165,10 @@ export async function getPrincipal(options: GetPrincipalOptions = {}): Promise<P
   //    identity helpers never double-count.
   let rateLimit: RateLimitInfo | undefined
   if (options.recordUsage) {
-    const verdict = consumeRateLimit(token.id, token.rateLimitPerMin)
+    //    Writes have their own bucket and limit; reads keep the original one.
+    const verdict = isWriteEntry(entry)
+      ? consumeRateLimit(`${token.id}:write`, token.writeRateLimitPerMin)
+      : consumeRateLimit(token.id, token.rateLimitPerMin)
     rateLimit = { limit: verdict.limit, remaining: verdict.remaining, reset: verdict.reset }
     if (!verdict.allowed) {
       return reject({

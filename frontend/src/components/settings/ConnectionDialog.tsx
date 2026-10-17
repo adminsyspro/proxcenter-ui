@@ -325,15 +325,18 @@ export default function ConnectionDialog({
   // tenants admin); picking an owner intentionally requires tenant visibility.
   useEffect(() => {
     if (!open || mode !== 'create' || !isProvider || (type !== 'pve' && type !== 'pbs')) return
-    fetch('/api/v1/tenants')
+    const ctrl = new AbortController()
+    fetch('/api/v1/tenants', { signal: ctrl.signal })
       .then(r => (r.ok ? r.json() : null))
       .then(data => {
+        if (ctrl.signal.aborted) return
         const list = (data?.data || []).filter(
           (tn: any) => tn.operatingModel === 'msp' && tn.enabled !== false
         )
         setMspTenants(list.map((tn: any) => ({ id: tn.id, name: tn.name })))
       })
-      .catch(() => setMspTenants([]))
+      .catch(() => { if (!ctrl.signal.aborted) setMspTenants([]) })
+    return () => ctrl.abort()
   }, [open, mode, isProvider, type])
 
   // Reverse-geocode lat/lng → country (ISO-2) when user fills the GPS fields

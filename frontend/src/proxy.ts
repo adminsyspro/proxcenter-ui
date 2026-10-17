@@ -12,7 +12,7 @@ import type { NextRequest } from "next/server"
 
 import { getToken } from "next-auth/jwt"
 
-import { matchPublicApiPath } from "@/lib/api-tokens/allowlist"
+import { allowedMethodsForPath, matchPublicApiPath } from "@/lib/api-tokens/allowlist"
 import { sessionCookieName } from "@/lib/auth/cookies"
 import { isPastAbsoluteCap } from "@/lib/auth/durations"
 
@@ -347,17 +347,25 @@ export async function proxy(request: NextRequest) {
   const hasApiTokenBearer =
     isApiPath && (request.headers.get('authorization') || '').startsWith('Bearer pxc_')
   if (isApiPath) {
-    const matched = matchPublicApiPath(pathname, request.method === 'OPTIONS' ? 'GET' : request.method)
-    if (matched.ok) {
+    const allowedMethods = allowedMethodsForPath(pathname)
+    if (allowedMethods.length > 0) {
+      const allow = allowedMethods.includes('GET') ? [...allowedMethods, 'HEAD'] : allowedMethods
       // Server-to-server only (spec section 8): explicit 405 to any OPTIONS
       // on the exposed surface, answered by the proxy itself.
       if (request.method === 'OPTIONS') {
         return NextResponse.json(
-          { error: 'API tokens are read-only', method: 'OPTIONS' },
-          { status: 405, headers: { Allow: 'GET, HEAD' } },
+          { error: 'Preflight not supported: API tokens are server to server', method: 'OPTIONS' },
+          { status: 405, headers: { Allow: allow.join(', ') } },
         )
       }
       if (hasApiTokenBearer) {
+        const matched = matchPublicApiPath(pathname, request.method)
+        if (!matched.ok) {
+          return NextResponse.json(
+            { error: 'Method not allowed for this API token route', method: request.method },
+            { status: 405, headers: { Allow: allow.join(', ') } },
+          )
+        }
         // Precedent for request-header injection in this file: demo mode
         // (lines 153-158). Neither the cookie 401 nor the 2FA enrollment
         // gate applies to this branch.

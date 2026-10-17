@@ -26,6 +26,8 @@ export type Principal = {
   userId?: string
   userEmail?: string
   tokenId?: string
+  /** User who created the token (token principals only); null once that user is deleted. */
+  creatorUserId?: string | null
   permissions?: Set<string>
   /** Raw scope ids as granted (token principals only): the metrics endpoint
    * filters series families on these, not on the expanded permissions. */
@@ -111,12 +113,14 @@ export async function getPrincipal(options: GetPrincipalOptions = {}): Promise<P
   const entry = entryId ? getAllowlistEntryById(entryId) : null
   if (!method || !path || !entry) return reject(INVALID_TOKEN)
 
-  // 4. Read-only before ANY scope consultation (D1).
-  if (method !== "GET" && method !== "HEAD") {
+  // 4. The method must be the designated entry's (HEAD rides on GET), before
+  //    ANY DB lookup or scope consultation.
+  const entryMethod = method === "HEAD" ? "GET" : method
+  if (entryMethod !== entry.method) {
     return reject({
       status: 405,
-      body: { error: "API tokens are read-only", method },
-      headers: { Allow: "GET, HEAD" },
+      body: { error: "Method not allowed for this API token route", method },
+      headers: { Allow: entry.method === "GET" ? "GET, HEAD" : entry.method },
     })
   }
 
@@ -200,6 +204,7 @@ export async function getPrincipal(options: GetPrincipalOptions = {}): Promise<P
     principal: {
       kind: "token",
       tokenId: token.id,
+      creatorUserId: token.createdByUserId,
       tenantId: token.tenantId,
       permissions: expandScopes(scopes),
       scopes,

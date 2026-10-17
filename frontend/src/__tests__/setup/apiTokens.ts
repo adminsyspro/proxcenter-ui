@@ -29,6 +29,7 @@ export async function seedApiToken(opts: {
   revokedAt?: Date | null
   expiresAt?: Date | null
   rateLimitPerMin?: number
+  createdByUserId?: string | null
 } = {}): Promise<{ id: string; secret: string; prefix: string }> {
   const generated = generateApiToken()
   const id = `tok_test_${++seq}_${Date.now()}`
@@ -44,6 +45,7 @@ export async function seedApiToken(opts: {
       revokedAt: opts.revokedAt ?? null,
       expiresAt: opts.expiresAt ?? null,
       rateLimitPerMin: opts.rateLimitPerMin ?? 600,
+      createdByUserId: opts.createdByUserId ?? null,
     },
   })
   return { id, secret: generated.secret, prefix: generated.prefix }

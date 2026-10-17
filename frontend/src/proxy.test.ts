@@ -287,13 +287,26 @@ describe('gesture 1: unconditional x-pxc-* strip on /api/*', () => {
 })
 
 describe('gesture 3: bounded derogation', () => {
-  it('answers 405 Allow: GET, HEAD to OPTIONS on an allowlisted path, with or without Bearer', async () => {
+  it('answers 405 to OPTIONS on an allowlisted path with the entry methods (+HEAD), with or without Bearer', async () => {
     for (const headers of [{}, { authorization: 'Bearer pxc_x'.padEnd(50, 'a') }]) {
       const res = await proxy(apiRequest('/api/v1/vms', { method: 'OPTIONS', headers }))
       expect(res.status).toBe(405)
       expect(res.headers.get('Allow')).toBe('GET, HEAD')
-      expect(await res.json()).toEqual({ error: 'API tokens are read-only', method: 'OPTIONS' })
+      expect(await res.json()).toEqual({
+        error: 'Preflight not supported: API tokens are server to server',
+        method: 'OPTIONS',
+      })
     }
+  })
+
+  it('answers 405 Allow: GET, HEAD itself to a Bearer POST on a GET-only allowlisted path', async () => {
+    const res = await proxy(
+      apiRequest('/api/v1/vms', { method: 'POST', headers: { authorization: 'Bearer pxc_abcdefgh123' } }),
+    )
+    expect(res.status).toBe(405)
+    expect(res.headers.get('Allow')).toBe('GET, HEAD')
+    expect(await res.json()).toEqual({ error: 'Method not allowed for this API token route', method: 'POST' })
+    expect(getTokenMock).not.toHaveBeenCalled()
   })
 
   it('derogates a Bearer pxc_ on an allowlisted path and stamps the three internal headers', async () => {

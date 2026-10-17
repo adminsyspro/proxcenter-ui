@@ -41,9 +41,10 @@ export default defineConfig({
           name: 'node',
           environment: 'node',
           include: ['src/**/*.test.{ts,js}'],
-          // Postgres globalSetup stays scoped to the node project only.
+          // Postgres globalSetup stays scoped to the node project only. It
+          // gives each worker its own schema, so files run in parallel.
           globalSetup: ['./src/__tests__/setup/postgres.ts'],
-          fileParallelism: false,
+          setupFiles: ['./src/__tests__/setup/postgres-worker.ts'],
         },
       },
       {

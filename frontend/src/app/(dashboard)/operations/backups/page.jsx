@@ -198,7 +198,7 @@ export default function BackupsPage() {
   const canAddToJob = !isVdcTenant && !rbac.loading && rbac.hasPermission('backup.job.edit')
   // Snapshot actions follow the rights their routes check.
   const canDeleteSnapshot = !rbac.loading && rbac.hasPermission('backup.delete')
-  const canVerifySnapshot = !rbac.loading && rbac.hasPermission('backup.job.run')
+  const canVerifySnapshot = !rbac.loading && rbac.hasPermission('vm.backup')
   const canRestoreSnapshot = !rbac.loading && rbac.hasAllPermissions(['vm.backup', 'backup.restore'])
   const [jobCreateRequest, setJobCreateRequest] = useState(null)
   const [coverageRefresh, setCoverageRefresh] = useState(0)

@@ -6,7 +6,7 @@ vi.mock('@/lib/rbac', () => ({
   checkPermission: vi.fn<(...args: any[]) => Promise<Response | null>>(),
   PERMISSIONS: {
     BACKUP_VIEW: 'backup.view',
-    BACKUP_JOB_RUN: 'backup.job.run',
+    VM_BACKUP: 'vm.backup',
   },
 }))
 
@@ -69,7 +69,7 @@ describe('POST /api/v1/pbs/[id]/backups/[backupId]/verify', () => {
     })
   })
 
-  // A verify starts a PBS job: seeing the backups is not enough to launch one.
+  // Re-verifying a snapshot needs vm.backup: seeing the backups is not enough.
   it('403 for a caller holding backup.view only', async () => {
     grantOnly('backup.view')
 
@@ -82,8 +82,8 @@ describe('POST /api/v1/pbs/[id]/backups/[backupId]/verify', () => {
     expect(pbsFetchMock).not.toHaveBeenCalled()
   })
 
-  it('checks backup.job.run on the PBS connection and passes when it is held', async () => {
-    grantOnly('backup.job.run')
+  it('checks vm.backup on the PBS connection and passes when it is held', async () => {
+    grantOnly('vm.backup')
 
     const res = await callRoute(POST as any, {
       method: 'POST',
@@ -91,7 +91,7 @@ describe('POST /api/v1/pbs/[id]/backups/[backupId]/verify', () => {
     })
 
     expect(res.status).toBe(200)
-    expect(checkPermissionMock).toHaveBeenCalledWith('backup.job.run', 'pbs', 'pbs-1')
+    expect(checkPermissionMock).toHaveBeenCalledWith('vm.backup', 'pbs', 'pbs-1')
   })
 
   it('403 when the tenant has no binding on the datastore/namespace', async () => {

@@ -71,7 +71,7 @@ describe('system roles with vm.view also browse storage content (issue #920)', (
 
 /**
  * Spec 6.4 of the API tokens write mode: deleting a PBS snapshot now needs
- * backup.delete, verifying one backup.job.run, and a restore backup.restore.
+ * backup.delete, verifying one vm.backup, and a restore backup.restore.
  * The system roles that already administer the matching objects must carry
  * those keys, so no default role loses an action it is meant to have.
  */
@@ -97,7 +97,13 @@ describe('system roles keep the backup actions the routes now check (API tokens 
 
   // The roles that delete and verify PBS snapshots and restore today keep doing it.
   it.each(['role_vm_admin', 'role_operator'])('%s keeps PBS snapshot delete and verify', (id) => {
-    expect(role(id).permissions).toEqual(expect.arrayContaining(['backup.delete', 'backup.job.run']))
+    expect(role(id).permissions).toEqual(expect.arrayContaining(['backup.delete', 'vm.backup']))
+  })
+
+  // Neither held backup.job.run before: keeping those actions must not widen
+  // them to running backup jobs.
+  it.each(['role_vm_admin', 'role_operator'])('%s does not run backup jobs', (id) => {
+    expect(role(id).permissions).not.toContain('backup.job.run')
   })
 
   it.each(['role_vm_admin', 'role_operator'])('%s keeps restore', (id) => {
@@ -105,8 +111,9 @@ describe('system roles keep the backup actions the routes now check (API tokens 
   })
 
   // Read-only roles losing PBS snapshot delete and verify is the fix itself.
-  it.each(['role_viewer', 'role_tenant_viewer', 'role_tenant_operator'])('%s holds neither backup.delete nor backup.job.run', (id) => {
+  it.each(['role_viewer', 'role_tenant_viewer', 'role_tenant_operator'])('%s can neither delete nor verify PBS snapshots', (id) => {
     expect(role(id).permissions).not.toContain('backup.delete')
+    expect(role(id).permissions).not.toContain('vm.backup')
     expect(role(id).permissions).not.toContain('backup.job.run')
   })
 })

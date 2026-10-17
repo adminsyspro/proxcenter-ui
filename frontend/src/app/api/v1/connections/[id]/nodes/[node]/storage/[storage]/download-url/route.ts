@@ -4,14 +4,35 @@ import { downloadToStorage, PveDownloadPermissionError } from "@/lib/proxmox/dow
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { buildStorageResourceId, checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { guardTenantStorageWrite, tenantUploadFilename } from "@/lib/vdc/scope"
+import type { Principal } from "@/lib/auth/principal"
+import { getTenantInfrastructureScope } from "@/lib/tenant/infraScope"
+import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 
 export const runtime = "nodejs"
 
+/**
+ * API tokens only: the node fetches the URL itself, follows redirects and
+ * resolves the name on its own, so no check made here can keep it off a
+ * private network. A token may only name an http(s) URL, and a vDC tenant
+ * token may not have the provider's node download anything.
+ */
+async function tokenUrlRefusal(principal: Principal, url: unknown): Promise<string | null> {
+  let protocol = ""
+  try {
+    protocol = new URL(String(url)).protocol
+  } catch {
+    // Not a URL: refused like any other scheme.
+  }
+  if (protocol !== "http:" && protocol !== "https:") return "Download URL not allowed for this token"
+  const infra = await getTenantInfrastructureScope(principal.tenantId, { ignoreVdcContext: true })
+  return infra.kind === "iaas" ? "Download URL not available to a vDC tenant token" : null
+}
+
 // POST /api/v1/connections/{id}/nodes/{node}/storage/{storage}/download-url
 // Download a file from a URL to Proxmox storage (ISO, CT template, etc.)
-export async function POST(
+async function postHandler(
   req: Request,
-  ctx: { params: Promise<{ id: string; node: string; storage: string }> }
+  ctx: { params: Promise<{ id: string; node: string; storage: string }>; principal?: Principal }
 ) {
   try {
     const { id, node, storage } = await ctx.params
@@ -29,6 +50,9 @@ export async function POST(
         { status: 400 }
       )
     }
+
+    const tokenRefusal = ctx.principal?.kind === "token" ? await tokenUrlRefusal(ctx.principal, url) : null
+    if (tokenRefusal) return NextResponse.json({ error: tokenRefusal }, { status: 403 })
 
     // On an ISO library that allows uploads, a tenant's file is namespaced
     // `custom-<slug>-*` server-side and the guard then only lets the tenant
@@ -65,3 +89,5 @@ export async function POST(
     return NextResponse.json({ error: e?.message || String(e) }, { status: e instanceof PveDownloadPermissionError ? 403 : 500 })
   }
 }
+
+export const POST = withPublicApiGuard("storage-download-url", postHandler)

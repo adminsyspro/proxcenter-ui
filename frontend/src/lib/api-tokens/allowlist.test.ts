@@ -143,6 +143,13 @@ describe('shared canonical matcher', () => {
       'gfr-jobs-list': '/api/v1/guest-file-restore/jobs',
       'gfr-job-create': '/api/v1/guest-file-restore/jobs',
       'gfr-job-cancel': '/api/v1/guest-file-restore/jobs/j1/cancel',
+      'storage-connection-list': '/api/v1/connections/c1/storage',
+      'storage-attach-pbs': '/api/v1/connections/c1/storage',
+      'storage-detach': '/api/v1/connections/c1/storage/pbs-main',
+      'storage-content-delete': '/api/v1/connections/c1/nodes/pve1/storage/local/content/local%3Aiso%2Fdebian.iso',
+      'storage-download-url': '/api/v1/connections/c1/nodes/pve1/storage/local/download-url',
+      'aplinfo-list': '/api/v1/connections/c1/nodes/pve1/aplinfo',
+      'aplinfo-download': '/api/v1/connections/c1/nodes/pve1/aplinfo',
     }
     for (const entry of PUBLIC_API_ALLOWLIST) {
       const path = samplePathById[entry.id]
@@ -205,6 +212,15 @@ describe('method-aware matching', () => {
     expect(matchPublicApiPath(`${snap}/verify`, 'POST').entryId).toBe('pbs-backup-verify')
     expect(matchPublicApiPath('/api/v1/pbs/p1/backups/ds1%2F..%2Fvm%2F100%2F1', 'DELETE').ok).toBe(false)
     expect(matchPublicApiPath('/api/v1/pbs/p1%2Fx/backups/ds1%2Fvm%2F100%2F1', 'DELETE').ok).toBe(false)
+  })
+
+  it('a storage volid carries its slash encoded in its one segment only', () => {
+    const content = '/api/v1/connections/c1/nodes/pve1/storage/local/content'
+    expect(matchPublicApiPath(`${content}/local%3Aiso%2Fdebian.iso`, 'DELETE'))
+      .toMatchObject({ entryId: 'storage-content-delete', params: { volid: 'local%3Aiso%2Fdebian.iso' } })
+    expect(matchPublicApiPath(`${content}/local%3Aiso%2F..%2Fdebian.iso`, 'DELETE').ok).toBe(false)
+    expect(matchPublicApiPath(`${content}/local%3Aiso%5Cdebian.iso`, 'DELETE').ok).toBe(false)
+    expect(matchPublicApiPath('/api/v1/connections/c1/nodes/pve1/storage/lo%2Fcal/content/local%3Aiso%2Fdebian.iso', 'DELETE').ok).toBe(false)
   })
 
   it('matchesEntry checks the method and isWriteEntry flags non-GET', () => {

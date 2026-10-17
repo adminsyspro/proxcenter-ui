@@ -6,6 +6,7 @@ import { buildStorageResourceId, checkPermission, PERMISSIONS } from "@/lib/rbac
 import { guardTenantStorageWrite, loadTenantSlugs, resolveUploadOwner } from "@/lib/vdc/scope"
 import { getTenantInfrastructureScope, maskingScope } from "@/lib/tenant/infraScope"
 import { getCurrentTenantId } from "@/lib/tenant"
+import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 
 export const runtime = "nodejs"
 
@@ -16,7 +17,7 @@ const TENANT_FILTERED_CONTENT = new Set(['iso', 'import'])
 
 // DELETE /api/v1/connections/{id}/nodes/{node}/storage/{storage}/content/{volid}
 // Delete a volume from Proxmox storage
-export async function DELETE(
+async function deleteHandler(
   _req: Request,
   ctx: { params: Promise<{ id: string; node: string; storage: string; volid: string }> }
 ) {
@@ -80,3 +81,5 @@ export async function DELETE(
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const DELETE = withPublicApiGuard("storage-content-delete", deleteHandler)

@@ -41,6 +41,9 @@ const EXPECTED_WRITE_IDS: Record<string, string[]> = {
     'pbs-job-sync-run', 'pbs-job-verify-run', 'pbs-job-tape-run', 'pbs-job-gc-run',
     'gfr-probe', 'gfr-job-create', 'gfr-job-cancel',
   ],
+  storage: [
+    'storage-attach-pbs', 'storage-detach', 'storage-content-delete', 'storage-download-url', 'aplinfo-download',
+  ],
 }
 
 /** The only entries allowed to resolve their connection inside the handler. */

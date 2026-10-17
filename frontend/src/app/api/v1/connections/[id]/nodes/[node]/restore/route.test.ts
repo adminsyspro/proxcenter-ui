@@ -15,6 +15,8 @@ const {
   waitForTaskMock,
   syncIpamForVmConfigMock,
   releaseAllocationsForVmMock,
+  getPrincipalMock,
+  checkTenantGuestScopeMock,
   afterCbs,
 } = vi.hoisted(() => ({
   getConnectionByIdMock: vi.fn(),
@@ -26,6 +28,8 @@ const {
   waitForTaskMock: vi.fn(),
   syncIpamForVmConfigMock: vi.fn(),
   releaseAllocationsForVmMock: vi.fn(),
+  getPrincipalMock: vi.fn(),
+  checkTenantGuestScopeMock: vi.fn(),
   afterCbs: [] as Array<() => Promise<void>>,
 }))
 
@@ -43,9 +47,21 @@ vi.mock("next/server", async (importOriginal) => {
 vi.mock("@/lib/proxmox/client", () => ({ pveFetch: pveFetchMock }))
 vi.mock("@/lib/connections/getConnection", () => ({ getConnectionById: getConnectionByIdMock }))
 vi.mock("@/lib/rbac", () => ({
-  checkPermission: () => checkPermissionMock(),
+  checkPermission: (...a: any[]) => checkPermissionMock(...a),
+  checkPermissions: async (perms: string[], ...rest: any[]) => {
+    for (const p of perms) {
+      const denied = await checkPermissionMock(p, ...rest)
+      if (denied) return denied
+    }
+    return null
+  },
   buildNodeResourceId: (...a: any[]) => a.join(":"),
-  PERMISSIONS: { VM_BACKUP: "vm.backup" },
+  buildVmResourceId: (...a: any[]) => a.join(":"),
+  PERMISSIONS: { VM_BACKUP: "vm.backup", BACKUP_RESTORE: "backup.restore", VM_DELETE: "vm.delete" },
+}))
+vi.mock("@/lib/auth/principal", () => ({ getPrincipal: () => getPrincipalMock() }))
+vi.mock("@/lib/vdc/guestScope", () => ({
+  checkTenantGuestScope: (...a: any[]) => checkTenantGuestScopeMock(...a),
 }))
 vi.mock("@/lib/tenant", () => ({
   getCurrentTenantId: () => getCurrentTenantIdMock(),
@@ -99,6 +115,8 @@ beforeEach(() => {
   waitForTaskMock.mockReset().mockResolvedValue(undefined)
   syncIpamForVmConfigMock.mockReset().mockResolvedValue({ bodyOverrides: {}, rollback: vi.fn() })
   releaseAllocationsForVmMock.mockReset()
+  getPrincipalMock.mockReset().mockResolvedValue({ ok: true, principal: { kind: "session", userId: "u1", tenantId: "default", connectionIds: null } })
+  checkTenantGuestScopeMock.mockReset().mockResolvedValue(null)
 })
 
 /** Decode the URL-encoded form body of a pveFetch(conn, path, opts) call. */
@@ -591,5 +609,132 @@ describe("POST restore -- container on the default storage (#965 follow-up)", ()
     expect(res.status).toBe(403)
     expect((await readJson<{ error: string }>(res))?.error).toMatch(/CephStoragePool/)
     expect(restoreCall()).toBeUndefined()
+  })
+})
+
+// Spec 6.4: a restore needs backup.restore, and `force` overwrites (destroys)
+// an existing guest, so it also needs vm.delete on that guest, judged on the
+// node it actually lives on.
+describe("POST restore -- backup.restore and the guest that force overwrites", () => {
+  const RESTORE_UPID = "UPID:pve-1:00000000:00000000:00000000:qmrestore:111:root@pam:"
+
+  /** Grant exactly the listed permissions, deny everything else. */
+  function grantOnly(...perms: string[]) {
+    checkPermissionMock.mockImplementation(async (perm: string) =>
+      perms.includes(perm) ? null : new Response(JSON.stringify({ error: `Permission denied: ${perm}` }), { status: 403 }))
+  }
+
+  /** /cluster/resources answers `guests`; anything else is the restore POST. */
+  function wireGuests(guests: unknown) {
+    pveFetchMock.mockImplementation(async (_conn: unknown, path: string) =>
+      path === "/cluster/resources?type=vm" ? guests : RESTORE_UPID)
+  }
+
+  const restorePosts = () => pveFetchMock.mock.calls.filter(c => c[1] === "/nodes/node1/qemu")
+
+  async function restore(body: Record<string, unknown>) {
+    const { POST } = await import("./route")
+    return callRoute(POST, {
+      method: "POST",
+      params: { id: "pve-1", node: "node1" },
+      body: { vmid: 111, archive: VZDUMP_QEMU_VOLID, type: "qemu", ...body },
+    })
+  }
+
+  it("403 without backup.restore, even with vm.backup", async () => {
+    grantOnly("vm.backup")
+
+    const res = await restore({})
+
+    expect(res.status).toBe(403)
+    expect(checkPermissionMock).toHaveBeenCalledWith("backup.restore", "node", "pve-1:node1")
+    expect(pveFetchMock).not.toHaveBeenCalled()
+  })
+
+  it("restores with vm.backup and backup.restore, without looking the vmid up when force is off", async () => {
+    grantOnly("vm.backup", "backup.restore")
+
+    const res = await restore({})
+
+    expect(res.status).toBe(200)
+    expect(pveFetchMock).toHaveBeenCalledTimes(1)
+    expect(checkPermissionMock).not.toHaveBeenCalledWith("vm.delete", expect.anything(), expect.anything())
+  })
+
+  it("force on an existing vmid: 403 without vm.delete on that guest, nothing restored", async () => {
+    grantOnly("vm.backup", "backup.restore")
+    wireGuests([{ vmid: 111, node: "node2", type: "qemu", pool: "p1" }])
+
+    const res = await restore({ force: true })
+
+    expect(res.status).toBe(403)
+    expect(checkPermissionMock).toHaveBeenCalledWith("vm.delete", "vm", "pve-1:node2:qemu:111")
+    expect(restorePosts()).toHaveLength(0)
+  })
+
+  it("force on an existing vmid: restores with force=1 when vm.delete is held", async () => {
+    grantOnly("vm.backup", "backup.restore", "vm.delete")
+    wireGuests([{ vmid: 110, node: "node1", type: "lxc" }, { vmid: 111, node: "node2", type: "qemu" }])
+
+    const res = await restore({ force: true })
+
+    expect(res.status).toBe(200)
+    expect(restorePosts()).toHaveLength(1)
+    expect(postedParams(restorePosts()[0]).get("force")).toBe("1")
+  })
+
+  it("force on a free vmid: nothing to overwrite, vm.delete is not required", async () => {
+    grantOnly("vm.backup", "backup.restore")
+    wireGuests([{ vmid: 110, node: "node1", type: "qemu" }])
+
+    const res = await restore({ force: true })
+
+    expect(res.status).toBe(200)
+    expect(restorePosts()).toHaveLength(1)
+  })
+
+  it.each([
+    ["the lookup throws", () => pveFetchMock.mockRejectedValue(new Error("ECONNREFUSED"))],
+    ["the lookup is not a list", () => wireGuests({ data: null })],
+  ])("force: 503 and nothing restored when %s", async (_label, wire) => {
+    wire()
+
+    const res = await restore({ force: true })
+
+    expect(res.status).toBe(503)
+    expect(restorePosts()).toHaveLength(0)
+  })
+
+  it("token caller with force: the overwritten guest must be inside its vDC", async () => {
+    getPrincipalMock.mockResolvedValue({ ok: true, principal: { kind: "token", tokenId: "tok-1", tenantId: "default", connectionIds: null } })
+    wireGuests([{ vmid: 111, node: "node2", type: "qemu", pool: "other-tenant" }])
+    checkTenantGuestScopeMock.mockResolvedValue(
+      new Response(JSON.stringify({ error: "Guest outside your vDC scope" }), { status: 403 }))
+
+    const res = await restore({ force: true })
+
+    expect(res.status).toBe(403)
+    expect(checkTenantGuestScopeMock).toHaveBeenCalledWith("default", expect.objectContaining({ id: "pve-1" }), "pve-1", "qemu", "node2", "111")
+    expect(restorePosts()).toHaveLength(0)
+  })
+
+  it("token caller with force on its own guest goes through", async () => {
+    getPrincipalMock.mockResolvedValue({ ok: true, principal: { kind: "token", tokenId: "tok-1", tenantId: "default", connectionIds: null } })
+    wireGuests([{ vmid: 111, node: "node2", type: "qemu", pool: "p1" }])
+
+    const res = await restore({ force: true })
+
+    expect(res.status).toBe(200)
+    expect(checkTenantGuestScopeMock).toHaveBeenCalledTimes(1)
+    expect(restorePosts()).toHaveLength(1)
+  })
+
+  it("session caller with force: the vDC guest check stays as today (not called)", async () => {
+    wireGuests([{ vmid: 111, node: "node2", type: "qemu" }])
+
+    const res = await restore({ force: true })
+
+    expect(res.status).toBe(200)
+    expect(checkTenantGuestScopeMock).not.toHaveBeenCalled()
   })
 })

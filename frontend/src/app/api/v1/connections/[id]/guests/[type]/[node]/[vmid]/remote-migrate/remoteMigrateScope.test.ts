@@ -178,6 +178,52 @@ describe("POST .../remote-migrate — MSP ownership gate", () => {
   })
 })
 
+// Spec 6.3: the migration lands a guest on the TARGET cluster, so vm.migrate is
+// also checked on the target connection, for every caller.
+describe("POST .../remote-migrate — vm.migrate on the target connection", () => {
+  const post = async (body: any) => {
+    const POST = (await import("./route")).POST as Parameters<typeof callRoute>[0]
+
+    return callRoute(POST, { method: "POST", params: PARAMS, body })
+  }
+
+  beforeEach(() => {
+    getInfraMock.mockResolvedValue({ kind: "provider" })
+    pveFetchMock.mockImplementation((_conn: any, path: string) =>
+      Promise.resolve(path.includes("remote_migrate") ? "UPID:pve1:0000A:qmigrate:100:root@pam:" : []))
+  })
+
+  it("403 without vm.migrate on the target connection, before any cluster is contacted", async () => {
+    checkPermissionMock.mockImplementation(async (_perm: string, resourceType: string) =>
+      resourceType === "connection" ? new Response(JSON.stringify({ error: "Permission denied: vm.migrate" }), { status: 403 }) : null)
+
+    const res = await post(VALID_BODY)
+
+    expect(res.status).toBe(403)
+    expect(checkPermissionMock).toHaveBeenCalledWith("vm.migrate", "connection", "conn-tgt")
+    expect(getConnectionByIdMock).not.toHaveBeenCalled()
+    expect(watchMigrationMock).not.toHaveBeenCalled()
+  })
+
+  it("passes with vm.migrate on the source guest and on the target connection", async () => {
+    const res = await post(VALID_BODY)
+
+    expect(res.status).toBe(200)
+    expect(checkPermissionMock).toHaveBeenCalledWith("vm.migrate", "vm", "conn-src/pve1/qemu/100")
+    expect(checkPermissionMock).toHaveBeenCalledWith("vm.migrate", "connection", "conn-tgt")
+  })
+
+  it("keeps the 400 when targetConnectionId is missing", async () => {
+    const { targetConnectionId: _omit, ...body } = VALID_BODY
+
+    const res = await post(body)
+
+    expect(res.status).toBe(400)
+    expect((await res.json()).error).toMatch(/targetConnectionId is required/)
+    expect(checkPermissionMock).not.toHaveBeenCalledWith("vm.migrate", "connection", expect.anything())
+  })
+})
+
 // The [vmid] segment reaches `qm unlock ${vmid}` in the cleanup watcher and the
 // [node] segment can become the SSH host (getNodeIp fallback), so both are
 // re-derived at the boundary and injection payloads must 400 before the gate.

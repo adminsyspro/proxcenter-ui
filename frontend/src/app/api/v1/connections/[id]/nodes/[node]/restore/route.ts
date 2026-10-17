@@ -2,7 +2,7 @@ import { NextResponse, after } from "next/server"
 
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
-import { checkPermission, buildNodeResourceId, PERMISSIONS } from "@/lib/rbac"
+import { checkPermission, checkPermissions, buildNodeResourceId, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
 import { syncIpamForVmConfig } from "@/lib/vdc/ipamSync"
 import { releaseAllocationsForVm } from "@/lib/vdc/ipam"
 import { waitForTask } from "@/lib/proxmox/tasks"
@@ -16,6 +16,8 @@ import { type DriveQosCaps } from "@/lib/vdc/drives"
 import { restampGuestDrives } from "@/lib/vdc/driveGuard"
 import { clearRestoredTags } from "@/lib/backups/restoreTagsCleanup"
 import { resolveCtRestoreStorage } from "@/lib/backups/ctRestoreStorage"
+import { getPrincipal } from "@/lib/auth/principal"
+import { checkTenantGuestScope } from "@/lib/vdc/guestScope"
 
 export const runtime = "nodejs"
 
@@ -29,7 +31,7 @@ export async function POST(
     const { id, node } = await ctx.params
 
     const resourceId = buildNodeResourceId(id, node)
-    const denied = await checkPermission(PERMISSIONS.VM_BACKUP, "node", resourceId)
+    const denied = await checkPermissions([PERMISSIONS.VM_BACKUP, PERMISSIONS.BACKUP_RESTORE], "node", resourceId)
     if (denied) return denied
 
     const body = await req.json()
@@ -57,8 +59,8 @@ export async function POST(
 
     // Tenant scoping. Resolved up-front so every later branch (pbsBackup
     // path, direct-archive path, target storage) goes through the same
-    // allow-list. RBAC was already checked above (BACKUP at node-resource
-    // granularity); this layer adds the vDC contract.
+    // allow-list. RBAC was already checked above (vm.backup + backup.restore
+    // at node-resource granularity); this layer adds the vDC contract.
     const tenantId = await getCurrentTenantId()
     // Object route (design ruling §5): full union — a deep link to another
     // vDC's resource must keep working in any view context.
@@ -115,6 +117,37 @@ export async function POST(
     }
 
     const conn = await getConnectionById(id)
+
+    // `force` overwrites the guest already holding this vmid, which destroys
+    // it: the caller must be allowed to delete that guest, judged on the node
+    // it actually lives on. Fail closed when its existence cannot be checked.
+    if (force) {
+      let guests: unknown
+      try {
+        guests = await pveFetch<unknown>(conn, '/cluster/resources?type=vm')
+      } catch {
+        guests = null
+      }
+      if (!Array.isArray(guests)) {
+        return NextResponse.json({ error: 'Unable to check the guest the restore would overwrite' }, { status: 503 })
+      }
+      const existing = guests.find(row => String(row?.vmid) === String(vmid))
+      if (existing) {
+        const existingType = String(existing.type)
+        const existingNode = String(existing.node)
+        const deleteDenied = await checkPermission(
+          PERMISSIONS.VM_DELETE, "vm", buildVmResourceId(id, existingNode, existingType, String(vmid)),
+        )
+        if (deleteDenied) return deleteDenied
+        // A vDC tenant token must stay inside its own vDC: a vmid of another
+        // tenant on the same provider connection is not its to overwrite.
+        const principalResult = await getPrincipal()
+        if (!principalResult.ok || principalResult.principal?.kind === 'token') {
+          const scopeDenied = await checkTenantGuestScope(tenantId, conn, id, existingType, existingNode, String(vmid))
+          if (scopeDenied) return scopeDenied
+        }
+      }
+    }
 
     // Resolve the PVE-side volid the way qmrestore expects it. Two paths:
     //

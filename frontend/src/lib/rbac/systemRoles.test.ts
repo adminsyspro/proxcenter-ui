@@ -68,3 +68,28 @@ describe('system roles with vm.view also browse storage content (issue #920)', (
     expect(role.permissions).toContain('storage.content')
   })
 })
+
+/**
+ * Spec 6.4 of the API tokens write mode: deleting a PBS snapshot now needs
+ * backup.delete, verifying one backup.job.run, and a restore backup.restore.
+ * The system roles that already administer the matching objects must carry
+ * those keys, so no default role loses an action it is meant to have.
+ */
+describe('system roles keep the backup actions the routes now check (API tokens write, spec 6.4)', () => {
+  const holds = (role: { permissions: string[] }, perm: string) =>
+    role.permissions.includes('*') || role.permissions.includes(perm)
+  const rows = (pred: (r: (typeof ROLES)[number]) => boolean) =>
+    ROLES.filter(pred).map(r => [r.id, r] as const)
+
+  it.each(rows(r => holds(r, 'backup.job.delete')))('%s holds backup.job.delete, so backup.delete', (_id, role) => {
+    expect(holds(role, 'backup.delete')).toBe(true)
+  })
+
+  it.each(rows(r => holds(r, 'vm.backup') && holds(r, 'vm.create')))('%s holds vm.backup and vm.create, so backup.restore', (_id, role) => {
+    expect(holds(role, 'backup.restore')).toBe(true)
+  })
+
+  it.each(rows(r => holds(r, 'backup.job.edit')))('%s holds backup.job.edit, so backup.job.run', (_id, role) => {
+    expect(holds(role, 'backup.job.run')).toBe(true)
+  })
+})

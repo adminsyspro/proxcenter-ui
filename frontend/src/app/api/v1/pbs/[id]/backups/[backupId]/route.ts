@@ -31,10 +31,9 @@ export async function DELETE(
       return NextResponse.json({ error: 'Missing params' }, { status: 400 })
     }
 
-    // BACKUP_VIEW is the right gate for now — there's no separate
-    // BACKUP_DELETE permission key in the RBAC enum. A future split
-    // can refine this without changing the route shape.
-    const denied = await checkPermission(PERMISSIONS.BACKUP_VIEW, 'pbs', id)
+    // Deleting a snapshot needs backup.delete: seeing the backups
+    // (backup.view) is not enough to remove them.
+    const denied = await checkPermission(PERMISSIONS.BACKUP_DELETE, 'pbs', id)
     if (denied) return denied
 
     const access = await assertVdcPbsAccess(id)

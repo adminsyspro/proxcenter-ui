@@ -28,7 +28,9 @@ export async function POST(
       return NextResponse.json({ error: 'Missing params' }, { status: 400 })
     }
 
-    const denied = await checkPermission(PERMISSIONS.BACKUP_VIEW, 'pbs', id)
+    // A verify starts a PBS job: gated like running a backup job, not
+    // like viewing the backups.
+    const denied = await checkPermission(PERMISSIONS.BACKUP_JOB_RUN, 'pbs', id)
     if (denied) return denied
 
     const access = await assertVdcPbsAccess(id)

@@ -6,6 +6,7 @@ vi.mock('@/lib/rbac', () => ({
   checkPermission: vi.fn<(...args: any[]) => Promise<Response | null>>(),
   PERMISSIONS: {
     BACKUP_VIEW: 'backup.view',
+    BACKUP_DELETE: 'backup.delete',
   },
 }))
 
@@ -45,6 +46,12 @@ const CONN = { id: 'pbs-1', baseUrl: 'https://pbs.local:8007', apiToken: 'PBS!to
 // backupId encodes: datastore/backupType/vmid/timestamp
 // e.g. "mystore/vm/100/1700000000"
 const BACKUP_ID = encodeURIComponent('mystore/vm/100/1700000000')
+
+/** Grant exactly the listed permissions, deny everything else. */
+function grantOnly(...perms: string[]) {
+  checkPermissionMock.mockImplementation(async (perm: string) =>
+    perms.includes(perm) ? null : new Response(JSON.stringify({ error: `Permission denied: ${perm}` }), { status: 403 }))
+}
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -160,6 +167,33 @@ describe('DELETE /api/v1/pbs/[id]/backups/[backupId]', () => {
 
     expect(res.status).toBe(403)
     expect(pbsFetchMock).not.toHaveBeenCalled()
+  })
+
+  // Deleting a snapshot is gated on backup.delete: a caller that can only see
+  // the backups must not be able to remove them.
+  it('403 for a caller holding backup.view only', async () => {
+    grantOnly('backup.view')
+
+    const res = await callRoute(DELETE as any, {
+      method: 'DELETE',
+      params: { id: 'pbs-1', backupId: BACKUP_ID },
+    })
+
+    expect(res.status).toBe(403)
+    expect(pbsFetchMock).not.toHaveBeenCalled()
+  })
+
+  it('checks backup.delete on the PBS connection and passes when it is held', async () => {
+    grantOnly('backup.delete')
+
+    const res = await callRoute(DELETE as any, {
+      method: 'DELETE',
+      params: { id: 'pbs-1', backupId: BACKUP_ID },
+    })
+
+    expect(res.status).toBe(200)
+    expect(checkPermissionMock).toHaveBeenCalledWith('backup.delete', 'pbs', 'pbs-1')
+    expect(pbsFetchMock).toHaveBeenCalledTimes(1)
   })
 
   it('returns the assertVdcPbsAccess denial when tenant has no access', async () => {

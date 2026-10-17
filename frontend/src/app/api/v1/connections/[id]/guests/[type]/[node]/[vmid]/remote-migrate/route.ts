@@ -104,6 +104,15 @@ export async function POST(
     const denied = await checkPermission(PERMISSIONS.VM_MIGRATE, "vm", resourceId)
     if (denied) return denied
 
+    const body = await req.json()
+
+    // The guest lands on the TARGET cluster: vm.migrate is checked there too.
+    // A missing target falls through to the 400 below.
+    if (body?.targetConnectionId) {
+      const targetDenied = await checkPermission(PERMISSIONS.VM_MIGRATE, "connection", String(body.targetConnectionId))
+      if (targetDenied) return targetDenied
+    }
+
     // VM placement is a whole-cluster operation: the provider may migrate any
     // cluster it manages; an MSP tenant may migrate within clusters it OWNS;
     // vDC/iaas tenants get an abstracted slice and cannot migrate.
@@ -116,7 +125,6 @@ export async function POST(
       )
     }
 
-    const body = await req.json()
     body.restore = parseRestoreRequest(body.restore)
     const {
       targetConnectionId,

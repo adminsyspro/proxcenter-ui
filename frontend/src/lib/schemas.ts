@@ -409,6 +409,9 @@ export const deploySchema = z.object({
   staticMac: z.string().regex(/^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}$/).optional(),
   saveAsBlueprint: z.boolean().default(false),
   blueprintName: z.string().max(100).optional(),
+  // Provider only: deploy into this tenant vDC instead of the provider's own
+  // infrastructure (roadmap#65). Authorised by the route, not here.
+  targetVdcId: z.string().min(1).optional(),
 })
 
 // ─── Broadcast banner ────────────────────────────────────────────────────────

@@ -31,7 +31,13 @@ vi.mock('@/lib/tenant/infraScope', () => ({
   maskingScope: vi.fn<(infra: any) => any>(),
 }))
 
+vi.mock('@/lib/vdc/providerTarget', () => ({
+  resolveScopeTenant: vi.fn(),
+  scopeTenantInfrastructure: vi.fn(),
+}))
+
 import { GET } from './route'
+import { resolveScopeTenant, scopeTenantInfrastructure } from '@/lib/vdc/providerTarget'
 import { checkPermission, getRequestGuestScopePerimeter, getRequestStorageGrantPerimeter } from '@/lib/rbac'
 import { getConnectionById } from '@/lib/connections/getConnection'
 import { pveFetch } from '@/lib/proxmox/client'
@@ -69,6 +75,8 @@ beforeEach(() => {
   getCurrentTenantIdMock.mockResolvedValue('t1')
   getTenantInfrastructureScopeMock.mockResolvedValue(null)
   maskingScopeMock.mockReturnValue(null)
+  vi.mocked(resolveScopeTenant).mockReset().mockImplementation(async (_req: any, _id: any, current: () => Promise<string>) => ({ ok: true, tenantId: await current(), target: null }))
+  vi.mocked(scopeTenantInfrastructure).mockReset().mockImplementation(async (st: any) => getTenantInfrastructureScopeMock(st.tenantId))
 })
 
 const call = () => callRoute(GET, { params: { id: 'c1', node: 'pve1' } })
@@ -246,5 +254,38 @@ describe('storage scope (#921)', () => {
     const res = await callRoute(GET as any, { params: { id: 'conn-1', node: 'pve1' }, searchParams: { content: 'iso' } })
     const body = await readJson<any>(res)
     expect(body.data.every((s: any) => s.tenantCanUpload === true)).toBe(true)
+  })
+})
+
+describe('GET storages: provider target (roadmap#65)', () => {
+  it('masks the listing with the scope of the target vDC', async () => {
+    const target = { vdcId: 'vdc-t', tenantId: 'tenant-acme', connectionId: 'c1' }
+    const infra = { kind: 'iaas', vdcScope: { vdcId: 'vdc-t' } }
+    vi.mocked(resolveScopeTenant).mockResolvedValue({ ok: true, tenantId: 'tenant-acme', target } as any)
+    vi.mocked(scopeTenantInfrastructure).mockResolvedValue(infra as any)
+    maskingScopeMock.mockReturnValue({
+      storagesByConnection: new Map([['c1', new Set(['nas'])]]),
+      nodesByConnection: new Map([['c1', new Set(['pve1'])]]),
+    })
+    stubPve([])
+
+    const res = await callRoute(GET, { params: { id: 'c1', node: 'pve1' }, searchParams: { content: 'iso', targetVdcId: 'vdc-t' } })
+    const body = await readJson<any>(res)
+
+    expect(res.status).toBe(200)
+    expect(vi.mocked(resolveScopeTenant).mock.calls[0]?.[1]).toBe('c1')
+    expect(maskingScopeMock).toHaveBeenCalledWith(infra)
+    expect(body.data.map((s: any) => s.storage)).toEqual(['nas'])
+    expect(getTenantInfrastructureScopeMock).not.toHaveBeenCalled()
+  })
+
+  it('propagates the refusal of the guard without reading PVE', async () => {
+    vi.mocked(resolveScopeTenant).mockResolvedValue({ ok: false, response: Response.json({ error: 'nope' }, { status: 403 }) } as any)
+
+    const res = await callRoute(GET, { params: { id: 'c1', node: 'pve1' }, searchParams: { targetVdcId: 'vdc-t' } })
+
+    expect(res.status).toBe(403)
+    expect(getConnectionByIdMock).not.toHaveBeenCalled()
+    expect(pveFetchMock).not.toHaveBeenCalled()
   })
 })

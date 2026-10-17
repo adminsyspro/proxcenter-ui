@@ -3,6 +3,7 @@ import { getCurrentTenantId } from '@/lib/tenant'
 import { checkPermission, getAccessibleResources, getRBACContext, PERMISSIONS } from '@/lib/rbac'
 import { filterVisibleVdcs, type VdcVisibilityGrant } from '@/lib/rbac/vdcVisibility'
 import { listVdcs, refreshVdcUsage } from '@/lib/vdc'
+import { resolveScopeTenant } from '@/lib/vdc/providerTarget'
 
 export const runtime = 'nodejs'
 
@@ -14,10 +15,27 @@ const USAGE_FRESHNESS_MS = 15_000
 // GET /api/v1/vdcs — list the current tenant's vDCs with quotas and usage.
 // Refreshes each vDC's usage against PVE when the cached row is stale or
 // empty so the client-side quota check matches server-side enforcement.
-export async function GET() {
+export async function GET(req: Request) {
   try {
     const denied = await checkPermission(PERMISSIONS.VM_VIEW)
     if (denied) return denied
+
+    // `?targetVdcId=` (provider only): that tenant vDC alone, with its quota
+    // and usage, for a provider deploying into it (roadmap#65).
+    const scopeTenant = await resolveScopeTenant(req, null, getCurrentTenantId)
+    if (!scopeTenant.ok) return scopeTenant.response
+    const target = scopeTenant.target
+    if (target) {
+      const pick = async () => (await listVdcs(target.tenantId)).filter(v => v.id === target.vdcId)
+      let picked = await pick()
+      const sync = picked[0]?.usage?.lastSyncedAt
+      const age = sync ? Date.now() - new Date(sync).getTime() : Number.NaN
+      if (picked.length > 0 && (!Number.isFinite(age) || age > USAGE_FRESHNESS_MS)) {
+        await refreshVdcUsage(target.vdcId).catch(() => {})
+        picked = await pick()
+      }
+      return NextResponse.json({ data: picked })
+    }
 
     const tenantId = await getCurrentTenantId()
 

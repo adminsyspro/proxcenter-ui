@@ -25,12 +25,14 @@ const findBlueprintForTenantMock = vi.fn<(...args: any[]) => Promise<any>>()
 const getCurrentTenantIdMock = vi.fn<() => Promise<string>>()
 
 const deploymentUpdateMock = vi.fn<(...args: any[]) => Promise<any>>()
+const deploymentCreateMock = vi.fn<(...args: any[]) => Promise<any>>()
+const resolveProviderVdcTargetMock = vi.fn<(...args: any[]) => Promise<any>>()
 
 vi.mock('next-auth', () => ({ getServerSession: vi.fn(async () => null) }))
 vi.mock('@/lib/tenant', () => ({
   getSessionPrisma: async () => ({
     customImage: { findUnique: customImageFindUniqueMock },
-    deployment: { create: vi.fn(async () => ({ id: 'dep-1' })), update: deploymentUpdateMock },
+    deployment: { create: deploymentCreateMock, update: deploymentUpdateMock },
     blueprint: { create: vi.fn(async () => ({})) },
   }),
   getCurrentTenantId: () => getCurrentTenantIdMock(),
@@ -85,6 +87,7 @@ vi.mock('@/lib/vdc/scope', async (io) => {
   return { ...actual, getVdcScope: getVdcScopeMock, loadTenantSlugs: async () => ({ mine: 'acme', all: ['acme', 'acme-prod'] }) }
 })
 vi.mock('@/lib/tenant/infraScope', () => ({ getTenantInfrastructureScope: async () => ({ kind: 'iaas', vdcScope: await getVdcScopeMock() }) }))
+vi.mock('@/lib/vdc/providerTarget', () => ({ resolveProviderVdcTarget: (...a: any[]) => resolveProviderVdcTargetMock(...a) }))
 const auditMock = vi.fn<(...args: any[]) => Promise<any>>()
 vi.mock('@/lib/audit', () => ({ audit: (...a: any[]) => auditMock(...a) }))
 
@@ -109,6 +112,8 @@ beforeEach(async () => {
   const { resolveSubnetForBridge } = await import('@/lib/vdc/vnets')
   afterCbs.length = 0
   deploymentUpdateMock.mockReset().mockResolvedValue({})
+  deploymentCreateMock.mockReset().mockResolvedValue({ id: 'dep-1' })
+  resolveProviderVdcTargetMock.mockReset()
   vi.mocked(resolveSubnetForBridge).mockReset().mockResolvedValue(null)
   checkPermissionMock.mockReset().mockResolvedValue(null)
   getConnectionByIdMock.mockReset().mockResolvedValue({ id: 'conn-1' })
@@ -1019,5 +1024,81 @@ describe('POST templates/deploy: source volume authorization', () => {
     const res = await callRoute(await loadPost(), { body: baseBody })
     expect(res.status).toBe(200)
     expect(afterCbs).toHaveLength(1)
+  })
+})
+
+describe('POST templates/deploy: provider deploying into a tenant vDC (roadmap#65)', () => {
+  const TARGET = { vdcId: 'vdc-t', vdcName: 'Gold', tenantId: 'tenant-acme', tenantName: 'Acme', connectionId: 'conn-1' }
+  const targetBody = { ...baseBody, targetVdcId: 'vdc-t' }
+
+  beforeEach(() => {
+    stubPveFetchForDeploy()
+    getCurrentTenantIdMock.mockResolvedValue('default')
+    resolveProviderVdcTargetMock.mockResolvedValue({ ok: true, target: TARGET })
+    getImageBySlugMock.mockReturnValue({ slug: 'ubuntu-22.04', format: 'qcow2', downloadUrl: 'https://img.test/u.qcow2' })
+    resolveVdcForTenantMock.mockResolvedValue({ vdcId: 'vdc-t', poolName: 'pool-acme', quota: null, storagePolicies: [] })
+    getVdcScopeMock.mockResolvedValue({
+      storagesByConnection: new Map([['conn-1', new Set(['local-lvm'])]]),
+      storagePoliciesByConnection: new Map(),
+    })
+  })
+
+  it('refuses a forged targetVdcId from a tenant caller and creates nothing', async () => {
+    getCurrentTenantIdMock.mockResolvedValue('tenant-1')
+    resolveProviderVdcTargetMock.mockResolvedValue({ ok: false, response: Response.json({ error: 'Only a provider administrator can target a tenant vDC.' }, { status: 403 }) })
+    const res = await callRoute(await loadPost(), { body: targetBody })
+    expect(res.status).toBe(403)
+    expect(deploymentCreateMock).not.toHaveBeenCalled()
+    expect(resolveVdcForTenantMock).not.toHaveBeenCalled()
+    expect(checkVmidAgainstTenantRangeMock).not.toHaveBeenCalled()
+    expect(afterCbs).toHaveLength(0)
+  })
+
+  it('400 when the target vDC is on another connection', async () => {
+    resolveProviderVdcTargetMock.mockResolvedValue({ ok: true, target: { ...TARGET, connectionId: 'conn-other' } })
+    const res = await callRoute(await loadPost(), { body: targetBody })
+    expect(res.status).toBe(400)
+    expect(deploymentCreateMock).not.toHaveBeenCalled()
+    expect(checkVmidAgainstTenantRangeMock).not.toHaveBeenCalled()
+  })
+
+  it('applies the placement rules of the TARGET tenant and the catalogue of the CALLER', async () => {
+    findCustomImageForTenantMock.mockResolvedValue(null)
+    getImageBySlugMock.mockReturnValue(undefined)
+    const res = await callRoute(await loadPost(), { body: { ...targetBody, imageSlug: 'custom-x' } })
+    // Unknown slug stops after the vmid, vDC resolution and the catalogue lookup.
+    expect(res.status).toBe(400)
+    expect(resolveProviderVdcTargetMock).toHaveBeenCalledWith('vdc-t')
+    expect(checkVmidAgainstTenantRangeMock).toHaveBeenCalledWith('tenant-acme', 190)
+    expect(resolveVdcForTenantMock).toHaveBeenCalledWith('tenant-acme', 'conn-1', 'pve1')
+    expect(findCustomImageForTenantMock).toHaveBeenCalledWith('default', 'custom-x', { vdcId: 'vdc-t' })
+  })
+
+  it('deploys with the target scope, records targetVdcId and audits the target', async () => {
+    const res = await callRoute(await loadPost(), { body: targetBody })
+    expect(res.status).toBe(200)
+    expect(getVdcScopeMock).toHaveBeenCalledWith('tenant-acme', { ignoreVdcContext: true })
+    const created = deploymentCreateMock.mock.calls[0]?.[0]
+    expect(created.data.config).toMatchObject({ targetVdcId: 'vdc-t' })
+    await runAfters()
+    expect(auditMock).toHaveBeenCalledWith(expect.objectContaining({
+      details: expect.objectContaining({ targetVdcId: 'vdc-t', targetTenantId: 'tenant-acme' }),
+    }))
+  })
+
+  it('does not record a targetVdcId on a regular deployment', async () => {
+    getCurrentTenantIdMock.mockResolvedValue('tenant-1')
+    resolveVdcForTenantMock.mockResolvedValue({ vdcId: 'vdc-1', poolName: 'pool-a', quota: null, storagePolicies: [] })
+    const res = await callRoute(await loadPost(), { body: baseBody })
+    expect(res.status).toBe(200)
+    expect(deploymentCreateMock.mock.calls[0]?.[0].data.config).not.toHaveProperty('targetVdcId')
+    expect(resolveProviderVdcTargetMock).not.toHaveBeenCalled()
+  })
+
+  it('409 when the vDC resolved for the tenant is not the target', async () => {
+    resolveVdcForTenantMock.mockResolvedValue({ vdcId: 'vdc-other', poolName: 'pool-acme', quota: null })
+    const res = await callRoute(await loadPost(), { body: targetBody })
+    expect(res.status).toBe(409)
+    expect(deploymentCreateMock).not.toHaveBeenCalled()
   })
 })

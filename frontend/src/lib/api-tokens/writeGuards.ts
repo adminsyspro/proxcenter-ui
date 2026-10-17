@@ -225,15 +225,20 @@ export async function runTokenEntryGuards(
 
 const isUpid = (value: unknown): value is string => typeof value === "string" && value.startsWith("UPID:")
 
-/** The PVE task id of a JSON response: `data` itself, or `data.upid` (the /guests/{vmid} envelope). */
-async function responseUpid(res: Response): Promise<string | null> {
-  if (!(res.headers.get("content-type") || "").includes("application/json")) return null
+/**
+ * The PVE task ids of a JSON response: `data` itself, or `data.upid` (the
+ * /guests/{vmid} envelope), as `upid`; and, for a multi-task answer
+ * (backup-job-run), every `data.tasks[].upid` as `upids`.
+ */
+async function responseUpids(res: Response): Promise<{ upid: string | null; upids?: string[] }> {
+  if (!(res.headers.get("content-type") || "").includes("application/json")) return { upid: null }
   try {
     const data = (await res.clone().json())?.data
-    if (isUpid(data)) return data
-    return isUpid(data?.upid) ? data.upid : null
+    const upid = isUpid(data) ? data : isUpid(data?.upid) ? data.upid : null
+    if (!Array.isArray(data?.tasks)) return { upid }
+    return { upid, upids: data.tasks.map((task: { upid?: unknown }) => task?.upid).filter(isUpid) }
   } catch {
-    return null
+    return { upid: null }
   }
 }
 
@@ -264,7 +269,7 @@ export async function auditTokenWrite(
         method: req.method,
         path: hdrs.get("x-pxc-path") || new URL(req.url).pathname,
         httpStatus: res.status,
-        upid: await responseUpid(res),
+        ...(await responseUpids(res)),
       },
     })
   } catch (e) {

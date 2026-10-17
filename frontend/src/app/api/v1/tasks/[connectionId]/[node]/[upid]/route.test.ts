@@ -478,6 +478,14 @@ describe('GET /api/v1/tasks/[connectionId]/[node]/[upid]: connection and vDC per
     } })
   }
 
+  /** A backup-job-run line: one vzdump task per node, journaled as upids. */
+  async function journalTokenRun(apiTokenId: string, upids: string[]) {
+    await prismaTest.auditLog.create({ data: {
+      id: `audit-run-${apiTokenId}`, tenantId: 'tenant-v', timestamp: new Date(), action: 'apitoken.write',
+      category: 'api_tokens', apiTokenId, details: { entry: 'backup-job-run', upid: null, upids },
+    } })
+  }
+
   it('judges a token on the connection of the task', async () => {
     await tokenGet(UPID)
     expect(checkPermissionMock).toHaveBeenCalledWith('connection.view', 'connection', 'conn-1')
@@ -549,6 +557,17 @@ describe('GET /api/v1/tasks/[connectionId]/[node]/[upid]: connection and vDC per
       const res = await tokenGet(DESTROY_UPID, { ...token, tokenId: 'tok-2' })
       expect(res.status).toBe(403)
       expect(askedProxmoxForTheTask()).toBe(false)
+    })
+
+    it('polls a vzdump task of a backup job run it started (no vmid in the UPID), never another token', async () => {
+      const VZDUMP_PVE1 = 'UPID:pve1:0000ABCD:00001234:6A000001:vzdump::root@pam:'
+      const VZDUMP_PVE2 = 'UPID:pve2:0000ABCD:00001234:6A000001:vzdump::root@pam:'
+      await journalTokenRun('tok-1', [VZDUMP_PVE1, VZDUMP_PVE2])
+      expect((await tokenGet(VZDUMP_PVE1)).status).toBe(200)
+      expect((await tokenGet(VZDUMP_PVE2, token, 'pve2')).status).toBe(200)
+      const other = await tokenGet(VZDUMP_PVE1, { ...token, tokenId: 'tok-2' })
+      expect(other.status).toBe(403)
+      expect(await readJson<any>(other)).toEqual({ error: 'Task outside your vDC scope' })
     })
   })
 

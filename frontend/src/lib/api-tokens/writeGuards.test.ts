@@ -450,6 +450,16 @@ describe('auditTokenWrite', () => {
     expect(auditMock.mock.calls.map(c => c[0].details.upid)).toEqual([upid, null, null])
   })
 
+  it('journals every UPID of a multi-task answer (data.tasks[].upid) as upids, only real ones', async () => {
+    const a = 'UPID:pve1:0001:0002:0003:vzdump::root@pam:'
+    const b = 'UPID:pve2:0001:0002:0003:vzdump::root@pam:'
+    const run = { data: { tasks: [{ node: 'pve1', upid: a }, { node: 'pve2', upid: b }, { node: 'pve3', upid: 'forged' }, { node: 'pve4' }], errors: [] } }
+    await auditTokenWrite(entry(), principal, post({}), NextResponse.json(run))
+    expect(auditMock.mock.calls[0][0].details).toMatchObject({ upid: null, upids: [a, b] })
+    await auditTokenWrite(entry(), principal, post({}), NextResponse.json({ data: a }))
+    expect(auditMock.mock.calls[1][0].details).not.toHaveProperty('upids')
+  })
+
   it('a failed write is journaled as a failure, without a UPID', async () => {
     await auditTokenWrite(entry(), principal, post({}), NextResponse.json({ error: 'nope' }, { status: 409 }))
     expect(auditMock.mock.calls[0][0]).toMatchObject({ status: 'failure', details: { httpStatus: 409, upid: null } })

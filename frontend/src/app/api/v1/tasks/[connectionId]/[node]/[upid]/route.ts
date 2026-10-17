@@ -544,7 +544,10 @@ function parseTaskUpid(upid: string): { node: string; vmid: string | null } | nu
   return { node: parts[1], vmid: /^\d+$/.test(parts[6] || '') ? parts[6] : null }
 }
 
-/** Whether this token journaled the UPID in its own apitoken.write line, i.e. started the task. */
+/**
+ * Whether this token journaled the UPID in its own apitoken.write line, i.e.
+ * started the task: as `upid`, or among the `upids` of a multi-task answer.
+ */
 async function startedByToken(principal: Principal, upid: string): Promise<boolean> {
   if (!principal.tokenId) return false
   const row = await prisma.auditLog.findFirst({
@@ -552,7 +555,10 @@ async function startedByToken(principal: Principal, upid: string): Promise<boole
       action: 'apitoken.write',
       apiTokenId: principal.tokenId,
       tenantId: principal.tenantId,
-      details: { path: ['upid'], equals: upid },
+      OR: [
+        { details: { path: ['upid'], equals: upid } },
+        { details: { path: ['upids'], array_contains: [upid] } },
+      ],
     },
     select: { id: true },
   })

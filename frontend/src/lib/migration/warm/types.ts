@@ -1,3 +1,5 @@
+import type { MigrationHardwareOverrides, MigrationNicMapping } from "../target-overrides"
+
 export type WarmStatus =
   | "pending" | "planning" | "enabling_cbt" | "preparing_disks" | "full_copy" | "delta_sync"
   | "awaiting_cutover" | "cutover" | "verify" | "converting_disks"
@@ -24,6 +26,10 @@ export interface WarmMigrationConfig {
    * by the route; absent means the Proxmox default, x86-64-v2-AES.
    */
   cpuType?: string
+  /** Operator hardware overrides of the created VM (#317): cores, sockets, memory. */
+  hardware?: MigrationHardwareOverrides
+  /** Per-source-NIC target bridge, VLAN tag and model (#317); unmapped NICs use networkBridge. */
+  nics?: MigrationNicMapping[]
   targetVmid?: number
   /** Extracted VDDK distribution dir on the PVE node (libdir=). */
   vddkLibdir?: string

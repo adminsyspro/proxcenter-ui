@@ -5,6 +5,7 @@
 import type { EsxiVmConfig, EsxiDiskInfo } from "@/lib/vmware/soap"
 import { vmwareToolsState } from "@/lib/vmware/soap"
 import { MIGRATION_CPU_TYPE_DEFAULT } from "./cpu-type"
+import { applyHardwareOverrides, buildNetValue, resolveNicTarget, type MigrationTargetOverrides } from "./target-overrides"
 
 export interface PveVmCreateParams {
   vmid: number
@@ -23,8 +24,11 @@ export interface PveVmCreateParams {
   /** Target slot of every source disk, in source listing order (`ide2`, `sata0`, `scsi1`…), see planDiskSlots. */
   diskSlots: string[]
   agent: string
-  // Network
-  net0: string
+  /**
+   * One entry per target NIC, `net0` to `netN`, in source NIC order (#317).
+   * Every source NIC is emitted: a guest with two adapters gets two.
+   */
+  nets: Record<string, string>
   // EFI disk (only if firmware=efi)
   efidisk0?: string
 }
@@ -155,7 +159,12 @@ function bootSlotOf(slots: string[], fallback: string): string {
 }
 
 /**
- * Generate Proxmox VM creation parameters from ESXi VM config
+ * Generate Proxmox VM creation parameters from ESXi VM config.
+ *
+ * `overrides` (#317) carries what the operator changed in the review step:
+ * hardware (cores, sockets, memory) applied on top of the source values, and
+ * a target bridge, VLAN tag and model per source NIC. A NIC without a mapping
+ * lands on `networkBridge` with `vlanTag`, as every NIC did before.
  */
 export function mapEsxiToPveConfig(
   esxiConfig: EsxiVmConfig,
@@ -164,6 +173,7 @@ export function mapEsxiToPveConfig(
   networkBridge: string = "vmbr0",
   vlanTag?: number,
   cpuType: string = MIGRATION_CPU_TYPE_DEFAULT,
+  overrides?: MigrationTargetOverrides,
 ): PveVmCreateParams {
   const isEfi = esxiConfig.firmware === "efi"
   const isWin = isWindowsVm(esxiConfig)
@@ -175,7 +185,6 @@ export function mapEsxiToPveConfig(
   // every modern Windows with INACCESSIBLE_BOOT_DEVICE: no inbox LSI driver
   // since the XP era (#653).
   const scsihw = "virtio-scsi-single"
-  const nicModel = isWin ? "e1000" : mapNicModel(esxiConfig.nics[0]?.type || "Vmxnet3")
   // Boot disk bus: SATA when the firmware is OVMF (existing rule — OVMF cannot
   // enumerate an LSI controller) or the guest is Windows (#653). Data disks
   // stay on SCSI. IDE and SATA source disks keep their bus, see planDiskSlots.
@@ -190,24 +199,28 @@ export function mapEsxiToPveConfig(
   // shutdown wait for an agent that will never answer.
   const agent = vmwareToolsState(esxiConfig) === "not-installed" ? "0" : "1"
 
-  const tagSuffix =
-    typeof vlanTag === "number" && Number.isInteger(vlanTag) && vlanTag >= 1 && vlanTag <= 4094
-      ? `,tag=${vlanTag}`
-      : ""
+  // One target NIC per source NIC, in source order (#317): `configMapper` used
+  // to emit `net0` from `nics[0]` only and silently dropped every other
+  // adapter. The source MAC is preserved so the guest keeps its network
+  // identity: without it Proxmox assigns a fresh MAC, the guest (notably
+  // Windows) sees a brand new adapter and its IP is stranded on the old
+  // "ghost" NIC. Only a well-formed unicast MAC is set; the target boots after
+  // the source is powered off (warm cutover / direct-ESXi power-off), so there
+  // is no MAC collision. A Windows guest gets e1000 (inbox driver) unless the
+  // operator picked a model; a source without any adapter still gets one
+  // default NIC on the default bridge, as before.
+  const nets: Record<string, string> = {}
+  esxiConfig.nics.forEach((nic, i) => {
+    const target = resolveNicTarget(i, overrides?.nics, { bridge: networkBridge, vlanTag })
+    const model = target.model ?? (isWin ? "e1000" : mapNicModel(nic.type || "Vmxnet3"))
+    nets[`net${i}`] = buildNetValue(model, target.bridge, nic.macAddress, target.vlanTag)
+  })
+  if (esxiConfig.nics.length === 0) {
+    const target = resolveNicTarget(0, overrides?.nics, { bridge: networkBridge, vlanTag })
+    nets.net0 = buildNetValue(target.model ?? (isWin ? "e1000" : "virtio"), target.bridge, undefined, target.vlanTag)
+  }
 
-  // Preserve the source NIC's MAC so the guest keeps its network identity.
-  // Without this Proxmox assigns a fresh MAC, the guest (notably Windows) sees
-  // a brand new adapter and its IP is stranded on the old "ghost" NIC. The
-  // cold/virt-v2v path already does this (see v2vConfigMapper). Only set a
-  // well-formed unicast MAC; the target boots after the source is powered off
-  // (warm cutover / direct-ESXi power-off), so there is no MAC collision.
-  const sourceMac = esxiConfig.nics[0]?.macAddress
-  const macSuffix =
-    sourceMac && /^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$/.test(sourceMac)
-      ? `,macaddr=${sourceMac}`
-      : ""
-
-  const params: PveVmCreateParams = {
+  const params: PveVmCreateParams = applyHardwareOverrides({
     vmid: targetVmid,
     name: esxiConfig.name.replace(/[^a-zA-Z0-9-]/g, "-").replace(/^-+|(?<!-)-+$/g, '').substring(0, 63) || 'vm',
     ostype: mapOsType(esxiConfig.guestId, esxiConfig.guestOS),
@@ -222,8 +235,8 @@ export function mapEsxiToPveConfig(
     bootDiskSlot,
     diskSlots,
     agent,
-    net0: `${nicModel},bridge=${networkBridge}${macSuffix}${tagSuffix}`,
-  }
+    nets,
+  }, overrides?.hardware)
 
   if (isEfi) {
     // pre-enrolled-keys=1 mirrors the Proxmox GUI default for UEFI VMs:

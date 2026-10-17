@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth"
 
 import { getSessionPrisma, getCurrentTenantId, getTenantPrisma } from "@/lib/tenant"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
-import { sensitiveNicPermissions, NicConfigError } from "@/lib/rbac/nicPermissions"
+import { NicConfigError } from "@/lib/rbac/nicPermissions"
 import { authOptions } from "@/lib/auth/config"
 import { runMigrationPipeline } from "@/lib/migration/pipeline"
 import { runXcpngMigrationPipeline } from "@/lib/migration/xcpng-pipeline"
@@ -18,10 +18,12 @@ import { sanitizeV2vRoot } from "@/lib/migration/v2v-root-select"
 import { persistedV2vInputs } from "@/lib/migration/retry-dispatch"
 import { parseNfcConcurrency, NFC_CONCURRENCY_MIN, NFC_CONCURRENCY_MAX } from "@/lib/migration/nfc-progress"
 import { MIGRATION_CPU_TYPES, resolveMigrationCpuType } from "@/lib/migration/cpu-type"
+import { parseHardwareOverrides, parseNicMappings, isAcceptableCpuType, type MigrationHardwareOverrides, type MigrationNicMapping } from "@/lib/migration/target-overrides"
 import { parseZeroRateLimit, ZERO_RATE_LIMIT_MIN_MBPS, ZERO_RATE_LIMIT_MAX_MBPS } from "@/lib/migration/warm/zero-rate"
 import { hasServerFeature } from "@/lib/auth/requireEnterprise"
 import { Features } from "@/lib/license/features"
 import { TERMINAL_STATUSES } from "@/lib/tasks/sharedTask"
+import { authorizeMigrationTarget } from "@/lib/migration/authorize"
 
 export const runtime = "nodejs"
 
@@ -98,24 +100,32 @@ export async function POST(req: Request) {
       vlanTag = n
     }
 
-    // CPU type of the created VM (roadmap#24). Absent means the Proxmox default;
-    // anything outside the offered models is refused here, since the value ends
+    // CPU type of the created VM (roadmap#24). Absent means the Proxmox default.
+    // The review step (#317) offers the node's own models next to the quick
+    // list, so any QEMU model Proxmox knows, or a cluster `custom-<name>`
+    // model, is accepted; anything else is refused here, since the value ends
     // up in `qm create` on the node.
-    const cpuType = resolveMigrationCpuType(body.cpuType)
+    const cpuType = resolveMigrationCpuType(body.cpuType) ?? (isAcceptableCpuType(body.cpuType) ? body.cpuType as string : null)
     if (cpuType === null) {
-      return NextResponse.json({ error: `cpuType must be one of ${MIGRATION_CPU_TYPES.join(", ")}` }, { status: 400 })
+      return NextResponse.json({ error: `cpuType must be a QEMU CPU model known to Proxmox (for example ${MIGRATION_CPU_TYPES.join(", ")}) or a custom-<name> model` }, { status: 400 })
     }
 
+    // Review-step overrides (#317): hardware right-sizing and one bridge per
+    // NIC. VMware sources only (the vmware/vcenter pipelines apply them); on
+    // any other source they are refused rather than silently ignored, so an
+    // API caller is never led to believe they were applied.
+    const hardwareParsed = parseHardwareOverrides(body.hardware)
+    if (hardwareParsed.ok === false) return NextResponse.json({ error: hardwareParsed.error }, { status: 400 })
+    const hardware: MigrationHardwareOverrides | undefined = hardwareParsed.value
+    const nicsParsed = parseNicMappings(body.nics)
+    if (nicsParsed.ok === false) return NextResponse.json({ error: nicsParsed.error }, { status: 400 })
+    const nics: MigrationNicMapping[] | undefined = nicsParsed.value
+
     const tenantId = await getCurrentTenantId()
-    if (tenantId !== 'default') {
-      const requestedNet = `virtio,bridge=${networkBridge}${vlanTag ? `,tag=${vlanTag}` : ''}`
-      for (const permission of sensitiveNicPermissions({ net0: requestedNet })) {
-        const identityDenied = await checkPermission(permission,
-          targetVmid === undefined ? 'connection' : 'vm',
-          targetVmid === undefined ? targetConnectionId : `${targetConnectionId}:${targetNode}:qemu:${targetVmid}`)
-        if (identityDenied) return identityDenied
-      }
-    }
+    const unauthorized = await authorizeMigrationTarget({
+      tenantId, sourceConnectionId, targetConnectionId, targetNode, targetVmid, networkBridge, vlanTag, nics,
+    })
+    if (unauthorized) return unauthorized
 
     // Optional warm-migration cutover downtime budget (seconds). Validate up
     // front: a malformed value would coerce to NaN and make the convergence
@@ -205,6 +215,9 @@ export async function POST(req: Request) {
     if (sourceConn.type === "vmware" && sourceConn.subType === "vcenter") {
       effectiveSourceType = "vcenter"
     }
+    if ((hardware || nics) && effectiveSourceType !== "vmware" && effectiveSourceType !== "vcenter") {
+      return NextResponse.json({ error: "hardware and nics overrides are only supported for VMware sources (ESXi and vCenter)" }, { status: 400 })
+    }
 
     // Warm migration (CBT) is available for VMware sources (ESXi-direct and
     // vCenter) and for XCP-ng pools reached directly over XAPI (Xen Orchestra
@@ -262,6 +275,9 @@ export async function POST(req: Request) {
         // retry — which rebuilds the config from job.config — keeps them instead of
         // silently reverting to the defaults.
         config: { sourceConnectionId, sourceVmId, sourceVmName: body.sourceVmName, targetConnectionId, targetNode, targetStorage, networkBridge, vlanTag, startAfterMigration, convertDisksToQcow2, cpuType, migrationType, transferMode, ...(targetVmid !== undefined && { targetVmid }), ...(body.vddkLibdir && { vddkLibdir: body.vddkLibdir }), ...(downtimeBudgetSec !== undefined && { downtimeBudgetSec }), ...(cutoverMode !== undefined && { cutoverMode }), ...(zeroRateLimitMBps !== undefined && { zeroRateLimitMBps }),
+          // Review-step overrides (#317), persisted so a retry keeps the same
+          // hardware and NIC layout.
+          ...(hardware && { hardware }), ...(nics && { nics }),
           // Source type and virt-v2v inputs (disk paths, vCenter placement, temp
           // storage, root override): persisted so a retry rebuilds the same job.
           sourceType: effectiveSourceType,
@@ -287,6 +303,8 @@ export async function POST(req: Request) {
       startAfterMigration,
       convertDisksToQcow2,
       cpuType,
+      ...(hardware && { hardware }),
+      ...(nics && { nics }),
       migrationType: migrationType as "cold" | "live" | "sshfs_boot",
       transferMode: transferMode as "https" | "sshfs",
       // Pass through the user-selected Temporary Storage so the direct-ESXi pipeline
@@ -306,6 +324,7 @@ export async function POST(req: Request) {
         await runWarmMigration(job.id, {
           sourceConnectionId, sourceVmId, targetConnectionId, targetNode, targetStorage,
           networkBridge, vlanTag, startAfterMigration, convertDisksToQcow2, cpuType,
+          ...(hardware && { hardware }), ...(nics && { nics }),
           ...(targetVmid !== undefined && { targetVmid }),
           ...(body.vddkLibdir && { vddkLibdir: body.vddkLibdir as string }),
           ...(downtimeBudgetSec !== undefined && { downtimeBudgetSec }),
@@ -339,6 +358,7 @@ export async function POST(req: Request) {
           sourceConnectionId, sourceVmId, sourceVmName,
           sourceType: effectiveSourceType as "vcenter" | "hyperv" | "nutanix",
           targetConnectionId, targetNode, targetStorage, networkBridge, vlanTag, startAfterMigration, convertDisksToQcow2, cpuType,
+          ...(hardware && { hardware }), ...(nics && { nics }),
           vcenterDatacenter, vcenterCluster, vcenterHost, diskPaths, tempStorage,
           migrationType: v2vMigrationType,
           ...(targetVmid !== undefined && { targetVmid }),
@@ -408,6 +428,7 @@ export async function POST(req: Request) {
               sourceConnectionId, sourceVmId, sourceVmName: body.sourceVmName || "",
               sourceType: "esxi-direct",
               targetConnectionId, targetNode, targetStorage, networkBridge, vlanTag, startAfterMigration, convertDisksToQcow2, cpuType,
+              ...(hardware && { hardware }), ...(nics && { nics }),
               tempStorage: body.tempStorage,
               migrationType: "cold",
               vmxPath: posixVmxPath,

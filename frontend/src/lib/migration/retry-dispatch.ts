@@ -81,6 +81,10 @@ export function v2vConfigFromJobConfig(
     ...(config.v2vRoot !== undefined && { v2vRoot: config.v2vRoot }),
     ...(typeof config.cpuType === "string" && { cpuType: config.cpuType }),
     ...(Number.isInteger(config.nfcConcurrency) && { nfcConcurrency: config.nfcConcurrency }),
+    // Review-step overrides (#317), validated by the create route before they
+    // were persisted: a retry rebuilds the same hardware and NIC layout.
+    ...(config.hardware && typeof config.hardware === "object" && { hardware: config.hardware }),
+    ...(Array.isArray(config.nics) && config.nics.length > 0 && { nics: config.nics }),
   }
 }
 

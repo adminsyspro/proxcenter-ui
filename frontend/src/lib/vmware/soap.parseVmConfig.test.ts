@@ -49,3 +49,21 @@ describe("parseVmConfig CBT state", () => {
     expect(parseVmConfig(answer("")).changeTrackingEnabled).toBeUndefined()
   })
 })
+
+describe("parseVmConfig NICs (#317)", () => {
+  const nic = (type: string, label: string, mac: string, net: string) =>
+    `<VirtualDevice xsi:type="Virtual${type}"><key>4000</key><deviceInfo><label>${label}</label><summary>${net}</summary></deviceInfo><macAddress>${mac}</macAddress></VirtualDevice>`
+
+  it("keeps the adapters in device order whatever their model", () => {
+    const cfg = parseVmConfig(answer(
+      nic("E1000", "Network adapter 1", "00:50:56:aa:00:01", "VM Network") +
+      nic("Vmxnet3", "Network adapter 2", "00:50:56:aa:00:02", "dmz") +
+      nic("E1000e", "Network adapter 3", "00:50:56:aa:00:03", "backup"),
+    ))
+    expect(cfg.nics).toEqual([
+      { label: "Network adapter 1", type: "E1000", macAddress: "00:50:56:aa:00:01", network: "VM Network" },
+      { label: "Network adapter 2", type: "Vmxnet3", macAddress: "00:50:56:aa:00:02", network: "dmz" },
+      { label: "Network adapter 3", type: "E1000e", macAddress: "00:50:56:aa:00:03", network: "backup" },
+    ])
+  })
+})

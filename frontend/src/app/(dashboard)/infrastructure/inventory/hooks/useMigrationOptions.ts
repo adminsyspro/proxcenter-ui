@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 
 import { DOWNTIME_BUDGET_DEFAULT_SEC } from '../components/migrationGuards'
 import { NFC_CONCURRENCY_DEFAULT } from '@/lib/migration/nfc-progress'
-import { MIGRATION_CPU_TYPE_DEFAULT, type MigrationCpuType } from '@/lib/migration/cpu-type'
+import { MIGRATION_CPU_TYPE_DEFAULT } from '@/lib/migration/cpu-type'
+import type { ReviewHardwareState, ReviewNicState } from '../components/migrationReview'
 
 /**
  * Minimal shape of the VM the single-migration dialog was opened for. Only the
@@ -76,7 +77,9 @@ export function useMigrationOptions({
   const [migConvertToQcow2, setMigConvertToQcow2] = useState(false)
   // CPU type of the created VM (roadmap#24). Starts on the Proxmox default so a
   // `host` chosen for one appliance never leaks into the next run.
-  const [migCpuType, setMigCpuType] = useState<MigrationCpuType>(MIGRATION_CPU_TYPE_DEFAULT)
+  // Any QEMU model of the target node once the review step (#317) is used,
+  // hence a plain string rather than the quick-list union.
+  const [migCpuType, setMigCpuType] = useState<string>(MIGRATION_CPU_TYPE_DEFAULT)
   // Warm only (#443). Off by default: the automatic budget stays the norm, and a
   // hold left on from an earlier run would park a migration nobody is watching.
   const [migManualCutover, setMigManualCutover] = useState(false)
@@ -89,9 +92,20 @@ export function useMigrationOptions({
   // cap of the target PVE connection", 0 means unlimited. Starts empty so
   // a cap typed for one busy array never silently slows the next run.
   const [migZeroRateLimit, setMigZeroRateLimit] = useState('')
+  // Two-step VMware dialog (#317): 'config' is the form, 'review' the step
+  // where the hardware and the NIC mapping of the target are edited. The
+  // review state starts empty and is seeded from the source VM when the
+  // operator enters the step, so a layout reviewed for one VM never carries
+  // over to the next.
+  const [migStep, setMigStep] = useState<'config' | 'review'>('config')
+  const [migHardware, setMigHardware] = useState<ReviewHardwareState>({ cores: '', sockets: '', memoryMB: '' })
+  const [migNics, setMigNics] = useState<ReviewNicState[]>([])
 
   useEffect(() => {
     if (!esxiMigrateVm && !bulkMigOpen) return
+    setMigStep('config')
+    setMigHardware({ cores: '', sockets: '', memoryMB: '' })
+    setMigNics([])
     setMigNetworkBridge('')
     setMigVlanTag('')
     setMigStartAfter(false)
@@ -137,5 +151,11 @@ export function useMigrationOptions({
     setMigDowntimeBudget,
     migZeroRateLimit,
     setMigZeroRateLimit,
+    migStep,
+    setMigStep,
+    migHardware,
+    setMigHardware,
+    migNics,
+    setMigNics,
   }
 }

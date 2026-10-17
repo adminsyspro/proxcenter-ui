@@ -11,6 +11,7 @@ import { runWarmMigration } from "@/lib/migration/warm/warm-pipeline"
 import { resolveRetryEngine, v2vConfigFromJobConfig } from "@/lib/migration/retry-dispatch"
 import { runXcpngWarmMigration } from "@/lib/migration/warm/xcpng-warm-pipeline"
 import { resolveInstanceId } from "@/lib/migration/orphan-sweep"
+import { authorizeMigrationTarget } from "@/lib/migration/authorize"
 
 export const runtime = "nodejs"
 
@@ -43,6 +44,22 @@ export async function POST(
       return NextResponse.json({ error: "No config saved for retry" }, { status: 400 })
     }
 
+    // A retry replays the saved target and NICs: the user retrying must pass
+    // the checks the creation route applies, not inherit the creator's (#317).
+    const tenantId = await getCurrentTenantId()
+    const saved = job.config as Record<string, any>
+    const unauthorized = await authorizeMigrationTarget({
+      tenantId,
+      sourceConnectionId: job.sourceConnectionId,
+      targetConnectionId: job.targetConnectionId,
+      targetNode: job.targetNode,
+      targetVmid: typeof saved.targetVmid === "number" ? saved.targetVmid : undefined,
+      networkBridge: typeof saved.networkBridge === "string" ? saved.networkBridge : "vmbr0",
+      vlanTag: typeof saved.vlanTag === "number" ? saved.vlanTag : undefined,
+      nics: Array.isArray(saved.nics) ? saved.nics : undefined,
+    })
+    if (unauthorized) return unauthorized
+
     // job.config is a JSONB column (see schema.prisma): Prisma returns the
     // parsed object directly. The shape is set at create time in
     // /api/v1/migrations/route.ts and matches MigrationConfig.
@@ -69,7 +86,6 @@ export async function POST(
       },
     })
 
-    const tenantId = await getCurrentTenantId()
     // Dispatch the retry to the same engine the original used: warm must not
     // fall back to a cold pipeline (it powers off the running source), and a
     // Hyper-V / vCenter / Nutanix / XCP-ng job must not be handed to the

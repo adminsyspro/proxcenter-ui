@@ -44,7 +44,7 @@ import {
   templates,
 } from '@/__tests__/fixtures/pveProvisioning'
 
-import InventoryDialogs, { type InventoryDialogsProps } from './InventoryDialogs'
+import InventoryDialogs, { requestedMigrationType, type InventoryDialogsProps } from './InventoryDialogs'
 import { useMigrationOptions } from '../hooks/useMigrationOptions'
 import type { AllVmItem, HostItem } from '../InventoryTree'
 
@@ -355,6 +355,14 @@ function makeProps(overrides: Partial<InventoryDialogsProps> = {}): InventoryDia
     // Upgrade
     upgradeDialogOpen: false,
     setUpgradeDialogOpen: vi.fn(),
+
+    // Two-step VMware dialog (#317): the review step and its state.
+    migStep: 'config',
+    setMigStep: vi.fn(),
+    migHardware: { cores: '', sockets: '', memoryMB: '' },
+    setMigHardware: vi.fn(),
+    migNics: [],
+    setMigNics: vi.fn(),
 
     ...overrides,
   }
@@ -1177,7 +1185,9 @@ describe('migration dialog options', () => {
 
     fireEvent.click(screen.getByText('harness-open-single'))
     await screen.findByText(/Not enough free space on san-lvm: 12\.0 GB available, 20\.0 GB needed/)
-    expect(screen.getByRole('button', { name: /Migrate to Proxmox/ })).toBeDisabled()
+    // VMware source: the form's launch button is "Review" (#317); the space
+    // verdict holds it, so the review step and the launch stay out of reach.
+    expect(screen.getByRole('button', { name: /^Review$/ })).toBeDisabled()
     expect(preflightBodies[0]).toMatchObject({
       action: 'warm-check', targetStorage: 'san-lvm', requiredDiskBytes: 20 * 1024 ** 3,
     })
@@ -1211,6 +1221,12 @@ describe('migration dialog options', () => {
     fireEvent.click(screen.getByText('harness-open-single'))
     await screen.findByText(/Target node is ready for warm migration/)
     expect(screen.queryByText(/Not enough free space/)).not.toBeInTheDocument()
+    // VMware source: "Review" opens the review step (#317), where the launch
+    // button is enabled because every form gate passed.
+    const review = screen.getByRole('button', { name: /^Review$/ })
+    expect(review).toBeEnabled()
+    fireEvent.click(review)
+    await screen.findByTestId('migration-review-step')
     expect(screen.getByRole('button', { name: /Migrate to Proxmox/ })).toBeEnabled()
     expect(preflightBodies[0]).toMatchObject({
       action: 'warm-check', targetStorage: 'san-lvm', requiredDiskBytes: 20 * 1024 ** 3,
@@ -1238,7 +1254,8 @@ describe('migration dialog options', () => {
 
     fireEvent.click(screen.getByText('harness-open-single'))
     await screen.findByText(/Could not read the free space of san-lvm on the target node: No such storage\./)
-    expect(screen.getByRole('button', { name: /Migrate to Proxmox/ })).toBeDisabled()
+    // VMware source: the form's launch button is "Review" (#317) and the read error holds it.
+    expect(screen.getByRole('button', { name: /^Review$/ })).toBeDisabled()
     expect(preflightBodies[0]).toMatchObject({ action: 'warm-check', targetStorage: 'san-lvm' })
   })
 
@@ -1585,5 +1602,15 @@ describe('migration dialog options', () => {
     await waitFor(() =>
       expect(screen.getByTestId('mig-disk-paths')).toHaveTextContent('/mnt/hyperv/win01.vhdx'),
     )
+  })
+})
+
+describe('requestedMigrationType', () => {
+  it.each([
+    ['hyperv', 'warm', 'cold'], ['nutanix', 'sshfs_boot', 'cold'],
+    ['vcenter', 'sshfs_boot', 'cold'], ['vcenter', 'warm', 'warm'], ['vcenter', 'cold', 'cold'],
+    ['vmware', 'sshfs_boot', 'sshfs_boot'], ['xcpng', 'warm', 'warm'], [undefined, 'cold', 'cold'],
+  ])('source %s, choice %s -> %s', (host, choice, want) => {
+    expect(requestedMigrationType(host as string | undefined, choice)).toBe(want)
   })
 })

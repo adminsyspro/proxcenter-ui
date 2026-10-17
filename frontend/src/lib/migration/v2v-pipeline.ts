@@ -31,6 +31,7 @@ import { ntfsCompressionPluginCheckCommand, ntfsCompressionPluginInstallScript }
 import { resolveNodeSshEndpoint } from "@/lib/ssh/node-endpoint"
 import { parseV2vLine, calculateOverallProgress } from "./v2v-progress"
 import { parseV2vXml, buildPveCreateParams } from "./v2vConfigMapper"
+import { describeOverrides, buildNetValue, resolveNicTarget, applyHardwareOverrides, type MigrationHardwareOverrides, type MigrationNicMapping } from "./target-overrides"
 import type { V2vVmConfig } from "./v2vConfigMapper"
 import { allocateAndMapBlockVolume, nextFreeDiskName, type AllocatedVolume } from "./pvesm-alloc"
 import { adoptImportAndAttachFileVolume } from "./adopt-file-volume"
@@ -93,6 +94,10 @@ export interface V2vMigrationConfig {
    * by the route; absent means the Proxmox default, x86-64-v2-AES.
    */
   cpuType?: string
+  /** Operator hardware overrides of the created VM (#317): cores, sockets, memory. */
+  hardware?: MigrationHardwareOverrides
+  /** Per-source-NIC target bridge, VLAN tag and model (#317); unmapped NICs use networkBridge. */
+  nics?: MigrationNicMapping[]
   /** vCenter datacenter name (libvirt vpx URI: vpx://VC/{datacenter}/...). Required for vcenter source. */
   vcenterDatacenter?: string
   /**
@@ -2306,6 +2311,7 @@ export async function runV2vMigrationPipeline(
 
     // Build PVE creation params
     let createParams: Record<string, any>
+    const overrides = { hardware: config.hardware, nics: config.nics }
 
     if (vmConfig) {
       // Override name from source VM (virt-v2v may use disk filename as name in -i disk mode)
@@ -2367,14 +2373,14 @@ export async function runV2vMigrationPipeline(
         await appendLog(jobId, applySourceSizing(vmConfig, sourceSizing), "info")
       }
 
-      createParams = buildPveCreateParams(vmConfig, targetVmid, config.networkBridge, config.vlanTag, config.cpuType)
+      // The operator's review-step choices (#317) are applied last, on top of
+      // the source values merged above: cores, sockets and memory win over the
+      // vCenter sizing, and each NIC lands on its own bridge, tag and model.
+      createParams = buildPveCreateParams(vmConfig, targetVmid, config.networkBridge, config.vlanTag, config.cpuType, overrides)
     } else {
       // Fallback config
-      const fallbackTagSuffix =
-        typeof config.vlanTag === "number" && Number.isInteger(config.vlanTag) && config.vlanTag >= 1 && config.vlanTag <= 4094
-          ? `,tag=${config.vlanTag}`
-          : ""
-      createParams = {
+      const fallbackNic = resolveNicTarget(0, overrides.nics, { bridge: config.networkBridge, vlanTag: config.vlanTag })
+      createParams = applyHardwareOverrides({
         vmid: targetVmid,
         name: config.sourceVmName.replaceAll(/[^a-zA-Z0-9.\-]/g, "-").substring(0, 63) || "vm",
         ostype: "l26",
@@ -2387,9 +2393,11 @@ export async function runV2vMigrationPipeline(
         machine: "q35",
         boot: "order=scsi0",
         agent: "enabled=0",
-        net0: `virtio,bridge=${config.networkBridge}${fallbackTagSuffix}`,
-      }
+        net0: buildNetValue(fallbackNic.model ?? "virtio", fallbackNic.bridge, undefined, fallbackNic.vlanTag),
+      }, overrides.hardware)
     }
+    const overridesLine = describeOverrides(overrides)
+    if (overridesLine) await appendLog(jobId, overridesLine)
 
     await appendLog(jobId, `Creating VM ${targetVmid}: ${createParams.name} (${createParams.ostype}, ${createParams.bios})...`)
 

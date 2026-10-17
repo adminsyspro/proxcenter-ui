@@ -29,6 +29,8 @@ import { parseSha1Thumbprint } from "./thumbprint"
 import type { Extent } from "./extents"
 import { startSoapKeepAlive } from "./session-keepalive"
 import { startJobHeartbeat } from "../job-heartbeat"
+import { resolveWarmZeroRateLimit } from "./zero-rate-target"
+import { sweepOrphanReaders } from "./orphan-readers"
 import type { WarmMigrationConfig } from "./types"
 import {
   registerJob, unregisterJob, acquireVmLock, releaseVmLock,
@@ -292,6 +294,15 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
     if (!pf.ok) throw new Error(pf.error || "VDDK preflight failed")
     await appendLog(jobId, "VDDK preflight OK on Proxmox node", "success")
 
+    // Leftover nbdkit readers of finished jobs hold a VMware snapshot and a
+    // kernel NBD slot for nothing (roadmap#45: one sat idle for nine days).
+    // Stop them before this job starts its own; a live job's reader is never
+    // touched, and a sweep failure never fails the migration.
+    await sweepOrphanReaders({
+      connectionId: config.targetConnectionId, nodeIp, nodeName: config.targetNode, currentJobId: jobId,
+      log: (msg, level) => appendLog(jobId, msg, level),
+    }).catch(async (e: any) => { await appendLog(jobId, `Leftover reader sweep skipped: ${e?.message || e}`, "warn").catch(() => {}) })
+
     // Source-side counterpart of that preflight (#946). A provisioned node says
     // nothing about whether its VDDK can read THIS source: the generations are
     // supported N-2 against vSphere, and an ESXi 5.5 source used to reach the
@@ -341,6 +352,7 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
       targetStorage: config.targetStorage, storageType: storageInfo?.type, targetVmid, shellConf,
       disks: vmConfig.disks.map(d => ({ key: d.deviceKey, capacityBytes: d.capacityBytes })),
       allocatedVolumes,
+      zeroRateLimitMBps: await resolveWarmZeroRateLimit(config.zeroRateLimitMBps, config.targetConnectionId),
     })
     for (const [deviceKey, dev] of provisioned) {
       targetDev.set(deviceKey, dev)

@@ -2,6 +2,7 @@
 // Zod validation schemas for API route inputs
 
 import { z } from 'zod'
+import { ZERO_RATE_LIMIT_MAX_MBPS, ZERO_RATE_UNLIMITED } from './migration/warm/zero-rate'
 
 import type { BroadcastInput } from '@/lib/broadcast/types'
 import { isValidCidr } from '@/lib/net/cidr'
@@ -62,6 +63,9 @@ export const createConnectionSchema = z.object({
   sshUseSudo: z.boolean().default(false),
   // Site Recovery replication network (CIDR), PVE only. Empty or null clears it.
   replicationNetwork: z.nullable(z.string().transform(s => s.trim())).optional(),
+  // Warm migration zeroing cap (roadmap#45), PVE only: MB/s, 0 = unlimited,
+  // null clears it. Ignored without the migration feature (Enterprise).
+  warmZeroRateLimitMBps: z.number().int().min(ZERO_RATE_UNLIMITED).max(ZERO_RATE_LIMIT_MAX_MBPS).nullable().optional(),
 }).superRefine((data, ctx) => {
   // PVE/PBS require apiToken
   if ((data.type === 'pve' || data.type === 'pbs') && !data.apiToken) {
@@ -155,6 +159,9 @@ export const updateConnectionSchema = z.object({
   sshPassword: z.nullable(z.string().transform(s => s.trim())).optional(),
   sshUseSudo: z.boolean().optional(),
   replicationNetwork: z.nullable(z.string().transform(s => s.trim())).optional(),
+  // Warm migration zeroing cap (roadmap#45), PVE only: MB/s, 0 = unlimited,
+  // null clears it. Ignored without the migration feature (Enterprise).
+  warmZeroRateLimitMBps: z.number().int().min(ZERO_RATE_UNLIMITED).max(ZERO_RATE_LIMIT_MAX_MBPS).nullable().optional(),
 }).superRefine((data, ctx) => {
   refineReplicationNetwork(data, ctx)
 })

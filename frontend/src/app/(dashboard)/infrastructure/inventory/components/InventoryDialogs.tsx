@@ -2,6 +2,7 @@
 
 import { useRBAC } from '@/contexts/RBACContext'
 import React, { useState } from 'react'
+import useSWR from 'swr'
 import { useNicIdentityPermissions } from '@/hooks/useNicIdentityPermissions'
 import dynamic from 'next/dynamic'
 import { useTranslations } from 'next-intl'
@@ -44,6 +45,8 @@ import {
 import { NodeRow, BulkAction } from '@/components/NodesTable'
 import NumericTextField from '@/components/ui/NumericTextField'
 import { NFC_CONCURRENCY_MIN, NFC_CONCURRENCY_MAX } from '@/lib/migration/nfc-progress'
+import { isZeroRateLimitValid, describeZeroRateLimit } from '@/lib/migration/warm/zero-rate'
+import ZeroRateSlider from '@/components/migration/ZeroRateSlider'
 import { MIGRATION_CPU_TYPES, MIGRATION_CPU_TYPE_DEFAULT, type MigrationCpuType } from '@/lib/migration/cpu-type'
 import { usedVmidsOnConnection, nextVmidOnConnection } from '@/components/hardware/utils'
 import { tooltipSlotProps } from '@/components/settings/ha/tooltipSlotProps'
@@ -294,6 +297,8 @@ export interface InventoryDialogsProps {
   setMigManualCutover: (v: boolean) => void
   migDowntimeBudget: string
   setMigDowntimeBudget: (v: string) => void
+  migZeroRateLimit: string
+  setMigZeroRateLimit: (v: string) => void
   setMigConvertToQcow2: (v: boolean) => void
   migCpuType: MigrationCpuType
   setMigCpuType: (v: MigrationCpuType) => void
@@ -484,6 +489,7 @@ export default function InventoryDialogs(props: InventoryDialogsProps) {
     migCpuType, setMigCpuType,
     migManualCutover, setMigManualCutover,
     migDowntimeBudget, setMigDowntimeBudget,
+    migZeroRateLimit, setMigZeroRateLimit,
     migDiskPaths, setMigDiskPaths, migTempStorage, setMigTempStorage, migV2vRoot, setMigV2vRoot,
     migNfcConcurrency, setMigNfcConcurrency,
     migType, setMigType, migTransferMode, setMigTransferMode, migPveConnections, migNodes, migStorages,
@@ -951,6 +957,18 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
   const showDowntimeBudget = migType === 'warm' && !migManualCutover
   const downtimeBudgetInvalid = showDowntimeBudget && !isDowntimeBudgetValid(migDowntimeBudget)
 
+  // roadmap#45: the thick zeroing cap only applies where zeroing happens, a
+  // thick LVM target. Empty keeps the cap of the target PVE connection
+  // (Settings > Connections), read here so the field says what it is.
+  const showZeroRateLimit = migType === 'warm' && migTargetIsThickLvm
+  const zeroRateLimitInvalid = showZeroRateLimit && !isZeroRateLimitValid(migZeroRateLimit)
+  const { data: targetConnection } = useSWR<{ data?: { warmZeroRateLimitMBps?: number | null } }>(
+    showZeroRateLimit && migTargetConn ? `/api/v1/connections/${encodeURIComponent(migTargetConn)}` : null,
+    (url: string) => fetch(url).then(r => (r.ok ? r.json() : null)),
+    { revalidateOnFocus: false },
+  )
+  const zeroRateGlobalDefault = describeZeroRateLimit(targetConnection?.data?.warmZeroRateLimitMBps)
+
   // Rendered identically by the single-VM and the bulk dialog. Kept as one
   // helper rather than two copies of the same JSX: an identical block repeated
   // in both dialogs is what trips the new-code duplication gate.
@@ -1070,6 +1088,48 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
           sx={{ width: 110, flexShrink: 0 }}
         />
       </Box>
+    </Box>
+  )
+
+  // Thick LVM warm targets only (roadmap#45): cap on the pre-copy zeroing, so a
+  // LUN shared with production is not saturated for the whole phase. Rendered
+  // by both dialogs; a plain text field because an empty value is meaningful.
+  // The cluster's cap applies unless the operator overrides it for this run:
+  // empty = follow the target connection (even if it changes later), any
+  // value (0 = unlimited) = this migration only.
+  const zeroRateClusterCap = targetConnection?.data?.warmZeroRateLimitMBps || 0
+  const zeroRateOverridden = migZeroRateLimit.trim() !== ''
+  const renderZeroRateLimitField = () => showZeroRateLimit && (
+    <Box sx={{ px: 0.5 }}>
+      <FormControlLabel
+        control={
+          <Checkbox
+            size="small"
+            checked={!zeroRateOverridden}
+            onChange={e => setMigZeroRateLimit(e.target.checked ? '' : String(zeroRateClusterCap))}
+            slotProps={{ input: { 'data-testid': 'warm-zero-rate-use-cluster' } as any }}
+          />
+        }
+        label={
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            <Typography variant="body2">{t('inventoryPage.esxiMigration.zeroRateUseCluster', { cap: zeroRateGlobalDefault })}</Typography>
+            <MuiTooltip title={t('inventoryPage.esxiMigration.zeroRateUseClusterHelp', { cap: zeroRateGlobalDefault })} arrow>
+              <Box component="i" className="ri-information-line" data-testid="warm-zero-rate-use-cluster-help" sx={{ fontSize: 16, color: 'text.secondary', cursor: 'help' }} />
+            </MuiTooltip>
+          </Box>
+        }
+      />
+      {zeroRateOverridden && (
+        <ZeroRateSlider
+          value={Number(migZeroRateLimit) || 0}
+          onChange={v => setMigZeroRateLimit(String(v))}
+          label={t('settings.warmZeroRateLimitLabel')}
+          help={t('inventoryPage.esxiMigration.zeroRateLimitHelp')}
+          ariaLabel={t('inventoryPage.esxiMigration.zeroRateLimit')}
+          testId="warm-zero-rate-limit"
+          valueTestId="warm-zero-rate-value"
+        />
+      )}
     </Box>
   )
 
@@ -3315,6 +3375,7 @@ return
                   {/* Post-migration qcow2 conversion (#595) — thick LVM targets only */}
                   {renderAutomaticCutoverSwitch()}
                   {renderDowntimeBudgetField()}
+                  {renderZeroRateLimitField()}
                   {renderQcow2ConvertSwitch()}
                 </Stack>
               </Box>
@@ -3597,6 +3658,7 @@ return
                   if (migType === 'warm' && migTargetNode !== '__auto__' && !warmPreflightCurrent?.ok) return true
                   // Warm: the selected storage cannot hold the source disks (or could not be read).
                   if (migType === 'warm' && warmSpaceShort) return true
+                  if (zeroRateLimitInvalid) return true
                   return false
                 })()}
                 sx={{ textTransform: 'none' }}
@@ -3643,6 +3705,10 @@ return
                         ...(migType === 'warm' && migManualCutover && { cutoverMode: 'manual' as const }),
                         ...(migType === 'warm' && !migManualCutover && migDowntimeBudget.trim() !== '' && {
                           downtimeBudgetSec: Number(migDowntimeBudget.trim()),
+                        }),
+                        // Thick zeroing cap (roadmap#45); empty keeps the target connection's.
+                        ...(showZeroRateLimit && migZeroRateLimit.trim() !== '' && {
+                          zeroRateLimitMBps: Number(migZeroRateLimit.trim()),
                         }),
                         // Forward tempStorage for every source type — v2v uses it as virt-v2v's -os,
                         // direct-ESXi uses it as the base path for SSHFS mount + VMDK dumps + clones.
@@ -4411,6 +4477,7 @@ return
                 )}
 
                 {renderNfcConcurrencyField(bulkMigHostInfo?.hostType === 'vcenter')}
+                {renderZeroRateLimitField()}
 
                 {renderCpuTypeSelect()}
 
@@ -4696,6 +4763,7 @@ return
                   // VM state.
                   if (migType === 'cold' && bulkMigHostInfo?.vms?.some((vm: any) => bulkMigSelected.has(vm.vmid) && (vm.status === 'running' || vm.status === 'poweredOn'))) return true
                   if (migType === 'warm' && bulkMigHostInfo?.vms?.some((vm: any) => bulkMigSelected.has(vm.vmid) && !isSourcePoweredOn(vm.status))) return true
+                  if (zeroRateLimitInvalid) return true
                   // Offline batches stage every source disk on the temporary storage: mandatory when offered.
                   if (migType !== 'warm' && vcenterPreflight?.tempStorages && vcenterPreflight.tempStorages.length > 0 && !migTempStorage) return true
                   return false
@@ -4807,6 +4875,7 @@ return
                           // virt-v2v root filesystem override (#738); omitted when empty.
                           ...(migV2vRoot.trim() && { v2vRoot: migV2vRoot.trim() }),
                           ...(isVcenterBulk && migType !== 'warm' && { nfcConcurrency: migNfcConcurrency }),
+                          ...(showZeroRateLimit && migZeroRateLimit.trim() !== '' && { zeroRateLimitMBps: Number(migZeroRateLimit.trim()) }),
                         }),
                       })
                       const d = await res.json()
@@ -4855,6 +4924,7 @@ return
                     }),
                     ...(migV2vRoot.trim() && { v2vRoot: migV2vRoot.trim() }),
                     ...(isVcenterBulk && migType !== 'warm' && { nfcConcurrency: migNfcConcurrency }),
+                    ...(showZeroRateLimit && migZeroRateLimit.trim() !== '' && { zeroRateLimitMBps: Number(migZeroRateLimit.trim()) }),
                   }
                   setBulkMigJobs(jobs)
                   setBulkMigStarting(false)

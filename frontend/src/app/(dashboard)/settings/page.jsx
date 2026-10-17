@@ -498,6 +498,11 @@ function ConnectionsTab() {
         ...(formData.sshPassphrase.trim() && { sshPassphrase: formData.sshPassphrase.trim() }),
         ...(formData.sshPassword.trim() && { sshPassword: formData.sshPassword.trim() }),
       }),
+      // Warm migration zeroing cap of this PVE target (roadmap#45), Enterprise
+      // only; empty = unlimited (null clears a value saved before).
+      ...(addConnType === 'pve' && migrationAvailable && {
+        warmZeroRateLimitMBps: formData.warmZeroRateLimitMBps?.trim() ? Number(formData.warmZeroRateLimitMBps.trim()) : null,
+      }),
       // Provider-only create-with-owner: own the connection by an MSP tenant
       ...(!editingConn?.id && formData.ownerTenantId && { ownerTenantId: formData.ownerTenantId }),
     }

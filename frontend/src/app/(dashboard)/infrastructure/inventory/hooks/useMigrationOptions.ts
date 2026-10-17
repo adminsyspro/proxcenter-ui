@@ -85,6 +85,10 @@ export function useMigrationOptions({
   // fixed scale. Starts at the pipeline default so the control opens where the
   // engine would have run anyway.
   const [migDowntimeBudget, setMigDowntimeBudget] = useState(String(DOWNTIME_BUDGET_DEFAULT_SEC))
+  // Warm only, thick targets (roadmap#45). MB/s as a string; empty means "the
+  // cap of the target PVE connection", 0 means unlimited. Starts empty so
+  // a cap typed for one busy array never silently slows the next run.
+  const [migZeroRateLimit, setMigZeroRateLimit] = useState('')
 
   useEffect(() => {
     if (!esxiMigrateVm && !bulkMigOpen) return
@@ -101,6 +105,7 @@ export function useMigrationOptions({
     setMigCpuType(MIGRATION_CPU_TYPE_DEFAULT)
     setMigManualCutover(false)
     setMigDowntimeBudget(String(DOWNTIME_BUDGET_DEFAULT_SEC))
+    setMigZeroRateLimit('')
   }, [esxiMigrateVm, bulkMigOpen])
 
   return {
@@ -130,5 +135,7 @@ export function useMigrationOptions({
     setMigManualCutover,
     migDowntimeBudget,
     setMigDowntimeBudget,
+    migZeroRateLimit,
+    setMigZeroRateLimit,
   }
 }

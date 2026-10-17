@@ -53,6 +53,10 @@ model Connection {
   // the RBD stream to the DR node's address inside this network instead of the
   // management address, the way the Proxmox migration network works.
   replicationNetwork String?
+  // Warm migration (roadmap#45): cap on the thick-target zeroing that precedes
+  // the copy into this PVE cluster, MB/s, so a LUN shared with production is
+  // not saturated. Null or 0 = unlimited. Enterprise (migration feature).
+  warmZeroRateLimitMBps Int?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

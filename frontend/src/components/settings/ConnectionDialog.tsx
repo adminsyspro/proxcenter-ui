@@ -31,6 +31,8 @@ import {
   MenuItem,
   Select,
   Switch,
+  Tab,
+  Tabs,
   TextField,
   ToggleButton,
   ToggleButtonGroup,
@@ -47,6 +49,9 @@ import { isPartialIPv4Cidr, isValidCidr } from '@/lib/net/cidr'
 import { isHostKeyMismatch } from './hostKeyMismatch'
 import NodeSshEndpointsEditor from '@/components/ssh/NodeSshEndpointsEditor'
 import { formatSshEndpoint } from '@/lib/ssh/node-endpoint-core'
+import { useLicense, Features } from '@/contexts/LicenseContext'
+import { isZeroRateLimitValid, ZERO_RATE_LIMIT_MAX_MBPS } from '@/lib/migration/warm/zero-rate'
+import ZeroRateSlider from '@/components/migration/ZeroRateSlider'
 
 export type ConnectionFormData = {
   name: string
@@ -77,6 +82,8 @@ export type ConnectionFormData = {
   sshUseSudo: boolean
   // Site Recovery replication network (CIDR), PVE only, '' = management network
   replicationNetwork: string
+  /** Warm migration zeroing cap of this PVE target, MB/s as typed; '' = unlimited (roadmap#45). */
+  warmZeroRateLimitMBps: string
   // Provider-only, create mode: own the connection by an MSP tenant ('' = pool)
   ownerTenantId: string
 }
@@ -119,6 +126,7 @@ const defaultFormData: ConnectionFormData = {
   sshPassword: '',
   sshUseSudo: false,
   replicationNetwork: '',
+  warmZeroRateLimitMBps: '',
   ownerTenantId: '',
 }
 
@@ -154,6 +162,8 @@ function InfoTooltip({ text, size = 14 }: { text: string; size?: number }) {
   )
 }
 
+type ConnectionTabId = 'general' | 'auth' | 'ssh' | 'siteRecovery' | 'migrations' | 'location'
+
 function SectionTitle({ icon, title, optional, info }: { icon: string; title: string; optional: string; info: string }) {
   return (
     <Typography variant="subtitle2" sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -174,6 +184,10 @@ export default function ConnectionDialog({
   mode = 'create'
 }: ConnectionDialogProps) {
   const t = useTranslations()
+  const [tab, setTab] = useState<ConnectionTabId>('general')
+  // Warm migration settings are Enterprise: hidden, never sent, on Community.
+  const { hasFeature } = useLicense()
+  const migrationAvailable = hasFeature(Features.VMWARE_MIGRATION)
   const theme = useTheme()
   const tooltipSlotProps = {
     tooltip: { sx: { bgcolor: 'background.paper', color: 'text.primary', border: `1px solid ${theme.palette.divider}`, boxShadow: 3, fontSize: '0.75rem' } },
@@ -223,6 +237,7 @@ export default function ConnectionDialog({
   // Reset form when dialog opens
   useEffect(() => {
     if (open) {
+      setTab('general')
       if (initialData) {
         // XCP-ng rows created before the direct-pool mode existed are XO connections,
         // so an absent subType means "xo".
@@ -243,6 +258,7 @@ export default function ConnectionDialog({
           sshAuthMethod: initialData.sshAuthMethod || '',
           // The list payload hands back null when no replication network is set
           replicationNetwork: (initialData as any).replicationNetwork || '',
+          warmZeroRateLimitMBps: (initialData as any).warmZeroRateLimitMBps ? String((initialData as any).warmZeroRateLimitMBps) : '',
           subType: editSubType,
           // External hypervisors keep "user:password" encrypted; the list payload
           // hands the user back as apiUser (never the password). Without it the
@@ -522,6 +538,11 @@ export default function ConnectionDialog({
       }
     }
 
+    if (type === 'pve' && migrationAvailable && !isZeroRateLimitValid(form.warmZeroRateLimitMBps)) {
+      setError(t('settings.warmZeroRateLimitInvalid', { max: ZERO_RATE_LIMIT_MAX_MBPS }))
+      return
+    }
+
     // Auto-append default port if not specified (PVE/PBS only, external hypervisors use 443)
     const defaultPort = isExternalHypervisor ? '443' : type === 'pbs' ? '8007' : '8006'
     let finalForm = { ...form }
@@ -588,8 +609,23 @@ export default function ConnectionDialog({
   // pool master over XAPI. Everything XCP-ng-specific below reads these.
   const isXcpngXo = isXcpng && form.subType === 'xo'
 
+  // Tabs shown for this connection type; the SSH condition is the one the SSH
+  // section always had (PVE and standalone ESXi only).
+  const showSshTab = !isPbs && !isXcpng && !isHyperv && !isNutanix && !(isVmware && form.subType === 'vcenter')
+  const visibleTabs: { id: ConnectionTabId; label: string; icon: string }[] = [
+    { id: 'general', label: t('settings.connectionTabGeneral'), icon: 'ri-settings-3-line' },
+    { id: 'auth', label: t('settings.connectionTabAuth'), icon: 'ri-key-2-line' },
+    ...(showSshTab ? [{ id: 'ssh' as const, label: t('settings.connectionTabSsh'), icon: 'ri-terminal-line' }] : []),
+    ...(type === 'pve' ? [{ id: 'siteRecovery' as const, label: t('settings.siteRecovery'), icon: 'ri-refresh-line' }] : []),
+    ...(type === 'pve' && migrationAvailable ? [{ id: 'migrations' as const, label: t('settings.connectionTabMigrations'), icon: 'ri-exchange-line' }] : []),
+    ...(!isExternalHypervisor ? [{ id: 'location' as const, label: t('settings.location'), icon: 'ri-map-pin-line' }] : []),
+  ]
+  // A tab that no longer applies (e.g. ESXi switched to vCenter) falls back to General.
+  const currentTab: ConnectionTabId = visibleTabs.some(tb => tb.id === tab) ? tab : 'general'
+  const zeroRateValue = Number(form.warmZeroRateLimitMBps) || 0
+
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
         {isNutanix ? (
           <><img src="/images/nutanix-logo.svg" alt="" width={20} height={20} /> {isEdit ? 'Edit Nutanix Connection' : 'Add Nutanix Connection'}</>
@@ -606,12 +642,30 @@ export default function ConnectionDialog({
         )}
       </DialogTitle>
       
+      {/* One tab per section: the dialog had grown into one long scroll. Every
+          panel stays mounted (only hidden) so the form state, the validation
+          and the save are unchanged by the tab the operator is on. */}
+      <Tabs
+        value={currentTab}
+        onChange={(_e, v) => setTab(v)}
+        // Every tab visible at once, no scroll arrows: equal widths across the
+        // (md) dialog, compact padding so six labels fit.
+        variant="fullWidth"
+        sx={{ px: 2, borderBottom: 1, borderColor: 'divider' }}
+      >
+        {visibleTabs.map(tb => (
+          <Tab key={tb.id} value={tb.id} label={tb.label} icon={<i className={tb.icon} />} iconPosition="start" sx={{ minHeight: 48, minWidth: 0, px: 1, textTransform: 'none', whiteSpace: 'nowrap' }} data-testid={`connection-tab-${tb.id}`} />
+        ))}
+      </Tabs>
+
       <DialogContent>
         {error && (
           <Alert severity="error" sx={{ mb: 2, mt: 1 }}>
             {error}
           </Alert>
         )}
+
+        <Box role="tabpanel" hidden={currentTab !== 'general'} sx={{ pt: 1 }}>
 
         {(isXcpngXo || isVmware) && (
           <Alert severity="info" sx={{ mb: 2 }}>
@@ -864,8 +918,9 @@ export default function ConnectionDialog({
           />
         )}
 
-        <Divider sx={{ my: 3 }} />
+        </Box>
 
+        <Box role="tabpanel" hidden={currentTab !== 'auth'} sx={{ pt: 1 }}>
         {/* Section: Authentication */}
         <Typography variant="subtitle2" sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
           <i className="ri-key-2-line" />
@@ -1110,9 +1165,11 @@ export default function ConnectionDialog({
           </>
         )}
 
-        {!isPbs && !isXcpng && !isHyperv && !isNutanix && !(isVmware && form.subType === 'vcenter') && (
+        </Box>
+
+        <Box role="tabpanel" hidden={currentTab !== 'ssh'} sx={{ pt: 1 }}>
+        {showSshTab && (
           <>
-        <Divider sx={{ my: 3 }} />
 
         {/* Section: SSH access (PVE + VMware/ESXi) */}
         <SectionTitle icon="ri-terminal-line" title={t('settings.sshAccess')} optional={t('common.optional')} info={t('settings.sshInfo')} />
@@ -1379,10 +1436,11 @@ export default function ConnectionDialog({
           </>
         )}
 
+        </Box>
+
+        <Box role="tabpanel" hidden={currentTab !== 'siteRecovery'} sx={{ pt: 1 }}>
         {type === 'pve' && (
           <>
-            <Divider sx={{ my: 3 }} />
-
             {/* Section: Site Recovery (PVE only). Its own section rather than a
                 field lost among the SSH credentials: the replication stream rides
                 on the SSH trust above, so the field waits for SSH to be enabled,
@@ -1421,10 +1479,38 @@ export default function ConnectionDialog({
           </>
         )}
 
+        </Box>
+
+        <Box role="tabpanel" hidden={currentTab !== 'migrations'} sx={{ pt: 1 }}>
+        {type === 'pve' && migrationAvailable && (
+          <>
+            {/* Section: warm migrations INTO this cluster (roadmap#45, Enterprise).
+                The zeroing cap protects the array behind this cluster's thick
+                storage, whatever the source hypervisor: it belongs to the target. */}
+            <SectionTitle icon="ri-exchange-line" title={t('settings.warmMigrationTarget')} optional={t('common.optional')} info={t('settings.warmMigrationTargetInfo')} />
+
+            <Box sx={{ mt: 2 }}>
+              <ZeroRateSlider
+                value={zeroRateValue}
+                onChange={v => handleChange('warmZeroRateLimitMBps', v > 0 ? String(v) : '')}
+                label={t('settings.warmZeroRateLimitLabel')}
+                help={t('settings.warmZeroRateLimitHelper')}
+                ariaLabel={t('settings.warmZeroRateLimit')}
+                testId="connection-warm-zero-rate-limit"
+                valueTestId="connection-warm-zero-rate-value"
+              />
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                {t('settings.warmZeroRateLimitCaption')}
+              </Typography>
+            </Box>
+          </>
+        )}
+
+        </Box>
+
+        <Box role="tabpanel" hidden={currentTab !== 'location'} sx={{ pt: 1 }}>
         {!isExternalHypervisor && (
           <>
-            <Divider sx={{ my: 3 }} />
-
             {/* Section: Location (optionnelle) — PVE/PBS only */}
             <SectionTitle icon="ri-map-pin-line" title={t('settings.location')} optional={t('common.optional')} info={t('settings.locationInfo')} />
 
@@ -1490,6 +1576,7 @@ export default function ConnectionDialog({
             />
           </>
         )}
+        </Box>
       </DialogContent>
 
       <DialogActions>

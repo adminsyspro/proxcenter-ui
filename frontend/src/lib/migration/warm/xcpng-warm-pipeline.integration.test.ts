@@ -618,11 +618,14 @@ describe("runXcpngWarmMigration failure cleanup", () => {
     expect(prisma.statusHistory).toEqual(["planning", "enabling_cbt", "preparing_disks", "full_copy", "failed"])
     expect(hasLog("Warm migration failed: block apply failed on disk 0")).toBe(true)
 
-    // thick path: announced, refusal of the offload surfaced, progress streamed, completion logged
+    // thick path: announced with its cap, refusal of the offload surfaced and the
+    // streamed mode named, progress streamed with the average rate, completion
+    // logged with mode and rate (roadmap#45 wording)
     expect(hasLog("Disk 0: zeroing thick target /dev/zvol/DatastoreVM/vm-900-disk-0 (15.0 GB)")).toBe(true)
-    expect(hasLog("Disk 0: array refused the blkdiscard write-zeroes offload (Operation not supported)")).toBe(true)
-    expect(messages().some(m => /^Disk 0: zeroed [\d.]+ of 15\.0 GB$/.test(m))).toBe(true)
-    expect(hasLog("Disk 0: zeroed thick target /dev/zvol/DatastoreVM/vm-900-disk-0")).toBe(true)
+    expect(messages().some(m => m.includes("Rate limit unlimited"))).toBe(true)
+    expect(hasLog("Disk 0: the array refused the write-zeroes offload (Operation not supported); streaming zeros")).toBe(true)
+    expect(messages().some(m => /^Disk 0: zeroed [\d.]+ of 15\.0 GB \(\d+ MB\/s average\)$/.test(m))).toBe(true)
+    expect(messages().some(m => /^Disk 0: zeroed thick target \/dev\/zvol\/DatastoreVM\/vm-900-disk-0 in .* \(streamed zeros, \d+ MB\/s average, limit unlimited\)$/.test(m))).toBe(true)
     expect(prisma.migrationJob.updateMany).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ status: "preparing_disks", transferSpeed: expect.stringMatching(/^Zeroing: \d+ MB\/s$/) }),
     }))

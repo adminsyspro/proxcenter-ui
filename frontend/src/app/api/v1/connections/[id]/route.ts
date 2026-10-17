@@ -15,6 +15,11 @@ import { pveFetch } from "@/lib/proxmox/client"
 import { discoverNodeIps } from "@/lib/proxmox/discoverNodeIps"
 import { xcpngSubTypeOf } from "@/lib/xcpng/source"
 import { normalizeXapiBaseUrl } from "@/lib/xcpng/xapi-client"
+import { hasServerFeature } from "@/lib/auth/requireEnterprise"
+import { Features } from "@/lib/license/features"
+
+/** Warm migration settings are Enterprise (migration feature). */
+const migrationFeatureLicensed = () => hasServerFeature(Features.VMWARE_MIGRATION)
 
 export const runtime = "nodejs"
 
@@ -188,6 +193,12 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     // disabling SSH in the same request wins over any value sent along.
     if (body.replicationNetwork !== undefined && body.sshEnabled !== false) {
       data.replicationNetwork = body.replicationNetwork || null
+    }
+    // Warm migration zeroing cap (roadmap#45): PVE only, Enterprise only; null
+    // clears it. A Community server ignores it rather than failing the save.
+    if (body.warmZeroRateLimitMBps !== undefined && await migrationFeatureLicensed()) {
+      const current = await prisma.connection.findUnique({ where: { id }, select: { type: true } })
+      if (current?.type === 'pve') data.warmZeroRateLimitMBps = body.warmZeroRateLimitMBps
     }
     if (body.sshAuthMethod !== undefined) {
       data.sshAuthMethod = body.sshAuthMethod || null

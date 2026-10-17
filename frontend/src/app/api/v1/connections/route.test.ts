@@ -15,6 +15,7 @@ const getTenantInfrastructureScopeMock = vi.fn<(tenantId?: string) => Promise<an
 const getRBACContextMock = vi.fn<() => Promise<any>>()
 const getRbacInfraScopeMock = vi.fn<(...args: any[]) => Promise<any>>()
 const testXcpngConnectionMock = vi.fn<(...args: any[]) => Promise<any>>()
+const hasServerFeatureMock = vi.fn<(featureId: string) => Promise<boolean>>()
 
 const connectionCreateMock = vi.fn<(args: any) => Promise<any>>()
 const connectionFindManyMock = vi.fn<(args: any) => Promise<any[]>>()
@@ -104,6 +105,10 @@ vi.mock('@/lib/audit', () => ({
   audit: auditMock,
 }))
 
+vi.mock('@/lib/auth/requireEnterprise', () => ({
+  hasServerFeature: (id: string) => hasServerFeatureMock(id),
+}))
+
 beforeEach(() => {
   checkPermissionMock.mockReset().mockResolvedValue(null)
   encryptSecretMock.mockReset().mockImplementation((s: string) => `enc:${s}`)
@@ -118,6 +123,7 @@ beforeEach(() => {
   getRBACContextMock.mockReset().mockResolvedValue({ isAdmin: true, userId: 'u1', tenantId: 'default' })
   getRbacInfraScopeMock.mockReset().mockResolvedValue(null)
   testXcpngConnectionMock.mockReset().mockResolvedValue({ ok: true, hosts: 1 })
+  hasServerFeatureMock.mockReset().mockResolvedValue(true)
   connectionFindManyMock.mockReset().mockResolvedValue([])
   connectionCreateMock.mockReset().mockResolvedValue({
     id: 'conn-new',
@@ -313,6 +319,25 @@ describe('POST /api/v1/connections - PVE path', () => {
     const created = connectionCreateMock.mock.calls[0][0].data
     expect(created.replicationNetwork).toBe('10.10.50.0/24')
     expect(connectionCreateMock.mock.calls[0][0].select).toEqual(expect.objectContaining({ replicationNetwork: true }))
+  })
+
+  it('stores the warm zeroing cap of a PVE connection on Enterprise, never on Community (roadmap#45)', async () => {
+    pveFetchMock.mockResolvedValue({})
+    const POST = await importPOST()
+
+    let res = await callRoute(POST, { body: { ...basePveBody, warmZeroRateLimitMBps: 150 } })
+    expect(res.status).toBe(201)
+    expect(connectionCreateMock.mock.calls[0][0].data.warmZeroRateLimitMBps).toBe(150)
+    expect(hasServerFeatureMock).toHaveBeenCalledWith('vmware_migration')
+    expect(connectionCreateMock.mock.calls[0][0].select).toEqual(expect.objectContaining({ warmZeroRateLimitMBps: true }))
+
+    hasServerFeatureMock.mockResolvedValue(false)
+    res = await callRoute(POST, { body: { ...basePveBody, warmZeroRateLimitMBps: 150 } })
+    expect(res.status).toBe(201)
+    expect(connectionCreateMock.mock.calls[1][0].data).not.toHaveProperty('warmZeroRateLimitMBps')
+
+    res = await callRoute(POST, { body: { ...basePveBody, warmZeroRateLimitMBps: -1 } })
+    expect(res.status).toBe(400)
   })
 
   it('stores a null replication network when SSH is disabled, even if a value is sent', async () => {

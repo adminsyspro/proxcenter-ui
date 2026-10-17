@@ -37,6 +37,11 @@ export interface WarmMigrationConfig {
    * is what a migration scheduled inside a maintenance window needs (#443).
    */
   cutoverMode?: "auto" | "manual"
+  /**
+   * Cap on the write rate of the thick-target zeroing, MB/s (roadmap#45). 0 is
+   * unlimited; absent means the cap of the target PVE connection.
+   */
+  zeroRateLimitMBps?: number
 }
 
 export interface LogEntry { ts: string; msg: string; level: "info" | "success" | "warn" | "error" }

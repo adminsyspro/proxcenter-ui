@@ -118,6 +118,17 @@ describe("POST /api/v1/migrations — warm routing", () => {
     expect(warm).not.toHaveBeenCalled()
   })
 
+  // roadmap#45: a bad zeroing cap is refused, never turned into "unlimited",
+  // which is exactly what the operator is trying to avoid on a shared LUN.
+  it.each([-1, 1.5, "abc", 100_001])("rejects the zeroing cap %j before creating a job", async (cap) => {
+    const res = await callRoute(POST, { body: { ...body, zeroRateLimitMBps: cap } })
+    expect(res.status).toBe(400)
+    expect((await readJson<any>(res))?.error).toMatch(/zeroRateLimitMBps/)
+    expect(h.prisma.migrationJob.create).not.toHaveBeenCalled()
+    await runAfters()
+    expect(warm).not.toHaveBeenCalled()
+  })
+
   it("rejects a malformed downtimeBudgetSec before creating a job", async () => {
     // validated up front (before the connection lookup), so no source mocks needed
     const res = await callRoute(POST, { body: { ...body, downtimeBudgetSec: "abc" } })

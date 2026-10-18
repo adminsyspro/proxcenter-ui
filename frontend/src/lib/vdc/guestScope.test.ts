@@ -14,7 +14,7 @@ vi.mock('@/lib/tenant/infraScope', async io => ({
   getTenantInfrastructureScope: getTenantInfrastructureScopeMock,
 }))
 
-import { checkTenantGuestScope } from './guestScope'
+import { checkTenantGuestScope, checkTenantGuestsScope } from './guestScope'
 
 const conn = { id: 'conn-1' } as any
 
@@ -91,5 +91,32 @@ describe('checkTenantGuestScope', () => {
     const res = await checkTenantGuestScope('tenant-1', conn, 'conn-1', 'qemu', 'pve3', '100')
     expect(res?.status).toBe(503)
     expect(await res?.json()).toEqual({ error: 'Unable to verify guest vDC scope' })
+  })
+})
+
+describe('checkTenantGuestsScope (a vmid list)', () => {
+  it('lists the guests and resolves the vDC scope once for the whole list', async () => {
+    expect(await checkTenantGuestsScope('tenant-1', conn, 'conn-1', null, null, ['100', '101'])).toBeNull()
+    expect(pveFetchMock).toHaveBeenCalledTimes(1)
+    expect(getTenantInfrastructureScopeMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('refuses the list when one guest is outside the vDC pools', async () => {
+    const res = await checkTenantGuestsScope('tenant-1', conn, 'conn-1', null, null, ['100', '200', '101'])
+    expect(res?.status).toBe(403)
+    expect(await res?.json()).toEqual({ error: 'Guest outside your vDC scope' })
+    expect(pveFetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('an empty list confines nothing, so an iaas tenant is refused', async () => {
+    const res = await checkTenantGuestsScope('tenant-1', conn, 'conn-1', null, null, [])
+    expect(res?.status).toBe(403)
+    expect(pveFetchMock).not.toHaveBeenCalled()
+  })
+
+  it('a non-iaas tenant is not confined, whatever the list', async () => {
+    getTenantInfrastructureScopeMock.mockResolvedValue({ kind: 'provider' })
+    expect(await checkTenantGuestsScope('tenant-1', conn, 'conn-1', null, null, ['200'])).toBeNull()
+    expect(pveFetchMock).not.toHaveBeenCalled()
   })
 })

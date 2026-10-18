@@ -9,7 +9,7 @@ import { rejectionToResponse, type Principal, type PrincipalRejection } from "@/
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { grantsPermission } from "@/lib/rbac"
 import { getTenantInfrastructureScope, type InfraScope } from "@/lib/tenant/infraScope"
-import { checkTenantGuestScope } from "@/lib/vdc/guestScope"
+import { checkTenantGuestsScope } from "@/lib/vdc/guestScope"
 
 import { isWriteEntry, type AllowlistEntry, type BodyOrQueryField, type GuestScopeSpec } from "./allowlist"
 import { creatorStillHolds, creatorStillHoldsPermission } from "./creatorCheck"
@@ -211,15 +211,13 @@ export async function runTokenEntryGuards(
     } catch {
       return deny({ status: 503, body: { error: "Unable to verify guest vDC scope" } })
     }
-    for (const vmid of target.vmids) {
-      const refused = await checkTenantGuestScope(
-        principal.tenantId, conn, target.connection, target.type, target.node, vmid, target.allowMovedNode === true,
-      )
-      if (refused) {
-        const body = await refused.clone().json().catch(() => ({ error: GUEST_OUTSIDE }))
-        await auditTokenDenied({ status: refused.status, body }, { tokenId: principal.tokenId, entryId: entry.id })
-        return refused
-      }
+    const refused = await checkTenantGuestsScope(
+      principal.tenantId, conn, target.connection, target.type, target.node, target.vmids, target.allowMovedNode === true,
+    )
+    if (refused) {
+      const body = await refused.clone().json().catch(() => ({ error: GUEST_OUTSIDE }))
+      await auditTokenDenied({ status: refused.status, body }, { tokenId: principal.tokenId, entryId: entry.id })
+      return refused
     }
   }
 

@@ -16,7 +16,7 @@ const {
 vi.mock('next/headers', () => ({ headers: headersMock }))
 vi.mock('./scope', () => ({ resolveVisibleConnectionIds: resolveVisibleMock }))
 vi.mock('@/lib/tenant/infraScope', () => ({ getTenantInfrastructureScope: infraMock }))
-vi.mock('@/lib/vdc/guestScope', () => ({ checkTenantGuestScope: guestScopeMock }))
+vi.mock('@/lib/vdc/guestScope', () => ({ checkTenantGuestsScope: guestScopeMock }))
 vi.mock('./creatorCheck', () => ({ creatorStillHolds: creatorMock, creatorStillHoldsPermission: creatorPermissionMock }))
 vi.mock('@/lib/connections/getConnection', () => ({ getConnectionById: getConnectionMock }))
 vi.mock('@/lib/audit', () => ({ audit: auditMock }))
@@ -322,19 +322,19 @@ describe('runTokenEntryGuards', () => {
     })
     const pathParams = { id: 'conn-a', type: 'qemu', node: 'pve1', vmid: '100' }
 
-    it('iaas: path segments are decoded and handed to checkTenantGuestScope', async () => {
+    it('iaas: path segments are decoded and handed to checkTenantGuestsScope', async () => {
       infraMock.mockResolvedValue(iaas())
       const params = { ...pathParams, node: 'pve%2D1' }
       expect(await runTokenEntryGuards(pathEntry, principal, post({}), params)).toBeNull()
       expect(getConnectionMock).toHaveBeenCalledWith('conn-a', 'tenant-x')
-      expect(guestScopeMock).toHaveBeenCalledWith('tenant-x', { id: 'conn-a' }, 'conn-a', 'qemu', 'pve-1', '100', false)
+      expect(guestScopeMock).toHaveBeenCalledWith('tenant-x', { id: 'conn-a' }, 'conn-a', 'qemu', 'pve-1', ['100'], false)
     })
 
     it('iaas: allowMovedNode is forwarded only when the entry declares it', async () => {
       infraMock.mockResolvedValue(iaas())
       const moved = entry({ ...pathEntry, guestScope: { connection: 'id', type: 'type', node: 'node', vmid: 'vmid', allowMovedNode: true } })
       expect(await runTokenEntryGuards(moved, principal, post({}), pathParams)).toBeNull()
-      expect(guestScopeMock).toHaveBeenLastCalledWith('tenant-x', { id: 'conn-a' }, 'conn-a', 'qemu', 'pve1', '100', true)
+      expect(guestScopeMock).toHaveBeenLastCalledWith('tenant-x', { id: 'conn-a' }, 'conn-a', 'qemu', 'pve1', ['100'], true)
       await runTokenEntryGuards(pathEntry, principal, post({}), pathParams)
       expect(guestScopeMock.mock.lastCall?.[6]).toBe(false)
     })
@@ -360,7 +360,7 @@ describe('runTokenEntryGuards', () => {
       infraMock.mockResolvedValue(iaas())
       const e = entry({ connectionSegment: undefined, vmKeySegment: 'vmid', guestScope: { vmKey: 'vmid' } })
       expect(await runTokenEntryGuards(e, principal, post({}), { vmid: 'conn-a:lxc:pve2:205' })).toBeNull()
-      expect(guestScopeMock).toHaveBeenCalledWith('tenant-x', { id: 'conn-a' }, 'conn-a', 'lxc', 'pve2', '205', false)
+      expect(guestScopeMock).toHaveBeenCalledWith('tenant-x', { id: 'conn-a' }, 'conn-a', 'lxc', 'pve2', ['205'], false)
     })
 
     describe('vmidField', () => {
@@ -373,17 +373,17 @@ describe('runTokenEntryGuards', () => {
         infraMock.mockResolvedValue(iaas())
         const req = post({ vmid: 100, storage: 'pbs' })
         expect(await runTokenEntryGuards(e, principal, req, { id: 'conn-a', node: 'pve1' })).toBeNull()
-        expect(guestScopeMock).toHaveBeenCalledWith('tenant-x', { id: 'conn-a' }, 'conn-a', null, null, '100', false)
+        expect(guestScopeMock).toHaveBeenCalledWith('tenant-x', { id: 'conn-a' }, 'conn-a', null, null, ['100'], false)
         expect(await req.json()).toEqual({ vmid: 100, storage: 'pbs' })
       })
 
-      it('a comma-separated vmid list checks every guest', async () => {
+      it('a comma-separated vmid list is checked in one call, the guests listed once', async () => {
         infraMock.mockResolvedValue(iaas())
-        guestScopeMock.mockImplementation(async (_t, _c, _id, _type, _node, vmid) =>
-          vmid === '101' ? NextResponse.json({ error: 'Guest outside your vDC scope' }, { status: 403 }) : null)
+        guestScopeMock.mockResolvedValue(NextResponse.json({ error: 'Guest outside your vDC scope' }, { status: 403 }))
         const res = await runTokenEntryGuards(e, principal, post({ vmid: '100, 101' }), { id: 'conn-a' })
         expect(res?.status).toBe(403)
-        expect(guestScopeMock.mock.calls.map(c => c[5])).toEqual(['100', '101'])
+        expect(guestScopeMock).toHaveBeenCalledTimes(1)
+        expect(guestScopeMock).toHaveBeenCalledWith('tenant-x', { id: 'conn-a' }, 'conn-a', null, null, ['100', '101'], false)
       })
 
       it('an absent or non-numeric vmid is refused for an iaas token (nothing to confine)', async () => {
@@ -400,7 +400,7 @@ describe('runTokenEntryGuards', () => {
         infraMock.mockResolvedValue(iaas())
         const q = entry({ guestScope: { connection: 'id', vmidField: { source: 'query', field: 'vmid' } } })
         expect(await runTokenEntryGuards(q, principal, post({}, 'http://t/x?vmid=300'), { id: 'conn-a' })).toBeNull()
-        expect(guestScopeMock).toHaveBeenCalledWith('tenant-x', { id: 'conn-a' }, 'conn-a', null, null, '300', false)
+        expect(guestScopeMock).toHaveBeenCalledWith('tenant-x', { id: 'conn-a' }, 'conn-a', null, null, ['300'], false)
       })
     })
 

@@ -58,6 +58,9 @@ vi.mock('@/hooks/useTaskEvents', () => ({
 // poll and the router used when a job row is clicked.
 vi.mock('@/contexts/LicenseContext', () => ({ useLicense: () => ({ isEnterprise: true }) }))
 vi.mock('@/hooks/useJobs', () => ({ useJobs: () => ({ data: undefined }) }))
+// The bulk migration chips poll over SWR; left real, their revalidation fires
+// after the jsdom teardown and fails the run with an unhandled rejection.
+vi.mock('@/hooks/useActiveBulkBatches', () => ({ useActiveBulkBatches: () => ({ data: undefined }) }))
 vi.mock('@/hooks/useRefreshInterval', () => ({ useRefreshInterval: () => 0 }))
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }) }))
 

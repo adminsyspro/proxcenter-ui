@@ -5087,6 +5087,8 @@
     "typeHostDrain": "主机清空",
     "drainGuests": "客户机",
     "drainRemaining": "{count} 个仍在 {node} 上",
+    "rollingDetailCurrent": "{node}：{done}/{total} 个节点",
+    "rollingDetailNodes": "{done}/{total} 个节点",
     "drainMaintenanceEnabled": "节点处于维护模式"
   },
   "tasks": {
@@ -7471,6 +7473,7 @@
     "vmMovedAlert": "此 VM 在创建推荐后已被移动。列表已刷新。",
     "recommendationExpiredAlert": "此推荐在重新评估后已过期。列表已刷新。",
     "vmAlreadyOnTargetAlert": "此 VM 已在目标节点上。列表已刷新。",
+    "actionNoticeTitle": "建议未应用",
     "rebalanceSchedule": "重平衡计划",
     "scheduleInterval": "每隔固定间隔",
     "scheduleDaily": "每天固定时间",
@@ -8142,6 +8145,7 @@
     "vms": "虚拟机",
     "online": "在线",
     "offline": "离线",
+    "maintenance": "维护中",
     "close": "关闭",
     "localStorageWarning": "检测到本地存储",
     "cannotMigrate": "无法在线迁移",

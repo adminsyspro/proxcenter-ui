@@ -5083,6 +5083,8 @@
     "typeHostDrain": "Drain d'hôte",
     "drainGuests": "Invités",
     "drainRemaining": "{count} encore sur {node}",
+    "rollingDetailCurrent": "{node} : {done}/{total} nœuds",
+    "rollingDetailNodes": "{done}/{total} nœuds",
     "drainMaintenanceEnabled": "Nœud en maintenance"
   },
   "tasks": {
@@ -7467,6 +7469,7 @@
     "vmMovedAlert": "Cette VM a été déplacée depuis la création de la recommandation. La liste a été actualisée.",
     "recommendationExpiredAlert": "Cette recommandation a expiré suite à une réévaluation. La liste a été actualisée.",
     "vmAlreadyOnTargetAlert": "Cette VM est déjà sur le nœud cible. La liste a été actualisée.",
+    "actionNoticeTitle": "Recommandation non appliquée",
     "rebalanceSchedule": "Fréquence de rééquilibrage",
     "scheduleInterval": "À intervalles réguliers",
     "scheduleDaily": "Tous les jours à une heure précise",
@@ -8133,6 +8136,7 @@
     "vms": "VMs",
     "online": "En ligne",
     "offline": "Hors ligne",
+    "maintenance": "En maintenance",
     "close": "Fermer",
     "localStorageWarning": "Stockage local détecté",
     "cannotMigrate": "ne peuvent pas être migrées à chaud",

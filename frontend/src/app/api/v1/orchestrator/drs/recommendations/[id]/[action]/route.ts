@@ -2,6 +2,7 @@
 import { NextResponse } from "next/server"
 
 import { getOrchestratorClient } from "@/lib/orchestrator/client"
+import { relayOrchestratorError } from "@/lib/orchestrator/relayError"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { getTenantConnectionIds } from "@/lib/tenant"
 
@@ -80,13 +81,9 @@ export async function POST(req: Request, ctx: Params) {
 
     return NextResponse.json(response.data)
   } catch (e: any) {
-    if ((e as any)?.code !== 'ORCHESTRATOR_UNAVAILABLE') {
-      console.error("Error executing recommendation action:", e)
-    }
-    
-return NextResponse.json(
-      { error: e?.message || "Action failed" },
-      { status: 500 }
-    )
+    // A refusal (409: rolling update, drain, placement...) or a missing
+    // recommendation (404) keeps its status and its reason, so the page can
+    // tell the operator why instead of a bare 500.
+    return relayOrchestratorError(e, "Error executing recommendation action:")
   }
 }

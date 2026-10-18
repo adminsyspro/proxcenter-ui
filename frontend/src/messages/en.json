@@ -5083,6 +5083,8 @@
     "typeHostDrain": "Host drain",
     "drainGuests": "Guests",
     "drainRemaining": "{count} still on {node}",
+    "rollingDetailCurrent": "{node}: {done}/{total} nodes",
+    "rollingDetailNodes": "{done}/{total} nodes",
     "drainMaintenanceEnabled": "Node in maintenance"
   },
   "tasks": {
@@ -7467,6 +7469,7 @@
     "vmMovedAlert": "This VM has been moved since the recommendation was created. The list has been refreshed.",
     "recommendationExpiredAlert": "This recommendation has expired following a re-evaluation. The list has been refreshed.",
     "vmAlreadyOnTargetAlert": "This VM is already on the target node. The list has been refreshed.",
+    "actionNoticeTitle": "Recommendation not applied",
     "rebalanceSchedule": "Rebalance schedule",
     "scheduleInterval": "Every interval",
     "scheduleDaily": "Daily at specific time",
@@ -8138,6 +8141,7 @@
     "vms": "VMs",
     "online": "Online",
     "offline": "Offline",
+    "maintenance": "In maintenance",
     "close": "Close",
     "localStorageWarning": "Local storage detected",
     "cannotMigrate": "cannot be live migrated",

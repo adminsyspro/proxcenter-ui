@@ -5083,6 +5083,8 @@
     "typeHostDrain": "호스트 드레인",
     "drainGuests": "게스트",
     "drainRemaining": "{node}에 {count}개 남음",
+    "rollingDetailCurrent": "{node}: {done}/{total} 노드",
+    "rollingDetailNodes": "{done}/{total} 노드",
     "drainMaintenanceEnabled": "유지 관리 중인 노드"
   },
   "tasks": {
@@ -7467,6 +7469,7 @@
     "vmMovedAlert": "권장 사항이 생성된 이후 이 VM이 이동되었습니다. 목록이 새로 고쳐졌습니다.",
     "recommendationExpiredAlert": "재평가에 따라 이 권장 사항이 만료되었습니다. 목록이 새로 고쳐졌습니다.",
     "vmAlreadyOnTargetAlert": "이 VM은 이미 대상 노드에 있습니다. 목록이 새로 고쳐졌습니다.",
+    "actionNoticeTitle": "권장 사항이 적용되지 않음",
     "rebalanceSchedule": "리밸런싱 일정",
     "scheduleInterval": "간격마다",
     "scheduleDaily": "매일 지정 시각",
@@ -8138,6 +8141,7 @@
     "vms": "VM",
     "online": "온라인",
     "offline": "오프라인",
+    "maintenance": "유지 보수 중",
     "close": "닫기",
     "localStorageWarning": "로컬 스토리지 감지됨",
     "cannotMigrate": "라이브 마이그레이션 불가",

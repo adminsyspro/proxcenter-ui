@@ -13,9 +13,15 @@ const h = vi.hoisted(() => ({
   getSubnetUsage: vi.fn(async () => ({ used: 0, usable: 0 })),
 }))
 
+// The API token guard is covered by routeGuard.test.ts and vnetTokenScope.test.ts:
+// pass-through so this file keeps testing the handler, as for a session caller.
+vi.mock("@/lib/api-tokens/routeGuard", () => ({
+  withPublicApiGuard: (_entryId: string, handler: any) => handler,
+}))
 vi.mock("@/lib/rbac", () => ({ checkPermission: h.checkPermission, PERMISSIONS: {} }))
-vi.mock("next-auth", () => ({ getServerSession: vi.fn(async () => ({ user: { id: "u1" } })) }))
-vi.mock("@/lib/auth/config", () => ({ authOptions: {} }))
+vi.mock("@/lib/auth/principal", () => ({
+  getPrincipal: vi.fn(async () => ({ ok: true, principal: { kind: "session", userId: "u1", tenantId: "tenant-a", connectionIds: null } })),
+}))
 vi.mock("@/lib/tenant", () => ({ getCurrentTenantId: h.getCurrentTenantId }))
 vi.mock("@/lib/vdc/vnets", () => ({
   createVnetForTenant: h.createVnetForTenant,

@@ -4,6 +4,7 @@
 import { BACKUP_REQUEST_SCHEMAS, BACKUP_RESPONSE_SCHEMAS } from "./backups"
 import { HA_REQUEST_SCHEMAS, HA_RESPONSE_SCHEMAS } from "./ha"
 import { MONITORING_RESPONSE_SCHEMAS } from "./monitoring"
+import { NETWORK_REQUEST_SCHEMAS, NETWORK_RESPONSE_SCHEMAS } from "./network"
 import { POOLS_REQUEST_SCHEMAS, POOLS_RESPONSE_SCHEMAS } from "./pools"
 import { STORAGE_REQUEST_SCHEMAS, STORAGE_RESPONSE_SCHEMAS } from "./storage"
 import { VM_REQUEST_SCHEMAS, VM_RESPONSE_SCHEMAS } from "./vms"
@@ -16,6 +17,7 @@ export const REQUEST_SCHEMAS: Record<string, Record<string, unknown>> = {
   ...STORAGE_REQUEST_SCHEMAS,
   ...HA_REQUEST_SCHEMAS,
   ...POOLS_REQUEST_SCHEMAS,
+  ...NETWORK_REQUEST_SCHEMAS,
 }
 
 export const RESPONSE_SCHEMAS: Record<string, Record<string, unknown>> = {
@@ -25,4 +27,5 @@ export const RESPONSE_SCHEMAS: Record<string, Record<string, unknown>> = {
   ...STORAGE_RESPONSE_SCHEMAS,
   ...HA_RESPONSE_SCHEMAS,
   ...POOLS_RESPONSE_SCHEMAS,
+  ...NETWORK_RESPONSE_SCHEMAS,
 }

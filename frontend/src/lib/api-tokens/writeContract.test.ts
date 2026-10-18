@@ -49,10 +49,17 @@ const EXPECTED_WRITE_IDS: Record<string, string[]> = {
     'ha-affinity-create', 'ha-affinity-update', 'ha-affinity-delete', 'ha-auto-update', 'ha-auto-sync',
   ],
   pools: ['pool-create', 'pool-update', 'pool-delete'],
+  network: [
+    'node-network-create', 'node-network-apply', 'node-network-revert', 'node-iface-update', 'node-iface-delete',
+    'sdn-apply', 'vdc-vnet-create', 'vdc-vnet-update', 'vdc-vnet-delete',
+  ],
 }
 
 /** The only entries allowed to resolve their connection inside the handler. */
-const HANDLER_PERIMETER_IDS = ['gfr-probe', 'gfr-job-create', 'gfr-job-cancel', 'vdc-vnet-create', 'vdc-vnet-update', 'vdc-vnet-delete']
+const HANDLER_PERIMETER_IDS = [
+  'gfr-probe', 'gfr-job-create', 'gfr-job-cancel',
+  'vdc-vnets-list', 'vdc-vnet-create', 'vdc-vnet-get', 'vdc-vnet-update', 'vdc-vnet-delete',
+]
 
 /** GET handlers of a file opened in write that stay closed (spec: consoles only). */
 const CLOSED_GET_NEIGHBOUR_FILES: string[] = []

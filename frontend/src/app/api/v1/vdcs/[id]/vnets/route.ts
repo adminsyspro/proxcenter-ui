@@ -1,25 +1,25 @@
 import { NextResponse } from "next/server"
-import { getServerSession } from "next-auth"
 
-import { authOptions } from "@/lib/auth/config"
+import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
+import { getPrincipal, type Principal } from "@/lib/auth/principal"
 import { getCurrentTenantId } from "@/lib/tenant"
-import { checkPermission } from "@/lib/rbac"
 import { listVnetsForTenant, createVnetForTenant } from "@/lib/vdc/vnets"
+import { checkVnetPermission } from "@/lib/vdc/vnetPermission"
 import { VniError } from "@/lib/vdc/vniPolicy"
 import { getSubnetUsage } from "@/lib/vdc/ipam"
 
 export const runtime = "nodejs"
 
-type RouteContext = { params: Promise<{ id: string }> | { id: string } }
+type RouteContext = { params: Promise<{ id: string }> | { id: string }; principal?: Principal }
 
 // GET /api/v1/vdcs/{id}/vnets
-export async function GET(_req: Request, ctx: RouteContext) {
+async function getHandler(_req: Request, ctx: RouteContext) {
   try {
     const params = await Promise.resolve(ctx.params)
     const vdcId = (params as any)?.id
     if (!vdcId) return NextResponse.json({ error: "Missing vDC ID" }, { status: 400 })
 
-    const denied = await checkPermission("sdn.vnet.view")
+    const denied = await checkVnetPermission(ctx.principal, vdcId, "sdn.vnet.view")
     if (denied) return denied
 
     // Enrich each VNet with its IPAM usage counts so the dashboard can
@@ -47,13 +47,13 @@ function parseDnsServers(raw: unknown): string[] | undefined {
   return undefined
 }
 
-export async function POST(req: Request, ctx: RouteContext) {
+async function postHandler(req: Request, ctx: RouteContext) {
   try {
     const params = await Promise.resolve(ctx.params)
     const vdcId = (params as any)?.id
     if (!vdcId) return NextResponse.json({ error: "Missing vDC ID" }, { status: 400 })
 
-    const denied = await checkPermission("sdn.vnet.create")
+    const denied = await checkVnetPermission(ctx.principal, vdcId, "sdn.vnet.create")
     if (denied) return denied
 
     const body = await req.json().catch(() => ({}))
@@ -106,8 +106,9 @@ export async function POST(req: Request, ctx: RouteContext) {
     }
     const externalAddressing = body?.externalAddressing === true
 
-    const session = await getServerSession(authOptions)
-    const createdBy = session?.user?.id ?? null
+    // A token creates as nobody: the audit journals the write under the token.
+    const principal = ctx.principal ?? (await getPrincipal()).principal
+    const createdBy = principal?.userId ?? null
     const tenantId = await getCurrentTenantId()
 
     try {
@@ -148,3 +149,6 @@ export async function POST(req: Request, ctx: RouteContext) {
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const GET = withPublicApiGuard("vdc-vnets-list", getHandler)
+export const POST = withPublicApiGuard("vdc-vnet-create", postHandler)

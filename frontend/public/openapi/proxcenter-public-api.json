@@ -1890,6 +1890,322 @@
           }
         }
       },
+      "NodeNetworkCreateRequest": {
+        "type": "object",
+        "required": [
+          "iface",
+          "type"
+        ],
+        "description": "Absent or empty fields are not sent to Proxmox.",
+        "properties": {
+          "iface": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "bridge",
+              "bond",
+              "eth",
+              "alias",
+              "vlan",
+              "OVSBridge",
+              "OVSBond",
+              "OVSPort",
+              "OVSIntPort"
+            ]
+          },
+          "address": {
+            "type": "string",
+            "description": "IPv4 address; with a /prefix it is sent as cidr"
+          },
+          "netmask": {
+            "type": "string"
+          },
+          "gateway": {
+            "type": "string"
+          },
+          "address6": {
+            "type": "string",
+            "description": "IPv6 address; with a /prefix it is sent as cidr6"
+          },
+          "netmask6": {
+            "type": "string"
+          },
+          "gateway6": {
+            "type": "string"
+          },
+          "cidr": {
+            "type": "string"
+          },
+          "cidr6": {
+            "type": "string"
+          },
+          "mtu": {
+            "type": "integer"
+          },
+          "comments": {
+            "type": "string"
+          },
+          "autostart": {
+            "type": "boolean"
+          },
+          "bridge_ports": {
+            "type": "string"
+          },
+          "bridge_stp": {
+            "type": "string"
+          },
+          "bridge_fd": {
+            "type": "integer"
+          },
+          "bridge_vlan_aware": {
+            "type": "boolean"
+          },
+          "bond_mode": {
+            "type": "string"
+          },
+          "bond_primary": {
+            "type": "string"
+          },
+          "bond-xmit-hash-policy": {
+            "type": "string"
+          },
+          "slaves": {
+            "type": "string"
+          },
+          "vlan-id": {
+            "type": "integer"
+          },
+          "vlan-raw-device": {
+            "type": "string"
+          },
+          "ovs_bridge": {
+            "type": "string"
+          },
+          "ovs_options": {
+            "type": "string"
+          },
+          "ovs_tag": {
+            "type": "integer"
+          },
+          "ovs_bonds": {
+            "type": "string"
+          },
+          "ovs_ports": {
+            "type": "string"
+          }
+        }
+      },
+      "NodeIfaceUpdateRequest": {
+        "type": "object",
+        "required": [
+          "type"
+        ],
+        "description": "Absent or empty fields are not sent to Proxmox. Only the fields of `type` are sent: bridge_* for a bridge, bond_* and slaves for a bond, vlan-* for a VLAN, ovs_* for an OVS object.",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "bridge",
+              "bond",
+              "eth",
+              "alias",
+              "vlan",
+              "OVSBridge",
+              "OVSBond",
+              "OVSPort",
+              "OVSIntPort"
+            ]
+          },
+          "address": {
+            "type": "string",
+            "description": "IPv4 address; with a /prefix it is sent as cidr"
+          },
+          "netmask": {
+            "type": "string"
+          },
+          "gateway": {
+            "type": "string"
+          },
+          "address6": {
+            "type": "string",
+            "description": "IPv6 address; with a /prefix it is sent as cidr6"
+          },
+          "netmask6": {
+            "type": "string"
+          },
+          "gateway6": {
+            "type": "string"
+          },
+          "cidr": {
+            "type": "string"
+          },
+          "cidr6": {
+            "type": "string"
+          },
+          "mtu": {
+            "type": "integer"
+          },
+          "comments": {
+            "type": "string"
+          },
+          "autostart": {
+            "type": "boolean",
+            "description": "Sent to Proxmox as 0 or 1"
+          },
+          "bridge_ports": {
+            "type": "string"
+          },
+          "bridge_vlan_aware": {
+            "type": "boolean",
+            "description": "Sent to Proxmox as 0 or 1"
+          },
+          "bond_mode": {
+            "type": "string"
+          },
+          "bond-primary": {
+            "type": "string"
+          },
+          "bond_xmit_hash_policy": {
+            "type": "string"
+          },
+          "slaves": {
+            "type": "string"
+          },
+          "vlan-id": {
+            "type": "integer"
+          },
+          "vlan-raw-device": {
+            "type": "string"
+          },
+          "ovs_bridge": {
+            "type": "string"
+          },
+          "ovs_options": {
+            "type": "string"
+          },
+          "ovs_tag": {
+            "type": "integer"
+          },
+          "ovs_bonds": {
+            "type": "string"
+          },
+          "ovs_ports": {
+            "type": "string"
+          }
+        }
+      },
+      "VdcVnetCreateRequest": {
+        "type": "object",
+        "required": [
+          "displayName"
+        ],
+        "properties": {
+          "displayName": {
+            "type": "string",
+            "description": "1-20 chars, lowercase letters, digits and dashes, starting with a letter"
+          },
+          "description": {
+            "type": "string"
+          },
+          "firewall": {
+            "type": "boolean",
+            "description": "Default true"
+          },
+          "subnet": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "description": "Absent or null: a pure L2 network (not allowed when the platform provides the edge)",
+            "required": [
+              "cidr",
+              "gateway"
+            ],
+            "properties": {
+              "cidr": {
+                "type": "string"
+              },
+              "gateway": {
+                "type": "string"
+              },
+              "dnsServers": {
+                "oneOf": [
+                  {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  {
+                    "type": "string",
+                    "description": "Comma-separated"
+                  }
+                ],
+                "description": "DNS servers, as an array or a comma-separated string"
+              }
+            }
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "vxlan",
+              "vlan"
+            ],
+            "description": "Default vxlan"
+          },
+          "vni": {
+            "type": "integer",
+            "description": "VXLAN only: a VNI the transport policy accepts; absent = allocated"
+          },
+          "bridge": {
+            "type": "string",
+            "description": "Required for a VLAN network"
+          },
+          "vlanTag": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 4094,
+            "description": "VLAN only; absent = allocated from the vDC VLAN pool"
+          },
+          "externalAddressing": {
+            "type": "boolean"
+          }
+        }
+      },
+      "VdcVnetUpdateRequest": {
+        "type": "object",
+        "description": "Only the given fields change.",
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "firewall": {
+            "type": "boolean"
+          },
+          "subnet": {
+            "type": "object",
+            "properties": {
+              "dnsServers": {
+                "oneOf": [
+                  {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  {
+                    "type": "string",
+                    "description": "Comma-separated"
+                  }
+                ],
+                "description": "DNS servers, as an array or a comma-separated string"
+              }
+            }
+          }
+        }
+      },
       "VmsResponse": {
         "type": "object",
         "properties": {
@@ -3944,6 +4260,298 @@
             "properties": {
               "success": {
                 "type": "boolean"
+              }
+            }
+          }
+        }
+      },
+      "NodeNetworkListResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "description": "As Proxmox returns it",
+              "additionalProperties": true
+            }
+          }
+        }
+      },
+      "NodeIfaceResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "description": "As Proxmox returns it",
+            "additionalProperties": true
+          }
+        }
+      },
+      "SdnApplyResponse": {
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "upid": {
+                "type": "string",
+                "description": "Proxmox task UPID"
+              }
+            }
+          }
+        }
+      },
+      "VdcVnetsResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "vdcId": {
+                  "type": "string"
+                },
+                "pveName": {
+                  "type": "string",
+                  "description": "Name of the VNet in Proxmox, generated"
+                },
+                "displayName": {
+                  "type": "string",
+                  "description": "Name shown to the tenant, unique in the vDC; the {pveName} path segment"
+                },
+                "description": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "tag": {
+                  "type": "integer",
+                  "description": "VNI (VXLAN) or VLAN tag"
+                },
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "vxlan",
+                    "vlan"
+                  ]
+                },
+                "bridge": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "zoneName": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "firewall": {
+                  "type": "boolean"
+                },
+                "subnet": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "description": "Null for a pure L2 network",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "vnetId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "cidr": {
+                      "type": "string"
+                    },
+                    "gateway": {
+                      "type": "string"
+                    },
+                    "dnsServers": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "ipamEnabled": {
+                      "type": "boolean"
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                },
+                "tenantNetwork": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "description": "The stretched tenant network that created this VNet; the provider manages it",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "createdBy": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "User who created it; null when an API token did"
+                },
+                "createdAt": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "ipamUsage": {
+                  "type": "object",
+                  "properties": {
+                    "used": {
+                      "type": "integer"
+                    },
+                    "usable": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "VdcVnetResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "vdcId": {
+                "type": "string"
+              },
+              "pveName": {
+                "type": "string",
+                "description": "Name of the VNet in Proxmox, generated"
+              },
+              "displayName": {
+                "type": "string",
+                "description": "Name shown to the tenant, unique in the vDC; the {pveName} path segment"
+              },
+              "description": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "tag": {
+                "type": "integer",
+                "description": "VNI (VXLAN) or VLAN tag"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "vxlan",
+                  "vlan"
+                ]
+              },
+              "bridge": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "zoneName": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "firewall": {
+                "type": "boolean"
+              },
+              "subnet": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "description": "Null for a pure L2 network",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "vnetId": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "cidr": {
+                    "type": "string"
+                  },
+                  "gateway": {
+                    "type": "string"
+                  },
+                  "dnsServers": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "ipamEnabled": {
+                    "type": "boolean"
+                  },
+                  "createdAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  }
+                }
+              },
+              "tenantNetwork": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "description": "The stretched tenant network that created this VNet; the provider manages it",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  }
+                }
+              },
+              "createdBy": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "User who created it; null when an API token did"
+              },
+              "createdAt": {
+                "type": "string",
+                "format": "date-time"
               }
             }
           }
@@ -19308,6 +19916,2401 @@
                 "example": {
                   "error": "Method not allowed for this API token route",
                   "method": "PATCH"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/connections/{id}/nodes/{node}/network": {
+      "get": {
+        "operationId": "node-network-list",
+        "summary": "Network interfaces of a node",
+        "description": "The network interfaces of the node as Proxmox lists them. Needs node.network on the node (scope network:write).",
+        "tags": [
+          "Network"
+        ],
+        "x-required-scopes": [
+          "nodes:read",
+          "network:write"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Raw connection id; must be inside the token connection perimeter."
+          },
+          {
+            "name": "node",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "description": "As Proxmox returns it",
+                        "additionalProperties": true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/connections/{id}/nodes/{node}/network"
+                    }
+                  },
+                  "perimeter": {
+                    "value": {
+                      "error": "Connection not in token scope",
+                      "connection": "conn-1"
+                    }
+                  },
+                  "clusterObject": {
+                    "value": {
+                      "error": "Cluster-level object not available to a vDC tenant token"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "PATCH"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "node-network-create",
+        "summary": "Create a network interface on a node",
+        "description": "Creates the interface `iface` of type `type` (bridge, bond, vlan, OVS objects); empty fields are not sent. The change is staged in Proxmox's pending network configuration until it is applied (PUT .../network). Not available to a vDC tenant token.",
+        "tags": [
+          "Network"
+        ],
+        "x-required-scopes": [
+          "network:write"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Raw connection id; must be inside the token connection perimeter."
+          },
+          {
+            "name": "node",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "iface",
+                  "type"
+                ],
+                "description": "Absent or empty fields are not sent to Proxmox.",
+                "properties": {
+                  "iface": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "bridge",
+                      "bond",
+                      "eth",
+                      "alias",
+                      "vlan",
+                      "OVSBridge",
+                      "OVSBond",
+                      "OVSPort",
+                      "OVSIntPort"
+                    ]
+                  },
+                  "address": {
+                    "type": "string",
+                    "description": "IPv4 address; with a /prefix it is sent as cidr"
+                  },
+                  "netmask": {
+                    "type": "string"
+                  },
+                  "gateway": {
+                    "type": "string"
+                  },
+                  "address6": {
+                    "type": "string",
+                    "description": "IPv6 address; with a /prefix it is sent as cidr6"
+                  },
+                  "netmask6": {
+                    "type": "string"
+                  },
+                  "gateway6": {
+                    "type": "string"
+                  },
+                  "cidr": {
+                    "type": "string"
+                  },
+                  "cidr6": {
+                    "type": "string"
+                  },
+                  "mtu": {
+                    "type": "integer"
+                  },
+                  "comments": {
+                    "type": "string"
+                  },
+                  "autostart": {
+                    "type": "boolean"
+                  },
+                  "bridge_ports": {
+                    "type": "string"
+                  },
+                  "bridge_stp": {
+                    "type": "string"
+                  },
+                  "bridge_fd": {
+                    "type": "integer"
+                  },
+                  "bridge_vlan_aware": {
+                    "type": "boolean"
+                  },
+                  "bond_mode": {
+                    "type": "string"
+                  },
+                  "bond_primary": {
+                    "type": "string"
+                  },
+                  "bond-xmit-hash-policy": {
+                    "type": "string"
+                  },
+                  "slaves": {
+                    "type": "string"
+                  },
+                  "vlan-id": {
+                    "type": "integer"
+                  },
+                  "vlan-raw-device": {
+                    "type": "string"
+                  },
+                  "ovs_bridge": {
+                    "type": "string"
+                  },
+                  "ovs_options": {
+                    "type": "string"
+                  },
+                  "ovs_tag": {
+                    "type": "integer"
+                  },
+                  "ovs_bonds": {
+                    "type": "string"
+                  },
+                  "ovs_ports": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/connections/{id}/nodes/{node}/network"
+                    }
+                  },
+                  "perimeter": {
+                    "value": {
+                      "error": "Connection not in token scope",
+                      "connection": "conn-1"
+                    }
+                  },
+                  "clusterObject": {
+                    "value": {
+                      "error": "Cluster-level object not available to a vDC tenant token"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "PATCH"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "node-network-apply",
+        "summary": "Apply the pending network configuration of a node",
+        "description": "Reloads the node network with its pending configuration (ifreload). Answers `success` once Proxmox accepted the reload; the Proxmox task it starts is not returned. No body. Not available to a vDC tenant token.",
+        "tags": [
+          "Network"
+        ],
+        "x-required-scopes": [
+          "network:write"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Raw connection id; must be inside the token connection perimeter."
+          },
+          {
+            "name": "node",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/connections/{id}/nodes/{node}/network"
+                    }
+                  },
+                  "perimeter": {
+                    "value": {
+                      "error": "Connection not in token scope",
+                      "connection": "conn-1"
+                    }
+                  },
+                  "clusterObject": {
+                    "value": {
+                      "error": "Cluster-level object not available to a vDC tenant token"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "PATCH"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "node-network-revert",
+        "summary": "Revert the pending network changes of a node",
+        "description": "Drops every pending network change of the node; the running configuration is left as it is. Not available to a vDC tenant token.",
+        "tags": [
+          "Network"
+        ],
+        "x-required-scopes": [
+          "network:write"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Raw connection id; must be inside the token connection perimeter."
+          },
+          {
+            "name": "node",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/connections/{id}/nodes/{node}/network"
+                    }
+                  },
+                  "perimeter": {
+                    "value": {
+                      "error": "Connection not in token scope",
+                      "connection": "conn-1"
+                    }
+                  },
+                  "clusterObject": {
+                    "value": {
+                      "error": "Cluster-level object not available to a vDC tenant token"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "PATCH"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/connections/{id}/nodes/{node}/network/{iface}": {
+      "get": {
+        "operationId": "node-iface-get",
+        "summary": "Network interface of a node",
+        "description": "The interface {iface} as Proxmox returns it. Needs node.network on the node (scope network:write).",
+        "tags": [
+          "Network"
+        ],
+        "x-required-scopes": [
+          "nodes:read",
+          "network:write"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Raw connection id; must be inside the token connection perimeter."
+          },
+          {
+            "name": "node",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          },
+          {
+            "name": "iface",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "description": "As Proxmox returns it",
+                      "additionalProperties": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/connections/{id}/nodes/{node}/network/{iface}"
+                    }
+                  },
+                  "perimeter": {
+                    "value": {
+                      "error": "Connection not in token scope",
+                      "connection": "conn-1"
+                    }
+                  },
+                  "clusterObject": {
+                    "value": {
+                      "error": "Cluster-level object not available to a vDC tenant token"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "POST"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "node-iface-update",
+        "summary": "Update a network interface of a node",
+        "description": "Changes the interface {iface}; `type` is required and selects the type-specific fields sent. An `address` in CIDR notation is sent as `cidr` (same for `address6`). The change is staged in Proxmox's pending network configuration until it is applied (PUT .../network). Not available to a vDC tenant token.",
+        "tags": [
+          "Network"
+        ],
+        "x-required-scopes": [
+          "network:write"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Raw connection id; must be inside the token connection perimeter."
+          },
+          {
+            "name": "node",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          },
+          {
+            "name": "iface",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "description": "Absent or empty fields are not sent to Proxmox. Only the fields of `type` are sent: bridge_* for a bridge, bond_* and slaves for a bond, vlan-* for a VLAN, ovs_* for an OVS object.",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "bridge",
+                      "bond",
+                      "eth",
+                      "alias",
+                      "vlan",
+                      "OVSBridge",
+                      "OVSBond",
+                      "OVSPort",
+                      "OVSIntPort"
+                    ]
+                  },
+                  "address": {
+                    "type": "string",
+                    "description": "IPv4 address; with a /prefix it is sent as cidr"
+                  },
+                  "netmask": {
+                    "type": "string"
+                  },
+                  "gateway": {
+                    "type": "string"
+                  },
+                  "address6": {
+                    "type": "string",
+                    "description": "IPv6 address; with a /prefix it is sent as cidr6"
+                  },
+                  "netmask6": {
+                    "type": "string"
+                  },
+                  "gateway6": {
+                    "type": "string"
+                  },
+                  "cidr": {
+                    "type": "string"
+                  },
+                  "cidr6": {
+                    "type": "string"
+                  },
+                  "mtu": {
+                    "type": "integer"
+                  },
+                  "comments": {
+                    "type": "string"
+                  },
+                  "autostart": {
+                    "type": "boolean",
+                    "description": "Sent to Proxmox as 0 or 1"
+                  },
+                  "bridge_ports": {
+                    "type": "string"
+                  },
+                  "bridge_vlan_aware": {
+                    "type": "boolean",
+                    "description": "Sent to Proxmox as 0 or 1"
+                  },
+                  "bond_mode": {
+                    "type": "string"
+                  },
+                  "bond-primary": {
+                    "type": "string"
+                  },
+                  "bond_xmit_hash_policy": {
+                    "type": "string"
+                  },
+                  "slaves": {
+                    "type": "string"
+                  },
+                  "vlan-id": {
+                    "type": "integer"
+                  },
+                  "vlan-raw-device": {
+                    "type": "string"
+                  },
+                  "ovs_bridge": {
+                    "type": "string"
+                  },
+                  "ovs_options": {
+                    "type": "string"
+                  },
+                  "ovs_tag": {
+                    "type": "integer"
+                  },
+                  "ovs_bonds": {
+                    "type": "string"
+                  },
+                  "ovs_ports": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/connections/{id}/nodes/{node}/network/{iface}"
+                    }
+                  },
+                  "perimeter": {
+                    "value": {
+                      "error": "Connection not in token scope",
+                      "connection": "conn-1"
+                    }
+                  },
+                  "clusterObject": {
+                    "value": {
+                      "error": "Cluster-level object not available to a vDC tenant token"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "POST"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "node-iface-delete",
+        "summary": "Delete a network interface of a node",
+        "description": "Removes the interface {iface}. The change is staged in Proxmox's pending network configuration until it is applied (PUT .../network). Not available to a vDC tenant token.",
+        "tags": [
+          "Network"
+        ],
+        "x-required-scopes": [
+          "network:write"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Raw connection id; must be inside the token connection perimeter."
+          },
+          {
+            "name": "node",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          },
+          {
+            "name": "iface",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/connections/{id}/nodes/{node}/network/{iface}"
+                    }
+                  },
+                  "perimeter": {
+                    "value": {
+                      "error": "Connection not in token scope",
+                      "connection": "conn-1"
+                    }
+                  },
+                  "clusterObject": {
+                    "value": {
+                      "error": "Cluster-level object not available to a vDC tenant token"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "POST"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/connections/{id}/sdn/apply": {
+      "post": {
+        "operationId": "sdn-apply",
+        "summary": "Apply the pending SDN configuration of a cluster",
+        "description": "Applies the pending SDN zones, VNets and subnets on every node of the cluster. `data.upid` is the Proxmox task UPID. No body. Not available to a vDC tenant token.",
+        "tags": [
+          "Network"
+        ],
+        "x-required-scopes": [
+          "network:write"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Raw connection id; must be inside the token connection perimeter."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "upid": {
+                          "type": "string",
+                          "description": "Proxmox task UPID"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/connections/{id}/sdn/apply"
+                    }
+                  },
+                  "perimeter": {
+                    "value": {
+                      "error": "Connection not in token scope",
+                      "connection": "conn-1"
+                    }
+                  },
+                  "clusterObject": {
+                    "value": {
+                      "error": "Cluster-level object not available to a vDC tenant token"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "DELETE"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/vdcs/{id}/vnets": {
+      "get": {
+        "operationId": "vdc-vnets-list",
+        "summary": "Networks of a vDC",
+        "description": "The VNets of the vDC with their subnet and IPAM usage. Needs sdn.vnet.view. The vDC must belong to the token's tenant (404 otherwise, as for a session of another tenant) and sit on a connection inside the token perimeter.",
+        "tags": [
+          "Network"
+        ],
+        "x-required-scopes": [
+          "nodes:read",
+          "network:write"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "vdcId": {
+                            "type": "string"
+                          },
+                          "pveName": {
+                            "type": "string",
+                            "description": "Name of the VNet in Proxmox, generated"
+                          },
+                          "displayName": {
+                            "type": "string",
+                            "description": "Name shown to the tenant, unique in the vDC; the {pveName} path segment"
+                          },
+                          "description": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "tag": {
+                            "type": "integer",
+                            "description": "VNI (VXLAN) or VLAN tag"
+                          },
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "vxlan",
+                              "vlan"
+                            ]
+                          },
+                          "bridge": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "zoneName": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "firewall": {
+                            "type": "boolean"
+                          },
+                          "subnet": {
+                            "type": [
+                              "object",
+                              "null"
+                            ],
+                            "description": "Null for a pure L2 network",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "vnetId": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "cidr": {
+                                "type": "string"
+                              },
+                              "gateway": {
+                                "type": "string"
+                              },
+                              "dnsServers": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "ipamEnabled": {
+                                "type": "boolean"
+                              },
+                              "createdAt": {
+                                "type": "string",
+                                "format": "date-time"
+                              }
+                            }
+                          },
+                          "tenantNetwork": {
+                            "type": [
+                              "object",
+                              "null"
+                            ],
+                            "description": "The stretched tenant network that created this VNet; the provider manages it",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "name": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          "createdBy": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "description": "User who created it; null when an API token did"
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "ipamUsage": {
+                            "type": "object",
+                            "properties": {
+                              "used": {
+                                "type": "integer"
+                              },
+                              "usable": {
+                                "type": "integer"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Route not available to API tokens",
+                  "route": "/api/v1/vdcs/{id}/vnets"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "DELETE"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "vdc-vnet-create",
+        "summary": "Create a network in a vDC",
+        "description": "Creates a VXLAN (default) or VLAN network named `displayName`, with a subnet or none (pure L2), and applies the SDN configuration. The vDC quota and VNI or VLAN policy apply. Answers 201. The vDC must belong to the token's tenant (404 otherwise, as for a session of another tenant) and sit on a connection inside the token perimeter.",
+        "tags": [
+          "Network"
+        ],
+        "x-required-scopes": [
+          "network:write"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "displayName"
+                ],
+                "properties": {
+                  "displayName": {
+                    "type": "string",
+                    "description": "1-20 chars, lowercase letters, digits and dashes, starting with a letter"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "firewall": {
+                    "type": "boolean",
+                    "description": "Default true"
+                  },
+                  "subnet": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "description": "Absent or null: a pure L2 network (not allowed when the platform provides the edge)",
+                    "required": [
+                      "cidr",
+                      "gateway"
+                    ],
+                    "properties": {
+                      "cidr": {
+                        "type": "string"
+                      },
+                      "gateway": {
+                        "type": "string"
+                      },
+                      "dnsServers": {
+                        "oneOf": [
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          {
+                            "type": "string",
+                            "description": "Comma-separated"
+                          }
+                        ],
+                        "description": "DNS servers, as an array or a comma-separated string"
+                      }
+                    }
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "vxlan",
+                      "vlan"
+                    ],
+                    "description": "Default vxlan"
+                  },
+                  "vni": {
+                    "type": "integer",
+                    "description": "VXLAN only: a VNI the transport policy accepts; absent = allocated"
+                  },
+                  "bridge": {
+                    "type": "string",
+                    "description": "Required for a VLAN network"
+                  },
+                  "vlanTag": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 4094,
+                    "description": "VLAN only; absent = allocated from the vDC VLAN pool"
+                  },
+                  "externalAddressing": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "vdcId": {
+                          "type": "string"
+                        },
+                        "pveName": {
+                          "type": "string",
+                          "description": "Name of the VNet in Proxmox, generated"
+                        },
+                        "displayName": {
+                          "type": "string",
+                          "description": "Name shown to the tenant, unique in the vDC; the {pveName} path segment"
+                        },
+                        "description": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "tag": {
+                          "type": "integer",
+                          "description": "VNI (VXLAN) or VLAN tag"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "vxlan",
+                            "vlan"
+                          ]
+                        },
+                        "bridge": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "zoneName": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "firewall": {
+                          "type": "boolean"
+                        },
+                        "subnet": {
+                          "type": [
+                            "object",
+                            "null"
+                          ],
+                          "description": "Null for a pure L2 network",
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "vnetId": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "cidr": {
+                              "type": "string"
+                            },
+                            "gateway": {
+                              "type": "string"
+                            },
+                            "dnsServers": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "ipamEnabled": {
+                              "type": "boolean"
+                            },
+                            "createdAt": {
+                              "type": "string",
+                              "format": "date-time"
+                            }
+                          }
+                        },
+                        "tenantNetwork": {
+                          "type": [
+                            "object",
+                            "null"
+                          ],
+                          "description": "The stretched tenant network that created this VNet; the provider manages it",
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "name": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "createdBy": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "description": "User who created it; null when an API token did"
+                        },
+                        "createdAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Route not available to API tokens",
+                  "route": "/api/v1/vdcs/{id}/vnets"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "DELETE"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/vdcs/{id}/vnets/{pveName}": {
+      "get": {
+        "operationId": "vdc-vnet-get",
+        "summary": "Network of a vDC",
+        "description": "The VNet whose display name is {pveName}; 404 when the vDC has none. Needs sdn.vnet.view. The vDC must belong to the token's tenant (404 otherwise, as for a session of another tenant) and sit on a connection inside the token perimeter.",
+        "tags": [
+          "Network"
+        ],
+        "x-required-scopes": [
+          "nodes:read",
+          "network:write"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          },
+          {
+            "name": "pveName",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "vdcId": {
+                          "type": "string"
+                        },
+                        "pveName": {
+                          "type": "string",
+                          "description": "Name of the VNet in Proxmox, generated"
+                        },
+                        "displayName": {
+                          "type": "string",
+                          "description": "Name shown to the tenant, unique in the vDC; the {pveName} path segment"
+                        },
+                        "description": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "tag": {
+                          "type": "integer",
+                          "description": "VNI (VXLAN) or VLAN tag"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "vxlan",
+                            "vlan"
+                          ]
+                        },
+                        "bridge": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "zoneName": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "firewall": {
+                          "type": "boolean"
+                        },
+                        "subnet": {
+                          "type": [
+                            "object",
+                            "null"
+                          ],
+                          "description": "Null for a pure L2 network",
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "vnetId": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "cidr": {
+                              "type": "string"
+                            },
+                            "gateway": {
+                              "type": "string"
+                            },
+                            "dnsServers": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "ipamEnabled": {
+                              "type": "boolean"
+                            },
+                            "createdAt": {
+                              "type": "string",
+                              "format": "date-time"
+                            }
+                          }
+                        },
+                        "tenantNetwork": {
+                          "type": [
+                            "object",
+                            "null"
+                          ],
+                          "description": "The stretched tenant network that created this VNet; the provider manages it",
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "name": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "createdBy": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "description": "User who created it; null when an API token did"
+                        },
+                        "createdAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Route not available to API tokens",
+                  "route": "/api/v1/vdcs/{id}/vnets/{pveName}"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "POST"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "vdc-vnet-update",
+        "summary": "Update a network of a vDC",
+        "description": "Changes the description, the firewall flag or the DNS servers of the VNet {pveName} (its display name). A VNet of a stretched tenant network is the provider's: 403. The vDC must belong to the token's tenant (404 otherwise, as for a session of another tenant) and sit on a connection inside the token perimeter.",
+        "tags": [
+          "Network"
+        ],
+        "x-required-scopes": [
+          "network:write"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          },
+          {
+            "name": "pveName",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "description": "Only the given fields change.",
+                "properties": {
+                  "description": {
+                    "type": "string"
+                  },
+                  "firewall": {
+                    "type": "boolean"
+                  },
+                  "subnet": {
+                    "type": "object",
+                    "properties": {
+                      "dnsServers": {
+                        "oneOf": [
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          {
+                            "type": "string",
+                            "description": "Comma-separated"
+                          }
+                        ],
+                        "description": "DNS servers, as an array or a comma-separated string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "vdcId": {
+                          "type": "string"
+                        },
+                        "pveName": {
+                          "type": "string",
+                          "description": "Name of the VNet in Proxmox, generated"
+                        },
+                        "displayName": {
+                          "type": "string",
+                          "description": "Name shown to the tenant, unique in the vDC; the {pveName} path segment"
+                        },
+                        "description": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "tag": {
+                          "type": "integer",
+                          "description": "VNI (VXLAN) or VLAN tag"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "vxlan",
+                            "vlan"
+                          ]
+                        },
+                        "bridge": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "zoneName": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "firewall": {
+                          "type": "boolean"
+                        },
+                        "subnet": {
+                          "type": [
+                            "object",
+                            "null"
+                          ],
+                          "description": "Null for a pure L2 network",
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "vnetId": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "cidr": {
+                              "type": "string"
+                            },
+                            "gateway": {
+                              "type": "string"
+                            },
+                            "dnsServers": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "ipamEnabled": {
+                              "type": "boolean"
+                            },
+                            "createdAt": {
+                              "type": "string",
+                              "format": "date-time"
+                            }
+                          }
+                        },
+                        "tenantNetwork": {
+                          "type": [
+                            "object",
+                            "null"
+                          ],
+                          "description": "The stretched tenant network that created this VNet; the provider manages it",
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "name": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "createdBy": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "description": "User who created it; null when an API token did"
+                        },
+                        "createdAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Route not available to API tokens",
+                  "route": "/api/v1/vdcs/{id}/vnets/{pveName}"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "POST"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "vdc-vnet-delete",
+        "summary": "Delete a network of a vDC",
+        "description": "Deletes the VNet {pveName} (its display name) and applies the SDN configuration. 409 while guest NICs still use it (`attachmentCount`); a VNet of a stretched tenant network is the provider's: 403. The vDC must belong to the token's tenant (404 otherwise, as for a session of another tenant) and sit on a connection inside the token perimeter.",
+        "tags": [
+          "Network"
+        ],
+        "x-required-scopes": [
+          "network:write"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          },
+          {
+            "name": "pveName",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Route not available to API tokens",
+                  "route": "/api/v1/vdcs/{id}/vnets/{pveName}"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "POST"
                 }
               }
             }

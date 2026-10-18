@@ -170,6 +170,19 @@ describe('shared canonical matcher', () => {
       'pool-create': '/api/v1/connections/c1/pools',
       'pool-update': '/api/v1/connections/c1/pools',
       'pool-delete': '/api/v1/connections/c1/pools',
+      'node-network-list': '/api/v1/connections/c1/nodes/pve1/network',
+      'node-network-create': '/api/v1/connections/c1/nodes/pve1/network',
+      'node-network-apply': '/api/v1/connections/c1/nodes/pve1/network',
+      'node-network-revert': '/api/v1/connections/c1/nodes/pve1/network',
+      'node-iface-get': '/api/v1/connections/c1/nodes/pve1/network/vmbr0',
+      'node-iface-update': '/api/v1/connections/c1/nodes/pve1/network/bond0.100',
+      'node-iface-delete': '/api/v1/connections/c1/nodes/pve1/network/vmbr1',
+      'sdn-apply': '/api/v1/connections/c1/sdn/apply',
+      'vdc-vnets-list': '/api/v1/vdcs/vdc1/vnets',
+      'vdc-vnet-create': '/api/v1/vdcs/vdc1/vnets',
+      'vdc-vnet-get': '/api/v1/vdcs/vdc1/vnets/lan',
+      'vdc-vnet-update': '/api/v1/vdcs/vdc1/vnets/lan',
+      'vdc-vnet-delete': '/api/v1/vdcs/vdc1/vnets/dmz',
     }
     for (const entry of PUBLIC_API_ALLOWLIST) {
       const path = samplePathById[entry.id]

@@ -8,6 +8,7 @@ import { BACKUP_ENTRIES } from "./backups"
 import { HA_ENTRIES } from "./ha"
 import { _matchAgainst, matchEntryParams, type AllowlistMatch } from "./matcher"
 import { MONITORING_ENTRIES } from "./monitoring"
+import { NETWORK_ENTRIES } from "./network"
 import { POOLS_ENTRIES } from "./pools"
 import { STORAGE_ENTRIES } from "./storage"
 import type { AllowlistEntry, HttpMethod } from "./types"
@@ -22,6 +23,7 @@ export {
 
 export const PUBLIC_API_ALLOWLIST: AllowlistEntry[] = [
   ...MONITORING_ENTRIES, ...VM_ENTRIES, ...BACKUP_ENTRIES, ...STORAGE_ENTRIES, ...HA_ENTRIES, ...POOLS_ENTRIES,
+  ...NETWORK_ENTRIES,
 ]
 
 const ENTRIES_BY_ID = new Map(PUBLIC_API_ALLOWLIST.map(e => [e.id, e]))

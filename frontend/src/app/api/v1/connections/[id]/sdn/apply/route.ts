@@ -4,10 +4,11 @@ import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { audit } from "@/lib/audit"
+import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 
 export const runtime = "nodejs"
 
-export async function POST(
+async function postHandler(
   _req: Request,
   ctx: { params: Promise<{ id: string }> }
 ) {
@@ -54,3 +55,5 @@ export async function POST(
     return NextResponse.json({ error: e?.message || String(e) }, { status: 502 })
   }
 }
+
+export const POST = withPublicApiGuard("sdn-apply", postHandler)

@@ -75,6 +75,13 @@ export async function POST(req: Request) {
     }
 
     const first = validated[0]
+    // The batch checks below read the source's VMs and the target's storage and
+    // nodes with the credentials stored on both connections, like the
+    // space-check and copy-check routes: same right to view each of them.
+    for (const id of new Set([first.sourceConnectionId, first.targetConnectionId])) {
+      const deniedView = await checkPermission(PERMISSIONS.CONNECTION_VIEW, "connection", id)
+      if (deniedView) return deniedView
+    }
     // Warm VMware: every VM's node must reach the copy adapter of its source
     // host (lib/migration/batch-copy-reach), or its job fails at planning.
     if (first.config.migrationType === "warm" && first.sourceConn.type === "vmware") {

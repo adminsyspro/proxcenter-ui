@@ -20,7 +20,7 @@ vi.mock("next/server", async (io) => {
 })
 vi.mock("next-auth", () => ({ getServerSession: vi.fn(async () => ({ user: { id: "u1" } })) }))
 vi.mock("@/lib/auth/config", () => ({ authOptions: {} }))
-vi.mock("@/lib/rbac", () => ({ checkPermission: vi.fn(async () => h.denied), PERMISSIONS: { VM_MIGRATE: "vm.migrate" } }))
+vi.mock("@/lib/rbac", () => ({ checkPermission: vi.fn(async () => h.denied), PERMISSIONS: { VM_MIGRATE: "vm.migrate", CONNECTION_VIEW: "connection.view" } }))
 vi.mock("@/lib/tenant", () => ({
   getSessionPrisma: vi.fn(async () => h.prisma),
   getCurrentTenantId: vi.fn(async () => h.tenantId),
@@ -220,6 +220,20 @@ describe("POST /api/v1/migrations/batches", () => {
   it("needs vm.migrate", async () => {
     h.denied = NextResponse.json({ error: "Forbidden" }, { status: 403 })
     expect((await create({ ...shared, vms })).status).toBe(403)
+  })
+
+  it("needs the right to view both connections, like the space and copy checks it runs", async () => {
+    const { checkPermission } = await import("@/lib/rbac")
+    vi.mocked(checkPermission).mockImplementation(async (perm: string, _t?: string, id?: string) =>
+      perm === "connection.view" && id === "tgt" ? NextResponse.json({ error: "Forbidden" }, { status: 403 }) as any : null)
+    try {
+      expect((await create({ ...shared, vms })).status).toBe(403)
+      expect(checkPermission).toHaveBeenCalledWith("connection.view", "connection", "src")
+      expect(h.tx.migrationBatch.create).not.toHaveBeenCalled()
+      expect(space.check).not.toHaveBeenCalled()
+    } finally {
+      vi.mocked(checkPermission).mockImplementation(async () => h.denied as any)
+    }
   })
 })
 

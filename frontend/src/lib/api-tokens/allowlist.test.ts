@@ -322,6 +322,9 @@ describe('method-aware matching', () => {
     expect(matchPublicApiPath('/api/v1/firewall/logs/c1', 'GET').ok).toBe(false)
     expect(matchPublicApiPath('/api/v1/firewall/microseg/c1/analyze', 'GET').ok).toBe(false)
     expect(matchPublicApiPath('/api/v1/firewall/vms/c1/pve1/qemu/100/log', 'GET').ok).toBe(false)
+    expect(matchPublicApiPath('/api/v1/firewall/microseg/c1/vms', 'GET').ok).toBe(false)
+    expect(matchPublicApiPath('/api/v1/firewall/microseg/c1/vm/pve1/qemu/100', 'GET').ok).toBe(false)
+    expect(matchPublicApiPath('/api/v1/firewall/microseg/c1/vm/pve1/qemu/100/simulate', 'GET').ok).toBe(false)
   })
 
   it('matchesEntry checks the method and isWriteEntry flags non-GET', () => {

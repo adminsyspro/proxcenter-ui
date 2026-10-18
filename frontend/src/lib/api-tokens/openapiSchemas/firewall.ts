@@ -10,7 +10,7 @@ const POLICY = { type: "string", enum: ["ACCEPT", "DROP", "REJECT"] }
 const RULE_FIELDS = {
   type: { type: "string", enum: ["in", "out", "group"] },
   action: { type: "string", description: "ACCEPT, DROP or REJECT; the security group name for a `group` rule" },
-  enable: { ...ENABLE_01, description: "Defaults to 1 on a creation" },
+  enable: { ...ENABLE_01, description: "Defaults to 1 on a creation; through the orchestrator an explicit 0 is also created as 1" },
   source: { type: "string", description: "Address, CIDR, alias or +ipset" },
   dest: { type: "string", description: "Address, CIDR, alias or +ipset" },
   proto: { type: "string", description: "tcp, udp, icmp, ..." },
@@ -120,7 +120,10 @@ export const FIREWALL_REQUEST_SCHEMAS: Record<string, Record<string, unknown>> =
       enable_firewall: { type: "boolean" },
       set_policy_in_drop: { type: "boolean" },
       set_policy_out_drop: { type: "boolean" },
-      apply_base_sgs: { type: "boolean", description: "Apply the sg-base-* group of each guest network, creating a missing one" },
+      apply_base_sgs: {
+        type: "boolean",
+        description: "Apply the sg-base-* group of each guest network, creating a missing one (and its gw-* alias). Refused to a vDC tenant token: 403",
+      },
       additional_sgs: { ...STRINGS, description: "Other security groups to apply" },
       enable_nic_fw: { type: "boolean", description: "Set firewall=1 on every NIC" },
     },

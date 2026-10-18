@@ -47,7 +47,10 @@ vi.mock('@/lib/rbac', () => ({
 }))
 vi.mock('@/lib/audit', () => ({ audit: (...a: any[]) => h.audit(...a) }))
 
+import { DELETE as ALIAS_DELETE } from './aliases/[connectionId]/[name]/route'
 import { POST as CLUSTER_RULE_ADD } from './cluster/[connectionId]/route'
+import { DELETE as CLUSTER_RULE_DELETE } from './cluster/[connectionId]/rules/[pos]/route'
+import { POST as VM_ISOLATE } from './microseg/[connectionId]/vm/[node]/[vmType]/[vmid]/isolate/route'
 import { DELETE as IPSET_ENTRY_DELETE } from './ipsets/[connectionId]/[ipsetName]/entries/[cidr]/route'
 import { POST as VM_RULE_CREATE } from './vms/[connectionId]/[node]/[vmType]/[vmid]/route'
 
@@ -87,6 +90,10 @@ const addClusterRule = (conn: string) => CLUSTER_RULE_ADD(
   tokenRequest('POST', `/api/v1/firewall/cluster/${conn}`, 'fw-cluster-rule-add', RULE) as any,
   { params: Promise.resolve({ connectionId: conn }) },
 )
+const isolate = (body: Record<string, unknown>) => VM_ISOLATE(
+  tokenRequest('POST', '/api/v1/firewall/microseg/c1/vm/pve1/qemu/100/isolate', 'fw-vm-isolate', body) as any,
+  { params: Promise.resolve({ connectionId: 'c1', node: 'pve1', vmType: 'qemu', vmid: '100' }) },
+)
 const addVmRule = (vmid: string) => VM_RULE_CREATE(
   tokenRequest('POST', `/api/v1/firewall/vms/c1/pve1/qemu/${vmid}`, 'fw-vm-rule-create', RULE) as any,
   { params: Promise.resolve({ connectionId: 'c1', node: 'pve1', vmType: 'qemu', vmid }) },
@@ -100,7 +107,9 @@ beforeEach(() => {
   h.checkPermission.mockResolvedValue(null)
   h.audit.mockResolvedValue('audit-1')
   h.pveFetch.mockImplementation(async (_conn, path: string) => (path === '/cluster/resources?type=vm' ? GUESTS : null))
-  h.orchPost.mockResolvedValue({ data: { status: 'created' } })
+  h.orchPost.mockImplementation(async (path: string) => (
+    path.endsWith('/isolate') ? { data: { success: true, applied_sgs: [], enabled_nics: [], actions: [] } } : { data: { status: 'created' } }
+  ))
   h.orchDelete.mockResolvedValue({ data: { status: 'deleted' } })
 })
 
@@ -167,5 +176,51 @@ describe('firewall routes with an API token', () => {
 
     expect(res.status).toBe(200)
     expect(h.orchDelete).toHaveBeenCalledWith('/firewall/ipsets/c1/blocklist/entries/10.0.0.0%2F24')
+  })
+
+  it('isolating its own guest with apply_base_sgs from a vDC tenant token: 403 cluster object, nothing reached', async () => {
+    h.getPrincipal.mockResolvedValue({ ok: true, principal: IAAS_TOKEN })
+    h.infra.mockResolvedValue({ kind: 'iaas', vdcScope: VDC_SCOPE })
+
+    const res = await isolate({ enable_firewall: true, apply_base_sgs: true })
+
+    expect(res.status).toBe(403)
+    expect(await res.json()).toEqual({ error: 'Cluster-level object not available to a vDC tenant token' })
+    expect(h.orchPost).not.toHaveBeenCalled()
+  })
+
+  it('isolating its own guest without apply_base_sgs from a vDC tenant token reaches the orchestrator', async () => {
+    h.getPrincipal.mockResolvedValue({ ok: true, principal: IAAS_TOKEN })
+    h.infra.mockResolvedValue({ kind: 'iaas', vdcScope: VDC_SCOPE })
+    const body = { enable_firewall: true, set_policy_in_drop: true, apply_base_sgs: false, enable_nic_fw: true }
+
+    const res = await isolate(body)
+
+    expect(res.status).toBe(200)
+    expect(h.checkPermission).toHaveBeenCalledWith('node.manage', 'connection', 'c1')
+    expect(h.orchPost).toHaveBeenCalledWith('/firewall/microseg/c1/vm/pve1/qemu/100/isolate', body)
+  })
+
+  it('a provider token keeps apply_base_sgs', async () => {
+    const res = await isolate({ apply_base_sgs: true })
+
+    expect(res.status).toBe(200)
+    expect(h.orchPost).toHaveBeenCalledWith('/firewall/microseg/c1/vm/pve1/qemu/100/isolate', { apply_base_sgs: true })
+  })
+
+  it('a double-encoded rule position or alias name is refused 401 before the handler', async () => {
+    const pos = await CLUSTER_RULE_DELETE(
+      tokenRequest('DELETE', '/api/v1/firewall/cluster/c1/rules/%252e%252e', 'fw-cluster-rule-delete') as any,
+      { params: Promise.resolve({ connectionId: 'c1', pos: '%2e%2e' }) },
+    )
+    const name = await ALIAS_DELETE(
+      tokenRequest('DELETE', '/api/v1/firewall/aliases/c1/gw%252Flan', 'fw-alias-delete') as any,
+      { params: Promise.resolve({ connectionId: 'c1', name: 'gw%2Flan' }) },
+    )
+
+    expect(pos.status).toBe(401)
+    expect(name.status).toBe(401)
+    expect(h.checkPermission).not.toHaveBeenCalled()
+    expect(h.orchDelete).not.toHaveBeenCalled()
   })
 })

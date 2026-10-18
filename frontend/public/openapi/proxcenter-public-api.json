@@ -2231,7 +2231,7 @@
               0,
               1
             ],
-            "description": "Defaults to 1 on a creation"
+            "description": "Defaults to 1 on a creation; through the orchestrator an explicit 0 is also created as 1"
           },
           "source": {
             "type": "string",
@@ -2310,7 +2310,7 @@
               0,
               1
             ],
-            "description": "Defaults to 1 on a creation"
+            "description": "Defaults to 1 on a creation; through the orchestrator an explicit 0 is also created as 1"
           },
           "source": {
             "type": "string",
@@ -2539,7 +2539,7 @@
           },
           "apply_base_sgs": {
             "type": "boolean",
-            "description": "Apply the sg-base-* group of each guest network, creating a missing one"
+            "description": "Apply the sg-base-* group of each guest network, creating a missing one (and its gw-* alias). Refused to a vDC tenant token: 403"
           },
           "additional_sgs": {
             "type": "array",
@@ -5016,7 +5016,7 @@
                     0,
                     1
                   ],
-                  "description": "Defaults to 1 on a creation"
+                  "description": "Defaults to 1 on a creation; through the orchestrator an explicit 0 is also created as 1"
                 },
                 "source": {
                   "type": "string",
@@ -5131,7 +5131,7 @@
                       0,
                       1
                     ],
-                    "description": "Defaults to 1 on a creation"
+                    "description": "Defaults to 1 on a creation; through the orchestrator an explicit 0 is also created as 1"
                   },
                   "source": {
                     "type": "string",
@@ -23078,7 +23078,7 @@
       "get": {
         "operationId": "fw-aliases-list",
         "summary": "Firewall aliases of a cluster",
-        "description": "The cluster firewall aliases (name, CIDR, comment). Needs node.view on the connection (scope nodes:read or firewall:write).",
+        "description": "The cluster firewall aliases (name, CIDR, comment). Needs node.view on the connection (scope nodes:read or firewall:write). Not available to a vDC tenant token.",
         "tags": [
           "Firewall"
         ],
@@ -23639,7 +23639,7 @@
       "get": {
         "operationId": "fw-cluster-get",
         "summary": "Cluster firewall options or rules",
-        "description": "The cluster firewall options, or its rules with `type=rules`. Needs node.view on the connection (scope nodes:read or firewall:write).",
+        "description": "The cluster firewall options, or its rules with `type=rules`. Needs node.view on the connection (scope nodes:read or firewall:write). Not available to a vDC tenant token.",
         "tags": [
           "Firewall"
         ],
@@ -23779,7 +23779,7 @@
                               0,
                               1
                             ],
-                            "description": "Defaults to 1 on a creation"
+                            "description": "Defaults to 1 on a creation; through the orchestrator an explicit 0 is also created as 1"
                           },
                           "source": {
                             "type": "string",
@@ -24133,7 +24133,7 @@
                       0,
                       1
                     ],
-                    "description": "Defaults to 1 on a creation"
+                    "description": "Defaults to 1 on a creation; through the orchestrator an explicit 0 is also created as 1"
                   },
                   "source": {
                     "type": "string",
@@ -24346,7 +24346,7 @@
                       0,
                       1
                     ],
-                    "description": "Defaults to 1 on a creation"
+                    "description": "Defaults to 1 on a creation; through the orchestrator an explicit 0 is also created as 1"
                   },
                   "source": {
                     "type": "string",
@@ -24565,7 +24565,7 @@
                       0,
                       1
                     ],
-                    "description": "Defaults to 1 on a creation"
+                    "description": "Defaults to 1 on a creation; through the orchestrator an explicit 0 is also created as 1"
                   },
                   "source": {
                     "type": "string",
@@ -24858,7 +24858,7 @@
       "get": {
         "operationId": "fw-groups-list",
         "summary": "Firewall security groups of a cluster",
-        "description": "The cluster security groups with their rules. Needs node.view on the connection (scope nodes:read or firewall:write).",
+        "description": "The cluster security groups with their rules. Needs node.view on the connection (scope nodes:read or firewall:write). Not available to a vDC tenant token.",
         "tags": [
           "Firewall"
         ],
@@ -24942,7 +24942,7 @@
                                 0,
                                 1
                               ],
-                              "description": "Defaults to 1 on a creation"
+                              "description": "Defaults to 1 on a creation; through the orchestrator an explicit 0 is also created as 1"
                             },
                             "source": {
                               "type": "string",
@@ -25393,7 +25393,7 @@
                       0,
                       1
                     ],
-                    "description": "Defaults to 1 on a creation"
+                    "description": "Defaults to 1 on a creation; through the orchestrator an explicit 0 is also created as 1"
                   },
                   "source": {
                     "type": "string",
@@ -25621,7 +25621,7 @@
                       0,
                       1
                     ],
-                    "description": "Defaults to 1 on a creation"
+                    "description": "Defaults to 1 on a creation; through the orchestrator an explicit 0 is also created as 1"
                   },
                   "source": {
                     "type": "string",
@@ -25913,7 +25913,7 @@
       "get": {
         "operationId": "fw-ipsets-list",
         "summary": "Firewall IP sets of a cluster",
-        "description": "The cluster IP sets with their entries. Needs node.view on the connection (scope nodes:read or firewall:write).",
+        "description": "The cluster IP sets with their entries. Needs node.view on the connection (scope nodes:read or firewall:write). Not available to a vDC tenant token.",
         "tags": [
           "Firewall"
         ],
@@ -26626,7 +26626,7 @@
       "get": {
         "operationId": "fw-node-get",
         "summary": "Node firewall options or rules",
-        "description": "The firewall options of the node, or its rules with `type=rules`. Needs node.view on the connection (scope nodes:read or firewall:write).",
+        "description": "The firewall options of the node, or its rules with `type=rules`. Needs node.view on the connection (scope nodes:read or firewall:write). Not available to a vDC tenant token.",
         "tags": [
           "Firewall"
         ],
@@ -26775,7 +26775,7 @@
                               0,
                               1
                             ],
-                            "description": "Defaults to 1 on a creation"
+                            "description": "Defaults to 1 on a creation; through the orchestrator an explicit 0 is also created as 1"
                           },
                           "source": {
                             "type": "string",
@@ -27147,7 +27147,7 @@
                       0,
                       1
                     ],
-                    "description": "Defaults to 1 on a creation"
+                    "description": "Defaults to 1 on a creation; through the orchestrator an explicit 0 is also created as 1"
                   },
                   "source": {
                     "type": "string",
@@ -27369,7 +27369,7 @@
                       0,
                       1
                     ],
-                    "description": "Defaults to 1 on a creation"
+                    "description": "Defaults to 1 on a creation; through the orchestrator an explicit 0 is also created as 1"
                   },
                   "source": {
                     "type": "string",
@@ -27597,7 +27597,7 @@
                       0,
                       1
                     ],
-                    "description": "Defaults to 1 on a creation"
+                    "description": "Defaults to 1 on a creation; through the orchestrator an explicit 0 is also created as 1"
                   },
                   "source": {
                     "type": "string",
@@ -28089,7 +28089,7 @@
       "post": {
         "operationId": "fw-vm-isolate",
         "summary": "Isolate a guest",
-        "description": "Applies micro-segmentation to the guest: enables its firewall, sets DROP policies, applies the base security groups of its networks (creating a missing one) and `additional_sgs`, and enables the firewall on its NICs, as the flags ask. {vmType} is qemu or lxc. Runs on the orchestrator only (no direct Proxmox fallback). Needs node.manage on the connection. A vDC tenant token reaches the guests of its own vDC pools only.",
+        "description": "Applies micro-segmentation to the guest: enables its firewall, sets DROP policies, applies the base security groups of its networks (creating a missing one) and `additional_sgs`, and enables the firewall on its NICs, as the flags ask. {vmType} is qemu or lxc. Runs on the orchestrator only (no direct Proxmox fallback). Needs node.manage on the connection. A vDC tenant token reaches the guests of its own vDC pools only. `apply_base_sgs` is refused to a vDC tenant token (it may create cluster-level groups and aliases): 403.",
         "tags": [
           "Firewall"
         ],
@@ -28152,7 +28152,7 @@
                   },
                   "apply_base_sgs": {
                     "type": "boolean",
-                    "description": "Apply the sg-base-* group of each guest network, creating a missing one"
+                    "description": "Apply the sg-base-* group of each guest network, creating a missing one (and its gw-* alias). Refused to a vDC tenant token: 403"
                   },
                   "additional_sgs": {
                     "type": "array",
@@ -28462,7 +28462,7 @@
                               0,
                               1
                             ],
-                            "description": "Defaults to 1 on a creation"
+                            "description": "Defaults to 1 on a creation; through the orchestrator an explicit 0 is also created as 1"
                           },
                           "source": {
                             "type": "string",
@@ -28657,7 +28657,7 @@
                       0,
                       1
                     ],
-                    "description": "Defaults to 1 on a creation"
+                    "description": "Defaults to 1 on a creation; through the orchestrator an explicit 0 is also created as 1"
                   },
                   "source": {
                     "type": "string",
@@ -29116,7 +29116,7 @@
                       0,
                       1
                     ],
-                    "description": "Defaults to 1 on a creation"
+                    "description": "Defaults to 1 on a creation; through the orchestrator an explicit 0 is also created as 1"
                   },
                   "source": {
                     "type": "string",

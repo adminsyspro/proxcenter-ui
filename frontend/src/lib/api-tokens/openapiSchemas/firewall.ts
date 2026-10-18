@@ -10,7 +10,7 @@ const POLICY = { type: "string", enum: ["ACCEPT", "DROP", "REJECT"] }
 const RULE_FIELDS = {
   type: { type: "string", enum: ["in", "out", "group"] },
   action: { type: "string", description: "ACCEPT, DROP or REJECT; the security group name for a `group` rule" },
-  enable: { ...ENABLE_01, description: "Defaults to 1 on a creation; through the orchestrator an explicit 0 is also created as 1" },
+  enable: { ...ENABLE_01, description: "Defaults to 1 when absent on a creation; an explicit 0 creates the rule disabled" },
   source: { type: "string", description: "Address, CIDR, alias or +ipset" },
   dest: { type: "string", description: "Address, CIDR, alias or +ipset" },
   proto: { type: "string", description: "tcp, udp, icmp, ..." },

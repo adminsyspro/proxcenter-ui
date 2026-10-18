@@ -105,6 +105,8 @@ export default function StorageDetailPanel({
 }: StorageDetailPanelProps) {
   const t = useTranslations()
   const theme = useTheme()
+  // Content type of the section whose upload button opened the dialog.
+  const [storageUploadType, setStorageUploadType] = React.useState<string | undefined>()
   // Write controls follow the rights their routes enforce (#920), judged on
   // THIS storage: a storage-scoped grant opens the storages it names and no
   // other (#921).
@@ -700,7 +702,7 @@ export default function StorageDetailPanel({
               group={group}
               formatBytes={formatBytes}
               vmNames={vmNamesMap}
-              onUpload={canUpload && ['iso', 'snippets', 'vztmpl', 'import'].includes(contentType) ? () => setStorageUploadOpen(true) : undefined}
+              onUpload={canUpload && ['iso', 'snippets', 'vztmpl', 'import'].includes(contentType) ? () => { setStorageUploadType(contentType); setStorageUploadOpen(true) } : undefined}
               onDownloadTemplate={canUpload && contentType === 'vztmpl' ? () => setTemplateDialogOpen(true) : undefined}
               onDelete={canDelete ? async (volid: string) => {
                 const res = await fetch(
@@ -737,6 +739,7 @@ export default function StorageDetailPanel({
           node={si.node}
           storage={si.storage}
           contentTypes={si.content || []}
+          initialContentType={storageUploadType}
           onUploaded={() => {
             setStorageUploadOpen(false)
             if (selection) void fetchDetails(selection).then(setData)

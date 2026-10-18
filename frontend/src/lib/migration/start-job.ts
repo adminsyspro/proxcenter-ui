@@ -46,6 +46,7 @@ export function warmConfigFromJobConfig(c: Record<string, any>, engine: "warm-vm
     // applied by the VMware engine only; vddkLibdir has no meaning on XCP-ng.
     ...(engine === "warm-vmware" && c.hardware && { hardware: c.hardware }),
     ...(engine === "warm-vmware" && c.nics && { nics: c.nics }),
+    ...(engine === "warm-vmware" && Array.isArray(c.disks) && c.disks.length > 0 && { disks: c.disks }),
     ...(c.targetVmid !== undefined && { targetVmid: c.targetVmid }),
     ...(engine === "warm-vmware" && c.vddkLibdir && { vddkLibdir: c.vddkLibdir }),
     ...(c.downtimeBudgetSec !== undefined && { downtimeBudgetSec: c.downtimeBudgetSec }),
@@ -64,6 +65,7 @@ export function coldConfigFromJobConfig(c: Record<string, any>): ColdConfig {
     convertDisksToQcow2: !!c.convertDisksToQcow2, cpuType: c.cpuType,
     ...(c.hardware && { hardware: c.hardware }),
     ...(c.nics && { nics: c.nics }),
+    ...(Array.isArray(c.disks) && c.disks.length > 0 && { disks: c.disks }),
     migrationType: c.migrationType as "cold" | "live" | "sshfs_boot",
     transferMode: c.transferMode as "https" | "sshfs",
     // The user-selected Temporary Storage keeps SSHFS mounts, VMDK dumps and
@@ -161,7 +163,7 @@ export async function startMigrationJob(job: StartableJob, tenantId: string, sou
           targetConnectionId: cold.targetConnectionId, targetNode: cold.targetNode, targetStorage: cold.targetStorage,
           networkBridge: cold.networkBridge, vlanTag: cold.vlanTag, startAfterMigration: cold.startAfterMigration,
           convertDisksToQcow2: cold.convertDisksToQcow2, cpuType: cold.cpuType,
-          ...(cold.hardware && { hardware: cold.hardware }), ...(cold.nics && { nics: cold.nics }),
+          ...(cold.hardware && { hardware: cold.hardware }), ...(cold.nics && { nics: cold.nics }), ...(cold.disks && { disks: cold.disks }),
           tempStorage: config.tempStorage,
           migrationType: "cold",
           vmxPath: v2vRoute.vmxPath,

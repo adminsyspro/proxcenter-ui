@@ -1,15 +1,17 @@
 'use client'
 
 /**
- * Second step of the VMware migration dialog (#317, lot 1): review and
+ * Second step of the VMware migration dialog (#317, lots 1 and 2): review and
  * customize the target VM before the job starts.
  *
  * Shows the hardware read from the source VM (cores, sockets, memory) as
  * editable fields, the CPU model of the target (the dialog's quick list plus
- * the node's own models from `cpu-models`), and one row per source NIC with
- * its vSphere network next to the target bridge (physical bridges and SDN
- * VNets from `network-choices`), an optional VLAN tag and an optional model.
- * The parent owns the state; this component only renders and edits it.
+ * the node's own models from `cpu-models`), one row per source disk with its
+ * target storage (the node's image storages the parent already listed) and
+ * whether it is migrated at all, and one row per source NIC with its vSphere
+ * network next to the target bridge (physical bridges and SDN VNets from
+ * `network-choices`), an optional VLAN tag and an optional model. The parent
+ * owns the state; this component only renders and edits it.
  */
 
 import React, { useEffect, useState } from 'react'
@@ -19,6 +21,8 @@ import Stack from '@mui/material/Stack'
 import Typography from '@mui/material/Typography'
 import TextField from '@mui/material/TextField'
 import Slider from '@mui/material/Slider'
+import Checkbox from '@mui/material/Checkbox'
+import Tooltip from '@mui/material/Tooltip'
 import FormControl from '@mui/material/FormControl'
 import FormHelperText from '@mui/material/FormHelperText'
 import InputLabel from '@mui/material/InputLabel'
@@ -37,8 +41,15 @@ import { MIGRATION_CPU_TYPES, MIGRATION_CPU_TYPE_DEFAULT } from '@/lib/migration
 import { MIGRATION_NIC_MODELS, HARDWARE_LIMITS } from '@/lib/migration/target-overrides'
 import {
   hardwareErrors, mergeCpuModels, sourceHardware, vlanTagInvalid,
-  type ReviewHardwareState, type ReviewNicState, type ReviewSource,
+  type ReviewDiskState, type ReviewHardwareState, type ReviewNicState, type ReviewSource,
 } from './migrationReview'
+
+/** One target storage of the node, as the step-1 selector lists them (`storages?content=images`). */
+export interface StorageChoice {
+  storage: string
+  type?: string
+  avail?: number
+}
 
 export interface NetworkChoice {
   name: string
@@ -65,6 +76,11 @@ export function toNetworkChoices(data: unknown): NetworkChoice[] {
   return [...out.filter(c => c.kind !== 'vnet'), ...out.filter(c => c.kind === 'vnet')]
 }
 
+// Leading icon of a disk or NIC row: same size and tone as the hardware rows'
+// icons, aligned on the label line with the detail line under the label.
+const rowLeadSx = { display: 'flex', alignItems: 'flex-start', gap: 1 } as const
+const rowIconSx = { fontSize: 15, opacity: 0.7, lineHeight: '20px', display: 'inline-flex', flexShrink: 0 } as const
+
 const SELECT_SX = { '& .MuiInputBase-input.MuiSelect-select': { minHeight: '1.4375em', lineHeight: '1.4375em' } } as const
 
 export interface MigrationReviewStepProps {
@@ -79,6 +95,17 @@ export interface MigrationReviewStepProps {
   onCpuTypeChange: (value: string) => void
   hardware: ReviewHardwareState
   onHardwareChange: (next: ReviewHardwareState) => void
+  disks: ReviewDiskState[]
+  onDisksChange: (next: ReviewDiskState[]) => void
+  /** The node's image storages, from the parent's step-1 list. */
+  storages: StorageChoice[]
+  /**
+   * Rendered under the disk table: the parent's per-disk verdicts (warm block
+   * storage, free space) and the controls that only apply to some storages
+   * (thick LVM zeroing cap, qcow2 conversion), gated by the parent so the
+   * same state drives step 1 and this step.
+   */
+  belowDisks?: React.ReactNode
   nics: ReviewNicState[]
   onNicsChange: (next: ReviewNicState[]) => void
 }
@@ -109,6 +136,11 @@ export function formatMiB(n: number): string {
   return `${Number.isInteger(g) ? g : g.toFixed(1)} GiB`
 }
 
+/** "40.0 GB" from bytes, the figure the step-1 storage selector shows; empty for an unknown size. */
+export function formatGB(bytes: number | undefined): string {
+  return bytes && bytes > 0 ? `${(bytes / 1073741824).toFixed(1)} GB` : ''
+}
+
 // Memory: one slider stop per mark, interpolated between them, rounded to 256 MiB.
 const MEMORY_MARKS = [512, 1024, 2048, 4096, 8192, 16384, 32768, 65536]
 const MEMORY_SCALE: HwSliderScale = {
@@ -135,7 +167,7 @@ const SOCKETS_SCALE = linearScale(1, 4, [1, 2, 3, 4])
 
 export default function MigrationReviewStep({
   source, sourceLoading, sourceName, targetConnId, targetNode, defaultBridge, canEditVlan,
-  cpuType, onCpuTypeChange, hardware, onHardwareChange, nics, onNicsChange,
+  cpuType, onCpuTypeChange, hardware, onHardwareChange, disks, onDisksChange, storages, belowDisks, nics, onNicsChange,
 }: MigrationReviewStepProps) {
   const t = useTranslations()
   const theme = useTheme()
@@ -172,10 +204,28 @@ export default function MigrationReviewStep({
     return known || !current ? choices : [{ name: current, kind: 'bridge', label: '' }, ...choices]
   }
 
+  // Every storage a disk row can show: the node's list, plus whatever the row
+  // already holds (the step-1 storage may predate a list reload).
+  const storageOptions = (current: string): StorageChoice[] => {
+    const known = storages.some(s => s.storage === current)
+    return known || !current ? storages : [{ storage: current }, ...storages]
+  }
+  const storageLine = (s: StorageChoice | undefined, fallback: string) => (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
+      <i className="ri-hard-drive-2-line" style={{ fontSize: 14, opacity: 0.7 }} />
+      <Typography variant="body2" fontWeight={500}>{s?.storage || fallback}</Typography>
+      {s?.type && <Typography variant="caption" sx={{ opacity: 0.5 }}>({s.type})</Typography>}
+    </Box>
+  )
+
   const setHw = (field: keyof ReviewHardwareState, value: string) =>
     onHardwareChange({ ...hardware, [field]: value.replaceAll(/[^0-9]/g, '') })
+  const setDisk = (index: number, patch: Partial<ReviewDiskState>) =>
+    onDisksChange(disks.map((d, i) => (i === index ? { ...d, ...patch } : d)))
   const setNic = (index: number, patch: Partial<ReviewNicState>) =>
     onNicsChange(nics.map((n, i) => (i === index ? { ...n, ...patch } : n)))
+
+  const tableSx = { '& td, & th': { px: 0.75, py: 0.75, borderBottom: '1px solid', borderColor: 'divider' }, '& th': { fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5, color: 'text.secondary', fontWeight: 600 } } as const
 
   // One row per value, as in the deploy wizard: label and value, then a slider
   // for the usual range and a field for an exact value (up to the hard limit).
@@ -271,10 +321,82 @@ export default function MigrationReviewStep({
               </MenuItem>
             ))}
           </Select>
-          <FormHelperText>
-            {t(cpuType === 'host' ? 'inventoryPage.esxiMigration.cpuTypeHostHint' : 'inventoryPage.esxiMigration.cpuTypeHint')}
-          </FormHelperText>
+          {cpuType === 'host' && <FormHelperText>{t('inventoryPage.esxiMigration.cpuTypeHostHint')}</FormHelperText>}
         </FormControl>
+      </Box>
+
+      <Box sx={sectionSx} data-testid="review-disks">
+        <Typography variant="subtitle2" sx={titleSx}>{t('inventoryPage.esxiMigration.reviewDisks')}</Typography>
+        {disks.length === 0 ? (
+          <Typography variant="caption" color="text.secondary">{t('inventoryPage.esxiMigration.reviewNoDisk')}</Typography>
+        ) : (
+          <Table size="small" sx={tableSx}>
+            <TableHead>
+              <TableRow>
+                <TableCell>{t('inventoryPage.esxiMigration.reviewDiskName')}</TableCell>
+                <TableCell sx={{ minWidth: 220 }}>{t('inventoryPage.esxiMigration.reviewDiskStorage')}</TableCell>
+                <TableCell align="center" sx={{ width: 80, whiteSpace: 'nowrap' }}>{t('inventoryPage.esxiMigration.reviewDiskMigrate')}</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {disks.map((disk, index) => {
+                const src = source?.disks[index]
+                // The boot disk is always copied: its row never dims and its box is locked.
+                const boot = index === 0
+                const excluded = !boot && disk.exclude
+                return (
+                  <TableRow key={index} data-testid={`review-disk-${index}`} style={excluded ? { opacity: 0.45 } : undefined}>
+                    <TableCell>
+                      <Box sx={rowLeadSx}>
+                        <Box component="i" className="ri-hard-drive-3-line" sx={rowIconSx} />
+                        <Box sx={{ minWidth: 0 }}>
+                          <Typography variant="body2" fontWeight={500} noWrap>{src?.label || `disk${index}`}</Typography>
+                          <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                            {[formatGB(src?.capacityBytes), src?.fileName].filter(Boolean).join(' · ')}
+                          </Typography>
+                        </Box>
+                      </Box>
+                    </TableCell>
+                    <TableCell>
+                      <FormControl fullWidth size="small" data-testid={`review-disk-${index}-storage`} error={!excluded && !disk.storage} disabled={excluded}>
+                        <Select
+                          value={disk.storage}
+                          onChange={e => setDisk(index, { storage: String(e.target.value) })}
+                          displayEmpty
+                          sx={SELECT_SX}
+                          renderValue={val => storageLine(storages.find(s => s.storage === val), String(val) || t('inventoryPage.esxiMigration.selectStorage'))}
+                        >
+                          {storageOptions(disk.storage).map(s => (
+                            <MenuItem key={s.storage} value={s.storage}>
+                              {storageLine(s, s.storage)}
+                              {formatGB(s.avail) && (
+                                <Typography variant="caption" sx={{ ml: 'auto', pl: 1, opacity: 0.6, whiteSpace: 'nowrap' }}>{formatGB(s.avail)}</Typography>
+                              )}
+                            </MenuItem>
+                          ))}
+                        </Select>
+                      </FormControl>
+                    </TableCell>
+                    <TableCell align="center">
+                      <Tooltip title={boot ? t('inventoryPage.esxiMigration.reviewDiskBootLocked') : ''} arrow placement="top">
+                        <span>
+                          <Checkbox
+                            size="small"
+                            checked={!excluded}
+                            disabled={boot}
+                            onChange={e => setDisk(index, { exclude: !e.target.checked })}
+                            slotProps={{ input: { 'data-testid': `review-disk-${index}-include`, 'aria-label': t('inventoryPage.esxiMigration.reviewDiskMigrate') } as any }}
+                          />
+                        </span>
+                      </Tooltip>
+                    </TableCell>
+                  </TableRow>
+                )
+              })}
+            </TableBody>
+          </Table>
+        )}
+        {belowDisks && <Stack spacing={1} sx={{ mt: 1.5 }} data-testid="review-disks-below">{belowDisks}</Stack>}
       </Box>
 
       <Box sx={sectionSx}>
@@ -284,7 +406,7 @@ export default function MigrationReviewStep({
             {t('inventoryPage.esxiMigration.reviewNoNic', { bridge: defaultBridge || 'vmbr0' })}
           </Typography>
         ) : (
-          <Table size="small" sx={{ '& td, & th': { px: 0.75, py: 0.75, borderBottom: '1px solid', borderColor: 'divider' }, '& th': { fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5, color: 'text.secondary', fontWeight: 600 } }}>
+          <Table size="small" sx={tableSx}>
             <TableHead>
               <TableRow>
                 <TableCell>{t('inventoryPage.esxiMigration.reviewNicAdapter')}</TableCell>
@@ -301,10 +423,15 @@ export default function MigrationReviewStep({
                 return (
                   <TableRow key={index} data-testid={`review-nic-${index}`}>
                     <TableCell>
-                      <Typography variant="body2" fontWeight={500} noWrap>{src?.label || `net${index}`}</Typography>
-                      <Typography variant="caption" sx={{ opacity: 0.6, display: 'block', fontFamily: '"JetBrains Mono", monospace', fontSize: 10 }}>
-                        {[src?.type, src?.macAddress].filter(Boolean).join(' · ')}
-                      </Typography>
+                      <Box sx={rowLeadSx}>
+                        <Box component="i" className="ri-network-line" sx={rowIconSx} />
+                        <Box sx={{ minWidth: 0 }}>
+                          <Typography variant="body2" fontWeight={500} noWrap>{src?.label || `net${index}`}</Typography>
+                          <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                            {[src?.type, src?.macAddress].filter(Boolean).join(' · ')}
+                          </Typography>
+                        </Box>
+                      </Box>
                     </TableCell>
                     <TableCell>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>

@@ -18,7 +18,7 @@ import {
   soapGuestShutdown, soapWaitPoweredOff, soapKeepAlive,
 } from "@/lib/vmware/cbt"
 import { mapEsxiToPveConfig } from "../configMapper"
-import { describeOverrides } from "../target-overrides"
+import { bytesPerStorage, describeDiskPlan, describeOverrides, planDiskTargets, planStorages } from "../target-overrides"
 import { volumesToFree, volumesToKeep, PVESM_FREE_TIMEOUT_MS, type AllocatedVolume } from "../pvesm-alloc"
 import { getNodeSshEndpointForMigration } from "../pve-tasks"
 import { decideNextPass, type PassStat, type ConvergenceConfig, type ConvergenceDecision } from "./convergence"
@@ -267,6 +267,14 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
 
     const vmConfigXml = await soapGetVmConfig(soapSession, config.sourceVmId)
     const vmConfig: EsxiVmConfig = parseVmConfig(vmConfigXml)
+    // Per-disk choices (#317, lot 2), resolved before anything is sized,
+    // created or copied: an excluded disk vanishes from vmConfig.disks here,
+    // so no later step (CBT verdict, allocation, passes, verify, attach) ever
+    // sees it, and disk i of the kept list lands on diskPlan.kept[i].storage.
+    const diskPlan = planDiskTargets(vmConfig.disks, config.disks, config.targetStorage)
+    const planLine = describeDiskPlan(diskPlan, config.targetStorage)
+    if (planLine) await appendLog(jobId, planLine)
+    vmConfig.disks = diskPlan.kept.map(k => k.disk)
     for (const d of vmConfig.disks) {
       if (!d.datastoreName || !d.relativePath) throw new Error(`Disk "${d.label}" has no datastore path: ${d.fileName}`)
     }
@@ -289,19 +297,33 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
 
     // Warm patches the target by byte offset, which is only valid on a raw
     // block device. A file-based target (dir/NFS qcow2) would be silently
-    // corrupted by the dd-seek apply — refuse it up front.
-    const storageInfo = await pveFetch<any>(pveConn as any, `/storage/${encodeURIComponent(config.targetStorage)}`)
-    if (isFileBasedStorage(storageInfo?.type || "dir")) {
-      throw new Error(`Warm migration requires a block-storage target (LVM/LVM-thin/ZFS/Ceph RBD); "${config.targetStorage}" is file-based (${storageInfo?.type}). Pick a block storage or use a cold migration.`)
+    // corrupted by the dd-seek apply: refuse it up front, for every storage
+    // of the plan. The types are kept: each disk is zeroed by its own.
+    const storages = planStorages(diskPlan)
+    const storageTypes = new Map<string, string>()
+    for (const storage of storages) {
+      const storageInfo = await pveFetch<any>(pveConn as any, `/storage/${encodeURIComponent(storage)}`)
+      const storageType = storageInfo?.type || "dir"
+      if (isFileBasedStorage(storageType)) {
+        // Name the disks only when the plan spreads them: with one storage every disk goes there.
+        const held = storages.length > 1
+          ? ` and would hold ${diskPlan.kept.filter(k => k.storage === storage).map(k => `disk ${k.sourceIndex + 1}`).join(", ")}`
+          : ""
+        throw new Error(`Warm migration requires a block-storage target (LVM/LVM-thin/ZFS/Ceph RBD); "${storage}" is file-based (${storageInfo?.type})${held}. Pick a block storage or use a cold migration.`)
+      }
+      storageTypes.set(storage, storageType)
     }
 
     // Free space backstop, same rule as the cold engine (disks' capacity plus
-    // 10 %). The dialog runs this check before enabling the launch, but the
-    // cluster-auto node choice and direct API calls reach here unchecked, and a
-    // zvol allocation that fails for space would otherwise surface only as a
-    // PVE error after the node preflight said "ready".
-    const space = await assertTargetStorageSpace(config.targetConnectionId, config.targetNode, config.targetStorage, vmConfig.disks.reduce((s, d) => s + d.capacityBytes, 0))
-    await appendLog(jobId, `Target storage "${config.targetStorage}": ${gib(space.availableBytes)} GB free, need ${gib(space.requiredBytes)} GB`, "info")
+    // 10 %), per storage of the plan. The dialog runs this check before
+    // enabling the launch, but the cluster-auto node choice and direct API
+    // calls reach here unchecked, and a zvol allocation that fails for space
+    // would otherwise surface only as a PVE error after the node preflight
+    // said "ready".
+    for (const [storage, requiredBytes] of bytesPerStorage(diskPlan, d => d.capacityBytes)) {
+      const space = await assertTargetStorageSpace(config.targetConnectionId, config.targetNode, storage, requiredBytes)
+      await appendLog(jobId, `Target storage "${storage}": ${gib(space.availableBytes)} GB free, need ${gib(space.requiredBytes)} GB`, "info")
+    }
 
     // VDDK preflight on the PVE node — actionable error before we touch anything.
     const pf = await checkVddkPreflight(config.targetConnectionId, nodeIp, libdir)
@@ -412,11 +434,10 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
     await appendLog(jobId, `Target VM ${targetVmid} created on ${config.targetNode} (${Object.keys(pveParams.nets).length} NIC(s))`, "success")
     if (pveParams.tpmstate0) await appendLog(jobId, vtpmCreatedLine(config.targetStorage), "info")
 
-    // ── preparing_disks: allocate a raw block volume per disk, zero the thick ones ──
+    // ── preparing_disks: allocate a raw block volume per disk on its own storage, zero the thick ones ──
     const provisioned = await provisionBlockTargets({
-      jobId, connectionId: config.targetConnectionId, nodeIp,
-      targetStorage: config.targetStorage, storageType: storageInfo?.type, targetVmid, shellConf,
-      disks: vmConfig.disks.map(d => ({ key: d.deviceKey, capacityBytes: d.capacityBytes })),
+      jobId, connectionId: config.targetConnectionId, nodeIp, targetVmid, shellConf,
+      disks: diskPlan.kept.map(k => ({ key: k.disk.deviceKey, capacityBytes: k.disk.capacityBytes, storage: k.storage, storageType: storageTypes.get(k.storage) ?? "" })),
       allocatedVolumes,
       zeroRateLimitMBps: await resolveWarmZeroRateLimit(config.zeroRateLimitMBps, config.targetConnectionId),
     })

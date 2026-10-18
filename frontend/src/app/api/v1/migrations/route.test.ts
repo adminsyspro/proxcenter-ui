@@ -625,12 +625,33 @@ describe("POST /api/v1/migrations: review-step overrides (#317)", () => {
     expect(v2v.mock.calls[0][1]).toMatchObject({ hardware: { sockets: 2 }, nics: [{ index: 0, bridge: "vmbr1" }] })
   })
 
+  it("persists the per-disk storage and exclusions (lot 2) and forwards them to the warm engine", async () => {
+    vmwareConns()
+    const res = await callRoute(POST, { body: { ...body, disks: [{ index: 2, exclude: true }, { index: 1, targetStorage: "ZFS-Pool" }, { index: 0, targetStorage: "local-lvm" }] } })
+    expect(res.status).toBe(200)
+    const disks = [{ index: 0, targetStorage: "local-lvm" }, { index: 1, targetStorage: "ZFS-Pool" }, { index: 2, exclude: true }]
+    expect(createdJobData().config).toMatchObject({ disks })
+    await runAfters()
+    expect(warm.mock.calls[0][1]).toMatchObject({ disks })
+  })
+
+  it("forwards the per-disk storage to the vCenter virt-v2v pipeline", async () => {
+    h.prisma.connection.findUnique
+      .mockResolvedValueOnce({ id: "src", type: "vmware", subType: "vcenter", name: "vc", baseUrl: "https://vc" })
+      .mockResolvedValueOnce({ id: "tgt", type: "pve", name: "pve" })
+    const res = await callRoute(POST, { body: { ...body, migrationType: "cold", disks: [{ index: 1, targetStorage: "ZFS-Pool" }] } })
+    expect(res.status).toBe(200)
+    await runAfters()
+    expect(v2v.mock.calls[0][1]).toMatchObject({ disks: [{ index: 1, targetStorage: "ZFS-Pool" }] })
+  })
+
   it("leaves the fields out when the caller omits them", async () => {
     vmwareConns()
     const res = await callRoute(POST, { body })
     expect(res.status).toBe(200)
     expect(createdJobData().config).not.toHaveProperty("hardware")
     expect(createdJobData().config).not.toHaveProperty("nics")
+    expect(createdJobData().config).not.toHaveProperty("disks")
     await runAfters()
     expect(warm.mock.calls[0][1]).not.toHaveProperty("nics")
   })
@@ -641,6 +662,10 @@ describe("POST /api/v1/migrations: review-step overrides (#317)", () => {
     [{ nics: [{ index: 0, bridge: "vmbr0; rm -rf /" }] }, /bridge/],
     [{ nics: [{ index: 0, bridge: "vmbr0", vlanTag: 5000 }] }, /vlanTag/],
     [{ nics: [{ index: 0, bridge: "vmbr0" }, { index: 0, bridge: "vmbr1" }] }, /listed twice/],
+    [{ disks: [{ index: 1, targetStorage: "local; rm -rf /" }] }, /targetStorage/],
+    [{ disks: [{ index: 0, exclude: true }] }, /boot disk/],
+    [{ disks: [{ index: 1, targetStorage: "a" }, { index: 1, exclude: true }] }, /listed twice/],
+    [{ disks: "local-lvm" }, /disks must be an array/],
   ])("answers 400 on %j", async (extra, message) => {
     vmwareConns()
     const res = await callRoute(POST, { body: { ...body, ...extra } })
@@ -657,6 +682,15 @@ describe("POST /api/v1/migrations: review-step overrides (#317)", () => {
     expect(res.status).toBe(400)
     expect((await readJson<any>(res)).error).toMatch(/only supported for VMware/)
     expect(h.prisma.migrationJob.create).not.toHaveBeenCalled()
+  })
+
+  it("refuses per-disk storage on a non-VMware source too", async () => {
+    h.prisma.connection.findUnique
+      .mockResolvedValueOnce({ id: "src", type: "hyperv", subType: null, name: "hv", baseUrl: "https://hv" })
+      .mockResolvedValueOnce({ id: "tgt", type: "pve", name: "pve" })
+    const res = await callRoute(POST, { body: { ...body, migrationType: "cold", disks: [{ index: 1, targetStorage: "ZFS-Pool" }] } })
+    expect(res.status).toBe(400)
+    expect((await readJson<any>(res)).error).toMatch(/only supported for VMware/)
   })
 
   it("accepts any QEMU model Proxmox knows and a cluster custom model as cpuType", async () => {

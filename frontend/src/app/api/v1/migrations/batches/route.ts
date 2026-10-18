@@ -53,6 +53,12 @@ export async function POST(req: Request) {
     if (vms.length === 0 || vms.length > MAX_BATCH_VMS || vms.some(vm => !vm || typeof vm !== "object")) {
       return NextResponse.json({ error: `vms must list between 1 and ${MAX_BATCH_VMS} VMs` }, { status: 400 })
     }
+    // A batch puts every VM on one storage (its space check reasons on it):
+    // per-disk placement (#317) is a single-VM choice, refused rather than
+    // applied by disk position to VMs whose disks were never reviewed.
+    if (body.disks !== undefined || vms.some(vm => vm.disks !== undefined)) {
+      return NextResponse.json({ error: "disks (per-disk storage) is not available for a batch: every VM of a batch goes to targetStorage" }, { status: 400 })
+    }
     const ids = vms.map(vm => String(vm.sourceVmId ?? ""))
     if (new Set(ids).size !== ids.length) {
       return NextResponse.json({ error: "A VM appears twice in the batch" }, { status: 400 })

@@ -137,7 +137,8 @@ function ThroughputPanel({ sessionKey, jobs }: Readonly<{ sessionKey: string; jo
           <Typography sx={captionSx} color="text.secondary">{t('liveThroughputWaiting')}</Typography>
         </Box>
       ) : (
-        // The chart takes whatever height the column leaves it (at least 140 px).
+        // The chart takes whatever height the column leaves it (at least 140 px);
+        // no legend under it, the tooltip names every series, the total included.
         <Box sx={{ flex: 1, minHeight: 140 }}>
           <ChartContainer>
             <ComposedChart data={chart.rows} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
@@ -183,23 +184,6 @@ function ThroughputPanel({ sessionKey, jobs }: Readonly<{ sessionKey: string; jo
               )}
             </ComposedChart>
           </ChartContainer>
-        </Box>
-      )}
-      {/* The legend comes with the chart: no names before there is a curve to name. */}
-      {chart.rows.length >= 2 && chart.series.length > 0 && (
-        <Box sx={{ display: 'flex', flexWrap: 'wrap', columnGap: 1.5, rowGap: 0.25, mt: 0.5 }}>
-          {chart.series.map((s, i) => (
-            <Box key={s.key} sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 0 }}>
-              <Box sx={{ width: 8, height: 8, borderRadius: '2px', bgcolor: colorOf(s.key, i), flexShrink: 0 }} />
-              <Typography sx={captionSx} noWrap>{nameOf(s)}</Typography>
-            </Box>
-          ))}
-          {chart.series.length > 1 && (
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 0 }} data-testid="migration-live-throughput-total-legend">
-              <Box sx={{ width: 12, height: 0, borderTop: '2px dashed', borderColor: 'text.primary', flexShrink: 0 }} />
-              <Typography sx={captionSx} noWrap>{t('liveThroughputTotal')}</Typography>
-            </Box>
-          )}
         </Box>
       )}
     </Paper>

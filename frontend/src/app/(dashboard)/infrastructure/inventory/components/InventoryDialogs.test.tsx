@@ -1204,6 +1204,10 @@ describe('migration dialog options', () => {
       http.post('*/api/v1/migrations/preflight', async ({ request }) => {
         const body = await request.json() as any
         preflightBodies.push(body)
+        // The review step re-checks the space per storage (#317 lot 2).
+        if (body.action === 'storage-space') {
+          return HttpResponse.json({ spaces: body.needs.map((n: any) => ({ storage: n.storage, availableBytes: 32 * 1024 ** 3, requiredBytes: n.requiredBytes, sufficient: true })) })
+        }
         return HttpResponse.json({
           ok: true, missing: [], kind: 'vddk', vddkTokenConfigured: false,
           space: { storage: body.targetStorage, availableBytes: 32 * 1024 ** 3, requiredBytes: body.requiredDiskBytes, sufficient: true },
@@ -1227,14 +1231,19 @@ describe('migration dialog options', () => {
     await screen.findByText(/Target node is ready for warm migration/)
     expect(screen.queryByText(/Not enough free space/)).not.toBeInTheDocument()
     // VMware source: "Review" opens the review step (#317), where the launch
-    // button is enabled because every form gate passed.
+    // button is enabled once the per-storage space check answered, because
+    // every form gate passed.
     const review = screen.getByRole('button', { name: /^Review$/ })
     expect(review).toBeEnabled()
     fireEvent.click(review)
     await screen.findByTestId('migration-review-step')
-    expect(screen.getByRole('button', { name: /Migrate to Proxmox/ })).toBeEnabled()
+    await waitFor(() => expect(screen.getByRole('button', { name: /Migrate to Proxmox/ })).toBeEnabled())
     expect(preflightBodies[0]).toMatchObject({
       action: 'warm-check', targetStorage: 'san-lvm', requiredDiskBytes: 20 * 1024 ** 3,
+    })
+    // Without any per-disk change the review asks exactly what warm-check asked.
+    expect(preflightBodies.find(b => b.action === 'storage-space')).toMatchObject({
+      targetConnectionId: CONN_ID, targetNode: NODE_NAME, needs: [{ storage: 'san-lvm', requiredBytes: 20 * 1024 ** 3 }],
     })
   })
 
@@ -1570,6 +1579,135 @@ describe('migration dialog options', () => {
   // The Hyper-V VHDX pre-fill moved into the reset-on-open hook (a blind reset
   // would have wiped what the open handler pre-filled): opening for a Hyper-V
   // VM with known disk paths must derive the /mnt/hyperv/ paths.
+  // #317 lot 2: one target storage per disk, and disks left out, chosen in the
+  // review step of a VMware migration. The source detail carries two disks of
+  // equal size so the committed bytes split in halves.
+  describe('per-disk target storage in the review step', () => {
+    const GIB2 = 1024 ** 3
+    const NFS = { storage: 'nas', type: 'nfs', content: 'images', total: 1099511627776, avail: 879609302220 }
+    const COLD_VM = { ...WARM_VM, status: 'poweredOff' }
+    const DETAIL = {
+      snapshotCount: 0, vmxVersion: 'vmx-19', numCPU: 2, numCoresPerSocket: 1, sockets: 2, memoryMB: 2048, hasVtpm: false,
+      nics: [{ label: 'Network adapter 1', type: 'Vmxnet3', macAddress: '00:50:56:aa:00:01', network: 'VM Network' }],
+      disks: [
+        { label: 'Hard disk 1', capacityBytes: 10 * GIB2, fileName: '[ds1] web/web.vmdk', thinProvisioned: true, diskMode: 'persistent', sharing: 'sharingNone' },
+        { label: 'Hard disk 2', capacityBytes: 10 * GIB2, fileName: '[ds1] web/web_1.vmdk', thinProvisioned: true, diskMode: 'persistent', sharing: 'sharingNone' },
+      ],
+    }
+    const targetProps = { migTargetConn: CONN_ID, migTargetNode: NODE_NAME, migNetworkBridge: 'vmbr0', migPveConnections: [{ id: CONN_ID, name: 'pve-lab', sshEnabled: true }] }
+
+    /** warm-check answers "ready"; storage-space answers with the free bytes of each storage. */
+    function seedPreflight(bodies: any[], availableOf: (storage: string) => number = () => 100 * GIB2) {
+      server.use(
+        http.post('*/api/v1/migrations/preflight', async ({ request }) => {
+          const body = await request.json() as any
+          bodies.push(body)
+          if (body.action === 'storage-space') {
+            return HttpResponse.json({ spaces: body.needs.map((n: any) => ({ storage: n.storage, availableBytes: availableOf(n.storage), requiredBytes: n.requiredBytes, sufficient: availableOf(n.storage) >= n.requiredBytes * 1.1 })) })
+          }
+          return HttpResponse.json({ ok: true, missing: [], kind: 'vddk', vddkTokenConfigured: false, space: { storage: body.targetStorage, availableBytes: 100 * GIB2, requiredBytes: body.requiredDiskBytes, sufficient: true } })
+        }),
+      )
+    }
+    function seedLaunch(bodies: any[]) {
+      server.use(http.post('*/api/v1/migrations', async ({ request }) => { bodies.push(await request.json()); return HttpResponse.json({ data: { jobId: 'job-3' } }) }))
+    }
+    async function openReview() {
+      fireEvent.click(screen.getByText('harness-open-single'))
+      fireEvent.click(await screen.findByRole('button', { name: /^Review$/ }))
+      // the rows appear once the source answer is in, whichever came first
+      await screen.findByTestId('review-disk-1')
+    }
+    async function pickStorage(row: number, storage: string) {
+      fireEvent.mouseDown(within(screen.getByTestId(`review-disk-${row}-storage`)).getByRole('combobox'))
+      fireEvent.click(await screen.findByRole('option', { name: new RegExp(`^${storage}`) }))
+    }
+    const launchButton = () => screen.getByRole('button', { name: /Migrate to Proxmox/ })
+
+    beforeEach(() => {
+      server.use(http.get(`*/api/v1/vmware/${CONN_ID}/vms/42`, () => HttpResponse.json({ data: DETAIL })))
+    })
+
+    it('sends one target storage per disk from the review step, the step-1 storage staying the default', async () => {
+      const bodies: any[] = []
+      seedLaunch(bodies)
+      renderWithProviders(<OptionsHarness vm={COLD_VM} dialogOverrides={{ ...targetProps, migTargetStorage: 'san-lvm', migStorages: [THICK_LVM, ZFS] }} />)
+      await openReview()
+      await pickStorage(1, 'tank')
+      expect(launchButton()).toBeEnabled()
+      fireEvent.click(launchButton())
+      await waitFor(() => expect(bodies).toHaveLength(1))
+      expect(bodies[0].targetStorage).toBe('san-lvm')
+      expect(bodies[0].disks).toEqual([{ index: 0, targetStorage: 'san-lvm' }, { index: 1, targetStorage: 'tank' }])
+    })
+
+    it('marks a disk left out, and never lets the boot disk be left out', async () => {
+      const bodies: any[] = []
+      seedLaunch(bodies)
+      renderWithProviders(<OptionsHarness vm={COLD_VM} dialogOverrides={{ ...targetProps, migTargetStorage: 'san-lvm', migStorages: [THICK_LVM, ZFS] }} />)
+      await openReview()
+      expect((screen.getByTestId('review-disk-0-include') as HTMLInputElement).disabled).toBe(true)
+      fireEvent.click(screen.getByTestId('review-disk-1-include'))
+      fireEvent.click(launchButton())
+      await waitFor(() => expect(bodies).toHaveLength(1))
+      expect(bodies[0].disks).toEqual([{ index: 0, targetStorage: 'san-lvm' }, { index: 1, exclude: true }])
+    })
+
+    it('sends no disks outside the review step', async () => {
+      const bodies: any[] = []
+      seedLaunch(bodies)
+      renderWithProviders(<InventoryDialogs {...makeProps({ esxiMigrateVm: ESXI_VM, ...targetProps, migTargetStorage: 'san-lvm', migStorages: [THICK_LVM, ZFS] })} />)
+      fireEvent.click(screen.getByRole('button', { name: /migrate to proxmox/i }))
+      await waitFor(() => expect(bodies).toHaveLength(1))
+      expect(bodies[0]).not.toHaveProperty('disks')
+      expect(bodies[0].targetStorage).toBe('san-lvm')
+    })
+
+    it('holds a warm launch while a kept disk is bound for a file-based storage, until it is moved or left out', async () => {
+      const bodies: any[] = []
+      seedPreflight(bodies)
+      renderWithProviders(<OptionsHarness vm={{ ...WARM_VM, status: 'poweredOn' }} dialogOverrides={{ ...targetProps, migType: 'warm', migTargetStorage: 'san-lvm', migStorages: [THICK_LVM, ZFS, NFS] }} />)
+      await openReview()
+      await waitFor(() => expect(launchButton()).toBeEnabled())
+      await pickStorage(1, 'nas')
+      expect(screen.getByTestId('review-disks-warm-blocked').textContent).toMatch(/Hard disk 2 on nas \(nfs\)/)
+      expect(launchButton()).toBeDisabled()
+      fireEvent.click(screen.getByTestId('review-disk-1-include'))
+      expect(screen.queryByTestId('review-disks-warm-blocked')).toBeNull()
+      await waitFor(() => expect(launchButton()).toBeEnabled())
+      // the share of the disk left out is no longer asked for
+      expect(bodies.at(-1)).toMatchObject({ action: 'storage-space', needs: [{ storage: 'san-lvm', requiredBytes: 10 * GIB2 }] })
+    })
+
+    it('names the storage that cannot hold the disks bound to it and holds the warm launch', async () => {
+      const bodies: any[] = []
+      seedPreflight(bodies, storage => (storage === 'tank' ? 5 * GIB2 : 100 * GIB2))
+      renderWithProviders(<OptionsHarness vm={{ ...WARM_VM, status: 'poweredOn' }} dialogOverrides={{ ...targetProps, migType: 'warm', migTargetStorage: 'san-lvm', migStorages: [THICK_LVM, ZFS] }} />)
+      await openReview()
+      await waitFor(() => expect(launchButton()).toBeEnabled())
+      await pickStorage(1, 'tank')
+      // the split changed: the check runs again and holds the launch meanwhile
+      expect(screen.getByTestId('review-disks-space-pending')).toBeInTheDocument()
+      expect(launchButton()).toBeDisabled()
+      await screen.findByText(/Not enough free space on tank: 5\.0 GB available, 10\.0 GB needed/)
+      expect(launchButton()).toBeDisabled()
+      expect(bodies.at(-1)).toMatchObject({
+        action: 'storage-space', targetConnectionId: CONN_ID, targetNode: NODE_NAME,
+        needs: [{ storage: 'san-lvm', requiredBytes: 10 * GIB2 }, { storage: 'tank', requiredBytes: 10 * GIB2 }],
+      })
+    })
+
+    it('shows the thick LVM options in the review step only while a kept disk lands on an lvm storage', async () => {
+      renderWithProviders(<OptionsHarness vm={COLD_VM} dialogOverrides={{ ...targetProps, migTargetStorage: 'tank', migStorages: [THICK_LVM, ZFS] }} />)
+      await openReview()
+      expect(screen.queryByText(QCOW2_LABEL)).not.toBeInTheDocument()
+      await pickStorage(1, 'san-lvm')
+      expect(within(screen.getByTestId('review-disks-below')).getByText(QCOW2_LABEL)).toBeInTheDocument()
+      fireEvent.click(screen.getByTestId('review-disk-1-include'))
+      expect(screen.queryByText(QCOW2_LABEL)).not.toBeInTheDocument()
+    })
+  })
+
   it('pre-fills migDiskPaths for Hyper-V sources with known disk paths on open', async () => {
     function HypervHarness() {
       const [esxiMigrateVm, setEsxiMigrateVm] = React.useState<any>(null)

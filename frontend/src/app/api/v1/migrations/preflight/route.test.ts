@@ -259,3 +259,60 @@ describe("POST /api/v1/migrations/preflight — warm-check action", () => {
     expect(mockWarm).not.toHaveBeenCalled()
   })
 })
+
+// #317 lot 2: the review step sends the disks of one VM to several storages,
+// and asks the free space of each against what the disks bound for it need.
+describe("POST /api/v1/migrations/preflight: storage-space action", () => {
+  const body = { action: "storage-space", targetConnectionId: "c1", targetNode: "pve1" }
+  const need = (storage: string, requiredBytes: number) => ({ storage, requiredBytes })
+
+  it("checks every storage against its own need and answers one verdict per entry, in order", async () => {
+    mockSpace.mockImplementation(async (_conn, _node, storage, requiredBytes) => ({ storage, type: "zfspool", availableBytes: 50, requiredBytes, sufficient: requiredBytes <= 40 }))
+    const res = await callRoute(POST, { body: { ...body, needs: [need("ZFS-Pool", 10), need("san-lvm", 0), need("slow", 45)] } })
+    expect(res.status).toBe(200)
+    expect(mockSpace).toHaveBeenCalledTimes(3)
+    expect(mockSpace).toHaveBeenCalledWith("c1", "pve1", "ZFS-Pool", 10)
+    expect(mockSpace).toHaveBeenCalledWith("c1", "pve1", "san-lvm", 0)
+    expect(await res.json()).toEqual({ spaces: [
+      { storage: "ZFS-Pool", type: "zfspool", availableBytes: 50, requiredBytes: 10, sufficient: true },
+      { storage: "san-lvm", type: "zfspool", availableBytes: 50, requiredBytes: 0, sufficient: true },
+      { storage: "slow", type: "zfspool", availableBytes: 50, requiredBytes: 45, sufficient: false },
+    ] })
+    // its own action: neither node preflight runs
+    expect(mockWarm).not.toHaveBeenCalled()
+    expect(mockV2v).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ["no needs", {}],
+    ["an empty list", { needs: [] }],
+    ["more than 64 entries", { needs: Array.from({ length: 65 }, (_, i) => need(`s${i}`, 1)) }],
+    ["a storage name outside the PVE grammar", { needs: [need("pool; rm -rf /", 1)] }],
+    ["a negative size", { needs: [need("ZFS-Pool", -1)] }],
+    ["a size that is not a number", { needs: [{ storage: "ZFS-Pool", requiredBytes: "10" }] }],
+    ["a missing size", { needs: [{ storage: "ZFS-Pool" }] }],
+    ["an entry that is not an object", { needs: ["ZFS-Pool"] }],
+  ])("400s on %s and checks nothing", async (_label, extra) => {
+    const res = await callRoute(POST, { body: { ...body, ...extra } })
+    expect(res.status).toBe(400)
+    expect(mockSpace).not.toHaveBeenCalled()
+  })
+
+  it("applies the migrate right and the tenant scope of warm-check, before reading anything", async () => {
+    const { checkPermission } = await import("@/lib/rbac")
+    vi.mocked(checkPermission).mockImplementationOnce(async () => Response.json({ error: "denied" }, { status: 403 }) as any)
+    expect((await callRoute(POST, { body: { ...body, needs: [need("ZFS-Pool", 1)] } })).status).toBe(403)
+    expect(checkPermission).toHaveBeenCalledWith("vm.migrate")
+    try {
+      scope.tenant = "t1"
+      for (const infra of [{ kind: "iaas", vdcScope: {} }, { kind: "msp", connectionIds: new Set(["other"]) }]) {
+        scope.infra = infra
+        expect((await callRoute(POST, { body: { ...body, needs: [need("ZFS-Pool", 1)] } })).status).toBe(404)
+      }
+    } finally {
+      scope.tenant = "default"
+      scope.infra = { kind: "provider" }
+    }
+    expect(mockSpace).not.toHaveBeenCalled()
+  })
+})

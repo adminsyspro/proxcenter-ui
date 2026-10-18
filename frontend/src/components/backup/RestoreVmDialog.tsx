@@ -29,8 +29,12 @@ import {
 
 import AppDialogTitle from '@/components/ui/AppDialogTitle'
 import { useTenant } from '@/contexts/TenantContext'
+import { useRBAC } from '@/contexts/RBACContext'
 import { formatDateTime } from '@/lib/i18n/date'
 import { readVdcContextCookie } from '@/lib/vdc/contextCookie'
+import { useTaskTracker } from '@/hooks/useTaskTracker'
+import { checkRestoredTagsOmitted, restoredTagsCheckMessage } from '@/lib/backups/restoreTags'
+import RestoreTagsSwitch from '@/components/backup/RestoreTagsSwitch'
 
 interface BackupRef {
   /** Full PVE volid, e.g. `pbs:backup/vm/100/2025-04-01T10:00:00Z`.
@@ -89,6 +93,9 @@ export default function RestoreVmDialog({
   // tenant keeps the full surface so the operator can pick the target.
   const { currentTenant, loading: tenantLoading } = useTenant()
   const isVdcTenant = !tenantLoading && !!currentTenant && currentTenant.id !== 'default' && currentTenant.operatingModel !== 'msp'
+  // Overwriting an existing guest destroys it: the route checks vm.delete on it.
+  const rbac = useRBAC()
+  const canOverwrite = !rbac.loading && rbac.hasPermission('vm.delete')
 
   // When the caller provides connectionId/node, lock them; otherwise we
   // render pickers and the user picks. Internal state holds the effective
@@ -115,12 +122,17 @@ export default function RestoreVmDialog({
   const [bwlimit, setBwlimit] = useState('')
   const [overrideName, setOverrideName] = useState(false)
   const [name, setName] = useState('')
+  // #965: keep the backed-up tags (PVE's behaviour) unless told otherwise.
+  const [restoreTags, setRestoreTags] = useState(true)
+  const { trackTask } = useTaskTracker()
 
   // Tenant-mode-only: pick between overwriting the source VM or spawning
   // a brand-new VM with a fresh VMID. Defaults to overwrite (the more
   // common "rollback" flow); `awaitingConfirm` gates the destructive
   // overwrite behind a second click.
-  const [restoreAsNew, setRestoreAsNew] = useState(false)
+  const [restoreAsNewChoice, setRestoreAsNewChoice] = useState(false)
+  // A tenant without vm.delete can only restore as a new VM.
+  const restoreAsNew = restoreAsNewChoice || (isVdcTenant && !canOverwrite)
   const [awaitingConfirm, setAwaitingConfirm] = useState(false)
 
   const [submitting, setSubmitting] = useState(false)
@@ -138,8 +150,9 @@ export default function RestoreVmDialog({
     setBwlimit('')
     setOverrideName(isVdcTenant)
     setName('')
+    setRestoreTags(true)
     setError(null)
-    setRestoreAsNew(false)
+    setRestoreAsNewChoice(false)
     setAwaitingConfirm(false)
     if (!callerLocksConn) setPickedConnectionId('')
     if (!callerLocksNode) setPickedNode('')
@@ -291,7 +304,9 @@ export default function RestoreVmDialog({
   // whose typed VMID is taken (the source VM itself or any other guest).
   const targetExists = Number.isFinite(targetVmidNumber) && usedVmIds.has(targetVmidNumber)
   const overwriting = isVdcTenant ? !restoreAsNew : targetExists
+  const overwriteBlocked = !isVdcTenant && targetExists && !canOverwrite
   const overwriteVmid = isVdcTenant ? sourceVmid : targetVmidNumber
+  const targetExistsKey = canOverwrite ? 'inventory.pbsRestoreTargetExists' : 'inventory.pbsRestoreTargetExistsNoOverwrite'
 
   const vmidValid = useMemo(() => {
     if (!Number.isFinite(targetVmidNumber)) return false
@@ -304,7 +319,7 @@ export default function RestoreVmDialog({
   // Tenant: vmid is derived (sourceVmid for overwrite, /cluster/nextid
   // for new VM) so we don't gate on `vmid` being typed in. Provider:
   // unchanged, the field is required.
-  const canSubmit = !submitting && !!connectionId && !!node && (
+  const canSubmit = !submitting && !!connectionId && !!node && !overwriteBlocked && (
     isVdcTenant ? true : (!!vmid && vmidValid)
   )
 
@@ -394,6 +409,7 @@ export default function RestoreVmDialog({
       const wantName =
         (isVdcTenant && restoreAsNew) || (!isVdcTenant && overrideName)
       if (wantName && name) body.name = name
+      if (!restoreTags) body.restoreTags = false
 
       const r = await fetch(
         `/api/v1/connections/${encodeURIComponent(connectionId)}/nodes/${encodeURIComponent(node)}/restore`,
@@ -408,7 +424,26 @@ export default function RestoreVmDialog({
         setError(j?.error || `HTTP ${r.status}`)
         return
       }
-      if (typeof j?.data === 'string') onStarted?.(j.data)
+      if (typeof j?.data === 'string') {
+        onStarted?.(j.data)
+        // Tags omitted: follow the task and read the restored config back
+        // before calling it done, so a guest that kept its tags is reported
+        // instead of being announced as a clean restore.
+        if (!restoreTags) {
+          const restoredType = type
+          void trackTask({
+            upid: j.data,
+            connId: connectionId,
+            node,
+            description: `Restore ${restoredType === 'lxc' ? 'CT' : 'VM'} ${effectiveVmid}`,
+            timeoutMs: 6 * 60 * 60 * 1000,
+            verify: async () => restoredTagsCheckMessage(
+              await checkRestoredTagsOmitted({ connectionId, node, type: restoredType, vmid: effectiveVmid }),
+              t as any,
+            ),
+          })
+        }
+      }
       onClose()
     } catch (e: any) {
       setError(e?.message || 'Restore failed')
@@ -417,10 +452,13 @@ export default function RestoreVmDialog({
     }
   }
 
+  const restoreLabel = type === 'lxc' ? t('inventory.pbsRestoreCt') : t('inventory.pbsRestoreVm')
+  const submitLabel = overwriting && awaitingConfirm ? t('inventory.pbsRestoreOverwriteConfirmButton') : restoreLabel
+
   return (
     <Dialog open={open} onClose={submitting ? undefined : onClose} maxWidth="sm" fullWidth>
       <AppDialogTitle onClose={onClose}>
-        {type === 'lxc' ? t('inventory.pbsRestoreCt') : t('inventory.pbsRestoreVm')}
+        {restoreLabel}
       </AppDialogTitle>
       <DialogContent>
         <Stack spacing={2} mt={1}>
@@ -480,10 +518,10 @@ export default function RestoreVmDialog({
               label={t('common.vmId')}
               value={vmid}
               onChange={(e) => handleVmidChange(e.target.value)}
-              error={!!vmid && !vmidValid}
+              error={(!!vmid && !vmidValid) || overwriteBlocked}
               helperText={
                 targetExists
-                  ? t('inventory.pbsRestoreTargetExists', { vmid: targetVmidNumber })
+                  ? t(targetExistsKey, { vmid: targetVmidNumber })
                   : undefined
               }
               fullWidth
@@ -531,6 +569,8 @@ export default function RestoreVmDialog({
             </Box>
           )}
 
+          {!isVdcTenant && <RestoreTagsSwitch checked={restoreTags} onChange={setRestoreTags} />}
+
           {isVdcTenant && !callerLocksConn && tenantVdcs.length > 1 &&
             !(readVdcContextCookie() && pickedVdcId === readVdcContextCookie()) && (
             <FormControl fullWidth size="small">
@@ -567,9 +607,9 @@ export default function RestoreVmDialog({
           {/* Tenant-only mode toggle: overwrite source VM (default) vs
               spawn a new VM. The new-VM path auto-allocates a fresh VMID
               via /cluster/nextid and forces unique MACs. */}
-          {isVdcTenant && (
+          {isVdcTenant && canOverwrite && (
             <FormControlLabel
-              control={<Switch checked={restoreAsNew} onChange={(_, v) => setRestoreAsNew(v)} />}
+              control={<Switch checked={restoreAsNew} onChange={(_, v) => setRestoreAsNewChoice(v)} />}
               label={t('inventory.pbsRestoreAsNew')}
             />
           )}
@@ -608,11 +648,7 @@ export default function RestoreVmDialog({
           onClick={handleSubmit}
           disabled={!canSubmit}
         >
-          {submitting
-            ? <CircularProgress size={16} />
-            : (overwriting && awaitingConfirm
-                ? t('inventory.pbsRestoreOverwriteConfirmButton')
-                : t('inventory.pbsRestoreVm'))}
+          {submitting ? <CircularProgress size={16} /> : submitLabel}
         </Button>
       </DialogActions>
     </Dialog>

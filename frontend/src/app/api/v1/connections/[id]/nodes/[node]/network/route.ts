@@ -3,12 +3,13 @@ import { NextResponse } from "next/server"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, buildNodeResourceId, PERMISSIONS } from "@/lib/rbac"
+import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 
 export const runtime = "nodejs"
 
 // GET /api/v1/connections/{id}/nodes/{node}/network
 // Récupère les interfaces réseau disponibles sur un node
-export async function GET(
+async function getHandler(
   req: Request,
   ctx: { params: Promise<{ id: string; node: string }> }
 ) {
@@ -34,7 +35,7 @@ export async function GET(
 
 // POST /api/v1/connections/{id}/nodes/{node}/network
 // Crée une nouvelle interface réseau sur le node
-export async function POST(
+async function postHandler(
   req: Request,
   ctx: { params: Promise<{ id: string; node: string }> }
 ) {
@@ -79,7 +80,7 @@ export async function POST(
 
 // PUT /api/v1/connections/{id}/nodes/{node}/network
 // Applique la configuration réseau (ifreload)
-export async function PUT(
+async function putHandler(
   req: Request,
   ctx: { params: Promise<{ id: string; node: string }> }
 ) {
@@ -104,7 +105,7 @@ export async function PUT(
 
 // DELETE /api/v1/connections/{id}/nodes/{node}/network
 // Revert les changements réseau en attente
-export async function DELETE(
+async function deleteHandler(
   req: Request,
   ctx: { params: Promise<{ id: string; node: string }> }
 ) {
@@ -126,3 +127,8 @@ export async function DELETE(
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const GET = withPublicApiGuard("node-network-list", getHandler)
+export const POST = withPublicApiGuard("node-network-create", postHandler)
+export const PUT = withPublicApiGuard("node-network-apply", putHandler)
+export const DELETE = withPublicApiGuard("node-network-revert", deleteHandler)

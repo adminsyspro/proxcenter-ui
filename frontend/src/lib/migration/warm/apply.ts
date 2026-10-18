@@ -61,6 +61,18 @@ export interface PassProgress extends PassWindow {
   lastPct: number
 }
 
+/**
+ * The figures a finished warm run leaves on its job, the cold engines' way:
+ * totalBytes is the disks' capacity, bytesTransferred what the run copied
+ * over all its passes (full copy, deltas, cutover). While the run goes, both
+ * stay per pass for the live readout; without this they ended on the last
+ * pass, mostly 0, and the migration statistics counted nothing.
+ */
+export function warmFinalTransfer(capacities: number[], copiedBytes: number): { totalBytes: bigint; bytesTransferred: bigint } {
+  const whole = (n: number) => BigInt(Math.max(0, Math.round(Number.isFinite(n) ? n : 0)))
+  return { totalBytes: whole(capacities.reduce((s, c) => s + (c || 0), 0)), bytesTransferred: whole(copiedBytes) }
+}
+
 // Apply a disk's changed extents to its target. buildApplyScripts splits the
 // dd batch into one or more commands, each bounded so no single command
 // exceeds the OS argument-length limit (see MAX_APPLY_CMD_BYTES) — a large

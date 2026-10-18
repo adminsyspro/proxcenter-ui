@@ -14,6 +14,7 @@ import { generateZoneName, isZoneNameTaken, createZone, deleteZone, deleteVnetPv
 import { clearVdcScopeCache } from './scope'
 import { validateVlanPoolsInput, assertNoCrossVdcOverlap, assertPoolShrinkSafe, type VlanPoolInput } from './vlan'
 import { getVdcStorageUsedMb } from './quota'
+import { readGuestDiskBytes } from '@/lib/inventory/guestDiskTotals'
 import { DEFAULT_COMPUTE_POLICY, normalizeComputePolicyInput, type VdcComputePolicy } from './computePolicy'
 import {
   normalizeTransportInput,
@@ -23,12 +24,14 @@ import {
   sameZoneConfig,
   type VdcTransport,
 } from './transport'
-import { assertNoTransportConflict } from './transportOps'
+import { assertNoTransportConflict, assertNoVniRangeOverlap } from './transportOps'
 import { memberPeersForVdc, withMemberPeers } from './stretchPeers'
 import { syncNetworksOfVdc } from './tenantNetworkMembers'
 
+import { EDGE_MODELS, rowToEdgeModel } from './types'
 import type {
   Vdc,
+  VdcEdgeModel,
   VdcWithDetails,
   VdcQuota,
   VdcUsage,
@@ -36,6 +39,7 @@ import type {
   UpdateVdcInput,
   VdcIsoLibraryGrant,
   VdcIsoLibraryInput,
+  VdcCatalogGrantsDto,
 } from './types'
 
 // Re-export all types
@@ -61,15 +65,26 @@ type VdcRow = {
   cpuDefaultModel?: string | null
   cpuAdvancedSettings?: boolean | null
   vxlanTransportMode?: string | null
+  transportSharing?: string | null
+  vniRangeStart?: number | null
+  vniRangeEnd?: number | null
   vxlanPeers?: string[] | null
   vxlanMtu?: number | null
   transportVlanId?: number | null
   transportDevice?: string | null
   transportCidr?: string | null
   transportNodeAddresses?: unknown
+  edgeModel?: string | null
   createdBy: string | null
   createdAt: Date
   updatedAt: Date
+}
+
+function normalizeEdgeModelInput(raw: unknown): VdcEdgeModel {
+  if (!EDGE_MODELS.includes(raw as VdcEdgeModel)) {
+    throw new Error(`edgeModel must be one of: ${EDGE_MODELS.join(', ')}`)
+  }
+  return raw as VdcEdgeModel
 }
 
 export function rowToComputePolicy(row: Pick<VdcRow, 'cpuModelMode' | 'cpuAllowedModels' | 'cpuDefaultModel' | 'cpuAdvancedSettings'>): VdcComputePolicy {
@@ -94,6 +109,7 @@ function rowToVdc(row: VdcRow): Vdc {
     primaryStorage: row.primaryStorage ?? null,
     computePolicy: rowToComputePolicy(row),
     transport: rowToTransport(row),
+    edgeModel: rowToEdgeModel(row.edgeModel),
     enabled: row.enabled !== false,
     createdBy: row.createdBy ?? null,
     createdAt: row.createdAt.toISOString(),
@@ -255,6 +271,10 @@ function buildVdcWithDetails(row: any, pbsConnNames?: Map<string, string>): VdcW
     storageId: l.storageId,
     allowUploads: l.allowUploads === true,
   }))
+  const catalogGrants: VdcCatalogGrantsDto = {
+    imageIds: (row.catalogGrants ?? []).map((g: any) => g.imageId).filter((x: unknown): x is string => typeof x === 'string'),
+    blueprintIds: (row.catalogGrants ?? []).map((g: any) => g.blueprintId).filter((x: unknown): x is string => typeof x === 'string'),
+  }
   const pbsBindings = row.pbsNamespaces.map((b: any) => ({
     id: b.id,
     vdcId: b.vdcId,
@@ -285,6 +305,7 @@ function buildVdcWithDetails(row: any, pbsConnNames?: Map<string, string>): VdcW
     storagePolicies,
     pbsBindings,
     isoLibraries,
+    catalogGrants,
   }
 }
 
@@ -293,6 +314,7 @@ const vdcWithDetailsInclude = {
   nodes: true,
   storages: true,
   isoLibraries: { orderBy: { storageId: 'asc' as const } },
+  catalogGrants: { select: { imageId: true, blueprintId: true } },
   quota: true,
   usageCache: true,
   sharedBridges: { orderBy: { bridge: 'asc' as const } },
@@ -473,6 +495,8 @@ export async function createVdc(input: CreateVdcInput, createdBy: string | null)
   // VLAN interface on the same nodes.
   const transport = normalizeTransportInput(input.transport)
   await assertNoTransportConflict(input.connectionId, null, transport)
+  await assertNoVniRangeOverlap(input.connectionId, null, transport)
+  const edgeModel: VdcEdgeModel = input.edgeModel === undefined ? 'tenant' : normalizeEdgeModelInput(input.edgeModel)
 
   // 4. Create PVE pool (existing behavior)
   const poolName = generatePoolName(tenantSlug, input.slug)
@@ -538,6 +562,7 @@ export async function createVdc(input: CreateVdcInput, createdBy: string | null)
           primaryStorage: input.primaryStorage ?? null,
           ...computePolicyToRow(normalizeComputePolicyInput(input.computePolicy)),
           ...transportToRow(transport),
+          edgeModel,
           enabled: true,
           createdBy,
           createdAt: now,
@@ -632,6 +657,13 @@ export async function createVdc(input: CreateVdcInput, createdBy: string | null)
     throw err
   }
 
+  // Catalogue grants (#903): a separate table keyed by the new vDC id; the
+  // entries were validated against the provider's rows inside the helper.
+  if (input.catalogGrants) {
+    const { replaceVdcCatalogGrants } = await import('@/lib/templates/catalogGrants')
+    await replaceVdcCatalogGrants(id, input.catalogGrants, createdBy)
+  }
+
   try {
     await applySdn(conn)
   } catch (err: any) {
@@ -655,13 +687,16 @@ export async function updateVdc(id: string, input: UpdateVdcInput): Promise<VdcW
     select: {
       id: true, tenantId: true, connectionId: true, sdnZoneName: true,
       cpuModelMode: true, cpuAllowedModels: true, cpuDefaultModel: true, cpuAdvancedSettings: true,
-      vxlanTransportMode: true, vxlanPeers: true, vxlanMtu: true,
+      vxlanTransportMode: true, transportSharing: true, vniRangeStart: true, vniRangeEnd: true,
+      vxlanPeers: true, vxlanMtu: true,
       transportVlanId: true, transportDevice: true, transportCidr: true, transportNodeAddresses: true,
     },
   })
   if (!existing) {
     throw new Error(`vDC not found: ${id}`)
   }
+
+  const nextEdgeModel: VdcEdgeModel | null = input.edgeModel === undefined ? null : normalizeEdgeModelInput(input.edgeModel)
 
   if (input.vlanPools) {
     validateVlanPoolsInput(input.vlanPools)
@@ -696,6 +731,7 @@ export async function updateVdc(id: string, input: UpdateVdcInput): Promise<VdcW
     const prevTransport = rowToTransport(existing)
     nextTransport = normalizeTransportInput(input.transport, prevTransport)
     await assertNoTransportConflict(existing.connectionId, id, nextTransport)
+    await assertNoVniRangeOverlap(existing.connectionId, id, nextTransport)
     if (existing.sdnZoneName) {
       const zoneOwner = await getConnectionOwnerTenantId(existing.connectionId)
       zoneConn = await getConnectionById(existing.connectionId, zoneOwner)
@@ -726,6 +762,7 @@ export async function updateVdc(id: string, input: UpdateVdcInput): Promise<VdcW
       Object.assign(updateData, computePolicyToRow(normalizeComputePolicyInput(input.computePolicy, rowToComputePolicy(existing))))
     }
     if (nextTransport) Object.assign(updateData, transportToRow(nextTransport))
+    if (nextEdgeModel) updateData.edgeModel = nextEdgeModel
 
     await tx.vdc.update({ where: { id }, data: updateData })
 
@@ -828,6 +865,11 @@ export async function updateVdc(id: string, input: UpdateVdcInput): Promise<VdcW
   // A member of a stretched tenant network (#901) whose own peers changed
   // must be re-learnt by the other members' zones.
   if (zoneChanged) await syncNetworksOfVdc(id)
+
+  if (input.catalogGrants) {
+    const { replaceVdcCatalogGrants } = await import('@/lib/templates/catalogGrants')
+    await replaceVdcCatalogGrants(id, input.catalogGrants, null)
+  }
 
   clearVdcScopeCache(existing.tenantId)
 
@@ -1007,7 +1049,16 @@ export async function deleteVdc(id: string): Promise<void> {
 // refreshVdcUsage
 // ---------------------------------------------------------------------------
 
-export async function refreshVdcUsage(vdcId: string): Promise<VdcUsage> {
+export interface RefreshVdcUsageOptions {
+  /**
+   * Throw instead of counting zero when the pool cannot be read. The scheduled
+   * sampler (#902) sets it: an unreachable cluster must leave a gap in the
+   * usage history, never a sample claiming the vDC consumed nothing.
+   */
+  strict?: boolean
+}
+
+export async function refreshVdcUsage(vdcId: string, options: RefreshVdcUsageOptions = {}): Promise<VdcUsage> {
   // 1. Load vDC
   const row = await prisma.vdc.findUnique({ where: { id: vdcId } })
   if (!row) {
@@ -1025,6 +1076,7 @@ export async function refreshVdcUsage(vdcId: string): Promise<VdcUsage> {
     const poolData = await pveFetch<{ members?: any[] }>(conn, `/pools/${encodeURIComponent(vdc.pvePoolName)}`)
     members = poolData?.members || []
   } catch (err: any) {
+    if (options.strict) throw err
     console.warn(`[vdc] Failed to fetch pool members for "${vdc.pvePoolName}": ${err?.message}`)
   }
 
@@ -1076,11 +1128,14 @@ export async function refreshVdcUsage(vdcId: string): Promise<VdcUsage> {
   let usedSnapshots = 0
   let usedBackups = 0
 
-  for (const vm of vmMembers) {
+  // #938: every disk of every member, from its config. `maxdisk` is the boot
+  // disk alone, 0 for a VM whose boot order names no disk.
+  const diskBytes = await readGuestDiskBytes(conn, vdc.connectionId, vmMembers)
+  vmMembers.forEach((vm: any, i: number) => {
     usedVcpus += vm.maxcpu || 0
     usedRamMb += Math.round((vm.maxmem || 0) / 1048576)
-    usedStorageMb += Math.round((vm.maxdisk || 0) / 1048576)
-  }
+    usedStorageMb += Math.round(diskBytes[i] / 1048576)
+  })
 
   // Per-tier usage for display (spec §7): same content-listing meter as the
   // enforcement path, stored as JSON on the usage cache row.

@@ -7,6 +7,7 @@ import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { customImageToCloudImage } from "@/lib/templates/cloudImages"
 import { getEffectiveCatalog } from "@/lib/templates/catalogStore"
 import { customImageScopeWhere } from "@/lib/templates/customImageScope"
+import { granteeVdcIds, loadGrantSummaries } from "@/lib/templates/catalogGrants"
 
 export const runtime = "nodejs"
 
@@ -29,15 +30,28 @@ export async function GET(req: Request) {
     // Custom images visible to the caller:
     //  - the provider sees ALL its own custom images (shared and private)
     //  - tenants see THEIR own custom images PLUS shared catalogue entries
-    //    flagged isShared=true on the provider tenant.
+    //    flagged isShared=true on the provider tenant, PLUS the provider
+    //    entries granted to the tenant or to the vDC in view (#903).
     // The clause lives in lib/templates/customImageScope so the deploy route
     // resolves a slug with exactly this scope: when the two drifted apart, a
     // shared template was listed here and then refused at deploy.
-    const customRows = await prisma.customImage.findMany({
-      where: customImageScopeWhere(tenantId),
-      orderBy: { createdAt: 'desc' },
-    }).catch(() => [])
-    let customImages = customRows.map(customImageToCloudImage)
+    const customRows = await granteeVdcIds(tenantId)
+      .then(vdcIds => prisma.customImage.findMany({
+        where: customImageScopeWhere(tenantId, vdcIds),
+        orderBy: { createdAt: 'desc' },
+      }))
+      .catch(() => [])
+    // The provider gets the grants of each entry for the visibility column;
+    // a tenant learns which cards are its own (editable) and which it only
+    // sees through sharing or a grant.
+    const grants = isProvider
+      ? await loadGrantSummaries('image', customRows.map(r => r.id)).catch(() => new Map())
+      : new Map()
+    let customImages = customRows.map(row => ({
+      ...customImageToCloudImage(row),
+      ownedByCaller: row.tenantId === tenantId,
+      ...(isProvider ? { grants: grants.get(row.id) ?? { tenantIds: [], vdcIds: [] } } : {}),
+    }))
     if (vendor) {
       customImages = customImages.filter(img => img.vendor === vendor)
     }

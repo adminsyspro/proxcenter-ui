@@ -233,9 +233,12 @@ export async function xapiManagementNetworkUuid(s: XapiSession): Promise<string>
   return (await xapiCall<any>(s, "network.get_record", mgmt.network))?.uuid || "<network uuid>"
 }
 
-export async function xapiEnableCbt(s: XapiSession, vdiRef: string): Promise<void> {
+/** Enable CBT on a VDI; true when this call switched it on, false when it already was. */
+export async function xapiEnableCbt(s: XapiSession, vdiRef: string): Promise<boolean> {
   const enabled = await xapiCall<boolean>(s, "VDI.get_cbt_enabled", vdiRef)
-  if (!enabled) await xapiCall(s, "VDI.enable_cbt", vdiRef)
+  if (enabled) return false
+  await xapiCall(s, "VDI.enable_cbt", vdiRef)
+  return true
 }
 export async function xapiDisableCbt(s: XapiSession, vdiRef: string): Promise<void> {
   await xapiCall(s, "VDI.disable_cbt", vdiRef)

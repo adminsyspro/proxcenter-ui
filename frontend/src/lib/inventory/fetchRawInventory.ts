@@ -16,6 +16,7 @@ import type { PoolFacts } from "./proxmoxProjections"
 import { readNodeStatus, readPools, readStorageResources } from "./proxmoxProjections"
 import { pbsFetch } from "@/lib/proxmox/pbs-client"
 import { collectNodeAddresses, resolveManagementIp } from "@/lib/proxmox/resolveManagementIp"
+import { attachGuestDiskTotals, onlineNodeSet } from "./guestDiskTotals"
 import {
   getInventoryFromCache,
   setCachedInventory,
@@ -84,6 +85,12 @@ export type GuestData = {
   cores?: number
   /** PVE 9 host-side memory of the guest, distinct from the guest-side `mem`. */
   memhost?: number
+  /**
+   * Sum of every attached disk, from the guest config (#938). `maxdisk` is
+   * only the boot disk (rootfs for a container), and 0 for a VM whose boot
+   * order names no disk. Absent until a config read succeeded.
+   */
+  diskTotal?: number
 }
 
 export type HaResource = {
@@ -389,6 +396,14 @@ return ha?.group
 return aId - bId
         })
       }
+
+      // #938: one /config per guest, cached across polls (guestDiskTotals.ts).
+      await attachGuestDiskTotals(
+        connConfig,
+        conn.id,
+        Array.from(nodeMap.values()).flatMap(n => n.guests),
+        { onlineNodes: nodesResult.status === 'fulfilled' ? onlineNodeSet(nodes) : null },
+      )
 
       const nodesArray = Array.from(nodeMap.values())
       const onlineNodes = nodesArray.filter(n => n.status === 'online').length

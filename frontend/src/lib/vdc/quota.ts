@@ -7,6 +7,7 @@
 import { DEFAULT_TENANT_ID } from '@/lib/tenant'
 import { pveFetch } from '@/lib/proxmox/client'
 import { getConnectionById } from '@/lib/connections/getConnection'
+import { readGuestDiskBytes } from '@/lib/inventory/guestDiskTotals'
 import { prisma } from '@/lib/db/prisma'
 
 import { normalizeComputePolicyInput, type VdcComputePolicy } from './computePolicy'
@@ -249,11 +250,20 @@ export async function checkVdcQuota(
   let storageMb = 0
   const vms = vmMembers.length
 
-  for (const vm of vmMembers) {
+  // #938: every disk of every member, read from its config. `maxdisk` is the
+  // boot disk alone (0 for a VM whose boot order names no disk), and summing it
+  // let a tenant run past maxStorageMb with multi-disk VMs. Read whenever the
+  // vDC has a storage quota, so the usage a refusal reports is exact too.
+  const meterStorage = !!quota && quota.maxStorageMb !== null
+  const diskBytes = meterStorage
+    ? await readGuestDiskBytes(conn, connectionId, vmMembers)
+    : vmMembers.map((vm: any) => Number(vm.maxdisk) || 0)
+
+  vmMembers.forEach((vm: any, i: number) => {
     vcpus += vm.maxcpu || 0
     ramMb += Math.round((vm.maxmem || 0) / 1048576)
-    storageMb += Math.round((vm.maxdisk || 0) / 1048576)
-  }
+    storageMb += Math.round(diskBytes[i] / 1048576)
+  })
 
   // Count snapshots across the pool (only fetched when the operation cares
   // about the snapshot quota — saves ~N PVE calls per ordinary create/resize).
@@ -326,9 +336,9 @@ export async function checkVdcQuota(
   }
 
   // Per-policy (tier) quota: metered from the storage content listing
-  // filtered to the vDC's pool members (spec §7). More accurate than the
-  // maxdisk aggregate above, which undercounts multi-disk VMs; the two
-  // meters coexist deliberately.
+  // filtered to the vDC's pool members (spec §7). It meters one storage at a
+  // time, the global meter above meters the whole pool from the guest configs
+  // (#938); the two coexist deliberately.
   const byStorage = operation.addStorageMbByStorage ?? {}
   const policyList = storagePolicies ?? []
   const meterNode = node ?? vmMembers[0]?.node

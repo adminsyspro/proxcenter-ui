@@ -17,6 +17,8 @@ export interface ImageVolumeSource {
   format?: string
   tenantId?: string
   isShared?: boolean
+  /** Set by findCustomImageForTenant on a provider row a tenant reaches through a grant (#903). */
+  visibleViaGrant?: boolean
 }
 
 /** Another cluster holding a copy of a volume-mode image (#44). */
@@ -114,8 +116,10 @@ export async function authorizeImageVolume(args: {
   // provider's golden image legitimately sits on storage and nodes outside the
   // tenant's vDC (#971), so the scope gates below do not apply to it. A tenant
   // cannot manufacture this exception with isShared in a request:
-  // `publishedImage` is always a server-resolved catalogue row.
-  const published = publishedImage?.tenantId === DEFAULT_TENANT_ID && !!publishedImage.isShared
+  // `publishedImage` is always a server-resolved catalogue row. A per-tenant
+  // or per-vDC grant (#903) is the same publication, narrowed to the caller.
+  const published = publishedImage?.tenantId === DEFAULT_TENANT_ID
+    && (!!publishedImage.isShared || publishedImage.visibleViaGrant === true)
     && publishedImage.volumeId === volumeId
     && publishedImage.sourceConnectionId === sourceConnectionId
     && publishedImage.sourceNode === sourceNode

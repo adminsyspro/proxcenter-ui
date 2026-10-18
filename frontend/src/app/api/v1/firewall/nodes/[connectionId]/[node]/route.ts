@@ -5,12 +5,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getOrchestratorClient } from '@/lib/orchestrator/client'
 import { verifyConnectionOwnership } from '@/lib/tenant'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
+import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
 import { getConnectionById } from '@/lib/connections/getConnection'
 import { orchestratorOrPve } from '@/lib/firewall/withPveFallback'
 import * as pveDirect from '@/lib/firewall/pveDirect'
 
 // GET /api/v1/firewall/nodes/[connectionId]/[node] - Get node options or rules
-export async function GET(
+async function getHandler(
   request: NextRequest,
   { params }: { params: Promise<{ connectionId: string; node: string }> }
 ) {
@@ -50,7 +51,7 @@ return NextResponse.json(
 }
 
 // PUT /api/v1/firewall/nodes/[connectionId]/[node] - Update node options
-export async function PUT(
+async function putHandler(
   request: NextRequest,
   { params }: { params: Promise<{ connectionId: string; node: string }> }
 ) {
@@ -83,7 +84,7 @@ return NextResponse.json(
 }
 
 // POST /api/v1/firewall/nodes/[connectionId]/[node] - Add node rule
-export async function POST(
+async function postHandler(
   request: NextRequest,
   { params }: { params: Promise<{ connectionId: string; node: string }> }
 ) {
@@ -114,3 +115,7 @@ return NextResponse.json(
     )
   }
 }
+
+export const GET = withPublicApiGuard("fw-node-get", getHandler)
+export const PUT = withPublicApiGuard("fw-node-options-update", putHandler)
+export const POST = withPublicApiGuard("fw-node-rule-add", postHandler)

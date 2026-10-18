@@ -140,6 +140,31 @@ describe('probeApi', () => {
     expect(byId(items, 'api.fallback.pve3')).toMatchObject({ status: 'warn', hint: 'api.fallbackTlsRejected' })
   })
 
+  // roadmap#51: a stored address that was only guessed (privilege-filtered
+  // interface list, corosync link) gets its own hint instead of blaming the
+  // node or the firewall, reachable or not.
+  it('tells a guessed fallback address apart from a verified one', async () => {
+    const deps = makeDeps({
+      directGet: vi.fn(async (baseUrl: string) => {
+        if (baseUrl.includes('10.100.5.2')) throw Object.assign(new Error('timeout'), { code: 'EHOSTUNREACH' })
+        return { statusCode: 200, data: { version: '9.2.11' } }
+      }),
+    })
+    const ctx = makeCtx({
+      fallbackHosts: [
+        { node: 'pve2', ip: '10.100.5.2', verified: false },
+        { node: 'pve3', ip: '10.100.5.3', verified: false },
+      ],
+    })
+    const items = await probeApi(ctx, deps)
+    expect(byId(items, 'api.fallback.pve2')).toMatchObject({
+      status: 'warn',
+      hint: 'api.fallbackUnverifiedUnreachable',
+      params: { node: 'pve2', host: '10.100.5.2', error: 'EHOSTUNREACH' },
+    })
+    expect(byId(items, 'api.fallback.pve3')).toMatchObject({ status: 'ok', hint: 'api.fallbackOkUnverified', params: { host: '10.100.5.3' } })
+  })
+
   it('does not probe fallbacks behind a reverse proxy', async () => {
     const deps = makeDeps()
     const items = await probeApi(makeCtx({ conn: { ...makeCtx().conn, behindProxy: true } }), deps)

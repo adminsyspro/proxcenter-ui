@@ -58,6 +58,18 @@ describe('compose files are registry-overridable', () => {
     expect(text).toMatch(/PROXCENTER_CVE_DEBIAN_MIRROR[=:]\s*\$\{CVE_DEBIAN_MIRROR:-\}/)
   })
 
+  // The installer writes HTTP_PROXY / HTTPS_PROXY / NO_PROXY to .env when it
+  // runs behind a proxy. Empty defaults keep direct connections elsewhere.
+  it.each(['docker-compose.enterprise.yml', 'docker-compose.ha.yml'])('%s passes the HTTP proxy to the orchestrator only', file => {
+    const text = read(file)
+    const block = serviceBlock(text, 'orchestrator')
+
+    expect(block).toMatch(/HTTP_PROXY[=:]\s*\$\{HTTP_PROXY:-\}/)
+    expect(block).toMatch(/HTTPS_PROXY[=:]\s*\$\{HTTPS_PROXY:-\}/)
+    expect(block).toMatch(/NO_PROXY[=:]\s*\$\{NO_PROXY:-localhost,127\.0\.0\.1,frontend,postgres,orchestrator,weasyprint\}/)
+    expect(serviceBlock(text, 'frontend')).not.toMatch(/_PROXY[=:]/)
+  })
+
   it('every ${VERSION} image also carries the REGISTRY prefix', () => {
     for (const file of files) {
       for (const line of imageLines(read(file))) {

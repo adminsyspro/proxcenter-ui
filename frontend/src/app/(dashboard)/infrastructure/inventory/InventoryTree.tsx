@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { fetchConnectionsNetworks, type HostBridgeItem, type HostVlanItem, type SdnVnetItem } from '@/lib/proxmox/fetchConnectionsNetworks'
+import { guestMatchesSearch } from '@/lib/inventory/guestSearch'
 import { bridgeLabel } from '@/lib/proxmox/hostVlanMap'
 import { sdnSegmentLabel, type SdnVnet } from '@/lib/proxmox/sdnVnetMap'
 
@@ -59,7 +60,6 @@ import { showsClusterLevel } from '@/lib/rbac/scopeKinds'
 import { useTagColors } from '@/contexts/TagColorContext'
 import { useTenant } from '@/contexts/TenantContext'
 import { useTaskTracker } from '@/hooks/useTaskTracker'
-import { startTrackedMigration } from '@/lib/migration/guestMigrateClient'
 import { useMyVdcs } from '@/hooks/useMyVdcs'
 import { readVdcContextCookie } from '@/lib/vdc/contextCookie'
 import { describeVmLoadFailure, describeVmLoadTimeout, externalVmFetchTimeoutMs } from '@/lib/inventory/externalVmFetch'
@@ -117,6 +117,7 @@ export type AllVmItem = {
   maxmem?: number
   disk?: number
   maxdisk?: number
+  diskTotal?: number  // #938: sum of every attached disk; maxdisk is the boot disk only
   uptime?: number | string | null
   ip?: string | null
   snapshots?: number
@@ -225,7 +226,7 @@ type TreeCluster = {
     cpu?: number      // node-level CPU usage (fraction 0-1)
     mem?: number      // node-level used memory (bytes)
     maxmem?: number   // node-level total memory (bytes)
-    vms: { type: string; vmid: string; name: string; status?: string; cpu?: number; maxcpu?: number; mem?: number; maxmem?: number; disk?: number; maxdisk?: number; uptime?: number; pool?: string; tags?: string; template?: boolean; hastate?: string; hagroup?: string; lock?: string }[]
+    vms: { type: string; vmid: string; name: string; status?: string; cpu?: number; maxcpu?: number; mem?: number; maxmem?: number; disk?: number; maxdisk?: number; diskTotal?: number; uptime?: number; pool?: string; tags?: string; template?: boolean; hastate?: string; hagroup?: string; lock?: string }[]
   }[]
 }
 
@@ -1160,16 +1161,17 @@ return migratingVmIds.has(`${connId}:${vmid}`)
     handleCloseNodeContextMenu()
   }
 
-  const handleMaintenanceConfirm = async () => {
-    if (!maintenanceTarget) return
+  // Exit maintenance, or enter it WITHOUT evacuating (the drain dialog's
+  // "maintenance only" switch). Entering with evacuation is a host drain run
+  // by the orchestrator, see HostDrainDialog (#248).
+  const handleMaintenanceConfirm = async (): Promise<boolean> => {
+    if (!maintenanceTarget) return false
     const { connId, node, maintenance } = maintenanceTarget
     const entering = !maintenance
 
     setMaintenanceBusy(true)
     setMaintenanceError(null)
     try {
-      // HA-managed guests are evacuated automatically by Proxmox node-maintenance.
-      // Non-HA guests are left for the operator to handle (see dialog note).
       const res = await fetch(
         `/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/maintenance`,
         { method: entering ? 'POST' : 'DELETE' }
@@ -1177,12 +1179,14 @@ return migratingVmIds.has(`${connId}:${vmid}`)
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
         setMaintenanceError(data?.error || res.statusText)
-        return
+        return false
       }
       setMaintenanceTarget(null)
       setReloadTick(x => x + 1)
+      return true
     } catch (e: any) {
       setMaintenanceError(e?.message || t('inventory.unknownError'))
+      return false
     } finally {
       setMaintenanceBusy(false)
     }
@@ -1218,7 +1222,7 @@ return migratingVmIds.has(`${connId}:${vmid}`)
   }
 
   const handleBulkActionConfirm = async () => {
-    const { action, connId, node, targetNode } = bulkActionDialog
+    const { action, connId, node } = bulkActionDialog
     if (!action) return
 
     const vms = getNodeVms(connId, node)
@@ -1235,10 +1239,8 @@ return migratingVmIds.has(`${connId}:${vmid}`)
         apiAction = 'shutdown'
         break
       case 'migrate-all':
-        if (!targetNode) return
-        vmsToProcess = vms
-        apiAction = 'migrate'
-        break
+        // Handled by HostDrainDialog (#248): never reaches this path.
+        return
     }
 
     if (vmsToProcess.length === 0) {
@@ -1253,14 +1255,6 @@ return migratingVmIds.has(`${connId}:${vmid}`)
         const batch = vmsToProcess.slice(i, i + batchSize)
         await Promise.all(batch.map(async (vm) => {
           try {
-            if (apiAction === 'migrate') {
-              // #926: each migration is followed to its end, which toasts the
-              // outcome with the reason; the POST alone proves nothing.
-              await startTrackedMigration(trackTask, { connId, node, type: vm.type, vmid: vm.vmid }, { target: targetNode, online: vm.status === 'running' }, {
-                description: `${vm.name || `VM ${vm.vmid}`}: ${t('vmActions.migrate')}`,
-              })
-              return
-            }
             await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/guests/${vm.type}/${encodeURIComponent(node)}/${encodeURIComponent(vm.vmid)}/${apiAction}`, { method: 'POST' })
           } catch {}
         }))
@@ -1570,6 +1564,7 @@ return next
         maxmem: guest.maxmem,
         disk: guest.disk,
         maxdisk: guest.maxdisk,
+        diskTotal: guest.diskTotal,
         pool: guest.pool || null,
         tags: guest.tags || null,
         template: guest.template === 1 || guest.template === true,
@@ -2009,12 +2004,8 @@ return next
             // Vérifier si le node match
             const nodeMatches = n.node.toLowerCase().includes(q)
 
-            // Filtrer les VMs qui matchent
-            const filteredVms = n.vms.filter(vm =>
-              vm.name.toLowerCase().includes(q) ||
-              vm.vmid.toLowerCase().includes(q) ||
-              vm.type.toLowerCase().includes(q)
-            )
+            // Filtrer les VMs qui matchent (nom, vmid, type ou tag, #937)
+            const filteredVms = n.vms.filter(vm => guestMatchesSearch(vm, q))
 
             // Garder le node si lui-même match OU si des VMs matchent
             if (nodeMatches || filteredVms.length > 0) {
@@ -2174,6 +2165,7 @@ return items
       maxmem?: number
       disk?: number
       maxdisk?: number
+      diskTotal?: number
       uptime?: number
       pool?: string | null
       tags?: string | null
@@ -2202,6 +2194,7 @@ return items
             maxmem: vm.maxmem,
             disk: vm.disk,
             maxdisk: vm.maxdisk,
+            diskTotal: vm.diskTotal,
             uptime: vm.uptime,
             pool: vm.pool,
             tags: vm.tags,
@@ -2229,13 +2222,10 @@ return vms
     if (!q) return allVms
     
     return allVms.filter(vm =>
-      vm.name.toLowerCase().includes(q) ||
-      vm.vmid.toLowerCase().includes(q) ||
-      vm.type.toLowerCase().includes(q) ||
+      guestMatchesSearch(vm, q) ||
       vm.node.toLowerCase().includes(q) ||
       vm.connName.toLowerCase().includes(q) ||
-      (vm.pool && vm.pool.toLowerCase().includes(q)) ||
-      (vm.tags && vm.tags.toLowerCase().includes(q))
+      (vm.pool && vm.pool.toLowerCase().includes(q))
     )
   }, [allVms, search])
 
@@ -2261,6 +2251,7 @@ return vms
         maxmem: vm.maxmem,
         disk: vm.disk,
         maxdisk: vm.maxdisk,
+        diskTotal: vm.diskTotal,
         uptime: vm.uptime,
         tags: vm.tags?.split(';').filter(Boolean),
         pool: vm.pool,

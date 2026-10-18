@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
+// The API token guard is covered by routeGuard.test.ts and writeContract.test.ts:
+// pass-through so this file keeps testing the handler, as for a session caller.
+vi.mock('@/lib/api-tokens/routeGuard', () => ({
+  withPublicApiGuard: (_entryId: string, handler: any) => handler,
+}))
+
 import { callRoute, readJson } from '@/__tests__/setup/route-test'
 
 vi.mock('next/headers', () => ({
@@ -394,5 +400,23 @@ describe('DELETE /api/v1/guests/[vmid]/snapshots', () => {
     expect(res.status).toBe(500)
     const body = await readJson<any>(res)
     expect(body.error).toMatch(/task failed/i)
+  })
+})
+
+describe('snapshots on a cluster outside the license (roadmap#58)', () => {
+  it('answers 403 with its code when creating a snapshot is refused', async () => {
+    const { PveLicenseExcludedError } = await import('@/lib/license/exclusions')
+    pveFetchMock.mockRejectedValue(new PveLicenseExcludedError('conn-1'))
+    const res = await callRoute(POST as any, { method: 'POST', params: { vmid: VM_KEY }, body: { name: 'snap1' } })
+    expect(res.status).toBe(403)
+    expect((await readJson<any>(res)).code).toBe('CONNECTION_LICENSE_EXCLUDED')
+  })
+
+  it('answers 403 with its code when deleting a snapshot is refused', async () => {
+    const { PveLicenseExcludedError } = await import('@/lib/license/exclusions')
+    pveFetchMock.mockRejectedValue(new PveLicenseExcludedError('conn-1'))
+    const res = await callRoute(DELETE as any, { method: 'DELETE', params: { vmid: VM_KEY }, searchParams: { name: 'snap1' } })
+    expect(res.status).toBe(403)
+    expect((await readJson<any>(res)).code).toBe('CONNECTION_LICENSE_EXCLUDED')
   })
 })

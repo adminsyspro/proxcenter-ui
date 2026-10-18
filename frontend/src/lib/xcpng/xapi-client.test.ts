@@ -517,9 +517,16 @@ describe("xcpng/xapi-client", () => {
   it("does not enable CBT when it is already enabled", async () => {
     fetchMock.mockResolvedValueOnce(success(true))
 
-    await expect(xapiEnableCbt(session, "OpaqueRef:vdi")).resolves.toBeUndefined()
+    await expect(xapiEnableCbt(session, "OpaqueRef:vdi")).resolves.toBe(false)
     expect(fetchMock).toHaveBeenCalledTimes(1)
     expect(requestAt(0).method).toBe("VDI.get_cbt_enabled")
+  })
+
+  it("enables CBT when it is off and says it did, so the caller can switch it back off", async () => {
+    fetchMock.mockResolvedValueOnce(success(false)).mockResolvedValueOnce(success(null))
+
+    await expect(xapiEnableCbt(session, "OpaqueRef:vdi")).resolves.toBe(true)
+    expect(requestAt(1).method).toBe("VDI.enable_cbt")
   })
 
   it("disables CBT", async () => {

@@ -8,9 +8,10 @@ import * as pveDirect from '@/lib/firewall/pveDirect'
 import { orchestratorOrPve } from '@/lib/firewall/withPveFallback'
 import { verifyConnectionOwnership } from '@/lib/tenant'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
+import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
 
 // GET /api/v1/firewall/groups/[connectionId] - Get all security groups
-export async function GET(
+async function getHandler(
   request: NextRequest,
   { params }: { params: Promise<{ connectionId: string }> }
 ) {
@@ -43,7 +44,7 @@ return NextResponse.json(
 }
 
 // POST /api/v1/firewall/groups/[connectionId] - Create security group
-export async function POST(
+async function postHandler(
   request: NextRequest,
   { params }: { params: Promise<{ connectionId: string }> }
 ) {
@@ -74,3 +75,6 @@ return NextResponse.json(
     )
   }
 }
+
+export const GET = withPublicApiGuard("fw-groups-list", getHandler)
+export const POST = withPublicApiGuard("fw-group-create", postHandler)

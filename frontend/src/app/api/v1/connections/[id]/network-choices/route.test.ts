@@ -14,7 +14,11 @@ const {
   vdcVnetFindManyMock,
   vdcSharedBridgeFindManyMock,
   vdcVlanPoolFindManyMock,
+  resolveScopeTenantMock,
+  scopeTenantInfrastructureMock,
 } = vi.hoisted(() => ({
+  resolveScopeTenantMock: vi.fn(),
+  scopeTenantInfrastructureMock: vi.fn(),
   vdcVlanPoolFindManyMock: vi.fn(),
   checkPermissionMock: vi.fn(),
   guestPerimeterAllowsMock: vi.fn(),
@@ -47,6 +51,10 @@ vi.mock("@/lib/tenant/infraScope", () => ({
   getTenantInfrastructureScope: (...a: any[]) => getTenantInfrastructureScopeMock(...a),
   maskingScope: (...a: any[]) => maskingScopeMock(...a),
 }))
+vi.mock("@/lib/vdc/providerTarget", () => ({
+  resolveScopeTenant: (...a: any[]) => resolveScopeTenantMock(...a),
+  scopeTenantInfrastructure: (...a: any[]) => scopeTenantInfrastructureMock(...a),
+}))
 vi.mock("@/lib/db/prisma", () => ({
   prisma: {
     connection: { findUnique: (...a: any[]) => connectionFindUniqueMock(...a) },
@@ -75,6 +83,8 @@ beforeEach(() => {
   getTenantInfrastructureScopeMock.mockReset().mockResolvedValue({ kind: "provider" })
   // provider: no vDC masking, so the route takes the full-cluster branch.
   maskingScopeMock.mockReset().mockReturnValue(null)
+  resolveScopeTenantMock.mockReset().mockImplementation(async (_req: any, _id: any, current: () => Promise<string>) => ({ ok: true, tenantId: await current(), target: null }))
+  scopeTenantInfrastructureMock.mockReset().mockImplementation(async (st: any) => getTenantInfrastructureScopeMock(st.tenantId))
   connectionFindUniqueMock.mockReset().mockResolvedValue({ tenantId: "provider-tenant" })
   vdcVnetFindManyMock.mockReset().mockResolvedValue([])
   vdcSharedBridgeFindManyMock.mockReset().mockResolvedValue([])
@@ -196,5 +206,34 @@ describe("GET /api/v1/connections/[id]/network-choices: iaas tenant slice", () =
     const res = await callRoute(GET, { params: PARAMS, searchParams: QUERY })
     expect(res.status).toBe(404)
     expect(connectionFindUniqueMock).not.toHaveBeenCalled()
+  })
+})
+
+describe("GET network-choices: provider target (roadmap#65)", () => {
+  it("masks with the infrastructure scope of the target vDC", async () => {
+    const target = { vdcId: "vdc-t", tenantId: "tenant-acme", connectionId: "conn-1" }
+    const infra = { kind: "iaas", vdcScope: { vdcId: "vdc-t" } }
+    resolveScopeTenantMock.mockResolvedValue({ ok: true, tenantId: "tenant-acme", target })
+    scopeTenantInfrastructureMock.mockResolvedValue(infra)
+
+    const GET = (await import("./route")).GET as Parameters<typeof callRoute>[0]
+    const res = await callRoute(GET, { params: PARAMS, searchParams: { ...QUERY, targetVdcId: "vdc-t" } })
+
+    expect(res.status).toBe(200)
+    expect(resolveScopeTenantMock.mock.calls[0]?.[1]).toBe("conn-1")
+    expect(scopeTenantInfrastructureMock).toHaveBeenCalledWith({ ok: true, tenantId: "tenant-acme", target })
+    expect(maskingScopeMock).toHaveBeenCalledWith(infra)
+    expect(getTenantInfrastructureScopeMock).not.toHaveBeenCalled()
+  })
+
+  it("propagates the refusal of the guard without reading the cluster", async () => {
+    resolveScopeTenantMock.mockResolvedValue({ ok: false, response: Response.json({ error: "nope" }, { status: 400 }) })
+
+    const GET = (await import("./route")).GET as Parameters<typeof callRoute>[0]
+    const res = await callRoute(GET, { params: PARAMS, searchParams: { ...QUERY, targetVdcId: "vdc-t" } })
+
+    expect(res.status).toBe(400)
+    expect(scopeTenantInfrastructureMock).not.toHaveBeenCalled()
+    expect(pveFetchMock).not.toHaveBeenCalled()
   })
 })

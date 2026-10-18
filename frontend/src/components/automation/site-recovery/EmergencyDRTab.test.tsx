@@ -542,3 +542,108 @@ describe('EmergencyDRTab: recovery plan header', () => {
     expect(screen.getByText('Paris → Lyon')).toBeInTheDocument()
   })
 })
+
+/* ------------------------------------------------------------------------ *
+ * Per-guest failover and failback (issue #943): the row of a plan guest
+ * carries a production failover distinct from starting its replica, a
+ * failback once it is over, and the plan reads how many guests are over.
+ * ------------------------------------------------------------------------ */
+
+describe('EmergencyDRTab: per-guest failover and failback', () => {
+  // MUI puts the tooltip text on the span that wraps a button (so a disabled
+  // button still has a tooltip), which is where the row's word lives.
+  const labelOf = (button: HTMLElement) => button.closest('span[aria-label]')?.getAttribute('aria-label')
+  const guestPlan = (guests: RecoveryPlan['guests'] = [], status: RecoveryPlan['status'] = 'ready') => plan({
+    status,
+    guests,
+    vms: [
+      { vm_id: 100, vm_name: 'web-01', replication_job_id: 'job-1', tier: 1, boot_order: 1 },
+      { vm_id: 101, vm_name: 'db-01', replication_job_id: 'job-1', tier: 1, boot_order: 2 },
+    ],
+  })
+  const twoGuests = () => job({ status: 'synced', vm_ids: [100, 101], vm_names: ['web-01', 'db-01'] })
+
+  it('offers a production failover on a protected guest, apart from the replica start, and names it as such', async () => {
+    const onGuestFailover = vi.fn()
+    const { props } = harness({ jobs: [twoGuests()], plans: [guestPlan()], onGuestFailover, onGuestFailback: vi.fn() })
+
+    expect(labelOf(startAction())).toBe('Start the replica on the DR site (test, not a failover)')
+    const failover = within(bodyRow()).getByTestId('guest-failover-100')
+
+    expect(labelOf(failover)).toBe('Failover this VM')
+    expect(failover).toBeEnabled()
+    await userEvent.click(failover)
+    expect(onGuestFailover).toHaveBeenCalledWith(expect.objectContaining({ vmId: 100, planId: 'plan-1', siblingCount: 1 }))
+    expect(props.onExecuteFailover).not.toHaveBeenCalled()
+  })
+
+  it('offers no per-guest failover on a standalone replica, which has no plan to hold its state', () => {
+    harness({ onGuestFailover: vi.fn(), onGuestFailback: vi.fn() })
+
+    expect(rowActions()).toHaveLength(2)
+  })
+
+  it('locks the replica start and stop of a failed over guest, shows its state, and offers its failback', async () => {
+    const onGuestFailback = vi.fn()
+    harness({
+      jobs: [twoGuests()],
+      plans: [guestPlan([{ vm_id: 100, state: 'failed_over', execution_id: 'exec-1', job_id: 'job-1', failed_over_at: null, updated_at: '' }], 'partially_failed_over')],
+      onGuestFailover: vi.fn(), onGuestFailback,
+    })
+
+    expect(startAction()).toBeDisabled()
+    expect(stopAction()).toBeDisabled()
+    expect(labelOf(startAction())).toBe('This VM is failed over: the replica is production. Use its failback.')
+    expect(bodyRow().cells[4].querySelector('i')).toHaveAttribute('aria-label', 'Failed over')
+    const failback = within(bodyRow()).getByTestId('guest-failback-100')
+
+    expect(labelOf(failback)).toBe('Failback this VM')
+    await userEvent.click(failback)
+    expect(onGuestFailback).toHaveBeenCalledWith(expect.objectContaining({ vmId: 100, guestState: 'failed_over' }))
+
+    // The sibling is untouched: it still offers its own failover.
+    expect(within(bodyRow(2)).getByTestId('guest-failover-101')).toBeEnabled()
+    expect(bodyRow(2).cells[4].querySelector('i')).toHaveAttribute('aria-label', 'Synced')
+  })
+
+  it('shows a guest failing over as in progress, and one failing back with its follow-up', () => {
+    harness({
+      jobs: [twoGuests()],
+      plans: [guestPlan([
+        { vm_id: 100, state: 'failing_over', execution_id: 'exec-1', job_id: 'job-1', failed_over_at: null, updated_at: '' },
+        { vm_id: 101, state: 'failing_back', execution_id: 'exec-2', job_id: 'job-1', failed_over_at: null, updated_at: '' },
+      ], 'partially_failed_over')],
+      onGuestFailover: vi.fn(), onGuestFailback: vi.fn(),
+    })
+
+    expect(within(bodyRow()).getByTestId('guest-failover-100')).toBeDisabled()
+    expect(labelOf(within(bodyRow()).getByTestId('guest-failover-100'))).toBe('Failover in progress')
+    expect(bodyRow().cells[4].querySelector('i')).toHaveAttribute('aria-label', 'Failing over')
+    expect(labelOf(within(bodyRow(2)).getByTestId('guest-failback-101'))).toBe('Open the failback of this VM')
+    expect(bodyRow(2).cells[4].querySelector('i')).toHaveAttribute('aria-label', 'Failing back')
+  })
+
+  it('counts the guests over in the plan chip and opens the plan failback on a partially failed over plan', async () => {
+    const { props } = harness({
+      jobs: [twoGuests()],
+      plans: [guestPlan([{ vm_id: 100, state: 'failed_over', execution_id: 'exec-1', job_id: 'job-1', failed_over_at: null, updated_at: '' }], 'partially_failed_over')],
+      onGuestFailover: vi.fn(), onGuestFailback: vi.fn(),
+    })
+
+    expect(screen.getByText('1 of 2 guests failed over')).toBeInTheDocument()
+    const planFailback = screen.getByRole('button', { name: 'Plan failback' })
+
+    expect(planFailback).toBeEnabled()
+    await userEvent.click(planFailback)
+    expect(props.onExecuteFailback).toHaveBeenCalledWith('plan-1')
+    // The plan failover stays open: it promotes the guests still protected.
+    expect(screen.getByRole('button', { name: 'Emergency Failover' })).toBeEnabled()
+  })
+
+  it('keeps the per-guest failover shut while the plan itself is executing or failed over as a whole', () => {
+    harness({ jobs: [twoGuests()], plans: [guestPlan([], 'executing')], onGuestFailover: vi.fn(), onGuestFailback: vi.fn() })
+
+    expect(within(bodyRow()).getByTestId('guest-failover-100')).toBeDisabled()
+    expect(labelOf(within(bodyRow()).getByTestId('guest-failover-100'))).toBe('The plan is busy: wait for its execution to finish')
+  })
+})

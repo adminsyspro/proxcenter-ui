@@ -14,11 +14,12 @@ import { GUEST_FILE_RESTORE_TERMINAL_STATUSES } from '@/lib/guestFileRestore/typ
 import type { GuestFileRestoreJobStatus, GuestFileRestoreLogLine } from '@/lib/guestFileRestore/types'
 import { PERMISSIONS, buildVmResourceId, checkPermission } from '@/lib/rbac'
 import { getSessionPrisma } from '@/lib/tenant'
+import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-export async function POST(_request: Request, ctx: { params: Promise<{ id: string }> | { id: string } }) {
+async function handler(_request: Request, ctx: { params: Promise<{ id: string }> | { id: string } }) {
   const guard = await requireGuestFileRestoreUser()
   if (guard.denied) return guard.denied
 
@@ -63,3 +64,5 @@ export async function POST(_request: Request, ctx: { params: Promise<{ id: strin
     return NextResponse.json({ error: error?.message || 'Erreur serveur' }, { status: 500 })
   }
 }
+
+export const POST = withPublicApiGuard("gfr-job-cancel", handler)

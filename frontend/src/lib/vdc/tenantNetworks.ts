@@ -13,15 +13,14 @@ import { DEFAULT_TENANT_ID } from '@/lib/tenant'
 
 import { gatewayValidForCidr, parseCidr } from './network'
 import { listVnetsPve, VNI_BASE } from './sdn'
-import { ZONE_MTU_MAX, ZONE_MTU_MIN } from './transport'
+import { VNI_MAX, ZONE_MTU_MAX, ZONE_MTU_MIN } from './transport'
 
 const ERR = 'Tenant network:'
 
 /** What the tenant reads: same alphabet as a VNet display name, free of PVE's 8-char limit. */
 export const TENANT_NETWORK_NAME_REGEX = /^[a-z][a-z0-9-]{0,19}$/
 
-/** VXLAN Network Identifier is 24 bits. */
-export const VNI_MAX = 16_777_215
+export { VNI_MAX }
 
 // Same shape as a PVE VNet id from sdn.ts: a letter followed by 7 hex chars.
 const PVE_VNET_ID_PREFIX = 'v'

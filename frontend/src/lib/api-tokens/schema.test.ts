@@ -26,6 +26,7 @@ describe('api_tokens schema', () => {
       },
     })
     expect(row.rateLimitPerMin).toBe(600)
+    expect(row.writeRateLimitPerMin).toBe(60)
     expect(row.revokedAt).toBeNull()
     expect(row.expiresAt).toBeNull()
     const found = await prismaTest.apiToken.findUnique({ where: { tokenPrefix: 'pxc_abcd1234' } })

@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
+// The API token guard is covered by routeGuard.test.ts and writeContract.test.ts:
+// pass-through so this file keeps testing the handler, as for a session caller.
+vi.mock('@/lib/api-tokens/routeGuard', () => ({
+  withPublicApiGuard: (_entryId: string, handler: any) => handler,
+}))
+
 import { callRoute, readJson, deniedPermissionResponse } from '@/__tests__/setup/route-test'
 
 const checkPermissionMock = vi.fn<(...args: any[]) => Promise<Response | null>>()
@@ -235,5 +241,17 @@ describe('POST guests: explicit tenant NIC identity', () => {
     checkPermissionMock.mockImplementation(async permission => permission === 'vm.create' ? null : Response.json({ error: 'denied' }, { status: 403 }))
     const res = await callRoute(await loadPost(), { params: baseParams, body: { vmid: 190, net0: 'virtio,bridge=vmbr0' } })
     expect(res.status).toBe(200)
+  })
+})
+
+describe('POST guests create — cluster outside the license (roadmap#58)', () => {
+  it('answers 403 with its code when the create write is refused', async () => {
+    const { PveLicenseExcludedError } = await import('@/lib/license/exclusions')
+    pveFetchMock.mockRejectedValue(new PveLicenseExcludedError('conn-1'))
+    const POST = await loadPost()
+    const res = await callRoute(POST, { params: baseParams, body: { vmid: 190 } })
+
+    expect(res.status).toBe(403)
+    expect(await res.json()).toMatchObject({ code: 'CONNECTION_LICENSE_EXCLUDED' })
   })
 })

@@ -10,7 +10,7 @@ vi.mock("undici", () => ({
 }))
 
 import {
-  soapCreateSnapshot, soapRemoveSnapshot, soapRemoveAllSnapshots,
+  soapCreateSnapshot, soapRemoveSnapshot, soapRemoveAllSnapshots, soapConsolidateVmDisks,
   soapWaitForConsolidation, soapFindSnapshotsByNamePrefix, parseSnapshotList,
   formatSoapBudget,
 } from "./soap"
@@ -278,5 +278,26 @@ describe("soapFindSnapshotsByNamePrefix", () => {
   it("returns an empty list when the VM carries no snapshot property", async () => {
     undiciRequest.mockResolvedValueOnce(reply("<objects><obj>vm-9</obj></objects>"))
     await expect(soapFindSnapshotsByNamePrefix(session, "vm-9", "proxcenter-warm-")).resolves.toEqual([])
+  })
+})
+
+describe("soapConsolidateVmDisks", () => {
+  it("submits ConsolidateVMDisks_Task on the VM and waits for the task", async () => {
+    undiciRequest.mockResolvedValueOnce(reply(TASK)).mockResolvedValueOnce(reply(DONE))
+    await expect(soapConsolidateVmDisks(session, "vm-9", onePoll)).resolves.toBeUndefined()
+    expect(bodyOf(0)).toContain("<urn:ConsolidateVMDisks_Task>")
+    expect(bodyOf(0)).toContain('<urn:_this type="VirtualMachine">vm-9</urn:_this>')
+    expect(undiciRequest).toHaveBeenCalledTimes(2)
+  })
+
+  it("throws when vCenter faults the call", async () => {
+    undiciRequest.mockResolvedValueOnce(reply("<faultstring>locked</faultstring>"))
+    await expect(soapConsolidateVmDisks(session, "vm-9", fast)).rejects.toThrow(/Failed to consolidate the disks of vm-9: locked/)
+  })
+
+  it("returns without polling when no task reference comes back", async () => {
+    undiciRequest.mockResolvedValueOnce(reply("<returnval/>"))
+    await expect(soapConsolidateVmDisks(session, "vm-9", fast)).resolves.toBeUndefined()
+    expect(undiciRequest).toHaveBeenCalledTimes(1)
   })
 })

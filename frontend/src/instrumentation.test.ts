@@ -4,6 +4,9 @@ import { Agent, getGlobalDispatcher } from 'undici'
 
 const importDiskAssetsMock = vi.fn()
 const sweepMock = vi.fn()
+const startSamplerMock = vi.fn()
+const startBatchPumpMock = vi.fn()
+const warmCleanupMock = vi.fn(async () => {})
 
 vi.mock('@/lib/branding/importDiskAssets', () => ({
   importDiskAssets: importDiskAssetsMock,
@@ -11,10 +14,15 @@ vi.mock('@/lib/branding/importDiskAssets', () => ({
 
 vi.mock('@/lib/db/prisma', () => ({ prisma: {} }))
 
+vi.mock('@/lib/vdc/usageHistory/sampler', () => ({ startVdcUsageSampler: startSamplerMock }))
+
 vi.mock('@/lib/migration/orphan-sweep', () => ({
   sweepOrphanedMigrationJobs: sweepMock,
   resolveInstanceId: () => 'node-a',
 }))
+
+vi.mock('@/lib/migration/batch-scheduler', () => ({ startBatchPump: startBatchPumpMock }))
+vi.mock('@/lib/migration/warm/orphan-cleanup', () => ({ cleanupOrphanedWarmSources: warmCleanupMock }))
 
 const { register } = await import('./instrumentation')
 
@@ -96,5 +104,75 @@ describe('instrumentation register (orphaned migration sweep)', () => {
     vi.stubEnv('DEMO_MODE', 'true')
     await register()
     expect(sweepMock).not.toHaveBeenCalled()
+  })
+})
+
+// #902: the vDC usage history is collected whether or not anybody opens a page.
+describe('instrumentation register (vDC usage sampler)', () => {
+  beforeEach(() => {
+    importDiskAssetsMock.mockReset()
+    importDiskAssetsMock.mockResolvedValue({ imported: 0, skipped: 0 })
+    sweepMock.mockReset()
+    sweepMock.mockResolvedValue({ owned: 0, foreign: 0, total: 0 })
+    startSamplerMock.mockReset()
+    vi.unstubAllEnvs()
+  })
+
+  it('starts the sampler on the nodejs runtime', async () => {
+    vi.stubEnv('NEXT_RUNTIME', 'nodejs')
+    await register()
+    expect(startSamplerMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('never throws when the sampler cannot start', async () => {
+    vi.stubEnv('NEXT_RUNTIME', 'nodejs')
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    startSamplerMock.mockImplementation(() => { throw new Error('boom') })
+    await expect(register()).resolves.toBeUndefined()
+    expect(error).toHaveBeenCalledWith('[startup] vDC usage sampler failed to start (non-fatal):', expect.any(Error))
+    error.mockRestore()
+  })
+
+  it('does not start in demo mode', async () => {
+    vi.stubEnv('NEXT_RUNTIME', 'nodejs')
+    vi.stubEnv('DEMO_MODE', 'true')
+    await register()
+    expect(startSamplerMock).not.toHaveBeenCalled()
+  })
+})
+
+// roadmap#53: the queue of a bulk migration lives in the database; something
+// has to start its jobs after a restart, and clean what a killed warm run left.
+describe('instrumentation register (bulk migration batches)', () => {
+  beforeEach(() => {
+    importDiskAssetsMock.mockReset()
+    importDiskAssetsMock.mockResolvedValue({ imported: 0, skipped: 0 })
+    sweepMock.mockReset()
+    startBatchPumpMock.mockReset()
+    warmCleanupMock.mockClear()
+    vi.unstubAllEnvs()
+    vi.stubEnv('NEXT_RUNTIME', 'nodejs')
+  })
+
+  it('starts the batch pump', async () => {
+    sweepMock.mockResolvedValue({ owned: 0, foreign: 0, total: 0, jobIds: [] })
+    await register()
+    expect(startBatchPumpMock).toHaveBeenCalledTimes(1)
+    expect(warmCleanupMock).not.toHaveBeenCalled()
+  })
+
+  it('cleans the sources of the jobs the sweep failed', async () => {
+    sweepMock.mockResolvedValue({ owned: 1, foreign: 1, total: 2, jobIds: ['j1', 'j2'] })
+    vi.spyOn(console, 'log').mockImplementation(() => {})
+    await register()
+    expect(warmCleanupMock).toHaveBeenCalledWith(['j1', 'j2'])
+  })
+
+  it('boots when the pump cannot start', async () => {
+    sweepMock.mockResolvedValue({ owned: 0, foreign: 0, total: 0, jobIds: [] })
+    startBatchPumpMock.mockImplementation(() => { throw new Error('boom') })
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    await expect(register()).resolves.toBeUndefined()
+    expect(err).toHaveBeenCalled()
   })
 })

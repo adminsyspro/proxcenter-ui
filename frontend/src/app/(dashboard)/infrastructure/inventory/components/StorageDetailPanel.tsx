@@ -20,6 +20,7 @@ import ChartContainer from '@/components/ChartContainer'
 
 import { formatBytes } from '@/utils/format'
 import { useRBAC } from '@/contexts/RBACContext'
+import { storageResourceId } from '@/lib/rbac/clientScope'
 import { formatBps, formatRrdTick, fetchDetails } from '../helpers'
 import ExpandableChart from './ExpandableChart'
 import StorageContentGroup from './StorageContentGroup'
@@ -104,13 +105,19 @@ export default function StorageDetailPanel({
 }: StorageDetailPanelProps) {
   const t = useTranslations()
   const theme = useTheme()
-  // Write controls follow the rights their routes enforce (#920).
-  const { hasPermission } = useRBAC()
-  const canUpload = hasPermission('storage.upload')
-  const canDelete = hasPermission('storage.delete')
+  // Content type of the section whose upload button opened the dialog.
+  const [storageUploadType, setStorageUploadType] = React.useState<string | undefined>()
+  // Write controls follow the rights their routes enforce (#920), judged on
+  // THIS storage: a storage-scoped grant opens the storages it names and no
+  // other (#921).
+  const { hasPermissionOn } = useRBAC()
 
   const si = data.storageInfo
   if (!si) return null
+
+  const storageRes = storageResourceId(si.connId, si.storage)
+  const canUpload = hasPermissionOn('storage.upload', 'storage', storageRes)
+  const canDelete = hasPermissionOn('storage.delete', 'storage', storageRes)
 
   const isCeph = isCephStorage(si.type)
   const typeLabels: Record<string, string> = {
@@ -695,7 +702,7 @@ export default function StorageDetailPanel({
               group={group}
               formatBytes={formatBytes}
               vmNames={vmNamesMap}
-              onUpload={canUpload && ['iso', 'snippets', 'vztmpl', 'import'].includes(contentType) ? () => setStorageUploadOpen(true) : undefined}
+              onUpload={canUpload && ['iso', 'snippets', 'vztmpl', 'import'].includes(contentType) ? () => { setStorageUploadType(contentType); setStorageUploadOpen(true) } : undefined}
               onDownloadTemplate={canUpload && contentType === 'vztmpl' ? () => setTemplateDialogOpen(true) : undefined}
               onDelete={canDelete ? async (volid: string) => {
                 const res = await fetch(
@@ -732,6 +739,7 @@ export default function StorageDetailPanel({
           node={si.node}
           storage={si.storage}
           contentTypes={si.content || []}
+          initialContentType={storageUploadType}
           onUploaded={() => {
             setStorageUploadOpen(false)
             if (selection) void fetchDetails(selection).then(setData)

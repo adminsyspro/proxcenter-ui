@@ -120,4 +120,61 @@ describe('uploadFileToStorage', () => {
     const { uploadId } = await uploadFileToStorage({ ...ARGS, file: fakeFile(10) })
     expect(uploadId).toMatch(/^\d+-(ab){16}$/)
   })
+
+  describe('behind a reverse proxy that gives up first (roadmap#55)', () => {
+    beforeEach(() => { vi.useFakeTimers() })
+    afterEach(() => { vi.useRealTimers() })
+
+    it('sends a chunk again after a proxy 504 or a network error, with its body', async () => {
+      responses = [{ status: 504, json: false }, { status: 200 }, { status: 200 }]
+      vi.mocked(fetch).mockImplementationOnce(async () => { throw new TypeError('Failed to fetch') })
+
+      const done = uploadFileToStorage({ ...ARGS, file: fakeFile(10) })
+      await vi.runAllTimersAsync()
+      await done
+
+      // network error, 504, then the accepted chunk, then finalize
+      expect(vi.mocked(fetch)).toHaveBeenCalledTimes(4)
+      expect(calls.map((c) => c.headers['X-Chunk-Index'])).toEqual(['0', '0', undefined])
+      expect(calls.slice(0, 2).map((c) => c.bodySize)).toEqual([10, 10])
+    })
+
+    it('asks again without the body after a 202, the server already holding the chunk', async () => {
+      responses = [{ status: 202 }, { status: 202 }, { status: 200 }, { status: 200 }]
+
+      await uploadFileToStorage({ ...ARGS, file: fakeFile(10) })
+
+      expect(calls.map((c) => c.bodySize)).toEqual([10, null, null, null])
+      expect(calls.slice(0, 3).every((c) => c.headers['X-Chunk-Index'] === '0')).toBe(true)
+    })
+
+    it('gives up after four retries and reports the last status', async () => {
+      responses = Array.from({ length: 5 }, () => ({ status: 504, json: false }))
+
+      const done = uploadFileToStorage({ ...ARGS, file: fakeFile(10) })
+      const outcome = expect(done).rejects.toThrow('Chunk 0 failed: HTTP 504')
+      await vi.runAllTimersAsync()
+      await outcome
+      expect(calls).toHaveLength(5)
+    })
+
+    it('does not retry a refusal of the route itself', async () => {
+      responses = [{ status: 409, body: { error: 'The upload was interrupted on the server side. Start it again.' } }]
+
+      await expect(uploadFileToStorage({ ...ARGS, file: fakeFile(10) })).rejects.toThrow('interrupted on the server side')
+      expect(calls).toHaveLength(1)
+    })
+
+    it('stops waiting between retries as soon as the upload is aborted', async () => {
+      responses = [{ status: 504, json: false }]
+      const ctrl = new AbortController()
+
+      const done = uploadFileToStorage({ ...ARGS, file: fakeFile(10), signal: ctrl.signal })
+      const outcome = expect(done).rejects.toThrow('stopped')
+      await vi.advanceTimersByTimeAsync(10)
+      ctrl.abort(new Error('stopped'))
+      await outcome
+      expect(calls).toHaveLength(1)
+    })
+  })
 })

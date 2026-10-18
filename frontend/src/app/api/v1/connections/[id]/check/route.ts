@@ -63,7 +63,7 @@ export async function POST(
 
     const managedHosts = await prisma.managedHost.findMany({
       where: { connectionId: id },
-      select: { node: true, ip: true, enabled: true, sshAddress: true, sshPort: true },
+      select: { node: true, ip: true, ipVerified: true, enabled: true, sshAddress: true, sshPort: true },
     })
 
     const ssh: CheckContext["ssh"] = {
@@ -95,7 +95,7 @@ export async function POST(
       },
       fallbackHosts: managedHosts
         .filter(h => h.enabled && h.ip)
-        .map(h => ({ node: h.node, ip: h.ip as string })),
+        .map(h => ({ node: h.node, ip: h.ip as string, verified: h.ipVerified })),
       pinnedFingerprint: row.fingerprint || null,
       ssh,
     }

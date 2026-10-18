@@ -3,6 +3,7 @@
  */
 
 import { MIGRATION_CPU_TYPE_DEFAULT } from "./cpu-type"
+import { applyHardwareOverrides, buildNetValue, resolveNicTarget, type MigrationTargetOverrides } from "./target-overrides"
 
 export interface V2vVmConfig {
   name: string
@@ -15,6 +16,8 @@ export interface V2vVmConfig {
   scsihw: string // virtio-scsi-single
   nics: { model: string; mac?: string }[]
   disks: { file: string; format: string; device: string }[]
+  /** Set from the vCenter source config: the guest had a vTPM (roadmap#1). */
+  hasVtpm?: boolean
 }
 
 function trimDotsAndDashes(value: string): string {
@@ -246,6 +249,10 @@ export function parseV2vXml(xmlString: string): V2vVmConfig {
  * validated by the API route (1-4094); we still treat anything outside that
  * range as a no-op so a misconfigured caller can't produce a syntactically
  * invalid net string that pvesh would reject at create time.
+ *
+ * `overrides` (#317): the operator's hardware (cores, sockets, memory) wins
+ * over the virt-v2v values, and a per-NIC mapping picks the bridge, tag and
+ * model of `netN`; a NIC without a mapping lands on `networkBridge`.
  */
 export function buildPveCreateParams(
   config: V2vVmConfig,
@@ -253,8 +260,9 @@ export function buildPveCreateParams(
   networkBridge: string,
   vlanTag?: number,
   cpuType: string = MIGRATION_CPU_TYPE_DEFAULT,
+  overrides?: MigrationTargetOverrides,
 ): Record<string, any> {
-  const params: Record<string, any> = {
+  const params: Record<string, any> = applyHardwareOverrides({
     vmid,
     name: config.name,
     ostype: config.ostype,
@@ -267,26 +275,18 @@ export function buildPveCreateParams(
     machine: config.machine,
     boot: 'order=scsi0',
     agent: 'enabled=0',
-  }
-
-  const tagSuffix =
-    typeof vlanTag === 'number' && Number.isInteger(vlanTag) && vlanTag >= 1 && vlanTag <= 4094
-      ? `,tag=${vlanTag}`
-      : ''
+  }, overrides?.hardware)
 
   // Network interfaces
   config.nics.forEach((nic, i) => {
-    let netValue = `${nic.model},bridge=${networkBridge}`
-    if (nic.mac) {
-      netValue += `,macaddr=${nic.mac}`
-    }
-    netValue += tagSuffix
-    params[`net${i}`] = netValue
+    const target = resolveNicTarget(i, overrides?.nics, { bridge: networkBridge, vlanTag })
+    params[`net${i}`] = buildNetValue(target.model ?? nic.model, target.bridge, nic.mac, target.vlanTag)
   })
 
   // If no NICs were found, add a default virtio NIC
   if (config.nics.length === 0) {
-    params.net0 = `virtio,bridge=${networkBridge}${tagSuffix}`
+    const target = resolveNicTarget(0, overrides?.nics, { bridge: networkBridge, vlanTag })
+    params.net0 = buildNetValue(target.model ?? 'virtio', target.bridge, undefined, target.vlanTag)
   }
 
   return params

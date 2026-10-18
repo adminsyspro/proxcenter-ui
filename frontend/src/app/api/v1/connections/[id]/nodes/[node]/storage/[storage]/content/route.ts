@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
-import { checkPermission, guestPerimeterAllows, PERMISSIONS } from "@/lib/rbac"
+import { buildStorageResourceId, checkPermission, guestPerimeterAllows, PERMISSIONS } from "@/lib/rbac"
 import { getCurrentTenantId } from "@/lib/tenant"
 import { getTenantInfrastructureScope, maskingScope } from "@/lib/tenant/infraScope"
 import { isLibraryOnlyStorage, loadTenantSlugs, resolveUploadOwner } from "@/lib/vdc/scope"
@@ -29,8 +29,10 @@ export async function GET(
     // Flat-scoped callers (vm/tag/pool) never match a connection resource, so
     // the ISO picker of the creation wizard used to 403 (issue #262). The vDC
     // storage mask below still applies to them unchanged. Browsing is its own
-    // right (issue #920): every built-in role holding vm.view carries it.
-    const denied = await checkPermission(PERMISSIONS.STORAGE_CONTENT, "connection", id)
+    // right (issue #920): every built-in role holding vm.view carries it. The
+    // resource is the storage itself (issue #921): a connection grant still
+    // covers it, a `storage` scope covers this storage and no other.
+    const denied = await checkPermission(PERMISSIONS.STORAGE_CONTENT, "storage", buildStorageResourceId(id, storage))
 
     if (denied && !(await guestPerimeterAllows(id, PERMISSIONS.STORAGE_CONTENT))) return denied
 

@@ -10,7 +10,7 @@ export type RoleScopeEntry = { scopeType: string; scopeTarget: string }
 
 // Scope types a role default scope may carry — mirrors ROLE_DEFAULT_SCOPE_TYPES
 // on the backend (no global, no inherit).
-const TYPES = ['tag', 'pool', 'node', 'connection', 'vm'] as const
+const TYPES = ['tag', 'pool', 'node', 'connection', 'vm', 'storage'] as const
 
 const typeIcon: Record<string, string> = {
   tag: 'ri-price-tag-3-line',
@@ -18,6 +18,7 @@ const typeIcon: Record<string, string> = {
   node: 'ri-computer-line',
   connection: 'ri-server-line',
   vm: 'ri-instance-line',
+  storage: 'ri-hard-drive-3-line',
 }
 
 /**
@@ -38,16 +39,25 @@ export default function RoleDefaultScopeEditor({
   const [type, setType] = useState<string>('tag')
   const [target, setTarget] = useState<string>('')
 
+  // Storage targets come from /api/v1/storage (issue #921): the inventory
+  // payload carries no storage, so the rows are attached to it as `storages`.
+  const [storages, setStorages] = useState<any[]>([])
+
   useEffect(() => {
     let active = true
     fetch('/api/v1/inventory')
       .then(r => r.json())
       .then(d => { if (active) setInventory(d?.data ?? d) })
       .catch(() => {})
+    fetch('/api/v1/storage')
+      .then(r => (r.ok ? r.json() : { data: [] }))
+      .then(d => { if (active) setStorages(Array.isArray(d?.data) ? d.data : []) })
+      .catch(() => {})
     return () => { active = false }
   }, [])
 
-  const options = useMemo(() => buildScopeOptions(inventory, type, t), [inventory, type, t])
+  const inventoryWithStorages = useMemo(() => (inventory ? { ...inventory, storages } : inventory), [inventory, storages])
+  const options = useMemo(() => buildScopeOptions(inventoryWithStorages, type, t), [inventoryWithStorages, type, t])
 
   const has = (st: string, tgt: string) => value.some(s => s.scopeType === st && s.scopeTarget === tgt)
 
@@ -131,7 +141,7 @@ export default function RoleDefaultScopeEditor({
               key={`${s.scopeType}:${s.scopeTarget}`}
               size='small'
               icon={<i className={typeIcon[s.scopeType] || 'ri-price-tag-3-line'} style={{ fontSize: 14 }} />}
-              label={`${labelFor(s.scopeType)}: ${resolveScopeTargetLabel(inventory, s.scopeType, s.scopeTarget, t)}`}
+              label={`${labelFor(s.scopeType)}: ${resolveScopeTargetLabel(inventoryWithStorages, s.scopeType, s.scopeTarget, t)}`}
               onDelete={() => remove(s.scopeType, s.scopeTarget)}
               variant='outlined'
             />

@@ -57,6 +57,16 @@ const upstreamStatus = {
     { connection_id: 'mine', nodes: ['n1'], guests: 2, spread: 0 },
     { connection_id: 'theirs', nodes: ['their-node-a', 'their-node-b'], guests: 5, spread: 12.5 },
     { nodes: ['n9'], guests: 1, spread: 0 }
+  ],
+  restricted_guests: [
+    { connection_id: 'mine', vmid: 9501, name: 'stor-a', node: 'n1', nodes: ['n1', 'n2'], limits: [{ kind: 'storage', resource: 'CephTwo', nodes: ['n1', 'n2'] }] },
+    { connection_id: 'theirs', vmid: 501, name: 'their-restricted-vm', node: 'their-node', nodes: ['their-node'], limits: [] },
+    { vmid: 778, name: 'orphan-restricted', node: 'n9', nodes: ['n9'], limits: [] }
+  ],
+  excluded_guests: [
+    { connection_id: 'mine', vmid: 9190, name: 'excl', node: 'n1', reason: 'tag', detail: 'pxc_ignore' },
+    { connection_id: 'theirs', vmid: 502, name: 'their-excluded-vm', node: 'their-node', reason: 'tag' },
+    { vmid: 779, name: 'orphan-excluded', node: 'n9', reason: 'local_disks' }
   ]
 }
 
@@ -96,6 +106,17 @@ describe('GET /api/v1/orchestrator/drs/status tenant scoping', () => {
 
     expect(body.balancing_domains).toHaveLength(1)
     expect(body.balancing_domains[0].nodes).toEqual(['n1'])
+  })
+
+  it('keeps only the restricted and excluded guests of the caller s connections', async () => {
+    const { GET } = await import('./route')
+    const body = await readBody(await callRoute(GET as any))
+
+    expect(body.restricted_guests.map((g: any) => g.vmid)).toEqual([9501])
+    expect(body.excluded_guests.map((g: any) => g.vmid)).toEqual([9190])
+    expect(JSON.stringify(body)).not.toContain('their-restricted-vm')
+    expect(JSON.stringify(body)).not.toContain('their-excluded-vm')
+    expect(JSON.stringify(body)).not.toContain('orphan-')
   })
 
   it('drops a row with no connection_id rather than showing it to everyone', async () => {
@@ -200,6 +221,51 @@ describe('GET /api/v1/orchestrator/drs/status RBAC infra scoping', () => {
 
     expect(body.pinned_guests).toHaveLength(3)
     expect(body.balancing_domains).toHaveLength(3)
+  })
+
+  it('never names an invisible node through a limiting resource', async () => {
+    rbacScopeMock.mockResolvedValue(nodeScopedToN1)
+    getDRSStatusMock.mockResolvedValue({
+      data: {
+        enabled: true,
+        restricted_guests: [{
+          connection_id: 'mine',
+          vmid: 9101,
+          name: 'dmz-a',
+          node: 'n1',
+          nodes: ['n1'],
+          // The storage also exists on n2, a node this caller has no grant on.
+          limits: [{ kind: 'storage', resource: 'ceph-a', nodes: ['n1', 'n2'] }]
+        }]
+      }
+    })
+    const { GET } = await import('./route')
+    const body = await readBody(await callRoute(GET as any))
+
+    expect(body.restricted_guests).toHaveLength(1)
+    expect(body.restricted_guests[0].limits[0].nodes).toEqual(['n1'])
+    expect(JSON.stringify(body)).not.toContain('n2')
+  })
+
+  it('serves the free-text reason of a pinned guest only to a caller who sees the whole connection', async () => {
+    getDRSStatusMock.mockResolvedValue({
+      data: {
+        enabled: true,
+        pinned_guests: [{ connection_id: 'mine', vmid: 9101, name: 'dmz-a', node: 'n1', reason: 'network unavailable on node "n2"' }]
+      }
+    })
+    const { GET } = await import('./route')
+
+    rbacScopeMock.mockResolvedValue(nodeScopedToN1)
+    const scoped = await readBody(await callRoute(GET as any))
+
+    expect(scoped.pinned_guests[0].reason).toBe('')
+    expect(JSON.stringify(scoped)).not.toContain('n2')
+
+    rbacScopeMock.mockResolvedValue({ ...nodeScopedToN1, fullConnections: new Set(['mine']) })
+    const whole = await readBody(await callRoute(GET as any))
+
+    expect(whole.pinned_guests[0].reason).toContain('n2')
   })
 
   it('drops a domain that names no node at all', async () => {

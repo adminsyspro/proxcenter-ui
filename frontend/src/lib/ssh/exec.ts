@@ -2,6 +2,7 @@ import { Client } from "ssh2"
 import { Agent } from "undici"
 import { prisma } from "@/lib/db/prisma"
 import { decryptSecret } from "@/lib/crypto/secret"
+import { isConnectionLicenseExcluded, licenseExcludedError, PveLicenseExcludedError } from "@/lib/license/exclusions"
 import { safeLog } from "@/lib/log/sanitize"
 import { orchestratorHeaders } from "@/lib/orchestrator/headers"
 import { makeHostVerifier } from "@/lib/ssh/host-key-store"
@@ -58,6 +59,11 @@ export interface SSHExecOpts {
   /** Called with each stdout/stderr chunk as it streams (e.g. to log live dd
    *  progress). Only honoured on the ssh2 path. */
   onData?: (chunk: string) => void
+  /** The command only reads (a probe, a sysfs or log read, a screendump), so
+   *  it may run on a connection outside the license, where every other
+   *  command is refused (roadmap#58). A caller vouches for its own command;
+   *  in doubt, leave it unset and the command is refused there. */
+  readOnly?: boolean
 }
 
 /**
@@ -162,6 +168,13 @@ export async function executeSSH(
   timeoutMs: number = 30_000,
   execOpts: SSHExecOpts = {}
 ): Promise<SSHResult> {
+  // A connection outside the license is read-only for ProxCenter
+  // (roadmap#58): only a command its caller vouches for as read-only may run
+  // there. Decided first, before any credential is read or any call is made.
+  if (!execOpts.readOnly && await isConnectionLicenseExcluded(connectionId)) {
+    throw await licenseExcludedError(connectionId)
+  }
+
   // Load via the global (unscoped) prisma. SSH credentials live on the
   // connection record owned by the provider tenant; a tenant in vDC mode
   // legitimately needs to reach those credentials to run commands on
@@ -254,7 +267,7 @@ export async function executeSSH(
 
   // 1. Try orchestrator
   try {
-    const body: Record<string, unknown> = { host: nodeIp, port, user, command: finalCommand }
+    const body: Record<string, unknown> = { host: nodeIp, port, user, command: finalCommand, connectionId }
     if (key) body.key = key
     if (password) body.password = password
     if (passphrase) body.passphrase = passphrase
@@ -275,6 +288,11 @@ export async function executeSSH(
 
     const err = await res.json().catch(() => ({}))
     const errMsg = err?.error || res.statusText
+    // The orchestrator's license refusal is not a whitelist miss: re-running a
+    // write over ssh2 would bypass it. A read the caller vouched for may go on.
+    if (err?.code === "CONNECTION_LICENSE_EXCLUDED" && !execOpts.readOnly) {
+      throw await licenseExcludedError(connectionId)
+    }
     // If orchestrator rejects the command (whitelist), fall through to direct ssh2
     if (errMsg.includes('not allowed') || errMsg.includes('not permitted') || res.status === 403) {
       console.log(`[ssh] orchestrator rejected command, falling back to ssh2 for ${safeLog(nodeIp)}`)
@@ -282,6 +300,7 @@ export async function executeSSH(
       return { success: false, error: errMsg }
     }
   } catch (err) {
+    if (err instanceof PveLicenseExcludedError) throw err
     // A fetch timeout (AbortSignal.timeout) is NOT "unreachable": the orchestrator
     // may have already run, or be running, the command. Re-running it over ssh2
     // would risk a second multi-hour operation, so surface the timeout instead of

@@ -12,7 +12,8 @@ import { pveFetch } from "@/lib/proxmox/client"
 import { downloadToStorage } from "@/lib/proxmox/download"
 import { selectDownloadStorage } from "@/lib/templates/downloadStorage"
 import { customImageToCloudImage } from "@/lib/templates/cloudImages"
-import { findCustomImageForTenant } from "@/lib/templates/customImageScope"
+import { findCustomImageForTenant, isProviderImageSlug } from "@/lib/templates/customImageScope"
+import { findBlueprintForTenant, CATALOG_NOT_GRANTED_IMAGE, CATALOG_NOT_GRANTED_BLUEPRINT } from "@/lib/templates/catalogGrants"
 import { authorizeImageVolume, imageSourceForConnection, SourceVolumeError, type ImageVolumeSource } from '@/lib/templates/sourceVolume'
 import { resolveBuiltInImage } from "@/lib/templates/catalogStore"
 import { supportsVmDisks } from "@/lib/proxmox/storage"
@@ -24,10 +25,11 @@ import { allocateIp, releaseIp, IpamExhaustedError } from "@/lib/vdc/ipam"
 import { scanUsedIpsForSubnet, scannedToIntSet } from "@/lib/vdc/ipamScan"
 import { parseCidr } from "@/lib/vdc/network"
 import { waitForTask } from "@/lib/proxmox/tasks"
-import { getVdcScope, writableStoragesFor, readOnlyLibraryError } from "@/lib/vdc/scope"
+import { getVdcScope, writableStoragesFor, stagingStoragesFor, readOnlyLibraryError } from "@/lib/vdc/scope"
 import { policyQosSuffix } from "@/lib/vdc/drives"
 import { DEFAULT_TENANT_ID } from "@/lib/tenant"
 import { checkVmidAgainstTenantRange } from "@/lib/tenant/vmidRange"
+import { resolveProviderVdcTarget, type ProviderVdcTarget } from "@/lib/vdc/providerTarget"
 
 export const runtime = "nodejs"
 
@@ -36,6 +38,10 @@ type DeploymentStatus = "pending" | "downloading" | "creating" | "configuring" |
 // No cluster names here: the copies may sit on clusters the caller cannot see.
 // The wizard names the ones it can, from its own connection list.
 const IMAGE_NOT_ON_CLUSTER = 'This image has no copy on the selected cluster. Pick a cluster that holds one, or ask the image owner to add this cluster to the image.'
+
+function targetAuditDetails(target: ProviderVdcTarget | null) {
+  return target ? { targetVdcId: target.vdcId, targetTenantId: target.tenantId } : {}
+}
 
 async function updateDeployment(id: string, status: DeploymentStatus, extra: Record<string, any> = {}) {
   const prisma = await getSessionPrisma()
@@ -73,42 +79,28 @@ export async function POST(req: Request) {
 
     const body = parseResult.data
 
-    // Resolve image: built-in first, then custom from DB
-    const tenantId = await getCurrentTenantId()
+    // Two tenants are in play. The caller's own (callerTenantId) owns the
+    // deployment record, the catalogue it picked the image from and any
+    // blueprint it saves. The tenant the guest is deployed FOR (tenantId)
+    // carries every placement rule below. They differ only when a provider
+    // administrator targets a tenant vDC explicitly (roadmap#65).
+    const callerTenantId = await getCurrentTenantId()
+    let tenantId = callerTenantId
+    let target: ProviderVdcTarget | null = null
+    if (body.targetVdcId) {
+      const resolved = await resolveProviderVdcTarget(body.targetVdcId)
+      if (!resolved.ok) return resolved.response
+      if (resolved.target.connectionId !== body.connectionId) {
+        return NextResponse.json({ error: 'The target vDC is not on this connection.' }, { status: 400 })
+      }
+      target = resolved.target
+      tenantId = target.tenantId
+    }
 
     // MSP VMID range: template/ISO deployments create brand-new guests too.
     const vmidRangeCheck = await checkVmidAgainstTenantRange(tenantId, Number(body.vmid))
     if (!vmidRangeCheck.ok) {
       return NextResponse.json({ error: vmidRangeCheck.error }, { status: vmidRangeCheck.status ?? 400 })
-    }
-
-    let image = (await resolveBuiltInImage(body.imageSlug)) as any
-    let isCustom = false
-    let sourceType = 'url'
-    let volumeId: string | null = null
-    let volumeSource: ImageVolumeSource | null = null
-
-    if (!image) {
-      // Same scope as the catalogue: the tenant's own images plus the
-      // provider's shared entries. Looking only under the caller's tenant
-      // refused every shared template with "Unknown image slug".
-      const customRow = await findCustomImageForTenant(tenantId, body.imageSlug)
-      if (!customRow) {
-        return NextResponse.json({ error: "Unknown image slug" }, { status: 400 })
-      }
-      image = customImageToCloudImage(customRow)
-      isCustom = true
-      sourceType = customRow.sourceType
-      volumeId = customRow.volumeId
-      if (sourceType === 'volume') {
-        // A volume image deploys from the copy held by the target cluster:
-        // its source, or one its owner declared on another cluster (#44).
-        volumeSource = imageSourceForConnection(customRow, body.connectionId)
-        if (!volumeSource) {
-          return NextResponse.json({ error: IMAGE_NOT_ON_CLUSTER }, { status: 400 })
-        }
-        volumeId = volumeSource.volumeId ?? null
-      }
     }
 
     // Resolve the tenant's vDC for this connection+node so we can pin
@@ -128,12 +120,77 @@ export async function POST(req: Request) {
       vdcInfo = await resolveVdcForTenant(tenantId, body.connectionId, body.node)
     } catch (e: any) {
       if (e?.message === 'NODE_NOT_AUTHORIZED') {
-        return NextResponse.json({ error: 'This node is not authorized for your vDC' }, { status: 403 })
+        return NextResponse.json({ error: target ? 'This node is not authorized for the target vDC' : 'This node is not authorized for your vDC' }, { status: 403 })
       }
       throw e
     }
     if (isTenant && !vdcInfo) {
       return NextResponse.json({ error: 'No vDC on this connection — deploy not allowed' }, { status: 403 })
+    }
+    // A tenant holds one vDC per connection, so this only trips on a vDC
+    // disabled or moved between the two lookups.
+    if (target && vdcInfo?.vdcId !== target.vdcId) {
+      return NextResponse.json({ error: 'The target vDC is not available on this connection.' }, { status: 409 })
+    }
+
+    // Resolve the image: built-in first, then a custom row within the
+    // caller's scope. The scope is the catalogue's (customImageScope): the
+    // tenant's own images, the provider's shared entries, and the provider
+    // entries granted to the tenant or to the TARGET vDC (#903). Looking only
+    // under the caller's tenant used to refuse every shared template with
+    // "Unknown image slug"; a provider slug outside the grants is a 403, so a
+    // revoked entry is refused here and not only hidden from the list.
+    let image = (await resolveBuiltInImage(body.imageSlug)) as any
+    let isCustom = false
+    // Built-in and provider catalogue images are provider content; a tenant's
+    // own image is not, which narrows where it may be staged (#1120).
+    let providerContent = true
+    // Base name of the file a custom URL image is staged under. Keyed on the
+    // image id, not on its slug: slugs are only unique per tenant, so
+    // `custom-<tenant>-<name>` of one tenant can equal another tenant's or a
+    // provider image's, and an existing staged file is reused without being
+    // downloaded again. A cuid has no '-', so this name never falls in a
+    // tenant's `custom-<slug>-` namespace either (#1120).
+    let stagingName: string | null = null
+    let sourceType = 'url'
+    let volumeId: string | null = null
+    let volumeSource: ImageVolumeSource | null = null
+    const grantScope = { vdcId: vdcInfo?.vdcId ?? null }
+
+    if (!image) {
+      const customRow = await findCustomImageForTenant(callerTenantId, body.imageSlug, grantScope)
+      if (!customRow) {
+        if (callerTenantId !== DEFAULT_TENANT_ID && await isProviderImageSlug(body.imageSlug)) {
+          return NextResponse.json({ error: CATALOG_NOT_GRANTED_IMAGE }, { status: 403 })
+        }
+        return NextResponse.json({ error: "Unknown image slug" }, { status: 400 })
+      }
+      image = customImageToCloudImage(customRow)
+      isCustom = true
+      providerContent = customRow.tenantId === DEFAULT_TENANT_ID
+      stagingName = `custom-${customRow.id}`
+      sourceType = customRow.sourceType
+      volumeId = customRow.volumeId
+      if (sourceType === 'volume') {
+        // A volume image deploys from the copy held by the target cluster:
+        // its source, or one its owner declared on another cluster (#44).
+        volumeSource = imageSourceForConnection(customRow, body.connectionId)
+        if (!volumeSource) {
+          return NextResponse.json({ error: IMAGE_NOT_ON_CLUSTER }, { status: 400 })
+        }
+        volumeId = volumeSource.volumeId ?? null
+      }
+    }
+
+    // A deployment "from a blueprint" is authorised on the blueprint too, not
+    // only on the image it names (#903): the recipe must be the caller's own,
+    // shared, or granted to the tenant or to the target vDC.
+    let blueprintRow: Awaited<ReturnType<typeof findBlueprintForTenant>> = null
+    if (body.blueprintId) {
+      blueprintRow = await findBlueprintForTenant(callerTenantId, String(body.blueprintId), grantScope)
+      if (!blueprintRow) {
+        return NextResponse.json({ error: CATALOG_NOT_GRANTED_BLUEPRINT }, { status: 403 })
+      }
     }
 
     // vDC compute policy (#893). The policy constrains what the tenant
@@ -154,14 +211,9 @@ export async function POST(req: Request) {
             .catch(() => undefined)
         : undefined
       let trustedModel: string | null = null
-      if (body.blueprintId) {
-        try {
-          const bp = await prisma.blueprint.findUnique({ where: { id: String(body.blueprintId) }, select: { hardware: true, tenantId: true } })
-          const bpHw = bp?.hardware as { cpu?: unknown } | null
-          if (bp?.tenantId === DEFAULT_TENANT_ID && typeof bpHw?.cpu === 'string') trustedModel = parseCpuProperty(bpHw.cpu).model || null
-        } catch {
-          trustedModel = null
-        }
+      if (blueprintRow) {
+        const bpHw = blueprintRow.hardware as { cpu?: unknown } | null
+        if (blueprintRow.tenantId === DEFAULT_TENANT_ID && typeof bpHw?.cpu === 'string') trustedModel = parseCpuProperty(bpHw.cpu).model || null
       }
       const allowed = resolveAllowedCpuModels(policy, caps)
       const requestedModel = parseCpuProperty(requestedCpu).model
@@ -182,7 +234,7 @@ export async function POST(req: Request) {
     // `if (isTenant)` scope block: provider deploys never fetch scope, so
     // this stays '' for them by construction.
     let dataDiskQosSuffix = ''
-    let tenantWritableStorages: Set<string> | null = null
+    let tenantStagingStorages: Set<string> | null = null
 
     // vDC quota enforcement. Mirrors the create-VM route on
     // /connections/[id]/guests/[type]/[node] so a tenant can't bypass
@@ -224,7 +276,9 @@ export async function POST(req: Request) {
     // already enforces this client-side, but the API contract has to
     // hold against forged payloads too.
     if (isTenant) {
-      const scope = await getVdcScope(tenantId)
+      // A provider targeting a vDC has no view context of that tenant: read
+      // the tenant's whole scope, which holds one vDC on this connection.
+      const scope = await getVdcScope(tenantId, target ? { ignoreVdcContext: true } : undefined)
       if (!scope) {
         return NextResponse.json({ error: 'Tenant vDC scope not resolved' }, { status: 403 })
       }
@@ -232,7 +286,7 @@ export async function POST(req: Request) {
       // set so a read-only ISO library (#894) is refused even when visible.
       const visibleStorages = scope.storagesByConnection.get(body.connectionId) ?? new Set<string>()
       const writableStorages = writableStoragesFor(scope, body.connectionId)
-      tenantWritableStorages = writableStorages
+      tenantStagingStorages = stagingStoragesFor(scope, body.connectionId, providerContent)
       if (!writableStorages.has(body.storage)) {
         return NextResponse.json(
           { error: visibleStorages.has(body.storage) ? readOnlyLibraryError(body.storage) : `Storage "${body.storage}" is not authorised for this tenant.` },
@@ -278,7 +332,7 @@ export async function POST(req: Request) {
       }
     }
 
-    if (tenantId !== DEFAULT_TENANT_ID) {
+    if (callerTenantId !== DEFAULT_TENANT_ID) {
       const hw = body.hardware
       // Mirror every NIC the pipeline can build: the ISO path pins
       // body.staticMac into the model token (see the IPAM reservation below).
@@ -293,7 +347,7 @@ export async function POST(req: Request) {
     const conn = await getConnectionById(body.connectionId)
 
     if (volumeSource) {
-      await authorizeImageVolume({ tenantId, source: volumeSource, target: { connectionId: body.connectionId, node: body.node }, publishedImage: volumeSource })
+      await authorizeImageVolume({ tenantId: callerTenantId, source: volumeSource, target: { connectionId: body.connectionId, node: body.node }, publishedImage: volumeSource })
     }
 
     const deploymentConfig = {
@@ -301,6 +355,9 @@ export async function POST(req: Request) {
       vmName: body.vmName,
       hardware: body.hardware,
       cloudInit: body.cloudInit,
+      // Kept for the history and for a retry, which must land in the same
+      // vDC. The record itself stays the caller's, where its progress is read.
+      ...(target ? { targetVdcId: target.vdcId } : {}),
     }
 
     // Create deployment record
@@ -356,7 +413,7 @@ export async function POST(req: Request) {
         if (volumeSource) {
           // Recheck before the background worker writes to PVE. A source
           // that disappeared or changed ownership must never be imported.
-          const currentRow = await findCustomImageForTenant(tenantId, body.imageSlug)
+          const currentRow = await findCustomImageForTenant(callerTenantId, body.imageSlug, grantScope)
           const currentSource = currentRow && imageSourceForConnection(currentRow, body.connectionId)
           if (!currentSource || currentSource.sourceType !== 'volume'
             || currentSource.volumeId !== volumeSource.volumeId
@@ -365,7 +422,7 @@ export async function POST(req: Request) {
             || currentSource.format !== volumeSource.format) {
             throw new SourceVolumeError('The source image changed. Start the deployment again.')
           }
-          await authorizeImageVolume({ tenantId, source: currentSource, target: { connectionId: body.connectionId, node: body.node }, publishedImage: currentSource })
+          await authorizeImageVolume({ tenantId: callerTenantId, source: currentSource, target: { connectionId: body.connectionId, node: body.node }, publishedImage: currentSource })
         }
         // ─────────── ISO branch ───────────────────────────────────────
         // Stops at the "creating" step (no cloud-init, no start). The VM
@@ -379,9 +436,11 @@ export async function POST(req: Request) {
             body,
             image,
             isCustom,
+            stagingName,
             sourceType,
             volumeId,
             vdcInfo,
+            target,
             dataDiskQosSuffix,
             onIpamAllocation: (alloc) => { ipamAllocation = alloc },
           })
@@ -403,13 +462,11 @@ export async function POST(req: Request) {
           //  - Built-in images (Ubuntu official, etc.): keep the upstream
           //    filename so all tenants share the same downloaded artefact
           //    (natural deduplication on the same PVE storage).
-          //  - Custom images: derive from the slug, which is already
-          //    tenant-prefixed for private images (e.g. `custom-acme-myapp`)
-          //    by the POST /custom-images route. Two tenants that upload the
-          //    same source URL therefore land in distinct files and can't
-          //    overwrite each other's image on a shared storage.
+          //  - Custom images: derive from the image id (`stagingName`), so
+          //    two images never share a staged file, even when their slugs
+          //    collide across tenants.
           const rawFilename = isCustom
-            ? `${image.slug}.${image.format}`
+            ? `${stagingName}.${image.format}`
             : (image.downloadUrl.split("/").pop() || `${image.slug}.${image.format}`)
           // PVE import content type requires .qcow2/.raw/.vmdk extension — rename .img to .qcow2
           const urlFilename = rawFilename.replace(/\.img$/, ".qcow2")
@@ -448,11 +505,12 @@ export async function POST(req: Request) {
             conn,
             `/nodes/${encodeURIComponent(body.node)}/storage`,
           )
-          const downloadStorage = selectDownloadStorage(nodeStorages, body.storage, tenantWritableStorages)
+          const downloadStorage = selectDownloadStorage(nodeStorages, body.storage, tenantStagingStorages)
           if (!downloadStorage) {
             throw new Error(
               `No active, writable file-based storage with Import content enabled is available on node '${body.node}'. ` +
-              `Ask your Proxmox administrator to configure an import storage and, for a tenant, allow it in the vDC. ` +
+              `Ask your Proxmox administrator to configure an import storage and, for a tenant, add it to the vDC ` +
+              `(as an ISO library, or a storage policy). ` +
               `ProxCenter does not change storage content types automatically.`,
             )
           }
@@ -676,7 +734,7 @@ export async function POST(req: Request) {
           resourceType: "vm",
           resourceId: String(body.vmid),
           resourceName: body.vmName || `${image.slug}-${body.vmid}`,
-          details: { imageSlug: body.imageSlug, node: body.node, connectionId: body.connectionId },
+          details: { imageSlug: body.imageSlug, node: body.node, connectionId: body.connectionId, ...targetAuditDetails(target) },
           status: "success",
         })
       } catch (err: any) {
@@ -720,9 +778,13 @@ async function runIsoDeploy(args: {
   body: any
   image: any
   isCustom: boolean
+  /** Staged file base name of a custom image (see the POST handler). */
+  stagingName: string | null
   sourceType: string
   volumeId: string | null
   vdcInfo: { poolName?: string | null } | null
+  /** Tenant vDC a provider deploys into, recorded in the audit entry. */
+  target: ProviderVdcTarget | null
   /** Storage-policy QoS suffix for the data disk (scsi0), computed once by
    *  the caller (empty string when body.storage carries no policy, or the
    *  tenant is the provider). Never applied to ide2 or efidisk0. */
@@ -732,7 +794,7 @@ async function runIsoDeploy(args: {
    *  throws (waitForTask timeout, audit failure, etc.). */
   onIpamAllocation?: (alloc: { subnetId: string; ip: string }) => void
 }): Promise<void> {
-  const { deploymentId, deploymentConfig, conn, body, image, isCustom, sourceType, volumeId, vdcInfo, dataDiskQosSuffix, onIpamAllocation } = args
+  const { deploymentId, deploymentConfig, conn, body, image, isCustom, stagingName, sourceType, volumeId, vdcInfo, target, dataDiskQosSuffix, onIpamAllocation } = args
   const hw = body.hardware
   const isoStorage: string = body.isoStorage
 
@@ -748,7 +810,7 @@ async function runIsoDeploy(args: {
   } else {
     // URL mode: download to the user-selected ISO storage with content=iso.
     const rawFilename = isCustom
-      ? `${image.slug}.iso`
+      ? `${stagingName}.iso`
       : (image.downloadUrl?.split("/").pop() || `${image.slug}.iso`)
     const isoFilename = rawFilename.toLowerCase().endsWith('.iso') ? rawFilename : `${rawFilename}.iso`
 
@@ -902,6 +964,7 @@ async function runIsoDeploy(args: {
       connectionId: body.connectionId,
       mode: 'iso',
       bios: useUefi ? 'ovmf' : 'seabios',
+      ...targetAuditDetails(target),
     },
     status: "success",
   })

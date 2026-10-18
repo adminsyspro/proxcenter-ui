@@ -133,12 +133,16 @@ export async function GET(
   try {
     const tmpFile = `/tmp/pxc-screen-${safeVmid}.ppm`
     const cmd = `qm monitor ${safeVmid} <<< 'screendump ${tmpFile}' > /dev/null 2>&1 && base64 -w0 ${tmpFile} && rm -f ${tmpFile}`
+    // The screendump only reads the guest's framebuffer, through a scratch
+    // file the same command removes: a cluster outside the license stays
+    // visible, pictures included (roadmap#58).
+    const readOnly = { readOnly: true }
 
     // Try the originally-requested node first.
     let resolvedNode = node
     let movedTo: string | null = null
     let nodeIp = await resolveNodeSshEndpoint(conn, resolvedNode)
-    let sshResult = await executeSSH(conn.id, nodeIp, cmd)
+    let sshResult = await executeSSH(conn.id, nodeIp, cmd, undefined, readOnly)
 
     // qm monitor exits with status 2 when the VM is not on this node — most
     // common cause: an intra-cluster migration moved the VM and our caller
@@ -150,7 +154,7 @@ export async function GET(
         resolvedNode = located.node
         movedTo = located.node
         nodeIp = await resolveNodeSshEndpoint(conn, resolvedNode)
-        sshResult = await executeSSH(conn.id, nodeIp, cmd)
+        sshResult = await executeSSH(conn.id, nodeIp, cmd, undefined, readOnly)
       }
     }
 

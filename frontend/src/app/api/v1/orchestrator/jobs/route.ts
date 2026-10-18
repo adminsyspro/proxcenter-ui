@@ -2,11 +2,14 @@ import { NextResponse } from "next/server"
 
 import { prisma as globalPrisma } from "@/lib/db/prisma"
 import { getCurrentTenantId, getTenantConnectionIds } from "@/lib/tenant"
-import { getTenantInfrastructureScope, maskingScope } from "@/lib/tenant/infraScope"
+import { canMigrateConnections, getTenantInfrastructureScope, maskingScope } from "@/lib/tenant/infraScope"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { orchestratorHeaders } from "@/lib/orchestrator/headers"
 import { TERMINAL_STATUSES, sourceTypeLabel } from "@/lib/tasks/sharedTask"
 import { replicationJobStatus } from "@/lib/tasks/replicationJobStatus"
+import { hostDrainJobRows } from "@/lib/tasks/hostDrainRows"
+import { rollingUpdateNeutralDetail } from "@/lib/tasks/rollingUpdateDetail"
+import { filterViewableDrains } from "@/lib/hostDrain/access"
 
 export const runtime = "nodejs"
 
@@ -46,7 +49,8 @@ function extractHostname(baseUrl: string): string {
 function migrationJobStatus(status: string): string {
   if (status === "completed") return "success"
   if (status === "failed" || status === "cancelled") return status
-  if (status === "pending") return "pending"
+  // A queued job of a bulk migration (roadmap#53) has not started yet.
+  if (status === "pending" || status === "queued") return "pending"
 
   return "running"
 }
@@ -164,9 +168,8 @@ export async function GET(req: Request) {
             startedAt: ru.started_at,
             endedAt: ru.completed_at,
             createdAt: ru.created_at,
-            detail: ru.current_node
-              ? `En cours: ${ru.current_node} (${ru.completed_nodes}/${ru.total_nodes} nœuds)`
-              : `${ru.completed_nodes}/${ru.total_nodes} nœuds`,
+            // Neutral: the Task Center page localizes it (rollingUpdateDetail)
+            detail: rollingUpdateNeutralDetail(ru),
             target: ruTarget,
             // Additional data for drill-down
             metadata: {
@@ -271,6 +274,28 @@ export async function GET(req: Request) {
     } catch (e) {
       if ((e as any)?.code !== 'ORCHESTRATOR_UNAVAILABLE') {
         console.error("Failed to fetch DRS migrations:", e)
+      }
+    }
+
+    // Fetch host drains (#248): one row for the drain, one per guest. The
+    // orchestrator keeps them fleet-wide.
+    try {
+      const drainRes = await fetch(`${ORCHESTRATOR_URL}/api/v1/host-drains?limit=50`, {
+        headers: orchestratorHeaders({ "Content-Type": "application/json" }),
+      })
+
+      if (drainRes.ok) {
+        const drainData = await drainRes.json()
+        const drains: any[] = Array.isArray(drainData) ? drainData : (drainData?.data || [])
+        // A drain lists every guest of the node: only on clusters the caller
+        // owns, never on one a vDC merely shares (the perimeter filter below
+        // would keep those, and other tenants' guest names with them).
+        const owned = drains.filter(d => d?.connection_id && canMigrateConnections(infra, d.connection_id))
+        jobs.push(...hostDrainJobRows(await filterViewableDrains(owned), resolve))
+      }
+    } catch (e) {
+      if ((e as any)?.code !== 'ORCHESTRATOR_UNAVAILABLE') {
+        console.error("Failed to fetch host drains:", e)
       }
     }
 
@@ -418,13 +443,17 @@ export async function GET(req: Request) {
               // from the task row, so the chip has to say so.
 
               const typeLabel = exec.type === "failover" ? "Failover" : exec.type === "failback" ? "Failback" : "Test Failover"
+              // An execution scoped to one guest names it (ui#943).
+              const scopedGuest = exec.scope_vmid
+                ? (exec.vm_results || []).find((vm: any) => vm.vm_id === exec.scope_vmid)?.vm_name || `VM ${exec.scope_vmid}`
+                : null
 
               const planSource = resolve(plan.source_cluster)
               const planTarget = resolve(plan.target_cluster)
 
               jobs.push({
                 id: exec.id,
-                name: `${typeLabel} - ${plan.name}`,
+                name: scopedGuest ? `${typeLabel} - ${plan.name} (${scopedGuest})` : `${typeLabel} - ${plan.name}`,
                 // A failover, a failback or a test failover is Site Recovery,
                 // not maintenance: the old "maintenance" type made the Type
                 // column lie about what the operator had run.

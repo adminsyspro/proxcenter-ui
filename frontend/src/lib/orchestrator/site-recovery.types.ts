@@ -153,7 +153,23 @@ export interface ReplicationJobLog {
 // Recovery Plans
 // ============================================
 
-export type RecoveryPlanStatus = 'ready' | 'degraded' | 'executing' | 'failed' | 'not_ready' | 'failed_over' | 'failing_back'
+// 'partially_failed_over' is derived from the per-guest states: some guests
+// of the plan run on the DR site, the others still replicate (ui#943).
+export type RecoveryPlanStatus = 'ready' | 'degraded' | 'executing' | 'failed' | 'not_ready' | 'failed_over' | 'partially_failed_over' | 'failing_back'
+
+// The DR state of one guest inside a plan. A guest without an entry is
+// protected: it replicates normally and its replica sits stopped.
+export type RecoveryPlanGuestState = 'failing_over' | 'failed_over' | 'failing_back'
+
+export interface RecoveryPlanGuest {
+  vm_id: number
+  state: RecoveryPlanGuestState
+  // The execution acting on the guest (its failover, then its failback).
+  execution_id: string
+  job_id: string
+  failed_over_at: string | null
+  updated_at: string
+}
 
 export interface RecoveryPlanVM {
   vm_id: number
@@ -175,6 +191,8 @@ export interface RecoveryPlan {
   last_failover: string | null
   active_test_execution_id?: string | null
   active_failback_execution_id?: string | null
+  // Per-guest DR states; absent or empty when every guest is protected.
+  guests?: RecoveryPlanGuest[]
   created_at: string
   updated_at: string
 }
@@ -274,12 +292,27 @@ export interface RecoveryVMResult {
   last_reverse_sync_bytes?: number
 }
 
+/** One line of the step log of a failover or failback (ui#943). */
+export interface RecoveryExecutionEvent {
+  id: number
+  execution_id: string
+  vm_id: number
+  step?: string
+  /** check = a verified fact, info = a step starting, warning = non-fatal, error = what stopped the run. */
+  level: 'info' | 'check' | 'warning' | 'error'
+  message: string
+  at: string
+}
+
 export interface RecoveryExecution {
   id: string
   plan_id: string
   type: RecoveryExecutionType
   status: RecoveryExecutionStatus
   network_isolated?: boolean
+  // A failover or failback restricted to one guest of the plan (ui#943).
+  // Absent for a plan-wide execution.
+  scope_vmid?: number
   started_at: string
   completed_at?: string
   vm_results: RecoveryVMResult[]

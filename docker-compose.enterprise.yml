@@ -164,6 +164,12 @@ services:
       # Air-gapped instance: the orchestrator never calls proxcenter.io (no
       # portal connection, no check-in). Written by install-airgap.sh.
       - PROXCENTER_OFFLINE=${PROXCENTER_OFFLINE:-}
+      # Outbound HTTP proxy for the Internet downloads (CVE feeds, portal).
+      # Written to .env by the installer when it runs behind a proxy; empty
+      # keeps direct connections. Proxmox API calls never use it.
+      - HTTP_PROXY=${HTTP_PROXY:-}
+      - HTTPS_PROXY=${HTTPS_PROXY:-}
+      - NO_PROXY=${NO_PROXY:-localhost,127.0.0.1,frontend,postgres,orchestrator,weasyprint}
       #
       # Docker Secrets support (Swarm / file-based):
       # - APP_SECRET_FILE=/run/secrets/app_secret

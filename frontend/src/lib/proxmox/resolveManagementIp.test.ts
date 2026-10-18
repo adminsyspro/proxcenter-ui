@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { collectNodeAddresses, resolveManagementIp } from './resolveManagementIp'
+import { collectNodeAddresses, resolveManagementAddress, resolveManagementIp } from './resolveManagementIp'
 
 describe('collectNodeAddresses', () => {
   it('collects unique searchable IPv4 and IPv6 addresses with prefixes stripped', () => {
@@ -46,5 +46,44 @@ describe('resolveManagementIp', () => {
       { iface: 'eth0', address: '10.0.0.2' },
       { iface: 'eth1', address: '10.0.1.2' },
     ])).toBe('10.0.0.2')
+  })
+})
+
+describe('resolveManagementAddress', () => {
+  it('verifies the gateway interface, Linux bridge or OVS port alike', () => {
+    expect(resolveManagementAddress([
+      { iface: 'vmbr0', type: 'bridge', address: '10.0.0.2' },
+      { iface: 'mgmt', type: 'OVSIntPort', address: '192.168.1.2', gateway: '192.168.1.1' },
+    ])).toEqual({ ip: '192.168.1.2', verified: true })
+  })
+
+  it('verifies vmbr0 without a gateway', () => {
+    expect(resolveManagementAddress([
+      { iface: 'eth0', type: 'eth', address: '10.0.0.2' },
+      { iface: 'vmbr0', type: 'bridge', address: '192.168.1.2' },
+    ])).toEqual({ ip: '192.168.1.2', verified: true })
+  })
+
+  // roadmap#51: the list a token without SDN.Audit on /sdn/zones/localnetwork
+  // gets from pve-manager, every bridge removed. Measured on PVE 9.2: only
+  // the VXLAN transport VLAN keeps an address, and it is not a bridge.
+  it('only guesses from a list without the management bridge, and a VLAN on vmbr0 is no bridge', () => {
+    expect(resolveManagementAddress([
+      { iface: 'nic0', type: 'eth', active: 1 },
+      { iface: 'vmbr0.4000', type: 'vlan', address: '10.100.5.2', cidr: '10.100.5.2/24', 'vlan-raw-device': 'vmbr0' },
+    ])).toEqual({ ip: '10.100.5.2', verified: false })
+    expect(resolveManagementAddress([{ iface: 'vmbr0.4000', address: '10.100.5.2' }])).toEqual({ ip: '10.100.5.2', verified: false })
+  })
+
+  it('guesses another bridge before a plain interface', () => {
+    expect(resolveManagementAddress([
+      { iface: 'eth0', address: '10.0.0.2' },
+      { iface: 'vmbr2', type: 'bridge', address: '172.16.0.2' },
+    ])).toEqual({ ip: '172.16.0.2', verified: false })
+  })
+
+  it('answers nothing for an empty or non-array list', () => {
+    expect(resolveManagementAddress([])).toBeUndefined()
+    expect(resolveManagementAddress(null as any)).toBeUndefined()
   })
 })

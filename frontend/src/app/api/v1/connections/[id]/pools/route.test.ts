@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
+// The API token guard is covered by routeGuard.test.ts and writeContract.test.ts:
+// pass-through so this file keeps testing the handler, as for a session caller.
+vi.mock('@/lib/api-tokens/routeGuard', () => ({
+  withPublicApiGuard: (_entryId: string, handler: any) => handler,
+}))
+
 import { callRoute, readJson, deniedPermissionResponse } from '@/__tests__/setup/route-test'
 
 vi.mock('@/lib/rbac', () => ({
@@ -39,6 +45,7 @@ import { prisma } from '@/lib/db/prisma'
 import { checkPermission, getRequestGuestScopePerimeter } from '@/lib/rbac'
 import { getConnectionById } from '@/lib/connections/getConnection'
 import { pveFetch, PveApplicationError } from '@/lib/proxmox/client'
+import { PveLicenseExcludedError } from '@/lib/license/exclusions'
 
 const checkPermissionMock = checkPermission as any
 const getRequestGuestScopePerimeterMock = getRequestGuestScopePerimeter as any
@@ -191,6 +198,20 @@ describe('POST /api/v1/connections/[id]/pools', () => {
     expect(body.error).toBe("create pool failed: pool 'p1' already exists")
     expect(invalidateInventoryCache).not.toHaveBeenCalled()
     expect((audit as any).mock.calls[0][0]).toMatchObject({ action: 'pool.create', status: 'failure' })
+  })
+
+  it('answers 403 with its code when the cluster is outside the license (roadmap#58)', async () => {
+    // pveFetch refused the write itself, before any request: the route must
+    // say so with the code the UI recognises, not a generic 500.
+    pveFetchMock.mockRejectedValue(new PveLicenseExcludedError('c1'))
+
+    const res = await callRoute(POST as any, { method: 'POST', params: { id: 'c1' }, body: { poolid: 'p1' } })
+    const body = await readJson<any>(res)
+
+    expect(res.status).toBe(403)
+    expect(body).toMatchObject({ code: 'CONNECTION_LICENSE_EXCLUDED' })
+    expect(body.error).toBe('This cluster is outside the license: ProxCenter refuses any change on it.')
+    expect(invalidateInventoryCache).not.toHaveBeenCalled()
   })
 })
 

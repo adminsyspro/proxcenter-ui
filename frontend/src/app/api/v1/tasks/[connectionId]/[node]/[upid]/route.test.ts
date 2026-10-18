@@ -1,10 +1,19 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
+// The API token guard is covered by routeGuard.test.ts and writeContract.test.ts:
+// pass-through so this file keeps testing the handler, as for a session caller.
+vi.mock('@/lib/api-tokens/routeGuard', () => ({
+  withPublicApiGuard: (_entryId: string, handler: any) => handler,
+}))
+
 import { readJson } from '@/__tests__/setup/route-test'
+import { prismaTest, truncate } from '@/__tests__/setup/prisma-test'
 
 vi.mock('@/lib/rbac', () => ({
   checkPermission: vi.fn<(...a: any[]) => Promise<any>>(),
-  PERMISSIONS: { CONNECTION_VIEW: 'connection.view', NODE_MANAGE: 'node.manage' },
+  PERMISSIONS: { CONNECTION_VIEW: 'connection.view', NODE_MANAGE: 'node.manage', VM_VIEW: 'vm.view', NODE_VIEW: 'node.view' },
+  buildVmResourceId: (c: string, n: string, t: string, v: string) => `${c}:${n}:${t}:${v}`,
+  buildNodeResourceId: (c: string, n: string) => `${c}:${n}`,
 }))
 
 vi.mock('@/lib/connections/getConnection', () => ({
@@ -33,10 +42,19 @@ vi.mock('@/lib/ssh/node-endpoint', async () => {
   }
 })
 
+const { getTenantInfrastructureScopeMock } = vi.hoisted(() => ({
+  getTenantInfrastructureScopeMock: vi.fn<(...args: any[]) => Promise<any>>(),
+}))
+vi.mock('@/lib/tenant/infraScope', async io => ({
+  ...await io<typeof import('@/lib/tenant/infraScope')>(),
+  getTenantInfrastructureScope: getTenantInfrastructureScopeMock,
+}))
+
 import { GET } from './route'
 import { checkPermission } from '@/lib/rbac'
 import { getConnectionById } from '@/lib/connections/getConnection'
 import { pveFetch } from '@/lib/proxmox/client'
+import { prisma } from '@/lib/db/prisma'
 import { executeSSH } from '@/lib/ssh/exec'
 import { getNodeIp } from '@/lib/ssh/node-ip'
 import { formatBytes as formatSize } from '@/utils/format'
@@ -74,6 +92,7 @@ function sawSourceVmDelete() {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  getTenantInfrastructureScopeMock.mockResolvedValue({ kind: 'provider' })
   checkPermissionMock.mockResolvedValue(null)
   getConnectionByIdMock.mockResolvedValue(CONN)
   getNodeIpMock.mockResolvedValue('10.0.0.2')
@@ -423,5 +442,188 @@ describe('GET /api/v1/tasks/[connectionId]/[node]/[upid]: failure reason (#926)'
     expect(json.failureReason).toBe('CT is locked (backup)')
     expect(json.logs).toEqual([])
     expect(json.totalLogLines).toBe(1)
+  })
+})
+
+describe('GET /api/v1/tasks/[connectionId]/[node]/[upid]: connection and vDC perimeter', () => {
+  const token = {
+    kind: 'token', tokenId: 'tok-1', tenantId: 'tenant-v', creatorUserId: 'u1',
+    connectionIds: null, scopes: ['vms:power'], permissions: new Set(['vm.view', 'connection.view']),
+  }
+  const DESTROY_UPID = 'UPID:pve1:0000ABCD:00001234:6A000000:qmdestroy:100:root@pam:'
+
+  function tenantGuests(rows: unknown[]) {
+    getTenantInfrastructureScopeMock.mockResolvedValue({ kind: 'iaas', vdcScope: {
+      connectionIds: new Set(['conn-1']),
+      nodesByConnection: new Map([['conn-1', new Set(['pve1', 'pve2'])]]),
+      poolsByConnection: new Map([['conn-1', new Set(['pool-a'])]]),
+    } })
+    const statusFetch = pveFetchMock.getMockImplementation()
+    pveFetchMock.mockImplementation((conn: any, path: string, ...rest: any[]) =>
+      path === '/cluster/resources?type=vm' ? Promise.resolve(rows) : statusFetch?.(conn, path, ...rest))
+  }
+
+  function tokenGet(upid: string, principal: Record<string, unknown> = token, node = NODE) {
+    return GET(new Request('http://test.local/x'), {
+      params: Promise.resolve({ connectionId: 'conn-1', node, upid }),
+      principal: principal as any,
+    })
+  }
+
+  function askedProxmoxForTheTask() {
+    return pveFetchMock.mock.calls.some((c: any[]) => String(c[1]).includes('/tasks/'))
+  }
+
+  async function journalTokenWrite(apiTokenId: string, upid: string) {
+    await prismaTest.auditLog.create({ data: {
+      id: `audit-${apiTokenId}-${upid.length}`, tenantId: 'tenant-v', timestamp: new Date(), action: 'apitoken.write',
+      category: 'api_tokens', apiTokenId, details: { entry: 'vm-delete', upid },
+    } })
+  }
+
+  /** A backup-job-run line: one vzdump task per node, journaled as upids. */
+  async function journalTokenRun(apiTokenId: string, upids: string[]) {
+    await prismaTest.auditLog.create({ data: {
+      id: `audit-run-${apiTokenId}`, tenantId: 'tenant-v', timestamp: new Date(), action: 'apitoken.write',
+      category: 'api_tokens', apiTokenId, details: { entry: 'backup-job-run', upid: null, upids },
+    } })
+  }
+
+  it('judges a token on the connection of the task', async () => {
+    await tokenGet(UPID)
+    expect(checkPermissionMock).toHaveBeenCalledWith('connection.view', 'connection', 'conn-1')
+  })
+
+  it('hands Proxmox the UPID as Next decoded it, never decoded a second time', async () => {
+    const res = await GET(new Request('http://test.local/x'), {
+      params: Promise.resolve({ connectionId: 'conn-1', node: NODE, upid: 'UPID:pve1:%41:%:x' }),
+    })
+
+    expect(res.status).toBe(200)
+    expect(pveFetchMock).toHaveBeenCalledWith(CONN, `/nodes/pve1/tasks/${encodeURIComponent('UPID:pve1:%41:%:x')}/status`)
+  })
+
+  it('judges a session on the connection first, then on the guest the UPID names (sessionTaskScope.test.ts)', async () => {
+    // A vm-scoped grant never matches a "connection" resource, it matches the VM one (#378).
+    checkPermissionMock.mockImplementation(async (_perm: string, resourceType?: string) =>
+      resourceType === 'vm' ? null : Response.json({ error: 'Permission denied: connection.view' }, { status: 403 }))
+    const { req, params } = ctx()
+    const res = await GET(req, { params })
+    expect(res.status).toBe(200)
+    expect(checkPermissionMock).toHaveBeenCalledWith('connection.view', 'connection', 'conn-1')
+    expect(checkPermissionMock).toHaveBeenCalledWith('vm.view', 'vm', 'conn-1:pve1:qemu:100')
+  })
+
+  it('a vDC tenant token reads the task of one of its guests, checked on the task node', async () => {
+    tenantGuests([{ type: 'qemu', vmid: 100, node: 'pve1', pool: 'pool-a' }])
+    const res = await tokenGet(UPID)
+    expect(res.status).toBe(200)
+    expect(getTenantInfrastructureScopeMock).toHaveBeenCalledWith('tenant-v', { ignoreVdcContext: true })
+  })
+
+  it('a vDC tenant token is refused the task of a guest outside its vDC, before Proxmox is asked for it', async () => {
+    tenantGuests([
+      { type: 'qemu', vmid: 100, node: 'pve1', pool: 'pool-other' },
+      { type: 'qemu', vmid: 200, node: 'pve1', pool: 'pool-a' },
+    ])
+    const res = await tokenGet(UPID)
+    expect(res.status).toBe(403)
+    expect(await readJson<any>(res)).toEqual({ error: 'Task outside your vDC scope' })
+    expect(askedProxmoxForTheTask()).toBe(false)
+  })
+
+  it('a vDC tenant token is refused a UPID whose node is not the URL node', async () => {
+    tenantGuests([{ type: 'qemu', vmid: 100, node: 'pve1', pool: 'pool-a' }])
+    const res = await tokenGet(UPID, token, 'pve2')
+    expect(res.status).toBe(403)
+    expect(await readJson<any>(res)).toEqual({ error: 'Task outside your vDC scope' })
+  })
+
+  it('a vDC tenant token is refused a task that names no guest', async () => {
+    tenantGuests([{ type: 'qemu', vmid: 100, node: 'pve1', pool: 'pool-a' }])
+    const res = await tokenGet('UPID:pve1:0000ABCD:00001234:6A000000:aptupdate::root@pam:')
+    expect(res.status).toBe(403)
+    expect(await readJson<any>(res)).toEqual({ error: 'Task outside your vDC scope' })
+  })
+
+  it('a task on another node or of no guest is judged on the tenant kind alone, without listing the guests', async () => {
+    tenantGuests([{ type: 'qemu', vmid: 100, node: 'pve1', pool: 'pool-a' }])
+    expect((await tokenGet(UPID, token, 'pve2')).status).toBe(403)
+    expect((await tokenGet('UPID:pve1:0000ABCD:00001234:6A000000:aptupdate::root@pam:')).status).toBe(403)
+    expect(pveFetchMock.mock.calls.some((c: any[]) => c[1] === '/cluster/resources?type=vm')).toBe(false)
+    getTenantInfrastructureScopeMock.mockResolvedValue({ kind: 'msp', connectionIds: new Set(['conn-1']) })
+    expect((await tokenGet(UPID, token, 'pve2')).status).toBe(200)
+  })
+
+  it('a vDC tenant token fails closed (503) when its guests cannot be listed or its scope resolved', async () => {
+    tenantGuests([])
+    pveFetchMock.mockImplementation(() => Promise.reject(new Error('pve down')))
+    expect((await tokenGet(UPID)).status).toBe(503)
+    getTenantInfrastructureScopeMock.mockRejectedValue(new Error('db down'))
+    expect((await tokenGet(UPID)).status).toBe(503)
+  })
+
+  describe('a task the token started itself', () => {
+    beforeEach(async () => {
+      await truncate(['audit_logs'])
+      tenantGuests([])
+      await journalTokenWrite('tok-1', DESTROY_UPID)
+    })
+
+    it('reads the final status of its own vm-delete whose guest no longer exists', async () => {
+      const res = await tokenGet(DESTROY_UPID)
+      expect(res.status).toBe(200)
+    })
+
+    it('its own task is refused when the UPID node is not the URL node', async () => {
+      const res = await tokenGet(DESTROY_UPID, token, 'pve2')
+      expect(res.status).toBe(403)
+      expect(await readJson<any>(res)).toEqual({ error: 'Task outside your vDC scope' })
+      expect(askedProxmoxForTheTask()).toBe(false)
+    })
+
+    it('fails closed (503, generic message) when its task journal cannot be read', async () => {
+      const findFirst = vi.spyOn(prisma.auditLog, 'findFirst').mockRejectedValueOnce(new Error('db down: secret'))
+      const res = await tokenGet('UPID:pve1:0000ABCD:00001234:6A000001:vzdump::root@pam:')
+      expect(res.status).toBe(503)
+      expect(await readJson<any>(res)).toEqual({ error: 'Unable to verify guest vDC scope' })
+      findFirst.mockRestore()
+    })
+
+    it('another token of the same tenant is refused the same UPID', async () => {
+      const res = await tokenGet(DESTROY_UPID, { ...token, tokenId: 'tok-2' })
+      expect(res.status).toBe(403)
+      expect(askedProxmoxForTheTask()).toBe(false)
+    })
+
+    it('polls a vzdump task of a backup job run it started (no vmid in the UPID), never another token', async () => {
+      const VZDUMP_PVE1 = 'UPID:pve1:0000ABCD:00001234:6A000001:vzdump::root@pam:'
+      const VZDUMP_PVE2 = 'UPID:pve2:0000ABCD:00001234:6A000001:vzdump::root@pam:'
+      await journalTokenRun('tok-1', [VZDUMP_PVE1, VZDUMP_PVE2])
+      expect((await tokenGet(VZDUMP_PVE1)).status).toBe(200)
+      expect((await tokenGet(VZDUMP_PVE2, token, 'pve2')).status).toBe(200)
+      const other = await tokenGet(VZDUMP_PVE1, { ...token, tokenId: 'tok-2' })
+      expect(other.status).toBe(403)
+      expect(await readJson<any>(other)).toEqual({ error: 'Task outside your vDC scope' })
+    })
+  })
+
+  it('provider tokens and sessions are not confined to vDC guests', async () => {
+    expect((await tokenGet(UPID)).status).toBe(200)
+    const { req, params } = ctx()
+    expect((await GET(req, { params })).status).toBe(200)
+    expect(pveFetchMock.mock.calls.some((c: any[]) => c[1] === '/cluster/resources?type=vm')).toBe(false)
+  })
+
+  it('a token without vms:migrate never releases the source lock of a finished migration', async () => {
+    configResult = { name: 'vm100', lock: 'migrate' }
+    expect((await tokenGet(UPID)).status).toBe(200)
+    expect(executeSSHMock).not.toHaveBeenCalled()
+  })
+
+  it('a token with vms:migrate releases it, as a session does', async () => {
+    configResult = { name: 'vm100', lock: 'migrate' }
+    expect((await tokenGet(UPID, { ...token, scopes: ['vms:migrate'] })).status).toBe(200)
+    expect(executeSSHMock).toHaveBeenCalledWith('conn-1', expect.objectContaining({ host: '10.0.0.2' }), 'qm unlock 100')
   })
 })

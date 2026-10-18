@@ -18,7 +18,11 @@ const plainKeys = [
   'placementConstrainedSdn',
   'placementConstrainedStorage',
   'placementConstrainedBoth',
-  'domainNoTarget'
+  'domainNoTarget',
+  'domainWholeCluster',
+  'restrictedGuestsTitle',
+  'excludedGuestsTitle',
+  'excludedGuestType'
 ]
 
 // Each of these carries an interpolation the card depends on; a locale that
@@ -28,7 +32,13 @@ const interpolated: Record<string, string> = {
   domainGuests: '{count,',
   domainSpread: '{value}',
   pinnedGuestOn: '{node}',
-  placementConstrainedTooltip: '{count,'
+  placementConstrainedTooltip: '{count,',
+  restrictedCanMoveTo: '{nodes}',
+  limitStorage: '{resource}',
+  limitVnet: '{zone}',
+  limitBridge: '{resource}',
+  excludedByTag: '{tag}',
+  excludedLocalDisks: '{storages}'
 }
 
 describe('DRS placement constraints i18n parity across the 6 served locales', () => {
@@ -49,6 +59,22 @@ describe('DRS placement constraints i18n parity across the 6 served locales', ()
       expect(value, `${locale}: placementConstrainedTooltip`).toBeTypeOf('string')
       expect(value, `${locale}: plural form`).toMatch(/\{count,\s*plural,/)
       expect(value, `${locale}: an "other" branch is required by ICU`).toContain('other {')
+      // The tooltip says how many guests are limited, with a =0 branch so a
+      // cluster whose domains carry no restricted guest reads correctly.
+      expect(value, `${locale}: restricted plural`).toMatch(/\{restricted,\s*plural,\s*=0 \{/)
+    }
+  })
+
+  it('no locale still claims the global spread cannot reach zero', () => {
+    // The old tooltip said the memory spread and health score "cannot come
+    // down to zero" because domains exist, which overlapping domains do not
+    // establish. The sentence must be gone everywhere.
+    for (const [locale, messages] of Object.entries(locales)) {
+      const tooltip: string = messages?.drsPage?.placementConstrainedTooltip
+      const desc: string = messages?.drsPage?.placementConstraintsDesc
+
+      expect(tooltip, `${locale}: tooltip`).not.toMatch(/zero|zéro|null sinken|cero|0이 될 수 없|降到零/)
+      expect(desc, `${locale}: desc`).not.toMatch(/cannot balance freely|ne peuvent pas s'équilibrer librement|nicht frei ausgeglichen|no pueden equilibrarse libremente|자유롭게 균형을 맞출 수 없|无法自由均衡/)
     }
   })
 

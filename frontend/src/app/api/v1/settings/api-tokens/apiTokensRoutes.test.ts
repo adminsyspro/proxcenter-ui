@@ -2,7 +2,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest'
 
 const {
   checkPermissionMock, getRBACContextMock, getCurrentTenantIdMock,
-  userHasAccessToTenantMock, requireFeatureMock, auditMock,
+  userHasAccessToTenantMock, requireFeatureMock, auditMock, holdsMock,
 } = vi.hoisted(() => ({
   checkPermissionMock: vi.fn<() => Promise<Response | null>>(),
   getRBACContextMock: vi.fn<() => Promise<any>>(),
@@ -10,11 +10,13 @@ const {
   userHasAccessToTenantMock: vi.fn<() => Promise<boolean>>(),
   requireFeatureMock: vi.fn<() => Promise<Response | null>>(),
   auditMock: vi.fn<() => Promise<string>>(),
+  holdsMock: vi.fn<(...a: any[]) => Promise<boolean>>(),
 }))
 
 vi.mock('@/lib/rbac', () => ({
   checkPermission: checkPermissionMock,
   getRBACContext: getRBACContextMock,
+  holdsBroadPermission: holdsMock,
   PERMISSIONS: { ADMIN_APITOKENS: 'admin.apitokens' },
 }))
 
@@ -38,6 +40,7 @@ beforeEach(async () => {
   userHasAccessToTenantMock.mockResolvedValue(true)
   getRBACContextMock.mockResolvedValue({ userId: 'admin-1', isAdmin: true, tenantId: 'default' })
   auditMock.mockResolvedValue('audit-id')
+  holdsMock.mockResolvedValue(true)
   await truncate(['api_tokens', 'tenants', 'users', 'provider_connections', 'Connection'])
   await seedDefaultTenant()
   // api_tokens.created_by_user_id has a real FK to users; the default RBAC
@@ -168,6 +171,86 @@ describe('POST /api/v1/settings/api-tokens', () => {
     expect(res.status).toBe(201)
     const body = await readJson<any>(res)
     expect(body.data.token.rateLimitPerMin).toBe(600)
+  })
+
+  it('defaults writeRateLimitPerMin to 60 and honours an explicit value', async () => {
+    const { POST } = await import('./route')
+    const dflt = await readJson<any>(await callRoute(POST, { body: validBody }))
+    expect(dflt.data.token.writeRateLimitPerMin).toBe(60)
+    const set = await readJson<any>(await callRoute(POST, { body: { ...validBody, name: 'w', writeRateLimitPerMin: 12.7 } }))
+    expect(set.data.token.writeRateLimitPerMin).toBe(12)
+    const bad = await readJson<any>(await callRoute(POST, { body: { ...validBody, name: 'w2', writeRateLimitPerMin: -1 } }))
+    expect(bad.data.token.writeRateLimitPerMin).toBe(60)
+  })
+
+  describe('anti-escalation', () => {
+    const asUser = () => getRBACContextMock.mockResolvedValue({ userId: 'admin-1', isAdmin: false, tenantId: 'default' })
+
+    it('refuses a write scope the creator does not hold, naming it', async () => {
+      asUser()
+      holdsMock.mockImplementation(async (_u, _t, key) => key === 'vm.view')
+      const { POST } = await import('./route')
+      const res = await callRoute(POST, { body: { name: 'x', scopes: ['vms:read', 'vms:power'] } })
+      expect(res.status).toBe(403)
+      expect(await readJson<any>(res)).toEqual({ error: 'You cannot grant a scope you do not hold', scope: 'vms:power' })
+      expect(await prismaTest.apiToken.findFirst({ where: { name: 'x' } })).toBeNull()
+    })
+
+    it('a held-rights lookup that fails is a 503 with a generic message, and mints nothing', async () => {
+      asUser()
+      holdsMock.mockRejectedValue(new Error('db down: secret details'))
+      const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      const { POST } = await import('./route')
+      const res = await callRoute(POST, { body: { name: 'x', scopes: ['vms:power'] } })
+      expect(res.status).toBe(503)
+      expect(await readJson<any>(res)).toEqual({ error: 'Unable to verify the scopes you can grant' })
+      expect(await prismaTest.apiToken.findFirst({ where: { name: 'x' } })).toBeNull()
+      errSpy.mockRestore()
+    })
+
+    it('accepts read-only scopes without consulting holdsBroadPermission', async () => {
+      asUser()
+      holdsMock.mockResolvedValue(false)
+      const { POST } = await import('./route')
+      const res = await callRoute(POST, { body: { name: 'x', scopes: ['vms:read'] } })
+      expect(res.status).toBe(201)
+      expect(holdsMock).not.toHaveBeenCalled()
+    })
+
+    it('checks held rights against the final tenant and connections, not the ambient ones', async () => {
+      asUser()
+      const now = new Date()
+      await prismaTest.tenant.create({ data: { id: 't2', slug: 't2', name: 'T2', operatingModel: 'msp', createdAt: now, updatedAt: now } })
+      await prismaTest.connection.create({
+        data: { id: 'c1', tenantId: 't2', name: 'c1', baseUrl: 'https://pve-c1:8006', apiTokenEnc: 'enc' },
+      })
+      const { POST } = await import('./route')
+      const body = { name: 'x', tenantId: 't2', connectionIds: ['c1'], scopes: ['vms:snapshot'] }
+      const ok = await callRoute(POST, { body })
+      expect(ok.status).toBe(201)
+      expect(holdsMock).toHaveBeenCalledWith('admin-1', 't2', 'vm.snapshot', ['c1'])
+
+      holdsMock.mockImplementation(async (_u, tenant) => tenant !== 't2')
+      const denied = await callRoute(POST, { body: { ...body, name: 'y' } })
+      expect(denied.status).toBe(403)
+      expect((await readJson<any>(denied)).scope).toBe('vms:snapshot')
+    })
+
+    it('lets a super admin mint any scope without checks', async () => {
+      holdsMock.mockResolvedValue(false)
+      const { POST } = await import('./route')
+      const res = await callRoute(POST, { body: { name: 'x', scopes: ['vms:delete'] } })
+      expect(res.status).toBe(201)
+      expect(holdsMock).not.toHaveBeenCalled()
+    })
+
+    it('fails closed for a non-admin without a user id', async () => {
+      getRBACContextMock.mockResolvedValue({ isAdmin: false, tenantId: 'default' })
+      const { POST } = await import('./route')
+      const res = await callRoute(POST, { body: { name: 'x', scopes: ['vms:power'] } })
+      expect(res.status).toBe(403)
+      expect((await readJson<any>(res)).scope).toBe('vms:power')
+    })
   })
 
   it('stores a provided description, and treats an empty string as absent (null)', async () => {

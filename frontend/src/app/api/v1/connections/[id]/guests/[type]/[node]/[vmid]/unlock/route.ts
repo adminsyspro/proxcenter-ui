@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server"
 
+import { licenseExcludedResponse } from "@/lib/api/response"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
 import { executeSSH } from "@/lib/ssh/exec"
 import { assertVmid } from "@/lib/ssh/validate"
 import { resolveNodeSshEndpoint } from "@/lib/ssh/node-endpoint"
+import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 
 export const runtime = "nodejs"
 
@@ -14,7 +16,7 @@ export const runtime = "nodejs"
  *
  * Unlock a VM via SSH (qm unlock / pct unlock)
  */
-export async function POST(
+async function postHandler(
   req: Request,
   ctx: { params: Promise<{ id: string; type: string; node: string; vmid: string }> }
 ) {
@@ -84,6 +86,10 @@ export async function POST(
     }
 
   } catch (e: any) {
+    // The cluster is outside the license: executeSSH refused the unlock
+    // itself (roadmap#58), with the code the UI recognises.
+    const excluded = licenseExcludedResponse(e)
+    if (excluded) return excluded
     console.error(`[unlock] Error:`, e)
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
@@ -94,7 +100,7 @@ export async function POST(
  *
  * Check if a VM is locked
  */
-export async function GET(
+async function getHandler(
   req: Request,
   ctx: { params: Promise<{ id: string; type: string; node: string; vmid: string }> }
 ) {
@@ -129,3 +135,6 @@ export async function GET(
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const POST = withPublicApiGuard("vm-unlock", postHandler)
+export const GET = withPublicApiGuard("vm-unlock-get", getHandler)

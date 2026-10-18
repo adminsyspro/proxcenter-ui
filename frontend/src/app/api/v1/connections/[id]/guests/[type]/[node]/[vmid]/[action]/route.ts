@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server"
+import { licenseExcludedResponse } from "@/lib/api/response"
 
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
 import { invalidateInventoryCache } from "@/lib/cache/inventoryCache"
+import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 
 export const runtime = "nodejs"
 
@@ -30,7 +32,7 @@ const VALID_ACTIONS = ['start', 'stop', 'shutdown', 'reboot', 'reset', 'suspend'
  *
  * Execute an action on a VM (start, stop, shutdown, reboot, suspend, resume)
  */
-export async function POST(_req: Request, ctx: RouteContext) {
+async function handler(_req: Request, ctx: RouteContext) {
   try {
     const { id, type, node, vmid, action } = await ctx.params
 
@@ -91,8 +93,12 @@ export async function POST(_req: Request, ctx: RouteContext) {
       message: `Action '${action}' executed on ${type}/${vmid}`
     })
   } catch (e: any) {
+    const excluded = licenseExcludedResponse(e)
+    if (excluded) return excluded
     console.error(`[guest/action] Error:`, e)
 
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const POST = withPublicApiGuard("vm-power", handler)

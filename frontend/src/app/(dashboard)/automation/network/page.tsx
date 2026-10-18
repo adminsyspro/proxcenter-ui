@@ -24,9 +24,10 @@ import DashboardTab from './components/DashboardTab'
 import RulesTab from './components/RulesTab'
 import ObjectsTab from './components/ObjectsTab'
 import SecurityGroupsPanel from './components/rules/SecurityGroupsPanel'
+import LoggingTab from './components/LoggingTab'
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   MAIN PAGE — 5 tabs: Dashboard, Firewalling, Aliases, IP Sets, Security Groups
+   MAIN PAGE — 6 tabs: Dashboard, Firewalling, Aliases, IP Sets, Security Groups, Logging
 ═══════════════════════════════════════════════════════════════════════════ */
 
 export default function NetworkAutomationPage() {
@@ -105,7 +106,7 @@ export default function NetworkAutomationPage() {
   return (
     <ProviderTenantGuard>
     <EnterpriseGuard requiredFeature={Features.MICROSEGMENTATION} featureName="Microsegmentation / Firewall">
-      <Box sx={{ minHeight: '100vh', p: 3 }}>
+      <Box sx={{ p: 3 }}>
 
         {/* Connection Selector */}
         <Box sx={{ mb: 3, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 2 }}>
@@ -159,6 +160,7 @@ export default function NetworkAutomationPage() {
             <Tab icon={<i className="ri-price-tag-3-line" />} iconPosition="start" label={t('networkPage.tabAliases')} sx={{ textTransform: 'none', fontWeight: 600, fontSize: 14 }} />
             <Tab icon={<i className="ri-database-2-line" />} iconPosition="start" label={t('networkPage.tabIpSets')} sx={{ textTransform: 'none', fontWeight: 600, fontSize: 14 }} />
             <Tab icon={<i className="ri-shield-check-line" />} iconPosition="start" label={t('networkPage.tabSecurityGroups')} sx={{ textTransform: 'none', fontWeight: 600, fontSize: 14 }} />
+            <Tab icon={<i className="ri-terminal-box-line" />} iconPosition="start" label={t('networkPage.tabLogging')} sx={{ textTransform: 'none', fontWeight: 600, fontSize: 14 }} />
           </Tabs>
 
           {/* Tab 0: Dashboard */}
@@ -251,6 +253,17 @@ export default function NetworkAutomationPage() {
               ipsets={ipsets}
               reload={loadFirewallData}
               reloadVMFirewallRules={reloadVMFirewallRules}
+            />
+          )}
+
+          {/* Tab 5: Logging (keyed: another connection starts from no element) */}
+          {activeTab === 5 && selectedConnection && (
+            <LoggingTab
+              key={selectedConnection}
+              selectedConnection={selectedConnection}
+              nodesList={nodesList}
+              securityGroups={securityGroups}
+              firewallMode={firewallMode}
             />
           )}
 

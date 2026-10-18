@@ -21,9 +21,13 @@ function roleLabel(row, t) {
   return t(`settings.licenseTab.licenses.role${row.role === 'primary' ? 'Primary' : row.role === 'option' ? 'Option' : 'Import'}`)
 }
 
+// Over its own limit: red when the fleet is over too, otherwise amber with
+// the reason the instance still works (the fleet's spare capacity).
+const overflowColor = fleetExceeded => (fleetExceeded ? 'error.main' : 'warning.main')
+
 // A held license moved to another instance reads as such; otherwise the
 // state the orchestrator gives, in words.
-function StateCell({ row, held, t }) {
+function StateCell({ row, held, fleetExceeded, t }) {
   if (held?.lost) {
     const days = leaseDaysLeft(held.grace_until)
 
@@ -34,19 +38,23 @@ function StateCell({ row, held, t }) {
     )
   }
 
-  const known = ['active', 'expired', 'invalid']
+  const known = ['active', 'expired', 'invalid', 'exceeded']
   const state = known.includes(row.state) ? row.state : 'unknown'
-
-  return (
-    <Typography variant='body2' color={state === 'active' ? 'text.secondary' : 'error.main'}>
+  const label = (
+    <Typography variant='body2' color={state === 'active' ? 'text.secondary' : state === 'exceeded' ? overflowColor(fleetExceeded) : 'error.main'}>
       {t(`settings.licenseTab.licenses.state.${state}`)}
     </Typography>
   )
+
+  if (state === 'exceeded' && !fleetExceeded) return <Tooltip title={t('settings.licenseTab.licenses.exceededCovered')}>{label}</Tooltip>
+
+  return label
 }
 
 // effectiveLicenseId: the import standing in for the primary, if any; its
-// row says so next to its name.
-export default function LicensesSection({ rows, held, t, locale, connName, canImport, perTenant, effectiveLicenseId = null, onImport, onEditMapping, onRemove, onDeactivate }) {
+// row says so next to its name. fleetExceeded: node_status.exceeded, which
+// decides how loud a license over its own limit reads.
+export default function LicensesSection({ rows, held, t, locale, connName, canImport, perTenant, effectiveLicenseId = null, fleetExceeded = false, onImport, onEditMapping, onRemove, onDeactivate }) {
   const msp = rows.some(r => r.role === 'import')
 
   return (
@@ -98,7 +106,7 @@ export default function LicensesSection({ rows, held, t, locale, connName, canIm
                       </Box>
                     </Box>
                   </TableCell>
-                  <TableCell sx={{ fontVariantNumeric: 'tabular-nums' }}>
+                  <TableCell sx={{ fontVariantNumeric: 'tabular-nums', ...(row.exceeded && { color: overflowColor(fleetExceeded), fontWeight: 600 }) }}>
                     {row.role === 'option' || row.heldOnly
                       ? '—'
                       : row.unlimited ? t('settings.licenseTab.summary.unlimited') : `${row.usedNodes} / ${row.maxNodes}`}
@@ -111,7 +119,7 @@ export default function LicensesSection({ rows, held, t, locale, connName, canIm
                     </TableCell>
                   )}
                   <TableCell sx={{ fontVariantNumeric: 'tabular-nums' }}>{formatDate(row.expiresAt, locale)}</TableCell>
-                  <TableCell><StateCell row={row} held={h} t={t} /></TableCell>
+                  <TableCell><StateCell row={row} held={h} fleetExceeded={fleetExceeded} t={t} /></TableCell>
                   <TableCell align='right' sx={{ whiteSpace: 'nowrap' }}>
                     {!row.heldOnly && row.role === 'import' && (
                       <Tooltip title={t('settings.licenseEditMapping')}>

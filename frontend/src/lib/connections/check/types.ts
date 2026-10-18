@@ -28,6 +28,12 @@ export interface CheckItem {
 export interface FallbackHost {
   node: string
   ip: string
+  /**
+   * False when the address is a guess (ManagedHost.ipVerified): the token
+   * could not see the node's management bridge, or the node did not answer
+   * and this is its corosync link. Absent means verified.
+   */
+  verified?: boolean
 }
 
 /** Per-node SSH override as stored on ManagedHost. */

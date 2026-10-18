@@ -4,13 +4,16 @@ import { getSetting } from "@/lib/db/settings"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 
 export const runtime = "nodejs"
 
-export async function POST(_req: Request, ctx: { params: Promise<{ id: string }> }) {
+async function postHandler(_req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await ctx.params
-    const denied = await checkPermission(PERMISSIONS.NODE_MANAGE)
+    // The settings cover the whole connection: node.manage on it, for a
+    // token and a session alike (a node-scoped holder does not qualify).
+    const denied = await checkPermission(PERMISSIONS.NODE_MANAGE, "connection", id)
     if (denied) return denied
 
     // Read Auto-HA settings
@@ -77,3 +80,5 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const POST = withPublicApiGuard("ha-auto-sync", postHandler)

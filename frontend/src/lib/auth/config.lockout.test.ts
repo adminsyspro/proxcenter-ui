@@ -25,9 +25,10 @@ vi.mock("./loginLockout", () => ({ beginLoginAttempt: vi.fn() }))
 vi.mock("@/lib/audit", () => ({ audit: vi.fn() }))
 
 import { prisma } from "@/lib/db/prisma"
+import { audit } from "@/lib/audit"
 import { verifyPassword } from "@/lib/auth/password"
 import { verifyTotpOrRecovery } from "@/lib/auth/verify-second-factor"
-import { authenticateLdapDetailed } from "./ldap"
+import { authenticateLdapDetailed, getLdapConfig } from "./ldap"
 import { beginLoginAttempt } from "./loginLockout"
 import { authOptions } from "./config"
 
@@ -205,5 +206,65 @@ describe("LDAP authorize with the lockout policy", () => {
     expect(user.id).toBe("u2")
     expect(succeed).toHaveBeenCalledTimes(1)
     expect(fail).not.toHaveBeenCalled()
+  })
+})
+
+// roadmap#38: the cause of a refusal reaches the server log and the audit
+// trail, while the person signing in keeps the generic message.
+describe("LDAP authorize records why a sign-in was refused", () => {
+  it("audits the orchestrator reason, never the password", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+    ;(authenticateLdapDetailed as any).mockResolvedValue({
+      user: null, failure: "user_not_found", reason: "user_not_found", detail: "Invalid credentials",
+    })
+
+    await expect(authorizeOf("ldap")({ username: "bob", password: "pa55" }, REQ)).rejects.toThrow(
+      /^Identifiants LDAP invalides$/,
+    )
+    expect(audit).toHaveBeenCalledWith(expect.objectContaining({
+      action: "login_failed",
+      userEmail: "bob",
+      details: { reason: "user_not_found", provider: "ldap", detail: "Invalid credentials" },
+    }))
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("user_not_found"))
+    expect(JSON.stringify((audit as any).mock.calls) + JSON.stringify(warn.mock.calls)).not.toContain("pa55")
+    warn.mockRestore()
+  })
+
+  it("audits an ambiguous match without counting it", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+    ;(authenticateLdapDetailed as any).mockResolvedValue({ user: null, failure: "error", reason: "ambiguous_match" })
+
+    await expect(authorizeOf("ldap")({ username: "dup", password: "x" }, REQ)).rejects.toThrow(/^Identifiants LDAP invalides$/)
+    expect(fail).not.toHaveBeenCalled()
+    expect(audit).toHaveBeenCalledWith(expect.objectContaining({ details: { reason: "ambiguous_match", provider: "ldap" } }))
+    warn.mockRestore()
+  })
+
+  it("audits a refusal by the allowed-group restriction", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+    ;(authenticateLdapDetailed as any).mockResolvedValue({
+      user: { email: "c@r38.lab", name: "C", avatar: null, dn: "uid=carol", groups: ["cn=vc-ops-nested,dc=x"] },
+      failure: null,
+    })
+    ;(getLdapConfig as any).mockResolvedValueOnce({ requireGroup: true, allowedGroups: ["dcvCenter Admins"] })
+
+    await expect(authorizeOf("ldap")({ username: "carol", password: "x" }, REQ)).rejects.toThrow(/not in an authorized group/)
+    expect(audit).toHaveBeenCalledWith(expect.objectContaining({
+      details: expect.objectContaining({ reason: "not_in_allowed_group", provider: "ldap" }),
+    }))
+    warn.mockRestore()
+  })
+
+  it("a failing audit does not change the refusal", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+    const error = vi.spyOn(console, "error").mockImplementation(() => {})
+    ;(audit as any).mockRejectedValueOnce(new Error("db down"))
+    ;(authenticateLdapDetailed as any).mockResolvedValue({ user: null, failure: "invalid_password", reason: "invalid_password" })
+
+    await expect(authorizeOf("ldap")({ username: "jdoe", password: "x" }, REQ)).rejects.toThrow(/^Identifiants LDAP invalides$/)
+    expect(error).toHaveBeenCalled()
+    warn.mockRestore()
+    error.mockRestore()
   })
 })

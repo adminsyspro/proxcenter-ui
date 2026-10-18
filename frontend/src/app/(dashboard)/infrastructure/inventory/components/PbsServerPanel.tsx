@@ -8,6 +8,8 @@ import { getDateLocale } from '@/lib/i18n/date'
 import { buildPbsSnapshotName, pbsFormatLabel } from '@/lib/backups/snapshotDisplay'
 import { useToast } from '@/contexts/ToastContext'
 import { useTaskTracker } from '@/hooks/useTaskTracker'
+import RestoreTagsSwitch from '@/components/backup/RestoreTagsSwitch'
+import { checkRestoredTagsOmitted, restoredTagsCheckMessage } from '@/lib/backups/restoreTags'
 import RestoreToGuestDialog from '@/components/backups/RestoreToGuestDialog'
 import { isRestorableItemPath } from '@/lib/guestFileRestore/paths'
 
@@ -125,6 +127,7 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
   const [pbsRestoreStart, setPbsRestoreStart] = useState(false)
   const [pbsRestoreLive, setPbsRestoreLive] = useState(false)
   const [pbsRestoreOverride, setPbsRestoreOverride] = useState(false)
+  const [pbsRestoreTags, setPbsRestoreTags] = useState(true)
   const [pbsRestoreName, setPbsRestoreName] = useState('')
   const [pbsRestoreMemory, setPbsRestoreMemory] = useState('')
   const [pbsRestoreCores, setPbsRestoreCores] = useState('')
@@ -162,6 +165,7 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
     setPbsRestoreStart(false)
     setPbsRestoreLive(false)
     setPbsRestoreOverride(false)
+    setPbsRestoreTags(true)
     setPbsRestoreName('')
     setPbsRestoreMemory('')
     setPbsRestoreCores('')
@@ -245,6 +249,7 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
       if (pbsRestoreUnique) body.unique = true
       if (pbsRestoreStart) body.start = true
       if (pbsRestoreLive) body.live = true
+      if (!pbsRestoreTags) body.restoreTags = false
       if (pbsRestoreOverride) {
         if (pbsRestoreName) body.name = pbsRestoreName
         if (pbsRestoreMemory) body.memory = Number.parseInt(pbsRestoreMemory)
@@ -263,7 +268,22 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
       const json = await res.json()
       if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`)
 
-      if (json.data) void trackTask({ upid: json.data, connId, node, description: `Restore ${pbsRestoreDialog.storageType === 'lxc' ? 'CT' : 'VM'} ${pbsRestoreVmId}` })
+      if (json.data) {
+        const restoredType = pbsRestoreDialog.storageType === 'lxc' ? 'lxc' : 'qemu'
+        const restoredVmid = body.vmid
+        void trackTask({
+          upid: json.data, connId, node,
+          description: `Restore ${restoredType === 'lxc' ? 'CT' : 'VM'} ${restoredVmid}`,
+          // Tags omitted (#965): read the config back before calling it done.
+          ...(pbsRestoreTags ? {} : {
+            timeoutMs: 6 * 60 * 60 * 1000,
+            verify: async () => restoredTagsCheckMessage(
+              await checkRestoredTagsOmitted({ connectionId: connId, node, type: restoredType, vmid: restoredVmid }),
+              t as any,
+            ),
+          }),
+        })
+      }
       toast.success(t('inventory.pbsRestoreStarted'))
       setPbsRestoreDialog({ open: false, backup: null, storageType: 'qemu' })
     } catch (e: any) {
@@ -271,7 +291,7 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
     } finally {
       setPbsRestoring(false)
     }
-  }, [pbsRestoreDialog, pbsRestoreVmId, pbsRestoreStorage, pbsRestoreBwLimit, pbsRestoreUnique, pbsRestoreStart, pbsRestoreLive, pbsRestoreOverride, pbsRestoreName, pbsRestoreMemory, pbsRestoreCores, pbsRestoreSockets, pbsRestoreNode, pbsRestoreConnId, data, trackTask, toast, t])
+  }, [pbsRestoreDialog, pbsRestoreVmId, pbsRestoreStorage, pbsRestoreBwLimit, pbsRestoreUnique, pbsRestoreStart, pbsRestoreLive, pbsRestoreTags, pbsRestoreOverride, pbsRestoreName, pbsRestoreMemory, pbsRestoreCores, pbsRestoreSockets, pbsRestoreNode, pbsRestoreConnId, data, trackTask, toast, t])
 
   // PBS file restore: helper to parse files from API response
   const parsePbsFiles = useCallback((files: any[]) => {
@@ -1076,6 +1096,7 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
                                         setPbsRestoreStart(false)
                                         setPbsRestoreLive(false)
                                         setPbsRestoreOverride(false)
+                                        setPbsRestoreTags(true)
                                         setPbsRestoreName('')
                                         setPbsRestoreMemory('')
                                         setPbsRestoreCores('')
@@ -1335,6 +1356,7 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
                   label={<Typography variant="body2">{t('inventory.pbsRestoreLive')}</Typography>}
                 />
               )}
+              <RestoreTagsSwitch control="checkbox" checked={pbsRestoreTags} onChange={setPbsRestoreTags} />
             </Box>
 
             {/* Override settings */}

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { pveFetch } from "@/lib/proxmox/client"
+import { licenseExcludedResponse } from "@/lib/api/response"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { putSingleUse, takeSingleUse } from "@/lib/console/session"
@@ -119,7 +120,7 @@ export async function POST(
     })
   } catch (e: any) {
     console.error("[terminal/node] Error:", e?.message)
-    return NextResponse.json({ error: e?.message || "Failed to create terminal session" }, { status: 500 })
+    return licenseExcludedResponse(e) ?? NextResponse.json({ error: e?.message || "Failed to create terminal session" }, { status: 500 })
   }
 }
 

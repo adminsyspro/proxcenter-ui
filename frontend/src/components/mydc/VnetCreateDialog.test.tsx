@@ -23,6 +23,13 @@ const VDC_POOLED = {
   name: 'ACME GRA4',
   vlanPools: [{ bridge: 'vmbr0', rangeStart: 100, rangeEnd: 199 }],
 }
+const VDC_RANGE = {
+  id: 'v1',
+  name: 'ACME GRA4',
+  transport: { sharing: 'shared', vniRangeStart: 20000, vniRangeEnd: 20009 },
+}
+const VDC_DEDICATED = { id: 'v1', name: 'ACME GRA4', transport: { sharing: 'dedicated', vniRangeStart: null, vniRangeEnd: null } }
+const VDC_PLATFORM_EDGE = { id: 'v1', name: 'ACME GRA4', edgeModel: 'platform' }
 const VDC_TWO_BRIDGES = {
   id: 'v1',
   name: 'ACME GRA4',
@@ -126,6 +133,69 @@ describe('VnetCreateDialog: vDC without VLAN pools', () => {
     expect(body.displayName).toBe('web')
     expect(body.subnet.cidr).toBe('10.42.0.0/24')
     expect(body.subnet.gateway).toBe('10.42.0.1')
+  })
+})
+
+describe('VnetCreateDialog: pure L2 network (roadmap#18) and L3 edge (#904)', () => {
+  it('posts subnet: null once the IP configuration switch is off, and hides the subnet fields', async () => {
+    renderDialog([VDC_PLAIN])
+    setText('Name', 'l2')
+    // Name alone is not enough while the subnet is on.
+    expect(createButton().disabled).toBe(true)
+
+    fireEvent.click(field('Configure IP addressing (CIDR, gateway, DNS)'))
+    expect(queryField('CIDR')).toBeNull()
+    expect(queryField('Gateway')).toBeNull()
+    await waitFor(() => expect(createButton().disabled).toBe(false))
+    fireEvent.click(createButton())
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled())
+    const body = lastPostBody()
+    expect(body.subnet).toBeNull()
+    expect(body.displayName).toBe('l2')
+    expect('vni' in body).toBe(false)
+  })
+
+  it('a platform-provided edge locks the IP configuration on', () => {
+    renderDialog([VDC_PLATFORM_EDGE])
+    const toggle = field('Configure IP addressing (CIDR, gateway, DNS)') as HTMLInputElement
+    expect(toggle.checked).toBe(true)
+    expect(toggle.disabled).toBe(true)
+    expect(screen.getByText(/Your provider operates the L3 edge/)).toBeTruthy()
+    expect(queryField('CIDR')).not.toBeNull()
+  })
+
+  it('offers no VNI field on a shared transport without a range', () => {
+    renderDialog([VDC_PLAIN])
+    expect(queryField('VNI')).toBeNull()
+    expect(screen.getByText('VNI is auto-allocated by ProxCenter.')).toBeTruthy()
+  })
+
+  it('shared transport with a range: VNI field gated to the range, posted as a number', async () => {
+    renderDialog([VDC_RANGE])
+    fillRequired('web')
+    // The range reads once, in the VNI field helper, and no subnet title
+    // repeats the IP toggle label.
+    expect(screen.getAllByText(/20000-20009/)).toHaveLength(1)
+    expect(screen.getByText(/assigned you the VNI range 20000-20009/)).toBeTruthy()
+    expect(screen.queryByText(/^Subnet \(CIDR/)).toBeNull()
+    setText('VNI', '30000')
+    await waitFor(() => expect(createButton().disabled).toBe(true))
+    setText('VNI', '20003')
+    await waitFor(() => expect(createButton().disabled).toBe(false))
+    fireEvent.click(createButton())
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled())
+    expect(lastPostBody().vni).toBe(20003)
+  })
+
+  it('dedicated transport: any VNI up to 16777215', async () => {
+    renderDialog([VDC_DEDICATED])
+    fillRequired('web')
+    expect(screen.getByText(/dedicated transport: you choose the VNI/)).toBeTruthy()
+    setText('VNI', '16777216')
+    await waitFor(() => expect(createButton().disabled).toBe(true))
+    setText('VNI', '42')
+    await waitFor(() => expect(createButton().disabled).toBe(false))
   })
 })
 

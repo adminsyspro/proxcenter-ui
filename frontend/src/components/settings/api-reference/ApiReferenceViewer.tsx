@@ -47,7 +47,9 @@ export function withLogo(document: OpenApiDocument, logoUrl: string, alt: string
 }
 
 /**
- * Embeds the Scalar API reference for the public read-only API.
+ * Embeds the Scalar API reference for the public API, reads and writes.
+ * Try-it sends real requests: a write operation fired from here acts on the
+ * real infrastructure, which the page hosting this viewer warns about.
  *
  * The host must give this component a definite box (the page puts it in an
  * absolutely positioned inset). Scalar sizes its sticky sidebar and viewport

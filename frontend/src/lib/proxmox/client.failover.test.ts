@@ -5,6 +5,8 @@ import { pveFetch } from './client'
 import { setNodeIps, incrementFailures } from '../cache/nodeIpCache'
 
 vi.mock('../connections/getConnection', () => ({ invalidateConnectionCache: vi.fn() }))
+// The write guard (roadmap#58) would otherwise ask the database on every POST.
+vi.mock('../license/exclusions', async importOriginal => ({ ...(await importOriginal<typeof import('../license/exclusions')>()), isConnectionLicenseExcluded: async () => false }))
 
 const servers: Server[] = []
 async function listen(host: string, handler: RequestListener, port = 0) {

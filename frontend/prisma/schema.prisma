@@ -34,6 +34,9 @@ model Connection {
   // a later step. Defaults to today's behavior (full_admin) so existing
   // connections are unchanged.
   accessProfile String @default("full_admin") @map("access_profile")
+  // Outside the license (roadmap#58): visible and readable, counted in no
+  // quota, every write to it refused by the orchestrator and by pveFetch.
+  licenseExcluded Boolean @default(false) @map("license_excluded")
 
   // Custom ProxCenter tags (semicolon-separated)
   tags String?
@@ -50,6 +53,15 @@ model Connection {
   // the RBD stream to the DR node's address inside this network instead of the
   // management address, the way the Proxmox migration network works.
   replicationNetwork String?
+  // Warm migration (roadmap#45): cap on the thick-target zeroing that precedes
+  // the copy into this PVE cluster, MB/s, so a LUN shared with production is
+  // not saturated. Null or 0 = unlimited. Enterprise (migration feature).
+  warmZeroRateLimitMBps Int?
+  // Post-copy integrity check of migrations INTO this cluster (roadmap#1):
+  // null = the defaults (on, 8 spread regions of 4 MiB). Enterprise.
+  integrityCheckEnabled  Boolean?
+  integrityRegionCount   Int?
+  integrityRegionSizeMiB Int?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -74,6 +86,12 @@ model ManagedHost {
   connection   Connection? @relation(fields: [connectionId], references: [id], onDelete: SetNull)
   node         String
   ip           String?
+  // False when `ip` is a guess rather than the node's management address: the
+  // token could not see the node's bridges in /nodes/{node}/network, or the
+  // node did not answer and this is its corosync link from /cluster/status.
+  // Failover tries a guess last, and a guess never replaces a verified
+  // address (roadmap#51).
+  ipVerified   Boolean     @default(true)
   sshAddress   String?
   sshPort      Int?
   displayName  String?
@@ -195,6 +213,9 @@ model CustomImage {
   createdAt         DateTime @default(now()) @map("created_at")
   updatedAt         DateTime @updatedAt @map("updated_at")
 
+  // Per-tenant / per-vDC visibility (#903), on top of the isShared shortcut.
+  grants            CatalogGrant[]
+
   @@unique([tenantId, slug])
   @@map("custom_images")
 }
@@ -209,11 +230,44 @@ model Blueprint {
   cloudInit   Json?   @map("cloud_init") // { ciuser, sshKeys, ipconfig0, nameserver, searchdomain }
   tags        String?
   isPublic    Boolean  @default(true) @map("is_public")
+  // Provider catalogue flag (#903), same contract as CustomImage.isShared:
+  // visible to every tenant, only the provider tenant may set it.
+  isShared    Boolean  @default(false) @map("is_shared")
   createdBy   String?  @map("created_by")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
+  grants      CatalogGrant[]
+
   @@map("blueprints")
+}
+
+// Who may see (and deploy) one provider catalogue entry (#903). One row per
+// entry and grantee; the grantee is a tenant OR a vDC, the entry an image OR
+// a blueprint (CHECK constraints in the migration). `isShared` on the entry
+// remains the "everyone" shortcut, so a grant only ever widens visibility.
+// Reads go through the global prisma client: the grantee column is not the
+// owner of the row, so the tenant-scoped extension must not filter on it.
+model CatalogGrant {
+  id              String       @id @default(cuid())
+  imageId         String?      @map("image_id")
+  image           CustomImage? @relation(fields: [imageId], references: [id], onDelete: Cascade)
+  blueprintId     String?      @map("blueprint_id")
+  blueprint       Blueprint?   @relation(fields: [blueprintId], references: [id], onDelete: Cascade)
+  granteeTenantId String?      @map("grantee_tenant_id")
+  granteeTenant   Tenant?      @relation(fields: [granteeTenantId], references: [id], onDelete: Cascade)
+  vdcId           String?      @map("vdc_id")
+  vdc             Vdc?         @relation(fields: [vdcId], references: [id], onDelete: Cascade)
+  createdBy       String?      @map("created_by")
+  createdAt       DateTime     @default(now()) @map("created_at")
+
+  @@unique([imageId, granteeTenantId])
+  @@unique([imageId, vdcId])
+  @@unique([blueprintId, granteeTenantId])
+  @@unique([blueprintId, vdcId])
+  @@index([granteeTenantId])
+  @@index([vdcId])
+  @@map("catalog_grants")
 }
 
 model Deployment {
@@ -303,10 +357,41 @@ model MigrationJob {
   // (#608). Null on rows created before this column existed.
   ownerInstanceId String? @map("owner_instance_id")
 
+  // Bulk migration this job belongs to (roadmap#53). A job of a batch is
+  // created up front as "queued" with its full config; the batch scheduler
+  // (lib/migration/batch-scheduler) starts it, in batchOrder, when a slot of
+  // the batch frees up. Null for a migration started on its own.
+  batchId    String?         @map("batch_id")
+  batch      MigrationBatch? @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  batchOrder Int?            @map("batch_order")
+
   @@index([status])
   @@index([sourceConnectionId])
   @@index([targetConnectionId])
+  @@index([batchId])
   @@map("migration_jobs")
+}
+
+// A bulk migration (roadmap#53): the queue of its jobs lives here, not in the
+// browser that launched it, so the batch keeps going with the tab closed and
+// across a server restart, and any browser can pause, resume or cancel it.
+model MigrationBatch {
+  id                 String   @id @default(cuid())
+  tenantId           String   @default("default") @map("tenant_id")
+  createdBy          String?  @map("created_by")
+  sourceConnectionId String   @map("source_connection_id")
+  targetConnectionId String   @map("target_connection_id")
+  // Jobs of the batch running at once, 1..BULK_CONCURRENCY_MAX.
+  concurrency        Int      @default(1)
+  status             String   @default("running") // running|paused|cancelled|completed
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  jobs MigrationJob[]
+
+  @@index([status])
+  @@index([tenantId, sourceConnectionId])
+  @@map("migration_batches")
 }
 
 // ============================================================================
@@ -464,6 +549,9 @@ model ApiToken {
   lastUsedAt      DateTime? @map("last_used_at")
   lastUsedIp      String?   @map("last_used_ip")
   rateLimitPerMin Int       @default(600) @map("rate_limit_per_min")
+  // Write requests are counted in their own bucket so a runaway automation
+  // cannot spend the read quota, and reads cannot hide a write flood.
+  writeRateLimitPerMin Int  @default(60) @map("write_rate_limit_per_min")
   createdByUserId String?   @map("created_by_user_id")
   // Denormalised on purpose (#632): createdByUserId is SetNull, so deleting
   // the account erases "who minted this credential" from the row while the
@@ -580,6 +668,7 @@ model Tenant {
   vdcs      Vdc[]
   apiTokens ApiToken[]
   tenantNetworks TenantNetwork[]
+  catalogGrants  CatalogGrant[]
 
   @@index([slug])
   @@map("tenants")
@@ -798,6 +887,18 @@ model Vdc {
   transportDevice        String?  @map("transport_device")
   transportCidr          String?  @map("transport_cidr")
   transportNodeAddresses Json?    @map("transport_node_addresses")
+  // VNI policy of the transport (roadmap#18). `shared`: the transport carries
+  // several tenants, the provider hands this vDC a permitted VNI range and a
+  // tenant may only pick inside it. `dedicated`: the transport segment belongs
+  // to this tenant alone, which picks any protocol-valid VNI.
+  transportSharing       String   @default("shared") @map("transport_sharing")
+  vniRangeStart          Int?     @map("vni_range_start")
+  vniRangeEnd            Int?     @map("vni_range_end")
+  // Who owns the L3 edge of the vDC networks (#904). `tenant`: the tenant
+  // brings its router / firewall / DHCP, pure L2 networks are allowed.
+  // `platform`: the provider operates the edge, so every network declares
+  // its subnet.
+  edgeModel              String   @default("tenant") @map("edge_model")
   createdBy      String?  @map("created_by")
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @default(now()) @map("updated_at")
@@ -814,6 +915,7 @@ model Vdc {
   pbsNamespaces      VdcPbsNamespace[]
   isoLibraries       VdcIsoLibrary[]
   tenantNetworkMembers TenantNetworkMember[]
+  catalogGrants      CatalogGrant[]
 
   @@unique([tenantId, connectionId])
   @@unique([tenantId, slug])
@@ -897,6 +999,47 @@ model VdcUsageCache {
   lastSyncedAt         DateTime? @map("last_synced_at")
 
   @@map("vdc_usage_cache")
+}
+
+/// One usage sample of a vDC (#902): the counters of VdcUsageCache at the time
+/// the scheduled sampler read them. The cache row is overwritten on every
+/// refresh; this table keeps the series, for invoicing, charts and audit.
+/// No foreign key on vdc_id on purpose: the history of a deleted vDC stays
+/// until the retention set in the vDC settings purges it, so its last month
+/// can still be invoiced. Each row therefore carries what identifies the vDC
+/// once it is gone (name, tenant, cluster, pool), as they were when sampled.
+model VdcUsageSample {
+  id                   String   @id
+  vdcId                String   @map("vdc_id")
+  vdcName              String   @map("vdc_name")
+  tenantId             String   @map("tenant_id")
+  tenantName           String   @map("tenant_name")
+  connectionId         String   @map("connection_id")
+  pvePoolName          String   @map("pve_pool_name")
+  sampledAt            DateTime @default(now()) @map("sampled_at")
+  usedVcpus            Int      @default(0) @map("used_vcpus")
+  usedRamMb            Int      @default(0) @map("used_ram_mb")
+  usedStorageMb        Int      @default(0) @map("used_storage_mb")
+  usedVms              Int      @default(0) @map("used_vms")
+  usedSnapshots        Int      @default(0) @map("used_snapshots")
+  usedBackups          Int      @default(0) @map("used_backups")
+  usedStorageByStorage Json?    @map("used_storage_by_storage")
+
+  @@index([vdcId, sampledAt])
+  @@index([sampledAt])
+  @@index([tenantId])
+  @@map("vdc_usage_history")
+}
+
+/// A named lease that elects the single process allowed to run a periodic
+/// job when several frontends share the database (HA replicas). Taken and
+/// renewed with one conditional upsert; a dead holder loses it at expiresAt.
+model SchedulerLease {
+  name      String   @id
+  holder    String
+  expiresAt DateTime @map("expires_at")
+
+  @@map("scheduler_leases")
 }
 
 model VdcSharedBridge {

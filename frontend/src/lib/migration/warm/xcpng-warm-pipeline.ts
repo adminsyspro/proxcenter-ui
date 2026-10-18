@@ -2,6 +2,8 @@ import { getTenantPrisma } from "@/lib/tenant"
 import { decryptSecret } from "@/lib/crypto/secret"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { pveFetch } from "@/lib/proxmox/client"
+import { reserveTargetVmid } from "../reserve-target-vmid"
+import { releaseVmids } from "../vmid-reservation"
 import { isFileBasedStorage } from "@/lib/proxmox/storage"
 import { executeSSH, shellEscape } from "@/lib/ssh/exec"
 import {
@@ -25,12 +27,14 @@ import {
   isCancelled, isCutoverRequested, sleepUnlessCutover, awaitOperatorCutover, runDeltaPassWithRetry, HOLD_PASS_INTERVAL_MS,
 } from "./job-control"
 import {
-  applyExtentsWithProgress, checksumDiskWindows, scaleWarmProgress, APPLY_INACTIVITY_MS, PROGRESS_LOG_INTERVAL_MS,
+  applyExtentsWithProgress, checksumDiskWindows, scaleWarmProgress, warmFinalTransfer, APPLY_INACTIVITY_MS, PROGRESS_LOG_INTERVAL_MS,
   type PassWindow, type PassProgress,
 } from "./apply"
 import { createTargetVmShell, provisionBlockTargets, markVolumesCopied } from "./target-provision"
+import { resolveWarmZeroRateLimit } from "./zero-rate-target"
+import { sweepOrphanReaders } from "./orphan-readers"
 import { cleanShutdownAndConfirm, isXapiGuestAgentMissing, type PowerOffOps } from "./power-off"
-import { attachDisksAndBoot, verifySampledFirstBlock } from "./finish"
+import { attachDisksAndBoot, removeTargetVmOnFailure, unmapTargetVolumes, verifySampledFirstBlock } from "./finish"
 import { startXapiReader, stopXapiReader, readAllocatedExtents, type XapiReaderHandle } from "./xapi-reader"
 import { checkNbdNodePreflight } from "./xcpng-node-preflight"
 import { startSessionKeepAlive } from "./session-keepalive"
@@ -81,7 +85,21 @@ export async function runXcpngWarmMigration(jobId: string, config: WarmMigration
   const allocatedVolumes: AllocatedVolume[] = []
   const activeReaders: XapiReaderHandle[] = []
   const targetDev = new Map<number, string>()  // disk position -> device path
+  let pveConn: any = null
+  let createdVmid: number | null = null        // set once THIS job created the target VM
+  const cbtEnabledVdis: string[] = []          // VDIs whose CBT was off until we switched it on
   const stopHeartbeat = startJobHeartbeat({ jobId, prisma })
+
+  // Give the source back CBT the way we found it: off only where we switched it
+  // on, so the CBT a backup product relies on is never touched. Never throws.
+  const restoreSourceCbt = async () => {
+    if (!session) return
+    for (const ref of cbtEnabledVdis.splice(0)) {
+      await xapiDisableCbt(session, ref).catch(async (e: any) => {
+        await appendLog(jobId, `Could not disable CBT on source disk ${ref} again: ${e?.message || e}. It was off before the migration.`, "warn").catch(() => {})
+      })
+    }
+  }
 
   try {
     await updateJob(jobId, "planning")
@@ -97,7 +115,7 @@ export async function runXcpngWarmMigration(jobId: string, config: WarmMigration
     await appendLog(jobId, `Authenticated to ${session.baseUrl} as ${user}`, "success")
     stopKeepAlive = startSessionKeepAlive(() => xapiKeepAlive(session!), KEEPALIVE_MS)
 
-    const pveConn = await getConnectionById(config.targetConnectionId)
+    pveConn = await getConnectionById(config.targetConnectionId)
     nodeIp = await getNodeSshEndpointForMigration(prisma, config.targetConnectionId, config.targetNode, pveConn.baseUrl)
 
     vmRef = await xapiVmRefByUuid(session, config.sourceVmId)
@@ -112,6 +130,12 @@ export async function runXcpngWarmMigration(jobId: string, config: WarmMigration
     const pf = await checkNbdNodePreflight(config.targetConnectionId, nodeIp)
     if (!pf.ok) throw new Error(pf.error || `Proxmox node is missing the NBD tooling for warm migration (${pf.missing.join(", ")}). Install with: apt install nbdkit nbd-client libnbd-bin`)
     await appendLog(jobId, "NBD tooling preflight OK on Proxmox node", "success")
+    // Same sweep as the VMware engine (roadmap#45): readers of finished jobs
+    // are stopped, live ones left alone, failures never fail the job.
+    await sweepOrphanReaders({
+      connectionId: config.targetConnectionId, nodeIp, nodeName: config.targetNode, currentJobId: jobId,
+      log: (msg, level) => appendLog(jobId, msg, level),
+    }).catch(async (e: any) => { await appendLog(jobId, `Leftover reader sweep skipped: ${e?.message || e}`, "warn").catch(() => {}) })
     if (!(await xapiNbdEnabled(session))) {
       const net = await xapiManagementNetworkUuid(session).catch(() => "<network uuid>")
       throw new Error(`NBD is not enabled on any network of the XCP-ng pool. Run once on the pool master: xe network-param-add uuid=${net} param-name=purpose param-key=nbd`)
@@ -124,19 +148,25 @@ export async function runXcpngWarmMigration(jobId: string, config: WarmMigration
     // ── enabling_cbt ──
     await updateJob(jobId, "enabling_cbt")
     if (useCbt) {
-      for (const d of vmConfig.disks) await xapiEnableCbt(session, d.vdiRef!)
-      await appendLog(jobId, "CBT enabled on source disks", "success")
+      for (const d of vmConfig.disks) if (await xapiEnableCbt(session, d.vdiRef!)) cbtEnabledVdis.push(d.vdiRef!)
+      await appendLog(jobId, cbtEnabledVdis.length === vmConfig.disks.length
+        ? "CBT enabled on source disks"
+        : `CBT enabled on ${cbtEnabledVdis.length} of ${vmConfig.disks.length} source disk(s), already on for the others (left as is)`, "success")
     }
-    if (targetVmid == null) targetVmid = Number(await pveFetch<number | string>(pveConn as any, "/cluster/nextid"))
+    if (targetVmid == null) targetVmid = await reserveTargetVmid(pveConn, config.targetConnectionId, jobId)
     const pveParams = mapXoToPveConfig(vmConfig, targetVmid, config.targetStorage, config.networkBridge, config.vlanTag, config.cpuType)
     const shellConf = await createTargetVmShell(pveConn as any, config.targetNode, pveParams)
+    createdVmid = targetVmid
     await updateJob(jobId, "enabling_cbt", { targetVmid })
     await appendLog(jobId, `Target VM ${targetVmid} created on ${config.targetNode}`, "success")
 
     // ── preparing_disks ──
+    // Every disk on the job's storage: the per-disk choices of #317 are VMware only.
     const devByKey = await provisionBlockTargets({
-      jobId, connectionId: config.targetConnectionId, nodeIp, targetStorage: config.targetStorage, storageType: storageInfo?.type || "",
-      targetVmid, shellConf, disks: vmConfig.disks.map(d => ({ key: d.position, capacityBytes: d.sizeBytes })), allocatedVolumes,
+      jobId, connectionId: config.targetConnectionId, nodeIp, targetVmid, shellConf,
+      disks: vmConfig.disks.map(d => ({ key: d.position, capacityBytes: d.sizeBytes, storage: config.targetStorage, storageType: storageInfo?.type || "" })),
+      allocatedVolumes,
+      zeroRateLimitMBps: await resolveWarmZeroRateLimit(config.zeroRateLimitMBps, config.targetConnectionId),
     })
     for (const [k, dev] of devByKey) targetDev.set(k, dev)
 
@@ -249,6 +279,9 @@ export async function runXcpngWarmMigration(jobId: string, config: WarmMigration
       return { bytes, snap }
     }
 
+    // Bytes copied over every pass, left on the job when it completes (warmFinalTransfer).
+    let copiedBytes = 0
+
     const powerOps: PowerOffOps = {
       requestShutdown: () => xapiCleanShutdown(session!, vmRef, { shouldAbort: () => isCancelled(jobId) }),
       waitPoweredOff: async (sliceMs: number) => {
@@ -272,6 +305,7 @@ export async function runXcpngWarmMigration(jobId: string, config: WarmMigration
       const t0 = Date.now()
       const full = await runPass("full", null, { status: "full_copy", currentStep: "full_copy", rangeStart: 10, rangeEnd: 80 })
       let baseline = full.snap
+      copiedBytes += full.bytes
       markVolumesCopied(allocatedVolumes)
       const fullSec = Math.max(1, (Date.now() - t0) / 1000)
       let throughput = full.bytes / fullSec
@@ -295,6 +329,7 @@ export async function runXcpngWarmMigration(jobId: string, config: WarmMigration
         const r = await runDeltaPassWithRetry(jobId, `Delta pass ${pass + 1}`, () => runPass(`delta-${pass + 1}`, baseline, deltaWindow))
         if (r === null) { await appendLog(jobId, "Operator requested cutover: proceeding to final delta", "info"); break }
         baseline = r.snap
+        copiedBytes += r.bytes
         const dsec = Math.max(1, (Date.now() - tk) / 1000)
         throughput = r.bytes > 0 ? r.bytes / dsec : throughput
         await appendLog(jobId, `Delta pass ${pass + 1}: ${(r.bytes / 1048576).toFixed(1)} MB`)
@@ -311,8 +346,9 @@ export async function runXcpngWarmMigration(jobId: string, config: WarmMigration
       await cleanShutdownAndConfirm(jobId, powerOps, "Cutover: requesting clean guest shutdown (XCP-ng guest tools)…", "cutover")
       await appendLog(jobId, "Source powered off (confirmed): applying final delta", "success")
       const fin = await runPass("cutover", baseline, { status: "cutover", currentStep: "cutover", rangeStart: 95, rangeEnd: 98 })
+      copiedBytes += fin.bytes
       await destroySnapshot(fin.snap)
-      for (const d of vmConfig.disks) await xapiDisableCbt(session, d.vdiRef!).catch(() => {})
+      await restoreSourceCbt()
     } else {
       // ── checksum fallback: source off for the whole copy, one block-diff pass per disk ──
       await updateJob(jobId, "full_copy", { currentStep: "source_shutdown", progress: 10 })
@@ -343,6 +379,7 @@ export async function runXcpngWarmMigration(jobId: string, config: WarmMigration
               jobId, connectionId: config.targetConnectionId, nodeIp, nbdDev: reader.nbdDev, dev, extents, capacityBytes: disk.sizeBytes, label: "checksum apply failed", diskIndex: i,
               pass: { status: "full_copy", currentStep: "full_copy", rangeStart: win.scanEnd, rangeEnd: win.applyEnd, totalBytes: extents.reduce((s, e) => s + e.length, 0), doneBytes: 0, lastPct: Math.round(win.scanEnd) },
             })
+            copiedBytes += extents.reduce((s, e) => s + e.length, 0)
           } finally { await release(reader) }
         }
         markVolumesCopied(allocatedVolumes)
@@ -359,11 +396,12 @@ export async function runXcpngWarmMigration(jobId: string, config: WarmMigration
       })
     }
 
+    await unmapTargetVolumes(config.targetConnectionId, nodeIp, allocatedVolumes)
     await attachDisksAndBoot({
       jobId, pveConn: pveConn as any, node: config.targetNode, vmid: targetVmid, diskCount: vmConfig.disks.length, diskSlots: pveParams.diskSlots, bootDiskSlot: pveParams.bootDiskSlot,
       allocatedVolumes, startAfterMigration: config.startAfterMigration, convertDisksToQcow2: config.convertDisksToQcow2 === true, targetStorage: config.targetStorage,
     })
-    await updateJob(jobId, "completed", { progress: 100 })
+    await updateJob(jobId, "completed", { progress: 100, ...warmFinalTransfer(vmConfig.disks.map(d => d.sizeBytes), copiedBytes) })
     await appendLog(jobId, "Warm migration complete", "success").catch(() => {})
   } catch (err: any) {
     await updateJob(jobId, isCancelled(jobId) ? "cancelled" : "failed", { error: String(err?.message || err) }).catch(() => {})
@@ -390,13 +428,19 @@ export async function runXcpngWarmMigration(jobId: string, config: WarmMigration
       }
     }
     // Free the target volumes that never held a complete copy; keep the ones that do (#612).
+    await unmapTargetVolumes(config.targetConnectionId, nodeIp, allocatedVolumes)
     for (const v of volumesToFree(allocatedVolumes)) {
-      if (nodeIp && v.rbdMapped && v.devicePath) await executeSSH(config.targetConnectionId, nodeIp, `rbd unmap "${v.devicePath}" 2>/dev/null`).catch(() => {})
       if (nodeIp) await executeSSH(config.targetConnectionId, nodeIp, `pvesm free ${shellEscape(v.volumeId)} 2>/dev/null`, PVESM_FREE_TIMEOUT_MS).catch(() => {})
     }
     for (const v of volumesToKeep(allocatedVolumes)) await appendLog(jobId, `Kept target volume ${v.volumeId}: it holds a completed copy of the source disk. Remove it manually from the storage if you do not want it.`, "warn").catch(() => {})
+    if (createdVmid != null && pveConn) {
+      await removeTargetVmOnFailure({ jobId, pveConn, node: config.targetNode, vmid: createdVmid, allocatedVolumes })
+    }
+    await restoreSourceCbt()
     throw err
   } finally {
+    // The VMID reserved for this job is either created on the cluster or unused now.
+    releaseVmids(jobId)
     stopHeartbeat()
     stopKeepAlive?.()
     if (session) await xapiLogout(session).catch(() => {})

@@ -239,7 +239,7 @@ describe('AlertThresholdsTab sub-tabs', () => {
 
     expect(await screen.findByText('CPU')).toBeInTheDocument()
     expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual([
-      'Resource Usage', 'Performance & replication', 'Snapshots', 'Collection & recovery',
+      'Resource Usage', 'Performance & replication', 'Snapshots', 'Collection & recovery', 'Network Flows',
     ])
     expect(screen.queryByText('Guest disk latency')).not.toBeInTheDocument()
 
@@ -262,5 +262,62 @@ describe('AlertThresholdsTab sub-tabs', () => {
     await waitFor(() => expect(fetchMock.mock.calls.some(([, options]) => options?.method === 'PUT')).toBe(true))
     const put = fetchMock.mock.calls.find(([, options]) => options?.method === 'PUT')
     expect(JSON.parse(put[1].body)).toMatchObject({ metrics_interval_seconds: 600, cpu_warning: 80, snapshot_max_age_days: 7 })
+  })
+})
+
+// roadmap#52: the telemetry delays are set here, in seconds, and saved with
+// the rest. 0 s of timeout means the orchestrator derives it from polling.
+describe('AlertThresholdsTab sFlow telemetry', () => {
+  async function telemetryCard() {
+    await openSection('Network Flows')
+    const title = await screen.findByText('sFlow telemetry')
+
+    return within(title.closest('.MuiCard-root') as HTMLElement)
+  }
+
+  it('is on by default with the automatic timeout and five minutes of grace', async () => {
+    renderWithProviders(<AlertThresholdsTab />)
+    const card = await telemetryCard()
+
+    expect(card.getByRole('switch')).toBeChecked()
+    expect(card.getByRole('spinbutton', { name: /seconds of silence/ })).toHaveValue(0)
+    expect(card.getByRole('spinbutton', { name: /seconds of grace/ })).toHaveValue(300)
+    expect(card.getByText(/Automatic: four counter polls/)).toBeInTheDocument()
+    expect(card.getByText(/may stay silent for 5 min/)).toBeInTheDocument()
+  })
+
+  it('explains a fixed timeout and saves both delays, then zero when switched off', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<AlertThresholdsTab />)
+    const card = await telemetryCard()
+
+    const timeout = card.getByRole('spinbutton', { name: /seconds of silence/ })
+    await user.clear(timeout)
+    await user.type(timeout, '600')
+    expect(card.getByText(/silent for more than 10 min is reported missing/)).toBeInTheDocument()
+    const grace = card.getByRole('spinbutton', { name: /seconds of grace/ })
+    await user.clear(grace)
+    await user.type(grace, '900')
+
+    await user.click(screen.getByRole('button', { name: /save/i }))
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(endpoint, expect.objectContaining({ method: 'PUT' })))
+    const saved = JSON.parse((fetchMock.mock.calls.find(c => c[1]?.method === 'PUT')![1] as RequestInit).body as string)
+    expect(saved).toMatchObject({ sflow_telemetry_alerts: 1, sflow_telemetry_timeout_seconds: 600, sflow_telemetry_grace_seconds: 900 })
+
+    fetchMock.mockClear()
+    await user.click(card.getByRole('switch'))
+    expect(card.getByText('Disabled')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /save/i }))
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(endpoint, expect.objectContaining({ method: 'PUT' })))
+    const off = JSON.parse((fetchMock.mock.calls.find(c => c[1]?.method === 'PUT')![1] as RequestInit).body as string)
+    expect(off).toMatchObject({ sflow_telemetry_alerts: 0, sflow_telemetry_timeout_seconds: 600, sflow_telemetry_grace_seconds: 900 })
+  })
+
+  it('runs the telemetry check right after a save', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<AlertThresholdsTab />)
+    await telemetryCard()
+    await user.click(screen.getByRole('button', { name: /save/i }))
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/v1/orchestrator/sflow/health/check', { method: 'POST' }))
   })
 })

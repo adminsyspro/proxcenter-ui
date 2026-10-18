@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server"
+import { licenseExcludedResponse } from "@/lib/api/response"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { resolveNodeSshEndpoint } from "@/lib/ssh/node-endpoint"
-import { executeSSH } from "@/lib/ssh/exec"
+import { executeSSH, type SSHResult } from "@/lib/ssh/exec"
 import { checkPermission, PERMISSIONS, buildNodeResourceId } from "@/lib/rbac"
 import { verifyNodeTarget, sshTargetError } from "@/lib/ssh/verify-node-target"
 
@@ -77,7 +78,16 @@ export async function POST(req: Request, ctx: Ctx) {
 if [ $? -eq 0 ]; then ${successCmd}; else echo FAILED > ${STATUS_FILE}; fi
 ' > /dev/null 2>&1 &`
 
-  const result = await executeSSH(id, nodeIp, script)
+  let result: SSHResult
+  try {
+    result = await executeSSH(id, nodeIp, script)
+  } catch (e) {
+    // The cluster is outside the license: executeSSH refused the upgrade
+    // itself (roadmap#58), with the code the UI recognises.
+    const excluded = licenseExcludedResponse(e)
+    if (excluded) return excluded
+    throw e
+  }
 
   if (!result.success) {
     return NextResponse.json(
@@ -116,7 +126,8 @@ export async function GET(_req: Request, ctx: Ctx) {
 
   const command = `${readStatus}; echo '---SEPARATOR---'; cat ${LOG_FILE} 2>/dev/null; echo '---SEPARATOR---'; if ${REBOOT_REQUIRED_TEST}; then echo YES; else echo NO; fi`
 
-  const result = await executeSSH(id, nodeIp, command)
+  // Only reads, so the poll still answers on a cluster outside the license.
+  const result = await executeSSH(id, nodeIp, command, undefined, { readOnly: true })
 
   if (!result.success) {
     return NextResponse.json(

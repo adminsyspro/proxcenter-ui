@@ -2,6 +2,7 @@
 import { NextResponse } from "next/server"
 
 import { pveFetch } from "@/lib/proxmox/client"
+import { licenseExcludedResponse } from "@/lib/api/response"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
 import { putMultiUse, readMultiUse } from "@/lib/console/session"
@@ -66,7 +67,7 @@ export async function POST(
     })
   } catch (e: any) {
     console.error("[spice] Error:", e?.message)
-    return NextResponse.json(
+    return licenseExcludedResponse(e) ?? NextResponse.json(
       { error: e?.message || "Failed to create SPICE session" },
       { status: 500 }
     )

@@ -15,6 +15,11 @@ import { pveFetch } from "@/lib/proxmox/client"
 import { discoverNodeIps } from "@/lib/proxmox/discoverNodeIps"
 import { xcpngSubTypeOf } from "@/lib/xcpng/source"
 import { normalizeXapiBaseUrl } from "@/lib/xcpng/xapi-client"
+import { hasServerFeature } from "@/lib/auth/requireEnterprise"
+import { Features } from "@/lib/license/features"
+
+/** Warm migration settings are Enterprise (migration feature). */
+const migrationFeatureLicensed = () => hasServerFeature(Features.VMWARE_MIGRATION)
 
 export const runtime = "nodejs"
 
@@ -188,6 +193,17 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     // disabling SSH in the same request wins over any value sent along.
     if (body.replicationNetwork !== undefined && body.sshEnabled !== false) {
       data.replicationNetwork = body.replicationNetwork || null
+    }
+    // Warm migration zeroing cap (roadmap#45): PVE only, Enterprise only; null
+    // clears it. A Community server ignores it rather than failing the save.
+    // The post-copy integrity settings (roadmap#1) follow the same gate; null
+    // puts a value back to its default.
+    const migrationFields = ['warmZeroRateLimitMBps', 'integrityCheckEnabled', 'integrityRegionCount', 'integrityRegionSizeMiB'] as const
+    if (migrationFields.some(f => body[f] !== undefined) && await migrationFeatureLicensed()) {
+      const current = await prisma.connection.findUnique({ where: { id }, select: { type: true } })
+      if (current?.type === 'pve') {
+        for (const f of migrationFields) if (body[f] !== undefined) data[f] = body[f]
+      }
     }
     if (body.sshAuthMethod !== undefined) {
       data.sshAuthMethod = body.sshAuthMethod || null

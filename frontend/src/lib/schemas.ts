@@ -2,6 +2,8 @@
 // Zod validation schemas for API route inputs
 
 import { z } from 'zod'
+import { ZERO_RATE_LIMIT_MAX_MBPS, ZERO_RATE_UNLIMITED } from './migration/warm/zero-rate'
+import { INTEGRITY_REGION_COUNT_MAX, INTEGRITY_REGION_SIZE_MIB_MAX } from './migration/integrity-settings'
 
 import type { BroadcastInput } from '@/lib/broadcast/types'
 import { isValidCidr } from '@/lib/net/cidr'
@@ -62,6 +64,14 @@ export const createConnectionSchema = z.object({
   sshUseSudo: z.boolean().default(false),
   // Site Recovery replication network (CIDR), PVE only. Empty or null clears it.
   replicationNetwork: z.nullable(z.string().transform(s => s.trim())).optional(),
+  // Warm migration zeroing cap (roadmap#45), PVE only: MB/s, 0 = unlimited,
+  // null clears it. Ignored without the migration feature (Enterprise).
+  warmZeroRateLimitMBps: z.number().int().min(ZERO_RATE_UNLIMITED).max(ZERO_RATE_LIMIT_MAX_MBPS).nullable().optional(),
+  // Post-copy integrity check of migrations into this cluster (roadmap#1),
+  // PVE only, Enterprise only; null = the default.
+  integrityCheckEnabled: z.boolean().nullable().optional(),
+  integrityRegionCount: z.number().int().min(0).max(INTEGRITY_REGION_COUNT_MAX).nullable().optional(),
+  integrityRegionSizeMiB: z.number().int().min(1).max(INTEGRITY_REGION_SIZE_MIB_MAX).nullable().optional(),
 }).superRefine((data, ctx) => {
   // PVE/PBS require apiToken
   if ((data.type === 'pve' || data.type === 'pbs') && !data.apiToken) {
@@ -155,6 +165,14 @@ export const updateConnectionSchema = z.object({
   sshPassword: z.nullable(z.string().transform(s => s.trim())).optional(),
   sshUseSudo: z.boolean().optional(),
   replicationNetwork: z.nullable(z.string().transform(s => s.trim())).optional(),
+  // Warm migration zeroing cap (roadmap#45), PVE only: MB/s, 0 = unlimited,
+  // null clears it. Ignored without the migration feature (Enterprise).
+  warmZeroRateLimitMBps: z.number().int().min(ZERO_RATE_UNLIMITED).max(ZERO_RATE_LIMIT_MAX_MBPS).nullable().optional(),
+  // Post-copy integrity check of migrations into this cluster (roadmap#1),
+  // PVE only, Enterprise only; null = the default.
+  integrityCheckEnabled: z.boolean().nullable().optional(),
+  integrityRegionCount: z.number().int().min(0).max(INTEGRITY_REGION_COUNT_MAX).nullable().optional(),
+  integrityRegionSizeMiB: z.number().int().min(1).max(INTEGRITY_REGION_SIZE_MIB_MAX).nullable().optional(),
 }).superRefine((data, ctx) => {
   refineReplicationNetwork(data, ctx)
 })
@@ -281,6 +299,7 @@ export const createCustomImageSchema = z.object({
   // the image becomes part of the shared catalogue visible to every tenant.
   // The route enforces the provider check; here we just accept the input.
   isShared: z.boolean().default(false),
+  grantTenantIds: z.array(z.string().min(1).max(64)).max(500).optional(),
 }).superRefine((data, ctx) => {
   if (data.sourceType === 'url' && !data.downloadUrl) {
     ctx.addIssue({
@@ -320,6 +339,9 @@ export const updateCustomImageSchema = z.object({
   ostype: z.string().max(20).optional(),
   tags: z.string().max(200).nullable().optional(),
   isShared: z.boolean().optional(),
+  // Provider-only (#903): tenants this entry is granted to, replacing the
+  // current per-tenant grants. Per-vDC grants live on the vDC (admin/vdcs).
+  grantTenantIds: z.array(z.string().min(1).max(64)).max(500).optional(),
 })
 
 // ─── Templates / Blueprints ──────────────────────────────────────────────────
@@ -351,6 +373,10 @@ export const createBlueprintSchema = z.object({
   }).nullable().optional(),
   tags: z.string().max(200).nullable().optional(),
   isPublic: z.boolean().default(true),
+  // Provider-only (#903), same contract as a custom image: `isShared` opens
+  // the blueprint to every tenant, `grantTenantIds` to the listed ones.
+  isShared: z.boolean().optional(),
+  grantTenantIds: z.array(z.string().min(1).max(64)).max(500).optional(),
 })
 
 /** POST /api/v1/templates/deploy — deploy a VM from image/blueprint */
@@ -401,6 +427,9 @@ export const deploySchema = z.object({
   staticMac: z.string().regex(/^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}$/).optional(),
   saveAsBlueprint: z.boolean().default(false),
   blueprintName: z.string().max(100).optional(),
+  // Provider only: deploy into this tenant vDC instead of the provider's own
+  // infrastructure (roadmap#65). Authorised by the route, not here.
+  targetVdcId: z.string().min(1).optional(),
 })
 
 // ─── Broadcast banner ────────────────────────────────────────────────────────

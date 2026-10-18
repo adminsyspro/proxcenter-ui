@@ -2,6 +2,7 @@ import { pveFetch } from "@/lib/proxmox/client"
 
 import { waitForPveTask } from "./pve-tasks"
 import type { AllocatedVolume } from "./pvesm-alloc"
+import { storageOfVolume } from "./target-overrides"
 
 type PveConn = { baseUrl: string; apiToken: string; insecureDev: boolean; id: string }
 
@@ -91,6 +92,11 @@ export interface ConvertDisksToQcow2Args {
   conn: PveConn
   node: string
   vmid: number | string
+  /**
+   * The job's default storage. Each disk converts on the storage its volume ID
+   * names (per-disk placement, #317); this is only the fallback for an ID
+   * without a storage prefix.
+   */
   targetStorage: string
   /**
    * The pipeline's cleanup registry (or any list of the volume IDs this
@@ -150,49 +156,62 @@ async function runConversion(args: ConvertDisksToQcow2Args): Promise<void> {
   // ask and needs to know why it did not happen.
   if (!enabled) return
 
-  // Server-side re-check of the UI gate: only a snapshot-as-volume-chain LVM
-  // storage defaults to qcow2, and only there does the conversion buy snapshots.
-  const storageCfg = await pveFetch<any>(conn, `/storage/${encodeURIComponent(targetStorage)}`)
-  if (!storageDefaultsToQcow2(storageCfg)) {
-    await log(
-      `Skipping qcow2 conversion: storage "${targetStorage}" (${storageCfg?.type || "unknown"}) does not ` +
-      `default to qcow2 (requires an LVM storage with snapshot-as-volume-chain). Disks keep their native format.`,
-    )
-    return
-  }
-
   const vmConf = await pveFetch<Record<string, unknown>>(
     conn, `/nodes/${encodeURIComponent(node)}/qemu/${vmid}/config`,
   )
-  const disks = migratedDataDisks(vmConf, volumes)
-  if (disks.length === 0) {
+  const migrated = migratedDataDisks(vmConf, volumes)
+  if (migrated.length === 0) {
     await log(`Skipping qcow2 conversion: no raw data disks from this migration are attached to VM ${vmid}.`)
     return
   }
 
-  // The mirror transiently doubles the disk: source raw volume and target qcow2
-  // volume coexist until the copy completes and `delete=1` frees the raw one.
-  // Disks convert one at a time, so the requirement is the LARGEST disk, not
-  // the sum. `avail` comes from the node's live storage status, not the config.
-  const storageStatus = await pveFetch<any>(
-    conn, `/nodes/${encodeURIComponent(node)}/storage/${encodeURIComponent(targetStorage)}/status`,
-  )
-  const avail = Number(storageStatus?.avail ?? 0)
-  const largest = Math.max(...disks.map(d => d.sizeBytes))
-  if (!Number.isFinite(avail) || avail < largest) {
-    const gib = (n: number) => (n / 1024 ** 3).toFixed(1)
-    await log(
-      `Skipping qcow2 conversion: free space on "${targetStorage}" (${gib(avail)} GiB) is below the largest ` +
-      `disk to convert (${gib(largest)} GiB) — the conversion transiently needs a second full copy of the disk. ` +
-      `Free up space and convert manually with "Move disk" if you need snapshots.`,
-      "warn",
-    )
-    return
+  // Each disk sits on the storage the operator picked for it (#317), so the
+  // gates run per storage and a disk converts in place on its own storage.
+  const byStorage = new Map<string, MigratedDataDisk[]>()
+  for (const d of migrated) {
+    const storage = storageOfVolume(d.volumeId, targetStorage)
+    byStorage.set(storage, [...(byStorage.get(storage) ?? []), d])
   }
+  const disks: Array<MigratedDataDisk & { storage: string }> = []
+  for (const [storage, onStorage] of byStorage) {
+    // Server-side re-check of the UI gate: only a snapshot-as-volume-chain LVM
+    // storage defaults to qcow2, and only there does the conversion buy snapshots.
+    const storageCfg = await pveFetch<any>(conn, `/storage/${encodeURIComponent(storage)}`)
+    if (!storageDefaultsToQcow2(storageCfg)) {
+      await log(
+        `Skipping qcow2 conversion: storage "${storage}" (${storageCfg?.type || "unknown"}) does not ` +
+        `default to qcow2 (requires an LVM storage with snapshot-as-volume-chain). Disks keep their native format.`,
+      )
+      continue
+    }
+
+    // The mirror transiently doubles the disk: source raw volume and target qcow2
+    // volume coexist until the copy completes and `delete=1` frees the raw one.
+    // Disks convert one at a time, so the requirement is the LARGEST disk on the
+    // storage, not the sum. `avail` comes from the node's live storage status.
+    const storageStatus = await pveFetch<any>(
+      conn, `/nodes/${encodeURIComponent(node)}/storage/${encodeURIComponent(storage)}/status`,
+    )
+    const avail = Number(storageStatus?.avail ?? 0)
+    const largest = Math.max(...onStorage.map(d => d.sizeBytes))
+    if (!Number.isFinite(avail) || avail < largest) {
+      const gib = (n: number) => (n / 1024 ** 3).toFixed(1)
+      await log(
+        `Skipping qcow2 conversion: free space on "${storage}" (${gib(avail)} GiB) is below the largest ` +
+        `disk to convert (${gib(largest)} GiB) — the conversion transiently needs a second full copy of the disk. ` +
+        `Free up space and convert manually with "Move disk" if you need snapshots.`,
+        "warn",
+      )
+      continue
+    }
+    disks.push(...onStorage.map(d => ({ ...d, storage })))
+  }
+  if (disks.length === 0) return
+  const storages = [...new Set(disks.map(d => d.storage))]
 
   await setPhase(95)
   await log(
-    `Converting ${disks.length} disk(s) to qcow2 on "${targetStorage}" so they can take Proxmox snapshots. ` +
+    `Converting ${disks.length} disk(s) to qcow2 on ${storages.map(n => `"${n}"`).join(", ")} so they can take Proxmox snapshots. ` +
     `This rewrites every byte in the background (hours on multi-TB disks); a running VM stays available.`,
   )
 
@@ -203,7 +222,7 @@ async function runConversion(args: ConvertDisksToQcow2Args): Promise<void> {
         conn, `/nodes/${encodeURIComponent(node)}/qemu/${vmid}/move_disk`,
         {
           method: "POST",
-          body: new URLSearchParams({ disk: disk.slot, storage: targetStorage, format: "qcow2", delete: "1" }),
+          body: new URLSearchParams({ disk: disk.slot, storage: disk.storage, format: "qcow2", delete: "1" }),
         },
       )
       if (!upid) throw new Error("move_disk returned no task id")

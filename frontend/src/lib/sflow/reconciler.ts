@@ -17,9 +17,11 @@
  * process alive by itself, and an error path that can never throw.
  */
 import { prisma } from "@/lib/db/prisma"
+import { isConnectionLicenseExcluded } from "@/lib/license/exclusions"
 import { executeSSH } from "@/lib/ssh/exec"
 import { managedHostSshEndpoint } from "@/lib/ssh/node-endpoint-core"
 import { applySFlowOnNode, SFLOW_PROBE_COMMAND, type SFlowDesiredConfig } from "@/lib/sflow/configure"
+import { reportExpectedAgents, type ExpectedAgentReport } from "@/lib/sflow/expectedAgents"
 
 export const SFLOW_RECONCILE_INTERVAL_MS = 10 * 60 * 1000
 export const SFLOW_DESIRED_CONFIG_KEY = "sflow.desiredConfig"
@@ -69,6 +71,13 @@ export async function reconcileSFlow(): Promise<SFlowReconcileReport> {
     include: { hosts: true },
   })
 
+  // What this pass learnt about each node, for the orchestrator's telemetry
+  // health (roadmap#52): with the page closed, this is the only path that
+  // keeps the expected-agent inventory current. A cluster is reported as
+  // complete only when every one of its nodes answered.
+  const expected: ExpectedAgentReport[] = []
+  const completeConnectionIds: string[] = []
+
   for (const setting of desired) {
     if (!isUsableConfig(setting.value)) continue
     const config = setting.value
@@ -76,31 +85,73 @@ export async function reconcileSFlow(): Promise<SFlowReconcileReport> {
     for (const conn of connections) {
       if (conn.tenantId !== setting.tenantId) continue
       if (!conn.sshKeyEnc && !conn.sshPassEnc) continue
+      // A cluster outside the license is read-only for ProxCenter: nothing to
+      // put back there, and executeSSH would refuse the re-apply (roadmap#58).
+      if (await isConnectionLicenseExcluded(conn.id)) continue
 
+      let allReached = true
       for (const host of conn.hosts) {
         if (!host.enabled || !(host.ip || host.sshAddress)) continue
         const target = managedHostSshEndpoint(host, conn.sshPort)
+        const agentIp = host.ip || target.host
 
-        const probe = await executeSSH(conn.id, target, SFLOW_PROBE_COMMAND)
-        if (!probe.success) continue // unreachable, not drifted
+        const probe = await executeSSH(conn.id, target, SFLOW_PROBE_COMMAND, undefined, { readOnly: true })
+        if (!probe.success) {
+          allReached = false
+          continue // unreachable, not drifted
+        }
 
         report.checked++
-        if (Number.parseInt((probe.output ?? "0").trim(), 10) > 0) continue // still configured
+        if (Number.parseInt((probe.output ?? "0").trim(), 10) > 0) {
+          expected.push(expectedAgent(conn.id, conn.name, host.node, agentIp, config, true))
+          continue // still configured
+        }
 
-        const applied = await applySFlowOnNode(conn.id, target, config)
+        const applied = await applySFlowOnNode(conn.id, target, config, agentIp)
         if (applied.success) {
           report.reapplied++
+          expected.push(expectedAgent(conn.id, conn.name, host.node, agentIp, config, true, true))
         } else if (applied.bridgesConfigured === 0 && applied.failedBridges.length === 0) {
-          // No OVS bridge on this node: nothing to reconcile, not a failure.
+          // No OVS bridge on this node: nothing to reconcile, not a failure,
+          // and nothing to expect from it either.
+          expected.push(expectedAgent(conn.id, conn.name, host.node, agentIp, config, false))
           continue
         } else {
           report.failed++
+          // The bridges may hold the configuration while the collector stays
+          // unreachable from the node: expected, so the silence is reported.
+          expected.push(expectedAgent(conn.id, conn.name, host.node, agentIp, config, applied.bridgesConfigured > 0))
         }
       }
+      if (allReached) completeConnectionIds.push(conn.id)
     }
   }
 
+  await reportExpectedAgents({ connection_ids: completeConnectionIds, agents: expected })
+
   return report
+}
+
+function expectedAgent(
+  connectionId: string,
+  connectionName: string,
+  node: string,
+  agentIp: string,
+  config: SFlowDesiredConfig,
+  configured: boolean,
+  reconfigured = false,
+): ExpectedAgentReport {
+  return {
+    connection_id: connectionId,
+    connection_name: connectionName,
+    node,
+    agent_ip: agentIp,
+    target: config.collectorTarget,
+    polling_interval: config.pollingInterval,
+    sampling_rate: config.samplingRate,
+    configured,
+    reconfigured,
+  }
 }
 
 export interface SFlowReconcilerOptions {

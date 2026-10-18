@@ -39,6 +39,10 @@ vi.mock('@/lib/proxmox/client', () => ({
 
 vi.mock('@/lib/proxmox/resolveManagementIp', () => ({
   resolveManagementIp: resolveManagementIpMock,
+  resolveManagementAddress: (networks: any) => {
+    const ip = resolveManagementIpMock(networks)
+    return ip ? { ip, verified: true } : undefined
+  },
 }))
 
 vi.mock('@/lib/proxmox/urlUtils', () => ({

@@ -36,6 +36,12 @@ export type RbacInfraScope = {
   nodeGrantsByConnection?: Map<string, Set<string>>
   /** Per-connection VMIDs granted directly (vm scope). Absent = none. */
   guestGrantsByConnection?: Map<string, Set<string>>
+  /**
+   * Per-connection storage ids granted outright (storage scope, issue #921).
+   * A storage grant opens that storage in the storage feeds and nothing else:
+   * it reveals no node, no guest and no cluster fact. Absent = none.
+   */
+  storageGrantsByConnection?: Map<string, Set<string>>
 }
 
 /** Permission(s) a grant must carry to count; `undefined` = every grant counts. */
@@ -74,6 +80,7 @@ export function deriveRbacInfraScope(
   const nodesByConnection = new Map<string, Set<string>>()
   const nodeGrantsByConnection = new Map<string, Set<string>>()
   const guestGrantsByConnection = new Map<string, Set<string>>()
+  const storageGrantsByConnection = new Map<string, Set<string>>()
   let guestDerived = false
 
   const addTo = (map: Map<string, Set<string>>, connId: string, value: string) => {
@@ -88,6 +95,14 @@ export function deriveRbacInfraScope(
   for (const g of relevant) {
     if (FLAT_SCOPE_TYPES.has(g.scopeType) && g.scopeTarget) {
       guestDerived = true
+      continue
+    }
+    if (g.scopeType === 'storage' && g.scopeTarget) {
+      // storage => connId:storageId; the storage id itself never holds ':'.
+      const sep = g.scopeTarget.indexOf(':')
+      if (sep > 0 && sep < g.scopeTarget.length - 1) {
+        addTo(storageGrantsByConnection, g.scopeTarget.slice(0, sep), g.scopeTarget.slice(sep + 1))
+      }
       continue
     }
     if (!TREE_SCOPE_TYPES.has(g.scopeType) || !g.scopeTarget) continue
@@ -109,7 +124,7 @@ export function deriveRbacInfraScope(
     }
   }
 
-  return { fullConnections, nodesByConnection, guestDerived, nodeGrantsByConnection, guestGrantsByConnection }
+  return { fullConnections, nodesByConnection, guestDerived, nodeGrantsByConnection, guestGrantsByConnection, storageGrantsByConnection }
 }
 
 /** Whether a whole connection is granted outright (infra scopes only). */
@@ -220,12 +235,85 @@ export function tokenInfraScope(connectionIds: string[] | null): RbacInfraScope 
     guestDerived: false,
     nodeGrantsByConnection: new Map(),
     guestGrantsByConnection: new Map(),
+    storageGrantsByConnection: new Map(),
   }
 }
 
 /** Node names granted outright on a connection (see RbacInfraScope.nodeGrantsByConnection). */
 function outrightNodes(scope: RbacInfraScope, connId: string): Set<string> | undefined {
   return scope.nodeGrantsByConnection ? scope.nodeGrantsByConnection.get(connId) : scope.nodesByConnection.get(connId)
+}
+
+const NO_STORAGES: ReadonlySet<string> = new Set()
+
+/** Storage ids granted outright on a connection (see RbacInfraScope.storageGrantsByConnection). */
+function outrightStorages(scope: RbacInfraScope, connId: string): ReadonlySet<string> {
+  return scope.storageGrantsByConnection?.get(connId) ?? NO_STORAGES
+}
+
+/** Whether the user holds at least one storage grant on the connection (issue #921). */
+export function hasStorageGrant(scope: RbacInfraScope | null, connId: string): boolean {
+  if (scope === null) return true
+  return outrightStorages(scope, connId).size > 0
+}
+
+/**
+ * Whether ONE storage of a connection is visible to the user (issue #921).
+ * Mirrors what the routes let them do with it, so the inventory never lists a
+ * storage every content and backup route would refuse:
+ *
+ *  - admin, or the whole connection granted: every storage;
+ *  - a storage granted outright (storage scope): that storage, on every node
+ *    carrying that id, exactly as the content routes judge it;
+ *  - a node granted outright (node scope): the local storages of that node,
+ *    plus the shared storages mounted on at least one granted node. A shared
+ *    entry that does not say where it is mounted (`nodes` absent or empty, the
+ *    streamed tree shape) is taken as cluster-wide, which is what PVE does for
+ *    a shared storage without a `nodes` restriction;
+ *  - a vm, tag or pool grant reveals no storage: those callers stay on the
+ *    guest-derived perimeter of the storage routes (issue #262).
+ *
+ * Same answer as the tenant path's `storagesByConnection`, which also names
+ * storages per connection, and as getStorageGrantPerimeter for the storage
+ * scopes themselves.
+ */
+export function isStorageVisible(
+  scope: RbacInfraScope | null,
+  connId: string,
+  storage: { storage: string; shared?: boolean; node?: string | null; nodes?: ReadonlyArray<string> | null },
+): boolean {
+  if (scope === null) return true
+  if (scope.fullConnections.has(connId)) return true
+  if (outrightStorages(scope, connId).has(storage.storage)) return true
+  const nodes = outrightNodes(scope, connId)
+  if (!nodes || nodes.size === 0) return false
+  if (storage.shared) {
+    const mounts = storage.nodes && storage.nodes.length > 0 ? storage.nodes : null
+    return mounts === null ? true : mounts.some(n => nodes.has(n))
+  }
+  return !!storage.node && nodes.has(storage.node)
+}
+
+/**
+ * Apply isStorageVisible to the streamed storage tree of one connection
+ * (per-node local storages plus the cluster's shared ones). Nodes left with
+ * no storage are dropped; null when nothing remains, so the caller skips the
+ * event. Null scope = admin, unchanged.
+ */
+export function filterStorageDataForRbac<
+  D extends {
+    connId: string
+    nodes: Array<{ node: string; storages: Array<{ storage: string }> }>
+    sharedStorages: Array<{ storage: string }>
+  },
+>(data: D, scope: RbacInfraScope | null): D | null {
+  if (scope === null) return data
+  const nodes = data.nodes
+    .map(n => ({ ...n, storages: n.storages.filter(s => isStorageVisible(scope, data.connId, { storage: s.storage, shared: false, node: n.node })) }))
+    .filter(n => n.storages.length > 0)
+  const sharedStorages = data.sharedStorages.filter(s => isStorageVisible(scope, data.connId, { storage: s.storage, shared: true }))
+  if (nodes.length === 0 && sharedStorages.length === 0) return null
+  return { ...data, nodes, sharedStorages }
 }
 
 /**

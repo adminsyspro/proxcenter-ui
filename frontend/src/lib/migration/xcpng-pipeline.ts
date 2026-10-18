@@ -22,6 +22,8 @@ import { startOperatorSignalWatch, stopOperatorSignalWatch } from "@/lib/migrati
 import { decryptSecret } from "@/lib/crypto/secret"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { pveFetch } from "@/lib/proxmox/client"
+import { reserveTargetVmid } from "./reserve-target-vmid"
+import { releaseVmids } from "./vmid-reservation"
 import { isFileBasedStorage } from "@/lib/proxmox/storage"
 import { executeSSH, shellEscape } from "@/lib/ssh/exec"
 import { formatSshEndpoint, resolveSshTargetPort, sshTargetHost, type SshTarget } from "@/lib/ssh/node-endpoint-core"
@@ -355,7 +357,7 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
       await appendLog(jobId, `Using user-specified VMID ${targetVmid}`)
     } else {
       await appendLog(jobId, "Allocating VMID on Proxmox cluster...")
-      targetVmid = Number(await pveFetch<number | string>(pveConn, "/cluster/nextid"))
+      targetVmid = await reserveTargetVmid(pveConn, config.targetConnectionId, jobId)
       await appendLog(jobId, `Allocated VMID ${targetVmid}`)
     }
     await updateJob(jobId, "creating_vm", { targetVmid })
@@ -374,10 +376,10 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
       scsihw: pveParams.scsihw,
       bios: pveParams.bios,
       machine: pveParams.machine,
-      net0: pveParams.net0,
       agent: pveParams.agent,
       serial0: "socket",
     })
+    for (const [key, value] of Object.entries(pveParams.nets)) createBody.set(key, value)
     if (pveParams.efidisk0) {
       createBody.set("efidisk0", pveParams.efidisk0)
     }
@@ -809,6 +811,8 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
       }
     }
   } finally {
+    // The VMID reserved for this job is either created on the cluster or unused now.
+    releaseVmids(jobId)
     stopSourceKeepAlive()
     await source?.close().catch(() => {})
     stopHeartbeat()

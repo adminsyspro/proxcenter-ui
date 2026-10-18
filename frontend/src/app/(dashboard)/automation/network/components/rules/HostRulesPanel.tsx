@@ -379,7 +379,7 @@ export default function HostRulesPanel({ hostRulesByNode, nodesList, securityGro
             {editingHostRule?.node && <Chip label={editingHostRule.node} size="small" sx={{ ml: 1 }} />}
           </Box>
         </DialogTitle>
-        <DialogContent sx={{ pt: 2 }}>
+        <DialogContent sx={{ pt: '20px !important' }}>
           <Grid container spacing={2}>
             <Grid size={{ xs: 12, sm: 4 }}>
               <FormControl fullWidth size="small">

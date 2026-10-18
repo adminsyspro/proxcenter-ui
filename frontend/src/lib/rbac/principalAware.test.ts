@@ -245,6 +245,41 @@ describe('checkPermission, token branch (layer 2)', () => {
   })
 })
 
+describe('checkPermission, token branch: confined to the token tenant connections', () => {
+  // operatingModel: non-default tenants must carry one (CHECK tenant_default_has_no_model).
+  async function seedTenantWithConnection(tenantId: string, connectionId: string) {
+    const now = new Date()
+    await prismaTest.tenant.create({
+      data: { id: tenantId, slug: tenantId, name: tenantId, operatingModel: 'msp', createdAt: now, updatedAt: now },
+    })
+    await prismaTest.connection.create({
+      data: { id: connectionId, tenantId, name: connectionId, baseUrl: `https://${connectionId}:8006`, apiTokenEnc: 'enc' },
+    })
+  }
+
+  beforeEach(async () => {
+    await truncate(['Connection'])
+    await seedTenantWithConnection('tenant-b', 'conn-b')
+    await seedTenantWithConnection('tenant-c', 'conn-c')
+  })
+
+  it('a non-default tenant token with null connectionIds is refused another tenant connection', async () => {
+    const { secret } = await seedApiToken({ tenantId: 'tenant-b', scopes: ['vms:read', 'vms:power'], connectionIds: null })
+    headersMock.mockResolvedValue(tokenHeaders(secret, 'vms-list', '/api/v1/vms'))
+    const denied = await checkPermission(PERMISSIONS.VM_START, 'vm', 'conn-c:n1:qemu:100')
+    expect(denied?.status).toBe(403)
+    expect(await denied?.json()).toEqual({ error: 'Permission denied: vm.start' })
+    expect(await checkPermission(PERMISSIONS.VM_START, 'vm', 'conn-b:n1:qemu:100')).toBeNull()
+    expect(await checkPermission(PERMISSIONS.VM_START)).toBeNull()
+  })
+
+  it('a default tenant token keeps reaching every connection', async () => {
+    const { secret } = await seedApiToken({ tenantId: 'default', scopes: ['vms:read', 'vms:power'], connectionIds: null })
+    headersMock.mockResolvedValue(tokenHeaders(secret, 'vms-list', '/api/v1/vms'))
+    expect(await checkPermission(PERMISSIONS.VM_START, 'vm', 'conn-c:n1:qemu:100')).toBeNull()
+  })
+})
+
 describe('token-aware filters (never a synthetic userId)', () => {
   const vms = [
     { id: 'conn-1:qemu:node1:100', connId: 'conn-1', node: 'node1', type: 'qemu', vmid: '100' },

@@ -19,6 +19,7 @@ import { PolicySection } from '../../types'
 import RuleFormDialog, { RuleFormData } from './RuleFormDialog'
 import RulesTableHead from './shared/RulesTableHead'
 import SecurityGroupMembersDialog from './shared/SecurityGroupMembersDialog'
+import FirewallLogDialog from '@/components/firewall/FirewallLogDialog'
 import { RuleActionCell, RuleLogCommentCells, RuleRowActionsCell, RuleRowLeadingCells, RuleTrafficCells } from './shared/RuleTableCells'
 
 // ── Props ──
@@ -104,6 +105,15 @@ export default function SecurityGroupsPanel({
 
   // Members (which guests this group is attached to)
   const [membersOf, setMembersOf] = useState<string | null>(null)
+
+  // Firewall log of one group, read from every node (its hits log with VMID 0)
+  const [logsOf, setLogsOf] = useState<string | null>(null)
+  // ...or of one of its rules
+  const [ruleLogs, setRuleLogs] = useState<{ group: string; pos: number } | null>(null)
+  const guestsByVmid = useMemo(
+    () => Object.fromEntries(vmFirewallData.map(v => [v.vmid, { name: v.name, type: v.type, status: v.status }])),
+    [vmFirewallData]
+  )
 
   // Drag & drop
   const [dragState, setDragState] = useState<{ sectionId: string; draggedPos: number | null; dragOverPos: number | null }>({ sectionId: '', draggedPos: null, dragOverPos: null })
@@ -312,6 +322,7 @@ export default function SecurityGroupsPanel({
         <RuleRowActionsCell
           onEdit={() => openEditRule(section.id, rule)}
           onDelete={() => setDeleteConfirm({ groupName: section.id, pos: rule.pos })}
+          logs={{ rule, onOpen: () => setRuleLogs({ group: section.id, pos: rule.pos }) }}
         />
       </TableRow>
     )
@@ -402,6 +413,11 @@ export default function SecurityGroupsPanel({
               <Tooltip title={t('firewall.membersTitle', { group: section.name })}>
                 <IconButton size="small" onClick={() => setMembersOf(section.id)}>
                   <i className="ri-links-line" style={{ fontSize: 16 }} />
+                </IconButton>
+              </Tooltip>
+              <Tooltip title={t('networkPage.firewallLogs')}>
+                <IconButton size="small" onClick={() => setLogsOf(section.id)}>
+                  <i className="ri-terminal-box-line" style={{ fontSize: 16 }} />
                 </IconButton>
               </Tooltip>
               <Tooltip title={t('networkPage.addRule')}>
@@ -521,7 +537,7 @@ export default function SecurityGroupsPanel({
       {filteredSections.length > 0 ? (
         <TableContainer component={Paper} sx={{ border: `1px solid ${alpha(theme.palette.divider, 0.1)}` }}>
           <Table size="small">
-            <RulesTableHead />
+            <RulesTableHead withLogs />
             <TableBody>
               {filteredSections.map(section => (
                 <Fragment key={section.id}>{renderSectionRow(section)}{renderSGRuleRows(section)}</Fragment>
@@ -563,6 +579,29 @@ export default function SecurityGroupsPanel({
           guestsNotScanned={guestsNotScanned}
           onClose={() => setMembersOf(null)}
           onChanged={touched => { touched.forEach(guest => { void reloadVMFirewallRules(guest) }) }}
+        />
+      )}
+
+      {logsOf && (
+        <FirewallLogDialog
+          open
+          onClose={() => setLogsOf(null)}
+          connectionId={selectedConnection}
+          scope={{ kind: 'group', group: logsOf }}
+          subject={logsOf}
+          guests={guestsByVmid}
+        />
+      )}
+
+      {ruleLogs && (
+        <FirewallLogDialog
+          open
+          onClose={() => setRuleLogs(null)}
+          connectionId={selectedConnection}
+          scope={{ kind: 'group', group: ruleLogs.group }}
+          subject={t('firewallLog.ruleSubject', { name: ruleLogs.group, pos: ruleLogs.pos })}
+          guests={guestsByVmid}
+          ruleFilter={{ kind: 'groupRule', group: ruleLogs.group, pos: ruleLogs.pos }}
         />
       )}
 

@@ -5,6 +5,12 @@
  */
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
+// The API token guard is covered by routeGuard.test.ts and writeContract.test.ts:
+// pass-through so this file keeps testing the handler, as for a session caller.
+vi.mock("@/lib/api-tokens/routeGuard", () => ({
+  withPublicApiGuard: (_entryId: string, handler: any) => handler,
+}))
+
 import { callRoute } from "@/__tests__/setup/route-test"
 
 const { checkPermissionMock, guardMock, nameMock, getConnectionByIdMock, pveFetchMock } = vi.hoisted(() => ({
@@ -16,6 +22,11 @@ const { checkPermissionMock, guardMock, nameMock, getConnectionByIdMock, pveFetc
 }))
 
 vi.mock("@/lib/rbac", () => ({
+  // Storage-scope helpers (#921): the id builder is the real shape, the
+  // perimeter is unrestricted unless a test overrides it.
+  buildStorageResourceId: (id: string, storage: string) => `${id}:${storage}`,
+  getRequestStorageGrantPerimeter: async () => null,
+  filterStoragesByGrant: (items: any[], p: any, of: (i: any) => string) => (p?.restricted ? items.filter((i: any) => p.storages.has(of(i))) : items),
   checkPermission: (...a: any[]) => checkPermissionMock(...a),
   PERMISSIONS: { CONNECTION_VIEW: "connection.view", STORAGE_UPLOAD: "storage.upload" },
 }))
@@ -30,6 +41,11 @@ vi.mock("@/lib/proxmox/client", () => ({
   pveFetch: (...a: any[]) => pveFetchMock(...a),
 }))
 vi.mock("@/lib/audit", () => ({ audit: vi.fn() }))
+// A provider session: the vDC tenant refusal is covered by downloadUrlTokenScope.test.ts.
+vi.mock("@/lib/auth/principal", () => ({
+  getPrincipal: async () => ({ ok: true, principal: { kind: "session", userId: "u1", tenantId: "default", connectionIds: null } }),
+}))
+vi.mock("@/lib/tenant/infraScope", () => ({ getTenantInfrastructureScope: async () => ({ kind: "provider" }) }))
 
 import { POST } from "./route"
 
@@ -54,7 +70,7 @@ describe("POST download-url: RBAC (#920)", () => {
   it("gates the download on storage.upload for the connection", async () => {
     const res = await callRoute(POST, { method: "POST", params: PARAMS, body: BODY })
     expect(res.status).toBe(200)
-    expect(checkPermissionMock).toHaveBeenCalledWith("storage.upload", "connection", "conn-1")
+    expect(checkPermissionMock).toHaveBeenCalledWith("storage.upload", "storage", "conn-1:isolib")
   })
 
   it("403s without storage.upload and never reaches PVE", async () => {

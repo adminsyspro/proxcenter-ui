@@ -21,11 +21,14 @@ import { startOperatorSignalWatch, stopOperatorSignalWatch } from "@/lib/migrati
 import { decryptSecret } from "@/lib/crypto/secret"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { pveFetch } from "@/lib/proxmox/client"
-import { isFileBasedStorage } from "@/lib/proxmox/storage"
+import { reserveTargetVmid } from "./reserve-target-vmid"
+import { releaseVmids } from "./vmid-reservation"
 import { executeSSH, shellEscape } from "@/lib/ssh/exec"
 import { formatSshEndpoint, resolveSshTargetPort, sshTargetHost, type SshTarget } from "@/lib/ssh/node-endpoint-core"
 import { soapLogin, soapLogout, soapGetVmConfig, parseVmConfig, buildVmdkDownloadUrl, buildVmdkDescriptorUrl, extractProp, soapCreateSnapshot, soapRemoveAllSnapshots, soapPowerOffVm, soapExportVm, soapWaitForNfcLease, soapNfcLeaseProgress, soapNfcLeaseComplete, soapNfcLeaseAbort, SNAPSHOT_REMOVE_TERMINAL_TIMEOUT_MS } from "@/lib/vmware/soap"
 import { mapEsxiToPveConfig, isWindowsVm } from "./configMapper"
+import { describeOverrides, planDiskTargets, describeDiskPlan, bytesPerStorage, type MigrationDiskMapping, type MigrationHardwareOverrides, type MigrationNicMapping } from "./target-overrides"
+import { coldStorageTarget, coldStorages, localVolumeKinds, describeStorageSpace, storageSpaceShortfall, type ColdStorageTarget } from "./cold-disk-targets"
 import type { SoapSession, EsxiVmConfig, EsxiDiskInfo, NfcLeaseDeviceUrl } from "@/lib/vmware/soap"
 import {
   allocateAndMapBlockVolume, nextFreeDiskName, volumesToFree,
@@ -39,6 +42,9 @@ import { buildUefiInjectScript } from "./uefi-inject"
 import { startJobHeartbeat } from "./job-heartbeat"
 import { capturePipelineStatus, writePipelineExit } from "./pipe-exit"
 import { interpretPollExit, MAX_CONSECUTIVE_POLL_FAILURES } from "./poll-exit"
+import { verifyDiskIntegrity, faultInjectionFromEnv, type RegionSource } from "./integrity"
+import { resolveIntegritySettings } from "./integrity-target"
+import { vtpmPreflightWarning, vtpmCreatedLine } from "./vtpm"
 
 type MigrationStatus = "pending" | "preflight" | "creating_vm" | "transferring" | "configuring" | "converting_disks" | "completed" | "failed" | "cancelled"
 
@@ -68,6 +74,12 @@ interface MigrationConfig {
    * by the route; absent means the Proxmox default, x86-64-v2-AES.
    */
   cpuType?: string
+  /** Operator hardware overrides of the created VM (#317): cores, sockets, memory. */
+  hardware?: MigrationHardwareOverrides
+  /** Per-source-NIC target bridge, VLAN tag and model (#317); unmapped NICs use networkBridge. */
+  nics?: MigrationNicMapping[]
+  /** Per-source-disk target storage or exclusion (#317, lot 2); unmapped disks use targetStorage. */
+  disks?: MigrationDiskMapping[]
   migrationType?: "cold" | "live" | "sshfs_boot"
   transferMode?: "https" | "sshfs" | "auto"
   // User-selected temp directory on the PVE node for large intermediate files
@@ -177,7 +189,10 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
    * (#738, same class as the misleading "failed to destroy partial VM" warning).
    */
   let vmCreated = false
-  let storageTempDir = ''
+  // `<storage path>/images/<vmid>` of every file-based target storage this run
+  // created (#317, lot 2: one per distinct storage), so the failure path sweeps
+  // the temp files of each of them.
+  const storageTempDirs: string[] = []
   // Block volumes pvesm-alloc'd during the run. Lifted to function scope
   // (was previously declared inside the main try) so the catch block can
   // free orphan LVM/RBD allocations when streaming fails before attach
@@ -247,11 +262,27 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       "success"
     )
 
+    // Per-disk choices (#317, lot 2), applied before anything is sized, created
+    // or copied: an excluded disk vanishes from every later step (it drives
+    // neither the vSAN check nor the transfer mode), and from here on disk i of
+    // vmConfig.disks lands on diskPlan.kept[i].storage.
+    const diskPlan = planDiskTargets(vmConfig.disks, config.disks, config.targetStorage)
+    const planLine = describeDiskPlan(diskPlan, config.targetStorage)
+    if (planLine) await appendLog(jobId, planLine)
+    vmConfig.disks = diskPlan.kept.map(k => k.disk)
+
     await updateJob(jobId, "preflight", {
       sourceVmName: vmConfig.name,
       totalDisks: vmConfig.disks.length,
       totalBytes: BigInt(vmConfig.disks.reduce((sum, d) => sum + d.capacityBytes, 0)),
     })
+    // vTPM awareness (roadmap#1): the TPM state stays in vSphere; the target
+    // gets an empty TPM 2.0 and the operator needs the BitLocker recovery key.
+    if (vmConfig.hasVtpm) await appendLog(jobId, vtpmPreflightWarning(), "warn")
+    // Post-copy integrity check (roadmap#1): knobs from the target PVE connection (Migrations tab),
+    // read once per job; the test hook is an env var of dev builds only.
+    const integrity = await resolveIntegritySettings(config.targetConnectionId)
+    const fault = faultInjectionFromEnv()
 
     // Handle VM power state based on migration type
     const isLive = config.migrationType === "live"
@@ -381,16 +412,20 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       await appendLog(jobId, `Transfer mode: HTTPS (download via ESXi API)`, "info")
     }
 
-    // Check target storage
-    const storageStatus = await pveFetch<any>(
-      pveConn,
-      `/nodes/${encodeURIComponent(config.targetNode)}/storage/${encodeURIComponent(config.targetStorage)}/status`
-    )
-    const freeBytes = (storageStatus?.avail || 0)
-    const neededBytes = vmConfig.disks.reduce((sum, d) => sum + d.capacityBytes, 0)
-    await appendLog(jobId, `Target storage "${config.targetStorage}": ${(freeBytes / 1073741824).toFixed(1)} GB free, need ${(neededBytes / 1073741824).toFixed(1)} GB`)
-    if (freeBytes < neededBytes * 1.1) {
-      throw new Error(`Insufficient disk space on "${config.targetStorage}": ${(freeBytes / 1073741824).toFixed(1)} GB free, need ${(neededBytes / 1073741824).toFixed(1)} GB`)
+    // Check the target storages: one status read per storage of the plan, the
+    // job default first (it also hosts efidisk0 / tpmstate0), each against the
+    // bytes of the disks it receives.
+    const neededPerStorage = bytesPerStorage(diskPlan, d => d.capacityBytes)
+    for (const storage of coldStorages(config.targetStorage, diskPlan)) {
+      const storageStatus = await pveFetch<any>(
+        pveConn,
+        `/nodes/${encodeURIComponent(config.targetNode)}/storage/${encodeURIComponent(storage)}/status`
+      )
+      const freeBytes = (storageStatus?.avail || 0)
+      const neededBytes = neededPerStorage.get(storage) ?? 0
+      await appendLog(jobId, describeStorageSpace(storage, freeBytes, neededBytes))
+      const shortfall = storageSpaceShortfall(storage, freeBytes, neededBytes)
+      if (shortfall) throw new Error(shortfall)
     }
 
     if (isCancelled(jobId)) throw new Error("Migration cancelled")
@@ -402,13 +437,16 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       await appendLog(jobId, `Using user-specified VMID ${targetVmid}`)
     } else {
       await appendLog(jobId, "Allocating VMID on Proxmox cluster...")
-      targetVmid = Number(await pveFetch<number | string>(pveConn, "/cluster/nextid"))
+      targetVmid = await reserveTargetVmid(pveConn, config.targetConnectionId, jobId)
       await appendLog(jobId, `Allocated VMID ${targetVmid}`)
     }
     await updateJob(jobId, "creating_vm", { targetVmid })
 
-    const pveParams = mapEsxiToPveConfig(vmConfig, targetVmid, config.targetStorage, config.networkBridge, config.vlanTag, config.cpuType)
-    await appendLog(jobId, `Creating VM: ${pveParams.name} (${pveParams.ostype}, ${pveParams.bios}, ${pveParams.scsihw})...`)
+    const overrides = { hardware: config.hardware, nics: config.nics }
+    const pveParams = mapEsxiToPveConfig(vmConfig, targetVmid, config.targetStorage, config.networkBridge, config.vlanTag, config.cpuType, overrides)
+    const overridesLine = describeOverrides(overrides)
+    if (overridesLine) await appendLog(jobId, overridesLine)
+    await appendLog(jobId, `Creating VM: ${pveParams.name} (${pveParams.ostype}, ${pveParams.bios}, ${pveParams.scsihw}, ${Object.keys(pveParams.nets).length} NIC(s))...`)
 
     // Build URLSearchParams for VM creation (without disks — we import them separately)
     const createBody = new URLSearchParams({
@@ -422,12 +460,18 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       scsihw: pveParams.scsihw,
       bios: pveParams.bios,
       machine: pveParams.machine,
-      net0: pveParams.net0,
       agent: pveParams.agent,
       serial0: "socket",
     })
+    // Every source NIC, net0 to netN (#317).
+    for (const [key, value] of Object.entries(pveParams.nets)) createBody.set(key, value)
     if (pveParams.efidisk0) {
       createBody.set("efidisk0", pveParams.efidisk0)
+    }
+    // Empty TPM 2.0 state for a source with a vTPM (roadmap#1); nextFreeDiskName
+    // already numbers the data disks after it.
+    if (pveParams.tpmstate0) {
+      createBody.set("tpmstate0", pveParams.tpmstate0)
     }
 
     const createResult = await pveFetch<any>(
@@ -442,38 +486,44 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       await waitForPveTask(pveConn, config.targetNode, String(createResult))
     }
     await appendLog(jobId, `VM ${targetVmid} created on ${config.targetNode}`, "success")
+    if (pveParams.tpmstate0) await appendLog(jobId, vtpmCreatedLine(config.targetStorage), "info")
 
     if (isCancelled(jobId)) throw new Error("Migration cancelled")
 
     // ── STEP 3: Transfer & import disks ──
     await updateJob(jobId, "transferring", { progress: 0 })
 
-    // Determine storage type for import strategy
-    const storageConfig = await pveFetch<any>(pveConn, `/storage/${encodeURIComponent(config.targetStorage)}`)
-    const storageType = storageConfig?.type || "dir"
-    const isFileBased = isFileBasedStorage(storageType)
-    const importFormat = isFileBased ? "qcow2" : "raw"
-
-    // Resolve temp directory: use target storage path instead of /tmp
-    // For file-based storage, temp files go on the storage itself (plenty of space)
-    // For block storage, we stream directly to the device (no temp files needed)
-    if (isFileBased) {
-      const storagePath = storageConfig?.path || '/var/lib/vz'
-      storageTempDir = `${storagePath}/images/${targetVmid}`
-      await executeSSH(config.targetConnectionId, nodeIp, `mkdir -p "${storageTempDir}"`)
-      await appendLog(jobId, `Temp directory: ${storageTempDir} (on target storage)`)
+    // Import strategy per target storage (#317, lot 2), resolved once per
+    // distinct storage of the plan and looked up per disk below. A file-based
+    // storage (dir, NFS, CIFS) takes its temp files on the storage itself
+    // (plenty of space) and the converted qcow2 is adopted from there; a block
+    // storage (LVM, ZFS, RBD) gets a raw volume streamed to directly, no temp files.
+    const storageTargets = new Map<string, ColdStorageTarget>()
+    for (const storage of coldStorages(config.targetStorage, diskPlan)) {
+      const storageConfig = await pveFetch<any>(pveConn, `/storage/${encodeURIComponent(storage)}`)
+      const target = coldStorageTarget(storage, storageConfig, targetVmid)
+      storageTargets.set(storage, target)
+      if (target.isFileBased) {
+        await executeSSH(config.targetConnectionId, nodeIp, `mkdir -p "${target.imagesDir}"`)
+        storageTempDirs.push(target.imagesDir)
+        await appendLog(jobId, `Temp directory: ${target.imagesDir} (on target storage "${storage}")`)
+      }
     }
+    // The target of kept disk i (vmConfig.disks[i] is diskPlan.kept[i].disk).
+    const diskTarget = (i: number): ColdStorageTarget => storageTargets.get(diskPlan.kept[i].storage)!
+    // Temp file prefix of disk i: on its storage when file-based, in the temp base otherwise.
+    const diskTmpFile = (i: number): string => `${diskTarget(i).imagesDir || tempBase}/proxcenter-mig-${jobId}-disk${i}`
 
-    // Allocate a raw volume on block storage and return the device path
-    async function allocateBlockVolume(sizeBytes: number): Promise<{ volumeId: string, devicePath: string }> {
+    // Allocate a raw volume on the block storage of disk i and return the device path
+    async function allocateBlockVolume(i: number): Promise<{ volumeId: string, devicePath: string }> {
       const vmConf = await pveFetch<Record<string, any>>(pveConn, `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}/config`)
       const volName = nextFreeDiskName(vmConf, allocatedVolumes, targetVmid)
       // Raw allocation, Ceph mapping and cleanup registration all live in
       // allocateAndMapBlockVolume — see it for why the format and the registration
       // order matter (#587).
       return allocateAndMapBlockVolume({
-        connectionId: config.targetConnectionId, nodeIp, targetStorage: config.targetStorage,
-        targetVmid, volName, sizeKB: Math.ceil(sizeBytes / 1024), allocatedVolumes,
+        connectionId: config.targetConnectionId, nodeIp, targetStorage: diskTarget(i).storage,
+        targetVmid, volName, sizeKB: Math.ceil(vmConfig.disks[i].capacityBytes / 1024), allocatedVolumes,
         onLog: (message) => appendLog(jobId, message),
       })
     }
@@ -496,6 +546,31 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       } catch (attachErr: any) {
         await appendLog(jobId, `Warning: Could not auto-attach ${diskSlot}: ${attachErr.message}`, "warn")
       }
+    }
+
+    // Post-copy integrity check of one disk (roadmap#1): first, last and N spread
+    // regions hashed on the source and on the target, plus `qemu-img check` on a
+    // qcow2 target. Runs BEFORE the disk is attached (block) or adopted (file), so
+    // a difference throws into the failure path, which destroys the partial VM.
+    // Live mode copies a vmkfstools clone that is deleted before this could run,
+    // so it is the one mode left unverified, and the log says so.
+    async function verifyCopiedDisk(i: number, disk: EsxiDiskInfo, source: RegionSource, target: RegionSource, checkImage?: string) {
+      if (isLive) {
+        await appendLog(jobId, `Integrity check, Disk ${i + 1}: not available in live mode (the source clone is removed before the check could run)`)
+        return
+      }
+      await verifyDiskIntegrity({
+        connectionId: config.targetConnectionId, nodeIp, diskIndex: i, diskLabel: `Disk ${i + 1}`,
+        capacityBytes: disk.capacityBytes, source, target,
+        ...(checkImage ? { checkImage: { path: checkImage, format: "qcow2" as const } } : {}),
+        settings: integrity, fault, log: (m, l) => appendLog(jobId, m, l),
+      })
+    }
+
+    // The ESXi datastore file of a disk as a region source: HTTPS range requests
+    // on the same URL the download used, with the SOAP session cookie.
+    function esxiHttpsSource(disk: EsxiDiskInfo): RegionSource {
+      return { kind: "https", url: buildVmdkDownloadUrl(esxiUrl, disk), cookie: soapSession!.cookie.replaceAll('"', "") }
     }
 
     // Helper: stream a disk from ESXi to a pre-allocated block device via HTTPS
@@ -616,6 +691,10 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       const elapsed = (Date.now() - startTime) / 1000
       await updateJob(jobId, "transferring", { bytesTransferred: BigInt(transferredBytes), transferSpeed })
       await appendLog(jobId, `Streaming complete: ${(transferredBytes / 1073741824).toFixed(1)} GB in ${elapsed.toFixed(0)}s (${transferSpeed})`, "success")
+
+      // Source bytes straight from the datastore (range requests), target bytes
+      // from the still-mapped device (roadmap#1).
+      await verifyCopiedDisk(i, disk, esxiHttpsSource(disk), { kind: "raw", path: devicePath })
 
       // Unmap RBD device if we mapped it
       const allocVol = allocatedVolumes.find(v => v.devicePath === devicePath)
@@ -850,7 +929,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       const diskSizeGB = (disk.capacityBytes / 1073741824).toFixed(1)
       await appendLog(jobId, `[Disk ${i + 1}/${vmConfig.disks.length}] Downloading "${disk.label}" (${diskSizeGB} GB, ${disk.thinProvisioned ? "thin" : "thick"})...`)
 
-      const tmpFile = storageTempDir ? `${storageTempDir}/proxcenter-mig-${jobId}-disk${i}` : `${tempBase}/proxcenter-mig-${jobId}-disk${i}`
+      const tmpFile = diskTmpFile(i)
       const soapCookie = soapSession!.cookie
 
       // Strip double quotes from cookie value to avoid shell quoting issues
@@ -1234,7 +1313,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       // qemu-img needs the flat file for direct raw access
       const flatPath = disk.relativePath.replace(/\.vmdk$/, "-flat.vmdk")
       const sshfsDiskPath = `${sshfsMountPath}/${flatPath}`
-      const tmpFile = storageTempDir ? `${storageTempDir}/proxcenter-mig-${jobId}-disk${i}` : `${tempBase}/proxcenter-mig-${jobId}-disk${i}`
+      const tmpFile = diskTmpFile(i)
 
       // Verify the disk file is accessible via SSHFS
       const checkFile = await executeSSH(config.targetConnectionId, nodeIp, `test -f "${sshfsDiskPath}" && echo EXISTS || echo MISSING`)
@@ -1259,6 +1338,8 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       const diskSizeGB = (disk.capacityBytes / 1073741824).toFixed(1)
       // Slot from the mapper (IDE and SATA source disks keep their bus).
       const diskSlot = pveParams.diskSlots[i] ?? `scsi${i}`
+      // Format, images directory and drive options of THIS disk's storage.
+      const { storage: diskStorage, importFormat, imagesDir, driveOpts } = diskTarget(i)
 
       await updateJob(jobId, "transferring", {
         currentStep: `converting_disk_${i + 1}`,
@@ -1369,8 +1450,14 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       const transferSpeed = speedBps > 1048576 ? `${(speedBps / 1048576).toFixed(1)} MB/s` : `${(speedBps / 1024).toFixed(0)} KB/s`
       await appendLog(jobId, `Conversion complete: ${diskSizeGB} GB in ${elapsed.toFixed(0)}s (${transferSpeed}), output ${(outputSize / 1073741824).toFixed(1)} GB`, "success")
 
+      // The converted qcow2 is the future volume (adopted by rename): sample it
+      // against the mounted source and check its structure before it is attached.
+      await verifyCopiedDisk(i, disk,
+        inputFormat === "vmdk" ? { kind: "image", path: sourcePath, format: "vmdk" } : { kind: "raw", path: sourcePath },
+        { kind: "image", path: outputFile, format: "qcow2" }, outputFile)
+
       // Import into Proxmox storage
-      await appendLog(jobId, `Adding disk to storage "${config.targetStorage}"...`)
+      await appendLog(jobId, `Adding disk to storage "${diskStorage}"...`)
       await updateJob(jobId, "transferring", { currentStep: `importing_disk_${i + 1}` })
 
       // Rename-or-import (#292): the converted image was written into the target
@@ -1383,12 +1470,12 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
         connectionId: config.targetConnectionId,
         nodeIp,
         sourcePath: outputFile,
-        targetStorage: config.targetStorage,
-        imagesDir: storageTempDir,
+        targetStorage: diskStorage,
+        imagesDir,
         targetVmid: targetVmid!,
         format: importFormat,
         slot: diskSlot,
-        driveOpts: isFileBased ? ",discard=on" : "",
+        driveOpts,
         diskLabel: `Disk ${i + 1}`,
         taken: adoptedVolumes,
         onLog: (m, level) => appendLog(jobId, m, level),
@@ -1536,6 +1623,13 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       const transferSpeed = speedBps > 1048576 ? `${(speedBps / 1048576).toFixed(1)} MB/s` : `${(speedBps / 1024).toFixed(0)} KB/s`
       await appendLog(jobId, `SSHFS streaming complete: ${(transferredBytes / 1073741824).toFixed(1)} GB in ${elapsed.toFixed(0)}s (${transferSpeed})`, "success")
 
+      // Source bytes from the mounted datastore (the flat file, or the VMDK
+      // descriptor through qemu-nbd on vSAN), target bytes from the still-mapped
+      // device (roadmap#1).
+      await verifyCopiedDisk(i, disk,
+        useVmdkDescriptor ? { kind: "image", path: sshfsDiskPath, format: "vmdk" } : { kind: "raw", path: sshfsDiskPath },
+        { kind: "raw", path: devicePath })
+
       // Unmap RBD device if we mapped it
       const allocVol = allocatedVolumes.find(v => v.devicePath === devicePath)
       if (allocVol?.rbdMapped) {
@@ -1549,7 +1643,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
     //       3) Cleanup clone on ESXi
     async function downloadDiskViaSsh(i: number, disk: EsxiDiskInfo, needsClone = false) {
       const diskSizeGB = (disk.capacityBytes / 1073741824).toFixed(1)
-      const tmpFile = storageTempDir ? `${storageTempDir}/proxcenter-mig-${jobId}-disk${i}` : `${tempBase}/proxcenter-mig-${jobId}-disk${i}`
+      const tmpFile = diskTmpFile(i)
       const { esxiHost, esxiSshPort, esxiSshUser, setupCmd, sshPrefix, cleanupCmd } = buildEsxiSshPrefix(tmpFile)
 
       // Build the VMFS path
@@ -1792,7 +1886,9 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
 
     // Helper: convert + import + attach a single disk
     async function convertAndImportDisk(i: number) {
-      const tmpFile = storageTempDir ? `${storageTempDir}/proxcenter-mig-${jobId}-disk${i}` : `${tempBase}/proxcenter-mig-${jobId}-disk${i}`
+      const tmpFile = diskTmpFile(i)
+      // Format, images directory and drive options of THIS disk's storage.
+      const { storage: diskStorage, importFormat, imagesDir, driveOpts } = diskTarget(i)
       // Slot from the mapper: sata0 for the boot disk of OVMF guests (the firmware
       // cannot enumerate an LSI controller) and of Windows guests (no boot-start
       // VirtIO driver in an untouched guest, #653), IDE and SATA source disks on
@@ -1815,10 +1911,15 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       await appendLog(jobId, `Conversion to ${importFormat} complete`, "success")
       await executeSSH(config.targetConnectionId, nodeIp, `rm -f "${tmpFile}.vmdk"`)
 
+      // The converted qcow2 is the future volume (adopted by rename): sample it
+      // against the datastore file (range requests) and check its structure.
+      await verifyCopiedDisk(i, vmConfig.disks[i], esxiHttpsSource(vmConfig.disks[i]),
+        { kind: "image", path: `${tmpFile}.${importFormat}`, format: "qcow2" }, `${tmpFile}.${importFormat}`)
+
       if (isCancelled(jobId)) throw new Error("Migration cancelled")
 
       // Import disk into Proxmox storage
-      await appendLog(jobId, `Adding disk to storage "${config.targetStorage}"...`)
+      await appendLog(jobId, `Adding disk to storage "${diskStorage}"...`)
       await updateJob(jobId, "transferring", { currentStep: `importing_disk_${i + 1}` })
 
       // Rename-or-import (#292): the shared helper adopts the converted image by
@@ -1830,12 +1931,12 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
         connectionId: config.targetConnectionId,
         nodeIp,
         sourcePath: `${tmpFile}.${importFormat}`,
-        targetStorage: config.targetStorage,
-        imagesDir: storageTempDir,
+        targetStorage: diskStorage,
+        imagesDir,
         targetVmid: targetVmid!,
         format: importFormat,
         slot: diskSlot,
-        driveOpts: isFileBased ? ",discard=on" : "",
+        driveOpts,
         diskLabel: `Disk ${i + 1}`,
         taken: adoptedVolumes,
         onLog: (m, level) => appendLog(jobId, m, level),
@@ -2053,10 +2154,10 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
           await updateJob(jobId, "transferring", { currentDisk: i, progress: Math.round((i / vmConfig.disks.length) * 100) })
           const diskDs = vmConfig.disks[i].datastoreName
           if (sshfsMountedDatastores.has(diskDs)) sshfsMountPath = sshfsMountedDatastores.get(diskDs)!
-          if (isFileBased) {
+          if (diskTarget(i).isFileBased) {
             await transferDiskViaSshfs(i, vmConfig.disks[i])
           } else {
-            const vol = await allocateBlockVolume(vmConfig.disks[i].capacityBytes)
+            const vol = await allocateBlockVolume(i)
             await streamDiskViaSshfsToBlock(i, vmConfig.disks[i], vol.devicePath)
             if (isCancelled(jobId)) throw new Error("Migration cancelled")
             await attachBlockDisk(i, vol.volumeId)
@@ -2065,13 +2166,16 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
         }
       } else {
         // ── Phase 3: Allocate local target volumes for drive-mirror ──
-        await appendLog(jobId, `Boot method: ${bootMethod} - allocating local target volumes (${isFileBased ? 'file-based' : 'block'})...`, "info")
+        // One target per disk (#317, lot 2): a file-based storage gets a raw image
+        // in its own images/<vmid>, a block storage a pvesm-allocated volume.
+        const localTargets = vmConfig.disks.map((_, di) => diskTarget(di))
+        await appendLog(jobId, `Boot method: ${bootMethod} - allocating local target volumes (${localVolumeKinds(localTargets)})...`, "info")
         const localVolumes: { volumeId: string, devicePath: string, isFileVol?: boolean }[] = []
 
         // Seed used disk numbers from current VM config so efidisk0 (which occupies
         // vm-<vmid>-disk-0.raw after `qm create --bios ovmf`) does not collide with data disks.
         const fileBasedUsedNums = new Set<number>()
-        if (isFileBased) {
+        if (localTargets.some(t => t.isFileBased)) {
           const vmConfForAlloc = await pveFetch<Record<string, any>>(pveConn,
             `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}/config`)
           for (const val of Object.values(vmConfForAlloc || {})) {
@@ -2084,10 +2188,10 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
 
         for (let di = 0; di < vmConfig.disks.length; di++) {
           const diskSizeBytes = vmConfig.disks[di].capacityBytes
-          if (isFileBased) {
+          const target = localTargets[di]
+          if (target.isFileBased) {
             // File-based storage (dir, NFS, CIFS): create a raw image file for drive-mirror target
-            const storagePath = storageConfig?.path || '/var/lib/vz'
-            const imgDir = `${storagePath}/images/${targetVmid}`
+            const imgDir = target.imagesDir
             await executeSSH(config.targetConnectionId, nodeIp, `mkdir -p "${imgDir}"`)
 
             // Pick next free disk number, skipping slots already taken (efidisk0, tpmstate0, ...).
@@ -2102,11 +2206,11 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
             if (!createResult.success) {
               throw new Error(`Failed to create disk image: ${createResult.error || createResult.output}`)
             }
-            localVolumes.push({ volumeId: `${config.targetStorage}:${targetVmid}/vm-${targetVmid}-disk-${diskNum}.raw`, devicePath: imgPath, isFileVol: true })
-            await appendLog(jobId, `Disk ${di}: ${imgPath} (${sizeGB} GB raw image)`, "info")
+            localVolumes.push({ volumeId: `${target.storage}:${targetVmid}/vm-${targetVmid}-disk-${diskNum}.raw`, devicePath: imgPath, isFileVol: true })
+            await appendLog(jobId, `Disk ${di}: ${imgPath} (${sizeGB} GB raw image on "${target.storage}")`, "info")
           } else {
             // Block storage (LVM, ZFS, RBD): pre-allocate volume
-            const vol = await allocateBlockVolume(diskSizeBytes)
+            const vol = await allocateBlockVolume(di)
             localVolumes.push(vol)
             await appendLog(jobId, `Disk ${di}: ${vol.volumeId} -> ${vol.devicePath} (${(diskSizeBytes / 1073741824).toFixed(1)} GB)`, "info")
           }
@@ -2569,7 +2673,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
         // it lives at the UEFI removable/fallback path \EFI\Boot\bootx64.efi. Windows stores
         // bootmgfw.efi under \EFI\Microsoft\Boot\ and doesn't always create the fallback copy.
         // Copy it now (while VM is stopped) so the guest boots without needing NVRAM.
-        if (pveParams.bios === "ovmf" && isFileBased && localVolumes[0]) {
+        if (pveParams.bios === "ovmf" && localTargets[0]?.isFileBased && localVolumes[0]) {
           await appendLog(jobId, "Ensuring UEFI fallback bootloader is present on EFI partition...", "info")
           const bootDiskPath = localVolumes[0].devicePath
           const injectScript = buildUefiInjectScript(bootDiskPath)
@@ -2612,9 +2716,8 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
 
         // Attach all disks + boot order atomically in a single PVE API PUT (replaces previous per-disk PUTs).
         const reconfigBody = new URLSearchParams()
-        const diskOpts = isFileBased ? ",discard=on" : ""
         for (let di = 0; di < localVolumes.length; di++) {
-          reconfigBody.set(slotPerDisk[di], `${localVolumes[di].volumeId}${diskOpts}`)
+          reconfigBody.set(slotPerDisk[di], `${localVolumes[di].volumeId}${localTargets[di].driveOpts}`)
         }
         reconfigBody.set('boot', `order=${slotPerDisk[0]}`)
         await pveSetVmConfig(pveConn, config.targetNode, targetVmid!, reconfigBody)
@@ -2697,14 +2800,19 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       await appendLog(jobId, "Cloning disks on ESXi via vmkfstools (VM stays running)...", "info")
 
       // Phase 1: Clone + download/stream all disks while VM runs
+      // The block volume streamed for disk i, or null when disk i goes to a
+      // file-based storage (downloaded now, converted and adopted in phase 3).
+      const liveBlockVolumes: (AllocatedVolume | null)[] = []
       try {
         for (let i = 0; i < vmConfig.disks.length; i++) {
           await updateJob(jobId, "transferring", { currentDisk: i })
-          if (isFileBased) {
+          if (diskTarget(i).isFileBased) {
             await downloadDiskViaSsh(i, vmConfig.disks[i], true)
+            liveBlockVolumes.push(null)
           } else {
             // Block storage: allocate + stream directly to device
-            const vol = await allocateBlockVolume(vmConfig.disks[i].capacityBytes)
+            const vol = await allocateBlockVolume(i)
+            liveBlockVolumes.push(vol)
             await streamDiskViaSshToBlock(i, vmConfig.disks[i], vol.devicePath, true)
           }
           if (isCancelled(jobId)) throw new Error("Migration cancelled")
@@ -2725,23 +2833,20 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       await appendLog(jobId, "All disks transferred - powering off source VM (downtime starts now)...", "warn")
       await powerOffSourceVm(jobId, soapSession!, config.sourceVmId)
 
-      // Phase 3: Import/attach disks
-      if (isFileBased) {
-        // File-based: convert + import from storage temp path
-        await appendLog(jobId, "Converting and importing disks to Proxmox...")
-        for (let i = 0; i < vmConfig.disks.length; i++) {
-          const progressBase = 70 + Math.round((i / vmConfig.disks.length) * 25)
-          await updateJob(jobId, "transferring", { currentDisk: i, progress: progressBase })
+      // Phase 3: Import/attach disks, each according to its own storage: a
+      // file-based disk is converted + imported from the storage temp path, a
+      // block disk was already streamed and is just attached.
+      if (liveBlockVolumes.some(v => v === null)) await appendLog(jobId, "Converting and importing disks to Proxmox...")
+      if (liveBlockVolumes.some(v => v !== null)) await appendLog(jobId, "Attaching pre-streamed volumes to VM...")
+      for (let i = 0; i < vmConfig.disks.length; i++) {
+        const progressBase = 70 + Math.round((i / vmConfig.disks.length) * 25)
+        await updateJob(jobId, "transferring", { currentDisk: i, progress: progressBase })
+        const vol = liveBlockVolumes[i]
+        if (vol) {
+          await attachBlockDisk(i, vol.volumeId)
+        } else {
           await convertAndImportDisk(i)
           if (isCancelled(jobId)) throw new Error("Migration cancelled")
-        }
-      } else {
-        // Block storage: data already streamed — just attach volumes
-        await appendLog(jobId, "Attaching pre-streamed volumes to VM...")
-        for (let i = 0; i < vmConfig.disks.length; i++) {
-          const progressBase = 70 + Math.round((i / vmConfig.disks.length) * 25)
-          await updateJob(jobId, "transferring", { currentDisk: i, progress: progressBase })
-          await attachBlockDisk(i, allocatedVolumes[i].volumeId)
         }
       }
 
@@ -2761,13 +2866,13 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
           sshfsMountPath = sshfsMountedDatastores.get(diskDs)!
         }
 
-        if (isFileBased) {
+        if (diskTarget(i).isFileBased) {
           // File-based storage: qemu-img convert directly from SSHFS mount into the
           // storage's images/<vmid> dir, then adopt by rename (#292)
           await transferDiskViaSshfs(i, vmConfig.disks[i])
         } else {
           // Block storage: dd from SSHFS mount directly to pre-allocated block device
-          const vol = await allocateBlockVolume(vmConfig.disks[i].capacityBytes)
+          const vol = await allocateBlockVolume(i)
           await streamDiskViaSshfsToBlock(i, vmConfig.disks[i], vol.devicePath)
           if (isCancelled(jobId)) throw new Error("Migration cancelled")
           await attachBlockDisk(i, vol.volumeId)
@@ -2786,14 +2891,14 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
           throw new Error(`vSAN datastores require SSHFS transfer mode. Please select "SSHFS" or "Auto" transfer mode in the migration settings.`)
         }
 
-        if (isFileBased) {
+        if (diskTarget(i).isFileBased) {
           // File-based storage: download to storage path → convert → adopt by rename (#292)
           await downloadDisk(i, vmConfig.disks[i])
           if (isCancelled(jobId)) throw new Error("Migration cancelled")
           await convertAndImportDisk(i)
         } else {
           // Block storage: allocate volume → stream directly to device (no temp files)
-          const vol = await allocateBlockVolume(vmConfig.disks[i].capacityBytes)
+          const vol = await allocateBlockVolume(i)
           await streamDiskToBlock(i, vmConfig.disks[i], vol.devicePath)
           if (isCancelled(jobId)) throw new Error("Migration cancelled")
           await attachBlockDisk(i, vol.volumeId)
@@ -2904,8 +3009,8 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
     try {
       const nodeIp = await getNodeSshEndpointForMigration(prisma, config.targetConnectionId, config.targetNode,
         (await getConnectionById(config.targetConnectionId)).baseUrl)
-      // Clean temp files on storage path (file-based storage)
-      if (storageTempDir) {
+      // Clean temp files on the storage paths (one per file-based target storage)
+      for (const storageTempDir of storageTempDirs) {
         await executeSSH(config.targetConnectionId, nodeIp,
           `rm -f "${storageTempDir}"/proxcenter-mig-${jobId}-disk*.vmdk "${storageTempDir}"/proxcenter-mig-${jobId}-disk*.qcow2 "${storageTempDir}"/proxcenter-mig-${jobId}-disk*.raw`)
       }
@@ -2970,6 +3075,8 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       }
     }
   } finally {
+    // The VMID reserved for this job is either created on the cluster or unused now.
+    releaseVmids(jobId)
     stopHeartbeat()
     if (soapSession) {
       await soapLogout(soapSession)

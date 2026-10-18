@@ -8,9 +8,10 @@ import * as pveDirect from '@/lib/firewall/pveDirect'
 import { orchestratorOrPve } from '@/lib/firewall/withPveFallback'
 import { verifyConnectionOwnership } from '@/lib/tenant'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
+import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
 
 // POST /api/v1/firewall/groups/[connectionId]/[groupName]/rules - Add rule
-export async function POST(
+async function postHandler(
   request: NextRequest,
   { params }: { params: Promise<{ connectionId: string; groupName: string }> }
 ) {
@@ -42,3 +43,5 @@ return NextResponse.json(
     )
   }
 }
+
+export const POST = withPublicApiGuard("fw-group-rule-create", postHandler)

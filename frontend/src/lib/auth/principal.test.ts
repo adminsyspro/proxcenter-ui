@@ -16,6 +16,7 @@ import {
   seedDefaultTenant,
   tokenHeaders,
 } from '@/__tests__/setup/apiTokens'
+import * as allowlist from '@/lib/api-tokens/allowlist'
 import { _impl } from '@/lib/auth/requireEnterprise'
 import { _resetLicenseVerdictCache } from '@/lib/api-tokens/licenseGate'
 import { _resetRateLimitCounters } from '@/lib/api-tokens/rateLimit'
@@ -30,7 +31,7 @@ beforeEach(async () => {
   vi.spyOn(_impl, 'getServerLicense').mockResolvedValue(ENTERPRISE_WITH_API_ACCESS)
   getServerSessionMock.mockResolvedValue(null)
   invalidateTrustedProxiesCache()
-  await truncate(['api_tokens', 'tenants', 'security_policies'])
+  await truncate(['api_tokens', 'users', 'tenants', 'security_policies'])
   await seedDefaultTenant()
 })
 
@@ -93,13 +94,13 @@ describe('getPrincipal, fail-closed internal headers (step 3)', () => {
   })
 })
 
-describe('getPrincipal, read-only (step 4, D1)', () => {
-  it.each(['POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'])('rejects %s with 405 before any scope logic', async (method) => {
+describe('getPrincipal, method check (step 4)', () => {
+  it.each(['POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'])('rejects %s on a GET entry with 405 before any scope logic', async (method) => {
     const { secret } = await seedApiToken()
     setHeaders(tokenHeaders(secret, 'vms-list', '/api/v1/vms', method))
     const result = await getPrincipal()
     expect(result.rejection?.status).toBe(405)
-    expect(result.rejection?.body).toEqual({ error: 'API tokens are read-only', method })
+    expect(result.rejection?.body).toEqual({ error: 'Method not allowed for this API token route', method })
     expect(result.rejection?.headers).toEqual({ Allow: 'GET, HEAD' })
   })
 
@@ -114,6 +115,69 @@ describe('getPrincipal, read-only (step 4, D1)', () => {
     const { secret } = await seedApiToken()
     setHeaders(tokenHeaders(secret, 'vms-list', '/api/v1/vms', 'HEAD'))
     expect((await getPrincipal()).ok).toBe(true)
+  })
+
+  it('lets a POST entry called with POST past step 4 (proves step 4 let it through: the unknown token then fails with 401)', async () => {
+    const postEntry = { id: 'test-post', method: 'POST', pattern: '/api/v1/test-post', requiredScopes: [] }
+    const spy = vi.spyOn(allowlist, 'getAllowlistEntryById').mockImplementation(id =>
+      id === 'test-post' ? (postEntry as any) : null,
+    )
+    setHeaders(tokenHeaders('pxc_' + 'a'.repeat(40), 'test-post', '/api/v1/test-post', 'POST'))
+    const result = await getPrincipal()
+    expect(spy).toHaveBeenCalled()
+    expect(result.rejection?.status).toBe(401)
+    expect(result.rejection?.body).toEqual({ error: 'Invalid or expired API token' })
+  })
+
+  it('accepts a valid token on a POST entry called with POST', async () => {
+    const postEntry = { id: 'test-post', method: 'POST', pattern: '/api/v1/test-post', requiredScopes: [] }
+    vi.spyOn(allowlist, 'getAllowlistEntryById').mockImplementation(id =>
+      id === 'test-post' ? (postEntry as any) : null,
+    )
+    const { secret } = await seedApiToken()
+    setHeaders(tokenHeaders(secret, 'test-post', '/api/v1/test-post', 'POST'))
+    expect((await getPrincipal()).ok).toBe(true)
+  })
+
+  it('lists every method of the path (plus HEAD) in the 405 Allow header', async () => {
+    const getE = { id: 'multi-get', method: 'GET', pattern: '/api/v1/multi', requiredScopes: [] }
+    const postE = { id: 'multi-post', method: 'POST', pattern: '/api/v1/multi', requiredScopes: [] }
+    allowlist.PUBLIC_API_ALLOWLIST.push(getE as any, postE as any)
+    try {
+      vi.spyOn(allowlist, 'getAllowlistEntryById').mockImplementation(id => (id === 'multi-get' ? (getE as any) : null))
+      const { secret } = await seedApiToken()
+      setHeaders(tokenHeaders(secret, 'multi-get', '/api/v1/multi', 'PUT'))
+      const result = await getPrincipal()
+      expect(result.rejection?.status).toBe(405)
+      expect(result.rejection?.headers).toEqual({ Allow: 'GET, POST, HEAD' })
+    } finally {
+      allowlist.PUBLIC_API_ALLOWLIST.splice(-2, 2)
+    }
+  })
+
+  it('answers 405 with Allow: POST to a GET on a POST-only entry', async () => {
+    const postE = { id: 'only-post', method: 'POST', pattern: '/api/v1/only-post', requiredScopes: [] }
+    allowlist.PUBLIC_API_ALLOWLIST.push(postE as any)
+    try {
+      vi.spyOn(allowlist, 'getAllowlistEntryById').mockImplementation(id => (id === 'only-post' ? (postE as any) : null))
+      const { secret } = await seedApiToken()
+      setHeaders(tokenHeaders(secret, 'only-post', '/api/v1/only-post', 'GET'))
+      const result = await getPrincipal()
+      expect(result.rejection?.status).toBe(405)
+      expect(result.rejection?.headers).toEqual({ Allow: 'POST' })
+    } finally {
+      allowlist.PUBLIC_API_ALLOWLIST.splice(-1, 1)
+    }
+  })
+
+  it('exposes the token creator as principal.creatorUserId', async () => {
+    const now = new Date()
+    await prismaTest.user.create({
+      data: { id: 'u1', email: 'u1@example.com', createdAt: now, updatedAt: now },
+    })
+    const { secret } = await seedApiToken({ createdByUserId: 'u1' })
+    setHeaders(tokenHeaders(secret, 'vms-list', '/api/v1/vms'))
+    expect((await getPrincipal()).principal?.creatorUserId).toBe('u1')
   })
 })
 
@@ -212,6 +276,31 @@ describe('getPrincipal, quota and scopes (steps 9-10)', () => {
     expect((await getPrincipal()).ok).toBe(true)
   })
 
+  it('counts writes in their own bucket, separate from the read bucket', async () => {
+    const postE = { id: 'quota-post', method: 'POST', pattern: '/api/v1/quota-post', requiredScopes: [] }
+    allowlist.PUBLIC_API_ALLOWLIST.push(postE as any)
+    try {
+      const realLookup = allowlist.getAllowlistEntryById
+      vi.spyOn(allowlist, 'getAllowlistEntryById').mockImplementation(id =>
+        id === 'quota-post' ? (postE as any) : realLookup(id),
+      )
+      const { secret } = await seedApiToken({ rateLimitPerMin: 600, writeRateLimitPerMin: 2 })
+      setHeaders(tokenHeaders(secret, 'quota-post', '/api/v1/quota-post', 'POST'))
+      expect((await getPrincipal({ recordUsage: true })).rateLimit?.limit).toBe(2)
+      expect((await getPrincipal({ recordUsage: true })).ok).toBe(true)
+      const denied = await getPrincipal({ recordUsage: true })
+      expect(denied.rejection?.status).toBe(429)
+      expect(denied.rejection?.headers?.['RateLimit-Limit']).toBe('2')
+
+      setHeaders(tokenHeaders(secret, 'vms-list', '/api/v1/vms'))
+      const read = await getPrincipal({ recordUsage: true })
+      expect(read.ok).toBe(true)
+      expect(read.rateLimit?.limit).toBe(600)
+    } finally {
+      allowlist.PUBLIC_API_ALLOWLIST.splice(-1, 1)
+    }
+  })
+
   it('quota is consumed by every authenticated call BEFORE the scope check', async () => {
     const { secret } = await seedApiToken({ scopes: ['storage:read'], rateLimitPerMin: 1 })
     setHeaders(tokenHeaders(secret, 'vms-list', '/api/v1/vms'))
@@ -230,6 +319,25 @@ describe('getPrincipal, quota and scopes (steps 9-10)', () => {
       error: 'Route not available to API tokens',
       route: '/api/v1/vms',
     })
+  })
+
+  it('a refusal after the token is identified names the token and its tenant (audit attribution, never the body)', async () => {
+    const { id, secret } = await seedApiToken({ scopes: ['storage:read'] })
+    setHeaders(tokenHeaders(secret, 'vms-list', '/api/v1/vms'))
+    const result = await getPrincipal()
+    expect(result.rejection?.status).toBe(403)
+    expect(result.rejection?.tokenId).toBe(id)
+    expect(result.rejection?.tenantId).toBe('default')
+    expect(JSON.stringify(result.rejection?.body)).not.toContain(id)
+  })
+
+  it('an unknown token is refused unattributed', async () => {
+    const { secret } = await seedApiToken({ revokedAt: new Date() })
+    setHeaders(tokenHeaders(secret, 'vms-list', '/api/v1/vms'))
+    const result = await getPrincipal()
+    expect(result.rejection?.status).toBe(401)
+    expect(result.rejection?.tokenId).toBeUndefined()
+    expect(result.rejection?.tenantId).toBeUndefined()
   })
 
   it('anyOf: a token holding only ONE of several acceptable scopes is admitted', async () => {

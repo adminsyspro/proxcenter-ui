@@ -2,7 +2,7 @@ import { NextResponse, after } from "next/server"
 
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
-import { checkPermission, buildNodeResourceId, PERMISSIONS } from "@/lib/rbac"
+import { checkPermission, checkPermissions, buildNodeResourceId, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
 import { syncIpamForVmConfig } from "@/lib/vdc/ipamSync"
 import { releaseAllocationsForVm } from "@/lib/vdc/ipam"
 import { waitForTask } from "@/lib/proxmox/tasks"
@@ -14,20 +14,26 @@ import { getTenantInfrastructureScope } from "@/lib/tenant/infraScope"
 import { safeLog } from "@/lib/log/sanitize"
 import { type DriveQosCaps } from "@/lib/vdc/drives"
 import { restampGuestDrives } from "@/lib/vdc/driveGuard"
+import { clearRestoredTags } from "@/lib/backups/restoreTagsCleanup"
+import { resolveCtRestoreStorage } from "@/lib/backups/ctRestoreStorage"
+import { checkTenantGuestScope } from "@/lib/vdc/guestScope"
+import type { Principal } from "@/lib/auth/principal"
+import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
+import { resolveVisibleConnectionIds } from "@/lib/api-tokens/scope"
 
 export const runtime = "nodejs"
 
 // POST /api/v1/connections/{id}/nodes/{node}/restore
 // Restore a VM or CT from a backup (vzdump/PBS)
-export async function POST(
+async function handler(
   req: Request,
-  ctx: { params: Promise<{ id: string; node: string }> }
+  ctx: { params: Promise<{ id: string; node: string }>; principal?: Principal }
 ) {
   try {
     const { id, node } = await ctx.params
 
     const resourceId = buildNodeResourceId(id, node)
-    const denied = await checkPermission(PERMISSIONS.VM_BACKUP, "node", resourceId)
+    const denied = await checkPermissions([PERMISSIONS.VM_BACKUP, PERMISSIONS.BACKUP_RESTORE], "node", resourceId)
     if (denied) return denied
 
     const body = await req.json()
@@ -46,6 +52,7 @@ export async function POST(
       sockets,
       pbsBackup,
       force,
+      restoreTags,
     } = body
 
     if (!vmid) {
@@ -54,8 +61,8 @@ export async function POST(
 
     // Tenant scoping. Resolved up-front so every later branch (pbsBackup
     // path, direct-archive path, target storage) goes through the same
-    // allow-list. RBAC was already checked above (BACKUP at node-resource
-    // granularity); this layer adds the vDC contract.
+    // allow-list. RBAC was already checked above (vm.backup + backup.restore
+    // at node-resource granularity); this layer adds the vDC contract.
     const tenantId = await getCurrentTenantId()
     // Object route (design ruling §5): full union — a deep link to another
     // vDC's resource must keep working in any view context.
@@ -113,6 +120,35 @@ export async function POST(
 
     const conn = await getConnectionById(id)
 
+    // `force` overwrites the guest already holding this vmid, which destroys
+    // it: the caller must be allowed to delete that guest, judged on the node
+    // it actually lives on. Fail closed when its existence cannot be checked.
+    if (force) {
+      let guests: unknown
+      try {
+        guests = await pveFetch<unknown>(conn, '/cluster/resources?type=vm')
+      } catch {
+        guests = null
+      }
+      if (!Array.isArray(guests)) {
+        return NextResponse.json({ error: 'Unable to check the guest the restore would overwrite' }, { status: 503 })
+      }
+      const existing = guests.find(row => String(row?.vmid) === String(vmid))
+      if (existing) {
+        const existingType = String(existing.type)
+        const existingNode = String(existing.node)
+        const deleteDenied = await checkPermission(
+          PERMISSIONS.VM_DELETE, "vm", buildVmResourceId(id, existingNode, existingType, String(vmid)),
+        )
+        if (deleteDenied) return deleteDenied
+        // A vDC tenant stays inside its own vDC: a vmid of another tenant on
+        // the same provider connection is not its to overwrite. No-op for
+        // the provider and MSP tenants.
+        const scopeDenied = await checkTenantGuestScope(tenantId, conn, id, existingType, existingNode, String(vmid))
+        if (scopeDenied) return scopeDenied
+      }
+    }
+
     // Resolve the PVE-side volid the way qmrestore expects it. Two paths:
     //
     // 1. The caller already knows the volid (e.g. /storage/.../content
@@ -132,6 +168,12 @@ export async function POST(
       }
       if (!pbsId || !datastore || !backupPath) {
         return NextResponse.json({ error: "pbsBackup requires pbsId, datastore, and backupPath" }, { status: 400 })
+      }
+      // The PBS source sits in a nested body field the API token guard does
+      // not read: an API token reads backups of its perimeter only.
+      const principal = ctx.principal
+      if (principal?.kind === "token" && !(await resolveVisibleConnectionIds(principal)).has(pbsId)) {
+        return NextResponse.json({ error: "Connection not in token scope", connection: pbsId }, { status: 403 })
       }
       // Tenant guard on the PBS source: assertVdcPbsAccess returns admin
       // for the provider, the binding tuples for an authorised tenant,
@@ -231,12 +273,26 @@ export async function POST(
           { status: 403 },
         )
       }
-      if (typeof storage === 'string' && storage.length > 0 && !(writableStorages ?? allowedStorages).has(storage)) {
-        return NextResponse.json(
-          { error: allowedStorages.has(storage) ? readOnlyLibraryError(storage) : `Target storage "${storage}" is not authorised for this tenant.` },
-          { status: 403 },
-        )
+    }
+
+    // Container restored on the "default" storage: PVE would put every volume
+    // on 'local' (see resolveCtRestoreStorage). Resolve it to the storage the
+    // backup came from, or refuse with a usable message. Done before the
+    // target check below so a tenant's restore is judged on the real target.
+    let targetStorage: string | undefined = typeof storage === 'string' && storage ? storage : undefined
+    if (type === 'lxc' && !targetStorage) {
+      const resolved = await resolveCtRestoreStorage(conn, node, archive)
+      if ('error' in resolved) {
+        return NextResponse.json({ error: resolved.error }, { status: 400 })
       }
+      targetStorage = resolved.storage
+    }
+
+    if (allowedStorages !== null && targetStorage && !(writableStorages ?? allowedStorages).has(targetStorage)) {
+      return NextResponse.json(
+        { error: allowedStorages.has(targetStorage) ? readOnlyLibraryError(targetStorage) : `Target storage "${targetStorage}" is not authorised for this tenant.` },
+        { status: 403 },
+      )
     }
 
     // PVE has no /qmrestore or /vzrestore REST endpoint — those are CLI
@@ -261,7 +317,7 @@ export async function POST(
       params.archive = archive
     }
 
-    if (storage) params.storage = storage
+    if (targetStorage) params.storage = targetStorage
     if (bwlimit) params.bwlimit = String(bwlimit)
     if (unique) params.unique = '1'
     if (start) params.start = '1'
@@ -270,6 +326,16 @@ export async function POST(
     // tenant chooses "Restore on top of source VM". Without it PVE
     // refuses with "VM/CT <id> already exists".
     if (force) params.force = '1'
+    // "Restore tags" off (#965): an empty `tags` override. PVE merges it into
+    // the backed-up config it writes once the disks are restored, and that is
+    // BEFORE it starts the guest (`start`) or boots it for a live restore, so
+    // the guest is never tagged, not even for a moment, and a tag-based
+    // Site Recovery job or DRS rule cannot pick it up. Works for qmrestore
+    // (VMA and PBS) and pct restore alike; a PVE that cannot honour it fails
+    // the call or the task, it never restores the tags silently. Absent or
+    // true keeps PVE's behaviour: the backed-up tags come back.
+    const omitTags = restoreTags === false
+    if (omitTags) params.tags = ''
 
     // Override settings
     if (name) params.name = name
@@ -328,12 +394,19 @@ export async function POST(
       const upid = String(result)
       const numericVmid = Number(vmid)
       after(async () => {
+        let taskError: unknown = null
         try {
           await waitForTask(conn, node, upid)
         } catch (err: any) {
           console.error(`[restore] waitForTask failed for vmid=${safeLog(vmid)}: ${safeLog(err?.message ?? err)}`)
-          return
+          taskError = err
         }
+
+        // Drop the blank `tags:` line the empty override leaves behind. Also
+        // after a task that ended in warnings: the guest exists all the same.
+        if (omitTags) await clearRestoredTags({ conn, node, isLxc, vmid: numericVmid })
+
+        if (taskError) return
 
         // Pool placement (tenant vDC scope only — provider doesn't auto-pool).
         // Applies to both qemu and lxc since both are scoped via PVE pools.
@@ -422,7 +495,7 @@ export async function POST(
       category: "backups",
       resourceType: "vm",
       resourceId: String(vmid),
-      details: { node, connectionId: id, archive, storage, type },
+      details: { node, connectionId: id, archive, storage: targetStorage, type, ...(omitTags ? { restoreTags: false } : {}) },
     })
 
     return NextResponse.json({
@@ -435,3 +508,5 @@ export async function POST(
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const POST = withPublicApiGuard("vm-restore", handler)

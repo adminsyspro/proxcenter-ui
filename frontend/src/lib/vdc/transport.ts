@@ -6,8 +6,18 @@
 
 export type VxlanTransportMode = 'cluster' | 'peers' | 'transport'
 
+/** Who else rides on the transport (roadmap#18). `shared`: other tenants of
+ *  the cluster, so the provider assigns this vDC a permitted VNI range.
+ *  `dedicated`: this tenant alone, which picks any protocol-valid VNI. */
+export type TransportSharing = 'shared' | 'dedicated'
+
 export interface VdcTransport {
   mode: VxlanTransportMode
+  sharing: TransportSharing
+  /** `shared` only: the VNI range the provider hands this vDC. Both bounds
+   *  or none; null = no range, the VNI is allocated automatically. */
+  vniRangeStart: number | null
+  vniRangeEnd: number | null
   /** `peers` mode: the whole peer list. `transport` mode: endpoints outside
    *  the node segment (tenant routers ingesting the VXLAN stream, hardware
    *  VTEPs, another cluster). Always empty in `cluster` mode. */
@@ -27,6 +37,9 @@ export interface VdcTransport {
 
 export const DEFAULT_TRANSPORT: VdcTransport = {
   mode: 'cluster',
+  sharing: 'shared',
+  vniRangeStart: null,
+  vniRangeEnd: null,
   peers: [],
   mtu: null,
   vlanId: null,
@@ -36,6 +49,10 @@ export const DEFAULT_TRANSPORT: VdcTransport = {
 }
 
 export const TRANSPORT_MODES: readonly VxlanTransportMode[] = ['cluster', 'peers', 'transport']
+export const TRANSPORT_SHARINGS: readonly TransportSharing[] = ['shared', 'dedicated']
+
+/** VXLAN Network Identifier is 24 bits. */
+export const VNI_MAX = 16_777_215
 
 /** VXLAN adds 50 bytes to every frame: the underlay must carry zone MTU + 50. */
 export const VXLAN_OVERHEAD = 50
@@ -255,6 +272,28 @@ function normalizeMtu(raw: unknown): number | null {
   return n
 }
 
+function normalizeVniBound(raw: unknown, label: string): number | null {
+  if (raw === null || raw === undefined || String(raw).trim() === '') return null
+  const n = Number(raw)
+  if (!Number.isInteger(n) || n < 1 || n > VNI_MAX) {
+    throw new Error(`${ERR} ${label} must be an integer between 1 and ${VNI_MAX}.`)
+  }
+  return n
+}
+
+/** Both bounds or none, ordered. Returns the pair as stored. */
+export function normalizeVniRange(start: unknown, end: unknown): { vniRangeStart: number | null; vniRangeEnd: number | null } {
+  const vniRangeStart = normalizeVniBound(start, 'VNI range start')
+  const vniRangeEnd = normalizeVniBound(end, 'VNI range end')
+  if ((vniRangeStart === null) !== (vniRangeEnd === null)) {
+    throw new Error(`${ERR} a VNI range needs both its start and its end.`)
+  }
+  if (vniRangeStart !== null && vniRangeEnd !== null && vniRangeStart > vniRangeEnd) {
+    throw new Error(`${ERR} VNI range start ${vniRangeStart} is above its end ${vniRangeEnd}.`)
+  }
+  return { vniRangeStart, vniRangeEnd }
+}
+
 function normalizeVlanId(raw: unknown): number | null {
   if (raw === null || raw === undefined || String(raw).trim() === '') return null
   const n = Number(raw)
@@ -319,6 +358,23 @@ export function normalizeTransportInput(
   const mode: VxlanTransportMode = TRANSPORT_MODES.includes(input.mode as VxlanTransportMode)
     ? (input.mode as VxlanTransportMode)
     : base.mode
+  // An unknown or missing sharing keeps the current one.
+  const sharing: TransportSharing = TRANSPORT_SHARINGS.includes(input.sharing as TransportSharing)
+    ? (input.sharing as TransportSharing)
+    : base.sharing
+  const range = normalizeVniRange(
+    input.vniRangeStart === undefined ? base.vniRangeStart : input.vniRangeStart,
+    input.vniRangeEnd === undefined ? base.vniRangeEnd : input.vniRangeEnd,
+  )
+  // The cluster network carries every vDC of the cluster by construction, so
+  // it can never be dedicated to one tenant.
+  if (sharing === 'dedicated' && mode === 'cluster') {
+    throw new Error(`${ERR} the cluster network is shared by every vDC of the cluster, it cannot be dedicated to one tenant. Use a peer list or a transport network.`)
+  }
+  // A dedicated transport leaves the VNI choice to the tenant: no range.
+  const policy = sharing === 'dedicated'
+    ? { sharing, vniRangeStart: null, vniRangeEnd: null }
+    : { sharing, ...range }
   const peers = input.peers === undefined ? [...base.peers] : normalizePeerList(input.peers)
   const mtu = input.mtu === undefined ? base.mtu : normalizeMtu(input.mtu)
   const vlanId = input.vlanId === undefined ? base.vlanId : normalizeVlanId(input.vlanId)
@@ -327,12 +383,12 @@ export function normalizeTransportInput(
   const nodeAddresses = input.nodeAddresses === undefined ? { ...base.nodeAddresses } : normalizeNodeAddresses(input.nodeAddresses)
 
   if (mode === 'cluster') {
-    return { mode, peers: [], mtu, vlanId: null, device: null, cidr: null, nodeAddresses: {} }
+    return { mode, ...policy, peers: [], mtu, vlanId: null, device: null, cidr: null, nodeAddresses: {} }
   }
 
   if (mode === 'peers') {
     if (peers.length === 0) throw new Error(`${ERR} peer list mode needs at least one peer address.`)
-    return { mode, peers, mtu, vlanId: null, device: null, cidr: null, nodeAddresses: {} }
+    return { mode, ...policy, peers, mtu, vlanId: null, device: null, cidr: null, nodeAddresses: {} }
   }
 
   if (vlanId === null) throw new Error(`${ERR} transport network mode needs a VLAN id.`)
@@ -353,12 +409,15 @@ export function normalizeTransportInput(
     if (seen.has(ip)) throw new Error(`${ERR} address ${ip} is listed twice.`)
     seen.add(ip)
   }
-  return { mode, peers, mtu, vlanId, device, cidr: cidr.text, nodeAddresses }
+  return { mode, ...policy, peers, mtu, vlanId, device, cidr: cidr.text, nodeAddresses }
 }
 
 /** The `vdcs` transport columns as Prisma returns them. */
 export interface TransportRow {
   vxlanTransportMode?: string | null
+  transportSharing?: string | null
+  vniRangeStart?: number | null
+  vniRangeEnd?: number | null
   vxlanPeers?: string[] | null
   vxlanMtu?: number | null
   transportVlanId?: number | null
@@ -375,8 +434,12 @@ export interface TransportRow {
 export function transportFromRow(row: TransportRow): VdcTransport {
   const mode = String(row.vxlanTransportMode ?? DEFAULT_TRANSPORT.mode)
   const nodeAddresses = row.transportNodeAddresses
+  const sharing = String(row.transportSharing ?? DEFAULT_TRANSPORT.sharing)
   const raw: VdcTransport = {
     mode: (TRANSPORT_MODES.includes(mode as VxlanTransportMode) ? mode : DEFAULT_TRANSPORT.mode) as VxlanTransportMode,
+    sharing: (TRANSPORT_SHARINGS.includes(sharing as TransportSharing) ? sharing : DEFAULT_TRANSPORT.sharing) as TransportSharing,
+    vniRangeStart: row.vniRangeStart ?? null,
+    vniRangeEnd: row.vniRangeEnd ?? null,
     peers: Array.isArray(row.vxlanPeers) ? row.vxlanPeers : [],
     mtu: row.vxlanMtu ?? null,
     vlanId: row.transportVlanId ?? null,
@@ -397,6 +460,9 @@ export function transportFromRow(row: TransportRow): VdcTransport {
 export function transportToRow(transport: VdcTransport) {
   return {
     vxlanTransportMode: transport.mode,
+    transportSharing: transport.sharing,
+    vniRangeStart: transport.vniRangeStart,
+    vniRangeEnd: transport.vniRangeEnd,
     vxlanPeers: transport.peers,
     vxlanMtu: transport.mtu,
     transportVlanId: transport.vlanId,
@@ -464,7 +530,7 @@ export function transportIfaceName(transport: Pick<VdcTransport, 'device' | 'vla
 
 /** Why the transports of two vDCs of one cluster cannot coexist (#899). */
 export interface TransportConflict {
-  reason: 'segment' | 'mtu' | 'nodeAddress' | 'addressReuse' | 'sharedSegment'
+  reason: 'segment' | 'mtu' | 'nodeAddress' | 'addressReuse' | 'sharedSegment' | 'dedicated'
   /** The value the other vDC holds, for the message. */
   detail: string
   /** The node the two disagree on, when the reason names one. */
@@ -498,6 +564,8 @@ export function transportConflict(a: VdcTransport, b: VdcTransport): TransportCo
   }
 
   if (cidrA && cidrB && cidrA.text !== cidrB.text) return { reason: 'segment', detail: cidrB.text }
+  // A segment one of the two declares dedicated cannot carry the other.
+  if (a.sharing === 'dedicated' || b.sharing === 'dedicated') return { reason: 'dedicated', detail: ifaceB }
   // The interface carries the zone MTU plus the VXLAN overhead, so two zone
   // MTUs on one interface is the same fight as two addresses.
   if ((a.mtu ?? null) !== (b.mtu ?? null)) {
@@ -514,6 +582,33 @@ export function transportConflict(a: VdcTransport, b: VdcTransport): TransportCo
     }
   }
   return null
+}
+
+/** Inclusive overlap of two VNI ranges; a vDC without a range never overlaps. */
+export function vniRangesOverlap(
+  a: Pick<VdcTransport, 'vniRangeStart' | 'vniRangeEnd'>,
+  b: Pick<VdcTransport, 'vniRangeStart' | 'vniRangeEnd'>,
+): boolean {
+  if (a.vniRangeStart === null || a.vniRangeEnd === null) return false
+  if (b.vniRangeStart === null || b.vniRangeEnd === null) return false
+  return a.vniRangeStart <= b.vniRangeEnd && b.vniRangeStart <= a.vniRangeEnd
+}
+
+/** What a tenant may do with the VNI of a new VXLAN network on this transport. */
+export interface VniPolicy {
+  sharing: TransportSharing
+  /** `shared` with a provider range: the permitted bounds. */
+  range: { start: number; end: number } | null
+  /** True when the tenant may type a VNI: a dedicated transport, or a shared one with a range. */
+  tenantChoice: boolean
+}
+
+export function vniPolicyFor(transport: Pick<VdcTransport, 'sharing' | 'vniRangeStart' | 'vniRangeEnd'>): VniPolicy {
+  const range = transport.vniRangeStart !== null && transport.vniRangeEnd !== null
+    ? { start: transport.vniRangeStart, end: transport.vniRangeEnd }
+    : null
+  if (transport.sharing === 'dedicated') return { sharing: 'dedicated', range: null, tenantChoice: true }
+  return { sharing: 'shared', range, tenantChoice: range !== null }
 }
 
 /** The MTU the transport interface itself must carry for a given zone MTU. */

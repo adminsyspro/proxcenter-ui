@@ -7,7 +7,9 @@ import { putGuestConfig } from '@/lib/proxmox/guestConfigClient'
 
 import { useProxCenterTasks } from '@/contexts/ProxCenterTasksContext'
 import { useHostsByConnection } from '@/hooks/useHosts'
-import { BULK_MIG_CONCURRENCY } from './bulkMigrationConfig'
+import { OPEN_BULK_BATCH_EVENT, type OpenBulkBatchDetail } from '@/lib/migration/bulkBatchOpen'
+import { emptyMigrationStats, sumMigrationStats, type MigrationStats } from '@/lib/migration/migration-stats'
+import { bulkBatchFromPayload, bulkRowsFromBatch, bulkSourceTypeLabel, fetchActiveBulkBatch, fetchBulkBatch, isBulkBatchFinished, shouldTrackBulkJob, type BatchPayload, type BulkMigBatch, type BulkMigJobRow } from './bulkJobList'
 import { useFavorites } from './hooks/useFavorites'
 import { useMigrationOptions } from './hooks/useMigrationOptions'
 import { useSnapshots } from './hooks/useSnapshots'
@@ -68,6 +70,7 @@ import {
   TableCell,
   TableContainer,
   TableHead,
+  TablePagination,
   TableRow,
   TableSortLabel,
   Tabs,
@@ -101,6 +104,8 @@ import { useMyVdcs } from '@/hooks/useMyVdcs'
 import { readVdcContextCookie } from '@/lib/vdc/contextCookie'
 import { useRouter } from 'next/navigation'
 import { getOsSvgIcon } from '@/lib/utils/osIcons'
+import GuestOsLogo from '@/components/ui/GuestOsLogo'
+import MigrationVmGlyph from '@/components/migration/MigrationVmGlyph'
 import RootInventoryView from './RootInventoryView'
 import StorageDashboard from './StorageDashboard'
 import NetworkDashboard from './NetworkDashboard'
@@ -141,6 +146,9 @@ import NodeTabs from './tabs/NodeTabs'
 import { UploadDialog } from '@/components/storage/StorageContentBrowser'
 import TemplateDownloadDialog from '@/components/storage/TemplateDownloadDialog'
 import { loadNodeAptUpdates } from '@/lib/proxmox/loadNodeAptUpdates'
+import { PAGE_SIZES } from '@/components/ui/PagedRows'
+import { countExtVmPower, filterExtVms, filteredSelectionState, toggleFilteredSelection, type ExtVmPowerFilter } from './extVmList'
+import { isNodeReachable } from './nodeStatusMeta'
 
 /**
  * Rang de l'onglet Sauvegardes d'une VM dans `VmDetailTabs` (Résumé, Matériel,
@@ -152,6 +160,7 @@ const VM_BACKUPS_TAB_INDEX = 4
 /* ------------------------------------------------------------------ */
 /* Main component                                                     */
 /* ------------------------------------------------------------------ */
+
 
 export default function InventoryDetails({
   selection,
@@ -381,6 +390,12 @@ export default function InventoryDetails({
   const [bulkMigSelected, setBulkMigSelected] = useState<Set<string>>(new Set())
   const [extVmSortCol, setExtVmSortCol] = useState<'name' | 'status' | 'guestOS' | 'usedSpace' | 'cpu' | 'ram'>('name')
   const [extVmSortDir, setExtVmSortDir] = useState<'asc' | 'desc'>('asc')
+  // Source VM list (roadmap#53): search, power filter (so a bulk cold or warm
+  // migration is one click on the right set) and pagination.
+  const [extVmQuery, setExtVmQuery] = useState('')
+  const [extVmPower, setExtVmPower] = useState<ExtVmPowerFilter>('all')
+  const [extVmPage, setExtVmPage] = useState(0)
+  const [extVmRowsPerPage, setExtVmRowsPerPage] = useState(PAGE_SIZES[0])
   const [bulkMigOpen, setBulkMigOpen] = useState(false)
   const [bulkMigStarting, setBulkMigStarting] = useState(false)
   // Per-migration options (start-after, VLAN, qcow2 conversion, ...) live in a
@@ -399,29 +414,37 @@ export default function InventoryDetails({
     migConvertToQcow2, setMigConvertToQcow2,
     migManualCutover, setMigManualCutover,
     migDowntimeBudget, setMigDowntimeBudget,
+    migZeroRateLimit, setMigZeroRateLimit,
+    migBulkConcurrency, setMigBulkConcurrency,
+    migCopyVmk, setMigCopyVmk,
     migCpuType, setMigCpuType,
+    migStep, setMigStep, migHardware, setMigHardware, migNics, setMigNics,
   } = useMigrationOptions({ esxiMigrateVm, bulkMigOpen })
-  // Shared with InventoryDialogs.tsx — see bulkMigrationConfig.ts. Used here
-  // by the queued-job poller below to decide how many slots are free; must
-  // match the dispatcher in InventoryDialogs.tsx or the two will fight each
-  // other (dispatcher starts N, poller immediately starts more on top).
-  const [bulkMigJobs, setBulkMigJobs] = useState<{ vmid: string; name: string; jobId: string; status: string; progress: number; error?: string; logs?: { ts: string; msg: string; level: string }[]; targetNode?: string; vcenterDatacenter?: string; vcenterCluster?: string; vcenterHost?: string }[]>([])
+  // The bulk migration followed by the dialog (roadmap#53). Its queue lives on
+  // the server: the batch row and its jobs are created in one request and the
+  // server starts them `concurrency` at a time, so the browser only polls the
+  // batch below and mirrors its jobs into bulkMigJobs, one row per VM.
+  const [bulkMigBatch, setBulkMigBatch] = useState<BulkMigBatch | null>(null)
+  const bulkMigBatchRef = useRef(bulkMigBatch)
+  bulkMigBatchRef.current = bulkMigBatch
+  const [bulkMigJobs, setBulkMigJobs] = useState<BulkMigJobRow[]>([])
   const [bulkMigProgressExpanded, setBulkMigProgressExpanded] = useState(true)
   const [bulkMigLogsExpanded, setBulkMigLogsExpanded] = useState(false)
   const [bulkMigLogsFilter, setBulkMigLogsFilter] = useState<string | null>(null)
   const bulkMigJobsRef = useRef(bulkMigJobs)
   bulkMigJobsRef.current = bulkMigJobs
-  // One poller tick at a time (roadmap#23). A tick awaits the POST that starts
-  // the next queued guest while the interval keeps firing, so every extra tick
-  // posted the same guest again as long as the first POST had not answered: the
-  // duplicates failed on the engine's per-VM lock and the modal followed the last
-  // of them. A ref, not a closure flag, because a state update restarts the
-  // effect and its interval while the previous tick is still in flight.
+  // One poller tick at a time (roadmap#23): a slow batch read must not be
+  // stacked by the next interval. A ref, not a closure flag, because a state
+  // update restarts the effect and its interval while a tick is still in flight.
   const bulkMigTickInFlightRef = useRef(false)
-  const bulkMigConfigRef = useRef<{ sourceConnectionId: string; targetConnectionId: string; targetStorage: string; networkBridge: string; vlanTag?: number; migrationType: string; transferMode: string; startAfterMigration: boolean; convertDisksToQcow2: boolean; sourceType: string; tempStorage?: string; v2vRoot?: string; nfcConcurrency?: number; cpuType?: string } | null>(null)
+  // Jobs of the batch that already have their task-bar entry.
+  const bulkMigTaskIdsRef = useRef<Set<string>>(new Set())
   // Snapshot of host info when bulk dialog opens (avoids null data when selection changes)
   const [bulkMigHostInfo, setBulkMigHostInfo] = useState<any>(null)
-  const [extHostMigrations, setExtHostMigrations] = useState<any[]>([])
+  const bulkMigHostInfoRef = useRef(bulkMigHostInfo)
+  bulkMigHostInfoRef.current = bulkMigHostInfo
+  // Counters of the host page, over its whole history (the list above is the last 50 jobs).
+  const [extHostStats, setExtHostStats] = useState<MigrationStats>(emptyMigrationStats)
   const [exitMaintenanceBusy, setExitMaintenanceBusy] = useState(false)
   const [exitMaintenanceError, setExitMaintenanceError] = useState<string | null>(null)
 
@@ -527,6 +550,12 @@ export default function InventoryDetails({
     })
     return sorted
   }, [data?.esxiHostInfo?.vms, extVmSortCol, extVmSortDir])
+  const filteredExtVms = useMemo(() => filterExtVms(sortedExtVms, extVmQuery, extVmPower), [sortedExtVms, extVmQuery, extVmPower])
+  const extVmCounts = useMemo(() => countExtVmPower(data?.esxiHostInfo?.vms || []), [data?.esxiHostInfo?.vms])
+  const extVmLastPage = Math.max(0, Math.ceil(filteredExtVms.length / extVmRowsPerPage) - 1)
+  const extVmCurrentPage = Math.min(extVmPage, extVmLastPage)
+  const pagedExtVms = filteredExtVms.slice(extVmCurrentPage * extVmRowsPerPage, (extVmCurrentPage + 1) * extVmRowsPerPage)
+  const extVmSelection = filteredSelectionState(bulkMigSelected, filteredExtVms)
 
   useEffect(() => {
     if (!nodeActionDialog) return
@@ -775,6 +804,8 @@ export default function InventoryDetails({
               node: n.node || n.name || n,
               status: n.status,
               ip: n.ip,
+              // Current load, for the bulk dialog's projection on the targets.
+              cpu: n.cpu, maxcpu: n.maxcpu, mem: n.mem, maxmem: n.maxmem,
             })
           }
         } catch {}
@@ -1012,123 +1043,73 @@ export default function InventoryDetails({
     return () => clearInterval(interval)
   }, [migJobId])
 
-  // Fetch active migration job for the currently selected ESXi VM
-  // Poll bulk migration jobs
+  // Mirror one read of the bulk batch into the dialog rows and the task bar.
+  // A job gets its task-bar entry the first time it is seen started (see
+  // shouldTrackBulkJob), then follows its progress like a single migration.
+  const applyBulkMigSnapshot = (snap: BatchPayload) => {
+    const previous = new Map(bulkMigJobsRef.current.map(j => [j.jobId, j]))
+    setBulkMigBatch(bulkBatchFromPayload(snap))
+    setBulkMigJobs(bulkRowsFromBatch(snap.jobs))
+    const sourceType = bulkSourceTypeLabel(bulkMigHostInfoRef.current?.hostType)
+    for (const j of snap.jobs) {
+      const prev = previous.get(j.id)
+      let added = false
+      if (!bulkMigTaskIdsRef.current.has(j.id)) {
+        if (!shouldTrackBulkJob(j, prev?.status)) continue
+        bulkMigTaskIdsRef.current.add(j.id)
+        added = true
+        addPCTask({
+          id: `migration-${j.id}`,
+          type: 'generic',
+          label: `${t('inventoryPage.esxiMigration.migrating')} ${j.sourceVmName || j.sourceVmId} (${sourceType} → Proxmox)`,
+          detail: t('inventoryPage.esxiMigration.preflight'),
+          progress: 0,
+          status: 'running',
+          createdAt: Date.now(),
+        })
+      }
+      const logsChanged = (j.logs?.length || 0) !== (prev?.logs?.length || 0)
+      if (!added && prev && (j.progress || 0) === prev.progress && j.status === prev.status && !logsChanged) continue
+      // Sync to PCTask: prefer j.currentStep (live virt-v2v phase)
+      const speed = j.transferSpeed ? ` — ${j.transferSpeed}` : ''
+      let stepFallback: string = j.status
+      if (j.status === 'transferring') stepFallback = `Transferring${speed}`
+      else if (j.status === 'completed') stepFallback = 'Completed'
+      else if (j.status === 'failed') stepFallback = j.error || 'Failed'
+      let taskStatus: 'done' | 'error' | 'running' = 'running'
+      if (j.status === 'completed') taskStatus = 'done'
+      else if (j.status === 'failed' || j.status === 'cancelled') taskStatus = 'error'
+      updatePCTaskRef.current(`migration-${j.id}`, {
+        progress: j.progress || 0,
+        detail: j.currentStep || stepFallback,
+        status: taskStatus,
+        ...(j.status === 'failed' ? { error: j.error || undefined } : {}),
+      })
+    }
+  }
+
+  // Load the newest batch still in flight from a source connection into the
+  // dialog. False when there is none, or when a batch got loaded meanwhile.
+  const loadActiveBulkBatch = async (sourceConnectionId: string, isStale: () => boolean = () => false): Promise<boolean> => {
+    const snap = await fetchActiveBulkBatch(sourceConnectionId)
+    if (!snap || isStale() || bulkMigBatchRef.current) return false
+    applyBulkMigSnapshot(snap)
+    return true
+  }
+
+  // Poll the bulk batch. The server starts the queued jobs itself; the browser
+  // only reads where the batch is, until nothing is left to start or to finish.
   useEffect(() => {
-    if (bulkMigJobs.length === 0) return
-    const hasWork = bulkMigJobs.some(j => j.status === 'queued' || j.status === 'starting' || (j.jobId && !['completed', 'failed', 'cancelled'].includes(j.status)))
-    if (!hasWork) return
-    // Body of one tick. Resolves true once nothing is left to poll or to start.
+    if (!bulkMigBatch || isBulkBatchFinished(bulkMigBatch.status, bulkMigJobsRef.current)) return
+    const batchId = bulkMigBatch.id
+    // Resolves true once the batch is over.
     const tick = async (): Promise<boolean> => {
-      const updates = [...bulkMigJobsRef.current]
-      let changed = false
-
-      // Poll active (running) jobs
-      for (const job of updates) {
-        if (!job.jobId || ['completed', 'failed', 'cancelled', 'queued'].includes(job.status)) continue
-        try {
-          const res = await fetch(`/api/v1/migrations/${job.jobId}`)
-          const d = await res.json()
-          if (d.data) {
-            const j = d.data
-            const logsChanged = (j.logs?.length || 0) !== (job.logs?.length || 0)
-            if (j.progress !== job.progress || j.status !== job.status || logsChanged) {
-              job.progress = j.progress || 0
-              job.status = j.status
-              job.error = j.error
-              if (j.logs) job.logs = j.logs
-              changed = true
-              // Sync to PCTask — prefer j.currentStep (live virt-v2v phase)
-              const speed = j.transferSpeed ? ` — ${j.transferSpeed}` : ''
-              const stepFallback = j.status === 'transferring' ? `Transferring${speed}` : j.status === 'completed' ? 'Completed' : j.status === 'failed' ? (j.error || 'Failed') : j.status
-              updatePCTaskRef.current(`migration-${job.jobId}`, {
-                progress: j.progress || 0,
-                detail: j.currentStep || stepFallback,
-                status: j.status === 'completed' ? 'done' : j.status === 'failed' || j.status === 'cancelled' ? 'error' : 'running',
-                ...(j.status === 'failed' ? { error: j.error } : {}),
-              })
-            }
-          }
-        } catch {}
-      }
-
-      // Start queued jobs if slots are available
-      const cfg = bulkMigConfigRef.current
-      if (cfg) {
-        const runningCount = updates.filter(j => j.jobId && !['completed', 'failed', 'cancelled', 'queued'].includes(j.status)).length
-        const slotsAvailable = BULK_MIG_CONCURRENCY - runningCount
-        if (slotsAvailable > 0) {
-          // A guest that already has a job is never posted again, whatever its status.
-          const queued = updates.filter(j => j.status === 'queued' && !j.jobId)
-          for (let i = 0; i < Math.min(slotsAvailable, queued.length); i++) {
-            const job = queued[i]
-            // Claimed before the POST is awaited, so a concurrent reader of the
-            // shared job objects never sees this guest as still queued.
-            job.status = 'starting'
-            changed = true
-            try {
-              const res = await fetch('/api/v1/migrations', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  sourceConnectionId: cfg.sourceConnectionId,
-                  sourceVmId: job.vmid,
-                  sourceVmName: job.name,
-                  targetConnectionId: cfg.targetConnectionId,
-                  targetNode: job.targetNode,
-                  targetStorage: cfg.targetStorage,
-                  networkBridge: cfg.networkBridge,
-                  ...(typeof cfg.vlanTag === 'number' && { vlanTag: cfg.vlanTag }),
-                  migrationType: cfg.migrationType,
-                  transferMode: cfg.transferMode,
-                  startAfterMigration: cfg.startAfterMigration,
-                  convertDisksToQcow2: cfg.convertDisksToQcow2,
-                  // vCenter inventory path was captured per-VM when the bulk job was
-                  // enqueued (see InventoryDialogs.tsx bulk-launch handler). Forward it
-                  // here too, otherwise queued vCenter migrations would lose the path
-                  // and the v2v pipeline would throw "vcenterDatacenter required".
-                  ...((job as any).vcenterDatacenter && { vcenterDatacenter: (job as any).vcenterDatacenter }),
-                  ...((job as any).vcenterCluster && { vcenterCluster: (job as any).vcenterCluster }),
-                  ...((job as any).vcenterHost && { vcenterHost: (job as any).vcenterHost }),
-                  ...(cfg.tempStorage && { tempStorage: cfg.tempStorage }),
-                  ...(cfg.v2vRoot && { v2vRoot: cfg.v2vRoot }),
-                  // Parallel NFC downloads (#807), captured with the batch like the other options.
-                  ...(typeof cfg.nfcConcurrency === 'number' && { nfcConcurrency: cfg.nfcConcurrency }),
-                  // CPU type of the created VM (roadmap#24), captured with the batch.
-                  ...(cfg.cpuType && { cpuType: cfg.cpuType }),
-                }),
-              })
-              const d = await res.json()
-              if (d.data?.jobId) {
-                job.jobId = d.data.jobId
-                job.status = 'pending'
-                changed = true
-                addPCTask({
-                  id: `migration-${d.data.jobId}`,
-                  type: 'generic',
-                  label: `${t('inventoryPage.esxiMigration.migrating')} ${job.name} (${cfg.sourceType} → Proxmox)`,
-                  detail: t('inventoryPage.esxiMigration.preflight'),
-                  progress: 0,
-                  status: 'running',
-                  createdAt: Date.now(),
-                })
-              } else {
-                job.status = 'failed'
-                job.error = d.error || 'Failed to start'
-                changed = true
-              }
-            } catch (e: any) {
-              job.status = 'failed'
-              job.error = e.message
-              changed = true
-            }
-          }
-        }
-      }
-
-      if (changed) setBulkMigJobs([...updates])
-      // Stop polling only when no active or queued jobs remain
-      return updates.every(j => j.status !== 'queued' && j.status !== 'starting' && (!j.jobId || ['completed', 'failed', 'cancelled'].includes(j.status)))
+      const snap = await fetchBulkBatch(batchId)
+      if (!snap) return false
+      // Closed or replaced while the read was in flight: drop it.
+      if (bulkMigBatchRef.current?.id !== batchId) return true
+      applyBulkMigSnapshot(snap)
+      return isBulkBatchFinished(snap.status, snap.jobs)
     }
     const interval = setInterval(async () => {
       if (bulkMigTickInFlightRef.current) return
@@ -1140,8 +1121,16 @@ export default function InventoryDetails({
       }
     }, 3000)
     return () => clearInterval(interval)
-  }, [bulkMigJobs.length > 0 ? bulkMigJobs.map(j => `${j.jobId}:${j.status}`).join(',') : ''])
+  }, [bulkMigBatch?.id, bulkMigBatch?.status])
 
+  // A batch reopened without going through "Migrate selected" (host page) takes
+  // the host info of the page when it is its source, for the logos of the dialog.
+  useEffect(() => {
+    if (!bulkMigBatch?.sourceConnectionId || bulkMigHostInfo) return
+    if (data?.esxiHostInfo?.connectionId === bulkMigBatch.sourceConnectionId) setBulkMigHostInfo(data.esxiHostInfo)
+  }, [bulkMigBatch?.sourceConnectionId, bulkMigHostInfo, data?.esxiHostInfo])
+
+  // Fetch active migration job for the currently selected ESXi VM
   useEffect(() => {
     if (selection?.type !== 'extvm') { setVmMigJob(null); return }
     const vmid = selection.id.split(':')[1]
@@ -1169,13 +1158,54 @@ export default function InventoryDetails({
     // instead of waiting for the next tick.
   }, [selection, migJobId])
 
-  // Fetch migration history for external host dashboard
+  // A bulk migration runs on the server (roadmap#53): opening its source host
+  // page reopens the follow-up of a batch still in flight there, even after the
+  // tab that launched it was closed. Skipped while a batch is already loaded.
+  // A taskbar entry that navigated here names its batch in the URL
+  // (?openBatch=, see lib/migration/bulkBatchOpen): that one is opened,
+  // otherwise the newest still in flight from this host.
   useEffect(() => {
-    if (selection?.type !== 'ext') { setExtHostMigrations([]); return }
+    if (selection?.type !== 'ext' || bulkMigBatchRef.current) return
+    let stale = false
+    const wanted = new URLSearchParams(window.location.search).get('openBatch')
+    const load = wanted
+      ? fetchBulkBatch(wanted).then(snap => {
+        if (!snap || stale || bulkMigBatchRef.current) return false
+        applyBulkMigSnapshot(snap)
+        return true
+      })
+      : loadActiveBulkBatch(selection.id, () => stale)
+    void load.then(found => { if (found && !stale) setBulkMigOpen(true) })
+    return () => { stale = true }
+  }, [selection?.type, selection?.id])
+
+  // The taskbar entry of a bulk migration, clicked while this page is mounted:
+  // reopen its follow-up in place (lib/migration/bulkBatchOpen). The latest
+  // render's snapshot handler is read through a ref, the listener stays put.
+  const applyBulkMigSnapshotRef = useRef(applyBulkMigSnapshot)
+  applyBulkMigSnapshotRef.current = applyBulkMigSnapshot
+  useEffect(() => {
+    const onOpen = (e: Event) => {
+      const detail = (e as CustomEvent<OpenBulkBatchDetail>).detail
+      if (!detail?.batchId) return
+      detail.handled = true
+      if (bulkMigBatchRef.current?.id === detail.batchId) { setBulkMigOpen(true); return }
+      void fetchBulkBatch(detail.batchId).then(snap => {
+        if (!snap) return
+        applyBulkMigSnapshotRef.current(snap)
+        setBulkMigOpen(true)
+      })
+    }
+    window.addEventListener(OPEN_BULK_BATCH_EVENT, onOpen)
+    return () => window.removeEventListener(OPEN_BULK_BATCH_EVENT, onOpen)
+  }, [])
+
+  // Migration counters of the external host page
+  useEffect(() => {
+    if (selection?.type !== 'ext') { setExtHostStats(emptyMigrationStats()); return }
     const connId = selection.id
-    fetch('/api/v1/migrations').then(r => r.json()).then(d => {
-      const jobs = (d.data || []).filter((j: any) => j.sourceConnectionId === connId)
-      setExtHostMigrations(jobs)
+    fetch('/api/v1/migrations/stats').then(r => r.json()).then(d => {
+      setExtHostStats(sumMigrationStats(d?.data?.bySource, [connId]))
     }).catch(() => {})
   }, [selection])
 
@@ -2062,8 +2092,12 @@ return
       const connId = selection.id || ''
       // Charger les mises à jour et les VMs locales pour chaque nœud
       data.nodesData.forEach((node: any) => {
+        // A node in HA maintenance (the one a rolling update is working on)
+        // still answers: only an offline node is skipped.
+        const reachable = isNodeReachable(node.status)
+
         // Charger les mises à jour
-        if (node.status === 'online' && !nodeUpdates[node.node]?.loading && nodeUpdates[node.node] === undefined) {
+        if (reachable && !nodeUpdates[node.node]?.loading && nodeUpdates[node.node] === undefined) {
           setNodeUpdates(prev => ({
             ...prev,
             [node.node]: { count: 0, updates: [], version: null, loading: true }
@@ -2078,7 +2112,7 @@ return
         }
         
         // Charger les VMs avec stockage local
-        if (node.status === 'online' && !nodeLocalVms[node.node]?.loading && nodeLocalVms[node.node] === undefined) {
+        if (reachable && !nodeLocalVms[node.node]?.loading && nodeLocalVms[node.node] === undefined) {
           setNodeLocalVms(prev => ({
             ...prev,
             [node.node]: { total: 0, running: 0, blockingMigration: 0, withReplication: 0, canMigrate: true, vms: [], loading: true }
@@ -2826,6 +2860,7 @@ return vm?.isCluster ?? false
                       maxmem: vm.maxmem,
                       disk: vm.disk,
                       maxdisk: vm.maxdisk,
+                      diskTotal: vm.diskTotal,
                       uptime: vm.uptime,
                       ip: vm.ip,
                       snapshots: vm.snapshots,
@@ -2981,6 +3016,7 @@ return vm?.isCluster ?? false
                       maxmem: vm.maxmem,
                       disk: vm.disk,
                       maxdisk: vm.maxdisk,
+                      diskTotal: vm.diskTotal,
                       uptime: vm.uptime,
                       ip: vm.ip,
                       snapshots: vm.snapshots,
@@ -3776,13 +3812,11 @@ return vm?.isCluster ?? false
             const totalRamGB = vms.reduce((s: number, v: any) => s + (v.memory_size_MiB || 0), 0) / 1024
             const totalDiskGB = vms.reduce((s: number, v: any) => s + (v.committed || 0), 0) / 1073741824
 
-            const migCompleted = extHostMigrations.filter((j: any) => j.status === 'completed').length
-            const migFailed = extHostMigrations.filter((j: any) => j.status === 'failed').length
-            const migRunning = extHostMigrations.filter((j: any) => !['completed', 'failed', 'cancelled'].includes(j.status)).length
-            const migTotal = extHostMigrations.length
-            const totalMigratedGB = extHostMigrations
-              .filter((j: any) => j.status === 'completed' && j.totalBytes)
-              .reduce((s: number, j: any) => s + Number(j.totalBytes), 0) / 1073741824
+            const migCompleted = extHostStats.completed
+            const migFailed = extHostStats.failed
+            const migRunning = extHostStats.inProgress
+            const migTotal = migCompleted + migFailed + migRunning + extHostStats.cancelled + extHostStats.queued
+            const totalMigratedGB = extHostStats.bytesTransferred / 1073741824
 
             const statCards = [
               { icon: 'ri-computer-line', label: t('inventoryPage.extDashboard.totalVms'), value: vms.length, color: theme.palette.primary.main },
@@ -3887,6 +3921,7 @@ return vm?.isCluster ?? false
             const isNutanixHost = data.esxiHostInfo.hostType === 'nutanix'
             const extVmIcon = isNutanixHost ? '/images/nutanix-logo.svg' : isXcpng ? '/images/xcpng-logo.svg' : '/images/esxi-vm.svg'
             return (
+            // The VM table takes the whole height of the host page.
             <Card variant="outlined" sx={{ width: '100%', borderRadius: 2, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
               <CardContent sx={{ p: 0, '&:last-child': { pb: 0 }, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
                 {data.esxiHostInfo.vms.length === 0 ? (
@@ -3896,6 +3931,37 @@ return vm?.isCluster ?? false
                   </Box>
                 ) : (
                   <>
+                  {/* Search and power filter: the set a bulk migration works on
+                      (running VMs for warm, stopped ones for cold). */}
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, px: 2, py: 1, flexShrink: 0, borderBottom: '1px solid', borderColor: 'divider', flexWrap: 'wrap' }}>
+                    <TextField
+                      size="small"
+                      placeholder={t('inventoryPage.esxiMigration.searchVms')}
+                      value={extVmQuery}
+                      onChange={e => { setExtVmQuery(e.target.value); setExtVmPage(0) }}
+                      slotProps={{
+                        input: { startAdornment: <InputAdornment position="start"><i className="ri-search-line" style={{ fontSize: 14 }} /></InputAdornment> },
+                        htmlInput: { 'data-testid': 'ext-vm-search' },
+                      }}
+                      sx={{ width: 240 }}
+                    />
+                    <ToggleButtonGroup
+                      size="small"
+                      exclusive
+                      value={extVmPower}
+                      onChange={(_e, v) => { if (v) { setExtVmPower(v); setExtVmPage(0) } }}
+                      data-testid="ext-vm-power"
+                      // Same height as the search field next to it.
+                      sx={{ alignSelf: 'stretch' }}
+                    >
+                      {(['all', 'running', 'stopped'] as const).map(p => (
+                        <ToggleButton key={p} value={p} sx={{ textTransform: 'none', fontSize: 12, px: 1.5, py: 0, gap: 0.75 }}>
+                          {p !== 'all' && <Box component="span" sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: p === 'running' ? 'success.main' : 'error.main' }} />}
+                          {t(`inventoryPage.esxiMigration.power_${p}`)} ({extVmCounts[p]})
+                        </ToggleButton>
+                      ))}
+                    </ToggleButtonGroup>
+                  </Box>
                   {/* Bulk migration toolbar */}
                   {bulkMigSelected.size > 0 && (
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, px: 2, py: 1, flexShrink: 0, bgcolor: theme.palette.mode === 'dark' ? 'rgba(var(--mui-palette-primary-mainChannel) / 0.08)' : 'rgba(var(--mui-palette-primary-mainChannel) / 0.06)', borderBottom: '1px solid', borderColor: 'divider' }}>
@@ -3916,9 +3982,13 @@ return vm?.isCluster ?? false
                         variant="contained"
                         sx={{ textTransform: 'none', fontSize: 11, height: 28 }}
                         startIcon={<img src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" width={14} height={14} />}
-                        onClick={() => {
+                        onClick={async () => {
                           if (!vmwareMigrationAvailable) { setUpgradeDialogOpen(true); return }
                           setBulkMigHostInfo(data.esxiHostInfo)
+                          // A batch already in flight from this source (launched from
+                          // another tab, or before a reload) is shown instead of the form,
+                          // so the same VMs are not queued a second time.
+                          if (!bulkMigBatchRef.current) await loadActiveBulkBatch(data.esxiHostInfo.connectionId)
                           setBulkMigOpen(true)
                         }}
                       >
@@ -3933,15 +4003,11 @@ return vm?.isCluster ?? false
                           <TableCell padding="checkbox" sx={{ width: 42 }}>
                             <Checkbox
                               size="small"
-                              indeterminate={bulkMigSelected.size > 0 && bulkMigSelected.size < data.esxiHostInfo.vms.length}
-                              checked={data.esxiHostInfo.vms.length > 0 && bulkMigSelected.size === data.esxiHostInfo.vms.length}
-                              onChange={(e) => {
-                                if (e.target.checked) {
-                                  setBulkMigSelected(new Set(data.esxiHostInfo!.vms.map((vm: any) => vm.vmid)))
-                                } else {
-                                  setBulkMigSelected(new Set())
-                                }
-                              }}
+                              // Every VM the search and the filter keep, on all pages.
+                              indeterminate={extVmSelection === 'some'}
+                              checked={filteredExtVms.length > 0 && extVmSelection === 'all'}
+                              onChange={(e) => setBulkMigSelected(toggleFilteredSelection(bulkMigSelected, filteredExtVms, e.target.checked))}
+                              inputProps={{ 'aria-label': t('inventoryPage.esxiMigration.selectFiltered') }}
                             />
                           </TableCell>
                           {([
@@ -3952,7 +4018,8 @@ return vm?.isCluster ?? false
                             { id: 'cpu' as const, label: 'CPU', align: 'right' as const },
                             { id: 'ram' as const, label: 'RAM', align: 'right' as const },
                           ]).map(col => (
-                            <TableCell key={col.id} align={col.align} sx={{ fontWeight: 700, fontSize: 12 }} sortDirection={extVmSortCol === col.id ? extVmSortDir : false}>
+                            // One line per header; Guest OS takes what the other columns leave.
+                            <TableCell key={col.id} align={col.align} sx={{ fontWeight: 700, fontSize: 12, whiteSpace: 'nowrap', ...(col.id === 'guestOS' && { width: '100%' }) }} sortDirection={extVmSortCol === col.id ? extVmSortDir : false}>
                               <TableSortLabel
                                 active={extVmSortCol === col.id}
                                 direction={extVmSortCol === col.id ? extVmSortDir : 'asc'}
@@ -3966,11 +4033,11 @@ return vm?.isCluster ?? false
                               </TableSortLabel>
                             </TableCell>
                           ))}
-                          <TableCell sx={{ fontWeight: 700, fontSize: 12 }} align="center">{t('inventoryPage.esxiMigration.migration')}</TableCell>
+                          <TableCell sx={{ fontWeight: 700, fontSize: 12, whiteSpace: 'nowrap' }} align="center">{t('inventoryPage.esxiMigration.migration')}</TableCell>
                         </TableRow>
                       </TableHead>
                       <TableBody>
-                        {sortedExtVms.map((vm: any) => (
+                        {pagedExtVms.map((vm: any) => (
                           <TableRow
                             key={vm.vmid}
                             hover
@@ -3992,10 +4059,11 @@ return vm?.isCluster ?? false
                                 }}
                               />
                             </TableCell>
-                            <TableCell>
-                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                <img src={extVmIcon} alt="" width={16} height={16} style={{ opacity: 0.7 }} />
-                                <Typography variant="body2" fontWeight={600}>{vm.name || vm.vmid}</Typography>
+                            {/* One line per row: a long name ends in an ellipsis, whole on hover. */}
+                            <TableCell sx={{ maxWidth: 260 }}>
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
+                                <img src={extVmIcon} alt="" width={16} height={16} style={{ opacity: 0.7, flexShrink: 0 }} />
+                                <Typography variant="body2" fontWeight={600} noWrap title={vm.name || vm.vmid}>{vm.name || vm.vmid}</Typography>
                               </Box>
                             </TableCell>
                             <TableCell>
@@ -4009,24 +4077,28 @@ return vm?.isCluster ?? false
                                 }}
                               />
                             </TableCell>
-                            <TableCell>
-                              <Typography variant="body2" sx={{ opacity: 0.8, fontSize: 12 }}>{vm.guest_OS || 'N/A'}</Typography>
+                            <TableCell sx={{ maxWidth: 0 }}>
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
+                                <GuestOsLogo guestOs={vm.guest_OS} />
+                                <Typography variant="body2" noWrap title={vm.guest_OS || undefined} sx={{ opacity: 0.8, fontSize: 12 }}>{vm.guest_OS || 'N/A'}</Typography>
+                              </Box>
                             </TableCell>
-                            <TableCell align="right">
+                            <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>
                               <Typography variant="body2" sx={{ fontSize: 12 }}>{vm.committed ? formatBytes(vm.committed) : '--'}</Typography>
                             </TableCell>
-                            <TableCell align="right">
+                            <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>
                               <Typography variant="body2" sx={{ fontSize: 12 }}>{vm.cpu || '--'} vCPU</Typography>
                             </TableCell>
-                            <TableCell align="right">
+                            <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>
                               <Typography variant="body2" sx={{ fontSize: 12 }}>{vm.memory_size_MiB ? `${(vm.memory_size_MiB / 1024).toFixed(1)} GB` : '--'}</Typography>
                             </TableCell>
-                            <TableCell align="center" onClick={e => e.stopPropagation()}>
+                            <TableCell align="center" sx={{ whiteSpace: 'nowrap' }} onClick={e => e.stopPropagation()}>
                               <Button
+                                title={t('inventoryPage.esxiMigration.migrate')}
                                 size="small"
                                 variant="outlined"
                                 color="primary"
-                                sx={{ textTransform: 'none', fontSize: 10, height: 24, minWidth: 0, px: 1.5 }}
+                                sx={{ textTransform: 'none', fontSize: 11, height: 24, minWidth: 0, px: 1, whiteSpace: 'nowrap' }}
                                 startIcon={<img src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" width={12} height={12} />}
                                 onClick={() => {
                                   if (!vmwareMigrationAvailable) { setUpgradeDialogOpen(true); return }
@@ -4054,7 +4126,7 @@ return vm?.isCluster ?? false
                                   })
                                 }}
                               >
-                                {t('inventoryPage.esxiMigration.migrate')}
+                                {t('inventoryPage.esxiMigration.migrateShort')}
                               </Button>
                             </TableCell>
                           </TableRow>
@@ -4062,55 +4134,29 @@ return vm?.isCluster ?? false
                       </TableBody>
                     </Table>
                   </TableContainer>
+                  {filteredExtVms.length === 0 && (
+                    <Typography variant="body2" sx={{ p: 2, textAlign: 'center', opacity: 0.6 }}>{t('inventoryPage.esxiMigration.noVmMatch')}</Typography>
+                  )}
+                  {filteredExtVms.length > PAGE_SIZES[0] && (
+                    <TablePagination
+                      component="div"
+                      count={filteredExtVms.length}
+                      page={extVmCurrentPage}
+                      onPageChange={(_e, p) => setExtVmPage(p)}
+                      rowsPerPage={extVmRowsPerPage}
+                      onRowsPerPageChange={e => { setExtVmRowsPerPage(Number(e.target.value)); setExtVmPage(0) }}
+                      rowsPerPageOptions={PAGE_SIZES}
+                      labelRowsPerPage={t('common.rowsPerPage')}
+                      sx={{ flexShrink: 0, borderTop: '1px solid', borderColor: 'divider' }}
+                      data-testid="ext-vm-pagination"
+                    />
+                  )}
                   </>
                 )}
               </CardContent>
             </Card>
             )
           })()}
-
-          {/* External Host — Recent Migrations */}
-          {selection?.type === 'ext' && extHostMigrations.length > 0 && (
-            <Card variant="outlined" sx={{ borderRadius: 2 }}>
-              <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
-                <Typography variant="body2" fontWeight={700} fontSize={12} sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <i className="ri-history-line" style={{ fontSize: 16, opacity: 0.5 }} />
-                  {t('inventoryPage.extDashboard.recentMigrations')}
-                </Typography>
-                <Stack spacing={0}>
-                  {extHostMigrations.slice(0, 8).map((mig: any) => (
-                    <Box key={mig.id} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.75, borderBottom: '1px solid', borderColor: 'divider', '&:last-child': { borderBottom: 'none' } }}>
-                      <Box sx={{
-                        width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
-                        bgcolor: mig.status === 'completed' ? 'success.main' : mig.status === 'failed' ? 'error.main' : 'primary.main',
-                      }} />
-                      <Typography variant="body2" fontSize={12} fontWeight={600} noWrap sx={{ minWidth: 0, flex: 1 }}>{mig.sourceVmName || mig.sourceVmId}</Typography>
-                      <Typography variant="caption" fontSize={10} sx={{ opacity: 0.5, whiteSpace: 'nowrap', flexShrink: 0 }}>
-                        → {mig.targetNode}
-                      </Typography>
-                      <Typography variant="caption" fontSize={10} sx={{ opacity: 0.5, whiteSpace: 'nowrap', flexShrink: 0 }}>
-                        {mig.totalBytes ? `${(Number(mig.totalBytes) / 1073741824).toFixed(1)} GB` : '--'}
-                      </Typography>
-                      {mig.completedAt && (
-                        <Typography variant="caption" fontSize={10} sx={{ opacity: 0.4, whiteSpace: 'nowrap', flexShrink: 0 }}>
-                          {new Date(mig.completedAt).toLocaleDateString()}
-                        </Typography>
-                      )}
-                      <Chip
-                        size="small"
-                        label={mig.status === 'completed' ? t('inventoryPage.esxiMigration.completed') : mig.status === 'failed' ? t('inventoryPage.esxiMigration.failed') : `${mig.progress || 0}%`}
-                        sx={{
-                          height: 20, fontSize: 10, fontWeight: 700, flexShrink: 0,
-                          bgcolor: mig.status === 'completed' ? 'success.main' : mig.status === 'failed' ? 'error.main' : 'primary.main',
-                          color: mig.status === 'completed' ? 'success.contrastText' : mig.status === 'failed' ? 'error.contrastText' : 'primary.contrastText',
-                        }}
-                      />
-                    </Box>
-                  ))}
-                </Stack>
-              </CardContent>
-            </Card>
-          )}
 
           {/* External VM — Migration Control Panel */}
           {selection?.type === 'extvm' && data.esxiVmInfo && (() => {
@@ -4680,9 +4726,21 @@ return vm?.isCluster ?? false
         setMigManualCutover={setMigManualCutover}
         migDowntimeBudget={migDowntimeBudget}
         setMigDowntimeBudget={setMigDowntimeBudget}
+        migZeroRateLimit={migZeroRateLimit}
+        setMigZeroRateLimit={setMigZeroRateLimit}
+        migBulkConcurrency={migBulkConcurrency}
+        setMigBulkConcurrency={setMigBulkConcurrency}
+        migCopyVmk={migCopyVmk}
+        setMigCopyVmk={setMigCopyVmk}
         setMigConvertToQcow2={setMigConvertToQcow2}
         migCpuType={migCpuType}
         setMigCpuType={setMigCpuType}
+        migStep={migStep}
+        setMigStep={setMigStep}
+        migHardware={migHardware}
+        setMigHardware={setMigHardware}
+        migNics={migNics}
+        setMigNics={setMigNics}
         migDiskPaths={migDiskPaths}
         setMigDiskPaths={setMigDiskPaths}
         migTempStorage={migTempStorage}
@@ -4725,7 +4783,8 @@ return vm?.isCluster ?? false
         setBulkMigLogsExpanded={setBulkMigLogsExpanded}
         bulkMigLogsFilter={bulkMigLogsFilter}
         setBulkMigLogsFilter={setBulkMigLogsFilter}
-        bulkMigConfigRef={bulkMigConfigRef}
+        bulkMigBatch={bulkMigBatch}
+        setBulkMigBatch={setBulkMigBatch}
         bulkMigHostInfo={bulkMigHostInfo}
         upgradeDialogOpen={upgradeDialogOpen}
         setUpgradeDialogOpen={setUpgradeDialogOpen}

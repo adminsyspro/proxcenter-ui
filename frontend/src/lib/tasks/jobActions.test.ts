@@ -197,6 +197,28 @@ describe("jobActionRequest", () => {
   })
 })
 
+describe("host drain rows (#248)", () => {
+  const drainRow = (over: Record<string, any> = {}) => ({ id: "hd-1", type: "host_drain", status: "running", ...over })
+  const guestRow = (over: Record<string, any> = {}) => ({ id: "hd-1#vm100", type: "host_drain", status: "running", ...over })
+
+  it("reads the drain log from the orchestrator record, nothing for a guest row", () => {
+    expect(jobDetailUrl(drainRow())).toBe("/api/v1/orchestrator/host-drains/hd-1")
+    expect(jobDetailUrl(guestRow())).toBeNull()
+  })
+
+  it("offers cancel on the running drain only, never on a guest migration", () => {
+    expect(jobActions(drainRow())).toEqual(["cancel"])
+    expect(jobActions(drainRow({ status: "failed" }))).toEqual([])
+    expect(jobActions(guestRow())).toEqual([])
+  })
+
+  it("posts the cancel to the host-drains route and gates it on node.manage", () => {
+    expect(jobActionRequest(drainRow(), "cancel")).toEqual({ url: "/api/v1/orchestrator/host-drains/hd-1/cancel", method: "POST" })
+    expect(jobActionRequest(guestRow(), "cancel")).toBeNull()
+    expect(jobActionPermission(drainRow())).toBe("node.manage")
+  })
+})
+
 describe("jobActionPermission", () => {
   // The three cancel routes do not enforce the same permission, and a row that
   // shows a button the route will answer 403 to is worse than no button.

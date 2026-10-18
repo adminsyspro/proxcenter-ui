@@ -369,6 +369,10 @@ describe("runXcpngWarmMigration CBT path", () => {
     expect(prisma.row.completedAt).toBeInstanceOf(Date)
     expect(prisma.row.sourceVmName).toBe("Debian13")
     expect(prisma.row.targetVmid).toBe(900)
+    // The finished row carries what the whole run moved, not the last (empty)
+    // pass: the full copy plus delta 1. totalBytes is the disk, as on a cold run.
+    expect(prisma.row.totalBytes).toBe(BigInt(DISK_BYTES))
+    expect(prisma.row.bytesTransferred).toBe(BigInt(DISK_BYTES + SMALL_DELTA.reduce((s, e) => s + e.length, 0)))
 
     // Every target-node command and reader ran on the node's own SSH address and port.
     const node = { host: "10.0.0.5", port: 2202, source: "override" }

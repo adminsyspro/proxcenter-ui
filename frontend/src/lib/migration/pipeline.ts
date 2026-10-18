@@ -21,6 +21,8 @@ import { startOperatorSignalWatch, stopOperatorSignalWatch } from "@/lib/migrati
 import { decryptSecret } from "@/lib/crypto/secret"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { pveFetch } from "@/lib/proxmox/client"
+import { reserveTargetVmid } from "./reserve-target-vmid"
+import { releaseVmids } from "./vmid-reservation"
 import { isFileBasedStorage } from "@/lib/proxmox/storage"
 import { executeSSH, shellEscape } from "@/lib/ssh/exec"
 import { formatSshEndpoint, resolveSshTargetPort, sshTargetHost, type SshTarget } from "@/lib/ssh/node-endpoint-core"
@@ -417,7 +419,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       await appendLog(jobId, `Using user-specified VMID ${targetVmid}`)
     } else {
       await appendLog(jobId, "Allocating VMID on Proxmox cluster...")
-      targetVmid = Number(await pveFetch<number | string>(pveConn, "/cluster/nextid"))
+      targetVmid = await reserveTargetVmid(pveConn, config.targetConnectionId, jobId)
       await appendLog(jobId, `Allocated VMID ${targetVmid}`)
     }
     await updateJob(jobId, "creating_vm", { targetVmid })
@@ -3042,6 +3044,8 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       }
     }
   } finally {
+    // The VMID reserved for this job is either created on the cluster or unused now.
+    releaseVmids(jobId)
     stopHeartbeat()
     if (soapSession) {
       await soapLogout(soapSession)

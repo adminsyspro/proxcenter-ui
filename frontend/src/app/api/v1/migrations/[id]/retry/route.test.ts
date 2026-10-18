@@ -106,7 +106,7 @@ describe("POST /api/v1/migrations/[id]/retry", () => {
     })
 
     await runAfters()
-    expect(xcpngWarm).toHaveBeenCalledWith("job-2", job.config, "default")
+    expect(xcpngWarm).toHaveBeenCalledWith("job-2", expect.objectContaining({ sourceConnectionId: "src", sourceVmId: "vm-1" }), "default")
     expect(warm).not.toHaveBeenCalled()
     expect(cold).not.toHaveBeenCalled()
   })
@@ -121,7 +121,7 @@ describe("POST /api/v1/migrations/[id]/retry", () => {
     expect(await readJson<any>(res)).toEqual({ data: { jobId: "job-2", status: "pending" } })
 
     await runAfters()
-    expect(warm).toHaveBeenCalledWith("job-2", job.config, "default")
+    expect(warm).toHaveBeenCalledWith("job-2", expect.objectContaining({ sourceConnectionId: "src", sourceVmId: "vm-1" }), "default")
     expect(xcpngWarm).not.toHaveBeenCalled()
     expect(cold).not.toHaveBeenCalled()
   })
@@ -139,7 +139,7 @@ describe("POST /api/v1/migrations/[id]/retry", () => {
     expect(await readJson<any>(res)).toEqual({ data: { jobId: "job-2", status: "pending" } })
 
     await runAfters()
-    expect(xcpngWarm).toHaveBeenCalledWith("job-2", job.config, "default")
+    expect(xcpngWarm).toHaveBeenCalledWith("job-2", expect.objectContaining({ sourceConnectionId: "src", sourceVmId: "vm-1" }), "default")
     expect(warm).not.toHaveBeenCalled()
     expect(cold).not.toHaveBeenCalled()
   })

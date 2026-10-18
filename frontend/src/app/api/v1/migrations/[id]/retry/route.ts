@@ -4,13 +4,8 @@ import { getServerSession } from "next-auth"
 import { getSessionPrisma, getCurrentTenantId } from "@/lib/tenant"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { authOptions } from "@/lib/auth/config"
-import { runMigrationPipeline } from "@/lib/migration/pipeline"
-import { runV2vMigrationPipeline } from "@/lib/migration/v2v-pipeline"
-import { runXcpngMigrationPipeline } from "@/lib/migration/xcpng-pipeline"
-import { runWarmMigration } from "@/lib/migration/warm/warm-pipeline"
-import { resolveRetryEngine, v2vConfigFromJobConfig } from "@/lib/migration/retry-dispatch"
-import { runXcpngWarmMigration } from "@/lib/migration/warm/xcpng-warm-pipeline"
 import { resolveInstanceId } from "@/lib/migration/orphan-sweep"
+import { startMigrationJob } from "@/lib/migration/start-job"
 import { authorizeMigrationTarget } from "@/lib/migration/authorize"
 
 export const runtime = "nodejs"
@@ -57,13 +52,9 @@ export async function POST(
       networkBridge: typeof saved.networkBridge === "string" ? saved.networkBridge : "vmbr0",
       vlanTag: typeof saved.vlanTag === "number" ? saved.vlanTag : undefined,
       nics: Array.isArray(saved.nics) ? saved.nics : undefined,
+      copyVmk: typeof saved.copyVmk === "string" && saved.copyVmk !== "" ? saved.copyVmk : undefined,
     })
     if (unauthorized) return unauthorized
-
-    // job.config is a JSONB column (see schema.prisma): Prisma returns the
-    // parsed object directly. The shape is set at create time in
-    // /api/v1/migrations/route.ts and matches MigrationConfig.
-    const config = job.config as unknown as Parameters<typeof runMigrationPipeline>[1]
 
     // Create a new job for the retry
     const newJob = await prisma.migrationJob.create({
@@ -91,32 +82,17 @@ export async function POST(
     // Hyper-V / vCenter / Nutanix / XCP-ng job must not be handed to the
     // direct-ESXi pipeline, which rejects any non-VMware source. The engine
     // comes from the sourceType persisted in the job config; jobs created
-    // before that field existed fall back to the live source connection.
-    // Resolve it while the request-scoped Prisma client is still alive; it may
-    // be torn down inside after().
-    const jobConfig = (job.config ?? {}) as Record<string, any>
+    // before that field existed fall back to the live source connection,
+    // resolved while the request-scoped Prisma client is still alive (it may
+    // be torn down inside after()).
     const sourceConn = await prisma.connection.findUnique({
       where: { id: job.sourceConnectionId },
       select: { type: true, subType: true },
     })
-    const engine = resolveRetryEngine(jobConfig, sourceConn)
+    // The new row is a copy of the failed one: start it from the original's
+    // fields and config under the new id.
     after(async () => {
-      switch (engine) {
-        case "warm-xcpng":
-          await runXcpngWarmMigration(newJob.id, config as unknown as Parameters<typeof runXcpngWarmMigration>[1], tenantId)
-          return
-        case "warm-vmware":
-          await runWarmMigration(newJob.id, config as unknown as Parameters<typeof runWarmMigration>[1], tenantId)
-          return
-        case "v2v":
-          await runV2vMigrationPipeline(newJob.id, v2vConfigFromJobConfig(jobConfig, job, sourceConn), tenantId)
-          return
-        case "xcpng-cold":
-          await runXcpngMigrationPipeline(newJob.id, { ...config, migrationType: "cold" }, tenantId)
-          return
-        default:
-          await runMigrationPipeline(newJob.id, config, tenantId)
-      }
+      await startMigrationJob({ ...job, id: newJob.id }, tenantId, sourceConn ?? null)
     })
 
     return NextResponse.json({ data: { jobId: newJob.id, status: "pending" } })

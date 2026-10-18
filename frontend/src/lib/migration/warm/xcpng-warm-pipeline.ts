@@ -2,6 +2,8 @@ import { getTenantPrisma } from "@/lib/tenant"
 import { decryptSecret } from "@/lib/crypto/secret"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { pveFetch } from "@/lib/proxmox/client"
+import { reserveTargetVmid } from "../reserve-target-vmid"
+import { releaseVmids } from "../vmid-reservation"
 import { isFileBasedStorage } from "@/lib/proxmox/storage"
 import { executeSSH, shellEscape } from "@/lib/ssh/exec"
 import {
@@ -25,7 +27,7 @@ import {
   isCancelled, isCutoverRequested, sleepUnlessCutover, awaitOperatorCutover, runDeltaPassWithRetry, HOLD_PASS_INTERVAL_MS,
 } from "./job-control"
 import {
-  applyExtentsWithProgress, checksumDiskWindows, scaleWarmProgress, APPLY_INACTIVITY_MS, PROGRESS_LOG_INTERVAL_MS,
+  applyExtentsWithProgress, checksumDiskWindows, scaleWarmProgress, warmFinalTransfer, APPLY_INACTIVITY_MS, PROGRESS_LOG_INTERVAL_MS,
   type PassWindow, type PassProgress,
 } from "./apply"
 import { createTargetVmShell, provisionBlockTargets, markVolumesCopied } from "./target-provision"
@@ -151,7 +153,7 @@ export async function runXcpngWarmMigration(jobId: string, config: WarmMigration
         ? "CBT enabled on source disks"
         : `CBT enabled on ${cbtEnabledVdis.length} of ${vmConfig.disks.length} source disk(s), already on for the others (left as is)`, "success")
     }
-    if (targetVmid == null) targetVmid = Number(await pveFetch<number | string>(pveConn as any, "/cluster/nextid"))
+    if (targetVmid == null) targetVmid = await reserveTargetVmid(pveConn, config.targetConnectionId, jobId)
     const pveParams = mapXoToPveConfig(vmConfig, targetVmid, config.targetStorage, config.networkBridge, config.vlanTag, config.cpuType)
     const shellConf = await createTargetVmShell(pveConn as any, config.targetNode, pveParams)
     createdVmid = targetVmid
@@ -275,6 +277,9 @@ export async function runXcpngWarmMigration(jobId: string, config: WarmMigration
       return { bytes, snap }
     }
 
+    // Bytes copied over every pass, left on the job when it completes (warmFinalTransfer).
+    let copiedBytes = 0
+
     const powerOps: PowerOffOps = {
       requestShutdown: () => xapiCleanShutdown(session!, vmRef, { shouldAbort: () => isCancelled(jobId) }),
       waitPoweredOff: async (sliceMs: number) => {
@@ -298,6 +303,7 @@ export async function runXcpngWarmMigration(jobId: string, config: WarmMigration
       const t0 = Date.now()
       const full = await runPass("full", null, { status: "full_copy", currentStep: "full_copy", rangeStart: 10, rangeEnd: 80 })
       let baseline = full.snap
+      copiedBytes += full.bytes
       markVolumesCopied(allocatedVolumes)
       const fullSec = Math.max(1, (Date.now() - t0) / 1000)
       let throughput = full.bytes / fullSec
@@ -321,6 +327,7 @@ export async function runXcpngWarmMigration(jobId: string, config: WarmMigration
         const r = await runDeltaPassWithRetry(jobId, `Delta pass ${pass + 1}`, () => runPass(`delta-${pass + 1}`, baseline, deltaWindow))
         if (r === null) { await appendLog(jobId, "Operator requested cutover: proceeding to final delta", "info"); break }
         baseline = r.snap
+        copiedBytes += r.bytes
         const dsec = Math.max(1, (Date.now() - tk) / 1000)
         throughput = r.bytes > 0 ? r.bytes / dsec : throughput
         await appendLog(jobId, `Delta pass ${pass + 1}: ${(r.bytes / 1048576).toFixed(1)} MB`)
@@ -337,6 +344,7 @@ export async function runXcpngWarmMigration(jobId: string, config: WarmMigration
       await cleanShutdownAndConfirm(jobId, powerOps, "Cutover: requesting clean guest shutdown (XCP-ng guest tools)…", "cutover")
       await appendLog(jobId, "Source powered off (confirmed): applying final delta", "success")
       const fin = await runPass("cutover", baseline, { status: "cutover", currentStep: "cutover", rangeStart: 95, rangeEnd: 98 })
+      copiedBytes += fin.bytes
       await destroySnapshot(fin.snap)
       await restoreSourceCbt()
     } else {
@@ -369,6 +377,7 @@ export async function runXcpngWarmMigration(jobId: string, config: WarmMigration
               jobId, connectionId: config.targetConnectionId, nodeIp, nbdDev: reader.nbdDev, dev, extents, capacityBytes: disk.sizeBytes, label: "checksum apply failed", diskIndex: i,
               pass: { status: "full_copy", currentStep: "full_copy", rangeStart: win.scanEnd, rangeEnd: win.applyEnd, totalBytes: extents.reduce((s, e) => s + e.length, 0), doneBytes: 0, lastPct: Math.round(win.scanEnd) },
             })
+            copiedBytes += extents.reduce((s, e) => s + e.length, 0)
           } finally { await release(reader) }
         }
         markVolumesCopied(allocatedVolumes)
@@ -390,7 +399,7 @@ export async function runXcpngWarmMigration(jobId: string, config: WarmMigration
       jobId, pveConn: pveConn as any, node: config.targetNode, vmid: targetVmid, diskCount: vmConfig.disks.length, diskSlots: pveParams.diskSlots, bootDiskSlot: pveParams.bootDiskSlot,
       allocatedVolumes, startAfterMigration: config.startAfterMigration, convertDisksToQcow2: config.convertDisksToQcow2 === true, targetStorage: config.targetStorage,
     })
-    await updateJob(jobId, "completed", { progress: 100 })
+    await updateJob(jobId, "completed", { progress: 100, ...warmFinalTransfer(vmConfig.disks.map(d => d.sizeBytes), copiedBytes) })
     await appendLog(jobId, "Warm migration complete", "success").catch(() => {})
   } catch (err: any) {
     await updateJob(jobId, isCancelled(jobId) ? "cancelled" : "failed", { error: String(err?.message || err) }).catch(() => {})
@@ -428,6 +437,8 @@ export async function runXcpngWarmMigration(jobId: string, config: WarmMigration
     await restoreSourceCbt()
     throw err
   } finally {
+    // The VMID reserved for this job is either created on the cluster or unused now.
+    releaseVmids(jobId)
     stopHeartbeat()
     stopKeepAlive?.()
     if (session) await xapiLogout(session).catch(() => {})

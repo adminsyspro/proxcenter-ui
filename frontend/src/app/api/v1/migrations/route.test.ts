@@ -22,7 +22,7 @@ vi.mock("@/lib/tenant/infraScope", async (orig) => ({
   ...(await orig<typeof import("@/lib/tenant/infraScope")>()),
   getTenantInfrastructureScope: vi.fn(async () => h.infra),
 }))
-vi.mock("@/lib/rbac", () => ({ checkPermission: vi.fn(async () => null), PERMISSIONS: { VM_MIGRATE: "vm.migrate" } }))
+vi.mock("@/lib/rbac", () => ({ checkPermission: vi.fn(async () => null), PERMISSIONS: { VM_MIGRATE: "vm.migrate", CONNECTION_MANAGE: "connection.manage" } }))
 vi.mock("@/lib/tenant", () => ({
   getSessionPrisma: vi.fn(async () => h.prisma),
   getCurrentTenantId: vi.fn(async () => "default"),
@@ -437,6 +437,33 @@ describe("POST /api/v1/migrations, who may migrate onto a cluster (#317)", () =>
       expect(res.status).toBe(200)
     } finally {
       h.infra = { kind: "provider" }
+    }
+  })
+})
+
+describe("POST /api/v1/migrations, pinning the copy network (roadmap#53)", () => {
+  it("keeps the adapter only: an address sent by the browser is never stored", async () => {
+    h.prisma.connection.findUnique
+      .mockResolvedValueOnce({ id: "src", type: "vmware", subType: null, name: "esxi", baseUrl: "https://esxi" })
+      .mockResolvedValueOnce({ id: "tgt", type: "pve", name: "pve" })
+    const res = await callRoute(POST, { body: { ...body, migrationType: "warm", copyVmk: "vmk2", copyAddress: "169.254.169.254" } })
+    expect(res.status).toBe(200)
+    const config = h.prisma.migrationJob.create.mock.calls[0][0].data.config
+    expect(config).toMatchObject({ copyVmk: "vmk2" })
+    expect(config).not.toHaveProperty("copyAddress")
+    expect((await callRoute(POST, { body: { ...body, copyVmk: "eth0" } })).status).toBe(400)
+  })
+
+  it("needs the right to manage the source connection: the adapter is applied as a host network setting", async () => {
+    const { checkPermission } = await import("@/lib/rbac")
+    vi.mocked(checkPermission).mockImplementation(async (perm: string) => (perm === "connection.manage" ? Response.json({ error: "denied" }, { status: 403 }) as any : null))
+    try {
+      const res = await callRoute(POST, { body: { ...body, copyVmk: "vmk2", copyAddress: "10.42.53.21" } })
+      expect(res.status).toBe(403)
+      expect(checkPermission).toHaveBeenCalledWith("connection.manage", "connection", "src")
+      expect(h.prisma.migrationJob.create).not.toHaveBeenCalled()
+    } finally {
+      vi.mocked(checkPermission).mockImplementation(async () => null)
     }
   })
 })

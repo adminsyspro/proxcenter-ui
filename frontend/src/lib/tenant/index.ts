@@ -11,6 +11,7 @@ import type { Prisma } from "@prisma/client"
 import { getPrincipal } from "@/lib/auth/principal"
 import { prisma } from "@/lib/db/prisma"
 
+import { backgroundTenantId } from "./background"
 import { DEFAULT_TENANT_ID } from "./constants"
 export { DEFAULT_TENANT_ID }
 
@@ -68,6 +69,9 @@ function rowToTenant(row: {
  * compatible); the token path NEVER falls back.
  */
 export async function getCurrentTenantId(): Promise<string> {
+  // A job the batch scheduler started outside any request (roadmap#53).
+  const background = backgroundTenantId()
+  if (background) return background
   const result = await getPrincipal()
   if (!result.ok) {
     // Fail-closed token branch: falling back to DEFAULT_TENANT_ID would

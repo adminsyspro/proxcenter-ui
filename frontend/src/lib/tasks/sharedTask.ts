@@ -69,18 +69,25 @@ export async function resolveSharedTaskScope(): Promise<SharedTaskScope> {
   return { tenantId, isDefault, client, reachableConnectionIds }
 }
 
-/** Prisma `where` fragment: active (any pipeline) OR recently-finished. */
+/**
+ * Prisma `where` fragment: active (any pipeline) OR recently-finished. A job of
+ * a bulk migration (roadmap#53) only counts once the scheduler started it: the
+ * queued ones of a big batch would otherwise fill the task bar, and those
+ * cancelled before they started never ran at all.
+ */
 export function sharedTaskWindowWhere(cutoff: Date) {
   return {
     OR: [
       { status: { notIn: TERMINAL_STATUSES as unknown as string[] } },
       { updatedAt: { gte: cutoff } },
     ],
+    AND: [{ OR: [{ batchId: null }, { startedAt: { not: null } }] }],
   }
 }
 
 /** Same predicate as sharedTaskWindowWhere, evaluated in memory (detail route). */
-export function jobInSharedTaskWindow(job: { status: string; updatedAt: Date }, cutoff: Date): boolean {
+export function jobInSharedTaskWindow(job: { status: string; updatedAt: Date; batchId?: string | null; startedAt?: Date | null }, cutoff: Date): boolean {
+  if (job.batchId && !job.startedAt) return false
   return !(TERMINAL_STATUSES as readonly string[]).includes(job.status) || job.updatedAt >= cutoff
 }
 

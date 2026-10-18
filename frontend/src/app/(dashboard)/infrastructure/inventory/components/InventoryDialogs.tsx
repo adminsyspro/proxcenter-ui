@@ -36,6 +36,7 @@ import {
   Snackbar,
   Stack,
   Switch,
+  TablePagination,
   TextField,
   Tooltip as MuiTooltip,
   Typography,
@@ -67,7 +68,11 @@ const EditOtherHardwareDialog = dynamic(() => import('@/components/HardwareModal
 const CloneVmDialog = dynamic(() => import('@/components/HardwareModals').then(mod => ({ default: mod.CloneVmDialog })), { ssr: false })
 import { MigrateVmDialog, CrossClusterMigrateParams } from '@/components/MigrateVmDialog'
 
-import { BULK_MIG_CONCURRENCY } from '../bulkMigrationConfig'
+import { BULK_MIG_CONCURRENCY_MAX, BULK_MIG_CONCURRENCY_MIN, bulkTargetNodes, bulkTempBytesRequired, bulkVmDiskBytes, clampBulkConcurrency } from '../bulkMigrationConfig'
+import { countExtVmPower, isSourcePaused, isSourcePoweredOn } from '../extVmList'
+import { bulkBatchFromPayload, bulkRowsFromBatch, countBulkJobs, fetchBulkBatch, isTerminalJobStatus, orderBulkJobs, type BulkMigBatch, type BulkMigJobRow } from '../bulkJobList'
+import { pageOf } from '@/lib/paging'
+import { STICKY_PAGER_SX } from '@/components/ui/PagedRows'
 import { migrateGuestAndWait, migrationFailureText, runInBatches } from '@/lib/migration/guestMigrateClient'
 import { isNodeActionDrainOver, nodeActionDrainConfig, nodeActionDrainProgress, nodeActionDrainReason, nodeActionDrainRemaining, type NodeActionDrain } from '@/lib/tasks/nodeActionDrain'
 import FailureReasonText from '@/components/tasks/FailureReasonText'
@@ -91,6 +96,10 @@ import RootChoiceButton from './RootChoiceButton'
 import { statusChipLabelKey, isWaitDisplayKey } from './migrationWaitDisplay'
 import { useToast } from '@/contexts/ToastContext'
 import { copyToClipboard } from '@/lib/clipboard'
+import { migrationLogText } from '../migrationLogText'
+import { bulkLoadProjection } from '../bulkLoadProjection'
+import MigrationLiveColumns, { type LiveJob } from './MigrationLiveColumns'
+import BulkLoadProjectionBlock from './BulkLoadProjectionBlock'
 
 /**
  * Which sources may be migrated warm. VMware (direct ESXi) and vCenter read
@@ -100,7 +109,28 @@ import { copyToClipboard } from '@/lib/clipboard'
  * a missing subType as XO), so the selector must not offer it.
  */
 export /** Source power state as reported by the inventory routes (VMware: poweredOn, XCP-ng and others: running). */
-const isSourcePoweredOn = (status?: string) => status === 'running' || status === 'poweredOn'
+// Bulk dialog lists (selected VMs, job rows) page by this many rows (roadmap#53).
+const BULK_LIST_PER_PAGE = 10
+// Power-state warnings name this many VMs, then count the rest.
+const BULK_WARN_NAMES = 5
+// Past this many VMs, the log filter is a list instead of one chip per VM.
+const BULK_LOG_CHIPS_MAX = 5
+
+/** Colours and label of a bulk job row: done, failed, cancelled, queued (or paused) or running. */
+function bulkJobRowTone(s: { isDone: boolean; isFailed: boolean; isCancelled: boolean; isQueued: boolean; isPaused: boolean }): { line: string; chipBg: string; chipColor: string; labelKey?: string } {
+  if (s.isDone) return { line: 'success.main', chipBg: 'success.main', chipColor: 'success.contrastText', labelKey: 'completed' }
+  if (s.isFailed) return { line: 'error.main', chipBg: 'error.main', chipColor: 'error.contrastText', labelKey: 'failed' }
+  if (s.isCancelled) return { line: 'divider', chipBg: 'action.disabled', chipColor: 'common.white', labelKey: 'cancelled' }
+  if (s.isQueued) return { line: 'divider', chipBg: 'action.disabled', chipColor: 'common.white', labelKey: s.isPaused ? 'paused' : 'queued' }
+  return { line: 'divider', chipBg: 'primary.main', chipColor: 'primary.contrastText' }
+}
+
+/** Migration type of a bulk job: Hyper-V and Nutanix are cold only, sshfs_boot is ESXi-direct only. */
+function bulkJobMigrationType(migType: string, s: { coldOnly: boolean; vcenter: boolean }): string {
+  if (s.coldOnly) return 'cold'
+  if (s.vcenter && migType === 'sshfs_boot') return 'cold'
+  return migType
+}
 
 const warmAllowedFor = (info?: { hostType?: string; connSubType?: string | null } | null) =>
   info?.hostType === 'vmware' ||
@@ -302,6 +332,10 @@ export interface InventoryDialogsProps {
   setMigDowntimeBudget: (v: string) => void
   migZeroRateLimit: string
   setMigZeroRateLimit: (v: string) => void
+  migBulkConcurrency: number
+  setMigBulkConcurrency: (v: number) => void
+  migCopyVmk: string
+  setMigCopyVmk: (v: string) => void
   setMigConvertToQcow2: (v: boolean) => void
   migCpuType: string
   setMigCpuType: (v: string) => void
@@ -350,15 +384,17 @@ export interface InventoryDialogsProps {
   setBulkMigOpen: (v: boolean) => void
   bulkMigStarting: boolean
   setBulkMigStarting: (v: boolean) => void
-  bulkMigJobs: { vmid: string; name: string; jobId: string; status: string; progress: number; error?: string; logs?: { ts: string; msg: string; level: string }[]; targetNode?: string }[]
-  setBulkMigJobs: (v: any) => void
+  bulkMigJobs: BulkMigJobRow[]
+  setBulkMigJobs: (v: BulkMigJobRow[]) => void
   bulkMigProgressExpanded: boolean
   setBulkMigProgressExpanded: (v: React.SetStateAction<boolean>) => void
   bulkMigLogsExpanded: boolean
   setBulkMigLogsExpanded: (v: React.SetStateAction<boolean>) => void
   bulkMigLogsFilter: string | null
   setBulkMigLogsFilter: (v: string | null) => void
-  bulkMigConfigRef: React.MutableRefObject<{ sourceConnectionId: string; targetConnectionId: string; targetStorage: string; networkBridge: string; vlanTag?: number; migrationType: string; transferMode: string; startAfterMigration: boolean; convertDisksToQcow2: boolean; sourceType: string; tempStorage?: string; v2vRoot?: string; nfcConcurrency?: number; cpuType?: string } | null>
+  // The server-side batch the dialog follows (roadmap#53), polled by InventoryDetails.
+  bulkMigBatch: BulkMigBatch | null
+  setBulkMigBatch: (v: BulkMigBatch | null) => void
   bulkMigHostInfo: any
 
   // Upgrade dialog
@@ -371,11 +407,11 @@ export interface InventoryDialogsProps {
 /* ------------------------------------------------------------------ */
 
 /*
- * BULK_MIG_CONCURRENCY now lives in ./bulkMigrationConfig.ts so the dispatcher
- * here and the queued-job poller in ../InventoryDetails.tsx read the same
- * value. Previously each file declared its own copy and they silently drifted
- * (dialogs at 1, details at 2) which made bulk migrations still run 2 in
- * parallel after we lowered the dispatcher's count.
+ * The bulk concurrency cap is the "Maximum parallel migrations" setting of the
+ * bulk dialog (roadmap#53), clamped by ../bulkMigrationConfig.ts and sent with
+ * the batch: the server stores it on the batch row and starts the queued jobs
+ * that many at a time. Previously each file declared its own constant and they
+ * silently drifted (dialogs at 1, details at 2).
  */
 
 /**
@@ -426,6 +462,41 @@ function CopyableCommand({ command }: { command: string }) {
         <i className={copied ? 'ri-check-line' : 'ri-file-copy-line'} style={{ fontSize: 14, color: copied ? '#2e7d32' : undefined }} />
       </IconButton>
     </Box>
+  )
+}
+
+/**
+ * Copy button of a migration log panel (roadmap#53): copies the lines the
+ * panel shows, as text (see migrationLogText), and swaps to a green check for
+ * 2 s. Same look as the button of CopyableCommand. The click never reaches the
+ * collapsible title row it sits in.
+ */
+function CopyLogsButton({ getText, sx }: { getText: () => string; sx?: object }) {
+  const t = useTranslations()
+  const [copied, setCopied] = useState(false)
+  const handleCopy = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (await copyToClipboard(getText())) {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    }
+  }
+  return (
+    <MuiTooltip title={copied ? t('inventoryPage.esxiMigration.logsCopied') : t('inventoryPage.esxiMigration.copyLogs')}>
+      <IconButton
+        size="small"
+        onClick={handleCopy}
+        aria-label={t('inventoryPage.esxiMigration.copyLogs')}
+        data-testid="copy-migration-logs"
+        sx={{
+          bgcolor: (theme) => theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
+          '&:hover': { bgcolor: (theme) => theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)' },
+          ...sx,
+        }}
+      >
+        <i className={copied ? 'ri-check-line' : 'ri-file-copy-line'} style={{ fontSize: 14, color: copied ? '#2e7d32' : undefined }} />
+      </IconButton>
+    </MuiTooltip>
   )
 }
 
@@ -511,6 +582,8 @@ export default function InventoryDialogs(props: InventoryDialogsProps) {
     migManualCutover, setMigManualCutover,
     migDowntimeBudget, setMigDowntimeBudget,
     migZeroRateLimit, setMigZeroRateLimit,
+    migBulkConcurrency, setMigBulkConcurrency,
+    migCopyVmk, setMigCopyVmk,
     migDiskPaths, setMigDiskPaths, migTempStorage, setMigTempStorage, migV2vRoot, setMigV2vRoot,
     migNfcConcurrency, setMigNfcConcurrency,
     migType, setMigType, migTransferMode, setMigTransferMode, migPveConnections, migNodes, migStorages,
@@ -520,7 +593,7 @@ export default function InventoryDialogs(props: InventoryDialogsProps) {
     bulkMigSelected, setBulkMigSelected, bulkMigOpen, setBulkMigOpen, bulkMigStarting, setBulkMigStarting,
     bulkMigJobs, setBulkMigJobs, bulkMigProgressExpanded, setBulkMigProgressExpanded,
     bulkMigLogsExpanded, setBulkMigLogsExpanded, bulkMigLogsFilter, setBulkMigLogsFilter,
-    bulkMigConfigRef, bulkMigHostInfo,
+    bulkMigBatch, setBulkMigBatch, bulkMigHostInfo,
     upgradeDialogOpen, setUpgradeDialogOpen,
   } = props
 
@@ -853,11 +926,48 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
   // nothing to install from the Enterprise repo). It drives which remediation
   // the not-ready alert offers.
   type WarmSpace = { storage: string; availableBytes: number; requiredBytes: number; sufficient: boolean; error?: string }
+  // roadmap#53: VMkernel adapters of the ESXi host the source VM runs on, with
+  // their service tags, so the copy can be pinned to one of them. Read for the
+  // single-VM dialog on any VMware source, and for a bulk batch only when the
+  // source is a standalone host (every VM of the batch then shares the same
+  // adapters); a vCenter batch spans hosts, so it keeps each host's default.
+  type CopyVnic = { device: string; address: string; subnetMask?: string; portgroup?: string; mtu?: number; services: string[] }
+  type CopyInterfaces = { hostName: string; source: 'vcenter' | 'esxi'; defaultDevice?: string; vnics: CopyVnic[] }
+  const copyIfaceVm = ((): { connId: string; vmid: string } | null => {
+    if (esxiMigrateVm) return isVmwareSource ? { connId: esxiMigrateVm.connId, vmid: esxiMigrateVm.vmid } : null
+    if (!bulkMigOpen || bulkMigHostInfo?.hostType !== 'vmware') return null
+    const first = (bulkMigHostInfo.vms || []).find((vm: any) => bulkMigSelected.has(vm.vmid))
+    return first ? { connId: bulkMigHostInfo.connectionId, vmid: first.vmid } : null
+  })()
+  // Fetched by URL, like the warm preflight below: the answer is keyed on the
+  // URL so a VM switch never shows the previous host's adapters.
+  const copyIfaceUrl = migType === 'warm' && copyIfaceVm ? `/api/v1/vmware/${copyIfaceVm.connId}/vms/${encodeURIComponent(copyIfaceVm.vmid)}/copy-interfaces` : null
+  const [copyIfaceState, setCopyIfaceState] = useState<{ url: string; loading: boolean; data?: CopyInterfaces; error?: string } | null>(null)
+  React.useEffect(() => {
+    if (!copyIfaceUrl) { setCopyIfaceState(null); return }
+    let cancelled = false
+    setCopyIfaceState({ url: copyIfaceUrl, loading: true })
+    fetch(copyIfaceUrl)
+      .then(r => r.json())
+      .then((d: { data?: CopyInterfaces; error?: string }) => { if (!cancelled) setCopyIfaceState({ url: copyIfaceUrl, loading: false, data: d.data, error: d.data ? undefined : (d.error || 'no answer') }) })
+      .catch((e: any) => { if (!cancelled) setCopyIfaceState({ url: copyIfaceUrl, loading: false, error: String(e?.message || e) }) })
+    return () => { cancelled = true }
+  }, [copyIfaceUrl])
+  const copyIfaceCurrent = copyIfaceState && copyIfaceState.url === copyIfaceUrl ? copyIfaceState : null
+  const copyIfaces = copyIfaceCurrent?.data
+  const copyIfacesLoading = !!copyIfaceUrl && (!copyIfaceCurrent || copyIfaceCurrent.loading)
+  const copyIfaceError = copyIfaceCurrent?.error
+  // The adapter the copy will use: the operator's pick, else the host default.
+  const copyVnic = copyIfaces ? copyIfaces.vnics.find(v => v.device === (migCopyVmk || copyIfaces.defaultDevice)) : undefined
+  const showCopyVmk = migType === 'warm' && !!copyIfaceVm
+
   // #946: the source's own vSphere version, checked against the VDDK generation
   // found on the node. Values only, never the route's sentence: the wording below
   // is composed from the catalogue so it follows the operator's language.
   type WarmSource = { sourceVersion: string; vddkMajor?: number; minVersion: string; absoluteMin: string; blocked: boolean; warning: boolean }
-  const [warmPreflight, setWarmPreflight] = useState<{ key: string; loading: boolean; ok: boolean; missing: string[]; kind: 'nbd' | 'vddk'; error?: string; tokenConfigured?: boolean; osUnsupported?: boolean; debianMajor?: number; space?: WarmSpace; source?: WarmSource } | null>(null)
+  // roadmap#53: can the node reach the VMkernel adapter the copy goes through?
+  type WarmCopyReach = { address: string; ports: Record<string, boolean>; ok: boolean; error?: string }
+  const [warmPreflight, setWarmPreflight] = useState<{ key: string; loading: boolean; ok: boolean; missing: string[]; kind: 'nbd' | 'vddk'; error?: string; tokenConfigured?: boolean; osUnsupported?: boolean; debianMajor?: number; space?: WarmSpace; source?: WarmSource; copy?: WarmCopyReach } | null>(null)
   // Bumped after a successful automated node setup so this effect re-runs and
   // the go/no-go flips to ready without the user having to reselect the node.
   const [warmPreflightRefresh, setWarmPreflightRefresh] = useState(0)
@@ -868,7 +978,9 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
     }
     // The storage is part of the key: the free-space verdict below belongs to
     // one storage, and switching storage must re-run the check.
-    const key = `${migTargetConn}::${migTargetNode}::${migTargetStorage}`
+    // The copy address too (roadmap#53): the reachability verdict belongs to
+    // one adapter, and picking another must re-run the probe.
+    const key = `${migTargetConn}::${migTargetNode}::${migTargetStorage}::${copyVnic?.address ?? ''}`
     // Which runtime the node needs follows the source, so the expected kind is
     // known before the answer comes back: it keeps the loading and network-error
     // states on the right remediation instead of defaulting to the VDDK one.
@@ -882,24 +994,30 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
       // NBD toolchain, everything else for the VDDK runtime.
       // targetStorage + requiredDiskBytes let the server compare the storage's
       // live free space with the source disks (same rule as the cold engine).
-      body: JSON.stringify({ targetConnectionId: migTargetConn, targetNode: migTargetNode, action: 'warm-check', sourceConnectionId: esxiMigrateVm?.connId, targetStorage: migTargetStorage || undefined, requiredDiskBytes: esxiMigrateVm?.committed || 0 }),
+      // copyAddress / copyDirect: the VMkernel adapter the copy goes through
+      // (chosen, or the host default), probed on 902 (and 443 for a direct
+      // ESXi source) from the node (roadmap#53).
+      body: JSON.stringify({ targetConnectionId: migTargetConn, targetNode: migTargetNode, action: 'warm-check', sourceConnectionId: esxiMigrateVm?.connId, targetStorage: migTargetStorage || undefined, requiredDiskBytes: esxiMigrateVm?.committed || 0, ...(copyVnic?.address && { sourceVmId: esxiMigrateVm?.vmid, copyVmk: copyVnic.device }) }),
     })
       .then(r => r.json())
-      .then((d: { ok?: boolean; missing?: string[]; kind?: string; error?: string; vddkTokenConfigured?: boolean; osUnsupported?: boolean; debianMajor?: number; space?: WarmSpace; source?: WarmSource }) => {
+      .then((d: { ok?: boolean; missing?: string[]; kind?: string; error?: string; vddkTokenConfigured?: boolean; osUnsupported?: boolean; debianMajor?: number; space?: WarmSpace; source?: WarmSource; copy?: WarmCopyReach }) => {
         // vddkTokenConfigured: server-side boolean saying an Enterprise VDDK
         // package token exists, i.e. the automated "Prepare this node" action
         // can work. The token itself never reaches the client.
-        if (!cancelled) setWarmPreflight({ key, loading: false, ok: !!d.ok, missing: d.missing || [], kind: d.kind === 'nbd' ? 'nbd' : 'vddk', error: d.error, tokenConfigured: !!d.vddkTokenConfigured, osUnsupported: !!d.osUnsupported, debianMajor: d.debianMajor, space: d.space, source: d.source })
+        if (!cancelled) setWarmPreflight({ key, loading: false, ok: !!d.ok, missing: d.missing || [], kind: d.kind === 'nbd' ? 'nbd' : 'vddk', error: d.error, tokenConfigured: !!d.vddkTokenConfigured, osUnsupported: !!d.osUnsupported, debianMajor: d.debianMajor, space: d.space, source: d.source, copy: d.copy })
       })
       .catch(() => { if (!cancelled) setWarmPreflight({ key, loading: false, ok: false, missing: [], kind: expectedKind }) })
     return () => { cancelled = true }
-  }, [singleWarmAllowed, esxiMigrateVm?.hostType, esxiMigrateVm?.connId, esxiMigrateVm?.committed, migType, migTargetConn, migTargetNode, migTargetStorage, warmPreflightRefresh])
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- copyIfaces?.source only changes with copyVnic?.address
+  }, [singleWarmAllowed, esxiMigrateVm?.hostType, esxiMigrateVm?.connId, esxiMigrateVm?.committed, migType, migTargetConn, migTargetNode, migTargetStorage, warmPreflightRefresh, copyVnic?.address])
   // Only trust the verdict when it belongs to the currently selected target. On a
   // node/connection switch the state briefly still holds the prior target's result
   // (the effect re-runs after render); ignoring a mismatched key stops a stale "ready"
   // from re-enabling the launch against a node that has not passed the current check.
   const warmPreflightCurrent =
-    warmPreflight && warmPreflight.key === `${migTargetConn}::${migTargetNode}::${migTargetStorage}` ? warmPreflight : null
+    warmPreflight && warmPreflight.key === `${migTargetConn}::${migTargetNode}::${migTargetStorage}::${copyVnic?.address ?? ''}` ? warmPreflight : null
+  // Reachability verdict of the copy adapter; null while loading or when no adapter is known. Blocks the launch on its own.
+  const warmCopyUnreachable = warmPreflightCurrent && !warmPreflightCurrent.loading && warmPreflightCurrent.copy && !warmPreflightCurrent.copy.ok ? warmPreflightCurrent.copy : null
   // Free-space verdict for the selected storage; undefined while loading or when
   // no storage is chosen yet. Blocks the launch on its own, independently of ok.
   const warmSpaceShort = warmPreflightCurrent && !warmPreflightCurrent.loading && warmPreflightCurrent.space && !warmPreflightCurrent.space.sufficient ? warmPreflightCurrent.space : null
@@ -1185,6 +1303,82 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
     </Box>
   )
 
+  // Warm VMware only (roadmap#53): which VMkernel adapter of the source host the
+  // NFC copy goes through. Empty keeps the host default (its vSphereBackupNFC
+  // adapter, else management). The helper carries the reachability verdict of
+  // the node preflight for the adapter in effect.
+  const copyVnicLabel = (v: CopyVnic) => `${v.device}  ${v.address}${v.services.length ? `  (${v.services.join(', ')})` : ''}`
+  const renderCopyVmkSelect = () => showCopyVmk && (
+    <TextField
+      select
+      fullWidth
+      size="small"
+      label={t('inventoryPage.esxiMigration.copyVmk')}
+      value={copyIfaces ? migCopyVmk : ''}
+      onChange={e => setMigCopyVmk(e.target.value)}
+      disabled={!copyIfaces}
+      error={!!warmCopyUnreachable || (!!copyIfaceError && !copyIfaces)}
+      helperText={(() => {
+        if (copyIfacesLoading) return t('inventoryPage.esxiMigration.copyVmkLoading')
+        if (!copyIfaces) return t('inventoryPage.esxiMigration.copyVmkFailed', { error: copyIfaceError || '' })
+        if (warmCopyUnreachable) {
+          return warmCopyUnreachable.error
+            ? t('inventoryPage.esxiMigration.copyVmkProbeFailed', { address: warmCopyUnreachable.address, error: warmCopyUnreachable.error })
+            : t('inventoryPage.esxiMigration.copyVmkUnreachable', { address: warmCopyUnreachable.address, ports: Object.entries(warmCopyUnreachable.ports).filter(([, open]) => !open).map(([p]) => p).join(', ') })
+        }
+        const reach = warmPreflightCurrent?.copy?.ok && copyVnic && warmPreflightCurrent.copy.address === copyVnic.address
+          ? ` ${t('inventoryPage.esxiMigration.copyVmkReachable', { node: migTargetNode, ports: Object.keys(warmPreflightCurrent.copy.ports).join(', ') })}`
+          : ''
+        const base = copyIfaces.source === 'vcenter'
+          ? t('inventoryPage.esxiMigration.copyVmkHelpVcenter', { host: copyIfaces.hostName })
+          : t('inventoryPage.esxiMigration.copyVmkHelpEsxi', { host: copyIfaces.hostName })
+        return `${base}${reach}`
+      })()}
+      // The empty value shows "Host default: …": keep the label on the border above it.
+      slotProps={{ htmlInput: { 'data-testid': 'warm-copy-vmk' }, select: { displayEmpty: true }, inputLabel: { shrink: true } }}
+    >
+      <MenuItem value="">
+        {copyIfaces?.defaultDevice
+          ? t('inventoryPage.esxiMigration.copyVmkDefault', { adapter: copyVnicLabel(copyIfaces.vnics.find(v => v.device === copyIfaces.defaultDevice)!) })
+          : t('inventoryPage.esxiMigration.copyVmkDefaultUnknown')}
+      </MenuItem>
+      {(copyIfaces?.vnics || []).filter(v => v.address).map(v => (
+        <MenuItem key={v.device} value={v.device}>{copyVnicLabel(v)}</MenuItem>
+      ))}
+    </TextField>
+  )
+
+  // Bulk only (roadmap#53): how many migrations of the batch run at once. Same
+  // shape as the NFC concurrency slider; the queued-job poller reads the value
+  // from the batch config, so it governs the whole batch, not just the first wave.
+  const renderBulkConcurrencyField = () => (
+    <Box sx={{ px: 0.5 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.5 }}>
+        <Typography variant="body2">{t('inventoryPage.esxiMigration.bulkConcurrency')}</Typography>
+        <MuiTooltip title={t('inventoryPage.esxiMigration.bulkConcurrencyTooltip')} arrow placement="top" slotProps={tooltipSlotProps}>
+          <i className="ri-question-line" style={{ fontSize: 14, opacity: 0.6 }} />
+        </MuiTooltip>
+        <Typography variant="body2" fontWeight={700} sx={{ ml: 'auto' }} data-testid="bulk-concurrency-value">
+          {t('inventoryPage.esxiMigration.bulkConcurrencyValue', { count: migBulkConcurrency })}
+        </Typography>
+      </Box>
+      <Box sx={{ px: 1 }}>
+        <Slider
+          size="small"
+          value={migBulkConcurrency}
+          onChange={(_, val) => setMigBulkConcurrency(clampBulkConcurrency(val as number))}
+          min={BULK_MIG_CONCURRENCY_MIN}
+          max={BULK_MIG_CONCURRENCY_MAX}
+          step={1}
+          marks
+          valueLabelDisplay="auto"
+          aria-label={t('inventoryPage.esxiMigration.bulkConcurrency')}
+          data-testid="bulk-concurrency-slider"
+        />
+      </Box>
+    </Box>
+  )
+
   // Cold vCenter only (#807): how many disks download at once over NFC. Each
   // stream is capped by the ESXi host, so this is the lever for a multi-disk
   // VM. Same shape as the downtime budget slider, rendered by both dialogs.
@@ -1289,6 +1483,146 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
   // copied anything yet, so those volumes are freed automatically and no
   // confirmation is needed.
   const [cancelMigConfirmOpen, setCancelMigConfirmOpen] = useState(false)
+  // Bulk dialog (roadmap#53): the selected VMs list folds away past one page,
+  // and both it and the job rows are paged so a batch of dozens stays readable.
+  const [bulkSelListOpen, setBulkSelListOpen] = useState<boolean | null>(null)
+  const [bulkSelPage, setBulkSelPage] = useState(0)
+  const [bulkJobPage, setBulkJobPage] = useState(0)
+  // Refusal of the batch launch (the server checks every VM before creating anything).
+  const [bulkStartError, setBulkStartError] = useState<string | null>(null)
+  // Pause / resume / cancel of the queued jobs, from the follow-up header.
+  const [bulkBatchBusy, setBulkBatchBusy] = useState(false)
+  const [bulkBatchError, setBulkBatchError] = useState<string | null>(null)
+  const [bulkCancelConfirmOpen, setBulkCancelConfirmOpen] = useState(false)
+  // Target space of the whole batch (roadmap#53), checked as soon as the
+  // node(s), the storage and the VMs are chosen: the server answers what
+  // POST /batches will check, so a batch that does not fit cannot start.
+  // Blocking problems rest on the disks' exact capacity (read on the source
+  // like the engines do); warnings on the list's estimate, for VMs whose exact
+  // size could not be read.
+  type BulkSpaceProblem = { storage: string; node: string | null; availableBytes: number; requiredBytes: number; error?: string; estimated?: boolean }
+  const [bulkSpace, setBulkSpace] = useState<{ status: 'idle' | 'checking' | 'ok' | 'blocked'; problems: BulkSpaceProblem[]; warnings: BulkSpaceProblem[] }>({ status: 'idle', problems: [], warnings: [] })
+  // Copy network of a warm VMware batch (roadmap#53): each VM's node must
+  // reach the VMkernel adapter of its source host. On Auto the server places
+  // the VMs on the nodes that do; a node named explicitly that does not
+  // blocks the launch. Same check as POST /batches.
+  type BulkCopyProblem = { kind: 'unreachable' | 'noNode'; node?: string; vm?: string; host: string; device: string; address: string; ports?: number[]; error?: string }
+  const [bulkCopy, setBulkCopy] = useState<{ status: 'idle' | 'checking' | 'done'; assignment: Record<string, string | null>; problems: BulkCopyProblem[]; infos: Array<{ vm: string; nodes: string[]; excluded: string[] }> }>({ status: 'idle', assignment: {}, problems: [], infos: [] })
+  const bulkCopyRequest = React.useMemo(() => {
+    if (!bulkMigOpen || bulkMigJobs.length > 0 || !bulkMigHostInfo || migType !== 'warm' || !migTargetConn || !migTargetNode) return null
+    if (['xcpng', 'hyperv', 'nutanix'].includes(bulkMigHostInfo.hostType)) return null
+    const nodes = bulkTargetNodes(migTargetNode, migTargetConn, migNodeOptions as any[])
+    const selected = (bulkMigHostInfo.vms || []).filter((vm: any) => bulkMigSelected.has(vm.vmid))
+    if (nodes.length === 0 || selected.length === 0) return null
+    return {
+      sourceConnectionId: bulkMigHostInfo.connectionId, targetConnectionId: migTargetConn, nodes, auto: migTargetNode === '__auto__',
+      ...(showCopyVmk && migCopyVmk && { copyVmk: migCopyVmk }),
+      vms: selected.map((vm: any) => ({ sourceVmId: vm.vmid, sourceVmName: vm.name || vm.vmid })),
+    }
+  }, [bulkMigOpen, bulkMigJobs.length, bulkMigHostInfo, migType, migTargetConn, migTargetNode, migNodeOptions, bulkMigSelected, showCopyVmk, migCopyVmk])
+  React.useEffect(() => {
+    if (!bulkCopyRequest) { setBulkCopy({ status: 'idle', assignment: {}, problems: [], infos: [] }); return }
+    let stale = false
+    setBulkCopy(prev => ({ ...prev, status: 'checking' }))
+    const timer = setTimeout(() => {
+      fetch('/api/v1/migrations/batches/copy-check', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(bulkCopyRequest) })
+        .then(r => r.json())
+        .then(d => {
+          if (stale) return
+          // An answer the dialog cannot read blocks nothing: POST /batches checks again.
+          if (!d?.data) { setBulkCopy({ status: 'idle', assignment: {}, problems: [], infos: [] }); return }
+          setBulkCopy({ status: 'done', assignment: d.data.assignment || {}, problems: d.data.problems || [], infos: d.data.infos || [] })
+        })
+        .catch(() => { if (!stale) setBulkCopy({ status: 'idle', assignment: {}, problems: [], infos: [] }) })
+    }, 300)
+    return () => { stale = true; clearTimeout(timer) }
+  }, [bulkCopyRequest])
+  // Node of each selected VM: the copy-network placement on Auto once known,
+  // else the round-robin. Shared by the launch, the space check and the projection.
+  const bulkNodeOf = React.useCallback((vmid: string, idx: number, nodes: string[]) => {
+    const placed = bulkCopyRequest?.auto && bulkCopy.status === 'done' ? bulkCopy.assignment[vmid] : undefined
+    return placed ?? nodes[idx % nodes.length]
+  }, [bulkCopyRequest, bulkCopy])
+  const bulkSpaceVms = React.useMemo(() => {
+    if (!bulkMigOpen || bulkMigJobs.length > 0 || !bulkMigHostInfo || !migTargetConn || !migTargetNode || !migTargetStorage) return null
+    const nodes = bulkTargetNodes(migTargetNode, migTargetConn, migNodeOptions as any[])
+    if (nodes.length === 0) return null
+    const selected = (bulkMigHostInfo.vms || []).filter((vm: any) => bulkMigSelected.has(vm.vmid))
+    if (selected.length === 0) return null
+    return selected.map((vm: any, idx: number) => ({ sourceVmId: vm.vmid, targetNode: bulkNodeOf(vm.vmid, idx, nodes), diskBytes: bulkVmDiskBytes(vm) }))
+  }, [bulkMigOpen, bulkMigJobs.length, bulkMigHostInfo, migTargetConn, migTargetNode, migTargetStorage, migNodeOptions, bulkMigSelected, bulkNodeOf])
+  // Load of each target node once the batch has landed (roadmap#53 part B),
+  // with the round-robin of the launch, from the load the node list reported.
+  const bulkProjection = React.useMemo(() => {
+    if (!bulkMigOpen || bulkMigJobs.length > 0 || !bulkMigHostInfo || !migTargetConn || !migTargetNode) return []
+    const nodes = bulkTargetNodes(migTargetNode, migTargetConn, migNodeOptions as any[])
+    const selected = (bulkMigHostInfo.vms || []).filter((vm: any) => bulkMigSelected.has(vm.vmid))
+    if (nodes.length === 0 || selected.length === 0) return []
+    return bulkLoadProjection(selected, nodes, (migNodeOptions as any[]).filter(o => o.connId === migTargetConn), (vm: any, i) => bulkNodeOf(vm.vmid, i, nodes))
+  }, [bulkMigOpen, bulkMigJobs.length, bulkMigHostInfo, migTargetConn, migTargetNode, migNodeOptions, bulkMigSelected, bulkNodeOf])
+  const migTargetNodeStatus = React.useMemo(() => {
+    const out: Record<string, string | undefined> = {}
+    for (const o of migNodeOptions as any[]) if (o.connId === migTargetConn) out[o.node] = o.status
+    return out
+  }, [migNodeOptions, migTargetConn])
+  // The jobs of the follow-up as its throughput chart and node cards read
+  // them: a new array only when a poll brings new rows, one sample per poll.
+  const bulkLiveJobs = React.useMemo<LiveJob[]>(() => bulkMigJobs.map(j => ({ id: j.jobId, name: j.name, status: j.status, bytesTransferred: j.bytesTransferred, transferSpeed: j.transferSpeed, targetNode: j.targetNode })), [bulkMigJobs])
+  const singleLiveJobs = React.useMemo<LiveJob[]>(() => (migJob
+    ? [{ id: String(migJob.id || migJobId || ''), name: esxiMigrateVm?.name || String(migJob.sourceVmName || migJob.sourceVmId || ''), status: migJob.status, bytesTransferred: migJob.bytesTransferred, transferSpeed: migJob.transferSpeed, targetNode: migJob.targetNode }]
+    : []
+  ), [migJob, migJobId, esxiMigrateVm?.name])
+  React.useEffect(() => {
+    if (!bulkSpaceVms) { setBulkSpace({ status: 'idle', problems: [], warnings: [] }); return }
+    let stale = false
+    setBulkSpace(prev => ({ ...prev, status: 'checking' }))
+    const timer = setTimeout(() => {
+      fetch('/api/v1/migrations/batches/space-check', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sourceConnectionId: bulkMigHostInfo?.connectionId, targetConnectionId: migTargetConn, targetStorage: migTargetStorage, vms: bulkSpaceVms }),
+      })
+        .then(r => r.json())
+        .then(d => {
+          if (stale) return
+          // An answer the dialog cannot read blocks nothing: the server checks again at launch.
+          if (!d?.data) { setBulkSpace({ status: 'idle', problems: [], warnings: [] }); return }
+          setBulkSpace({ status: d.data.ok ? 'ok' : 'blocked', problems: d.data.problems || [], warnings: d.data.warnings || [] })
+        })
+        .catch(() => { if (!stale) setBulkSpace({ status: 'idle', problems: [], warnings: [] }) })
+    }, 300)
+    return () => { stale = true; clearTimeout(timer) }
+  }, [bulkSpaceVms, migTargetStorage, migTargetConn, bulkMigHostInfo?.connectionId])
+  React.useEffect(() => {
+    if (!bulkMigOpen) return
+    setBulkSelListOpen(null)
+    setBulkSelPage(0)
+    setBulkJobPage(0)
+    setBulkStartError(null)
+    setBulkBatchError(null)
+  }, [bulkMigOpen])
+  const runBulkBatchAction = async (action: 'pause' | 'resume' | 'cancel-queued') => {
+    if (!bulkMigBatch) return
+    const batchId = bulkMigBatch.id
+    setBulkBatchBusy(true)
+    setBulkBatchError(null)
+    try {
+      const res = await fetch(`/api/v1/migrations/batches/${encodeURIComponent(batchId)}/${action}`, { method: 'POST' })
+      const d = await res.json().catch(() => ({}))
+      if (!res.ok) setBulkBatchError(d.error || `HTTP ${res.status}`)
+      // Read back even after a refusal: a 409 means the batch moved on (another
+      // tab, the scheduler), and the header must show where it is now.
+      const snap = await fetchBulkBatch(batchId)
+      if (snap) {
+        setBulkMigBatch(bulkBatchFromPayload(snap))
+        setBulkMigJobs(bulkRowsFromBatch(snap.jobs))
+      }
+    } catch (e: any) {
+      setBulkBatchError(e?.message || String(e))
+    } finally {
+      setBulkBatchBusy(false)
+    }
+  }
   const cancelMigrationJob = async () => {
     const res = await fetch(`/api/v1/migrations/${migJobId}/cancel`, { method: 'POST' })
     const d = await res.json().catch(() => ({}))
@@ -1362,6 +1696,8 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
           ...(showZeroRateLimit && migZeroRateLimit.trim() !== '' && {
             zeroRateLimitMBps: Number(migZeroRateLimit.trim()),
           }),
+          // VMkernel adapter of the copy (roadmap#53); empty keeps the host default.
+          ...(showCopyVmk && migCopyVmk && copyVnic && { copyVmk: migCopyVmk }),
           // Forward tempStorage for every source type — v2v uses it as virt-v2v's -os,
           // direct-ESXi uses it as the base path for SSHFS mount + VMDK dumps + clones.
           ...(migTempStorage !== '/tmp' && {
@@ -2707,7 +3043,7 @@ return
 
       {/* ESXi / XCP-ng Migration Dialog */}
       {/* The review step (#317) carries a five-column NIC table: it gets the wider dialog. */}
-      <Dialog open={!!esxiMigrateVm} onClose={() => { if (!migStarting) setEsxiMigrateVm(null) }} maxWidth={!migJobId ? 'md' : 'sm'} fullWidth>
+      <Dialog open={!!esxiMigrateVm} onClose={() => { if (!migStarting) setEsxiMigrateVm(null) }} maxWidth="md" fullWidth>
         <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
           <img src={esxiMigrateVm?.hostType === 'nutanix' ? '/images/nutanix-logo.svg' : esxiMigrateVm?.hostType === 'hyperv' ? '/images/hyperv-logo.svg' : esxiMigrateVm?.hostType === 'xcpng' ? '/images/xcpng-logo.svg' : '/images/esxi-logo.svg'} alt="" width={22} height={22} />
           {t('inventoryPage.esxiMigration.migrateToProxmox')}
@@ -3579,6 +3915,7 @@ return
                   {renderAutomaticCutoverSwitch()}
                   {renderDowntimeBudgetField()}
                   {renderZeroRateLimitField()}
+                  {renderCopyVmkSelect()}
                   {renderIntegrityNote(esxiMigrateVm?.hostType)}
                   {renderQcow2ConvertSwitch()}
                 </Stack>
@@ -3655,6 +3992,13 @@ return
 
           {/* Migration in progress / completed / failed */}
           {esxiMigrateVm && migJobId && migJob && (
+            <MigrationLiveColumns
+              sessionKey={String(migJobId)}
+              jobs={singleLiveJobs}
+              targetConnectionId={migJob.targetConnectionId || migTargetConn || undefined}
+              nodeOptions={migNodeOptions as any[]}
+              active={!!esxiMigrateVm}
+            >
             <Stack spacing={2} sx={{ mt: 1 }}>
               {/* Migration visual: VMware → Proxmox */}
               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 2, py: 2 }}>
@@ -3777,7 +4121,9 @@ return
 
               {/* Logs */}
               {migJob.logs?.length > 0 && (
-                <Box sx={{ p: 1.5, bgcolor: theme.palette.mode === 'dark' ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.03)', fontFamily: '"JetBrains Mono", monospace', fontSize: 11, maxHeight: 250, overflow: 'auto', borderRadius: 1.5, lineHeight: 1.8 }}>
+                <Box sx={{ position: 'relative' }}>
+                <CopyLogsButton sx={{ position: 'absolute', top: 4, right: 12, zIndex: 1 }} getText={() => migrationLogText(migJob.logs)} />
+                <Box sx={{ p: 1.5, pr: 6, bgcolor: theme.palette.mode === 'dark' ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.03)', fontFamily: '"JetBrains Mono", monospace', fontSize: 11, maxHeight: 250, overflow: 'auto', borderRadius: 1.5, lineHeight: 1.8 }}>
                   {migJob.logs.map((log: any, i: number) => (
                     <Box key={i}>
                       <Box component="span" sx={{ color: 'text.secondary' }}>[{new Date(log.ts).toLocaleTimeString()}]</Box>{' '}
@@ -3788,8 +4134,10 @@ return
                     </Box>
                   ))}
                 </Box>
+                </Box>
               )}
             </Stack>
+            </MigrationLiveColumns>
           )}
 
           {/* Loading state while starting */}
@@ -3893,6 +4241,8 @@ return
                   if (migType === 'warm' && migTargetNode !== '__auto__' && !warmPreflightCurrent?.ok) return true
                   // Warm: the selected storage cannot hold the source disks (or could not be read).
                   if (migType === 'warm' && warmSpaceShort) return true
+                  // Warm: the node cannot reach the VMkernel adapter the copy goes through (roadmap#53).
+                  if (migType === 'warm' && warmCopyUnreachable) return true
                   if (zeroRateLimitInvalid) return true
                   return false
                 })()}
@@ -4002,13 +4352,14 @@ return
       </Dialog>
 
       {/* Bulk Migration Dialog */}
-      <Dialog open={bulkMigOpen} onClose={() => { if (!bulkMigStarting && bulkMigJobs.length === 0) setBulkMigOpen(false) }} maxWidth="sm" fullWidth>
+      <Dialog open={bulkMigOpen} onClose={() => { if (!bulkMigStarting && bulkMigJobs.length === 0) setBulkMigOpen(false) }} maxWidth={bulkMigJobs.length === 0 ? 'md' : 'lg'} fullWidth>
         <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
           {bulkMigHostInfo?.hostType === 'hyperv'
             ? <img src="/images/hyperv-logo.svg" alt="" width={22} height={22} />
             : <img src={bulkMigHostInfo?.hostType === 'nutanix' ? '/images/nutanix-logo.svg' : bulkMigHostInfo?.hostType === 'hyperv' ? '/images/hyperv-logo.svg' : bulkMigHostInfo?.hostType === 'xcpng' ? '/images/xcpng-logo.svg' : '/images/esxi-logo.svg'} alt="" width={22} height={22} />
           }
-          {t('inventoryPage.esxiMigration.bulkMigration')} ({bulkMigSelected.size} VMs)
+          {/* A batch reopened from the server may not match the current selection. */}
+          {t('inventoryPage.esxiMigration.bulkMigration')} ({bulkMigJobs.length > 0 ? bulkMigJobs.length : bulkMigSelected.size} VMs)
         </DialogTitle>
         <DialogContent>
           <Stack spacing={2.5} sx={{ mt: 1 }}>
@@ -4021,53 +4372,96 @@ return
                 Hidden once migration starts (bulkMigJobs populated): the
                 per-job progress rows below already list the same VMs with
                 live status, so the static summary becomes redundant noise. */}
-            {bulkMigJobs.length === 0 && <Box sx={{ p: 2, borderRadius: 1.5, bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)', border: '1px solid', borderColor: 'divider', maxHeight: 150, overflow: 'auto' }}>
-              <Typography variant="subtitle2" sx={{ mb: 1, color: 'text.secondary', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5 }}>{t('inventoryPage.esxiMigration.selectedVms')}</Typography>
-              {(() => {
-                // Pick the hypervisor-specific VM icon. Mirrors the small map
-                // used in InventoryTree.tsx for the migration section.
-                const vmIconByType: Record<string, string | undefined> = {
-                  vmware: '/images/esxi-vm.svg',
-                  hyperv: undefined,
-                  xcpng: undefined,
-                  nutanix: undefined,
-                }
-                const vmIconSrc = vmIconByType[bulkMigHostInfo?.hostType || ''] || undefined
-                return (bulkMigHostInfo?.vms || []).filter((vm: any) => bulkMigSelected.has(vm.vmid)).map((vm: any) => {
-                  const dotColor =
-                    vm.status === 'running' ? '#4caf50' :
-                    vm.status === 'paused' || vm.status === 'suspended' ? '#ed6c02' :
-                    '#f44336'
-                  return (
-                    <Box key={vm.vmid} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.3 }}>
-                      <Box component="span" sx={{ position: 'relative', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 14, height: 14, flexShrink: 0 }}>
-                        {vmIconSrc
-                          ? <img src={vmIconSrc} alt="" width={14} height={14} style={{ opacity: 0.7 }} />
-                          : <i className="ri-computer-line" style={{ fontSize: 14, opacity: 0.7 }} />
-                        }
-                        <Box sx={{
-                          position: 'absolute', bottom: -2, right: -3,
-                          width: 7, height: 7, borderRadius: '50%',
-                          bgcolor: dotColor,
-                          border: '1.5px solid', borderColor: 'background.paper',
-                          boxShadow: vm.status === 'running' ? `0 0 4px ${dotColor}` : 'none',
-                        }} />
-                      </Box>
-                      <Typography variant="body2" fontSize={12} fontWeight={600}>{vm.name || vm.vmid}</Typography>
-                    </Box>
-                  )
-                })
-              })()}
-            </Box>}
-
+            {/* Same layout as the single VM dialog (#317): where the VMs go on
+                the left, how they get there on the right, both columns ending on
+                the same line; stacked on a narrow screen. Warnings span below. */}
             {bulkMigJobs.length === 0 && (
               <>
+              <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2.5, alignItems: 'stretch' }}>
+              <Stack spacing={2.5} data-testid="bulk-column-target">
+              {(() => {
+              // Pick the hypervisor-specific VM icon. Mirrors the small map
+              // used in InventoryTree.tsx for the migration section.
+              const vmIconByType: Record<string, string | undefined> = {
+                vmware: '/images/esxi-vm.svg',
+                hyperv: undefined,
+                xcpng: undefined,
+                nutanix: undefined,
+              }
+              const vmIconSrc = vmIconByType[bulkMigHostInfo?.hostType || ''] || undefined
+              const selectedVms = (bulkMigHostInfo?.vms || []).filter((vm: any) => bulkMigSelected.has(vm.vmid))
+              const power = countExtVmPower(selectedVms)
+              // Open by default while the list fits on one page.
+              const listOpen = bulkSelListOpen ?? selectedVms.length <= BULK_LIST_PER_PAGE
+              const { rows, page } = pageOf(selectedVms, bulkSelPage, BULK_LIST_PER_PAGE)
+              return (
+                <Box sx={{ p: 2, borderRadius: 1.5, bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)', border: '1px solid', borderColor: 'divider' }}>
+                  <Box
+                    onClick={() => setBulkSelListOpen(!listOpen)}
+                    data-testid="bulk-selected-summary"
+                    sx={{ display: 'flex', alignItems: 'center', gap: 1, cursor: 'pointer', userSelect: 'none' }}
+                  >
+                    <i className={listOpen ? 'ri-subtract-line' : 'ri-add-line'} style={{ fontSize: 16, opacity: 0.5 }} />
+                    <Typography variant="subtitle2" sx={{ color: 'text.secondary', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5 }}>{t('inventoryPage.esxiMigration.selectedVms')}</Typography>
+                    <Typography variant="body2" fontSize={12} fontWeight={600}>
+                      {t('inventoryPage.esxiMigration.selectedVmsSummary', { count: selectedVms.length, running: power.running, stopped: power.stopped })}
+                    </Typography>
+                  </Box>
+                  {listOpen && (
+                    <Box sx={{ mt: 1 }}>
+                      {rows.map((vm: any) => {
+                        // Same pastille as the inventory tree; a VMware VM
+                        // reports "poweredOn", not "running".
+                        const on = isSourcePoweredOn(vm.status)
+                        let dotColor = '#f44336'
+                        if (on) dotColor = '#4caf50'
+                        else if (isSourcePaused(vm.status)) dotColor = '#ed6c02'
+                        return (
+                          <Box key={vm.vmid} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.3 }}>
+                            <Box component="span" sx={{ position: 'relative', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 14, height: 14, flexShrink: 0 }}>
+                              {vmIconSrc
+                                ? <img src={vmIconSrc} alt="" width={14} height={14} style={{ opacity: 0.7 }} />
+                                : <i className="ri-computer-line" style={{ fontSize: 14, opacity: 0.7 }} />
+                              }
+                              <Box
+                                data-testid={`bulk-selected-dot-${vm.vmid}`}
+                                data-power={on ? 'on' : 'off'}
+                                sx={{
+                                  position: 'absolute', bottom: -2, right: -3,
+                                  width: 7, height: 7, borderRadius: '50%',
+                                  bgcolor: dotColor,
+                                  border: '1.5px solid', borderColor: 'background.paper',
+                                  boxShadow: on ? `0 0 4px ${dotColor}` : 'none',
+                                }}
+                              />
+                            </Box>
+                            <Typography variant="body2" fontSize={12} fontWeight={600}>{vm.name || vm.vmid}</Typography>
+                          </Box>
+                        )
+                      })}
+                      {selectedVms.length > BULK_LIST_PER_PAGE && (
+                        <TablePagination
+                          component="div"
+                          count={selectedVms.length}
+                          page={page}
+                          onPageChange={(_e, p) => setBulkSelPage(p)}
+                          rowsPerPage={BULK_LIST_PER_PAGE}
+                          rowsPerPageOptions={[BULK_LIST_PER_PAGE]}
+                          sx={{ ...STICKY_PAGER_SX, '& .MuiTablePagination-toolbar': { minHeight: 36, pl: 0 } }}
+                        />
+                      )}
+                    </Box>
+                  )}
+                </Box>
+              )
+            })()}
+
                 <Box sx={{ display: 'flex', justifyContent: 'center' }}>
                   <i className="ri-arrow-down-line" style={{ fontSize: 24, color: theme.palette.primary.main }} />
                 </Box>
 
                 {/* Target config — reuse same selectors as single migration */}
-                <Box sx={{ p: 2, borderRadius: 1.5, bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)', border: '1px solid', borderColor: 'divider' }}>
+                <Box sx={{ flexGrow: 1, p: 2, borderRadius: 1.5, bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)', border: '1px solid', borderColor: 'divider' }}>
                   <Typography variant="subtitle2" sx={{ mb: 1.5, color: 'text.secondary', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5 }}>{t('inventoryPage.esxiMigration.targetProxmox')}</Typography>
                   <Stack spacing={2}>
                     <FormControl fullWidth size="small">
@@ -4294,6 +4688,13 @@ return
                     )}
                   </Stack>
                 </Box>
+                {bulkProjection.length > 0 && <BulkLoadProjectionBlock rows={bulkProjection} nodeStatus={migTargetNodeStatus} />}
+              </Stack>
+
+              {/* Right column: the migration itself, type and tuning */}
+              <Box sx={{ p: 2, borderRadius: 1.5, bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)', border: '1px solid', borderColor: 'divider' }} data-testid="bulk-column-settings">
+                <Typography variant="subtitle2" sx={{ mb: 1.5, color: 'text.secondary', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5 }}>{t('inventoryPage.esxiMigration.migrationSettings')}</Typography>
+                <Stack spacing={2}>
 
                 {/* Migration type, hidden for Hyper-V / Nutanix (cold only).
                     vCenter and direct ESXi both support cold + warm. */}
@@ -4520,10 +4921,10 @@ return
                     2x-disk space requirement would be a false alarm there. */}
                 {migType !== 'warm' && vcenterPreflight?.tempStorages && vcenterPreflight.tempStorages.length > 0 && (() => {
                   const selectedBulkVms = (bulkMigHostInfo?.vms || []).filter((vm: any) => bulkMigSelected.has(vm.vmid))
-                  // Peak disk usage in bulk = biggest committed disk × 2 (source + converted).
-                  // Sequential runs (BULK_MIG_CONCURRENCY=1) so only one VM occupies tempStorage at a time.
-                  const maxCommitted = selectedBulkVms.reduce((m: number, vm: any) => Math.max(m, vm.committed || 0), 0)
-                  const requiredBytes = maxCommitted * 2
+                  // Peak disk usage in bulk = the N biggest committed disks × 2 (source +
+                  // converted), N being how many jobs run at once (roadmap#53); sequential
+                  // degrades to the biggest VM alone.
+                  const requiredBytes = bulkTempBytesRequired(selectedBulkVms.map((vm: any) => vm.committed || 0), migBulkConcurrency)
                   return (
                     <Box>
                       <TextField
@@ -4539,9 +4940,9 @@ return
                           if (!sel) return 'Required: where the source disks are staged on the Proxmox node during the migration'
                           const availGB = (sel.availableBytes / 1073741824).toFixed(1)
                           const reqGB = (requiredBytes / 1073741824).toFixed(1)
-                          if (requiredBytes > 0 && sel.availableBytes < requiredBytes) return `Insufficient space: ${availGB} GB available, ~${reqGB} GB required for largest VM in batch`
+                          if (requiredBytes > 0 && sel.availableBytes < requiredBytes) return `Insufficient space: ${availGB} GB available, ~${reqGB} GB required for the ${migBulkConcurrency} largest VM(s) running at once`
                           return requiredBytes > 0
-                            ? `${availGB} GB available (${sel.filesystem}), ~${reqGB} GB peak needed per VM`
+                            ? `${availGB} GB available (${sel.filesystem}), ~${reqGB} GB peak needed for ${migBulkConcurrency} VM(s) at once`
                             : `${availGB} GB available (${sel.filesystem})`
                         })()}
                         error={(() => {
@@ -4600,8 +5001,11 @@ return
                   />
                 )}
 
+                {renderBulkConcurrencyField()}
                 {renderNfcConcurrencyField(bulkMigHostInfo?.hostType === 'vcenter')}
                 {renderZeroRateLimitField()}
+                {renderCopyVmkSelect()}
+                {renderIntegrityNote(bulkMigHostInfo?.hostType)}
 
                 {renderCpuTypeSelect()}
 
@@ -4612,6 +5016,9 @@ return
 
                 {/* Post-migration qcow2 conversion (#595) — thick LVM targets only */}
                 {renderQcow2ConvertSwitch()}
+                </Stack>
+              </Box>
+              </Box>
 
                 {/* SSH warning — not needed for vCenter */}
                 {bulkMigHostInfo?.hostType !== 'vcenter' && bulkMigHostInfo?.hostType !== 'hyperv' && bulkMigHostInfo?.hostType !== 'nutanix' && migTargetConn && !migPveConnections.find((c: any) => c.id === migTargetConn)?.sshEnabled && (
@@ -4624,9 +5031,10 @@ return
                     <Alert severity="error" sx={{ fontSize: 12 }}>
                       {t('inventoryPage.esxiMigration.warmNeedsRunningVmsBulk')}
                       <Box component="ul" sx={{ m: 0, mt: 0.5, pl: 2 }}>
-                        {stoppedVms.map((vm: any) => (
+                        {stoppedVms.slice(0, BULK_WARN_NAMES).map((vm: any) => (
                           <li key={vm.vmid}><strong>{vm.name || vm.vmid}</strong></li>
                         ))}
+                        {stoppedVms.length > BULK_WARN_NAMES && <li>{t('inventoryPage.esxiMigration.andMoreVms', { count: stoppedVms.length - BULK_WARN_NAMES })}</li>}
                       </Box>
                     </Alert>
                   ) : null
@@ -4638,9 +5046,10 @@ return
                     <Alert severity="warning" sx={{ fontSize: 12 }}>
                       {t('inventoryPage.esxiMigration.coldMigrationRunningVms')}
                       <Box component="ul" sx={{ m: 0, mt: 0.5, pl: 2 }}>
-                        {runningVms.map((vm: any) => (
+                        {runningVms.slice(0, BULK_WARN_NAMES).map((vm: any) => (
                           <li key={vm.vmid}><strong>{vm.name || vm.vmid}</strong></li>
                         ))}
+                        {runningVms.length > BULK_WARN_NAMES && <li>{t('inventoryPage.esxiMigration.andMoreVms', { count: runningVms.length - BULK_WARN_NAMES })}</li>}
                       </Box>
                     </Alert>
                   ) : null
@@ -4648,18 +5057,75 @@ return
               </>
             )}
 
+            {bulkMigJobs.length === 0 && bulkCopy.problems.length > 0 && (
+              <Alert severity="error" data-testid="bulk-copy-error">
+                {bulkCopy.problems.map((p, i) => {
+                  const where = { device: p.device, address: p.address, host: p.host }
+                  const text = p.kind === 'noNode'
+                    ? t('inventoryPage.esxiMigration.copyNoNode', { vm: p.vm ?? '', ...where })
+                    : p.error
+                      ? t('inventoryPage.esxiMigration.copyProbeFailed', { node: p.node ?? '', ...where, error: p.error })
+                      : t('inventoryPage.esxiMigration.copyUnreachable', { node: p.node ?? '', ...where, ports: (p.ports ?? []).join(' / ') })
+                  return <Typography key={i} variant="body2">{text}</Typography>
+                })}
+              </Alert>
+            )}
+            {bulkMigJobs.length === 0 && bulkCopy.problems.length === 0 && bulkCopy.infos.length > 0 && (
+              <Alert severity="info" data-testid="bulk-copy-info">
+                {bulkCopy.infos.map((info, i) => (
+                  <Typography key={i} variant="body2">{t('inventoryPage.esxiMigration.copyOnlyNodes', { vm: info.vm, nodes: info.nodes.join(', '), excluded: info.excluded.join(', ') })}</Typography>
+                ))}
+              </Alert>
+            )}
+
+            {bulkMigJobs.length === 0 && (['problems', 'warnings'] as const).map(kind => {
+              let list = bulkSpace.warnings
+              if (kind === 'problems') list = bulkSpace.status === 'blocked' ? bulkSpace.problems : []
+              if (list.length === 0) return null
+              return (
+                <Alert key={kind} severity={kind === 'problems' ? 'error' : 'warning'} data-testid={kind === 'problems' ? 'bulk-space-error' : 'bulk-space-warning'}>
+                  {list.map((p, i) => {
+                    const values = { storage: p.storage, node: p.node ?? '', free: (p.availableBytes / 1073741824).toFixed(1), need: (p.requiredBytes / 1073741824).toFixed(1), error: p.error ?? '' }
+                    const shape = p.node ? 'Node' : 'Shared'
+                    const key = p.error ? 'batchSpaceUnreadable' : `batchSpace${p.estimated ? 'Estimated' : ''}${shape}`
+                    return <Typography key={i} variant="body2">{t(`inventoryPage.esxiMigration.${key}`, values)}</Typography>
+                  })}
+                </Alert>
+              )
+            })}
+
+            {bulkMigJobs.length === 0 && bulkStartError && (
+              <Alert severity="error" data-testid="bulk-start-error">
+                <Typography variant="body2" fontWeight={700}>{t('inventoryPage.esxiMigration.batchStartFailed')}</Typography>
+                <Typography variant="body2">{bulkStartError}</Typography>
+              </Alert>
+            )}
+
             {/* Bulk migration progress */}
             {bulkMigJobs.length > 0 && (() => {
-              const completedCount = bulkMigJobs.filter(j => j.status === 'completed').length
-              const failedCount = bulkMigJobs.filter(j => j.status === 'failed').length
+              const jobCounts = countBulkJobs(bulkMigJobs)
+              const completedCount = jobCounts.completed
+              const failedCount = jobCounts.failed
               const globalProgress = bulkMigJobs.length > 0 ? Math.round(bulkMigJobs.reduce((sum, j) => sum + j.progress, 0) / bulkMigJobs.length) : 0
-              const allDone = bulkMigJobs.every(j => ['completed', 'failed', 'cancelled'].includes(j.status))
+              const allDone = bulkMigJobs.every(j => isTerminalJobStatus(j.status))
+              const batchStatus = bulkMigBatch?.status
+              const isPaused = batchStatus === 'paused'
+              const canSteer = batchStatus === 'running' || isPaused
               const allLogs = (bulkMigLogsFilter
                 ? bulkMigJobs.filter(j => j.jobId === bulkMigLogsFilter)
                 : bulkMigJobs
               ).flatMap(j => (j.logs || []).map(l => ({ ...l, vmName: j.name }))).sort((a, b) => new Date(a.ts).getTime() - new Date(b.ts).getTime())
+              // Two columns (roadmap#53 part B): the jobs and their logs on the
+              // left, the throughput of the batch and its target nodes on the right.
               return (
-                <Stack spacing={1}>
+                <MigrationLiveColumns
+                  sessionKey={bulkMigBatch?.id || 'bulk'}
+                  jobs={bulkLiveJobs}
+                  targetConnectionId={bulkMigBatch?.targetConnectionId || migTargetConn || undefined}
+                  nodeOptions={migNodeOptions as any[]}
+                  active={bulkMigOpen}
+                >
+                <Stack spacing={1} sx={{ flex: 1, minHeight: 0 }}>
                   {/* Global progress header — collapsible */}
                   <Box
                     onClick={() => setBulkMigProgressExpanded(v => !v)}
@@ -4669,9 +5135,44 @@ return
                     <Typography variant="body2" fontWeight={700} fontSize={12} sx={{ flex: 1 }}>
                       {t('inventoryPage.esxiMigration.bulkMigration')} — {completedCount}/{bulkMigJobs.length} {t('inventoryPage.esxiMigration.completed').toLowerCase()}
                       {failedCount > 0 && <Typography component="span" color="error.main" fontWeight={700} fontSize={12}> ({failedCount} {t('inventoryPage.esxiMigration.failed').toLowerCase()})</Typography>}
+                      {jobCounts.cancelled > 0 && <Typography component="span" color="text.secondary" fontWeight={700} fontSize={12} data-testid="bulk-cancelled-count"> ({jobCounts.cancelled} {t('inventoryPage.esxiMigration.cancelled').toLowerCase()})</Typography>}
+                      {!allDone && (
+                        <Typography component="span" fontSize={12} fontWeight={600} sx={{ opacity: 0.6 }} data-testid="bulk-job-counts">
+                          {' · '}{isPaused
+                            ? t('inventoryPage.esxiMigration.batchPaused', { running: jobCounts.active, queued: jobCounts.queued })
+                            : t('inventoryPage.esxiMigration.bulkJobsInFlight', { running: jobCounts.active, queued: jobCounts.queued })}
+                        </Typography>
+                      )}
                     </Typography>
+                    {/* Steering of the server-side queue. Started jobs always carry
+                        on: pause only holds the queued ones back, cancel drops them.
+                        Clicks stay here so the collapsible header does not toggle. */}
+                    {bulkMigBatch && canSteer && (
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }} onClick={e => e.stopPropagation()}>
+                        {batchStatus === 'running' && jobCounts.queued > 0 && (
+                          <Button size="small" variant="text" disabled={bulkBatchBusy} startIcon={<i className="ri-pause-line" />} onClick={() => runBulkBatchAction('pause')} sx={{ textTransform: 'none', fontSize: 11, minWidth: 0, py: 0, px: 1 }}>
+                            {t('inventoryPage.esxiMigration.pauseBatch')}
+                          </Button>
+                        )}
+                        {isPaused && (
+                          <Button size="small" variant="text" disabled={bulkBatchBusy} startIcon={<i className="ri-play-line" />} onClick={() => runBulkBatchAction('resume')} sx={{ textTransform: 'none', fontSize: 11, minWidth: 0, py: 0, px: 1 }}>
+                            {t('inventoryPage.esxiMigration.resumeBatch')}
+                          </Button>
+                        )}
+                        {jobCounts.queued > 0 && (
+                          <Button size="small" variant="text" color="error" disabled={bulkBatchBusy} startIcon={<i className="ri-close-circle-line" />} onClick={() => setBulkCancelConfirmOpen(true)} sx={{ textTransform: 'none', fontSize: 11, minWidth: 0, py: 0, px: 1 }}>
+                            {t('inventoryPage.esxiMigration.cancelQueued')}
+                          </Button>
+                        )}
+                      </Box>
+                    )}
                     <Typography variant="caption" fontWeight={700} sx={{ opacity: 0.6 }}>{globalProgress}%</Typography>
                   </Box>
+                  {bulkBatchError && (
+                    <Alert severity="error" onClose={() => setBulkBatchError(null)} sx={{ py: 0 }} data-testid="bulk-batch-error">
+                      {bulkBatchError}
+                    </Alert>
+                  )}
                   <LinearProgress
                     variant="determinate"
                     value={globalProgress}
@@ -4696,13 +5197,19 @@ return
                       bulkMigHostInfo?.hostType === 'xcpng' ? '/images/xcpng-logo.svg' :
                       '/images/esxi-logo.svg'
                     const dstLogo = theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'
+                    // Failed and running jobs first, so what needs attention is on page one.
+                    const { rows: jobRows, page: jobPage } = pageOf(orderBulkJobs(bulkMigJobs), bulkJobPage, BULK_LIST_PER_PAGE)
                     return (
                       <Box sx={{ pl: 1 }}>
-                        {bulkMigJobs.map((job) => {
+                        {jobRows.map((job) => {
                           const isDone = job.status === 'completed'
-                          const isFailed = job.status === 'failed' || job.status === 'cancelled'
+                          const isFailed = job.status === 'failed'
+                          // Cancelled reads as greyed out, not as a failure: most are
+                          // queued jobs dropped by "Cancel queued" that never ran.
+                          const isCancelled = job.status === 'cancelled'
                           const isQueued = job.status === 'queued'
-                          const isActive = !isDone && !isFailed && !isQueued
+                          const isActive = !isDone && !isFailed && !isCancelled && !isQueued
+                          const rowTone = bulkJobRowTone({ isDone, isFailed, isCancelled, isQueued, isPaused })
                           return (
                             <Box key={job.vmid} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.75, borderBottom: '1px solid', borderColor: 'divider', '&:last-child': { borderBottom: 'none' } }}>
                               {/* Source hypervisor logo */}
@@ -4710,7 +5217,7 @@ return
                                 width: 24, height: 24, borderRadius: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
                                 bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)',
                                 border: '1px solid', borderColor: isDone ? 'success.main' : isFailed ? 'error.main' : 'divider',
-                                opacity: isQueued ? 0.4 : 1,
+                                opacity: isQueued || isCancelled ? 0.4 : 1,
                               }}>
                                 <img src={srcLogo} alt="" width={14} height={14} style={{ opacity: isDone ? 0.4 : 1 }} />
                               </Box>
@@ -4719,7 +5226,7 @@ return
                                   duration/spacing are slightly tighter to match the
                                   smaller track length. */}
                               <Box sx={{ width: 70, position: 'relative', height: 16, display: 'flex', alignItems: 'center', flexShrink: 0 }}>
-                                <Box sx={{ position: 'absolute', inset: 0, top: '50%', height: 2, transform: 'translateY(-50%)', bgcolor: isDone ? 'success.main' : isFailed ? 'error.main' : 'divider', borderRadius: 1, opacity: isQueued ? 0.3 : 1 }} />
+                                <Box sx={{ position: 'absolute', inset: 0, top: '50%', height: 2, transform: 'translateY(-50%)', bgcolor: rowTone.line, borderRadius: 1, opacity: isQueued || isCancelled ? 0.3 : 1 }} />
                                 {isActive && [0, 1, 2, 3].map(idx => (
                                   <Box key={idx} sx={{
                                     position: 'absolute', width: 5, height: 5, borderRadius: '50%',
@@ -4740,6 +5247,11 @@ return
                                     <i className="ri-close-circle-fill" />
                                   </Box>
                                 )}
+                                {isCancelled && (
+                                  <Box sx={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)', color: 'text.disabled', fontSize: 12, lineHeight: 1 }}>
+                                    <i className="ri-close-circle-line" />
+                                  </Box>
+                                )}
                                 {isQueued && (
                                   <Box sx={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)', color: 'text.disabled', fontSize: 12, lineHeight: 1 }}>
                                     <i className="ri-pause-circle-line" />
@@ -4751,7 +5263,7 @@ return
                                 width: 24, height: 24, borderRadius: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
                                 bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)',
                                 border: '1px solid', borderColor: isDone ? 'success.main' : isFailed ? 'error.main' : 'divider',
-                                opacity: isQueued ? 0.4 : 1,
+                                opacity: isQueued || isCancelled ? 0.4 : 1,
                               }}>
                                 <img src={dstLogo} alt="" width={14} height={14} style={{ opacity: isDone ? 1 : 0.6 }} />
                               </Box>
@@ -4767,16 +5279,28 @@ return
                               </Box>
                               <Chip
                                 size="small"
-                                label={isDone ? t('inventoryPage.esxiMigration.completed') : isFailed ? t('inventoryPage.esxiMigration.failed') : isQueued ? t('inventoryPage.esxiMigration.queued') : `${job.progress}%`}
+                                label={rowTone.labelKey ? t(`inventoryPage.esxiMigration.${rowTone.labelKey}`) : `${job.progress}%`}
                                 sx={{
                                   height: 20, fontSize: 10, fontWeight: 700, minWidth: 50,
-                                  bgcolor: isDone ? 'success.main' : isFailed ? 'error.main' : isQueued ? 'action.disabled' : 'primary.main',
-                                  color: isDone ? 'success.contrastText' : isFailed ? 'error.contrastText' : isQueued ? 'common.white' : 'primary.contrastText',
+                                  bgcolor: rowTone.chipBg,
+                                  color: rowTone.chipColor,
                                 }}
                               />
                             </Box>
                           )
                         })}
+                        {bulkMigJobs.length > BULK_LIST_PER_PAGE && (
+                          <TablePagination
+                            component="div"
+                            count={bulkMigJobs.length}
+                            page={jobPage}
+                            onPageChange={(_e, p) => setBulkJobPage(p)}
+                            rowsPerPage={BULK_LIST_PER_PAGE}
+                            rowsPerPageOptions={[BULK_LIST_PER_PAGE]}
+                            sx={{ ...STICKY_PAGER_SX, '& .MuiTablePagination-toolbar': { minHeight: 36, pl: 0 } }}
+                            data-testid="bulk-job-pagination"
+                          />
+                        )}
                       </Box>
                     )
                   })()}
@@ -4791,12 +5315,36 @@ return
                       {t('inventoryPage.esxiMigration.migrationLogs')}
                     </Typography>
                     <Typography component="span" variant="caption" sx={{ opacity: 0.4 }}>({allLogs.length})</Typography>
+                    {allLogs.length > 0 && (
+                      // The lines shown: the VM filter applies, the VM is named when the batch has several.
+                      <CopyLogsButton
+                        sx={{ ml: 'auto' }}
+                        getText={() => migrationLogText(allLogs.map(l => ({ ...l, vmName: bulkMigJobs.length > 1 ? l.vmName : undefined })))}
+                      />
+                    )}
                   </Box>
 
                   {bulkMigLogsExpanded && (
-                    <Box>
-                      {/* VM filter tabs */}
-                      {bulkMigJobs.length > 1 && (
+                    <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+                      {/* VM filter: one chip per VM for a small batch, a list past
+                          BULK_LOG_CHIPS_MAX VMs so a large one stays readable. */}
+                      {bulkMigJobs.length > BULK_LOG_CHIPS_MAX && (
+                        <TextField
+                          select
+                          size="small"
+                          value={bulkMigLogsFilter ?? ''}
+                          onChange={e => setBulkMigLogsFilter(e.target.value || null)}
+                          label={t('inventoryPage.esxiMigration.logsOfVm')}
+                          sx={{ mb: 1, minWidth: 260 }}
+                          slotProps={{ select: { displayEmpty: true }, inputLabel: { shrink: true }, htmlInput: { 'data-testid': 'bulk-logs-vm-filter' } }}
+                        >
+                          <MenuItem value="">{t('inventoryPage.esxiMigration.allVms')}</MenuItem>
+                          {bulkMigJobs.filter(j => j.jobId).map(j => (
+                            <MenuItem key={j.jobId} value={j.jobId}>{j.name}</MenuItem>
+                          ))}
+                        </TextField>
+                      )}
+                      {bulkMigJobs.length > 1 && bulkMigJobs.length <= BULK_LOG_CHIPS_MAX && (
                         <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', mb: 1 }}>
                           <Chip
                             size="small"
@@ -4817,7 +5365,8 @@ return
                       )}
 
                       {/* Log entries */}
-                      <Box sx={{ maxHeight: 250, overflowY: 'auto', bgcolor: theme.palette.mode === 'dark' ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.03)', borderRadius: 1, p: 1 }}>
+                      {/* Grows down to the dialog's bottom edge, like the right-hand panels. */}
+                      <Box sx={{ flex: 1, minHeight: 250, maxHeight: '55vh', overflowY: 'auto', bgcolor: theme.palette.mode === 'dark' ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.03)', borderRadius: 1, p: 1 }}>
                         {allLogs.length > 0 ? allLogs.map((log, i) => (
                           <Box key={i} sx={{ display: 'flex', gap: 0.75, py: 0.25, fontFamily: 'JetBrains Mono, monospace', fontSize: 11, lineHeight: 1.5 }}>
                             <Typography component="span" sx={{ fontSize: 10, opacity: 0.4, whiteSpace: 'nowrap', fontFamily: 'inherit' }}>
@@ -4844,6 +5393,7 @@ return
                     </Box>
                   )}
                 </Stack>
+                </MigrationLiveColumns>
               )
             })()}
           </Stack>
@@ -4890,6 +5440,10 @@ return
                   if (zeroRateLimitInvalid) return true
                   // Offline batches stage every source disk on the temporary storage: mandatory when offered.
                   if (migType !== 'warm' && vcenterPreflight?.tempStorages && vcenterPreflight.tempStorages.length > 0 && !migTempStorage) return true
+                  // The target storage cannot hold the whole batch (roadmap#53).
+                  if (bulkSpace.status === 'blocked') return true
+                  // A target node cannot reach a VM's copy network (warm VMware).
+                  if (bulkCopy.problems.length > 0) return true
                   return false
                 })()}
                 sx={{ textTransform: 'none' }}
@@ -4897,161 +5451,109 @@ return
                 onClick={async () => {
                   if (!bulkMigHostInfo) return
                   setBulkMigStarting(true)
+                  setBulkStartError(null)
                   const vmsToMigrate = bulkMigHostInfo.vms.filter((vm: any) => bulkMigSelected.has(vm.vmid))
-                  // Build node list for round-robin distribution.
-                  // - Auto mode: spread across every online node of the CHOSEN cluster
-                  //   (migTargetConn). We filter migNodeOptions by connId + online
-                  //   status so a degraded/offline node in the cluster doesn't get
-                  //   jobs round-robined to it.
-                  // - Manual mode: single target node, every job lands there.
-                  let nodeList: string[]
-                  if (migTargetNode === '__auto__') {
-                    const clusterNodes = migNodeOptions
-                      .filter((o: any) => o.connId === migTargetConn && o.status === 'online')
-                      .map((o: any) => o.node)
-                    // Fallback: if status info missing/empty, take all nodes of the
-                    // cluster so we at least try instead of skipping the whole batch.
-                    nodeList = clusterNodes.length > 0
-                      ? clusterNodes
-                      : migNodeOptions.filter((o: any) => o.connId === migTargetConn).map((o: any) => o.node)
-                  } else {
-                    nodeList = [migTargetNode]
-                  }
+                  // Round-robin over the target nodes: Auto spreads over the online
+                  // nodes of the chosen cluster, a single node takes every VM. Same
+                  // distribution as the target-space check above.
+                  const nodeList = bulkTargetNodes(migTargetNode, migTargetConn, migNodeOptions as any[])
                   if (nodeList.length === 0) {
                     setBulkMigStarting(false)
                     return
                   }
 
-                  // Create all jobs, first N as 'pending' (will be started), rest as 'queued'.
-                  // We carry the vCenter inventory path on each job so it can be threaded
-                  // through the per-VM POST below; bulk migrations may span multiple hosts
-                  // inside the same vCenter so the path can differ per VM.
-                  const jobs: typeof bulkMigJobs = vmsToMigrate.map((vm: any, idx: number) => ({
-                    vmid: vm.vmid,
-                    name: vm.name || vm.vmid,
-                    jobId: '',
-                    status: idx < BULK_MIG_CONCURRENCY ? 'pending' : 'queued',
-                    progress: 0,
-                    targetNode: nodeList[idx % nodeList.length],
-                    vcenterDatacenter: vm.vcenterDatacenter,
-                    vcenterCluster: vm.vcenterCluster,
-                    vcenterHost: vm.vcenterHost,
-                  } as any))
-
-                  // Start the first batch
+                  // One entry per VM. The vCenter inventory path is per VM: a batch
+                  // may span several ESXi hosts inside the same vCenter.
+                  const vms = vmsToMigrate.map((vm: any, idx: number) => ({
+                    sourceVmId: vm.vmid,
+                    sourceVmName: vm.name || vm.vmid,
+                    targetNode: bulkNodeOf(vm.vmid, idx, nodeList),
+                    // What the VM needs on the target: the server checks the batch fits.
+                    diskBytes: bulkVmDiskBytes(vm),
+                    // vCenter inventory path required by libvirt vpx URI (auto-discovered
+                    // server-side via SOAP). Same rationale as the single-migration POST:
+                    // we don't gate on isVcenterBulk because the bulk host info's
+                    // hostType isn't reliably 'vcenter'.
+                    ...(vm.vcenterDatacenter && { vcenterDatacenter: vm.vcenterDatacenter }),
+                    ...(vm.vcenterCluster && { vcenterCluster: vm.vcenterCluster }),
+                    ...(vm.vcenterHost && { vcenterHost: vm.vcenterHost }),
+                  }))
                   const isVcenterBulk = bulkMigHostInfo.hostType === 'vcenter'
                   const isHypervBulk = bulkMigHostInfo.hostType === 'hyperv'
                   const isNutanixBulk = bulkMigHostInfo.hostType === 'nutanix'
-                  const sourceType = bulkMigHostInfo.hostType === 'xcpng' ? 'XCP-ng' : isVcenterBulk ? 'vCenter' : isHypervBulk ? 'Hyper-V' : isNutanixBulk ? 'Nutanix' : 'ESXi'
-                  for (let idx = 0; idx < Math.min(BULK_MIG_CONCURRENCY, jobs.length); idx++) {
-                    const job = jobs[idx]
-                    try {
-                      const res = await fetch('/api/v1/migrations', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                          sourceConnectionId: bulkMigHostInfo.connectionId,
-                          sourceVmId: job.vmid,
-                          sourceVmName: job.name,
-                          targetConnectionId: migTargetConn,
-                          targetNode: job.targetNode,
-                          targetStorage: migTargetStorage,
-                          networkBridge: migNetworkBridge,
-                          // 802.1Q VLAN tag (1-4094); applied to every VM in the
-                          // batch since they all land on the same target bridge.
-                          ...(canEditVlan && migVlanTag !== '' && Number(migVlanTag) >= 1 && Number(migVlanTag) <= 4094 && {
-                            vlanTag: Number(migVlanTag),
-                          }),
-                          // vCenter supports cold + warm; Hyper-V / Nutanix still force
-                          // cold since their pipelines don't have a changed-block transfer
-                          // path. sshfs_boot is ESXi-direct only.
-                          migrationType: (isHypervBulk || isNutanixBulk) ? 'cold'
-                            : (isVcenterBulk ? (migType === 'sshfs_boot' ? 'cold' : migType) : migType),
-                          transferMode: (isVcenterBulk || isHypervBulk || isNutanixBulk) ? 'v2v' : migTransferMode,
-                          startAfterMigration: migStartAfter,
-                          // Same storage-type gate as the single-VM payload.
-                          convertDisksToQcow2: migConvertToQcow2 && migTargetIsThickLvm,
-                          // CPU type of the created VM (roadmap#24), same for the whole batch.
-                          cpuType: migCpuType,
-                          // vCenter inventory path required by libvirt vpx URI (auto-discovered
-                          // server-side via SOAP). Bulk jobs may target different ESXi hosts
-                          // inside the same vCenter, so the path is per-VM. Same rationale
-                          // as the single-migration POST: we don't gate on isVcenterBulk
-                          // because the bulk host info's hostType isn't reliably 'vcenter'.
-                          ...((job as any).vcenterDatacenter && {
-                            vcenterDatacenter: (job as any).vcenterDatacenter,
-                          }),
-                          ...((job as any).vcenterCluster && {
-                            vcenterCluster: (job as any).vcenterCluster,
-                          }),
-                          ...((job as any).vcenterHost && {
-                            vcenterHost: (job as any).vcenterHost,
-                          }),
-                          // tempStorage lets the user pick where virt-v2v writes
-                          // temp files (vcenter/hyperv/nutanix) OR where the
-                          // direct-ESXi pipeline mounts SSHFS + writes VMDK dumps.
-                          // Omit when it's the default /tmp so the server-side
-                          // default is used and we don't inadvertently pass an
-                          // empty string.
-                          ...(migTempStorage && migTempStorage !== '/tmp' && {
-                            tempStorage: migTempStorage,
-                          }),
-                          // virt-v2v root filesystem override (#738); omitted when empty.
-                          ...(migV2vRoot.trim() && { v2vRoot: migV2vRoot.trim() }),
-                          ...(isVcenterBulk && migType !== 'warm' && { nfcConcurrency: migNfcConcurrency }),
-                          ...(showZeroRateLimit && migZeroRateLimit.trim() !== '' && { zeroRateLimitMBps: Number(migZeroRateLimit.trim()) }),
+                  // Cap of this batch (roadmap#53): the server starts the queued jobs
+                  // that many at a time, whether or not this tab stays open.
+                  const bulkConcurrency = clampBulkConcurrency(migBulkConcurrency)
+                  try {
+                    // The whole batch in one request: the server checks every VM,
+                    // then creates the batch and one queued job per VM, or nothing.
+                    const res = await fetch('/api/v1/migrations/batches', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        sourceConnectionId: bulkMigHostInfo.connectionId,
+                        targetConnectionId: migTargetConn,
+                        targetStorage: migTargetStorage,
+                        networkBridge: migNetworkBridge,
+                        // 802.1Q VLAN tag (1-4094); applied to every VM in the
+                        // batch since they all land on the same target bridge.
+                        ...(canEditVlan && migVlanTag !== '' && Number(migVlanTag) >= 1 && Number(migVlanTag) <= 4094 && {
+                          vlanTag: Number(migVlanTag),
                         }),
-                      })
-                      const d = await res.json()
-                      if (d.data?.jobId) {
-                        job.jobId = d.data.jobId
-                        job.status = 'pending'
-                        addPCTask({
-                          id: `migration-${d.data.jobId}`,
-                          type: 'generic',
-                          label: `${t('inventoryPage.esxiMigration.migrating')} ${job.name} (${sourceType} → Proxmox)`,
-                          detail: t('inventoryPage.esxiMigration.preflight'),
-                          progress: 0,
-                          status: 'running',
-                          createdAt: Date.now(),
-                        })
-                      } else {
-                        job.status = 'failed'
-                        job.error = d.error || 'Failed to start'
-                      }
-                    } catch (e: any) {
-                      job.status = 'failed'
-                      job.error = e.message
+                        // vCenter supports cold + warm; Hyper-V / Nutanix still force
+                        // cold since their pipelines don't have a changed-block transfer
+                        // path. sshfs_boot is ESXi-direct only.
+                        migrationType: bulkJobMigrationType(migType, { coldOnly: isHypervBulk || isNutanixBulk, vcenter: isVcenterBulk }),
+                        transferMode: (isVcenterBulk || isHypervBulk || isNutanixBulk) ? 'v2v' : migTransferMode,
+                        startAfterMigration: migStartAfter,
+                        // Same storage-type gate as the single-VM payload.
+                        convertDisksToQcow2: migConvertToQcow2 && migTargetIsThickLvm,
+                        // CPU type of the created VM (roadmap#24), same for the whole batch.
+                        cpuType: migCpuType,
+                        // tempStorage lets the user pick where virt-v2v writes
+                        // temp files (vcenter/hyperv/nutanix) OR where the
+                        // direct-ESXi pipeline mounts SSHFS + writes VMDK dumps.
+                        // Omit when it's the default /tmp so the server-side
+                        // default is used and we don't inadvertently pass an
+                        // empty string.
+                        ...(migTempStorage && migTempStorage !== '/tmp' && {
+                          tempStorage: migTempStorage,
+                        }),
+                        // virt-v2v root filesystem override (#738); omitted when empty.
+                        ...(migV2vRoot.trim() && { v2vRoot: migV2vRoot.trim() }),
+                        // Parallel NFC downloads (#807).
+                        ...(isVcenterBulk && migType !== 'warm' && { nfcConcurrency: migNfcConcurrency }),
+                        // Thick zeroing cap of a warm batch (roadmap#45).
+                        ...(showZeroRateLimit && migZeroRateLimit.trim() !== '' && { zeroRateLimitMBps: Number(migZeroRateLimit.trim()) }),
+                        // VMkernel adapter of the copy (roadmap#53), ESXi-direct batches only.
+                        ...(showCopyVmk && migCopyVmk && copyVnic && { copyVmk: migCopyVmk }),
+                        concurrency: bulkConcurrency,
+                        vms,
+                      }),
+                    })
+                    const d = await res.json().catch(() => ({}))
+                    const jobIds: unknown = d?.data?.jobIds
+                    if (!res.ok || !d?.data?.batchId || !Array.isArray(jobIds) || jobIds.length !== vms.length) {
+                      // The refusal names the VM it is about, when it is about one.
+                      const msg = d?.error || `HTTP ${res.status}`
+                      const refused = d?.sourceVmId != null ? vms.find((vm: { sourceVmId: string }) => String(vm.sourceVmId) === String(d.sourceVmId)) : undefined
+                      setBulkStartError(refused ? `${refused.sourceVmName}: ${msg}` : msg)
+                      return
                     }
+                    setBulkMigBatch({ id: d.data.batchId, status: 'running', concurrency: bulkConcurrency, sourceConnectionId: bulkMigHostInfo.connectionId, targetConnectionId: migTargetConn })
+                    setBulkMigJobs(vms.map((vm: { sourceVmId: string; sourceVmName: string; targetNode: string }, i: number) => ({
+                      vmid: vm.sourceVmId,
+                      name: vm.sourceVmName,
+                      jobId: String(jobIds[i]),
+                      status: 'queued',
+                      progress: 0,
+                      targetNode: vm.targetNode,
+                    })))
+                  } catch (e: any) {
+                    setBulkStartError(e?.message || String(e))
+                  } finally {
+                    setBulkMigStarting(false)
                   }
-
-                  bulkMigConfigRef.current = {
-                    sourceConnectionId: bulkMigHostInfo.connectionId,
-                    targetConnectionId: migTargetConn,
-                    targetStorage: migTargetStorage,
-                    networkBridge: migNetworkBridge,
-                    ...(canEditVlan && migVlanTag !== '' && Number(migVlanTag) >= 1 && Number(migVlanTag) <= 4094 && {
-                      vlanTag: Number(migVlanTag),
-                    }),
-                    migrationType: (isHypervBulk || isNutanixBulk) ? 'cold'
-                      : (isVcenterBulk ? (migType === 'sshfs_boot' ? 'cold' : migType) : migType),
-                    transferMode: isVcenterBulk ? 'v2v' : migTransferMode,
-                    startAfterMigration: migStartAfter,
-                    convertDisksToQcow2: migConvertToQcow2 && migTargetIsThickLvm,
-                    sourceType,
-                    cpuType: migCpuType,
-                    // Persisted across the queued-job poller so retries use the
-                    // same temp storage the user selected when starting the batch.
-                    // Applies to every source type (virt-v2v and direct-ESXi both honour it).
-                    ...(migTempStorage && migTempStorage !== '/tmp' && {
-                      tempStorage: migTempStorage,
-                    }),
-                    ...(migV2vRoot.trim() && { v2vRoot: migV2vRoot.trim() }),
-                    ...(isVcenterBulk && migType !== 'warm' && { nfcConcurrency: migNfcConcurrency }),
-                    ...(showZeroRateLimit && migZeroRateLimit.trim() !== '' && { zeroRateLimitMBps: Number(migZeroRateLimit.trim()) }),
-                  }
-                  setBulkMigJobs(jobs)
-                  setBulkMigStarting(false)
                 }}
               >
                 {t('inventoryPage.esxiMigration.startMigration')} ({bulkMigSelected.size} VMs)
@@ -5066,13 +5568,34 @@ return
               >
                 {t('inventoryPage.esxiMigration.minimize')}
               </Button>
-              {bulkMigJobs.every(j => ['completed', 'failed', 'cancelled'].includes(j.status)) && (
-                <Button onClick={() => { setBulkMigOpen(false); setBulkMigJobs([]); setBulkMigSelected(new Set()) }}>
+              {bulkMigJobs.every(j => isTerminalJobStatus(j.status)) && (
+                <Button onClick={() => { setBulkMigOpen(false); setBulkMigJobs([]); setBulkMigBatch(null); setBulkMigSelected(new Set()) }}>
                   {t('common.close')}
                 </Button>
               )}
             </>
           )}
+        </DialogActions>
+      </Dialog>
+
+      {/* Cancel the queued jobs of the bulk batch: started ones carry on. */}
+      <Dialog open={bulkCancelConfirmOpen} onClose={() => setBulkCancelConfirmOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>{t('inventoryPage.esxiMigration.cancelQueuedConfirmTitle')}</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            {t('inventoryPage.esxiMigration.cancelQueuedConfirmBody', { count: bulkMigJobs.filter(j => j.status === 'queued').length })}
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setBulkCancelConfirmOpen(false)}>{t('common.back')}</Button>
+          <Button
+            color="error"
+            variant="contained"
+            disabled={bulkBatchBusy}
+            onClick={async () => { setBulkCancelConfirmOpen(false); await runBulkBatchAction('cancel-queued') }}
+          >
+            {t('inventoryPage.esxiMigration.cancelQueued')}
+          </Button>
         </DialogActions>
       </Dialog>
 

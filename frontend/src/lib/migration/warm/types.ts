@@ -48,6 +48,15 @@ export interface WarmMigrationConfig {
    * unlimited; absent means the cap of the target PVE connection.
    */
   zeroRateLimitMBps?: number
+  /**
+   * VMkernel adapter of the source host the NFC copy must use (roadmap#53),
+   * e.g. "vmk2", with its address. On a standalone ESXi source the VDDK
+   * connects to that address directly; on a vCenter source the adapter is
+   * tagged vSphereBackupNFC on the host so vSphere hands out NFC tickets on
+   * it. Absent means the host's default: its vSphereBackupNFC-tagged adapter
+   * when one exists, otherwise management.
+   */
+  copyVmk?: string
 }
 
 export interface LogEntry { ts: string; msg: string; level: "info" | "success" | "warn" | "error" }

@@ -439,6 +439,8 @@ export type DetailsPayload = {
       }>
     }>
     migrations?: any[]
+    /** Counters over the whole history (GET /api/v1/migrations/stats), summed over the hosts. */
+    migrationStats?: import('@/lib/migration/migration-stats').MigrationStats
   }
 
   esxiHostInfo?: {

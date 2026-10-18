@@ -16,10 +16,11 @@ import { getPbsConnectionById, getPbsConnectionByIdUnscoped } from '@/lib/connec
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { assertVdcPbsAccess } from '@/lib/vdc/scope'
 import { invalidatePbsBackupCache } from '@/lib/cache/pbsBackupCache'
+import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
 
 export const runtime = 'nodejs'
 
-export async function DELETE(
+async function handler(
   req: Request,
   ctx: { params: Promise<{ id: string; backupId: string }> | { id: string; backupId: string } },
 ) {
@@ -31,10 +32,9 @@ export async function DELETE(
       return NextResponse.json({ error: 'Missing params' }, { status: 400 })
     }
 
-    // BACKUP_VIEW is the right gate for now — there's no separate
-    // BACKUP_DELETE permission key in the RBAC enum. A future split
-    // can refine this without changing the route shape.
-    const denied = await checkPermission(PERMISSIONS.BACKUP_VIEW, 'pbs', id)
+    // Deleting a snapshot needs backup.delete: seeing the backups
+    // (backup.view) is not enough to remove them.
+    const denied = await checkPermission(PERMISSIONS.BACKUP_DELETE, 'pbs', id)
     if (denied) return denied
 
     const access = await assertVdcPbsAccess(id)
@@ -87,3 +87,5 @@ export async function DELETE(
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const DELETE = withPublicApiGuard("pbs-backup-delete", handler)

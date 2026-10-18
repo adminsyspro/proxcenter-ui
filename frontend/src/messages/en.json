@@ -870,6 +870,7 @@
     "pbsRestoreTagsUnverified": "the guest was restored but its tags could not be checked: {error}",
     "pbsRestoreBandwidth": "Bandwidth limit (KiB/s)",
     "pbsRestoreTargetExists": "VM {vmid} exists and will be overwritten",
+    "pbsRestoreTargetExistsNoOverwrite": "VM {vmid} exists and you are not allowed to overwrite it: pick a free VMID",
     "pbsRestoreIpamNote": "IP allocation is reconciled automatically after the restore completes.",
     "pbsRestoreAsNew": "Restore as a new VM (auto-allocates a fresh VMID + unique MACs)",
     "pbsRestoreOverwriteConfirm": "This will replace VM {vmid} with the backup contents. Click again to confirm.",
@@ -3508,15 +3509,16 @@
     "apiTokens": {
       "tabLabel": "API",
       "title": "API tokens",
-      "subtitle": "Read-only service accounts for external monitoring tools (Prometheus, Zabbix, PRTG, CI).",
+      "subtitle": "Service accounts for external tools: monitoring (Prometheus, Zabbix, PRTG) and automation (CI, scripts). Each scope is granted explicitly.",
       "newToken": "New token",
       "referenceButton": "API reference",
       "reference": {
         "title": "API reference",
-        "subtitle": "Interactive documentation of the public read-only API",
+        "subtitle": "Interactive documentation of the public API",
         "hint": "Requests sent from this page go to this ProxCenter instance. Open the Authentication panel and paste a pxc_ token to try the endpoints against your own data.",
         "backToTokens": "Back to API tokens",
-        "thisInstance": "This ProxCenter instance"
+        "thisInstance": "This ProxCenter instance",
+        "writeWarning": "Write operations act on your real infrastructure. \"Try it\" sends real requests with the token you paste: a POST, PUT or DELETE sent from this page starts, changes or deletes actual resources."
       },
       "columns": {
         "prefix": "Prefix",
@@ -3547,12 +3549,49 @@
         "expirationCustom": "Custom",
         "customDays": "Days",
         "scopes": "Scopes",
+        "access": {
+          "none": "None",
+          "read": "Read",
+          "write": "Write"
+        },
+        "domains": {
+          "vms": "VMs and containers",
+          "backups": "Backups",
+          "storage": "Storage",
+          "nodes": "Nodes and cluster",
+          "automation": "Automation",
+          "alerts": "Alerts",
+          "reports": "Reports"
+        },
+        "subScopes": {
+          "vmsPower": "Power",
+          "vmsWrite": "Edit",
+          "vmsSnapshot": "Snapshots",
+          "vmsMigrate": "Migrate",
+          "vmsDelete": "Delete",
+          "backupsWrite": "Write jobs",
+          "backupsRestore": "Restore",
+          "backupsDelete": "Delete",
+          "haWrite": "HA",
+          "poolsWrite": "Pools",
+          "networkWrite": "Network",
+          "firewallWrite": "Firewall"
+        },
+        "subScopesLabel": "{domain} write scopes",
+        "readOnlyDomain": "Read only domain",
+        "domainNotGrantable": "Your own permissions do not allow granting any write scope of this domain for the selected tenant and connections.",
         "tenant": "Tenant",
         "connections": "Connections",
         "connectionsAll": "All connections of the tenant",
         "create": "Create",
         "cancel": "Cancel",
-        "confirm": "Confirm"
+        "confirm": "Confirm",
+        "writeWarning": "Write scopes let the token create, change and delete real resources.",
+        "scopeNotGrantable": "Your own permissions do not allow granting this scope for the selected tenant and connections.",
+        "scopesLoading": "Checking which write scopes you can grant...",
+        "grantableError": "Could not check which write scopes you can grant. Close and reopen the dialog to try again.",
+        "writeRateLimit": "Writes per minute",
+        "writeRateLimitHelp": "Write requests this token may send per minute, counted apart from reads."
       },
       "reveal": {
         "title": "Copy your token now",
@@ -3560,7 +3599,8 @@
         "copy": "Copy",
         "copied": "Copied",
         "done": "Done"
-      }
+      },
+      "deletedToken": "Deleted token"
     },
     "displayMode": "Display mode",
     "light": "Light",

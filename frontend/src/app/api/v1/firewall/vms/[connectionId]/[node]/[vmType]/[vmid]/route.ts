@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getOrchestratorClient } from '@/lib/orchestrator/client'
 import { verifyConnectionOwnership } from '@/lib/tenant'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
+import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
 import { getConnectionById } from '@/lib/connections/getConnection'
 import { orchestratorOrPve } from '@/lib/firewall/withPveFallback'
 import * as pveDirect from '@/lib/firewall/pveDirect'
@@ -15,7 +16,7 @@ type RouteContext = {
 
 // GET - Récupère options ou règles firewall d'une VM/CT
 // ?type=options ou ?type=rules
-export async function GET(req: NextRequest, ctx: RouteContext) {
+async function getHandler(req: NextRequest, ctx: RouteContext) {
   try {
     const { connectionId, node, vmType, vmid } = await ctx.params
     const ownershipDenied = await verifyConnectionOwnership(connectionId)
@@ -54,7 +55,7 @@ return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
 }
 
 // POST - Ajoute une règle firewall
-export async function POST(req: NextRequest, ctx: RouteContext) {
+async function postHandler(req: NextRequest, ctx: RouteContext) {
   try {
     const { connectionId, node, vmType, vmid } = await ctx.params
     const ownershipDenied = await verifyConnectionOwnership(connectionId)
@@ -82,7 +83,7 @@ return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
 }
 
 // PUT - Met à jour les options firewall
-export async function PUT(req: NextRequest, ctx: RouteContext) {
+async function putHandler(req: NextRequest, ctx: RouteContext) {
   try {
     const { connectionId, node, vmType, vmid } = await ctx.params
     const ownershipDenied = await verifyConnectionOwnership(connectionId)
@@ -108,3 +109,7 @@ export async function PUT(req: NextRequest, ctx: RouteContext) {
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const GET = withPublicApiGuard("fw-vm-get", getHandler)
+export const POST = withPublicApiGuard("fw-vm-rule-create", postHandler)
+export const PUT = withPublicApiGuard("fw-vm-options-update", putHandler)

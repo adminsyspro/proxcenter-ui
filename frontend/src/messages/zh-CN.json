@@ -874,6 +874,7 @@
     "pbsRestoreTagsUnverified": "客户机已恢复，但无法检查其标签：{error}",
     "pbsRestoreBandwidth": "Bandwidth limit (KiB/s)",
     "pbsRestoreTargetExists": "VM {vmid} 已存在，将被覆盖",
+    "pbsRestoreTargetExistsNoOverwrite": "VM {vmid} 已存在，您无权覆盖它：请选择一个空闲的 VMID",
     "pbsRestoreIpamNote": "IP allocation is reconciled automatically after the restore completes.",
     "pbsRestoreAsNew": "Restore as a new VM (auto-allocates a fresh VMID + unique MACs)",
     "pbsRestoreOverwriteConfirm": "This will replace VM {vmid} with the backup contents. Click again to confirm.",
@@ -3512,15 +3513,16 @@
     "apiTokens": {
       "tabLabel": "API",
       "title": "API 令牌",
-      "subtitle": "供外部监控工具(Prometheus、Zabbix、PRTG、CI)使用的只读服务账户。",
+      "subtitle": "供外部工具使用的服务账户:监控(Prometheus、Zabbix、PRTG)与自动化(CI、脚本)。每个范围都需明确授予。",
       "newToken": "新建令牌",
       "referenceButton": "API 参考文档",
       "reference": {
         "title": "API 参考文档",
-        "subtitle": "公共只读 API 的交互式文档",
+        "subtitle": "公共 API 的交互式文档",
         "hint": "从此页面发送的请求会转到此 ProxCenter 实例。打开身份验证面板并粘贴 pxc_ 令牌，即可使用您自己的数据试用这些端点。",
         "backToTokens": "返回 API 令牌",
-        "thisInstance": "此 ProxCenter 实例"
+        "thisInstance": "此 ProxCenter 实例",
+        "writeWarning": "写操作会作用于您的真实基础设施。\"Try it\" 会使用您粘贴的令牌发送真实请求:从本页面发送的 POST、PUT 或 DELETE 会启动、修改或删除真实资源。"
       },
       "columns": {
         "prefix": "前缀",
@@ -3551,12 +3553,49 @@
         "expirationCustom": "自定义",
         "customDays": "天数",
         "scopes": "权限范围",
+        "access": {
+          "none": "无",
+          "read": "读取",
+          "write": "写入"
+        },
+        "domains": {
+          "vms": "虚拟机和容器",
+          "backups": "备份",
+          "storage": "存储",
+          "nodes": "节点和集群",
+          "automation": "自动化",
+          "alerts": "告警",
+          "reports": "报告"
+        },
+        "subScopes": {
+          "vmsPower": "电源",
+          "vmsWrite": "编辑",
+          "vmsSnapshot": "快照",
+          "vmsMigrate": "迁移",
+          "vmsDelete": "删除",
+          "backupsWrite": "备份任务",
+          "backupsRestore": "恢复",
+          "backupsDelete": "删除",
+          "haWrite": "HA",
+          "poolsWrite": "资源池",
+          "networkWrite": "网络",
+          "firewallWrite": "防火墙"
+        },
+        "subScopesLabel": "{domain}的写入范围",
+        "readOnlyDomain": "此领域仅支持读取",
+        "domainNotGrantable": "您自身的权限不允许为所选租户和连接授予此领域的任何写入范围。",
         "tenant": "租户",
         "connections": "连接",
         "connectionsAll": "该租户的所有连接",
         "create": "创建",
         "cancel": "取消",
-        "confirm": "确认"
+        "confirm": "确认",
+        "writeWarning": "写入范围允许令牌创建、修改和删除真实资源。",
+        "scopeNotGrantable": "您自身的权限不允许为所选租户和连接授予此范围。",
+        "scopesLoading": "正在检查您可以授予的写入范围...",
+        "grantableError": "无法检查您可以授予的写入范围。请关闭并重新打开对话框后重试。",
+        "writeRateLimit": "每分钟写入次数",
+        "writeRateLimitHelp": "此令牌每分钟可发送的写入请求数,与读取分开计数。"
       },
       "reveal": {
         "title": "请立即复制您的令牌",
@@ -3564,7 +3603,8 @@
         "copy": "复制",
         "copied": "已复制",
         "done": "完成"
-      }
+      },
+      "deletedToken": "已删除的令牌"
     },
     "displayMode": "显示模式",
     "light": "浅色",

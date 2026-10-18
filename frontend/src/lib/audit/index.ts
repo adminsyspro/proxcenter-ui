@@ -107,6 +107,7 @@ export type AuditAction =
   | "apitoken.delete"
   | "apitoken.revoke"
   | "apitoken.denied"
+  | "apitoken.write"
 
   // 2FA
   | "2fa_enrolled"
@@ -136,6 +137,9 @@ export interface AuditLogEntry {
   ipAddress?: string
   userAgent?: string
   apiTokenId?: string
+  /** Tenant of the row when the caller knows it better than the ambient
+   * request (a token refused before its principal resolves). */
+  tenantId?: string
 }
 
 /**
@@ -198,11 +202,13 @@ export async function audit(entry: AuditLogEntry, tx?: Prisma.TransactionClient)
   }
 
   // Get tenant ID for scoping
-  let tenantId = "default"
-  try {
-    tenantId = await getCurrentTenantId()
-  } catch {
-    // Fallback to default (e.g. during login before session exists)
+  let tenantId = entry.tenantId || "default"
+  if (!entry.tenantId) {
+    try {
+      tenantId = await getCurrentTenantId()
+    } catch {
+      // Fallback to default (e.g. during login before session exists)
+    }
   }
 
   const client = tx ?? prisma
@@ -366,6 +372,22 @@ export async function getAuditLogs(options: {
     }),
   ])
 
+  // Token-attributed rows show the token's name and prefix as their actor.
+  // One lookup for the whole page; no foreign key on purpose, so a deleted
+  // token simply resolves to nulls.
+  // Not tenant-filtered: rows are already confined to options.tenantId, and
+  // the denial rows of a rejected token (expired, wrong tenant) land in the
+  // default tenant, whose provider viewers see every token; a tenant filter
+  // would mislabel those as deleted.
+  const tokenIds = [...new Set(rows.map(row => row.apiTokenId).filter((id): id is string => !!id))]
+  const tokens = tokenIds.length
+    ? await prisma.apiToken.findMany({
+        where: { id: { in: tokenIds } },
+        select: { id: true, name: true, tokenPrefix: true },
+      })
+    : []
+  const tokensById = new Map(tokens.map(token => [token.id, token]))
+
   // Re-map Prisma camelCase + JSONB → legacy SQLite snake_case + JSON-string
   // shape so the public response wire contract is unchanged.
   const data = rows.map(row => ({
@@ -384,6 +406,9 @@ export async function getAuditLogs(options: {
     status: row.status,
     error_message: row.errorMessage,
     tenant_id: row.tenantId,
+    api_token_id: row.apiTokenId,
+    api_token_name: (row.apiTokenId && tokensById.get(row.apiTokenId)?.name) || null,
+    api_token_prefix: (row.apiTokenId && tokensById.get(row.apiTokenId)?.tokenPrefix) || null,
   }))
 
   return { data, meta: { total, limit, offset } }

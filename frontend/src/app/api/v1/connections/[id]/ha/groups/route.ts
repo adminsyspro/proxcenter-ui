@@ -3,12 +3,13 @@ import { NextResponse } from "next/server"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 
 export const runtime = "nodejs"
 
 // GET /api/v1/connections/{id}/ha/groups
 // Récupère tous les groupes HA
-export async function GET(
+async function getHandler(
   req: Request,
   ctx: { params: Promise<{ id: string }> }
 ) {
@@ -34,7 +35,7 @@ return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
 
 // POST /api/v1/connections/{id}/ha/groups
 // Crée un nouveau groupe HA
-export async function POST(
+async function postHandler(
   req: Request,
   ctx: { params: Promise<{ id: string }> }
 ) {
@@ -92,3 +93,6 @@ export async function POST(
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const GET = withPublicApiGuard("ha-groups-list", getHandler)
+export const POST = withPublicApiGuard("ha-group-create", postHandler)

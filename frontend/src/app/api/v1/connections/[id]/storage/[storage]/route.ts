@@ -6,6 +6,7 @@ import { getCurrentTenantId, getSessionPrisma } from "@/lib/tenant"
 import { getTenantInfrastructureScope, maskingScope } from "@/lib/tenant/infraScope"
 import { detachPbsStorage, PbsAttachError } from "@/lib/storage/attachPbsStorage"
 import { audit } from "@/lib/audit"
+import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 
 export const runtime = "nodejs"
 
@@ -16,7 +17,7 @@ export const runtime = "nodejs"
  * scoped token ProxCenter minted for it, unless another cluster still runs
  * its backups through that same token.
  */
-export async function DELETE(
+async function deleteHandler(
   _req: Request,
   ctx: { params: Promise<{ id: string; storage: string }> | { id: string; storage: string } },
 ) {
@@ -117,3 +118,5 @@ export async function DELETE(
     )
   }
 }
+
+export const DELETE = withPublicApiGuard("storage-detach", deleteHandler)

@@ -15,7 +15,7 @@ import { prisma } from "@/lib/db/prisma"
 import { getPrincipal, rejectionToResponse, type Principal } from "@/lib/auth/principal"
 import { resolveVmMeta } from "@/lib/cache/vmMetaCache"
 import { getTenantInventoriesFromCache } from "@/lib/cache/inventoryCache"
-import { DEFAULT_TENANT_ID } from "@/lib/tenant"
+import { DEFAULT_TENANT_ID, getTenantConnectionIds } from "@/lib/tenant"
 import {
   deriveRbacInfraScope,
   isConnectionVisible,
@@ -207,7 +207,7 @@ async function loadUserGrants(userId: string, tenantId: string): Promise<LoadedG
  * (`vm.config.media`, `vm.config.nic.link`, …), excluding explicit MAC/VLAN grants. The walk is O(depth),
  * which is at most 2-3 for the deepest permission (`vm.config.nic.link`).
  */
-function grantsPermission(grantedSet: Set<string>, requested: string): boolean {
+export function grantsPermission(grantedSet: Set<string>, requested: string): boolean {
   if (grantedSet.has(requested)) return true
   if ((SENSITIVE_NIC_PERMISSIONS as readonly string[]).includes(requested)) return false
   const parts = requested.split('.')
@@ -662,12 +662,12 @@ function resolveTokenConnectionId(
   return resourceId.split(":")[0] || null
 }
 
-function checkTokenPermission(
+async function checkTokenPermission(
   principal: Principal,
   permission: string,
   resourceType?: RbacResourceType,
   resourceId?: string,
-): NextResponse | null {
+): Promise<NextResponse | null> {
   const deny = () =>
     NextResponse.json({ error: `Permission denied: ${permission}` }, { status: 403 })
   if (!principal.permissions || !grantsPermission(principal.permissions, permission)) {
@@ -676,15 +676,58 @@ function checkTokenPermission(
   // Connection perimeter: only RESOURCE-BEARING checks are constrained.
   // Global and resource-less checks pass — aggregated routes rely on them
   // and filter downstream through the enumeration helpers instead.
-  if (principal.connectionIds && resourceType && resourceType !== "global" && resourceId) {
-    const connId = resolveTokenConnectionId(resourceType, resourceId)
-    // Fail CLOSED: a resource-bearing id whose connection cannot be resolved
-    // (e.g. ":node1:qemu:100") is refused, never waved past the perimeter.
-    if (!connId || !principal.connectionIds.includes(connId)) {
-      return deny()
+  if (!resourceType || resourceType === "global" || !resourceId) return null
+  const confineToTenant = principal.tenantId !== DEFAULT_TENANT_ID
+  if (!principal.connectionIds && !confineToTenant) return null
+  const connId = resolveTokenConnectionId(resourceType, resourceId)
+  // Fail CLOSED: a resource-bearing id whose connection cannot be resolved
+  // (e.g. ":node1:qemu:100") is refused, never waved past the perimeter.
+  if (!connId) return deny()
+  if (principal.connectionIds && !principal.connectionIds.includes(connId)) {
+    return deny()
+  }
+  // A non-provider token only ever reaches its own tenant's connections
+  // (owned or vDC-bound), even with a null perimeter: a provider-pool
+  // connection id named in a URL is not an invitation to another tenant.
+  if (confineToTenant) {
+    let tenantConnections: Set<string>
+    try {
+      tenantConnections = await getTenantConnectionIds()
+    } catch (e) {
+      // Fail closed without leaking the lookup error to the token client.
+      console.error("[rbac] token tenant connection lookup failed, denying:", (e as Error)?.message ?? e)
+      return NextResponse.json({ error: "Unable to verify token scope" }, { status: 503 })
     }
+    if (!tenantConnections.has(connId)) return deny()
   }
   return null
+}
+
+/**
+ * Whether the user holds `permission` across the WHOLE perimeter, not just on
+ * some resource of it. Used to stop a token creator from granting a right they
+ * only hold narrowly, and to re-check the creator on token writes.
+ *
+ * Deliberately not `hasPermission` without a resource: `scopeMatches` lets any
+ * scoped grant through when no resource is named. Only `global` and
+ * `connection` grants count here; node / vm / tag / pool / storage grants
+ * never make a right broad. A null or empty perimeter needs a global grant;
+ * a list needs every id covered by a global grant or that exact connection.
+ */
+export async function holdsBroadPermission(
+  userId: string,
+  tenantId: string,
+  permission: string,
+  connectionIds: string[] | null,
+): Promise<boolean> {
+  const grants = await loadUserGrants(userId, tenantId)
+  if (grants.superAdmin) return true
+  const holding = grants.byScope.filter(g => grantsPermission(g.permissions, permission))
+  if (holding.some(g => g.scopeType === "global")) return true
+  if (!connectionIds || connectionIds.length === 0) return false
+  return connectionIds.every(id =>
+    holding.some(g => g.scopeType === "connection" && g.scopeTarget === id),
+  )
 }
 
 /**
@@ -708,7 +751,7 @@ export async function checkPermission(
   if (principal && principal.kind === "token") {
     // Layer 2 (defense in depth): flat scope permissions + connection
     // perimeter, no DB grants loaded for tokens.
-    return checkTokenPermission(principal, permission, resourceType, resourceId)
+    return await checkTokenPermission(principal, permission, resourceType, resourceId)
   }
 
   if (!principal?.userId) {
@@ -759,7 +802,7 @@ export async function checkPermissions(
 
   if (principal && principal.kind === "token") {
     for (const p of permissions) {
-      const denied = checkTokenPermission(principal, p, resourceType, resourceId)
+      const denied = await checkTokenPermission(principal, p, resourceType, resourceId)
       if (denied) return denied
     }
     return null

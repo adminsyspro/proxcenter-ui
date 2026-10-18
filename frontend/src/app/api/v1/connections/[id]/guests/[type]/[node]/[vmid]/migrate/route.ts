@@ -8,12 +8,13 @@ import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
 import { migrateVmSchema } from "@/lib/schemas"
 import { invalidateInventoryCache } from "@/lib/cache/inventoryCache"
 import { migrationTenantDenied } from "@/lib/tenant/migrationGuard"
+import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 
 export const runtime = "nodejs"
 
 // POST /api/v1/connections/{id}/guests/{type}/{node}/{vmid}/migrate
 // Lance la migration d'une VM vers un autre node
-export async function POST(
+async function handler(
   req: Request,
   ctx: { params: Promise<{ id: string; type: string; node: string; vmid: string }> }
 ) {
@@ -140,3 +141,5 @@ export async function POST(
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const POST = withPublicApiGuard("vm-migrate", handler)

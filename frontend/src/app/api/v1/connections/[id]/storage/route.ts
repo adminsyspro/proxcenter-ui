@@ -10,10 +10,11 @@ import { getCurrentTenantId, getSessionPrisma } from "@/lib/tenant"
 import { getTenantInfrastructureScope, maskingScope } from "@/lib/tenant/infraScope"
 import { attachPbsStorage, PbsAttachError } from "@/lib/storage/attachPbsStorage"
 import { audit } from "@/lib/audit"
+import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 
 export const runtime = "nodejs"
 
-export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> | { id: string } }) {
+async function getHandler(_req: Request, ctx: { params: Promise<{ id: string }> | { id: string } }) {
   try {
     const params = await Promise.resolve(ctx.params)
     const id = (params as any)?.id
@@ -264,7 +265,7 @@ return b.usedPct - a.usedPct
  * minted here. Hand-typed server + credentials are deliberately not accepted:
  * ProxCenter must be able to revoke what it handed out.
  */
-export async function POST(req: Request, ctx: { params: Promise<{ id: string }> | { id: string } }) {
+async function postHandler(req: Request, ctx: { params: Promise<{ id: string }> | { id: string } }) {
   const params = await Promise.resolve(ctx.params)
   const id = (params as any)?.id
 
@@ -404,3 +405,6 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     )
   }
 }
+
+export const GET = withPublicApiGuard("storage-connection-list", getHandler)
+export const POST = withPublicApiGuard("storage-attach-pbs", postHandler)

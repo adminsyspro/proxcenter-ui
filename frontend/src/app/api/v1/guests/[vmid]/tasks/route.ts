@@ -3,6 +3,7 @@ import { NextResponse } from "next/server"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
+import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 
 export const runtime = "nodejs"
 
@@ -58,7 +59,7 @@ return `${h}h ${m}m`
  * GET /api/v1/guests/[vmid]/tasks
  * Liste les tâches récentes d'une VM
  */
-export async function GET(
+async function handler(
   req: Request,
   ctx: { params: Promise<Params> }
 ) {
@@ -133,3 +134,5 @@ export async function GET(
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const GET = withPublicApiGuard("vm-tasks-list", handler)

@@ -6,12 +6,13 @@ import { checkPermission, buildNodeResourceId, buildStorageResourceId, PERMISSIO
 import { getCurrentTenantId, DEFAULT_TENANT_ID } from "@/lib/tenant"
 import { getTenantInfrastructureScope } from "@/lib/tenant/infraScope"
 import { writableStoragesFor, readOnlyLibraryError } from "@/lib/vdc/scope"
+import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 
 export const runtime = "nodejs"
 
 // POST /api/v1/connections/{id}/nodes/{node}/vzdump
 // Lance une sauvegarde de VM/CT
-export async function POST(
+async function handler(
   req: Request,
   ctx: { params: Promise<{ id: string; node: string }> }
 ) {
@@ -115,3 +116,5 @@ export async function POST(
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const POST = withPublicApiGuard("vm-backup-now", handler)

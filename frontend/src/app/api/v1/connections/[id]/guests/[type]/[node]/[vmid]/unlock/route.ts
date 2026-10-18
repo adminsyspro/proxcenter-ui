@@ -7,6 +7,7 @@ import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
 import { executeSSH } from "@/lib/ssh/exec"
 import { assertVmid } from "@/lib/ssh/validate"
 import { resolveNodeSshEndpoint } from "@/lib/ssh/node-endpoint"
+import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 
 export const runtime = "nodejs"
 
@@ -15,7 +16,7 @@ export const runtime = "nodejs"
  *
  * Unlock a VM via SSH (qm unlock / pct unlock)
  */
-export async function POST(
+async function postHandler(
   req: Request,
   ctx: { params: Promise<{ id: string; type: string; node: string; vmid: string }> }
 ) {
@@ -99,7 +100,7 @@ export async function POST(
  *
  * Check if a VM is locked
  */
-export async function GET(
+async function getHandler(
   req: Request,
   ctx: { params: Promise<{ id: string; type: string; node: string; vmid: string }> }
 ) {
@@ -134,3 +135,6 @@ export async function GET(
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const POST = withPublicApiGuard("vm-unlock", postHandler)
+export const GET = withPublicApiGuard("vm-unlock-get", getHandler)

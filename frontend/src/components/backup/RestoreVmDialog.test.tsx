@@ -50,8 +50,16 @@ vi.mock('@/contexts/TenantContext', () => ({
   useTenant: () => useTenantMock(),
 }))
 
+// Overwriting an existing guest needs vm.delete (the restore route checks it
+// on force). Granted by default; the overwrite-gating block withdraws it.
+const { useRBACMock } = vi.hoisted(() => ({ useRBACMock: vi.fn() }))
+vi.mock('@/contexts/RBACContext', () => ({
+  useRBAC: () => useRBACMock(),
+}))
+
 beforeEach(() => {
   useTenantMock.mockReturnValue({ currentTenant: null, loading: false })
+  useRBACMock.mockReturnValue({ loading: false, hasPermission: () => true })
   trackTaskMock.mockClear()
 })
 
@@ -502,6 +510,49 @@ describe('RestoreVmDialog - Restore tags option (#965)', () => {
     renderWithProviders(<RestoreVmDialog {...makeProps()} />)
     await screen.findByText(/VM 100/)
     expect(screen.queryByLabelText('Restore tags')).toBeNull()
+  })
+})
+
+describe('RestoreVmDialog - overwrite needs vm.delete', () => {
+  beforeEach(() => {
+    seedBaseHandlers()
+    useRBACMock.mockReturnValue({ loading: false, hasPermission: (p: string) => p !== 'vm.delete' })
+  })
+
+  function submitButton() {
+    return screen.getAllByRole('button').find((b) => b.textContent?.trim() === 'Restore VM') as HTMLButtonElement
+  }
+
+  it('provider: a taken VMID cannot be submitted and says why', async () => {
+    renderWithProviders(<RestoreVmDialog {...makeProps()} />)
+
+    expect(await screen.findByText(`VM ${SOURCE_VMID} exists and you are not allowed to overwrite it: pick a free VMID`)).toBeTruthy()
+    expect(submitButton()).toBeDisabled()
+
+    fireEvent.change(screen.getByLabelText('VMID'), { target: { value: '250' } })
+    await waitFor(() => expect(submitButton()).not.toBeDisabled())
+  })
+
+  it('vDC tenant: no overwrite toggle, the restore goes to a new VM without force', async () => {
+    useTenantMock.mockReturnValue({ currentTenant: { id: 't1', operatingModel: 'iaas' }, loading: false })
+    const bodies: Record<string, any>[] = []
+    server.use(
+      http.post(`*/api/v1/connections/${CONN_ID}/nodes/${NODE_NAME}/restore`, async ({ request }) => {
+        bodies.push((await request.json()) as Record<string, any>)
+        return HttpResponse.json({ data: UPID })
+      }),
+    )
+    renderWithProviders(<RestoreVmDialog {...makeProps()} />)
+    await screen.findByText(/VM 100/)
+
+    expect(screen.queryByText('Restore as a new VM (auto-allocates a fresh VMID + unique MACs)')).toBeNull()
+    await waitFor(() => expect(submitButton()).not.toBeDisabled())
+    fireEvent.click(submitButton())
+
+    await waitFor(() => expect(bodies).toHaveLength(1))
+    expect(bodies[0].force).toBeUndefined()
+    expect(bodies[0].unique).toBe(true)
+    expect(bodies[0].vmid).toBe(101)
   })
 })
 

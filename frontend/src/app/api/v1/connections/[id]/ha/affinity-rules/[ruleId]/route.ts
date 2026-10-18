@@ -3,12 +3,19 @@ import { NextResponse } from "next/server"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 
 export const runtime = "nodejs"
 
+const RULE_TYPES = new Set(['node-affinity', 'resource-affinity'])
+
+function isNotFound(e: any): boolean {
+  return Boolean(e?.message?.includes('404') || e?.message?.includes('does not exist'))
+}
+
 // GET /api/v1/connections/{id}/ha/affinity-rules/{ruleId}
 // Récupère une règle d'affinité HA spécifique
-export async function GET(
+async function getHandler(
   req: Request,
   ctx: { params: Promise<{ id: string; ruleId: string }> }
 ) {
@@ -26,7 +33,7 @@ export async function GET(
 
     return NextResponse.json({ data: rule })
   } catch (e: any) {
-    if (e?.message?.includes('404') || e?.message?.includes('does not exist')) {
+    if (isNotFound(e)) {
       return NextResponse.json({ error: 'Règle d\'affinité HA non trouvée' }, { status: 404 })
     }
 
@@ -38,7 +45,7 @@ return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
 
 // PUT /api/v1/connections/{id}/ha/affinity-rules/{ruleId}
 // Met à jour une règle d'affinité HA
-export async function PUT(
+async function putHandler(
   req: Request,
   ctx: { params: Promise<{ id: string; ruleId: string }> }
 ) {
@@ -50,12 +57,40 @@ export async function PUT(
 
     if (permError) return permError
 
-    const conn = await getConnectionById(id)
     const body = await req.json()
+
+    if (body.type !== undefined && !RULE_TYPES.has(body.type)) {
+      return NextResponse.json({ error: 'Le type de règle doit être node-affinity ou resource-affinity' }, { status: 400 })
+    }
+
+    const conn = await getConnectionById(id)
+    const rulePath = `/cluster/ha/rules/${encodeURIComponent(ruleId)}`
+
+    // PVE 9 exige `type` en mise à jour (il choisit le schéma node-affinity / resource-affinity) :
+    // celui du corps s'il est donné, sinon celui de la règle existante.
+    let ruleType: string | undefined = body.type
+
+    if (ruleType === undefined) {
+      try {
+        const existing = await pveFetch<any>(conn, rulePath)
+
+        ruleType = existing?.type
+      } catch (e: any) {
+        if (isNotFound(e)) {
+          return NextResponse.json({ error: 'Règle d\'affinité HA non trouvée' }, { status: 404 })
+        }
+
+        throw e
+      }
+    }
 
     // Construire les paramètres
     const params = new URLSearchParams()
-    
+
+    if (ruleType) {
+      params.append('type', ruleType)
+    }
+
     if (body.resources !== undefined) {
       params.append('resources', body.resources)
     }
@@ -92,7 +127,7 @@ export async function PUT(
       params.append('digest', body.digest)
     }
 
-    const result = await pveFetch<any>(conn, `/cluster/ha/rules/${encodeURIComponent(ruleId)}`, {
+    const result = await pveFetch<any>(conn, rulePath, {
       method: 'PUT',
       body: params.toString(),
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
@@ -111,7 +146,7 @@ return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
 
 // DELETE /api/v1/connections/{id}/ha/affinity-rules/{ruleId}
 // Supprime une règle d'affinité HA
-export async function DELETE(
+async function deleteHandler(
   req: Request,
   ctx: { params: Promise<{ id: string; ruleId: string }> }
 ) {
@@ -139,3 +174,7 @@ export async function DELETE(
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const GET = withPublicApiGuard("ha-affinity-get", getHandler)
+export const PUT = withPublicApiGuard("ha-affinity-update", putHandler)
+export const DELETE = withPublicApiGuard("ha-affinity-delete", deleteHandler)

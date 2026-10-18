@@ -5,8 +5,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getOrchestratorClient } from '@/lib/orchestrator/client'
 import { verifyConnectionOwnership } from '@/lib/tenant'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
+import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
 
-export async function POST(
+async function postHandler(
   request: NextRequest,
   { params }: { params: Promise<{ connectionId: string }> }
 ) {
@@ -34,3 +35,5 @@ return NextResponse.json(
     )
   }
 }
+
+export const POST = withPublicApiGuard("fw-microseg-base-generate", postHandler)

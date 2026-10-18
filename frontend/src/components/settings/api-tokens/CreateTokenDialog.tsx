@@ -3,14 +3,15 @@
 import { useEffect, useState } from 'react'
 
 import {
-  Alert, Box, Button, Checkbox, Dialog, DialogActions, DialogContent, DialogTitle,
-  FormControlLabel, FormGroup, IconButton, MenuItem, Stack, TextField, Tooltip, Typography,
+  Alert, Box, Button, Checkbox, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, MenuItem,
+  Stack, TextField, ToggleButton, ToggleButtonGroup, Tooltip, Typography,
 } from '@mui/material'
 import { useTheme } from '@mui/material/styles'
 import { useTranslations } from 'next-intl'
 
 import { tooltipSlotProps } from '@/components/settings/ha/tooltipSlotProps'
-import { ALL_SCOPE_IDS } from '@/lib/api-tokens/scopes'
+import NumericTextField from '@/components/ui/NumericTextField'
+import { ALL_SCOPE_IDS, DESTRUCTIVE_SCOPE_IDS, isWriteScope } from '@/lib/api-tokens/scopes'
 import { copyToClipboard } from '@/lib/clipboard'
 import { selectableTenants, sortTenantsProviderFirst } from '@/lib/storage/tenantFacets'
 
@@ -38,21 +39,67 @@ export function filterToVisibleConnectionIds(selectedIds: string[], visible: Con
   return selectedIds.filter(id => visibleIds.has(id))
 }
 
-// Reuses the app's existing icon vocabulary for each domain (the VM/node/
-// storage inventory tabs, the automation + alert-thresholds settings tabs,
-// the compliance pages) rather than inventing a new one. Keyed by scope id
-// so a future addition to SCOPE_DEFINITIONS without a matching entry here
-// still renders a row -- via DEFAULT_SCOPE_ICON -- instead of a blank one.
-const SCOPE_ICONS: Record<string, string> = {
-  'vms:read': 'ri-computer-line',
-  'nodes:read': 'ri-server-line',
-  'storage:read': 'ri-hard-drive-2-line',
-  'backups:read': 'ri-save-line',
-  'automation:read': 'ri-robot-line',
-  'alerts:read': 'ri-alarm-warning-line',
-  'reports:read': 'ri-file-list-3-line',
+// The scope picker groups the scopes of scopes.ts by domain: one read scope
+// each, and the write scopes that act on the same objects. A row is set to
+// None, Read or Write; Write always carries the domain's read scope too (a
+// write API is unusable without listing what it acts on). The icons reuse
+// the app's vocabulary for each domain (inventory tabs, automation and
+// alert settings, compliance pages). SCOPE_DOMAINS.test pins that every
+// scope id of scopes.ts sits in exactly one domain.
+type ScopeDomain = { id: string; icon: string; read: string; write: readonly string[] }
+
+export const SCOPE_DOMAINS: readonly ScopeDomain[] = [
+  {
+    id: 'vms',
+    icon: 'ri-computer-line',
+    read: 'vms:read',
+    write: ['vms:power', 'vms:write', 'vms:snapshot', 'vms:migrate', 'vms:delete'],
+  },
+  { id: 'backups', icon: 'ri-save-line', read: 'backups:read', write: ['backups:write', 'backups:restore', 'backups:delete'] },
+  { id: 'storage', icon: 'ri-hard-drive-2-line', read: 'storage:read', write: ['storage:write'] },
+  {
+    id: 'nodes',
+    icon: 'ri-server-line',
+    read: 'nodes:read',
+    write: ['ha:write', 'pools:write', 'network:write', 'firewall:write'],
+  },
+  { id: 'automation', icon: 'ri-robot-line', read: 'automation:read', write: [] },
+  { id: 'alerts', icon: 'ri-alarm-warning-line', read: 'alerts:read', write: [] },
+  { id: 'reports', icon: 'ri-file-list-3-line', read: 'reports:read', write: [] },
+]
+
+// Short toggle labels (dialog.subScopes.*) of the write sub-scopes,
+// shown under a row on Write when its domain has more than one.
+export const SUB_SCOPE_LABEL_KEYS: Record<string, string> = {
+  'vms:power': 'vmsPower',
+  'vms:write': 'vmsWrite',
+  'vms:snapshot': 'vmsSnapshot',
+  'vms:migrate': 'vmsMigrate',
+  'vms:delete': 'vmsDelete',
+  'backups:write': 'backupsWrite',
+  'backups:restore': 'backupsRestore',
+  'backups:delete': 'backupsDelete',
+  'ha:write': 'haWrite',
+  'pools:write': 'poolsWrite',
+  'network:write': 'networkWrite',
+  'firewall:write': 'firewallWrite',
 }
-const DEFAULT_SCOPE_ICON = 'ri-key-line'
+
+type AccessLevel = 'none' | 'read' | 'write'
+
+function accessLevelOf(domain: ScopeDomain, scopes: string[]): AccessLevel {
+  if (domain.write.some(scope => scopes.includes(scope))) return 'write'
+  return scopes.includes(domain.read) ? 'read' : 'none'
+}
+
+// Spec values: a write token gets its own per-minute bucket (60 by default),
+// and checking a write scope preselects a 90-day expiry.
+const DEFAULT_WRITE_RATE_LIMIT = 60
+const WRITE_TOKEN_EXPIRATION = '90'
+
+// Answer of the grantable-scopes check for one (tenant, perimeter) key; a
+// null list means the check failed.
+type GrantableResult = { key: string; list: string[] | null }
 
 const EXPIRATION_CHOICES = [
   { value: 'none', labelKey: 'expirationNone', days: null as number | null },
@@ -87,6 +134,10 @@ export default function CreateTokenDialog({ open, onClose, onCreated }: Props) {
   const [expiration, setExpiration] = useState('none')
   const [customDays, setCustomDays] = useState('180')
   const [scopes, setScopes] = useState<string[]>([])
+  // Once the user picked an expiry, checking a write scope leaves it alone.
+  const [expirationTouched, setExpirationTouched] = useState(false)
+  const [writeRateLimit, setWriteRateLimit] = useState(DEFAULT_WRITE_RATE_LIMIT)
+  const [grantableResult, setGrantableResult] = useState<GrantableResult | null>(null)
   // Fallback free-text field, used only when the tenant selector could not
   // load (degrade to the pre-fix behaviour: ambient tenant, hand-typed ids).
   const [connectionsText, setConnectionsText] = useState('')
@@ -155,16 +206,15 @@ export default function CreateTokenDialog({ open, onClose, onCreated }: Props) {
     setConnectionIds([])
   }, [tenantId])
 
-  function toggleScope(scope: string) {
-    setScopes(prev => (prev.includes(scope) ? prev.filter(s => s !== scope) : [...prev, scope]))
-  }
-
   function reset() {
     setName('')
     setDescription('')
     setExpiration('none')
     setCustomDays('180')
     setScopes([])
+    setExpirationTouched(false)
+    setWriteRateLimit(DEFAULT_WRITE_RATE_LIMIT)
+    setGrantableResult(null)
     setConnectionsText('')
     setConnectionIds([])
     setTenantId('')
@@ -190,27 +240,120 @@ export default function CreateTokenDialog({ open, onClose, onCreated }: Props) {
   const connectionSelectorAvailable = tenantsAvailable && connectionsAvailable
   const visibleConnections = connectionOptions.filter(c => c.tenantId === tenantId)
 
+  // The perimeter the token would get, shared by the grantable check and the
+  // creation request so both always judge the same connections.
+  const resolvedConnectionIds = connectionSelectorAvailable
+    ? filterToVisibleConnectionIds(connectionIds, visibleConnections)
+    : connectionsText
+        .split(',')
+        .map(c => c.trim())
+        .filter(Boolean)
+  const perimeterKey = resolvedConnectionIds.join(',')
+  const grantableTenantId = tenantsAvailable ? tenantId : ''
+  const grantableKey = `${grantableTenantId}|${perimeterKey}`
+
+  // Which write scopes the caller may hand out for this tenant and perimeter
+  // (the creation route runs the same check). Asked again on every change of
+  // either; a scope that stops being grantable is unchecked rather than left
+  // checked behind a disabled box.
+  useEffect(() => {
+    if (!open) return
+    let active = true
+
+    void (async () => {
+      const params = new URLSearchParams()
+      if (grantableTenantId) params.set('tenantId', grantableTenantId)
+      if (perimeterKey) params.set('connectionIds', perimeterKey)
+      const query = params.toString()
+      let list: string[] | null = null
+      try {
+        const res = await fetch(`/api/v1/settings/api-tokens/grantable-scopes${query ? `?${query}` : ''}`)
+        const json = res.ok ? await res.json() : null
+        if (Array.isArray(json?.data?.grantable)) list = json.data.grantable
+      } catch {
+        // Network failure: list stays null, the write scopes stay disabled.
+      }
+      if (!active) return
+      const allowed = list ?? []
+      setGrantableResult({ key: grantableKey, list })
+      setScopes(prev => prev.filter(scope => !isWriteScope(scope) || allowed.includes(scope)))
+    })()
+
+    return () => {
+      active = false
+    }
+  }, [open, grantableKey, grantableTenantId, perimeterKey])
+
+  // Loading (no answer yet for the current key) and failure both keep every
+  // write scope disabled: the UI fails closed, the creation route stays the
+  // judge either way.
+  function writeScopeBlocker(scope: string): string {
+    if (grantableResult?.key !== grantableKey) return t('dialog.scopesLoading')
+    if (!grantableResult.list) return t('dialog.grantableError')
+    return grantableResult.list.includes(scope) ? '' : t('dialog.scopeNotGrantable')
+  }
+
+  // Write on a whole domain: unavailable on a read only domain, while the
+  // grantable answer is pending or failed, and when none of its write
+  // scopes is grantable.
+  function domainWriteBlocker(domain: ScopeDomain): string {
+    if (domain.write.length === 0) return t('dialog.readOnlyDomain')
+    if (grantableResult?.key !== grantableKey) return t('dialog.scopesLoading')
+    if (!grantableResult.list) return t('dialog.grantableError')
+    return domain.write.some(scope => grantableResult.list.includes(scope)) ? '' : t('dialog.domainNotGrantable')
+  }
+
+  // Write preselects every grantable non destructive sub-scope; a domain
+  // whose only grantable ones are destructive gets the first of them, so a
+  // row on Write never carries zero write scopes.
+  function defaultWriteScopes(domain: ScopeDomain): string[] {
+    const grantable = domain.write.filter(scope => !writeScopeBlocker(scope))
+    const safe = grantable.filter(scope => !DESTRUCTIVE_SCOPE_IDS.includes(scope))
+    return safe.length ? safe : grantable.slice(0, 1)
+  }
+
+  function setDomainLevel(domain: ScopeDomain, level: AccessLevel) {
+    const own = new Set([domain.read, ...domain.write])
+    const others = scopes.filter(scope => !own.has(scope))
+    if (level === 'none') {
+      setScopes(others)
+    } else if (level === 'read') {
+      setScopes([...others, domain.read])
+    } else {
+      setScopes([...others, domain.read, ...defaultWriteScopes(domain)])
+      // Going back to Read or None later does not revert the expiry.
+      if (!expirationTouched) setExpiration(WRITE_TOKEN_EXPIRATION)
+    }
+  }
+
+  // The read scope stays when a toggle is unselected, so unselecting the
+  // last one leaves the row on Read.
+  function toggleSubScope(scope: string) {
+    setScopes(prev => (prev.includes(scope) ? prev.filter(s => s !== scope) : [...prev, scope]))
+  }
+
+  const hasWriteScope = scopes.some(isWriteScope)
+  // A write scope checked against an answer that is not (yet) a success for
+  // the current tenant and perimeter: the request would likely be refused.
+  const writeCheckPending = hasWriteScope && (grantableResult?.key !== grantableKey || !grantableResult.list)
+
   async function handleCreate() {
     setSaving(true)
     setError('')
     try {
-      const fallbackConnectionIds = connectionsText
-        .split(',')
-        .map(c => c.trim())
-        .filter(Boolean)
-      const resolvedConnectionIds = connectionSelectorAvailable
-        ? filterToVisibleConnectionIds(connectionIds, visibleConnections)
-        : fallbackConnectionIds
-
       const res = await fetch('/api/v1/settings/api-tokens', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           name,
           description: description || undefined,
-          scopes,
+          // Canonical order, whatever the order rows were picked in.
+          scopes: ALL_SCOPE_IDS.filter(scope => scopes.includes(scope)),
           connectionIds: resolvedConnectionIds.length ? resolvedConnectionIds : null,
           expiresInDays: expiresInDays(),
+          // Only a write token has a write bucket; the server default
+          // applies otherwise.
+          ...(hasWriteScope ? { writeRateLimitPerMin: writeRateLimit } : {}),
           ...(tenantsAvailable && tenantId ? { tenantId } : {}),
         }),
       })
@@ -255,7 +398,16 @@ export default function CreateTokenDialog({ open, onClose, onCreated }: Props) {
             {error && <Alert severity='error'>{error}</Alert>}
             <TextField label={t('dialog.name')} value={name} onChange={e => setName(e.target.value)} fullWidth required />
             <TextField label={t('dialog.description')} value={description} onChange={e => setDescription(e.target.value)} fullWidth />
-            <TextField select label={t('dialog.expiration')} value={expiration} onChange={e => setExpiration(e.target.value)} fullWidth>
+            <TextField
+              select
+              label={t('dialog.expiration')}
+              value={expiration}
+              onChange={e => {
+                setExpiration(e.target.value)
+                setExpirationTouched(true)
+              }}
+              fullWidth
+            >
               {EXPIRATION_CHOICES.map(choice => (
                 <MenuItem key={choice.value} value={choice.value}>{t(`dialog.${choice.labelKey}`)}</MenuItem>
               ))}
@@ -264,26 +416,35 @@ export default function CreateTokenDialog({ open, onClose, onCreated }: Props) {
               <TextField label={t('dialog.customDays')} type='number' value={customDays} onChange={e => setCustomDays(e.target.value)} fullWidth />
             )}
             <Box>
-              <Typography variant='subtitle2' sx={{ mb: 1 }}>{t('dialog.scopes')}</Typography>
-              {/* FormGroup (block-level) rather than the FormControlLabels'
-                  own inline-flex flow, one scope per row: rendered bare, the
-                  eight labels ran together on a single line with no
-                  separation between them. */}
-              <FormGroup>
-                {ALL_SCOPE_IDS.map(scope => (
-                  <FormControlLabel
-                    key={scope}
-                    sx={{ width: '100%', mr: 0 }}
-                    control={<Checkbox checked={scopes.includes(scope)} onChange={() => toggleScope(scope)} />}
-                    label={
-                      <Stack direction='row' alignItems='center' spacing={1}>
-                        <i className={SCOPE_ICONS[scope] || DEFAULT_SCOPE_ICON} />
-                        <Typography variant='body2'>{scope}</Typography>
-                      </Stack>
-                    }
+              <Typography variant='subtitle2' sx={{ mb: 1, color: 'text.primary' }}>{t('dialog.scopes')}</Typography>
+              {hasWriteScope && <Alert severity='warning' sx={{ mb: 1 }}>{t('dialog.writeWarning')}</Alert>}
+              <Box sx={{ border: 1, borderColor: 'divider', borderRadius: 1 }}>
+                {SCOPE_DOMAINS.map(domain => (
+                  <ScopeDomainRow
+                    key={domain.id}
+                    domain={domain}
+                    label={t(`dialog.domains.${domain.id}`)}
+                    level={accessLevelOf(domain, scopes)}
+                    scopes={scopes}
+                    writeBlocker={domainWriteBlocker(domain)}
+                    subScopeBlocker={writeScopeBlocker}
+                    onLevel={level => setDomainLevel(domain, level)}
+                    onToggleSubScope={toggleSubScope}
                   />
                 ))}
-              </FormGroup>
+              </Box>
+              {hasWriteScope && (
+                <NumericTextField
+                  label={t('dialog.writeRateLimit')}
+                  helperText={t('dialog.writeRateLimitHelp')}
+                  value={writeRateLimit}
+                  onChange={setWriteRateLimit}
+                  fallback={DEFAULT_WRITE_RATE_LIMIT}
+                  min={1}
+                  fullWidth
+                  sx={{ mt: 2 }}
+                />
+              )}
             </Box>
             {tenantsAvailable && (
               <TextField select label={t('dialog.tenant')} value={tenantId} onChange={e => setTenantId(e.target.value)} fullWidth>
@@ -361,7 +522,7 @@ export default function CreateTokenDialog({ open, onClose, onCreated }: Props) {
             <Button onClick={handleClose}>{t('dialog.cancel')}</Button>
             <Button
               variant='contained'
-              disabled={saving || !name.trim() || scopes.length === 0}
+              disabled={saving || !name.trim() || scopes.length === 0 || writeCheckPending}
               onClick={handleCreate}
             >
               {t('dialog.create')}
@@ -370,5 +531,127 @@ export default function CreateTokenDialog({ open, onClose, onCreated }: Props) {
         )}
       </DialogActions>
     </Dialog>
+  )
+}
+
+type ScopeDomainRowProps = {
+  domain: ScopeDomain
+  label: string
+  level: AccessLevel
+  scopes: string[]
+  writeBlocker: string
+  subScopeBlocker: (scope: string) => string
+  onLevel: (level: AccessLevel) => void
+  onToggleSubScope: (scope: string) => void
+}
+
+// One domain on one line (icon, label, None | Read | Write), and on Write,
+// when the domain has several write scopes, a wrap row of toggles to pick
+// them. The raw scope ids sit in tooltips, to match the API reference.
+function ScopeDomainRow({
+  domain, label, level, scopes, writeBlocker, subScopeBlocker, onLevel, onToggleSubScope,
+}: ScopeDomainRowProps) {
+  const t = useTranslations('settings.apiTokens')
+  const labelId = `api-token-domain-${domain.id}`
+  const showChips = level === 'write' && domain.write.length > 1
+  const selectedWrites = domain.write.filter(scope => scopes.includes(scope))
+
+  return (
+    <Box
+      data-domain={domain.id}
+      sx={{ px: 3, py: 1, '&:not(:last-of-type)': { borderBottom: 1, borderColor: 'divider' } }}
+    >
+      <Stack direction='row' alignItems='center' spacing={2.5} sx={{ minHeight: 32 }}>
+        <Box component='i' className={domain.icon} sx={{ fontSize: 18, color: 'text.secondary', flexShrink: 0 }} />
+        <Tooltip title={<ScopeIdsTitle domain={domain} />} placement='top-start' slotProps={tooltipSlotProps}>
+          <Typography id={labelId} variant='body2' noWrap sx={{ flex: 1, minWidth: 0, color: 'text.primary' }}>
+            {label}
+          </Typography>
+        </Tooltip>
+        <ToggleButtonGroup
+          exclusive
+          size='small'
+          value={level}
+          aria-labelledby={labelId}
+          // A click on the selected button sends null: the row keeps its level.
+          onChange={(_e, value: AccessLevel | null) => value && onLevel(value)}
+          sx={{ flexShrink: 0, '& .MuiToggleButton-root': { typography: 'body2', py: 1, px: 3, textTransform: 'none' } }}
+        >
+          <ToggleButton value='none'>{t('dialog.access.none')}</ToggleButton>
+          <ToggleButton value='read' color='primary'>{t('dialog.access.read')}</ToggleButton>
+          {/* The span carries the tooltip: a disabled button fires no pointer events. */}
+          <Tooltip title={writeBlocker} slotProps={tooltipSlotProps}>
+            <Box component='span' sx={{ display: 'inline-flex' }}>
+              <ToggleButton value='write' color='warning' disabled={!!writeBlocker}>{t('dialog.access.write')}</ToggleButton>
+            </Box>
+          </Tooltip>
+        </ToggleButtonGroup>
+      </Stack>
+      {showChips && (
+        <ToggleButtonGroup
+          size='small'
+          value={selectedWrites}
+          aria-label={t('dialog.subScopesLabel', { domain: label })}
+          sx={{
+            display: 'flex', flexWrap: 'wrap', gap: 1, pl: 7.5, pt: 1.5, pb: 1,
+            '& .MuiToggleButton-root': {
+              typography: 'body2', py: 1, px: 3, gap: 1, textTransform: 'none',
+              border: 1, borderColor: 'divider', borderRadius: 1, ml: 0,
+              '&.Mui-disabled': { borderColor: 'divider' },
+            },
+            '& .MuiToggleButton-root.Mui-selected': { borderColor: 'warning.main' },
+          }}
+        >
+          {domain.write.map(scope => {
+            const blocker = subScopeBlocker(scope)
+            const destructive = DESTRUCTIVE_SCOPE_IDS.includes(scope)
+            return (
+              <Tooltip key={scope} title={<SubScopeTitle scope={scope} blocker={blocker} />} slotProps={tooltipSlotProps}>
+                <Box component='span' sx={{ display: 'inline-flex' }}>
+                  <ToggleButton
+                    value={scope}
+                    color={destructive ? 'error' : 'warning'}
+                    disabled={!!blocker}
+                    onChange={() => onToggleSubScope(scope)}
+                    sx={destructive ? {
+                      '&&:not(.Mui-disabled)': { color: 'error.main' },
+                      '&:not(.Mui-disabled)': { borderColor: 'error.main' },
+                    } : undefined}
+                  >
+                    {destructive && <i className='ri-delete-bin-line' style={{ fontSize: 14 }} />}
+                    {t(`dialog.subScopes.${SUB_SCOPE_LABEL_KEYS[scope]}`)}
+                  </ToggleButton>
+                </Box>
+              </Tooltip>
+            )
+          })}
+        </ToggleButtonGroup>
+      )}
+    </Box>
+  )
+}
+
+function ScopeIdsTitle({ domain }: { domain: ScopeDomain }) {
+  const t = useTranslations('settings.apiTokens')
+  return (
+    <Box component='span' sx={{ display: 'block', typography: 'caption' }}>
+      <Box component='span' sx={{ display: 'block' }}>
+        {t('dialog.access.read')}: <Box component='span' sx={{ fontFamily: 'monospace' }}>{domain.read}</Box>
+      </Box>
+      {domain.write.length > 0 && (
+        <Box component='span' sx={{ display: 'block' }}>
+          {t('dialog.access.write')}: <Box component='span' sx={{ fontFamily: 'monospace' }}>{domain.write.join(', ')}</Box>
+        </Box>
+      )}
+    </Box>
+  )
+}
+
+function SubScopeTitle({ scope, blocker }: { scope: string; blocker: string }) {
+  return (
+    <Box component='span' sx={{ display: 'block', typography: 'caption' }}>
+      <Box component='span' sx={{ display: 'block', fontFamily: 'monospace' }}>{scope}</Box>
+      {blocker && <Box component='span' sx={{ display: 'block', mt: 0.5 }}>{blocker}</Box>}
+    </Box>
   )
 }

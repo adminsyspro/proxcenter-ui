@@ -1,9 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+// The API token guard is covered by routeGuard.test.ts and writeContract.test.ts:
+// pass-through so this file keeps testing the handler, as for a session caller.
+vi.mock('@/lib/api-tokens/routeGuard', () => ({
+  withPublicApiGuard: (_entryId: string, handler: any) => handler,
+}))
+
 import { callRoute, readJson } from '@/__tests__/setup/route-test'
 
-const { userGuardMock, targetGuardMock, settingsMock, connMock, probeAgentMock, probeSshMock, hostGuardMock, providerMock } = vi.hoisted(() => ({
+const { userGuardMock, targetGuardMock, tokenScopeMock, settingsMock, connMock, probeAgentMock, probeSshMock, hostGuardMock, providerMock } = vi.hoisted(() => ({
   userGuardMock: vi.fn(),
+  tokenScopeMock: vi.fn(),
   targetGuardMock: vi.fn(),
   settingsMock: vi.fn(),
   connMock: vi.fn(),
@@ -16,6 +23,7 @@ const { userGuardMock, targetGuardMock, settingsMock, connMock, probeAgentMock, 
 vi.mock('@/lib/guestFileRestore/guard', () => ({
   requireGuestFileRestoreUser: () => userGuardMock(),
   authorizeRestoreTarget: (...a: any[]) => targetGuardMock(...a),
+  denyTokenOutsideRestoreScope: (...a: any[]) => tokenScopeMock(...a),
   isProviderCaller: (...a: any[]) => providerMock(...a),
 }))
 vi.mock('@/lib/guestFileRestore/settings', () => ({ loadGuestFileRestoreSettings: () => settingsMock() }))
@@ -36,6 +44,7 @@ const settings = { agentEnabled: true, sshEnabled: true, sshConnectTimeoutSec: 2
 beforeEach(() => {
   userGuardMock.mockReset().mockResolvedValue({ denied: null, principal: { kind: 'session', userId: 'u1', tenantId: 'default' } })
   targetGuardMock.mockReset().mockResolvedValue(null)
+  tokenScopeMock.mockReset().mockResolvedValue(null)
   settingsMock.mockReset().mockResolvedValue({ ...settings })
   connMock.mockReset().mockResolvedValue({ id: 'c1', baseUrl: 'https://pve:8006', apiToken: 't' })
   probeAgentMock.mockReset().mockResolvedValue({ ok: true, os: 'linux', hostname: 'web-01' })
@@ -120,6 +129,17 @@ describe('POST /api/v1/guest-file-restore/probe', () => {
     expect(hostGuardMock).toHaveBeenLastCalledWith(expect.objectContaining({ providerCaller: false }))
     probeSshMock.mockResolvedValue({ ok: false, error: 'SSH authentication failed: check the user name, password or private key', errorClass: 'auth_failed' })
     expect(await readJson(await callRoute(POST, { body: { target, method: 'ssh', ssh } }))).toMatchObject({ errorClass: 'auth_failed' })
+  })
+
+  it('holds an API token to its perimeter and vDC before reaching the guest', async () => {
+    const res = await callRoute(POST, { body: { target, method: 'agent' } })
+    expect(res.status).toBe(200)
+    expect(tokenScopeMock).toHaveBeenCalledWith(expect.objectContaining({ userId: 'u1' }), expect.objectContaining({ id: 'c1' }), target)
+
+    tokenScopeMock.mockResolvedValue(new Response(JSON.stringify({ error: 'Guest outside your vDC scope' }), { status: 403 }))
+    probeAgentMock.mockClear()
+    expect((await callRoute(POST, { body: { target, method: 'agent' } })).status).toBe(403)
+    expect(probeAgentMock).not.toHaveBeenCalled()
   })
 
   it('answers 404 when the target connection is unknown', async () => {

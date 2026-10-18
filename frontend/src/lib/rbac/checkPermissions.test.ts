@@ -13,6 +13,7 @@ const m = vi.hoisted(() => ({
   getPrincipal: vi.fn(),
   rejectionToResponse: vi.fn(),
   resolveVmMeta: vi.fn(),
+  getTenantConnectionIds: vi.fn(),
   prisma: {
     rbacUserRole: { findFirst: vi.fn(), findMany: vi.fn() },
     rbacUserPermission: { findMany: vi.fn() },
@@ -26,15 +27,23 @@ vi.mock('@/lib/auth/principal', () => ({
 }))
 vi.mock('@/lib/cache/vmMetaCache', () => ({ resolveVmMeta: (...a: unknown[]) => m.resolveVmMeta(...a) }))
 vi.mock('@/lib/cache/inventoryCache', () => ({ getTenantInventoriesFromCache: vi.fn() }))
-vi.mock('@/lib/tenant', () => ({ DEFAULT_TENANT_ID: 'default' }))
+vi.mock('@/lib/tenant', () => ({
+  DEFAULT_TENANT_ID: 'default',
+  getTenantConnectionIds: (...a: unknown[]) => m.getTenantConnectionIds(...a),
+}))
 
-import { checkPermissions, expandPermissionHierarchy, PERMISSIONS } from './index'
+import { expandScopes } from '@/lib/api-tokens/scopes'
+import { checkPermission, checkPermissions, expandPermissionHierarchy, holdsBroadPermission, PERMISSIONS } from './index'
 
 const VM = 'conn-1:pve1:qemu:100'
 
-const tokenPrincipal = (permissions: string[], connectionIds: string[] | undefined = ['conn-1']) => ({
+const tokenPrincipal = (
+  permissions: string[] | Set<string>,
+  connectionIds: string[] | null | undefined = ['conn-1'],
+  tenantId = 'default',
+) => ({
   ok: true,
-  principal: { kind: 'token', tokenId: 'tok_x', tenantId: 'default', permissions: new Set(permissions), connectionIds },
+  principal: { kind: 'token', tokenId: 'tok_x', tenantId, permissions: new Set(permissions), connectionIds },
 })
 const userPrincipal = { ok: true, principal: { kind: 'user', userId: 'u1', tenantId: 't1' } }
 
@@ -56,6 +65,7 @@ beforeEach(() => {
   m.prisma.rbacUserRole.findMany.mockResolvedValue([])
   m.prisma.rbacUserPermission.findMany.mockResolvedValue([])
   m.resolveVmMeta.mockReturnValue(null)
+  m.getTenantConnectionIds.mockResolvedValue(new Set(['connA']))
 })
 
 describe('expandPermissionHierarchy', () => {
@@ -159,4 +169,122 @@ describe('sensitive NIC permissions require explicit grants', () => {
       expect((await checkPermissions([permission], 'vm', 'conn-1:pve1:qemu:101'))?.status).toBe(403)
     })
   }
+})
+
+describe('token checks are confined to the token tenant connections', () => {
+  const VM_A = 'connA:n1:qemu:100'
+  const VM_B = 'connB:n1:qemu:100'
+
+  it('a non-default tenant token with a null perimeter is refused a connection of another tenant', async () => {
+    m.getPrincipal.mockResolvedValue(tokenPrincipal(['vm.start'], null, 't1'))
+    expect(await errorOf(await checkPermission(PERMISSIONS.VM_START, 'vm', VM_B))).toEqual({ status: 403, error: 'Permission denied: vm.start' })
+    expect(await checkPermission(PERMISSIONS.VM_START, 'vm', VM_A)).toBeNull()
+  })
+
+  it('checkPermissions applies the same confinement to every right', async () => {
+    m.getPrincipal.mockResolvedValue(tokenPrincipal(['vm.start', 'vm.view'], null, 't1'))
+    expect(await errorOf(await checkPermissions([PERMISSIONS.VM_VIEW, PERMISSIONS.VM_START], 'vm', VM_B))).toEqual({ status: 403, error: 'Permission denied: vm.view' })
+    expect(await checkPermissions([PERMISSIONS.VM_VIEW, PERMISSIONS.VM_START], 'vm', VM_A)).toBeNull()
+  })
+
+  it('confines raw connection ids too, and keeps the explicit perimeter on top', async () => {
+    m.getPrincipal.mockResolvedValue(tokenPrincipal(['connection.view', 'vm.start'], ['connA', 'connB'], 't1'))
+    expect((await checkPermission(PERMISSIONS.CONNECTION_VIEW, 'connection', 'connB'))?.status).toBe(403)
+    expect(await checkPermission(PERMISSIONS.CONNECTION_VIEW, 'connection', 'connA')).toBeNull()
+    m.getPrincipal.mockResolvedValue(tokenPrincipal(['vm.start'], ['connZ'], 't1'))
+    expect((await checkPermission(PERMISSIONS.VM_START, 'vm', VM_A))?.status).toBe(403)
+  })
+
+  it('global and resource-less checks keep passing without reading the tenant connections', async () => {
+    m.getPrincipal.mockResolvedValue(tokenPrincipal(['vm.start'], null, 't1'))
+    expect(await checkPermission(PERMISSIONS.VM_START)).toBeNull()
+    expect(await checkPermission(PERMISSIONS.VM_START, 'global')).toBeNull()
+    expect(m.getTenantConnectionIds).not.toHaveBeenCalled()
+  })
+
+  it('an unresolvable connection segment stays refused', async () => {
+    m.getPrincipal.mockResolvedValue(tokenPrincipal(['vm.start'], null, 't1'))
+    expect((await checkPermission(PERMISSIONS.VM_START, 'vm', ':n1:qemu:100'))?.status).toBe(403)
+  })
+
+  it('a default tenant token is unchanged: no tenant lookup, any connection', async () => {
+    m.getPrincipal.mockResolvedValue(tokenPrincipal(['vm.start'], null, 'default'))
+    expect(await checkPermission(PERMISSIONS.VM_START, 'vm', VM_B)).toBeNull()
+    expect(m.getTenantConnectionIds).not.toHaveBeenCalled()
+  })
+
+  it('a tenant connection lookup that throws is a 503, never a thrown 500 nor a pass', async () => {
+    m.getPrincipal.mockResolvedValue(tokenPrincipal(['vm.start'], null, 't1'))
+    m.getTenantConnectionIds.mockRejectedValue(new Error('db down: secret'))
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    expect(await errorOf(await checkPermission(PERMISSIONS.VM_START, 'vm', VM_A))).toEqual({ status: 503, error: 'Unable to verify token scope' })
+    expect((await checkPermissions([PERMISSIONS.VM_START, PERMISSIONS.VM_START], 'vm', VM_A))?.status).toBe(503)
+    errSpy.mockRestore()
+  })
+
+  it('a missing right is refused before any tenant lookup', async () => {
+    m.getPrincipal.mockResolvedValue(tokenPrincipal(['vm.view'], null, 't1'))
+    expect((await checkPermission(PERMISSIONS.VM_START, 'vm', VM_A))?.status).toBe(403)
+    expect(m.getTenantConnectionIds).not.toHaveBeenCalled()
+  })
+})
+
+describe('vms:write scope against the permission hierarchy', () => {
+  it('reaches vm.config.hardware through vm.config, never the NIC mac or vlan', async () => {
+    m.getPrincipal.mockResolvedValue(tokenPrincipal(expandScopes(['vms:write'])))
+    expect(await checkPermission(PERMISSIONS.VM_CONFIG_HARDWARE, 'vm', VM)).toBeNull()
+    expect(await errorOf(await checkPermission(PERMISSIONS.VM_CONFIG_NIC_MAC, 'vm', VM))).toEqual({ status: 403, error: 'Permission denied: vm.config.nic.mac' })
+    expect(await errorOf(await checkPermission(PERMISSIONS.VM_CONFIG_NIC_VLAN, 'vm', VM))).toEqual({ status: 403, error: 'Permission denied: vm.config.nic.vlan' })
+  })
+})
+
+describe('holdsBroadPermission', () => {
+  it('a super admin holds everything', async () => {
+    m.prisma.rbacUserRole.findFirst.mockResolvedValue({ id: 'assignment' })
+    expect(await holdsBroadPermission('u1', 't1', 'vm.start', null)).toBe(true)
+    expect(await holdsBroadPermission('u1', 't1', 'vm.start', ['c1', 'c2'])).toBe(true)
+  })
+
+  it('a pool, tag, node, vm or storage grant never counts as broad', async () => {
+    for (const [scopeType, scopeTarget] of [['pool', 'prod'], ['tag', 'web'], ['node', 'c1:n1'], ['vm', 'c1:n1:qemu:100'], ['storage', 'c1:local']]) {
+      grantRole(['vm.start'], scopeType, scopeTarget)
+      expect(await holdsBroadPermission('u1', 't1', 'vm.start', null)).toBe(false)
+      expect(await holdsBroadPermission('u1', 't1', 'vm.start', ['c1'])).toBe(false)
+    }
+  })
+
+  it('a global grant covers every perimeter, through the hierarchy and with the NIC exception', async () => {
+    grantRole(['vm.start', 'vm.config'])
+    expect(await holdsBroadPermission('u1', 't1', 'vm.start', null)).toBe(true)
+    expect(await holdsBroadPermission('u1', 't1', 'vm.start', ['c1', 'c2'])).toBe(true)
+    expect(await holdsBroadPermission('u1', 't1', 'vm.config.hardware', null)).toBe(true)
+    expect(await holdsBroadPermission('u1', 't1', 'vm.config.nic.mac', null)).toBe(false)
+    expect(await holdsBroadPermission('u1', 't1', 'vm.delete', null)).toBe(false)
+    expect(m.prisma.rbacUserRole.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ userId: 'u1', tenantId: 't1' }) }))
+  })
+
+  it('a connection grant covers exactly its connection', async () => {
+    grantRole(['vm.start'], 'connection', 'c1')
+    expect(await holdsBroadPermission('u1', 't1', 'vm.start', ['c1'])).toBe(true)
+    expect(await holdsBroadPermission('u1', 't1', 'vm.start', ['c1', 'c2'])).toBe(false)
+    expect(await holdsBroadPermission('u1', 't1', 'vm.start', null)).toBe(false)
+    expect(await holdsBroadPermission('u1', 't1', 'vm.start', ['c10'])).toBe(false)
+  })
+
+  it('an empty perimeter needs a global grant, never vacuous truth', async () => {
+    grantRole(['vm.start'], 'connection', 'c1')
+    expect(await holdsBroadPermission('u1', 't1', 'vm.start', [])).toBe(false)
+    grantRole(['vm.start'])
+    expect(await holdsBroadPermission('u1', 't1', 'vm.start', [])).toBe(true)
+  })
+
+  it('global and connection grants combine across connections', async () => {
+    m.prisma.rbacUserRole.findMany.mockResolvedValue([])
+    m.prisma.rbacUserPermission.findMany.mockResolvedValue([
+      { scopeType: 'connection', scopeTarget: 'c1', permission: { name: 'vm.start' } },
+      { scopeType: 'connection', scopeTarget: 'c2', permission: { name: 'vm.start' } },
+    ])
+    expect(await holdsBroadPermission('u1', 't1', 'vm.start', ['c1', 'c2'])).toBe(true)
+    expect(await holdsBroadPermission('u1', 't1', 'vm.start', ['c1', 'c3'])).toBe(false)
+  })
 })

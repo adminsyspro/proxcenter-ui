@@ -10,6 +10,7 @@ import { getTenantInfrastructureScope, maskingScope } from "@/lib/tenant/infraSc
 import { getAllowedJobPools, isJobOwnedByTenantPools, validateTenantJobBody, validateTenantJobInfra } from "@/lib/vdc/backupJobs"
 import { denyJobGuestsOutsideBackupRight, jobSelection } from "@/lib/backups/jobGuestScope"
 import { writableStoragesFor } from "@/lib/vdc/scope"
+import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 
 export const runtime = "nodejs"
 
@@ -23,7 +24,7 @@ type RouteContext = {
  * Récupère la liste des backup jobs configurés sur le cluster Proxmox
  * Endpoint Proxmox: GET /cluster/backup
  */
-export async function GET(_req: Request, ctx: RouteContext) {
+async function getHandler(_req: Request, ctx: RouteContext) {
   try {
     const { id } = await ctx.params
 
@@ -269,7 +270,7 @@ return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
  * Crée un nouveau backup job
  * Endpoint Proxmox: POST /cluster/backup
  */
-export async function POST(req: Request, ctx: RouteContext) {
+async function postHandler(req: Request, ctx: RouteContext) {
   try {
     const { id } = await ctx.params
     const body = await req.json()
@@ -466,3 +467,6 @@ export async function POST(req: Request, ctx: RouteContext) {
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const GET = withPublicApiGuard("backup-jobs-list", getHandler)
+export const POST = withPublicApiGuard("backup-job-create", postHandler)

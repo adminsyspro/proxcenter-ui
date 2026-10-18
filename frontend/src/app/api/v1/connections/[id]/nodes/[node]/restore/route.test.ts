@@ -1,5 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
+// The API token guard is covered by routeGuard.test.ts and writeContract.test.ts:
+// pass-through so this file keeps testing the handler, as for a session caller.
+vi.mock("@/lib/api-tokens/routeGuard", () => ({
+  withPublicApiGuard: (_entryId: string, handler: any) => handler,
+}))
+
 import { callRoute, readJson } from "@/__tests__/setup/route-test"
 
 // Hoisted mocks -- referenced from vi.mock factories below, which vitest
@@ -15,6 +21,7 @@ const {
   waitForTaskMock,
   syncIpamForVmConfigMock,
   releaseAllocationsForVmMock,
+  resolveVisibleMock,
   afterCbs,
 } = vi.hoisted(() => ({
   getConnectionByIdMock: vi.fn(),
@@ -26,6 +33,7 @@ const {
   waitForTaskMock: vi.fn(),
   syncIpamForVmConfigMock: vi.fn(),
   releaseAllocationsForVmMock: vi.fn(),
+  resolveVisibleMock: vi.fn(),
   afterCbs: [] as Array<() => Promise<void>>,
 }))
 
@@ -43,15 +51,27 @@ vi.mock("next/server", async (importOriginal) => {
 vi.mock("@/lib/proxmox/client", () => ({ pveFetch: pveFetchMock }))
 vi.mock("@/lib/connections/getConnection", () => ({ getConnectionById: getConnectionByIdMock }))
 vi.mock("@/lib/rbac", () => ({
-  checkPermission: () => checkPermissionMock(),
+  checkPermission: (...a: any[]) => checkPermissionMock(...a),
+  checkPermissions: async (perms: string[], ...rest: any[]) => {
+    for (const p of perms) {
+      const denied = await checkPermissionMock(p, ...rest)
+      if (denied) return denied
+    }
+    return null
+  },
   buildNodeResourceId: (...a: any[]) => a.join(":"),
-  PERMISSIONS: { VM_BACKUP: "vm.backup" },
+  buildVmResourceId: (...a: any[]) => a.join(":"),
+  PERMISSIONS: { VM_BACKUP: "vm.backup", BACKUP_RESTORE: "backup.restore", VM_DELETE: "vm.delete" },
 }))
+
 vi.mock("@/lib/tenant", () => ({
   getCurrentTenantId: () => getCurrentTenantIdMock(),
   DEFAULT_TENANT_ID: "default",
 }))
-vi.mock("@/lib/tenant/infraScope", () => ({
+// Spread the real module: the real checkTenantGuestScope (force path) reads
+// maskingScope from it.
+vi.mock("@/lib/tenant/infraScope", async (io) => ({
+  ...(await io<typeof import("@/lib/tenant/infraScope")>()),
   getTenantInfrastructureScope: (...a: any[]) => getInfraMock(...a),
 }))
 vi.mock("@/lib/vdc/quota", () => ({
@@ -80,6 +100,7 @@ vi.mock("@/lib/db/prisma", () => ({
 // Dynamically imported by the route (`await import("@/lib/audit")`); vi.mock
 // intercepts dynamic imports too.
 vi.mock("@/lib/audit", () => ({ audit: vi.fn().mockResolvedValue("audit-1") }))
+vi.mock("@/lib/api-tokens/scope", () => ({ resolveVisibleConnectionIds: (...a: any[]) => resolveVisibleMock(...a) }))
 
 beforeEach(() => {
   afterCbs.length = 0
@@ -591,5 +612,193 @@ describe("POST restore -- container on the default storage (#965 follow-up)", ()
     expect(res.status).toBe(403)
     expect((await readJson<{ error: string }>(res))?.error).toMatch(/CephStoragePool/)
     expect(restoreCall()).toBeUndefined()
+  })
+})
+
+// Spec 6.4: a restore needs backup.restore, and `force` overwrites (destroys)
+// an existing guest, so it also needs vm.delete on that guest, judged on the
+// node it actually lives on.
+describe("POST restore -- backup.restore and the guest that force overwrites", () => {
+  const RESTORE_UPID = "UPID:pve-1:00000000:00000000:00000000:qmrestore:111:root@pam:"
+
+  /** Grant exactly the listed permissions, deny everything else. */
+  function grantOnly(...perms: string[]) {
+    checkPermissionMock.mockImplementation(async (perm: string) =>
+      perms.includes(perm) ? null : new Response(JSON.stringify({ error: `Permission denied: ${perm}` }), { status: 403 }))
+  }
+
+  /** /cluster/resources answers `guests`; anything else is the restore POST. */
+  function wireGuests(guests: unknown) {
+    pveFetchMock.mockImplementation(async (_conn: unknown, path: string) =>
+      path === "/cluster/resources?type=vm" ? guests : RESTORE_UPID)
+  }
+
+  const restorePosts = () => pveFetchMock.mock.calls.filter(c => c[1] === "/nodes/node1/qemu")
+
+  async function restore(body: Record<string, unknown>) {
+    const { POST } = await import("./route")
+    return callRoute(POST, {
+      method: "POST",
+      params: { id: "pve-1", node: "node1" },
+      body: { vmid: 111, archive: VZDUMP_QEMU_VOLID, type: "qemu", ...body },
+    })
+  }
+
+  it("403 without backup.restore, even with vm.backup", async () => {
+    grantOnly("vm.backup")
+
+    const res = await restore({})
+
+    expect(res.status).toBe(403)
+    expect(checkPermissionMock).toHaveBeenCalledWith("backup.restore", "node", "pve-1:node1")
+    expect(pveFetchMock).not.toHaveBeenCalled()
+  })
+
+  it("restores with vm.backup and backup.restore, without looking the vmid up when force is off", async () => {
+    grantOnly("vm.backup", "backup.restore")
+
+    const res = await restore({})
+
+    expect(res.status).toBe(200)
+    expect(pveFetchMock).toHaveBeenCalledTimes(1)
+    expect(checkPermissionMock).not.toHaveBeenCalledWith("vm.delete", expect.anything(), expect.anything())
+  })
+
+  it("force on an existing vmid: 403 without vm.delete on that guest, nothing restored", async () => {
+    grantOnly("vm.backup", "backup.restore")
+    wireGuests([{ vmid: 111, node: "node2", type: "qemu", pool: "p1" }])
+
+    const res = await restore({ force: true })
+
+    expect(res.status).toBe(403)
+    expect(checkPermissionMock).toHaveBeenCalledWith("vm.delete", "vm", "pve-1:node2:qemu:111")
+    expect(restorePosts()).toHaveLength(0)
+  })
+
+  it("force on an existing vmid: restores with force=1 when vm.delete is held", async () => {
+    grantOnly("vm.backup", "backup.restore", "vm.delete")
+    wireGuests([{ vmid: 110, node: "node1", type: "lxc" }, { vmid: 111, node: "node2", type: "qemu" }])
+
+    const res = await restore({ force: true })
+
+    expect(res.status).toBe(200)
+    expect(restorePosts()).toHaveLength(1)
+    expect(postedParams(restorePosts()[0]).get("force")).toBe("1")
+  })
+
+  it("force on a free vmid: nothing to overwrite, vm.delete is not required", async () => {
+    grantOnly("vm.backup", "backup.restore")
+    wireGuests([{ vmid: 110, node: "node1", type: "qemu" }])
+
+    const res = await restore({ force: true })
+
+    expect(res.status).toBe(200)
+    expect(restorePosts()).toHaveLength(1)
+  })
+
+  it.each([
+    ["the lookup throws", () => pveFetchMock.mockRejectedValue(new Error("ECONNREFUSED"))],
+    ["the lookup is not a list", () => wireGuests({ data: null })],
+  ])("force: 503 and nothing restored when %s", async (_label, wire) => {
+    wire()
+
+    const res = await restore({ force: true })
+
+    expect(res.status).toBe(503)
+    expect(restorePosts()).toHaveLength(0)
+  })
+
+  /** A vDC tenant whose vDC holds node1 and node2 and the pool "pool-1". */
+  function iaasTenant() {
+    getCurrentTenantIdMock.mockResolvedValue("tenant-x")
+    getInfraMock.mockResolvedValue({
+      kind: "iaas",
+      vdcScope: {
+        connectionIds: new Set(["pve-1"]),
+        pbsConnectionIds: new Set<string>(),
+        nodesByConnection: new Map([["pve-1", new Set(["node1", "node2"])]]),
+        storagesByConnection: new Map([["pve-1", new Set(["local"])]]),
+        writableStoragesByConnection: new Map([["pve-1", new Set(["local"])]]),
+        storagePoliciesByConnection: new Map<string, Map<string, any>>(),
+        poolsByConnection: new Map([["pve-1", new Set(["pool-1"])]]),
+        vnetsByConnection: new Map<string, Set<string>>(),
+        sharedBridgesByConnection: new Map<string, Set<string>>(),
+        pbsNamespacesByConnection: new Map<string, Array<{ datastore: string; namespace: string }>>(),
+        pbsNamespacesByPveConnection: new Map<string, Set<string>>(),
+      },
+    })
+    resolveVdcForTenantMock.mockResolvedValue({ vdcId: "vdc-1", poolName: "pool-1", quota: null })
+  }
+
+  // Every caller of a vDC tenant (session or token) is judged on the guest
+  // it would overwrite, not only on the node it restores to.
+  it("iaas session with force on a guest outside its vDC: 403, nothing restored", async () => {
+    iaasTenant()
+    wireGuests([{ vmid: 111, node: "node2", type: "qemu", pool: "other-tenant-pool" }])
+
+    const res = await restore({ force: true })
+
+    expect(res.status).toBe(403)
+    expect((await readJson<{ error: string }>(res))?.error).toMatch(/outside your vDC/i)
+    expect(restorePosts()).toHaveLength(0)
+  })
+
+  it("iaas session with force on its own vDC guest goes through", async () => {
+    iaasTenant()
+    wireGuests([{ vmid: 111, node: "node2", type: "qemu", pool: "pool-1" }])
+
+    const res = await restore({ force: true })
+
+    expect(res.status).toBe(200)
+    expect(restorePosts()).toHaveLength(1)
+  })
+
+  it("provider with force on an existing guest: the vDC guest check is a no-op", async () => {
+    wireGuests([{ vmid: 111, node: "node2", type: "qemu" }])
+
+    const res = await restore({ force: true })
+
+    expect(res.status).toBe(200)
+    // One lookup for the vm.delete target; the vDC check makes none for a provider.
+    expect(pveFetchMock.mock.calls.filter(c => c[1] === "/cluster/resources?type=vm")).toHaveLength(1)
+  })
+})
+
+describe("POST restore -- API token and the nested PBS source", () => {
+  const token = { kind: "token", tokenId: "tok-1", tenantId: "default", connectionIds: ["pve-1", "pbs-in"] }
+  const pbsBody = (pbsId: string) => ({
+    vmid: 111, type: "qemu", pbsBackup: { pbsId, datastore: "ds1", backupPath: "backup/vm/111/2026-08-11T15:51:33Z" },
+  })
+  const call = async (body: object, principal?: object) => {
+    const { POST } = await import("./route")
+    const req = new Request("http://test.local/_", { method: "POST", body: JSON.stringify(body), headers: { "content-type": "application/json" } })
+    return POST(req, { params: Promise.resolve({ id: "pve-1", node: "node1" }), ...(principal ? { principal } : {}) } as any)
+  }
+
+  beforeEach(async () => {
+    resolveVisibleMock.mockReset().mockResolvedValue(new Set(["pve-1", "pbs-in"]))
+    const { prisma } = await import("@/lib/db/prisma")
+    vi.mocked(prisma.connection.findUnique).mockReset().mockResolvedValue(null as any)
+  })
+
+  it("refuses a pbsId outside the token perimeter before touching the PBS connection", async () => {
+    const res = await call(pbsBody("pbs-out"), token)
+
+    expect(res.status).toBe(403)
+    expect(await readJson(res)).toEqual({ error: "Connection not in token scope", connection: "pbs-out" })
+    expect(resolveVisibleMock).toHaveBeenCalledWith(token)
+    const { prisma } = await import("@/lib/db/prisma")
+    expect(prisma.connection.findUnique).not.toHaveBeenCalled()
+    expect(pveFetchMock).not.toHaveBeenCalled()
+  })
+
+  it("lets a pbsId inside the perimeter through, and never consults it for a session", async () => {
+    const { prisma } = await import("@/lib/db/prisma")
+    expect((await call(pbsBody("pbs-in"), token)).status).toBe(404)
+    expect(prisma.connection.findUnique).toHaveBeenCalledWith(expect.objectContaining({ where: { id: "pbs-in" } }))
+
+    resolveVisibleMock.mockClear()
+    expect((await call(pbsBody("pbs-out"))).status).toBe(404)
+    expect(resolveVisibleMock).not.toHaveBeenCalled()
   })
 })

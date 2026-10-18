@@ -13,15 +13,28 @@ const h = vi.hoisted(() => ({
   getSubnetUsage: vi.fn(async () => ({ used: 0, usable: 0 })),
 }))
 
-vi.mock("@/lib/rbac", () => ({ checkPermission: h.checkPermission, PERMISSIONS: {} }))
-vi.mock("next-auth", () => ({ getServerSession: vi.fn(async () => ({ user: { id: "u1" } })) }))
-vi.mock("@/lib/auth/config", () => ({ authOptions: {} }))
+// The API token guard is covered by routeGuard.test.ts and vnetTokenScope.test.ts:
+// pass-through so this file keeps testing the handler, as for a session caller.
+vi.mock("@/lib/api-tokens/routeGuard", () => ({
+  withPublicApiGuard: (_entryId: string, handler: any) => handler,
+}))
+vi.mock("@/lib/rbac", () => ({
+  checkPermission: h.checkPermission,
+  PERMISSIONS: { SDN_VNET_VIEW: "sdn.vnet.view", SDN_VNET_CREATE: "sdn.vnet.create", SDN_VNET_EDIT: "sdn.vnet.edit", SDN_VNET_DELETE: "sdn.vnet.delete" },
+}))
+vi.mock("@/lib/auth/principal", () => ({
+  getPrincipal: vi.fn(async () => ({ ok: true, principal: { kind: "session", userId: "u1", tenantId: "tenant-a", connectionIds: null } })),
+}))
 vi.mock("@/lib/tenant", () => ({ getCurrentTenantId: h.getCurrentTenantId }))
 vi.mock("@/lib/vdc/vnets", () => ({
   createVnetForTenant: h.createVnetForTenant,
   listVnetsForTenant: h.listVnetsForTenant,
 }))
 vi.mock("@/lib/vdc/ipam", () => ({ getSubnetUsage: h.getSubnetUsage }))
+// The tenant check of vnetPermission.ts: the vDC belongs to the caller's tenant.
+vi.mock("@/lib/db/prisma", () => ({
+  prisma: { vdc: { findUnique: async () => ({ tenantId: "tenant-a", connectionId: "c1" }) } },
+}))
 
 import { POST } from "./route"
 import { VniError } from "@/lib/vdc/vniPolicy"

@@ -5,12 +5,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getOrchestratorClient } from '@/lib/orchestrator/client'
 import { verifyConnectionOwnership } from '@/lib/tenant'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
+import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
 import { orchestratorOrPve } from '@/lib/firewall/withPveFallback'
 import * as pveDirect from '@/lib/firewall/pveDirect'
 import { getConnectionById } from '@/lib/connections/getConnection'
 
 // POST /api/v1/firewall/cluster/[connectionId]/rules - Add cluster rule
-export async function POST(
+async function postHandler(
   request: NextRequest,
   { params }: { params: Promise<{ connectionId: string }> }
 ) {
@@ -41,3 +42,5 @@ return NextResponse.json(
     )
   }
 }
+
+export const POST = withPublicApiGuard("fw-cluster-rule-create", postHandler)

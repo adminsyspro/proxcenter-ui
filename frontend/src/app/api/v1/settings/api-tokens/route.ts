@@ -7,12 +7,16 @@ import { getCurrentTenantId, userHasAccessToTenant } from "@/lib/tenant"
 import { requireFeature } from "@/lib/auth/requireEnterprise"
 import { Features } from "@/lib/license/features"
 import { generateApiToken } from "@/lib/api-tokens/tokenCrypto"
-import { ALL_SCOPE_IDS } from "@/lib/api-tokens/scopes"
+import { ALL_SCOPE_IDS, isWriteScope } from "@/lib/api-tokens/scopes"
+import { firstUngrantableScope } from "@/lib/api-tokens/grantable"
 import { audit } from "@/lib/audit"
 
 import { requireApiTokenAdmin, TOKEN_VIEW_SELECT } from "./_shared"
 
 export const runtime = "nodejs"
+
+const DEFAULT_RATE_LIMIT_PER_MIN = 600
+const DEFAULT_WRITE_RATE_LIMIT_PER_MIN = 60
 
 // Management stays readable after option expiry (control_plane_ha
 // precedent, spec D6): GET is NOT license-gated, only POST (creation) and
@@ -93,6 +97,23 @@ export async function POST(req: Request) {
     }
   }
 
+  if (!ctx.isAdmin) {
+    // Fail closed: without a user id nothing can be proven held.
+    let ungrantable: string | null | undefined
+    try {
+      ungrantable = ctx.userId
+        ? await firstUngrantableScope(ctx.userId, tenantId, scopes as string[], connectionIds)
+        : (scopes as string[]).find(isWriteScope)
+    } catch (e: any) {
+      // Fail closed; the lookup error stays in the logs.
+      console.error("[api-tokens] held-rights lookup failed:", e?.message ?? e)
+      return NextResponse.json({ error: "Unable to verify the scopes you can grant" }, { status: 503 })
+    }
+    if (ungrantable) {
+      return NextResponse.json({ error: "You cannot grant a scope you do not hold", scope: ungrantable }, { status: 403 })
+    }
+  }
+
   let expiresAt: Date | null = null
   if (body?.expiresInDays !== undefined && body?.expiresInDays !== null) {
     const days = Number(body.expiresInDays)
@@ -107,7 +128,14 @@ export async function POST(req: Request) {
     Number.isFinite(Number(body.rateLimitPerMin)) &&
     Number(body.rateLimitPerMin) > 0
       ? Math.floor(Number(body.rateLimitPerMin))
-      : 600
+      : DEFAULT_RATE_LIMIT_PER_MIN
+
+  const writeRateLimitPerMin =
+    body?.writeRateLimitPerMin !== undefined &&
+    Number.isFinite(Number(body.writeRateLimitPerMin)) &&
+    Number(body.writeRateLimitPerMin) > 0
+      ? Math.floor(Number(body.writeRateLimitPerMin))
+      : DEFAULT_WRITE_RATE_LIMIT_PER_MIN
 
   const generated = generateApiToken()
 
@@ -138,6 +166,7 @@ export async function POST(req: Request) {
           connectionIds,
           expiresAt,
           rateLimitPerMin,
+          writeRateLimitPerMin,
           createdByUserId: ctx.userId ?? null,
           createdByEmail: creator?.email ?? null,
         },
@@ -151,7 +180,7 @@ export async function POST(req: Request) {
           resourceType: "api_token",
           resourceId: created.id,
           resourceName: name,
-          details: { tenantId, scopes, connectionIds, expiresAt: expiresAt?.toISOString() ?? null },
+          details: { tenantId, scopes, connectionIds, expiresAt: expiresAt?.toISOString() ?? null, writeRateLimitPerMin },
         },
         tx,
       )

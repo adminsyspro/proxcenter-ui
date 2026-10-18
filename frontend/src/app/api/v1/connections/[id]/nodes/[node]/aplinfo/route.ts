@@ -4,12 +4,13 @@ import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { buildStorageResourceId, checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { audit } from "@/lib/audit"
+import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 
 export const runtime = "nodejs"
 
 // GET /api/v1/connections/{id}/nodes/{node}/aplinfo
 // List available CT templates from the online repository
-export async function GET(
+async function getHandler(
   _req: Request,
   ctx: { params: Promise<{ id: string; node: string }> }
 ) {
@@ -36,7 +37,7 @@ export async function GET(
 // POST /api/v1/connections/{id}/nodes/{node}/aplinfo
 // Download a CT template to a storage
 // Body: { storage: string, template: string }
-export async function POST(
+async function postHandler(
   req: Request,
   ctx: { params: Promise<{ id: string; node: string }> }
 ) {
@@ -82,3 +83,6 @@ export async function POST(
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const GET = withPublicApiGuard("aplinfo-list", getHandler)
+export const POST = withPublicApiGuard("aplinfo-download", postHandler)

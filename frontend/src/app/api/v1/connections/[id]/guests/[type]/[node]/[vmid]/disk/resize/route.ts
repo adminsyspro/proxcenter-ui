@@ -11,6 +11,7 @@ import { getTenantInfrastructureScope } from '@/lib/tenant/infraScope'
 import { writableStoragesFor } from '@/lib/vdc/scope'
 import { resolveVdcForTenant, checkVdcQuota } from '@/lib/vdc/quota'
 import { parseDriveString } from '@/lib/vdc/drives'
+import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
 
 export const runtime = "nodejs"
 
@@ -27,7 +28,7 @@ function parseSizeDeltaMb(size: string): number {
 
 // POST /api/v1/connections/{id}/guests/{type}/{node}/{vmid}/disk/resize
 // Redimensionne un disque (agrandissement uniquement)
-export async function POST(
+async function handler(
   req: Request,
   ctx: { params: Promise<{ id: string; type: string; node: string; vmid: string }> }
 ) {
@@ -158,3 +159,5 @@ export async function POST(
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const POST = withPublicApiGuard("vm-disk-resize", handler)

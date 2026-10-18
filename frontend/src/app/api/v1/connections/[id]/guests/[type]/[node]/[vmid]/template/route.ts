@@ -4,12 +4,13 @@ import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
 import { invalidateInventoryCache } from "@/lib/cache/inventoryCache"
+import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 
 export const runtime = "nodejs"
 
 // POST /api/v1/connections/{id}/guests/{type}/{node}/{vmid}/template
 // Convert a VM to a template (irreversible, VM must be stopped)
-export async function POST(
+async function handler(
   req: Request,
   ctx: { params: Promise<{ id: string; type: string; node: string; vmid: string }> | { id: string; type: string; node: string; vmid: string } }
 ) {
@@ -65,3 +66,5 @@ export async function POST(
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const POST = withPublicApiGuard("vm-template", handler)

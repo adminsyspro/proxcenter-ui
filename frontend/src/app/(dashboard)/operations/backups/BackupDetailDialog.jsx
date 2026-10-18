@@ -48,6 +48,8 @@ function Field({ label, children }) {
 export default function BackupDetailDialog({
   open, onClose, backup, points, onSelectPoint, tab, onTabChange, showExplorer, explorer, vdc, typeChip,
   onRestore, onVerify, verifying, onDelete, deleting, deleteAwaitingConfirm, timeAgo, t, locale,
+  // Each action shows only when the caller holds the right the route checks.
+  canDelete = true, canVerify = true, canRestore = true,
 }) {
   const theme = useTheme()
   const fullScreen = useMediaQuery(theme.breakpoints.down('md'))
@@ -208,23 +210,29 @@ export default function BackupDetailDialog({
 
       <Divider />
       <DialogActions sx={{ px: 3, py: 1.5, flexWrap: 'wrap', gap: 1 }}>
-        <Button size='small' variant='outlined' color={deleteAwaitingConfirm ? 'warning' : 'error'} onClick={onDelete}
-          disabled={deleting || backup.protected}
-          startIcon={deleteIcon}>
-          {deleteAwaitingConfirm ? t('backups.deleteConfirmButton') : t('common.delete')}
-        </Button>
-        {backup.protected && (
+        {canDelete && (
+          <Button size='small' variant='outlined' color={deleteAwaitingConfirm ? 'warning' : 'error'} onClick={onDelete}
+            disabled={deleting || backup.protected}
+            startIcon={deleteIcon}>
+            {deleteAwaitingConfirm ? t('backups.deleteConfirmButton') : t('common.delete')}
+          </Button>
+        )}
+        {canDelete && backup.protected && (
           <Typography variant='caption' sx={{ opacity: 0.7 }}>{t('backups.deleteProtectedHint')}</Typography>
         )}
         <Box sx={{ flex: 1 }} />
-        <Button size='small' variant='outlined' onClick={onVerify} disabled={verifying}
-          startIcon={verifying ? <CircularProgress size={14} /> : <i className='ri-shield-check-line' />}>
-          {t('backups.verifyAction')}
-        </Button>
-        <Button size='small' variant='contained' onClick={onRestore} disabled={backup.backupType === 'host'}
-          startIcon={<i className='ri-history-line' />}>
-          {t('audit.actions.restore')}
-        </Button>
+        {canVerify && (
+          <Button size='small' variant='outlined' onClick={onVerify} disabled={verifying}
+            startIcon={verifying ? <CircularProgress size={14} /> : <i className='ri-shield-check-line' />}>
+            {t('backups.verifyAction')}
+          </Button>
+        )}
+        {canRestore && (
+          <Button size='small' variant='contained' onClick={onRestore} disabled={backup.backupType === 'host'}
+            startIcon={<i className='ri-history-line' />}>
+            {t('audit.actions.restore')}
+          </Button>
+        )}
       </DialogActions>
     </Dialog>
   )

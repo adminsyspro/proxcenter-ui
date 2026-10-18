@@ -870,6 +870,7 @@
     "pbsRestoreTagsUnverified": "el invitado se restauró pero no se pudieron comprobar sus etiquetas: {error}",
     "pbsRestoreBandwidth": "Límite de ancho de banda (KiB/s)",
     "pbsRestoreTargetExists": "La VM {vmid} existe y será sobrescrita",
+    "pbsRestoreTargetExistsNoOverwrite": "La VM {vmid} existe y no tiene permiso para sobrescribirla: elija un VMID libre",
     "pbsRestoreIpamNote": "La asignación IP se reconcilia automáticamente cuando finaliza la restauración.",
     "pbsRestoreAsNew": "Restaurar como una VM nueva (asigna automáticamente un VMID libre y MACs únicas)",
     "pbsRestoreOverwriteConfirm": "Esto reemplazará la VM {vmid} con el contenido del backup. Haz clic de nuevo para confirmar.",
@@ -3508,15 +3509,16 @@
     "apiTokens": {
       "tabLabel": "API",
       "title": "Tokens de API",
-      "subtitle": "Cuentas de servicio de solo lectura para herramientas de monitorización externas (Prometheus, Zabbix, PRTG, CI).",
+      "subtitle": "Cuentas de servicio para herramientas externas: monitorización (Prometheus, Zabbix, PRTG) y automatización (CI, scripts). Cada scope se concede de forma explícita.",
       "newToken": "Nuevo token",
       "referenceButton": "Referencia de la API",
       "reference": {
         "title": "Referencia de la API",
-        "subtitle": "Documentación interactiva de la API pública de solo lectura",
+        "subtitle": "Documentación interactiva de la API pública",
         "hint": "Las solicitudes enviadas desde esta página se dirigen a esta instancia de ProxCenter. Abra el panel Autenticación y pegue un token pxc_ para probar los endpoints con sus propios datos.",
         "backToTokens": "Volver a los tokens de API",
-        "thisInstance": "Esta instancia de ProxCenter"
+        "thisInstance": "Esta instancia de ProxCenter",
+        "writeWarning": "Las operaciones de escritura actúan sobre su infraestructura real. \"Try it\" envía peticiones reales con el token que pegue: un POST, PUT o DELETE enviado desde esta página inicia, modifica o elimina recursos reales."
       },
       "columns": {
         "prefix": "Prefijo",
@@ -3547,12 +3549,49 @@
         "expirationCustom": "Personalizada",
         "customDays": "Días",
         "scopes": "Ámbitos",
+        "access": {
+          "none": "Ninguno",
+          "read": "Lectura",
+          "write": "Escritura"
+        },
+        "domains": {
+          "vms": "VM y contenedores",
+          "backups": "Copias de seguridad",
+          "storage": "Almacenamiento",
+          "nodes": "Nodos y clúster",
+          "automation": "Automatización",
+          "alerts": "Alertas",
+          "reports": "Informes"
+        },
+        "subScopes": {
+          "vmsPower": "Encendido",
+          "vmsWrite": "Edición",
+          "vmsSnapshot": "Snapshots",
+          "vmsMigrate": "Migración",
+          "vmsDelete": "Eliminación",
+          "backupsWrite": "Trabajos de copia",
+          "backupsRestore": "Restauración",
+          "backupsDelete": "Eliminación",
+          "haWrite": "HA",
+          "poolsWrite": "Pools",
+          "networkWrite": "Red",
+          "firewallWrite": "Firewall"
+        },
+        "subScopesLabel": "Scopes de escritura: {domain}",
+        "readOnlyDomain": "Dominio de solo lectura",
+        "domainNotGrantable": "Sus propios permisos no permiten conceder ningún scope de escritura de este dominio para el tenant y las conexiones seleccionados.",
         "tenant": "Tenant",
         "connections": "Conexiones",
         "connectionsAll": "Todas las conexiones del tenant",
         "create": "Crear",
         "cancel": "Cancelar",
-        "confirm": "Confirmar"
+        "confirm": "Confirmar",
+        "writeWarning": "Los scopes de escritura permiten al token crear, modificar y eliminar recursos reales.",
+        "scopeNotGrantable": "Sus propios permisos no permiten conceder este scope para el tenant y las conexiones seleccionados.",
+        "scopesLoading": "Comprobando qué scopes de escritura puede conceder...",
+        "grantableError": "No se pudo comprobar qué scopes de escritura puede conceder. Cierre y vuelva a abrir el diálogo para reintentarlo.",
+        "writeRateLimit": "Escrituras por minuto",
+        "writeRateLimitHelp": "Peticiones de escritura que este token puede enviar por minuto, contadas aparte de las lecturas."
       },
       "reveal": {
         "title": "Copia tu token ahora",
@@ -3560,7 +3599,8 @@
         "copy": "Copiar",
         "copied": "Copiado",
         "done": "Listo"
-      }
+      },
+      "deletedToken": "Token eliminado"
     },
     "displayMode": "Modo de visualización",
     "light": "Claro",

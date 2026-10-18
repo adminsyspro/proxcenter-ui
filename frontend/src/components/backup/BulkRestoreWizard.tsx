@@ -53,6 +53,7 @@ import { useTheme } from '@mui/material/styles'
 import { DataGrid, type GridColDef, type GridRowSelectionModel } from '@mui/x-data-grid'
 
 import AppDialogTitle from '@/components/ui/AppDialogTitle'
+import { useRBAC } from '@/contexts/RBACContext'
 import RestoreTagsSwitch from '@/components/backup/RestoreTagsSwitch'
 import { checkRestoredTagsOmitted, restoredTagsCheckMessage } from '@/lib/backups/restoreTags'
 import StorageTypeIcon from '@/components/storage/StorageTypeIcon'
@@ -190,6 +191,9 @@ export default function BulkRestoreWizard({
   const [rangeStart, setRangeStart] = useState('9000')
   const [rangeEnd, setRangeEnd] = useState('9099')
   const [overwrite, setOverwrite] = useState(false)
+  // Overwriting an existing guest destroys it: the route checks vm.delete on it.
+  const rbac = useRBAC()
+  const canOverwrite = !rbac.loading && rbac.hasPermission('vm.delete')
   const [overwriteConfirmed, setOverwriteConfirmed] = useState(false)
   const [startAfter, setStartAfter] = useState(false)
   const [uniqueMac, setUniqueMac] = useState(true)
@@ -834,7 +838,7 @@ export default function BulkRestoreWizard({
                 onChange={e => setRangeEnd(e.target.value.replace(/[^0-9]/g, ''))}
               />
             </>
-          ) : (
+          ) : canOverwrite && (
             <FormControlLabel
               sx={{ gridColumn: { sm: 'span 2' }, mt: 0.5 }}
               control={<Switch checked={overwrite} onChange={(_, v) => { setOverwrite(v); setOverwriteConfirmed(false) }} />}

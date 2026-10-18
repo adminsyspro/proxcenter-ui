@@ -870,6 +870,7 @@
     "pbsRestoreTagsUnverified": "l'invité a été restauré mais ses tags n'ont pas pu être vérifiés : {error}",
     "pbsRestoreBandwidth": "Limite de bande passante (Kio/s)",
     "pbsRestoreTargetExists": "La VM {vmid} existe et sera écrasée",
+    "pbsRestoreTargetExistsNoOverwrite": "La VM {vmid} existe et vous n'avez pas le droit de l'écraser : choisissez un VMID libre",
     "pbsRestoreIpamNote": "L'allocation IP est réconciliée automatiquement à la fin de la restauration.",
     "pbsRestoreAsNew": "Restaurer en tant que nouvelle VM (alloue un VMID + des MAC uniques)",
     "pbsRestoreOverwriteConfirm": "Cette opération va remplacer la VM {vmid} par le contenu du backup. Cliquez à nouveau pour confirmer.",
@@ -3508,15 +3509,16 @@
     "apiTokens": {
       "tabLabel": "API",
       "title": "Jetons API",
-      "subtitle": "Comptes de service en lecture seule pour les outils de supervision externes (Prometheus, Zabbix, PRTG, CI).",
+      "subtitle": "Comptes de service pour les outils externes : supervision (Prometheus, Zabbix, PRTG) et automatisation (CI, scripts). Chaque scope est accordé explicitement.",
       "newToken": "Nouveau jeton",
       "referenceButton": "Référence de l'API",
       "reference": {
         "title": "Référence de l'API",
-        "subtitle": "Documentation interactive de l'API publique en lecture seule",
+        "subtitle": "Documentation interactive de l'API publique",
         "hint": "Les requêtes envoyées depuis cette page sont adressées à cette instance ProxCenter. Ouvrez le panneau Authentification et collez un jeton pxc_ pour tester les points de terminaison avec vos propres données.",
         "backToTokens": "Retour aux jetons API",
-        "thisInstance": "Cette instance ProxCenter"
+        "thisInstance": "Cette instance ProxCenter",
+        "writeWarning": "Les opérations d'écriture agissent sur votre infrastructure réelle. « Try it » envoie de vraies requêtes avec le jeton que vous collez : un POST, PUT ou DELETE envoyé depuis cette page démarre, modifie ou supprime de vraies ressources."
       },
       "columns": {
         "prefix": "Préfixe",
@@ -3547,12 +3549,49 @@
         "expirationCustom": "Personnalisée",
         "customDays": "Jours",
         "scopes": "Périmètres",
+        "access": {
+          "none": "Aucun",
+          "read": "Lecture",
+          "write": "Écriture"
+        },
+        "domains": {
+          "vms": "VM et conteneurs",
+          "backups": "Sauvegardes",
+          "storage": "Stockage",
+          "nodes": "Nœuds et cluster",
+          "automation": "Automatisation",
+          "alerts": "Alertes",
+          "reports": "Rapports"
+        },
+        "subScopes": {
+          "vmsPower": "Alimentation",
+          "vmsWrite": "Modification",
+          "vmsSnapshot": "Snapshots",
+          "vmsMigrate": "Migration",
+          "vmsDelete": "Suppression",
+          "backupsWrite": "Tâches de sauvegarde",
+          "backupsRestore": "Restauration",
+          "backupsDelete": "Suppression",
+          "haWrite": "HA",
+          "poolsWrite": "Pools",
+          "networkWrite": "Réseau",
+          "firewallWrite": "Pare-feu"
+        },
+        "subScopesLabel": "Scopes d'écriture : {domain}",
+        "readOnlyDomain": "Domaine en lecture seule",
+        "domainNotGrantable": "Vos propres permissions ne permettent d'accorder aucun scope d'écriture de ce domaine pour le tenant et les connexions sélectionnés.",
         "tenant": "Tenant",
         "connections": "Connexions",
         "connectionsAll": "Toutes les connexions du tenant",
         "create": "Créer",
         "cancel": "Annuler",
-        "confirm": "Confirmer"
+        "confirm": "Confirmer",
+        "writeWarning": "Les scopes d'écriture permettent de créer, modifier et supprimer des ressources réelles.",
+        "scopeNotGrantable": "Vos propres permissions ne permettent pas d'accorder ce scope pour le tenant et les connexions sélectionnés.",
+        "scopesLoading": "Vérification des scopes d'écriture que vous pouvez accorder...",
+        "grantableError": "Impossible de vérifier les scopes d'écriture que vous pouvez accorder. Fermez puis rouvrez la fenêtre pour réessayer.",
+        "writeRateLimit": "Écritures par minute",
+        "writeRateLimitHelp": "Requêtes d'écriture autorisées par minute pour ce jeton, comptées à part des lectures."
       },
       "reveal": {
         "title": "Copiez votre jeton maintenant",
@@ -3560,7 +3599,8 @@
         "copy": "Copier",
         "copied": "Copié",
         "done": "Terminé"
-      }
+      },
+      "deletedToken": "Jeton supprimé"
     },
     "displayMode": "Mode d'affichage",
     "light": "Clair",

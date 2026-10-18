@@ -2,7 +2,7 @@ import { NextResponse, after } from "next/server"
 
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
-import { checkPermission, buildNodeResourceId, PERMISSIONS } from "@/lib/rbac"
+import { checkPermission, checkPermissions, buildNodeResourceId, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
 import { syncIpamForVmConfig } from "@/lib/vdc/ipamSync"
 import { releaseAllocationsForVm } from "@/lib/vdc/ipam"
 import { waitForTask } from "@/lib/proxmox/tasks"
@@ -16,20 +16,24 @@ import { type DriveQosCaps } from "@/lib/vdc/drives"
 import { restampGuestDrives } from "@/lib/vdc/driveGuard"
 import { clearRestoredTags } from "@/lib/backups/restoreTagsCleanup"
 import { resolveCtRestoreStorage } from "@/lib/backups/ctRestoreStorage"
+import { checkTenantGuestScope } from "@/lib/vdc/guestScope"
+import type { Principal } from "@/lib/auth/principal"
+import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
+import { resolveVisibleConnectionIds } from "@/lib/api-tokens/scope"
 
 export const runtime = "nodejs"
 
 // POST /api/v1/connections/{id}/nodes/{node}/restore
 // Restore a VM or CT from a backup (vzdump/PBS)
-export async function POST(
+async function handler(
   req: Request,
-  ctx: { params: Promise<{ id: string; node: string }> }
+  ctx: { params: Promise<{ id: string; node: string }>; principal?: Principal }
 ) {
   try {
     const { id, node } = await ctx.params
 
     const resourceId = buildNodeResourceId(id, node)
-    const denied = await checkPermission(PERMISSIONS.VM_BACKUP, "node", resourceId)
+    const denied = await checkPermissions([PERMISSIONS.VM_BACKUP, PERMISSIONS.BACKUP_RESTORE], "node", resourceId)
     if (denied) return denied
 
     const body = await req.json()
@@ -57,8 +61,8 @@ export async function POST(
 
     // Tenant scoping. Resolved up-front so every later branch (pbsBackup
     // path, direct-archive path, target storage) goes through the same
-    // allow-list. RBAC was already checked above (BACKUP at node-resource
-    // granularity); this layer adds the vDC contract.
+    // allow-list. RBAC was already checked above (vm.backup + backup.restore
+    // at node-resource granularity); this layer adds the vDC contract.
     const tenantId = await getCurrentTenantId()
     // Object route (design ruling §5): full union — a deep link to another
     // vDC's resource must keep working in any view context.
@@ -116,6 +120,35 @@ export async function POST(
 
     const conn = await getConnectionById(id)
 
+    // `force` overwrites the guest already holding this vmid, which destroys
+    // it: the caller must be allowed to delete that guest, judged on the node
+    // it actually lives on. Fail closed when its existence cannot be checked.
+    if (force) {
+      let guests: unknown
+      try {
+        guests = await pveFetch<unknown>(conn, '/cluster/resources?type=vm')
+      } catch {
+        guests = null
+      }
+      if (!Array.isArray(guests)) {
+        return NextResponse.json({ error: 'Unable to check the guest the restore would overwrite' }, { status: 503 })
+      }
+      const existing = guests.find(row => String(row?.vmid) === String(vmid))
+      if (existing) {
+        const existingType = String(existing.type)
+        const existingNode = String(existing.node)
+        const deleteDenied = await checkPermission(
+          PERMISSIONS.VM_DELETE, "vm", buildVmResourceId(id, existingNode, existingType, String(vmid)),
+        )
+        if (deleteDenied) return deleteDenied
+        // A vDC tenant stays inside its own vDC: a vmid of another tenant on
+        // the same provider connection is not its to overwrite. No-op for
+        // the provider and MSP tenants.
+        const scopeDenied = await checkTenantGuestScope(tenantId, conn, id, existingType, existingNode, String(vmid))
+        if (scopeDenied) return scopeDenied
+      }
+    }
+
     // Resolve the PVE-side volid the way qmrestore expects it. Two paths:
     //
     // 1. The caller already knows the volid (e.g. /storage/.../content
@@ -135,6 +168,12 @@ export async function POST(
       }
       if (!pbsId || !datastore || !backupPath) {
         return NextResponse.json({ error: "pbsBackup requires pbsId, datastore, and backupPath" }, { status: 400 })
+      }
+      // The PBS source sits in a nested body field the API token guard does
+      // not read: an API token reads backups of its perimeter only.
+      const principal = ctx.principal
+      if (principal?.kind === "token" && !(await resolveVisibleConnectionIds(principal)).has(pbsId)) {
+        return NextResponse.json({ error: "Connection not in token scope", connection: pbsId }, { status: 403 })
       }
       // Tenant guard on the PBS source: assertVdcPbsAccess returns admin
       // for the provider, the binding tuples for an authorised tenant,
@@ -469,3 +508,5 @@ export async function POST(
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const POST = withPublicApiGuard("vm-restore", handler)

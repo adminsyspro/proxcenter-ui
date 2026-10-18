@@ -12,12 +12,13 @@ import { sensitiveNicPermissions, hasNicMutation, hasNicRevert, NicConfigError }
 import { classifyConfigBody } from "@/lib/rbac/configClassifier"
 import { isOpticalDrive } from "@/lib/proxmox/cdrom"
 import { getCurrentTenantId } from "@/lib/tenant"
-import { getTenantInfrastructureScope, maskingScope } from "@/lib/tenant/infraScope"
 import { resolveVdcForTenant, checkVdcQuota } from "@/lib/vdc/quota"
+import { checkTenantGuestScope } from "@/lib/vdc/guestScope"
 import { validateCpuAgainstPolicy, parseCpuProperty, loadCpuCapabilitiesIfNeeded } from "@/lib/vdc/computePolicy"
 import { enforceTenantDrives, meterImportRefs, DriveScopeError } from "@/lib/vdc/driveGuard"
 import { getAllowedNetworksForTenant, validateNetAgainstScope } from "@/lib/vdc/vnets"
 import { syncIpamForVmConfig, IpamHintUnavailableError, IpamExhaustedError } from "@/lib/vdc/ipamSync"
+import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 
 export const runtime = "nodejs"
 
@@ -99,44 +100,8 @@ function isForwardedConfigKey(key: string, type: 'qemu' | 'lxc'): boolean {
     key === 'rng0'                 // VirtIO RNG
 }
 
-/** VM grants remain inside the tenant's live vDC node/pool boundary. */
-async function checkTenantGuestScope(
-  tenantId: string,
-  conn: Parameters<typeof pveFetch>[0],
-  id: string,
-  type: string,
-  node: string,
-  vmid: string,
-  allowMovedNode = false,
-): Promise<NextResponse | null> {
-  const infra = await getTenantInfrastructureScope(tenantId, { ignoreVdcContext: true })
-  if (infra.kind !== 'iaas') return null
-  const scope = maskingScope(infra)
-  const nodes = scope?.nodesByConnection.get(id)
-  const pools = scope?.poolsByConnection.get(id)
-  if (!scope?.connectionIds.has(id) || !nodes?.has(node) || !pools?.size) {
-    return NextResponse.json({ error: 'Guest outside your vDC scope' }, { status: 403 })
-  }
-
-  let resources: unknown
-  try {
-    resources = await pveFetch<unknown>(conn, '/cluster/resources?type=vm')
-  } catch {
-    return NextResponse.json({ error: 'Unable to verify guest vDC scope' }, { status: 503 })
-  }
-  if (!Array.isArray(resources)) {
-    return NextResponse.json({ error: 'Unable to verify guest vDC scope' }, { status: 503 })
-  }
-  const guest = resources.find(row => row?.type === type && String(row.vmid) === vmid)
-  if (!guest || !nodes.has(guest.node) || !guest.pool || !pools.has(guest.pool) ||
-    (!allowMovedNode && guest.node !== node)) {
-    return NextResponse.json({ error: 'Guest outside your vDC scope' }, { status: 403 })
-  }
-  return null
-}
-
 // GET: Récupérer la configuration de la VM
-export async function GET(
+async function getHandler(
   req: Request,
   ctx: { params: Promise<{ id: string; type: string; node: string; vmid: string }> }
 ) {
@@ -221,7 +186,7 @@ export async function GET(
 }
 
 // PUT: Mettre à jour la configuration de la VM
-export async function PUT(
+async function putHandler(
   req: Request,
   ctx: { params: Promise<{ id: string; type: string; node: string; vmid: string }> }
 ) {
@@ -541,3 +506,5 @@ return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
 
+export const GET = withPublicApiGuard("vm-config-get", getHandler)
+export const PUT = withPublicApiGuard("vm-config-update", putHandler)

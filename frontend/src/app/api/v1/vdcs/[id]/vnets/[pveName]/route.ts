@@ -1,26 +1,32 @@
 import { NextResponse } from "next/server"
 
+import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
+import type { Principal } from "@/lib/auth/principal"
 import { getCurrentTenantId } from "@/lib/tenant"
-import { checkPermission } from "@/lib/rbac"
 import { prisma } from "@/lib/db/prisma"
 import { updateVnetForTenant, deleteVnetForTenant } from "@/lib/vdc/vnets"
+import { checkVnetPermission } from "@/lib/vdc/vnetPermission"
+import { PERMISSIONS } from "@/lib/rbac"
 
 export const runtime = "nodejs"
 
 // The dynamic segment is named [pveName] for historical reasons. Its actual
 // value is the VNet's user-facing display_name (scoped to the vDC). We keep
 // the folder name to avoid breaking existing redirects/bookmarks.
-type RouteContext = { params: Promise<{ id: string; pveName: string }> | { id: string; pveName: string } }
+type RouteContext = {
+  params: Promise<{ id: string; pveName: string }> | { id: string; pveName: string }
+  principal?: Principal
+}
 
 // GET /api/v1/vdcs/{id}/vnets/{displayName}
-export async function GET(_req: Request, ctx: RouteContext) {
+async function getHandler(_req: Request, ctx: RouteContext) {
   try {
     const params = await Promise.resolve(ctx.params)
     const vdcId = (params as any)?.id
     const displayName = (params as any)?.pveName
     if (!vdcId || !displayName) return NextResponse.json({ error: "Missing params" }, { status: 400 })
 
-    const denied = await checkPermission("sdn.vnet.view")
+    const denied = await checkVnetPermission(ctx.principal, vdcId, PERMISSIONS.SDN_VNET_VIEW)
     if (denied) return denied
 
     const tenantId = await getCurrentTenantId()
@@ -69,14 +75,14 @@ export async function GET(_req: Request, ctx: RouteContext) {
 }
 
 // PUT /api/v1/vdcs/{id}/vnets/{displayName}
-export async function PUT(req: Request, ctx: RouteContext) {
+async function putHandler(req: Request, ctx: RouteContext) {
   try {
     const params = await Promise.resolve(ctx.params)
     const vdcId = (params as any)?.id
     const displayName = (params as any)?.pveName
     if (!vdcId || !displayName) return NextResponse.json({ error: "Missing params" }, { status: 400 })
 
-    const denied = await checkPermission("sdn.vnet.edit")
+    const denied = await checkVnetPermission(ctx.principal, vdcId, PERMISSIONS.SDN_VNET_EDIT)
     if (denied) return denied
 
     const body = await req.json().catch(() => ({}))
@@ -121,14 +127,14 @@ export async function PUT(req: Request, ctx: RouteContext) {
 }
 
 // DELETE /api/v1/vdcs/{id}/vnets/{displayName}
-export async function DELETE(_req: Request, ctx: RouteContext) {
+async function deleteHandler(_req: Request, ctx: RouteContext) {
   try {
     const params = await Promise.resolve(ctx.params)
     const vdcId = (params as any)?.id
     const displayName = (params as any)?.pveName
     if (!vdcId || !displayName) return NextResponse.json({ error: "Missing params" }, { status: 400 })
 
-    const denied = await checkPermission("sdn.vnet.delete")
+    const denied = await checkVnetPermission(ctx.principal, vdcId, PERMISSIONS.SDN_VNET_DELETE)
     if (denied) return denied
 
     const tenantId = await getCurrentTenantId()
@@ -156,3 +162,7 @@ export async function DELETE(_req: Request, ctx: RouteContext) {
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const GET = withPublicApiGuard("vdc-vnet-get", getHandler)
+export const PUT = withPublicApiGuard("vdc-vnet-update", putHandler)
+export const DELETE = withPublicApiGuard("vdc-vnet-delete", deleteHandler)

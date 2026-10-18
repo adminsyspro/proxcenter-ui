@@ -870,6 +870,7 @@
     "pbsRestoreTagsUnverified": "게스트가 복원되었지만 태그를 확인할 수 없습니다: {error}",
     "pbsRestoreBandwidth": "대역폭 제한 (KiB/s)",
     "pbsRestoreTargetExists": "VM {vmid}이(가) 이미 존재하며 덮어쓰게 됩니다",
+    "pbsRestoreTargetExistsNoOverwrite": "VM {vmid}이(가) 이미 존재하며 덮어쓸 권한이 없습니다. 사용 가능한 VMID를 선택하세요",
     "pbsRestoreIpamNote": "IP 할당은 복원 완료 후 자동으로 재조정됩니다.",
     "pbsRestoreAsNew": "새 VM으로 복원 (새 VMID + 고유 MAC 자동 할당)",
     "pbsRestoreOverwriteConfirm": "VM {vmid}이(가) 백업 내용으로 대체됩니다. 확인하려면 다시 클릭하세요.",
@@ -3508,15 +3509,16 @@
     "apiTokens": {
       "tabLabel": "API",
       "title": "API 토큰",
-      "subtitle": "외부 모니터링 도구(Prometheus, Zabbix, PRTG, CI)를 위한 읽기 전용 서비스 계정입니다.",
+      "subtitle": "외부 도구를 위한 서비스 계정입니다: 모니터링(Prometheus, Zabbix, PRTG) 및 자동화(CI, 스크립트). 각 스코프는 명시적으로 부여됩니다.",
       "newToken": "새 토큰",
       "referenceButton": "API 레퍼런스",
       "reference": {
         "title": "API 레퍼런스",
-        "subtitle": "공개 읽기 전용 API의 대화형 문서",
+        "subtitle": "공개 API의 대화형 문서",
         "hint": "이 페이지에서 전송한 요청은 이 ProxCenter 인스턴스로 전달됩니다. 인증 패널을 열고 pxc_ 토큰을 붙여 넣으면 자신의 데이터로 엔드포인트를 사용해 볼 수 있습니다.",
         "backToTokens": "API 토큰으로 돌아가기",
-        "thisInstance": "이 ProxCenter 인스턴스"
+        "thisInstance": "이 ProxCenter 인스턴스",
+        "writeWarning": "쓰기 작업은 실제 인프라에 적용됩니다. \"Try it\"은 붙여넣은 토큰으로 실제 요청을 보냅니다. 이 페이지에서 보낸 POST, PUT 또는 DELETE는 실제 리소스를 시작, 변경 또는 삭제합니다."
       },
       "columns": {
         "prefix": "접두사",
@@ -3547,12 +3549,49 @@
         "expirationCustom": "사용자 지정",
         "customDays": "일수",
         "scopes": "범위",
+        "access": {
+          "none": "없음",
+          "read": "읽기",
+          "write": "쓰기"
+        },
+        "domains": {
+          "vms": "VM 및 컨테이너",
+          "backups": "백업",
+          "storage": "스토리지",
+          "nodes": "노드 및 클러스터",
+          "automation": "자동화",
+          "alerts": "알림",
+          "reports": "보고서"
+        },
+        "subScopes": {
+          "vmsPower": "전원",
+          "vmsWrite": "편집",
+          "vmsSnapshot": "스냅샷",
+          "vmsMigrate": "마이그레이션",
+          "vmsDelete": "삭제",
+          "backupsWrite": "백업 작업",
+          "backupsRestore": "복원",
+          "backupsDelete": "삭제",
+          "haWrite": "HA",
+          "poolsWrite": "풀",
+          "networkWrite": "네트워크",
+          "firewallWrite": "방화벽"
+        },
+        "subScopesLabel": "{domain} 쓰기 스코프",
+        "readOnlyDomain": "읽기 전용 영역",
+        "domainNotGrantable": "본인의 권한으로는 선택한 테넌트와 연결에 대해 이 영역의 쓰기 스코프를 부여할 수 없습니다.",
         "tenant": "테넌트",
         "connections": "연결",
         "connectionsAll": "테넌트의 모든 연결",
         "create": "생성",
         "cancel": "취소",
-        "confirm": "확인"
+        "confirm": "확인",
+        "writeWarning": "쓰기 스코프를 사용하면 토큰이 실제 리소스를 생성, 변경 및 삭제할 수 있습니다.",
+        "scopeNotGrantable": "본인의 권한으로는 선택한 테넌트와 연결에 대해 이 스코프를 부여할 수 없습니다.",
+        "scopesLoading": "부여할 수 있는 쓰기 스코프를 확인하는 중...",
+        "grantableError": "부여할 수 있는 쓰기 스코프를 확인하지 못했습니다. 대화 상자를 닫았다가 다시 열어 주세요.",
+        "writeRateLimit": "분당 쓰기 횟수",
+        "writeRateLimitHelp": "이 토큰이 분당 보낼 수 있는 쓰기 요청 수이며, 읽기와 별도로 계산됩니다."
       },
       "reveal": {
         "title": "지금 토큰을 복사하세요",
@@ -3560,7 +3599,8 @@
         "copy": "복사",
         "copied": "복사됨",
         "done": "완료"
-      }
+      },
+      "deletedToken": "삭제된 토큰"
     },
     "displayMode": "표시 모드",
     "light": "라이트",

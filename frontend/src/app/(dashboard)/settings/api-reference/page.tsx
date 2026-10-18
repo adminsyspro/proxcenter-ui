@@ -5,7 +5,7 @@ import { useEffect } from 'react'
 import dynamic from 'next/dynamic'
 import { useRouter } from 'next/navigation'
 
-import { Box, Button, LinearProgress, Typography } from '@mui/material'
+import { Alert, Box, Button, LinearProgress, Typography } from '@mui/material'
 import { useSession } from 'next-auth/react'
 import { useTranslations } from 'next-intl'
 
@@ -69,6 +69,9 @@ export default function ApiReferencePage() {
           {t('backToTokens')}
         </Button>
       </Box>
+      {/* Try-it is wired to this instance (ApiReferenceViewer): a POST, PUT
+          or DELETE sent from the reference is a real write. */}
+      <Alert severity='warning' sx={{ flexShrink: 0 }}>{t('writeWarning')}</Alert>
       <Box
         sx={{
           flex: 1,

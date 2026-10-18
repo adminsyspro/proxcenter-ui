@@ -4,12 +4,13 @@ import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { requireProviderTenant } from "@/lib/tenant"
+import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 
 export const runtime = "nodejs"
 
 // GET /api/v1/connections/{id}/ha/{sid}
 // Récupère la configuration HA d'une ressource (sid = "vm:100" ou "ct:101")
-export async function GET(
+async function getHandler(
   req: Request,
   ctx: { params: Promise<{ id: string; sid: string }> }
 ) {
@@ -44,7 +45,7 @@ return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
 
 // POST /api/v1/connections/{id}/ha/{sid}
 // Crée ou met à jour la configuration HA d'une ressource
-export async function POST(
+async function postHandler(
   req: Request,
   ctx: { params: Promise<{ id: string; sid: string }> }
 ) {
@@ -122,7 +123,7 @@ return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
 
 // DELETE /api/v1/connections/{id}/ha/{sid}
 // Supprime la configuration HA d'une ressource
-export async function DELETE(
+async function deleteHandler(
   req: Request,
   ctx: { params: Promise<{ id: string; sid: string }> }
 ) {
@@ -153,3 +154,7 @@ export async function DELETE(
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const GET = withPublicApiGuard("ha-resource-get", getHandler)
+export const POST = withPublicApiGuard("ha-resource-upsert", postHandler)
+export const DELETE = withPublicApiGuard("ha-resource-delete", deleteHandler)

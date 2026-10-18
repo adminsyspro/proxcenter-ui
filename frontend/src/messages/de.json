@@ -858,6 +858,7 @@
     "pbsRestoreTagsUnverified": "der Gast wurde wiederhergestellt, aber seine Tags konnten nicht geprüft werden: {error}",
     "pbsRestoreBandwidth": "Bandwidth limit (KiB/s)",
     "pbsRestoreTargetExists": "VM {vmid} existiert und wird überschrieben",
+    "pbsRestoreTargetExistsNoOverwrite": "VM {vmid} existiert und Sie dürfen sie nicht überschreiben: wählen Sie eine freie VMID",
     "pbsRestoreIpamNote": "IP allocation is reconciled automatically after the restore completes.",
     "pbsRestoreAsNew": "Restore as a new VM (auto-allocates a fresh VMID + unique MACs)",
     "pbsRestoreOverwriteConfirm": "This will replace VM {vmid} with the backup contents. Click again to confirm.",
@@ -3495,15 +3496,16 @@
     "apiTokens": {
       "tabLabel": "API",
       "title": "API-Token",
-      "subtitle": "Schreibgeschützte Dienstkonten für externe Monitoring-Tools (Prometheus, Zabbix, PRTG, CI).",
+      "subtitle": "Dienstkonten für externe Tools: Monitoring (Prometheus, Zabbix, PRTG) und Automatisierung (CI, Skripte). Jeder Scope wird ausdrücklich vergeben.",
       "newToken": "Neuer Token",
       "referenceButton": "API-Referenz",
       "reference": {
         "title": "API-Referenz",
-        "subtitle": "Interaktive Dokumentation der öffentlichen schreibgeschützten API",
+        "subtitle": "Interaktive Dokumentation der öffentlichen API",
         "hint": "Von dieser Seite gesendete Anfragen gehen an diese ProxCenter-Instanz. Öffnen Sie den Bereich Authentifizierung und fügen Sie ein pxc_-Token ein, um die Endpunkte mit Ihren eigenen Daten auszuprobieren.",
         "backToTokens": "Zurück zu den API-Token",
-        "thisInstance": "Diese ProxCenter-Instanz"
+        "thisInstance": "Diese ProxCenter-Instanz",
+        "writeWarning": "Schreiboperationen wirken auf Ihre echte Infrastruktur. \"Try it\" sendet echte Anfragen mit dem eingefügten Token: ein POST, PUT oder DELETE von dieser Seite startet, ändert oder löscht echte Ressourcen."
       },
       "columns": {
         "prefix": "Präfix",
@@ -3534,12 +3536,49 @@
         "expirationCustom": "Benutzerdefiniert",
         "customDays": "Tage",
         "scopes": "Berechtigungen",
+        "access": {
+          "none": "Keine",
+          "read": "Lesen",
+          "write": "Schreiben"
+        },
+        "domains": {
+          "vms": "VMs und Container",
+          "backups": "Backups",
+          "storage": "Speicher",
+          "nodes": "Knoten und Cluster",
+          "automation": "Automatisierung",
+          "alerts": "Alarme",
+          "reports": "Berichte"
+        },
+        "subScopes": {
+          "vmsPower": "Ein/Aus",
+          "vmsWrite": "Bearbeiten",
+          "vmsSnapshot": "Snapshots",
+          "vmsMigrate": "Migrieren",
+          "vmsDelete": "Löschen",
+          "backupsWrite": "Backup-Jobs",
+          "backupsRestore": "Wiederherstellen",
+          "backupsDelete": "Löschen",
+          "haWrite": "HA",
+          "poolsWrite": "Pools",
+          "networkWrite": "Netzwerk",
+          "firewallWrite": "Firewall"
+        },
+        "subScopesLabel": "Schreib-Scopes: {domain}",
+        "readOnlyDomain": "Bereich nur lesbar",
+        "domainNotGrantable": "Ihre eigenen Berechtigungen erlauben es nicht, einen Schreib-Scope dieses Bereichs für den gewählten Mandanten und die gewählten Verbindungen zu vergeben.",
         "tenant": "Mandant",
         "connections": "Verbindungen",
         "connectionsAll": "Alle Verbindungen des Mandanten",
         "create": "Erstellen",
         "cancel": "Abbrechen",
-        "confirm": "Bestätigen"
+        "confirm": "Bestätigen",
+        "writeWarning": "Schreib-Scopes erlauben dem Token, echte Ressourcen zu erstellen, zu ändern und zu löschen.",
+        "scopeNotGrantable": "Ihre eigenen Berechtigungen erlauben es nicht, diesen Scope für den gewählten Mandanten und die gewählten Verbindungen zu vergeben.",
+        "scopesLoading": "Prüfung, welche Schreib-Scopes Sie vergeben dürfen...",
+        "grantableError": "Es konnte nicht geprüft werden, welche Schreib-Scopes Sie vergeben dürfen. Schließen und öffnen Sie den Dialog erneut.",
+        "writeRateLimit": "Schreibvorgänge pro Minute",
+        "writeRateLimitHelp": "Schreibanfragen, die dieses Token pro Minute senden darf, getrennt von Lesezugriffen gezählt."
       },
       "reveal": {
         "title": "Kopieren Sie Ihren Token jetzt",
@@ -3547,7 +3586,8 @@
         "copy": "Kopieren",
         "copied": "Kopiert",
         "done": "Fertig"
-      }
+      },
+      "deletedToken": "Gelöschtes Token"
     },
     "displayMode": "Anzeigemodus",
     "light": "Hell",

@@ -1,7 +1,6 @@
-// Response schemas maintained NEXT TO the allowlist entries: the allowlist is
-// not reducible to a pattern plus scopes (spec D8), the generator builds the
-// spec skeleton from these metadata.
-export const RESPONSE_SCHEMAS: Record<string, Record<string, unknown>> = {
+// Response schemas of the read-only monitoring entries.
+
+export const MONITORING_RESPONSE_SCHEMAS: Record<string, Record<string, unknown>> = {
   VmsResponse: {
     type: "object",
     properties: {

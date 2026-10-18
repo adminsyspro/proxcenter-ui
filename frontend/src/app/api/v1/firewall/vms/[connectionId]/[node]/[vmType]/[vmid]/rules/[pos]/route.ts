@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getOrchestratorClient } from '@/lib/orchestrator/client'
 import { verifyConnectionOwnership } from '@/lib/tenant'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
+import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
 import { getConnectionById } from '@/lib/connections/getConnection'
 import { orchestratorOrPve } from '@/lib/firewall/withPveFallback'
 import * as pveDirect from '@/lib/firewall/pveDirect'
@@ -14,7 +15,7 @@ type RouteContext = {
 }
 
 // PUT - Update a VM firewall rule
-export async function PUT(req: NextRequest, ctx: RouteContext) {
+async function putHandler(req: NextRequest, ctx: RouteContext) {
   try {
     const { connectionId, node, vmType, vmid, pos } = await ctx.params
     const ownershipDenied = await verifyConnectionOwnership(connectionId)
@@ -42,7 +43,7 @@ return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
 }
 
 // DELETE - Delete a VM firewall rule
-export async function DELETE(req: NextRequest, ctx: RouteContext) {
+async function deleteHandler(req: NextRequest, ctx: RouteContext) {
   try {
     const { connectionId, node, vmType, vmid, pos } = await ctx.params
     const ownershipDenied = await verifyConnectionOwnership(connectionId)
@@ -66,3 +67,6 @@ export async function DELETE(req: NextRequest, ctx: RouteContext) {
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const PUT = withPublicApiGuard("fw-vm-rule-update", putHandler)
+export const DELETE = withPublicApiGuard("fw-vm-rule-delete", deleteHandler)

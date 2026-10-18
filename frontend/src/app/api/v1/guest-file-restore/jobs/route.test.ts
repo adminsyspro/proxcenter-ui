@@ -1,13 +1,20 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+// The API token guard is covered by routeGuard.test.ts and writeContract.test.ts:
+// pass-through so this file keeps testing the handler, as for a session caller.
+vi.mock('@/lib/api-tokens/routeGuard', () => ({
+  withPublicApiGuard: (_entryId: string, handler: any) => handler,
+}))
+
 import { callRoute, readJson } from '@/__tests__/setup/route-test'
 
 const {
-  userGuardMock, targetGuardMock, settingsMock, connMock, resolveSourceMock, pveFetchMock,
+  userGuardMock, targetGuardMock, tokenScopeMock, settingsMock, connMock, resolveSourceMock, pveFetchMock,
   createMock, findManyMock, auditMock, runMock, afterMock, checkPermissionMock, purgeMock, reconcileMock, hostGuardMock, providerMock,
 } = vi.hoisted(() => ({
   userGuardMock: vi.fn(),
   targetGuardMock: vi.fn(),
+  tokenScopeMock: vi.fn(),
   settingsMock: vi.fn(),
   connMock: vi.fn(),
   resolveSourceMock: vi.fn(),
@@ -28,6 +35,7 @@ vi.mock('next/server', async importOriginal => ({ ...(await importOriginal<typeo
 vi.mock('@/lib/guestFileRestore/guard', () => ({
   requireGuestFileRestoreUser: () => userGuardMock(),
   authorizeRestoreTarget: (...a: any[]) => targetGuardMock(...a),
+  denyTokenOutsideRestoreScope: (...a: any[]) => tokenScopeMock(...a),
   isProviderCaller: (...a: any[]) => providerMock(...a),
 }))
 vi.mock('@/lib/guestFileRestore/settings', () => ({ loadGuestFileRestoreSettings: () => settingsMock() }))
@@ -82,6 +90,7 @@ function body(over: object = {}) {
 beforeEach(() => {
   userGuardMock.mockReset().mockResolvedValue({ denied: null, principal: { kind: 'session', userId: 'u1', userEmail: 'alice@example.org', tenantId: 'default' } })
   targetGuardMock.mockReset().mockResolvedValue(null)
+  tokenScopeMock.mockReset().mockResolvedValue(null)
   settingsMock.mockReset().mockResolvedValue({ ...settings })
   connMock.mockReset().mockResolvedValue({ id: 'c1', baseUrl: 'https://pve:8006', apiToken: 't' })
   resolveSourceMock.mockReset().mockResolvedValue(resolved)
@@ -129,6 +138,19 @@ describe('POST /api/v1/guest-file-restore/jobs', () => {
       target: expect.objectContaining({ node: 'pve1', vmid: 100, type: 'qemu' }),
       opaqueConnectErrors: false,
     }))
+  })
+
+  it('holds an API token to its perimeter (target and source connection) and vDC before creating anything', async () => {
+    expect((await callRoute(POST, { body: body() })).status).toBe(202)
+    expect(tokenScopeMock).toHaveBeenCalledWith(expect.objectContaining({ userId: 'u1' }), expect.objectContaining({ id: 'c1' }), target, 'c1')
+    const pbsSource = { kind: 'pbs', pbsId: 'pbs1', datastore: 'ds', backupType: 'vm', backupId: '100', backupTime: 1, archive: 'root.pxar.didx' }
+    await callRoute(POST, { body: body({ source: pbsSource, items: [{ path: '/etc/hosts', directory: false }] }) })
+    expect(tokenScopeMock).toHaveBeenLastCalledWith(expect.anything(), expect.anything(), target, 'pbs1')
+
+    tokenScopeMock.mockResolvedValue(new Response(JSON.stringify({ error: 'Connection not in token scope', connection: 'c1' }), { status: 403 }))
+    createMock.mockClear()
+    expect((await callRoute(POST, { body: body() })).status).toBe(403)
+    expect(createMock).not.toHaveBeenCalled()
   })
 
   it('binds a tenant caller to the guest addresses and hides connection causes in its job', async () => {

@@ -280,6 +280,12 @@ const isUpid = (value: unknown): value is string => typeof value === "string" &&
  * The PVE task ids of a JSON response: `data` itself, or `data.upid` (the
  * /guests/{vmid} envelope), as `upid`; and, for a multi-task answer
  * (backup-job-run), every `data.tasks[].upid` as `upids`.
+ *
+ * Anti-forgery invariant (Ruling 18): task-status lets a token read any task
+ * journaled here as its own, so these values must come from Proxmox only. A
+ * token-reachable write handler must NEVER echo request input into a `data`
+ * string, `data.upid` or `data.tasks[].upid`: a client could otherwise journal
+ * a UPID of its choosing and read another tenant's task through it.
  */
 async function responseUpids(res: Response): Promise<{ upid: string | null; upids?: string[] }> {
   if (!(res.headers.get("content-type") || "").includes("application/json")) return { upid: null }

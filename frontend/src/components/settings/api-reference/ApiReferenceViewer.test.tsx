@@ -24,7 +24,7 @@ vi.mock('@/contexts/BrandingContext', () => ({
 }))
 
 import { renderWithProviders } from '@/__tests__/setup/renderWithProviders'
-import ApiReferenceViewer, { PUBLIC_API_SPEC_URL, withLogo } from './ApiReferenceViewer'
+import ApiReferenceViewer, { PUBLIC_API_SPEC_URL, withLogo, withRequiredScopes } from './ApiReferenceViewer'
 
 const DOCUMENT = {
   openapi: '3.1.0',
@@ -136,5 +136,52 @@ describe('withLogo', () => {
     const patched = withLogo({ openapi: '3.1.0', info: { title: 'T' } }, '/logo"x.svg', 'A & <B>')
     expect(patched.info?.description).toBe('<img src="/logo&quot;x.svg" alt="A &amp; &lt;B&gt;" width="110">')
     expect(patched.info?.title).toBe('T')
+  })
+})
+
+describe('withRequiredScopes', () => {
+  const LABELS = { one: 'Required scope', anyOf: 'Required scope, any one of' }
+
+  it('appends the scopes each operation requires to its description, leaving the source untouched', () => {
+    const source = {
+      openapi: '3.1.0',
+      info: { title: 'T' },
+      paths: {
+        '/api/v1/vms/{id}/start': {
+          parameters: [{ name: 'id', in: 'path' }],
+          post: { summary: 'Start', description: 'Starts the guest.', 'x-required-scopes': ['vms:power'] },
+        },
+        '/api/v1/guests/{vmid}/snapshots': {
+          get: { summary: 'List', 'x-required-scopes': ['vms:read', 'vms:snapshot'] },
+          delete: { summary: 'No scopes declared' },
+        },
+      },
+    }
+    const snapshot = JSON.stringify(source)
+    const patched = withRequiredScopes(source, LABELS) as any
+    expect(patched.paths['/api/v1/vms/{id}/start'].post.description).toBe('Starts the guest.\n\n**Required scope:** `vms:power`')
+    expect(patched.paths['/api/v1/guests/{vmid}/snapshots'].get.description).toBe(
+      '**Required scope, any one of:** `vms:read`, `vms:snapshot`',
+    )
+    expect(patched.paths['/api/v1/guests/{vmid}/snapshots'].delete.description).toBeUndefined()
+    // Path-level keys that are not operations are carried over as they are.
+    expect(patched.paths['/api/v1/vms/{id}/start'].parameters).toEqual([{ name: 'id', in: 'path' }])
+    expect(JSON.stringify(source)).toBe(snapshot)
+  })
+
+  it('copes with a document without paths', () => {
+    expect(withRequiredScopes({ openapi: '3.1.0' }, LABELS)).toEqual({ openapi: '3.1.0' })
+  })
+})
+
+describe('ApiReferenceViewer required scopes', () => {
+  it('shows the required scopes on the operations of the rendered document', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      ...DOCUMENT,
+      paths: { '/api/v1/x': { post: { description: 'Does x.', 'x-required-scopes': ['vms:write'] } } },
+    }), { status: 200 })))
+    renderWithProviders(<ApiReferenceViewer />)
+    await screen.findByTestId('scalar')
+    expect(configurations.at(-1).content.paths['/api/v1/x'].post.description).toBe('Does x.\n\n**Required scope:** `vms:write`')
   })
 })

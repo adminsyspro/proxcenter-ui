@@ -3496,15 +3496,18 @@
     "apiTokens": {
       "tabLabel": "API",
       "title": "API-Token",
-      "subtitle": "Schreibgeschützte Dienstkonten für externe Monitoring-Tools (Prometheus, Zabbix, PRTG, CI).",
+      "subtitle": "Dienstkonten für externe Tools: Monitoring (Prometheus, Zabbix, PRTG) und Automatisierung (CI, Skripte). Jeder Scope wird ausdrücklich vergeben.",
       "newToken": "Neuer Token",
       "referenceButton": "API-Referenz",
       "reference": {
         "title": "API-Referenz",
-        "subtitle": "Interaktive Dokumentation der öffentlichen schreibgeschützten API",
+        "subtitle": "Interaktive Dokumentation der öffentlichen API",
         "hint": "Von dieser Seite gesendete Anfragen gehen an diese ProxCenter-Instanz. Öffnen Sie den Bereich Authentifizierung und fügen Sie ein pxc_-Token ein, um die Endpunkte mit Ihren eigenen Daten auszuprobieren.",
         "backToTokens": "Zurück zu den API-Token",
-        "thisInstance": "Diese ProxCenter-Instanz"
+        "thisInstance": "Diese ProxCenter-Instanz",
+        "writeWarning": "Schreiboperationen wirken auf Ihre echte Infrastruktur. \"Try it\" sendet echte Anfragen mit dem eingefügten Token: ein POST, PUT oder DELETE von dieser Seite startet, ändert oder löscht echte Ressourcen.",
+        "requiredScope": "Erforderlicher Scope",
+        "requiredScopesAnyOf": "Erforderlicher Scope, einer von"
       },
       "columns": {
         "prefix": "Präfix",
@@ -3540,7 +3543,15 @@
         "connectionsAll": "Alle Verbindungen des Mandanten",
         "create": "Erstellen",
         "cancel": "Abbrechen",
-        "confirm": "Bestätigen"
+        "confirm": "Bestätigen",
+        "readScopes": "Lesen",
+        "writeScopes": "Schreiben",
+        "writeWarning": "Schreib-Scopes erlauben dem Token, echte Ressourcen zu erstellen, zu ändern und zu löschen.",
+        "scopeNotGrantable": "Ihre eigenen Berechtigungen erlauben es nicht, diesen Scope für den gewählten Mandanten und die gewählten Verbindungen zu vergeben.",
+        "scopesLoading": "Prüfung, welche Schreib-Scopes Sie vergeben dürfen...",
+        "grantableError": "Es konnte nicht geprüft werden, welche Schreib-Scopes Sie vergeben dürfen. Schließen und öffnen Sie den Dialog erneut.",
+        "writeRateLimit": "Schreibvorgänge pro Minute",
+        "writeRateLimitHelp": "Schreibanfragen, die dieses Token pro Minute senden darf, getrennt von Lesezugriffen gezählt."
       },
       "reveal": {
         "title": "Kopieren Sie Ihren Token jetzt",
@@ -3548,7 +3559,8 @@
         "copy": "Kopieren",
         "copied": "Kopiert",
         "done": "Fertig"
-      }
+      },
+      "deletedToken": "Gelöschtes Token"
     },
     "displayMode": "Anzeigemodus",
     "light": "Hell",

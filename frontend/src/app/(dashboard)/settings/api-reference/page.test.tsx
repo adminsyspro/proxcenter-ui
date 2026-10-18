@@ -56,6 +56,16 @@ describe('ApiReferencePage', () => {
     expect(replaceMock).not.toHaveBeenCalled()
   })
 
+  // Try it sends real requests: a POST from this page acts on the real
+  // infrastructure, so the page says so above the reference.
+  it('warns above the reference that write operations act on the real infrastructure', () => {
+    renderPage()
+    const banner = screen.getByRole('alert')
+    expect(banner).toHaveTextContent((en as any).settings.apiTokens.reference.writeWarning)
+    expect(banner.className).toContain('MuiAlert-standardWarning')
+    expect(setPageInfoMock).toHaveBeenCalledWith('API reference', 'Interactive documentation of the public API', 'ri-book-2-line')
+  })
+
   it('waits for RBAC before deciding anything', () => {
     useRBACMock.mockReturnValue({ isAdmin: false, loading: true })
     renderPage()

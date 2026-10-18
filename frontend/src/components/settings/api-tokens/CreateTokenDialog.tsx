@@ -3,14 +3,16 @@
 import { useEffect, useState } from 'react'
 
 import {
-  Alert, Box, Button, Checkbox, Dialog, DialogActions, DialogContent, DialogTitle,
-  FormControlLabel, FormGroup, IconButton, MenuItem, Stack, TextField, Tooltip, Typography,
+  Accordion, AccordionDetails, AccordionSummary, Alert, Box, Button, Checkbox, Chip, Dialog, DialogActions,
+  DialogContent, DialogTitle, FormControlLabel, FormGroup, IconButton, MenuItem, Stack, TextField, Tooltip,
+  Typography,
 } from '@mui/material'
 import { useTheme } from '@mui/material/styles'
 import { useTranslations } from 'next-intl'
 
 import { tooltipSlotProps } from '@/components/settings/ha/tooltipSlotProps'
-import { ALL_SCOPE_IDS } from '@/lib/api-tokens/scopes'
+import NumericTextField from '@/components/ui/NumericTextField'
+import { ALL_SCOPE_IDS, DESTRUCTIVE_SCOPE_IDS, isWriteScope } from '@/lib/api-tokens/scopes'
 import { copyToClipboard } from '@/lib/clipboard'
 import { selectableTenants, sortTenantsProviderFirst } from '@/lib/storage/tenantFacets'
 
@@ -51,8 +53,33 @@ const SCOPE_ICONS: Record<string, string> = {
   'automation:read': 'ri-robot-line',
   'alerts:read': 'ri-alarm-warning-line',
   'reports:read': 'ri-file-list-3-line',
+  'vms:power': 'ri-shut-down-line',
+  'vms:write': 'ri-edit-box-line',
+  'vms:snapshot': 'ri-camera-line',
+  'vms:migrate': 'ri-swap-box-line',
+  'vms:delete': 'ri-delete-bin-line',
+  'backups:write': 'ri-save-3-line',
+  'backups:restore': 'ri-history-line',
+  'backups:delete': 'ri-delete-bin-6-line',
+  'storage:write': 'ri-hard-drive-3-line',
+  'ha:write': 'ri-shield-check-line',
+  'pools:write': 'ri-stack-line',
+  'network:write': 'ri-share-line',
+  'firewall:write': 'ri-fire-line',
 }
 const DEFAULT_SCOPE_ICON = 'ri-key-line'
+
+const READ_SCOPES = ALL_SCOPE_IDS.filter(scope => !isWriteScope(scope))
+const WRITE_SCOPES = ALL_SCOPE_IDS.filter(isWriteScope)
+
+// Spec values: a write token gets its own per-minute bucket (60 by default),
+// and checking a write scope preselects a 90-day expiry.
+const DEFAULT_WRITE_RATE_LIMIT = 60
+const WRITE_TOKEN_EXPIRATION = '90'
+
+// Answer of the grantable-scopes check for one (tenant, perimeter) key; a
+// null list means the check failed.
+type GrantableResult = { key: string; list: string[] | null }
 
 const EXPIRATION_CHOICES = [
   { value: 'none', labelKey: 'expirationNone', days: null as number | null },
@@ -87,6 +114,10 @@ export default function CreateTokenDialog({ open, onClose, onCreated }: Props) {
   const [expiration, setExpiration] = useState('none')
   const [customDays, setCustomDays] = useState('180')
   const [scopes, setScopes] = useState<string[]>([])
+  // Once the user picked an expiry, checking a write scope leaves it alone.
+  const [expirationTouched, setExpirationTouched] = useState(false)
+  const [writeRateLimit, setWriteRateLimit] = useState(DEFAULT_WRITE_RATE_LIMIT)
+  const [grantableResult, setGrantableResult] = useState<GrantableResult | null>(null)
   // Fallback free-text field, used only when the tenant selector could not
   // load (degrade to the pre-fix behaviour: ambient tenant, hand-typed ids).
   const [connectionsText, setConnectionsText] = useState('')
@@ -156,7 +187,10 @@ export default function CreateTokenDialog({ open, onClose, onCreated }: Props) {
   }, [tenantId])
 
   function toggleScope(scope: string) {
+    const adding = !scopes.includes(scope)
     setScopes(prev => (prev.includes(scope) ? prev.filter(s => s !== scope) : [...prev, scope]))
+    // Unchecking every write scope again does not revert the expiry.
+    if (adding && isWriteScope(scope) && !expirationTouched) setExpiration(WRITE_TOKEN_EXPIRATION)
   }
 
   function reset() {
@@ -165,6 +199,9 @@ export default function CreateTokenDialog({ open, onClose, onCreated }: Props) {
     setExpiration('none')
     setCustomDays('180')
     setScopes([])
+    setExpirationTouched(false)
+    setWriteRateLimit(DEFAULT_WRITE_RATE_LIMIT)
+    setGrantableResult(null)
     setConnectionsText('')
     setConnectionIds([])
     setTenantId('')
@@ -190,18 +227,63 @@ export default function CreateTokenDialog({ open, onClose, onCreated }: Props) {
   const connectionSelectorAvailable = tenantsAvailable && connectionsAvailable
   const visibleConnections = connectionOptions.filter(c => c.tenantId === tenantId)
 
+  // The perimeter the token would get, shared by the grantable check and the
+  // creation request so both always judge the same connections.
+  const resolvedConnectionIds = connectionSelectorAvailable
+    ? filterToVisibleConnectionIds(connectionIds, visibleConnections)
+    : connectionsText
+        .split(',')
+        .map(c => c.trim())
+        .filter(Boolean)
+  const perimeterKey = resolvedConnectionIds.join(',')
+  const grantableTenantId = tenantsAvailable ? tenantId : ''
+  const grantableKey = `${grantableTenantId}|${perimeterKey}`
+
+  // Which write scopes the caller may hand out for this tenant and perimeter
+  // (the creation route runs the same check). Asked again on every change of
+  // either; a scope that stops being grantable is unchecked rather than left
+  // checked behind a disabled box.
+  useEffect(() => {
+    if (!open) return
+    let active = true
+
+    void (async () => {
+      const params = new URLSearchParams()
+      if (grantableTenantId) params.set('tenantId', grantableTenantId)
+      if (perimeterKey) params.set('connectionIds', perimeterKey)
+      const query = params.toString()
+      let list: string[] | null = null
+      try {
+        const res = await fetch(`/api/v1/settings/api-tokens/grantable-scopes${query ? `?${query}` : ''}`)
+        const json = res.ok ? await res.json() : null
+        if (Array.isArray(json?.data?.grantable)) list = json.data.grantable
+      } catch {
+        // Network failure: list stays null, the write scopes stay disabled.
+      }
+      if (!active) return
+      const allowed = list ?? []
+      setGrantableResult({ key: grantableKey, list })
+      setScopes(prev => prev.filter(scope => !isWriteScope(scope) || allowed.includes(scope)))
+    })()
+
+    return () => {
+      active = false
+    }
+  }, [open, grantableKey, grantableTenantId, perimeterKey])
+
+  // Loading (no answer yet for the current key) and failure both keep every
+  // write scope disabled: the UI fails closed, the creation route stays the
+  // judge either way.
+  function writeScopeBlocker(scope: string): string {
+    if (grantableResult?.key !== grantableKey) return t('dialog.scopesLoading')
+    if (!grantableResult.list) return t('dialog.grantableError')
+    return grantableResult.list.includes(scope) ? '' : t('dialog.scopeNotGrantable')
+  }
+
   async function handleCreate() {
     setSaving(true)
     setError('')
     try {
-      const fallbackConnectionIds = connectionsText
-        .split(',')
-        .map(c => c.trim())
-        .filter(Boolean)
-      const resolvedConnectionIds = connectionSelectorAvailable
-        ? filterToVisibleConnectionIds(connectionIds, visibleConnections)
-        : fallbackConnectionIds
-
       const res = await fetch('/api/v1/settings/api-tokens', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -211,6 +293,7 @@ export default function CreateTokenDialog({ open, onClose, onCreated }: Props) {
           scopes,
           connectionIds: resolvedConnectionIds.length ? resolvedConnectionIds : null,
           expiresInDays: expiresInDays(),
+          writeRateLimitPerMin: writeRateLimit,
           ...(tenantsAvailable && tenantId ? { tenantId } : {}),
         }),
       })
@@ -255,7 +338,16 @@ export default function CreateTokenDialog({ open, onClose, onCreated }: Props) {
             {error && <Alert severity='error'>{error}</Alert>}
             <TextField label={t('dialog.name')} value={name} onChange={e => setName(e.target.value)} fullWidth required />
             <TextField label={t('dialog.description')} value={description} onChange={e => setDescription(e.target.value)} fullWidth />
-            <TextField select label={t('dialog.expiration')} value={expiration} onChange={e => setExpiration(e.target.value)} fullWidth>
+            <TextField
+              select
+              label={t('dialog.expiration')}
+              value={expiration}
+              onChange={e => {
+                setExpiration(e.target.value)
+                setExpirationTouched(true)
+              }}
+              fullWidth
+            >
               {EXPIRATION_CHOICES.map(choice => (
                 <MenuItem key={choice.value} value={choice.value}>{t(`dialog.${choice.labelKey}`)}</MenuItem>
               ))}
@@ -265,12 +357,13 @@ export default function CreateTokenDialog({ open, onClose, onCreated }: Props) {
             )}
             <Box>
               <Typography variant='subtitle2' sx={{ mb: 1 }}>{t('dialog.scopes')}</Typography>
+              <Typography variant='body2' color='text.secondary' sx={{ fontWeight: 600 }}>{t('dialog.readScopes')}</Typography>
               {/* FormGroup (block-level) rather than the FormControlLabels'
                   own inline-flex flow, one scope per row: rendered bare, the
                   eight labels ran together on a single line with no
                   separation between them. */}
               <FormGroup>
-                {ALL_SCOPE_IDS.map(scope => (
+                {READ_SCOPES.map(scope => (
                   <FormControlLabel
                     key={scope}
                     sx={{ width: '100%', mr: 0 }}
@@ -284,6 +377,66 @@ export default function CreateTokenDialog({ open, onClose, onCreated }: Props) {
                   />
                 ))}
               </FormGroup>
+              {/* Folded by default: write access is opt-in and the section
+                  opens on its warning. */}
+              <Accordion disableGutters variant='outlined' sx={{ mt: 1 }}>
+                <AccordionSummary expandIcon={<i className='ri-arrow-down-s-line' />}>
+                  <Stack direction='row' alignItems='center' spacing={1}>
+                    <Typography variant='body2' color='text.secondary' sx={{ fontWeight: 600 }}>{t('dialog.writeScopes')}</Typography>
+                    {scopes.some(isWriteScope) && (
+                      <Chip size='small' color='warning' label={scopes.filter(isWriteScope).length} />
+                    )}
+                  </Stack>
+                </AccordionSummary>
+                <AccordionDetails>
+                  <Stack spacing={2}>
+                    <Alert severity='warning'>{t('dialog.writeWarning')}</Alert>
+                    <FormGroup>
+                      {WRITE_SCOPES.map(scope => {
+                        const blocker = writeScopeBlocker(scope)
+                        const destructive = DESTRUCTIVE_SCOPE_IDS.includes(scope)
+                        let labelColor: string | undefined
+                        if (blocker) labelColor = 'text.disabled'
+                        else if (destructive) labelColor = 'error.main'
+                        return (
+                          // The span carries the tooltip: a disabled input
+                          // fires no pointer events of its own.
+                          <Tooltip key={scope} title={blocker} placement='left' slotProps={tooltipSlotProps}>
+                            <Box component='span' sx={{ display: 'block' }}>
+                              <FormControlLabel
+                                sx={{ width: '100%', mr: 0 }}
+                                disabled={!!blocker}
+                                control={
+                                  <Checkbox
+                                    color={destructive ? 'error' : 'primary'}
+                                    checked={scopes.includes(scope)}
+                                    onChange={() => toggleScope(scope)}
+                                  />
+                                }
+                                label={
+                                  <Stack direction='row' alignItems='center' spacing={1}>
+                                    <Box component='i' className={SCOPE_ICONS[scope] || DEFAULT_SCOPE_ICON} sx={{ color: labelColor }} />
+                                    <Typography variant='body2' sx={{ color: labelColor }}>{scope}</Typography>
+                                  </Stack>
+                                }
+                              />
+                            </Box>
+                          </Tooltip>
+                        )
+                      })}
+                    </FormGroup>
+                    <NumericTextField
+                      label={t('dialog.writeRateLimit')}
+                      helperText={t('dialog.writeRateLimitHelp')}
+                      value={writeRateLimit}
+                      onChange={setWriteRateLimit}
+                      fallback={DEFAULT_WRITE_RATE_LIMIT}
+                      min={1}
+                      fullWidth
+                    />
+                  </Stack>
+                </AccordionDetails>
+              </Accordion>
             </Box>
             {tenantsAvailable && (
               <TextField select label={t('dialog.tenant')} value={tenantId} onChange={e => setTenantId(e.target.value)} fullWidth>

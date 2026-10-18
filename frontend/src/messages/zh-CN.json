@@ -3513,15 +3513,18 @@
     "apiTokens": {
       "tabLabel": "API",
       "title": "API 令牌",
-      "subtitle": "供外部监控工具(Prometheus、Zabbix、PRTG、CI)使用的只读服务账户。",
+      "subtitle": "供外部工具使用的服务账户:监控(Prometheus、Zabbix、PRTG)与自动化(CI、脚本)。每个范围都需明确授予。",
       "newToken": "新建令牌",
       "referenceButton": "API 参考文档",
       "reference": {
         "title": "API 参考文档",
-        "subtitle": "公共只读 API 的交互式文档",
+        "subtitle": "公共 API 的交互式文档",
         "hint": "从此页面发送的请求会转到此 ProxCenter 实例。打开身份验证面板并粘贴 pxc_ 令牌，即可使用您自己的数据试用这些端点。",
         "backToTokens": "返回 API 令牌",
-        "thisInstance": "此 ProxCenter 实例"
+        "thisInstance": "此 ProxCenter 实例",
+        "writeWarning": "写操作会作用于您的真实基础设施。\"Try it\" 会使用您粘贴的令牌发送真实请求:从本页面发送的 POST、PUT 或 DELETE 会启动、修改或删除真实资源。",
+        "requiredScope": "所需范围",
+        "requiredScopesAnyOf": "所需范围(任选其一)"
       },
       "columns": {
         "prefix": "前缀",
@@ -3557,7 +3560,15 @@
         "connectionsAll": "该租户的所有连接",
         "create": "创建",
         "cancel": "取消",
-        "confirm": "确认"
+        "confirm": "确认",
+        "readScopes": "读取",
+        "writeScopes": "写入",
+        "writeWarning": "写入范围允许令牌创建、修改和删除真实资源。",
+        "scopeNotGrantable": "您自身的权限不允许为所选租户和连接授予此范围。",
+        "scopesLoading": "正在检查您可以授予的写入范围...",
+        "grantableError": "无法检查您可以授予的写入范围。请关闭并重新打开对话框后重试。",
+        "writeRateLimit": "每分钟写入次数",
+        "writeRateLimitHelp": "此令牌每分钟可发送的写入请求数,与读取分开计数。"
       },
       "reveal": {
         "title": "请立即复制您的令牌",
@@ -3565,7 +3576,8 @@
         "copy": "复制",
         "copied": "已复制",
         "done": "完成"
-      }
+      },
+      "deletedToken": "已删除的令牌"
     },
     "displayMode": "显示模式",
     "light": "浅色",

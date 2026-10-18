@@ -367,6 +367,18 @@ export async function getAuditLogs(options: {
     }),
   ])
 
+  // Token-attributed rows show the token's name and prefix as their actor.
+  // One lookup for the whole page; no foreign key on purpose, so a deleted
+  // token simply resolves to nulls.
+  const tokenIds = [...new Set(rows.map(row => row.apiTokenId).filter((id): id is string => !!id))]
+  const tokens = tokenIds.length
+    ? await prisma.apiToken.findMany({
+        where: { id: { in: tokenIds } },
+        select: { id: true, name: true, tokenPrefix: true },
+      })
+    : []
+  const tokensById = new Map(tokens.map(token => [token.id, token]))
+
   // Re-map Prisma camelCase + JSONB → legacy SQLite snake_case + JSON-string
   // shape so the public response wire contract is unchanged.
   const data = rows.map(row => ({
@@ -385,6 +397,9 @@ export async function getAuditLogs(options: {
     status: row.status,
     error_message: row.errorMessage,
     tenant_id: row.tenantId,
+    api_token_id: row.apiTokenId,
+    api_token_name: (row.apiTokenId && tokensById.get(row.apiTokenId)?.name) || null,
+    api_token_prefix: (row.apiTokenId && tokensById.get(row.apiTokenId)?.tokenPrefix) || null,
   }))
 
   return { data, meta: { total, limit, offset } }

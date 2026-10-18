@@ -13,6 +13,7 @@ import { useTranslations } from 'next-intl'
 import CreateTokenDialog from './CreateTokenDialog'
 import FeatureGuard from '@/components/guards/FeatureGuard'
 import { tooltipSlotProps } from '@/components/settings/ha/tooltipSlotProps'
+import { DESTRUCTIVE_SCOPE_IDS, isWriteScope } from '@/lib/api-tokens/scopes'
 import { Features } from '@/lib/license/features'
 
 type ApiTokenView = {
@@ -29,11 +30,18 @@ type ApiTokenView = {
   lastUsedAt: string | null
   lastUsedIp: string | null
   rateLimitPerMin: number
+  writeRateLimitPerMin?: number
   // Frozen copy of the creator's email (TOKEN_VIEW_SELECT). Null on tokens
   // minted before the column existed, and on tokens created without a user
   // session -- the grid falls back to the "unknown" label for those.
   createdByEmail?: string | null
   createdAt: string
+}
+
+// Read scopes stay neutral; write scopes stand out, destructive ones most.
+function scopeChipColor(scope: string): 'default' | 'warning' | 'error' {
+  if (DESTRUCTIVE_SCOPE_IDS.includes(scope)) return 'error'
+  return isWriteScope(scope) ? 'warning' : 'default'
 }
 
 function ApiTokensPanel() {
@@ -110,7 +118,7 @@ function ApiTokensPanel() {
       renderCell: params => (
         <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
           {(params.value as string[]).map(scope => (
-            <Chip key={scope} label={scope} size='small' />
+            <Chip key={scope} label={scope} size='small' color={scopeChipColor(scope)} />
           ))}
         </Box>
       ),

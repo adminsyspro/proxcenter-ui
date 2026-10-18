@@ -194,6 +194,25 @@ describe('ApiTokensTab', () => {
     expect(screen.getByText(/203\.0\.113\.9/)).toBeInTheDocument()
   })
 
+  // Write scopes stand out from read ones, and the destructive ones stand out
+  // from the rest of the write scopes.
+  it('colours write scope chips in warning and destructive ones in error', async () => {
+    tokensFixture = [{ ...TOKEN_ROW, scopes: ['vms:read', 'vms:power', 'vms:delete'] }]
+    renderWithProviders(<ApiTokensTab />)
+    const readChip = (await screen.findByText('vms:read')).closest('.MuiChip-root') as HTMLElement
+    const writeChip = screen.getByText('vms:power').closest('.MuiChip-root') as HTMLElement
+    const destructiveChip = screen.getByText('vms:delete').closest('.MuiChip-root') as HTMLElement
+    expect(readChip.className).toContain('MuiChip-colorDefault')
+    expect(writeChip.className).toContain('MuiChip-colorWarning')
+    expect(destructiveChip.className).toContain('MuiChip-colorError')
+  })
+
+  it('no longer calls the tokens read-only', async () => {
+    renderWithProviders(<ApiTokensTab />)
+    expect(await screen.findByText(enTokens.subtitle)).toBeInTheDocument()
+    expect(enTokens.subtitle).not.toMatch(/read-only/i)
+  })
+
   // #827: this tab is where an admin has just minted a token and wonders what
   // it can call. A real link (not a router push) so it can open in a new tab.
   it('links to the in-product API reference', async () => {

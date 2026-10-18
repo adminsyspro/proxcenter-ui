@@ -28,6 +28,7 @@ import { formatBytes } from '@/utils/format'
 import { uploadFileToStorage } from '@/lib/storage/uploadClient'
 import { useProxCenterTasks } from '@/contexts/ProxCenterTasksContext'
 import { useRBAC } from '@/contexts/RBACContext'
+import { useTenant } from '@/contexts/TenantContext'
 import { storageResourceId } from '@/lib/rbac/clientScope'
 import TemplateDownloadDialog from '@/components/storage/TemplateDownloadDialog'
 
@@ -311,6 +312,9 @@ export function UploadDialog({ open, onClose, onOpen, connId, node, storage, con
 }) {
   const { addTask, updateTask, registerOnRestore, unregisterOnRestore, registerOnCancel, unregisterOnCancel } = useProxCenterTasks()
   const [mode, setMode] = useState<'file' | 'url'>('file')
+  // The node fetches the URL itself: a vDC tenant may not have it download
+  // anything (the route refuses it), only the provider and msp tenants may.
+  const { isFullClusterView: canDownloadUrl } = useTenant()
   const [file, setFile] = useState<File | null>(null)
   const [contentType, setContentType] = useState('')
   const [uploading, setUploading] = useState(false)
@@ -527,7 +531,7 @@ export function UploadDialog({ open, onClose, onOpen, connId, node, storage, con
       <DialogContent>
         <Stack spacing={2.5} sx={{ mt: 1 }}>
           {/* Mode toggle */}
-          <ToggleButtonGroup
+          {canDownloadUrl && <ToggleButtonGroup
             value={mode}
             exclusive
             onChange={(_e, v) => { if (v) { setMode(v); setError(null); setSuccess(false) } }}
@@ -543,7 +547,7 @@ export function UploadDialog({ open, onClose, onOpen, connId, node, storage, con
               <i className="ri-links-line" style={{ fontSize: 16 }} />{' '}
               Download from URL
             </ToggleButton>
-          </ToggleButtonGroup>
+          </ToggleButtonGroup>}
 
           {/* Content type selector */}
           <Box>

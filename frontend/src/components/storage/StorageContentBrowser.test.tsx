@@ -23,6 +23,8 @@ const h = vi.hoisted(() => ({
   uploadFileToStorage: vi.fn(),
   // Rights of the signed-in user; every test starts with all storage rights.
   permissions: new Set<string>(),
+  // Provider / msp tenant (full cluster view) unless a test makes it a vDC tenant.
+  fullClusterView: true,
   tasks: {
     addTask: vi.fn(),
     updateTask: vi.fn(),
@@ -36,6 +38,7 @@ const h = vi.hoisted(() => ({
 vi.mock('@/lib/storage/uploadClient', () => ({ uploadFileToStorage: h.uploadFileToStorage }))
 vi.mock('@/contexts/ProxCenterTasksContext', () => ({ useProxCenterTasks: () => h.tasks }))
 vi.mock('@/components/storage/TemplateDownloadDialog', () => ({ default: () => null }))
+vi.mock('@/contexts/TenantContext', () => ({ useTenant: () => ({ isFullClusterView: h.fullClusterView }) }))
 vi.mock('@/contexts/RBACContext', () => ({
   useRBAC: () => ({
     hasPermission: (p: string) => h.permissions.has(p),
@@ -85,6 +88,7 @@ describe('StorageContentBrowser', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     h.permissions = new Set(['storage.content', 'storage.upload', 'storage.delete'])
+    h.fullClusterView = true
     seedContent()
   })
 
@@ -189,6 +193,20 @@ describe('StorageContentBrowser', () => {
     // The dialog closes and the list is refreshed 1.5 s after the task is accepted.
     await waitFor(() => expect(onDelete).toHaveBeenCalledTimes(1), { timeout: 3000 })
     expect(contentCalls).toBe(2)
+  })
+
+  it('a vDC tenant uploads a file but is never offered the download from a URL (the route refuses it)', async () => {
+    h.fullClusterView = false
+    renderBrowser()
+
+    await waitFor(() => expect(screen.getByText('virtio-win-0.1.271.iso')).toBeInTheDocument())
+    fireEvent.click(screen.getByTitle('Upload'))
+
+    const dialog = await screen.findByRole('dialog')
+
+    expect(within(dialog).queryByRole('button', { name: /Download from URL/ })).toBeNull()
+    expect(within(dialog).queryByLabelText('URL')).toBeNull()
+    expect(within(dialog).getByText('Click to select a file')).toBeInTheDocument()
   })
 
   // Issue #920: each write control follows the right its route enforces.

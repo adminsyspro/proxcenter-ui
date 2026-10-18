@@ -41,6 +41,11 @@ vi.mock("@/lib/proxmox/client", () => ({
   pveFetch: (...a: any[]) => pveFetchMock(...a),
 }))
 vi.mock("@/lib/audit", () => ({ audit: vi.fn() }))
+// A provider session: the vDC tenant refusal is covered by downloadUrlTokenScope.test.ts.
+vi.mock("@/lib/auth/principal", () => ({
+  getPrincipal: async () => ({ ok: true, principal: { kind: "session", userId: "u1", tenantId: "default", connectionIds: null } }),
+}))
+vi.mock("@/lib/tenant/infraScope", () => ({ getTenantInfrastructureScope: async () => ({ kind: "provider" }) }))
 
 import { POST } from "./route"
 

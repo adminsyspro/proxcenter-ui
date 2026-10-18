@@ -2,7 +2,8 @@
  * The node fetches the download URL itself, following redirects and resolving
  * the name on its own, so no pre-flight can keep it off a private network. An
  * API token may only name an http(s) URL, and a vDC tenant token is refused
- * outright. Sessions and provider tokens keep today's behaviour. Real route
+ * outright, as is a vDC tenant session. Provider and msp sessions keep
+ * today's behaviour. Real route
  * and guard; principal, perimeter, tenant scope, the storage guard and Proxmox
  * are stubbed.
  */
@@ -123,13 +124,29 @@ describe('POST download-url with an API token', () => {
     expect(downloadMock).toHaveBeenCalledTimes(1)
   })
 
-  it('a session is unchanged: no URL restriction, no tenant lookup', async () => {
-    getPrincipalMock.mockResolvedValue({ ok: true, principal: { kind: 'session', userId: 'u-1', tenantId: 'tenant-a' } })
+})
+
+describe('POST download-url with a session', () => {
+  const session = (tenantId: string) => getPrincipalMock.mockResolvedValue({ ok: true, principal: { kind: 'session', userId: 'u-1', tenantId, connectionIds: null } })
+
+  it('403 for a vDC tenant session, the node is never asked', async () => {
+    session('tenant-a')
+
+    const res = await download('https://cdimage.debian.org/debian.iso')
+
+    expect(res.status).toBe(403)
+    expect(await res.json()).toEqual({ error: 'Download URL not available to a vDC tenant' })
+    expect(infraMock).toHaveBeenCalledWith('tenant-a', { ignoreVdcContext: true })
+    expect(downloadMock).not.toHaveBeenCalled()
+  })
+
+  it.each(['provider', 'msp'])('a %s session is unchanged: no URL restriction', async (kind) => {
+    session(kind === 'provider' ? 'default' : 'tenant-m')
+    infraMock.mockResolvedValue({ kind })
 
     const res = await download('ftp://10.0.0.5/x.iso')
 
     expect(res.status).toBe(200)
-    expect(infraMock).not.toHaveBeenCalled()
     expect(downloadMock).toHaveBeenCalledTimes(1)
   })
 })

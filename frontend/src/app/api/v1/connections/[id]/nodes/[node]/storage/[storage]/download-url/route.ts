@@ -4,18 +4,22 @@ import { downloadToStorage, PveDownloadPermissionError } from "@/lib/proxmox/dow
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { buildStorageResourceId, checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { guardTenantStorageWrite, tenantUploadFilename } from "@/lib/vdc/scope"
-import type { Principal } from "@/lib/auth/principal"
+import { getPrincipal, type Principal } from "@/lib/auth/principal"
 import { getTenantInfrastructureScope } from "@/lib/tenant/infraScope"
 import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 
 export const runtime = "nodejs"
 
 /**
- * API tokens only: the node fetches the URL itself, follows redirects and
- * resolves the name on its own, so no check made here can keep it off a
- * private network. A token may only name an http(s) URL, and a vDC tenant
- * token may not have the provider's node download anything.
+ * The node fetches the URL itself, follows redirects and resolves the name on
+ * its own, so no check made here can keep it off a private network: a vDC
+ * tenant, token or session, may not have the provider's node download
+ * anything. A token may moreover only name an http(s) URL.
  */
+async function isVdcTenant(tenantId: string): Promise<boolean> {
+  return (await getTenantInfrastructureScope(tenantId, { ignoreVdcContext: true })).kind === "iaas"
+}
+
 async function tokenUrlRefusal(principal: Principal, url: unknown): Promise<string | null> {
   let protocol = ""
   try {
@@ -24,8 +28,13 @@ async function tokenUrlRefusal(principal: Principal, url: unknown): Promise<stri
     // Not a URL: refused like any other scheme.
   }
   if (protocol !== "http:" && protocol !== "https:") return "Download URL not allowed for this token"
-  const infra = await getTenantInfrastructureScope(principal.tenantId, { ignoreVdcContext: true })
-  return infra.kind === "iaas" ? "Download URL not available to a vDC tenant token" : null
+  return (await isVdcTenant(principal.tenantId)) ? "Download URL not available to a vDC tenant token" : null
+}
+
+/** The session's own tenant, the one its grants were just judged in (no provider fallback). */
+async function sessionUrlRefusal(): Promise<string | null> {
+  const tenantId = (await getPrincipal()).principal?.tenantId
+  return tenantId && (await isVdcTenant(tenantId)) ? "Download URL not available to a vDC tenant" : null
 }
 
 // POST /api/v1/connections/{id}/nodes/{node}/storage/{storage}/download-url
@@ -51,8 +60,8 @@ async function postHandler(
       )
     }
 
-    const tokenRefusal = ctx.principal?.kind === "token" ? await tokenUrlRefusal(ctx.principal, url) : null
-    if (tokenRefusal) return NextResponse.json({ error: tokenRefusal }, { status: 403 })
+    const urlRefusal = ctx.principal?.kind === "token" ? await tokenUrlRefusal(ctx.principal, url) : await sessionUrlRefusal()
+    if (urlRefusal) return NextResponse.json({ error: urlRefusal }, { status: 403 })
 
     // On an ISO library that allows uploads, a tenant's file is namespaced
     // `custom-<slug>-*` server-side and the guard then only lets the tenant

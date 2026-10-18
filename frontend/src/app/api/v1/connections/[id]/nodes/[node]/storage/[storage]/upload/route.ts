@@ -8,6 +8,7 @@ import { getPrincipal } from "@/lib/auth/principal"
 import { buildStorageResourceId, checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { guardTenantStorageWrite, tenantUploadFilename } from "@/lib/vdc/scope"
 import { setProgress, clearProgress } from "@/lib/upload-progress"
+import { UPLOAD_CHUNK_SIZE } from "@/lib/storage/uploadClient"
 import { licenseExcludedResponse } from "@/lib/api/response"
 import { isConnectionLicenseExcluded, licenseExcludedError } from "@/lib/license/exclusions"
 
@@ -23,10 +24,77 @@ const streamingSessions = new Map<string, {
   fileName: string
   bytesSent: number
   totalFormLength: number
+  // Index of the next chunk to write. A lower index was already written and
+  // is only acknowledged again (a retry after its reply was lost); a higher
+  // one means a chunk is missing.
+  nextChunk: number
+  // Writes to Proxmox, chained in chunk order.
+  writing: Promise<void>
+  // Set when a write failed and ended the session, to tell it from a stop.
+  failed?: boolean
+  // File bytes accepted so far (written or queued), against the size the
+  // first chunk announced.
+  receivedBytes: number
+  fileSize: number
+  // A chunk is queued or being written: the next one waits for it.
+  writeInFlight: boolean
   resolve: (value: { statusCode: number; body: string }) => void
   reject: (reason: any) => void
   resultPromise: Promise<{ statusCode: number; body: string }>
 }>()
+
+type StreamingSession = NonNullable<ReturnType<typeof streamingSessions.get>>
+
+// How long a chunk request waits for its write to Proxmox before answering
+// 202. Well under the 60 s proxy_read_timeout of nginx/proxcenter-locations.conf:
+// past it the proxy answers 504 and the browser never learns the chunk is in.
+const CHUNK_ACK_WAIT_MS = 25_000
+
+class UploadCancelled extends Error {}
+
+// Read a chunk whole, but never more than `limit` bytes: it is held in
+// memory until Proxmox takes it. Null when the body runs past the limit.
+async function readChunkBody(body: ReadableStream<Uint8Array>, limit: number): Promise<Buffer | null> {
+  const reader = body.getReader()
+  const parts: Uint8Array[] = []
+  let size = 0
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) return Buffer.concat(parts)
+    size += value.byteLength
+    if (size > limit) {
+      await reader.cancel().catch(() => { /* the body is dropped anyway */ })
+      return null
+    }
+    parts.push(value)
+  }
+}
+
+// Answer a chunk once its write (and every write before it) is through, or
+// 202 when that takes longer than CHUNK_ACK_WAIT_MS: the browser then asks
+// again without the body.
+async function acknowledgeChunk(uploadId: string, session: StreamingSession, chunkIndex: number) {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const waited = new Promise<"pending">(resolve => { timer = setTimeout(() => resolve("pending"), CHUNK_ACK_WAIT_MS) })
+
+  try {
+    const outcome = await Promise.race([session.writing.then(() => "written" as const), waited])
+
+    if (outcome === "pending") {
+      return NextResponse.json({ pending: true, chunkIndex, uploadId }, { status: 202 })
+    }
+
+    return NextResponse.json({ ok: true, chunkIndex, bytesSent: session.bytesSent })
+  } catch (e: any) {
+    if (e instanceof UploadCancelled || (!session.failed && streamingSessions.get(uploadId) !== session)) {
+      return NextResponse.json({ cancelled: true, uploadId }, { status: 409 })
+    }
+
+    return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
+  } finally {
+    clearTimeout(timer)
+  }
+}
 
 // Build multipart form parts (without file data)
 function buildMultipartParts(boundary: string, contentType: string, fileName: string, mimeType: string) {
@@ -146,11 +214,55 @@ async function handleChunk(
     if (storageBlock) return storageBlock
     const mimeType = req.headers.get("x-mime-type") || "application/octet-stream"
 
+    let session = streamingSessions.get(uploadId)
+
+    // Already written: a retry whose earlier reply was lost (a proxy 504), or
+    // the browser asking again after a 202. The body, if any, is not needed.
+    if (session && chunkIndex < session.nextChunk) {
+      return await acknowledgeChunk(uploadId, session, chunkIndex)
+    }
+
+    // Past the first chunk with no session: the session was dropped (failed
+    // write, stop, restart). Opening a new one here would stream the rest of
+    // the file under the full length, and Proxmox stores what it received as
+    // a complete, truncated file.
+    if (!session && chunkIndex > 0) {
+      return NextResponse.json(
+        { error: "The upload was interrupted on the server side. Start it again.", code: "UPLOAD_SESSION_LOST", uploadId },
+        { status: 409 }
+      )
+    }
+
+    if (session && chunkIndex > session.nextChunk) {
+      return NextResponse.json(
+        { error: `Chunk ${session.nextChunk} never arrived. Start the upload again.`, code: "UPLOAD_CHUNK_MISSING", uploadId },
+        { status: 409 }
+      )
+    }
+
     if (!req.body) {
       return NextResponse.json({ error: "Missing body" }, { status: 400 })
     }
 
-    let session = streamingSessions.get(uploadId)
+    // One chunk in memory per upload: the browser waits for each chunk's
+    // answer (or asks again after a 202) before sending the next one.
+    if (session?.writeInFlight) {
+      return NextResponse.json({ error: `Chunk ${chunkIndex - 1} is still being written`, uploadId }, { status: 429 })
+    }
+
+    // Read the whole chunk before writing any of it. Streamed straight to
+    // Proxmox, its read followed Proxmox's pace: when the proxy gave up first,
+    // the read aborted half way and took the whole session down.
+    let data: Buffer | null
+    try {
+      data = await readChunkBody(req.body, UPLOAD_CHUNK_SIZE)
+    } catch {
+      return NextResponse.json({ error: `Chunk ${chunkIndex} was cut off in transit`, uploadId }, { status: 400 })
+    }
+    const announced = session ? session.fileSize : totalSize
+    if (!data || (session?.receivedBytes ?? 0) + data.byteLength > announced) {
+      return NextResponse.json({ error: `Chunk ${chunkIndex} is larger than the upload allows`, uploadId }, { status: 413 })
+    }
 
     // First chunk: open connection to Proxmox
     if (!session) {
@@ -234,6 +346,11 @@ async function handleChunk(
         fileName,
         bytesSent: 0,
         totalFormLength,
+        nextChunk: 0,
+        writing: Promise.resolve(),
+        receivedBytes: 0,
+        fileSize: totalSize,
+        writeInFlight: false,
         resolve: resolveResult,
         reject: rejectResult,
         resultPromise,
@@ -243,36 +360,38 @@ async function handleChunk(
       console.log(`[upload] Streaming "${fileName.replaceAll(/[\r\n]/g, '')}" (${totalSize} bytes) directly to Proxmox, uploadId=${uploadId}`)
     }
 
-    // Stream chunk data directly to the open Proxmox connection
-    const reader = req.body.getReader()
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
+    // Queue the write behind the previous chunks. The chunk counts as received
+    // from here on, so a retry of it is acknowledged instead of written twice.
+    const current = session
+    const bytes = data
+    current.nextChunk = chunkIndex + 1
+    current.receivedBytes += bytes.byteLength
+    current.writeInFlight = true
+    const write = current.writing.then(async () => {
+      // A stop (#974) drops the session. Write nothing more: progress would
+      // read "transferring" over the cancelled entry, and a browser that
+      // reloaded and is polling it would never learn the transfer was stopped.
+      if (streamingSessions.get(uploadId) !== current) throw new UploadCancelled()
 
-      // A stop (#974) drops the session. Leave immediately: one more loop
-      // would write "transferring" over the cancelled progress entry, and a
-      // browser that reloaded and is polling it would never learn the
-      // transfer was stopped.
-      if (streamingSessions.get(uploadId) !== session) {
-        await reader.cancel().catch(() => { /* the body is going away anyway */ })
-
-        return NextResponse.json({ cancelled: true, uploadId }, { status: 409 })
-      }
-
-      if (value) {
-        await new Promise<void>((resolve, reject) => {
-          session!.proxyReq.write(value, (err: any) => (err ? reject(err) : resolve()))
-        })
-        session.bytesSent += value.byteLength
-        setProgress(uploadId, { bytesSent: session.bytesSent, totalBytes: totalSize || session.totalFormLength, status: "transferring" })
-      }
-    }
-
-    return NextResponse.json({
-      ok: true,
-      chunkIndex,
-      bytesSent: session.bytesSent,
+      await new Promise<void>((resolve, reject) => {
+        current.proxyReq.write(bytes, (err: any) => (err ? reject(err) : resolve()))
+      })
+      current.bytesSent += bytes.byteLength
+      setProgress(uploadId, { bytesSent: current.bytesSent, totalBytes: totalSize || current.totalFormLength, status: "transferring" })
     })
+    current.writing = write
+    void write.finally(() => { current.writeInFlight = false }).catch(() => { /* reported below */ })
+    // A failed write ends the session, whether or not a request still waits
+    // on it: the next chunk then gets UPLOAD_SESSION_LOST.
+    write.catch((e) => {
+      if (e instanceof UploadCancelled || streamingSessions.get(uploadId) !== current) return
+      console.error("Error streaming chunk:", e)
+      current.failed = true
+      current.proxyReq.destroy()
+      streamingSessions.delete(uploadId)
+    })
+
+    return await acknowledgeChunk(uploadId, current, chunkIndex)
   } catch (e: any) {
     const session = streamingSessions.get(uploadId)
 
@@ -315,6 +434,10 @@ async function handleFinalize(
     if (!session) {
       return NextResponse.json({ error: "No streaming session found. Send chunks first." }, { status: 400 })
     }
+
+    // Every chunk was acknowledged, so its write is through; this only holds
+    // back a finalize sent while a chunk was still pending.
+    await session.writing
 
     // Write closing boundary
     const closing = `\r\n--${session.boundary}--\r\n`

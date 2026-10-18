@@ -315,3 +315,140 @@ describe("DELETE upload: stopping a transfer in flight", () => {
     expect(again.status).toBe(404)
   })
 })
+
+/**
+ * Retries behind a reverse proxy (roadmap#55). nginx answers 504 when a chunk
+ * write to Proxmox outlasts its read timeout, while the route keeps writing.
+ * A retry of that chunk must be acknowledged, never written a second time,
+ * and a chunk that finds no session must not open a new, truncated upload.
+ */
+describe("POST upload: chunk retries are idempotent", () => {
+  beforeEach(() => { fakeHttps.request.mockClear() })
+
+  // Fake Proxmox request whose writes are recorded; `hold` keeps a write
+  // pending until `release()` is called.
+  const recordingRequest = (opts: { hold?: boolean; fail?: boolean } = {}) => {
+    const writes: Buffer[] = []
+    let pending: (() => void) | null = null
+    fakeHttps.request.mockImplementationOnce((_o: any, _onResponse: any) => {
+      const { EventEmitter } = require("node:events")
+      const req: any = new EventEmitter()
+      req.write = (data: any, cb?: (err?: any) => void) => {
+        writes.push(Buffer.from(data))
+        if (opts.fail) cb?.(new Error("socket hang up"))
+        else if (opts.hold) pending = () => cb?.()
+        else cb?.()
+        return true
+      }
+      req.destroy = vi.fn()
+      req.end = () => {}
+      return req
+    })
+    return { writes, release: () => pending?.() }
+  }
+
+  const chunk = (uploadId: string, index: number, body?: string) =>
+    callRoute(POST, {
+      method: "POST",
+      params: PARAMS,
+      headers: { "x-chunk-index": String(index), "x-total-size": "8", "x-file-name": "big.iso", "x-upload-id": uploadId },
+      body,
+    })
+
+  it("acknowledges a chunk sent again after its reply was lost, without writing it twice", async () => {
+    const pve = recordingRequest()
+
+    expect((await chunk("r-dup", 0, "aaaa")).status).toBe(200)
+    const again = await chunk("r-dup", 0, "aaaa")
+    expect(again.status).toBe(200)
+    expect((await chunk("r-dup", 1, "bbbb")).status).toBe(200)
+
+    // Multipart preamble, then each chunk once and whole.
+    expect(pve.writes.slice(1).map(String)).toEqual(["aaaa", "bbbb"])
+  })
+
+  it("refuses a chunk past the first when no session exists, instead of opening a truncated upload", async () => {
+    const res = await chunk("r-lost", 2, "cccc")
+
+    expect(res.status).toBe(409)
+    expect(await res.json()).toMatchObject({ code: "UPLOAD_SESSION_LOST" })
+    expect(fakeHttps.request).not.toHaveBeenCalled()
+  })
+
+  it("refuses a chunk that skips one", async () => {
+    recordingRequest()
+    expect((await chunk("r-gap", 0, "aaaa")).status).toBe(200)
+
+    const res = await chunk("r-gap", 2, "cccc")
+
+    expect(res.status).toBe(409)
+    expect(await res.json()).toMatchObject({ code: "UPLOAD_CHUNK_MISSING" })
+  })
+
+  it("answers 202 when the write outlasts the wait, then 200 to a bodiless ask once it is through", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
+    try {
+      const pve = recordingRequest({ hold: true })
+      const first = chunk("r-slow", 0, "aaaa")
+      await vi.advanceTimersByTimeAsync(25_000)
+      const res = await first
+      expect(res.status).toBe(202)
+      expect(await res.json()).toMatchObject({ pending: true, chunkIndex: 0 })
+
+      pve.release()
+      const ask = await chunk("r-slow", 0)
+      expect(ask.status).toBe(200)
+      expect(pve.writes.slice(1).map(String)).toEqual(["aaaa"])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it("refuses a chunk that would carry the upload past the size its first chunk announced", async () => {
+    const pve = recordingRequest()
+    expect((await chunk("r-big", 0, "aaaa")).status).toBe(200)
+
+    const res = await chunk("r-big", 1, "bbbbbbbb")
+
+    expect(res.status).toBe(413)
+    expect(pve.writes.slice(1).map(String)).toEqual(["aaaa"])
+  })
+
+  it("keeps one chunk in memory per upload: the next one waits for the write in flight", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
+    try {
+      const pve = recordingRequest({ hold: true })
+      const first = chunk("r-queue", 0, "aaaa")
+      await vi.advanceTimersByTimeAsync(0)
+
+      const second = await chunk("r-queue", 1, "bbbb")
+      expect(second.status).toBe(429)
+
+      pve.release()
+      await vi.advanceTimersByTimeAsync(0)
+      expect((await first).status).toBe(200)
+
+      // Once chunk 0 is through, chunk 1 is taken.
+      const third = chunk("r-queue", 1, "bbbb")
+      await vi.advanceTimersByTimeAsync(0)
+      pve.release()
+      expect((await third).status).toBe(200)
+      expect(pve.writes.slice(1).map(String)).toEqual(["aaaa", "bbbb"])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it("ends the session on a failed write, so the next chunk is refused rather than streamed", async () => {
+    // The preamble is written without a callback, so only the chunk write fails.
+    recordingRequest({ fail: true })
+
+    const res = await chunk("r-fail", 0, "aaaa")
+    expect(res.status).toBe(500)
+    expect((await res.json()).error).toMatch(/socket hang up/)
+
+    const next = await chunk("r-fail", 1, "bbbb")
+    expect(next.status).toBe(409)
+    expect(await next.json()).toMatchObject({ code: "UPLOAD_SESSION_LOST" })
+  })
+})

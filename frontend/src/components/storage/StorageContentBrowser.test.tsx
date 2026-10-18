@@ -164,6 +164,26 @@ describe('StorageContentBrowser', () => {
     }))
   })
 
+  it('preselects the type of the section the upload was opened from, not the first uploadable one', async () => {
+    h.uploadFileToStorage.mockReturnValue(new Promise(() => {}))
+    // `import` comes first and is uploadable too; the ISO section opens the dialog.
+    renderWithProviders(
+      <StorageContentBrowser connId={CONN} node={NODE} storage={STORAGE} contentTypes={['import', 'iso']} onDelete={vi.fn()} />,
+    )
+
+    await waitFor(() => expect(screen.getByText('virtio-win-0.1.271.iso')).toBeInTheDocument())
+    fireEvent.click(screen.getByTitle('Upload'))
+
+    const dialog = await screen.findByRole('dialog')
+    const file = new File(['iso-bytes'], 'alpine.iso', { type: 'application/octet-stream' })
+
+    fireEvent.change(dialog.querySelector('input[type="file"]')!, { target: { files: [file] } })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Upload' }))
+
+    await waitFor(() => expect(h.uploadFileToStorage).toHaveBeenCalledTimes(1))
+    expect(h.uploadFileToStorage.mock.calls[0][0]).toMatchObject({ contentType: 'iso' })
+  })
+
   it('downloads from a URL with the file name taken from its path, then reloads the content', async () => {
     let body: Record<string, unknown> | null = null
 

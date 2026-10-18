@@ -99,6 +99,13 @@ function hasBodyField(entry: AllowlistEntry): boolean {
     (!!guest && 'vmidField' in guest && guest.vmidField.source === 'body')
 }
 
+/** Entries whose path names a guest ({vmid} or a vmKey segment) without confining it to the vDC. */
+function unconfinedGuestEntries(entries: AllowlistEntry[] = PUBLIC_API_ALLOWLIST): string[] {
+  return entries
+    .filter(e => (e.pattern.split('/').includes('{vmid}') || !!e.vmKeySegment) && !e.guestScope)
+    .map(e => e.id)
+}
+
 const byRouteFile = new Map<string, AllowlistEntry[]>()
 for (const entry of PUBLIC_API_ALLOWLIST) {
   byRouteFile.set(entry.routeFile, [...(byRouteFile.get(entry.routeFile) ?? []), entry])
@@ -163,6 +170,16 @@ describe('write contract: declared entries', () => {
         for (const write of writes) expect(get.requiredScopes).toEqual(expect.arrayContaining(write.requiredScopes))
       }
     }
+  })
+
+  it('(h) every entry whose path names a guest declares guestScope', () => {
+    expect(unconfinedGuestEntries()).toEqual([])
+  })
+
+  it('(h) bites: a {vmid} or vmKey entry stripped of its guestScope is reported', () => {
+    const stripped = new Set(['vm-power', 'vm-notes-update'])
+    const entries = PUBLIC_API_ALLOWLIST.map(e => (stripped.has(e.id) ? { ...e, guestScope: undefined } : e))
+    expect(unconfinedGuestEntries(entries).sort()).toEqual(['vm-notes-update', 'vm-power'])
   })
 
   it('(f) no (method, sample path) matches two entries, and the shared matcher picks its own', () => {

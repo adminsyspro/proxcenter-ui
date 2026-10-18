@@ -1,37 +1,13 @@
-// PURE data module: imported by BOTH the proxy (D7) and
+// PURE data modules: imported by BOTH the proxy (D7) and
 // principal.ts (D8). NO DB access, ever.
-// Single source of truth for: the proxy derogation, the authorization
-// (getPrincipal step 10), the OpenAPI generation and the contract tests.
+import type { AllowlistEntry } from "./types"
 
-export type AllowlistQueryParam = {
-  name: string
-  description: string
-  required?: boolean
-}
-
-export type AllowlistEntry = {
-  /** Stable id, carried by the internal x-pxc-entry header. */
-  id: string
-  method: "GET"
-  /** Segment-per-segment pattern; {name} = one named dynamic segment. */
-  pattern: string
-  /** anyOf semantics; empty list = any valid token (health). */
-  requiredScopes: string[]
-  /** Name of the dynamic segment carrying a RAW connection id, if any (spec layer 1). */
-  connectionSegment?: string
-  /** Route module, repo-frontend-relative; consumed by the contract tests. */
-  routeFile: string
-  summary: string
-  description: string
-  queryParams?: AllowlistQueryParam[]
-  /** Key into RESPONSE_SCHEMAS (openapiSchemas.ts). */
-  responseSchemaRef: string
-}
-
-export const PUBLIC_API_ALLOWLIST: AllowlistEntry[] = [
+// Phase 1: read-only monitoring.
+export const MONITORING_ENTRIES: AllowlistEntry[] = [
   {
     id: "vms-list",
     method: "GET",
+    tag: "Monitoring",
     pattern: "/api/v1/vms",
     requiredScopes: ["vms:read"],
     routeFile: "src/app/api/v1/vms/route.ts",
@@ -47,6 +23,7 @@ export const PUBLIC_API_ALLOWLIST: AllowlistEntry[] = [
   {
     id: "inventory-tree",
     method: "GET",
+    tag: "Monitoring",
     pattern: "/api/v1/inventory",
     requiredScopes: ["nodes:read"],
     routeFile: "src/app/api/v1/inventory/route.ts",
@@ -59,6 +36,7 @@ export const PUBLIC_API_ALLOWLIST: AllowlistEntry[] = [
   {
     id: "storage-list",
     method: "GET",
+    tag: "Monitoring",
     pattern: "/api/v1/storage",
     requiredScopes: ["storage:read"],
     routeFile: "src/app/api/v1/storage/route.ts",
@@ -69,6 +47,7 @@ export const PUBLIC_API_ALLOWLIST: AllowlistEntry[] = [
   {
     id: "pbs-backups",
     method: "GET",
+    tag: "Monitoring",
     pattern: "/api/v1/pbs/{id}/backups",
     requiredScopes: ["backups:read"],
     connectionSegment: "id",
@@ -89,6 +68,7 @@ export const PUBLIC_API_ALLOWLIST: AllowlistEntry[] = [
   {
     id: "public-backups",
     method: "GET",
+    tag: "Monitoring",
     pattern: "/api/v1/public/backups",
     requiredScopes: ["backups:read"],
     routeFile: "src/app/api/v1/public/backups/route.ts",
@@ -100,6 +80,7 @@ export const PUBLIC_API_ALLOWLIST: AllowlistEntry[] = [
   {
     id: "public-metrics",
     method: "GET",
+    tag: "Monitoring",
     pattern: "/api/v1/public/metrics",
     requiredScopes: ["nodes:read", "vms:read", "backups:read"],
     routeFile: "src/app/api/v1/public/metrics/route.ts",
@@ -111,6 +92,7 @@ export const PUBLIC_API_ALLOWLIST: AllowlistEntry[] = [
   {
     id: "public-health",
     method: "GET",
+    tag: "Monitoring",
     pattern: "/api/v1/public/health",
     requiredScopes: [],
     routeFile: "src/app/api/v1/public/health/route.ts",
@@ -120,64 +102,3 @@ export const PUBLIC_API_ALLOWLIST: AllowlistEntry[] = [
     responseSchemaRef: "HealthResponse",
   },
 ]
-
-const ENTRIES_BY_ID = new Map(PUBLIC_API_ALLOWLIST.map(e => [e.id, e]))
-
-export function getAllowlistEntryById(id: string): AllowlistEntry | null {
-  return ENTRIES_BY_ID.get(id) ?? null
-}
-
-/**
- * Pre-match rejections (spec section 8): encoded slash or backslash, empty
- * segment (double slash), '.' or '..' segments, trailing slash on a non-root
- * path. Rejection = no match = the existing proxy cookie 401, nothing
- * is disclosed.
- */
-export function isRejectedPath(pathname: string): boolean {
-  const lower = pathname.toLowerCase()
-  if (lower.includes("%2f") || lower.includes("%5c")) return true
-  if (pathname !== "/" && pathname.endsWith("/")) return true
-  const segments = pathname.split("/").slice(1)
-  for (const segment of segments) {
-    if (segment === "" || segment === "." || segment === "..") return true
-  }
-  return false
-}
-
-function matchPattern(pattern: string, pathname: string): Record<string, string> | null {
-  const patternSegments = pattern.split("/").slice(1)
-  const pathSegments = pathname.split("/").slice(1)
-  if (patternSegments.length !== pathSegments.length) return null
-  const params: Record<string, string> = {}
-  for (let i = 0; i < patternSegments.length; i++) {
-    const p = patternSegments[i]
-    if (p.startsWith("{") && p.endsWith("}")) {
-      params[p.slice(1, -1)] = pathSegments[i]
-    } else if (p !== pathSegments[i]) {
-      return null
-    }
-  }
-  return params
-}
-
-export type AllowlistMatch = { ok: boolean; entryId?: string; params?: Record<string, string> }
-
-/** THE single shared matcher: the proxy and getPrincipal both use it. */
-export function matchPublicApiPath(pathname: string): AllowlistMatch {
-  if (isRejectedPath(pathname)) return { ok: false }
-  for (const entry of PUBLIC_API_ALLOWLIST) {
-    const params = matchPattern(entry.pattern, pathname)
-    if (params !== null) return { ok: true, entryId: entry.id, params }
-  }
-  return { ok: false }
-}
-
-/** Re-verification against ONE designated entry (getPrincipal step 10): never a free re-match. */
-export function matchEntryParams(entry: AllowlistEntry, pathname: string): Record<string, string> | null {
-  if (isRejectedPath(pathname)) return null
-  return matchPattern(entry.pattern, pathname)
-}
-
-export function matchesEntry(entry: AllowlistEntry, pathname: string): boolean {
-  return matchEntryParams(entry, pathname) !== null
-}

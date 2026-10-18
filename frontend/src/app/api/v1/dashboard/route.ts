@@ -6,6 +6,7 @@ import { getSessionPrisma, getCurrentTenantId } from "@/lib/tenant"
 import { getTenantInfrastructureScope, inventoryConnectionPlan, maskingScope } from '@/lib/tenant/infraScope'
 import { prisma as globalPrisma } from '@/lib/db/prisma'
 import { pveFetch } from "@/lib/proxmox/client"
+import { attachGuestDiskTotals, onlineNodeSet } from "@/lib/inventory/guestDiskTotals"
 import { pbsFetch } from "@/lib/proxmox/pbs-client"
 import { listSnapshotsInNamespace } from "@/lib/proxmox/pbsNamespace"
 import { getConnectionById, getPbsConnectionById } from "@/lib/connections/getConnection"
@@ -241,6 +242,12 @@ export async function GET(req: Request) {
 
           const vms = resources.filter((r: any) => r.type === 'qemu')
           const lxcs = resources.filter((r: any) => r.type === 'lxc')
+          // #938: provisioned disk is the sum of every disk, not the boot disk
+          // `maxdisk` carries. Read from the inventory's cache, never waited on.
+          await attachGuestDiskTotals(connData, conn.id, [...vms, ...lxcs], {
+            onlineNodes: nodesResult.status === 'fulfilled' ? onlineNodeSet(nodes) : null,
+            blocking: false,
+          })
 
           // Aggregate real storage from /cluster/resources (not rootfs)
           const storageResources = resources.filter((r: any) => r.type === 'storage')
@@ -804,7 +811,7 @@ return null
     for (const g of allGuests) {
       provCpu += Number(g.maxcpu || 0)
       provMem += Number(g.maxmem || 0)
-      provDisk += Number(g.maxdisk || 0)
+      provDisk += Math.max(Number(g.diskTotal) || 0, Number(g.maxdisk) || 0)
     }
 
     // RBAC scope-aware resource view:

@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { callRoute, readJson } from '@/__tests__/setup/route-test'
+import { PveLicenseExcludedError } from '@/lib/license/exclusions'
 
 const checkPermissionMock = vi.fn<(...args: any[]) => Promise<Response | null>>()
 const getConnectionByIdMock = vi.fn<(id: string) => Promise<any>>()
@@ -67,6 +68,19 @@ describe('POST upgrade — identity guard', () => {
     const res = await callRoute(POST, { params: { id: 'c1', node: 'pve1' }, body: {} })
     expect(res.status).toBe(500)
     expect((await readJson<any>(res)).error).toMatch(/private address/)
+  })
+
+  it('answers 403 with its code when the cluster is outside the license (roadmap#58)', async () => {
+    getNodeIpMock.mockResolvedValue('203.0.113.10')
+    executeSSHMock
+      .mockResolvedValueOnce({ success: true, output: 'pve1' })      // the identity probe only reads, so it ran
+      .mockRejectedValueOnce(new PveLicenseExcludedError('c1'))     // the upgrade script: refused by executeSSH
+    const POST = await importPOST()
+    const res = await callRoute(POST, { params: { id: 'c1', node: 'pve1' }, body: {} })
+    expect(res.status).toBe(403)
+    expect(await readJson<any>(res)).toMatchObject({ code: 'CONNECTION_LICENSE_EXCLUDED' })
+    expect(executeSSHMock.mock.calls[0][4]).toEqual({ readOnly: true })
+    expect(executeSSHMock.mock.calls[1][4]).toBeUndefined()
   })
 })
 
@@ -182,6 +196,8 @@ describe('GET upgrade poll — reboot detection', () => {
     const res = await callRoute(GET, { params: { id: 'c1', node: 'pve1' } })
     expect(await readJson<any>(res)).toEqual({ status: 'COMPLETED', logs: 'log', reboot_required: true })
     const command = executeSSHMock.mock.calls[0][2] as string
+    // The poll only reads, so it still answers on a cluster outside the license (roadmap#58).
+    expect(executeSSHMock.mock.calls[0][4]).toEqual({ readOnly: true })
     expect(command).toContain('cat /var/log/proxcenter-upgrade.status')
     expect(command).toContain('uname -r')
     // an auto-reboot run ends on REBOOTING: once booted after it, it reads as COMPLETED

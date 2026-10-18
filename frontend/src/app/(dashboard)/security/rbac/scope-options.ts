@@ -120,9 +120,44 @@ export function buildScopeOptions(inventory: any, scopeType: string, t: any): Sc
         }))
     }
 
+    case 'storage':
+      return buildStorageScopeOptions(inventory.storages, inventory.clusters)
+
     default:
       return []
   }
+}
+
+/**
+ * One option per (connection, storage) from the `/api/v1/storage` rows the
+ * dialogs attach to the inventory as `storages` (issue #921). The inventory
+ * payload itself carries no storage, so without that list the type offers
+ * nothing. The id is the scope target the server matches: `connId:storage`.
+ */
+export function buildStorageScopeOptions(
+  storages: Array<{ connId: string; connName?: string; storage: string; type?: string; shared?: boolean }> | null | undefined,
+  clusters: Array<{ id: string; name?: string }> | null | undefined,
+): ScopeOption[] {
+  if (!Array.isArray(storages)) return []
+  const connName = new Map((clusters ?? []).map(c => [c.id, c.name]))
+  const seen = new Set<string>()
+  const options: ScopeOption[] = []
+
+  for (const s of storages) {
+    if (!s?.connId || !s.storage) continue
+    const id = `${s.connId}:${s.storage}`
+    if (seen.has(id)) continue
+    seen.add(id)
+    const cluster = connName.get(s.connId) || s.connName || s.connId
+    options.push({
+      id,
+      label: s.storage,
+      sublabel: [s.type, cluster].filter(Boolean).join(' · '),
+      icon: s.type === 'pbs' ? 'ri-shield-check-line' : 'ri-hard-drive-3-line',
+    })
+  }
+
+  return options.sort((a, b) => a.label.localeCompare(b.label) || a.sublabel!.localeCompare(b.sublabel!))
 }
 
 /**
@@ -197,6 +232,9 @@ export function formatScopeTarget(
     case 'vm':
       // "connId:node:type:vmid" -> "type/vmid · node"
       return parts.length >= 4 ? `${parts[2]}/${parts[3]} · ${parts[1]}` : target
+    case 'storage':
+      // "connId:storage" -> "storage · ConnectionName"
+      return parts.length >= 2 ? `${parts[1]} · ${conn(parts[0])}` : target
     default:
       return target
   }

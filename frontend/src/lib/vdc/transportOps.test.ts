@@ -19,7 +19,7 @@ vi.mock('@/lib/proxmox/client', () => ({ pveFetch: pveFetchMock }))
 vi.mock('@/lib/connections/getConnection', () => ({ getConnectionById: getConnectionByIdMock }))
 vi.mock('./stretchPeers', async (importOriginal) => ({ ...(await importOriginal<any>()), memberPeersForVdc: vi.fn().mockResolvedValue([]) }))
 
-import { assertNoTransportConflict, effectiveZoneConfig, getVdcTransportStatus, getVdcZoneStatus, provisionVdcTransport, syncVdcZone } from './transportOps'
+import { assertNoTransportConflict, assertNoVniRangeOverlap, effectiveZoneConfig, getVdcTransportStatus, getVdcZoneStatus, provisionVdcTransport, syncVdcZone } from './transportOps'
 import { DEFAULT_TRANSPORT } from './transport'
 
 const conn = { baseUrl: 'https://pve', apiToken: 't' }
@@ -326,5 +326,27 @@ describe('assertNoTransportConflict', () => {
     prismaMock.vdc.findMany.mockResolvedValue([otherRow({ transportDevice: 'vmbr1' })])
     await expect(assertNoTransportConflict('c1', 'v1', transport))
       .rejects.toThrow(/segment 10.100.5.0\/24 is in use by vDC "Acme prod" on interface "vmbr1.4000"/)
+  })
+})
+
+describe('assertNoVniRangeOverlap (roadmap#18)', () => {
+  const ranged = (start: number | null, end: number | null) => ({ ...DEFAULT_TRANSPORT, vniRangeStart: start, vniRangeEnd: end })
+
+  it('skips the lookup when the vDC has no range', async () => {
+    await assertNoVniRangeOverlap('c1', 'v1', ranged(null, null))
+    expect(prismaMock.vdc.findMany).not.toHaveBeenCalled()
+  })
+
+  it('refuses a range overlapping another vDC of the cluster, and excludes the vDC itself', async () => {
+    prismaMock.vdc.findMany.mockResolvedValue([{ name: 'vdc-b', vniRangeStart: 20005, vniRangeEnd: 20020 }])
+    await expect(assertNoVniRangeOverlap('c1', 'v1', ranged(20000, 20009)))
+      .rejects.toThrow(/VNI range 20000-20009 is in use by vDC "vdc-b" \(20005-20020\)/)
+    expect(prismaMock.vdc.findMany.mock.calls[0][0].where).toMatchObject({ connectionId: 'c1', id: { not: 'v1' } })
+  })
+
+  it('accepts disjoint ranges, and looks at every vDC on a creation', async () => {
+    prismaMock.vdc.findMany.mockResolvedValue([{ name: 'vdc-b', vniRangeStart: 20010, vniRangeEnd: 20019 }])
+    await expect(assertNoVniRangeOverlap('c1', null, ranged(20000, 20009))).resolves.toBeUndefined()
+    expect(prismaMock.vdc.findMany.mock.calls[0][0].where.id).toBeUndefined()
   })
 })

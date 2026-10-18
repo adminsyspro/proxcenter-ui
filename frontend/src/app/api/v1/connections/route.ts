@@ -15,6 +15,11 @@ import { discoverNodeIps } from "@/lib/proxmox/discoverNodeIps"
 import { captureFingerprint } from "@/lib/proxmox/pbsFingerprint"
 import { testXcpngConnection, xcpngDefaultUser, xcpngSubTypeOf, type XcpngSubType } from "@/lib/xcpng/source"
 import { normalizeXapiBaseUrl } from "@/lib/xcpng/xapi-client"
+import { hasServerFeature } from "@/lib/auth/requireEnterprise"
+import { Features } from "@/lib/license/features"
+
+/** Warm migration settings are Enterprise (migration feature). */
+const migrationFeatureLicensed = () => hasServerFeature(Features.VMWARE_MIGRATION)
 
 export const runtime = "nodejs"
 
@@ -91,6 +96,10 @@ export async function GET(req: Request) {
       sshAuthMethod: string | null
       sshUseSudo: boolean
       replicationNetwork: string | null
+      warmZeroRateLimitMBps: number | null
+      integrityCheckEnabled: boolean | null
+      integrityRegionCount: number | null
+      integrityRegionSizeMiB: number | null
       apiTokenEnc: string | null
       sshKeyEnc: string | null
       sshPassEnc: string | null
@@ -129,6 +138,10 @@ export async function GET(req: Request) {
         sshAuthMethod: true,
         sshUseSudo: true,
         replicationNetwork: true,
+        warmZeroRateLimitMBps: true,
+        integrityCheckEnabled: true,
+        integrityRegionCount: true,
+        integrityRegionSizeMiB: true,
         apiTokenEnc: true,
         sshKeyEnc: true,
         sshPassEnc: true,
@@ -223,6 +236,8 @@ export async function POST(req: Request) {
       latitude, longitude, locationLabel, country,
       sshEnabled, sshPort, sshUser, sshAuthMethod,
       sshKey, sshPassphrase, sshPassword, sshUseSudo, replicationNetwork,
+      warmZeroRateLimitMBps,
+      integrityCheckEnabled, integrityRegionCount, integrityRegionSizeMiB,
       ownerTenantId,
     } = parseResult.data
 
@@ -310,6 +325,18 @@ export async function POST(req: Request) {
       }
     } else {
       data.apiTokenEnc = encryptSecret(apiToken || '')
+    }
+
+    // Warm migration zeroing cap (roadmap#45): a PVE target setting, kept only
+    // with the migration feature (Enterprise); Community never stores one.
+    if (type === 'pve' && typeof warmZeroRateLimitMBps === 'number' && await migrationFeatureLicensed()) {
+      data.warmZeroRateLimitMBps = warmZeroRateLimitMBps
+    }
+    // Post-copy integrity check (roadmap#1): same gate, null keeps the default.
+    if (type === 'pve' && await migrationFeatureLicensed()) {
+      if (typeof integrityCheckEnabled === 'boolean') data.integrityCheckEnabled = integrityCheckEnabled
+      if (typeof integrityRegionCount === 'number') data.integrityRegionCount = integrityRegionCount
+      if (typeof integrityRegionSizeMiB === 'number') data.integrityRegionSizeMiB = integrityRegionSizeMiB
     }
 
     // SSH config (PVE + VMware)
@@ -463,6 +490,8 @@ export async function POST(req: Request) {
           insecureTLS: true, hasCeph: true, latitude: true, longitude: true,
           locationLabel: true, country: true, sshEnabled: true, sshPort: true,
           sshUser: true, sshAuthMethod: true, sshUseSudo: true, replicationNetwork: true,
+          warmZeroRateLimitMBps: true,
+          integrityCheckEnabled: true, integrityRegionCount: true, integrityRegionSizeMiB: true,
           createdAt: true, updatedAt: true,
         },
       })

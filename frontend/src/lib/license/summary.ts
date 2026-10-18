@@ -7,7 +7,7 @@
 import { leaseDaysLeft } from '@/components/settings/leaseDays'
 import { isMovedLicenseExpired } from '@/components/settings/movedLicenseExpired'
 
-import type { LicenseTableRow } from './view'
+import type { LicenseTableRow, PerLicenseUsage } from './view'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 const CLOCK_SKEW_ALERT_SECONDS = 5 * 60
@@ -38,6 +38,13 @@ export interface LicenseConnection {
   partner?: { name?: string; has_logo?: boolean; logo_sha256?: string | null } | null
 }
 
+// A cluster declared outside the license: counted in no quota, read-only
+// for ProxCenter, listed with the nodes it would have cost.
+export interface ExcludedConnection {
+  connection_id: string
+  nodes: number
+}
+
 export interface LicenseStatus {
   licensed?: boolean
   edition?: string
@@ -45,7 +52,7 @@ export interface LicenseStatus {
   customer?: { name?: string; company?: string }
   options?: string[]
   limits?: { max_nodes?: number }
-  node_status?: { current_nodes?: number; max_nodes?: number; exceeded?: boolean }
+  node_status?: { current_nodes?: number; max_nodes?: number; exceeded?: boolean; per_license?: PerLicenseUsage[]; excluded?: ExcludedConnection[] }
   expires_at?: string
   days_remaining?: number
   expired?: boolean
@@ -88,7 +95,7 @@ export interface LicenseSummary {
 }
 
 export type AlertSeverity = 'error' | 'warning' | 'info'
-export type AlertAction = 'addNodes' | 'renew' | 'sync' | 'requestFile' | 'resetIdentity' | 'reconnect' | 'openAccount'
+export type AlertAction = 'addNodes' | 'excludeCluster' | 'renew' | 'sync' | 'requestFile' | 'resetIdentity' | 'reconnect' | 'openAccount'
 
 export interface LicenseAlert {
   id: string
@@ -219,7 +226,8 @@ export function buildLicenseAlerts(
   if (nodeStatus?.exceeded && maxNodes > 0) {
     const used = nodeStatus.current_nodes ?? 0
 
-    alerts.push({ id: 'quota', severity: 'error', values: { used, max: maxNodes, over: Math.max(0, used - maxNodes) }, actions: ['addNodes'] })
+    // Two ways out: more nodes, or a cluster declared outside the license.
+    alerts.push({ id: 'quota', severity: 'error', values: { used, max: maxNodes, over: Math.max(0, used - maxNodes) }, actions: ['addNodes', 'excludeCluster'] })
   }
 
   // An import stands in for the primary (none activated, expired, lease over

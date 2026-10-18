@@ -7,6 +7,7 @@ import { pveFetch } from "@/lib/proxmox/client"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { getCurrentTenantId } from "@/lib/tenant"
 import { getAllowedJobPools } from "@/lib/vdc/backupJobs"
+import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 
 export const runtime = "nodejs"
 
@@ -41,7 +42,7 @@ async function auditAdd(connId: string, jobId: string, details: Record<string, a
  * sent to PVE, so schedule, retention, notes and every other option stay as
  * they are. vDC tenants have their own pool-based flow and are refused here.
  */
-export async function POST(req: Request, ctx: RouteContext) {
+async function handler(req: Request, ctx: RouteContext) {
   try {
     const { id, jobId } = await ctx.params
     const body = await req.json().catch(() => ({}))
@@ -107,3 +108,5 @@ export async function POST(req: Request, ctx: RouteContext) {
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const POST = withPublicApiGuard("backup-job-guests", handler)

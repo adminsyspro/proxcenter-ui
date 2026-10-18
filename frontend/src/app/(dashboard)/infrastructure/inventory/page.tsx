@@ -126,7 +126,7 @@ export default function InventoryPage() {
   }, [rbacLoading, defaultViewMode, deepLinked])
 
   // Deep-link: auto-select VM from URL search params (?vmid=123&connId=...&node=...&type=qemu)
-  // Also handles ?selectType=node&selectId=connId:nodeName and ?selectType=pbs&selectId=pbsId
+  // Also handles ?selectType=node&selectId=connId:nodeName, ?selectType=pbs&selectId=pbsId and ?selectType=ext&selectId=connId
   const deepLinkHandled = useRef(false)
 
   useEffect(() => {
@@ -147,6 +147,16 @@ export default function InventoryPage() {
     if (selectType === 'pbs' && selectId) {
       deepLinkHandled.current = true
       setSelection({ type: 'pbs', id: selectId })
+      setViewMode('tree')
+
+      return
+    }
+
+    // External hypervisor host (roadmap#53: the taskbar entry of a bulk
+    // migration lands here to reopen its follow-up).
+    if (selectType === 'ext' && selectId) {
+      deepLinkHandled.current = true
+      setSelection({ type: 'ext', id: selectId })
       setViewMode('tree')
 
       return

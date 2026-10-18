@@ -2,10 +2,11 @@ import { NextResponse } from "next/server"
 
 import { getCurrentTenantId } from "@/lib/tenant"
 import { checkPermission, guestPerimeterAllows, PERMISSIONS, buildNodeResourceId } from "@/lib/rbac"
-import { getTenantInfrastructureScope, maskingScope } from "@/lib/tenant/infraScope"
+import { maskingScope } from "@/lib/tenant/infraScope"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { prisma } from "@/lib/db/prisma"
+import { resolveScopeTenant, scopeTenantInfrastructure } from "@/lib/vdc/providerTarget"
 
 export const runtime = "nodejs"
 
@@ -34,8 +35,12 @@ export async function GET(req: Request, ctx: RouteContext) {
 
     if (denied && !(await guestPerimeterAllows(connId, PERMISSIONS.CONNECTION_VIEW))) return denied
 
-    const tenantId = await getCurrentTenantId()
-    const infra = await getTenantInfrastructureScope(tenantId)
+    // `?targetVdcId=` (provider only): the choices that vDC's tenant gets,
+    // for a provider deploying into it (roadmap#65).
+    const scopeTenant = await resolveScopeTenant(req, connId, getCurrentTenantId)
+    if (!scopeTenant.ok) return scopeTenant.response
+    const tenantId = scopeTenant.tenantId
+    const infra = await scopeTenantInfrastructure(scopeTenant)
     // MSP tenants own whole clusters and may only query connections they own.
     // The shared getConnectionById below authorizes via the connection's OWN
     // tenantId, so without this gate an MSP user could pass a non-owned connId

@@ -227,6 +227,7 @@ export async function soapGetVmConfig(session: SoapSession, vmid: string): Promi
           <urn:pathSet>config.uuid</urn:pathSet>
           <urn:pathSet>config.firmware</urn:pathSet>
           <urn:pathSet>config.files.vmPathName</urn:pathSet>
+          <urn:pathSet>config.changeTrackingEnabled</urn:pathSet>
           <urn:pathSet>config.hardware.device</urn:pathSet>
           <urn:pathSet>runtime.powerState</urn:pathSet>
           <urn:pathSet>storage.perDatastoreUsage</urn:pathSet>
@@ -608,6 +609,36 @@ export async function soapWaitForConsolidation(
 }
 
 /**
+ * Consolidate the disks of a VM whose runtime.consolidationNeeded is set
+ * (ConsolidateVMDisks_Task). A snapshot removed while its disks were still
+ * held open (a copy killed by a server restart) can leave the delta merge
+ * pending: until it runs, the next warm run of the VM waits on it.
+ */
+export async function soapConsolidateVmDisks(session: SoapSession, vmid: string, opts: SoapTaskWaitOptions = {}): Promise<void> {
+  const body = `<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:urn="urn:vim25">
+  <soapenv:Body>
+    <urn:ConsolidateVMDisks_Task>
+      <urn:_this type="VirtualMachine">${vmid}</urn:_this>
+    </urn:ConsolidateVMDisks_Task>
+  </soapenv:Body>
+</soapenv:Envelope>`
+
+  const result = await soapRequest(session.baseUrl, body, session.cookie, session.insecureTLS)
+  if (result.text.includes("faultstring")) {
+    const fault = result.text.match(/<faultstring>([\s\S]*?)<\/faultstring>/)?.[1] || ""
+    throw new Error(`Failed to consolidate the disks of ${vmid}: ${fault}`)
+  }
+  const taskMor = result.text.match(/<returnval type="Task">([^<]+)<\/returnval>/)?.[1]
+  if (!taskMor) return
+  await waitForSoapTask(session, taskMor, {
+    ...opts,
+    timeoutMs: opts.timeoutMs ?? SNAPSHOT_REMOVE_TIMEOUT_MS,
+    label: `Disk consolidation of ${vmid}`,
+  })
+}
+
+/**
  * Flatten a VirtualMachine `snapshot` property payload into {name, mor} pairs.
  *
  * The payload nests VirtualMachineSnapshotTree entries: each carries its own
@@ -905,6 +936,22 @@ export interface EsxiVmConfig {
   toolsStatus?: string
   /** "guestToolsRunning" | "guestToolsNotRunning" | "guestToolsExecutingScripts". */
   toolsRunningStatus?: string
+  /**
+   * Changed Block Tracking state before we touch the VM. A warm migration only
+   * switches CBT back off when it was the one turning it on: a backup product
+   * (Veeam & co) relies on CBT the customer enabled.
+   */
+  changeTrackingEnabled?: boolean
+  /**
+   * The source carries a virtual TPM (a `VirtualTPM` device). Its state is
+   * never copied; the pipelines warn and create an empty tpmstate0 (roadmap#1).
+   */
+  hasVtpm?: boolean
+}
+
+/** Is there a `VirtualTPM` device in a `config.hardware.device` property? */
+export function hasVirtualTpm(devicesXml: string): boolean {
+  return /xsi:type="VirtualTPM"/.test(devicesXml || "")
 }
 
 /**
@@ -921,6 +968,30 @@ export function vmwareToolsState(c: Pick<EsxiVmConfig, "toolsStatus" | "toolsRun
 }
 
 /** Parse full VM config from SOAP XML */
+/**
+ * Network adapters of a `config.hardware.device` property, in device order.
+ *
+ * Device order is what vSphere shows as "Network adapter 1, 2, ...", and it is
+ * the order the migration dialog and the mappers index NICs by (#317): the
+ * review step's row N is the mapper's `netN`. The former per-type passes
+ * (every Vmxnet3 first, then every E1000) reordered mixed-model guests.
+ */
+export function parseNicDevices(devicesXml: string): EsxiNicInfo[] {
+  const nics: EsxiNicInfo[] = []
+  const nicRegex = /xsi:type="Virtual(Vmxnet3|E1000e|E1000|Vmxnet2|Vmxnet)">([\s\S]*?)(?=<VirtualDevice|$)/g
+  let nicMatch
+  while ((nicMatch = nicRegex.exec(devicesXml)) !== null) {
+    const n = nicMatch[2]
+    nics.push({
+      label: n.match(/<label>([^<]*)<\/label>/)?.[1] || "",
+      type: nicMatch[1],
+      macAddress: n.match(/<macAddress>([^<]*)<\/macAddress>/)?.[1] || "",
+      network: n.match(/<summary>([^<]*)<\/summary>/)?.[1] || "",
+    })
+  }
+  return nics
+}
+
 export function parseVmConfig(xml: string): EsxiVmConfig {
   const name = extractProp(xml, "name")
   const guestOS = extractProp(xml, "config.guestFullName")
@@ -988,21 +1059,7 @@ export function parseVmConfig(xml: string): EsxiVmConfig {
   }
 
   // NICs
-  const nics: EsxiNicInfo[] = []
-  const nicTypes = ["Vmxnet3", "E1000e", "E1000", "Vmxnet2", "Vmxnet"]
-  for (const nicType of nicTypes) {
-    const nicRegex = new RegExp(`xsi:type="Virtual${nicType}">([\\s\\S]*?)(?=<VirtualDevice|$)`, "g")
-    let nicMatch
-    while ((nicMatch = nicRegex.exec(devicesXml)) !== null) {
-      const n = nicMatch[1]
-      nics.push({
-        label: n.match(/<label>([^<]*)<\/label>/)?.[1] || "",
-        type: nicType,
-        macAddress: n.match(/<macAddress>([^<]*)<\/macAddress>/)?.[1] || "",
-        network: n.match(/<summary>([^<]*)<\/summary>/)?.[1] || "",
-      })
-    }
-  }
+  const nics = parseNicDevices(devicesXml)
 
   // Snapshots
   const snapshotXml = extractProp(xml, "snapshot")
@@ -1023,10 +1080,14 @@ export function parseVmConfig(xml: string): EsxiVmConfig {
     extractProp(xml, "summary.guest.toolsRunningStatus") ||
     undefined
 
+  const cbt = extractProp(xml, "config.changeTrackingEnabled")
+
   return {
     name, guestOS, guestId, numCPU, numCoresPerSocket, sockets, memoryMB,
     firmware, uuid, vmxVersion, vmPathName, powerState, committed, disks, nics, snapshotCount,
     toolsStatus, toolsRunningStatus,
+    changeTrackingEnabled: cbt === "true" ? true : cbt === "false" ? false : undefined,
+    hasVtpm: hasVirtualTpm(devicesXml),
   }
 }
 

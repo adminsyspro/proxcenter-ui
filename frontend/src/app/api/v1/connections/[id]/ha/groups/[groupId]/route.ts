@@ -3,12 +3,13 @@ import { NextResponse } from "next/server"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 
 export const runtime = "nodejs"
 
 // GET /api/v1/connections/{id}/ha/groups/{groupId}
 // Récupère un groupe HA spécifique
-export async function GET(
+async function getHandler(
   req: Request,
   ctx: { params: Promise<{ id: string; groupId: string }> }
 ) {
@@ -38,7 +39,7 @@ return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
 
 // PUT /api/v1/connections/{id}/ha/groups/{groupId}
 // Met à jour un groupe HA
-export async function PUT(
+async function putHandler(
   req: Request,
   ctx: { params: Promise<{ id: string; groupId: string }> }
 ) {
@@ -97,7 +98,7 @@ return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
 
 // DELETE /api/v1/connections/{id}/ha/groups/{groupId}
 // Supprime un groupe HA
-export async function DELETE(
+async function deleteHandler(
   req: Request,
   ctx: { params: Promise<{ id: string; groupId: string }> }
 ) {
@@ -125,3 +126,7 @@ export async function DELETE(
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const GET = withPublicApiGuard("ha-group-get", getHandler)
+export const PUT = withPublicApiGuard("ha-group-update", putHandler)
+export const DELETE = withPublicApiGuard("ha-group-delete", deleteHandler)

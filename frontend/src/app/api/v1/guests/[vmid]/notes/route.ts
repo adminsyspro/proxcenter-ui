@@ -3,6 +3,7 @@ import { NextResponse } from "next/server"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
+import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 
 export const runtime = "nodejs"
 
@@ -30,7 +31,7 @@ return {
  * GET /api/v1/guests/[vmid]/notes
  * Récupère les notes (description) d'une VM depuis Proxmox
  */
-export async function GET(
+async function getHandler(
   req: Request,
   ctx: { params: Promise<Params> }
 ) {
@@ -80,7 +81,7 @@ return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
  * Met à jour les notes (description) d'une VM dans Proxmox
  * Body: { content: string }
  */
-export async function PUT(
+async function putHandler(
   req: Request,
   ctx: { params: Promise<Params> }
 ) {
@@ -141,3 +142,6 @@ export async function PUT(
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const GET = withPublicApiGuard("vm-notes-get", getHandler)
+export const PUT = withPublicApiGuard("vm-notes-update", putHandler)

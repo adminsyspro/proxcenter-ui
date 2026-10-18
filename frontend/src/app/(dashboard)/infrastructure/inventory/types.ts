@@ -231,6 +231,8 @@ export type DetailsPayload = {
     maxmem?: number
     disk?: number
     maxdisk?: number
+    /** Sum of every attached disk, from the guest config (#938). */
+    diskTotal?: number
     uptime?: number
     tags?: string[]
     template?: boolean
@@ -257,6 +259,8 @@ export type DetailsPayload = {
     maxmem?: number
     disk?: number
     maxdisk?: number
+    /** Sum of every attached disk, from the guest config (#938). */
+    diskTotal?: number
     uptime?: number
     tags?: string[]
     isCluster?: boolean
@@ -435,6 +439,8 @@ export type DetailsPayload = {
       }>
     }>
     migrations?: any[]
+    /** Counters over the whole history (GET /api/v1/migrations/stats), summed over the hosts. */
+    migrationStats?: import('@/lib/migration/migration-stats').MigrationStats
   }
 
   esxiHostInfo?: {

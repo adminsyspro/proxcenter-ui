@@ -92,8 +92,13 @@ export async function runV2vPreflight(
   const conn = await getConnectionById(targetConnectionId)
   const nodeIp = await resolveNodeSshEndpoint(conn, targetNode)
 
+  // Every check here only reads (which, test -f, df, find), so it still runs
+  // on a cluster outside the license; the migration itself is refused there
+  // (roadmap#58). Installing or downloading anything stays a write.
+  const probe = (command: string) => executeSSH(targetConnectionId, nodeIp, command, undefined, { readOnly: true })
+
   // 1. Check SSH connectivity
-  const sshCheck = await executeSSH(targetConnectionId, nodeIp, "echo ok")
+  const sshCheck = await probe("echo ok")
   if (!sshCheck.success) {
     errors.push(`SSH connectivity failed: ${sshCheck.error || "unknown error"}`)
     // If SSH fails, no point running the other checks
@@ -103,20 +108,20 @@ export async function runV2vPreflight(
 
   // 2-4: Run remaining checks in parallel
   const [v2vCheck, pvCheck, dfCheck, virtioWinCheck, ntfsFixCheck, virtCustomizeCheck, nbdkitCheck, nbdcopyCheck, guestfsCheck, ovmfCheck, ntfsPluginCheck] = await Promise.all([
-    executeSSH(targetConnectionId, nodeIp, "which virt-v2v"),
-    executeSSH(targetConnectionId, nodeIp, "which pv"),
-    executeSSH(targetConnectionId, nodeIp, "df -B1 /tmp | tail -1 | awk '{print $4}'"),
-    executeSSH(targetConnectionId, nodeIp, "test -f /usr/share/virtio-win/virtio-win.iso && echo yes || echo no"),
-    executeSSH(targetConnectionId, nodeIp, "which ntfsfix && which qemu-nbd && echo yes || echo no"),
-    executeSSH(targetConnectionId, nodeIp, "which virt-customize && echo yes || echo no"),
-    executeSSH(targetConnectionId, nodeIp, "which nbdkit"),
-    executeSSH(targetConnectionId, nodeIp, "which nbdcopy"),
+    probe("which virt-v2v"),
+    probe("which pv"),
+    probe("df -B1 /tmp | tail -1 | awk '{print $4}'"),
+    probe("test -f /usr/share/virtio-win/virtio-win.iso && echo yes || echo no"),
+    probe("which ntfsfix && which qemu-nbd && echo yes || echo no"),
+    probe("which virt-customize && echo yes || echo no"),
+    probe("which nbdkit"),
+    probe("which nbdcopy"),
     // rhsrvany.exe or pvvxsvc.exe: required by virt-v2v for Windows firstboot scripts
-    executeSSH(targetConnectionId, nodeIp, "test -f /usr/share/virt-tools/rhsrvany.exe -o -f /usr/share/virt-tools/pvvxsvc.exe && echo yes || echo no"),
+    probe("test -f /usr/share/virt-tools/rhsrvany.exe -o -f /usr/share/virt-tools/pvvxsvc.exe && echo yes || echo no"),
     // OVMF firmware: required for UEFI guests at "Creating output metadata"
-    executeSSH(targetConnectionId, nodeIp, "test -f /usr/share/OVMF/OVMF_CODE_4M.fd -o -f /usr/share/OVMF/OVMF_CODE.fd && echo yes || echo no"),
+    probe("test -f /usr/share/OVMF/OVMF_CODE_4M.fd -o -f /usr/share/OVMF/OVMF_CODE.fd && echo yes || echo no"),
     // ntfs-3g system-compression plugin: Windows "Compact OS" guests are invisible to libguestfs without it
-    executeSSH(targetConnectionId, nodeIp, ntfsCompressionPluginCheckCommand()),
+    probe(ntfsCompressionPluginCheckCommand()),
   ])
 
   // 2. Check virt-v2v installed
@@ -211,7 +216,7 @@ export async function runV2vPreflight(
 
   // 5. Check cifs-utils for Hyper-V only (needed for auto-mount)
   if (sourceType === 'hyperv') {
-    const cifsCheck = await executeSSH(targetConnectionId, nodeIp, "which mount.cifs")
+    const cifsCheck = await probe("which mount.cifs")
     if (!cifsCheck.success || !cifsCheck.output?.trim()) {
       // Not an error - pipeline will install if needed
     }
@@ -220,7 +225,7 @@ export async function runV2vPreflight(
   // 6. Scan available storage paths for temp files
   try {
     // Get mount points with significant space (excluding tmpfs, devtmpfs, squashfs, etc.)
-    const dfAllResult = await executeSSH(targetConnectionId, nodeIp,
+    const dfAllResult = await probe(
       `df -B1 --output=target,avail,size,fstype | tail -n +2 | awk '$4 !~ /tmpfs|devtmpfs|squashfs|overlay/ && $1 !~ /^\\/mnt\\/hyperv/ && $1 != "/" && $2 > 1073741824 {print $1"|"$2"|"$3"|"$4}'`)
     const storages: TempStorageOption[] = []
     if (dfAllResult.success && dfAllResult.output?.trim()) {
@@ -259,14 +264,14 @@ export async function runV2vPreflight(
   // 7. Scan /mnt/hyperv/ for VHDX/VHD files (Hyper-V only)
   if (sourceType === 'hyperv' && vmName) {
     try {
-      const scanResult = await executeSSH(targetConnectionId, nodeIp,
+      const scanResult = await probe(
         `find /mnt/hyperv -iname "*${vmName.replaceAll(/[^a-zA-Z0-9._-]/g, '*')}*" \\( -iname "*.vhdx" -o -iname "*.vhd" \\) 2>/dev/null || true`)
       const detected = (scanResult.output || '').split('\n').map(l => l.trim()).filter(l => l && l.startsWith('/'))
       if (detected.length > 0) {
         result.detectedDisks = detected
       } else {
         // Fallback: list all VHDX/VHD in /mnt/hyperv/
-        const allResult = await executeSSH(targetConnectionId, nodeIp,
+        const allResult = await probe(
           `find /mnt/hyperv -iname "*.vhdx" -o -iname "*.vhd" 2>/dev/null || true`)
         const all = (allResult.output || '').split('\n').map(l => l.trim()).filter(l => l && l.startsWith('/'))
         if (all.length > 0) {

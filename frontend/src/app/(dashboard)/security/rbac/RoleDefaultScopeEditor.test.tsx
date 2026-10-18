@@ -13,6 +13,11 @@ const t = (k: string) => k
 function seedInventory() {
   server.use(
     http.get('/api/v1/inventory', () => HttpResponse.json(inventoryFixture)),
+    // Storage targets of the "storage" scope type (#921).
+    http.get('/api/v1/storage', () => HttpResponse.json({ data: [
+      { connId: inventoryFixture.data.clusters[0].id, connName: inventoryFixture.data.clusters[0].name, storage: 'local', type: 'dir', shared: false },
+      { connId: inventoryFixture.data.clusters[0].id, connName: inventoryFixture.data.clusters[0].name, storage: 'pbs-main', type: 'pbs', shared: true },
+    ] })),
   )
 }
 
@@ -132,5 +137,35 @@ describe('RoleDefaultScopeEditor - Add guard (no target selected)', () => {
     expect(addBtn).toBeDisabled()
 
     expect(onChange).not.toHaveBeenCalled()
+  })
+})
+
+// ------------------------------------------------------------------ //
+// Issue #921: the "storage" type lists the storages of /api/v1/storage
+// ------------------------------------------------------------------ //
+describe('RoleDefaultScopeEditor - storage scope', () => {
+  beforeEach(() => {
+    cleanup()
+    seedInventory()
+  })
+
+  it('renders an existing storage entry with the storage name', async () => {
+    const connId = inventoryFixture.data.clusters[0].id
+    const value: RoleScopeEntry[] = [{ scopeType: 'storage', scopeTarget: `${connId}:pbs-main` }]
+    renderWithProviders(<RoleDefaultScopeEditor value={value} onChange={vi.fn()} t={t} />)
+
+    expect(await screen.findByText(/rbac\.scopes\.storage: pbs-main/)).toBeInTheDocument()
+  })
+
+  it('offers the storages as targets once the type is switched to storage', async () => {
+    renderWithProviders(<RoleDefaultScopeEditor value={[]} onChange={vi.fn()} t={t} />)
+    const [typeSelect] = await screen.findAllByRole('combobox')
+    fireEvent.mouseDown(typeSelect)
+    fireEvent.click(await screen.findByText('rbac.scopes.storage'))
+
+    await waitFor(() => expect(screen.getAllByRole('combobox')[1]).not.toHaveAttribute('aria-disabled', 'true'))
+    fireEvent.mouseDown(screen.getAllByRole('combobox')[1])
+    expect(await screen.findByText('local')).toBeInTheDocument()
+    expect(screen.getByText('pbs-main')).toBeInTheDocument()
   })
 })

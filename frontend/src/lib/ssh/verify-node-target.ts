@@ -38,7 +38,8 @@ export async function verifyNodeTarget(
   const resolvedViaConnHost = !!connHost && sshTargetHost(target) === connHost
   if (!resolvedViaConnHost) return { ok: true }
 
-  const probe = await executeSSH(connId, target, "hostname -s")
+  // Only reads: the identity of a cluster outside the license can still be checked.
+  const probe = await executeSSH(connId, target, "hostname -s", undefined, { readOnly: true })
   if (!probe.success) {
     return { ok: false, status: 502, error: sshTargetError(node, target, probe.error || "SSH unreachable") }
   }

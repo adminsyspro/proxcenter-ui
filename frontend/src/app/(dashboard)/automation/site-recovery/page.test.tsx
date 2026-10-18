@@ -22,6 +22,7 @@ const state = vi.hoisted(() => ({
 const emergency = vi.hoisted(() => ({
   actual: null as unknown as typeof import('@/lib/site-recovery/emergencyActions'),
   startDRVM: vi.fn(), stopDRVM: vi.fn(), loadVMRestorePoints: vi.fn(), saveRecoveryPlan: vi.fn(),
+  failoverGuest: vi.fn(), startGuestFailback: vi.fn(), cutoverGuestFailback: vi.fn(), cancelGuestFailback: vi.fn(),
 }))
 
 vi.mock('@/lib/site-recovery/emergencyActions', async importOriginal => {
@@ -35,6 +36,10 @@ vi.mock('@/lib/site-recovery/emergencyActions', async importOriginal => {
     stopDRVM: emergency.stopDRVM,
     loadVMRestorePoints: emergency.loadVMRestorePoints,
     saveRecoveryPlan: emergency.saveRecoveryPlan,
+    failoverGuest: emergency.failoverGuest,
+    startGuestFailback: emergency.startGuestFailback,
+    cutoverGuestFailback: emergency.cutoverGuestFailback,
+    cancelGuestFailback: emergency.cancelGuestFailback,
   }
 })
 vi.mock('swr', async importOriginal => {
@@ -62,6 +67,8 @@ vi.mock('@/hooks/useSiteRecovery', () => ({
 // it: a prop that stops being passed makes the stub blow up or the text differ.
 type EmergencyTabProps = {
   vmStatesByConn: Record<string, Record<number, string>>
+  onGuestFailover: (vm: Record<string, unknown>) => void
+  onGuestFailback: (vm: Record<string, unknown>) => void
   onStartVM: (vmId: number, targetCluster: string, jobId: string, restorePoint?: string) => Promise<void>
   onStopVM: (vmId: number, targetCluster: string, jobId: string, resumeReplication: boolean) => Promise<void>
   loadRestorePoints: (jobId: string, vmId: number) => Promise<unknown>
@@ -80,17 +87,54 @@ type JobDialogProps = {
   jobs: Array<{ id: string }>
 }
 
+type GuestDialogStubProps = {
+  open: boolean
+  mode: string
+  target: { vmName: string; sourceSite?: string; targetSite?: string } | null
+  placements: unknown
+  execution: { id: string; status: string } | null
+  errorMessage?: string | null
+  restorePoints: unknown
+  onFailover: (restorePoint?: string) => void
+  onStartFailback: () => void
+  onCutover: () => void
+  onCancelFailback: () => void
+  onClose: () => void
+}
+
+// One row of the Emergency DR tab: guest 9101 of plan-1, source on src, replica on dst.
+const GUEST_ROW = vi.hoisted(() => ({
+  vmId: 9101, vmName: 'db', targetVmId: 9101, sourceCluster: 'src', targetCluster: 'dst',
+  jobId: 'job-1', planId: 'plan-1', planName: 'Tier 1', siblingCount: 1,
+}))
+
 vi.mock('@/components/automation/site-recovery', () => ({
   DashboardTab: ({ onSyncJob }: { onSyncJob: (id: string) => void }) => <div>Dashboard content<button onClick={() => onSyncJob('job')}>Sync job</button></div>,
   ProtectionTab: ({ onResumeJob, onEditJob }: { onResumeJob: (id: string) => void; onEditJob: (id: string) => void }) => (
     <div>Protection content<button onClick={() => onResumeJob('job')}>Resume job</button><button onClick={() => onEditJob('job')}>Edit job</button></div>
   ),
   SnapshotsTab: () => <div>Snapshots content</div>,
+  GuestFailoverDialog: (props: GuestDialogStubProps) => props.open && props.target ? (
+    <div data-testid='guest-dialog'>
+      <span data-testid='guest-dialog-head'>{`${props.mode} ${props.target.vmName} ${props.target.sourceSite} -> ${props.target.targetSite}`}</span>
+      <span data-testid='guest-dialog-placements'>{JSON.stringify(props.placements)}</span>
+      <span data-testid='guest-dialog-execution'>{props.execution ? `${props.execution.id}:${props.execution.status}` : 'none'}</span>
+      <span data-testid='guest-dialog-error'>{props.errorMessage || ''}</span>
+      <span data-testid='guest-dialog-restore-points'>{JSON.stringify(props.restorePoints)}</span>
+      <button onClick={() => props.onFailover('mirror-1')}>Guest dialog failover</button>
+      <button onClick={props.onStartFailback}>Guest dialog start failback</button>
+      <button onClick={props.onCutover}>Guest dialog cutover</button>
+      <button onClick={props.onCancelFailback}>Guest dialog cancel failback</button>
+      <button onClick={props.onClose}>Guest dialog close</button>
+    </div>
+  ) : null,
   RecoveryPlansTab: ({ onEditPlan }: { onEditPlan: (id: string) => void }) => (
     <div>Recovery plans content<button onClick={() => onEditPlan('plan-1')}>Edit plan</button></div>
   ),
-  EmergencyDRTab: ({ vmStatesByConn, onStartVM, onStopVM, loadRestorePoints }: EmergencyTabProps) => (
+  EmergencyDRTab: ({ vmStatesByConn, onStartVM, onStopVM, loadRestorePoints, onGuestFailover, onGuestFailback }: EmergencyTabProps) => (
     <div>Emergency content
+      <button onClick={() => onGuestFailover(GUEST_ROW)}>Row failover</button>
+      <button onClick={() => onGuestFailback(GUEST_ROW)}>Row failback</button>
       <span data-testid='vm-states'>{JSON.stringify(vmStatesByConn)}</span>
       <button onClick={() => onStartVM(100, 'dst', 'job').catch(state.startError)}>Start DR VM</button>
       <button onClick={() => onStartVM(9101, 'dst', 'job-1', 'mirror-0915').catch(state.startError)}>Start replica from restore point</button>
@@ -397,4 +441,114 @@ it('opens the job dialog on the job the Protection tab picked, with the inventor
   await userEvent.click(screen.getByRole('button', { name: 'Edit job' }))
 
   expect(await screen.findByText('Edit job dialog for job with 4 guest(s) and 1 job(s)')).toBeInTheDocument()
+})
+
+// ── Per-guest failover and failback (ui#943) ─────────────────────────
+
+function stubExecutionFetch(...answers: Array<{ id: string; status: string } | null>) {
+  const fetchMock = vi.fn(async () => {
+    const next = answers.length > 1 ? answers.shift() : answers[0]
+
+    return { ok: next !== null, json: async () => next }
+  })
+
+  vi.stubGlobal('fetch', fetchMock)
+
+  return fetchMock
+}
+
+async function openGuestRow(button: 'Row failover' | 'Row failback') {
+  state.vms = inventory
+  state.connections = [{ id: 'src', name: 'PVE-PROD', hasCeph: false }, { id: 'dst', name: 'PVE-DR', hasCeph: false }]
+  await openEmergencyTab()
+  await userEvent.click(screen.getByRole('button', { name: button }))
+
+  return screen.getByTestId('guest-dialog')
+}
+
+it('opens the guest failover on the row, with both sites, where each side runs, and its restore points', async () => {
+  emergency.loadVMRestorePoints.mockResolvedValue({ vm_id: 9101, points: [] })
+  state.plans = [{ id: 'plan-1', name: 'Tier 1' }]
+
+  await openGuestRow('Row failover')
+
+  expect(screen.getByTestId('guest-dialog-head').textContent).toBe('failover db PVE-PROD -> PVE-DR')
+  expect(JSON.parse(screen.getByTestId('guest-dialog-placements').textContent || 'null')).toEqual({
+    source: { node: 'pve-1', status: 'stopped' },
+    dr: { node: 'pve-dr-1', status: 'running' },
+  })
+  expect(emergency.loadVMRestorePoints).toHaveBeenCalledWith('job-1', 9101)
+  await waitFor(() => expect(screen.getByTestId('guest-dialog-restore-points').textContent).toContain('"loading":false'))
+})
+
+it('fails the guest over with the chosen restore point, then follows its execution to the end', async () => {
+  emergency.loadVMRestorePoints.mockResolvedValue(null)
+  emergency.failoverGuest.mockResolvedValue({ id: 'exec-1', status: 'running' })
+  const fetchMock = stubExecutionFetch({ id: 'exec-1', status: 'completed' })
+
+  await openGuestRow('Row failover')
+  vi.useFakeTimers({ shouldAdvanceTime: true })
+  await userEvent.click(screen.getByRole('button', { name: 'Guest dialog failover' }))
+
+  expect(emergency.failoverGuest).toHaveBeenCalledWith('plan-1', 9101, 'mirror-1')
+  await waitFor(() => expect(screen.getByTestId('guest-dialog-execution').textContent).toBe('exec-1:running'))
+  await act(async () => { await vi.advanceTimersByTimeAsync(3100) })
+  await waitFor(() => expect(screen.getByTestId('guest-dialog-execution').textContent).toBe('exec-1:completed'))
+  expect(fetchMock).toHaveBeenCalledWith('/api/v1/orchestrator/replication/executions/exec-1')
+  expect(state.mutate).toHaveBeenCalled()
+})
+
+it('shows the refusal of a guest action in the dialog', async () => {
+  emergency.loadVMRestorePoints.mockResolvedValue(null)
+  emergency.failoverGuest.mockRejectedValue(new Error('this guest is failed over'))
+
+  await openGuestRow('Row failover')
+  await userEvent.click(screen.getByRole('button', { name: 'Guest dialog failover' }))
+
+  await waitFor(() => expect(screen.getByTestId('guest-dialog-error').textContent).toBe('this guest is failed over'))
+  expect(screen.getByTestId('guest-dialog-execution').textContent).toBe('none')
+})
+
+it('rehydrates a failback already in flight, cuts it over and refreshes its execution at once', async () => {
+  state.plans = [{ id: 'plan-1', name: 'Tier 1', guests: [{ vm_id: 9101, state: 'failing_back', execution_id: 'exec-fb' }] } as { id: string; name?: string }]
+  emergency.cutoverGuestFailback.mockResolvedValue({})
+  stubExecutionFetch({ id: 'exec-fb', status: 'running' })
+
+  await openGuestRow('Row failback')
+
+  expect(screen.getByTestId('guest-dialog-head').textContent).toBe('failback db PVE-PROD -> PVE-DR')
+  await waitFor(() => expect(screen.getByTestId('guest-dialog-execution').textContent).toBe('exec-fb:running'))
+  expect(emergency.loadVMRestorePoints).not.toHaveBeenCalled()
+
+  await userEvent.click(screen.getByRole('button', { name: 'Guest dialog cutover' }))
+
+  expect(emergency.cutoverGuestFailback).toHaveBeenCalledWith('plan-1', 9101)
+})
+
+it('starts the guest failback, and its cancel closes the dialog', async () => {
+  emergency.startGuestFailback.mockResolvedValue({ id: 'exec-2', status: 'running' })
+  emergency.cancelGuestFailback.mockResolvedValue({})
+  stubExecutionFetch({ id: 'exec-2', status: 'running' })
+
+  await openGuestRow('Row failback')
+  await userEvent.click(screen.getByRole('button', { name: 'Guest dialog start failback' }))
+
+  expect(emergency.startGuestFailback).toHaveBeenCalledWith('plan-1', 9101)
+  await waitFor(() => expect(screen.getByTestId('guest-dialog-execution').textContent).toBe('exec-2:running'))
+
+  await userEvent.click(screen.getByRole('button', { name: 'Guest dialog cancel failback' }))
+
+  expect(emergency.cancelGuestFailback).toHaveBeenCalledWith('plan-1', 9101)
+  await waitFor(() => expect(screen.queryByTestId('guest-dialog')).toBeNull())
+})
+
+it('closes the guest dialog and refreshes the plans', async () => {
+  emergency.loadVMRestorePoints.mockRejectedValue(new Error('down'))
+
+  await openGuestRow('Row failover')
+  await waitFor(() => expect(screen.getByTestId('guest-dialog-restore-points').textContent).toContain('"failed":true'))
+  await userEvent.click(screen.getByRole('button', { name: 'Guest dialog close' }))
+
+  expect(screen.queryByTestId('guest-dialog')).toBeNull()
+  expect(state.mutate).toHaveBeenCalled()
 })

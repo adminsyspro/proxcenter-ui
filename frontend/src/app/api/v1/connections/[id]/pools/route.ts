@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { licenseExcludedResponse } from '@/lib/api/response'
 
 import { pveFetch, PveApplicationError } from '@/lib/proxmox/client'
 import { getConnectionById } from '@/lib/connections/getConnection'
@@ -6,6 +7,7 @@ import { checkPermission, getRequestGuestScopePerimeter, PERMISSIONS } from "@/l
 import { audit } from '@/lib/audit'
 import { invalidateInventoryCache } from '@/lib/cache/inventoryCache'
 import { prisma } from '@/lib/db/prisma'
+import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
 
 export const runtime = 'nodejs'
 
@@ -15,7 +17,7 @@ type Ctx = { params: Promise<{ id: string }> | { id: string } }
 // levels since PVE 8.1. '.' and '..' segments are refused outright.
 const POOLID_RE = /^[A-Za-z][A-Za-z0-9._-]*(?:\/(?!\.{1,2}(?:\/|$))[A-Za-z0-9._-]+){0,2}$/
 
-export async function GET(_req: Request, ctx: Ctx) {
+async function getHandler(_req: Request, ctx: Ctx) {
   try {
     const params = await Promise.resolve(ctx.params)
     const connId = (params as any)?.id
@@ -153,13 +155,15 @@ function pveRefusalMessage(e: any): string {
 }
 
 function pveError(e: any) {
+  const excluded = licenseExcludedResponse(e)
+  if (excluded) return excluded
   const status = e instanceof PveApplicationError && e.statusCode >= 400 && e.statusCode < 500 ? e.statusCode : 500
 
   return NextResponse.json({ error: pveRefusalMessage(e) }, { status })
 }
 
 // POST - Create a pool
-export async function POST(req: Request, ctx: Ctx) {
+async function postHandler(req: Request, ctx: Ctx) {
   const body = await req.json().catch(() => ({}))
   const r = await resolveWrite(ctx, body?.poolid)
 
@@ -185,7 +189,7 @@ export async function POST(req: Request, ctx: Ctx) {
 }
 
 // PUT - Update a pool's comment
-export async function PUT(req: Request, ctx: Ctx) {
+async function putHandler(req: Request, ctx: Ctx) {
   const body = await req.json().catch(() => ({}))
   const r = await resolveWrite(ctx, body?.poolid)
 
@@ -214,7 +218,7 @@ export async function PUT(req: Request, ctx: Ctx) {
 }
 
 // DELETE - Delete a pool (Proxmox refuses one that still has members)
-export async function DELETE(req: Request, ctx: Ctx) {
+async function deleteHandler(req: Request, ctx: Ctx) {
   const poolid = new URL(req.url).searchParams.get('poolid')
   const r = await resolveWrite(ctx, poolid)
 
@@ -244,3 +248,8 @@ export async function DELETE(req: Request, ctx: Ctx) {
 
   return NextResponse.json({ data: { success: true } })
 }
+
+export const GET = withPublicApiGuard("pools-list", getHandler)
+export const POST = withPublicApiGuard("pool-create", postHandler)
+export const PUT = withPublicApiGuard("pool-update", putHandler)
+export const DELETE = withPublicApiGuard("pool-delete", deleteHandler)

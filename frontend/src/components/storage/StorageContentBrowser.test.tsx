@@ -23,6 +23,8 @@ const h = vi.hoisted(() => ({
   uploadFileToStorage: vi.fn(),
   // Rights of the signed-in user; every test starts with all storage rights.
   permissions: new Set<string>(),
+  // Provider / msp tenant (full cluster view) unless a test makes it a vDC tenant.
+  fullClusterView: true,
   tasks: {
     addTask: vi.fn(),
     updateTask: vi.fn(),
@@ -36,8 +38,15 @@ const h = vi.hoisted(() => ({
 vi.mock('@/lib/storage/uploadClient', () => ({ uploadFileToStorage: h.uploadFileToStorage }))
 vi.mock('@/contexts/ProxCenterTasksContext', () => ({ useProxCenterTasks: () => h.tasks }))
 vi.mock('@/components/storage/TemplateDownloadDialog', () => ({ default: () => null }))
+vi.mock('@/contexts/TenantContext', () => ({ useTenant: () => ({ isFullClusterView: h.fullClusterView }) }))
 vi.mock('@/contexts/RBACContext', () => ({
-  useRBAC: () => ({ hasPermission: (p: string) => h.permissions.has(p), isAdmin: false, loading: false }),
+  useRBAC: () => ({
+    hasPermission: (p: string) => h.permissions.has(p),
+    // Resource-aware check (#921): the fixture grants its rights on conn-1:local only.
+    hasPermissionOn: (p: string, type: string, id: string) => h.permissions.has(p) && type === 'storage' && id === 'conn-1:local',
+    isAdmin: false,
+    loading: false,
+  }),
 }))
 
 import StorageContentBrowser from './StorageContentBrowser'
@@ -79,6 +88,7 @@ describe('StorageContentBrowser', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     h.permissions = new Set(['storage.content', 'storage.upload', 'storage.delete'])
+    h.fullClusterView = true
     seedContent()
   })
 
@@ -154,6 +164,26 @@ describe('StorageContentBrowser', () => {
     }))
   })
 
+  it('preselects the type of the section the upload was opened from, not the first uploadable one', async () => {
+    h.uploadFileToStorage.mockReturnValue(new Promise(() => {}))
+    // `import` comes first and is uploadable too; the ISO section opens the dialog.
+    renderWithProviders(
+      <StorageContentBrowser connId={CONN} node={NODE} storage={STORAGE} contentTypes={['import', 'iso']} onDelete={vi.fn()} />,
+    )
+
+    await waitFor(() => expect(screen.getByText('virtio-win-0.1.271.iso')).toBeInTheDocument())
+    fireEvent.click(screen.getByTitle('Upload'))
+
+    const dialog = await screen.findByRole('dialog')
+    const file = new File(['iso-bytes'], 'alpine.iso', { type: 'application/octet-stream' })
+
+    fireEvent.change(dialog.querySelector('input[type="file"]')!, { target: { files: [file] } })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Upload' }))
+
+    await waitFor(() => expect(h.uploadFileToStorage).toHaveBeenCalledTimes(1))
+    expect(h.uploadFileToStorage.mock.calls[0][0]).toMatchObject({ contentType: 'iso' })
+  })
+
   it('downloads from a URL with the file name taken from its path, then reloads the content', async () => {
     let body: Record<string, unknown> | null = null
 
@@ -183,6 +213,20 @@ describe('StorageContentBrowser', () => {
     // The dialog closes and the list is refreshed 1.5 s after the task is accepted.
     await waitFor(() => expect(onDelete).toHaveBeenCalledTimes(1), { timeout: 3000 })
     expect(contentCalls).toBe(2)
+  })
+
+  it('a vDC tenant uploads a file but is never offered the download from a URL (the route refuses it)', async () => {
+    h.fullClusterView = false
+    renderBrowser()
+
+    await waitFor(() => expect(screen.getByText('virtio-win-0.1.271.iso')).toBeInTheDocument())
+    fireEvent.click(screen.getByTitle('Upload'))
+
+    const dialog = await screen.findByRole('dialog')
+
+    expect(within(dialog).queryByRole('button', { name: /Download from URL/ })).toBeNull()
+    expect(within(dialog).queryByLabelText('URL')).toBeNull()
+    expect(within(dialog).getByText('Click to select a file')).toBeInTheDocument()
   })
 
   // Issue #920: each write control follows the right its route enforces.

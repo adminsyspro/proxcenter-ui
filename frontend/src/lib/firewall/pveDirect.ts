@@ -120,6 +120,9 @@ function ruleToForm(rule: CreateRuleRequest): URLSearchParams {
   return form
 }
 
+/** Optional rule properties PVE can drop through the PUT `delete` parameter. */
+const CLEARABLE_RULE_FIELDS = ['source', 'dest', 'proto', 'dport', 'sport', 'macro', 'iface', 'log', 'comment'] as const
+
 function updateRuleToForm(rule: UpdateRuleRequest): URLSearchParams {
   const form = new URLSearchParams()
 
@@ -128,15 +131,19 @@ function updateRuleToForm(rule: UpdateRuleRequest): URLSearchParams {
   // Pointer semantics in Go: only send enable when the caller provided it,
   // and send an explicit 0 as-is.
   if (rule.enable != null) form.set('enable', String(rule.enable))
-  setIf(form, 'source', rule.source)
-  setIf(form, 'dest', rule.dest)
-  setIf(form, 'proto', rule.proto)
-  setIf(form, 'dport', rule.dport)
-  setIf(form, 'sport', rule.sport)
-  setIf(form, 'macro', rule.macro)
-  setIf(form, 'iface', rule.iface)
-  setIf(form, 'log', rule.log)
-  setIf(form, 'comment', rule.comment)
+
+  // PVE keeps any property the PUT omits, so a field the user emptied
+  // (present as '') must go through `delete`, an absent one stays as is (#1115).
+  const cleared: string[] = []
+
+  for (const key of CLEARABLE_RULE_FIELDS) {
+    const value = rule[key]
+
+    if (value === '') cleared.push(key)
+    else setIf(form, key, value)
+  }
+
+  if (cleared.length > 0) form.set('delete', cleared.join(','))
   if (rule.moveto != null) form.set('moveto', String(rule.moveto))
 
   return form
@@ -374,8 +381,28 @@ export async function deleteVMRule(conn: PveConn, node: string, vmType: string, 
   return del(conn, `/nodes/${node}/${vmType}/${vmid}/firewall/rules/${pos}`)
 }
 
-export async function getVMFirewallLog(conn: PveConn, node: string, vmType: string, vmid: number | string, limit = 50): Promise<FirewallLogEntry[]> {
-  return (await pveFetch<FirewallLogEntry[]>(conn, `/nodes/${node}/${vmType}/${vmid}/firewall/log?limit=${limit}`)) ?? []
+/** Mirrors the Go LogQuery: PVE counts `limit` from the oldest line, 0 = all. */
+export interface LogWindow {
+  since?: number
+  until?: number
+}
+
+function logQuery(limit: number, window?: LogWindow): string {
+  const q = new URLSearchParams({ limit: String(limit) })
+
+  if (window?.since) q.set('since', String(window.since))
+  if (window?.until) q.set('until', String(window.until))
+
+  return q.toString()
+}
+
+export async function getVMFirewallLog(conn: PveConn, node: string, vmType: string, vmid: number | string, limit = 50, window?: LogWindow): Promise<FirewallLogEntry[]> {
+  return (await pveFetch<FirewallLogEntry[]>(conn, `/nodes/${node}/${vmType}/${vmid}/firewall/log?${logQuery(limit, window)}`)) ?? []
+}
+
+/** The node's whole firewall log: the only place security group hits land (VMID 0). */
+export async function getNodeFirewallLog(conn: PveConn, node: string, limit = 50, window?: LogWindow): Promise<FirewallLogEntry[]> {
+  return (await pveFetch<FirewallLogEntry[]>(conn, `/nodes/${node}/firewall/log?${logQuery(limit, window)}`)) ?? []
 }
 
 // ================================================================================

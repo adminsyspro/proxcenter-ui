@@ -33,6 +33,7 @@ import EmptyState from '@/components/EmptyState'
 import { CardsSkeleton, TableSkeleton } from '@/components/skeletons'
 
 import { jobActionPermission, jobActions, runJobAction } from '@/lib/tasks/jobActions'
+import { rollingUpdateDetail } from '@/lib/tasks/rollingUpdateDetail'
 import JobDetailDialog from '@/components/tasks/JobDetailDialog'
 import StopTaskButton from '@/components/tasks/StopTaskButton'
 import TaskLogButton from '@/components/tasks/TaskLogButton'
@@ -294,7 +295,7 @@ export default function JobsPage() {
               variant='body2'
               sx={{ opacity: 0.7, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flexShrink: 0, maxWidth: '50%' }}
             >
-              {params.row.detail}
+              {params.row.type === 'rolling_update' ? rollingUpdateDetail(params.row, t) : params.row.detail}
             </Typography>
             {/* #926: why it failed, on the row itself */}
             {params.row.status === 'failed' && <FailureReasonText reason={params.row.metadata?.error} />}
@@ -490,6 +491,7 @@ export default function JobsPage() {
                 <MenuItem value='drs'>{t('jobsPage.typeDrs')}</MenuItem>
                 <MenuItem value='migration'>{t('jobsPage.typeMigration')}</MenuItem>
                 <MenuItem value='site_recovery'>{t('jobsPage.typeSiteRecovery')}</MenuItem>
+                <MenuItem value='host_drain'>{t('jobsPage.typeHostDrain')}</MenuItem>
               </Select>
             </FormControl>
 

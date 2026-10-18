@@ -51,6 +51,27 @@ export async function isLdapEnabled(): Promise<boolean> {
   return row?.enabled === true
 }
 
+/**
+ * The bind password a test or a diagnostic should use: the one typed in the
+ * form, or else the saved one, so the admin can re-run it without re-entering
+ * the secret (the form only ever receives a `hasBindPassword` hint).
+ */
+export async function bindPasswordOrSaved(
+  bindDn: string | null | undefined,
+  bindPassword: string | null | undefined,
+): Promise<string | undefined> {
+  if (bindPassword || !bindDn) return bindPassword || undefined
+  try {
+    const row = await prisma.ldapConfig.findUnique({
+      where: { id: "default" },
+      select: { bindPasswordEnc: true },
+    })
+    return row?.bindPasswordEnc ? decryptSecret(row.bindPasswordEnc) : undefined
+  } catch {
+    return undefined
+  }
+}
+
 /** Reads the full LDAP config + decrypts the bind password. */
 export async function getLdapConfig(): Promise<LdapConfig | null> {
   const row = await prisma.ldapConfig.findUnique({ where: { id: "default" } })
@@ -102,7 +123,20 @@ export async function getLdapConfig(): Promise<LdapConfig | null> {
  */
 export type LdapAuthOutcome =
   | { user: LdapUser; failure: null }
-  | { user: null; failure: "user_not_found" | "invalid_password" | "error" }
+  | {
+      user: null
+      failure: "user_not_found" | "invalid_password" | "error"
+      /**
+       * The precise cause, for the server log and the audit trail only: the
+       * person signing in keeps seeing the generic invalid-credentials message,
+       * so a filter that excludes them reveals nothing about their account.
+       * The orchestrator's `reason` code when it sends one (user_not_found,
+       * ambiguous_match, invalid_filter, service_bind_failed, ...).
+       */
+      reason: string
+      /** The orchestrator's error text, never a password. */
+      detail?: string
+    }
 
 // The orchestrator answers this exact text both for an unknown user and for
 // a refused bind. Newer orchestrators add `user_found` to tell them apart.
@@ -114,12 +148,12 @@ export async function authenticateLdapDetailed(
   password: string,
 ): Promise<LdapAuthOutcome> {
   if (!(await isLdapEnabled())) {
-    return { user: null, failure: "error" }
+    return { user: null, failure: "error", reason: "disabled" }
   }
 
   const config = await getLdapConfig()
   if (!config || !config.enabled) {
-    return { user: null, failure: "error" }
+    return { user: null, failure: "error", reason: "disabled" }
   }
 
   try {
@@ -157,15 +191,20 @@ export async function authenticateLdapDetailed(
     if (!res.ok) {
       const text = await res.text().catch(() => "")
       console.error(`Orchestrator LDAP auth failed: ${res.status} ${text}`)
-      return { user: null, failure: "error" }
+      return { user: null, failure: "error", reason: "orchestrator_error", detail: `HTTP ${res.status}` }
     }
 
     const data = await res.json()
     if (!data.success || !data.user) {
-      if (data.error !== LDAP_INVALID_CREDENTIALS) return { user: null, failure: "error" }
+      const detail = typeof data.error === "string" ? data.error : undefined
+      const reported = typeof data.reason === "string" && data.reason ? data.reason : null
+      if (data.error !== LDAP_INVALID_CREDENTIALS) {
+        return { user: null, failure: "error", reason: reported ?? "directory_error", detail }
+      }
       // An orchestrator without `user_found` cannot tell: count it as a
       // refused bind, the row cap bounds what unknown names can add.
-      return { user: null, failure: data.user_found === false ? "user_not_found" : "invalid_password" }
+      const failure = data.user_found === false ? "user_not_found" : "invalid_password"
+      return { user: null, failure, reason: reported ?? failure, detail }
     }
 
     return {
@@ -199,19 +238,15 @@ export async function authenticateLdap(
 }
 
 /**
- * Resolve a ProxCenter role from LDAP group membership. The mapping rows are
- * read from the top down and the first one the user belongs to wins, so the
- * order shown in the LDAP form is the order that decides (issue #992): before
- * that the outer loop was the directory's group list, which put the winner
- * beyond the admin's reach. Each row matches an exact DN, or the CN extracted
- * from the user's DN, so either spelling works on both sides.
- *
- * Returns null when no group matches so the caller can preserve manually
- * assigned roles instead of forcing the defaultRole.
+ * The mapping row that decides a user's role from their LDAP groups. The rows
+ * are read from the top down and the first one the user belongs to wins, so
+ * the order shown in the LDAP form is the order that decides (issue #992):
+ * before that the outer loop was the directory's group list, which put the
+ * winner beyond the admin's reach. Each row matches an exact DN, or the CN
+ * extracted from the user's DN, so either spelling works on both sides.
  */
-export function resolveLdapRole(groups: string[], config: LdapConfig): string | null {
-  const mapping = config.groupRoleMapping || []
-  if (!groups || groups.length === 0 || mapping.length === 0) {
+export function matchLdapRoleEntry(groups: string[], mapping: GroupRoleEntry[] | null | undefined): GroupRoleEntry | null {
+  if (!groups || groups.length === 0 || !mapping || mapping.length === 0) {
     return null
   }
 
@@ -227,10 +262,20 @@ export function resolveLdapRole(groups: string[], config: LdapConfig): string | 
   }
 
   for (const entry of mapping) {
-    if (entry.role && claimed.has(entry.group)) return entry.role
+    if (entry.role && claimed.has(entry.group)) return entry
   }
 
   return null
+}
+
+/**
+ * Resolve a ProxCenter role from LDAP group membership (see matchLdapRoleEntry).
+ *
+ * Returns null when no group matches so the caller can preserve manually
+ * assigned roles instead of forcing the defaultRole.
+ */
+export function resolveLdapRole(groups: string[], config: Pick<LdapConfig, "groupRoleMapping">): string | null {
+  return matchLdapRoleEntry(groups, config.groupRoleMapping)?.role ?? null
 }
 
 /**

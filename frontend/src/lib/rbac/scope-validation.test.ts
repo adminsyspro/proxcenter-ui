@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 
-import { validateAssignmentScope, validateRoleDefaultScopes } from './scope-validation'
+import { scopeBreadth, validateAssignmentScope, validateRoleDefaultScopes } from './scope-validation'
 
 describe('validateAssignmentScope', () => {
   it('accepts global and inherit without a target', () => {
@@ -62,5 +62,24 @@ describe('validateRoleDefaultScopes', () => {
 
   it('rejects an unknown scope type', () => {
     expect(validateRoleDefaultScopes([{ scopeType: 'bogus', scopeTarget: 'x' }]).ok).toBe(false)
+  })
+})
+
+describe('storage scope (issue #921)', () => {
+  it('accepts a storage assignment with its connectionId:storageId target and refuses it bare', () => {
+    expect(validateAssignmentScope('storage', 'conn-1:local')).toEqual({ ok: true, scopeType: 'storage', scopeTarget: 'conn-1:local' })
+    expect(validateAssignmentScope('storage', null).ok).toBe(false)
+  })
+
+  it('accepts storage as a role default scope', () => {
+    expect(validateRoleDefaultScopes([{ scopeType: 'storage', scopeTarget: 'conn-1:local' }])).toEqual({
+      ok: true,
+      scopes: [{ scopeType: 'storage', scopeTarget: 'conn-1:local' }],
+    })
+  })
+
+  it('ranks a storage as narrow as a single VM', () => {
+    expect(scopeBreadth('storage')).toBe(scopeBreadth('vm'))
+    expect(scopeBreadth('storage')).toBeLessThan(scopeBreadth('node'))
   })
 })

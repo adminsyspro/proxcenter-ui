@@ -65,7 +65,7 @@ import { getTenantPrisma } from "@/lib/tenant"
 import { decryptSecret } from "@/lib/crypto/secret"
 import { getNodeSshEndpointForMigration, waitForPveTask } from "../pve-tasks"
 import { allocateAndMapBlockVolume, type AllocatedVolume, type AllocateAndMapArgs } from "../pvesm-alloc"
-import { pveSetVmConfig } from "../pve-vm-config"
+import { destroyPveVm, pveSetVmConfig } from "../pve-vm-config"
 import { convertDisksToQcow2 } from "../qcow2-convert"
 import { startJobHeartbeat } from "../job-heartbeat"
 import { checkNbdNodePreflight } from "./xcpng-node-preflight"
@@ -319,7 +319,7 @@ beforeEach(() => {
   vi.mocked(xapiGetVmConfig).mockImplementation(async () => vmConfig)
   vi.mocked(xapiNbdEnabled).mockResolvedValue(true)
   vi.mocked(xapiManagementNetworkUuid).mockResolvedValue("net-uuid-1")
-  vi.mocked(xapiEnableCbt).mockResolvedValue(undefined)
+  vi.mocked(xapiEnableCbt).mockResolvedValue(true) // CBT was off: this job switched it on
   vi.mocked(xapiDisableCbt).mockResolvedValue(undefined)
   vi.mocked(xapiGetNbdInfo).mockResolvedValue(NBD_INFO)
   vi.mocked(xapiFindSnapshotsByPrefix).mockResolvedValue([])
@@ -369,6 +369,10 @@ describe("runXcpngWarmMigration CBT path", () => {
     expect(prisma.row.completedAt).toBeInstanceOf(Date)
     expect(prisma.row.sourceVmName).toBe("Debian13")
     expect(prisma.row.targetVmid).toBe(900)
+    // The finished row carries what the whole run moved, not the last (empty)
+    // pass: the full copy plus delta 1. totalBytes is the disk, as on a cold run.
+    expect(prisma.row.totalBytes).toBe(BigInt(DISK_BYTES))
+    expect(prisma.row.bytesTransferred).toBe(BigInt(DISK_BYTES + SMALL_DELTA.reduce((s, e) => s + e.length, 0)))
 
     // Every target-node command and reader ran on the node's own SSH address and port.
     const node = { host: "10.0.0.5", port: 2202, source: "override" }
@@ -618,11 +622,14 @@ describe("runXcpngWarmMigration failure cleanup", () => {
     expect(prisma.statusHistory).toEqual(["planning", "enabling_cbt", "preparing_disks", "full_copy", "failed"])
     expect(hasLog("Warm migration failed: block apply failed on disk 0")).toBe(true)
 
-    // thick path: announced, refusal of the offload surfaced, progress streamed, completion logged
+    // thick path: announced with its cap, refusal of the offload surfaced and the
+    // streamed mode named, progress streamed with the average rate, completion
+    // logged with mode and rate (roadmap#45 wording)
     expect(hasLog("Disk 0: zeroing thick target /dev/zvol/DatastoreVM/vm-900-disk-0 (15.0 GB)")).toBe(true)
-    expect(hasLog("Disk 0: array refused the blkdiscard write-zeroes offload (Operation not supported)")).toBe(true)
-    expect(messages().some(m => /^Disk 0: zeroed [\d.]+ of 15\.0 GB$/.test(m))).toBe(true)
-    expect(hasLog("Disk 0: zeroed thick target /dev/zvol/DatastoreVM/vm-900-disk-0")).toBe(true)
+    expect(messages().some(m => m.includes("Rate limit unlimited"))).toBe(true)
+    expect(hasLog("Disk 0: the array refused the write-zeroes offload (Operation not supported); streaming zeros")).toBe(true)
+    expect(messages().some(m => /^Disk 0: zeroed [\d.]+ of 15\.0 GB \(\d+ MB\/s average\)$/.test(m))).toBe(true)
+    expect(messages().some(m => /^Disk 0: zeroed thick target \/dev\/zvol\/DatastoreVM\/vm-900-disk-0 in .* \(streamed zeros, \d+ MB\/s average, limit unlimited\)$/.test(m))).toBe(true)
     expect(prisma.migrationJob.updateMany).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ status: "preparing_disks", transferSpeed: expect.stringMatching(/^Zeroing: \d+ MB\/s$/) }),
     }))
@@ -634,7 +641,11 @@ describe("runXcpngWarmMigration failure cleanup", () => {
     expect(sshCommands).toContain("pvesm free 'DatastoreVM:vm-900-disk-0' 2>/dev/null")
     expect(hasLog("Kept target volume")).toBe(false)
     expect(pveSetVmConfig).not.toHaveBeenCalled()
-    expect(xapiDisableCbt).not.toHaveBeenCalled()
+    // nothing was copied: the VM shell this job created goes, so a retry can reuse
+    // its VMID, and CBT is switched back off as it was (roadmap#57)
+    expect(destroyPveVm).toHaveBeenCalledWith(expect.anything(), "pve1", 900)
+    expect(hasLog("Removed target VM 900 created by this migration")).toBe(true)
+    expect(xapiDisableCbt).toHaveBeenCalledWith(expect.anything(), "OpaqueRef:vdi0")
     expect(xapiLogout).toHaveBeenCalledTimes(1)
 
     // the per-VM lock was released: the same source VM can be migrated again
@@ -720,10 +731,37 @@ describe("runXcpngWarmMigration failure cleanup", () => {
     expect(hasLog("Removed leftover warm snapshot OpaqueRef:old from the source VM")).toBe(true)
     expect(hasLog("Warning: could not remove warm snapshot OpaqueRef:stuck: VDI_IN_USE")).toBe(true)
     // Ceph: the mapped device is unmapped before the volume is freed
-    const unmapIdx = sshCommands.indexOf('rbd unmap "/dev/rbd0" 2>/dev/null')
+    const unmapIdx = sshCommands.indexOf("rbd unmap '/dev/rbd0' 2>/dev/null")
     const freeIdx = sshCommands.indexOf("pvesm free 'DatastoreVM:vm-900-disk-0' 2>/dev/null")
     expect(unmapIdx).toBeGreaterThan(-1)
     expect(freeIdx).toBeGreaterThan(unmapIdx)
+  })
+
+  it("releases the kernel RBD mapping before attaching a completed Ceph copy (roadmap#57)", { timeout: 20000 }, async () => {
+    storageType = "rbd"
+    rbdMapped = true
+    changedBlocks = [[]]
+
+    const err = await runToEnd("xcp-it-rbd-success", makeConfig())
+
+    expect(err).toBeNull()
+    expect(prisma.row.status).toBe("completed")
+    const unmap = vi.mocked(executeSSH).mock.calls.findIndex(c => c[2] === "rbd unmap '/dev/rbd0' 2>/dev/null")
+    expect(unmap).toBeGreaterThan(-1)
+    // before the attach: on a KRBD storage PVE maps the image itself when the VM starts
+    expect(vi.mocked(executeSSH).mock.invocationCallOrder[unmap]).toBeLessThan(vi.mocked(pveSetVmConfig).mock.invocationCallOrder[0])
+  })
+
+  it("leaves alone the CBT a backup product had enabled on the source (roadmap#57)", { timeout: 20000 }, async () => {
+    vi.mocked(xapiEnableCbt).mockResolvedValue(false) // already on before the job
+    applyFails = true
+
+    const err = await runToEnd("xcp-it-cbt-preexisting", makeConfig())
+
+    expect(err).toBeInstanceOf(Error)
+    expect(hasLog("CBT enabled on 0 of 1 source disk(s), already on for the others (left as is)")).toBe(true)
+    expect(destroyPveVm).toHaveBeenCalledWith(expect.anything(), "pve1", 900)
+    expect(xapiDisableCbt).not.toHaveBeenCalled()
   })
 
   it("keeps the completed copy when the attach fails at cutover", { timeout: 20000 }, async () => {
@@ -742,6 +780,9 @@ describe("runXcpngWarmMigration failure cleanup", () => {
     expect(xapiDisableCbt).toHaveBeenCalledTimes(1)
     expect(sshCommands.some(c => c.startsWith("pvesm free"))).toBe(false)
     expect(hasLog("Kept target volume DatastoreVM:vm-900-disk-0: it holds a completed copy of the source disk")).toBe(true)
+    // destroying the VM would take the kept vm-900-disk-0 with it
+    expect(destroyPveVm).not.toHaveBeenCalled()
+    expect(hasLog("Kept target VM 900: it holds a completed copy of the source disk")).toBe(true)
     expect(destroyed).toHaveLength(3) // full, delta-1, cutover: nothing left on the pool
     expect(xapiLogout).toHaveBeenCalledTimes(1)
   })

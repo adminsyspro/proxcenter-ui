@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react'
 import { Box, Card, CardContent, Typography, Stack, Chip, LinearProgress, alpha, useTheme } from '@mui/material'
 import { PieChart, Pie, Cell } from 'recharts'
 import ChartContainer from '@/components/ChartContainer'
+import PagedRows from '@/components/ui/PagedRows'
+import MigrationVmGlyph from '@/components/migration/MigrationVmGlyph'
 
 type ExternalHypervisor = {
   id: string
@@ -16,6 +18,7 @@ type MigrationJob = {
   id: string
   sourceVmName?: string
   sourceHost?: string
+  sourceConnectionId?: string
   targetNode: string
   targetVmid?: number
   status: string
@@ -65,8 +68,8 @@ export default function MigrationDashboard({ externalHypervisors, onHostClick }:
     fetch('/api/v1/migrations')
       .then(r => r.ok ? r.json() : null)
       .then(d => {
-        const jobs = (d?.data || []).slice(0, 10) // Last 10 jobs
-        setRecentJobs(jobs)
+        // Every job, paged below: an older migration stays reachable.
+        setRecentJobs(d?.data || [])
       })
       .catch(() => {})
   }, [])
@@ -279,7 +282,7 @@ export default function MigrationDashboard({ externalHypervisors, onHostClick }:
         Hypervisors
       </Typography>
       <Stack spacing={1.5}>
-        {externalHypervisors.map(h => {
+        <PagedRows items={externalHypervisors} testId="migration-hypervisors-pagination">{h => {
           const vms = h.vms ?? []
           const running = vms.filter(vm => isRunning(vm.status)).length
           const stopped = vms.length - running
@@ -431,7 +434,7 @@ export default function MigrationDashboard({ externalHypervisors, onHostClick }:
               </CardContent>
             </Card>
           )
-        })}
+        }}</PagedRows>
       </Stack>
 
       {/* Recent Migrations */}
@@ -441,15 +444,11 @@ export default function MigrationDashboard({ externalHypervisors, onHostClick }:
             Recent Migrations
           </Typography>
           <Stack spacing={1}>
-            {recentJobs.map(job => {
+            <PagedRows items={recentJobs} testId="migration-recent-pagination">{job => {
               const statusColor = job.status === 'completed' ? theme.palette.success.main
                 : job.status === 'failed' ? theme.palette.error.main
                 : job.status === 'cancelled' ? theme.palette.warning.main
                 : theme.palette.info.main
-              const statusIcon = job.status === 'completed' ? 'ri-checkbox-circle-fill'
-                : job.status === 'failed' ? 'ri-close-circle-fill'
-                : job.status === 'cancelled' ? 'ri-forbid-line'
-                : 'ri-loader-4-line'
               const isActive = job.status === 'transferring' || job.status === 'preflight' || job.status === 'creating_vm' || job.status === 'configuring' || job.status === 'pending'
                 // Warm migration (CBT) phases
                 || job.status === 'planning' || job.status === 'enabling_cbt' || job.status === 'preparing_disks' || job.status === 'full_copy' || job.status === 'delta_sync' || job.status === 'awaiting_cutover' || job.status === 'cutover' || job.status === 'verify'
@@ -464,7 +463,7 @@ export default function MigrationDashboard({ externalHypervisors, onHostClick }:
                 <Card key={job.id} variant="outlined" sx={{ borderRadius: 2, borderColor: isActive ? alpha(statusColor, 0.4) : undefined }}>
                   <CardContent sx={{ py: 1.25, px: 2, '&:last-child': { pb: 1.25 } }}>
                     <Stack direction="row" alignItems="center" spacing={1.5}>
-                      <i className={statusIcon} style={{ fontSize: 18, color: statusColor, animation: isActive ? 'spin 1s linear infinite' : undefined }} />
+                      <MigrationVmGlyph hostType={externalHypervisors.find(h => h.id === job.sourceConnectionId)?.type} status={job.status} size={18} />
                       <Box sx={{ flex: 1, minWidth: 0 }}>
                         <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 0.25 }}>
                           <Typography variant="body2" fontWeight={600} noWrap>
@@ -521,7 +520,7 @@ export default function MigrationDashboard({ externalHypervisors, onHostClick }:
                   </CardContent>
                 </Card>
               )
-            })}
+            }}</PagedRows>
           </Stack>
         </>
       )}

@@ -58,6 +58,7 @@ interface TenantUser {
   enabled: number
   is_default: number
   is_super_admin: boolean
+  rbac_roles?: Array<{ id: string; name: string; is_system: boolean }>
   joined_at: string
 }
 
@@ -72,6 +73,31 @@ interface Connection {
   name: string
   type: string
   tenantId?: string | null
+}
+
+const MEMBER_CHIP_SX = { height: 18, fontSize: '0.6rem' }
+
+/**
+ * Effective RBAC roles of a tenant member, never the legacy users.role column:
+ * a Super Admin created after setup still carries role "user" there
+ * (roadmap#65).
+ */
+function MemberRoleChips({ user }: { user: TenantUser }) {
+  const t = useTranslations()
+  if (user.is_super_admin) {
+    return <Chip label={t('rbac.roles.role_super_admin')} size="small" color="primary" sx={MEMBER_CHIP_SX} />
+  }
+  const roles = user.rbac_roles ?? []
+  if (roles.length === 0) {
+    return <Chip label={t('tenants.noRbacRole')} size="small" variant="outlined" sx={MEMBER_CHIP_SX} />
+  }
+  return (
+    <>
+      {roles.map(r => (
+        <Chip key={r.id} label={r.is_system && t.has(`rbac.roles.${r.id}`) ? t(`rbac.roles.${r.id}`) : r.name} size="small" sx={MEMBER_CHIP_SX} />
+      ))}
+    </>
+  )
 }
 
 export default function TenantsTab() {
@@ -791,7 +817,7 @@ export default function TenantsTab() {
                             primary={
                               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                 {user.name || user.email}
-                                <Chip label={user.role} size="small" sx={{ height: 18, fontSize: '0.6rem' }} />
+                                <MemberRoleChips user={user} />
                               </Box>
                             }
                             secondary={user.email}

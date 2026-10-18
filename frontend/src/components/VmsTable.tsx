@@ -3,6 +3,7 @@
 import React, { useMemo, useEffect, useLayoutEffect, useRef, useState, useCallback } from 'react'
 import { useTranslations } from 'next-intl'
 import { getOsSvgIcon } from '@/lib/utils/osIcons'
+import { tagsSortValue } from '@/lib/inventory/guestSearch'
 import { useTagColors } from '@/contexts/TagColorContext'
 import { vmIconOpacity } from '@/app/(dashboard)/infrastructure/inventory/helpers'
 import { NodeIcon } from '@/app/(dashboard)/infrastructure/inventory/components/TreeIcons'
@@ -75,6 +76,13 @@ export function isColumnVisible(userChoice: boolean | undefined, hiddenByWidth: 
 const pct = (v: any) => Math.max(0, Math.min(100, Number(v ?? 0)))
 
 const bytesToGb = (b: any) => Math.round((Number(b || 0) / 1024 / 1024 / 1024) * 10) / 10
+
+// Allocated disk of a guest (#938): the sum of every attached disk when the
+// inventory read the config, never less than what Proxmox reports (`maxdisk`,
+// the boot disk only, and 0 for a VM whose boot order names no disk).
+export function guestDiskBytes(row: { diskTotal?: number; maxdisk?: number }): number {
+  return Math.max(Number(row.diskTotal) || 0, Number(row.maxdisk) || 0)
+}
 
 const secondsToUptime = (s: any) => {
   if (typeof s === 'string' && s.match(/^\d+[dhdms]/)) return s
@@ -455,6 +463,8 @@ export type VmRow = {
   maxmem?: number
   disk?: number
   maxdisk?: number
+  /** Sum of every attached disk, from the guest config (#938). */
+  diskTotal?: number
   uptime?: number | string | null
   ip?: string | null
   snapshots?: number
@@ -821,7 +831,8 @@ return { id: vm.id, data }
     for (const vm of vms) {
       const ramAllocGB = vm.maxmem ? Math.round(vm.maxmem / 1073741824 * 10) / 10 : ''
       const ramUsedGB = vm.maxmem && vm.ram !== undefined ? Math.round((vm.ram / 100) * vm.maxmem / 1073741824 * 10) / 10 : ''
-      const diskAllocGB = vm.maxdisk ? Math.round(vm.maxdisk / 1073741824 * 10) / 10 : ''
+      const diskAllocBytes = guestDiskBytes(vm)
+      const diskAllocGB = diskAllocBytes ? Math.round(diskAllocBytes / 1073741824 * 10) / 10 : ''
       const diskUsedGB = vm.disk ? Math.round(vm.disk / 1073741824 * 10) / 10 : ''
       const diskPct = vm.maxdisk && vm.disk ? Math.round((vm.disk / vm.maxdisk) * 100) : ''
 
@@ -1155,14 +1166,16 @@ return (
         headerName: 'Disk',
         width: 55,
         renderHeader: headerIconOnly('ri-hard-drive-2-line'),
+        // Sort on the size shown, not on `disk` (the field name), which is usage.
+        valueGetter: (_value, row) => guestDiskBytes(row),
         renderCell: (params) => {
-          const maxdisk = params.row.maxdisk
+          const allocated = guestDiskBytes(params.row)
 
-          if (!maxdisk) return <Typography variant='caption' sx={{ opacity: 0.5 }}>—</Typography>
+          if (!allocated) return <Typography variant='caption' sx={{ opacity: 0.5 }}>—</Typography>
           
 return (
             <Typography variant='body2' sx={{ fontSize: '0.7rem' }}>
-              {bytesToGb(maxdisk)}G
+              {bytesToGb(allocated)}G
             </Typography>
           )
         }
@@ -1222,6 +1235,8 @@ return (
         width: 120,
         minWidth: 60,
         renderHeader: headerIconOnly('ri-price-tag-3-line'),
+        // Sort on the joined tags, not on the array reference (#937).
+        valueGetter: (_value, row) => tagsSortValue(row.tags),
         renderCell: (params) => <TagsCell tags={params.row.tags || []} getTagColor={(tag) => getTagColor(tag, params.row.connId)} shape={getShape(params.row.connId)} />
       })
     }

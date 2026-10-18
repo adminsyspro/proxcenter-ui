@@ -12,18 +12,19 @@
 import { NextResponse } from 'next/server'
 
 import { getConnectionByIdOrNull } from '@/lib/connections/getConnection'
-import { authorizeRestoreTarget, isProviderCaller, requireGuestFileRestoreUser } from '@/lib/guestFileRestore/guard'
+import { authorizeRestoreTarget, denyTokenOutsideRestoreScope, isProviderCaller, requireGuestFileRestoreUser } from '@/lib/guestFileRestore/guard'
 import { SSH_CONNECT_FAILED_MESSAGE, assertSshHostAllowed, opaqueSshErrorClass } from '@/lib/guestFileRestore/guestAddresses'
 import { probeRequestSchema, validationError } from '@/lib/guestFileRestore/schemas'
 import { loadGuestFileRestoreSettings } from '@/lib/guestFileRestore/settings'
 import type { GuestFileRestoreProbeResult } from '@/lib/guestFileRestore/types'
 import { probeAgent } from '@/lib/guestFileRestore/writers/agent'
 import { probeSsh } from '@/lib/guestFileRestore/writers/ssh'
+import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-export async function POST(request: Request) {
+async function handler(request: Request) {
   const guard = await requireGuestFileRestoreUser()
   if (guard.denied) return guard.denied
 
@@ -55,6 +56,8 @@ export async function POST(request: Request) {
 
     const conn = await getConnectionByIdOrNull(target.connId)
     if (!conn) return NextResponse.json({ error: 'Connection not found' }, { status: 404 })
+    const outside = await denyTokenOutsideRestoreScope(guard.principal, conn, target)
+    if (outside) return outside
 
     let result: GuestFileRestoreProbeResult
     if (method === 'agent') {
@@ -76,3 +79,5 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: error?.message || 'Erreur serveur' }, { status: 500 })
   }
 }
+
+export const POST = withPublicApiGuard("gfr-probe", handler)

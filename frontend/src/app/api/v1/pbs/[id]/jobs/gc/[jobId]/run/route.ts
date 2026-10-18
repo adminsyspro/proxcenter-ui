@@ -4,6 +4,7 @@ import { demoResponse } from "@/lib/demo/demo-api"
 import { pbsFetch } from "@/lib/proxmox/pbs-client"
 import { getPbsConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 
 export const runtime = "nodejs"
 
@@ -16,7 +17,7 @@ type RouteContext = {
  * Exécute un Garbage Collection sur un datastore
  * Note: jobId est au format "gc-{datastore}"
  */
-export async function POST(req: Request, ctx: RouteContext) {
+async function handler(req: Request, ctx: RouteContext) {
   const demo = demoResponse(req)
   if (demo) return demo
 
@@ -50,3 +51,5 @@ export async function POST(req: Request, ctx: RouteContext) {
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const POST = withPublicApiGuard("pbs-job-gc-run", handler)

@@ -1,15 +1,17 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 
-const { headersMock, getServerSessionMock, resolveVisibleMock } = vi.hoisted(() => ({
+const { headersMock, getServerSessionMock, resolveVisibleMock, creatorStillHoldsMock } = vi.hoisted(() => ({
   headersMock: vi.fn<() => Promise<Headers>>(),
   getServerSessionMock: vi.fn<() => Promise<any>>(),
   resolveVisibleMock: vi.fn<() => Promise<Set<string>>>(),
+  creatorStillHoldsMock: vi.fn<(...args: any[]) => Promise<boolean>>(),
 }))
 
 vi.mock('next/headers', () => ({ headers: headersMock }))
 vi.mock('next-auth', () => ({ getServerSession: getServerSessionMock }))
 vi.mock('@/lib/auth/config', () => ({ authOptions: {} }))
 vi.mock('./scope', () => ({ resolveVisibleConnectionIds: resolveVisibleMock }))
+vi.mock('./creatorCheck', () => ({ creatorStillHolds: creatorStillHoldsMock }))
 
 import { NextResponse } from 'next/server'
 
@@ -23,6 +25,7 @@ import {
 import { _impl } from '@/lib/auth/requireEnterprise'
 import { _resetLicenseVerdictCache } from '@/lib/api-tokens/licenseGate'
 import { _resetRateLimitCounters } from '@/lib/api-tokens/rateLimit'
+import * as allowlist from './allowlist'
 import { withPublicApiGuard } from './routeGuard'
 
 beforeEach(async () => {
@@ -33,6 +36,7 @@ beforeEach(async () => {
   vi.spyOn(_impl, 'getServerLicense').mockResolvedValue(ENTERPRISE_WITH_API_ACCESS)
   getServerSessionMock.mockResolvedValue(null)
   resolveVisibleMock.mockResolvedValue(new Set(['conn-a']))
+  creatorStillHoldsMock.mockResolvedValue(true)
   await truncate(['audit_logs', 'api_tokens', 'tenants'])
   await seedDefaultTenant()
 })
@@ -207,5 +211,123 @@ describe('withPublicApiGuard', () => {
     const rows = await prismaTest.auditLog.findMany({ where: { action: 'apitoken.denied' } })
     expect(rows).toHaveLength(1)
     expect((rows[0].details as any).tokenPrefix).toBeUndefined()
+  })
+
+  it('a tenant token refused for a missing scope is audited against that token and its tenant', async () => {
+    const now = new Date()
+    await prismaTest.tenant.create({
+      data: { id: 'tenant-msp', slug: 'msp', name: 'MSP', operatingModel: 'msp', createdAt: now, updatedAt: now },
+    })
+    const { id, secret } = await seedApiToken({ tenantId: 'tenant-msp', scopes: ['storage:read'] })
+    headersMock.mockResolvedValue(tokenHeaders(secret, 'vms-list', '/api/v1/vms'))
+    const guarded = withPublicApiGuard('vms-list', okHandler)
+    const res = await guarded(new Request('http://t/_'), {})
+    expect(res.status).toBe(403)
+    expect(await res.json()).toEqual({ error: 'Route not available to API tokens', route: '/api/v1/vms' })
+    const rows = await prismaTest.auditLog.findMany({ where: { action: 'apitoken.denied' } })
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({ apiTokenId: id, tenantId: 'tenant-msp', userId: null })
+    expect((rows[0].details as any).reason).toBe('Route not available to API tokens')
+  })
+
+  it('an invalid token stays unattributed in the denial audit', async () => {
+    const { secret } = await seedApiToken({ revokedAt: new Date() })
+    headersMock.mockResolvedValue(tokenHeaders(secret, 'vms-list', '/api/v1/vms'))
+    const guarded = withPublicApiGuard('vms-list', okHandler)
+    const res = await guarded(new Request('http://t/_'), {})
+    expect(res.status).toBe(401)
+    const rows = await prismaTest.auditLog.findMany({ where: { action: 'apitoken.denied' } })
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({ apiTokenId: null, tenantId: 'default' })
+  })
+
+  describe('write entries', () => {
+    const writeEntry = {
+      id: 'test-write',
+      method: 'POST',
+      pattern: '/api/v1/test-write/{id}',
+      requiredScopes: ['vms:write'],
+      connectionSegment: 'id',
+      secondaryConnections: [{ source: 'body', field: 'targetConnectionId' }],
+    }
+    const UPID = 'UPID:pve1:00001234:00005678:65000000:qmstart:100:root@pam:'
+
+    beforeEach(() => {
+      const realLookup = allowlist.getAllowlistEntryById
+      vi.spyOn(allowlist, 'getAllowlistEntryById').mockImplementation(id =>
+        id === 'test-write' ? (writeEntry as any) : realLookup(id))
+    })
+
+    function post(body: unknown, method = 'POST'): Request {
+      return new Request('http://t/api/v1/test-write/conn-a', {
+        method,
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+    }
+
+    it('runs the guards, hands the body intact to the handler and journals the write with its UPID', async () => {
+      const { id, secret } = await seedApiToken({ scopes: ['vms:write'], createdByUserId: null })
+      headersMock.mockResolvedValue(tokenHeaders(secret, 'test-write', '/api/v1/test-write/conn-a', 'POST'))
+      const guarded = withPublicApiGuard('test-write', async (req, ctx) => {
+        expect(ctx.principal?.tokenId).toBe(id)
+        expect(await req.json()).toEqual({ targetConnectionId: 'conn-a', vmid: 100 })
+        return NextResponse.json({ data: UPID })
+      })
+      const res = await guarded(post({ targetConnectionId: 'conn-a', vmid: 100 }), {})
+      expect(res.status).toBe(200)
+      expect(res.headers.get('RateLimit-Limit')).toBe('60')
+      expect(creatorStillHoldsMock).toHaveBeenCalledWith(expect.objectContaining({ tokenId: id }), 'vms:write')
+      const rows = await prismaTest.auditLog.findMany({ where: { apiTokenId: id } })
+      expect(rows).toHaveLength(1)
+      expect(rows[0]).toMatchObject({ action: 'apitoken.write', category: 'api_tokens', status: 'success', resourceId: id })
+      expect(rows[0].details).toEqual({
+        entry: 'test-write', method: 'POST', path: '/api/v1/test-write/conn-a', httpStatus: 200, upid: UPID,
+      })
+    })
+
+    it('a guard refusal never reaches the handler and is journaled as apitoken.denied', async () => {
+      const { id, secret } = await seedApiToken({ scopes: ['vms:write'] })
+      headersMock.mockResolvedValue(tokenHeaders(secret, 'test-write', '/api/v1/test-write/conn-a', 'POST'))
+      const handler = vi.fn(async () => NextResponse.json({ data: 'ok' }))
+      const res = await withPublicApiGuard('test-write', handler)(post({ targetConnectionId: 'conn-z' }), {})
+      expect(res.status).toBe(403)
+      expect(await res.json()).toEqual({ error: 'Connection not in token scope', connection: 'conn-z' })
+      expect(handler).not.toHaveBeenCalled()
+      const rows = await prismaTest.auditLog.findMany({ where: { apiTokenId: id } })
+      expect(rows.map(r => r.action)).toEqual(['apitoken.denied'])
+    })
+
+    it('refuses 401 when the request method is not the one the token was authorized for', async () => {
+      const { secret } = await seedApiToken({ scopes: ['vms:write'] })
+      headersMock.mockResolvedValue(tokenHeaders(secret, 'test-write', '/api/v1/test-write/conn-a', 'POST'))
+      const handler = vi.fn(async () => NextResponse.json({ data: 'ok' }))
+      const res = await withPublicApiGuard('test-write', handler)(post({}, 'PUT'), {})
+      expect(res.status).toBe(401)
+      expect(handler).not.toHaveBeenCalled()
+    })
+
+    it('a handler that throws is still journaled (HTTP 500) and the error propagates', async () => {
+      const { id, secret } = await seedApiToken({ scopes: ['vms:write'] })
+      headersMock.mockResolvedValue(tokenHeaders(secret, 'test-write', '/api/v1/test-write/conn-a', 'POST'))
+      const guarded = withPublicApiGuard('test-write', async () => { throw new Error('boom') })
+      await expect(guarded(post({}), {})).rejects.toThrow('boom')
+      const rows = await prismaTest.auditLog.findMany({ where: { apiTokenId: id } })
+      expect(rows).toHaveLength(1)
+      expect(rows[0]).toMatchObject({ action: 'apitoken.write', status: 'failure' })
+      expect((rows[0].details as any).httpStatus).toBe(500)
+    })
+
+    it('a failing write journal never alters the response', async () => {
+      const { secret } = await seedApiToken({ scopes: ['vms:write'] })
+      headersMock.mockResolvedValue(tokenHeaders(secret, 'test-write', '/api/v1/test-write/conn-a', 'POST'))
+      const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      const audit = await import('@/lib/audit')
+      vi.spyOn(audit, 'audit').mockRejectedValue(new Error('db down'))
+      const res = await withPublicApiGuard('test-write', async () => NextResponse.json({ data: UPID }))(post({}), {})
+      expect(res.status).toBe(200)
+      expect(await res.json()).toEqual({ data: UPID })
+      expect(errSpy).toHaveBeenCalled()
+    })
   })
 })

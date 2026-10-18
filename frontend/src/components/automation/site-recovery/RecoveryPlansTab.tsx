@@ -15,6 +15,14 @@ import AppDialogTitle from '@/components/ui/AppDialogTitle'
 import ExecutionScreenshots from './ExecutionScreenshots'
 
 import EngineGlyph from './EngineGlyph'
+import { guestStateOf } from '@/lib/site-recovery/emergencyActions'
+
+// Labels of the per-guest DR states shown in the plan drawer (ui#943).
+const GUEST_STATE_LABELS: Record<string, string> = {
+  failing_over: 'siteRecovery.status.failingOver',
+  failed_over: 'siteRecovery.status.failedOver',
+  failing_back: 'siteRecovery.status.failingBack',
+}
 import type { RecoveryPlan, RecoveryExecution, RecoveryPlanStatus, ReplicationJob, StorageEngine } from '@/lib/orchestrator/site-recovery.types'
 
 // ── Helpers ────────────────────────────────────────────────────────────
@@ -35,6 +43,7 @@ const PlanStatusBadge = ({ status, t }: { status: RecoveryPlanStatus; t: any }) 
     failed: { color: 'error' },
     not_ready: { color: 'default' },
     failed_over: { color: 'error' },
+    partially_failed_over: { color: 'warning' },
     failing_back: { color: 'info' }
   }
 
@@ -449,6 +458,16 @@ export default function RecoveryPlansTab({
                                       sx={{ height: 20, fontSize: '0.65rem', flexShrink: 0 }}
                                     />
                                   )}
+                                  {/* The guest's own DR state (ui#943): failed over on its own,
+                                      or on its way in or out, while the plan reads partial. */}
+                                  {guestStateOf(selected, vm.vm_id) && (
+                                    <Chip
+                                      size='small'
+                                      color={guestStateOf(selected, vm.vm_id)?.state === 'failed_over' ? 'error' : 'warning'}
+                                      label={t(GUEST_STATE_LABELS[guestStateOf(selected, vm.vm_id)!.state])}
+                                      sx={{ height: 20, fontSize: '0.65rem', flexShrink: 0 }}
+                                    />
+                                  )}
                                 </Box>
                                 <Typography variant='caption' sx={{ color: 'text.secondary', flexShrink: 0 }}>
                                   VM {vm.vm_id}
@@ -577,8 +596,8 @@ export default function RecoveryPlansTab({
                     {t('siteRecovery.plans.failback')}
                   </Button>
                   <Tooltip
-                    title={selected.status === 'failed_over' ? t('siteRecovery.plans.failedOverTooltip') : t('siteRecovery.plans.testActiveTooltip')}
-                    disableHoverListener={!(selected.active_test_execution_id || selected.status === 'executing' || selected.status === 'failed_over')}
+                    title={selected.status === 'failed_over' || selected.status === 'partially_failed_over' ? t('siteRecovery.plans.failedOverTooltip') : t('siteRecovery.plans.testActiveTooltip')}
+                    disableHoverListener={!(selected.active_test_execution_id || selected.status === 'executing' || selected.status === 'failed_over' || selected.status === 'partially_failed_over')}
                     arrow
                   >
                     <span>
@@ -586,7 +605,7 @@ export default function RecoveryPlansTab({
                         variant='outlined' size='small'
                         startIcon={<i className='ri-test-tube-line' />}
                         onClick={() => { onTestFailover(selected.id); closeDrawer() }}
-                        disabled={!!selected.active_test_execution_id || selected.status === 'executing' || selected.status === 'failed_over'}
+                        disabled={!!selected.active_test_execution_id || selected.status === 'executing' || selected.status === 'failed_over' || selected.status === 'partially_failed_over'}
                       >
                         {t('siteRecovery.plans.testFailover')}
                       </Button>

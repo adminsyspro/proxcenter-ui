@@ -1,3 +1,5 @@
+import type { MigrationDiskMapping, MigrationHardwareOverrides, MigrationNicMapping } from "../target-overrides"
+
 export type WarmStatus =
   | "pending" | "planning" | "enabling_cbt" | "preparing_disks" | "full_copy" | "delta_sync"
   | "awaiting_cutover" | "cutover" | "verify" | "converting_disks"
@@ -24,6 +26,12 @@ export interface WarmMigrationConfig {
    * by the route; absent means the Proxmox default, x86-64-v2-AES.
    */
   cpuType?: string
+  /** Operator hardware overrides of the created VM (#317): cores, sockets, memory. */
+  hardware?: MigrationHardwareOverrides
+  /** Per-source-NIC target bridge, VLAN tag and model (#317); unmapped NICs use networkBridge. */
+  nics?: MigrationNicMapping[]
+  /** Per-source-disk target storage or exclusion (#317, lot 2); unmapped disks use targetStorage. */
+  disks?: MigrationDiskMapping[]
   targetVmid?: number
   /** Extracted VDDK distribution dir on the PVE node (libdir=). */
   vddkLibdir?: string
@@ -37,6 +45,20 @@ export interface WarmMigrationConfig {
    * is what a migration scheduled inside a maintenance window needs (#443).
    */
   cutoverMode?: "auto" | "manual"
+  /**
+   * Cap on the write rate of the thick-target zeroing, MB/s (roadmap#45). 0 is
+   * unlimited; absent means the cap of the target PVE connection.
+   */
+  zeroRateLimitMBps?: number
+  /**
+   * VMkernel adapter of the source host the NFC copy must use (roadmap#53),
+   * e.g. "vmk2", with its address. On a standalone ESXi source the VDDK
+   * connects to that address directly; on a vCenter source the adapter is
+   * tagged vSphereBackupNFC on the host so vSphere hands out NFC tickets on
+   * it. Absent means the host's default: its vSphereBackupNFC-tagged adapter
+   * when one exists, otherwise management.
+   */
+  copyVmk?: string
 }
 
 export interface LogEntry { ts: string; msg: string; level: "info" | "success" | "warn" | "error" }

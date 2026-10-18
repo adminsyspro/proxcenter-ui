@@ -28,6 +28,9 @@ function tierBar(): HTMLElement {
 vi.mock('./MyVmsMetricsCharts', () => ({ default: () => null }))
 vi.mock('./MyDatacentersMapCard', () => ({ default: () => null }))
 vi.mock('./MyGreenCard', () => ({ default: () => null }))
+vi.mock('@/components/vdc/VdcUsageHistoryChart', () => ({
+  default: ({ historyUrl }: { historyUrl: string }) => <div data-testid="usage-history-chart">{historyUrl}</div>,
+}))
 
 import MyVdcOverview from './MyVdcOverview'
 
@@ -57,6 +60,27 @@ function makeVdc(overrides: Record<string, unknown> = {}) {
     ...overrides,
   }
 }
+
+describe('MyVdcOverview, network model (#904, roadmap#18)', () => {
+  it('shows the tenant-provided edge and automatic VNIs by default', () => {
+    renderWithProviders(<MyVdcOverview vdc={makeVdc()} />)
+    expect(screen.getByText('Tenant provided edge')).toBeTruthy()
+    expect(screen.getByText(/Pure L2 networks without IP configuration are allowed/)).toBeTruthy()
+    expect(screen.getByText(/allocates the VNI of each network automatically/)).toBeTruthy()
+  })
+
+  it('shows the platform-provided edge and the assigned VNI range', () => {
+    renderWithProviders(<MyVdcOverview vdc={makeVdc({ edgeModel: 'platform', transport: { sharing: 'shared', vniRangeStart: 20000, vniRangeEnd: 20009 } })} />)
+    expect(screen.getByText('Platform provided edge')).toBeTruthy()
+    expect(screen.getByText(/Every network must declare its subnet/)).toBeTruthy()
+    expect(screen.getByText(/VNIs 20000 to 20009 are reserved for you/)).toBeTruthy()
+  })
+
+  it('shows a dedicated transport', () => {
+    renderWithProviders(<MyVdcOverview vdc={makeVdc({ transport: { sharing: 'dedicated' } })} />)
+    expect(screen.getByText(/Dedicated transport: you choose the VNI/)).toBeTruthy()
+  })
+})
 
 describe('MyVdcOverview, per-tier storage usage bars', () => {
   afterEach(cleanup)
@@ -135,5 +159,15 @@ describe('MyVdcOverview, per-tier storage usage bars', () => {
 
     expect(bar).toHaveAttribute('aria-valuenow', '0')
     expect(bar.className).not.toContain('colorError')
+  })
+})
+
+describe('MyVdcOverview, usage history (#902)', () => {
+  afterEach(cleanup)
+
+  it('shows the usage history of this vDC through the tenant route', () => {
+    renderWithProviders(<MyVdcOverview vdc={makeVdc({ id: 'vdc/1' })} />)
+
+    expect(screen.getByTestId('usage-history-chart')).toHaveTextContent('/api/v1/vdcs/vdc%2F1/usage/history')
   })
 })

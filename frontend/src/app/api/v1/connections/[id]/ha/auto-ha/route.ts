@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 
 import { getSetting, setSetting } from "@/lib/db/settings"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 
 export const runtime = "nodejs"
 
@@ -21,7 +22,7 @@ async function loadSettings(connId: string): Promise<AutoHaSettings> {
   return { ...DEFAULTS, ...(stored ?? {}) }
 }
 
-export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
+async function getHandler(_req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await ctx.params
     const denied = await checkPermission(PERMISSIONS.NODE_VIEW)
@@ -33,10 +34,12 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   }
 }
 
-export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }) {
+async function putHandler(req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await ctx.params
-    const denied = await checkPermission(PERMISSIONS.NODE_MANAGE)
+    // The settings cover the whole connection: node.manage on it, for a
+    // token and a session alike (a node-scoped holder does not qualify).
+    const denied = await checkPermission(PERMISSIONS.NODE_MANAGE, "connection", id)
     if (denied) return denied
 
     const body = await req.json()
@@ -57,3 +60,6 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const GET = withPublicApiGuard("ha-auto-get", getHandler)
+export const PUT = withPublicApiGuard("ha-auto-update", putHandler)

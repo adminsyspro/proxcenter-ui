@@ -22,6 +22,8 @@ import { startOperatorSignalWatch, stopOperatorSignalWatch } from "@/lib/migrati
 import { decryptSecret } from "@/lib/crypto/secret"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { pveFetch } from "@/lib/proxmox/client"
+import { reserveTargetVmid } from "./reserve-target-vmid"
+import { releaseVmids } from "./vmid-reservation"
 import { isFileBasedStorage } from "@/lib/proxmox/storage"
 import { executeSSH, shellEscape } from "@/lib/ssh/exec"
 import { HyperVClient } from "@/lib/hyperv/client"
@@ -31,6 +33,8 @@ import { ntfsCompressionPluginCheckCommand, ntfsCompressionPluginInstallScript }
 import { resolveNodeSshEndpoint } from "@/lib/ssh/node-endpoint"
 import { parseV2vLine, calculateOverallProgress } from "./v2v-progress"
 import { parseV2vXml, buildPveCreateParams } from "./v2vConfigMapper"
+import { describeOverrides, buildNetValue, resolveNicTarget, applyHardwareOverrides, planDiskTargets, planStorages, describeDiskPlan, type MigrationDiskMapping, type MigrationHardwareOverrides, type MigrationNicMapping } from "./target-overrides"
+import { planV2vImports, v2vDiskSlot } from "./v2v-disk-targets"
 import type { V2vVmConfig } from "./v2vConfigMapper"
 import { allocateAndMapBlockVolume, nextFreeDiskName, type AllocatedVolume } from "./pvesm-alloc"
 import { adoptImportAndAttachFileVolume } from "./adopt-file-volume"
@@ -54,13 +58,16 @@ import {
   soapGetSnapshotQuiesced,
   soapPowerOffVm,
 } from "@/lib/vmware/soap"
-import type { SoapSession, EsxiVmConfig } from "@/lib/vmware/soap"
+import type { SoapSession, EsxiVmConfig, EsxiDiskInfo } from "@/lib/vmware/soap"
 import { pveSetVmConfig, destroyPveVm } from "./pve-vm-config"
 import { startJobHeartbeat } from "./job-heartbeat"
 import { MIGRATION_CPU_TYPE_DEFAULT } from "./cpu-type"
 import { sanitizeV2vRoot, planV2vRootRetry } from "./v2v-root-select"
 import type { V2vRootCandidate } from "./v2v-root-select"
 import { formatSshEndpoint, type SshTarget } from '@/lib/ssh/node-endpoint-core'
+import { verifyDiskIntegrity, verifyConvertedImage, faultInjectionFromEnv, buildQemuImgInfoCmd, parseQemuImgInfo, type RegionSource } from "./integrity"
+import { resolveIntegritySettings } from "./integrity-target"
+import { tpmstate0Param, vtpmPreflightWarning, vtpmCreatedLine } from "./vtpm"
 
 type MigrationStatus = "pending" | "preflight" | "creating_vm" | "transferring" | "configuring" | "converting_disks" | "completed" | "failed" | "cancelled"
 
@@ -93,6 +100,12 @@ export interface V2vMigrationConfig {
    * by the route; absent means the Proxmox default, x86-64-v2-AES.
    */
   cpuType?: string
+  /** Operator hardware overrides of the created VM (#317): cores, sockets, memory. */
+  hardware?: MigrationHardwareOverrides
+  /** Per-source-NIC target bridge, VLAN tag and model (#317); unmapped NICs use networkBridge. */
+  nics?: MigrationNicMapping[]
+  /** Per-source-disk target storage or exclusion (#317, lot 2); unmapped disks use targetStorage. */
+  disks?: MigrationDiskMapping[]
   /** vCenter datacenter name (libvirt vpx URI: vpx://VC/{datacenter}/...). Required for vcenter source. */
   vcenterDatacenter?: string
   /**
@@ -158,6 +171,14 @@ interface LogEntry {
   ts: string
   msg: string
   level: "info" | "success" | "warn" | "error"
+}
+
+/** Type and path of a target storage, resolved once per storage a job writes to (#317, lot 2). */
+interface TargetStorageInfo {
+  type: string
+  isFileBased: boolean
+  /** Root of a file-based storage (`<path>/images/<vmid>` holds the volumes); unused for a block storage. */
+  path: string
 }
 
 let cancelledJobs = new Set<string>()
@@ -1141,6 +1162,52 @@ export async function runV2vMigrationPipeline(
       }
     }
 
+    // Per-disk target storage and exclusion (#317, lot 2). virt-v2v writes every
+    // converted disk into `-o local -os <outputDir>` and cannot leave one out, so
+    // the per-disk choices apply in the Phase 6 import loop: output file i is
+    // source disk i and goes onto the storage chosen for that disk; an excluded
+    // disk is converted but never imported (its file goes with the output dir).
+    // The staging decision above stays on the default storage. Every other
+    // storage the choices name is resolved here, once, as soon as the source
+    // disk list is known, so an unknown or inactive storage fails the job
+    // before the long conversion instead of after it.
+    const targetStorages = new Map<string, TargetStorageInfo>([
+      [config.targetStorage, { type: storageType, isFileBased, path: storagePath }],
+    ])
+    const storageInfo = async (storage: string): Promise<TargetStorageInfo> => {
+      const known = targetStorages.get(storage)
+      if (known) return known
+      let extra: any
+      try {
+        extra = await pveFetch<any>(pveConn, `/storage/${encodeURIComponent(storage)}`)
+      } catch (err: any) {
+        throw new Error(`Target storage "${storage}" chosen for a disk in the migration options is not known to the cluster: ${err?.message || String(err)}`)
+      }
+      const extraStatus = await pveFetch<any>(
+        pveConn,
+        `/nodes/${encodeURIComponent(config.targetNode)}/storage/${encodeURIComponent(storage)}/status`,
+      ).catch(() => null)
+      if (!(extraStatus?.active === 1 || extraStatus?.active === true)) {
+        throw new Error(`Target storage "${storage}" chosen for a disk in the migration options is not active on ${config.targetNode}`)
+      }
+      const extraType: string = extra?.type || "dir"
+      const info: TargetStorageInfo = { type: extraType, isFileBased: isFileBasedStorage(extraType), path: extra?.path || "/var/lib/vz" }
+      targetStorages.set(storage, info)
+      return info
+    }
+    const hasDiskMappings = (config.disks?.length ?? 0) > 0
+    // The source disks in source order, the list the per-disk choices index.
+    // Known on the vCenter path (SOAP inspection) and read from the ESXi host
+    // on the esxi-direct path when choices were made; null otherwise, as before.
+    let sourceDisks: EsxiDiskInfo[] | null = null
+    const applyDiskPlan = async (disks: EsxiDiskInfo[]) => {
+      if (!hasDiskMappings) return
+      const diskPlan = planDiskTargets(disks, config.disks, config.targetStorage)
+      const planLine = describeDiskPlan(diskPlan, config.targetStorage)
+      if (planLine) await appendLog(jobId, planLine)
+      for (const storage of planStorages(diskPlan)) await storageInfo(storage)
+    }
+
     if (isCancelled(jobId)) throw new Error("Migration cancelled")
 
     // ── PHASE 1.5: Auto-mount Hyper-V SMB share ──
@@ -1294,6 +1361,37 @@ export async function runV2vMigrationPipeline(
         throw new Error(`Failed to write password file: ${writeResult.error}`)
       }
       await appendLog(jobId, "Credentials prepared on target node", "success")
+    }
+
+    // esxi-direct (#317, lot 2): virt-v2v reads the .vmx itself, so this path
+    // never needed the source disk list. The per-disk choices are positions in
+    // that list, so when there are any it is read over SOAP from the ESXi host,
+    // the same lookup the dispatcher made to route the job here; a failure is
+    // fatal because the choices cannot be honoured by guessing. Without choices
+    // nothing changes.
+    if (config.sourceType === "esxi-direct" && hasDiskMappings) {
+      const esxiConn = await prisma.connection.findUnique({
+        where: { id: config.sourceConnectionId },
+        select: { baseUrl: true, apiTokenEnc: true, insecureTLS: true },
+      })
+      if (!esxiConn?.apiTokenEnc) {
+        throw new Error("The per-disk storage choices need the source VM's disk list, but the ESXi connection has no API credentials")
+      }
+      const esxiCreds = decryptSecret(esxiConn.apiTokenEnc)
+      const esxiColon = esxiCreds.indexOf(":")
+      const esxiApiUser = esxiColon > 0 ? esxiCreds.substring(0, esxiColon) : "root"
+      const esxiApiPass = esxiColon > 0 ? esxiCreds.substring(esxiColon + 1) : esxiCreds
+      await appendLog(jobId, "Reading the source disk list from the ESXi host for the per-disk storage choices...")
+      const esxiSession = await soapLogin(esxiConn.baseUrl.replace(/\/$/, ""), esxiApiUser, esxiApiPass, esxiConn.insecureTLS)
+      let esxiVmXml = ""
+      try {
+        esxiVmXml = await soapGetVmConfig(esxiSession, config.sourceVmId)
+      } finally {
+        await soapLogout(esxiSession).catch(() => {})
+      }
+      sourceDisks = parseVmConfig(esxiVmXml).disks
+      await appendLog(jobId, `Source VM has ${sourceDisks.length} disk(s)`)
+      await applyDiskPlan(sourceDisks)
     }
 
     // ── PHASE 2b: Prepare SSH credentials for esxi-direct source ──
@@ -1659,6 +1757,13 @@ export async function runV2vMigrationPipeline(
         `Source VM has ${sourceVmwareConfig.disks.length} disk(s) on datastores: ` +
         `${datastoreNames.join(", ") || "(none parsed)"}. Using NFC transport (vCenter canonical API).`,
       )
+      // vTPM awareness (roadmap#1): the TPM state stays in vSphere; the target
+      // gets an empty TPM 2.0 and the operator needs the BitLocker recovery key.
+      if (sourceVmwareConfig.hasVtpm) await appendLog(jobId, vtpmPreflightWarning(), "warn")
+      // The per-disk choices index this list (#317, lot 2); resolving their
+      // storages now fails before the download rather than after it.
+      sourceDisks = sourceVmwareConfig.disks
+      await applyDiskPlan(sourceDisks)
 
       // virt-v2v's `-i disk` / `-i libvirtxml` input modes need two Debian
       // packages: nbdkit (exposes the local VMDK over NBD during opening /
@@ -1885,7 +1990,7 @@ export async function runV2vMigrationPipeline(
       await appendLog(jobId, `Using user-specified VMID ${targetVmid}`)
     } else {
       await appendLog(jobId, "Allocating VMID on Proxmox cluster...")
-      targetVmid = Number(await pveFetch<number | string>(pveConn, "/cluster/nextid"))
+      targetVmid = await reserveTargetVmid(pveConn, config.targetConnectionId, jobId)
       await appendLog(jobId, `Allocated VMID ${targetVmid}`)
     }
     await updateJob(jobId, "creating_vm", { targetVmid })
@@ -2306,6 +2411,7 @@ export async function runV2vMigrationPipeline(
 
     // Build PVE creation params
     let createParams: Record<string, any>
+    const overrides = { hardware: config.hardware, nics: config.nics }
 
     if (vmConfig) {
       // Override name from source VM (virt-v2v may use disk filename as name in -i disk mode)
@@ -2351,6 +2457,8 @@ export async function runV2vMigrationPipeline(
         vmConfig.memory = realMemMB
         vmConfig.firmware = realFirmware
         vmConfig.ostype = realOstype
+        // virt-v2v never emits the vTPM in its domain XML; vCenter knows (roadmap#1).
+        vmConfig.hasVtpm = sourceVmwareConfig.hasVtpm === true
 
         // NIC mapping: preserve MAC addresses for guest network continuity (DHCP
         // reservations, license activations tied to MAC, etc.). We map each source
@@ -2367,14 +2475,14 @@ export async function runV2vMigrationPipeline(
         await appendLog(jobId, applySourceSizing(vmConfig, sourceSizing), "info")
       }
 
-      createParams = buildPveCreateParams(vmConfig, targetVmid, config.networkBridge, config.vlanTag, config.cpuType)
+      // The operator's review-step choices (#317) are applied last, on top of
+      // the source values merged above: cores, sockets and memory win over the
+      // vCenter sizing, and each NIC lands on its own bridge, tag and model.
+      createParams = buildPveCreateParams(vmConfig, targetVmid, config.networkBridge, config.vlanTag, config.cpuType, overrides)
     } else {
       // Fallback config
-      const fallbackTagSuffix =
-        typeof config.vlanTag === "number" && Number.isInteger(config.vlanTag) && config.vlanTag >= 1 && config.vlanTag <= 4094
-          ? `,tag=${config.vlanTag}`
-          : ""
-      createParams = {
+      const fallbackNic = resolveNicTarget(0, overrides.nics, { bridge: config.networkBridge, vlanTag: config.vlanTag })
+      createParams = applyHardwareOverrides({
         vmid: targetVmid,
         name: config.sourceVmName.replaceAll(/[^a-zA-Z0-9.\-]/g, "-").substring(0, 63) || "vm",
         ostype: "l26",
@@ -2387,9 +2495,11 @@ export async function runV2vMigrationPipeline(
         machine: "q35",
         boot: "order=scsi0",
         agent: "enabled=0",
-        net0: `virtio,bridge=${config.networkBridge}${fallbackTagSuffix}`,
-      }
+        net0: buildNetValue(fallbackNic.model ?? "virtio", fallbackNic.bridge, undefined, fallbackNic.vlanTag),
+      }, overrides.hardware)
     }
+    const overridesLine = describeOverrides(overrides)
+    if (overridesLine) await appendLog(jobId, overridesLine)
 
     await appendLog(jobId, `Creating VM ${targetVmid}: ${createParams.name} (${createParams.ostype}, ${createParams.bios})...`)
 
@@ -2413,6 +2523,11 @@ export async function runV2vMigrationPipeline(
         // Boot verification after migration. Using =0 caused silent
         // boot failures when the source VM had Secure Boot enabled.
         body.set("efidisk0", `${config.targetStorage}:1,efitype=4m,pre-enrolled-keys=1`)
+      }
+      // Empty TPM 2.0 state for a source with a vTPM (roadmap#1). It also takes
+      // a vm-<vmid>-disk-N number, which nextFreeDiskName reads from the config.
+      if (vmConfig?.hasVtpm) {
+        body.set("tpmstate0", tpmstate0Param(config.targetStorage))
       }
       return body
     }
@@ -2448,6 +2563,7 @@ export async function runV2vMigrationPipeline(
         }
         await updateJob(jobId, "creating_vm", { targetVmid })
         await appendLog(jobId, `VM ${targetVmid} created on ${config.targetNode}`, "success")
+        if (vmConfig?.hasVtpm) await appendLog(jobId, vtpmCreatedLine(config.targetStorage), "info")
         break
       } catch (err: any) {
         const errMsg = err?.message || String(err)
@@ -2455,11 +2571,13 @@ export async function runV2vMigrationPipeline(
         if (!isConflict || attempt === MAX_VMID_RETRIES - 1) {
           throw err
         }
-        const freshId = Number(await pveFetch<number | string>(pveConn, "/cluster/nextid"))
+        // Jobs of this server never share an id (reserveTargetVmid): the VM was
+        // made outside ProxCenter meanwhile.
+        const freshId = await reserveTargetVmid(pveConn, config.targetConnectionId, jobId)
         await appendLog(
           jobId,
-          `VMID ${createdVmid} taken (race with concurrent migration), retrying with fresh id ${freshId}`,
-          "warn",
+          `VMID ${createdVmid} was created on the cluster meanwhile, using ${freshId}`,
+          "info",
         )
         createdVmid = freshId
       }
@@ -2493,9 +2611,10 @@ export async function runV2vMigrationPipeline(
 
     await appendLog(jobId, `Found ${diskFiles.length} disk file(s): ${diskFiles.join(", ")}`)
 
-    // Storage type and path were resolved once in Phase 1 (#292): isFileBased
-    // picks the import strategy here, storagePath locates the images/<vmid>
-    // directory the adoption renames into.
+    // The default storage's type and path were resolved once in Phase 1 (#292)
+    // and the other storages of the per-disk choices when the plan was read
+    // (#317, lot 2): each disk's own entry picks its import strategy here and
+    // locates the images/<vmid> directory the adoption renames into.
 
     // Track the highest disk number used (EFI VMs may have disk-0 for efidisk0).
     // Only the block branch still consumes it; the file-based branch gets its
@@ -2514,6 +2633,23 @@ export async function runV2vMigrationPipeline(
     // qcow2 conversion (#595) and the failure cleanup, and these volumes are
     // already qcow2 and already the VM's disks.
     const adoptedVolumes: AllocatedVolume[] = []
+
+    // Post-copy integrity check (roadmap#1). virt-v2v rewrote the guest, so the
+    // source bytes cannot be compared: what IS verified is the copy from the
+    // converted image to the final volume (block targets), the qcow2 structure
+    // (`qemu-img check`) and the virtual size against the vCenter capacity.
+    const integrity = await resolveIntegritySettings(config.targetConnectionId)
+    const fault = faultInjectionFromEnv()
+
+    // Which output file goes where (#317, lot 2): output file i is source disk
+    // i, imported onto its own storage or left out; the source capacities feed
+    // the integrity check as before, when the two lists line up. With per-disk
+    // choices and a list that does not line up this throws before anything is
+    // imported, and the failure cleanup destroys the shell VM as usual.
+    const importPlan = planV2vImports(diskFiles, sourceDisks, config.disks, config.targetStorage)
+    for (const left of importPlan.excluded) {
+      await appendLog(jobId, `[Disk ${left.sourceIndex + 1}/${diskFiles.length}] Excluded in the migration options: ${left.file} is not imported`)
+    }
 
     // When virt-v2v can't inject virtio-scsi (`--block-driver` missing), it falls
     // back to virtio-blk (viostor.sys) as the boot-critical driver on Windows.
@@ -2534,26 +2670,31 @@ export async function runV2vMigrationPipeline(
     // If useVirtioBlk is already true (no --block-driver support) we keep that path —
     // virtio0 with the injected viostor is the safer choice virt-v2v already planned.
     const useWinSataBoot = isWindowsVm && !useVirtioBlk
+    const bus = { winSataBoot: useWinSataBoot, virtioBlk: useVirtioBlk }
 
-    for (let i = 0; i < diskFiles.length; i++) {
-      const diskFile = diskFiles[i]
+    for (const disk of importPlan.imports) {
+      const diskFile = disk.file
       const diskPath = `${outputDir}/${diskFile}`
+      const diskLabel = `Disk ${disk.sourceIndex + 1}`
+      const diskTag = `[${diskLabel}/${diskFiles.length}]`
       // Boot disk of a Windows guest → sata0 (see useWinSataBoot rationale above).
       // Data disks shift down to scsi0, scsi1... since the boot disk no longer
-      // occupies scsi0.
-      const diskSlot = useWinSataBoot
-        ? (i === 0 ? "sata0" : `scsi${i - 1}`)
-        : (useVirtioBlk ? `virtio${i}` : `scsi${i}`)
+      // occupies scsi0. The slot counts the imported disks, so an excluded disk
+      // leaves no gap on the bus (#317, lot 2).
+      const diskSlot = v2vDiskSlot(disk.slotIndex, bus)
+      // The disk's own storage (#317, lot 2): the default one was resolved in
+      // Phase 1, the others when the per-disk choices were read.
+      const target = await storageInfo(disk.storage)
 
       // "Adding", not "importing": on a file-based target the disk is usually
       // adopted by rename and nothing is copied at all (#292).
-      await appendLog(jobId, `[Disk ${i + 1}/${diskFiles.length}] Adding ${diskFile} to storage "${config.targetStorage}"...`)
+      await appendLog(jobId, `${diskTag} Adding ${diskFile} to storage "${disk.storage}"...`)
       await updateJob(jobId, "transferring", {
-        currentStep: `importing_disk_${i + 1}`,
-        progress: Math.round(70 + (i / diskFiles.length) * 25),
+        currentStep: `importing_disk_${disk.slotIndex + 1}`,
+        progress: Math.round(70 + (disk.slotIndex / importPlan.imports.length) * 25),
       })
 
-      if (isFileBased) {
+      if (target.isFileBased) {
         // File-based storage (#292): the converted image usually already sits in
         // the staging directory ON this storage, as qcow2. importOrAdoptFileVolume
         // renames it into images/<vmid>/ (O(1), no second full-disk copy) and
@@ -2566,20 +2707,38 @@ export async function runV2vMigrationPipeline(
         // shared helper owns the guard rails and the attach. sourceFormat marks
         // the file raw unless we asked virt-v2v for qcow2, so a raw image is
         // converted by the import fallback rather than misnamed.
-        const { volumeId: diskVolume, adopted } = await adoptImportAndAttachFileVolume({
+        // Only a disk bound for the staging storage already holds its future
+        // volume (#317, lot 2); one bound for another file-based storage is
+        // copied there by the converting `qm disk import`, which validates it.
+        // The helper's same-filesystem check makes that call on the node.
+        const stagedFormat = directWriteDir ? "qcow2" : "raw"
+        const stagedOnTarget = directWriteDir !== null && disk.storage === config.targetStorage
+        if (stagedOnTarget) {
+          // The qcow2 virt-v2v wrote IS the future volume (adopted by rename):
+          // check its structure and size now, before it is attached.
+          await verifyDiskIntegrity({
+            connectionId: config.targetConnectionId, nodeIp, diskIndex: disk.sourceIndex, diskLabel,
+            capacityBytes: disk.capacityBytes ?? 0, source: null, target: { kind: "image", path: diskPath, format: "qcow2" },
+            checkImage: { path: diskPath, format: "qcow2" }, expectedVirtualSize: disk.capacityBytes,
+            settings: integrity, fault, log: (m, l) => appendLog(jobId, m, l),
+          })
+        } else {
+          await appendLog(jobId, `Integrity check, ${diskLabel}: the ${stagedFormat} staging image is converted again by qm disk import, which validates it; no region check is possible on this path`)
+        }
+        const { volumeId: diskVolume } = await adoptImportAndAttachFileVolume({
           pveConn,
           targetNode: config.targetNode,
           connectionId: config.targetConnectionId,
           nodeIp,
           sourcePath: diskPath,
-          targetStorage: config.targetStorage,
-          imagesDir: `${storagePath}/images/${targetVmid}`,
+          targetStorage: disk.storage,
+          imagesDir: `${target.path}/images/${targetVmid}`,
           targetVmid: targetVmid!,
           format: "qcow2",
-          sourceFormat: directWriteDir ? "qcow2" : "raw",
+          sourceFormat: stagedFormat,
           slot: diskSlot,
           driveOpts: ",discard=on",
-          diskLabel: `Disk ${i + 1}`,
+          diskLabel,
           taken: adoptedVolumes,
           onLog: (m, level) => appendLog(jobId, m, level),
         })
@@ -2606,13 +2765,13 @@ export async function runV2vMigrationPipeline(
           pveConn,
           `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}/config`
         )
-        const volName = nextFreeDiskName(vmConf, [], targetVmid)
+        const volName = nextFreeDiskName(vmConf, [...blockVolumes, ...adoptedVolumes], targetVmid)
 
         // See allocateAndMapBlockVolume: raw allocation (so PVE never formats the
         // target as qcow2), Ceph mapping, and device-path validation (#587).
         const vol = await allocateAndMapBlockVolume({
           connectionId: config.targetConnectionId, nodeIp,
-          targetStorage: config.targetStorage, targetVmid, volName, sizeKB,
+          targetStorage: disk.storage, targetVmid, volName, sizeKB,
         })
         blockVolumes.push(vol)
         const volumeId = vol.volumeId
@@ -2643,7 +2802,7 @@ export async function runV2vMigrationPipeline(
         // executeSSH defaults to a 30s timeout which is far too short for a
         // multi-GB write; we pass a 4h cap (same as the old dd path) for large
         // data disks on slow storage.
-        await appendLog(jobId, `[Disk ${i + 1}/${diskFiles.length}] Importing to block device ${devicePath} (sparse-aware)...`)
+        await appendLog(jobId, `${diskTag} Importing to block device ${devicePath} (sparse-aware)...`)
         const FOUR_HOURS_MS = 14_400_000
         const importResult = await executeSSH(
           config.targetConnectionId, nodeIp,
@@ -2653,6 +2812,16 @@ export async function runV2vMigrationPipeline(
         if (!importResult.success) {
           throw new Error(`Block write failed for ${diskFile}: ${importResult.error || importResult.output}`)
         }
+
+        // The copy that was just made (converted image -> block device) is the
+        // one handed over: sample it on both sides before the attach (roadmap#1).
+        // virt-v2v's output is raw here (qcow2 only in direct-write mode), but
+        // the format is read from the image rather than assumed.
+        await verifyConvertedImage({
+          connectionId: config.targetConnectionId, nodeIp, diskIndex: disk.sourceIndex, imagePath: diskPath, devicePath,
+          fallbackSizeBytes: sizeBytes, sourceCapacityBytes: disk.capacityBytes,
+          settings: integrity, fault, log: (m, l) => appendLog(jobId, m, l),
+        })
 
         // Unmap RBD if we mapped it
         if (rbdMapped) {
@@ -2665,7 +2834,7 @@ export async function runV2vMigrationPipeline(
         })
         try {
           await pveSetVmConfig(pveConn, config.targetNode, targetVmid!, attachBody)
-          await appendLog(jobId, `Disk ${i + 1} imported and attached as ${diskSlot}`, "success")
+          await appendLog(jobId, `${diskLabel} imported and attached as ${diskSlot}`, "success")
         } catch (attachErr: any) {
           await appendLog(jobId, `Warning: Could not auto-attach ${diskSlot}: ${attachErr.message}`, "warn")
         }
@@ -2679,7 +2848,7 @@ export async function runV2vMigrationPipeline(
     //     robust way to survive a fragile viostor registry injection, VM always boots)
     //   - Windows-without-block-driver → virtio0 (viostor/virtio-blk fallback)
     //   - Everything else (Linux, etc.) → scsi0
-    const bootSlot = useWinSataBoot ? "sata0" : (useVirtioBlk ? "virtio0" : "scsi0")
+    const bootSlot = v2vDiskSlot(0, bus)
     await pveSetVmConfig(pveConn, config.targetNode, targetVmid!, new URLSearchParams({ boot: `order=${bootSlot}` }))
     await appendLog(jobId, `Boot order set to ${bootSlot}`, "success")
 
@@ -2954,6 +3123,8 @@ export async function runV2vMigrationPipeline(
       }
     }
   } finally {
+    // The VMID reserved for this job is either created on the cluster or unused now.
+    releaseVmids(jobId)
     stopHeartbeat()
     // Always close the vCenter SOAP session if one is open. Leaving it dangling
     // would slowly exhaust vCenter's session pool (default cap ~250). Idempotent

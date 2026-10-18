@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { licenseExcludedResponse } from "@/lib/api/response"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById, isConnectionNotFoundError } from "@/lib/connections/getConnection"
 import { checkPermission, buildNodeResourceId, PERMISSIONS } from "@/lib/rbac"
@@ -9,11 +10,14 @@ import { formatSshEndpoint, resolveNodeSshEndpoint } from "@/lib/ssh/node-endpoi
 
 export const runtime = "nodejs"
 
-// Map a thrown error to the right HTTP response: a genuine not-found becomes a
-// 404, everything else (DB/crypto/infra) surfaces as a 500 with the original
-// message. Shared by all three handlers so the not-found vs real-error
-// distinction lives in one place.
+// Map a thrown error to the right HTTP response: a cluster outside the license
+// (executeSSH refused the command itself, roadmap#58) answers 403 with its
+// code, a genuine not-found becomes a 404, everything else (DB/crypto/infra)
+// surfaces as a 500 with the original message. Shared by all three handlers so
+// the distinction lives in one place.
 function maintenanceError(label: string, e: any, fallback: string): NextResponse {
+  const excluded = licenseExcludedResponse(e)
+  if (excluded) return excluded
   console.error(`[maintenance] ${label} Error:`, e?.message)
   if (isConnectionNotFoundError(e)) {
     return NextResponse.json({ error: "Connection not found" }, { status: 404 })

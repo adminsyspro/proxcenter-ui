@@ -1,4 +1,5 @@
 import { NextResponse, after } from "next/server"
+import { licenseExcludedResponse } from "@/lib/api/response"
 
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
@@ -10,12 +11,13 @@ import { writableStoragesFor, readOnlyLibraryError } from "@/lib/vdc/scope"
 import { resolveVdcForTenant, checkVdcQuota } from "@/lib/vdc/quota"
 import { parseDriveString, parsePveSizeToMb, stampDriveQos, type DriveQosCaps } from "@/lib/vdc/drives"
 import { waitForTask } from "@/lib/proxmox/tasks"
+import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 
 export const runtime = "nodejs"
 
 // POST /api/v1/connections/{id}/guests/{type}/{node}/{vmid}/disk/move
 // Déplace un disque vers un autre stockage
-export async function POST(
+async function handler(
   req: Request,
   ctx: { params: Promise<{ id: string; type: string; node: string; vmid: string }> }
 ) {
@@ -163,8 +165,12 @@ export async function POST(
       message: `Déplacement du disque ${disk} vers ${storage} lancé`
     })
   } catch (e: any) {
+    const excluded = licenseExcludedResponse(e)
+    if (excluded) return excluded
     console.error('Error moving disk:', e)
 
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const POST = withPublicApiGuard("vm-disk-move", handler)

@@ -26,6 +26,7 @@ import ChartContainer from '@/components/ChartContainer'
 
 import { getDateLocale } from '@/lib/i18n/date'
 import { usePageTitle } from '@/contexts/PageTitleContext'
+import AuditActorCell, { auditActorText, auditActorValueGetter } from '@/components/security/AuditActorCell'
 
 /* --------------------------------
    Constants
@@ -363,7 +364,7 @@ return () => clearTimeout(timer)
 
     const rows = logs.map(l => [
       formatDate(l.timestamp, dateLocale),
-      l.user_email || '—',
+      auditActorText(l, { deletedToken: t('settings.apiTokens.deletedToken'), system: '—' }),
       ACTION_KEYS[l.action] ? t(ACTION_KEYS[l.action]) : l.action,
       CATEGORIES[l.category]?.labelKey ? t(CATEGORIES[l.category].labelKey) : l.category,
       l.resource_name || l.resource_id || '—',
@@ -400,11 +401,13 @@ return () => clearTimeout(timer)
         field: 'user_email',
         headerName: t('navigation.users'),
         width: 250,
-        renderCell: params => (
-          <Typography variant='body2' sx={{ opacity: params.row.user_email ? 1 : 0.5 }}>
-            {params.row.user_email || t('audit.categories.system')}
-          </Typography>
-        ),
+        // A token-written row names the token (key icon, name and prefix);
+        // sorting and filtering read that same text.
+        valueGetter: auditActorValueGetter({
+          deletedToken: t('settings.apiTokens.deletedToken'),
+          system: t('audit.categories.system'),
+        }),
+        renderCell: params => <AuditActorCell row={params.row} />,
       },
       {
         field: 'action',

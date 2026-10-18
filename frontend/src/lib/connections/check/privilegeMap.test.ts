@@ -105,6 +105,7 @@ describe('the map', () => {
     expect(endpointFamily('/nodes/{x}/termproxy')).toBe('node/shell')
     expect(endpointFamily('/nodes/{x}/{x}/{x}/config')).toBe('guest')
     expect(endpointFamily('/nodes/{x}/network/{x}')).toBe('node')
+    expect(endpointFamily('/nodes/{x}/network')).toBe('node/network')
     expect(endpointFamily('/nodes/{x}/status')).toBe('node')
     expect(endpointFamily('/nodes/{x}/qemu/{x}/status/start')).toBe('guest/power')
     expect(endpointFamily('/nodes/{x}/storage/{x}/download-url')).toBe('storage/download')

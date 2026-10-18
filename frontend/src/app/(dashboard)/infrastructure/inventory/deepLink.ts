@@ -8,7 +8,7 @@
  * is every cold page load: a pasted link, a new tab, a refresh.
  */
 
-const SELECTABLE_KINDS = new Set(['node', 'cluster', 'pbs'])
+const SELECTABLE_KINDS = new Set(['node', 'cluster', 'pbs', 'ext'])
 
 export function hasDeepLinkSelection(params: { get(key: string): string | null }): boolean {
   const selectType = params.get('selectType')

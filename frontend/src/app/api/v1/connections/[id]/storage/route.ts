@@ -4,15 +4,17 @@ import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { isSharedStorage, vmDiskFormats } from "@/lib/proxmox/storage"
 import { formatBytes } from "@/utils/format"
-import { checkPermission, getRequestGuestScopePerimeter, PERMISSIONS } from "@/lib/rbac"
+import { checkPermission, getCurrentRbacInfraScope, getRequestGuestScopePerimeter, PERMISSIONS } from "@/lib/rbac"
+import { hasInfraGrant, hasStorageGrant, isStorageVisible } from "@/lib/rbac/infraScope"
 import { getCurrentTenantId, getSessionPrisma } from "@/lib/tenant"
 import { getTenantInfrastructureScope, maskingScope } from "@/lib/tenant/infraScope"
 import { attachPbsStorage, PbsAttachError } from "@/lib/storage/attachPbsStorage"
 import { audit } from "@/lib/audit"
+import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 
 export const runtime = "nodejs"
 
-export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> | { id: string } }) {
+async function getHandler(_req: Request, ctx: { params: Promise<{ id: string }> | { id: string } }) {
   try {
     const params = await Promise.resolve(ctx.params)
     const id = (params as any)?.id
@@ -30,7 +32,15 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW, "connection", id)
     const perimeter = denied ? await getRequestGuestScopePerimeter(id) : null
 
-    if (denied && !(perimeter?.holdsPermission && perimeter.hasVisibleGuests)) return denied
+    // A caller holding connection.view, or storage.view (the right the storage
+    // pages carry), on a node or a storage of this cluster only (node or
+    // storage scope, issue #921) never matches the connection either. They
+    // get the list narrowed by isStorageVisible further down: their nodes'
+    // local storages, the shared ones, the storages they were granted.
+    const infraScope = denied ? await getCurrentRbacInfraScope([PERMISSIONS.CONNECTION_VIEW, PERMISSIONS.STORAGE_VIEW]) : null
+    const partial = !!infraScope && (hasInfraGrant(infraScope, id) || hasStorageGrant(infraScope, id))
+
+    if (denied && !partial && !(perimeter?.holdsPermission && perimeter.hasVisibleGuests)) return denied
 
     const conn = await getConnectionById(id)
 
@@ -220,6 +230,14 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
       })
     }
 
+    // Node- and storage-scoped callers (issue #921): the aggregated rows carry
+    // the nodes mounting a shared storage, so the exact rule applies here.
+    if (partial && infraScope) {
+      result = result.filter((s: any) =>
+        isStorageVisible(infraScope, id, { storage: s.storage, shared: !!s.shared, node: s.node, nodes: Array.isArray(s.nodes) ? s.nodes : null }),
+      )
+    }
+
     // Trier: partagés d'abord, puis par utilisation décroissante
     result.sort((a, b) => {
       if (a.shared !== b.shared) return a.shared ? -1 : 1
@@ -247,7 +265,7 @@ return b.usedPct - a.usedPct
  * minted here. Hand-typed server + credentials are deliberately not accepted:
  * ProxCenter must be able to revoke what it handed out.
  */
-export async function POST(req: Request, ctx: { params: Promise<{ id: string }> | { id: string } }) {
+async function postHandler(req: Request, ctx: { params: Promise<{ id: string }> | { id: string } }) {
   const params = await Promise.resolve(ctx.params)
   const id = (params as any)?.id
 
@@ -387,3 +405,6 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     )
   }
 }
+
+export const GET = withPublicApiGuard("storage-connection-list", getHandler)
+export const POST = withPublicApiGuard("storage-attach-pbs", postHandler)

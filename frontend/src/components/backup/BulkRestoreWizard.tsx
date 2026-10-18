@@ -53,6 +53,9 @@ import { useTheme } from '@mui/material/styles'
 import { DataGrid, type GridColDef, type GridRowSelectionModel } from '@mui/x-data-grid'
 
 import AppDialogTitle from '@/components/ui/AppDialogTitle'
+import { useRBAC } from '@/contexts/RBACContext'
+import RestoreTagsSwitch from '@/components/backup/RestoreTagsSwitch'
+import { checkRestoredTagsOmitted, restoredTagsCheckMessage } from '@/lib/backups/restoreTags'
 import StorageTypeIcon from '@/components/storage/StorageTypeIcon'
 import { resolveSelectedRowIds } from '@/utils/gridSelection'
 import {
@@ -188,9 +191,13 @@ export default function BulkRestoreWizard({
   const [rangeStart, setRangeStart] = useState('9000')
   const [rangeEnd, setRangeEnd] = useState('9099')
   const [overwrite, setOverwrite] = useState(false)
+  // Overwriting an existing guest destroys it: the route checks vm.delete on it.
+  const rbac = useRBAC()
+  const canOverwrite = !rbac.loading && rbac.hasPermission('vm.delete')
   const [overwriteConfirmed, setOverwriteConfirmed] = useState(false)
   const [startAfter, setStartAfter] = useState(false)
   const [uniqueMac, setUniqueMac] = useState(true)
+  const [restoreTags, setRestoreTags] = useState(true)
   const [bwlimit, setBwlimit] = useState('')
   const [nameSuffix, setNameSuffix] = useState('')
 
@@ -230,6 +237,7 @@ export default function BulkRestoreWizard({
     setOverwriteConfirmed(false)
     setStartAfter(false)
     setUniqueMac(true)
+    setRestoreTags(true)
     setBwlimit('')
     setNameSuffix('')
     setStorage('')
@@ -418,13 +426,17 @@ export default function BulkRestoreWizard({
       unique: uniqueMac,
       nameSuffix,
       force: mode === 'source' && overwrite,
+      restoreTags,
     }),
-    [storage, bwlimit, startAfter, uniqueMac, nameSuffix, mode, overwrite],
+    [storage, bwlimit, startAfter, uniqueMac, nameSuffix, mode, overwrite, restoreTags],
   )
+
+  // Jobs whose task ended OK and whose config is being read back (#965).
+  const verifyingRef = useRef<Set<string>>(new Set())
 
   // ── Dispatch loop ──
   const pollJob = useCallback(async (job: RestoreJob) => {
-    if (!job.upid) return
+    if (!job.upid || verifyingRef.current.has(job.key)) return
     try {
       const r = await fetch(
         `/api/v1/tasks/${encodeURIComponent(connectionId)}/${encodeURIComponent(node)}/${encodeURIComponent(job.upid)}`,
@@ -433,6 +445,22 @@ export default function BulkRestoreWizard({
       if (!r.ok) return
       const task = await r.json()
       const mapped = statusFromTask(task)
+      // Tags omitted: the task ending OK is not the end of it. The job stays
+      // running until the restored config is read back, and a guest that
+      // still carries tags is a failure, not a restore done.
+      if (mapped.status === 'done' && !restoreOptions.restoreTags && job.targetVmid !== null) {
+        verifyingRef.current.add(job.key)
+        const check = await checkRestoredTagsOmitted({
+          connectionId, node, type: job.type === 'lxc' ? 'lxc' : 'qemu', vmid: job.targetVmid,
+          delayMs: Math.min(2_000, pollIntervalMs),
+        })
+        verifyingRef.current.delete(job.key)
+        const tagsError = restoredTagsCheckMessage(check, t as any)
+        setJob(job.key, tagsError
+          ? { status: 'failed', error: tagsError, endedAt: Date.now() }
+          : { status: 'done', endedAt: Date.now() })
+        return
+      }
       setJob(job.key, {
         status: mapped.status,
         error: mapped.error || job.error,
@@ -441,7 +469,7 @@ export default function BulkRestoreWizard({
         ...(isTerminal(mapped.status) ? { endedAt: Date.now() } : {}),
       })
     } catch { /* transient, the next tick retries */ }
-  }, [connectionId, node, setJob])
+  }, [connectionId, node, setJob, restoreOptions.restoreTags, t, pollIntervalMs])
 
   const dispatchJob = useCallback(async (key: string) => {
     // Claim the slot synchronously: this is what makes a second tick see the
@@ -504,6 +532,7 @@ export default function BulkRestoreWizard({
         vmid: e.guest.vmid,
         targetVmid: e.targetVmid,
         label: e.guest.vmName ? `${e.guest.vmName} (${e.guest.vmid})` : String(e.guest.vmid),
+        type: e.guest.backupType === 'ct' ? 'lxc' as const : 'qemu' as const,
         status: 'pending' as const,
       }))
     setJobs(jobsRef.current)
@@ -809,7 +838,7 @@ export default function BulkRestoreWizard({
                 onChange={e => setRangeEnd(e.target.value.replace(/[^0-9]/g, ''))}
               />
             </>
-          ) : (
+          ) : canOverwrite && (
             <FormControlLabel
               sx={{ gridColumn: { sm: 'span 2' }, mt: 0.5 }}
               control={<Switch checked={overwrite} onChange={(_, v) => { setOverwrite(v); setOverwriteConfirmed(false) }} />}
@@ -848,6 +877,7 @@ export default function BulkRestoreWizard({
               control={<Switch checked={startAfter} onChange={(_, v) => setStartAfter(v)} />}
               label={t('backups.bulkRestore.startAfter')}
             />
+            <RestoreTagsSwitch checked={restoreTags} onChange={setRestoreTags} />
           </Stack>
         </Box>
       </Box>

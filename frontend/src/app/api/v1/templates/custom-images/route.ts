@@ -8,6 +8,7 @@ import { authOptions } from "@/lib/auth/config"
 import { createCustomImageSchema } from "@/lib/schemas"
 import { prisma as basePrisma } from "@/lib/db/prisma"
 import { authorizeImageLocations, authorizeImageVolume, SourceVolumeError } from '@/lib/templates/sourceVolume'
+import { loadGrantSummaries, replaceTenantGrants } from '@/lib/templates/catalogGrants'
 
 export const runtime = "nodejs"
 
@@ -29,7 +30,11 @@ export async function GET(req: Request) {
       orderBy: { createdAt: 'desc' },
     })
 
-    return NextResponse.json({ data: images })
+    // Provider list: each row carries its per-tenant / per-vDC grants (#903).
+    const tenantId = await getCurrentTenantId()
+    if (tenantId !== DEFAULT_TENANT_ID) return NextResponse.json({ data: images })
+    const grants = await loadGrantSummaries('image', images.map(i => i.id))
+    return NextResponse.json({ data: images.map(i => ({ ...i, grants: grants.get(i.id) ?? { tenantIds: [], vdcIds: [] } })) })
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
@@ -115,6 +120,11 @@ export async function POST(req: Request) {
         createdBy: session?.user?.id || null,
       },
     })
+
+    // Per-tenant grants (#903): provider only, like isShared.
+    if (tenantId === DEFAULT_TENANT_ID && body.grantTenantIds) {
+      await replaceTenantGrants('image', image.id, body.grantTenantIds, session?.user?.id || null)
+    }
 
     // Audit
     const { audit } = await import("@/lib/audit")

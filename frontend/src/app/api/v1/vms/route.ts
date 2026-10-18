@@ -147,7 +147,11 @@ async function handler(req: Request, ctx: GuardedRouteContext) {
           }
         })
 
-        const enriched = await enrichVmsWithConfig(connData, mapped, onlineNodes, { includeAgent })
+        const enriched = (await enrichVmsWithConfig(connData, mapped, onlineNodes, { includeAgent }))
+          // #938: `diskGb` is the VM's disk size, so every disk of it, not the
+          // boot disk `maxdisk` names. Never below maxdisk, and maxdisk alone
+          // when the config could not be read.
+          .map(vm => ({ ...vm, diskGb: round1(Math.max(Number(vm.diskTotal) || 0, vm.maxdisk) / 1073741824) }))
         // A rejected /cluster/resources gave an EMPTY `mapped`: reading the
         // index is fine, rebuilding it from that list is not.
         const { vms: withIps, warming } = attachGuestIps(conn.id, connData, enriched, {

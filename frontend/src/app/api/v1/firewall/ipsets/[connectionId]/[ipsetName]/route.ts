@@ -5,12 +5,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getOrchestratorClient } from '@/lib/orchestrator/client'
 import { verifyConnectionOwnership } from '@/lib/tenant'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
+import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
 import { getConnectionById } from '@/lib/connections/getConnection'
 import { orchestratorOrPve } from '@/lib/firewall/withPveFallback'
 import * as pveDirect from '@/lib/firewall/pveDirect'
 
 // DELETE /api/v1/firewall/ipsets/[connectionId]/[ipsetName] - Delete IP set
-export async function DELETE(
+async function deleteHandler(
   request: NextRequest,
   { params }: { params: Promise<{ connectionId: string; ipsetName: string }> }
 ) {
@@ -40,3 +41,5 @@ return NextResponse.json(
     )
   }
 }
+
+export const DELETE = withPublicApiGuard("fw-ipset-delete", deleteHandler)

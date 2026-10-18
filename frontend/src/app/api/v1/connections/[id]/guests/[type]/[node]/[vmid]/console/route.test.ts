@@ -25,6 +25,7 @@ vi.mock('@/lib/rbac', () => ({
 vi.mock('@/lib/audit', () => ({ audit: (...a: unknown[]) => m.audit(...a) }))
 
 import { POST } from './route'
+import { PveLicenseExcludedError } from '@/lib/license/exclusions'
 
 const PARAMS = { id: 'c1', type: 'qemu', node: 'pve1', vmid: '100' }
 const call = (params: Record<string, string> = PARAMS) => callRoute(POST as any, { method: 'POST', params })
@@ -74,6 +75,17 @@ describe('POST .../console audit', () => {
       errorMessage: 'VM 100 not running',
       details: expect.not.objectContaining({ upid: expect.anything() }),
     }))
+  })
+
+  it('answers 403 with its code on a cluster outside the license, so noVNC stops retrying (roadmap#58)', async () => {
+    m.pveFetch.mockRejectedValueOnce(new PveLicenseExcludedError('c1'))
+    const res = await call()
+    expect(res.status).toBe(403)
+    expect(await res.json()).toEqual({
+      error: 'This cluster is outside the license: ProxCenter refuses any change on it.',
+      code: 'CONNECTION_LICENSE_EXCLUDED',
+    })
+    expect(m.audit).toHaveBeenCalledWith(expect.objectContaining({ action: 'console.open', status: 'failure' }))
   })
 
   it('journals a failure when the connection is gone', async () => {

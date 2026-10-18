@@ -8,8 +8,6 @@ import type { AllVmItem, HostItem } from '../InventoryTree'
 import { parseVmId, fetchDetails, resolveVmPowerAction } from '../helpers'
 import { crossClusterMigrate } from '@/lib/migration/crossClusterMigrate'
 import {
-  migrateGuestAndWait,
-  migrationFailureText,
   runInBatches,
   startTrackedMigration,
   type MigrateGuestRef,
@@ -467,7 +465,7 @@ export function useVmActions({
   }, [])
 
   const executeBulkAction = useCallback(async () => {
-    const { action, node, targetNode } = bulkActionDialog
+    const { action, node } = bulkActionDialog
     if (!action || !node || !data?.allVms) return
 
     const nodeVms = (data.allVms as any[]).filter((vm: any) =>
@@ -501,14 +499,9 @@ export function useVmActions({
         description = t('bulkActions.stoppingVms')
         break
       case 'migrate-all':
-        if (!targetNode) {
-          toast.error(t('bulkActions.selectTargetNode'))
-          return
-        }
-        vmsToProcess = nodeVms.filter((vm: any) => vm.status !== 'stopped' || true) // All VMs
-        apiAction = 'migrate'
-        description = t('bulkActions.migratingVms')
-        break
+        // A host drain run by the orchestrator (#248): HostDrainDialog posts
+        // it itself, this path is never reached for migrate-all.
+        return
     }
 
     if (vmsToProcess.length === 0) {
@@ -522,21 +515,8 @@ export function useVmActions({
 
     let successCount = 0
     let errorCount = 0
-    const migrationFailures: { name: string; reason: string }[] = []
 
     await runInBatches(vmsToProcess, 5, async (vm: any) => {
-      // #926: a migration counts once its PVE task ended OK, not on HTTP 200.
-      if (apiAction === 'migrate') {
-        const outcome = await migrateGuestAndWait(vm, { target: targetNode, online: vm.status === 'running' })
-        if (outcome.ok) {
-          successCount++
-        } else {
-          errorCount++
-          migrationFailures.push({ name: vm.name || `VM ${vm.vmid}`, reason: migrationFailureText(outcome, t) })
-        }
-        return
-      }
-
       try {
         const url = `/api/v1/connections/${encodeURIComponent(vm.connId)}/guests/${vm.type}/${encodeURIComponent(vm.node)}/${encodeURIComponent(vm.vmid)}/${apiAction}`
         const res = await fetch(url, { method: 'POST' })
@@ -550,11 +530,6 @@ export function useVmActions({
         errorCount++
       }
     })
-
-    // One toast per guest that did not move, with the reason, a handful at most.
-    for (const failure of migrationFailures.slice(0, 5)) {
-      toast.error(t('vmActions.migrateGuestFailed', failure))
-    }
 
     if (errorCount === 0) {
       toast.success(t('vmActions.bulkSuccess', { description, count: successCount }))

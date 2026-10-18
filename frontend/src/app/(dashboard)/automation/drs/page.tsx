@@ -81,9 +81,13 @@ import DRSSettingsPanel, {
 } from '@/components/automation/drs/DRSSettingsPanel'
 import PlacementConstraintsCard, {
   type PinnedGuest,
-  type BalancingDomain
+  type BalancingDomain,
+  type RestrictedGuest,
+  type ExcludedGuest
 } from '@/components/automation/drs/PlacementConstraintsCard'
 import MigrationHistoryTab from '@/components/automation/drs/MigrationHistoryTab'
+import { GuestGlyph, NodeGlyph } from '@/components/automation/drs/glyphs'
+import DrsActionNoticeDialog from '@/components/automation/drs/DrsActionNoticeDialog'
 import AffinityRulesManager, {
   type AffinityRule, 
   type VMInfo as AffinityVMInfo 
@@ -128,6 +132,8 @@ interface DRSStatus {
   pinned_guests?: PinnedGuest[]
   pinned_guest_count?: number
   balancing_domains?: BalancingDomain[]
+  restricted_guests?: RestrictedGuest[]
+  excluded_guests?: ExcludedGuest[]
 }
 
 interface DRSRecommendation {
@@ -166,6 +172,14 @@ interface DRSMigration {
   // starts. Absent on rows written by an orchestrator older than that.
   reason?: string
   maintenance_evacuation?: boolean
+}
+
+// Current status of the guest and of both ends of a migration, for the dots
+// of their glyphs.
+interface GlyphStatuses {
+  guest?: string
+  source?: string
+  target?: string
 }
 
 // Type pour la progression d'une migration
@@ -443,10 +457,11 @@ const ClusterCard = ({
   const theme = useTheme()
   const clusterRecs = recommendations.filter(r => r.connection_id === clusterId)
 
-  // What segments this cluster, if anything. The memory spread and the health
-  // score below are computed over every node, so on a segmented cluster they
-  // measure a gap no migration can close: the chip is what tells the operator
-  // that a low score here is a topology fact, not a DRS failure.
+  // What shapes placement on this cluster, if anything. Some guests can only
+  // move within part of the nodes because a bridge, an SDN zone or a storage
+  // they use exists there only: a valid, often intentional shape. The chip
+  // says how many guests that concerns and points at the placement card,
+  // where each one is named with its limiting resource.
   const placementConstraint = useMemo(() => {
     const domains = balancingDomains.filter(d => d.connection_id === clusterId)
 
@@ -459,8 +474,14 @@ const ClusterCard = ({
     const network = kinds.has('network')
     const storage = kinds.has('storage')
 
+    // The guests outside the widest domain are the ones with fewer places to
+    // go; the widest domain is where the free guests live.
+    const widest = Math.max(...domains.map(d => d.nodes.length))
+    const restricted = domains.filter(d => d.nodes.length < widest).reduce((sum, d) => sum + d.guests, 0)
+
     return {
       count: domains.length,
+      restricted,
       icon: network ? 'ri-git-branch-line' : 'ri-hard-drive-2-line',
       labelKey:
         network && storage
@@ -571,13 +592,16 @@ return 'neutral'
               {placementConstraint && (
                 <Tooltip
                   arrow
-                  title={t('drsPage.placementConstrainedTooltip', { count: placementConstraint.count })}
+                  title={t('drsPage.placementConstrainedTooltip', {
+                    count: placementConstraint.count,
+                    restricted: placementConstraint.restricted
+                  })}
                 >
                   <Chip
                     icon={<i className={placementConstraint.icon} style={{ fontSize: 14 }} />}
                     label={t(placementConstraint.labelKey)}
                     size="small"
-                    color="warning"
+                    color="info"
                     variant="outlined"
                     sx={{ height: 22, fontSize: '0.7rem', fontWeight: 600 }}
                   />
@@ -860,13 +884,17 @@ return 'neutral'
 // Active Migration Row - Affiche une migration en cours avec barre de progression
 const ActiveMigrationRow = ({
   migration,
-  progress
+  progress,
+  statuses = {}
 }: {
   migration: DRSMigration
   progress: MigrationProgress | null
+  statuses?: GlyphStatuses
 }) => {
   const theme = useTheme()
   const t = useTranslations()
+  const dark = theme.palette.mode === 'dark'
+  const dotBorder = theme.palette.background.paper
   const pct = progress?.progress ?? 0
   const message = progress?.message ?? t('drsPage.loading')
   const isComplete = migration.status === 'completed'
@@ -906,21 +934,20 @@ const ActiveMigrationRow = ({
         </Box>
 
         {/* VM Name + Type */}
-        <Box sx={{ minWidth: 140 }}>
+        <Box sx={{ minWidth: 140, display: 'flex', alignItems: 'center', gap: 1 }}>
+          <GuestGlyph type={migration.guest_type} status={statuses.guest} dotBorder={dotBorder} />
           <Typography sx={{ fontWeight: 600, fontSize: '0.875rem' }} noWrap>
             {migration.vm_name || `VM ${migration.vmid}`}
           </Typography>
-          {migration.guest_type === 'lxc' && (
-            <Chip label="CT" size="small" sx={{ height: 16, fontSize: '0.6rem' }} />
-          )}
         </Box>
 
         {/* Migration path */}
         <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
-          <Chip 
-            size="small" 
-            label={migration.source_node} 
-            sx={{ 
+          <Chip
+            size="small"
+            icon={<NodeGlyph status={statuses.source} dark={dark} dotBorder={dotBorder} />}
+            label={migration.source_node}
+            sx={{
               bgcolor: alpha(theme.palette.error.main, 0.1),
               color: 'error.main',
               fontWeight: 500,
@@ -928,8 +955,9 @@ const ActiveMigrationRow = ({
             }} 
           />
           <Typography sx={{ opacity: 0.4 }}>→</Typography>
-          <Chip 
-            size="small" 
+          <Chip
+            size="small"
+            icon={<NodeGlyph status={statuses.target} dark={dark} dotBorder={dotBorder} />}
             label={migration.target_node}
             sx={{ 
               bgcolor: alpha(theme.palette.success.main, 0.1),
@@ -975,14 +1003,18 @@ const ActiveMigrationRow = ({
 const RecommendationRow = React.memo(({
   rec,
   onClick,
-  haConflict = false
+  haConflict = false,
+  statuses = {}
 }: {
   rec: DRSRecommendation
   onClick: () => void
   haConflict?: boolean
+  statuses?: GlyphStatuses
 }) => {
   const theme = useTheme()
   const t = useTranslations()
+  const dark = theme.palette.mode === 'dark'
+  const dotBorder = theme.palette.background.paper
   const priorityLabel = getPriorityLabel(rec.priority)
   const priorityColor = getPriorityColor(rec.priority)
 
@@ -1006,10 +1038,10 @@ const RecommendationRow = React.memo(({
         }
       }}
     >
-      {/* Icône migration */}
-      <SwapHorizIcon sx={{ opacity: 0.5, fontSize: 20 }} />
+      {/* Guest glyph: type icon with its status dot */}
+      <GuestGlyph type={rec.guest_type} status={statuses.guest} dotBorder={dotBorder} />
 
-      {/* VM Name + Type + Reason */}
+      {/* VM Name + Reason */}
       <Box sx={{ minWidth: 160 }}>
         <Typography sx={{ fontWeight: 600, fontSize: '0.875rem' }} noWrap>
           {rec.vm_name || `VM ${rec.vmid}`}
@@ -1017,9 +1049,6 @@ const RecommendationRow = React.memo(({
         <Typography variant="caption" sx={{ opacity: 0.6, display: 'block', lineHeight: 1.2 }} noWrap>
           {rec.reason}
         </Typography>
-        {rec.guest_type === 'lxc' && (
-          <Chip label="CT" size="small" sx={{ height: 16, fontSize: '0.6rem' }} />
-        )}
         {rec.maintenance_evacuation && (
           <Chip label={t('drsPage.evacuation')} size="small" color="warning" sx={{ height: 16, fontSize: '0.6rem', ml: 0.5 }} />
         )}
@@ -1027,9 +1056,10 @@ const RecommendationRow = React.memo(({
 
       {/* Migration path */}
       <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
-        <Chip 
-          size="small" 
-          label={rec.source_node} 
+        <Chip
+          size="small"
+          icon={<NodeGlyph status={statuses.source} dark={dark} dotBorder={dotBorder} />}
+          label={rec.source_node}
           sx={{ 
             bgcolor: alpha(theme.palette.error.main, 0.1),
             color: 'error.main',
@@ -1038,8 +1068,9 @@ const RecommendationRow = React.memo(({
           }} 
         />
         <Typography sx={{ opacity: 0.4 }}>→</Typography>
-        <Chip 
-          size="small" 
+        <Chip
+          size="small"
+          icon={<NodeGlyph status={statuses.target} dark={dark} dotBorder={dotBorder} />}
           label={rec.target_node}
           sx={{ 
             bgcolor: alpha(theme.palette.success.main, 0.1),
@@ -1410,6 +1441,8 @@ export default function DRSPage() {
   const [tab, setTab] = useState(0)
   const [expandedClusters, setExpandedClusters] = useState<Set<string>>(new Set())
   const [drawerOpen, setDrawerOpen] = useState(false)
+  // Why the last recommendation action did not go through, shown in a dialog.
+  const [actionNotice, setActionNotice] = useState<string | null>(null)
   const [selectedRec, setSelectedRec] = useState<DRSRecommendation | null>(null)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'warning' | 'error' }>({ open: false, message: '', severity: 'success' })
@@ -1439,6 +1472,8 @@ return () => setPageInfo('', '', '')
   // empty so an older orchestrator simply renders nothing extra.
   const pinnedGuests: PinnedGuest[] = status?.pinned_guests ?? []
   const balancingDomains: BalancingDomain[] = status?.balancing_domains ?? []
+  const restrictedGuests: RestrictedGuest[] = status?.restricted_guests ?? []
+  const excludedGuests: ExcludedGuest[] = status?.excluded_guests ?? []
 
   const { data: recommendationsRaw, mutate: mutateRecs, isLoading: recsLoading } = useDRSRecsHook(isEnterprise)
 
@@ -1526,8 +1561,9 @@ return allVMsData.data.vms.map(vm => ({
     }))
   }, [allVMsData])
 
-  // Current guest and node statuses, for the status dots of the History rows.
-  // Keyed with the connection: two clusters may both have a "pve1".
+  // Current guest and node statuses, for the status dots of every guest and
+  // node glyph of the page (recommendations, active migrations, drawer,
+  // History). Keyed with the connection: two clusters may both have a "pve1".
   const historyVmStatus = useMemo(() => {
     const map: Record<string, string> = {}
 
@@ -1549,6 +1585,12 @@ return allVMsData.data.vms.map(vm => ({
 
     return map
   }, [metricsData])
+
+  const glyphStatuses = useCallback((m: { connection_id: string; vmid: number; source_node: string; target_node: string }): GlyphStatuses => ({
+    guest: historyVmStatus[`${m.connection_id}:${m.vmid}`],
+    source: historyNodeStatus[`${m.connection_id}:${m.source_node}`],
+    target: historyNodeStatus[`${m.connection_id}:${m.target_node}`]
+  }), [historyVmStatus, historyNodeStatus])
 
   // Computed
   // Set of node names currently in maintenance — used to filter out bad targets
@@ -1949,8 +1991,9 @@ return next
         setDrawerOpen(false)
       }
     } catch (e: any) {
-      console.error('Error executing recommendation action:', e)
-      
+      // Expected outcomes (moved guest, refusal): shown in the notice dialog
+      console.warn('Recommendation action not applied:', e)
+
       // Gérer les différents cas d'erreur
       const errorMsg = e.message || ''
       
@@ -1964,13 +2007,13 @@ return next
         const validated = await res.json()
 
         void mutateRecs(validated, false)
-        alert(t('drsPage.vmMovedAlert'))
+        setActionNotice(t('drsPage.vmMovedAlert'))
       } else if (errorMsg.includes('404') || errorMsg.includes('not found') || errorMsg.includes('Recommendation not found')) {
         // Recommandation n'existe plus
         setDrawerOpen(false)
         setSelectedRec(null)
         await mutateRecs()
-        alert(t('drsPage.recommendationExpiredAlert'))
+        setActionNotice(t('drsPage.recommendationExpiredAlert'))
       } else if (errorMsg.includes('already on target')) {
         // VM déjà sur la cible
         setDrawerOpen(false)
@@ -1979,7 +2022,14 @@ return next
         const validated = await res.json()
 
         void mutateRecs(validated, false)
-        alert(t('drsPage.vmAlreadyOnTargetAlert'))
+        setActionNotice(t('drsPage.vmAlreadyOnTargetAlert'))
+      } else {
+        // Any other refusal (rolling update in progress, node being drained,
+        // placement, too many migrations): say why rather than nothing.
+        setDrawerOpen(false)
+        setSelectedRec(null)
+        await mutateRecs()
+        setActionNotice(errorMsg)
       }
     } finally {
       setActionLoading(null)
@@ -2364,11 +2414,15 @@ return next
       {/* Tab: Recommendations */}
       {tab === 1 && (
         <Stack spacing={2}>
-          {/* Why DRS is constrained here, on a zoned cluster */}
+          {/* How placement is shaped here, guest by guest, on a heterogeneous cluster */}
           <PlacementConstraintsCard
             pinnedGuests={pinnedGuests}
             balancingDomains={balancingDomains}
+            restrictedGuests={restrictedGuests}
+            excludedGuests={excludedGuests}
             connectionNames={connectionNames}
+            vmStatus={historyVmStatus}
+            nodeStatus={historyNodeStatus}
           />
 
           {/* Migrations actives en cours */}
@@ -2385,6 +2439,7 @@ return next
                       key={m.id}
                       migration={m}
                       progress={migrationsProgress[m.id] || null}
+                      statuses={glyphStatuses(m)}
                     />
                   ))}
                 </Stack>
@@ -2447,6 +2502,7 @@ return next
                               rec={rec}
                               onClick={() => openRecommendation(rec)}
                               haConflict={getHAConflictStatus(rec.vmid, rec.target_node, rec.connection_id, haDataMap) === 'conflict'}
+                              statuses={glyphStatuses(rec)}
                             />
                           ))}
                         </Stack>
@@ -2579,9 +2635,12 @@ return next
               <Typography variant="overline" sx={{ opacity: 0.5 }}>
                 {selectedRec.guest_type === 'lxc' ? t('drsPage.container') : t('drsPage.vm')}
               </Typography>
-              <Typography variant="h5" sx={{ fontWeight: 700 }}>
-                {selectedRec.vm_name || `VM ${selectedRec.vmid}`}
-              </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <GuestGlyph type={selectedRec.guest_type} status={glyphStatuses(selectedRec).guest} dotBorder={theme.palette.background.paper} />
+                <Typography variant="h5" sx={{ fontWeight: 700 }}>
+                  {selectedRec.vm_name || `VM ${selectedRec.vmid}`}
+                </Typography>
+              </Box>
               <Typography variant="body2" sx={{ opacity: 0.6 }}>
                 {selectedRec.guest_type === 'lxc' ? t('drsPage.ctidLabel') : t('drsPage.vmidLabel')}: {selectedRec.vmid}
               </Typography>
@@ -2604,16 +2663,22 @@ return next
               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}>
                 <Box sx={{ textAlign: 'center' }}>
                   <Typography variant="caption" sx={{ opacity: 0.5 }}>{t('drsPage.source')}</Typography>
-                  <Typography sx={{ fontWeight: 600, color: 'error.main' }}>
-                    {selectedRec.source_node}
-                  </Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.75 }}>
+                    <NodeGlyph status={glyphStatuses(selectedRec).source} dark={theme.palette.mode === 'dark'} dotBorder={theme.palette.background.paper} />
+                    <Typography sx={{ fontWeight: 600, color: 'error.main' }}>
+                      {selectedRec.source_node}
+                    </Typography>
+                  </Box>
                 </Box>
                 <SwapHorizIcon sx={{ fontSize: 32, opacity: 0.3 }} />
                 <Box sx={{ textAlign: 'center' }}>
                   <Typography variant="caption" sx={{ opacity: 0.5 }}>{t('drsPage.target')}</Typography>
-                  <Typography sx={{ fontWeight: 600, color: 'success.main' }}>
-                    {selectedRec.target_node}
-                  </Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.75 }}>
+                    <NodeGlyph status={glyphStatuses(selectedRec).target} dark={theme.palette.mode === 'dark'} dotBorder={theme.palette.background.paper} />
+                    <Typography sx={{ fontWeight: 600, color: 'success.main' }}>
+                      {selectedRec.target_node}
+                    </Typography>
+                  </Box>
                 </Box>
               </Box>
             </Paper>
@@ -2801,6 +2866,7 @@ return next
           </Stack>
         )}
       </Drawer>
+      <DrsActionNoticeDialog message={actionNotice} onClose={() => setActionNotice(null)} />
       <Snackbar
         open={snackbar.open}
         autoHideDuration={6000}

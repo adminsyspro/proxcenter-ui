@@ -1,24 +1,26 @@
 import { NextResponse } from "next/server"
-import { getServerSession } from "next-auth"
 
-import { authOptions } from "@/lib/auth/config"
+import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
+import { getPrincipal, type Principal } from "@/lib/auth/principal"
 import { getCurrentTenantId } from "@/lib/tenant"
-import { checkPermission } from "@/lib/rbac"
 import { listVnetsForTenant, createVnetForTenant } from "@/lib/vdc/vnets"
+import { checkVnetPermission } from "@/lib/vdc/vnetPermission"
+import { PERMISSIONS } from "@/lib/rbac"
+import { VniError } from "@/lib/vdc/vniPolicy"
 import { getSubnetUsage } from "@/lib/vdc/ipam"
 
 export const runtime = "nodejs"
 
-type RouteContext = { params: Promise<{ id: string }> | { id: string } }
+type RouteContext = { params: Promise<{ id: string }> | { id: string }; principal?: Principal }
 
 // GET /api/v1/vdcs/{id}/vnets
-export async function GET(_req: Request, ctx: RouteContext) {
+async function getHandler(_req: Request, ctx: RouteContext) {
   try {
     const params = await Promise.resolve(ctx.params)
     const vdcId = (params as any)?.id
     if (!vdcId) return NextResponse.json({ error: "Missing vDC ID" }, { status: 400 })
 
-    const denied = await checkPermission("sdn.vnet.view")
+    const denied = await checkVnetPermission(ctx.principal, vdcId, PERMISSIONS.SDN_VNET_VIEW)
     if (denied) return denied
 
     // Enrich each VNet with its IPAM usage counts so the dashboard can
@@ -39,13 +41,20 @@ export async function GET(_req: Request, ctx: RouteContext) {
 }
 
 // POST /api/v1/vdcs/{id}/vnets
-export async function POST(req: Request, ctx: RouteContext) {
+/** DNS servers as an array or a comma-separated string; anything else = none. */
+function parseDnsServers(raw: unknown): string[] | undefined {
+  if (Array.isArray(raw)) return raw.map(x => String(x).trim()).filter(Boolean)
+  if (typeof raw === "string") return raw.split(",").map(x => x.trim()).filter(Boolean)
+  return undefined
+}
+
+async function postHandler(req: Request, ctx: RouteContext) {
   try {
     const params = await Promise.resolve(ctx.params)
     const vdcId = (params as any)?.id
     if (!vdcId) return NextResponse.json({ error: "Missing vDC ID" }, { status: 400 })
 
-    const denied = await checkPermission("sdn.vnet.create")
+    const denied = await checkVnetPermission(ctx.principal, vdcId, PERMISSIONS.SDN_VNET_CREATE)
     if (denied) return denied
 
     const body = await req.json().catch(() => ({}))
@@ -61,23 +70,28 @@ export async function POST(req: Request, ctx: RouteContext) {
 
     if (!displayName) return NextResponse.json({ error: "displayName required" }, { status: 400 })
 
-    // Subnet is mandatory — VNets without one cannot allocate IPs since
-    // PVE-native IPAM/DHCP are broken on VXLAN zones.
-    if (!body?.subnet || typeof body.subnet !== "object") {
-      return NextResponse.json({ error: "subnet (cidr + gateway) is required" }, { status: 400 })
+    // Subnet is optional (roadmap#18): absent or null = pure L2 network, the
+    // tenant brings its own addressing. Present = CIDR and gateway required.
+    let subnet: { cidr: string; gateway: string; dnsServers?: string[] } | null = null
+    if (body?.subnet !== undefined && body?.subnet !== null) {
+      if (typeof body.subnet !== "object") {
+        return NextResponse.json({ error: "subnet must be an object (cidr + gateway) or null for a pure L2 network" }, { status: 400 })
+      }
+      const s = body.subnet
+      const cidr = typeof s.cidr === "string" ? s.cidr.trim() : ""
+      const gateway = typeof s.gateway === "string" ? s.gateway.trim() : ""
+      if (!cidr && !gateway && !s.dnsServers) {
+        subnet = null
+      } else {
+        if (!cidr || !gateway) {
+          return NextResponse.json({ error: "subnet.cidr and subnet.gateway are required when a subnet is given" }, { status: 400 })
+        }
+        subnet = { cidr, gateway, dnsServers: parseDnsServers(s.dnsServers) }
+      }
     }
-    const s = body.subnet
-    const cidr = typeof s.cidr === "string" ? s.cidr.trim() : ""
-    const gateway = typeof s.gateway === "string" ? s.gateway.trim() : ""
-    if (!cidr || !gateway) {
-      return NextResponse.json({ error: "subnet.cidr and subnet.gateway are required" }, { status: 400 })
-    }
-    const dnsServers = Array.isArray(s.dnsServers)
-      ? s.dnsServers.map((x: any) => String(x).trim()).filter(Boolean)
-      : typeof s.dnsServers === "string"
-        ? s.dnsServers.split(",").map((x: string) => x.trim()).filter(Boolean)
-        : undefined
-    const subnet = { cidr, gateway, dnsServers }
+    // Tenant-chosen VNI (roadmap#18); the library validates it against the
+    // transport policy and answers with the right status.
+    const vni = body?.vni === undefined || body?.vni === null || body?.vni === '' ? null : body.vni
 
     const type = body?.type === 'vlan' ? 'vlan' as const : 'vxlan' as const
     const bridge = typeof body?.bridge === 'string' ? body.bridge.trim() : ''
@@ -93,18 +107,24 @@ export async function POST(req: Request, ctx: RouteContext) {
     }
     const externalAddressing = body?.externalAddressing === true
 
-    const session = await getServerSession(authOptions)
-    const createdBy = session?.user?.id ?? null
+    // A token creates as nobody: the audit journals the write under the token.
+    const principal = ctx.principal ?? (await getPrincipal()).principal
+    const createdBy = principal?.userId ?? null
     const tenantId = await getCurrentTenantId()
 
     try {
       const vnet = await createVnetForTenant({
-        vdcId, tenantId, displayName, description, firewall, subnet, createdBy,
+        vdcId, tenantId, displayName, description, firewall, subnet, vni, createdBy,
         type, bridge: bridge || undefined, vlanTag, externalAddressing,
       })
       return NextResponse.json({ data: vnet }, { status: 201 })
     } catch (err: any) {
       const msg = err?.message || String(err)
+      if (err instanceof VniError) return NextResponse.json({ error: msg }, { status: err.status })
+      // A platform-provided edge needs the subnet (#904); vni on a VLAN network.
+      if (msg.includes('define the subnet') || msg.includes('vni applies to VXLAN')) {
+        return NextResponse.json({ error: msg }, { status: 400 })
+      }
       if (msg.includes("Quota exceeded")) return NextResponse.json({ error: msg }, { status: 409 })
       if (msg.includes("Invalid VNet name")) return NextResponse.json({ error: msg }, { status: 400 })
       if (msg.includes('has no VLAN pool')) return NextResponse.json({ error: msg }, { status: 400 })
@@ -130,3 +150,6 @@ export async function POST(req: Request, ctx: RouteContext) {
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const GET = withPublicApiGuard("vdc-vnets-list", getHandler)
+export const POST = withPublicApiGuard("vdc-vnet-create", postHandler)

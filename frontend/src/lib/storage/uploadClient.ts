@@ -35,6 +35,48 @@ function newUploadId(): string {
   return `${Date.now()}-${Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('')}`
 }
 
+// What a reverse proxy answers when it gives up waiting on the route, not a
+// verdict of the route: the chunk is sent again. The route acknowledges a
+// chunk it already has instead of writing it twice.
+const RETRYABLE_STATUSES = new Set([502, 503, 504])
+const RETRY_DELAYS_MS = [1000, 2000, 4000, 8000]
+
+function pause(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) return reject(signal.reason)
+    const onAbort = () => { clearTimeout(timer); reject(signal?.reason) }
+    const timer = setTimeout(() => { signal?.removeEventListener('abort', onAbort); resolve() }, ms)
+    signal?.addEventListener('abort', onAbort, { once: true })
+  })
+}
+
+async function sendChunk(url: string, headers: Record<string, string>, body: Blob, index: number, signal?: AbortSignal): Promise<void> {
+  // After a 202 the route holds the chunk and is still writing it to PVE:
+  // ask again without the body until it is through.
+  let held = false
+  let retries = 0
+  for (;;) {
+    let res: Response
+    try {
+      res = await fetch(url, { method: 'POST', signal, headers, body: held ? undefined : body })
+    } catch (e) {
+      if (signal?.aborted || retries >= RETRY_DELAYS_MS.length) throw e
+      await pause(RETRY_DELAYS_MS[retries++], signal)
+      continue
+    }
+    if (res.status === 202) {
+      held = true
+      continue
+    }
+    if (res.ok) return
+    if (RETRYABLE_STATUSES.has(res.status) && retries < RETRY_DELAYS_MS.length) {
+      await pause(RETRY_DELAYS_MS[retries++], signal)
+      continue
+    }
+    throw await errorOf(res, `Chunk ${index} failed: HTTP ${res.status}`)
+  }
+}
+
 async function errorOf(res: Response, fallback: string): Promise<Error> {
   const json = await res.json().catch(() => ({} as any))
   return new Error(json?.error || fallback)
@@ -51,21 +93,15 @@ export async function uploadFileToStorage(args: UploadFileArgs): Promise<UploadF
   for (let i = 0; i < totalChunks; i++) {
     const start = i * UPLOAD_CHUNK_SIZE
     const end = Math.min(start + UPLOAD_CHUNK_SIZE, file.size)
-    const res = await fetch(url, {
-      method: 'POST',
-      signal,
-      headers: {
-        'X-Upload-Id': uploadId,
-        'X-Chunk-Index': String(i),
-        'X-Total-Chunks': String(totalChunks),
-        'X-Total-Size': String(file.size),
-        'X-File-Name': file.name,
-        'X-Content-Type': contentType,
-        'X-Mime-Type': file.type || 'application/octet-stream',
-      },
-      body: file.slice(start, end),
-    })
-    if (!res.ok) throw await errorOf(res, `Chunk ${i} failed: HTTP ${res.status}`)
+    await sendChunk(url, {
+      'X-Upload-Id': uploadId,
+      'X-Chunk-Index': String(i),
+      'X-Total-Chunks': String(totalChunks),
+      'X-Total-Size': String(file.size),
+      'X-File-Name': file.name,
+      'X-Content-Type': contentType,
+      'X-Mime-Type': file.type || 'application/octet-stream',
+    }, file.slice(start, end), i, signal)
     onProgress?.(Math.round(((i + 1) / totalChunks) * 100))
   }
 

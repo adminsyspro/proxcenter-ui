@@ -6,12 +6,20 @@ const {
   connectionFindManyMock,
   executeSSHMock,
   applySFlowOnNodeMock,
+  isConnectionLicenseExcludedMock,
+  reportExpectedAgentsMock,
 } = vi.hoisted(() => ({
   settingUpsertMock: vi.fn(),
   settingFindManyMock: vi.fn(),
   connectionFindManyMock: vi.fn(),
   executeSSHMock: vi.fn(),
   applySFlowOnNodeMock: vi.fn(),
+  isConnectionLicenseExcludedMock: vi.fn(async (_id: string) => false),
+  reportExpectedAgentsMock: vi.fn(),
+}))
+
+vi.mock("@/lib/license/exclusions", () => ({
+  isConnectionLicenseExcluded: isConnectionLicenseExcludedMock,
 }))
 
 vi.mock("@/lib/db/prisma", () => ({
@@ -33,6 +41,10 @@ vi.mock("@/lib/ssh/exec", () => ({
 vi.mock("@/lib/sflow/configure", () => ({
   applySFlowOnNode: applySFlowOnNodeMock,
   SFLOW_PROBE_COMMAND: "sflow-probe-command",
+}))
+
+vi.mock("@/lib/sflow/expectedAgents", () => ({
+  reportExpectedAgents: reportExpectedAgentsMock,
 }))
 
 import {
@@ -65,6 +77,7 @@ beforeEach(() => {
   settingFindManyMock.mockResolvedValue([])
   connectionFindManyMock.mockResolvedValue([])
   executeSSHMock.mockResolvedValue({ success: true, output: "1\n" })
+  reportExpectedAgentsMock.mockResolvedValue(true)
   applySFlowOnNodeMock.mockResolvedValue({
     success: true,
     bridgesConfigured: 1,
@@ -133,7 +146,24 @@ describe("reconcileSFlow", () => {
 
     await expect(reconcileSFlow()).resolves.toEqual({ checked: 1, reapplied: 0, failed: 0 })
     expect(executeSSHMock).toHaveBeenCalledTimes(1)
-    expect(executeSSHMock).toHaveBeenCalledWith("right-tenant", expect.objectContaining({ host: "10.0.0.1", port: 22 }), "sflow-probe-command")
+    // The probe only reads, so it may run on a cluster outside the license (roadmap#58).
+    expect(executeSSHMock).toHaveBeenCalledWith("right-tenant", expect.objectContaining({ host: "10.0.0.1", port: 22 }), "sflow-probe-command", undefined, { readOnly: true })
+  })
+
+  it("leaves a cluster outside the license alone: neither probed nor re-applied (roadmap#58)", async () => {
+    // executeSSH would refuse the re-apply there; skipping the connection
+    // keeps that refusal from aborting the pass for every other cluster.
+    settingFindManyMock.mockResolvedValue([{ tenantId: "tenant-1", value: desiredConfig }])
+    connectionFindManyMock.mockResolvedValue([connection({ id: "excluded" }), connection({ id: "licensed" })])
+    isConnectionLicenseExcludedMock.mockImplementation(async (id: string) => id === "excluded")
+    executeSSHMock.mockResolvedValue({ success: true, output: "0\n" })
+    applySFlowOnNodeMock.mockResolvedValue({ success: true, bridgesConfigured: 1, failedBridges: [] })
+
+    await expect(reconcileSFlow()).resolves.toEqual({ checked: 1, reapplied: 1, failed: 0 })
+    expect(executeSSHMock).toHaveBeenCalledTimes(1)
+    expect(executeSSHMock.mock.calls[0][0]).toBe("licensed")
+    expect(applySFlowOnNodeMock).toHaveBeenCalledTimes(1)
+    expect(applySFlowOnNodeMock.mock.calls[0][0]).toBe("licensed")
   })
 
   it("skips connections without SSH credentials and unusable hosts", async () => {
@@ -173,7 +203,7 @@ describe("reconcileSFlow", () => {
     executeSSHMock.mockResolvedValue({ success: true, output: "0\n" })
 
     await expect(reconcileSFlow()).resolves.toEqual({ checked: 1, reapplied: 1, failed: 0 })
-    expect(applySFlowOnNodeMock).toHaveBeenCalledWith("connection-1", expect.objectContaining({ host: "10.0.0.1", port: 22 }), desiredConfig)
+    expect(applySFlowOnNodeMock).toHaveBeenCalledWith("connection-1", expect.objectContaining({ host: "10.0.0.1", port: 22 }), desiredConfig, "10.0.0.1")
   })
 
   it("reaches each node on its own SSH address and port, else the connection port", async () => {
@@ -196,6 +226,52 @@ describe("reconcileSFlow", () => {
       { host: "10.0.0.3", port: 2222, source: "proxmox" },
     ])
     expect(applySFlowOnNodeMock.mock.calls.map(c => c[1].port)).toEqual([2201, 2202, 2222])
+  })
+
+  // roadmap#52: with the page closed, this pass is what keeps the
+  // orchestrator's inventory of expected agents current.
+  it("reports every node it reached to the orchestrator, and only complete clusters as such", async () => {
+    settingFindManyMock.mockResolvedValue([{ tenantId: "tenant-1", value: desiredConfig }])
+    connectionFindManyMock.mockResolvedValue([
+      connection({ name: "DR", hosts: [
+        { node: "pve1-dr", enabled: true, ip: "10.0.0.1" },
+        { node: "pve2-dr", enabled: true, ip: "10.0.0.2" },
+        { node: "pve3-dr", enabled: true, ip: "10.0.0.3" },
+        { node: "pve4-dr", enabled: true, ip: "10.0.0.4" },
+      ] }),
+      connection({ id: "connection-2", name: "PROD", hosts: [{ node: "pve1", enabled: true, ip: "10.0.1.1" }, { node: "pve2", enabled: true, ip: "10.0.1.2" }] }),
+    ])
+    executeSSHMock.mockImplementation(async (_c: string, target: { host: string }) => {
+      switch (target.host) {
+        case "10.0.0.1": return { success: true, output: "1\n" } // still configured
+        case "10.0.0.2": return { success: true, output: "0\n" } // lost it, re-applied below
+        case "10.0.0.3": return { success: true, output: "0\n" } // no OVS at all
+        case "10.0.0.4": return { success: true, output: "0\n" } // bridges set, collector unreachable
+        case "10.0.1.1": return { success: true, output: "1\n" }
+        default: return { success: false, error: "unreachable" } // 10.0.1.2 down
+      }
+    })
+    applySFlowOnNodeMock.mockImplementation(async (_c: string, target: { host: string }) => {
+      switch (target.host) {
+        case "10.0.0.2": return { success: true, bridgesConfigured: 1, failedBridges: [] }
+        case "10.0.0.3": return { success: false, bridgesConfigured: 0, failedBridges: [], error: "no OVS bridge" }
+        default: return { success: false, bridgesConfigured: 1, failedBridges: [], error: "no route to the collector" }
+      }
+    })
+
+    await expect(reconcileSFlow()).resolves.toEqual({ checked: 5, reapplied: 1, failed: 1 })
+
+    expect(reportExpectedAgentsMock).toHaveBeenCalledTimes(1)
+    const update = reportExpectedAgentsMock.mock.calls[0][0]
+    // DR answered in full, PROD had a node down: only DR may be trusted as complete.
+    expect(update.connection_ids).toEqual(["connection-1"])
+    expect(update.agents).toEqual([
+      expect.objectContaining({ connection_id: "connection-1", connection_name: "DR", node: "pve1-dr", agent_ip: "10.0.0.1", configured: true, reconfigured: false, target: desiredConfig.collectorTarget, polling_interval: 30, sampling_rate: 4096 }),
+      expect.objectContaining({ node: "pve2-dr", configured: true, reconfigured: true }),
+      expect.objectContaining({ node: "pve3-dr", configured: false }),
+      expect.objectContaining({ node: "pve4-dr", configured: true, reconfigured: false }),
+      expect.objectContaining({ connection_id: "connection-2", node: "pve1", configured: true }),
+    ])
   })
 
   it("does not count a node with no OVS bridge as a failure", async () => {

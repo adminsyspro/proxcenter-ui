@@ -6,8 +6,14 @@ import { fetchTaskLog } from '@/lib/proxmox/taskLog'
 import { extractTaskFailureReason } from '@/lib/proxmox/taskFailureReason'
 import { getConnectionById, type PveConn } from '@/lib/connections/getConnection'
 import { formatBytes as formatSize } from '@/utils/format'
-import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { buildNodeResourceId, buildVmResourceId, checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { assertVmid } from '@/lib/ssh/validate'
+import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
+import { getPrincipal, type Principal } from '@/lib/auth/principal'
+import { findVmMetaByVmid } from '@/lib/cache/vmMetaCache'
+import { prisma } from '@/lib/db/prisma'
+import { checkTenantGuestScope } from '@/lib/vdc/guestScope'
+import { getTenantInfrastructureScope } from '@/lib/tenant/infraScope'
 
 export const runtime = 'nodejs'
 
@@ -531,23 +537,143 @@ function parseGenericProgress(logs: TaskLogEntry[]): { progress: number; message
   return { progress, message, speed, eta }
 }
 
-export async function GET(
+const TASK_OUTSIDE = 'Task outside your vDC scope'
+
+/** `UPID:node:pid:pstart:starttime:type:id:user:`: its node, its task type, and its guest when the id is a vmid. */
+function parseTaskUpid(upid: string): { node: string; type: string; vmid: string | null } | null {
+  const parts = upid.split(':')
+  if (parts[0] !== 'UPID' || !parts[1]) return null
+  return { node: parts[1], type: parts[5] || '', vmid: /^\d+$/.test(parts[6] || '') ? parts[6] : null }
+}
+
+/** Guest types a task type can be about: qm* a VM, vz* a container (vzdump, like any other type, either). */
+function taskGuestTypes(taskType: string): Array<'qemu' | 'lxc'> {
+  if (taskType.startsWith('qm')) return ['qemu']
+  if (taskType.startsWith('vz') && taskType !== 'vzdump') return ['lxc']
+  return ['qemu', 'lxc']
+}
+
+/** vm.view on one guest of the connection, on `node`, for each type the task may be about. */
+async function mayViewGuestOn(connectionId: string, node: string, types: string[], vmid: string): Promise<boolean> {
+  for (const type of types) {
+    if (!(await checkPermission(PERMISSIONS.VM_VIEW, 'vm', buildVmResourceId(connectionId, node, type, vmid)))) return true
+  }
+  return false
+}
+
+/**
+ * vm.view on the guest a task names: on the node the UPID names, else on the
+ * node the inventory has it on now. A migration, a DRS or HA relocation moves
+ * the guest after its task ran, and vm and pool/tag grants match the guest
+ * where it lives (the RBAC metadata index is keyed on its current node).
+ */
+async function mayViewTaskGuest(connectionId: string, node: string, taskType: string, vmid: string): Promise<boolean> {
+  const types = taskGuestTypes(taskType)
+  if (await mayViewGuestOn(connectionId, node, types, vmid)) return true
+  const tenantId = (await getPrincipal()).principal?.tenantId
+  const current = findVmMetaByVmid(connectionId, vmid, tenantId)?.node
+  return !!current && current !== node && (await mayViewGuestOn(connectionId, current, types, vmid))
+}
+
+/**
+ * A session follows a task when it may view the task's connection, or the
+ * guest its UPID names (vm.view; pool and tag grants resolve in
+ * checkPermission), or its node (node.view): a vm-, pool- or node-scoped
+ * user keeps polling the tasks of what it sees (#378), a grant on another
+ * connection opens nothing. The task is read on the URL node, so the guest
+ * and node fallbacks need the UPID node to be that node. Anything but a 403
+ * (401: no session) is final.
+ */
+async function checkSessionTaskAccess(connectionId: string, node: string, upid: string): Promise<Response | null> {
+  const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW, 'connection', connectionId)
+  if (!denied || denied.status !== 403) return denied
+  const task = parseTaskUpid(upid)
+  if (task?.node !== node) return denied
+  if (task.vmid && (await mayViewTaskGuest(connectionId, node, task.type, task.vmid))) return null
+  return (await checkPermission(PERMISSIONS.NODE_VIEW, 'node', buildNodeResourceId(connectionId, node))) ? denied : null
+}
+
+/**
+ * Whether this token journaled the UPID in its own apitoken.write line, i.e.
+ * started the task: as `upid`, or among the `upids` of a multi-task answer.
+ */
+async function startedByToken(principal: Principal, upid: string): Promise<boolean> {
+  if (!principal.tokenId) return false
+  const row = await prisma.auditLog.findFirst({
+    where: {
+      action: 'apitoken.write',
+      apiTokenId: principal.tokenId,
+      tenantId: principal.tenantId,
+      OR: [
+        { details: { path: ['upid'], equals: upid } },
+        { details: { path: ['upids'], array_contains: [upid] } },
+      ],
+    },
+    select: { id: true },
+  })
+  return row !== null
+}
+
+/**
+ * A vDC tenant token only follows the tasks of its own guests, or the tasks it
+ * started itself (the destroy task of a guest that is gone, for one): a task of
+ * another tenant's guest on a shared provider connection stays hidden. Every
+ * other tenant kind passes. A task the guest check cannot confine (its UPID
+ * names another node than the URL one, or no guest) is judged on the tenant
+ * kind alone: refused to a vDC tenant, unless it is its own task on that node.
+ * A lookup that fails is a 503, never a pass.
+ */
+async function taskOutsideTokenScope(
+  principal: Principal, connection: PveConn, connectionId: string, node: string, upid: string,
+): Promise<Response | null> {
+  const task = parseTaskUpid(upid)
+  const sameNode = task?.node === node
+  const outside = () => NextResponse.json({ error: TASK_OUTSIDE }, { status: 403 })
+  try {
+    if (!sameNode || !task?.vmid) {
+      const infra = await getTenantInfrastructureScope(principal.tenantId, { ignoreVdcContext: true })
+      if (infra.kind !== 'iaas') return null
+      return sameNode && (await startedByToken(principal, upid)) ? null : outside()
+    }
+    const refused = await checkTenantGuestScope(principal.tenantId, connection, connectionId, null, node, task.vmid, true)
+    // null: inside the vDC (or not a vDC tenant). A 503 (scope unverifiable) is returned as is.
+    if (!refused || refused.status !== 403) return refused
+    return (await startedByToken(principal, upid)) ? null : outside()
+  } catch {
+    return NextResponse.json({ error: 'Unable to verify guest vDC scope' }, { status: 503 })
+  }
+}
+
+async function handler(
   req: Request,
-  { params }: { params: Promise<{ connectionId: string; node: string; upid: string }> }
+  { params, principal }: { params: Promise<{ connectionId: string; node: string; upid: string }>; principal?: Principal }
 ) {
   try {
-    const { connectionId, node, upid } = await params
+    // Next already decoded the segment once; a UPID never holds a "%".
+    const { connectionId, node, upid: decodedUpid } = await params
 
-    const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW)
+    // Tokens are judged on the connection of the task. Sessions may also
+    // reach it through the guest or the node it names (#378).
+    const isToken = principal?.kind === 'token'
+    const denied = isToken
+      ? await checkPermission(PERMISSIONS.CONNECTION_VIEW, 'connection', connectionId)
+      : await checkSessionTaskAccess(connectionId, node, decodedUpid)
     if (denied) return denied
-
-    const decodedUpid = decodeURIComponent(upid)
 
     const connection = await getConnectionById(connectionId)
 
     if (!connection) {
       return NextResponse.json({ error: 'Connection not found' }, { status: 404 })
     }
+
+    if (isToken) {
+      const outside = await taskOutsideTokenScope(principal, connection, connectionId, node, decodedUpid)
+      if (outside) return outside
+    }
+
+    // Reading a finished migration releases the source lock (SSH qm unlock):
+    // a token only triggers that side effect when it may migrate.
+    const mayReleaseMigrationLock = !isToken || !!principal.scopes?.includes('vms:migrate')
 
     let status: TaskStatus
 
@@ -591,7 +717,7 @@ return NextResponse.json({ error: `Failed to fetch task status: ${e.message}` },
         message = 'Completed successfully'
         const taskType = status?.type || ''
         const vmid = status?.id || ''
-        if (vmid && (taskType === 'qmigrate' || taskType.includes('migrate'))) {
+        if (mayReleaseMigrationLock && vmid && (taskType === 'qmigrate' || taskType.includes('migrate'))) {
           await handleSourceVmCleanupAfterMigration({
             connection, connectionId, node, vmid,
           })
@@ -607,7 +733,7 @@ return NextResponse.json({ error: `Failed to fetch task status: ${e.message}` },
           message = 'Migration completed (with cleanup warnings)'
           const taskType = status?.type || ''
           const vmid = status?.id || ''
-          if (vmid && (taskType === 'qmigrate' || taskType.includes('migrate'))) {
+          if (mayReleaseMigrationLock && vmid && (taskType === 'qmigrate' || taskType.includes('migrate'))) {
             await handleSourceVmCleanupAfterMigration({
               connection, connectionId, node, vmid,
             })
@@ -685,7 +811,8 @@ export async function DELETE(
     const denied = await checkPermission(PERMISSIONS.NODE_MANAGE, "connection", connectionId)
     if (denied) return denied
 
-    const decodedUpid = decodeURIComponent(upid)
+    // Next already decoded the segment once.
+    const decodedUpid = upid
 
     const connection = await getConnectionById(connectionId)
 
@@ -709,3 +836,5 @@ export async function DELETE(
     )
   }
 }
+
+export const GET = withPublicApiGuard("task-status", handler)

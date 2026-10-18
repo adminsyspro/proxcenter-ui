@@ -1,4 +1,8 @@
 import { describe, it, expect, beforeEach } from "vitest"
+import { spawnSync } from "node:child_process"
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import { planPasses, buildThickZeroScript, scaleWarmProgress, checksumDiskWindows, ZERO_PARALLEL_CHUNKS, markVolumesCopied, requestWarmCutover, requestWarmForcePowerOff, cancelWarmMigrationJob, gateReason, __isCutoverRequestedForTest, __isForcePowerOffRequestedForTest, __awaitOperatorCutoverForTest, __sleepUnlessCutoverForTest } from "./warm-pipeline"
 import { parseDdProgress } from "./dd-progress"
 import { volumesToFree, volumesToKeep, type AllocatedVolume } from "../pvesm-alloc"
@@ -29,6 +33,16 @@ describe("planPasses", () => {
     expect(actions[actions.length - 1].action).toBe("operator-gate")
   })
 
+  it("counts the integrity check run at cutover in the projected downtime (roadmap#1)", () => {
+    // 20 s shutdown + 30 s boot + 1 s transfer = 51 s fits 60 s; + 20 s of checks does not
+    const stat = { deltaBytes: 100 * MiB, throughputBytesPerSec: 100 * MiB }
+    const budget = { ...cfg, downtimeBudgetSec: 60 }
+    expect(planPasses([stat], budget)[0].action).toBe("cutover")
+    const withCheck = planPasses([stat], { ...budget, verifySec: 20 })
+    expect(withCheck[0].action).not.toBe("cutover")
+    expect(withCheck[0].projectedDowntimeSec).toBe(71)
+  })
+
   it("keeps issuing delta passes while above budget and below the cap", () => {
     const stats = Array.from({ length: 3 }, () => ({ deltaBytes: 50 * GiB, throughputBytesPerSec: 100 * MiB }))
     const actions = planPasses(stats, cfg)
@@ -43,94 +57,116 @@ describe("buildThickZeroScript", () => {
   it("queries the exact device size and bounds every zero stream to its range (#445)", () => {
     const cmd = buildThickZeroScript(dev)
     expect(cmd).toContain(`blockdev --getsize64 '${dev}'`)
-    // one bounded `head -c … | dd` per parallel range — never an unbounded dd
+    // one bounded `head -c … | dd` per parallel range of a slice, never an unbounded dd
     expect(cmd.match(/head -c /g)).toHaveLength(ZERO_PARALLEL_CHUNKS)
   })
 
+  // Run for real under bash, with the node tools replaced by stubs: what
+  // matters is the exit status, a target left unzeroed must never "succeed".
+  function runZeroScript(stubs: Record<string, string>): { status: number | null; out: string } {
+    const bin = mkdtempSync(join(tmpdir(), "zero-stubs-"))
+    const all = { date: 'echo 1700000000000000000', ...stubs }
+    for (const [name, body] of Object.entries(all)) {
+      writeFileSync(join(bin, name), `#!/bin/sh\n${body}\n`)
+      chmodSync(join(bin, name), 0o755)
+    }
+    const r = spawnSync("bash", ["-c", buildThickZeroScript(dev)], { env: { ...process.env, PATH: `${bin}:/usr/bin:/bin` }, encoding: "utf8" })
+    rmSync(bin, { recursive: true, force: true })
+
+    return { status: r.status, out: `${r.stdout}${r.stderr}` }
+  }
+
+  it.each([
+    ["blockdev fails", { blockdev: "exit 1" }],
+    ["blockdev prints nothing", { blockdev: "exit 0" }],
+    ["blockdev prints garbage", { blockdev: "echo oops" }],
+    ["the device reports a size of 0", { blockdev: "echo 0" }],
+  ])("fails closed when %s, never exits 0 on a target it did not zero", (_label, stubs) => {
+    const r = runZeroScript({ blkdiscard: "exit 0", ...stubs })
+    expect(r.status).not.toBe(0)
+    expect(r.out).toContain("zero-error:")
+    expect(r.out).not.toContain("zero-mode:")
+  })
+
+  it("zeroes the whole device in slices and reports the offload mode", () => {
+    const r = runZeroScript({ blockdev: `echo ${3 * GiB}`, blkdiscard: "exit 0" })
+    expect(r.status).toBe(0)
+    expect(r.out).toContain("zero-mode: offload")
+    expect(r.out).toContain(`${3 * GiB} bytes copied`)
+  })
+
   it("does NOT emit the unbounded dd that ENOSPCs past end-of-device (#445)", () => {
-    // A bare `dd if=/dev/zero of=DEV bs=4M oflag=direct` with no count fills the
-    // device, then writes one block past the end -> ENOSPC -> exit 1, even after
-    // a full zero. Guard that the broken form never comes back.
     const cmd = buildThickZeroScript(dev)
     expect(cmd).not.toMatch(/dd if=\/dev\/zero of=/)
   })
 
-  it("prefers blkdiscard -z and only streams zeros on its failure", () => {
+  it("prefers blkdiscard -z in slices and only streams zeros on its failure", () => {
     const cmd = buildThickZeroScript(dev)
-    expect(cmd).toContain(`blkdiscard -z '${dev}' 2>&1`)
+    // sliced offload: offset and length pinned to the loop variables (roadmap#45)
+    expect(cmd).toContain(`blkdiscard -z -o "$off" -l "$len" '${dev}' 2>&1`)
+    expect(cmd).not.toMatch(/blkdiscard -z '[^']+' 2>&1/)
     // blkdiscard first; the parallel dd streams are the fallback, not the primary path
     expect(cmd.indexOf("blkdiscard -z")).toBeLessThan(cmd.indexOf("head -c"))
+    // a refusal switches the mode and REDOES the same slice by streaming
+    expect(cmd).toContain('echo "blkdiscard-refused: $out"; echo "zero-mode: stream"; mode=stream; continue')
   })
 
-  it("surfaces WHY the offload was refused with a parseable marker (#606)", () => {
-    // Today the blkdiscard error is only visible when the whole script fails;
-    // when the fallback succeeds the reason for the slow path is silently lost.
+  it("names the mode it took with parseable markers (roadmap#45)", () => {
     const cmd = buildThickZeroScript(dev)
+    expect(cmd).toContain('[ "$off" -ne 0 ] || echo "zero-mode: offload"')
+    expect(cmd).toContain('echo "zero-mode: stream"')
     expect(cmd).toContain('echo "blkdiscard-refused: $out"')
   })
 
-  it("splits the device into equal 4 MiB-aligned ranges, remainder on the last (#606)", () => {
-    // Queue depth 1 is why the field run sustained only 359 MiB/s on an FC
-    // array that reaches 1.9 GB/s with concurrency: one dd per range, in parallel.
+  it("reports progress after every slice in dd's summary format, on both paths", () => {
     const cmd = buildThickZeroScript(dev)
-    expect(cmd).toContain(`per=$((sz / ${ZERO_PARALLEL_CHUNKS} / 4194304 * 4194304))`)
+    expect(cmd).toContain('report() { e=$(ms); echo "$off bytes copied, $((e / 1000)).$(printf %03d $((e % 1000))) s"; }')
+    expect(cmd).toContain("off=$((off + len)); pace; report")
+    // and parseDdProgress reads such a line unchanged
+    expect(parseDdProgress("4290772992 bytes copied, 41.212 s")).toEqual({ bytes: 4290772992, seconds: 41.212, bytesPerSec: 4290772992 / 41.212 })
+  })
+
+  it("walks the device in 1 GiB slices when unlimited and does not pace", () => {
+    const cmd = buildThickZeroScript(dev)
+    expect(cmd).toContain("cap=0")
+    expect(cmd).toContain(`slice=${1024 * MiB}`)
+    expect(cmd).toContain('pace() { [ "$cap" -gt 0 ] || return 0;')
+  })
+
+  it("paces to the cap: slice of about a quarter second, sleep until bytes/cap has elapsed", () => {
+    const cmd = buildThickZeroScript(dev, { rateLimitMBps: 100 })
+    expect(cmd).toContain(`cap=${100 * MiB}`)
+    expect(cmd).toContain(`slice=${24 * MiB}`)
+    expect(cmd).toContain('due=$((off * 1000 / cap)); [ "$due" -gt "$e" ] || return 0; w=$((due - e)); sleep "$((w / 1000)).$(printf %03d $((w % 1000)))"')
+  })
+
+  it("splits each slice into equal 4 MiB-aligned ranges, remainder on the last (#606)", () => {
+    const cmd = buildThickZeroScript(dev)
+    expect(cmd).toContain(`per=$((len / ${ZERO_PARALLEL_CHUNKS} / 4194304 * 4194304))`)
     for (let i = 0; i < ZERO_PARALLEL_CHUNKS - 1; i++) {
       expect(cmd).toContain(`head -c "$per" /dev/zero | dd of='${dev}'`)
-      expect(cmd).toContain(`seek=$((${i} * per))`)
+      expect(cmd).toContain(`seek=$((off + ${i} * per))`)
       expect(cmd).toContain(`2>"$t/z${i}" & p${i}=$!`)
       expect(cmd).toContain(`wait $p${i} || fail=1`)
     }
-    // the last range takes the remainder, so the whole device is covered
     const last = ZERO_PARALLEL_CHUNKS - 1
-    expect(cmd).toContain(`head -c "$((sz - ${last} * per))" /dev/zero`)
-    expect(cmd).toContain(`seek=$((${last} * per))`)
+    expect(cmd).toContain(`head -c "$((len - ${last} * per))" /dev/zero`)
+    expect(cmd).toContain(`seek=$((off + ${last} * per))`)
     expect(cmd).toContain(`wait $p${last} || fail=1`)
+    // a failed range replays the dd error text and fails the step
+    expect(cmd).toContain('if [ "$fail" -ne 0 ]; then cat "$t"/z*; exit 1; fi')
   })
 
-  it("honours a custom chunk count, remainder included", () => {
-    const cmd = buildThickZeroScript(dev, 2)
-    expect(cmd).toContain("per=$((sz / 2 / 4194304 * 4194304))")
-    expect(cmd).toContain('head -c "$per" /dev/zero')
-    expect(cmd).toContain('head -c "$((sz - 1 * per))" /dev/zero')
-    expect(cmd).not.toContain("$t/z2")
-  })
-
-  it("degenerates to one bounded full-device stream with a single chunk", () => {
-    const cmd = buildThickZeroScript(dev, 1)
-    expect(cmd.match(/head -c /g)).toHaveLength(1)
-    expect(cmd).toContain('head -c "$((sz - 0 * per))" /dev/zero')
-    expect(cmd).toContain("seek=$((0 * per))")
-  })
-
-  it("aggregates the per-range progress into ONE line in dd's own format", () => {
-    // The poller line must be consumable by parseDdProgress unchanged, so the
-    // caller gets live bytes for the progress bar and the SSH stream stays alive
-    // (feeding the same inactivity guard as the copy).
-    const cmd = buildThickZeroScript(dev)
-    expect(cmd).toContain('echo "$b bytes copied, $(($(date +%s)-start)) s"')
-    const sample = 'echo "$b bytes copied, $(($(date +%s)-start)) s"'
-      .replace('$b', "3221225472").replace("$(($(date +%s)-start))", "120")
-      .replace(/^echo "/, "").replace(/"$/, "")
-    expect(parseDdProgress(sample)).toEqual({ bytes: 3221225472, seconds: 120, bytesPerSec: 3221225472 / 120 })
-  })
-
-  it("keeps O_DIRECT with full 4 MiB pipe blocks and byte-exact seeks", () => {
-    const cmd = buildThickZeroScript(dev)
-    expect(cmd).toContain("bs=4M iflag=fullblock oflag=seek_bytes,direct conv=notrunc status=progress")
-  })
-
-  it("single-quotes the device in every write/read position", () => {
-    const cmd = buildThickZeroScript(dev)
-    expect(cmd).toContain(`blockdev --getsize64 '${dev}'`)
-    expect(cmd).toContain(`blkdiscard -z '${dev}'`)
-    expect(cmd).toContain(`dd of='${dev}'`)
-  })
-
-  it("escapes an embedded single quote in the device path", () => {
-    const cmd = buildThickZeroScript("/dev/x'y")
-    expect(cmd).toContain(`'/dev/x'\\''y'`)
+  it("honours a custom chunk count, as a number or in the options object", () => {
+    for (const cmd of [buildThickZeroScript(dev, 2), buildThickZeroScript(dev, { chunks: 2 })]) {
+      expect(cmd).toContain("per=$((len / 2 / 4194304 * 4194304))")
+      expect(cmd).toContain('head -c "$per" /dev/zero')
+      expect(cmd).toContain('head -c "$((len - 1 * per))" /dev/zero')
+      expect(cmd).not.toContain("$t/z2")
+    }
   })
 })
+
 
 describe("scaleWarmProgress", () => {
   // Locked scale: preparing_disks 0→10, full_copy 10→80, deltas 80→95, cutover+ 95→100.

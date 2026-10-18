@@ -2,10 +2,11 @@ import { NextResponse } from "next/server"
 
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
-import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { buildStorageResourceId, checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { guardTenantStorageWrite, loadTenantSlugs, resolveUploadOwner } from "@/lib/vdc/scope"
 import { getTenantInfrastructureScope, maskingScope } from "@/lib/tenant/infraScope"
 import { getCurrentTenantId } from "@/lib/tenant"
+import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 
 export const runtime = "nodejs"
 
@@ -16,18 +17,21 @@ const TENANT_FILTERED_CONTENT = new Set(['iso', 'import'])
 
 // DELETE /api/v1/connections/{id}/nodes/{node}/storage/{storage}/content/{volid}
 // Delete a volume from Proxmox storage
-export async function DELETE(
+async function deleteHandler(
   _req: Request,
   ctx: { params: Promise<{ id: string; node: string; storage: string; volid: string }> }
 ) {
   try {
     const { id, node, storage, volid } = await ctx.params
 
-    const denied = await checkPermission(PERMISSIONS.STORAGE_DELETE, "connection", id)
+    // Judged on the storage itself (issue #921).
+    const denied = await checkPermission(PERMISSIONS.STORAGE_DELETE, "storage", buildStorageResourceId(id, storage))
     if (denied) return denied
 
-    // The volid is URL-encoded; Proxmox expects the full volid (storage:path)
-    const decodedVolid = decodeURIComponent(volid)
+    // Next already decoded the segment once (%2F included): this is the full
+    // volid (storage:path) as Proxmox names it. Decoding it again would turn
+    // a file named "a%20b.iso" into "a b.iso", and fail on a bare "%".
+    const decodedVolid = volid
     // Volid format is "<storage>:<contentType>/<filename>".
     const volidMatch = decodedVolid.match(/^[^:]+:([^/]+)\/(.+)$/)
     const itemContent = volidMatch?.[1] || ''
@@ -79,3 +83,5 @@ export async function DELETE(
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const DELETE = withPublicApiGuard("storage-content-delete", deleteHandler)

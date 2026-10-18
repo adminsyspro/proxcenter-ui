@@ -20,6 +20,7 @@ import ImageCard from './ImageCard'
 import VendorLogo from './VendorLogo'
 import EmptyState from '@/components/EmptyState'
 import CustomImageDialog from './CustomImageDialog'
+import { visibilityBadge } from './CatalogVisibilityField'
 import { useTenant } from '@/contexts/TenantContext'
 import { useRBAC } from '@/contexts/RBACContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -373,9 +374,18 @@ export default function ImageCatalogTab({ onDeploy }: ImageCatalogTabProps) {
             // they own. The provider can mutate everything (including
             // shared catalogue entries it published itself); a tenant
             // can only mutate its own private images, never the shared
-            // provider entries it sees through the catalogue.
-            const isShared = !!(group.versions[0] as any).isShared
-            const canMutate = group.isCustom && (isProviderTenant || !isShared)
+            // or granted provider entries it sees through the catalogue.
+            const first = group.versions[0] as any
+            const isShared = !!first.isShared
+            const ownedByCaller = first.ownedByCaller !== false
+            const canMutate = group.isCustom && (isProviderTenant || (ownedByCaller && !isShared))
+            // Visibility badge (#903): the provider reads who sees the entry,
+            // a tenant sees which cards come from the provider catalogue.
+            const badge = !group.isCustom
+              ? undefined
+              : isProviderTenant
+                ? visibilityBadge(t, first)
+                : (ownedByCaller ? undefined : { label: t('templates.catalog.visibilityFromProvider'), color: 'info' as const })
             return (
               <ImageCard
                 key={group.key}
@@ -385,6 +395,7 @@ export default function ImageCatalogTab({ onDeploy }: ImageCatalogTabProps) {
                 isCustom={group.isCustom}
                 onEdit={canMutate ? handleEdit : undefined}
                 onDelete={canMutate ? handleDelete : undefined}
+                badge={badge}
               />
             )
           })}

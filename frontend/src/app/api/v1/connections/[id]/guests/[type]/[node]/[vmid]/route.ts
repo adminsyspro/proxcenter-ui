@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server"
+import { licenseExcludedResponse } from "@/lib/api/response"
 
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
 import { releaseAllocationsForVm } from "@/lib/vdc/ipam"
 import { deleteGuestIpEntry, guestKey } from "@/lib/cache/guestIpCache"
+import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 
 export const runtime = "nodejs"
 
@@ -12,7 +14,7 @@ const ALLOWED_TYPES = new Set(["qemu", "lxc"])
 
 // DELETE /api/v1/connections/{id}/guests/{type}/{node}/{vmid}
 // Supprime une VM ou un conteneur LXC
-export async function DELETE(
+async function handler(
   req: Request,
   ctx: { params: Promise<{ id: string; type: string; node: string; vmid: string }> }
 ) {
@@ -139,8 +141,12 @@ export async function DELETE(
       ...(ipamWarning ? { warning: ipamWarning } : {}),
     })
   } catch (e: any) {
+    const excluded = licenseExcludedResponse(e)
+    if (excluded) return excluded
     console.error("[DELETE VM] Error:", e)
 
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const DELETE = withPublicApiGuard("vm-delete", handler)

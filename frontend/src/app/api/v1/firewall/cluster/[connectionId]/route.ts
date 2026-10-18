@@ -5,12 +5,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getOrchestratorClient } from '@/lib/orchestrator/client'
 import { verifyConnectionOwnership } from '@/lib/tenant'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
+import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
 import { orchestratorOrPve } from '@/lib/firewall/withPveFallback'
 import * as pveDirect from '@/lib/firewall/pveDirect'
 import { getConnectionById } from '@/lib/connections/getConnection'
 
 // GET /api/v1/firewall/cluster/[connectionId] - Get cluster options or rules
-export async function GET(
+async function getHandler(
   request: NextRequest,
   { params }: { params: Promise<{ connectionId: string }> }
 ) {
@@ -50,7 +51,7 @@ return NextResponse.json(
 }
 
 // PUT /api/v1/firewall/cluster/[connectionId] - Update cluster options
-export async function PUT(
+async function putHandler(
   request: NextRequest,
   { params }: { params: Promise<{ connectionId: string }> }
 ) {
@@ -83,7 +84,7 @@ return NextResponse.json(
 }
 
 // POST /api/v1/firewall/cluster/[connectionId] - Add cluster rule
-export async function POST(
+async function postHandler(
   request: NextRequest,
   { params }: { params: Promise<{ connectionId: string }> }
 ) {
@@ -114,3 +115,7 @@ return NextResponse.json(
     )
   }
 }
+
+export const GET = withPublicApiGuard("fw-cluster-get", getHandler)
+export const PUT = withPublicApiGuard("fw-cluster-options-update", putHandler)
+export const POST = withPublicApiGuard("fw-cluster-rule-add", postHandler)

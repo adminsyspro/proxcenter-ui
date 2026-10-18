@@ -1,26 +1,32 @@
 import { NextResponse } from "next/server"
 
+import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
+import type { Principal } from "@/lib/auth/principal"
 import { getCurrentTenantId } from "@/lib/tenant"
-import { checkPermission } from "@/lib/rbac"
 import { prisma } from "@/lib/db/prisma"
 import { updateVnetForTenant, deleteVnetForTenant } from "@/lib/vdc/vnets"
+import { checkVnetPermission } from "@/lib/vdc/vnetPermission"
+import { PERMISSIONS } from "@/lib/rbac"
 
 export const runtime = "nodejs"
 
 // The dynamic segment is named [pveName] for historical reasons. Its actual
 // value is the VNet's user-facing display_name (scoped to the vDC). We keep
 // the folder name to avoid breaking existing redirects/bookmarks.
-type RouteContext = { params: Promise<{ id: string; pveName: string }> | { id: string; pveName: string } }
+type RouteContext = {
+  params: Promise<{ id: string; pveName: string }> | { id: string; pveName: string }
+  principal?: Principal
+}
 
 // GET /api/v1/vdcs/{id}/vnets/{displayName}
-export async function GET(_req: Request, ctx: RouteContext) {
+async function getHandler(_req: Request, ctx: RouteContext) {
   try {
     const params = await Promise.resolve(ctx.params)
     const vdcId = (params as any)?.id
     const displayName = (params as any)?.pveName
     if (!vdcId || !displayName) return NextResponse.json({ error: "Missing params" }, { status: 400 })
 
-    const denied = await checkPermission("sdn.vnet.view")
+    const denied = await checkVnetPermission(ctx.principal, vdcId, PERMISSIONS.SDN_VNET_VIEW)
     if (denied) return denied
 
     const tenantId = await getCurrentTenantId()
@@ -30,21 +36,21 @@ export async function GET(_req: Request, ctx: RouteContext) {
     })
 
     if (!row) return NextResponse.json({ error: "VNet not found" }, { status: 404 })
-    if (!row.subnet) {
-      return NextResponse.json({ error: "VNet has no subnet — DB migration required" }, { status: 500 })
-    }
 
-    const subnet = {
-      id: row.subnet.id,
-      vnetId: row.subnet.vnetId,
-      cidr: row.subnet.cidr,
-      gateway: row.subnet.gateway,
-      dnsServers: row.subnet.dnsServers
-        ? row.subnet.dnsServers.split(',').map((s: string) => s.trim()).filter(Boolean)
-        : [],
-      ipamEnabled: row.subnet.ipamEnabled,
-      createdAt: row.subnet.createdAt.toISOString(),
-    }
+    // Null for a pure L2 network (roadmap#18).
+    const subnet = row.subnet
+      ? {
+          id: row.subnet.id,
+          vnetId: row.subnet.vnetId,
+          cidr: row.subnet.cidr,
+          gateway: row.subnet.gateway,
+          dnsServers: row.subnet.dnsServers
+            ? row.subnet.dnsServers.split(',').map((s: string) => s.trim()).filter(Boolean)
+            : [],
+          ipamEnabled: row.subnet.ipamEnabled,
+          createdAt: row.subnet.createdAt.toISOString(),
+        }
+      : null
 
     return NextResponse.json({
       data: {
@@ -69,14 +75,14 @@ export async function GET(_req: Request, ctx: RouteContext) {
 }
 
 // PUT /api/v1/vdcs/{id}/vnets/{displayName}
-export async function PUT(req: Request, ctx: RouteContext) {
+async function putHandler(req: Request, ctx: RouteContext) {
   try {
     const params = await Promise.resolve(ctx.params)
     const vdcId = (params as any)?.id
     const displayName = (params as any)?.pveName
     if (!vdcId || !displayName) return NextResponse.json({ error: "Missing params" }, { status: 400 })
 
-    const denied = await checkPermission("sdn.vnet.edit")
+    const denied = await checkVnetPermission(ctx.principal, vdcId, PERMISSIONS.SDN_VNET_EDIT)
     if (denied) return denied
 
     const body = await req.json().catch(() => ({}))
@@ -111,6 +117,8 @@ export async function PUT(req: Request, ctx: RouteContext) {
       }
       // A VNet of a stretched tenant network is the provider's (#901).
       if (msg.includes("is managed by the provider")) return NextResponse.json({ error: msg }, { status: 403 })
+      // DNS edit on a pure L2 network (roadmap#18).
+      if (msg.includes("pure L2 network")) return NextResponse.json({ error: msg }, { status: 400 })
       throw err
     }
   } catch (e: any) {
@@ -119,14 +127,14 @@ export async function PUT(req: Request, ctx: RouteContext) {
 }
 
 // DELETE /api/v1/vdcs/{id}/vnets/{displayName}
-export async function DELETE(_req: Request, ctx: RouteContext) {
+async function deleteHandler(_req: Request, ctx: RouteContext) {
   try {
     const params = await Promise.resolve(ctx.params)
     const vdcId = (params as any)?.id
     const displayName = (params as any)?.pveName
     if (!vdcId || !displayName) return NextResponse.json({ error: "Missing params" }, { status: 400 })
 
-    const denied = await checkPermission("sdn.vnet.delete")
+    const denied = await checkVnetPermission(ctx.principal, vdcId, PERMISSIONS.SDN_VNET_DELETE)
     if (denied) return denied
 
     const tenantId = await getCurrentTenantId()
@@ -154,3 +162,7 @@ export async function DELETE(_req: Request, ctx: RouteContext) {
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const GET = withPublicApiGuard("vdc-vnet-get", getHandler)
+export const PUT = withPublicApiGuard("vdc-vnet-update", putHandler)
+export const DELETE = withPublicApiGuard("vdc-vnet-delete", deleteHandler)

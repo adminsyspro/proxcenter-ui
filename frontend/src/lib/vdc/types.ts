@@ -1,6 +1,15 @@
 import type { VdcComputePolicy } from './computePolicy'
 import type { VdcTransport } from './transport'
 
+/** Who provides gateway, DHCP and NAT on the vDC networks (#904). */
+export type VdcEdgeModel = 'tenant' | 'platform'
+export const EDGE_MODELS: readonly VdcEdgeModel[] = ['tenant', 'platform']
+
+/** A row edited by hand must not break every listing: unknown = tenant edge. */
+export function rowToEdgeModel(raw: string | null | undefined): VdcEdgeModel {
+  return EDGE_MODELS.includes(raw as VdcEdgeModel) ? (raw as VdcEdgeModel) : 'tenant'
+}
+
 export interface Vdc {
   id: string
   tenantId: string
@@ -18,6 +27,9 @@ export interface Vdc {
   computePolicy: VdcComputePolicy
   /** How the vDC's VXLAN zone reaches its peers (#899). */
   transport: VdcTransport
+  /** `tenant`: the tenant brings its own L3 edge, pure L2 networks allowed.
+   *  `platform`: the provider operates the edge, every network has a subnet. */
+  edgeModel: VdcEdgeModel
   enabled: boolean
   createdBy: string | null
   createdAt: string
@@ -42,6 +54,13 @@ export interface VdcWithDetails extends Vdc {
   /** ISO storages granted to the tenant (#894): read-only catalogue, plus an
    *  optional upload area for the tenant's own `custom-<slug>-*` files. */
   isoLibraries: VdcIsoLibraryGrant[]
+  /** Provider catalogue entries granted to this vDC (#903). */
+  catalogGrants: VdcCatalogGrantsDto
+}
+
+export interface VdcCatalogGrantsDto {
+  imageIds: string[]
+  blueprintIds: string[]
 }
 
 export interface VdcIsoLibraryGrant {
@@ -139,10 +158,9 @@ export interface VdcVnet {
   bridge: string | null
   zoneName: string | null
   firewall: boolean
-  /** L3 / IPAM config attached to the VNet. Always present — the VNet is
-   *  unusable without a subnet (the IPAM is the only mechanism to allocate
-   *  IPs on VXLAN, where PVE-native DHCP/IPAM is broken on PVE 9.x). */
-  subnet: VdcSubnet
+  /** L3 / IPAM config attached to the VNet. Null for a pure L2 network
+   *  (roadmap#18): the tenant addresses it itself, ProxCenter assigns no IP. */
+  subnet: VdcSubnet | null
   /** Set when a stretched tenant network created this VNet (#901): the
    *  provider manages it, and `subnet.id` is the network's shared pool. */
   tenantNetwork: { id: string; name: string } | null
@@ -193,6 +211,8 @@ export interface CreateVdcInput {
   computePolicy?: Partial<VdcComputePolicy>
   isoLibraries?: VdcIsoLibraryInput[]
   transport?: Partial<VdcTransport>
+  catalogGrants?: Partial<VdcCatalogGrantsDto>
+  edgeModel?: VdcEdgeModel
 }
 
 export interface UpdateVdcInput {
@@ -208,4 +228,6 @@ export interface UpdateVdcInput {
   computePolicy?: Partial<VdcComputePolicy>
   isoLibraries?: VdcIsoLibraryInput[]
   transport?: Partial<VdcTransport>
+  catalogGrants?: Partial<VdcCatalogGrantsDto>
+  edgeModel?: VdcEdgeModel
 }

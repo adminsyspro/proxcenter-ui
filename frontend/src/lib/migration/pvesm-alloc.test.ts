@@ -12,6 +12,7 @@ import {
   reserveVolumeSlot,
   volumesToFree,
   volumesToKeep,
+  keepTargetVm,
   type AllocatedVolume,
 } from "./pvesm-alloc"
 
@@ -196,6 +197,9 @@ describe("allocateBlockVolumeAndResolvePath", () => {
   it("surfaces the command output when the path resolution fails", async () => {
     mockSSH
       .mockResolvedValueOnce(created("FC-HDC-01:vm-250-disk-1"))
+      // stderr discarded: nothing to read, only the exit code.
+      .mockResolvedValueOnce({ success: false, output: "", error: "Exit code 2" })
+      // The diagnostic rerun keeps stderr.
       .mockResolvedValueOnce(failed("no such volume 'FC-HDC-01:vm-250-disk-1'"))
 
     let message = ""
@@ -207,6 +211,71 @@ describe("allocateBlockVolumeAndResolvePath", () => {
 
     expect(message).toContain("no such volume")
     expect(message).not.toContain("Exit code 17")
+    expect(mockSSH.mock.calls[2][2]).toBe("pvesm path 'FC-HDC-01:vm-250-disk-1' 2>&1")
+  })
+})
+
+describe("PVE CLI warnings on stderr (roadmap#57)", () => {
+  // What every PVE CLI prints on stderr once a custom storage plugin implements an
+  // older storage API than the installed libpve-storage-perl.
+  const WARNING =
+    `Plugin "PVE::Storage::Custom::StarLvmPlugin" is implementing an older storage API, an upgrade is recommended`
+
+  /** A node that answers like the orchestrator: stdout and stderr merged, unless the
+   *  command itself redirects stderr. Only PVE's Perl CLIs load the storage plugins;
+   *  `rbd` is Ceph's own binary and never prints the warning. */
+  function nodeWithWarning(stdoutFor: (cmd: string) => string) {
+    mockSSH.mockImplementation(async (_conn: string, _ip: string, cmd: string) => {
+      const stdout = stdoutFor(cmd)
+      const warns = cmd.startsWith("pvesm ") && !cmd.includes("2>/dev/null")
+      return { success: true, output: warns ? `${WARNING}\n${stdout}` : stdout }
+    })
+  }
+
+  it("resolves a librbd path free of the warning and maps it (customer report)", async () => {
+    nodeWithWarning(cmd => {
+      if (cmd.startsWith("pvesm alloc")) return "successfully created 'ceph30:vm-74001208-disk-1'"
+      if (cmd.startsWith("pvesm path")) {
+        return "rbd:ceph30/vm-74001208-disk-1:conf=/etc/pve/ceph.conf:id=admin:keyring=/etc/pve/priv/ceph/ceph30.keyring"
+      }
+      if (cmd.startsWith("rbd map")) return "/dev/rbd0"
+      return ""
+    })
+
+    const vol = await allocateAndMapBlockVolume({
+      connectionId: "conn-1", nodeIp: "10.0.0.1", targetStorage: "ceph30",
+      targetVmid: 74001208, volName: "vm-74001208-disk-1", sizeKB: 188743680,
+    })
+
+    expect(vol.volumeId).toBe("ceph30:vm-74001208-disk-1")
+    expect(mockSSH.mock.calls[2][2]).toContain("rbd map 'ceph30/vm-74001208-disk-1'")
+    expect(vol.devicePath).toBe("/dev/rbd0")
+  })
+
+  it("resolves a block device path free of the warning (LVM)", async () => {
+    nodeWithWarning(cmd =>
+      cmd.startsWith("pvesm alloc") ? "successfully created 'FC-HDC-01:vm-250-disk-1'" : "/dev/FC-HDC-01/vm-250-disk-1",
+    )
+
+    const res = await allocateBlockVolumeAndResolvePath("conn-1", "10.0.0.1", "FC-HDC-01", 250, "vm-250-disk-1", 20971520)
+
+    expect(res).toEqual({ volumeId: "FC-HDC-01:vm-250-disk-1", devicePath: "/dev/FC-HDC-01/vm-250-disk-1" })
+  })
+
+  it("reads the volume ID from the success line even when a warning carries a quote", async () => {
+    // A plugin that fails to load warns with Perl's own message, apostrophe included.
+    mockSSH
+      .mockResolvedValueOnce({
+        success: true,
+        output: `Error loading storage plugin "PVE::Storage::Custom::Broken": Can't locate Foo.pm in @INC\n`
+          + "successfully created 'FC-HDC-01:vm-250-disk-1'",
+      })
+      .mockResolvedValueOnce(path("/dev/FC-HDC-01/vm-250-disk-1"))
+
+    const res = await allocateBlockVolumeAndResolvePath("conn-1", "10.0.0.1", "FC-HDC-01", 250, "vm-250-disk-1", 20971520)
+
+    expect(res.volumeId).toBe("FC-HDC-01:vm-250-disk-1")
+    expect(mockSSH.mock.calls[1][2]).toContain("pvesm path 'FC-HDC-01:vm-250-disk-1'")
   })
 })
 
@@ -424,5 +493,24 @@ describe("volumesToKeep", () => {
     const volumes = [{ volumeId: "", devicePath: "", copied: true }]
 
     expect(volumesToKeep(volumes)).toEqual([])
+  })
+})
+
+describe("keepTargetVm (roadmap#57)", () => {
+  it("lets cleanup remove a VM whose volumes hold no completed copy", () => {
+    expect(keepTargetVm([{ volumeId: "s:vm-1-disk-0", devicePath: "/dev/x" }])).toBe(false)
+  })
+
+  it("lets cleanup remove a VM with no volume at all (failure right after the create)", () => {
+    expect(keepTargetVm([])).toBe(false)
+    expect(keepTargetVm([{ volumeId: "", devicePath: "" }])).toBe(false)
+  })
+
+  it("keeps a VM whose unattached volume holds a completed copy: the destroy would take it along (#612)", () => {
+    expect(keepTargetVm([{ volumeId: "s:vm-1-disk-0", devicePath: "/dev/x", copied: true }])).toBe(true)
+  })
+
+  it("keeps a VM whose disks are attached already: it is the migrated guest", () => {
+    expect(keepTargetVm([{ volumeId: "s:vm-1-disk-0", devicePath: "/dev/x", copied: true, attached: true }])).toBe(true)
   })
 })

@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getOrchestratorClient } from '@/lib/orchestrator/client'
 import { verifyConnectionOwnership } from '@/lib/tenant'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
+import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
 import { getConnectionById } from '@/lib/connections/getConnection'
 import { orchestratorOrPve } from '@/lib/firewall/withPveFallback'
 import * as pveDirect from '@/lib/firewall/pveDirect'
@@ -13,7 +14,7 @@ type RouteContext = {
 }
 
 // PUT - Toggle firewall on all NICs of a VM/CT
-export async function PUT(req: NextRequest, ctx: RouteContext) {
+async function putHandler(req: NextRequest, ctx: RouteContext) {
   try {
     const { connectionId, node, vmType, vmid } = await ctx.params
     const ownershipDenied = await verifyConnectionOwnership(connectionId)
@@ -39,3 +40,5 @@ export async function PUT(req: NextRequest, ctx: RouteContext) {
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const PUT = withPublicApiGuard("fw-vm-nic-firewall-update", putHandler)

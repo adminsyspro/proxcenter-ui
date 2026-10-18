@@ -13,10 +13,11 @@ import { pbsFetch } from '@/lib/proxmox/pbs-client'
 import { getPbsConnectionById, getPbsConnectionByIdUnscoped } from '@/lib/connections/getConnection'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { assertVdcPbsAccess } from '@/lib/vdc/scope'
+import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
 
 export const runtime = 'nodejs'
 
-export async function POST(
+async function handler(
   req: Request,
   ctx: { params: Promise<{ id: string; backupId: string }> | { id: string; backupId: string } },
 ) {
@@ -28,7 +29,9 @@ export async function POST(
       return NextResponse.json({ error: 'Missing params' }, { status: 400 })
     }
 
-    const denied = await checkPermission(PERMISSIONS.BACKUP_VIEW, 'pbs', id)
+    // Re-verifying a snapshot is a per-backup action, gated like taking
+    // one (vm.backup): seeing the backups (backup.view) is not enough.
+    const denied = await checkPermission(PERMISSIONS.VM_BACKUP, 'pbs', id)
     if (denied) return denied
 
     const access = await assertVdcPbsAccess(id)
@@ -77,3 +80,5 @@ export async function POST(
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const POST = withPublicApiGuard("pbs-backup-verify", handler)

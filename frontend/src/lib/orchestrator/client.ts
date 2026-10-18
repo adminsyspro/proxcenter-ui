@@ -1,4 +1,4 @@
-import type { CleanupStarted, ReplicationJob, ReplicationCheckRequest, ReplicationHealthStatus, SnapshotIdentity, SSHConnectivityResult } from './site-recovery.types'
+import type { CleanupStarted, RecoveryExecutionEvent, ReplicationJob, ReplicationCheckRequest, ReplicationHealthStatus, SnapshotIdentity, SSHConnectivityResult } from './site-recovery.types'
 
 // src/lib/orchestrator/client.ts
 // Client pour communiquer avec le backend Go d'orchestration
@@ -698,6 +698,25 @@ return this.get<ClusterMetrics[]>(`/metrics/${connectionId}/history${query ? `?$
     return this.post<any>(`/replication/plans/${planId}/failback-cancel`)
   }
 
+  // Per-guest failover and failback (ui#943): one guest of the plan, its
+  // siblings keep replicating. Each call only claims the guest and starts
+  // the work in the background, so the default budget is ample.
+  guestFailover(planId: string, vmid: number, body?: { restore_point?: string }) {
+    return this.post<any>(`/replication/plans/${planId}/guests/${vmid}/failover`, body)
+  }
+
+  guestFailback(planId: string, vmid: number) {
+    return this.post<any>(`/replication/plans/${planId}/guests/${vmid}/failback`)
+  }
+
+  guestFailbackCutover(planId: string, vmid: number) {
+    return this.post<any>(`/replication/plans/${planId}/guests/${vmid}/failback-cutover`)
+  }
+
+  guestFailbackCancel(planId: string, vmid: number) {
+    return this.post<any>(`/replication/plans/${planId}/guests/${vmid}/failback-cancel`)
+  }
+
   cleanupTestFailover(planId: string) {
     // The cleanup itself runs in the background on the orchestrator and this
     // call only starts it, so the default budget is ample. It used to run
@@ -734,6 +753,11 @@ return this.get<ClusterMetrics[]>(`/metrics/${connectionId}/history${query ? `?$
 
   getExecution(id: string) {
     return this.get<any>(`/replication/executions/${id}`)
+  }
+
+  // The step log of a failover or failback (ui#943), the lines after `after` when given.
+  getExecutionEvents(id: string, after = 0) {
+    return this.get<RecoveryExecutionEvent[]>(`/replication/executions/${id}/events${after > 0 ? `?after=${after}` : ''}`)
   }
 
   getExecutionScreenshots(id: string) {

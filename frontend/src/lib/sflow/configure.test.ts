@@ -13,6 +13,7 @@ vi.mock("@/lib/ssh/exec", () => ({
 import {
   applySFlowOnNode,
   buildSFlowConfigureCommand,
+  collectorHost,
   parseConfigureOutput,
   type SFlowDesiredConfig,
 } from "./configure"
@@ -34,7 +35,6 @@ describe("buildSFlowConfigureCommand", () => {
 
     expect(command.startsWith("for br in $(ovs-vsctl list-br)")).toBe(true)
     expect(command).not.toMatch(/\bclear\b/)
-    expect(command).not.toMatch(/\bagent=/)
   })
 
   it("interpolates the sampling and polling values", () => {
@@ -68,16 +68,56 @@ describe("buildSFlowConfigureCommand", () => {
   })
 })
 
+// #1066: left unset, ovs-vswitchd reports the source address of its route to
+// the collector, which on a multi-homed node is not the address the table and
+// the port map key the node on.
+describe("agent address", () => {
+  it("pins the agent to the node address when it is an IPv4 literal", () => {
+    expect(buildSFlowConfigureCommand(config, "10.0.0.11")).toContain(`agent='"10.0.0.11"'`)
+  })
+
+  it("pins an IPv6 node address with the literal quotes its colons need", () => {
+    expect(buildSFlowConfigureCommand(config, "fd00::11")).toContain(`agent='"fd00::11"'`)
+  })
+
+  it("leaves the agent to Open vSwitch for a hostname or no address at all", () => {
+    expect(buildSFlowConfigureCommand(config, "pve1.example")).not.toMatch(/\bagent=/)
+    expect(buildSFlowConfigureCommand(config)).not.toMatch(/\bagent=/)
+  })
+})
+
+describe("collector reachability check", () => {
+  it("asks the node to resolve the collector host and route to it", () => {
+    const command = buildSFlowConfigureCommand({ ...config, collectorTarget: "10.0.0.250:6343" })
+
+    expect(command).toContain(`getent ahosts '10.0.0.250'`)
+    expect(command).toContain("SFLOW_UNRESOLVED")
+    expect(command).toContain('SFLOW_ROUTE:$(ip route get "$addr"')
+  })
+
+  it.each([
+    ["10.0.0.250:6343", "10.0.0.250"],
+    ["collector.example:6343", "collector.example"],
+    ["[fd00::250]:6343", "fd00::250"],
+    ["fd00::250", "fd00::250"],
+    ["collector.example", "collector.example"],
+  ])("extracts the host of %s", (target, host) => {
+    expect(collectorHost(target)).toBe(host)
+  })
+})
+
 describe("parseConfigureOutput", () => {
   it("counts successful bridge markers and collects failed bridge names", () => {
     expect(parseConfigureOutput("SFLOW_OK:vmbr0\nSFLOW_OK:vmbr1\nSFLOW_FAILED:vmbr2\n")).toEqual({
       configured: 2,
       failedBridges: ["vmbr2"],
+      collectorResolved: null,
+      routeSource: null,
     })
   })
 
   it("returns zero configured bridges and no failures for empty output", () => {
-    expect(parseConfigureOutput("")).toEqual({ configured: 0, failedBridges: [] })
+    expect(parseConfigureOutput("")).toEqual({ configured: 0, failedBridges: [], collectorResolved: null, routeSource: null })
   })
 
   it("handles mixed output and preserves all failed bridge names", () => {
@@ -91,6 +131,23 @@ describe("parseConfigureOutput", () => {
     expect(parseConfigureOutput(output)).toEqual({
       configured: 1,
       failedBridges: ["vmbr-broken", "vmbr-other"],
+      collectorResolved: null,
+      routeSource: null,
+    })
+  })
+
+  it("reads the source address of the route to the collector", () => {
+    expect(parseConfigureOutput("SFLOW_OK:vmbr0\nSFLOW_ROUTE:10.0.0.11\n")).toMatchObject({
+      collectorResolved: true,
+      routeSource: "10.0.0.11",
+    })
+  })
+
+  it("tells an unresolvable collector apart from an unroutable one", () => {
+    expect(parseConfigureOutput("SFLOW_OK:vmbr0\nSFLOW_UNRESOLVED\n")).toMatchObject({ collectorResolved: false })
+    expect(parseConfigureOutput("SFLOW_OK:vmbr0\nSFLOW_ROUTE:\n")).toMatchObject({
+      collectorResolved: true,
+      routeSource: "",
     })
   })
 })
@@ -140,6 +197,34 @@ describe("applySFlowOnNode", () => {
       error: "no OVS bridge on this node, nothing to configure",
     })
     expect(result.error).toContain("nothing to configure")
+  })
+
+  it("passes the node address through to the agent column", async () => {
+    executeSSHMock.mockResolvedValue({ success: true, output: "SFLOW_OK:vmbr0\nSFLOW_ROUTE:10.0.0.11\n" })
+
+    await applySFlowOnNode("connection-1", "10.0.0.1", config, "10.0.0.11")
+
+    expect(executeSSHMock.mock.calls[0][2]).toContain(`agent='"10.0.0.11"'`)
+  })
+
+  // #1066: ovs-vsctl answers success either way, ovs-vswitchd then only logs
+  // an error and sends nothing. The node must not be reported as configured.
+  it("fails a node that cannot resolve the collector, bridges configured or not", async () => {
+    executeSSHMock.mockResolvedValue({ success: true, output: "SFLOW_OK:vmbr0\nSFLOW_UNRESOLVED\n" })
+
+    const result = await applySFlowOnNode("connection-1", "10.0.0.1", { ...config, collectorTarget: "proxcenter.example:6343" })
+
+    expect(result).toMatchObject({ success: false, bridgesConfigured: 1, failedBridges: [] })
+    expect(result.error).toContain("cannot resolve the collector proxcenter.example")
+  })
+
+  it("fails a node with no route to the collector", async () => {
+    executeSSHMock.mockResolvedValue({ success: true, output: "SFLOW_OK:vmbr0\nSFLOW_ROUTE:\n" })
+
+    const result = await applySFlowOnNode("connection-1", "10.0.0.1", { ...config, collectorTarget: "10.9.9.9:6343" })
+
+    expect(result).toMatchObject({ success: false, bridgesConfigured: 1 })
+    expect(result.error).toContain("no route to the collector 10.9.9.9")
   })
 
   it("returns the SSH error when the command fails without a marker", async () => {

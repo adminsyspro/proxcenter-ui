@@ -1,10 +1,12 @@
 import { pveFetch } from "@/lib/proxmox/client"
-import type { AllocatedVolume } from "../pvesm-alloc"
-import { pveSetVmConfig } from "../pve-vm-config"
+import { keepTargetVm, type AllocatedVolume } from "../pvesm-alloc"
+import { destroyPveVm, pveSetVmConfig } from "../pve-vm-config"
 import { convertDisksToQcow2 } from "../qcow2-convert"
+import { verifyDiskIntegrity, type FaultInjection, type IntegritySettings } from "../integrity"
 import { scanBlockChecksums } from "./checksum-detector"
 import { updateJob, appendLog } from "./job-control"
 import { type SshTarget } from "@/lib/ssh/node-endpoint-core"
+import { executeSSH, shellEscape } from "@/lib/ssh/exec"
 
 /**
  * Attach the copied volumes to the target VM, optionally start it, then run the
@@ -58,8 +60,8 @@ export async function attachDisksAndBoot(a: {
 
 /**
  * Sampled first-block checksum of one disk, source vs target (defense in depth,
- * never a hard failure). `openReader` exposes the source disk as a block device
- * on the node; the source-specific reader stays with the caller.
+ * never a hard failure). Still used by the XCP-ng warm pipeline; the VMware
+ * warm pipeline runs the blocking verifyWarmDiskIntegrity below instead.
  */
 export async function verifySampledFirstBlock(a: {
   jobId: string; connectionId: string; nodeIp: SshTarget; diskIndex: number; dev: string
@@ -83,5 +85,89 @@ export async function verifySampledFirstBlock(a: {
     }
   } catch (e: any) {
     await appendLog(jobId, `Verify (sampled) skipped on disk ${i}: ${e?.message || e}`, "warn")
+  }
+}
+
+/**
+ * Failure cleanup for the target VM a warm job created (roadmap#57).
+ *
+ * Before any copy completes, the VM is an empty shell: leaving it behind blocks
+ * the VMID, so a retry with the same target VMID fails until someone removes it
+ * by hand. Once a volume holds a completed copy the VM is kept, together with
+ * that volume (#612), and the log says so. Never throws.
+ */
+export async function removeTargetVmOnFailure(a: {
+  jobId: string; pveConn: any; node: string; vmid: number; allocatedVolumes: AllocatedVolume[]
+}): Promise<void> {
+  const { jobId, pveConn, node, vmid, allocatedVolumes } = a
+  if (keepTargetVm(allocatedVolumes)) {
+    await appendLog(jobId, `Kept target VM ${vmid}: it holds a completed copy of the source disk. Remove it with 'qm destroy ${vmid} --purge --destroy-unreferenced-disks' if you do not want it.`, "warn").catch(() => {})
+    return
+  }
+  try {
+    await destroyPveVm(pveConn, node, vmid)
+    await appendLog(jobId, `Removed target VM ${vmid} created by this migration`, "warn").catch(() => {})
+  } catch (e: any) {
+    const msg = e?.message || String(e)
+    // PVE answers a missing guest config with a 500: nothing is left behind.
+    if (/does not exist/i.test(msg)) return
+    await appendLog(jobId, `Could not remove target VM ${vmid}: ${msg}. Remove it with 'qm destroy ${vmid} --purge --destroy-unreferenced-disks' before retrying with the same VMID.`, "warn").catch(() => {})
+  }
+}
+
+/**
+ * Release the kernel RBD mappings the copy used (roadmap#57).
+ *
+ * The cold pipelines unmap once they have written a disk; warm only did it for a
+ * volume it freed after a failure, so every successful warm migration to Ceph,
+ * and every volume kept after one (#612), left a `/dev/rbdN` behind on the node.
+ * Call it before the attach: on a KRBD storage PVE maps the image itself when
+ * the VM starts, and `rbd unmap` refuses a device still in use anyway. Never throws.
+ */
+export async function unmapTargetVolumes(connectionId: string, nodeIp: SshTarget, allocatedVolumes: AllocatedVolume[]): Promise<void> {
+  if (!nodeIp) return
+  for (const v of allocatedVolumes) {
+    if (!v.rbdMapped || !v.devicePath) continue
+    const r = await executeSSH(connectionId, nodeIp, `rbd unmap ${shellEscape(v.devicePath)} 2>/dev/null`).catch(() => null)
+    if (r?.success) v.rbdMapped = false
+  }
+}
+
+/**
+ * Post-cutover integrity check of one disk, source vs target (roadmap#1): the
+ * first, the last and N spread regions are hashed on both sides, and any
+ * difference, or a region that cannot be read, throws and fails the job before
+ * the disks are attached. The source is powered off at this point, so its
+ * current disk is the cutover state. `openReader` exposes the source disk as a
+ * block device on the node; the source-specific reader stays with the caller.
+ * Replaces the former first-256-MiB md5 sample that only logged a warning.
+ */
+export async function verifyWarmDiskIntegrity(a: {
+  jobId: string; connectionId: string; nodeIp: SshTarget; diskIndex: number; dev: string
+  capacityBytes: number; settings: IntegritySettings; fault?: FaultInjection | null
+  openReader: () => Promise<{ nbdDev: string; close: () => Promise<void> }>
+}): Promise<void> {
+  const { jobId, connectionId, nodeIp, diskIndex: i, dev } = a
+  if (!a.settings.enabled) {
+    await appendLog(jobId, `Integrity check disabled on the target cluster (Settings > Connections > Migrations tab): disk ${i} is handed over unverified`, "warn")
+    return
+  }
+  let reader: { nbdDev: string; close: () => Promise<void> }
+  try {
+    reader = await a.openReader()
+  } catch (e: any) {
+    // Blocking by design: a disk that cannot be re-read on the source cannot be
+    // verified, and the check exists to never hand over an unverified copy.
+    throw new Error(`Integrity check could not open the source disk ${i} for verification: ${e?.message || e}. The copied volumes are kept; retry once the source is reachable, or disable the check on the target cluster (Settings > Connections > Migrations tab).`)
+  }
+  try {
+    await verifyDiskIntegrity({
+      connectionId, nodeIp, diskIndex: i, diskLabel: `Disk ${i + 1}`, capacityBytes: a.capacityBytes,
+      source: { kind: "raw", path: reader.nbdDev }, target: { kind: "raw", path: dev },
+      settings: a.settings, fault: a.fault,
+      log: (m, l) => appendLog(jobId, m, l),
+    })
+  } finally {
+    await reader.close().catch(() => {})
   }
 }

@@ -183,9 +183,9 @@ const colorSchemes = skin => {
           darkerOpacity: 'rgb(var(--mui-palette-secondary-mainChannel) / 0.38)'
         },
         error: {
-          main: '#FF4C51',
-          light: '#FF7074',
-          dark: '#E64449',
+          main: '#DC2626',
+          light: '#EF4444',
+          dark: '#B91C1C',
           contrastText: '#fff',
           lighterOpacity: 'rgb(var(--mui-palette-error-mainChannel) / 0.08)',
           lightOpacity: 'rgb(var(--mui-palette-error-mainChannel) / 0.16)',
@@ -194,9 +194,9 @@ const colorSchemes = skin => {
           darkerOpacity: 'rgb(var(--mui-palette-error-mainChannel) / 0.38)'
         },
         warning: {
-          main: '#FFB400',
-          light: '#FFC333',
-          dark: '#E6A200',
+          main: '#D97706',
+          light: '#F59E0B',
+          dark: '#B45309',
           contrastText: '#fff',
           lighterOpacity: 'rgb(var(--mui-palette-warning-mainChannel) / 0.08)',
           lightOpacity: 'rgb(var(--mui-palette-warning-mainChannel) / 0.16)',
@@ -205,9 +205,9 @@ const colorSchemes = skin => {
           darkerOpacity: 'rgb(var(--mui-palette-warning-mainChannel) / 0.38)'
         },
         info: {
-          main: '#16B1FF',
-          light: '#45C1FF',
-          dark: '#149FE6',
+          main: '#0284C7',
+          light: '#0EA5E9',
+          dark: '#0369A1',
           contrastText: '#fff',
           lighterOpacity: 'rgb(var(--mui-palette-info-mainChannel) / 0.08)',
           lightOpacity: 'rgb(var(--mui-palette-info-mainChannel) / 0.16)',
@@ -216,9 +216,9 @@ const colorSchemes = skin => {
           darkerOpacity: 'rgb(var(--mui-palette-info-mainChannel) / 0.38)'
         },
         success: {
-          main: '#56CA00',
-          light: '#78D533',
-          dark: '#4DB600',
+          main: '#16A34A',
+          light: '#22C55E',
+          dark: '#15803D',
           contrastText: '#fff',
           lighterOpacity: 'rgb(var(--mui-palette-success-mainChannel) / 0.08)',
           lightOpacity: 'rgb(var(--mui-palette-success-mainChannel) / 0.16)',

@@ -2,6 +2,8 @@ import { getTenantPrisma } from "@/lib/tenant"
 import { decryptSecret } from "@/lib/crypto/secret"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { pveFetch } from "@/lib/proxmox/client"
+import { reserveTargetVmid } from "../reserve-target-vmid"
+import { releaseVmids } from "../vmid-reservation"
 import { assertTargetStorageSpace, gib } from "./target-space"
 import { isFileBasedStorage } from "@/lib/proxmox/storage"
 import { executeSSH, shellEscape } from "@/lib/ssh/exec"
@@ -12,10 +14,11 @@ import {
 } from "@/lib/vmware/soap"
 import type { SoapSession, EsxiVmConfig, EsxiDiskInfo } from "@/lib/vmware/soap"
 import {
-  cbtEligibility, soapEnableCbt, queryAllChangedAreas, soapGetSnapshotChangeIds,
+  cbtEligibility, soapEnableCbt, soapDisableCbt, queryAllChangedAreas, soapGetSnapshotChangeIds,
   soapGuestShutdown, soapWaitPoweredOff, soapKeepAlive,
 } from "@/lib/vmware/cbt"
 import { mapEsxiToPveConfig } from "../configMapper"
+import { bytesPerStorage, describeDiskPlan, describeOverrides, planDiskTargets, planStorages } from "../target-overrides"
 import { volumesToFree, volumesToKeep, PVESM_FREE_TIMEOUT_MS, type AllocatedVolume } from "../pvesm-alloc"
 import { getNodeSshEndpointForMigration } from "../pve-tasks"
 import { decideNextPass, type PassStat, type ConvergenceConfig, type ConvergenceDecision } from "./convergence"
@@ -29,6 +32,15 @@ import { parseSha1Thumbprint } from "./thumbprint"
 import type { Extent } from "./extents"
 import { startSoapKeepAlive } from "./session-keepalive"
 import { startJobHeartbeat } from "../job-heartbeat"
+import { resolveWarmZeroRateLimit } from "./zero-rate-target"
+import { resolveIntegritySettings } from "../integrity-target"
+import { faultInjectionFromEnv } from "../integrity"
+import { estimateIntegritySecondsPerDisk } from "../integrity-settings"
+import { vtpmPreflightWarning, vtpmCreatedLine } from "../vtpm"
+import { sweepOrphanReaders } from "./orphan-readers"
+import { resolveCopyPath } from "./copy-path"
+import { checkNfcReachability, describeUnreachable, NFC_PORT, API_PORT } from "./nfc-reachability"
+import { describeHeadroom, isThinHeadroom, parseVmDatastoreMors, soapGetDatastoreHeadroom } from "@/lib/vmware/datastore-headroom"
 import type { WarmMigrationConfig } from "./types"
 import {
   registerJob, unregisterJob, acquireVmLock, releaseVmLock,
@@ -36,12 +48,12 @@ import {
   sleepUnlessCutover, awaitOperatorCutover, runDeltaPassWithRetry, HOLD_PASS_INTERVAL_MS,
 } from "./job-control"
 import {
-  applyExtentsWithProgress, checksumDiskWindows, scaleWarmProgress,
+  applyExtentsWithProgress, checksumDiskWindows, scaleWarmProgress, warmFinalTransfer,
   APPLY_INACTIVITY_MS, PROGRESS_LOG_INTERVAL_MS, type PassWindow, type PassProgress,
 } from "./apply"
 import { createTargetVmShell, provisionBlockTargets, markVolumesCopied } from "./target-provision"
 import { cleanShutdownAndConfirm, isVmwareToolsUnavailable, type PowerOffOps } from "./power-off"
-import { attachDisksAndBoot, verifySampledFirstBlock } from "./finish"
+import { attachDisksAndBoot, removeTargetVmOnFailure, unmapTargetVolumes, verifyWarmDiskIntegrity } from "./finish"
 import { type SshTarget } from "@/lib/ssh/node-endpoint-core"
 
 // ── Pure convergence planning (unit-tested) ──
@@ -204,6 +216,9 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
   let stopKeepAlive: (() => void) | null = null
   let targetVmid: number | null = config.targetVmid ?? null
   let nodeIp: SshTarget = ""                                   // resolved in planning; used by failure cleanup
+  let pveConn: any = null
+  let createdVmid: number | null = null             // set once THIS job created the target VM
+  let cbtEnabledByUs = false                        // CBT was off on the source and we switched it on
   const vmKey = `${config.sourceConnectionId}:${config.sourceVmId}`
   let acquiredVmLock = false
   const ourSnapshots: string[] = []                 // MORs WE created — cleaned up by specific MOR
@@ -243,14 +258,23 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
     const esxiUrl = esxiConn.baseUrl.replace(/\/$/, "")
     const esxiHost = new URL(esxiUrl).hostname
 
-    const pveConn = await getConnectionById(config.targetConnectionId)
+    pveConn = await getConnectionById(config.targetConnectionId)
     nodeIp = await getNodeSshEndpointForMigration(prisma, config.targetConnectionId, config.targetNode, (pveConn as any).baseUrl)
 
     soapSession = await soapLogin(esxiUrl, username, password, esxiConn.insecureTLS)
     await appendLog(jobId, `Authenticated to ${esxiHost} as ${username}`, "success")
     stopKeepAlive = startSoapKeepAlive(() => soapKeepAlive(soapSession!), SOAP_KEEPALIVE_INTERVAL_MS)
 
-    const vmConfig: EsxiVmConfig = parseVmConfig(await soapGetVmConfig(soapSession, config.sourceVmId))
+    const vmConfigXml = await soapGetVmConfig(soapSession, config.sourceVmId)
+    const vmConfig: EsxiVmConfig = parseVmConfig(vmConfigXml)
+    // Per-disk choices (#317, lot 2), resolved before anything is sized,
+    // created or copied: an excluded disk vanishes from vmConfig.disks here,
+    // so no later step (CBT verdict, allocation, passes, verify, attach) ever
+    // sees it, and disk i of the kept list lands on diskPlan.kept[i].storage.
+    const diskPlan = planDiskTargets(vmConfig.disks, config.disks, config.targetStorage)
+    const planLine = describeDiskPlan(diskPlan, config.targetStorage)
+    if (planLine) await appendLog(jobId, planLine)
+    vmConfig.disks = diskPlan.kept.map(k => k.disk)
     for (const d of vmConfig.disks) {
       if (!d.datastoreName || !d.relativePath) throw new Error(`Disk "${d.label}" has no datastore path: ${d.fileName}`)
     }
@@ -267,27 +291,53 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
     if (tools !== "running" && tools !== "unknown") {
       await appendLog(jobId, `VMware Tools are ${tools === "not-installed" ? "not installed" : "not running"} on the source: a clean shutdown will not be possible, so the source will be powered off hard at cutover (crash-consistent final delta)`, "warn")
     }
+    // vTPM awareness (roadmap#1): say it at planning time, hours before the
+    // cutover, so the operator has the BitLocker recovery key ready.
+    if (vmConfig.hasVtpm) await appendLog(jobId, vtpmPreflightWarning(), "warn")
 
     // Warm patches the target by byte offset, which is only valid on a raw
     // block device. A file-based target (dir/NFS qcow2) would be silently
-    // corrupted by the dd-seek apply — refuse it up front.
-    const storageInfo = await pveFetch<any>(pveConn as any, `/storage/${encodeURIComponent(config.targetStorage)}`)
-    if (isFileBasedStorage(storageInfo?.type || "dir")) {
-      throw new Error(`Warm migration requires a block-storage target (LVM/LVM-thin/ZFS/Ceph RBD); "${config.targetStorage}" is file-based (${storageInfo?.type}). Pick a block storage or use a cold migration.`)
+    // corrupted by the dd-seek apply: refuse it up front, for every storage
+    // of the plan. The types are kept: each disk is zeroed by its own.
+    const storages = planStorages(diskPlan)
+    const storageTypes = new Map<string, string>()
+    for (const storage of storages) {
+      const storageInfo = await pveFetch<any>(pveConn as any, `/storage/${encodeURIComponent(storage)}`)
+      const storageType = storageInfo?.type || "dir"
+      if (isFileBasedStorage(storageType)) {
+        // Name the disks only when the plan spreads them: with one storage every disk goes there.
+        const held = storages.length > 1
+          ? ` and would hold ${diskPlan.kept.filter(k => k.storage === storage).map(k => `disk ${k.sourceIndex + 1}`).join(", ")}`
+          : ""
+        throw new Error(`Warm migration requires a block-storage target (LVM/LVM-thin/ZFS/Ceph RBD); "${storage}" is file-based (${storageInfo?.type})${held}. Pick a block storage or use a cold migration.`)
+      }
+      storageTypes.set(storage, storageType)
     }
 
     // Free space backstop, same rule as the cold engine (disks' capacity plus
-    // 10 %). The dialog runs this check before enabling the launch, but the
-    // cluster-auto node choice and direct API calls reach here unchecked, and a
-    // zvol allocation that fails for space would otherwise surface only as a
-    // PVE error after the node preflight said "ready".
-    const space = await assertTargetStorageSpace(config.targetConnectionId, config.targetNode, config.targetStorage, vmConfig.disks.reduce((s, d) => s + d.capacityBytes, 0))
-    await appendLog(jobId, `Target storage "${config.targetStorage}": ${gib(space.availableBytes)} GB free, need ${gib(space.requiredBytes)} GB`, "info")
+    // 10 %), per storage of the plan. The dialog runs this check before
+    // enabling the launch, but the cluster-auto node choice and direct API
+    // calls reach here unchecked, and a zvol allocation that fails for space
+    // would otherwise surface only as a PVE error after the node preflight
+    // said "ready".
+    for (const [storage, requiredBytes] of bytesPerStorage(diskPlan, d => d.capacityBytes)) {
+      const space = await assertTargetStorageSpace(config.targetConnectionId, config.targetNode, storage, requiredBytes)
+      await appendLog(jobId, `Target storage "${storage}": ${gib(space.availableBytes)} GB free, need ${gib(space.requiredBytes)} GB`, "info")
+    }
 
     // VDDK preflight on the PVE node — actionable error before we touch anything.
     const pf = await checkVddkPreflight(config.targetConnectionId, nodeIp, libdir)
     if (!pf.ok) throw new Error(pf.error || "VDDK preflight failed")
     await appendLog(jobId, "VDDK preflight OK on Proxmox node", "success")
+
+    // Leftover nbdkit readers of finished jobs hold a VMware snapshot and a
+    // kernel NBD slot for nothing (roadmap#45: one sat idle for nine days).
+    // Stop them before this job starts its own; a live job's reader is never
+    // touched, and a sweep failure never fails the migration.
+    await sweepOrphanReaders({
+      connectionId: config.targetConnectionId, nodeIp, nodeName: config.targetNode, currentJobId: jobId,
+      log: (msg, level) => appendLog(jobId, msg, level),
+    }).catch(async (e: any) => { await appendLog(jobId, `Leftover reader sweep skipped: ${e?.message || e}`, "warn").catch(() => {}) })
 
     // Source-side counterpart of that preflight (#946). A provisioned node says
     // nothing about whether its VDDK can read THIS source: the generations are
@@ -307,29 +357,89 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
       await appendLog(jobId, `CBT unavailable (${elig.reason || "pre-existing snapshot"}) — using checksum block-diff fallback (downtime scales with disk size)`, "warn")
     }
 
-    // SSL thumbprint for the VDDK connection (fetched from the PVE node).
+    // Which VMkernel adapter of the source host carries the copy (roadmap#53):
+    // the operator's choice from the dialog, otherwise the host's own default
+    // (its vSphereBackupNFC-tagged adapter, else management). On a standalone
+    // host the VDDK is pointed at that address; on a vCenter source the adapter
+    // is tagged on the host so the NFC ticket names it. Then prove, from the
+    // node, that the address answers on 902 (and 443 when the VDDK talks to the
+    // host directly) before anything is allocated: once the copy leaves the
+    // management network, nothing else says the node has a route to it.
+    const copy = await resolveCopyPath({
+      session: soapSession, vmid: config.sourceVmId, connectionHost: esxiHost,
+      chosen: config.copyVmk ? { device: config.copyVmk } : undefined,
+      log: (msg, level) => appendLog(jobId, msg, level),
+    })
+    for (const change of copy.hostChanges) await appendLog(jobId, `Source host ${copy.label.split(" on ").pop()}: ${change} (host network setting, kept after the migration)`, "warn")
+    const reach = await checkNfcReachability(config.targetConnectionId, nodeIp, copy.nfcAddress, copy.direct ? [NFC_PORT, API_PORT] : [NFC_PORT])
+    if (!reach.ok) throw new Error(describeUnreachable(reach, copy.label))
+    await appendLog(jobId, `Copy network: ${copy.label}, port ${Object.keys(reach.ports).join(" and ")} reachable from ${config.targetNode}${copy.direct ? "" : " (VDDK connects through the vCenter)"}`, "success")
+
+    // Headroom of the source datastores (roadmap#53): the snapshot this job
+    // holds grows for the whole copy, and parallel jobs on one datastore each
+    // hold their own. Informational; a thin datastore is a warning, not a stop.
+    try {
+      for (const ds of await soapGetDatastoreHeadroom(soapSession, parseVmDatastoreMors(vmConfigXml))) {
+        await appendLog(jobId, describeHeadroom(ds), isThinHeadroom(ds) ? "warn" : "info")
+      }
+    } catch (e: any) {
+      await appendLog(jobId, `Source datastore headroom not read (${e?.message || e})`, "warn")
+    }
+
+    // SSL thumbprint for the VDDK connection (fetched from the PVE node), of the
+    // address the VDDK will actually dial: by IP when the copy is pinned to an
+    // adapter, in which case the certificate's name never matches and the
+    // thumbprint is the only thing the VDDK trusts.
     const tp = await executeSSH(config.targetConnectionId, nodeIp,
-      `echo | openssl s_client -connect ${shellEscape(esxiHost)}:443 2>/dev/null | openssl x509 -fingerprint -sha1 -noout`)
+      `echo | openssl s_client -connect ${shellEscape(copy.server)}:443 2>/dev/null | openssl x509 -fingerprint -sha1 -noout`)
     const thumbprint = parseSha1Thumbprint(tp.output || "")
 
     if (isCancelled(jobId)) throw new Error("Migration cancelled")
 
     // ── enabling_cbt: enable CBT + provision the target VM shell and raw volumes ──
     await updateJob(jobId, "enabling_cbt")
-    if (useCbt) { await soapEnableCbt(soapSession, config.sourceVmId); await appendLog(jobId, "CBT enabled on source", "success") }
+    if (useCbt && vmConfig.changeTrackingEnabled === true) {
+      // Someone else's CBT (a backup product, usually): use it, and leave it on.
+      await appendLog(jobId, "CBT already enabled on source, left as is", "info")
+    } else if (useCbt) {
+      await soapEnableCbt(soapSession, config.sourceVmId)
+      cbtEnabledByUs = true
+      await appendLog(jobId, "CBT enabled on source", "success")
+    }
 
-    if (targetVmid == null) targetVmid = Number(await pveFetch<number | string>(pveConn as any, "/cluster/nextid"))
-    const pveParams = mapEsxiToPveConfig(vmConfig, targetVmid, config.targetStorage, config.networkBridge, config.vlanTag, config.cpuType)
-    const shellConf = await createTargetVmShell(pveConn, config.targetNode, pveParams)
+    const overrides = { hardware: config.hardware, nics: config.nics }
+    const overridesLine = describeOverrides(overrides)
+    if (overridesLine) await appendLog(jobId, overridesLine)
+    // The id comes from reserveTargetVmid, so the jobs of a parallel batch
+    // (roadmap#53) never share one. A create can still fail with "VM <id>
+    // already exists" when a VM was made outside ProxCenter meanwhile: take a
+    // fresh id and retry, unless the operator picked the vmid (their conflict).
+    let pveParams = mapEsxiToPveConfig(vmConfig, targetVmid ?? 0, config.targetStorage, config.networkBridge, config.vlanTag, config.cpuType, overrides)
+    let shellConf: Record<string, any> | undefined
+    for (let attempt = 1; shellConf === undefined; attempt++) {
+      if (targetVmid == null) targetVmid = await reserveTargetVmid(pveConn, config.targetConnectionId, jobId)
+      pveParams = mapEsxiToPveConfig(vmConfig, targetVmid, config.targetStorage, config.networkBridge, config.vlanTag, config.cpuType, overrides)
+      try {
+        shellConf = await createTargetVmShell(pveConn, config.targetNode, pveParams)
+      } catch (e: any) {
+        const msg = String(e?.message || e)
+        if (config.targetVmid != null || attempt >= 5 || !/already exists/i.test(msg)) throw e
+        await appendLog(jobId, `VM ${targetVmid} was created on the cluster meanwhile (${msg}); taking a fresh id`, "info")
+        targetVmid = null
+      }
+    }
+    // From here THIS job owns the shell: failure cleanup may remove it (roadmap#57).
+    createdVmid = targetVmid
     await updateJob(jobId, "enabling_cbt", { targetVmid })
-    await appendLog(jobId, `Target VM ${targetVmid} created on ${config.targetNode}`, "success")
+    await appendLog(jobId, `Target VM ${targetVmid} created on ${config.targetNode} (${Object.keys(pveParams.nets).length} NIC(s))`, "success")
+    if (pveParams.tpmstate0) await appendLog(jobId, vtpmCreatedLine(config.targetStorage), "info")
 
-    // ── preparing_disks: allocate a raw block volume per disk, zero the thick ones ──
+    // ── preparing_disks: allocate a raw block volume per disk on its own storage, zero the thick ones ──
     const provisioned = await provisionBlockTargets({
-      jobId, connectionId: config.targetConnectionId, nodeIp,
-      targetStorage: config.targetStorage, storageType: storageInfo?.type, targetVmid, shellConf,
-      disks: vmConfig.disks.map(d => ({ key: d.deviceKey, capacityBytes: d.capacityBytes })),
+      jobId, connectionId: config.targetConnectionId, nodeIp, targetVmid, shellConf,
+      disks: diskPlan.kept.map(k => ({ key: k.disk.deviceKey, capacityBytes: k.disk.capacityBytes, storage: k.storage, storageType: storageTypes.get(k.storage) ?? "" })),
       allocatedVolumes,
+      zeroRateLimitMBps: await resolveWarmZeroRateLimit(config.zeroRateLimitMBps, config.targetConnectionId),
     })
     for (const [deviceKey, dev] of provisioned) {
       targetDev.set(deviceKey, dev)
@@ -342,7 +452,7 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
       if (extents.length === 0) return 0
       const sock = `/tmp/proxcenter-vddk-${jobId}-${disk.deviceKey}.sock`
       const pwFile = `/tmp/proxcenter-vddk-${jobId}-${disk.deviceKey}.pw`
-      const opts: VddkOpts = { sock, libdir, server: esxiHost, user: username, passwordFile: pwFile, thumbprint, moref: config.sourceVmId, diskPath: disk.fileName, snapshot: snapMor }
+      const opts: VddkOpts = { sock, libdir, server: copy.server, user: username, passwordFile: pwFile, thumbprint, moref: config.sourceVmId, diskPath: disk.fileName, snapshot: snapMor }
       const reader = await startVddkReader(config.targetConnectionId, nodeIp, opts, password)
       activeReaders.push(reader)
       try {
@@ -451,6 +561,9 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
       return bytes
     }
 
+    // Bytes copied over every pass, left on the job when it completes (warmFinalTransfer).
+    let copiedBytes = 0
+
     // Source-side power operations for the confirmed power-off (see cleanShutdownAndConfirm).
     const powerOffOps: PowerOffOps = {
       requestShutdown: () => soapGuestShutdown(soapSession!, config.sourceVmId),
@@ -467,6 +580,7 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
       await appendLog(jobId, "Full copy (CBT allocated map)…")
       const t0 = Date.now()
       const fullBytes = await runCbtPass("full", () => "*", { status: "full_copy", currentStep: "full_copy", rangeStart: 10, rangeEnd: 80 })
+      copiedBytes += fullBytes
       // The full pass applied a VMware-snapshot-consistent image of every disk:
       // from this point the target holds a bootable point-in-time copy worth hours
       // of transfer, so failure cleanup must keep these volumes, not free them (#612).
@@ -477,7 +591,10 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
       await appendLog(jobId, `Full copy done: ${(fullBytes / 1073741824).toFixed(2)} GB at ${(throughput / 1048576).toFixed(0)} MB/s`, "success")
 
       // ── delta_sync: converge by downtime budget, or hold for the operator ──
-      const cfg: ConvergenceConfig = { downtimeBudgetSec: budget, maxPasses, shutdownSec: 20, bootSec: 30, cutoverMode }
+      // The integrity check runs at cutover with the source off (roadmap#1): its
+      // time is part of the downtime the budget is measured against.
+      const verifySec = estimateIntegritySecondsPerDisk(await resolveIntegritySettings(config.targetConnectionId)) * vmConfig.disks.length
+      const cfg: ConvergenceConfig = { downtimeBudgetSec: budget, maxPasses, shutdownSec: 20, bootSec: 30, verifySec, cutoverMode }
       if (cutoverMode === "manual") {
         await appendLog(jobId, `Manual cutover: replication will keep running and the migration will wait for you. Click "Cutover now" when your window opens.`, "info")
       }
@@ -502,6 +619,7 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
         const deltaBytes = await runDeltaPassWithRetry(jobId, `Delta pass ${pass + 1}`,
           () => runCbtPass(`delta-${pass + 1}`, dk => diskState.get(dk)!.currentChangeId || "*", deltaWindow))
         if (deltaBytes === null) { await appendLog(jobId, "Operator requested cutover — proceeding to final delta", "info"); break }
+        copiedBytes += deltaBytes
         const dsec = Math.max(1, (Date.now() - tk) / 1000)
         throughput = deltaBytes > 0 ? deltaBytes / dsec : throughput
         await appendLog(jobId, `Delta pass ${pass + 1}: ${(deltaBytes / 1048576).toFixed(1)} MB`)
@@ -509,7 +627,7 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
         await updateJob(jobId, "delta_sync", { currentStep: `delta_${pass + 1}`, projectedDowntimeSec: decision.projectedDowntimeSec, progress: Math.round(deltaWindow.rangeEnd) })
         if (decision.action === "cutover") break
         if (decision.action === "operator-gate") {
-          await awaitOperatorCutover(jobId, decision.projectedDowntimeSec, budget, maxPasses, { floorSec: cfg.shutdownSec + cfg.bootSec })
+          await awaitOperatorCutover(jobId, decision.projectedDowntimeSec, budget, maxPasses, { floorSec: cfg.shutdownSec + cfg.bootSec + verifySec })
           break
         }
         // A converged source yields empty passes; without pacing they would
@@ -530,7 +648,7 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
       // Last pass, and the only one that runs on a powered-off source: every
       // wait here is guest downtime, so all three budgets are the short ones
       // (see CUTOVER_SNAPSHOT_CREATE_TIMEOUT_MS and TERMINAL_SNAPSHOT_REMOVE_TIMEOUT_MS).
-      await runCbtPass("cutover", dk => diskState.get(dk)!.currentChangeId || "*",
+      copiedBytes += await runCbtPass("cutover", dk => diskState.get(dk)!.currentChangeId || "*",
         { status: "cutover", currentStep: "cutover", rangeStart: 95, rangeEnd: 98 },
         {
           removeTimeoutMs: TERMINAL_SNAPSHOT_REMOVE_TIMEOUT_MS,
@@ -554,7 +672,7 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
           const disk = vmConfig.disks[i]
           const sock = `/tmp/proxcenter-vddk-${jobId}-${disk.deviceKey}.sock`
           const pwFile = `/tmp/proxcenter-vddk-${jobId}-${disk.deviceKey}.pw`
-          const opts: VddkOpts = { sock, libdir, server: esxiHost, user: username, passwordFile: pwFile, thumbprint, moref: config.sourceVmId, diskPath: disk.fileName, snapshot: snapMor }
+          const opts: VddkOpts = { sock, libdir, server: copy.server, user: username, passwordFile: pwFile, thumbprint, moref: config.sourceVmId, diskPath: disk.fileName, snapshot: snapMor }
           const reader = await startVddkReader(config.targetConnectionId, nodeIp, opts, password)
           activeReaders.push(reader)
           try {
@@ -596,6 +714,7 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
                 lastPct: Math.round(win.scanEnd),
               },
             })
+            copiedBytes += extents.reduce((s, e) => s + e.length, 0)
           } finally {
             await stopVddkReader(config.targetConnectionId, nodeIp, reader).catch(() => {})
             const idx = activeReaders.indexOf(reader)
@@ -618,27 +737,33 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
       }
     }
 
-    // ── verify (sampled, defense-in-depth) ──
-    // The no-loss property is algorithmic (CBT + post-shutdown final delta), not a
-    // product of this check. We sample the first block of each disk: the source is
-    // now powered off, so its current disk == the cutover state (no snapshot param).
-    // A mismatch is a loud warning, never a hard failure; the authoritative full
-    // cmp is the lab runbook.
+    // ── verify (sampled regions, blocking) ──
+    // The no-loss property is algorithmic (CBT + post-shutdown final delta); this
+    // check catches what the algorithm cannot see (a transport or a storage that
+    // lied). The source is now powered off, so its current disk == the cutover
+    // state (no snapshot param). First, last and N spread regions of every disk
+    // are hashed on both sides; a difference FAILS the job before the disks are
+    // attached (roadmap#1). The baseline and the intermediate deltas never run
+    // it: only this final copy is the one handed over. Knobs: the target PVE connection (Migrations tab).
     await updateJob(jobId, "verify", { progress: 98 })
+    const integrity = await resolveIntegritySettings(config.targetConnectionId)
+    const fault = faultInjectionFromEnv()
     for (let i = 0; i < vmConfig.disks.length; i++) {
       const disk = vmConfig.disks[i]
       const dev = targetDev.get(disk.deviceKey)!
       const sock = `/tmp/proxcenter-vddk-${jobId}-vrfy-${disk.deviceKey}.sock`
       const pwFile = `/tmp/proxcenter-vddk-${jobId}-vrfy-${disk.deviceKey}.pw`
-      await verifySampledFirstBlock({
+      await verifyWarmDiskIntegrity({
         jobId, connectionId: config.targetConnectionId, nodeIp, diskIndex: i, dev,
+        capacityBytes: disk.capacityBytes, settings: integrity, fault,
         openReader: async () => {
           const reader = await startVddkReader(config.targetConnectionId, nodeIp,
-            { sock, libdir, server: esxiHost, user: username, passwordFile: pwFile, thumbprint, moref: config.sourceVmId, diskPath: disk.fileName }, password)
+            { sock, libdir, server: copy.server, user: username, passwordFile: pwFile, thumbprint, moref: config.sourceVmId, diskPath: disk.fileName }, password)
           return { nbdDev: reader.nbdDev, close: () => stopVddkReader(config.targetConnectionId, nodeIp, reader) }
         },
       })
     }
+    await unmapTargetVolumes(config.targetConnectionId, nodeIp, allocatedVolumes)
     await attachDisksAndBoot({
       jobId, pveConn, node: config.targetNode, vmid: targetVmid, diskCount: vmConfig.disks.length,
       diskSlots: pveParams.diskSlots, bootDiskSlot: pveParams.bootDiskSlot, allocatedVolumes,
@@ -646,7 +771,10 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
       targetStorage: config.targetStorage,
     })
 
-    await updateJob(jobId, "completed", { progress: 100 })
+    // The source is powered off for good: give it back CBT the way we found it.
+    await restoreSourceCbt(jobId, soapSession, config.sourceVmId, cbtEnabledByUs)
+
+    await updateJob(jobId, "completed", { progress: 100, ...warmFinalTransfer(vmConfig.disks.map(d => d.capacityBytes), copiedBytes) })
     // Non-fatal: a failing log append after the terminal write must not throw
     // us into the catch, which would flip a completed job to "failed" (#608).
     await appendLog(jobId, "Warm migration complete", "success").catch(() => {})
@@ -657,13 +785,35 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
     await appendLog(jobId, `Warm migration failed: ${err?.message || err}`, "error").catch(() => {})
     // Best-effort cleanup: stop readers, remove OUR snapshots (specific MOR), free orphan volumes.
     await cleanupOnFailure(jobId, config, soapSession, ourSnapshots, allocatedVolumes, activeReaders, nodeIp).catch(() => {})
+    // After the volumes: the VM goes only when it holds no completed copy (#612),
+    // and CBT only once our snapshots are gone, which vSphere requires.
+    if (createdVmid != null && pveConn) {
+      await removeTargetVmOnFailure({ jobId, pveConn, node: config.targetNode, vmid: createdVmid, allocatedVolumes })
+    }
+    await restoreSourceCbt(jobId, soapSession, config.sourceVmId, cbtEnabledByUs)
     throw err
   } finally {
+    // The VMID reserved for this job is either created on the cluster or unused now.
+    releaseVmids(jobId)
     stopHeartbeat()
     stopKeepAlive?.()
     if (soapSession) await soapLogout(soapSession).catch(() => {})
     unregisterJob(jobId)
     if (acquiredVmLock) releaseVmLock(vmKey)
+  }
+}
+
+/**
+ * Switch CBT back off on the source when this job switched it on. Never throws:
+ * a source that keeps CBT is harmless, a cleanup that masks the real error is not.
+ */
+async function restoreSourceCbt(jobId: string, session: SoapSession | null, sourceVmId: string, enabledByUs: boolean): Promise<void> {
+  if (!enabledByUs || !session) return
+  try {
+    await soapDisableCbt(session, sourceVmId)
+    await appendLog(jobId, "CBT disabled on source again (it was off before the migration)", "info").catch(() => {})
+  } catch (e: any) {
+    await appendLog(jobId, `Could not disable CBT on the source again: ${e?.message || e}. It was off before the migration; switch it off in vSphere if you do not want it.`, "warn").catch(() => {})
   }
 }
 
@@ -700,11 +850,11 @@ async function cleanupOnFailure(
     await sweepWarmSnapshots(session, config.sourceVmId,
       msg => appendLog(jobId, msg, "warn")).catch(() => {})
   }
-  // Unmap RBD + free volumes the VM never referenced (orphans). volumesToFree also
+  // Unmap every RBD volume (a kept one too), then free the volumes the VM never referenced (orphans). volumesToFree also
   // covers a volume created by an allocation that reported a failure, and skips the
   // slots whose allocation never started.
+  await unmapTargetVolumes(config.targetConnectionId, nodeIp, allocatedVolumes)
   for (const v of volumesToFree(allocatedVolumes)) {
-    if (nodeIp && v.rbdMapped && v.devicePath) await executeSSH(config.targetConnectionId, nodeIp, `rbd unmap "${v.devicePath}" 2>/dev/null`).catch(() => {})
     // A `saferemove` LVM storage zeroes the volume before removing it, which takes
     // far longer than the 30 s executeSSH default.
     if (nodeIp) await executeSSH(config.targetConnectionId, nodeIp, `pvesm free ${shellEscape(v.volumeId)} 2>/dev/null`, PVESM_FREE_TIMEOUT_MS).catch(() => {})

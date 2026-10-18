@@ -12,10 +12,13 @@ import { Agent, setGlobalDispatcher } from 'undici'
 import { startSessionSweeper } from '@/lib/auth/sessionSweeper'
 import { importDiskAssets } from '@/lib/branding/importDiskAssets'
 import { prisma } from '@/lib/db/prisma'
+import { startBatchPump } from '@/lib/migration/batch-scheduler'
 import { resolveInstanceId, sweepOrphanedMigrationJobs } from '@/lib/migration/orphan-sweep'
+import { cleanupOrphanedWarmSources } from '@/lib/migration/warm/orphan-cleanup'
 import { startSFlowReconciler } from '@/lib/sflow/reconciler'
 import { startCatalogRefresher } from '@/lib/templates/catalogRefresher'
 import { isCatalogAutoUpdateEnabled } from '@/lib/templates/catalogStore'
+import { startVdcUsageSampler } from '@/lib/vdc/usageHistory/sampler'
 
 export async function registerNode(): Promise<void> {
   // undici 8 negotiates HTTP/2 through ALPN by default. Every hypervisor API we
@@ -42,6 +45,10 @@ export async function registerNode(): Promise<void> {
     const swept = await sweepOrphanedMigrationJobs({ prisma, instanceId: resolveInstanceId() })
     if (swept.total > 0) {
       console.log(`[startup] orphaned migration jobs failed: owned=${swept.owned} foreign=${swept.foreign}`)
+      // A warm run killed by the restart could not clean its source VM (warm
+      // snapshot, CBT it enabled). Done in the background: it talks to vSphere
+      // and boot must not wait on, or fail with, a source host.
+      void cleanupOrphanedWarmSources(swept.jobIds).catch(err => console.error('[startup] warm source cleanup failed (non-fatal):', err))
     }
   } catch (err) {
     // Boot must never depend on the sweep: the rows stay non-terminal and the
@@ -69,6 +76,29 @@ export async function registerNode(): Promise<void> {
     // Boot must never depend on this: the nodes simply stay as they are and
     // the next boot retries starting the reconciler.
     console.error('[startup] sFlow reconciler failed to start (non-fatal):', err)
+  }
+
+  try {
+    // vDC usage history (#902): measures every vDC at the cadence set in the
+    // vDC settings, whether or not anybody opens a page. Every replica starts
+    // it; a database lease lets exactly one of them sample.
+    startVdcUsageSampler()
+  } catch (err) {
+    // Boot must never depend on this: the history simply misses the periods
+    // until the next boot starts the sampler.
+    console.error('[startup] vDC usage sampler failed to start (non-fatal):', err)
+  }
+
+  try {
+    // Bulk migrations (roadmap#53): starts the queued jobs of every running
+    // batch, so a batch carries on after this restart and without the
+    // browser that launched it. Every replica starts it; a database lease
+    // lets exactly one of them pump.
+    startBatchPump()
+  } catch (err) {
+    // Boot must never depend on this: the batches stay queued and the next
+    // job end, resume or boot pumps them.
+    console.error('[startup] migration batch pump failed to start (non-fatal):', err)
   }
 
   try {

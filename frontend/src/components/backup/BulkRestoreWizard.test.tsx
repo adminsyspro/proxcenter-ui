@@ -26,6 +26,13 @@ import { server, http, HttpResponse } from '@/__tests__/setup/msw-server'
 
 import BulkRestoreWizard from './BulkRestoreWizard'
 
+// Overwriting needs vm.delete (the restore route checks it on force). Granted
+// by default; the overwrite-gating test withdraws it.
+const { canDelete } = vi.hoisted(() => ({ canDelete: { value: true } }))
+vi.mock('@/contexts/RBACContext', () => ({
+  useRBAC: () => ({ loading: false, hasPermission: (p: string) => p !== 'vm.delete' || canDelete.value }),
+}))
+
 const PBS_ID = 'pbs-1'
 const CONN_ID = 'conn-1'
 
@@ -128,7 +135,7 @@ async function gotoTargetStep() {
   await chooseFromSelect(SELECT.node, /pve1/)
 }
 
-beforeEach(() => { seedHandlers() })
+beforeEach(() => { seedHandlers(); canDelete.value = true })
 afterEach(() => { cleanup() })
 
 describe('BulkRestoreWizard: guest list', () => {
@@ -161,6 +168,19 @@ describe('BulkRestoreWizard: guest list', () => {
 })
 
 describe('BulkRestoreWizard: target step', () => {
+  it('offers no overwrite without vm.delete, so a taken original VMID stays blocking', async () => {
+    canDelete.value = false
+    renderWizard()
+    await screen.findByText('web-01')
+    await gotoTargetStep()
+
+    await chooseFromSelect(SELECT.vmidPolicy, /Original VMID/)
+
+    expect(await screen.findByText(/already exists? on the target cluster/)).toBeTruthy()
+    expect(screen.queryByText('Overwrite the existing guests')).toBeNull()
+    expect((screen.getByRole('button', { name: /^Next$/ }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
   it('blocks the original-VMID policy while a target VMID is taken, and unblocks it after an explicit overwrite confirm', async () => {
     renderWizard()
     await screen.findByText('web-01')
@@ -259,5 +279,46 @@ describe('BulkRestoreWizard: dispatch queue', () => {
     finishTask(9002)
 
     expect(await screen.findByText(/Finished: 1 restored, 1 failed/, {}, { timeout: 3000 })).toBeTruthy()
+  })
+})
+
+describe('BulkRestoreWizard: Restore tags option (#965)', () => {
+  it('restores without tags on request and fails the guest whose config still carries some', async () => {
+    server.use(
+      http.get('*/api/v1/connections/:id/guests/:type/:node/:vmid/config', ({ params }) =>
+        HttpResponse.json({ data: params.vmid === '9001' ? { tags: 'prod;proxcenter-replica' } : { tags: ' ' } }),
+      ),
+    )
+    renderWizard()
+    await screen.findByText('web-01')
+    await gotoTargetStep()
+
+    const tagsSwitch = screen.getByLabelText('Restore tags') as HTMLInputElement
+    expect(tagsSwitch.checked).toBe(true)
+    fireEvent.click(tagsSwitch)
+    expect(tagsSwitch.checked).toBe(false)
+
+    fireEvent.click(screen.getByRole('button', { name: /^Next$/ }))
+    fireEvent.click(await screen.findByRole('button', { name: /Restore 2 guests/ }))
+
+    await waitFor(() => expect(restorePosts.length).toBe(1))
+    expect(restorePosts[0].restoreTags).toBe(false)
+    finishTask(9001)
+    await waitFor(() => expect(restorePosts.length).toBe(2), { timeout: 3000 })
+    expect(restorePosts[1].restoreTags).toBe(false)
+    finishTask(9002)
+
+    expect(await screen.findByText(/Finished: 1 restored, 1 failed/, {}, { timeout: 3000 })).toBeTruthy()
+  })
+
+  it('leaves the tags option off the wire by default', async () => {
+    renderWizard()
+    await screen.findByText('web-01')
+    await gotoTargetStep()
+    fireEvent.click(screen.getByRole('button', { name: /^Next$/ }))
+    fireEvent.click(await screen.findByRole('button', { name: /Restore 2 guests/ }))
+
+    await waitFor(() => expect(restorePosts.length).toBe(1))
+    expect(restorePosts[0]).not.toHaveProperty('restoreTags')
   })
 })

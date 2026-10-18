@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { licenseExcludedResponse } from "@/lib/api/response"
 
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
@@ -7,12 +8,13 @@ import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
 import { migrateVmSchema } from "@/lib/schemas"
 import { invalidateInventoryCache } from "@/lib/cache/inventoryCache"
 import { migrationTenantDenied } from "@/lib/tenant/migrationGuard"
+import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 
 export const runtime = "nodejs"
 
 // POST /api/v1/connections/{id}/guests/{type}/{node}/{vmid}/migrate
 // Lance la migration d'une VM vers un autre node
-export async function POST(
+async function handler(
   req: Request,
   ctx: { params: Promise<{ id: string; type: string; node: string; vmid: string }> }
 ) {
@@ -132,8 +134,12 @@ export async function POST(
       message: `Migration de VM ${vmid} vers ${target} lancée`
     })
   } catch (e: any) {
+    const excluded = licenseExcludedResponse(e)
+    if (excluded) return excluded
     console.error('Error migrating VM:', e)
 
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const POST = withPublicApiGuard("vm-migrate", handler)

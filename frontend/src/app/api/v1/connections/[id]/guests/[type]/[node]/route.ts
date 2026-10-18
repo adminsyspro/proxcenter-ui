@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { licenseExcludedResponse } from "@/lib/api/response"
 
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
@@ -13,6 +14,7 @@ import { allocateIp, releaseIp, IpamExhaustedError } from "@/lib/vdc/ipam"
 import { parseCidr } from "@/lib/vdc/network"
 import { checkVmidAgainstTenantRange } from "@/lib/tenant/vmidRange"
 import { enforceTenantDrives, meterImportRefs, DriveScopeError } from "@/lib/vdc/driveGuard"
+import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 
 export const runtime = "nodejs"
 
@@ -43,7 +45,7 @@ function sumNewDiskStorageMb(body: Record<string, any>): number {
 
 // POST /api/v1/connections/{id}/guests/{type}/{node}
 // Create a new VM (qemu) or LXC container
-export async function POST(
+async function handler(
   req: Request, 
   ctx: { params: Promise<{ id: string; type: string; node: string }> | { id: string; type: string; node: string } }
 ) {
@@ -321,8 +323,12 @@ export async function POST(
     })
   } catch (e: any) {
     if (e instanceof NicConfigError) return NextResponse.json({ error: e.message }, { status: 400 })
+    const excluded = licenseExcludedResponse(e)
+    if (excluded) return excluded
     console.error('Error creating guest:', e)
 
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const POST = withPublicApiGuard("vm-create", handler)

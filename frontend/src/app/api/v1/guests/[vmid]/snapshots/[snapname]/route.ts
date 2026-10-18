@@ -1,4 +1,5 @@
 import { NextResponse, after } from "next/server"
+import { licenseExcludedResponse } from "@/lib/api/response"
 
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
@@ -9,6 +10,7 @@ import { waitForTask } from "@/lib/proxmox/tasks"
 import { restampGuestDrives } from "@/lib/vdc/driveGuard"
 import type { DriveQosCaps } from "@/lib/vdc/drives"
 import { safeLog } from "@/lib/log/sanitize"
+import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 
 export const runtime = "nodejs"
 
@@ -47,7 +49,7 @@ async function getConnection(id: string) {
  * POST /api/v1/guests/[vmid]/snapshots/[snapname]
  * Rollback vers un snapshot
  */
-export async function POST(
+async function postHandler(
   req: Request,
   ctx: { params: Promise<Params> }
 ) {
@@ -132,6 +134,8 @@ export async function POST(
       }
     })
   } catch (e: any) {
+    const excluded = licenseExcludedResponse(e)
+    if (excluded) return excluded
     console.error("Snapshot rollback error:", e)
 
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
@@ -143,7 +147,7 @@ return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
  * Mettre à jour la description d'un snapshot
  * Body: { description: string }
  */
-export async function PUT(
+async function putHandler(
   req: Request,
   ctx: { params: Promise<Params> }
 ) {
@@ -205,3 +209,6 @@ export async function PUT(
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const POST = withPublicApiGuard("vm-snapshot-rollback", postHandler)
+export const PUT = withPublicApiGuard("vm-snapshot-update", putHandler)

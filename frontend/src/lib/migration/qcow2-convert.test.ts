@@ -205,6 +205,45 @@ describe("convertDisksToQcow2 — skip paths (each with an explanatory log line)
     expect(logs.some(l => l.level === "warn" && /free space/i.test(l.msg))).toBe(true)
   })
 
+  it("converts each disk on its own storage and skips the storages that do not default to qcow2 (#317)", async () => {
+    const conf: Record<string, string> = {
+      scsi0: `${STORAGE}:vm-250-disk-1,size=32G`,
+      scsi1: `ZFS-Pool:vm-250-disk-2,size=8G`,
+      scsi2: `LVM-B:vm-250-disk-3,size=16G`,
+    }
+    const volumes: AllocatedVolume[] = [
+      { volumeId: `${STORAGE}:vm-250-disk-1`, devicePath: "", attached: true },
+      { volumeId: "ZFS-Pool:vm-250-disk-2", devicePath: "", attached: true },
+      { volumeId: "LVM-B:vm-250-disk-3", devicePath: "", attached: true },
+    ]
+    let n = 10
+    mockFetch.mockImplementation(async (_c: any, path: string, init?: any) => {
+      if (path === `/storage/${STORAGE}`) return QUALIFYING_STORAGE
+      if (path === "/storage/LVM-B") return { storage: "LVM-B", type: "lvm", "snapshot-as-volume-chain": "1" }
+      if (path === "/storage/ZFS-Pool") return { storage: "ZFS-Pool", type: "zfspool" }
+      if (path.endsWith("/status")) return { avail: 500 * GiB }
+      if (path === `/nodes/${NODE}/qemu/${VMID}/config`) return { ...conf }
+      if (path.endsWith("/move_disk")) {
+        const body = init.body as URLSearchParams
+        const slot = body.get("disk")!
+        conf[slot] = `${body.get("storage")}:vm-${VMID}-disk-${n++}.qcow2,size=1G`
+        return `UPID:${slot}`
+      }
+      throw new Error(`unexpected pveFetch ${path}`)
+    })
+    const { args, logs } = makeHarness(volumes)
+
+    await convertDisksToQcow2(args)
+
+    const moves = moveCalls().map(c => Object.fromEntries((c[2] as any).body as URLSearchParams))
+    expect(moves).toEqual([
+      { disk: "scsi0", storage: STORAGE, format: "qcow2", delete: "1" },
+      { disk: "scsi2", storage: "LVM-B", format: "qcow2", delete: "1" },
+    ])
+    expect(logs.some(l => l.msg.includes(`Skipping qcow2 conversion: storage "ZFS-Pool"`))).toBe(true)
+    expect(volumes.map(v => v.volumeId)).toEqual([`${STORAGE}:vm-250-disk-10.qcow2`, "ZFS-Pool:vm-250-disk-2", "LVM-B:vm-250-disk-11.qcow2"])
+  })
+
   it("skips when none of our volumes is attached to the VM (nothing to convert)", async () => {
     mockPveRoutes()
     const volumes: AllocatedVolume[] = [{ volumeId: `${STORAGE}:vm-250-disk-7`, devicePath: "/dev/vg/x" }]

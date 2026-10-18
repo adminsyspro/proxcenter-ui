@@ -100,7 +100,8 @@ export async function testNetworkReachability(networkId: string): Promise<Reacha
       } catch (err: any) {
         return peers.map(peer => ({ ...base, node, peer, state: 'unavailable' as const, message: err?.message || String(err) }))
       }
-      const res = await executeSSH(vdc.connectionId, nodeIp, buildPingCommand(peers), 10_000 + peers.length * 2_000)
+      // A ping only reads: the diagnostic still runs on a cluster outside the license (roadmap#58).
+      const res = await executeSSH(vdc.connectionId, nodeIp, buildPingCommand(peers), 10_000 + peers.length * 2_000, { readOnly: true })
       if (!res.success) {
         return peers.map(peer => ({ ...base, node, peer, state: 'unavailable' as const, message: res.error || 'SSH command failed' }))
       }

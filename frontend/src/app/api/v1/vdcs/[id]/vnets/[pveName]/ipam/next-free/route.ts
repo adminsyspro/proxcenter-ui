@@ -14,12 +14,13 @@ import { generatePveMacAddress } from "@/lib/vdc/sdn"
 import { parseCidr, ipToInt, intToIp } from "@/lib/vdc/network"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { prisma } from "@/lib/db/prisma"
+import { resolveScopeTenant } from "@/lib/vdc/providerTarget"
 
 export const runtime = "nodejs"
 
 type RouteContext = { params: Promise<{ id: string; pveName: string }> | { id: string; pveName: string } }
 
-export async function GET(_req: Request, ctx: RouteContext) {
+export async function GET(req: Request, ctx: RouteContext) {
   try {
     const params = await Promise.resolve(ctx.params)
     const vdcId = (params as any)?.id
@@ -31,7 +32,14 @@ export async function GET(_req: Request, ctx: RouteContext) {
     const denied = await checkPermission("sdn.vnet.view")
     if (denied) return denied
 
-    const tenantId = await getCurrentTenantId()
+    // `?targetVdcId=` (provider only, equal to the path vDC): preview the IP
+    // a provider deploying into that tenant vDC will reserve (roadmap#65).
+    const scopeTenant = await resolveScopeTenant(req, null, getCurrentTenantId)
+    if (!scopeTenant.ok) return scopeTenant.response
+    if (scopeTenant.target && scopeTenant.target.vdcId !== vdcId) {
+      return NextResponse.json({ error: "VNet not found" }, { status: 404 })
+    }
+    const tenantId = scopeTenant.tenantId
 
     const vnetRow = await prisma.vdcVnet.findFirst({
       where: { vdcId, displayName, vdc: { tenantId } },

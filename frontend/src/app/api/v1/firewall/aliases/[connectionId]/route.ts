@@ -5,12 +5,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getOrchestratorClient } from '@/lib/orchestrator/client'
 import { verifyConnectionOwnership } from '@/lib/tenant'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
+import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
 import { getConnectionById } from '@/lib/connections/getConnection'
 import { orchestratorOrPve } from '@/lib/firewall/withPveFallback'
 import * as pveDirect from '@/lib/firewall/pveDirect'
 
 // GET /api/v1/firewall/aliases/[connectionId] - Get all aliases
-export async function GET(
+async function getHandler(
   request: NextRequest,
   { params }: { params: Promise<{ connectionId: string }> }
 ) {
@@ -41,7 +42,7 @@ return NextResponse.json(
 }
 
 // POST /api/v1/firewall/aliases/[connectionId] - Create alias
-export async function POST(
+async function postHandler(
   request: NextRequest,
   { params }: { params: Promise<{ connectionId: string }> }
 ) {
@@ -72,3 +73,6 @@ return NextResponse.json(
     )
   }
 }
+
+export const GET = withPublicApiGuard("fw-aliases-list", getHandler)
+export const POST = withPublicApiGuard("fw-alias-create", postHandler)

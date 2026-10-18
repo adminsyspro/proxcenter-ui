@@ -24,6 +24,9 @@ vi.mock('@/lib/tenant/vmidRange', async (io) => {
   }
 })
 
+const { resolveScopeTenantMock } = vi.hoisted(() => ({ resolveScopeTenantMock: vi.fn() }))
+vi.mock('@/lib/vdc/providerTarget', () => ({ resolveScopeTenant: (...a: any[]) => resolveScopeTenantMock(...a) }))
+
 async function loadGet() {
   const mod = await import('./route')
   return mod.GET as Parameters<typeof callRoute>[0]
@@ -33,6 +36,7 @@ beforeEach(() => {
   checkPermissionMock.mockReset().mockResolvedValue(null)
   getConnectionByIdMock.mockReset().mockResolvedValue({ id: 'conn-1' })
   pveFetchMock.mockReset()
+  resolveScopeTenantMock.mockReset().mockImplementation(async (_req: any, _id: any, current: () => Promise<string>) => ({ ok: true, tenantId: await current(), target: null }))
   resolveTenantVmidRangeMock.mockReset().mockResolvedValue(null)
   getUsedVmidsForTenantMock.mockReset().mockResolvedValue({ used: new Set<number>(), unreachable: [] })
   ;(globalThis as any).__proxcenter_recent_vmids__ = new Map()
@@ -126,5 +130,28 @@ describe('GET nextid — with range', () => {
 
     const resUsed = await callRoute(GET, { params: { id: 'conn-1' }, searchParams: { vmid: '201' } })
     expect(await readJson<{ available: boolean }>(resUsed)).toMatchObject({ available: false })
+  })
+})
+
+describe('GET nextid — provider target (roadmap#65)', () => {
+  it('picks inside the range of the target tenant', async () => {
+    resolveScopeTenantMock.mockResolvedValue({ ok: true, tenantId: 'tenant-acme', target: { vdcId: 'vdc-t' } })
+    resolveTenantVmidRangeMock.mockResolvedValue({ start: 300, end: 310 })
+    getUsedVmidsForTenantMock.mockResolvedValue({ used: new Set([300]), unreachable: [] })
+    const GET = await loadGet()
+    const res = await callRoute(GET, { params: { id: 'conn-1' }, searchParams: { targetVdcId: 'vdc-t' } })
+    expect(await readJson(res)).toEqual({ data: 301, available: true })
+    expect(resolveScopeTenantMock.mock.calls[0]?.[1]).toBe('conn-1')
+    expect(resolveTenantVmidRangeMock).toHaveBeenCalledWith('tenant-acme')
+    expect(getUsedVmidsForTenantMock.mock.calls[0]?.[0]).toBe('tenant-acme')
+  })
+
+  it('propagates the refusal of the guard without touching PVE', async () => {
+    resolveScopeTenantMock.mockResolvedValue({ ok: false, response: Response.json({ error: 'nope' }, { status: 403 }) })
+    const GET = await loadGet()
+    const res = await callRoute(GET, { params: { id: 'conn-1' }, searchParams: { targetVdcId: 'vdc-t' } })
+    expect(res.status).toBe(403)
+    expect(resolveTenantVmidRangeMock).not.toHaveBeenCalled()
+    expect(pveFetchMock).not.toHaveBeenCalled()
   })
 })

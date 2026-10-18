@@ -54,7 +54,15 @@ describe("sharedTaskWindowWhere / jobInSharedTaskWindow", () => {
         { status: { notIn: TERMINAL_STATUSES } },
         { updatedAt: { gte: cutoff } },
       ],
+      AND: [{ OR: [{ batchId: null }, { startedAt: { not: null } }] }],
     })
+  })
+
+  it("a job of a bulk migration counts only once started (roadmap#53)", () => {
+    const now = new Date("2026-06-16T10:30:00Z")
+    expect(jobInSharedTaskWindow({ status: "queued", updatedAt: now, batchId: "b1", startedAt: null }, cutoff)).toBe(false)
+    expect(jobInSharedTaskWindow({ status: "cancelled", updatedAt: now, batchId: "b1", startedAt: null }, cutoff)).toBe(false)
+    expect(jobInSharedTaskWindow({ status: "full_copy", updatedAt: now, batchId: "b1", startedAt: now }, cutoff)).toBe(true)
   })
 
   it("active job is always in window regardless of updatedAt", () => {

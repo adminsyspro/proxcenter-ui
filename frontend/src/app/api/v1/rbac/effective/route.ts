@@ -173,10 +173,14 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Ajouter les permissions directes
+    // Ajouter les permissions directes. Deduped on (permission, scope) like
+    // the role rows: a direct grant of a right a role already carries on
+    // another scope is a distinct perimeter the client must still see (#921).
     for (const dp of directPermissions) {
       const matches = checkScopeMatch(dp.scopeType, dp.scopeTarget, resourceType, resourceId)
-      if (matches && !effectivePermissions.has(dp.permission.name)) {
+      const key = `${dp.permission.name}|${dp.scopeType}|${dp.scopeTarget ?? ""}`
+      if (matches && !detailSeen.has(key)) {
+        detailSeen.add(key)
         effectivePermissions.add(dp.permission.name)
         permissionDetails.push({
           id: dp.permission.id,
@@ -299,6 +303,11 @@ function checkScopeMatch(
       // Tag/pool permissions are always listed in effective perms
       // Actual scope resolution happens at access time via resourceMeta
       return true
+
+    case "storage":
+      // One storage of one connection, `connectionId:storageId` (issue #921),
+      // mirroring `scopeMatches`.
+      return resourceType === "storage" && !!scopeTarget && resourceId === scopeTarget
 
     default:
       return false

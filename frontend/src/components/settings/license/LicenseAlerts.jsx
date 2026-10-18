@@ -41,8 +41,10 @@ function formatValues(values, locale, t) {
   return out
 }
 
-// handlers: { addNodes, renew, sync, requestFile, resetIdentity, reconnect,
-// openAccount }, each a function or an href string.
+// handlers: { addNodes, excludeCluster, renew, sync, requestFile,
+// resetIdentity, reconnect, openAccount }, each a function or an href string.
+// An action with no handler here is not offered (excludeCluster needs the
+// multi-license orchestrator).
 // details: optional extra content per alert id, shown under its text.
 export default function LicenseAlerts({ alerts, t, locale, busy, handlers, details = {} }) {
   if (alerts.length === 0) return null
@@ -51,6 +53,7 @@ export default function LicenseAlerts({ alerts, t, locale, busy, handlers, detai
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, mb: 2 }}>
       {alerts.map((a, i) => {
         const values = formatValues(a.values, locale, t)
+        const actions = a.actions.filter(action => handlers[action] !== undefined)
 
         return (
           <Alert
@@ -58,9 +61,9 @@ export default function LicenseAlerts({ alerts, t, locale, busy, handlers, detai
             severity={a.severity}
             icon={<i className={ICON[a.id] || 'ri-error-warning-line'} style={{ fontSize: 18 }} />}
             sx={{ py: 0.75, alignItems: 'center', '& .MuiAlert-message': { fontSize: '0.8125rem', lineHeight: 1.5 } }}
-            action={a.actions.length > 0 && (
+            action={actions.length > 0 && (
               <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', alignSelf: 'center', flexWrap: 'wrap' }}>
-                {a.actions.map(action => {
+                {actions.map(action => {
                   const h = handlers[action]
                   const common = { size: 'small', variant: 'outlined', color: a.severity, disabled: busy && typeof h === 'function' }
 

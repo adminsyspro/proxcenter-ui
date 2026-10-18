@@ -114,13 +114,31 @@ function walkImportGraph(entryFile: string): Map<string, string> {
  * files ever stops being an offender (fixed, or the comment is reworded),
  * the second assertion in the test body fails too, forcing a conscious
  * update instead of leaving a stale exception in place.
+ *
+ * The guest file restore routes share `lib/guestFileRestore/guard.ts`, whose
+ * `isProviderCaller` reads the raw session claim ON PURPOSE (a tenant user
+ * must never be promoted by getCurrentTenantId's "default" fallback) and
+ * whose `requireGuestFileRestoreAdmin` guards the settings route only. For a
+ * token principal `isProviderCaller` answers false BEFORE any session read
+ * (pinned in guard.test.ts), so a cookie riding along a pxc_ bearer is never
+ * consulted; config.ts / jwtContext.ts are the same textual false positives
+ * as above, reached through its `authOptions` import.
  */
+const GFR_SESSION_READ_EXCEPTIONS = [
+  path.join('lib', 'guestFileRestore', 'guard.ts'),
+  path.join('lib', 'auth', 'config.ts'),
+  path.join('lib', 'auth', 'jwtContext.ts'),
+]
 const KNOWN_SESSION_READ_EXCEPTIONS: Record<string, string[]> = {
   'storage-list': [
     path.join('lib', 'storage', 'fleetScope.ts'),
     path.join('lib', 'auth', 'config.ts'),
     path.join('lib', 'auth', 'jwtContext.ts'),
   ],
+  'gfr-probe': GFR_SESSION_READ_EXCEPTIONS,
+  'gfr-jobs-list': GFR_SESSION_READ_EXCEPTIONS,
+  'gfr-job-create': GFR_SESSION_READ_EXCEPTIONS,
+  'gfr-job-cancel': GFR_SESSION_READ_EXCEPTIONS,
 }
 
 describe('allowlist contract: two assertions per route (spec D2)', () => {
@@ -176,10 +194,27 @@ describe('allowlist contract: two assertions per route (spec D2)', () => {
     },
   )
 
+  it('guestFileRestore/guard.ts reads the session in exactly two places: requireGuestFileRestoreAdmin and isProviderCaller', () => {
+    const source = readFileSync(path.join(SRC_ROOT, 'lib', 'guestFileRestore', 'guard.ts'), 'utf8')
+    const functions = [...source.matchAll(/^export (?:async )?function (\w+)/gm)].map(m => ({ name: m[1], at: m.index ?? 0 }))
+    const callers = [...source.matchAll(/getServerSession\s*\(/g)].map(call => {
+      const enclosing = functions.filter(f => f.at < (call.index ?? 0)).pop()
+      return enclosing?.name ?? '(module scope)'
+    })
+    expect(callers.sort()).toEqual(['isProviderCaller', 'requireGuestFileRestoreAdmin'])
+  })
+
   it('every entry declares scopes that exist in the scope table', async () => {
     const { ALL_SCOPE_IDS } = await import('./scopes')
     for (const entry of PUBLIC_API_ALLOWLIST) {
       for (const scope of entry.requiredScopes) expect(ALL_SCOPE_IDS).toContain(scope)
+    }
+  })
+
+  it('every entry with a requestSchemaRef has it in REQUEST_SCHEMAS', async () => {
+    const { REQUEST_SCHEMAS } = await import('./openapiSchemas')
+    for (const entry of PUBLIC_API_ALLOWLIST) {
+      if (entry.requestSchemaRef) expect(REQUEST_SCHEMAS[entry.requestSchemaRef]).toBeDefined()
     }
   })
 

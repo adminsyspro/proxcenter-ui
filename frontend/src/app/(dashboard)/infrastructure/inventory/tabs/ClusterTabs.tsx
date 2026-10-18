@@ -28,7 +28,6 @@ import {
   MenuItem,
   Select,
   Stack,
-  Switch,
   Tab,
   Table,
   TableBody,
@@ -51,13 +50,14 @@ import { formatBytes } from '@/utils/format'
 import { useCopyToClipboard } from '@/lib/clipboard'
 import ExpandableChart from '../components/ExpandableChart'
 import NodesTable, { NodeRow, BulkAction } from '@/components/NodesTable'
-import VmsTable, { VmRow, TrendPoint } from '@/components/VmsTable'
+import VmsTable, { VmRow, TrendPoint, guestDiskBytes } from '@/components/VmsTable'
 import ClusterFirewallTab from '@/components/ClusterFirewallTab'
 import ClusterSdnTab from '@/components/cluster-sdn/ClusterSdnTab'
 import BackupJobsPanel from '../BackupJobsPanel'
 import CveTab from '@/components/CveTab'
 import ChangeTrackingTab from './ChangeTrackingTab'
 import CorosyncLinksCell from './CorosyncLinksCell'
+import AutoHaCard from './AutoHaCard'
 import ComplianceTab from '@/components/ComplianceTab'
 import DatacenterSettingsTab from '@/components/datacenter-settings'
 import MetricServerTab from '@/components/MetricServerTab'
@@ -88,6 +88,7 @@ import MetricsRangeSelector, { type MetricsRangeValue } from '@/components/metri
 import useChartDragRange from '@/components/metrics/useChartDragRange'
 import { timeframeForWindow, type RrdRangeMeta, type RrdWindow } from '@/lib/metrics/rrdRange'
 import { osdGridStates, type OsdGridState } from '@/lib/ceph/osdGrid'
+import { isNodeReachable, nodeStatusMeta } from '../nodeStatusMeta'
 
 const INVENTORY_OSD_STYLE: Record<OsdGridState, { color: string; label: string; opacity: number }> = {
   down: { color: '#ef4444', label: 'Down', opacity: 1 },
@@ -491,60 +492,7 @@ export default function ClusterTabs(props: any) {
     setExecutingAll(false)
   }, [clusterRecs, mutateRecs, toast, t])
 
-  // Auto-HA state
   const connId = selection?.type === 'cluster' ? selection.id : ''
-  const [autoHaSettings, setAutoHaSettings] = useState<any>(null)
-  const [autoHaLoading, setAutoHaLoading] = useState(false)
-  const [autoHaSaving, setAutoHaSaving] = useState(false)
-  const [autoHaSyncing, setAutoHaSyncing] = useState(false)
-  const [autoHaSyncResult, setAutoHaSyncResult] = useState<any>(null)
-
-  const loadAutoHaSettings = useCallback(async () => {
-    if (!connId) return
-    setAutoHaLoading(true)
-    try {
-      const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/ha/auto-ha`)
-      const json = await res.json()
-      setAutoHaSettings(json.data)
-    } catch { /* ignore */ }
-    setAutoHaLoading(false)
-  }, [connId])
-
-  const saveAutoHaSettings = useCallback(async (data: any) => {
-    if (!connId) return
-    setAutoHaSaving(true)
-    try {
-      const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/ha/auto-ha`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      })
-      const json = await res.json()
-      setAutoHaSettings(json.data)
-    } catch { /* ignore */ }
-    setAutoHaSaving(false)
-  }, [connId])
-
-  const syncAutoHa = useCallback(async () => {
-    if (!connId) return
-    setAutoHaSyncing(true)
-    setAutoHaSyncResult(null)
-    try {
-      const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/ha/auto-ha/sync`, { method: 'POST' })
-      const json = await res.json()
-      setAutoHaSyncResult(json.data || json.error)
-    } catch (e: any) {
-      setAutoHaSyncResult({ error: e?.message })
-    }
-    setAutoHaSyncing(false)
-  }, [connId])
-
-  // Load Auto-HA settings when HA tab is activated
-  useEffect(() => {
-    if (clusterTab === 3 && connId && !autoHaSettings && !autoHaLoading) {
-      void loadAutoHaSettings()
-    }
-  }, [clusterTab, connId])
 
   // Fetch RRD data for all nodes when in Summary tab
   const [clusterNodeRrd, setClusterNodeRrd] = useState<Record<string, any[]>>({})
@@ -1665,7 +1613,7 @@ export default function ClusterTabs(props: any) {
                                   />
                                   <Box sx={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                                     <img src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" style={{ width: 16, height: 16, opacity: 0.8 }} />
-                                    <Box sx={{ position: 'absolute', bottom: -2, right: -2, width: 8, height: 8, borderRadius: '50%', bgcolor: node.status === 'online' ? 'success.main' : 'error.main', border: '1.5px solid', borderColor: 'background.paper' }} />
+                                    <Box sx={{ position: 'absolute', bottom: -2, right: -2, width: 8, height: 8, borderRadius: '50%', bgcolor: nodeStatusMeta(node.status).dot, border: '1.5px solid', borderColor: 'background.paper' }} />
                                   </Box>
                                   <Typography fontWeight={600}>{node.name}</Typography>
                                   <Chip 
@@ -1756,111 +1704,7 @@ export default function ClusterTabs(props: any) {
                       </Box>
                     ) : (
                       <Stack spacing={3}>
-                        {/* Auto-HA */}
-                        {autoHaSettings && (
-                          <Card variant="outlined" sx={{ borderRadius: 2, overflow: 'hidden' }}>
-                            <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
-                              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: autoHaSettings.enabled ? 2 : 0 }}>
-                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                                  <i className="ri-shield-star-line" style={{ fontSize: 20, opacity: 0.7 }} />
-                                  <Typography variant="subtitle2" fontWeight={700}>Auto-HA</Typography>
-                                  <Typography variant="caption" sx={{ opacity: 0.5 }}>
-                                    {autoHaSettings.enabled ? t('cluster.autoHaEnabled') : t('cluster.autoHaDisabled')}
-                                  </Typography>
-                                </Box>
-                                <Switch
-                                  checked={autoHaSettings.enabled}
-                                  onChange={(e) => saveAutoHaSettings({ ...autoHaSettings, enabled: e.target.checked })}
-                                  disabled={autoHaSaving}
-                                />
-                              </Box>
-
-                              {autoHaSettings.enabled && (
-                                <Stack spacing={2}>
-                                  <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-                                    <FormControl size="small" sx={{ flex: 1 }}>
-                                      <InputLabel>{t('cluster.autoHaDefaultState')}</InputLabel>
-                                      <Select
-                                        value={autoHaSettings.state || 'started'}
-                                        label={t('cluster.autoHaDefaultState')}
-                                        onChange={(e) => setAutoHaSettings((prev: any) => ({ ...prev, state: e.target.value }))}
-                                      >
-                                        <MenuItem value="started">Started</MenuItem>
-                                        <MenuItem value="stopped">Stopped</MenuItem>
-                                        <MenuItem value="enabled">Enabled</MenuItem>
-                                        <MenuItem value="disabled">Disabled</MenuItem>
-                                      </Select>
-                                    </FormControl>
-
-                                    {clusterPveMajorVersion < 9 && clusterHaGroups.length > 0 && (
-                                      <FormControl size="small" sx={{ flex: 1 }}>
-                                        <InputLabel>{t('common.group')}</InputLabel>
-                                        <Select
-                                          value={autoHaSettings.group || ''}
-                                          label={t('common.group')}
-                                          onChange={(e) => setAutoHaSettings((prev: any) => ({ ...prev, group: e.target.value }))}
-                                        >
-                                          <MenuItem value=""><em>{t('common.none')}</em></MenuItem>
-                                          {clusterHaGroups.map((g: any) => (
-                                            <MenuItem key={g.group} value={g.group}>{g.group}</MenuItem>
-                                          ))}
-                                        </Select>
-                                      </FormControl>
-                                    )}
-
-                                    <NumericTextField
-                                      size="small"
-                                      type="number"
-                                      label="Max Restart"
-                                      value={autoHaSettings.max_restart ?? 1}
-                                      onChange={(n) => setAutoHaSettings((prev: any) => ({ ...prev, max_restart: n }))}
-                                      fallback={0}
-                                      inputProps={{ min: 0, max: 10 }}
-                                      sx={{ flex: 1 }}
-                                    />
-                                    <NumericTextField
-                                      size="small"
-                                      type="number"
-                                      label="Max Relocate"
-                                      value={autoHaSettings.max_relocate ?? 1}
-                                      onChange={(n) => setAutoHaSettings((prev: any) => ({ ...prev, max_relocate: n }))}
-                                      fallback={0}
-                                      inputProps={{ min: 0, max: 10 }}
-                                      sx={{ flex: 1 }}
-                                    />
-                                    <Button
-                                      size="small"
-                                      variant="outlined"
-                                      onClick={() => saveAutoHaSettings(autoHaSettings)}
-                                      disabled={autoHaSaving}
-                                      startIcon={autoHaSaving ? <CircularProgress size={14} /> : <i className="ri-save-line" />}
-                                    >
-                                      {t('common.save')}
-                                    </Button>
-                                    <Button
-                                      size="small"
-                                      variant="contained"
-                                      onClick={syncAutoHa}
-                                      disabled={autoHaSyncing}
-                                      startIcon={autoHaSyncing ? <CircularProgress size={14} /> : <i className="ri-refresh-line" />}
-                                    >
-                                      {t('cluster.autoHaSyncNow')}
-                                    </Button>
-                                  </Box>
-                                  {autoHaSyncResult && !autoHaSyncResult.error && (
-                                    <Alert severity="success" sx={{ py: 0.5 }}>
-                                      {t('cluster.autoHaSyncSuccess', { added: autoHaSyncResult.added, skipped: autoHaSyncResult.skipped })}
-                                      {autoHaSyncResult.errors?.length > 0 && ` (${autoHaSyncResult.errors.length} errors)`}
-                                    </Alert>
-                                  )}
-                                  {autoHaSyncResult?.error && (
-                                    <Alert severity="error" sx={{ py: 0.5 }}>{autoHaSyncResult.error}</Alert>
-                                  )}
-                                </Stack>
-                              )}
-                            </CardContent>
-                          </Card>
-                        )}
+                        <AutoHaCard key={clusterConnId} connId={clusterConnId} pveMajorVersion={clusterPveMajorVersion} haGroups={clusterHaGroups} />
 
                         {/* HA Status (quorum, master, lrm) */}
                         {clusterHaStatus && clusterHaStatus.filter((s: any) => s.type === 'quorum' || s.type === 'master' || s.type === 'lrm').length > 0 && (
@@ -2752,12 +2596,12 @@ export default function ClusterTabs(props: any) {
                                   </Typography>
                                   <Typography variant="caption" sx={{ opacity: 0.7, display: 'block', mt: 1 }}>{t('dashboard.widgets.provisioned')}</Typography>
                                   <Typography variant="body2" fontWeight={600} sx={{ color: (() => {
-                                    const provBytes = (allVms || []).reduce((sum: number, vm: any) => sum + (Number(vm.maxdisk) || 0), 0)
+                                    const provBytes = (allVms || []).reduce((sum: number, vm: any) => sum + guestDiskBytes(vm), 0)
                                     const totalBytes = clusterCephData.pgmap?.bytes_total || 0
                                     return totalBytes > 0 && provBytes > totalBytes ? 'warning.main' : 'text.primary'
                                   })() }}>
                                     {(() => {
-                                      const provBytes = (allVms || []).reduce((sum: number, vm: any) => sum + (Number(vm.maxdisk) || 0), 0)
+                                      const provBytes = (allVms || []).reduce((sum: number, vm: any) => sum + guestDiskBytes(vm), 0)
                                       const totalBytes = clusterCephData.pgmap?.bytes_total || 0
                                       const pct = totalBytes > 0 ? Math.round((provBytes / totalBytes) * 100) : 0
                                       return `${formatBytes(provBytes)} (${pct}%)`
@@ -3402,6 +3246,7 @@ export default function ClusterTabs(props: any) {
                               <TableBody>
                                 {data.nodesData.map((node: any) => {
                                   const nodeUpdate = nodeUpdates[node.node]
+                                  const reachable = isNodeReachable(node.status)
                                   // Calcul du temps estimé (réaliste pour rolling update)
                                   const hasKernel = nodeUpdate?.updates?.some((u: any) => 
                                     (u.Package || u.package || '').toLowerCase().includes('kernel') ||
@@ -3440,7 +3285,7 @@ export default function ClusterTabs(props: any) {
                                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                           <Box sx={{ position: 'relative', display: 'inline-flex', alignItems: 'center', width: 16, height: 16, flexShrink: 0 }}>
                                             <img src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" width={16} height={16} style={{ opacity: 0.8 }} />
-                                            <Box sx={{ position: 'absolute', bottom: -2, right: -2, width: 8, height: 8, borderRadius: '50%', bgcolor: node.status === 'online' ? 'success.main' : 'error.main', border: '1.5px solid', borderColor: 'background.paper' }} />
+                                            <Box sx={{ position: 'absolute', bottom: -2, right: -2, width: 8, height: 8, borderRadius: '50%', bgcolor: nodeStatusMeta(node.status).dot, border: '1.5px solid', borderColor: 'background.paper' }} />
                                           </Box>
                                           <Typography variant="body2" fontWeight={600}>{node.node}</Typography>
                                         </Box>
@@ -3541,7 +3386,7 @@ export default function ClusterTabs(props: any) {
                                       <TableCell align="center">
                                         {nodeUpdate?.loading ? (
                                           <CircularProgress size={14} />
-                                        ) : node.status !== 'online' ? (
+                                        ) : !reachable ? (
                                           <Typography variant="caption" sx={{ opacity: 0.5 }}>—</Typography>
                                         ) : (
                                           <Chip 
@@ -3568,7 +3413,7 @@ export default function ClusterTabs(props: any) {
                                       <TableCell align="center">
                                         {nodeUpdate?.loading ? (
                                           <CircularProgress size={14} />
-                                        ) : node.status !== 'online' || pkgCount === 0 ? (
+                                        ) : !reachable || pkgCount === 0 ? (
                                           <Typography variant="caption" sx={{ opacity: 0.5 }}>—</Typography>
                                         ) : (
                                           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.5 }}>
@@ -3584,23 +3429,19 @@ export default function ClusterTabs(props: any) {
                                         )}
                                       </TableCell>
                                       <TableCell align="center">
-                                        {node.status === 'online' ? (
-                                          <Chip 
-                                            size="small" 
-                                            label={t('updates.online')} 
-                                            color="success" 
-                                            icon={<i className="ri-checkbox-circle-fill" style={{ fontSize: 14 }} />}
-                                            sx={{ height: 24 }}
-                                          />
-                                        ) : (
-                                          <Chip 
-                                            size="small" 
-                                            label={t('updates.offline')} 
-                                            color="error"
-                                            icon={<i className="ri-close-circle-fill" style={{ fontSize: 14 }} />}
-                                            sx={{ height: 24 }}
-                                          />
-                                        )}
+                                        {(() => {
+                                          const meta = nodeStatusMeta(node.status)
+
+                                          return (
+                                            <Chip
+                                              size="small"
+                                              label={t(meta.label)}
+                                              color={meta.chipColor}
+                                              icon={<i className={meta.icon} style={{ fontSize: 14 }} />}
+                                              sx={{ height: 24 }}
+                                            />
+                                          )
+                                        })()}
                                       </TableCell>
                                     </TableRow>
                                   )

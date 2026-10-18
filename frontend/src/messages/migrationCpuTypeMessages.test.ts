@@ -9,10 +9,10 @@ import zhCN from './zh-CN.json'
 
 const locales: Record<string, any> = { en, fr, de, es, ko, 'zh-CN': zhCN }
 
-// The migration dialogs render the CPU type select (roadmap#24) from these four
+// The migration dialogs render the CPU type select (roadmap#24) from these three
 // keys; a locale missing one shows its key path, request.ts has no English
 // fallback. The model names themselves are not translated.
-const KEYS = ['cpuType', 'cpuTypeDefault', 'cpuTypeHint', 'cpuTypeHostHint']
+const KEYS = ['cpuType', 'cpuTypeDefault', 'cpuTypeHostHint']
 
 describe('migration CPU type i18n parity across the 6 served locales', () => {
   for (const [locale, messages] of Object.entries(locales)) {
@@ -23,8 +23,5 @@ describe('migration CPU type i18n parity across the 6 served locales', () => {
         expect((value as string).trim().length, `${locale}: ${key} is empty`).toBeGreaterThan(0)
       })
     }
-    it(`${locale} names the Proxmox default in the hint`, () => {
-      expect(locales[locale].inventoryPage.esxiMigration.cpuTypeHint).toContain('x86-64-v2-AES')
-    })
   }
 })

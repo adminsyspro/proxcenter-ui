@@ -53,12 +53,24 @@ afterAll(async () => {
 })
 
 describe("sweepOrphanedMigrationJobs", () => {
+  it("never fails a queued job of a bulk migration, even an old unowned one (roadmap#53)", async () => {
+    const mine = await seedJob({ ownerInstanceId: ME, status: "queued", currentStep: "queued" })
+    const legacy = await seedJob({ ownerInstanceId: null, status: "queued", currentStep: "queued", updatedAt: hoursAgo(48) })
+
+    const res = await sweep()
+
+    expect(res.total).toBe(0)
+    expect((await reload(mine.id)).status).toBe("queued")
+    expect((await reload(legacy.id)).status).toBe("queued")
+  })
+
   it("fails non-terminal jobs owned by this instance regardless of age", async () => {
     const fresh = await seedJob({ ownerInstanceId: ME, updatedAt: NOW })
     const stale = await seedJob({ ownerInstanceId: ME, status: "pending", updatedAt: hoursAgo(48) })
 
     const res = await sweep()
-    expect(res).toEqual({ owned: 2, foreign: 0, total: 2 })
+    expect(res).toMatchObject({ owned: 2, foreign: 0, total: 2 })
+    expect([...res.jobIds].sort((a, b) => a.localeCompare(b))).toEqual([fresh.id, stale.id].sort((a, b) => a.localeCompare(b)))
 
     for (const id of [fresh.id, stale.id]) {
       const job = await reload(id)
@@ -78,7 +90,7 @@ describe("sweepOrphanedMigrationJobs", () => {
     const recent = await seedJob({ updatedAt: hoursAgo(1) })
 
     const res = await sweep()
-    expect(res).toEqual({ owned: 0, foreign: 1, total: 1 })
+    expect(res).toMatchObject({ owned: 0, foreign: 1, total: 1 })
 
     expect((await reload(old.id)).status).toBe("failed")
     // strict `<` cutoff and a live-looking row: both stay untouched
@@ -97,7 +109,7 @@ describe("sweepOrphanedMigrationJobs", () => {
     const oldIncarnation = await seedJob({ ownerInstanceId: "previous-container-id", updatedAt: hoursAgo(18) })
 
     const res = await sweep()
-    expect(res).toEqual({ owned: 0, foreign: 1, total: 1 })
+    expect(res).toMatchObject({ owned: 0, foreign: 1, total: 1 })
 
     const job = await reload(oldIncarnation.id)
     expect(job.status).toBe("failed")
@@ -109,7 +121,7 @@ describe("sweepOrphanedMigrationJobs", () => {
     const peer = await seedJob({ ownerInstanceId: "node-b", updatedAt: hoursAgo(2) })
 
     const res = await sweep()
-    expect(res).toEqual({ owned: 0, foreign: 0, total: 0 })
+    expect(res).toMatchObject({ owned: 0, foreign: 0, total: 0 })
 
     const job = await reload(peer.id)
     expect(job.status).toBe("transferring")
@@ -124,7 +136,7 @@ describe("sweepOrphanedMigrationJobs", () => {
     const failed = await seedJob({ ownerInstanceId: ME, status: "failed", error: "boom", completedAt: done })
 
     const res = await sweep()
-    expect(res).toEqual({ owned: 0, foreign: 0, total: 0 })
+    expect(res).toMatchObject({ owned: 0, foreign: 0, total: 0 })
 
     expect((await reload(completed.id)).status).toBe("completed")
     expect((await reload(cancelled.id)).status).toBe("cancelled")

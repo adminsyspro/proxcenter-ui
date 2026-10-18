@@ -315,3 +315,54 @@ describe('PBS backup names belong to the snapshot', () => {
     }
   })
 })
+
+
+describe('machine-level backup browsing', () => {
+  it('paginates whole machines and keeps their restore points newest first', async () => {
+    getAllBackupsMock.mockResolvedValue({ data: [
+      backup({ id: 'old', backupTime: 100, vmName: 'old-name' }),
+      backup({ id: 'other', backupId: '101', vmName: 'zeta' }),
+      backup({ id: 'new', backupTime: 300, vmName: 'alpha' }),
+    ], warnings: [], fromCache: true })
+    const { GET } = await import('./route')
+    const first = await readJson<any>(await callRoute(GET, {
+      params: { id: 'pbs-1' }, searchParams: { groupBy: 'machine', pageSize: '1' },
+    }))
+    expect(first.data.backups.map((b: any) => b.id)).toEqual(['new', 'old'])
+    expect(first.data.pagination).toMatchObject({ totalItems: 2, totalPages: 2, hasNext: true })
+    expect(first.data.stats.total).toBe(3)
+    const second = await readJson<any>(await callRoute(GET, {
+      params: { id: 'pbs-1' }, searchParams: { groupBy: 'machine', pageSize: '1', page: '2' },
+    }))
+    expect(second.data.backups.map((b: any) => b.id)).toEqual(['other'])
+  })
+
+  it('keeps equal names and IDs distinct across datastore, namespace and type, including hosts', async () => {
+    getAllBackupsMock.mockResolvedValue({ data: [
+      backup(), backup({ id: 'ds', datastore: 'store2' }),
+      backup({ id: 'ns', namespace: 'tenant' }), backup({ id: 'ct', backupType: 'ct' }),
+      backup({ id: 'host', backupType: 'host', backupId: 'server.example' }),
+    ], warnings: [], fromCache: true })
+    const { GET } = await import('./route')
+    const body = await readJson<any>(await callRoute(GET, {
+      params: { id: 'pbs-1' }, searchParams: { groupBy: 'machine' },
+    }))
+    expect(body.data.pagination.totalItems).toBe(5)
+    expect(body.data.backups).toHaveLength(5)
+  })
+
+  it('applies tenant scope and search before grouping without returning hidden restore points', async () => {
+    assertVdcPbsAccessMock.mockResolvedValue({ kind: 'tenant', allowed: [{ datastore: 'store1', namespace: '' }] })
+    getVdcScopeMock.mockResolvedValue({ pbsNamespacesByConnection: new Map([['pbs-1', [{ datastore: 'store1', namespace: '' }]]]) })
+    getAllBackupsMock.mockResolvedValue({ data: [
+      backup({ id: 'match', comment: 'keep' }), backup({ id: 'no-match' }),
+      backup({ id: 'hidden', namespace: 'private', comment: 'keep' }),
+    ], warnings: [], fromCache: true })
+    const { GET } = await import('./route')
+    const body = await readJson<any>(await callRoute(GET, {
+      params: { id: 'pbs-1' }, searchParams: { groupBy: 'machine', search: 'keep' },
+    }))
+    expect(body.data.backups.map((b: any) => b.id)).toEqual(['match'])
+    expect(body.data.pagination.totalItems).toBe(1)
+  })
+})

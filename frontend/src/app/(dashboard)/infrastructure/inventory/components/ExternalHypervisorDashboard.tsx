@@ -13,10 +13,13 @@ import {
   useTheme,
 } from '@mui/material'
 import { alpha } from '@mui/material/styles'
-import { PieChart, Pie, Cell, BarChart, Bar, CartesianGrid, XAxis, YAxis, Tooltip } from 'recharts'
+import { PieChart, Pie, Cell } from 'recharts'
 import ChartContainer from '@/components/ChartContainer'
+import { emptyMigrationStats } from '@/lib/migration/migration-stats'
 
 import type { DetailsPayload, InventorySelection } from '../types'
+import PagedRows from '@/components/ui/PagedRows'
+import MigrationVmGlyph from '@/components/migration/MigrationVmGlyph'
 
 type ExtTypeInfo = NonNullable<DetailsPayload['extTypeInfo']>
 
@@ -38,10 +41,13 @@ export default function ExternalHypervisorDashboard({ extTypeInfo: info, onSelec
 
   // Migration stats
   const migrations = info.migrations || []
-  const migCompleted = migrations.filter((j: any) => j.status === 'completed').length
-  const migFailed = migrations.filter((j: any) => j.status === 'failed').length
-  const migRunning = migrations.filter((j: any) => !['completed', 'failed', 'cancelled'].includes(j.status)).length
-  const totalMigratedGB = migrations.filter((j: any) => j.status === 'completed' && j.totalBytes).reduce((s: number, j: any) => s + Number(j.totalBytes), 0) / 1073741824
+  // Counters over the whole history; `migrations` (the last 50 jobs) only feeds the list.
+  const stats = info.migrationStats ?? emptyMigrationStats()
+  const migCompleted = stats.completed
+  const migFailed = stats.failed
+  const migRunning = stats.inProgress
+  const migTotal = migCompleted + migFailed + migRunning + stats.cancelled + stats.queued
+  const totalMigratedGB = stats.bytesTransferred / 1073741824
 
   // Donut chart data — VM status
   const vmStatusData = [
@@ -56,14 +62,6 @@ export default function ExternalHypervisorDashboard({ extTypeInfo: info, onSelec
     { name: t('inventoryPage.extDashboard.inProgress'), value: migRunning, color: theme.palette.primary.main },
   ].filter(d => d.value > 0)
 
-  // Bar chart data — resources per host
-  const hostBarData = info.hosts.map((h: any) => ({
-    name: h.connectionName.length > 12 ? h.connectionName.substring(0, 12) + '…' : h.connectionName,
-    vms: h.vms.length,
-    cpu: h.vms.reduce((s: number, v: any) => s + (v.cpu || 0), 0),
-    ram: Math.round(h.vms.reduce((s: number, v: any) => s + (v.memory_size_MiB || 0), 0) / 1024),
-  }))
-
   const statCards = [
     { icon: 'ri-server-line', label: t('inventoryPage.extDashboard.hosts'), value: info.hosts.length, color: theme.palette.warning.main },
     { icon: 'ri-computer-line', label: t('inventoryPage.extDashboard.totalVms'), value: allVms.length, color: theme.palette.primary.main },
@@ -71,8 +69,13 @@ export default function ExternalHypervisorDashboard({ extTypeInfo: info, onSelec
     { icon: 'ri-hard-drive-3-line', label: t('inventoryPage.extDashboard.dataTransferred'), value: `${totalMigratedGB.toFixed(1)} GB`, color: theme.palette.secondary.main },
   ]
 
+  // The details pane is a fixed-height column that clips: the dashboard scrolls
+  // on its own, and its cards keep their height instead of being squeezed
+  // (a squeezed card cut the bar chart's axis and the host rows).
+  // Paged cards keep overflow visible: a Card clips by default, which would
+  // pin their sticky pager to the card instead of the dashboard's viewport.
   return (
-    <>
+    <Box data-testid="ext-type-dashboard" sx={{ flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 2, '& > *': { flexShrink: 0 } }}>
     {/* Stats cards */}
     <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 1.5 }}>
       {statCards.map((s) => (
@@ -137,7 +140,7 @@ export default function ExternalHypervisorDashboard({ extTypeInfo: info, onSelec
             <i className="ri-swap-line" style={{ fontSize: 16, opacity: 0.5 }} />
             {t('inventoryPage.extDashboard.migrationStats')}
           </Typography>
-          {migrations.length === 0 ? (
+          {migTotal === 0 ? (
             <Box sx={{ height: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <Typography variant="body2" fontSize={12} sx={{ opacity: 0.4 }}>{t('inventoryPage.extDashboard.noMigrations')}</Typography>
             </Box>
@@ -186,36 +189,6 @@ export default function ExternalHypervisorDashboard({ extTypeInfo: info, onSelec
       </Card>
     </Box>
 
-    {/* Resources per host — bar chart */}
-    {info.hosts.length > 1 && (
-      <Card variant="outlined" sx={{ borderRadius: 2 }}>
-        <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
-          <Typography variant="body2" fontWeight={700} fontSize={12} sx={{ mb: 1.5, display: 'flex', alignItems: 'center', gap: 1 }}>
-            <i className="ri-bar-chart-2-line" style={{ fontSize: 16, opacity: 0.5 }} />
-            {t('inventoryPage.extDashboard.resourcesPerHost')}
-          </Typography>
-          <Box sx={{ height: 180 }}>
-            <ChartContainer>
-              <BarChart data={hostBarData} margin={{ top: 5, right: 5, bottom: 5, left: -15 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke={alpha(theme.palette.divider, 0.5)} />
-                <XAxis dataKey="name" tick={{ fontSize: 10 }} />
-                <YAxis tick={{ fontSize: 10 }} />
-                {/* cursor: Recharts defaults the hover band to a hardcoded
-                    light grey, which reads as a white block on the dark theme. */}
-                <Tooltip
-                  contentStyle={{ fontSize: 12, borderRadius: 8, border: `1px solid ${theme.palette.divider}`, background: theme.palette.background.paper }}
-                  cursor={{ fill: theme.palette.action.hover }}
-                />
-                <Bar dataKey="vms" name="VMs" fill={theme.palette.primary.main} radius={[3, 3, 0, 0]} />
-                <Bar dataKey="cpu" name="vCPU" fill={theme.palette.warning.main} radius={[3, 3, 0, 0]} />
-                <Bar dataKey="ram" name="RAM (GB)" fill={theme.palette.info.main} radius={[3, 3, 0, 0]} />
-              </BarChart>
-            </ChartContainer>
-          </Box>
-        </CardContent>
-      </Card>
-    )}
-
     {/* Global resources summary */}
     <Card variant="outlined" sx={{ borderRadius: 2 }}>
       <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
@@ -241,14 +214,14 @@ export default function ExternalHypervisorDashboard({ extTypeInfo: info, onSelec
     </Card>
 
     {/* Hosts list with VM counts */}
-    <Card variant="outlined" sx={{ borderRadius: 2 }}>
+    <Card variant="outlined" sx={{ borderRadius: 2, overflow: 'visible' }}>
       <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
         <Typography variant="body2" fontWeight={700} fontSize={12} sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
           <i className="ri-server-line" style={{ fontSize: 16, opacity: 0.5 }} />
           {t('inventoryPage.extDashboard.hosts')}
         </Typography>
         <Stack spacing={0}>
-          {info.hosts.map((host: any) => {
+          <PagedRows items={info.hosts} testId="ext-type-hosts-pagination">{(host: any) => {
             const hostRunning = host.vms.filter((v: any) => v.status === 'running').length
             const hostCpu = host.vms.reduce((s: number, v: any) => s + (v.cpu || 0), 0)
             const hostRamGB = host.vms.reduce((s: number, v: any) => s + (v.memory_size_MiB || 0), 0) / 1024
@@ -268,34 +241,34 @@ export default function ExternalHypervisorDashboard({ extTypeInfo: info, onSelec
                 </Typography>
               </Box>
             )
-          })}
+          }}</PagedRows>
         </Stack>
       </CardContent>
     </Card>
 
     {/* Recent migrations */}
     {migrations.length > 0 && (
-      <Card variant="outlined" sx={{ borderRadius: 2 }}>
+      <Card variant="outlined" sx={{ borderRadius: 2, overflow: 'visible' }}>
         <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
           <Typography variant="body2" fontWeight={700} fontSize={12} sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
             <i className="ri-history-line" style={{ fontSize: 16, opacity: 0.5 }} />
             {t('inventoryPage.extDashboard.recentMigrations')}
           </Typography>
           <Stack spacing={0}>
-            {migrations.slice(0, 10).map((mig: any) => (
+            <PagedRows items={migrations} testId="ext-type-migrations-pagination">{(mig: any) => (
               <Box key={mig.id} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.75, borderBottom: '1px solid', borderColor: 'divider', '&:last-child': { borderBottom: 'none' } }}>
-                <Box sx={{ width: 8, height: 8, borderRadius: '50%', flexShrink: 0, bgcolor: mig.status === 'completed' ? 'success.main' : mig.status === 'failed' ? 'error.main' : 'primary.main' }} />
+                <MigrationVmGlyph hostType={info.hypervisorType} status={mig.status} />
                 <Typography variant="body2" fontSize={12} fontWeight={600} noWrap sx={{ minWidth: 0, flex: 1 }}>{mig.sourceVmName || mig.sourceVmId}</Typography>
                 <Typography variant="caption" fontSize={10} sx={{ opacity: 0.5, whiteSpace: 'nowrap', flexShrink: 0 }}>{'\u2192'} {mig.targetNode}</Typography>
                 <Typography variant="caption" fontSize={10} sx={{ opacity: 0.5, whiteSpace: 'nowrap', flexShrink: 0 }}>{mig.totalBytes ? `${(Number(mig.totalBytes) / 1073741824).toFixed(1)} GB` : '--'}</Typography>
                 {mig.completedAt && <Typography variant="caption" fontSize={10} sx={{ opacity: 0.4, whiteSpace: 'nowrap', flexShrink: 0 }}>{new Date(mig.completedAt).toLocaleDateString()}</Typography>}
                 <Chip size="small" label={mig.status === 'completed' ? t('inventoryPage.esxiMigration.completed') : mig.status === 'failed' ? t('inventoryPage.esxiMigration.failed') : `${mig.progress || 0}%`} sx={{ height: 20, fontSize: 10, fontWeight: 700, flexShrink: 0, bgcolor: mig.status === 'completed' ? 'success.main' : mig.status === 'failed' ? 'error.main' : 'primary.main', color: mig.status === 'completed' ? 'success.contrastText' : mig.status === 'failed' ? 'error.contrastText' : 'primary.contrastText' }} />
               </Box>
-            ))}
+            )}</PagedRows>
           </Stack>
         </CardContent>
       </Card>
     )}
-    </>
+    </Box>
   )
 }

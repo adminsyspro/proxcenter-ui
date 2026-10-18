@@ -43,6 +43,15 @@ vi.mock("@/lib/ssh/node-endpoint", async () => ({
 vi.mock("./job-heartbeat", () => ({ startJobHeartbeat: vi.fn() }))
 vi.mock("./pve-vm-config", () => ({ pveSetVmConfig: vi.fn(), destroyPveVm: vi.fn() }))
 vi.mock("@/lib/audit", () => ({ audit: vi.fn() }))
+// Per-disk target storage (#317, lot 2): the vCenter and esxi-direct paths read
+// the source disk list over SOAP, and the vCenter path downloads the disks over
+// NFC before virt-v2v runs; both are stubbed so a run reaches the import loop.
+vi.mock("@/lib/vmware/soap", async importOriginal => {
+  const actual = await importOriginal<typeof import("@/lib/vmware/soap")>()
+  return { ...actual, soapLogin: vi.fn(), soapLogout: vi.fn(), soapGetVmConfig: vi.fn(), parseVmConfig: vi.fn() }
+})
+vi.mock("@/lib/crypto/secret", () => ({ decryptSecret: vi.fn(() => "root:pw") }))
+vi.mock("./nfc-export", () => ({ runVcenterNfcExport: vi.fn() }))
 
 import { executeSSH } from "@/lib/ssh/exec"
 import { pveFetch } from "@/lib/proxmox/client"
@@ -52,6 +61,8 @@ import { resolveNodeSshEndpoint } from "@/lib/ssh/node-endpoint"
 import { startJobHeartbeat } from "./job-heartbeat"
 import { pveSetVmConfig, destroyPveVm } from "./pve-vm-config"
 import { audit } from "@/lib/audit"
+import { soapLogin, soapLogout, soapGetVmConfig, parseVmConfig } from "@/lib/vmware/soap"
+import { runVcenterNfcExport } from "./nfc-export"
 import {
   runV2vMigrationPipeline,
   requestV2vRootChoice,
@@ -171,6 +182,28 @@ async function sshRouter(_connId: string, _host: string, command: string) {
     return ok("Successfully imported disk as 'unused0:local:120/vm-120-disk-0.qcow2'")
   }
   if (command.startsWith("du -sb ")) return ok("1073741824")
+  // Post-copy integrity check (roadmap#1): a clean qcow2 of the expected size.
+  if (command.startsWith("qemu-img check ")) return ok('{"corruptions": 0, "leaks": 0, "check-errors": 0}\nQEMU_IMG_CHECK_RC=0')
+  if (command.startsWith("qemu-img info ")) return ok('{"virtual-size": 1073741824, "format": "qcow2"}')
+  // Block target: the region hash script runs once per side and prints one
+  // `R<index> <sha256>` line per sampled region; identical hashes = clean copy.
+  if (command.includes("proxcenter-integrity.")) {
+    const tags = [...command.matchAll(/echo "R(\d+) \$\(sha256sum/g)].map(m => m[1])
+    return ok(tags.map(t => `R${t} ${"ab".repeat(32)}`).join("\n"))
+  }
+  // Per-disk target storage (#317, lot 2): a block storage named "thin" answers
+  // like LVM-thin, and the vCenter / esxi-direct paths find their tools in place.
+  if (command.startsWith("which nbdkit")) return ok("ok")
+  if (command.startsWith("stat -c %s ")) return ok("1073741824") // size of a converted image
+  if (command.startsWith("pvesm alloc ")) {
+    const m = /pvesm alloc '([^']+)' \d+ '([^']+)'/.exec(command)
+    return ok(`successfully created '${m?.[1]}:${m?.[2]}'`)
+  }
+  if (command.startsWith("pvesm path ")) {
+    const m = /pvesm path '[^:]+:([^']+)'/.exec(command)
+    return ok(`/dev/thin/${m?.[1]}`)
+  }
+  if (command.startsWith("ssh-agent -a ")) return ok("SSH_AGENT_PID=4343; export SSH_AGENT_PID;") // esxi-direct per-job agent
   // mkdir -p, rm -f, rm -rf, find ... -delete, kill, umount: plain success
   return ok("")
 }
@@ -261,6 +294,13 @@ beforeEach(() => {
   vi.mocked(audit).mockResolvedValue("audit-1" as any)
   vi.mocked(executeSSH).mockImplementation(sshRouter as any)
   vi.mocked(pveFetch).mockImplementation(pveRouter as any)
+  vi.mocked(soapLogin).mockResolvedValue({} as any)
+  vi.mocked(soapLogout).mockResolvedValue(undefined)
+  vi.mocked(soapGetVmConfig).mockResolvedValue("<xml/>")
+  // One downloaded VMDK per source disk, in disk order, like the real export.
+  vi.mocked(runVcenterNfcExport).mockImplementation(async p =>
+    Array.from({ length: p.sourceVmwareConfig?.disks.length ?? 1 }, (_, i) => `${p.outputDir}/disk-${i}.vmdk`),
+  )
 })
 
 afterEach(() => {
@@ -471,5 +511,176 @@ describe("runV2vMigrationPipeline direct storage write (#292)", () => {
     // and the disk reaches the storage through the converting import
     const importCmd = sshCommands().find(c => c.startsWith("qm disk import ")) || ""
     expect(importCmd).toContain("qm disk import 120 '/tmp/v2v-v2v-it-inactive/testvm-sda' 'local' --format qcow2")
+  })
+})
+
+describe("runV2vMigrationPipeline per-disk target storage (#317, lot 2)", () => {
+  const sshCommands = () => vi.mocked(executeSSH).mock.calls.map(c => String(c[2]))
+  /** Every `slot=volid` the pipeline attached through the VM config API. */
+  const attachedSlots = () =>
+    Object.fromEntries(vi.mocked(pveSetVmConfig).mock.calls.flatMap(c => [...c[3].entries()])) as Record<string, string>
+
+  /** SOAP inspection of a source VM with `n` disks of 1 GiB, the size the qemu-img info stub reports. */
+  function vmwareSource(n: number) {
+    return {
+      name: "testvm", guestOS: "Ubuntu Linux (64-bit)", guestId: "ubuntu64Guest", numCPU: 2, numCoresPerSocket: 1, sockets: 2,
+      memoryMB: 2048, firmware: "bios", uuid: "u", vmxVersion: "vmx-19", vmPathName: "[ds1] testvm/testvm.vmx",
+      powerState: "poweredOff", committed: 0, snapshotCount: 0, hasVtpm: false, nics: [],
+      disks: Array.from({ length: n }, (_, i) => ({
+        label: `Hard disk ${i + 1}`, fileName: `[ds1] testvm/d${i}.vmdk`, capacityBytes: 1073741824,
+        thinProvisioned: true, datastoreName: "ds1", relativePath: `testvm/d${i}.vmdk`,
+      })),
+    }
+  }
+
+  /** A second storage, block (LVM-thin), next to the file-based default "local". */
+  async function withThinStorage(conn: unknown, path: string, init?: { method?: string }) {
+    if (path === "/storage/thin") return { type: "lvmthin" }
+    return pveRouter(conn, path, init)
+  }
+
+  function vcenterConfig(overrides: Partial<V2vMigrationConfig> = {}): V2vMigrationConfig {
+    return makeConfig({ sourceType: "vcenter", diskPaths: undefined, migrationType: "cold", ...overrides })
+  }
+
+  const VCENTER_CONN = { baseUrl: "https://vcsa.local", apiTokenEnc: "enc", insecureTLS: true, hypervShareName: null }
+
+  it("imports each disk of a vCenter VM onto its own storage: boot disk on the default, data disk on a block storage", { timeout: 15000 }, async () => {
+    queueV2vRuns([{ exit: 0, log: SUCCESS_LOG }])
+    diskListing = "testvm-sda\ntestvm-sdb\n"
+    prisma.connection.findUnique.mockResolvedValue(VCENTER_CONN as any)
+    vi.mocked(parseVmConfig).mockReturnValue(vmwareSource(2) as any)
+    vi.mocked(pveFetch).mockImplementation(withThinStorage as any)
+
+    await runPipelineToEnd("v2v-it-perdisk", vcenterConfig({ disks: [{ index: 1, targetStorage: "thin" }] }))
+
+    expect(prisma.row.status).toBe("completed")
+    const logs = messages()
+    expect(logs).toContain("Per-disk choices: storage disk 1->local, disk 2->thin")
+    // the extra storage was resolved up front, before the download and the conversion
+    const pvePaths = vi.mocked(pveFetch).mock.calls.map(c => String(c[1]))
+    expect(pvePaths.indexOf("/storage/thin")).toBeLessThan(pvePaths.indexOf("/cluster/nextid"))
+    const commands = sshCommands()
+    // disk 1: file-based default storage, converting import (the rename stub refuses)
+    expect(commands.some(c => c.startsWith("qm disk import 120 ") && c.includes("testvm-sda") && c.includes("'local'"))).toBe(true)
+    // disk 2: raw volume allocated on the block storage and written there, never imported as a file
+    expect(commands).toContain("pvesm alloc 'thin' 120 'vm-120-disk-1' 1048576 --format raw 2>&1")
+    expect(commands.some(c => c.startsWith("qemu-img convert ") && c.includes("testvm-sdb") && c.includes("/dev/thin/vm-120-disk-1"))).toBe(true)
+    expect(commands.some(c => c.startsWith("qm disk import ") && c.includes("testvm-sdb"))).toBe(false)
+    expect(logs.some(m => m.includes('[Disk 2/2] Adding testvm-sdb to storage "thin"'))).toBe(true)
+    // attached in order, each from its own storage
+    const attached = attachedSlots()
+    expect(attached.scsi0).toBe("local:120/vm-120-disk-0.qcow2,discard=on")
+    expect(attached.scsi1).toBe("thin:vm-120-disk-1")
+    expect(attached.boot).toBe("order=scsi0")
+  })
+
+  it("skips an excluded disk: its file is neither imported nor attached, and the next disk takes the next slot", { timeout: 15000 }, async () => {
+    queueV2vRuns([{ exit: 0, log: SUCCESS_LOG }])
+    diskListing = "testvm-sda\ntestvm-sdb\ntestvm-sdc\n"
+    prisma.connection.findUnique.mockResolvedValue(VCENTER_CONN as any)
+    vi.mocked(parseVmConfig).mockReturnValue(vmwareSource(3) as any)
+
+    await runPipelineToEnd("v2v-it-exclude", vcenterConfig({ disks: [{ index: 1, exclude: true }] }))
+
+    expect(prisma.row.status).toBe("completed")
+    const logs = messages()
+    expect(logs).toContain("Per-disk choices: excluded disk 2")
+    expect(logs.some(m => m.includes("[Disk 2/3] Excluded in the migration options: testvm-sdb is not imported"))).toBe(true)
+    const commands = sshCommands()
+    // all three disks were still converted (virt-v2v cannot skip one)...
+    expect(runVcenterNfcExport).toHaveBeenCalledTimes(1)
+    expect(commands.some(c => c.startsWith("qm disk import ") && c.includes("testvm-sdb"))).toBe(false)
+    expect(commands.some(c => c.includes("echo ADOPT_OK") && c.includes("testvm-sdb"))).toBe(false)
+    // ...but only the kept ones were imported, in source order, without a slot gap
+    const imported = commands.filter(c => c.startsWith("qm disk import ")).map(c => /testvm-sd[a-z]/.exec(c)?.[0])
+    expect(imported).toEqual(["testvm-sda", "testvm-sdc"])
+    const attached = attachedSlots()
+    expect(attached.scsi0).toBeDefined()
+    expect(attached.scsi1).toBeDefined()
+    expect(attached.scsi2).toBeUndefined()
+    expect(logs.some(m => m.includes("Disk 3 imported and attached as scsi1"))).toBe(true)
+    // the excluded file leaves with the output directory
+    expect(commands).toContain("rm -rf '/var/lib/vz/proxcenter-v2v/v2v-it-exclude'")
+  })
+
+  it("fails before importing anything when the converted disks do not match the source disk list", { timeout: 15000 }, async () => {
+    queueV2vRuns([{ exit: 0, log: SUCCESS_LOG }])
+    diskListing = "testvm-sda\ntestvm-sdb\ntestvm-sdc\n" // one more file than the inspected VM has disks
+    prisma.connection.findUnique.mockResolvedValue(VCENTER_CONN as any)
+    vi.mocked(parseVmConfig).mockReturnValue(vmwareSource(2) as any)
+    vi.mocked(pveFetch).mockImplementation(withThinStorage as any)
+
+    await runPipelineToEnd("v2v-it-mismatch", vcenterConfig({ disks: [{ index: 1, targetStorage: "thin" }] }))
+
+    expect(prisma.row.status).toBe("failed")
+    expect(String(prisma.row.error)).toContain("the source VM has 2 disk(s) but virt-v2v produced 3 disk file(s)")
+    const commands = sshCommands()
+    expect(commands.some(c => c.startsWith("qm disk import ") || c.startsWith("pvesm alloc ") || c.startsWith("qemu-img convert "))).toBe(false)
+    const diskAttach = vi.mocked(pveSetVmConfig).mock.calls.some(c => [...c[3].keys()].some(k => /^(scsi|sata|virtio)\d+$/.test(k)))
+    expect(diskAttach).toBe(false)
+    // the shell VM created before the import is cleaned up as for any failure after the create
+    expect(destroyPveVm).toHaveBeenCalledWith(expect.objectContaining({ id: "conn-target" }), "pve1", 120)
+  })
+
+  it("fails up front when a chosen storage is unknown to the cluster, before any download", { timeout: 15000 }, async () => {
+    prisma.connection.findUnique.mockResolvedValue(VCENTER_CONN as any)
+    vi.mocked(parseVmConfig).mockReturnValue(vmwareSource(2) as any)
+    vi.mocked(pveFetch).mockImplementation((async (conn: unknown, path: string, init?: { method?: string }) => {
+      if (path === "/storage/gone") throw new Error("500 storage 'gone' does not exist")
+      return pveRouter(conn, path, init)
+    }) as any)
+
+    await runPipelineToEnd("v2v-it-badstorage", vcenterConfig({ disks: [{ index: 1, targetStorage: "gone" }] }))
+
+    expect(prisma.row.status).toBe("failed")
+    expect(String(prisma.row.error)).toContain('Target storage "gone" chosen for a disk in the migration options is not known to the cluster')
+    expect(runVcenterNfcExport).not.toHaveBeenCalled()
+    expect(v2vLaunches).toHaveLength(0)
+  })
+
+  it("keeps today's import without per-disk choices: every disk on the default storage, slots in order", { timeout: 15000 }, async () => {
+    queueV2vRuns([{ exit: 0, log: SUCCESS_LOG }])
+    diskListing = "testvm-sda\ntestvm-sdb\n"
+
+    await runPipelineToEnd("v2v-it-default", makeConfig())
+
+    expect(prisma.row.status).toBe("completed")
+    expect(sshCommands().filter(c => c.startsWith("qm disk import "))).toEqual([
+      "qm disk import 120 '/var/lib/vz/proxcenter-v2v/v2v-it-default/testvm-sda' 'local' --format qcow2 2>&1",
+      "qm disk import 120 '/var/lib/vz/proxcenter-v2v/v2v-it-default/testvm-sdb' 'local' --format qcow2 2>&1",
+    ])
+    const attached = attachedSlots()
+    expect(attached.scsi0).toBe("local:120/vm-120-disk-0.qcow2,discard=on")
+    expect(attached.scsi1).toBe("local:120/vm-120-disk-0.qcow2,discard=on")
+    expect(messages().some(m => m.startsWith("Per-disk choices"))).toBe(false)
+    expect(soapLogin).not.toHaveBeenCalled()
+  })
+
+  it("reads the source disk list from the ESXi host on the esxi-direct path and honours the choices", { timeout: 15000 }, async () => {
+    queueV2vRuns([{ exit: 0, log: SUCCESS_LOG }])
+    diskListing = "testvm-sda\ntestvm-sdb\n"
+    prisma.connection.findUnique.mockResolvedValue({
+      baseUrl: "https://esxi.local", apiTokenEnc: "enc", insecureTLS: true, hypervShareName: null,
+      sshEnabled: true, sshUser: "root", sshPort: 22, sshKeyEnc: "enc-key", sshPassEnc: null, sshAuthMethod: "key",
+    } as any)
+    vi.mocked(parseVmConfig).mockReturnValue(vmwareSource(2) as any)
+    vi.mocked(pveFetch).mockImplementation(withThinStorage as any)
+
+    await runPipelineToEnd("v2v-it-esxi", makeConfig({
+      sourceType: "esxi-direct", diskPaths: undefined, migrationType: "cold",
+      vmxPath: "/vmfs/volumes/ds1/testvm/testvm.vmx", esxiHost: "esxi.local",
+      disks: [{ index: 1, targetStorage: "thin" }],
+    }))
+
+    expect(prisma.row.status).toBe("completed")
+    // the lookup the dispatcher made, repeated here because the pipeline never had the list
+    expect(soapLogin).toHaveBeenCalledWith("https://esxi.local", "root", "pw", true)
+    expect(soapLogout).toHaveBeenCalledTimes(1)
+    expect(runVcenterNfcExport).not.toHaveBeenCalled()
+    expect(v2vLaunches[0]).toContain("-i vmx -it ssh")
+    expect(messages()).toContain("Per-disk choices: storage disk 1->local, disk 2->thin")
+    expect(sshCommands()).toContain("pvesm alloc 'thin' 120 'vm-120-disk-1' 1048576 --format raw 2>&1")
+    expect(attachedSlots().scsi1).toBe("thin:vm-120-disk-1")
   })
 })

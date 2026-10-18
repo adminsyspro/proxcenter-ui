@@ -5,12 +5,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getOrchestratorClient } from '@/lib/orchestrator/client'
 import { verifyConnectionOwnership } from '@/lib/tenant'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
+import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
 import { getConnectionById } from '@/lib/connections/getConnection'
 import { orchestratorOrPve } from '@/lib/firewall/withPveFallback'
 import * as pveDirect from '@/lib/firewall/pveDirect'
 
 // PUT /api/v1/firewall/aliases/[connectionId]/[name] - Update alias
-export async function PUT(
+async function putHandler(
   request: NextRequest,
   { params }: { params: Promise<{ connectionId: string; name: string }> }
 ) {
@@ -43,7 +44,7 @@ return NextResponse.json(
 }
 
 // DELETE /api/v1/firewall/aliases/[connectionId]/[name] - Delete alias
-export async function DELETE(
+async function deleteHandler(
   request: NextRequest,
   { params }: { params: Promise<{ connectionId: string; name: string }> }
 ) {
@@ -73,3 +74,6 @@ return NextResponse.json(
     )
   }
 }
+
+export const PUT = withPublicApiGuard("fw-alias-update", putHandler)
+export const DELETE = withPublicApiGuard("fw-alias-delete", deleteHandler)

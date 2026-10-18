@@ -6,6 +6,7 @@ import { listVdcs, createVdc } from "@/lib/vdc"
 import { mapCreateVdcError } from "@/lib/vdc/httpErrors"
 import { audit } from "@/lib/audit"
 import { requireProviderTenant } from "@/lib/tenant"
+import { normalizeIdList } from "@/lib/templates/catalogGrants"
 
 export const runtime = "nodejs"
 
@@ -83,7 +84,11 @@ export async function POST(req: NextRequest) {
         storagePolicies: body.storagePolicies,
         computePolicy: body.computePolicy,
         isoLibraries: Array.isArray(body.isoLibraries) ? body.isoLibraries : undefined,
+        catalogGrants: body.catalogGrants && typeof body.catalogGrants === 'object'
+          ? { imageIds: normalizeIdList(body.catalogGrants.imageIds), blueprintIds: normalizeIdList(body.catalogGrants.blueprintIds) }
+          : undefined,
         transport: body.transport && typeof body.transport === 'object' ? body.transport : undefined,
+        edgeModel: typeof body.edgeModel === 'string' ? body.edgeModel : undefined,
         quota: body.quota,
       },
       session?.user?.id ?? null

@@ -26,7 +26,8 @@ export async function GET(_req: Request, ctx: Ctx) {
 
   try {
     const nodeIp = await resolveNodeSshEndpoint(conn, node)
-    const result = await executeSSH(id, nodeIp, "which sshfs")
+    // Only reads: still answers on a cluster outside the license (roadmap#58).
+    const result = await executeSSH(id, nodeIp, "which sshfs", undefined, { readOnly: true })
     console.log("[check-sshfs]", node, "result:", JSON.stringify({ success: result.success, output: result.output?.trim(), error: result.error }))
     // "which sshfs" returns the path (e.g. /usr/bin/sshfs) on success, empty/error on failure
     const installed = result.success && !!result.output?.trim() && result.output.includes("sshfs")

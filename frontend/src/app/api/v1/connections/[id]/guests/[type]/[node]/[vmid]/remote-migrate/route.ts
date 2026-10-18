@@ -10,6 +10,7 @@ import { assertVmid, assertNodeName } from "@/lib/ssh/validate"
 import { getNodeIp } from "@/lib/ssh/node-ip"
 
 import { captureReplicationJobs, type CcmRestorePlan } from '@/lib/migration/ccm-prereqs'
+import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
 
 export const runtime = "nodejs"
 
@@ -70,7 +71,7 @@ function parseRestoreRequest(value: unknown): RestoreRequest | undefined {
  * - delete?: boolean - Supprimer la VM source après migration réussie (défaut: false)
  * - bwlimit?: number - Limite de bande passante en KiB/s (optionnel)
  */
-export async function POST(
+async function handler(
   req: Request,
   ctx: { params: Promise<{ id: string; type: string; node: string; vmid: string }> }
 ) {
@@ -116,7 +117,21 @@ export async function POST(
       )
     }
 
-    const body = await req.json()
+    const body = await req.json().catch(() => null)
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 })
+    }
+    if (!body.targetConnectionId) {
+      return NextResponse.json({ error: "targetConnectionId is required" }, { status: 400 })
+    }
+    if (typeof body.targetConnectionId !== 'string') {
+      return NextResponse.json({ error: "targetConnectionId must be a string" }, { status: 400 })
+    }
+
+    // The guest lands on the TARGET cluster: vm.migrate is checked there too.
+    const targetDenied = await checkPermission(PERMISSIONS.VM_MIGRATE, "connection", body.targetConnectionId)
+    if (targetDenied) return targetDenied
+
     body.restore = parseRestoreRequest(body.restore)
     const {
       targetConnectionId,
@@ -129,11 +144,6 @@ export async function POST(
       bwlimit,
       restore,
     } = body
-
-    // Validation des paramètres requis
-    if (!targetConnectionId) {
-      return NextResponse.json({ error: "targetConnectionId is required" }, { status: 400 })
-    }
 
     // MSP tenants must also own the target connection
     if (infra.kind === 'msp' && !infra.connectionIds.has(targetConnectionId)) {
@@ -377,3 +387,5 @@ export async function POST(
     return NextResponse.json({ error: errorMessage }, { status: 500 })
   }
 }
+
+export const POST = withPublicApiGuard("vm-remote-migrate", handler)

@@ -8,9 +8,10 @@ import * as pveDirect from '@/lib/firewall/pveDirect'
 import { orchestratorOrPve } from '@/lib/firewall/withPveFallback'
 import { verifyConnectionOwnership } from '@/lib/tenant'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
+import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
 
 // DELETE /api/v1/firewall/groups/[connectionId]/[groupName] - Delete security group
-export async function DELETE(
+async function deleteHandler(
   request: NextRequest,
   { params }: { params: Promise<{ connectionId: string; groupName: string }> }
 ) {
@@ -41,3 +42,5 @@ return NextResponse.json(
     )
   }
 }
+
+export const DELETE = withPublicApiGuard("fw-group-delete", deleteHandler)

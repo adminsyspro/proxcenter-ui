@@ -12,7 +12,7 @@ import type { Prisma } from '@prisma/client'
 
 import { audit } from '@/lib/audit'
 import { getConnectionByIdOrNull } from '@/lib/connections/getConnection'
-import { authorizeRestoreTarget, isProviderCaller, requireGuestFileRestoreUser } from '@/lib/guestFileRestore/guard'
+import { authorizeRestoreTarget, denyTokenOutsideRestoreScope, isProviderCaller, requireGuestFileRestoreUser } from '@/lib/guestFileRestore/guard'
 import { assertSshHostAllowed } from '@/lib/guestFileRestore/guestAddresses'
 import { knownBytesTotal, runGuestFileRestoreJob, type RunContext } from '@/lib/guestFileRestore/runner'
 import { createJobRequestSchema, listJobsQuerySchema, validationError } from '@/lib/guestFileRestore/schemas'
@@ -22,11 +22,12 @@ import { purgeExpiredJobs, reconcileStaleJobs, toJobDto } from '@/lib/guestFileR
 import { pveFetch } from '@/lib/proxmox/client'
 import { PERMISSIONS, checkPermission } from '@/lib/rbac'
 import { getCurrentTenantId, getSessionPrisma } from '@/lib/tenant'
+import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-export async function GET(request: Request) {
+async function getHandler(request: Request) {
   const guard = await requireGuestFileRestoreUser()
   if (guard.denied) return guard.denied
 
@@ -82,7 +83,7 @@ async function lookupGuestName(conn: NonNullable<Awaited<ReturnType<typeof getCo
   }
 }
 
-export async function POST(request: Request) {
+async function postHandler(request: Request) {
   const guard = await requireGuestFileRestoreUser()
   if (guard.denied) return guard.denied
 
@@ -120,6 +121,10 @@ export async function POST(request: Request) {
 
     const conn = await getConnectionByIdOrNull(target.connId)
     if (!conn) return NextResponse.json({ error: 'Connection not found' }, { status: 404 })
+    const outside = await denyTokenOutsideRestoreScope(
+      guard.principal, conn, target, source.kind === 'pve' ? source.connId : source.pbsId,
+    )
+    if (outside) return outside
 
     const providerCaller = await isProviderCaller(guard.principal)
     if (method === 'ssh' && ssh) {
@@ -191,3 +196,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: error?.message || 'Erreur serveur' }, { status: 500 })
   }
 }
+
+export const GET = withPublicApiGuard("gfr-jobs-list", getHandler)
+export const POST = withPublicApiGuard("gfr-job-create", postHandler)

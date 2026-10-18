@@ -5,12 +5,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getOrchestratorClient } from '@/lib/orchestrator/client'
 import { verifyConnectionOwnership } from '@/lib/tenant'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
+import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
 import { getConnectionById } from '@/lib/connections/getConnection'
 import { orchestratorOrPve } from '@/lib/firewall/withPveFallback'
 import * as pveDirect from '@/lib/firewall/pveDirect'
 
 // PUT /api/v1/firewall/nodes/[connectionId]/[node]/rules/[pos] - Update/move node rule
-export async function PUT(
+async function putHandler(
   request: NextRequest,
   { params }: { params: Promise<{ connectionId: string; node: string; pos: string }> }
 ) {
@@ -43,7 +44,7 @@ return NextResponse.json(
 }
 
 // DELETE /api/v1/firewall/nodes/[connectionId]/[node]/rules/[pos] - Delete node rule
-export async function DELETE(
+async function deleteHandler(
   request: NextRequest,
   { params }: { params: Promise<{ connectionId: string; node: string; pos: string }> }
 ) {
@@ -75,3 +76,6 @@ return NextResponse.json(
     )
   }
 }
+
+export const PUT = withPublicApiGuard("fw-node-rule-update", putHandler)
+export const DELETE = withPublicApiGuard("fw-node-rule-delete", deleteHandler)

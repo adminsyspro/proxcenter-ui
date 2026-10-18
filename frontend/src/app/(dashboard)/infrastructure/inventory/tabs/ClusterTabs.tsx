@@ -1703,7 +1703,7 @@ export default function ClusterTabs(props: any) {
                       </Box>
                     ) : (
                       <Stack spacing={3}>
-                        <AutoHaCard connId={clusterConnId} pveMajorVersion={clusterPveMajorVersion} haGroups={clusterHaGroups} />
+                        <AutoHaCard key={clusterConnId} connId={clusterConnId} pveMajorVersion={clusterPveMajorVersion} haGroups={clusterHaGroups} />
 
                         {/* HA Status (quorum, master, lrm) */}
                         {clusterHaStatus && clusterHaStatus.filter((s: any) => s.type === 'quorum' || s.type === 'master' || s.type === 'lrm').length > 0 && (

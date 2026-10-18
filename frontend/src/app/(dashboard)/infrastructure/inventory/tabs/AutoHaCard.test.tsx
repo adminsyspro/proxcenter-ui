@@ -79,6 +79,29 @@ describe('AutoHaCard', () => {
     expect(screen.getByRole('button', { name: /Save/ })).toBeInTheDocument()
   })
 
+  it('a switch to another connection never carries the previous settings, nor saves them there', async () => {
+    const OTHER = '*/api/v1/connections/conn-2/ha/auto-ha'
+    let releaseOther: () => void = () => {}
+    const otherLoaded = new Promise<void>(resolve => { releaseOther = resolve })
+    let putBody: any = null
+    server.use(
+      http.get(OTHER, async () => { await otherLoaded; return HttpResponse.json({ data: { ...STORED, enabled: false, max_restart: 3 } }) }),
+      http.put(OTHER, async ({ request }) => { putBody = await request.json(); return HttpResponse.json({ data: putBody }) }),
+    )
+    const { rerender } = renderWithProviders(<AutoHaCard connId="conn-1" pveMajorVersion={9} haGroups={[]} />)
+    await waitFor(() => expect(screen.getByRole('switch')).toBeChecked())
+
+    rerender(<AutoHaCard connId="conn-2" pveMajorVersion={9} haGroups={[]} />)
+
+    // conn-2 still loading: nothing of conn-1 on screen to edit or save.
+    expect(screen.queryByRole('switch')).toBeNull()
+    releaseOther()
+    await waitFor(() => expect(screen.getByRole('switch')).not.toBeChecked())
+    fireEvent.click(screen.getByRole('switch'))
+    await waitFor(() => expect(putBody).not.toBeNull())
+    expect(putBody).toEqual({ ...STORED, enabled: true, max_restart: 3 })
+  })
+
   it('a refused sync shows the error, not a success', async () => {
     server.use(http.post(`${BASE}/sync`, () => HttpResponse.json({ error: 'Permission denied: node.manage' }, { status: 403 })))
     renderCard()

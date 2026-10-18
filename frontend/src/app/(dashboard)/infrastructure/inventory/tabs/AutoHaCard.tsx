@@ -40,7 +40,14 @@ export default function AutoHaCard({ connId, pveMajorVersion, haGroups }: {
   const { hasPermissionOn } = useRBAC()
   const canManageAutoHa = !!connId && hasPermissionOn('node.manage', 'connection', connId)
 
-  const [autoHaSettings, setAutoHaSettings] = useState<any>(null)
+  // Settings are kept with the connection they were read from: after a switch
+  // to another cluster nothing of the previous one is shown, edited or saved.
+  const [loaded, setLoaded] = useState<{ connId: string; data: any } | null>(null)
+  const autoHaSettings = loaded?.connId === connId ? loaded.data : null
+  const setAutoHaSettings = useCallback((next: any) => setLoaded(prev => {
+    const current = prev?.connId === connId ? prev.data : null
+    return { connId, data: typeof next === 'function' ? next(current) : next }
+  }), [connId])
   const [autoHaSaving, setAutoHaSaving] = useState(false)
   const [autoHaSyncing, setAutoHaSyncing] = useState(false)
   const [autoHaSyncResult, setAutoHaSyncResult] = useState<any>(null)
@@ -53,7 +60,7 @@ export default function AutoHaCard({ connId, pveMajorVersion, haGroups }: {
       .then(json => { if (!cancelled) setAutoHaSettings(json.data) })
       .catch(() => { /* ignore */ })
     return () => { cancelled = true }
-  }, [connId])
+  }, [connId, setAutoHaSettings])
 
   const saveAutoHaSettings = useCallback(async (data: any) => {
     if (!connId) return
@@ -69,7 +76,7 @@ export default function AutoHaCard({ connId, pveMajorVersion, haGroups }: {
       else toast.error(json.error || t('errors.updateError'))
     } catch { /* ignore */ }
     setAutoHaSaving(false)
-  }, [connId, toast, t])
+  }, [connId, setAutoHaSettings, toast, t])
 
   const syncAutoHa = useCallback(async () => {
     if (!connId) return

@@ -38,6 +38,9 @@ vi.mock('@/hooks/useRefreshInterval', () => ({ useRefreshInterval: () => 0 }))
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }) }))
 vi.mock('@mui/x-data-grid', () => ({ DataGrid: () => <div data-testid="datagrid" /> }))
 vi.mock('./TaskDetailDialog', () => ({ default: () => null }))
+// The bulk batch tabs poll through SWR: left real, a revalidation lands after
+// jsdom is torn down and fails the run with "document is not defined".
+vi.mock('@/hooks/useActiveBulkBatches', () => ({ useActiveBulkBatches: () => ({ data: undefined }) }))
 vi.mock('@/components/tasks/JobDetailDialog', () => ({ default: () => null }))
 // Record which job the shared detail dialog was opened on.
 vi.mock('@/components/SharedTaskDetailDialog', () => ({

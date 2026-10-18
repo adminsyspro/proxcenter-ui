@@ -51,6 +51,12 @@ describe('buildOpenApiDocument', () => {
     ]))
   })
 
+  it('tells the HA sid is sent unencoded, an encoded colon being refused', () => {
+    const op = doc.paths['/api/v1/connections/{id}/ha/{sid}'].post
+    expect(op.description).toContain('sent unencoded (`vm:100`): a percent-encoded `:` (`vm%3A100`) is refused with 401')
+    expect(op.parameters.find((p: any) => p.name === 'sid').description).toMatch(/unencoded.*refused \(401\)/)
+  })
+
   it('carries the exact error bodies of the spec', () => {
     const responses = doc.paths['/api/v1/vms'].get.responses
     expect(responses['401'].content['application/json'].example).toEqual({

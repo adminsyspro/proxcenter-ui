@@ -11630,7 +11630,7 @@
             "schema": {
               "type": "string"
             },
-            "description": "Path parameter."
+            "description": "Path parameter, sent unencoded: a percent-encoded character in it is refused (401)."
           }
         ],
         "responses": {
@@ -11753,7 +11753,7 @@
             "schema": {
               "type": "string"
             },
-            "description": "Path parameter."
+            "description": "Path parameter, sent unencoded: a percent-encoded character in it is refused (401)."
           }
         ],
         "requestBody": {
@@ -12038,7 +12038,7 @@
             "schema": {
               "type": "string"
             },
-            "description": "Path parameter."
+            "description": "Path parameter, sent unencoded: a percent-encoded character in it is refused (401)."
           }
         ],
         "responses": {
@@ -12159,7 +12159,7 @@
             "schema": {
               "type": "string"
             },
-            "description": "Path parameter."
+            "description": "Path parameter, sent unencoded: a percent-encoded character in it is refused (401)."
           },
           {
             "name": "action",
@@ -17793,7 +17793,7 @@
       "get": {
         "operationId": "ha-resource-get",
         "summary": "HA configuration of a guest",
-        "description": "The HA resource {sid} as Proxmox stores it; `data` is null when the guest is not HA-managed. {sid} is `vm:<vmid>` or `ct:<vmid>`, sent as is (a percent-encoded `:` is refused).\n\nRequired scope: `nodes:read` or `ha:write`",
+        "description": "The HA resource {sid} as Proxmox stores it; `data` is null when the guest is not HA-managed. {sid} is `vm:<vmid>` or `ct:<vmid>`, sent unencoded (`vm:100`): a percent-encoded `:` (`vm%3A100`) is refused with 401.\n\nRequired scope: `nodes:read` or `ha:write`",
         "tags": [
           "HA"
         ],
@@ -17818,7 +17818,7 @@
             "schema": {
               "type": "string"
             },
-            "description": "Path parameter."
+            "description": "Path parameter, sent unencoded: a percent-encoded character in it is refused (401)."
           }
         ],
         "responses": {
@@ -17925,7 +17925,7 @@
       "post": {
         "operationId": "ha-resource-upsert",
         "summary": "Put a guest under HA, or update its HA configuration",
-        "description": "Creates the HA resource {sid} when the guest is not HA-managed yet, otherwise updates it with the given fields; `message` says which. {sid} is `vm:<vmid>` or `ct:<vmid>`, sent as is (a percent-encoded `:` is refused). Only from the provider tenant. Not available to a vDC tenant token.\n\nRequired scope: `ha:write`",
+        "description": "Creates the HA resource {sid} when the guest is not HA-managed yet, otherwise updates it with the given fields; `message` says which. {sid} is `vm:<vmid>` or `ct:<vmid>`, sent unencoded (`vm:100`): a percent-encoded `:` (`vm%3A100`) is refused with 401. Only from the provider tenant. Not available to a vDC tenant token.\n\nRequired scope: `ha:write`",
         "tags": [
           "HA"
         ],
@@ -17949,7 +17949,7 @@
             "schema": {
               "type": "string"
             },
-            "description": "Path parameter."
+            "description": "Path parameter, sent unencoded: a percent-encoded character in it is refused (401)."
           }
         ],
         "requestBody": {
@@ -18092,7 +18092,7 @@
       "delete": {
         "operationId": "ha-resource-delete",
         "summary": "Take a guest out of HA",
-        "description": "Removes the HA resource {sid}; the guest itself is left as it is. {sid} is `vm:<vmid>` or `ct:<vmid>`, sent as is (a percent-encoded `:` is refused). Only from the provider tenant. Not available to a vDC tenant token.\n\nRequired scope: `ha:write`",
+        "description": "Removes the HA resource {sid}; the guest itself is left as it is. {sid} is `vm:<vmid>` or `ct:<vmid>`, sent unencoded (`vm:100`): a percent-encoded `:` (`vm%3A100`) is refused with 401. Only from the provider tenant. Not available to a vDC tenant token.\n\nRequired scope: `ha:write`",
         "tags": [
           "HA"
         ],
@@ -18116,7 +18116,7 @@
             "schema": {
               "type": "string"
             },
-            "description": "Path parameter."
+            "description": "Path parameter, sent unencoded: a percent-encoded character in it is refused (401)."
           }
         ],
         "responses": {

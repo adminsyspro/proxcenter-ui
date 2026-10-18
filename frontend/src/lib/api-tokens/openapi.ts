@@ -66,6 +66,8 @@ function parameters(entry: AllowlistEntry) {
         description = "Raw connection id; must be inside the token connection perimeter."
       } else if (entry.vmKeySegment === name) {
         description = "Composite guest key connId:type:node:vmid; the connection must be inside the token connection perimeter."
+      } else if (entry.segmentExclude?.[name]) {
+        description = "Path parameter, sent unencoded: a percent-encoded character in it is refused (401)."
       }
       params.push({
         name,

@@ -9,7 +9,7 @@ const HA_FILE = "connections/[id]/ha"
 const HA_READ_SCOPES = ["nodes:read", "ha:write"]
 /** Static siblings of ha/{sid}: Next serves them first. */
 const NOT_HA_SIBLINGS = { sid: ["groups", "affinity-rules", "auto-ha"] } as const
-const SID_NOTE = "{sid} is `vm:<vmid>` or `ct:<vmid>`, sent as is (a percent-encoded `:` is refused)."
+const SID_NOTE = "{sid} is `vm:<vmid>` or `ct:<vmid>`, sent unencoded (`vm:100`): a percent-encoded `:` (`vm%3A100`) is refused with 401."
 const TENANT_NOTE = "Not available to a vDC tenant token."
 
 type HaEntry = Omit<AllowlistEntry, "tag" | "routeFile" | "connectionSegment" | "clusterObject" | "requiredScopes"> & {

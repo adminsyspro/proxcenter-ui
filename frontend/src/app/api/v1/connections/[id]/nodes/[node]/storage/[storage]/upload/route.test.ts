@@ -404,6 +404,41 @@ describe("POST upload: chunk retries are idempotent", () => {
     }
   })
 
+  it("refuses a chunk that would carry the upload past the size its first chunk announced", async () => {
+    const pve = recordingRequest()
+    expect((await chunk("r-big", 0, "aaaa")).status).toBe(200)
+
+    const res = await chunk("r-big", 1, "bbbbbbbb")
+
+    expect(res.status).toBe(413)
+    expect(pve.writes.slice(1).map(String)).toEqual(["aaaa"])
+  })
+
+  it("keeps one chunk in memory per upload: the next one waits for the write in flight", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
+    try {
+      const pve = recordingRequest({ hold: true })
+      const first = chunk("r-queue", 0, "aaaa")
+      await vi.advanceTimersByTimeAsync(0)
+
+      const second = await chunk("r-queue", 1, "bbbb")
+      expect(second.status).toBe(429)
+
+      pve.release()
+      await vi.advanceTimersByTimeAsync(0)
+      expect((await first).status).toBe(200)
+
+      // Once chunk 0 is through, chunk 1 is taken.
+      const third = chunk("r-queue", 1, "bbbb")
+      await vi.advanceTimersByTimeAsync(0)
+      pve.release()
+      expect((await third).status).toBe(200)
+      expect(pve.writes.slice(1).map(String)).toEqual(["aaaa", "bbbb"])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it("ends the session on a failed write, so the next chunk is refused rather than streamed", async () => {
     // The preamble is written without a callback, so only the chunk write fails.
     recordingRequest({ fail: true })

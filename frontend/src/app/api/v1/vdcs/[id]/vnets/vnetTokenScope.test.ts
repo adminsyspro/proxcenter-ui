@@ -11,6 +11,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const h = vi.hoisted(() => ({
   headers: vi.fn<() => Promise<Headers>>(),
+  currentTenant: vi.fn<() => Promise<string>>(),
   getPrincipal: vi.fn<(...a: any[]) => Promise<any>>(),
   infra: vi.fn<(...a: any[]) => Promise<any>>(),
   checkPermission: vi.fn<(...a: any[]) => Promise<Response | null>>(),
@@ -35,7 +36,7 @@ vi.mock('@/lib/tenant/infraScope', async io => ({
   getTenantInfrastructureScope: (...a: any[]) => h.infra(...a),
 }))
 vi.mock('@/lib/tenant', () => ({
-  getCurrentTenantId: async () => 'tenant-a',
+  getCurrentTenantId: () => h.currentTenant(),
   getTenantConnectionIds: async () => new Set(['c1', 'c2']),
   DEFAULT_TENANT_ID: 'default',
 }))
@@ -45,7 +46,10 @@ vi.mock('@/lib/db/prisma', () => ({
     vdcVnet: { findFirst: (...a: any[]) => h.vnetFindFirst(...a) },
   },
 }))
-vi.mock('@/lib/rbac', () => ({ checkPermission: (...a: any[]) => h.checkPermission(...a), PERMISSIONS: {} }))
+vi.mock('@/lib/rbac', () => ({
+  checkPermission: (...a: any[]) => h.checkPermission(...a),
+  PERMISSIONS: { SDN_VNET_VIEW: 'sdn.vnet.view', SDN_VNET_CREATE: 'sdn.vnet.create', SDN_VNET_EDIT: 'sdn.vnet.edit', SDN_VNET_DELETE: 'sdn.vnet.delete' },
+}))
 vi.mock('@/lib/vdc/vnets', () => ({
   listVnetsForTenant: (...a: any[]) => h.listVnets(...a),
   createVnetForTenant: (...a: any[]) => h.createVnet(...a),
@@ -60,7 +64,7 @@ import { DELETE, GET, PUT } from './[pveName]/route'
 
 const TOKEN_A = {
   kind: 'token', tokenId: 'tok-a', tenantId: 'tenant-a', creatorUserId: 'u-a', connectionIds: null,
-  scopes: ['network:write'], permissions: new Set(['node.view', 'connection.view', 'node.network', 'connection.manage', 'sdn.vnet.create', 'sdn.vnet.edit', 'sdn.vnet.delete']),
+  scopes: ['network:write'], permissions: new Set(['node.view', 'connection.view', 'node.network', 'connection.manage', 'sdn.vnet.view', 'sdn.vnet.create', 'sdn.vnet.edit', 'sdn.vnet.delete']),
 }
 const SESSION = { kind: 'session', userId: 'u-1', tenantId: 'tenant-a', connectionIds: null }
 const VDC_A = { id: 'vdc-a', tenantId: 'tenant-a', connectionId: 'c1' }
@@ -99,6 +103,7 @@ const CALLS = [
 beforeEach(() => {
   vi.clearAllMocks()
   h.getPrincipal.mockResolvedValue({ ok: true, principal: TOKEN_A })
+  h.currentTenant.mockResolvedValue('tenant-a')
   h.infra.mockResolvedValue({ kind: 'iaas' })
   h.creator.mockResolvedValue(true)
   h.checkPermission.mockResolvedValue(null)
@@ -145,6 +150,16 @@ describe('vDC VNets with an API token of tenant A', () => {
     expect(h.checkPermission).toHaveBeenCalledWith('sdn.vnet.view', 'connection', 'c1')
   })
 
+  it.each(CALLS)('%s when the vDC lookup fails: an error, no library call', async (_name, call) => {
+    h.vdcFindUnique.mockRejectedValue(new Error('database unavailable'))
+
+    const res = await call('vdc-a')
+
+    expect(res.status).toBeGreaterThanOrEqual(400)
+    expect(h.checkPermission).not.toHaveBeenCalled()
+    for (const lib of [h.listVnets, h.createVnet, h.updateVnet, h.deleteVnet, h.vnetFindFirst]) expect(lib).not.toHaveBeenCalled()
+  })
+
   it('creates on its own vDC, judged on the vDC connection, with no creating user', async () => {
     const res = await CREATE(tokenRequest('POST', 'vdc-a', false), listParams('vdc-a'))
 
@@ -161,6 +176,36 @@ describe('vDC VNets with an API token of tenant A', () => {
     await call()
 
     expect(h.checkPermission).toHaveBeenCalledWith(permission, 'connection', 'c1')
+  })
+})
+
+describe('vDC VNets with a provider token, as with a provider session', () => {
+  beforeEach(() => {
+    h.getPrincipal.mockResolvedValue({ ok: true, principal: { ...TOKEN_A, tenantId: 'default' } })
+    h.currentTenant.mockResolvedValue('default')
+    h.infra.mockResolvedValue({ kind: 'provider' })
+    // The library resolves the vDC within the caller's tenant (resolveVdcForVnet).
+    const ownVdcOnly = async (vdcId: string, tenantId: string) => {
+      if ([VDC_A, VDC_B].find(v => v.id === vdcId)?.tenantId !== tenantId) throw new Error('vDC not found')
+      return { id: 'vnet-1' }
+    }
+    h.updateVnet.mockImplementation(ownVdcOnly)
+    h.deleteVnet.mockImplementation(ownVdcOnly)
+  })
+
+  it.each([
+    ['GET', () => GET(tokenRequest('GET', 'vdc-b', true), itemParams('vdc-b'))],
+    ['PUT', () => PUT(tokenRequest('PUT', 'vdc-b', true), itemParams('vdc-b'))],
+    ['DELETE', () => DELETE(tokenRequest('DELETE', 'vdc-b', true), itemParams('vdc-b'))],
+  ] as const)('%s on a VNet of a tenant vDC: 404, looked up in the provider tenant', async (method, call) => {
+    const res = await call()
+
+    expect(res.status).toBe(404)
+    if (method === 'GET') {
+      expect(h.vnetFindFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { vdcId: 'vdc-b', displayName: 'lan', vdc: { tenantId: 'default' } } }))
+    } else {
+      expect(method === 'PUT' ? h.updateVnet : h.deleteVnet).toHaveBeenCalledWith('vdc-b', 'default', 'lan', ...(method === 'PUT' ? [expect.anything()] : []))
+    }
   })
 })
 

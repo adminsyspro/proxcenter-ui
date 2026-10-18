@@ -5,6 +5,7 @@ import { getPrincipal, type Principal } from "@/lib/auth/principal"
 import { getCurrentTenantId } from "@/lib/tenant"
 import { listVnetsForTenant, createVnetForTenant } from "@/lib/vdc/vnets"
 import { checkVnetPermission } from "@/lib/vdc/vnetPermission"
+import { PERMISSIONS } from "@/lib/rbac"
 import { VniError } from "@/lib/vdc/vniPolicy"
 import { getSubnetUsage } from "@/lib/vdc/ipam"
 
@@ -19,7 +20,7 @@ async function getHandler(_req: Request, ctx: RouteContext) {
     const vdcId = (params as any)?.id
     if (!vdcId) return NextResponse.json({ error: "Missing vDC ID" }, { status: 400 })
 
-    const denied = await checkVnetPermission(ctx.principal, vdcId, "sdn.vnet.view")
+    const denied = await checkVnetPermission(ctx.principal, vdcId, PERMISSIONS.SDN_VNET_VIEW)
     if (denied) return denied
 
     // Enrich each VNet with its IPAM usage counts so the dashboard can
@@ -53,7 +54,7 @@ async function postHandler(req: Request, ctx: RouteContext) {
     const vdcId = (params as any)?.id
     if (!vdcId) return NextResponse.json({ error: "Missing vDC ID" }, { status: 400 })
 
-    const denied = await checkVnetPermission(ctx.principal, vdcId, "sdn.vnet.create")
+    const denied = await checkVnetPermission(ctx.principal, vdcId, PERMISSIONS.SDN_VNET_CREATE)
     if (denied) return denied
 
     const body = await req.json().catch(() => ({}))

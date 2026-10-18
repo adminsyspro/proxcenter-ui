@@ -60,6 +60,7 @@ export const WRITE_SCOPE_DEFINITIONS: Record<string, readonly string[]> = {
     "connection.view",
     "node.network",
     "connection.manage",
+    "sdn.vnet.view",
     "sdn.vnet.create",
     "sdn.vnet.edit",
     "sdn.vnet.delete",

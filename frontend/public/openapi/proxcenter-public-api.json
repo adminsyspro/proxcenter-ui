@@ -4659,6 +4659,7 @@
         "connection.view",
         "node.network",
         "connection.manage",
+        "sdn.vnet.view",
         "sdn.vnet.create",
         "sdn.vnet.edit",
         "sdn.vnet.delete"
@@ -21208,7 +21209,7 @@
       "get": {
         "operationId": "vdc-vnets-list",
         "summary": "Networks of a vDC",
-        "description": "The VNets of the vDC with their subnet and IPAM usage. Needs sdn.vnet.view. The vDC must belong to the token's tenant (404 otherwise, as for a session of another tenant) and sit on a connection inside the token perimeter.",
+        "description": "The VNets of the vDC with their subnet and IPAM usage. Needs sdn.vnet.view (scope network:write). The vDC must belong to the token's tenant (404 otherwise, as for a session of another tenant) and sit on a connection inside the token perimeter.",
         "tags": [
           "Network"
         ],
@@ -21736,7 +21737,7 @@
       "get": {
         "operationId": "vdc-vnet-get",
         "summary": "Network of a vDC",
-        "description": "The VNet whose display name is {pveName}; 404 when the vDC has none. Needs sdn.vnet.view. The vDC must belong to the token's tenant (404 otherwise, as for a session of another tenant) and sit on a connection inside the token perimeter.",
+        "description": "The VNet whose display name is {pveName}; 404 when the vDC has none. Needs sdn.vnet.view (scope network:write). The vDC must belong to the token's tenant (404 otherwise, as for a session of another tenant) and sit on a connection inside the token perimeter.",
         "tags": [
           "Network"
         ],

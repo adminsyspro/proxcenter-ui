@@ -18,7 +18,10 @@ const h = vi.hoisted(() => ({
 vi.mock("@/lib/api-tokens/routeGuard", () => ({
   withPublicApiGuard: (_entryId: string, handler: any) => handler,
 }))
-vi.mock("@/lib/rbac", () => ({ checkPermission: h.checkPermission, PERMISSIONS: {} }))
+vi.mock("@/lib/rbac", () => ({
+  checkPermission: h.checkPermission,
+  PERMISSIONS: { SDN_VNET_VIEW: "sdn.vnet.view", SDN_VNET_CREATE: "sdn.vnet.create", SDN_VNET_EDIT: "sdn.vnet.edit", SDN_VNET_DELETE: "sdn.vnet.delete" },
+}))
 vi.mock("@/lib/auth/principal", () => ({
   getPrincipal: vi.fn(async () => ({ ok: true, principal: { kind: "session", userId: "u1", tenantId: "tenant-a", connectionIds: null } })),
 }))

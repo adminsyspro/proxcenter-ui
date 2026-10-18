@@ -124,7 +124,7 @@ export const NETWORK_ENTRIES: AllowlistEntry[] = [
     file: VNETS_FILE,
     pattern: VNETS,
     summary: "Networks of a vDC",
-    description: `The VNets of the vDC with their subnet and IPAM usage. Needs sdn.vnet.view. ${VDC_NOTE}`,
+    description: `The VNets of the vDC with their subnet and IPAM usage. Needs sdn.vnet.view (scope network:write). ${VDC_NOTE}`,
     responseSchemaRef: "VdcVnetsResponse",
   }),
   vnetEntry({
@@ -145,7 +145,7 @@ export const NETWORK_ENTRIES: AllowlistEntry[] = [
     file: `${VNETS_FILE}/[pveName]`,
     pattern: `${VNETS}/{pveName}`,
     summary: "Network of a vDC",
-    description: `The VNet whose display name is {pveName}; 404 when the vDC has none. Needs sdn.vnet.view. ${VDC_NOTE}`,
+    description: `The VNet whose display name is {pveName}; 404 when the vDC has none. Needs sdn.vnet.view (scope network:write). ${VDC_NOTE}`,
     responseSchemaRef: "VdcVnetResponse",
   }),
   vnetEntry({

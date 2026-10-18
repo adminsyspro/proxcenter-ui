@@ -107,7 +107,7 @@ describe('scope to permission resolver (spec section 7)', () => {
       'pools:write': ['connection.view', 'connection.manage'],
       'network:write': [
         'node.view', 'connection.view', 'node.network', 'connection.manage',
-        'sdn.vnet.create', 'sdn.vnet.edit', 'sdn.vnet.delete',
+        'sdn.vnet.view', 'sdn.vnet.create', 'sdn.vnet.edit', 'sdn.vnet.delete',
       ],
       'firewall:write': ['node.view', 'connection.view', 'node.manage'],
     })

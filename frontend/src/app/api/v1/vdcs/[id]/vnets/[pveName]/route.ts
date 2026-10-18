@@ -6,6 +6,7 @@ import { getCurrentTenantId } from "@/lib/tenant"
 import { prisma } from "@/lib/db/prisma"
 import { updateVnetForTenant, deleteVnetForTenant } from "@/lib/vdc/vnets"
 import { checkVnetPermission } from "@/lib/vdc/vnetPermission"
+import { PERMISSIONS } from "@/lib/rbac"
 
 export const runtime = "nodejs"
 
@@ -25,7 +26,7 @@ async function getHandler(_req: Request, ctx: RouteContext) {
     const displayName = (params as any)?.pveName
     if (!vdcId || !displayName) return NextResponse.json({ error: "Missing params" }, { status: 400 })
 
-    const denied = await checkVnetPermission(ctx.principal, vdcId, "sdn.vnet.view")
+    const denied = await checkVnetPermission(ctx.principal, vdcId, PERMISSIONS.SDN_VNET_VIEW)
     if (denied) return denied
 
     const tenantId = await getCurrentTenantId()
@@ -81,7 +82,7 @@ async function putHandler(req: Request, ctx: RouteContext) {
     const displayName = (params as any)?.pveName
     if (!vdcId || !displayName) return NextResponse.json({ error: "Missing params" }, { status: 400 })
 
-    const denied = await checkVnetPermission(ctx.principal, vdcId, "sdn.vnet.edit")
+    const denied = await checkVnetPermission(ctx.principal, vdcId, PERMISSIONS.SDN_VNET_EDIT)
     if (denied) return denied
 
     const body = await req.json().catch(() => ({}))
@@ -133,7 +134,7 @@ async function deleteHandler(_req: Request, ctx: RouteContext) {
     const displayName = (params as any)?.pveName
     if (!vdcId || !displayName) return NextResponse.json({ error: "Missing params" }, { status: 400 })
 
-    const denied = await checkVnetPermission(ctx.principal, vdcId, "sdn.vnet.delete")
+    const denied = await checkVnetPermission(ctx.principal, vdcId, PERMISSIONS.SDN_VNET_DELETE)
     if (denied) return denied
 
     const tenantId = await getCurrentTenantId()

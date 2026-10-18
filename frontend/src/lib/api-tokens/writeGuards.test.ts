@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const {
   headersMock, resolveVisibleMock, infraMock, guestScopeMock, creatorMock, creatorPermissionMock, getConnectionMock, auditMock,
@@ -516,6 +516,40 @@ describe('runTokenEntryGuards', () => {
       expect(res?.status).toBe(403)
       expect(creatorMock).not.toHaveBeenCalled()
     })
+  })
+})
+
+describe('runTokenEntryGuards: a lookup that throws (scope unverifiable)', () => {
+  const guestEntry = entry({
+    pattern: '/api/v1/connections/{id}/guests/{type}/{node}/{vmid}/x',
+    guestScope: { connection: 'id', type: 'type', node: 'node', vmid: 'vmid' },
+  })
+  const guestParams = { id: 'conn-a', type: 'qemu', node: 'pve1', vmid: '100' }
+  let errSpy: ReturnType<typeof vi.spyOn>
+  beforeEach(() => { errSpy = vi.spyOn(console, 'error').mockImplementation(() => {}) })
+  afterEach(() => errSpy.mockRestore())
+
+  async function expectUnverifiable(res: Response | null) {
+    expect(res?.status).toBe(503)
+    expect(await res?.json()).toEqual({ error: 'Unable to verify token scope' })
+    expect(deniedAudit().details).toMatchObject({ status: 503, reason: 'Unable to verify token scope', entry: 'test-write' })
+    expect(creatorMock).not.toHaveBeenCalled()
+  }
+
+  it('the perimeter resolution', async () => {
+    resolveVisibleMock.mockRejectedValue(new Error('db down: secret'))
+    await expectUnverifiable(await runTokenEntryGuards(entry(), principal, post({}), { id: 'conn-a' }))
+  })
+
+  it('the tenant infrastructure scope', async () => {
+    infraMock.mockRejectedValue(new Error('db down'))
+    await expectUnverifiable(await runTokenEntryGuards(entry({ clusterObject: true }), principal, post({}), { id: 'conn-a' }))
+  })
+
+  it('the guest vDC scope helper (its own infra lookup)', async () => {
+    infraMock.mockResolvedValue(iaas())
+    guestScopeMock.mockRejectedValue(new Error('db down'))
+    await expectUnverifiable(await runTokenEntryGuards(guestEntry, principal, post({}), guestParams))
   })
 })
 

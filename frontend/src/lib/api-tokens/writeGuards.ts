@@ -20,6 +20,7 @@ const NOT_IN_SCOPE = "Connection not in token scope"
 const CLUSTER_OBJECT = "Cluster-level object not available to a vDC tenant token"
 const GUEST_OUTSIDE = "Guest outside your vDC scope"
 const CREATOR_LOST = "Token creator no longer holds this right"
+const SCOPE_UNVERIFIABLE = "Unable to verify token scope"
 
 type FieldReader = (field: BodyOrQueryField) => Promise<unknown[]>
 
@@ -132,12 +133,15 @@ async function guestTargets(
   return type && node && vmid ? { connection, type, node, vmids: [vmid], allowMovedNode: spec.allowMovedNode } : null
 }
 
+type Deny = (rejection?: PrincipalRejection) => Promise<Response>
+
 /**
  * Token-only guards, in the spec order: (1) forwarded method, (1b) no path
  * param still escaped once decoded, (2) primary connection, (3) secondary
  * connections, (4) cluster objects vs vDC tenant, (5) guest vDC scope,
  * (6) live creator check on writes. Null = proceed; otherwise the refusal to
- * send, already journaled as apitoken.denied.
+ * send, already journaled as apitoken.denied. A lookup that throws (perimeter,
+ * tenant scope, guest scope) is a journaled 503, never a pass nor a bare 500.
  */
 export async function runTokenEntryGuards(
   entry: AllowlistEntry,
@@ -145,10 +149,25 @@ export async function runTokenEntryGuards(
   req: Request,
   params: Record<string, string>,
 ): Promise<Response | null> {
-  const deny = async (rejection?: PrincipalRejection): Promise<Response> => {
+  const deny: Deny = async rejection => {
     await auditTokenDenied(rejection, { tokenId: principal.tokenId, entryId: entry.id })
     return rejectionToResponse(rejection)
   }
+  try {
+    return await evaluateGuards(entry, principal, req, params, deny)
+  } catch (e) {
+    console.error("[api-tokens] token scope lookup failed, denying:", (e as Error)?.message ?? e)
+    return deny({ status: 503, body: { error: SCOPE_UNVERIFIABLE } })
+  }
+}
+
+async function evaluateGuards(
+  entry: AllowlistEntry,
+  principal: Principal,
+  req: Request,
+  params: Record<string, string>,
+  deny: Deny,
+): Promise<Response | null> {
   const notInScope = (connection: unknown) =>
     deny({ status: 403, body: { error: NOT_IN_SCOPE, connection: typeof connection === "string" ? connection : null } })
 

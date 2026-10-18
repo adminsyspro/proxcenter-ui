@@ -689,8 +689,16 @@ async function checkTokenPermission(
   // A non-provider token only ever reaches its own tenant's connections
   // (owned or vDC-bound), even with a null perimeter: a provider-pool
   // connection id named in a URL is not an invitation to another tenant.
-  if (confineToTenant && !(await getTenantConnectionIds()).has(connId)) {
-    return deny()
+  if (confineToTenant) {
+    let tenantConnections: Set<string>
+    try {
+      tenantConnections = await getTenantConnectionIds()
+    } catch (e) {
+      // Fail closed without leaking the lookup error to the token client.
+      console.error("[rbac] token tenant connection lookup failed, denying:", (e as Error)?.message ?? e)
+      return NextResponse.json({ error: "Unable to verify token scope" }, { status: 503 })
+    }
+    if (!tenantConnections.has(connId)) return deny()
   }
   return null
 }

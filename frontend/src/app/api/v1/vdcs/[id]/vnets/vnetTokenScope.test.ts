@@ -126,6 +126,19 @@ describe('vDC VNets with an API token of tenant A', () => {
     for (const lib of [h.listVnets, h.createVnet, h.updateVnet, h.deleteVnet, h.vnetFindFirst]) expect(lib).not.toHaveBeenCalled()
   })
 
+  it.each(CALLS)('%s when the vDC lookup fails: 503 with a generic message, nothing read or written', async (_name, call) => {
+    h.vdcFindUnique.mockRejectedValue(new Error('db down: secret details'))
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    const res = await call('vdc-a')
+
+    expect(res.status).toBe(503)
+    expect(await res.json()).toEqual({ error: 'Unable to verify token scope' })
+    expect(h.checkPermission).not.toHaveBeenCalled()
+    for (const lib of [h.listVnets, h.createVnet, h.updateVnet, h.deleteVnet]) expect(lib).not.toHaveBeenCalled()
+    errSpy.mockRestore()
+  })
+
   it.each(CALLS)('%s on an unknown vDC: 404', async (_name, call) => {
     expect((await call('vdc-none')).status).toBe(404)
   })

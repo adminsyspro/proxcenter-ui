@@ -196,6 +196,18 @@ describe('POST /api/v1/settings/api-tokens', () => {
       expect(await prismaTest.apiToken.findFirst({ where: { name: 'x' } })).toBeNull()
     })
 
+    it('a held-rights lookup that fails is a 503 with a generic message, and mints nothing', async () => {
+      asUser()
+      holdsMock.mockRejectedValue(new Error('db down: secret details'))
+      const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      const { POST } = await import('./route')
+      const res = await callRoute(POST, { body: { name: 'x', scopes: ['vms:power'] } })
+      expect(res.status).toBe(503)
+      expect(await readJson<any>(res)).toEqual({ error: 'Unable to verify the scopes you can grant' })
+      expect(await prismaTest.apiToken.findFirst({ where: { name: 'x' } })).toBeNull()
+      errSpy.mockRestore()
+    })
+
     it('accepts read-only scopes without consulting holdsBroadPermission', async () => {
       asUser()
       holdsMock.mockResolvedValue(false)

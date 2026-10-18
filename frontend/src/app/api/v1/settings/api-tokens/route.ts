@@ -105,7 +105,9 @@ export async function POST(req: Request) {
         ? await firstUngrantableScope(ctx.userId, tenantId, scopes as string[], connectionIds)
         : (scopes as string[]).find(isWriteScope)
     } catch (e: any) {
-      return NextResponse.json({ error: e?.message || "Internal server error" }, { status: 500 })
+      // Fail closed; the lookup error stays in the logs.
+      console.error("[api-tokens] held-rights lookup failed:", e?.message ?? e)
+      return NextResponse.json({ error: "Unable to verify the scopes you can grant" }, { status: 503 })
     }
     if (ungrantable) {
       return NextResponse.json({ error: "You cannot grant a scope you do not hold", scope: ungrantable }, { status: 403 })

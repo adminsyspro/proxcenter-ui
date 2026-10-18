@@ -213,6 +213,15 @@ describe('token checks are confined to the token tenant connections', () => {
     expect(m.getTenantConnectionIds).not.toHaveBeenCalled()
   })
 
+  it('a tenant connection lookup that throws is a 503, never a thrown 500 nor a pass', async () => {
+    m.getPrincipal.mockResolvedValue(tokenPrincipal(['vm.start'], null, 't1'))
+    m.getTenantConnectionIds.mockRejectedValue(new Error('db down: secret'))
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    expect(await errorOf(await checkPermission(PERMISSIONS.VM_START, 'vm', VM_A))).toEqual({ status: 503, error: 'Unable to verify token scope' })
+    expect((await checkPermissions([PERMISSIONS.VM_START, PERMISSIONS.VM_START], 'vm', VM_A))?.status).toBe(503)
+    errSpy.mockRestore()
+  })
+
   it('a missing right is refused before any tenant lookup', async () => {
     m.getPrincipal.mockResolvedValue(tokenPrincipal(['vm.view'], null, 't1'))
     expect((await checkPermission(PERMISSIONS.VM_START, 'vm', VM_A))?.status).toBe(403)

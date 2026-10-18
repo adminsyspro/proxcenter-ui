@@ -21,7 +21,16 @@ export async function checkVnetPermission(
   permission: string,
 ): Promise<Response | null> {
   if (principal?.kind !== "token") return checkPermission(permission)
+  try {
+    return await checkTokenVnetPermission(principal, vdcId, permission)
+  } catch (e) {
+    // Fail closed with a generic message: the lookup error stays in the logs.
+    console.error("[vnets] token scope lookup failed, denying:", (e as Error)?.message ?? e)
+    return NextResponse.json({ error: "Unable to verify token scope" }, { status: 503 })
+  }
+}
 
+async function checkTokenVnetPermission(principal: Principal, vdcId: string, permission: string): Promise<Response | null> {
   const vdc = await prisma.vdc.findUnique({ where: { id: vdcId }, select: { tenantId: true, connectionId: true } })
   if (!vdc || (principal.tenantId !== DEFAULT_TENANT_ID && vdc.tenantId !== principal.tenantId)) {
     return NextResponse.json({ error: "vDC not found" }, { status: 404 })

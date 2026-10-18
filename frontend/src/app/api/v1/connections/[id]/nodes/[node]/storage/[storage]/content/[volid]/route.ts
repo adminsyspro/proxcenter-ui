@@ -28,8 +28,10 @@ async function deleteHandler(
     const denied = await checkPermission(PERMISSIONS.STORAGE_DELETE, "storage", buildStorageResourceId(id, storage))
     if (denied) return denied
 
-    // The volid is URL-encoded; Proxmox expects the full volid (storage:path)
-    const decodedVolid = decodeURIComponent(volid)
+    // Next already decoded the segment once (%2F included): this is the full
+    // volid (storage:path) as Proxmox names it. Decoding it again would turn
+    // a file named "a%20b.iso" into "a b.iso", and fail on a bare "%".
+    const decodedVolid = volid
     // Volid format is "<storage>:<contentType>/<filename>".
     const volidMatch = decodedVolid.match(/^[^:]+:([^/]+)\/(.+)$/)
     const itemContent = volidMatch?.[1] || ''

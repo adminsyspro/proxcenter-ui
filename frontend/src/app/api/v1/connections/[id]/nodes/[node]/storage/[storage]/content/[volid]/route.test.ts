@@ -83,11 +83,13 @@ const getCurrentTenantIdMock = getCurrentTenantId as any
 const tenantFindManyMock = prisma.tenant.findMany as any
 const auditMock = audit as any
 
+// Next hands the handler its dynamic segments decoded once, %2F included:
+// a request for .../content/local%3Aiso%2Fubuntu-22.04.iso gets this volid.
 const BASE_PARAMS = {
   id: 'conn-1',
   node: 'pve-node-01',
   storage: 'local',
-  volid: 'local%3Aiso%2Fubuntu-22.04.iso',
+  volid: 'local:iso/ubuntu-22.04.iso',
 }
 
 beforeEach(() => {
@@ -114,13 +116,26 @@ describe('DELETE /api/v1/connections/[id]/nodes/[node]/storage/[storage]/content
     const body = await readJson<any>(res)
     expect(body.success).toBe(true)
 
-    // volid is decoded from "local%3Aiso%2Fubuntu-22.04.iso" to "local:iso/ubuntu-22.04.iso"
-    // then re-encoded for the URL segment
+    // The volid Next decoded is re-encoded once for the PVE URL segment.
     expect(pveFetchMock).toHaveBeenCalledWith(
       { id: 'conn-1' },
       '/nodes/pve-node-01/storage/local/content/local%3Aiso%2Fubuntu-22.04.iso',
       { method: 'DELETE' },
     )
+  })
+
+  it.each([
+    // Requested as .../content/local%3Aiso%2Fa%2520b.iso: the file is literally "a%20b.iso".
+    ['local:iso/a%20b.iso', 'local%3Aiso%2Fa%2520b.iso'],
+    // A bare "%" is a valid file name too, not a malformed escape (no 500).
+    ['local:iso/100%.iso', 'local%3Aiso%2F100%25.iso'],
+  ])('addresses %s as is, its name never decoded a second time', async (volid, sent) => {
+    const res = await callRoute(DELETE as any, { method: 'DELETE', params: { ...BASE_PARAMS, volid } })
+
+    expect(res.status).toBe(200)
+    expect(pveFetchMock).toHaveBeenCalledWith({ id: 'conn-1' }, `/nodes/pve-node-01/storage/local/content/${sent}`, { method: 'DELETE' })
+    expect(guardTenantStorageWriteMock).toHaveBeenCalledWith('conn-1', 'local', { filename: volid.split('/')[1] })
+    expect(auditMock).toHaveBeenCalledWith(expect.objectContaining({ details: expect.objectContaining({ volid }) }))
   })
 
   it('403 when checkPermission denies', async () => {
@@ -168,7 +183,7 @@ describe('DELETE /api/v1/connections/[id]/nodes/[node]/storage/[storage]/content
       method: 'DELETE',
       params: {
         ...BASE_PARAMS,
-        volid: encodeURIComponent('local:iso/ubuntu-22.04.iso'),
+        volid: 'local:iso/ubuntu-22.04.iso',
       },
     })
 
@@ -188,7 +203,7 @@ describe('DELETE /api/v1/connections/[id]/nodes/[node]/storage/[storage]/content
       method: 'DELETE',
       params: {
         ...BASE_PARAMS,
-        volid: encodeURIComponent('local:iso/custom-acme-my.iso'),
+        volid: 'local:iso/custom-acme-my.iso',
       },
     })
 
@@ -206,7 +221,7 @@ describe('DELETE /api/v1/connections/[id]/nodes/[node]/storage/[storage]/content
       params: {
         ...BASE_PARAMS,
         storage: 'backups',
-        volid: encodeURIComponent('backups:backup/vzdump-qemu-100-2024_01_01-00_00_00.vma.zst'),
+        volid: 'backups:backup/vzdump-qemu-100-2024_01_01-00_00_00.vma.zst',
       },
     })
 
@@ -227,7 +242,7 @@ describe('DELETE /api/v1/connections/[id]/nodes/[node]/storage/[storage]/content
       method: 'DELETE',
       params: {
         ...BASE_PARAMS,
-        volid: encodeURIComponent('local:iso/custom-acme123-test.iso'),
+        volid: 'local:iso/custom-acme123-test.iso',
       },
     })
 
@@ -283,7 +298,7 @@ describe('DELETE content: filename forwarded to guardTenantStorageWrite (#894)',
 
     const res = await callRoute(DELETE as any, {
       method: 'DELETE',
-      params: { ...BASE_PARAMS, storage: 'isolib', volid: encodeURIComponent('isolib:iso/custom-acme-x.iso') },
+      params: { ...BASE_PARAMS, storage: 'isolib', volid: 'isolib:iso/custom-acme-x.iso' },
     })
 
     expect(res.status).toBe(200)
@@ -295,7 +310,7 @@ describe('DELETE content: filename forwarded to guardTenantStorageWrite (#894)',
     maskingScopeMock.mockReturnValue({ something: 'non-null' })
     getTenantInfrastructureScopeMock.mockResolvedValue({ kind: 'iaas', vdcScope: {} })
     tenantFindManyMock.mockResolvedValue([{ id: 'tenant-acme', slug: 'acme' }, { id: 'tenant-prod', slug: 'acme-prod' }])
-    const params = { ...BASE_PARAMS, storage: 'isolib', volid: encodeURIComponent('isolib:iso/custom-acme-prod-x.iso') }
+    const params = { ...BASE_PARAMS, storage: 'isolib', volid: 'isolib:iso/custom-acme-prod-x.iso' }
 
     getCurrentTenantIdMock.mockResolvedValue('tenant-acme')
     const refused = await callRoute(DELETE as any, { method: 'DELETE', params })
@@ -314,7 +329,7 @@ describe('DELETE content: filename forwarded to guardTenantStorageWrite (#894)',
     )
     const res = await callRoute(DELETE as any, {
       method: 'DELETE',
-      params: { ...BASE_PARAMS, storage: 'isolib', volid: encodeURIComponent('isolib:iso/custom-other-x.iso') },
+      params: { ...BASE_PARAMS, storage: 'isolib', volid: 'isolib:iso/custom-other-x.iso' },
     })
     expect(res.status).toBe(403)
     expect((await readJson<any>(res)).error).toMatch(/custom-acme-/)

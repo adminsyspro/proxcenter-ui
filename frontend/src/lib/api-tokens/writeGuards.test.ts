@@ -179,6 +179,8 @@ describe('runTokenEntryGuards', () => {
       it.each([
         ['vm-config-update', 'PUT', '/api/v1/connections/conn-a/guests/qemu/pve1/1%2500/config'],
         ['pbs-backup-delete', 'DELETE', '/api/v1/pbs/pbs-a/backups/ds1%2Fvm%2F100%2F%2525'],
+        // A file named "a%20b.iso": a session may delete it, a token never names a "%" (the handler decodes once).
+        ['storage-content-delete', 'DELETE', '/api/v1/connections/conn-a/nodes/pve1/storage/local/content/local%3Aiso%2Fa%2520b.iso'],
       ])('%s with a double-encoded (%%25) segment: 401', async (id, method, path) => {
         const real = getAllowlistEntryById(id)!
         const params = matchEntryParams(real, path)

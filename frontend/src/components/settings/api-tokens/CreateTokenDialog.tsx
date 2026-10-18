@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 
 import {
-  Alert, Box, Button, Checkbox, Chip, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, MenuItem,
+  Alert, Box, Button, Checkbox, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, MenuItem,
   Stack, TextField, ToggleButton, ToggleButtonGroup, Tooltip, Typography,
 } from '@mui/material'
 import { useTheme } from '@mui/material/styles'
@@ -68,7 +68,7 @@ export const SCOPE_DOMAINS: readonly ScopeDomain[] = [
   { id: 'reports', icon: 'ri-file-list-3-line', read: 'reports:read', write: [] },
 ]
 
-// Short chip labels (dialog.subScopes.*) and icons of the write sub-scopes,
+// Short toggle labels (dialog.subScopes.*) of the write sub-scopes,
 // shown under a row on Write when its domain has more than one.
 export const SUB_SCOPE_LABEL_KEYS: Record<string, string> = {
   'vms:power': 'vmsPower',
@@ -83,21 +83,6 @@ export const SUB_SCOPE_LABEL_KEYS: Record<string, string> = {
   'pools:write': 'poolsWrite',
   'network:write': 'networkWrite',
   'firewall:write': 'firewallWrite',
-}
-
-const SUB_SCOPE_ICONS: Record<string, string> = {
-  'vms:power': 'ri-shut-down-line',
-  'vms:write': 'ri-edit-box-line',
-  'vms:snapshot': 'ri-camera-line',
-  'vms:migrate': 'ri-swap-box-line',
-  'vms:delete': 'ri-delete-bin-line',
-  'backups:write': 'ri-save-3-line',
-  'backups:restore': 'ri-history-line',
-  'backups:delete': 'ri-delete-bin-6-line',
-  'ha:write': 'ri-shield-check-line',
-  'pools:write': 'ri-stack-line',
-  'network:write': 'ri-share-line',
-  'firewall:write': 'ri-fire-line',
 }
 
 type AccessLevel = 'none' | 'read' | 'write'
@@ -341,7 +326,7 @@ export default function CreateTokenDialog({ open, onClose, onCreated }: Props) {
     }
   }
 
-  // The read scope stays when a chip is unselected, so unselecting the
+  // The read scope stays when a toggle is unselected, so unselecting the
   // last one leaves the row on Read.
   function toggleSubScope(scope: string) {
     setScopes(prev => (prev.includes(scope) ? prev.filter(s => s !== scope) : [...prev, scope]))
@@ -561,7 +546,7 @@ type ScopeDomainRowProps = {
 }
 
 // One domain on one line (icon, label, None | Read | Write), and on Write,
-// when the domain has several write scopes, a wrap row of chips to pick
+// when the domain has several write scopes, a wrap row of toggles to pick
 // them. The raw scope ids sit in tooltips, to match the API reference.
 function ScopeDomainRow({
   domain, label, level, scopes, writeBlocker, subScopeBlocker, onLevel, onToggleSubScope,
@@ -603,36 +588,44 @@ function ScopeDomainRow({
         </ToggleButtonGroup>
       </Stack>
       {showChips && (
-        <Box
-          role='group'
+        <ToggleButtonGroup
+          size='small'
+          value={selectedWrites}
           aria-label={t('dialog.subScopesLabel', { domain: label })}
-          sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5, pl: 7.5, pt: 1.5, pb: 1 }}
+          sx={{
+            display: 'flex', flexWrap: 'wrap', gap: 1, pl: 7.5, pt: 1.5, pb: 1,
+            '& .MuiToggleButton-root': {
+              typography: 'body2', py: 1, px: 3, gap: 1, textTransform: 'none',
+              border: 1, borderColor: 'divider', borderRadius: 1, ml: 0,
+              '&.Mui-disabled': { borderColor: 'divider' },
+            },
+            '& .MuiToggleButton-root.Mui-selected': { borderColor: 'warning.main' },
+          }}
         >
           {domain.write.map(scope => {
             const blocker = subScopeBlocker(scope)
-            const selected = selectedWrites.includes(scope)
-            let color: 'error' | 'primary' | 'default' = 'default'
-            if (DESTRUCTIVE_SCOPE_IDS.includes(scope)) color = 'error'
-            else if (selected) color = 'primary'
+            const destructive = DESTRUCTIVE_SCOPE_IDS.includes(scope)
             return (
               <Tooltip key={scope} title={<SubScopeTitle scope={scope} blocker={blocker} />} slotProps={tooltipSlotProps}>
                 <Box component='span' sx={{ display: 'inline-flex' }}>
-                  <Chip
-                    size='small'
-                    clickable
+                  <ToggleButton
+                    value={scope}
+                    color={destructive ? 'error' : 'warning'}
                     disabled={!!blocker}
-                    aria-pressed={selected}
-                    color={color}
-                    variant={selected ? 'tonal' : 'outlined'}
-                    icon={<i className={selected ? 'ri-check-line' : SUB_SCOPE_ICONS[scope]} />}
-                    label={t(`dialog.subScopes.${SUB_SCOPE_LABEL_KEYS[scope]}`)}
-                    onClick={() => onToggleSubScope(scope)}
-                  />
+                    onChange={() => onToggleSubScope(scope)}
+                    sx={destructive ? {
+                      '&&:not(.Mui-disabled)': { color: 'error.main' },
+                      '&:not(.Mui-disabled)': { borderColor: 'error.main' },
+                    } : undefined}
+                  >
+                    {destructive && <i className='ri-delete-bin-line' style={{ fontSize: 14 }} />}
+                    {t(`dialog.subScopes.${SUB_SCOPE_LABEL_KEYS[scope]}`)}
+                  </ToggleButton>
                 </Box>
               </Tooltip>
             )
           })}
-        </Box>
+        </ToggleButtonGroup>
       )}
     </Box>
   )

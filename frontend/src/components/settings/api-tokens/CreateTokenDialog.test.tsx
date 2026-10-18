@@ -46,7 +46,7 @@ describe('SCOPE_DOMAINS', () => {
     for (const domain of SCOPE_DOMAINS) expect(READ_SCOPE_IDS, domain.id).toContain(domain.read)
   })
 
-  it('labels every write sub-scope that is shown as a chip', () => {
+  it('labels every write sub-scope that is shown as a toggle', () => {
     const subScopes = (en as any).settings.apiTokens.dialog.subScopes
     for (const domain of SCOPE_DOMAINS.filter(d => d.write.length > 1)) {
       for (const scope of domain.write) expect(subScopes[SUB_SCOPE_LABEL_KEYS[scope]], scope).toBeTruthy()
@@ -115,13 +115,13 @@ describe('CreateTokenDialog scope picker', () => {
     return levels(dialog, domain).closest('[data-domain]') as HTMLElement
   }
 
-  function chipGroup(dialog: HTMLElement, domain: string) {
+  function toggleGroup(dialog: HTMLElement, domain: string) {
     return within(dialog).queryByRole('group', { name: dialogT.subScopesLabel.replace('{domain}', dialogT.domains[domain]) })
   }
 
-  function chip(dialog: HTMLElement, domain: string, subKey: string) {
-    const group = chipGroup(dialog, domain)
-    expect(group, `chips of ${domain}`).not.toBeNull()
+  function toggle(dialog: HTMLElement, domain: string, subKey: string) {
+    const group = toggleGroup(dialog, domain)
+    expect(group, `toggles of ${domain}`).not.toBeNull()
     return within(group as HTMLElement).getByRole('button', { name: dialogT.subScopes[subKey] })
   }
 
@@ -202,20 +202,20 @@ describe('CreateTokenDialog scope picker', () => {
     await userEvent.click(levelButton(dialog, 'vms', 'write'))
     expect(createButton(dialog)).toBeEnabled()
     await userEvent.click(levelButton(dialog, 'vms', 'none'))
-    expect(chipGroup(dialog, 'vms')).toBeNull()
+    expect(toggleGroup(dialog, 'vms')).toBeNull()
     expect(createButton(dialog)).toBeDisabled()
   })
 
-  it('reveals the sub-scope chips on Write, every non destructive one selected and Delete left out', async () => {
+  it('reveals the sub-scope toggles on Write, every non destructive one selected and Delete left out', async () => {
     const dialog = await openDialog()
     await grantableSettled(dialog)
-    expect(chipGroup(dialog, 'vms')).toBeNull()
+    expect(toggleGroup(dialog, 'vms')).toBeNull()
     await userEvent.click(levelButton(dialog, 'vms', 'write'))
     expect(levelButton(dialog, 'vms', 'write')).toHaveAttribute('aria-pressed', 'true')
     for (const key of ['vmsPower', 'vmsWrite', 'vmsSnapshot', 'vmsMigrate']) {
-      expect(chip(dialog, 'vms', key), key).toHaveAttribute('aria-pressed', 'true')
+      expect(toggle(dialog, 'vms', key), key).toHaveAttribute('aria-pressed', 'true')
     }
-    expect(chip(dialog, 'vms', 'vmsDelete')).toHaveAttribute('aria-pressed', 'false')
+    expect(toggle(dialog, 'vms', 'vmsDelete')).toHaveAttribute('aria-pressed', 'false')
     expect(within(dialog).getByText(dialogT.writeWarning)).toBeVisible()
     expect(within(dialog).getByLabelText(dialogT.writeRateLimit)).toBeInTheDocument()
 
@@ -225,70 +225,69 @@ describe('CreateTokenDialog scope picker', () => {
     expect(postBody().writeRateLimitPerMin).toBe(60)
   })
 
-  it('paints the destructive chips, label included, in the error colour', async () => {
+  it('paints the destructive toggles, label included, in the error colour', async () => {
     const dialog = await openDialog()
     await grantableSettled(dialog)
     await userEvent.click(levelButton(dialog, 'vms', 'write'))
     await userEvent.click(levelButton(dialog, 'backups', 'write'))
-    const destructive = [chip(dialog, 'vms', 'vmsDelete'), chip(dialog, 'backups', 'backupsDelete')]
+    const destructive = [toggle(dialog, 'vms', 'vmsDelete'), toggle(dialog, 'backups', 'backupsDelete')]
     expect(DESTRUCTIVE_SCOPE_IDS).toEqual(['vms:delete', 'backups:delete'])
     for (const element of destructive) {
-      expect(element.className).toContain('MuiChip-colorError')
       expect(getComputedStyle(element).color).toBe('rgb(211, 47, 47)')
     }
-    expect(chip(dialog, 'vms', 'vmsPower').className).not.toContain('MuiChip-colorError')
-    expect(chip(dialog, 'backups', 'backupsRestore').className).not.toContain('MuiChip-colorError')
+    expect(getComputedStyle(toggle(dialog, 'vms', 'vmsPower')).color).not.toBe('rgb(211, 47, 47)')
+    expect(getComputedStyle(toggle(dialog, 'backups', 'backupsRestore')).color).not.toBe('rgb(211, 47, 47)')
   })
 
-  it('adds a destructive sub-scope only when its chip is picked', async () => {
+  it('adds a destructive sub-scope only when its toggle is picked', async () => {
     const dialog = await openDialog()
     await grantableSettled(dialog)
     await typeName(dialog)
     await userEvent.click(levelButton(dialog, 'vms', 'write'))
-    await userEvent.click(chip(dialog, 'vms', 'vmsDelete'))
-    expect(chip(dialog, 'vms', 'vmsDelete')).toHaveAttribute('aria-pressed', 'true')
-    await userEvent.click(chip(dialog, 'vms', 'vmsWrite'))
+    await userEvent.click(toggle(dialog, 'vms', 'vmsDelete'))
+    expect(toggle(dialog, 'vms', 'vmsDelete')).toHaveAttribute('aria-pressed', 'true')
+    await userEvent.click(toggle(dialog, 'vms', 'vmsWrite'))
     await userEvent.click(createButton(dialog))
     await waitFor(() => expect(postBody().scopes).toEqual(['vms:read', 'vms:power', 'vms:snapshot', 'vms:migrate', 'vms:delete']))
   })
 
-  it('switches the row back to Read when the last sub-scope chip is unselected', async () => {
+  it('switches the row back to Read when the last sub-scope toggle is unselected', async () => {
     const dialog = await openDialog()
     await grantableSettled(dialog)
     await typeName(dialog)
     await userEvent.click(levelButton(dialog, 'nodes', 'write'))
-    for (const key of ['haWrite', 'poolsWrite', 'networkWrite']) await userEvent.click(chip(dialog, 'nodes', key))
+    for (const key of ['haWrite', 'poolsWrite', 'networkWrite']) await userEvent.click(toggle(dialog, 'nodes', key))
     expect(levelButton(dialog, 'nodes', 'write')).toHaveAttribute('aria-pressed', 'true')
-    await userEvent.click(chip(dialog, 'nodes', 'firewallWrite'))
+    await userEvent.click(toggle(dialog, 'nodes', 'firewallWrite'))
     expect(levelButton(dialog, 'nodes', 'read')).toHaveAttribute('aria-pressed', 'true')
-    expect(chipGroup(dialog, 'nodes')).toBeNull()
+    expect(toggleGroup(dialog, 'nodes')).toBeNull()
     expect(within(dialog).queryByText(dialogT.writeWarning)).not.toBeInTheDocument()
     await userEvent.click(createButton(dialog))
     await waitFor(() => expect(postBody().scopes).toEqual(['nodes:read']))
     expect(postBody()).not.toHaveProperty('writeRateLimitPerMin')
   })
 
-  it('needs no chips for a domain with a single write scope', async () => {
+  it('needs no toggles for a domain with a single write scope', async () => {
     const dialog = await openDialog()
     await grantableSettled(dialog)
     await typeName(dialog)
     await userEvent.click(levelButton(dialog, 'storage', 'write'))
-    expect(chipGroup(dialog, 'storage')).toBeNull()
+    expect(toggleGroup(dialog, 'storage')).toBeNull()
     await userEvent.click(createButton(dialog))
     await waitFor(() => expect(postBody().scopes).toEqual(['storage:read', 'storage:write']))
   })
 
-  it('disables a sub-scope chip the caller cannot grant, and leaves it out of the defaults', async () => {
+  it('disables a sub-scope toggle the caller cannot grant, and leaves it out of the defaults', async () => {
     grantableFor = () => [...READ_GRANTABLE, 'vms:power', 'vms:delete']
     const dialog = await openDialog()
     await grantableSettled(dialog)
     await typeName(dialog)
     await userEvent.click(levelButton(dialog, 'vms', 'write'))
-    expect(chip(dialog, 'vms', 'vmsPower')).toHaveAttribute('aria-pressed', 'true')
-    expect(chip(dialog, 'vms', 'vmsSnapshot')).toHaveAttribute('aria-disabled', 'true')
-    expect(chip(dialog, 'vms', 'vmsDelete')).not.toHaveAttribute('aria-disabled')
+    expect(toggle(dialog, 'vms', 'vmsPower')).toHaveAttribute('aria-pressed', 'true')
+    expect(toggle(dialog, 'vms', 'vmsSnapshot')).toBeDisabled()
+    expect(toggle(dialog, 'vms', 'vmsDelete')).toBeEnabled()
 
-    await userEvent.hover(chip(dialog, 'vms', 'vmsSnapshot').parentElement as HTMLElement)
+    await userEvent.hover(toggle(dialog, 'vms', 'vmsSnapshot').parentElement as HTMLElement)
     const tooltip = await screen.findByRole('tooltip')
     expect(tooltip).toHaveTextContent(dialogT.scopeNotGrantable)
     expect(tooltip).toHaveTextContent('vms:snapshot')
@@ -312,7 +311,7 @@ describe('CreateTokenDialog scope picker', () => {
     const dialog = await openDialog()
     await grantableSettled(dialog)
     await userEvent.click(levelButton(dialog, 'vms', 'write'))
-    expect(chip(dialog, 'vms', 'vmsDelete')).toHaveAttribute('aria-pressed', 'true')
+    expect(toggle(dialog, 'vms', 'vmsDelete')).toHaveAttribute('aria-pressed', 'true')
     expect(levelButton(dialog, 'vms', 'write')).toHaveAttribute('aria-pressed', 'true')
   })
 
@@ -357,7 +356,7 @@ describe('CreateTokenDialog scope picker', () => {
     // The read scope stays: the row falls back to Read, Write is now refused.
     await waitFor(() => expect(levelButton(dialog, 'vms', 'read')).toHaveAttribute('aria-pressed', 'true'))
     expect(levelButton(dialog, 'vms', 'write')).toBeDisabled()
-    expect(chipGroup(dialog, 'vms')).toBeNull()
+    expect(toggleGroup(dialog, 'vms')).toBeNull()
 
     fireEvent.mouseDown(within(dialog).getAllByRole('combobox')[2])
     await userEvent.click(await screen.findByRole('option', { name: 'Tenant A PVE' }))

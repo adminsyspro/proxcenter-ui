@@ -2527,6 +2527,7 @@
       },
       "FirewallVmIsolateRequest": {
         "type": "object",
+        "description": "Only these fields, spelled exactly, are forwarded; another type than the one documented is refused 400.",
         "properties": {
           "enable_firewall": {
             "type": "boolean"
@@ -28140,6 +28141,7 @@
             "application/json": {
               "schema": {
                 "type": "object",
+                "description": "Only these fields, spelled exactly, are forwarded; another type than the one documented is refused 400.",
                 "properties": {
                   "enable_firewall": {
                     "type": "boolean"

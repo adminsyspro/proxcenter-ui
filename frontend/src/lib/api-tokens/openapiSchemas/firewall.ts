@@ -116,6 +116,7 @@ export const FIREWALL_REQUEST_SCHEMAS: Record<string, Record<string, unknown>> =
   },
   FirewallVmIsolateRequest: {
     type: "object",
+    description: "Only these fields, spelled exactly, are forwarded; another type than the one documented is refused 400.",
     properties: {
       enable_firewall: { type: "boolean" },
       set_policy_in_drop: { type: "boolean" },

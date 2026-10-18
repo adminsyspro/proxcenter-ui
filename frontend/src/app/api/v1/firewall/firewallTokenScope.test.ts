@@ -208,6 +208,50 @@ describe('firewall routes with an API token', () => {
     expect(h.orchPost).toHaveBeenCalledWith('/firewall/microseg/c1/vm/pve1/qemu/100/isolate', { apply_base_sgs: true })
   })
 
+  it.each(['Apply_Base_SGs', 'APPLY_BASE_SGS', 'apply_baſe_sgs'])(
+    'a vDC tenant token spelling %s (the orchestrator folds key case): 403, nothing reached',
+    async key => {
+      h.getPrincipal.mockResolvedValue({ ok: true, principal: IAAS_TOKEN })
+      h.infra.mockResolvedValue({ kind: 'iaas', vdcScope: VDC_SCOPE })
+
+      const res = await isolate({ enable_firewall: true, [key]: true })
+
+      expect(res.status).toBe(403)
+      expect(await res.json()).toEqual({ error: 'Cluster-level object not available to a vDC tenant token' })
+      expect(h.orchPost).not.toHaveBeenCalled()
+    },
+  )
+
+  it('a token isolate forwards only the known fields, exactly spelled', async () => {
+    const res = await isolate({
+      enable_firewall: true, additional_sgs: ['sg-web'], Apply_Base_SGs: true, ENABLE_NIC_FW: true, extra: 1,
+    })
+
+    expect(res.status).toBe(200)
+    expect(h.orchPost).toHaveBeenCalledWith(
+      '/firewall/microseg/c1/vm/pve1/qemu/100/isolate', { enable_firewall: true, additional_sgs: ['sg-web'] },
+    )
+  })
+
+  it.each([
+    [{ apply_base_sgs: 'true' }], [{ additional_sgs: 'sg-web' }], [{ additional_sgs: [1] }], [['enable_firewall']],
+  ])('a token isolate with a mistyped body %j: 400, nothing reached', async body => {
+    const res = await isolate(body as any)
+
+    expect(res.status).toBe(400)
+    expect(h.orchPost).not.toHaveBeenCalled()
+  })
+
+  it('a session isolate forwards its body unchanged', async () => {
+    h.getPrincipal.mockResolvedValue({ ok: true, principal: { kind: 'session', userId: 'u-a', tenantId: 'default' } })
+    const body = { enable_firewall: true, Apply_Base_SGs: true, extra: 1 }
+
+    const res = await isolate(body)
+
+    expect(res.status).toBe(200)
+    expect(h.orchPost).toHaveBeenCalledWith('/firewall/microseg/c1/vm/pve1/qemu/100/isolate', body)
+  })
+
   it('a double-encoded rule position or alias name is refused 401 before the handler', async () => {
     const pos = await CLUSTER_RULE_DELETE(
       tokenRequest('DELETE', '/api/v1/firewall/cluster/c1/rules/%252e%252e', 'fw-cluster-rule-delete') as any,

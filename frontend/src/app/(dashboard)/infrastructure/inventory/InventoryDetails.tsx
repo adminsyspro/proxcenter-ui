@@ -1174,7 +1174,7 @@ export default function InventoryDetails({
         return true
       })
       : loadActiveBulkBatch(selection.id, () => stale)
-    load.then(found => { if (found && !stale) setBulkMigOpen(true) })
+    void load.then(found => { if (found && !stale) setBulkMigOpen(true) })
     return () => { stale = true }
   }, [selection?.type, selection?.id])
 
@@ -1189,7 +1189,7 @@ export default function InventoryDetails({
       if (!detail?.batchId) return
       detail.handled = true
       if (bulkMigBatchRef.current?.id === detail.batchId) { setBulkMigOpen(true); return }
-      fetchBulkBatch(detail.batchId).then(snap => {
+      void fetchBulkBatch(detail.batchId).then(snap => {
         if (!snap) return
         applyBulkMigSnapshotRef.current(snap)
         setBulkMigOpen(true)

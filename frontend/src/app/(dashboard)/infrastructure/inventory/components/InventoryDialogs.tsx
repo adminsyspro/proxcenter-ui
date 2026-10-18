@@ -51,7 +51,7 @@ import ZeroRateSlider from '@/components/migration/ZeroRateSlider'
 import { estimateIntegritySecondsPerDisk, integritySettingsFromConnection } from '@/lib/migration/integrity-settings'
 import { MIGRATION_CPU_TYPES, MIGRATION_CPU_TYPE_DEFAULT, type MigrationCpuType } from '@/lib/migration/cpu-type'
 import MigrationReviewStep from './MigrationReviewStep'
-import { initialHardwareState, initialNicState, reviewIsValid, buildHardwarePayload, buildNicsPayload, type ReviewSource, type ReviewHardwareState, type ReviewNicState } from './migrationReview'
+import { initialHardwareState, initialNicState, initialDiskState, reviewIsValid, buildHardwarePayload, buildNicsPayload, buildDisksPayload, keptReviewDisks, reviewDiskStorages, tempStorageTypeFor, warmSpaceNeeds, type ReviewSource, type ReviewSourceDisk, type ReviewHardwareState, type ReviewNicState, type ReviewDiskState } from './migrationReview'
 import { usedVmidsOnConnection, nextVmidOnConnection } from '@/components/hardware/utils'
 import { tooltipSlotProps } from '@/components/settings/ha/tooltipSlotProps'
 // Dependency-free eligibility check (NOT ./cbt, which pulls the server-only SOAP client).
@@ -795,12 +795,18 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
   // keeps the VMware-specific CBT-fallback warning below silent for them.
   const [sourceDatastores, setSourceDatastores] = useState<string[]>([])
   const [sourceDatastoresLoading, setSourceDatastoresLoading] = useState(false)
-  // The review step (#317) reads the hardware and the NIC list from the same
-  // answer: `nics` is parsed server side in the order the pipelines index them.
-  const [sourceVmDetail, setSourceVmDetail] = useState<({ snapshotCount: number; vmxVersion: string; disks: { diskMode?: string; sharing?: string }[] } & ReviewSource) | null>(null)
+  // The review step (#317) reads the hardware, the disk list and the NIC list
+  // from the same answer: `disks` and `nics` are parsed server side in the
+  // order the pipelines index them.
+  const [sourceVmDetail, setSourceVmDetail] = useState<(Omit<ReviewSource, 'disks'> & { snapshotCount: number; vmxVersion: string; disks: (ReviewSourceDisk & { diskMode?: string; sharing?: string })[] }) | null>(null)
+  // Per-disk choices of the review step (#317, lot 2): target storage and
+  // exclusion, one row per source disk. Local to this dialog rather than in
+  // useMigrationOptions because the only way into the review step is
+  // enterReview, which seeds the rows afresh from the source VM every time.
+  const [migDisks, setMigDisks] = useState<ReviewDiskState[]>([])
   const isVmwareSource = esxiMigrateVm?.hostType === 'vmware' || esxiMigrateVm?.hostType === 'vcenter'
   React.useEffect(() => {
-    if (!esxiMigrateVm) { setSourceDatastores([]); setSourceVmDetail(null); return }
+    if (!esxiMigrateVm) { setSourceDatastores([]); setSourceVmDetail(null); setMigDisks([]); return }
     if (esxiMigrateVm.hostType === 'hyperv' || esxiMigrateVm.hostType === 'nutanix' || esxiMigrateVm.hostType === 'xcpng') {
       setSourceDatastores([])
       setSourceVmDetail(null)
@@ -818,12 +824,20 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
       .then(d => {
         if (cancelled) return
         const detail = d?.data
-        const disks = (detail?.disks || []) as { fileName?: string; diskMode?: string; sharing?: string }[]
+        // Normalised once: the review step sizes and labels the rows from
+        // these, the CBT check below reads diskMode/sharing.
+        const disks = (Array.isArray(detail?.disks) ? detail.disks : []).map((disk: any) => ({
+          label: String(disk?.label || ''),
+          capacityBytes: Number(disk?.capacityBytes) || 0,
+          fileName: String(disk?.fileName || ''),
+          diskMode: typeof disk?.diskMode === 'string' ? disk.diskMode : undefined,
+          sharing: typeof disk?.sharing === 'string' ? disk.sharing : undefined,
+        }))
         if (isVcenterSource) {
           setSourceDatastores([])
         } else {
-          const names = [...new Set(disks
-            .map(disk => (disk.fileName || '').match(/^\[([^\]]+)\]/)?.[1])
+          const names = [...new Set<string>(disks
+            .map((disk: { fileName: string }) => (disk.fileName || '').match(/^\[([^\]]+)\]/)?.[1])
             .filter((n): n is string => !!n))]
           setSourceDatastores(names)
         }
@@ -1022,6 +1036,47 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
   // no storage is chosen yet. Blocks the launch on its own, independently of ok.
   const warmSpaceShort = warmPreflightCurrent && !warmPreflightCurrent.loading && warmPreflightCurrent.space && !warmPreflightCurrent.space.sufficient ? warmPreflightCurrent.space : null
 
+  // #317 lot 2: in the review step of a warm VMware migration the disks may
+  // land on several storages, so the free space is checked per storage with
+  // the source's committed size apportioned to the kept disks (storage-space
+  // action of the preflight route). Keyed on the needs and debounced, so a
+  // row edit re-runs the check once the operator stops; the launch waits for
+  // a current verdict, like the step-1 check. Cluster-auto is not gated, as
+  // in step 1 (the engine backstop covers it).
+  const reviewSpaceNeeds = isVmwareSource && migStep === 'review' && migType === 'warm'
+    ? warmSpaceNeeds(migDisks, sourceVmDetail, esxiMigrateVm?.committed || 0, migTargetStorage)
+    : []
+  const reviewSpaceKey = reviewSpaceNeeds.length > 0 && migTargetConn && migTargetNode && migTargetNode !== '__auto__'
+    ? `${migTargetConn}::${migTargetNode}::${JSON.stringify(reviewSpaceNeeds)}`
+    : ''
+  const [reviewSpace, setReviewSpace] = useState<{ key: string; loading: boolean; spaces: WarmSpace[] } | null>(null)
+  React.useEffect(() => {
+    if (!reviewSpaceKey) { setReviewSpace(null); return }
+    const key = reviewSpaceKey
+    const needs = reviewSpaceNeeds
+    let cancelled = false
+    setReviewSpace({ key, loading: true, spaces: [] })
+    // A storage the server could not answer for blocks like an unreadable one.
+    const unanswered = (error: string): WarmSpace[] => needs.map(n => ({ storage: n.storage, availableBytes: 0, requiredBytes: n.requiredBytes, sufficient: false, error }))
+    const timer = setTimeout(() => {
+      fetch('/api/v1/migrations/preflight', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'storage-space', targetConnectionId: migTargetConn, targetNode: migTargetNode, needs }),
+      })
+        .then(r => r.json())
+        .then((d: { spaces?: WarmSpace[]; error?: string }) => {
+          if (!cancelled) setReviewSpace({ key, loading: false, spaces: Array.isArray(d?.spaces) ? d.spaces : unanswered(d?.error || 'no answer') })
+        })
+        .catch((e: any) => { if (!cancelled) setReviewSpace({ key, loading: false, spaces: unanswered(String(e?.message || e)) }) })
+    }, 300)
+    return () => { cancelled = true; clearTimeout(timer) }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- the needs, connection and node are folded into the key
+  }, [reviewSpaceKey])
+  const reviewSpaceCurrent = reviewSpace && reviewSpace.key === reviewSpaceKey ? reviewSpace : null
+  const reviewSpacePending = !!reviewSpaceKey && (!reviewSpaceCurrent || reviewSpaceCurrent.loading)
+  const reviewSpaceShort = reviewSpaceCurrent && !reviewSpaceCurrent.loading ? reviewSpaceCurrent.spaces.filter(s => !s.sufficient) : []
+
   // Automated warm-node provisioning (Enterprise VDDK package). Offered inside
   // the not-ready alert only when the server reported a configured package
   // token. `phase` walks confirm -> running -> error; success clears the state
@@ -1066,13 +1121,30 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
   // snapshot-as-volume-chain check stays server-side. Both the switch below
   // and the request payloads gate on this, so a toggle left on for an earlier
   // LVM pick can never leak into a run against a storage it doesn't apply to.
-  const migTargetIsThickLvm = migStorages.find((s: any) => s.storage === migTargetStorage)?.type === 'lvm'
+  //
+  // #317 lot 2: in the review step of a VMware migration the per-disk rows
+  // decide which storages receive disks, so "thick LVM" means at least one
+  // kept disk on an `lvm` storage; everywhere else (step 1, bulk, other
+  // sources) the step-1 storage decides, as before.
+  const storageTypeOf = (name: string): string | undefined => migStorages.find((s: any) => s.storage === name)?.type
+  const inDiskReview = isVmwareSource && migStep === 'review'
+  const reviewStorages = inDiskReview ? reviewDiskStorages(migDisks, migTargetStorage) : [migTargetStorage]
+  const migTargetIsThickLvm = reviewStorages.some(s => storageTypeOf(s) === 'lvm')
 
   // Warm writes the target by byte offset, so a file-based storage is refused by
   // the engine at planning time. Both dialogs gate on this, since both can start
   // a warm run against the same storage picker.
-  const migTargetStorageType: string | undefined = migStorages.find((s: any) => s.storage === migTargetStorage)?.type
+  const migTargetStorageType: string | undefined = storageTypeOf(migTargetStorage)
   const warmStorageBlocked = warmNeedsBlockStorage(migType, migTargetStorageType)
+  // Review step: the same rule per kept disk, named so the operator sees which
+  // row to move or to leave out. efidisk0/tpmstate0 stay on the step-1 storage,
+  // which warmStorageBlocked above already covers.
+  const warmBlockedDisks = inDiskReview
+    ? keptReviewDisks(migDisks).filter(d => warmNeedsBlockStorage(migType, storageTypeOf(d.storage))).map(d => ({ ...d, label: sourceVmDetail?.disks[d.index]?.label || `disk${d.index}`, type: storageTypeOf(d.storage) ?? '' }))
+    : []
+  // Cold temp space is sized by the worst case over the kept disks' targets:
+  // one disk bound for a block storage is staged twice.
+  const tempStorageTypeForCheck = tempStorageTypeFor(reviewStorages.map(storageTypeOf))
   // #742: helper line under the Target Storage selector, shared by the single VM
   // and the bulk dialog. It tells apart "still reading the node", "the read
   // failed" (with the reason the API returned plus a Retry, since the failure is
@@ -1177,9 +1249,7 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
           </MenuItem>
         ))}
       </Select>
-      <FormHelperText>
-        {t(migCpuType === 'host' ? 'inventoryPage.esxiMigration.cpuTypeHostHint' : 'inventoryPage.esxiMigration.cpuTypeHint')}
-      </FormHelperText>
+      {migCpuType === 'host' && <FormHelperText>{t('inventoryPage.esxiMigration.cpuTypeHostHint')}</FormHelperText>}
     </FormControl>
   )
 
@@ -1635,17 +1705,20 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
   // the step was opened (slow vCenter), as long as nothing was typed yet.
   const enterReview = () => {
     setMigHardware(initialHardwareState(sourceVmDetail))
+    setMigDisks(initialDiskState(sourceVmDetail, migTargetStorage))
     setMigNics(initialNicState(sourceVmDetail, migNetworkBridge, canEditVlan ? migVlanTag : ''))
     setMigStep('review')
   }
   React.useEffect(() => {
     if (migStep !== 'review' || !sourceVmDetail) return
     if (migHardware.cores === '' && migHardware.sockets === '' && migHardware.memoryMB === '') setMigHardware(initialHardwareState(sourceVmDetail))
+    if (migDisks.length === 0 && sourceVmDetail.disks.length > 0) setMigDisks(initialDiskState(sourceVmDetail, migTargetStorage))
     if (migNics.length === 0 && sourceVmDetail.nics.length > 0) setMigNics(initialNicState(sourceVmDetail, migNetworkBridge, canEditVlan ? migVlanTag : ''))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [migStep, sourceVmDetail])
   const launchMigration = async () => {
     const reviewHardware = buildHardwarePayload(migHardware, sourceVmDetail)
+    const reviewDisks = buildDisksPayload(migDisks)
     const reviewNics = buildNicsPayload(migNics, canEditVlan)
     if (!esxiMigrateVm) return
     setMigStarting(true)
@@ -1682,8 +1755,10 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
           // CPU type of the created VM (roadmap#24).
           cpuType: migCpuType,
           // Review-step overrides (#317), VMware sources only: hardware values
-          // that differ from the source, and one target bridge per source NIC.
+          // that differ from the source, one target storage per source disk
+          // (or its exclusion), and one target bridge per source NIC.
           ...(isVmwareSource && migStep === 'review' && reviewHardware && { hardware: reviewHardware }),
+          ...(isVmwareSource && migStep === 'review' && reviewDisks && { disks: reviewDisks }),
           ...(isVmwareSource && migStep === 'review' && reviewNics && { nics: reviewNics }),
           // Warm only, and single-VM only: the switch is hidden
           // everywhere else, so the payload is gated on the type too
@@ -3985,6 +4060,42 @@ return
               onCpuTypeChange={setMigCpuType}
               hardware={migHardware}
               onHardwareChange={setMigHardware}
+              disks={migDisks}
+              onDisksChange={setMigDisks}
+              storages={migStorages}
+              belowDisks={(
+                <>
+                  {/* Warm on a file-based storage, per kept disk (the step-1 storage is checked by warmStorageBlocked). */}
+                  {warmBlockedDisks.length > 0 && (
+                    <Alert severity="error" sx={{ fontSize: 12 }} icon={<i className="ri-error-warning-line" style={{ fontSize: 18 }} />} data-testid="review-disks-warm-blocked">
+                      {t('inventoryPage.esxiMigration.reviewDiskWarmFileStorage', {
+                        items: warmBlockedDisks.map(d => t('inventoryPage.esxiMigration.reviewDiskOnStorage', { disk: d.label, storage: d.storage, type: d.type })).join(', '),
+                      })}
+                    </Alert>
+                  )}
+                  {/* Free space per storage, the committed size apportioned to the kept disks. */}
+                  {migType === 'warm' && reviewSpacePending && (
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }} data-testid="review-disks-space-pending">
+                      <CircularProgress size={12} />
+                      <Typography variant="caption" color="text.secondary">{t('inventoryPage.esxiMigration.reviewDiskSpaceChecking')}</Typography>
+                    </Box>
+                  )}
+                  {migType === 'warm' && reviewSpaceShort.map(space => (
+                    <Alert key={space.storage} severity="error" sx={{ fontSize: 12 }} icon={<i className="ri-hard-drive-2-line" style={{ fontSize: 18 }} />} data-testid="review-disks-space-short">
+                      {space.error
+                        ? t('inventoryPage.esxiMigration.warmStorageCheckFailed', { storage: space.storage, error: space.error })
+                        : t('inventoryPage.esxiMigration.warmStorageInsufficient', {
+                            storage: space.storage,
+                            available: (space.availableBytes / 1073741824).toFixed(1),
+                            required: (space.requiredBytes / 1073741824).toFixed(1),
+                          })}
+                    </Alert>
+                  ))}
+                  {/* Thick LVM controls follow the kept disks here, so they appear the moment a disk lands on an lvm storage. */}
+                  {renderZeroRateLimitField()}
+                  {renderQcow2ConvertSwitch()}
+                </>
+              )}
               nics={migNics}
               onNicsChange={setMigNics}
             />
@@ -4165,7 +4276,7 @@ return
                   // Review step (#317): the edited values can block the launch,
                   // and every form gate below keeps applying, so a preflight or
                   // space verdict that changes meanwhile still holds the job.
-                  if (migStep === 'review' && !reviewIsValid(migHardware, migNics)) return true
+                  if (migStep === 'review' && !reviewIsValid(migHardware, migNics, migDisks)) return true
                   // Base requirements (always apply)
                   if (!migTargetConn || !migTargetNode || !migTargetStorage || migStarting) return true
                   // Block migration when the user picked a VMID that conflicts
@@ -4212,7 +4323,7 @@ return
                     // that 1x / 2x rule.
                     if (!migTempStorage) return true
                     const sel = vcenterPreflight.tempStorages?.find(s => s.path === migTempStorage)
-                    if (!sel || sel.availableBytes < requiredTempBytes(esxiMigrateVm?.committed || 0, migTargetStorageType)) return true
+                    if (!sel || sel.availableBytes < requiredTempBytes(esxiMigrateVm?.committed || 0, tempStorageTypeForCheck)) return true
                     // Direct-ESXi via v2v also requires SSH + key on the source connection
                     // (virt-v2v -it ssh doesn't do password auth).
                     if (isDirectEsxiWinCold && migTargetConn && !migPveConnections.find((c: any) => c.id === migTargetConn)?.sshEnabled) return true
@@ -4225,7 +4336,7 @@ return
                   if (migType !== 'warm' && vcenterPreflight?.tempStorages && vcenterPreflight.tempStorages.length > 0) {
                     if (!migTempStorage) return true
                     const tempSel = vcenterPreflight.tempStorages.find(s => s.path === migTempStorage)
-                    if (!tempSel || tempSel.availableBytes < requiredTempBytes(esxiMigrateVm?.committed || 0, migTargetStorageType)) return true
+                    if (!tempSel || tempSel.availableBytes < requiredTempBytes(esxiMigrateVm?.committed || 0, tempStorageTypeForCheck)) return true
                   }
                   // ESXi-direct path: SSH must be configured on the target Proxmox
                   // connection and sshfs/pv must be available when those modes selected.
@@ -4241,6 +4352,10 @@ return
                   if (migType === 'warm' && migTargetNode !== '__auto__' && !warmPreflightCurrent?.ok) return true
                   // Warm: the selected storage cannot hold the source disks (or could not be read).
                   if (migType === 'warm' && warmSpaceShort) return true
+                  // Review step (#317 lot 2): a kept disk on a file-based storage, or a
+                  // per-storage space verdict missing, pending or short.
+                  if (warmBlockedDisks.length > 0) return true
+                  if (migType === 'warm' && (reviewSpacePending || reviewSpaceShort.length > 0)) return true
                   // Warm: the node cannot reach the VMkernel adapter the copy goes through (roadmap#53).
                   if (migType === 'warm' && warmCopyUnreachable) return true
                   if (zeroRateLimitInvalid) return true

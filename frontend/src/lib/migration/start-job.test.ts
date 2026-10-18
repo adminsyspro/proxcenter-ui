@@ -49,14 +49,14 @@ beforeEach(() => {
 
 describe("startMigrationJob", () => {
   it("routes a VMware warm job to the VMware warm engine with every warm option", async () => {
-    const config = { ...base, migrationType: "warm", sourceType: "vcenter", downtimeBudgetSec: 600, cutoverMode: "manual", zeroRateLimitMBps: 200, copyVmk: "vmk2", copyAddress: "10.0.0.2", vddkLibdir: "/opt/vddk", targetVmid: 900, hardware: { cores: 2 }, nics: [{ index: 0, bridge: "vmbr1" }] }
+    const config = { ...base, migrationType: "warm", sourceType: "vcenter", downtimeBudgetSec: 600, cutoverMode: "manual", zeroRateLimitMBps: 200, copyVmk: "vmk2", copyAddress: "10.0.0.2", vddkLibdir: "/opt/vddk", targetVmid: 900, hardware: { cores: 2 }, nics: [{ index: 0, bridge: "vmbr1" }], disks: [{ index: 1, targetStorage: "ZFS-Pool" }] }
 
     await startMigrationJob(job(config), "t1")
 
     expect(warm).toHaveBeenCalledWith("job-1", {
       sourceConnectionId: "src", sourceVmId: "vm-1", targetConnectionId: "tgt", targetNode: "pve1", targetStorage: "local-lvm",
       networkBridge: "vmbr0", vlanTag: undefined, startAfterMigration: false, convertDisksToQcow2: false, cpuType: "host",
-      hardware: { cores: 2 }, nics: [{ index: 0, bridge: "vmbr1" }], targetVmid: 900, vddkLibdir: "/opt/vddk",
+      hardware: { cores: 2 }, nics: [{ index: 0, bridge: "vmbr1" }], disks: [{ index: 1, targetStorage: "ZFS-Pool" }], targetVmid: 900, vddkLibdir: "/opt/vddk",
       downtimeBudgetSec: 600, cutoverMode: "manual", zeroRateLimitMBps: 200, copyVmk: "vmk2",
     }, "t1")
     expect(cold).not.toHaveBeenCalled()
@@ -64,12 +64,13 @@ describe("startMigrationJob", () => {
   })
 
   it("routes an XCP-ng warm job to the XCP-ng engine without the VMware-only options", async () => {
-    await startMigrationJob(job({ ...base, migrationType: "warm", sourceType: "xcpng", vddkLibdir: "/x", copyVmk: "vmk1", copyAddress: "a" }), "t1")
+    await startMigrationJob(job({ ...base, migrationType: "warm", sourceType: "xcpng", vddkLibdir: "/x", copyVmk: "vmk1", copyAddress: "a", disks: [{ index: 1, exclude: true }] }), "t1")
 
     const cfg = xcpngWarm.mock.calls[0][1]
     expect(cfg).toMatchObject({ sourceVmId: "vm-1", targetNode: "pve1" })
     expect(cfg).not.toHaveProperty("vddkLibdir")
     expect(cfg).not.toHaveProperty("copyVmk")
+    expect(cfg).not.toHaveProperty("disks")
     expect(warm).not.toHaveBeenCalled()
   })
 
@@ -89,10 +90,11 @@ describe("startMigrationJob", () => {
     h.connection.findUnique.mockResolvedValueOnce({ apiTokenEnc: "enc", baseUrl: "https://esxi1.lab/", insecureTLS: true, sshEnabled: true, sshKeyEnc: "k", sshPassEnc: null })
     parse.mockReturnValueOnce({ guestOS: "Microsoft Windows Server 2022", guestId: "windows2019srv_64Guest", vmPathName: "[Datastore] win/win.vmx" } as any)
 
-    await startMigrationJob(job({ ...base, migrationType: "cold", sourceType: "vmware", v2vRoot: "/dev/sda2" }), "t1")
+    await startMigrationJob(job({ ...base, migrationType: "cold", sourceType: "vmware", v2vRoot: "/dev/sda2", disks: [{ index: 1, exclude: true }] }), "t1")
 
     expect(v2v).toHaveBeenCalledWith("job-1", expect.objectContaining({
       sourceType: "esxi-direct", vmxPath: "/vmfs/volumes/Datastore/win/win.vmx", esxiHost: "esxi1.lab", migrationType: "cold", v2vRoot: "/dev/sda2", sourceVmName: "web-1",
+      disks: [{ index: 1, exclude: true }],
     }), "t1")
     expect(cold).not.toHaveBeenCalled()
   })
@@ -101,9 +103,9 @@ describe("startMigrationJob", () => {
     h.connection.findUnique.mockResolvedValueOnce({ apiTokenEnc: "enc", baseUrl: "https://esxi1.lab", insecureTLS: true, sshEnabled: true, sshKeyEnc: "k" })
     parse.mockReturnValueOnce({ guestOS: "Debian GNU/Linux 12", guestId: "debian12_64Guest", vmPathName: "[Datastore] deb/deb.vmx" } as any)
 
-    await startMigrationJob(job({ ...base, migrationType: "cold", sourceType: "vmware" }), "t1")
+    await startMigrationJob(job({ ...base, migrationType: "cold", sourceType: "vmware", disks: [{ index: 1, targetStorage: "ISO" }] }), "t1")
 
-    expect(cold).toHaveBeenCalledWith("job-1", expect.objectContaining({ migrationType: "cold", transferMode: "auto" }), "t1")
+    expect(cold).toHaveBeenCalledWith("job-1", expect.objectContaining({ migrationType: "cold", transferMode: "auto", disks: [{ index: 1, targetStorage: "ISO" }] }), "t1")
     expect(v2v).not.toHaveBeenCalled()
   })
 
@@ -141,11 +143,12 @@ describe("startMigrationJob", () => {
 describe("config builders", () => {
   it("omit absent options", () => {
     const w = warmConfigFromJobConfig({ ...base }, "warm-vmware")
-    for (const k of ["targetVmid", "vddkLibdir", "downtimeBudgetSec", "cutoverMode", "zeroRateLimitMBps", "copyVmk", "hardware", "nics"]) {
+    for (const k of ["targetVmid", "vddkLibdir", "downtimeBudgetSec", "cutoverMode", "zeroRateLimitMBps", "copyVmk", "hardware", "nics", "disks"]) {
       expect(w).not.toHaveProperty(k)
     }
     const c = coldConfigFromJobConfig({ ...base, migrationType: "cold" })
     expect(c).not.toHaveProperty("tempStorage")
     expect(c).not.toHaveProperty("targetVmid")
+    expect(c).not.toHaveProperty("disks")
   })
 })

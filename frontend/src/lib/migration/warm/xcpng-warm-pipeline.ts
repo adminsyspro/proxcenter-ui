@@ -161,9 +161,11 @@ export async function runXcpngWarmMigration(jobId: string, config: WarmMigration
     await appendLog(jobId, `Target VM ${targetVmid} created on ${config.targetNode}`, "success")
 
     // ── preparing_disks ──
+    // Every disk on the job's storage: the per-disk choices of #317 are VMware only.
     const devByKey = await provisionBlockTargets({
-      jobId, connectionId: config.targetConnectionId, nodeIp, targetStorage: config.targetStorage, storageType: storageInfo?.type || "",
-      targetVmid, shellConf, disks: vmConfig.disks.map(d => ({ key: d.position, capacityBytes: d.sizeBytes })), allocatedVolumes,
+      jobId, connectionId: config.targetConnectionId, nodeIp, targetVmid, shellConf,
+      disks: vmConfig.disks.map(d => ({ key: d.position, capacityBytes: d.sizeBytes, storage: config.targetStorage, storageType: storageInfo?.type || "" })),
+      allocatedVolumes,
       zeroRateLimitMBps: await resolveWarmZeroRateLimit(config.zeroRateLimitMBps, config.targetConnectionId),
     })
     for (const [k, dev] of devByKey) targetDev.set(k, dev)

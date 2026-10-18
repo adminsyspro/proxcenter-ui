@@ -11,16 +11,26 @@ import { cleanup } from '@testing-library/react'
 import { renderWithProviders, screen, waitFor, fireEvent, within } from '@/__tests__/setup/renderWithProviders'
 import { server, http, HttpResponse } from '@/__tests__/setup/msw-server'
 
-import MigrationReviewStep, { toNetworkChoices } from './MigrationReviewStep'
+import MigrationReviewStep, { toNetworkChoices, formatGB } from './MigrationReviewStep'
 import type { ReviewSource } from './migrationReview'
 
+const GIB = 1024 ** 3
 const source: ReviewSource = {
   numCPU: 4, numCoresPerSocket: 2, sockets: 2, memoryMB: 4096,
   nics: [
     { label: 'Network adapter 1', type: 'Vmxnet3', macAddress: '00:50:56:aa:00:01', network: 'VM Network' },
     { label: 'Network adapter 2', type: 'E1000', macAddress: '00:50:56:aa:00:02', network: 'i317-net' },
   ],
+  disks: [
+    { label: 'Hard disk 1', capacityBytes: 40 * GIB, fileName: '[ds1] web/web.vmdk' },
+    { label: 'Hard disk 2', capacityBytes: 100 * GIB, fileName: '[ds1] web/web_1.vmdk' },
+  ],
 }
+const storages = [
+  { storage: 'san-lvm', type: 'lvm', avail: 800 * GIB },
+  { storage: 'tank', type: 'zfspool', avail: 120 * GIB },
+]
+const onDefault = { storage: 'san-lvm', exclude: false }
 
 // The jsdom setup owns server.listen/close; only the handlers are per test.
 afterEach(() => { cleanup(); server.resetHandlers() })
@@ -40,6 +50,7 @@ function renderStep(overrides: Partial<React.ComponentProps<typeof MigrationRevi
     source, sourceLoading: false, sourceName: 'web-01', targetConnId: 'pve', targetNode: 'pve1', defaultBridge: 'vmbr0', canEditVlan: true,
     cpuType: 'x86-64-v2-AES', onCpuTypeChange: vi.fn(),
     hardware: { cores: '2', sockets: '2', memoryMB: '4096' }, onHardwareChange: vi.fn(),
+    disks: [onDefault, onDefault], onDisksChange: vi.fn(), storages,
     nics: [{ bridge: 'vmbr0', vlanTag: '', model: '' }, { bridge: 'vmbr0', vlanTag: '', model: '' }], onNicsChange: vi.fn(),
     ...overrides,
   }
@@ -124,9 +135,68 @@ describe('MigrationReviewStep', () => {
 
   it('tells the operator when the source could not be read and hides the VLAN field without the permission', () => {
     seedNode()
-    renderStep({ source: null, nics: [], canEditVlan: false })
+    renderStep({ source: null, nics: [], disks: [], canEditVlan: false })
     expect(screen.getByText(/could not be read/)).toBeTruthy()
     expect(screen.getByText(/No network adapter/)).toBeTruthy()
+    expect(screen.getByText(/No disk detected/)).toBeTruthy()
+  })
+
+  // #317 lot 2: the disk table, before the NICs.
+  it('lists every source disk with its size and path, and moves one to another storage of the node', async () => {
+    seedNode()
+    const props = renderStep()
+    const disks = screen.getByTestId('review-disks')
+    expect(within(disks).getByText('Hard disk 1')).toBeTruthy()
+    expect(within(disks).getByText('40.0 GB · [ds1] web/web.vmdk')).toBeTruthy()
+    expect(within(disks).getByText('100.0 GB · [ds1] web/web_1.vmdk')).toBeTruthy()
+    // disks come before the network interfaces
+    expect(disks.compareDocumentPosition(screen.getByText('Network interfaces')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+
+    const combo = within(screen.getByTestId('review-disk-1-storage')).getByRole('combobox')
+    fireEvent.mouseDown(combo)
+    const option = await screen.findByRole('option', { name: /tank/ })
+    // the menu shows the type and the free space, like the step-1 selector
+    expect(option.textContent).toContain('(zfspool)')
+    expect(option.textContent).toContain('120.0 GB')
+    fireEvent.click(option)
+    expect(props.onDisksChange).toHaveBeenCalledWith([onDefault, { storage: 'tank', exclude: false }])
+  })
+
+  it('leaves a disk out with its checkbox, dims the row and locks its storage; the boot disk stays locked', () => {
+    seedNode()
+    const props = renderStep({ disks: [onDefault, { storage: 'tank', exclude: true }] })
+    const boot = screen.getByTestId('review-disk-0-include') as HTMLInputElement
+    expect(boot.checked).toBe(true)
+    expect(boot.disabled).toBe(true)
+    const second = screen.getByTestId('review-disk-1-include') as HTMLInputElement
+    expect(second.checked).toBe(false)
+    expect(screen.getByTestId('review-disk-1')).toHaveStyle({ opacity: '0.45' })
+    expect(within(screen.getByTestId('review-disk-1-storage')).getByRole('combobox').getAttribute('aria-disabled')).toBe('true')
+    fireEvent.click(second)
+    expect(props.onDisksChange).toHaveBeenCalledWith([onDefault, { storage: 'tank', exclude: false }])
+  })
+
+  it('flags a kept disk without a storage and keeps an unknown storage selectable', async () => {
+    seedNode()
+    renderStep({ disks: [{ storage: 'old-pool', exclude: false }, { storage: '', exclude: false }] })
+    const blank = within(screen.getByTestId('review-disk-1-storage')).getByRole('combobox')
+    expect(blank.closest('.MuiInputBase-root')?.className).toMatch(/Mui-error/)
+    expect(within(screen.getByTestId('review-disk-1-storage')).getByText('Select storage...')).toBeTruthy()
+    fireEvent.mouseDown(within(screen.getByTestId('review-disk-0-storage')).getByRole('combobox'))
+    expect(await screen.findByRole('option', { name: /old-pool/ })).toBeTruthy()
+    expect(screen.getByRole('option', { name: /san-lvm/ })).toBeTruthy()
+  })
+
+  it('renders the parent controls under the disk table, where the thick LVM options belong', () => {
+    seedNode()
+    renderStep({ belowDisks: <span>Convert disks to qcow2 after migration</span> })
+    expect(within(screen.getByTestId('review-disks')).getByTestId('review-disks-below').textContent).toContain('Convert disks to qcow2')
+  })
+
+  it('formats sizes like the storage selector', () => {
+    expect(formatGB(40 * GIB)).toBe('40.0 GB')
+    expect(formatGB(0)).toBe('')
+    expect(formatGB(undefined)).toBe('')
   })
 
   it('warns about a source vTPM: its state is never copied and the recovery key is needed', () => {

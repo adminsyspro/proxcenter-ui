@@ -275,6 +275,31 @@ describe('vDC VNets with a session', () => {
     expect(h.vdcFindUnique).not.toHaveBeenCalled()
   })
 
+  it.each(SESSION_CALLS)('%s when the vDC lookup fails: 503 with a generic message, nothing read or written', async (_name, call) => {
+    h.vdcFindUnique.mockRejectedValue(new Error('db down: secret details'))
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    const res = await call('vdc-a')
+
+    expect(res.status).toBe(503)
+    expect(await res.json()).toEqual({ error: 'Unable to verify vDC access' })
+    for (const lib of [h.listVnets, h.createVnet, h.updateVnet, h.deleteVnet, h.vnetFindFirst]) expect(lib).not.toHaveBeenCalled()
+    errSpy.mockRestore()
+  })
+
+  it('fails closed (503) when the provider membership cannot be verified', async () => {
+    h.getPrincipal.mockResolvedValue({ ok: true, principal: { ...SESSION, tenantId: 'default' } })
+    h.currentTenant.mockResolvedValue('default')
+    h.tenantMember.mockRejectedValue(new Error('db down'))
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    const res = await LIST(new Request('http://test.local/x'), listParams('vdc-b'))
+
+    expect(res.status).toBe(503)
+    expect(h.listVnets).not.toHaveBeenCalled()
+    errSpy.mockRestore()
+  })
+
   it('a provider session keeps its fleet view: lists the VNets of a tenant vDC, no vDC lookup', async () => {
     h.getPrincipal.mockResolvedValue({ ok: true, principal: { ...SESSION, tenantId: 'default' } })
     h.currentTenant.mockResolvedValue('default')

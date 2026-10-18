@@ -28,7 +28,6 @@ import {
   MenuItem,
   Select,
   Stack,
-  Switch,
   Tab,
   Table,
   TableBody,
@@ -58,6 +57,7 @@ import BackupJobsPanel from '../BackupJobsPanel'
 import CveTab from '@/components/CveTab'
 import ChangeTrackingTab from './ChangeTrackingTab'
 import CorosyncLinksCell from './CorosyncLinksCell'
+import AutoHaCard from './AutoHaCard'
 import ComplianceTab from '@/components/ComplianceTab'
 import DatacenterSettingsTab from '@/components/datacenter-settings'
 import MetricServerTab from '@/components/MetricServerTab'
@@ -219,7 +219,7 @@ export default function ClusterTabs(props: any) {
   const t = useTranslations()
   const router = useRouter()
   const { hasFeature, loading: licenseLoading } = useLicense()
-  const { hasPermission, hasPermissionOn } = useRBAC()
+  const { hasPermission } = useRBAC()
   const isEnterprise = !licenseLoading && hasFeature(Features.DRS)
   const drsEnabled = isEnterprise && hasPermission('automation.view')
   const { data: drsStatus } = useDRSStatus(drsEnabled)
@@ -354,8 +354,6 @@ export default function ClusterTabs(props: any) {
   const canManageCluster = hasPermission('connection.manage')
   // Unsetting an OSD flag is a storage.admin action on the API side (#920).
   const canSetCephFlags = hasPermission('storage.admin')
-  // Auto-HA settings cover the whole connection: node.manage on it, as the routes require.
-  const canManageAutoHa = !!clusterConnId && hasPermissionOn('node.manage', 'connection', clusterConnId)
   const activeRollingUpdateId = hasActiveUpdate(clusterConnId)
 
   const drsHealth = useMemo(() => {
@@ -493,62 +491,7 @@ export default function ClusterTabs(props: any) {
     setExecutingAll(false)
   }, [clusterRecs, mutateRecs, toast, t])
 
-  // Auto-HA state
   const connId = selection?.type === 'cluster' ? selection.id : ''
-  const [autoHaSettings, setAutoHaSettings] = useState<any>(null)
-  const [autoHaLoading, setAutoHaLoading] = useState(false)
-  const [autoHaSaving, setAutoHaSaving] = useState(false)
-  const [autoHaSyncing, setAutoHaSyncing] = useState(false)
-  const [autoHaSyncResult, setAutoHaSyncResult] = useState<any>(null)
-
-  const loadAutoHaSettings = useCallback(async () => {
-    if (!connId) return
-    setAutoHaLoading(true)
-    try {
-      const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/ha/auto-ha`)
-      const json = await res.json()
-      setAutoHaSettings(json.data)
-    } catch { /* ignore */ }
-    setAutoHaLoading(false)
-  }, [connId])
-
-  const saveAutoHaSettings = useCallback(async (data: any) => {
-    if (!connId) return
-    setAutoHaSaving(true)
-    try {
-      const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/ha/auto-ha`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      })
-      const json = await res.json()
-      // A refusal keeps the stored settings on screen and says why.
-      if (res.ok) setAutoHaSettings(json.data)
-      else toast.error(json.error || t('errors.genericError'))
-    } catch { /* ignore */ }
-    setAutoHaSaving(false)
-  }, [connId, toast, t])
-
-  const syncAutoHa = useCallback(async () => {
-    if (!connId) return
-    setAutoHaSyncing(true)
-    setAutoHaSyncResult(null)
-    try {
-      const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/ha/auto-ha/sync`, { method: 'POST' })
-      const json = await res.json()
-      setAutoHaSyncResult(json.data || json.error)
-    } catch (e: any) {
-      setAutoHaSyncResult({ error: e?.message })
-    }
-    setAutoHaSyncing(false)
-  }, [connId])
-
-  // Load Auto-HA settings when HA tab is activated
-  useEffect(() => {
-    if (clusterTab === 3 && connId && !autoHaSettings && !autoHaLoading) {
-      void loadAutoHaSettings()
-    }
-  }, [clusterTab, connId])
 
   // Fetch RRD data for all nodes when in Summary tab
   const [clusterNodeRrd, setClusterNodeRrd] = useState<Record<string, any[]>>({})
@@ -1760,111 +1703,7 @@ export default function ClusterTabs(props: any) {
                       </Box>
                     ) : (
                       <Stack spacing={3}>
-                        {/* Auto-HA */}
-                        {autoHaSettings && (
-                          <Card variant="outlined" sx={{ borderRadius: 2, overflow: 'hidden' }}>
-                            <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
-                              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: autoHaSettings.enabled ? 2 : 0 }}>
-                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                                  <i className="ri-shield-star-line" style={{ fontSize: 20, opacity: 0.7 }} />
-                                  <Typography variant="subtitle2" fontWeight={700}>Auto-HA</Typography>
-                                  <Typography variant="caption" sx={{ opacity: 0.5 }}>
-                                    {autoHaSettings.enabled ? t('cluster.autoHaEnabled') : t('cluster.autoHaDisabled')}
-                                  </Typography>
-                                </Box>
-                                <Switch
-                                  checked={autoHaSettings.enabled}
-                                  onChange={(e) => saveAutoHaSettings({ ...autoHaSettings, enabled: e.target.checked })}
-                                  disabled={autoHaSaving || !canManageAutoHa}
-                                />
-                              </Box>
-
-                              {autoHaSettings.enabled && (
-                                <Stack spacing={2}>
-                                  <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-                                    <FormControl size="small" sx={{ flex: 1 }}>
-                                      <InputLabel>{t('cluster.autoHaDefaultState')}</InputLabel>
-                                      <Select
-                                        value={autoHaSettings.state || 'started'}
-                                        label={t('cluster.autoHaDefaultState')}
-                                        onChange={(e) => setAutoHaSettings((prev: any) => ({ ...prev, state: e.target.value }))}
-                                      >
-                                        <MenuItem value="started">Started</MenuItem>
-                                        <MenuItem value="stopped">Stopped</MenuItem>
-                                        <MenuItem value="enabled">Enabled</MenuItem>
-                                        <MenuItem value="disabled">Disabled</MenuItem>
-                                      </Select>
-                                    </FormControl>
-
-                                    {clusterPveMajorVersion < 9 && clusterHaGroups.length > 0 && (
-                                      <FormControl size="small" sx={{ flex: 1 }}>
-                                        <InputLabel>{t('common.group')}</InputLabel>
-                                        <Select
-                                          value={autoHaSettings.group || ''}
-                                          label={t('common.group')}
-                                          onChange={(e) => setAutoHaSettings((prev: any) => ({ ...prev, group: e.target.value }))}
-                                        >
-                                          <MenuItem value=""><em>{t('common.none')}</em></MenuItem>
-                                          {clusterHaGroups.map((g: any) => (
-                                            <MenuItem key={g.group} value={g.group}>{g.group}</MenuItem>
-                                          ))}
-                                        </Select>
-                                      </FormControl>
-                                    )}
-
-                                    <NumericTextField
-                                      size="small"
-                                      type="number"
-                                      label="Max Restart"
-                                      value={autoHaSettings.max_restart ?? 1}
-                                      onChange={(n) => setAutoHaSettings((prev: any) => ({ ...prev, max_restart: n }))}
-                                      fallback={0}
-                                      inputProps={{ min: 0, max: 10 }}
-                                      sx={{ flex: 1 }}
-                                    />
-                                    <NumericTextField
-                                      size="small"
-                                      type="number"
-                                      label="Max Relocate"
-                                      value={autoHaSettings.max_relocate ?? 1}
-                                      onChange={(n) => setAutoHaSettings((prev: any) => ({ ...prev, max_relocate: n }))}
-                                      fallback={0}
-                                      inputProps={{ min: 0, max: 10 }}
-                                      sx={{ flex: 1 }}
-                                    />
-                                    <Button
-                                      size="small"
-                                      variant="outlined"
-                                      onClick={() => saveAutoHaSettings(autoHaSettings)}
-                                      disabled={autoHaSaving || !canManageAutoHa}
-                                      startIcon={autoHaSaving ? <CircularProgress size={14} /> : <i className="ri-save-line" />}
-                                    >
-                                      {t('common.save')}
-                                    </Button>
-                                    <Button
-                                      size="small"
-                                      variant="contained"
-                                      onClick={syncAutoHa}
-                                      disabled={autoHaSyncing || !canManageAutoHa}
-                                      startIcon={autoHaSyncing ? <CircularProgress size={14} /> : <i className="ri-refresh-line" />}
-                                    >
-                                      {t('cluster.autoHaSyncNow')}
-                                    </Button>
-                                  </Box>
-                                  {autoHaSyncResult && !autoHaSyncResult.error && (
-                                    <Alert severity="success" sx={{ py: 0.5 }}>
-                                      {t('cluster.autoHaSyncSuccess', { added: autoHaSyncResult.added, skipped: autoHaSyncResult.skipped })}
-                                      {autoHaSyncResult.errors?.length > 0 && ` (${autoHaSyncResult.errors.length} errors)`}
-                                    </Alert>
-                                  )}
-                                  {autoHaSyncResult?.error && (
-                                    <Alert severity="error" sx={{ py: 0.5 }}>{autoHaSyncResult.error}</Alert>
-                                  )}
-                                </Stack>
-                              )}
-                            </CardContent>
-                          </Card>
-                        )}
+                        <AutoHaCard connId={clusterConnId} pveMajorVersion={clusterPveMajorVersion} haGroups={clusterHaGroups} />
 
                         {/* HA Status (quorum, master, lrm) */}
                         {clusterHaStatus && clusterHaStatus.filter((s: any) => s.type === 'quorum' || s.type === 'master' || s.type === 'lrm').length > 0 && (

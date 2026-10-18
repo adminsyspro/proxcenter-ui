@@ -11,6 +11,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const m = vi.hoisted(() => ({
   getPrincipal: vi.fn<(...a: any[]) => Promise<any>>(),
   resolveVmMeta: vi.fn<(...a: any[]) => any>(),
+  findVmMetaByVmid: vi.fn<(...a: any[]) => any>(),
   getConnectionById: vi.fn<(...a: any[]) => Promise<any>>(),
   pveFetch: vi.fn<(...a: any[]) => Promise<any>>(),
   roleGrants: [] as any[],
@@ -29,7 +30,10 @@ vi.mock('@/lib/db/prisma', () => ({
     rbacUserPermission: { findMany: async () => [] },
   },
 }))
-vi.mock('@/lib/cache/vmMetaCache', () => ({ resolveVmMeta: (...a: any[]) => m.resolveVmMeta(...a) }))
+vi.mock('@/lib/cache/vmMetaCache', () => ({
+  resolveVmMeta: (...a: any[]) => m.resolveVmMeta(...a),
+  findVmMetaByVmid: (...a: any[]) => m.findVmMetaByVmid(...a),
+}))
 vi.mock('@/lib/cache/inventoryCache', () => ({ getTenantInventoriesFromCache: () => [] }))
 vi.mock('@/lib/tenant', () => ({ DEFAULT_TENANT_ID: 'default', getTenantConnectionIds: async () => new Set(['conn-1', 'conn-2']) }))
 vi.mock('@/lib/connections/getConnection', () => ({ getConnectionById: (...a: any[]) => m.getConnectionById(...a) }))
@@ -53,6 +57,7 @@ beforeEach(() => {
   m.roleGrants = []
   m.getPrincipal.mockResolvedValue({ ok: true, principal: { kind: 'session', userId: 'u1', tenantId: 'default', connectionIds: null } })
   m.resolveVmMeta.mockReturnValue(null)
+  m.findVmMetaByVmid.mockReturnValue(null)
   m.getConnectionById.mockImplementation(async (id: string) => ({ id, name: id }))
   m.pveFetch.mockImplementation(async (_c: any, path: string) =>
     path.endsWith('/status') ? { status: 'stopped', exitstatus: 'OK', type: 'qmstart', id: '100' } : [])
@@ -116,6 +121,38 @@ describe('task status for a session', () => {
     expect((await poll(upid('qmstart', '100'))).status).toBe(200)
     expect(m.resolveVmMeta).toHaveBeenCalledWith('conn-1:pve1:qemu:100', 'default')
     expect((await poll(upid('qmstart', '101'))).status).toBe(403)
+  })
+
+  describe('a guest that moved since its task ran (migration, DRS or HA relocation)', () => {
+    // The UPID names pve1, where the task ran and is read; the inventory has the VM on pve2 now.
+    beforeEach(() => {
+      m.findVmMetaByVmid.mockImplementation((conn: string, vmid: string) =>
+        conn === 'conn-1' && vmid === '100' ? { tags: [], pool: 'pool-a', node: 'pve2' } : null)
+    })
+
+    it('a pool-scoped user still polls it: judged where the VM lives now', async () => {
+      grant(VIEWER, 'pool', 'pool-a')
+      m.resolveVmMeta.mockImplementation((rid: string) => rid === 'conn-1:pve2:qemu:100' ? { tags: [], pool: 'pool-a' } : null)
+
+      expect((await poll(upid('qmstart', '100'))).status).toBe(200)
+      expect(m.findVmMetaByVmid).toHaveBeenCalledWith('conn-1', '100', 'default')
+    })
+
+    it('a vm-scoped user whose grant names the current node still polls it', async () => {
+      grant(VIEWER, 'vm', 'conn-1:pve2:qemu:100')
+      expect((await poll(upid('qmstart', '100'))).status).toBe(200)
+    })
+
+    it('the current node opens nothing more than the guest itself: another VM stays refused', async () => {
+      grant(VIEWER, 'vm', 'conn-1:pve2:qemu:100')
+      expect((await poll(upid('qmstart', '101'))).status).toBe(403)
+    })
+
+    it('no inventory lookup when the grant already matches on the UPID node', async () => {
+      grant(VIEWER, 'vm', 'conn-1:pve1:qemu:100')
+      expect((await poll(upid('qmstart', '100'))).status).toBe(200)
+      expect(m.findVmMetaByVmid).not.toHaveBeenCalled()
+    })
   })
 
   it('a node-scoped user polls a node task of its node, not of another node', async () => {

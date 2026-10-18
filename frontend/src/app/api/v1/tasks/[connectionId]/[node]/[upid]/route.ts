@@ -9,7 +9,8 @@ import { formatBytes as formatSize } from '@/utils/format'
 import { buildNodeResourceId, buildVmResourceId, checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { assertVmid } from '@/lib/ssh/validate'
 import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
-import type { Principal } from '@/lib/auth/principal'
+import { getPrincipal, type Principal } from '@/lib/auth/principal'
+import { findVmMetaByVmid } from '@/lib/cache/vmMetaCache'
 import { prisma } from '@/lib/db/prisma'
 import { checkTenantGuestScope } from '@/lib/vdc/guestScope'
 import { getTenantInfrastructureScope } from '@/lib/tenant/infraScope'
@@ -552,24 +553,43 @@ function taskGuestTypes(taskType: string): Array<'qemu' | 'lxc'> {
   return ['qemu', 'lxc']
 }
 
+/** vm.view on one guest of the connection, on `node`, for each type the task may be about. */
+async function mayViewGuestOn(connectionId: string, node: string, types: string[], vmid: string): Promise<boolean> {
+  for (const type of types) {
+    if (!(await checkPermission(PERMISSIONS.VM_VIEW, 'vm', buildVmResourceId(connectionId, node, type, vmid)))) return true
+  }
+  return false
+}
+
+/**
+ * vm.view on the guest a task names: on the node the UPID names, else on the
+ * node the inventory has it on now. A migration, a DRS or HA relocation moves
+ * the guest after its task ran, and vm and pool/tag grants match the guest
+ * where it lives (the RBAC metadata index is keyed on its current node).
+ */
+async function mayViewTaskGuest(connectionId: string, node: string, taskType: string, vmid: string): Promise<boolean> {
+  const types = taskGuestTypes(taskType)
+  if (await mayViewGuestOn(connectionId, node, types, vmid)) return true
+  const tenantId = (await getPrincipal()).principal?.tenantId
+  const current = findVmMetaByVmid(connectionId, vmid, tenantId)?.node
+  return !!current && current !== node && (await mayViewGuestOn(connectionId, current, types, vmid))
+}
+
 /**
  * A session follows a task when it may view the task's connection, or the
  * guest its UPID names (vm.view; pool and tag grants resolve in
  * checkPermission), or its node (node.view): a vm-, pool- or node-scoped
  * user keeps polling the tasks of what it sees (#378), a grant on another
- * connection opens nothing. The guest and node fallbacks need the UPID node
- * to be the URL node. Anything but a 403 (401: no session) is final.
+ * connection opens nothing. The task is read on the URL node, so the guest
+ * and node fallbacks need the UPID node to be that node. Anything but a 403
+ * (401: no session) is final.
  */
 async function checkSessionTaskAccess(connectionId: string, node: string, upid: string): Promise<Response | null> {
   const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW, 'connection', connectionId)
   if (!denied || denied.status !== 403) return denied
   const task = parseTaskUpid(upid)
   if (task?.node !== node) return denied
-  if (task.vmid) {
-    for (const type of taskGuestTypes(task.type)) {
-      if (!(await checkPermission(PERMISSIONS.VM_VIEW, 'vm', buildVmResourceId(connectionId, node, type, task.vmid)))) return null
-    }
-  }
+  if (task.vmid && (await mayViewTaskGuest(connectionId, node, task.type, task.vmid))) return null
   return (await checkPermission(PERMISSIONS.NODE_VIEW, 'node', buildNodeResourceId(connectionId, node))) ? denied : null
 }
 
@@ -629,9 +649,8 @@ async function handler(
   { params, principal }: { params: Promise<{ connectionId: string; node: string; upid: string }>; principal?: Principal }
 ) {
   try {
-    const { connectionId, node, upid } = await params
-
-    const decodedUpid = decodeURIComponent(upid)
+    // Next already decoded the segment once; a UPID never holds a "%".
+    const { connectionId, node, upid: decodedUpid } = await params
 
     // Tokens are judged on the connection of the task. Sessions may also
     // reach it through the guest or the node it names (#378).
@@ -792,7 +811,8 @@ export async function DELETE(
     const denied = await checkPermission(PERMISSIONS.NODE_MANAGE, "connection", connectionId)
     if (denied) return denied
 
-    const decodedUpid = decodeURIComponent(upid)
+    // Next already decoded the segment once.
+    const decodedUpid = upid
 
     const connection = await getConnectionById(connectionId)
 

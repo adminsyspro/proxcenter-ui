@@ -494,6 +494,15 @@ describe('GET /api/v1/tasks/[connectionId]/[node]/[upid]: connection and vDC per
     expect(checkPermissionMock).toHaveBeenCalledWith('connection.view', 'connection', 'conn-1')
   })
 
+  it('hands Proxmox the UPID as Next decoded it, never decoded a second time', async () => {
+    const res = await GET(new Request('http://test.local/x'), {
+      params: Promise.resolve({ connectionId: 'conn-1', node: NODE, upid: 'UPID:pve1:%41:%:x' }),
+    })
+
+    expect(res.status).toBe(200)
+    expect(pveFetchMock).toHaveBeenCalledWith(CONN, `/nodes/pve1/tasks/${encodeURIComponent('UPID:pve1:%41:%:x')}/status`)
+  })
+
   it('judges a session on the connection first, then on the guest the UPID names (sessionTaskScope.test.ts)', async () => {
     // A vm-scoped grant never matches a "connection" resource, it matches the VM one (#378).
     checkPermissionMock.mockImplementation(async (_perm: string, resourceType?: string) =>

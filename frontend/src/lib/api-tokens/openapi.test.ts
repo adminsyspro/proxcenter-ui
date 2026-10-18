@@ -82,7 +82,7 @@ describe('buildOpenApiDocument', () => {
     const base = {
       requiredScopes: ['vms:write'], routeFile: 'x', summary: 's', description: 'd',
       responseSchemaRef: 'TaskStartedResponse',
-    } as const
+    }
     const post: AllowlistEntry = {
       ...base, id: 'vm-start', method: 'POST', tag: 'VMs',
       pattern: '/api/v1/connections/{connId}/vms/{vmKey}/start',

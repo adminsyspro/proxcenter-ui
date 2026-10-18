@@ -1,10 +1,12 @@
 // Live check that a write token's creator still holds the rights of the scope
-// being used (Proxmox-like model): a token never outlives its creator's rights.
-// Verdicts (true and false) are cached in-process for 60 s per token+scope, so
-// a revoked right takes at most one TTL to bite. Under control-plane HA each
-// node keeps its own cache (accepted, same as the rate limiter).
+// being used, and of the secondary permissions its handler may check
+// (Proxmox-like model): a token never outlives its creator's rights.
+// Verdicts (true and false) are cached in-process for 60 s per token+scope or
+// token+permission, so a revoked right takes at most one TTL to bite. Under
+// control-plane HA each node keeps its own cache (accepted, same as the rate
+// limiter).
 import { prisma } from "@/lib/db/prisma"
-import { isUserSuperAdmin } from "@/lib/rbac"
+import { holdsBroadPermission, isUserSuperAdmin } from "@/lib/rbac"
 import { userHasAccessToTenant } from "@/lib/tenant"
 
 import { holdsWriteScope } from "./grantable"
@@ -31,8 +33,12 @@ function sweep(nowMs: number): void {
   }
 }
 
-async function compute(token: CreatorToken, scopeId: string): Promise<boolean> {
-  if (!token.creatorUserId || !isWriteScope(scopeId)) return false
+/**
+ * The creator still exists, is enabled, and (unless super admin) can still
+ * reach the token tenant; then `holds` decides on the right itself.
+ */
+async function creatorPasses(token: CreatorToken, holds: (userId: string) => Promise<boolean>): Promise<boolean> {
+  if (!token.creatorUserId) return false
   const userId = token.creatorUserId
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { enabled: true } })
   if (!user || user.enabled === false) return false
@@ -42,18 +48,33 @@ async function compute(token: CreatorToken, scopeId: string): Promise<boolean> {
 
   if (!(await userHasAccessToTenant(userId, token.tenantId))) return false
 
-  return holdsWriteScope(userId, token.tenantId, scopeId, token.connectionIds)
+  return holds(userId)
 }
 
-export async function creatorStillHolds(token: CreatorToken, scopeId: string): Promise<boolean> {
+async function cachedVerdict(cacheKey: string, compute: () => Promise<boolean>): Promise<boolean> {
   const now = Date.now()
   sweep(now)
-  const cacheKey = `${token.tokenId}:${scopeId}`
   const hit = cache.get(cacheKey)
   if (hit && hit.expiresAt > now) return hit.verdict
-  const verdict = await compute(token, scopeId)
+  const verdict = await compute()
   cache.set(cacheKey, { verdict, expiresAt: now + TTL_MS })
   return verdict
+}
+
+/** Whether the creator still holds every permission key of the write scope `scopeId`. */
+export function creatorStillHolds(token: CreatorToken, scopeId: string): Promise<boolean> {
+  return cachedVerdict(`${token.tokenId}:${scopeId}`, async () =>
+    isWriteScope(scopeId) &&
+    creatorPasses(token, userId => holdsWriteScope(userId, token.tenantId, scopeId, token.connectionIds)))
+}
+
+/**
+ * Whether the creator still holds the single permission `key` broadly: a
+ * secondary permission an entry's handler may check beyond its scope.
+ */
+export function creatorStillHoldsPermission(token: CreatorToken, key: string): Promise<boolean> {
+  return cachedVerdict(`${token.tokenId}:permission:${key}`, () =>
+    creatorPasses(token, userId => holdsBroadPermission(userId, token.tenantId, key, token.connectionIds)))
 }
 
 export function _resetCreatorCheckCache(): void {

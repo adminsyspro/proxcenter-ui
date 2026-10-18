@@ -1,13 +1,14 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 
 const {
-  headersMock, resolveVisibleMock, infraMock, guestScopeMock, creatorMock, getConnectionMock, auditMock,
+  headersMock, resolveVisibleMock, infraMock, guestScopeMock, creatorMock, creatorPermissionMock, getConnectionMock, auditMock,
 } = vi.hoisted(() => ({
   headersMock: vi.fn<() => Promise<Headers>>(),
   resolveVisibleMock: vi.fn<(...args: any[]) => Promise<Set<string>>>(),
   infraMock: vi.fn<(...args: any[]) => Promise<any>>(),
   guestScopeMock: vi.fn<(...args: any[]) => Promise<Response | null>>(),
   creatorMock: vi.fn<(...args: any[]) => Promise<boolean>>(),
+  creatorPermissionMock: vi.fn<(...args: any[]) => Promise<boolean>>(),
   getConnectionMock: vi.fn<(...args: any[]) => Promise<any>>(),
   auditMock: vi.fn<(...args: any[]) => Promise<string>>(),
 }))
@@ -16,7 +17,7 @@ vi.mock('next/headers', () => ({ headers: headersMock }))
 vi.mock('./scope', () => ({ resolveVisibleConnectionIds: resolveVisibleMock }))
 vi.mock('@/lib/tenant/infraScope', () => ({ getTenantInfrastructureScope: infraMock }))
 vi.mock('@/lib/vdc/guestScope', () => ({ checkTenantGuestScope: guestScopeMock }))
-vi.mock('./creatorCheck', () => ({ creatorStillHolds: creatorMock }))
+vi.mock('./creatorCheck', () => ({ creatorStillHolds: creatorMock, creatorStillHoldsPermission: creatorPermissionMock }))
 vi.mock('@/lib/connections/getConnection', () => ({ getConnectionById: getConnectionMock }))
 vi.mock('@/lib/audit', () => ({ audit: auditMock }))
 
@@ -24,6 +25,7 @@ import { NextResponse } from 'next/server'
 
 import { getAllowlistEntryById, matchEntryParams, type AllowlistEntry } from './allowlist'
 import type { Principal } from '@/lib/auth/principal'
+import { expandScopes } from './scopes'
 import { auditTokenWrite, runTokenEntryGuards } from './writeGuards'
 
 const principal: Principal = {
@@ -91,6 +93,7 @@ beforeEach(() => {
   infraMock.mockResolvedValue({ kind: 'provider' })
   guestScopeMock.mockResolvedValue(null)
   creatorMock.mockResolvedValue(true)
+  creatorPermissionMock.mockResolvedValue(true)
   getConnectionMock.mockResolvedValue({ id: 'conn-a' })
   auditMock.mockResolvedValue('audit-id')
 })
@@ -449,6 +452,62 @@ describe('runTokenEntryGuards', () => {
       const orphan = { ...principal, creatorUserId: null }
       await runTokenEntryGuards(entry(), orphan, post({}), { id: 'conn-a' })
       expect(creatorMock.mock.calls[0][0].creatorUserId).toBeNull()
+    })
+
+    describe('secondary permissions the token holds (Ruling 35)', () => {
+      const creatorToken = { tokenId: 'tok-1', tenantId: 'tenant-x', creatorUserId: 'user-1', connectionIds: ['conn-a'] }
+      const withScopes = (...scopes: string[]): Principal => ({ ...principal, scopes, permissions: expandScopes(scopes) })
+
+      it('vm-restore: a creator stripped of vm.delete cannot force-overwrite through a vms:delete token', async () => {
+        creatorPermissionMock.mockImplementation(async (_t, key) => key !== 'vm.delete')
+        const restore = getAllowlistEntryById('vm-restore')!
+        const res = await runTokenEntryGuards(restore, withScopes('backups:restore', 'vms:delete'), post({}), { id: 'conn-a', node: 'pve1' })
+        expect(res?.status).toBe(403)
+        expect(await res?.json()).toEqual({ error: 'Token creator no longer holds this right', permission: 'vm.delete' })
+        expect(creatorPermissionMock).toHaveBeenCalledWith(creatorToken, 'vm.delete')
+        expect(deniedAudit().details).toMatchObject({ status: 403, reason: 'Token creator no longer holds this right', entry: 'vm-restore' })
+      })
+
+      it('vm-remote-migrate-prepare: a creator stripped of node.manage is refused through an ha:write token', async () => {
+        creatorPermissionMock.mockImplementation(async (_t, key) => key !== 'node.manage')
+        const prepare = getAllowlistEntryById('vm-remote-migrate-prepare')!
+        const params = { id: 'conn-a', type: 'qemu', node: 'pve1', vmid: '100' }
+        const res = await runTokenEntryGuards(prepare, withScopes('vms:migrate', 'vms:snapshot', 'ha:write'), post({}), params)
+        expect(res?.status).toBe(403)
+        expect(await res?.json()).toEqual({ error: 'Token creator no longer holds this right', permission: 'node.manage' })
+        expect(creatorPermissionMock).toHaveBeenCalledWith(creatorToken, 'vm.snapshot')
+      })
+
+      it('passes when the creator still holds every secondary key the token holds', async () => {
+        const prepare = getAllowlistEntryById('vm-remote-migrate-prepare')!
+        const params = { id: 'conn-a', type: 'qemu', node: 'pve1', vmid: '100' }
+        expect(await runTokenEntryGuards(prepare, withScopes('vms:migrate', 'vms:snapshot', 'ha:write'), post({}), params)).toBeNull()
+        expect(creatorPermissionMock.mock.calls.map(c => c[1])).toEqual(['vm.snapshot', 'node.manage'])
+      })
+
+      it('a secondary key the token does not hold is not checked (the handler refuses it anyway)', async () => {
+        creatorPermissionMock.mockResolvedValue(false)
+        const restore = getAllowlistEntryById('vm-restore')!
+        expect(await runTokenEntryGuards(restore, withScopes('backups:restore'), post({}), { id: 'conn-a', node: 'pve1' })).toBeNull()
+        expect(creatorPermissionMock).not.toHaveBeenCalled()
+      })
+
+      it('a secondary check that rejects is a deny, never a pass', async () => {
+        const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+        creatorPermissionMock.mockRejectedValue(new Error('db down'))
+        const restore = getAllowlistEntryById('vm-restore')!
+        const res = await runTokenEntryGuards(restore, withScopes('backups:restore', 'vms:delete'), post({}), { id: 'conn-a', node: 'pve1' })
+        expect(res?.status).toBe(403)
+        errSpy.mockRestore()
+      })
+
+      it('the scope verdict comes first: a lost scope never reaches the secondary check', async () => {
+        creatorMock.mockResolvedValue(false)
+        const restore = getAllowlistEntryById('vm-restore')!
+        const res = await runTokenEntryGuards(restore, withScopes('backups:restore', 'vms:delete'), post({}), { id: 'conn-a', node: 'pve1' })
+        expect(await res?.json()).toEqual({ error: 'Token creator no longer holds this right', scope: 'backups:restore' })
+        expect(creatorPermissionMock).not.toHaveBeenCalled()
+      })
     })
 
     it('runs last: an earlier refusal never reaches the creator check', async () => {

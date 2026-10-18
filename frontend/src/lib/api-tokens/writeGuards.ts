@@ -7,11 +7,12 @@ import { headers } from "next/headers"
 
 import { rejectionToResponse, type Principal, type PrincipalRejection } from "@/lib/auth/principal"
 import { getConnectionById } from "@/lib/connections/getConnection"
+import { grantsPermission } from "@/lib/rbac"
 import { getTenantInfrastructureScope, type InfraScope } from "@/lib/tenant/infraScope"
 import { checkTenantGuestScope } from "@/lib/vdc/guestScope"
 
 import { isWriteEntry, type AllowlistEntry, type BodyOrQueryField, type GuestScopeSpec } from "./allowlist"
-import { creatorStillHolds } from "./creatorCheck"
+import { creatorStillHolds, creatorStillHoldsPermission } from "./creatorCheck"
 import { resolveVisibleConnectionIds } from "./scope"
 import { extractTokenPrefix } from "./tokenCrypto"
 
@@ -222,22 +223,35 @@ export async function runTokenEntryGuards(
     }
   }
 
-  // (6) Writes: the creator must still hold the rights of the entry's scope.
-  //     A failing check (DB error) is a deny, never a pass nor a 500.
+  // (6) Writes: the creator must still hold the rights of the entry's scope,
+  //     and every secondary permission the handler may check that the token
+  //     holds (a creator stripped of vm.delete must not keep it through a
+  //     vms:delete token). A failing check (DB error) is a deny, never a pass.
   if (isWriteEntry(entry)) {
-    const scope = entry.requiredScopes[0]
-    let holds = false
-    try {
-      holds = !!principal.tokenId && await creatorStillHolds({
-        tokenId: principal.tokenId,
-        tenantId: principal.tenantId,
-        creatorUserId: principal.creatorUserId ?? null,
-        connectionIds: principal.connectionIds,
-      }, scope)
-    } catch (e) {
-      console.error("[api-tokens] creator check failed, denying:", (e as Error)?.message ?? e)
+    const token = {
+      tokenId: principal.tokenId ?? "",
+      tenantId: principal.tenantId,
+      creatorUserId: principal.creatorUserId ?? null,
+      connectionIds: principal.connectionIds,
     }
-    if (!holds) return deny({ status: 403, body: { error: CREATOR_LOST, scope } })
+    const verdict = async (check: () => Promise<boolean>): Promise<boolean> => {
+      try {
+        return !!principal.tokenId && await check()
+      } catch (e) {
+        console.error("[api-tokens] creator check failed, denying:", (e as Error)?.message ?? e)
+        return false
+      }
+    }
+    const scope = entry.requiredScopes[0]
+    if (!(await verdict(() => creatorStillHolds(token, scope)))) {
+      return deny({ status: 403, body: { error: CREATOR_LOST, scope } })
+    }
+    for (const permission of entry.secondaryPermissions ?? []) {
+      if (!principal.permissions || !grantsPermission(principal.permissions, permission)) continue
+      if (!(await verdict(() => creatorStillHoldsPermission(token, permission)))) {
+        return deny({ status: 403, body: { error: CREATOR_LOST, permission } })
+      }
+    }
   }
 
   return null

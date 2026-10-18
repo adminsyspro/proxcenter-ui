@@ -11,7 +11,7 @@ vi.mock("@/lib/db/prisma", () => ({ prisma: { user: { findUnique: mocks.findUniq
 vi.mock("@/lib/rbac", () => ({ holdsBroadPermission: mocks.holds, isUserSuperAdmin: mocks.isSuper }))
 vi.mock("@/lib/tenant", () => ({ userHasAccessToTenant: mocks.hasTenant }))
 
-import { _resetCreatorCheckCache, creatorStillHolds } from "./creatorCheck"
+import { _resetCreatorCheckCache, creatorStillHolds, creatorStillHoldsPermission } from "./creatorCheck"
 import { WRITE_SCOPE_DEFINITIONS } from "./scopes"
 
 const SCOPE = Object.keys(WRITE_SCOPE_DEFINITIONS)[0]
@@ -87,5 +87,42 @@ describe("creatorStillHolds", () => {
     mocks.hasTenant.mockResolvedValue(true)
     expect(await creatorStillHolds(token, SCOPE)).toBe(false)
     expect(mocks.hasTenant).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe("creatorStillHoldsPermission (secondary permissions, Ruling 35)", () => {
+  it("asks holdsBroadPermission for that one key over the token tenant and perimeter", async () => {
+    expect(await creatorStillHoldsPermission(token, "vm.delete")).toBe(true)
+    expect(mocks.holds).toHaveBeenCalledTimes(1)
+    expect(mocks.holds).toHaveBeenCalledWith("u1", "ten1", "vm.delete", ["c1"])
+  })
+
+  it("is false when the creator lost the key", async () => {
+    mocks.holds.mockResolvedValue(false)
+    expect(await creatorStillHoldsPermission(token, "node.manage")).toBe(false)
+  })
+
+  it("shares the preconditions: no creator, disabled user, no tenant access", async () => {
+    expect(await creatorStillHoldsPermission({ ...token, creatorUserId: null }, "vm.delete")).toBe(false)
+    mocks.findUnique.mockResolvedValueOnce({ enabled: false })
+    expect(await creatorStillHoldsPermission({ ...token, tokenId: "t2" }, "vm.delete")).toBe(false)
+    mocks.hasTenant.mockResolvedValue(false)
+    expect(await creatorStillHoldsPermission({ ...token, tokenId: "t3" }, "vm.delete")).toBe(false)
+    expect(mocks.holds).not.toHaveBeenCalled()
+    mocks.isSuper.mockResolvedValue(true)
+    expect(await creatorStillHoldsPermission({ ...token, tokenId: "t4" }, "vm.delete")).toBe(true)
+    expect(mocks.holds).not.toHaveBeenCalled()
+  })
+
+  it("caches the verdict 60 s per token and key, apart from the scope verdict", async () => {
+    await creatorStillHoldsPermission(token, "vm.delete")
+    await creatorStillHoldsPermission(token, "vm.delete")
+    expect(mocks.holds).toHaveBeenCalledTimes(1)
+    await creatorStillHoldsPermission(token, "node.manage")
+    expect(mocks.holds).toHaveBeenCalledTimes(2)
+    vi.advanceTimersByTime(60_001)
+    mocks.holds.mockResolvedValue(false)
+    expect(await creatorStillHoldsPermission(token, "vm.delete")).toBe(false)
+    expect(await creatorStillHolds(token, SCOPE)).toBe(false)
   })
 })

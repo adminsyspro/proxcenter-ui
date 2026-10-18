@@ -17,6 +17,7 @@ import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { assertVdcPbsAccess } from '@/lib/vdc/scope'
 import { invalidatePbsBackupCache } from '@/lib/cache/pbsBackupCache'
 import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
+import { residualEscapeRefusal } from '@/lib/api/pathParam'
 
 export const runtime = 'nodejs'
 
@@ -40,7 +41,9 @@ async function handler(
     const access = await assertVdcPbsAccess(id)
     if (access instanceof Response) return access
 
-    const decoded = decodeURIComponent(rawBackupId)
+    const malformed = residualEscapeRefusal(rawBackupId, 'backupId')
+    if (malformed) return malformed
+    const decoded = rawBackupId
     const parts = decoded.split('/')
     if (parts.length < 4) {
       return NextResponse.json({ error: 'Invalid backupId format' }, { status: 400 })

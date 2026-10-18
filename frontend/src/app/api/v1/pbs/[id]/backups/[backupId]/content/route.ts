@@ -8,6 +8,7 @@ import { formatBytes } from "@/utils/format"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { getDateLocale } from "@/lib/i18n/date"
 import { assertVdcPbsAccess } from "@/lib/vdc/scope"
+import { residualEscapeRefusal } from "@/lib/api/pathParam"
 
 export const runtime = "nodejs"
 
@@ -45,7 +46,9 @@ export async function GET(
     // with "value is not defined in the enumeration". Anchor on the END of
     // the path instead — the last three segments are always typed:
     // [..., type, vmid, time].
-    const decodedBackupId = decodeURIComponent(backupId)
+    const malformed = residualEscapeRefusal(backupId, 'backupId')
+    if (malformed) return malformed
+    const decodedBackupId = backupId
     const parts = decodedBackupId.split('/')
 
     if (parts.length < 4) {

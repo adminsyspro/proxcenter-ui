@@ -42,7 +42,8 @@ const getPbsConnectionByIdUnscopedMock = getPbsConnectionByIdUnscoped as any
 const pbsFetchMock = pbsFetch as any
 
 const CONN = { id: 'pbs-1', baseUrl: 'https://pbs.local:8007', apiToken: 'PBS!tok=secret' }
-const BACKUP_ID = encodeURIComponent('mystore/vm/100/1700000000')
+// As Next hands it: the client's %2F already decoded.
+const BACKUP_ID = 'mystore/vm/100/1700000000'
 const UPID = 'UPID:pbs:00000001:00000002:00000003:verify:mystore:root@pam:'
 
 /** Grant exactly the listed permissions, deny everything else. */
@@ -73,6 +74,29 @@ describe('POST /api/v1/pbs/[id]/backups/[backupId]/verify', () => {
       method: 'POST',
       body: JSON.stringify({ 'backup-type': 'vm', 'backup-id': '100', 'backup-time': 1700000000 }),
     })
+  })
+
+  it('passes a namespaced backupId on to PBS as Next decoded it', async () => {
+    const res = await callRoute(POST as any, {
+      method: 'POST',
+      params: { id: 'pbs-1', backupId: 'mystore/tenant-a/vdc-1/vm/100/1700000000' },
+    })
+
+    expect(res.status).toBe(200)
+    expect(pbsFetchMock).toHaveBeenCalledWith(CONN, '/admin/datastore/mystore/verify', {
+      method: 'POST',
+      body: JSON.stringify({ 'backup-type': 'vm', 'backup-id': '100', 'backup-time': 1700000000, ns: 'tenant-a/vdc-1' }),
+    })
+  })
+
+  // A "%" left after Next's decode: a 400 before PBS, never decoded again.
+  it.each(['mystore/vm/100/2026%zz', 'mystore/vm/100%41/1700000000'])('400 on a backupId still holding an escape (%s), before PBS', async backupId => {
+    const res = await callRoute(POST as any, { method: 'POST', params: { id: 'pbs-1', backupId } })
+
+    expect(res.status).toBe(400)
+    expect(await readJson<any>(res)).toEqual({ error: 'Malformed backupId' })
+    expect(getPbsConnectionByIdMock).not.toHaveBeenCalled()
+    expect(pbsFetchMock).not.toHaveBeenCalled()
   })
 
   // Re-verifying a snapshot needs vm.backup: seeing the backups is not enough.

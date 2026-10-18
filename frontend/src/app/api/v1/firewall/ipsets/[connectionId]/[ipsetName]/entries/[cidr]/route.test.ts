@@ -23,8 +23,8 @@ vi.mock('@/lib/firewall/pveDirect', () => ({ deleteIPSetEntry: deleteIPSetEntryM
 
 installFirewallRouteMocks()
 
-// Next hands the raw (still encoded) path segment: a CIDR carries a slash.
-const PARAMS = { connectionId: 'conn-1', ipsetName: 'blacklist', cidr: '10.0.0.0%2F8' }
+// Next hands the path segment decoded once: the client's %2F is a slash here.
+const PARAMS = { connectionId: 'conn-1', ipsetName: 'blacklist', cidr: '10.0.0.0/8' }
 
 beforeEach(resetFirewallRouteMocks)
 
@@ -53,6 +53,16 @@ describe('DELETE /api/v1/firewall/ipsets/[connectionId]/[ipsetName]/entries/[cid
     expect(await readJson<any>(res)).toEqual({ success: true })
     // pveDirect escapes the CIDR itself — double-encoding would 404 on PVE
     expect(deleteIPSetEntryMock).toHaveBeenCalledWith(CONN, 'blacklist', '10.0.0.0/8')
+  })
+
+  it.each(['10.0.0.1%zz', '10.0.0.0%2F8'])('answers 400 on a CIDR still holding an escape (%s), before the orchestrator or PVE', async cidr => {
+    const { DELETE } = handlersOf(await import('./route'))
+    const res = await callRoute(DELETE, { params: { ...PARAMS, cidr }, method: 'DELETE' })
+
+    expect(res.status).toBe(400)
+    expect(await readJson<any>(res)).toEqual({ error: 'Malformed CIDR' })
+    expect(orchestrator.delete).not.toHaveBeenCalled()
+    expect(deleteIPSetEntryMock).not.toHaveBeenCalled()
   })
 
   it('propagates a non-unavailable orchestrator error as a 500 and never writes to PVE', async () => {

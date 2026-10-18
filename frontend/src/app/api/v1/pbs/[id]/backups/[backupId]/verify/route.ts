@@ -14,6 +14,7 @@ import { getPbsConnectionById, getPbsConnectionByIdUnscoped } from '@/lib/connec
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { assertVdcPbsAccess } from '@/lib/vdc/scope'
 import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
+import { residualEscapeRefusal } from '@/lib/api/pathParam'
 
 export const runtime = 'nodejs'
 
@@ -39,7 +40,9 @@ async function handler(
 
     // Same anchor-on-the-end parsing used elsewhere — sub-namespaces have
     // '/' so a left-aligned split misassigns the type/id/time tail.
-    const decoded = decodeURIComponent(rawBackupId)
+    const malformed = residualEscapeRefusal(rawBackupId, 'backupId')
+    if (malformed) return malformed
+    const decoded = rawBackupId
     const parts = decoded.split('/')
     if (parts.length < 4) {
       return NextResponse.json({ error: 'Invalid backupId format' }, { status: 400 })

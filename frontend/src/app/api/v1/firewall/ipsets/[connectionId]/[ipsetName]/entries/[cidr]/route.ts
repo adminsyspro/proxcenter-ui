@@ -9,6 +9,7 @@ import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
 import { getConnectionById } from '@/lib/connections/getConnection'
 import { orchestratorOrPve } from '@/lib/firewall/withPveFallback'
 import * as pveDirect from '@/lib/firewall/pveDirect'
+import { residualEscapeRefusal } from '@/lib/api/pathParam'
 
 // DELETE /api/v1/firewall/ipsets/[connectionId]/[ipsetName]/entries/[cidr] - Delete entry
 async function deleteHandler(
@@ -23,7 +24,9 @@ async function deleteHandler(
     const denied = await checkPermission(PERMISSIONS.NODE_MANAGE, "connection", connectionId)
     if (denied) return denied
 
-    const decodedCidr = decodeURIComponent(cidr)
+    const malformed = residualEscapeRefusal(cidr, 'CIDR')
+    if (malformed) return malformed
+    const decodedCidr = cidr
 
     const orchestrator = getOrchestratorClient()
 

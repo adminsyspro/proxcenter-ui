@@ -49,9 +49,9 @@ const invalidatePbsBackupCacheMock = invalidatePbsBackupCache as any
 
 const CONN = { id: 'pbs-1', baseUrl: 'https://pbs.local:8007', apiToken: 'PBS!tok=secret' }
 
-// backupId encodes: datastore/backupType/vmid/timestamp
-// e.g. "mystore/vm/100/1700000000"
-const BACKUP_ID = encodeURIComponent('mystore/vm/100/1700000000')
+// backupId encodes: datastore/backupType/vmid/timestamp, as Next hands it
+// (the client's %2F already decoded), e.g. "mystore/vm/100/1700000000"
+const BACKUP_ID = 'mystore/vm/100/1700000000'
 
 /** Grant exactly the listed permissions, deny everything else. */
 function grantOnly(...perms: string[]) {
@@ -153,12 +153,36 @@ describe('DELETE /api/v1/pbs/[id]/backups/[backupId]', () => {
   it('400 when backupId has fewer than 4 path segments', async () => {
     const res = await callRoute(DELETE as any, {
       method: 'DELETE',
-      params: { id: 'pbs-1', backupId: encodeURIComponent('mystore/vm/100') },
+      params: { id: 'pbs-1', backupId: 'mystore/vm/100' },
     })
 
     expect(res.status).toBe(400)
     const body = await readJson<any>(res)
     expect(body.error).toContain('Invalid backupId format')
+    expect(pbsFetchMock).not.toHaveBeenCalled()
+  })
+
+  it('passes a namespaced backupId on to PBS as Next decoded it', async () => {
+    const res = await callRoute(DELETE as any, {
+      method: 'DELETE',
+      params: { id: 'pbs-1', backupId: 'mystore/tenant-a/vdc-1/vm/100/1700000000' },
+    })
+
+    expect(res.status).toBe(200)
+    const url = new URL(`http://x${pbsFetchMock.mock.calls[0][1]}`)
+    expect(url.pathname).toBe('/admin/datastore/mystore/snapshots')
+    expect(url.searchParams.get('ns')).toBe('tenant-a/vdc-1')
+    expect(url.searchParams.get('backup-id')).toBe('100')
+  })
+
+  // A "%" left after Next's decode is an escape sent twice or garbage: a 400
+  // before PBS, never decoded again (a 500 "URI malformed" on a bad one).
+  it.each(['mystore/vm/100/2026%zz', 'mystore/vm/100%41/1700000000'])('400 on a backupId still holding an escape (%s), before PBS', async backupId => {
+    const res = await callRoute(DELETE as any, { method: 'DELETE', params: { id: 'pbs-1', backupId } })
+
+    expect(res.status).toBe(400)
+    expect(await readJson<any>(res)).toEqual({ error: 'Malformed backupId' })
+    expect(getPbsConnectionByIdMock).not.toHaveBeenCalled()
     expect(pbsFetchMock).not.toHaveBeenCalled()
   })
 

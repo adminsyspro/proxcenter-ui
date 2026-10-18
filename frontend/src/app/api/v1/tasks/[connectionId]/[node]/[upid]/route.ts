@@ -594,36 +594,35 @@ async function checkSessionTaskAccess(connectionId: string, node: string, upid: 
 }
 
 /**
- * Whether this token journaled the UPID in its own apitoken.write line, i.e.
- * started the task: as `upid`, or among the `upids` of a multi-task answer.
+ * Whether the caller journaled the UPID, i.e. started the task: a token in its
+ * own apitoken.write line (as `upid`, or among the `upids` of a multi-task
+ * answer), a session in an audit line of its tenant (the guest deletion
+ * records the destroy task it started).
  */
-async function startedByToken(principal: Principal, upid: string): Promise<boolean> {
-  if (!principal.tokenId) return false
-  const row = await prisma.auditLog.findFirst({
-    where: {
-      action: 'apitoken.write',
-      apiTokenId: principal.tokenId,
-      tenantId: principal.tenantId,
-      OR: [
-        { details: { path: ['upid'], equals: upid } },
-        { details: { path: ['upids'], array_contains: [upid] } },
-      ],
-    },
-    select: { id: true },
-  })
+async function startedByCaller(principal: Principal, upid: string): Promise<boolean> {
+  const upidMatch = [
+    { details: { path: ['upid'], equals: upid } },
+    { details: { path: ['upids'], array_contains: [upid] } },
+  ]
+  if (principal.kind === 'token' && !principal.tokenId) return false
+  const where = principal.kind === 'token'
+    ? { action: 'apitoken.write', apiTokenId: principal.tokenId, tenantId: principal.tenantId, OR: upidMatch }
+    : { tenantId: principal.tenantId, OR: upidMatch }
+  const row = await prisma.auditLog.findFirst({ where, select: { id: true } })
   return row !== null
 }
 
 /**
- * A vDC tenant token only follows the tasks of its own guests, or the tasks it
- * started itself (the destroy task of a guest that is gone, for one): a task of
- * another tenant's guest on a shared provider connection stays hidden. Every
- * other tenant kind passes. A task the guest check cannot confine (its UPID
- * names another node than the URL one, or no guest) is judged on the tenant
- * kind alone: refused to a vDC tenant, unless it is its own task on that node.
- * A lookup that fails is a 503, never a pass.
+ * A vDC tenant, token or session, only follows the tasks of its own guests, or
+ * the tasks it started itself (the destroy task of a guest that is gone, for
+ * one): a task of another tenant's guest on a shared provider connection stays
+ * hidden, as in the running-task list. Every other tenant kind passes. A task
+ * the guest check cannot confine (its UPID names another node than the URL
+ * one, or no guest) is judged on the tenant kind alone: refused to a vDC
+ * tenant, unless it is its own task on that node. A lookup that fails is a
+ * 503, never a pass.
  */
-async function taskOutsideTokenScope(
+async function taskOutsideVdcScope(
   principal: Principal, connection: PveConn, connectionId: string, node: string, upid: string,
 ): Promise<Response | null> {
   const task = parseTaskUpid(upid)
@@ -633,12 +632,12 @@ async function taskOutsideTokenScope(
     if (!sameNode || !task?.vmid) {
       const infra = await getTenantInfrastructureScope(principal.tenantId, { ignoreVdcContext: true })
       if (infra.kind !== 'iaas') return null
-      return sameNode && (await startedByToken(principal, upid)) ? null : outside()
+      return sameNode && (await startedByCaller(principal, upid)) ? null : outside()
     }
     const refused = await checkTenantGuestScope(principal.tenantId, connection, connectionId, null, node, task.vmid, true)
     // null: inside the vDC (or not a vDC tenant). A 503 (scope unverifiable) is returned as is.
     if (!refused || refused.status !== 403) return refused
-    return (await startedByToken(principal, upid)) ? null : outside()
+    return (await startedByCaller(principal, upid)) ? null : outside()
   } catch {
     return NextResponse.json({ error: 'Unable to verify guest vDC scope' }, { status: 503 })
   }
@@ -666,8 +665,10 @@ async function handler(
       return NextResponse.json({ error: 'Connection not found' }, { status: 404 })
     }
 
-    if (isToken) {
-      const outside = await taskOutsideTokenScope(principal, connection, connectionId, node, decodedUpid)
+    // The session's own tenant, the one its grants were just judged in.
+    const caller = isToken ? principal : (await getPrincipal()).principal
+    if (caller) {
+      const outside = await taskOutsideVdcScope(caller, connection, connectionId, node, decodedUpid)
       if (outside) return outside
     }
 

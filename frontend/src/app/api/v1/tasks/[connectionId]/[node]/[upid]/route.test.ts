@@ -50,6 +50,15 @@ vi.mock('@/lib/tenant/infraScope', async io => ({
   getTenantInfrastructureScope: getTenantInfrastructureScopeMock,
 }))
 
+// A session caller is a provider user unless a test says otherwise: the route
+// confines a vDC tenant session to its guests like a token (#69).
+const PROVIDER_SESSION = { kind: 'session', userId: 'u1', tenantId: 'default', connectionIds: null }
+const { principalMock } = vi.hoisted(() => ({ principalMock: { session: null as any } }))
+vi.mock('@/lib/auth/principal', async io => ({
+  ...await io<typeof import('@/lib/auth/principal')>(),
+  getPrincipal: async () => ({ ok: true, principal: principalMock.session }),
+}))
+
 import { GET } from './route'
 import { checkPermission } from '@/lib/rbac'
 import { getConnectionById } from '@/lib/connections/getConnection'
@@ -92,6 +101,7 @@ function sawSourceVmDelete() {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  principalMock.session = PROVIDER_SESSION
   getTenantInfrastructureScopeMock.mockResolvedValue({ kind: 'provider' })
   checkPermissionMock.mockResolvedValue(null)
   getConnectionByIdMock.mockResolvedValue(CONN)
@@ -605,6 +615,78 @@ describe('GET /api/v1/tasks/[connectionId]/[node]/[upid]: connection and vDC per
       const other = await tokenGet(VZDUMP_PVE1, { ...token, tokenId: 'tok-2' })
       expect(other.status).toBe(403)
       expect(await readJson<any>(other)).toEqual({ error: 'Task outside your vDC scope' })
+    })
+  })
+
+  describe('a vDC tenant session, confined like its tokens', () => {
+    const session = { kind: 'session', userId: 'u1', tenantId: 'tenant-v', connectionIds: null }
+    const sessionGet = (upid: string, node = NODE) =>
+      GET(new Request('http://test.local/x'), { params: Promise.resolve({ connectionId: 'conn-1', node, upid }) })
+
+    /** The audit line the guest deletion writes, with the destroy task it started. */
+    async function journalSessionDelete(tenantId: string, upid: string) {
+      await prismaTest.auditLog.create({ data: {
+        id: `audit-session-${tenantId}`, tenantId, userId: 'u1', timestamp: new Date(), action: 'delete',
+        category: 'vms', resourceType: 'qemu', resourceId: '100', details: { node: NODE, connectionId: 'conn-1', upid },
+      } })
+    }
+
+    beforeEach(async () => {
+      await truncate(['audit_logs'])
+      principalMock.session = session
+    })
+
+    it('is refused the task of a guest outside its vDC, before Proxmox is asked for it', async () => {
+      tenantGuests([{ type: 'qemu', vmid: 100, node: 'pve1', pool: 'pool-other' }])
+      const res = await sessionGet(UPID)
+      expect(res.status).toBe(403)
+      expect(await readJson<any>(res)).toEqual({ error: 'Task outside your vDC scope' })
+      expect(askedProxmoxForTheTask()).toBe(false)
+      expect(getTenantInfrastructureScopeMock).toHaveBeenCalledWith('tenant-v', { ignoreVdcContext: true })
+    })
+
+    it('reads the task of one of its guests', async () => {
+      tenantGuests([{ type: 'qemu', vmid: 100, node: 'pve1', pool: 'pool-a' }])
+      expect((await sessionGet(UPID)).status).toBe(200)
+    })
+
+    it('is refused a task that names no guest', async () => {
+      tenantGuests([{ type: 'qemu', vmid: 100, node: 'pve1', pool: 'pool-a' }])
+      const res = await sessionGet('UPID:pve1:0000ABCD:00001234:6A000000:aptupdate::root@pam:')
+      expect(res.status).toBe(403)
+      expect(await readJson<any>(res)).toEqual({ error: 'Task outside your vDC scope' })
+    })
+
+    it('reads the destroy task its tenant journaled, once the guest is gone', async () => {
+      tenantGuests([])
+      await journalSessionDelete('tenant-v', DESTROY_UPID)
+      expect((await sessionGet(DESTROY_UPID)).status).toBe(200)
+      // Not on another node than the one the UPID names.
+      expect((await sessionGet(DESTROY_UPID, 'pve2')).status).toBe(403)
+    })
+
+    it('is refused a destroy task journaled by another tenant only', async () => {
+      tenantGuests([])
+      await journalSessionDelete('tenant-other', DESTROY_UPID)
+      const res = await sessionGet(DESTROY_UPID)
+      expect(res.status).toBe(403)
+      expect(askedProxmoxForTheTask()).toBe(false)
+    })
+
+    it('polls a vzdump task its tenant journaled among the upids of a run', async () => {
+      const VZDUMP = 'UPID:pve1:0000ABCD:00001234:6A000001:vzdump::root@pam:'
+      tenantGuests([])
+      await prismaTest.auditLog.create({ data: {
+        id: 'audit-session-run', tenantId: 'tenant-v', userId: 'u1', timestamp: new Date(), action: 'run',
+        category: 'backups', details: { upid: null, upids: [VZDUMP] },
+      } })
+      expect((await sessionGet(VZDUMP)).status).toBe(200)
+    })
+
+    it('an MSP tenant session is not confined to vDC guests', async () => {
+      getTenantInfrastructureScopeMock.mockResolvedValue({ kind: 'msp', connectionIds: new Set(['conn-1']) })
+      expect((await sessionGet(UPID)).status).toBe(200)
+      expect((await sessionGet('UPID:pve1:0000ABCD:00001234:6A000000:aptupdate::root@pam:')).status).toBe(200)
     })
   })
 

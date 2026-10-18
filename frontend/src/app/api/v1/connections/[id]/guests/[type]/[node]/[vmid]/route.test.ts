@@ -134,8 +134,10 @@ describe('DELETE /api/v1/connections/[id]/guests/[type]/[node]/[vmid]', () => {
     )
 
     expect(releaseAllocationsForVmMock).toHaveBeenCalledWith(CONN_ID, 101)
+    // The destroy task is journaled: a vDC tenant session follows it by this
+    // line once the guest, and its vDC scope, are gone (task status route).
     expect(auditMock).toHaveBeenCalledWith(
-      expect.objectContaining({ action: 'delete', resourceId: VMID })
+      expect.objectContaining({ action: 'delete', resourceId: VMID, details: expect.objectContaining({ upid: 'UPID:delete:task' }) })
     )
   })
 

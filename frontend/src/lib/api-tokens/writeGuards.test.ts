@@ -22,7 +22,7 @@ vi.mock('@/lib/audit', () => ({ audit: auditMock }))
 
 import { NextResponse } from 'next/server'
 
-import type { AllowlistEntry } from './allowlist'
+import { getAllowlistEntryById, matchEntryParams, type AllowlistEntry } from './allowlist'
 import type { Principal } from '@/lib/auth/principal'
 import { auditTokenWrite, runTokenEntryGuards } from './writeGuards'
 
@@ -142,8 +142,50 @@ describe('runTokenEntryGuards', () => {
 
     it('decodes the segment exactly once before the perimeter check', async () => {
       expect(await runTokenEntryGuards(entry(), principal, post({}), { id: 'conn%2Da' })).toBeNull()
-      const res = await runTokenEntryGuards(entry(), principal, post({}), { id: 'conn%252Da' })
-      expect(await res?.json()).toEqual({ error: 'Connection not in token scope', connection: 'conn%2Da' })
+      const res = await runTokenEntryGuards(entry(), principal, post({}), { id: 'conn%2Db' })
+      expect(await res?.json()).toEqual({ error: 'Connection not in token scope', connection: 'conn-b' })
+    })
+
+    describe('a value still escaped after the single decode (Ruling 32)', () => {
+      it('401 on any path param, before any other guard', async () => {
+        const res = await runTokenEntryGuards(entry(), principal, post({}), { id: 'conn-a', pos: '%252e%252e' })
+        expect(res?.status).toBe(401)
+        expect(resolveVisibleMock).not.toHaveBeenCalled()
+        expect(deniedAudit()).toMatchObject({ details: { status: 401, entry: 'test-write' } })
+      })
+
+      it('401 on a GET entry too', async () => {
+        setForwarded('GET')
+        const res = await runTokenEntryGuards(getEntry(), principal, new Request('http://t/api/v1/x'), { id: 'conn%2525a' })
+        expect(res?.status).toBe(401)
+      })
+
+      it('401 on a malformed escape in a segment the guard does not otherwise read', async () => {
+        const res = await runTokenEntryGuards(entry(), principal, post({}), { id: 'conn-a', name: 'x%E0%A4%A' })
+        expect(res?.status).toBe(401)
+      })
+
+      it('a single-encoded slash in the encodedSlashSegment still passes', async () => {
+        const fw = getAllowlistEntryById('fw-ipset-entry-delete')!
+        setForwarded('DELETE')
+        const req = new Request('http://t/api/v1/x', { method: 'DELETE' })
+        const params = { connectionId: 'conn-a', ipsetName: 'blocklist', cidr: '10.0.0.0%2F24' }
+        expect(await runTokenEntryGuards(fw, principal, req, params)).toBeNull()
+      })
+
+      it.each([
+        ['vm-config-update', 'PUT', '/api/v1/connections/conn-a/guests/qemu/pve1/1%2500/config'],
+        ['pbs-backup-delete', 'DELETE', '/api/v1/pbs/pbs-a/backups/ds1%2Fvm%2F100%2F%2525'],
+      ])('%s with a double-encoded (%%25) segment: 401', async (id, method, path) => {
+        const real = getAllowlistEntryById(id)!
+        const params = matchEntryParams(real, path)
+        expect(params).not.toBeNull()
+        setForwarded(method, path)
+        const req = new Request(`http://t${path}`, { method, headers: { 'content-type': 'application/json' }, body: '{}' })
+        const res = await runTokenEntryGuards(real, principal, req, params!)
+        expect(res?.status).toBe(401)
+        expect(resolveVisibleMock).not.toHaveBeenCalled()
+      })
     })
 
     it('401 (fail closed) on a malformed percent escape', async () => {

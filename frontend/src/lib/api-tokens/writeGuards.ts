@@ -39,6 +39,21 @@ function decodeParam(params: Record<string, string>, name: string): string | nul
   }
 }
 
+/**
+ * A path param still escaped once decoded (%252e, %2525) or not decodable at
+ * all: the handler, which gets Next's decoded params and may decode again,
+ * would not see the value the guard checked. Refused, every segment.
+ */
+function hasResidualEscape(params: Record<string, string>): boolean {
+  return Object.values(params).some(raw => {
+    try {
+      return decodeURIComponent(raw).includes("%")
+    } catch {
+      return true
+    }
+  })
+}
+
 /** "connId:type:node:vmid", same format as the routes' parseVmKey. */
 function parseVmKey(value: string | null): { connection: string; type: string; node: string; vmid: string } | null {
   const parts = value ? value.split(":") : []
@@ -117,10 +132,11 @@ async function guestTargets(
 }
 
 /**
- * Token-only guards, in the spec order: (1) forwarded method, (2) primary
- * connection, (3) secondary connections, (4) cluster objects vs vDC tenant,
- * (5) guest vDC scope, (6) live creator check on writes. Null = proceed;
- * otherwise the refusal to send, already journaled as apitoken.denied.
+ * Token-only guards, in the spec order: (1) forwarded method, (1b) no path
+ * param still escaped once decoded, (2) primary connection, (3) secondary
+ * connections, (4) cluster objects vs vDC tenant, (5) guest vDC scope,
+ * (6) live creator check on writes. Null = proceed; otherwise the refusal to
+ * send, already journaled as apitoken.denied.
  */
 export async function runTokenEntryGuards(
   entry: AllowlistEntry,
@@ -140,6 +156,10 @@ export async function runTokenEntryGuards(
   const hdrs = await headers()
   const forwarded = hdrs.get("x-pxc-method")
   if (!forwarded || normalizeMethod(forwarded) !== normalizeMethod(req.method)) return deny()
+
+  // (1b) Path params are decoded exactly once: a value still escaped after
+  //      that decode is refused like a malformed escape.
+  if (hasResidualEscape(params)) return deny()
 
   const readField = fieldReader(req)
   let visible: Set<string> | null = null

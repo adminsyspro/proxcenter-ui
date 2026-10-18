@@ -20,6 +20,7 @@ vi.mock('@/lib/audit', () => ({ audit: async () => {} }))
 import { POST } from './route'
 import { PUT } from './[id]/route'
 import { authorizeImageVolume, imageSourceForConnection } from '@/lib/templates/sourceVolume'
+import { URL_IMAGE_REFUSED } from '@/lib/vdc/nodeUrlFetch'
 
 const body = { name: 'Disk image', sourceType: 'volume', volumeId: 'shared:vm-201-disk-0', sourceConnectionId: 'conn-a', sourceNode: 'pve1' }
 const request = (data: object) => new Request('http://localhost/api/v1/templates/custom-images', { method: 'POST', body: JSON.stringify(data) })
@@ -158,6 +159,8 @@ describe('custom image source authorization', () => {
   })
 
   it('clears the source locator when switching back to a URL', async () => {
+    // An MSP tenant: a vDC tenant may not set a URL at all (below).
+    mocks.infra.mockResolvedValue({ kind: 'msp', connectionIds: new Set(['conn-a']) })
     mocks.find.mockResolvedValue({ ...body, id: 'image-a', tenantId: 'tenant-a' })
     const response = await PUT(request({ sourceType: 'url', downloadUrl: 'https://example.test/image.qcow2' }), { params: Promise.resolve({ id: 'image-a' }) })
     expect(response.status).toBe(200)
@@ -267,6 +270,7 @@ describe('custom image source authorization', () => {
       expect((await PUT(request({ extraLocations: [copy] }), { params: Promise.resolve({ id: 'image-a' }) })).status).toBe(403)
       expect(mocks.update).not.toHaveBeenCalled()
       mocks.find.mockResolvedValue({ ...body, id: 'image-a', tenantId: 'tenant-a', extraLocations: [copy] })
+      mocks.infra.mockResolvedValue({ kind: 'msp', connectionIds: new Set(['conn-a']) })
       const response = await PUT(request({ sourceType: 'url', downloadUrl: 'https://example.test/image.qcow2' }), { params: Promise.resolve({ id: 'image-a' }) })
       expect(response.status).toBe(200)
       expect((await response.json()).data.extraLocations).toEqual([])
@@ -290,8 +294,65 @@ describe('custom image source authorization', () => {
   })
 
   it('keeps URL image creation independent of source-volume permissions', async () => {
+    mocks.infra.mockResolvedValue({ kind: 'msp', connectionIds: new Set(['conn-a']) })
     const response = await POST(request({ name: 'URL', sourceType: 'url', downloadUrl: 'https://example.test/image.qcow2' }))
     expect(response.status).toBe(201)
     expect(mocks.pve).not.toHaveBeenCalled()
+  })
+
+  describe('URL images of a vDC tenant (#69)', () => {
+    // The node fetches the URL itself: a vDC (iaas) tenant may not name one.
+    const urlBody = { name: 'URL', sourceType: 'url', downloadUrl: 'http://10.0.0.5/secret.qcow2' }
+    const urlImage = { id: 'image-a', tenantId: 'tenant-a', sourceType: 'url', downloadUrl: 'https://example.test/image.qcow2' }
+    const put = (data: object) => PUT(request(data), { params: Promise.resolve({ id: 'image-a' }) })
+
+    it('refuses a vDC tenant creating a URL image, before saving anything', async () => {
+      const response = await POST(request(urlBody))
+      expect(response.status).toBe(403)
+      expect((await response.json()).error).toBe(URL_IMAGE_REFUSED)
+      expect(mocks.create).not.toHaveBeenCalled()
+      expect(mocks.infra).toHaveBeenCalledWith('tenant-a', { ignoreVdcContext: true })
+    })
+
+    it.each([
+      ['provider', 'default', { kind: 'provider' }],
+      ['MSP', 'tenant-a', { kind: 'msp', connectionIds: new Set(['conn-a']) }],
+    ])('still lets a %s tenant create a URL image', async (_label, tenantId, infra) => {
+      mocks.tenant.mockResolvedValue(tenantId)
+      mocks.infra.mockResolvedValue(infra)
+      const response = await POST(request(urlBody))
+      expect(response.status).toBe(201)
+      expect(mocks.create).toHaveBeenCalled()
+    })
+
+    it('leaves a vDC tenant volume image to the source checks alone', async () => {
+      const response = await POST(request(body))
+      expect(response.status).toBe(201)
+      expect((await response.json()).error).toBeUndefined()
+    })
+
+    it('refuses a vDC tenant switching a volume image to a URL', async () => {
+      mocks.find.mockResolvedValue({ ...body, id: 'image-a', tenantId: 'tenant-a' })
+      const response = await put({ sourceType: 'url', downloadUrl: urlBody.downloadUrl })
+      expect(response.status).toBe(403)
+      expect((await response.json()).error).toBe(URL_IMAGE_REFUSED)
+      expect(mocks.update).not.toHaveBeenCalled()
+    })
+
+    it('refuses a vDC tenant changing the URL of an existing URL image', async () => {
+      mocks.find.mockResolvedValue(urlImage)
+      const response = await put({ downloadUrl: urlBody.downloadUrl })
+      expect(response.status).toBe(403)
+      expect((await response.json()).error).toBe(URL_IMAGE_REFUSED)
+      expect(mocks.update).not.toHaveBeenCalled()
+    })
+
+    it('lets a vDC tenant rename an existing URL image', async () => {
+      mocks.find.mockResolvedValue(urlImage)
+      const response = await put({ name: 'Renamed' })
+      expect(response.status).toBe(200)
+      expect(mocks.update).toHaveBeenCalled()
+      expect(mocks.update.mock.calls[0][0].data).not.toHaveProperty('downloadUrl')
+    })
   })
 })

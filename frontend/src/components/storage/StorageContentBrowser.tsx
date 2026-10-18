@@ -300,7 +300,7 @@ function ContentGroupCard({ group, connId, node, storage, canDelete, onDeleted, 
 
 // ---------- Upload dialog ----------
 
-export function UploadDialog({ open, onClose, onOpen, connId, node, storage, contentTypes, onUploaded }: {
+export function UploadDialog({ open, onClose, onOpen, connId, node, storage, contentTypes, initialContentType, onUploaded }: {
   open: boolean
   onClose: () => void
   onOpen: () => void
@@ -308,6 +308,8 @@ export function UploadDialog({ open, onClose, onOpen, connId, node, storage, con
   node: string
   storage: string
   contentTypes: string[]
+  // Type preselected on open, e.g. the content section the dialog was opened from.
+  initialContentType?: string
   onUploaded: () => void
 }) {
   const { addTask, updateTask, registerOnRestore, unregisterOnRestore, registerOnCancel, unregisterOnCancel } = useProxCenterTasks()
@@ -334,7 +336,7 @@ export function UploadDialog({ open, onClose, onOpen, connId, node, storage, con
     if (open && !minimized && !uploading) {
       setMode('file')
       setFile(null)
-      setContentType(uploadableTypes[0] || '')
+      setContentType(initialContentType && uploadableTypes.includes(initialContentType) ? initialContentType : uploadableTypes[0] || '')
       setUploading(false)
       setProgress(0)
       setError(null)
@@ -737,6 +739,7 @@ export default function StorageContentBrowser({
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [uploadOpen, setUploadOpen] = useState(false)
+  const [uploadType, setUploadType] = useState<string | undefined>()
   const [templateDialogOpen, setTemplateDialogOpen] = useState(false)
 
   // readOnly hides every write control; otherwise each control follows the
@@ -830,7 +833,7 @@ export default function StorageContentBrowser({
             storage={storage}
             canDelete={canDelete}
             onDeleted={handleDeleted}
-            onUploadClick={hasUploadableContent && CONTENT_MAP[ct]?.uploadable ? () => setUploadOpen(true) : undefined}
+            onUploadClick={hasUploadableContent && CONTENT_MAP[ct]?.uploadable ? () => { setUploadType(ct); setUploadOpen(true) } : undefined}
             onDownloadTemplate={ct === 'vztmpl' && hasVztmpl ? () => setTemplateDialogOpen(true) : undefined}
           />
         ))
@@ -855,6 +858,7 @@ export default function StorageContentBrowser({
           node={node}
           storage={storage}
           contentTypes={contentTypes}
+          initialContentType={uploadType}
           onUploaded={handleUploaded}
         />
       )}

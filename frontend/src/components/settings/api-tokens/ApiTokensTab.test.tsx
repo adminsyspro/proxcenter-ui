@@ -166,6 +166,12 @@ afterEach(() => {
 
 // Opens the create dialog and waits for the tenant + connection selectors to
 // finish loading (3 comboboxes: expiration, tenant, connections).
+// The Read level of the VMs row of the create dialog's scope picker.
+function vmsReadButton(dialog: HTMLElement) {
+  const levels = within(dialog).getByRole('group', { name: enTokens.dialog.domains.vms })
+  return within(levels).getByRole('button', { name: enTokens.dialog.access.read })
+}
+
 async function openDialogWithTenantSelector() {
   renderWithProviders(<ApiTokensTab />)
   await screen.findByText('pxc_Ab12Cd34')
@@ -314,7 +320,7 @@ describe('ApiTokensTab', () => {
     // carries an accessible name matching /name/i outside this scope.
     const dialog = await screen.findByRole('dialog')
     await userEvent.type(within(dialog).getByLabelText(/name/i), 'ci-runner')
-    await userEvent.click(within(dialog).getByLabelText('vms:read'))
+    await userEvent.click(vmsReadButton(dialog))
     await userEvent.click(within(dialog).getByRole('button', { name: /^create$/i }))
     expect(await screen.findByText('pxc_SECRETVALUE')).toBeInTheDocument()
     expect(screen.getByText(/never be shown again/i)).toBeInTheDocument()
@@ -330,7 +336,7 @@ describe('ApiTokensTab', () => {
   // icon, and a PVE connection carries the PROXMOX MARK rather than a generic
   // glyph -- the convention the rest of the app already follows in
   // MigrateVmDialog's target-cluster selector. Both match the icon+label Stack
-  // pattern the scope checkboxes use in this file.
+  // pattern the scope domain rows use in the create dialog.
   // (ri-link was tried first and rejected by the owner as the wrong icon.)
   it('shows the app icon vocabulary on the tenant and connection options', async () => {
     const dialog = await openDialogWithTenantSelector()
@@ -353,7 +359,7 @@ describe('ApiTokensTab', () => {
   it('sends the selected non-default tenant id', async () => {
     const dialog = await openDialogWithTenantSelector()
     await userEvent.type(within(dialog).getByLabelText(/name/i), 'ci-tenant-a')
-    await userEvent.click(within(dialog).getByLabelText('vms:read'))
+    await userEvent.click(vmsReadButton(dialog))
 
     const tenantCombobox = within(dialog).getAllByRole('combobox')[1]
     fireEvent.mouseDown(tenantCombobox)
@@ -369,7 +375,7 @@ describe('ApiTokensTab', () => {
   it('sends exactly the selected connection ids', async () => {
     const dialog = await openDialogWithTenantSelector()
     await userEvent.type(within(dialog).getByLabelText(/name/i), 'ci-conn-a')
-    await userEvent.click(within(dialog).getByLabelText('vms:read'))
+    await userEvent.click(vmsReadButton(dialog))
 
     fireEvent.mouseDown(within(dialog).getAllByRole('combobox')[1])
     await userEvent.click(await screen.findByRole('option', { name: 'Tenant A' }))
@@ -388,7 +394,7 @@ describe('ApiTokensTab', () => {
   it('clears the connection selection when the tenant changes', async () => {
     const dialog = await openDialogWithTenantSelector()
     await userEvent.type(within(dialog).getByLabelText(/name/i), 'ci-switch')
-    await userEvent.click(within(dialog).getByLabelText('vms:read'))
+    await userEvent.click(vmsReadButton(dialog))
 
     // Pick tenant-a, then its connection.
     fireEvent.mouseDown(within(dialog).getAllByRole('combobox')[1])
@@ -427,47 +433,45 @@ describe('ApiTokensTab', () => {
     expect(within(dialog).queryByLabelText(/tenant/i)).not.toBeInTheDocument()
 
     await userEvent.type(within(dialog).getByLabelText(/name/i), 'ci-fallback')
-    await userEvent.click(within(dialog).getByLabelText('vms:read'))
+    await userEvent.click(vmsReadButton(dialog))
     await userEvent.click(within(dialog).getByRole('button', { name: /^create$/i }))
 
     expect(await screen.findByText('pxc_SECRETVALUE')).toBeInTheDocument()
     expect(lastPostBody().tenantId).toBeUndefined()
   })
 
-  // Fix round 4 (owner-reported): the eight scope checkboxes used to render
-  // as one run-on line ("vms:readnodes:readstorage:read...") because bare
-  // FormControlLabels are inline-flex and flow together with no
-  // separation. Covers both halves of the fix: a block-level row per scope,
-  // and a domain icon matching the app's existing icon vocabulary for that
-  // domain instead of no icon at all.
-  it('lays out each scope checkbox on its own row with a matching domain icon', async () => {
+  // Fix round 4 (owner-reported): the scopes used to render as one run-on
+  // line ("vms:readnodes:readstorage:read..."). The picker now shows one row
+  // per domain, each with the app's icon for that domain and its own
+  // None | Read | Write choice.
+  it('lays out one row per scope domain with a matching domain icon', async () => {
     const dialog = await openDialogWithTenantSelector()
 
-    const scopeIcons: Record<string, string> = {
-      'vms:read': 'ri-computer-line',
-      'nodes:read': 'ri-server-line',
-      'storage:read': 'ri-hard-drive-2-line',
-      'backups:read': 'ri-save-line',
-      'automation:read': 'ri-robot-line',
-      'alerts:read': 'ri-alarm-warning-line',
-      'reports:read': 'ri-file-list-3-line',
+    const domainIcons: Record<string, string> = {
+      vms: 'ri-computer-line',
+      nodes: 'ri-server-line',
+      storage: 'ri-hard-drive-2-line',
+      backups: 'ri-save-line',
+      automation: 'ri-robot-line',
+      alerts: 'ri-alarm-warning-line',
+      reports: 'ri-file-list-3-line',
     }
 
-    const rows = Object.entries(scopeIcons).map(([scope, iconClass]) => {
-      const checkbox = within(dialog).getByLabelText(scope)
-      const row = checkbox.closest('label') as HTMLElement
-      expect(row, `expected a label row for ${scope}`).not.toBeNull()
-      expect(row.querySelector(`i.${iconClass}`), `expected ${iconClass} on the ${scope} row`).not.toBeNull()
+    const rows = Object.entries(domainIcons).map(([domain, iconClass]) => {
+      const levels = within(dialog).getByRole('group', { name: enTokens.dialog.domains[domain] })
+      const row = levels.closest('[data-domain]') as HTMLElement
+      expect(row, `expected a row for ${domain}`).not.toBeNull()
+      expect(row.querySelector(`i.${iconClass}`), `expected ${iconClass} on the ${domain} row`).not.toBeNull()
+      for (const level of ['none', 'read', 'write']) {
+        expect(within(levels).getByRole('button', { name: enTokens.dialog.access[level] })).toBeInTheDocument()
+      }
       return row
     })
 
-    // One-per-line: every row is a distinct FormControlLabel, all direct
-    // children of the same FormGroup (a block-level, column-flex container)
-    // rather than sharing the FormControlLabels' own inline-flex flow.
-    rows.forEach(row => expect(row.className).toContain('MuiFormControlLabel-root'))
+    // Distinct sibling rows of one list, never nested in each other.
     const container = rows[0].parentElement
-    expect(container?.className).toContain('MuiFormGroup-root')
     rows.forEach(row => expect(row.parentElement).toBe(container))
+    expect(new Set(rows).size).toBe(rows.length)
   })
 
   it('still offers the free-text connections field when only the connections fetch fails', async () => {
@@ -489,7 +493,7 @@ describe('ApiTokensTab', () => {
     })
 
     await userEvent.type(within(dialog).getByLabelText(/name/i), 'ci-conn-fallback')
-    await userEvent.click(within(dialog).getByLabelText('vms:read'))
+    await userEvent.click(vmsReadButton(dialog))
     await userEvent.type(within(dialog).getByLabelText(/connections/i), 'conn-x, conn-y')
     await userEvent.click(within(dialog).getByRole('button', { name: /^create$/i }))
 

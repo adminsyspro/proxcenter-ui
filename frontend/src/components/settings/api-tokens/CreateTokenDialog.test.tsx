@@ -3,16 +3,9 @@ import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/re
 import userEvent from '@testing-library/user-event'
 
 import { renderWithProviders } from '@/__tests__/setup/renderWithProviders'
-import { DESTRUCTIVE_SCOPE_IDS, WRITE_SCOPE_IDS } from '@/lib/api-tokens/scopes'
+import { DESTRUCTIVE_SCOPE_IDS, READ_SCOPE_IDS, WRITE_SCOPE_IDS } from '@/lib/api-tokens/scopes'
 import en from '@/messages/en.json'
-import CreateTokenDialog, { filterToVisibleConnectionIds } from './CreateTokenDialog'
-
-// A scope with no entry in the dialog's local icon map, standing in for a
-// future addition to SCOPE_DEFINITIONS that nobody has wired an icon for yet.
-vi.mock('@/lib/api-tokens/scopes', async importOriginal => {
-  const actual = await importOriginal<typeof import('@/lib/api-tokens/scopes')>()
-  return { ...actual, ALL_SCOPE_IDS: [...actual.ALL_SCOPE_IDS, 'future:scope'] }
-})
+import CreateTokenDialog, { SCOPE_DOMAINS, SUB_SCOPE_LABEL_KEYS, filterToVisibleConnectionIds } from './CreateTokenDialog'
 
 // Fix round 3, finding 1: no UI sequence has been shown to submit a stale
 // connection id (the tenant-change effect clears the selection before the
@@ -45,31 +38,26 @@ describe('filterToVisibleConnectionIds', () => {
   })
 })
 
-describe('CreateTokenDialog scopes layout', () => {
-  beforeEach(() => {
-    // The tenant/connection plumbing degrades gracefully on a failed fetch
-    // (asserted elsewhere in ApiTokensTab.test.tsx); irrelevant to this
-    // scopes-rendering test beyond needing `fetch` to exist under jsdom.
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: 'forbidden' }), { status: 403 })))
+describe('SCOPE_DOMAINS', () => {
+  it('places every scope id in exactly one domain, one read scope per domain', () => {
+    const placed = SCOPE_DOMAINS.flatMap(domain => [domain.read, ...domain.write])
+    expect([...placed].sort()).toEqual([...READ_SCOPE_IDS, ...WRITE_SCOPE_IDS].sort())
+    expect(new Set(placed).size).toBe(placed.length)
+    for (const domain of SCOPE_DOMAINS) expect(READ_SCOPE_IDS, domain.id).toContain(domain.read)
   })
 
-  afterEach(() => {
-    vi.unstubAllGlobals()
-    cleanup()
-  })
-
-  it('falls back to a generic icon for a scope with no mapped entry', async () => {
-    renderWithProviders(<CreateTokenDialog open onClose={() => {}} onCreated={() => {}} />)
-    const dialog = await screen.findByRole('dialog')
-    const checkbox = within(dialog).getByLabelText('future:scope')
-    const row = checkbox.closest('label') as HTMLElement
-    expect(row.querySelector('i.ri-key-line')).not.toBeNull()
+  it('labels every write sub-scope that is shown as a chip', () => {
+    const subScopes = (en as any).settings.apiTokens.dialog.subScopes
+    for (const domain of SCOPE_DOMAINS.filter(d => d.write.length > 1)) {
+      for (const scope of domain.write) expect(subScopes[SUB_SCOPE_LABEL_KEYS[scope]], scope).toBeTruthy()
+    }
   })
 })
 
-describe('CreateTokenDialog write scopes', () => {
+describe('CreateTokenDialog scope picker', () => {
   const dialogT = (en as any).settings.apiTokens.dialog
-  const READ_GRANTABLE = ['vms:read', 'nodes:read', 'storage:read', 'backups:read', 'automation:read', 'alerts:read', 'reports:read']
+  const READ_GRANTABLE = [...READ_SCOPE_IDS]
+  const VM_DEFAULTS = ['vms:read', 'vms:power', 'vms:write', 'vms:snapshot', 'vms:migrate']
 
   // `null` makes the grantable-scopes call fail; a function answers per URL.
   let grantableFor: ((url: string) => string[]) | null
@@ -114,17 +102,39 @@ describe('CreateTokenDialog write scopes', () => {
     return dialog
   }
 
-  function writeToggle(dialog: HTMLElement) {
-    return within(dialog).getByRole('button', { name: new RegExp(`^${dialogT.writeScopes}`) })
+  // The level toggle of a domain row is a group named after the domain.
+  function levels(dialog: HTMLElement, domain: string) {
+    return within(dialog).getByRole('group', { name: dialogT.domains[domain] })
   }
 
-  async function expandWrite(dialog: HTMLElement) {
-    await userEvent.click(writeToggle(dialog))
-    await waitFor(() => expect(writeToggle(dialog)).toHaveAttribute('aria-expanded', 'true'))
+  function levelButton(dialog: HTMLElement, domain: string, level: 'none' | 'read' | 'write') {
+    return within(levels(dialog, domain)).getByRole('button', { name: dialogT.access[level] })
   }
 
-  function checkboxOf(dialog: HTMLElement, scope: string) {
-    return within(dialog).getByLabelText(scope) as HTMLInputElement
+  function rowOf(dialog: HTMLElement, domain: string) {
+    return levels(dialog, domain).closest('[data-domain]') as HTMLElement
+  }
+
+  function chipGroup(dialog: HTMLElement, domain: string) {
+    return within(dialog).queryByRole('group', { name: dialogT.subScopesLabel.replace('{domain}', dialogT.domains[domain]) })
+  }
+
+  function chip(dialog: HTMLElement, domain: string, subKey: string) {
+    const group = chipGroup(dialog, domain)
+    expect(group, `chips of ${domain}`).not.toBeNull()
+    return within(group as HTMLElement).getByRole('button', { name: dialogT.subScopes[subKey] })
+  }
+
+  async function grantableSettled(dialog: HTMLElement) {
+    await waitFor(() => expect(levelButton(dialog, 'vms', 'write')).toBeEnabled())
+  }
+
+  async function typeName(dialog: HTMLElement) {
+    await userEvent.type(within(dialog).getByLabelText(new RegExp(`^${dialogT.name}`)), 'ci')
+  }
+
+  function createButton(dialog: HTMLElement) {
+    return within(dialog).getByRole('button', { name: new RegExp(`^${dialogT.create}$`) })
   }
 
   function grantableCalls() {
@@ -139,142 +149,248 @@ describe('CreateTokenDialog write scopes', () => {
     return JSON.parse((call as any)[1].body)
   }
 
-  it('renders a Read and a Write section, Write folded by default behind a warning', async () => {
+  it('renders one row per domain with its icon, label and None, Read, Write, all on None', async () => {
     const dialog = await openDialog()
-    expect(within(dialog).getByText(dialogT.readScopes)).toBeInTheDocument()
-    expect(writeToggle(dialog)).toHaveAttribute('aria-expanded', 'false')
-    // (MUI hides the native input itself, so visibility is read on the row.)
-    expect(checkboxOf(dialog, 'vms:read').closest('label')).toBeVisible()
-    expect(checkboxOf(dialog, 'vms:power').closest('label')).not.toBeVisible()
-    expect(within(dialog).getByText(dialogT.writeWarning)).not.toBeVisible()
+    for (const domain of SCOPE_DOMAINS) {
+      const row = rowOf(dialog, domain.id)
+      expect(row.querySelector(`i.${domain.icon}`), `icon on ${domain.id}`).not.toBeNull()
+      expect(within(row).getByText(dialogT.domains[domain.id])).toBeInTheDocument()
+      expect(levelButton(dialog, domain.id, 'none')).toHaveAttribute('aria-pressed', 'true')
+      expect(levelButton(dialog, domain.id, 'read')).toHaveAttribute('aria-pressed', 'false')
+      expect(levelButton(dialog, domain.id, 'write')).toHaveAttribute('aria-pressed', 'false')
+    }
+    expect(within(dialog).queryByText(dialogT.writeWarning)).not.toBeInTheDocument()
+    expect(within(dialog).queryByLabelText(dialogT.writeRateLimit)).not.toBeInTheDocument()
+    await typeName(dialog)
+    expect(createButton(dialog)).toBeDisabled()
+  })
 
-    await expandWrite(dialog)
+  it('shows the raw scope ids a domain grants in a tooltip on its label', async () => {
+    const dialog = await openDialog()
+    await userEvent.hover(within(rowOf(dialog, 'vms')).getByText(dialogT.domains.vms))
+    const tooltip = await screen.findByRole('tooltip')
+    for (const scope of ['vms:read', 'vms:power', 'vms:delete']) expect(tooltip).toHaveTextContent(scope)
+  })
+
+  it('keeps Write disabled on the read only domains, with a tooltip saying why', async () => {
+    const dialog = await openDialog()
+    await grantableSettled(dialog)
+    for (const domain of ['automation', 'alerts', 'reports']) {
+      expect(levelButton(dialog, domain, 'write'), domain).toBeDisabled()
+      expect(levelButton(dialog, domain, 'read'), domain).toBeEnabled()
+    }
+    await userEvent.hover(levelButton(dialog, 'alerts', 'write').parentElement as HTMLElement)
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(dialogT.readOnlyDomain)
+  })
+
+  it('sends the read scopes of the domains on Read, without a write rate limit', async () => {
+    const dialog = await openDialog()
+    await typeName(dialog)
+    await userEvent.click(levelButton(dialog, 'alerts', 'read'))
+    await userEvent.click(levelButton(dialog, 'vms', 'read'))
+    expect(levelButton(dialog, 'vms', 'read')).toHaveAttribute('aria-pressed', 'true')
+    expect(within(dialog).queryByText(dialogT.writeWarning)).not.toBeInTheDocument()
+    await userEvent.click(createButton(dialog))
+    await waitFor(() => expect(postBody().scopes).toEqual(['vms:read', 'alerts:read']))
+    expect(postBody()).not.toHaveProperty('writeRateLimitPerMin')
+  })
+
+  it('drops every scope of a domain set back to None', async () => {
+    const dialog = await openDialog()
+    await grantableSettled(dialog)
+    await typeName(dialog)
+    await userEvent.click(levelButton(dialog, 'vms', 'write'))
+    expect(createButton(dialog)).toBeEnabled()
+    await userEvent.click(levelButton(dialog, 'vms', 'none'))
+    expect(chipGroup(dialog, 'vms')).toBeNull()
+    expect(createButton(dialog)).toBeDisabled()
+  })
+
+  it('reveals the sub-scope chips on Write, every non destructive one selected and Delete left out', async () => {
+    const dialog = await openDialog()
+    await grantableSettled(dialog)
+    expect(chipGroup(dialog, 'vms')).toBeNull()
+    await userEvent.click(levelButton(dialog, 'vms', 'write'))
+    expect(levelButton(dialog, 'vms', 'write')).toHaveAttribute('aria-pressed', 'true')
+    for (const key of ['vmsPower', 'vmsWrite', 'vmsSnapshot', 'vmsMigrate']) {
+      expect(chip(dialog, 'vms', key), key).toHaveAttribute('aria-pressed', 'true')
+    }
+    expect(chip(dialog, 'vms', 'vmsDelete')).toHaveAttribute('aria-pressed', 'false')
     expect(within(dialog).getByText(dialogT.writeWarning)).toBeVisible()
-    expect(checkboxOf(dialog, 'vms:power').closest('label')).toBeVisible()
-    for (const scope of WRITE_SCOPE_IDS) {
-      const row = checkboxOf(dialog, scope).closest('label') as HTMLElement
-      // Every write scope has its own icon, never the generic fallback.
-      expect(row.querySelector('i[class^="ri-"]'), `icon on ${scope}`).not.toBeNull()
-      expect(row.querySelector('i.ri-key-line'), `no fallback icon on ${scope}`).toBeNull()
-    }
+    expect(within(dialog).getByLabelText(dialogT.writeRateLimit)).toBeInTheDocument()
+
+    await typeName(dialog)
+    await userEvent.click(createButton(dialog))
+    await waitFor(() => expect(postBody().scopes).toEqual(VM_DEFAULTS))
+    expect(postBody().writeRateLimitPerMin).toBe(60)
   })
 
-  it('paints the destructive scopes in the error colour', async () => {
+  it('paints the destructive chips, label included, in the error colour', async () => {
     const dialog = await openDialog()
-    await expandWrite(dialog)
-    for (const scope of DESTRUCTIVE_SCOPE_IDS) {
-      expect(checkboxOf(dialog, scope).closest('.MuiCheckbox-root')?.className).toContain('MuiCheckbox-colorError')
+    await grantableSettled(dialog)
+    await userEvent.click(levelButton(dialog, 'vms', 'write'))
+    await userEvent.click(levelButton(dialog, 'backups', 'write'))
+    const destructive = [chip(dialog, 'vms', 'vmsDelete'), chip(dialog, 'backups', 'backupsDelete')]
+    expect(DESTRUCTIVE_SCOPE_IDS).toEqual(['vms:delete', 'backups:delete'])
+    for (const element of destructive) {
+      expect(element.className).toContain('MuiChip-colorError')
+      expect(getComputedStyle(element).color).toBe('rgb(211, 47, 47)')
     }
-    expect(checkboxOf(dialog, 'vms:power').closest('.MuiCheckbox-root')?.className).not.toContain('MuiCheckbox-colorError')
+    expect(chip(dialog, 'vms', 'vmsPower').className).not.toContain('MuiChip-colorError')
+    expect(chip(dialog, 'backups', 'backupsRestore').className).not.toContain('MuiChip-colorError')
   })
 
-  it('paints the destructive scope LABELS in the error colour, out of reach of the accordion text override', async () => {
+  it('adds a destructive sub-scope only when its chip is picked', async () => {
     const dialog = await openDialog()
-    await expandWrite(dialog)
-    const label = (scope: string) => within(checkboxOf(dialog, scope).closest('label') as HTMLElement).getByText(scope)
-    for (const scope of WRITE_SCOPE_IDS) {
-      // The app theme forces `.MuiAccordionDetails-root .MuiTypography-root`
-      // to text.secondary (overrides/accordion.jsx), which outranks a
-      // Typography's own sx colour: the label must not be such a Typography.
-      expect(label(scope).matches('.MuiAccordionDetails-root .MuiTypography-root'), scope).toBe(false)
-    }
-    for (const scope of DESTRUCTIVE_SCOPE_IDS) {
-      expect(getComputedStyle(label(scope)).color, scope).toBe('rgb(211, 47, 47)')
-    }
-    expect(getComputedStyle(label('vms:power')).color).not.toBe('rgb(211, 47, 47)')
+    await grantableSettled(dialog)
+    await typeName(dialog)
+    await userEvent.click(levelButton(dialog, 'vms', 'write'))
+    await userEvent.click(chip(dialog, 'vms', 'vmsDelete'))
+    expect(chip(dialog, 'vms', 'vmsDelete')).toHaveAttribute('aria-pressed', 'true')
+    await userEvent.click(chip(dialog, 'vms', 'vmsWrite'))
+    await userEvent.click(createButton(dialog))
+    await waitFor(() => expect(postBody().scopes).toEqual(['vms:read', 'vms:power', 'vms:snapshot', 'vms:migrate', 'vms:delete']))
   })
 
-  it('disables a write scope the caller cannot grant, with a tooltip saying why', async () => {
+  it('switches the row back to Read when the last sub-scope chip is unselected', async () => {
+    const dialog = await openDialog()
+    await grantableSettled(dialog)
+    await typeName(dialog)
+    await userEvent.click(levelButton(dialog, 'nodes', 'write'))
+    for (const key of ['haWrite', 'poolsWrite', 'networkWrite']) await userEvent.click(chip(dialog, 'nodes', key))
+    expect(levelButton(dialog, 'nodes', 'write')).toHaveAttribute('aria-pressed', 'true')
+    await userEvent.click(chip(dialog, 'nodes', 'firewallWrite'))
+    expect(levelButton(dialog, 'nodes', 'read')).toHaveAttribute('aria-pressed', 'true')
+    expect(chipGroup(dialog, 'nodes')).toBeNull()
+    expect(within(dialog).queryByText(dialogT.writeWarning)).not.toBeInTheDocument()
+    await userEvent.click(createButton(dialog))
+    await waitFor(() => expect(postBody().scopes).toEqual(['nodes:read']))
+    expect(postBody()).not.toHaveProperty('writeRateLimitPerMin')
+  })
+
+  it('needs no chips for a domain with a single write scope', async () => {
+    const dialog = await openDialog()
+    await grantableSettled(dialog)
+    await typeName(dialog)
+    await userEvent.click(levelButton(dialog, 'storage', 'write'))
+    expect(chipGroup(dialog, 'storage')).toBeNull()
+    await userEvent.click(createButton(dialog))
+    await waitFor(() => expect(postBody().scopes).toEqual(['storage:read', 'storage:write']))
+  })
+
+  it('disables a sub-scope chip the caller cannot grant, and leaves it out of the defaults', async () => {
+    grantableFor = () => [...READ_GRANTABLE, 'vms:power', 'vms:delete']
+    const dialog = await openDialog()
+    await grantableSettled(dialog)
+    await typeName(dialog)
+    await userEvent.click(levelButton(dialog, 'vms', 'write'))
+    expect(chip(dialog, 'vms', 'vmsPower')).toHaveAttribute('aria-pressed', 'true')
+    expect(chip(dialog, 'vms', 'vmsSnapshot')).toHaveAttribute('aria-disabled', 'true')
+    expect(chip(dialog, 'vms', 'vmsDelete')).not.toHaveAttribute('aria-disabled')
+
+    await userEvent.hover(chip(dialog, 'vms', 'vmsSnapshot').parentElement as HTMLElement)
+    const tooltip = await screen.findByRole('tooltip')
+    expect(tooltip).toHaveTextContent(dialogT.scopeNotGrantable)
+    expect(tooltip).toHaveTextContent('vms:snapshot')
+
+    await userEvent.click(createButton(dialog))
+    await waitFor(() => expect(postBody().scopes).toEqual(['vms:read', 'vms:power']))
+  })
+
+  it('disables Write on a domain when none of its write scopes is grantable', async () => {
     grantableFor = () => [...READ_GRANTABLE, 'vms:power']
     const dialog = await openDialog()
-    await expandWrite(dialog)
-    await waitFor(() => expect(checkboxOf(dialog, 'vms:power')).toBeEnabled())
-    expect(checkboxOf(dialog, 'vms:delete')).toBeDisabled()
-    expect(checkboxOf(dialog, 'vms:read')).toBeEnabled()
-
-    await userEvent.hover(checkboxOf(dialog, 'vms:delete').closest('label') as HTMLElement)
-    expect(await screen.findByRole('tooltip')).toHaveTextContent(dialogT.scopeNotGrantable)
+    await grantableSettled(dialog)
+    expect(levelButton(dialog, 'backups', 'write')).toBeDisabled()
+    expect(levelButton(dialog, 'backups', 'read')).toBeEnabled()
+    await userEvent.hover(levelButton(dialog, 'backups', 'write').parentElement as HTMLElement)
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(dialogT.domainNotGrantable)
   })
 
-  it('keeps every write scope disabled when the grantable check fails (fail closed)', async () => {
+  it('selects the only grantable sub-scope on Write even when it is destructive', async () => {
+    grantableFor = () => [...READ_GRANTABLE, 'vms:delete']
+    const dialog = await openDialog()
+    await grantableSettled(dialog)
+    await userEvent.click(levelButton(dialog, 'vms', 'write'))
+    expect(chip(dialog, 'vms', 'vmsDelete')).toHaveAttribute('aria-pressed', 'true')
+    expect(levelButton(dialog, 'vms', 'write')).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('keeps every Write button disabled when the grantable check fails (fail closed)', async () => {
     grantableFor = null
     const dialog = await openDialog()
-    await expandWrite(dialog)
     await waitFor(() => expect(grantableCalls().length).toBeGreaterThan(0))
-    for (const scope of WRITE_SCOPE_IDS) expect(checkboxOf(dialog, scope)).toBeDisabled()
-    expect(checkboxOf(dialog, 'vms:read')).toBeEnabled()
-
-    await userEvent.hover(checkboxOf(dialog, 'vms:power').closest('label') as HTMLElement)
+    for (const domain of SCOPE_DOMAINS) {
+      expect(levelButton(dialog, domain.id, 'write'), domain.id).toBeDisabled()
+      expect(levelButton(dialog, domain.id, 'read'), domain.id).toBeEnabled()
+    }
+    await userEvent.hover(levelButton(dialog, 'vms', 'write').parentElement as HTMLElement)
     expect(await screen.findByRole('tooltip')).toHaveTextContent(dialogT.grantableError)
   })
 
-  it('asks again for the selected tenant and connections, and drops a scope that became ungrantable', async () => {
+  it('keeps every Write button disabled while the grantable answer is pending', async () => {
+    let release: () => void = () => {}
+    const held = new Promise<void>(resolve => { release = resolve })
+    const answer = vi.mocked(fetch).getMockImplementation()!
+    vi.mocked(fetch).mockImplementation(async (url: any, init?: any) => {
+      if (String(url).startsWith('/api/v1/settings/api-tokens/grantable-scopes')) await held
+      return answer(url, init)
+    })
+    const dialog = await openDialog()
+    await waitFor(() => expect(grantableCalls().length).toBeGreaterThan(0))
+    expect(levelButton(dialog, 'vms', 'write')).toBeDisabled()
+    await userEvent.hover(levelButton(dialog, 'vms', 'write').parentElement as HTMLElement)
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(dialogT.scopesLoading)
+    release()
+    await grantableSettled(dialog)
+  })
+
+  it('asks again for the selected tenant and connections, and drops a write scope that became ungrantable', async () => {
     grantableFor = url => (url.includes('tenantId=tenant-a') ? READ_GRANTABLE : [...READ_GRANTABLE, ...WRITE_SCOPE_IDS])
     const dialog = await openDialog()
-    await expandWrite(dialog)
-    await waitFor(() => expect(checkboxOf(dialog, 'vms:power')).toBeEnabled())
-    await userEvent.click(checkboxOf(dialog, 'vms:power'))
-    expect(checkboxOf(dialog, 'vms:power')).toBeChecked()
+    await grantableSettled(dialog)
+    await userEvent.click(levelButton(dialog, 'vms', 'write'))
 
     fireEvent.mouseDown(within(dialog).getAllByRole('combobox')[1])
     await userEvent.click(await screen.findByRole('option', { name: 'Tenant A' }))
     await waitFor(() => expect(grantableCalls().some(url => url.includes('tenantId=tenant-a'))).toBe(true))
-    await waitFor(() => expect(checkboxOf(dialog, 'vms:power')).toBeDisabled())
-    expect(checkboxOf(dialog, 'vms:power')).not.toBeChecked()
+    // The read scope stays: the row falls back to Read, Write is now refused.
+    await waitFor(() => expect(levelButton(dialog, 'vms', 'read')).toHaveAttribute('aria-pressed', 'true'))
+    expect(levelButton(dialog, 'vms', 'write')).toBeDisabled()
+    expect(chipGroup(dialog, 'vms')).toBeNull()
 
     fireEvent.mouseDown(within(dialog).getAllByRole('combobox')[2])
     await userEvent.click(await screen.findByRole('option', { name: 'Tenant A PVE' }))
     await waitFor(() => expect(grantableCalls().some(url => url.includes('connectionIds=conn-a'))).toBe(true))
   })
 
-  it('presets a 90-day expiry when a write scope is checked, and keeps it when unchecked', async () => {
+  it('presets a 90-day expiry when a domain goes to Write, and keeps it when back to Read', async () => {
     const dialog = await openDialog()
     const expiration = within(dialog).getAllByRole('combobox')[0]
     expect(expiration).toHaveTextContent(dialogT.expirationNone)
-    await expandWrite(dialog)
-    await waitFor(() => expect(checkboxOf(dialog, 'vms:snapshot')).toBeEnabled())
+    await grantableSettled(dialog)
 
-    await userEvent.click(checkboxOf(dialog, 'vms:snapshot'))
+    await userEvent.click(levelButton(dialog, 'backups', 'write'))
     expect(expiration).toHaveTextContent(dialogT.expiration90)
-    await userEvent.click(checkboxOf(dialog, 'vms:snapshot'))
+    await userEvent.click(levelButton(dialog, 'backups', 'read'))
     expect(expiration).toHaveTextContent(dialogT.expiration90)
 
-    await userEvent.type(within(dialog).getByLabelText(new RegExp(`^${dialogT.name}`)), 'ci')
-    await userEvent.click(checkboxOf(dialog, 'vms:power'))
-    await userEvent.click(within(dialog).getByRole('button', { name: new RegExp(`^${dialogT.create}$`) }))
+    await typeName(dialog)
+    await userEvent.click(createButton(dialog))
     await waitFor(() => expect(postBody().expiresInDays).toBe(90))
   })
 
-  it('leaves an expiry the user chose alone when a write scope is checked', async () => {
+  it('leaves an expiry the user chose alone when a domain goes to Write', async () => {
     const dialog = await openDialog()
     const expiration = within(dialog).getAllByRole('combobox')[0]
     fireEvent.mouseDown(expiration)
     await userEvent.click(await screen.findByRole('option', { name: dialogT.expiration30 }))
-    await expandWrite(dialog)
-    await waitFor(() => expect(checkboxOf(dialog, 'vms:power')).toBeEnabled())
-    await userEvent.click(checkboxOf(dialog, 'vms:power'))
+    await grantableSettled(dialog)
+    await userEvent.click(levelButton(dialog, 'vms', 'write'))
     expect(expiration).toHaveTextContent(dialogT.expiration30)
   })
 
-  it('sends writeRateLimitPerMin, 60 by default, only with a write scope', async () => {
-    const dialog = await openDialog()
-    await userEvent.type(within(dialog).getByLabelText(new RegExp(`^${dialogT.name}`)), 'ci')
-    await expandWrite(dialog)
-    await waitFor(() => expect(checkboxOf(dialog, 'vms:power')).toBeEnabled())
-    await userEvent.click(checkboxOf(dialog, 'vms:power'))
-    await userEvent.click(within(dialog).getByRole('button', { name: new RegExp(`^${dialogT.create}$`) }))
-    await waitFor(() => expect(postBody().writeRateLimitPerMin).toBe(60))
-  })
-
-  it('leaves writeRateLimitPerMin out of a read-only token (server default)', async () => {
-    const dialog = await openDialog()
-    await userEvent.type(within(dialog).getByLabelText(new RegExp(`^${dialogT.name}`)), 'ci')
-    await userEvent.click(checkboxOf(dialog, 'vms:read'))
-    await userEvent.click(within(dialog).getByRole('button', { name: new RegExp(`^${dialogT.create}$`) }))
-    await waitFor(() => expect(postBody()).not.toHaveProperty('writeRateLimitPerMin'))
-  })
-
-  it('disables Create while a write scope is checked and the grantable answer for the new perimeter is pending', async () => {
+  it('disables Create while a domain is on Write and the grantable answer for the new perimeter is pending', async () => {
     // The first answer comes at once; the one for tenant-a is held back.
     let release: () => void = () => {}
     const held = new Promise<void>(resolve => { release = resolve })
@@ -283,27 +399,24 @@ describe('CreateTokenDialog write scopes', () => {
       if (String(url).includes('tenantId=tenant-a')) await held
       return answer(url, init)
     })
-    grantableFor = () => [...READ_GRANTABLE, ...WRITE_SCOPE_IDS]
 
     const dialog = await openDialog()
-    const create = () => within(dialog).getByRole('button', { name: new RegExp(`^${dialogT.create}$`) })
-    await userEvent.type(within(dialog).getByLabelText(new RegExp(`^${dialogT.name}`)), 'ci')
-    await expandWrite(dialog)
-    await waitFor(() => expect(checkboxOf(dialog, 'vms:power')).toBeEnabled())
-    await userEvent.click(checkboxOf(dialog, 'vms:power'))
-    expect(create()).toBeEnabled()
+    await typeName(dialog)
+    await grantableSettled(dialog)
+    await userEvent.click(levelButton(dialog, 'vms', 'write'))
+    expect(createButton(dialog)).toBeEnabled()
 
     fireEvent.mouseDown(within(dialog).getAllByRole('combobox')[1])
     await userEvent.click(await screen.findByRole('option', { name: 'Tenant A' }))
     await waitFor(() => expect(grantableCalls().some(url => url.includes('tenantId=tenant-a'))).toBe(true))
-    expect(checkboxOf(dialog, 'vms:power')).toBeChecked()
-    expect(create()).toBeDisabled()
+    expect(levelButton(dialog, 'vms', 'write')).toHaveAttribute('aria-pressed', 'true')
+    expect(createButton(dialog)).toBeDisabled()
 
     release()
-    await waitFor(() => expect(create()).toBeEnabled())
+    await waitFor(() => expect(createButton(dialog)).toBeEnabled())
   })
 
-  it('drops the write scope when the check fails, so Create stays usable for the read scopes', async () => {
+  it('drops the write scopes when the check fails, so Create stays usable for the read scopes', async () => {
     let fail = false
     const answer = vi.mocked(fetch).getMockImplementation()!
     vi.mocked(fetch).mockImplementation(async (url: any, init?: any) => {
@@ -313,30 +426,28 @@ describe('CreateTokenDialog write scopes', () => {
       return answer(url, init)
     })
     const dialog = await openDialog()
-    await userEvent.type(within(dialog).getByLabelText(new RegExp(`^${dialogT.name}`)), 'ci')
-    await expandWrite(dialog)
-    await waitFor(() => expect(checkboxOf(dialog, 'vms:power')).toBeEnabled())
-    await userEvent.click(checkboxOf(dialog, 'vms:power'))
-    await userEvent.click(checkboxOf(dialog, 'vms:read'))
+    await typeName(dialog)
+    await grantableSettled(dialog)
+    await userEvent.click(levelButton(dialog, 'vms', 'write'))
     fail = true
     fireEvent.mouseDown(within(dialog).getAllByRole('combobox')[1])
     await userEvent.click(await screen.findByRole('option', { name: 'Tenant A' }))
-    // A failed check unchecks the write scope; the read scope keeps Create usable.
-    await waitFor(() => expect(checkboxOf(dialog, 'vms:power')).not.toBeChecked())
-    expect(within(dialog).getByRole('button', { name: new RegExp(`^${dialogT.create}$`) })).toBeEnabled()
+    await waitFor(() => expect(levelButton(dialog, 'vms', 'read')).toHaveAttribute('aria-pressed', 'true'))
+    expect(createButton(dialog)).toBeEnabled()
+    await userEvent.click(createButton(dialog))
+    await waitFor(() => expect(postBody().scopes).toEqual(['vms:read']))
   })
 
   it('sends the writes-per-minute value the user typed', async () => {
     const dialog = await openDialog()
-    await userEvent.type(within(dialog).getByLabelText(new RegExp(`^${dialogT.name}`)), 'ci')
-    await expandWrite(dialog)
-    await waitFor(() => expect(checkboxOf(dialog, 'vms:power')).toBeEnabled())
-    await userEvent.click(checkboxOf(dialog, 'vms:power'))
+    await typeName(dialog)
+    await grantableSettled(dialog)
+    await userEvent.click(levelButton(dialog, 'storage', 'write'))
     const field = within(dialog).getByLabelText(dialogT.writeRateLimit)
     await userEvent.clear(field)
     await userEvent.type(field, '120')
-    await userEvent.click(within(dialog).getByRole('button', { name: new RegExp(`^${dialogT.create}$`) }))
+    await userEvent.click(createButton(dialog))
     await waitFor(() => expect(postBody().writeRateLimitPerMin).toBe(120))
-    expect(postBody().scopes).toEqual(['vms:power'])
+    expect(postBody().scopes).toEqual(['storage:read', 'storage:write'])
   })
 })

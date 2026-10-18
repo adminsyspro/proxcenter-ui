@@ -35,14 +35,26 @@ describe('settings.apiTokens i18n parity across the 6 served locales', () => {
       'dialog.scopes', 'dialog.tenant', 'dialog.connections', 'dialog.connectionsAll',
       'dialog.create', 'dialog.cancel', 'dialog.confirm', 'reveal.title', 'reveal.warning',
       'reveal.copy', 'reveal.copied', 'reveal.done',
-      // Write mode: the two scope sections, the grantable check, the write
-      // rate limit, the reference warning and the audit actor of a gone token.
-      'dialog.readScopes', 'dialog.writeScopes', 'dialog.writeWarning', 'dialog.scopeNotGrantable',
+      // Write mode: the per-domain None/Read/Write picker and its write
+      // sub-scope chips, the grantable check, the write rate limit, the
+      // reference warning and the audit actor of a gone token.
+      'dialog.access.none', 'dialog.access.read', 'dialog.access.write',
+      'dialog.domains.vms', 'dialog.domains.backups', 'dialog.domains.storage', 'dialog.domains.nodes',
+      'dialog.domains.automation', 'dialog.domains.alerts', 'dialog.domains.reports',
+      'dialog.subScopes.vmsPower', 'dialog.subScopes.vmsWrite', 'dialog.subScopes.vmsSnapshot',
+      'dialog.subScopes.vmsMigrate', 'dialog.subScopes.vmsDelete', 'dialog.subScopes.backupsWrite',
+      'dialog.subScopes.backupsRestore', 'dialog.subScopes.backupsDelete', 'dialog.subScopes.haWrite',
+      'dialog.subScopes.poolsWrite', 'dialog.subScopes.networkWrite', 'dialog.subScopes.firewallWrite',
+      'dialog.subScopesLabel', 'dialog.readOnlyDomain', 'dialog.domainNotGrantable',
+      'dialog.writeWarning', 'dialog.scopeNotGrantable',
       'dialog.scopesLoading', 'dialog.grantableError', 'dialog.writeRateLimit', 'dialog.writeRateLimitHelp',
       'reference.writeWarning', 'deletedToken',
     ]) {
       expect(reference).toContain(key)
     }
+    // The per-domain picker replaced the Read list and the Write accordion.
+    expect(reference).not.toContain('dialog.readScopes')
+    expect(reference).not.toContain('dialog.writeScopes')
   })
 
   it.each([['en', en], ['fr', fr], ['de', de], ['zh-CN', zhCN], ['ko', ko], ['es', es]])(

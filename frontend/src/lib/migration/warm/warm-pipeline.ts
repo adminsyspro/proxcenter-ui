@@ -345,7 +345,7 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
     // management network, nothing else says the node has a route to it.
     const copy = await resolveCopyPath({
       session: soapSession, vmid: config.sourceVmId, connectionHost: esxiHost,
-      chosen: config.copyVmk ? { device: config.copyVmk, address: config.copyAddress } : undefined,
+      chosen: config.copyVmk ? { device: config.copyVmk } : undefined,
       log: (msg, level) => appendLog(jobId, msg, level),
     })
     for (const change of copy.hostChanges) await appendLog(jobId, `Source host ${copy.label.split(" on ").pop()}: ${change} (host network setting, kept after the migration)`, "warn")

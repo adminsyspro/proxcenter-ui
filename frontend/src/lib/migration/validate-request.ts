@@ -19,7 +19,6 @@ import { parseHardwareOverrides, parseNicMappings, isAcceptableCpuType } from "@
 import { parseZeroRateLimit, ZERO_RATE_LIMIT_MIN_MBPS, ZERO_RATE_LIMIT_MAX_MBPS } from "@/lib/migration/warm/zero-rate"
 import { hasServerFeature } from "@/lib/auth/requireEnterprise"
 import { Features } from "@/lib/license/features"
-import { isValidCopyAddress } from "@/lib/migration/warm/nfc-reachability"
 import { TERMINAL_STATUSES } from "@/lib/tasks/sharedTask"
 import { authorizeMigrationTarget } from "@/lib/migration/authorize"
 import { isValidSourceVmId } from "@/lib/migration/source-vm-id"
@@ -171,18 +170,15 @@ export async function validateMigrationRequest(
   const zeroRateLimitMBps = parsedZeroRate !== undefined && await hasServerFeature(Features.VMWARE_MIGRATION) ? parsedZeroRate : undefined
 
   // Warm only (roadmap#53): the VMkernel adapter of the source host the NFC
-  // copy must use, as "vmkN" plus its address. Both or neither: the engine
-  // needs the device to tag it on a vCenter host and the address to connect
-  // and to probe reachability. The address reaches a shell probe on the node
-  // and the device a SOAP call, so both grammars are checked here.
+  // copy must use, as "vmkN". Only the device is kept: the engine reads its
+  // address from vSphere at run time (lib/migration/warm/copy-path), so an
+  // address sent by the browser is ignored and never stored or probed.
   let copyVmk: string | undefined
-  let copyAddress: string | undefined
-  if (isSet(body.copyVmk) || isSet(body.copyAddress)) {
-    if (typeof body.copyVmk !== "string" || !/^vmk\d{1,3}$/.test(body.copyVmk) || !isValidCopyAddress(body.copyAddress)) {
-      return bad('copyVmk must be a VMkernel device ("vmk0") and copyAddress its IP address or host name')
+  if (isSet(body.copyVmk)) {
+    if (typeof body.copyVmk !== "string" || !/^vmk\d{1,3}$/.test(body.copyVmk)) {
+      return bad('copyVmk must be a VMkernel device ("vmk0")')
     }
     copyVmk = body.copyVmk
-    copyAddress = body.copyAddress
   }
 
   // Who owns the warm switchover. "manual" holds the run in delta_sync,
@@ -300,7 +296,7 @@ export async function validateMigrationRequest(
       // Warm-only options (vddkLibdir, downtimeBudgetSec) are persisted here so a
       // retry — which rebuilds the config from job.config — keeps them instead of
       // silently reverting to the defaults.
-      config: { sourceConnectionId, sourceVmId, sourceVmName: body.sourceVmName, targetConnectionId, targetNode, targetStorage, networkBridge, vlanTag, startAfterMigration, convertDisksToQcow2, cpuType, migrationType, transferMode, ...(targetVmid !== undefined && { targetVmid }), ...(body.vddkLibdir && { vddkLibdir: body.vddkLibdir }), ...(downtimeBudgetSec !== undefined && { downtimeBudgetSec }), ...(cutoverMode !== undefined && { cutoverMode }), ...(zeroRateLimitMBps !== undefined && { zeroRateLimitMBps }), ...(copyVmk && { copyVmk, copyAddress }),
+      config: { sourceConnectionId, sourceVmId, sourceVmName: body.sourceVmName, targetConnectionId, targetNode, targetStorage, networkBridge, vlanTag, startAfterMigration, convertDisksToQcow2, cpuType, migrationType, transferMode, ...(targetVmid !== undefined && { targetVmid }), ...(body.vddkLibdir && { vddkLibdir: body.vddkLibdir }), ...(downtimeBudgetSec !== undefined && { downtimeBudgetSec }), ...(cutoverMode !== undefined && { cutoverMode }), ...(zeroRateLimitMBps !== undefined && { zeroRateLimitMBps }), ...(copyVmk && { copyVmk }),
         // Review-step overrides (#317), persisted so a retry keeps the same
         // hardware and NIC layout.
         ...(hardware && { hardware }), ...(nics && { nics }),

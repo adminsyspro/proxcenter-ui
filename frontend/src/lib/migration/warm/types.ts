@@ -57,7 +57,6 @@ export interface WarmMigrationConfig {
    * when one exists, otherwise management.
    */
   copyVmk?: string
-  copyAddress?: string
 }
 
 export interface LogEntry { ts: string; msg: string; level: "info" | "success" | "warn" | "error" }

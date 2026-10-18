@@ -398,7 +398,9 @@ describe('warm copy network (roadmap#53)', () => {
     fireEvent.click(screen.getByRole('button', { name: /migrate to proxmox/i }))
     await waitFor(() => expect(bodies).toHaveLength(1))
     // Shared by the batch: the server copies them into the job of every VM.
-    expect(bodies[0]).toMatchObject({ migrationType: 'warm', copyVmk: 'vmk2', copyAddress: '10.42.53.21', concurrency: 2 })
+    expect(bodies[0]).toMatchObject({ migrationType: 'warm', copyVmk: 'vmk2', concurrency: 2 })
+    // The server reads the adapter's address from vSphere: the browser never sends one.
+    expect(bodies[0]).not.toHaveProperty('copyAddress')
     expect(bodies[0].vms.map((v: any) => v.sourceVmId)).toEqual(['468', '469'])
   })
 

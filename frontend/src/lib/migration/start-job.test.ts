@@ -57,7 +57,7 @@ describe("startMigrationJob", () => {
       sourceConnectionId: "src", sourceVmId: "vm-1", targetConnectionId: "tgt", targetNode: "pve1", targetStorage: "local-lvm",
       networkBridge: "vmbr0", vlanTag: undefined, startAfterMigration: false, convertDisksToQcow2: false, cpuType: "host",
       hardware: { cores: 2 }, nics: [{ index: 0, bridge: "vmbr1" }], targetVmid: 900, vddkLibdir: "/opt/vddk",
-      downtimeBudgetSec: 600, cutoverMode: "manual", zeroRateLimitMBps: 200, copyVmk: "vmk2", copyAddress: "10.0.0.2",
+      downtimeBudgetSec: 600, cutoverMode: "manual", zeroRateLimitMBps: 200, copyVmk: "vmk2",
     }, "t1")
     expect(cold).not.toHaveBeenCalled()
     expect(h.connection.findUnique).not.toHaveBeenCalled()

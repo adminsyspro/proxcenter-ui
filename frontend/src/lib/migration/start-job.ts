@@ -51,7 +51,7 @@ export function warmConfigFromJobConfig(c: Record<string, any>, engine: "warm-vm
     ...(c.downtimeBudgetSec !== undefined && { downtimeBudgetSec: c.downtimeBudgetSec }),
     ...(c.cutoverMode !== undefined && { cutoverMode: c.cutoverMode }),
     ...(c.zeroRateLimitMBps !== undefined && { zeroRateLimitMBps: c.zeroRateLimitMBps }),
-    ...(engine === "warm-vmware" && c.copyVmk && { copyVmk: c.copyVmk, copyAddress: c.copyAddress }),
+    ...(engine === "warm-vmware" && c.copyVmk && { copyVmk: c.copyVmk }),
   }
 }
 

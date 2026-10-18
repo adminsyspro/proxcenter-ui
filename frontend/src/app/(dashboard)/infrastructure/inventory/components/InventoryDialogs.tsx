@@ -1697,7 +1697,7 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
             zeroRateLimitMBps: Number(migZeroRateLimit.trim()),
           }),
           // VMkernel adapter of the copy (roadmap#53); empty keeps the host default.
-          ...(showCopyVmk && migCopyVmk && copyVnic && { copyVmk: migCopyVmk, copyAddress: copyVnic.address }),
+          ...(showCopyVmk && migCopyVmk && copyVnic && { copyVmk: migCopyVmk }),
           // Forward tempStorage for every source type — v2v uses it as virt-v2v's -os,
           // direct-ESXi uses it as the base path for SSHFS mount + VMDK dumps + clones.
           ...(migTempStorage !== '/tmp' && {
@@ -5526,7 +5526,7 @@ return
                         // Thick zeroing cap of a warm batch (roadmap#45).
                         ...(showZeroRateLimit && migZeroRateLimit.trim() !== '' && { zeroRateLimitMBps: Number(migZeroRateLimit.trim()) }),
                         // VMkernel adapter of the copy (roadmap#53), ESXi-direct batches only.
-                        ...(showCopyVmk && migCopyVmk && copyVnic && { copyVmk: migCopyVmk, copyAddress: copyVnic.address }),
+                        ...(showCopyVmk && migCopyVmk && copyVnic && { copyVmk: migCopyVmk }),
                         concurrency: bulkConcurrency,
                         vms,
                       }),

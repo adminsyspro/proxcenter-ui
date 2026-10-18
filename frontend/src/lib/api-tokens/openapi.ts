@@ -88,11 +88,20 @@ function parameters(entry: AllowlistEntry) {
   return params
 }
 
+// Scalar renders no custom extension, so x-required-scopes alone stays
+// invisible in the reference: the description says it too. Any one of the
+// listed scopes is enough; an entry without scopes takes any valid token.
+function requiredScopesLine(scopes: readonly string[]): string {
+  if (scopes.length === 0) return "Required scope: any valid token"
+  return `Required scope: ${scopes.map((scope) => `\`${scope}\``).join(" or ")}`
+}
+
 function operation(entry: AllowlistEntry, refusedMethod: HttpMethod, schemas: SchemaSets) {
+  const line = requiredScopesLine(entry.requiredScopes)
   const op: Record<string, unknown> = {
     operationId: entry.id,
     summary: entry.summary,
-    description: entry.description,
+    description: entry.description ? `${entry.description}\n\n${line}` : line,
     tags: [entry.tag],
     "x-required-scopes": entry.requiredScopes,
     parameters: parameters(entry),

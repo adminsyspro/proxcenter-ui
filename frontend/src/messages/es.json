@@ -3518,9 +3518,7 @@
         "hint": "Las solicitudes enviadas desde esta página se dirigen a esta instancia de ProxCenter. Abra el panel Autenticación y pegue un token pxc_ para probar los endpoints con sus propios datos.",
         "backToTokens": "Volver a los tokens de API",
         "thisInstance": "Esta instancia de ProxCenter",
-        "writeWarning": "Las operaciones de escritura actúan sobre su infraestructura real. \"Try it\" envía peticiones reales con el token que pegue: un POST, PUT o DELETE enviado desde esta página inicia, modifica o elimina recursos reales.",
-        "requiredScope": "Scope requerido",
-        "requiredScopesAnyOf": "Scope requerido, uno de"
+        "writeWarning": "Las operaciones de escritura actúan sobre su infraestructura real. \"Try it\" envía peticiones reales con el token que pegue: un POST, PUT o DELETE enviado desde esta página inicia, modifica o elimina recursos reales."
       },
       "columns": {
         "prefix": "Prefijo",

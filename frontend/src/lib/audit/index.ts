@@ -370,6 +370,10 @@ export async function getAuditLogs(options: {
   // Token-attributed rows show the token's name and prefix as their actor.
   // One lookup for the whole page; no foreign key on purpose, so a deleted
   // token simply resolves to nulls.
+  // Not tenant-filtered: rows are already confined to options.tenantId, and
+  // the denial rows of a rejected token (expired, wrong tenant) land in the
+  // default tenant, whose provider viewers see every token; a tenant filter
+  // would mislabel those as deleted.
   const tokenIds = [...new Set(rows.map(row => row.apiTokenId).filter((id): id is string => !!id))]
   const tokens = tokenIds.length
     ? await prisma.apiToken.findMany({

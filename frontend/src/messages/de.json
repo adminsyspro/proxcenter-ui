@@ -3505,9 +3505,7 @@
         "hint": "Von dieser Seite gesendete Anfragen gehen an diese ProxCenter-Instanz. Öffnen Sie den Bereich Authentifizierung und fügen Sie ein pxc_-Token ein, um die Endpunkte mit Ihren eigenen Daten auszuprobieren.",
         "backToTokens": "Zurück zu den API-Token",
         "thisInstance": "Diese ProxCenter-Instanz",
-        "writeWarning": "Schreiboperationen wirken auf Ihre echte Infrastruktur. \"Try it\" sendet echte Anfragen mit dem eingefügten Token: ein POST, PUT oder DELETE von dieser Seite startet, ändert oder löscht echte Ressourcen.",
-        "requiredScope": "Erforderlicher Scope",
-        "requiredScopesAnyOf": "Erforderlicher Scope, einer von"
+        "writeWarning": "Schreiboperationen wirken auf Ihre echte Infrastruktur. \"Try it\" sendet echte Anfragen mit dem eingefügten Token: ein POST, PUT oder DELETE von dieser Seite startet, ändert oder löscht echte Ressourcen."
       },
       "columns": {
         "prefix": "Präfix",

@@ -5420,7 +5420,7 @@
       "get": {
         "operationId": "vms-list",
         "summary": "List all VMs and containers across visible connections",
-        "description": "Aggregated VM/LXC list with status, usage and config-derived fields (cpuType, scsihw, agentEnabled, bios, ostype, onboot, description, macs) served by default. `ips` merges the addresses pinned in the config with the last known guest agent / LXC addresses from a background index; `staleIps` lists the last known addresses a guest could not re-confirm (stopped, agent down) and `ipIndexWarming` tells that the index is still being built. Pass include=agent to probe the QEMU guest agent on running VMs (about 7x slower).",
+        "description": "Aggregated VM/LXC list with status, usage and config-derived fields (cpuType, scsihw, agentEnabled, bios, ostype, onboot, description, macs) served by default. `ips` merges the addresses pinned in the config with the last known guest agent / LXC addresses from a background index; `staleIps` lists the last known addresses a guest could not re-confirm (stopped, agent down) and `ipIndexWarming` tells that the index is still being built. Pass include=agent to probe the QEMU guest agent on running VMs (about 7x slower).\n\nRequired scope: `vms:read`",
         "tags": [
           "Monitoring"
         ],
@@ -5649,7 +5649,7 @@
       "get": {
         "operationId": "inventory-tree",
         "summary": "Multi-cluster inventory tree (clusters, nodes, guests, PBS)",
-        "description": "Full inventory tree served from the shared SWR cache, filtered by tenant, vDC and token connection perimeter.",
+        "description": "Full inventory tree served from the shared SWR cache, filtered by tenant, vDC and token connection perimeter.\n\nRequired scope: `nodes:read`",
         "tags": [
           "Monitoring"
         ],
@@ -5782,7 +5782,7 @@
       "get": {
         "operationId": "storage-list",
         "summary": "All storages across visible PVE connections",
-        "description": "Aggregated storage list with capacity and usage per storage.",
+        "description": "Aggregated storage list with capacity and usage per storage.\n\nRequired scope: `storage:read`",
         "tags": [
           "Monitoring"
         ],
@@ -5885,7 +5885,7 @@
       "get": {
         "operationId": "pbs-backups",
         "summary": "Snapshots of one PBS server",
-        "description": "All snapshots of the given PBS connection (all datastores and namespaces), paginated and filterable. {id} is a raw connection id, validated against the token perimeter before the handler runs.",
+        "description": "All snapshots of the given PBS connection (all datastores and namespaces), paginated and filterable. {id} is a raw connection id, validated against the token perimeter before the handler runs.\n\nRequired scope: `backups:read`",
         "tags": [
           "Monitoring"
         ],
@@ -6062,7 +6062,7 @@
       "get": {
         "operationId": "public-backups",
         "summary": "Fleet-wide backup freshness per guest",
-        "description": "For every guest in the token perimeter: most recent backup date, age in seconds, datastore, PBS server, size and verification state. Guests without any backup are present with a null age.",
+        "description": "For every guest in the token perimeter: most recent backup date, age in seconds, datastore, PBS server, size and verification state. Guests without any backup are present with a null age.\n\nRequired scope: `backups:read`",
         "tags": [
           "Monitoring"
         ],
@@ -6243,7 +6243,7 @@
       "get": {
         "operationId": "public-metrics",
         "summary": "Prometheus exposition of fleet metrics",
-        "description": "Prometheus text exposition served from the inventory and PBS caches (never amplified to the hypervisor). Series families are filtered by scope: proxcenter_node_* needs nodes:read, proxcenter_vm_* needs vms:read, proxcenter_backup_* needs backups:read.",
+        "description": "Prometheus text exposition served from the inventory and PBS caches (never amplified to the hypervisor). Series families are filtered by scope: proxcenter_node_* needs nodes:read, proxcenter_vm_* needs vms:read, proxcenter_backup_* needs backups:read.\n\nRequired scope: `nodes:read` or `vms:read` or `backups:read`",
         "tags": [
           "Monitoring"
         ],
@@ -6335,7 +6335,7 @@
       "get": {
         "operationId": "public-health",
         "summary": "Application status and per-connection reachability",
-        "description": "Authenticated variant of the public liveness probe: application status plus per-connection reachability derived from the inventory cache, filtered by tenant. Any valid token can call it.",
+        "description": "Authenticated variant of the public liveness probe: application status plus per-connection reachability derived from the inventory cache, filtered by tenant. Any valid token can call it.\n\nRequired scope: any valid token",
         "tags": [
           "Monitoring"
         ],
@@ -6465,7 +6465,7 @@
       "post": {
         "operationId": "vm-create",
         "summary": "Create a VM or a container",
-        "description": "Creates a QEMU VM ({type} = qemu) or an LXC container ({type} = lxc) on {node}. The body is the Proxmox create parameter set, forwarded once the vDC rules have run: a vDC tenant gets its pool, CPU policy, storage, network and quota enforced, and an IPAM address injected on managed bridges. Setting a NIC MAC or VLAN as a vDC tenant also needs vm.config.nic.mac / vm.config.nic.vlan, which no scope grants.",
+        "description": "Creates a QEMU VM ({type} = qemu) or an LXC container ({type} = lxc) on {node}. The body is the Proxmox create parameter set, forwarded once the vDC rules have run: a vDC tenant gets its pool, CPU policy, storage, network and quota enforced, and an IPAM address injected on managed bridges. Setting a NIC MAC or VLAN as a vDC tenant also needs vm.config.nic.mac / vm.config.nic.vlan, which no scope grants.\n\nRequired scope: `vms:write`",
         "tags": [
           "VMs"
         ],
@@ -6667,7 +6667,7 @@
       "get": {
         "operationId": "vm-config-get",
         "summary": "Guest configuration",
-        "description": "The effective Proxmox configuration of the guest, with `pending` listing the changes that wait for a reboot. When the guest has moved to another node of the cluster since the URL was built, the configuration is read from its current node and `movedTo` names it.",
+        "description": "The effective Proxmox configuration of the guest, with `pending` listing the changes that wait for a reboot. When the guest has moved to another node of the cluster since the URL was built, the configuration is read from its current node and `movedTo` names it.\n\nRequired scope: `vms:read` or `vms:power` or `vms:write` or `vms:snapshot` or `vms:migrate` or `vms:delete`",
         "tags": [
           "VMs"
         ],
@@ -6832,7 +6832,7 @@
       "put": {
         "operationId": "vm-config-update",
         "summary": "Update the guest configuration",
-        "description": "Writes the given Proxmox configuration keys (CPU, memory, disks, NICs, options, cloud-init, `delete`, `revert`). Keys the route does not forward for this guest type are dropped. Answers 202 with `pending: true` when the Proxmox task outlives the request; follow its UPID. Changing a NIC MAC or VLAN as a vDC tenant also needs vm.config.nic.mac / vm.config.nic.vlan, which no scope grants.",
+        "description": "Writes the given Proxmox configuration keys (CPU, memory, disks, NICs, options, cloud-init, `delete`, `revert`). Keys the route does not forward for this guest type are dropped. Answers 202 with `pending: true` when the Proxmox task outlives the request; follow its UPID. Changing a NIC MAC or VLAN as a vDC tenant also needs vm.config.nic.mac / vm.config.nic.vlan, which no scope grants.\n\nRequired scope: `vms:write`",
         "tags": [
           "VMs"
         ],
@@ -7021,7 +7021,7 @@
       "post": {
         "operationId": "vm-power",
         "summary": "Power action on a guest",
-        "description": "Starts, stops (hard), shuts down (ACPI), reboots, resets, suspends or resumes the guest. No body.",
+        "description": "Starts, stops (hard), shuts down (ACPI), reboots, resets, suspends or resumes the guest. No body.\n\nRequired scope: `vms:power`",
         "tags": [
           "VMs"
         ],
@@ -7199,7 +7199,7 @@
       "post": {
         "operationId": "vm-clone",
         "summary": "Clone a guest",
-        "description": "Clones the guest (or a template) to `newid`. Other Proxmox clone parameters pass through. A vDC tenant clone stays in its pool, storages and quota.",
+        "description": "Clones the guest (or a template) to `newid`. Other Proxmox clone parameters pass through. A vDC tenant clone stays in its pool, storages and quota.\n\nRequired scope: `vms:write`",
         "tags": [
           "VMs"
         ],
@@ -7411,7 +7411,7 @@
       "post": {
         "operationId": "vm-template",
         "summary": "Convert a guest to a template",
-        "description": "Irreversible. The guest must be stopped. No body.",
+        "description": "Irreversible. The guest must be stopped. No body.\n\nRequired scope: `vms:write`",
         "tags": [
           "VMs"
         ],
@@ -7565,7 +7565,7 @@
       "post": {
         "operationId": "vm-disk-resize",
         "summary": "Resize a guest disk",
-        "description": "Grows a disk (e.g. size `+10G`). A vDC tenant growth counts against its storage quota.",
+        "description": "Grows a disk (e.g. size `+10G`). A vDC tenant growth counts against its storage quota.\n\nRequired scope: `vms:write`",
         "tags": [
           "VMs"
         ],
@@ -7748,7 +7748,7 @@
       "post": {
         "operationId": "vm-disk-move",
         "summary": "Move a guest disk to another storage",
-        "description": "Moves a disk to `storage`. A vDC tenant may only target its own writable storages, within quota.",
+        "description": "Moves a disk to `storage`. A vDC tenant may only target its own writable storages, within quota.\n\nRequired scope: `vms:write`",
         "tags": [
           "VMs"
         ],
@@ -7938,7 +7938,7 @@
       "get": {
         "operationId": "vm-unlock-get",
         "summary": "Guest lock state",
-        "description": "Whether the guest carries a Proxmox lock (backup, migrate, snapshot, ...) and which one.",
+        "description": "Whether the guest carries a Proxmox lock (backup, migrate, snapshot, ...) and which one.\n\nRequired scope: `vms:read` or `vms:power` or `vms:write` or `vms:snapshot` or `vms:migrate` or `vms:delete`",
         "tags": [
           "VMs"
         ],
@@ -8098,7 +8098,7 @@
       "post": {
         "operationId": "vm-unlock",
         "summary": "Remove the lock of a guest",
-        "description": "Runs `qm unlock` / `pct unlock` on the node over SSH. A guest that is not locked answers `unlocked: false`. No body.",
+        "description": "Runs `qm unlock` / `pct unlock` on the node over SSH. A guest that is not locked answers `unlocked: false`. No body.\n\nRequired scope: `vms:write`",
         "tags": [
           "VMs"
         ],
@@ -8270,7 +8270,7 @@
       "post": {
         "operationId": "vm-migrate",
         "summary": "Migrate a guest to another node of its cluster",
-        "description": "Intra-cluster migration to `target`. Refused while snapshots block the migration.",
+        "description": "Intra-cluster migration to `target`. Refused while snapshots block the migration.\n\nRequired scope: `vms:migrate`",
         "tags": [
           "VMs"
         ],
@@ -8457,7 +8457,7 @@
       "post": {
         "operationId": "vm-remote-migrate",
         "summary": "Migrate a VM to another cluster",
-        "description": "Cross-cluster migration (Proxmox remote_migrate) of a QEMU VM. `targetConnectionId` must also be inside the token perimeter. Reserved to the provider and to the MSP tenant that owns both connections.",
+        "description": "Cross-cluster migration (Proxmox remote_migrate) of a QEMU VM. `targetConnectionId` must also be inside the token perimeter. Reserved to the provider and to the MSP tenant that owns both connections.\n\nRequired scope: `vms:migrate`",
         "tags": [
           "VMs"
         ],
@@ -8795,7 +8795,7 @@
       "post": {
         "operationId": "vm-remote-migrate-check",
         "summary": "Preflight a cross-cluster migration",
-        "description": "Validates a cross-cluster migration before launching it: blocking errors and warnings (HA, replication, snapshots, CPU, storage, bridge, VMID collision). Changes nothing. `targetConnectionId` must also be inside the token perimeter.",
+        "description": "Validates a cross-cluster migration before launching it: blocking errors and warnings (HA, replication, snapshots, CPU, storage, bridge, VMID collision). Changes nothing. `targetConnectionId` must also be inside the token perimeter.\n\nRequired scope: `vms:migrate`",
         "tags": [
           "VMs"
         ],
@@ -9023,7 +9023,7 @@
       "get": {
         "operationId": "vm-remote-migrate-prepare-get",
         "summary": "Cross-cluster migration prerequisites of a VM",
-        "description": "The HA resource, replication jobs, snapshots and Site Recovery jobs that stand in the way of a cross-cluster migration.",
+        "description": "The HA resource, replication jobs, snapshots and Site Recovery jobs that stand in the way of a cross-cluster migration.\n\nRequired scope: `vms:read` or `vms:power` or `vms:write` or `vms:snapshot` or `vms:migrate` or `vms:delete`",
         "tags": [
           "VMs"
         ],
@@ -9259,7 +9259,7 @@
       "post": {
         "operationId": "vm-remote-migrate-prepare",
         "summary": "Clear cross-cluster migration prerequisites",
-        "description": "Captures, then removes, the requested blockers: HA resource and replication jobs (also need node.manage on the connection) and the named snapshots (also need vm.snapshot, irreversible). The capture is returned so the migration can restore it.",
+        "description": "Captures, then removes, the requested blockers: HA resource and replication jobs (also need node.manage on the connection) and the named snapshots (also need vm.snapshot, irreversible). The capture is returned so the migration can restore it.\n\nRequired scope: `vms:migrate`",
         "tags": [
           "VMs"
         ],
@@ -9543,7 +9543,7 @@
       "delete": {
         "operationId": "vm-delete",
         "summary": "Delete a guest",
-        "description": "Destroys the guest. It must be stopped and unlocked. Its IPAM addresses are released.",
+        "description": "Destroys the guest. It must be stopped and unlocked. Its IPAM addresses are released.\n\nRequired scope: `vms:delete`",
         "tags": [
           "VMs"
         ],
@@ -9722,7 +9722,7 @@
       "get": {
         "operationId": "vm-notes-get",
         "summary": "Guest notes",
-        "description": "The guest description (notes). {vmid} is the composite key connId:type:node:vmid.",
+        "description": "The guest description (notes). {vmid} is the composite key connId:type:node:vmid.\n\nRequired scope: `vms:read` or `vms:power` or `vms:write` or `vms:snapshot` or `vms:migrate` or `vms:delete`",
         "tags": [
           "VMs"
         ],
@@ -9849,7 +9849,7 @@
       "put": {
         "operationId": "vm-notes-update",
         "summary": "Update the guest notes",
-        "description": "Replaces the guest description (notes). {vmid} is the composite key connId:type:node:vmid.",
+        "description": "Replaces the guest description (notes). {vmid} is the composite key connId:type:node:vmid.\n\nRequired scope: `vms:write`",
         "tags": [
           "VMs"
         ],
@@ -9994,7 +9994,7 @@
       "get": {
         "operationId": "vm-snapshots-list",
         "summary": "Guest snapshots",
-        "description": "Snapshots of the guest, newest first. {vmid} is the composite key connId:type:node:vmid.",
+        "description": "Snapshots of the guest, newest first. {vmid} is the composite key connId:type:node:vmid.\n\nRequired scope: `vms:read` or `vms:power` or `vms:write` or `vms:snapshot` or `vms:migrate` or `vms:delete`",
         "tags": [
           "Snapshots"
         ],
@@ -10151,7 +10151,7 @@
       "post": {
         "operationId": "vm-snapshot-create",
         "summary": "Take a snapshot",
-        "description": "Takes a snapshot of the guest. `vmstate` (QEMU only) also saves the RAM. {vmid} is the composite key connId:type:node:vmid.",
+        "description": "Takes a snapshot of the guest. `vmstate` (QEMU only) also saves the RAM. {vmid} is the composite key connId:type:node:vmid.\n\nRequired scope: `vms:snapshot`",
         "tags": [
           "Snapshots"
         ],
@@ -10306,7 +10306,7 @@
       "delete": {
         "operationId": "vm-snapshot-delete",
         "summary": "Delete a snapshot",
-        "description": "Deletes the snapshot named by `name`. {vmid} is the composite key connId:type:node:vmid.",
+        "description": "Deletes the snapshot named by `name`. {vmid} is the composite key connId:type:node:vmid.\n\nRequired scope: `vms:snapshot`",
         "tags": [
           "Snapshots"
         ],
@@ -10455,7 +10455,7 @@
       "post": {
         "operationId": "vm-snapshot-rollback",
         "summary": "Roll a guest back to a snapshot",
-        "description": "Rolls the guest back to {snapname}. No body. {vmid} is the composite key connId:type:node:vmid.",
+        "description": "Rolls the guest back to {snapname}. No body. {vmid} is the composite key connId:type:node:vmid.\n\nRequired scope: `vms:snapshot`",
         "tags": [
           "Snapshots"
         ],
@@ -10593,7 +10593,7 @@
       "put": {
         "operationId": "vm-snapshot-update",
         "summary": "Update a snapshot description",
-        "description": "Replaces the description of {snapname}. {vmid} is the composite key connId:type:node:vmid.",
+        "description": "Replaces the description of {snapname}. {vmid} is the composite key connId:type:node:vmid.\n\nRequired scope: `vms:snapshot`",
         "tags": [
           "Snapshots"
         ],
@@ -10744,7 +10744,7 @@
       "get": {
         "operationId": "vm-tasks-list",
         "summary": "Recent tasks of a guest",
-        "description": "The last 50 Proxmox tasks of the guest on its node, newest first. {vmid} is the composite key connId:type:node:vmid.",
+        "description": "The last 50 Proxmox tasks of the guest on its node, newest first. {vmid} is the composite key connId:type:node:vmid.\n\nRequired scope: `vms:read` or `vms:power` or `vms:write` or `vms:snapshot` or `vms:migrate` or `vms:delete`",
         "tags": [
           "Tasks"
         ],
@@ -10929,7 +10929,7 @@
       "get": {
         "operationId": "task-status",
         "summary": "Status of a Proxmox task",
-        "description": "Status, progress and log of the task {upid} started on {node}, as returned by every write that answers with a UPID. Poll it until `status` is `stopped`, then read `exitstatus` (`OK` on success) and `failureReason`. Any write scope opens it. A vDC tenant token only reads the tasks of its own guests.",
+        "description": "Status, progress and log of the task {upid} started on {node}, as returned by every write that answers with a UPID. Poll it until `status` is `stopped`, then read `exitstatus` (`OK` on success) and `failureReason`. Any write scope opens it. A vDC tenant token only reads the tasks of its own guests.\n\nRequired scope: `vms:power` or `vms:write` or `vms:snapshot` or `vms:migrate` or `vms:delete` or `backups:write` or `backups:restore` or `backups:delete` or `storage:write` or `ha:write` or `pools:write` or `network:write` or `firewall:write`",
         "tags": [
           "Tasks"
         ],
@@ -11168,7 +11168,7 @@
       "get": {
         "operationId": "backup-jobs-list",
         "summary": "Backup jobs of a cluster",
-        "description": "The vzdump backup jobs of the cluster, with the backup storages and nodes a job may use. A vDC tenant only sees the jobs of its own pools and the storages and nodes of its vDC.",
+        "description": "The vzdump backup jobs of the cluster, with the backup storages and nodes a job may use. A vDC tenant only sees the jobs of its own pools and the storages and nodes of its vDC.\n\nRequired scope: `backups:read` or `backups:write` or `backups:restore` or `backups:delete`",
         "tags": [
           "Backups"
         ],
@@ -11321,7 +11321,7 @@
       "post": {
         "operationId": "backup-job-create",
         "summary": "Create a backup job",
-        "description": "Creates a scheduled vzdump job. A vDC tenant job must select one of its pools, be pinned to one of its nodes and write to one of its storages.",
+        "description": "Creates a scheduled vzdump job. A vDC tenant job must select one of its pools, be pinned to one of its nodes and write to one of its storages.\n\nRequired scope: `backups:write`",
         "tags": [
           "Backups"
         ],
@@ -11602,7 +11602,7 @@
       "get": {
         "operationId": "backup-job-get",
         "summary": "Backup job",
-        "description": "The Proxmox configuration of the backup job {jobId}.",
+        "description": "The Proxmox configuration of the backup job {jobId}.\n\nRequired scope: `backups:read` or `backups:write` or `backups:restore` or `backups:delete`",
         "tags": [
           "Backups"
         ],
@@ -11728,7 +11728,7 @@
       "put": {
         "operationId": "backup-job-update",
         "summary": "Update a backup job",
-        "description": "Changes the given fields of the backup job {jobId}; absent fields are left as they are. A vDC tenant stays inside its pools, nodes and storages.",
+        "description": "Changes the given fields of the backup job {jobId}; absent fields are left as they are. A vDC tenant stays inside its pools, nodes and storages.\n\nRequired scope: `backups:write`",
         "tags": [
           "Backups"
         ],
@@ -12013,7 +12013,7 @@
       "delete": {
         "operationId": "backup-job-delete",
         "summary": "Delete a backup job",
-        "description": "Removes the backup job {jobId}. The backups it produced stay.",
+        "description": "Removes the backup job {jobId}. The backups it produced stay.\n\nRequired scope: `backups:write`",
         "tags": [
           "Backups"
         ],
@@ -12134,7 +12134,7 @@
       "post": {
         "operationId": "backup-job-run",
         "summary": "Run a backup job now",
-        "description": "Starts the backup job {jobId} with its own options, one vzdump task per node that hosts its guests. `tasks` lists the UPID started on each node. No body.",
+        "description": "Starts the backup job {jobId} with its own options, one vzdump task per node that hosts its guests. `tasks` lists the UPID started on each node. No body.\n\nRequired scope: `backups:write`",
         "tags": [
           "Backups"
         ],
@@ -12308,7 +12308,7 @@
       "post": {
         "operationId": "backup-job-guests",
         "summary": "Add a guest to a backup job",
-        "description": "Adds the guest `vmid` to the selection of the backup job {jobId}: an `all` job drops it from its exclusions, a vmid-list job gets it appended. Pool jobs, jobs pinned to another node and jobs that already select it answer 409 with the reason. Not available to a vDC tenant.",
+        "description": "Adds the guest `vmid` to the selection of the backup job {jobId}: an `all` job drops it from its exclusions, a vmid-list job gets it appended. Pool jobs, jobs pinned to another node and jobs that already select it answer 409 with the reason. Not available to a vDC tenant.\n\nRequired scope: `backups:write`",
         "tags": [
           "Backups"
         ],
@@ -12465,7 +12465,7 @@
       "post": {
         "operationId": "vm-backup-now",
         "summary": "Back up guests now",
-        "description": "Starts a vzdump backup of `vmid` (one id or a comma-separated list) on {node} to `storage`. A vDC tenant token only backs up guests of its own vDC, to one of its writable storages.",
+        "description": "Starts a vzdump backup of `vmid` (one id or a comma-separated list) on {node} to `storage`. A vDC tenant token only backs up guests of its own vDC, to one of its writable storages.\n\nRequired scope: `backups:write`",
         "tags": [
           "Backups"
         ],
@@ -12648,7 +12648,7 @@
       "post": {
         "operationId": "vm-restore",
         "summary": "Restore a guest from a backup",
-        "description": "Restores `archive` (a Proxmox volume id) or `pbsBackup` (PBS coordinates, mapped to the PVE storage of {node} that targets them) as guest `vmid` on {node}. `pbsBackup.pbsId` must also be inside the token perimeter. `force` overwrites the guest holding `vmid`, which also needs vm.delete on it (scope vms:delete). A vDC tenant restores on its own nodes, from and to its own storages.",
+        "description": "Restores `archive` (a Proxmox volume id) or `pbsBackup` (PBS coordinates, mapped to the PVE storage of {node} that targets them) as guest `vmid` on {node}. `pbsBackup.pbsId` must also be inside the token perimeter. `force` overwrites the guest holding `vmid`, which also needs vm.delete on it (scope vms:delete). A vDC tenant restores on its own nodes, from and to its own storages.\n\nRequired scope: `backups:restore`",
         "tags": [
           "Backups"
         ],
@@ -12893,7 +12893,7 @@
       "delete": {
         "operationId": "pbs-backup-delete",
         "summary": "Delete a PBS snapshot",
-        "description": "Deletes one snapshot. {backupId} is `datastore/[namespace/]type/id/epoch` URL-encoded as a single segment (`/` as %2F), as listed by GET /api/v1/pbs/{id}/backups. A protected snapshot is refused by PBS. Irreversible.",
+        "description": "Deletes one snapshot. {backupId} is `datastore/[namespace/]type/id/epoch` URL-encoded as a single segment (`/` as %2F), as listed by GET /api/v1/pbs/{id}/backups. A protected snapshot is refused by PBS. Irreversible.\n\nRequired scope: `backups:delete`",
         "tags": [
           "Backups"
         ],
@@ -13025,7 +13025,7 @@
       "post": {
         "operationId": "pbs-backup-verify",
         "summary": "Verify a PBS snapshot",
-        "description": "Re-verifies the chunks of one snapshot. {backupId} is `datastore/[namespace/]type/id/epoch` URL-encoded as a single segment (`/` as %2F). `data` is the PBS task UPID. No body.",
+        "description": "Re-verifies the chunks of one snapshot. {backupId} is `datastore/[namespace/]type/id/epoch` URL-encoded as a single segment (`/` as %2F). `data` is the PBS task UPID. No body.\n\nRequired scope: `backups:write`",
         "tags": [
           "Backups"
         ],
@@ -13164,7 +13164,7 @@
       "post": {
         "operationId": "pbs-job-prune-create",
         "summary": "Create a PBS prune job",
-        "description": "Creates a prune job on the PBS server {id}. Not available to a vDC tenant token.",
+        "description": "Creates a prune job on the PBS server {id}. Not available to a vDC tenant token.\n\nRequired scope: `backups:write`",
         "tags": [
           "Backups"
         ],
@@ -13342,7 +13342,7 @@
       "put": {
         "operationId": "pbs-job-prune-update",
         "summary": "Update a PBS prune job",
-        "description": "Changes the given properties of the prune job {jobId}; an absent field is left as is, an empty one clears an optional property. Not available to a vDC tenant token.",
+        "description": "Changes the given properties of the prune job {jobId}; an absent field is left as is, an empty one clears an optional property. Not available to a vDC tenant token.\n\nRequired scope: `backups:write`",
         "tags": [
           "Backups"
         ],
@@ -13520,7 +13520,7 @@
       "delete": {
         "operationId": "pbs-job-prune-delete",
         "summary": "Delete a PBS prune job",
-        "description": "Removes the prune job {jobId}. The backups it produced stay. Not available to a vDC tenant token.",
+        "description": "Removes the prune job {jobId}. The backups it produced stay. Not available to a vDC tenant token.\n\nRequired scope: `backups:write`",
         "tags": [
           "Backups"
         ],
@@ -13648,7 +13648,7 @@
       "post": {
         "operationId": "pbs-job-sync-create",
         "summary": "Create a PBS sync job",
-        "description": "Creates a sync job on the PBS server {id}. Not available to a vDC tenant token.",
+        "description": "Creates a sync job on the PBS server {id}. Not available to a vDC tenant token.\n\nRequired scope: `backups:write`",
         "tags": [
           "Backups"
         ],
@@ -13818,7 +13818,7 @@
       "put": {
         "operationId": "pbs-job-sync-update",
         "summary": "Update a PBS sync job",
-        "description": "Changes the given properties of the sync job {jobId}; an absent field is left as is, an empty one clears an optional property. Not available to a vDC tenant token.",
+        "description": "Changes the given properties of the sync job {jobId}; an absent field is left as is, an empty one clears an optional property. Not available to a vDC tenant token.\n\nRequired scope: `backups:write`",
         "tags": [
           "Backups"
         ],
@@ -13990,7 +13990,7 @@
       "delete": {
         "operationId": "pbs-job-sync-delete",
         "summary": "Delete a PBS sync job",
-        "description": "Removes the sync job {jobId}. The backups it produced stay. Not available to a vDC tenant token.",
+        "description": "Removes the sync job {jobId}. The backups it produced stay. Not available to a vDC tenant token.\n\nRequired scope: `backups:write`",
         "tags": [
           "Backups"
         ],
@@ -14118,7 +14118,7 @@
       "post": {
         "operationId": "pbs-job-verify-create",
         "summary": "Create a PBS verify job",
-        "description": "Creates a verify job on the PBS server {id}. Not available to a vDC tenant token.",
+        "description": "Creates a verify job on the PBS server {id}. Not available to a vDC tenant token.\n\nRequired scope: `backups:write`",
         "tags": [
           "Backups"
         ],
@@ -14280,7 +14280,7 @@
       "put": {
         "operationId": "pbs-job-verify-update",
         "summary": "Update a PBS verify job",
-        "description": "Changes the given properties of the verify job {jobId}; an absent field is left as is, an empty one clears an optional property. Not available to a vDC tenant token.",
+        "description": "Changes the given properties of the verify job {jobId}; an absent field is left as is, an empty one clears an optional property. Not available to a vDC tenant token.\n\nRequired scope: `backups:write`",
         "tags": [
           "Backups"
         ],
@@ -14446,7 +14446,7 @@
       "delete": {
         "operationId": "pbs-job-verify-delete",
         "summary": "Delete a PBS verify job",
-        "description": "Removes the verify job {jobId}. The backups it produced stay. Not available to a vDC tenant token.",
+        "description": "Removes the verify job {jobId}. The backups it produced stay. Not available to a vDC tenant token.\n\nRequired scope: `backups:write`",
         "tags": [
           "Backups"
         ],
@@ -14574,7 +14574,7 @@
       "post": {
         "operationId": "pbs-job-tape-create",
         "summary": "Create a PBS tape backup job",
-        "description": "Creates a tape backup job on the PBS server {id}. Not available to a vDC tenant token.",
+        "description": "Creates a tape backup job on the PBS server {id}. Not available to a vDC tenant token.\n\nRequired scope: `backups:write`",
         "tags": [
           "Backups"
         ],
@@ -14750,7 +14750,7 @@
       "put": {
         "operationId": "pbs-job-tape-update",
         "summary": "Update a PBS tape backup job",
-        "description": "Changes the given properties of the tape backup job {jobId}; an absent field is left as is, an empty one clears an optional property. Not available to a vDC tenant token.",
+        "description": "Changes the given properties of the tape backup job {jobId}; an absent field is left as is, an empty one clears an optional property. Not available to a vDC tenant token.\n\nRequired scope: `backups:write`",
         "tags": [
           "Backups"
         ],
@@ -14925,7 +14925,7 @@
       "delete": {
         "operationId": "pbs-job-tape-delete",
         "summary": "Delete a PBS tape backup job",
-        "description": "Removes the tape backup job {jobId}. The backups it produced stay. Not available to a vDC tenant token.",
+        "description": "Removes the tape backup job {jobId}. The backups it produced stay. Not available to a vDC tenant token.\n\nRequired scope: `backups:write`",
         "tags": [
           "Backups"
         ],
@@ -15053,7 +15053,7 @@
       "post": {
         "operationId": "pbs-job-sync-run",
         "summary": "Run a PBS sync job now",
-        "description": "Starts the sync job {jobId} now. `data` is the PBS task UPID. No body. Not available to a vDC tenant token.",
+        "description": "Starts the sync job {jobId} now. `data` is the PBS task UPID. No body. Not available to a vDC tenant token.\n\nRequired scope: `backups:write`",
         "tags": [
           "Backups"
         ],
@@ -15188,7 +15188,7 @@
       "post": {
         "operationId": "pbs-job-verify-run",
         "summary": "Run a PBS verify job now",
-        "description": "Starts the verify job {jobId} now. `data` is the PBS task UPID. No body. Not available to a vDC tenant token.",
+        "description": "Starts the verify job {jobId} now. `data` is the PBS task UPID. No body. Not available to a vDC tenant token.\n\nRequired scope: `backups:write`",
         "tags": [
           "Backups"
         ],
@@ -15323,7 +15323,7 @@
       "post": {
         "operationId": "pbs-job-tape-run",
         "summary": "Run a PBS tape backup job now",
-        "description": "Starts the tape backup job {jobId} now. `data` is the PBS task UPID. No body. Not available to a vDC tenant token.",
+        "description": "Starts the tape backup job {jobId} now. `data` is the PBS task UPID. No body. Not available to a vDC tenant token.\n\nRequired scope: `backups:write`",
         "tags": [
           "Backups"
         ],
@@ -15458,7 +15458,7 @@
       "post": {
         "operationId": "pbs-job-gc-run",
         "summary": "Run a PBS garbage collection now",
-        "description": "Starts a garbage collection of a datastore; {jobId} is `gc-<datastore>`. `data` is the PBS task UPID. No body. Not available to a vDC tenant token.",
+        "description": "Starts a garbage collection of a datastore; {jobId} is `gc-<datastore>`. `data` is the PBS task UPID. No body. Not available to a vDC tenant token.\n\nRequired scope: `backups:write`",
         "tags": [
           "Backups"
         ],
@@ -15593,7 +15593,7 @@
       "post": {
         "operationId": "gfr-probe",
         "summary": "Test the connection to a file restore target",
-        "description": "Reaches the guest that would receive restored files, by guest agent or SSH, and reports its OS plus, for SSH, the host key fingerprint to send back with the job. Answers 200 with `ok: false` when the guest cannot be reached. `target.connId` must be inside the token perimeter and, for a vDC tenant token, the guest inside its vDC (checked by the handler: the field is nested).",
+        "description": "Reaches the guest that would receive restored files, by guest agent or SSH, and reports its OS plus, for SSH, the host key fingerprint to send back with the job. Answers 200 with `ok: false` when the guest cannot be reached. `target.connId` must be inside the token perimeter and, for a vDC tenant token, the guest inside its vDC (checked by the handler: the field is nested).\n\nRequired scope: `backups:restore`",
         "tags": [
           "Backups"
         ],
@@ -15806,7 +15806,7 @@
       "get": {
         "operationId": "gfr-jobs-list",
         "summary": "File restore jobs",
-        "description": "The file restore jobs of the tenant on one connection, newest first; poll it to follow a job.",
+        "description": "The file restore jobs of the tenant on one connection, newest first; poll it to follow a job.\n\nRequired scope: `backups:read` or `backups:write` or `backups:restore` or `backups:delete`",
         "tags": [
           "Backups"
         ],
@@ -16089,7 +16089,7 @@
       "post": {
         "operationId": "gfr-job-create",
         "summary": "Restore files into a guest",
-        "description": "Copies files and folders of a backup (a PVE backup volume or a PBS pxar archive) into a running guest, by guest agent or SSH (host key fingerprint from the probe required). Answers 202 with the job id; the job runs after the response. `target.connId` and the source connection must be inside the token perimeter and, for a vDC tenant token, the target guest inside its vDC (checked by the handler: the fields are nested).",
+        "description": "Copies files and folders of a backup (a PVE backup volume or a PBS pxar archive) into a running guest, by guest agent or SSH (host key fingerprint from the probe required). Answers 202 with the job id; the job runs after the response. `target.connId` and the source connection must be inside the token perimeter and, for a vDC tenant token, the target guest inside its vDC (checked by the handler: the fields are nested).\n\nRequired scope: `backups:restore`",
         "tags": [
           "Backups"
         ],
@@ -16413,7 +16413,7 @@
       "post": {
         "operationId": "gfr-job-cancel",
         "summary": "Cancel a file restore job",
-        "description": "Cancels a queued or running file restore job {id}. The handler resolves the job's guest and checks it against the token. No body.",
+        "description": "Cancels a queued or running file restore job {id}. The handler resolves the job's guest and checks it against the token. No body.\n\nRequired scope: `backups:restore`",
         "tags": [
           "Backups"
         ],
@@ -16664,7 +16664,7 @@
       "get": {
         "operationId": "storage-connection-list",
         "summary": "Storages of a cluster",
-        "description": "The storages of the cluster with their capacity and configuration; a shared storage is one row listing every node that mounts it. Needs connection.view on the cluster (scope storage:write or nodes:read). A vDC tenant only sees the storages of its vDC.",
+        "description": "The storages of the cluster with their capacity and configuration; a shared storage is one row listing every node that mounts it. Needs connection.view on the cluster (scope storage:write or nodes:read). A vDC tenant only sees the storages of its vDC.\n\nRequired scope: `storage:read` or `storage:write`",
         "tags": [
           "Storage"
         ],
@@ -16839,7 +16839,7 @@
       "post": {
         "operationId": "storage-attach-pbs",
         "summary": "Attach a PBS datastore to a cluster",
-        "description": "Adds a `pbs:` storage pointing at a datastore of the PBS connection `pbsConnectionId`, which must also be inside the token perimeter. ProxCenter mints a PBS token scoped to that datastore for the cluster. Answers 201. Not available to a vDC tenant token.",
+        "description": "Adds a `pbs:` storage pointing at a datastore of the PBS connection `pbsConnectionId`, which must also be inside the token perimeter. ProxCenter mints a PBS token scoped to that datastore for the cluster. Answers 201. Not available to a vDC tenant token.\n\nRequired scope: `storage:write`",
         "tags": [
           "Storage"
         ],
@@ -17042,7 +17042,7 @@
       "delete": {
         "operationId": "storage-detach",
         "summary": "Detach a PBS storage from a cluster",
-        "description": "Removes the `pbs:` storage {storage} from the cluster and revokes the PBS token ProxCenter minted for it, unless another cluster still uses that token (`data.token` says which). The backups stay on the PBS. Not available to a vDC tenant token.",
+        "description": "Removes the `pbs:` storage {storage} from the cluster and revokes the PBS token ProxCenter minted for it, unless another cluster still uses that token (`data.token` says which). The backups stay on the PBS. Not available to a vDC tenant token.\n\nRequired scope: `storage:write`",
         "tags": [
           "Storage"
         ],
@@ -17195,7 +17195,7 @@
       "delete": {
         "operationId": "storage-content-delete",
         "summary": "Delete a storage volume",
-        "description": "Deletes the volume {volid} (e.g. `local:iso/debian.iso`) from {storage} on {node}, URL-encoded as a single segment (`/` as %2F). A vDC tenant token only deletes the ISO and import files of its own tenant on its writable storages. Irreversible.",
+        "description": "Deletes the volume {volid} (e.g. `local:iso/debian.iso`) from {storage} on {node}, URL-encoded as a single segment (`/` as %2F). A vDC tenant token only deletes the ISO and import files of its own tenant on its writable storages. Irreversible.\n\nRequired scope: `storage:write`",
         "tags": [
           "Storage"
         ],
@@ -17336,7 +17336,7 @@
       "post": {
         "operationId": "storage-download-url",
         "summary": "Download a file from a URL to a storage",
-        "description": "Has {node} fetch `url` into {storage} as `filename` (an ISO, a container template, an import image). The Proxmox token of the connection needs Datastore.AllocateTemplate on the storage and Sys.AccessNetwork on the node. A token may only name an http or https URL (else 403). Not available to a vDC tenant token: the node would fetch the URL from the provider network.",
+        "description": "Has {node} fetch `url` into {storage} as `filename` (an ISO, a container template, an import image). The Proxmox token of the connection needs Datastore.AllocateTemplate on the storage and Sys.AccessNetwork on the node. A token may only name an http or https URL (else 403). Not available to a vDC tenant token: the node would fetch the URL from the provider network.\n\nRequired scope: `storage:write`",
         "tags": [
           "Storage"
         ],
@@ -17505,7 +17505,7 @@
       "get": {
         "operationId": "aplinfo-list",
         "summary": "Container templates available for download",
-        "description": "The container templates of the Proxmox online repository, as seen by {node}. Needs vm.view on the cluster (scope vms:read).",
+        "description": "The container templates of the Proxmox online repository, as seen by {node}. Needs vm.view on the cluster (scope vms:read).\n\nRequired scope: `storage:read` or `storage:write`",
         "tags": [
           "Storage"
         ],
@@ -17632,7 +17632,7 @@
       "post": {
         "operationId": "aplinfo-download",
         "summary": "Download a container template",
-        "description": "Has {node} download the repository template `template` into `storage`. Not available to a vDC tenant token.",
+        "description": "Has {node} download the repository template `template` into `storage`. Not available to a vDC tenant token.\n\nRequired scope: `storage:write`",
         "tags": [
           "Storage"
         ],
@@ -17792,7 +17792,7 @@
       "get": {
         "operationId": "ha-resource-get",
         "summary": "HA configuration of a guest",
-        "description": "The HA resource {sid} as Proxmox stores it; `data` is null when the guest is not HA-managed. {sid} is `vm:<vmid>` or `ct:<vmid>`, sent as is (a percent-encoded `:` is refused).",
+        "description": "The HA resource {sid} as Proxmox stores it; `data` is null when the guest is not HA-managed. {sid} is `vm:<vmid>` or `ct:<vmid>`, sent as is (a percent-encoded `:` is refused).\n\nRequired scope: `nodes:read` or `ha:write`",
         "tags": [
           "HA"
         ],
@@ -17924,7 +17924,7 @@
       "post": {
         "operationId": "ha-resource-upsert",
         "summary": "Put a guest under HA, or update its HA configuration",
-        "description": "Creates the HA resource {sid} when the guest is not HA-managed yet, otherwise updates it with the given fields; `message` says which. {sid} is `vm:<vmid>` or `ct:<vmid>`, sent as is (a percent-encoded `:` is refused). Only from the provider tenant. Not available to a vDC tenant token.",
+        "description": "Creates the HA resource {sid} when the guest is not HA-managed yet, otherwise updates it with the given fields; `message` says which. {sid} is `vm:<vmid>` or `ct:<vmid>`, sent as is (a percent-encoded `:` is refused). Only from the provider tenant. Not available to a vDC tenant token.\n\nRequired scope: `ha:write`",
         "tags": [
           "HA"
         ],
@@ -18091,7 +18091,7 @@
       "delete": {
         "operationId": "ha-resource-delete",
         "summary": "Take a guest out of HA",
-        "description": "Removes the HA resource {sid}; the guest itself is left as it is. {sid} is `vm:<vmid>` or `ct:<vmid>`, sent as is (a percent-encoded `:` is refused). Only from the provider tenant. Not available to a vDC tenant token.",
+        "description": "Removes the HA resource {sid}; the guest itself is left as it is. {sid} is `vm:<vmid>` or `ct:<vmid>`, sent as is (a percent-encoded `:` is refused). Only from the provider tenant. Not available to a vDC tenant token.\n\nRequired scope: `ha:write`",
         "tags": [
           "HA"
         ],
@@ -18220,7 +18220,7 @@
       "get": {
         "operationId": "ha-groups-list",
         "summary": "HA groups of a cluster",
-        "description": "The HA groups of the cluster (Proxmox VE 8; version 9 replaced them with node affinity rules).",
+        "description": "The HA groups of the cluster (Proxmox VE 8; version 9 replaced them with node affinity rules).\n\nRequired scope: `nodes:read` or `ha:write`",
         "tags": [
           "HA"
         ],
@@ -18343,7 +18343,7 @@
       "post": {
         "operationId": "ha-group-create",
         "summary": "Create an HA group",
-        "description": "Creates the HA group `group` over `nodes` (Proxmox VE 8). Not available to a vDC tenant token.",
+        "description": "Creates the HA group `group` over `nodes` (Proxmox VE 8). Not available to a vDC tenant token.\n\nRequired scope: `ha:write`",
         "tags": [
           "HA"
         ],
@@ -18495,7 +18495,7 @@
       "get": {
         "operationId": "ha-group-get",
         "summary": "HA group",
-        "description": "The HA group {groupId}; 404 when it does not exist.",
+        "description": "The HA group {groupId}; 404 when it does not exist.\n\nRequired scope: `nodes:read` or `ha:write`",
         "tags": [
           "HA"
         ],
@@ -18624,7 +18624,7 @@
       "put": {
         "operationId": "ha-group-update",
         "summary": "Update an HA group",
-        "description": "Changes the given properties of the HA group {groupId}; `delete` lists the properties to clear. Not available to a vDC tenant token.",
+        "description": "Changes the given properties of the HA group {groupId}; `delete` lists the properties to clear. Not available to a vDC tenant token.\n\nRequired scope: `ha:write`",
         "tags": [
           "HA"
         ],
@@ -18780,7 +18780,7 @@
       "delete": {
         "operationId": "ha-group-delete",
         "summary": "Delete an HA group",
-        "description": "Removes the HA group {groupId}. Not available to a vDC tenant token.",
+        "description": "Removes the HA group {groupId}. Not available to a vDC tenant token.\n\nRequired scope: `ha:write`",
         "tags": [
           "HA"
         ],
@@ -18909,7 +18909,7 @@
       "get": {
         "operationId": "ha-affinity-list",
         "summary": "HA affinity rules of a cluster",
-        "description": "The HA rules of the cluster (Proxmox VE 9 and later). On an older cluster `data` is empty and `unsupported` is true.",
+        "description": "The HA rules of the cluster (Proxmox VE 9 and later). On an older cluster `data` is empty and `unsupported` is true.\n\nRequired scope: `nodes:read` or `ha:write`",
         "tags": [
           "HA"
         ],
@@ -19036,7 +19036,7 @@
       "post": {
         "operationId": "ha-affinity-create",
         "summary": "Create an HA affinity rule",
-        "description": "Creates the HA rule `rule`: a node-affinity rule keeps `resources` on `nodes`, a resource-affinity rule keeps them together (positive) or apart (negative). Proxmox VE 9 and later. Not available to a vDC tenant token.",
+        "description": "Creates the HA rule `rule`: a node-affinity rule keeps `resources` on `nodes`, a resource-affinity rule keeps them together (positive) or apart (negative). Proxmox VE 9 and later. Not available to a vDC tenant token.\n\nRequired scope: `ha:write`",
         "tags": [
           "HA"
         ],
@@ -19209,7 +19209,7 @@
       "get": {
         "operationId": "ha-affinity-get",
         "summary": "HA affinity rule",
-        "description": "The HA rule {ruleId}; 404 when it does not exist.",
+        "description": "The HA rule {ruleId}; 404 when it does not exist.\n\nRequired scope: `nodes:read` or `ha:write`",
         "tags": [
           "HA"
         ],
@@ -19338,7 +19338,7 @@
       "put": {
         "operationId": "ha-affinity-update",
         "summary": "Update an HA affinity rule",
-        "description": "Changes the given properties of the HA rule {ruleId}; `delete` lists the properties to clear, `digest` guards against a concurrent change. Not available to a vDC tenant token.",
+        "description": "Changes the given properties of the HA rule {ruleId}; `delete` lists the properties to clear, `digest` guards against a concurrent change. Not available to a vDC tenant token.\n\nRequired scope: `ha:write`",
         "tags": [
           "HA"
         ],
@@ -19508,7 +19508,7 @@
       "delete": {
         "operationId": "ha-affinity-delete",
         "summary": "Delete an HA affinity rule",
-        "description": "Removes the HA rule {ruleId}. Not available to a vDC tenant token.",
+        "description": "Removes the HA rule {ruleId}. Not available to a vDC tenant token.\n\nRequired scope: `ha:write`",
         "tags": [
           "HA"
         ],
@@ -19637,7 +19637,7 @@
       "get": {
         "operationId": "ha-auto-get",
         "summary": "Auto-HA settings of a cluster",
-        "description": "The ProxCenter Auto-HA settings of the cluster: when enabled, every new guest is put under HA with these defaults.",
+        "description": "The ProxCenter Auto-HA settings of the cluster: when enabled, every new guest is put under HA with these defaults.\n\nRequired scope: `nodes:read` or `ha:write`",
         "tags": [
           "HA"
         ],
@@ -19786,7 +19786,7 @@
       "put": {
         "operationId": "ha-auto-update",
         "summary": "Update the Auto-HA settings of a cluster",
-        "description": "Changes the given Auto-HA settings; absent or invalid fields keep their value, `max_restart` and `max_relocate` are clamped to 0-10. Needs node.manage on this connection. Not available to a vDC tenant token.",
+        "description": "Changes the given Auto-HA settings; absent or invalid fields keep their value, `max_restart` and `max_relocate` are clamped to 0-10. Needs node.manage on this connection. Not available to a vDC tenant token.\n\nRequired scope: `ha:write`",
         "tags": [
           "HA"
         ],
@@ -19977,7 +19977,7 @@
       "post": {
         "operationId": "ha-auto-sync",
         "summary": "Apply Auto-HA to the existing guests now",
-        "description": "Puts every guest of the cluster that is not HA-managed yet (templates excepted) under HA with the Auto-HA defaults. 400 when Auto-HA is disabled. No body. Needs node.manage on this connection. Not available to a vDC tenant token.",
+        "description": "Puts every guest of the cluster that is not HA-managed yet (templates excepted) under HA with the Auto-HA defaults. 400 when Auto-HA is disabled. No body. Needs node.manage on this connection. Not available to a vDC tenant token.\n\nRequired scope: `ha:write`",
         "tags": [
           "HA"
         ],
@@ -20112,7 +20112,7 @@
       "get": {
         "operationId": "pools-list",
         "summary": "Resource pools of a cluster",
-        "description": "The Proxmox resource pools of the cluster with their comment.",
+        "description": "The Proxmox resource pools of the cluster with their comment.\n\nRequired scope: `nodes:read` or `pools:write`",
         "tags": [
           "Pools"
         ],
@@ -20248,7 +20248,7 @@
       "post": {
         "operationId": "pool-create",
         "summary": "Create a resource pool",
-        "description": "Creates the pool `poolid`. `poolid` starts with a letter and nests up to three levels with `/` (Proxmox VE 8.1 and later). Answers 201. Not available to a vDC tenant token.",
+        "description": "Creates the pool `poolid`. `poolid` starts with a letter and nests up to three levels with `/` (Proxmox VE 8.1 and later). Answers 201. Not available to a vDC tenant token.\n\nRequired scope: `pools:write`",
         "tags": [
           "Pools"
         ],
@@ -20398,7 +20398,7 @@
       "put": {
         "operationId": "pool-update",
         "summary": "Update the comment of a resource pool",
-        "description": "Sets the comment of the pool `poolid` (named in the body); an empty comment clears it. Not available to a vDC tenant token.",
+        "description": "Sets the comment of the pool `poolid` (named in the body); an empty comment clears it. Not available to a vDC tenant token.\n\nRequired scope: `pools:write`",
         "tags": [
           "Pools"
         ],
@@ -20550,7 +20550,7 @@
       "delete": {
         "operationId": "pool-delete",
         "summary": "Delete a resource pool",
-        "description": "Deletes the pool named by the `poolid` query parameter. Proxmox refuses a pool that still has members; a pool backing a vDC answers 409 `POOL_OWNED_BY_VDC`. No body. Not available to a vDC tenant token.",
+        "description": "Deletes the pool named by the `poolid` query parameter. Proxmox refuses a pool that still has members; a pool backing a vDC answers 409 `POOL_OWNED_BY_VDC`. No body. Not available to a vDC tenant token.\n\nRequired scope: `pools:write`",
         "tags": [
           "Pools"
         ],
@@ -20683,7 +20683,7 @@
       "get": {
         "operationId": "node-network-list",
         "summary": "Network interfaces of a node",
-        "description": "The network interfaces of the node as Proxmox lists them. Needs node.network on the node (scope network:write).",
+        "description": "The network interfaces of the node as Proxmox lists them. Needs node.network on the node (scope network:write).\n\nRequired scope: `nodes:read` or `network:write`",
         "tags": [
           "Network"
         ],
@@ -20815,7 +20815,7 @@
       "post": {
         "operationId": "node-network-create",
         "summary": "Create a network interface on a node",
-        "description": "Creates the interface `iface` of type `type` (bridge, bond, vlan, OVS objects); empty fields are not sent. The change is staged in Proxmox's pending network configuration until it is applied (PUT .../network). Not available to a vDC tenant token.",
+        "description": "Creates the interface `iface` of type `type` (bridge, bond, vlan, OVS objects); empty fields are not sent. The change is staged in Proxmox's pending network configuration until it is applied (PUT .../network). Not available to a vDC tenant token.\n\nRequired scope: `network:write`",
         "tags": [
           "Network"
         ],
@@ -21055,7 +21055,7 @@
       "put": {
         "operationId": "node-network-apply",
         "summary": "Apply the pending network configuration of a node",
-        "description": "Reloads the node network with its pending configuration (ifreload). Answers `success` once Proxmox accepted the reload; the Proxmox task it starts is not returned. No body. Not available to a vDC tenant token.",
+        "description": "Reloads the node network with its pending configuration (ifreload). Answers `success` once Proxmox accepted the reload; the Proxmox task it starts is not returned. No body. Not available to a vDC tenant token.\n\nRequired scope: `network:write`",
         "tags": [
           "Network"
         ],
@@ -21181,7 +21181,7 @@
       "delete": {
         "operationId": "node-network-revert",
         "summary": "Revert the pending network changes of a node",
-        "description": "Drops every pending network change of the node; the running configuration is left as it is. Not available to a vDC tenant token.",
+        "description": "Drops every pending network change of the node; the running configuration is left as it is. Not available to a vDC tenant token.\n\nRequired scope: `network:write`",
         "tags": [
           "Network"
         ],
@@ -21309,7 +21309,7 @@
       "get": {
         "operationId": "node-iface-get",
         "summary": "Network interface of a node",
-        "description": "The interface {iface} as Proxmox returns it. Needs node.network on the node (scope network:write).",
+        "description": "The interface {iface} as Proxmox returns it. Needs node.network on the node (scope network:write).\n\nRequired scope: `nodes:read` or `network:write`",
         "tags": [
           "Network"
         ],
@@ -21447,7 +21447,7 @@
       "put": {
         "operationId": "node-iface-update",
         "summary": "Update a network interface of a node",
-        "description": "Changes the interface {iface}; `type` is required and selects the type-specific fields sent. An `address` in CIDR notation is sent as `cidr` (same for `address6`). The change is staged in Proxmox's pending network configuration until it is applied (PUT .../network). Not available to a vDC tenant token.",
+        "description": "Changes the interface {iface}; `type` is required and selects the type-specific fields sent. An `address` in CIDR notation is sent as `cidr` (same for `address6`). The change is staged in Proxmox's pending network configuration until it is applied (PUT .../network). Not available to a vDC tenant token.\n\nRequired scope: `network:write`",
         "tags": [
           "Network"
         ],
@@ -21688,7 +21688,7 @@
       "delete": {
         "operationId": "node-iface-delete",
         "summary": "Delete a network interface of a node",
-        "description": "Removes the interface {iface}. The change is staged in Proxmox's pending network configuration until it is applied (PUT .../network). Not available to a vDC tenant token.",
+        "description": "Removes the interface {iface}. The change is staged in Proxmox's pending network configuration until it is applied (PUT .../network). Not available to a vDC tenant token.\n\nRequired scope: `network:write`",
         "tags": [
           "Network"
         ],
@@ -21825,7 +21825,7 @@
       "post": {
         "operationId": "sdn-apply",
         "summary": "Apply the pending SDN configuration of a cluster",
-        "description": "Applies the pending SDN zones, VNets and subnets on every node of the cluster. `data.upid` is the Proxmox task UPID. No body. Not available to a vDC tenant token.",
+        "description": "Applies the pending SDN zones, VNets and subnets on every node of the cluster. `data.upid` is the Proxmox task UPID. No body. Not available to a vDC tenant token.\n\nRequired scope: `network:write`",
         "tags": [
           "Network"
         ],
@@ -21953,7 +21953,7 @@
       "get": {
         "operationId": "vdc-vnets-list",
         "summary": "Networks of a vDC",
-        "description": "The VNets of the vDC with their subnet and IPAM usage. Needs sdn.vnet.view (scope network:write). The vDC must belong to the token's tenant (404 otherwise, as for a session of another tenant) and sit on a connection inside the token perimeter.",
+        "description": "The VNets of the vDC with their subnet and IPAM usage. Needs sdn.vnet.view (scope network:write). The vDC must belong to the token's tenant (404 otherwise, as for a session of another tenant) and sit on a connection inside the token perimeter.\n\nRequired scope: `nodes:read` or `network:write`",
         "tags": [
           "Network"
         ],
@@ -22181,7 +22181,7 @@
       "post": {
         "operationId": "vdc-vnet-create",
         "summary": "Create a network in a vDC",
-        "description": "Creates a VXLAN (default) or VLAN network named `displayName`, with a subnet or none (pure L2), and applies the SDN configuration. The vDC quota and VNI or VLAN policy apply. Answers 201. The vDC must belong to the token's tenant (404 otherwise, as for a session of another tenant) and sit on a connection inside the token perimeter.",
+        "description": "Creates a VXLAN (default) or VLAN network named `displayName`, with a subnet or none (pure L2), and applies the SDN configuration. The vDC quota and VNI or VLAN policy apply. Answers 201. The vDC must belong to the token's tenant (404 otherwise, as for a session of another tenant) and sit on a connection inside the token perimeter.\n\nRequired scope: `network:write`",
         "tags": [
           "Network"
         ],
@@ -22481,7 +22481,7 @@
       "get": {
         "operationId": "vdc-vnet-get",
         "summary": "Network of a vDC",
-        "description": "The VNet whose display name is {pveName}; 404 when the vDC has none. Needs sdn.vnet.view (scope network:write). The vDC must belong to the token's tenant (404 otherwise, as for a session of another tenant) and sit on a connection inside the token perimeter.",
+        "description": "The VNet whose display name is {pveName}; 404 when the vDC has none. Needs sdn.vnet.view (scope network:write). The vDC must belong to the token's tenant (404 otherwise, as for a session of another tenant) and sit on a connection inside the token perimeter.\n\nRequired scope: `nodes:read` or `network:write`",
         "tags": [
           "Network"
         ],
@@ -22704,7 +22704,7 @@
       "put": {
         "operationId": "vdc-vnet-update",
         "summary": "Update a network of a vDC",
-        "description": "Changes the description, the firewall flag or the DNS servers of the VNet {pveName} (its display name). A VNet of a stretched tenant network is the provider's: 403. The vDC must belong to the token's tenant (404 otherwise, as for a session of another tenant) and sit on a connection inside the token perimeter.",
+        "description": "Changes the description, the firewall flag or the DNS servers of the VNet {pveName} (its display name). A VNet of a stretched tenant network is the provider's: 403. The vDC must belong to the token's tenant (404 otherwise, as for a session of another tenant) and sit on a connection inside the token perimeter.\n\nRequired scope: `network:write`",
         "tags": [
           "Network"
         ],
@@ -22965,7 +22965,7 @@
       "delete": {
         "operationId": "vdc-vnet-delete",
         "summary": "Delete a network of a vDC",
-        "description": "Deletes the VNet {pveName} (its display name) and applies the SDN configuration. 409 while guest NICs still use it (`attachmentCount`); a VNet of a stretched tenant network is the provider's: 403. The vDC must belong to the token's tenant (404 otherwise, as for a session of another tenant) and sit on a connection inside the token perimeter.",
+        "description": "Deletes the VNet {pveName} (its display name) and applies the SDN configuration. 409 while guest NICs still use it (`attachmentCount`); a VNet of a stretched tenant network is the provider's: 403. The vDC must belong to the token's tenant (404 otherwise, as for a session of another tenant) and sit on a connection inside the token perimeter.\n\nRequired scope: `network:write`",
         "tags": [
           "Network"
         ],
@@ -23078,7 +23078,7 @@
       "get": {
         "operationId": "fw-aliases-list",
         "summary": "Firewall aliases of a cluster",
-        "description": "The cluster firewall aliases (name, CIDR, comment). Needs node.view on the connection (scope nodes:read or firewall:write). Not available to a vDC tenant token.",
+        "description": "The cluster firewall aliases (name, CIDR, comment). Needs node.view on the connection (scope nodes:read or firewall:write). Not available to a vDC tenant token.\n\nRequired scope: `nodes:read` or `firewall:write`",
         "tags": [
           "Firewall"
         ],
@@ -23208,7 +23208,7 @@
       "post": {
         "operationId": "fw-alias-create",
         "summary": "Create a firewall alias",
-        "description": "Creates the cluster alias `name` for `cidr`. Answers 201. Needs node.manage on the connection. Not available to a vDC tenant token.",
+        "description": "Creates the cluster alias `name` for `cidr`. Answers 201. Needs node.manage on the connection. Not available to a vDC tenant token.\n\nRequired scope: `firewall:write`",
         "tags": [
           "Firewall"
         ],
@@ -23358,7 +23358,7 @@
       "put": {
         "operationId": "fw-alias-update",
         "summary": "Update a firewall alias",
-        "description": "Changes the CIDR and comment of the cluster alias {name}. Needs node.manage on the connection. Not available to a vDC tenant token.",
+        "description": "Changes the CIDR and comment of the cluster alias {name}. Needs node.manage on the connection. Not available to a vDC tenant token.\n\nRequired scope: `firewall:write`",
         "tags": [
           "Firewall"
         ],
@@ -23511,7 +23511,7 @@
       "delete": {
         "operationId": "fw-alias-delete",
         "summary": "Delete a firewall alias",
-        "description": "Removes the cluster alias {name}. Needs node.manage on the connection. Not available to a vDC tenant token.",
+        "description": "Removes the cluster alias {name}. Needs node.manage on the connection. Not available to a vDC tenant token.\n\nRequired scope: `firewall:write`",
         "tags": [
           "Firewall"
         ],
@@ -23639,7 +23639,7 @@
       "get": {
         "operationId": "fw-cluster-get",
         "summary": "Cluster firewall options or rules",
-        "description": "The cluster firewall options, or its rules with `type=rules`. Needs node.view on the connection (scope nodes:read or firewall:write). Not available to a vDC tenant token.",
+        "description": "The cluster firewall options, or its rules with `type=rules`. Needs node.view on the connection (scope nodes:read or firewall:write). Not available to a vDC tenant token.\n\nRequired scope: `nodes:read` or `firewall:write`",
         "tags": [
           "Firewall"
         ],
@@ -23900,7 +23900,7 @@
       "put": {
         "operationId": "fw-cluster-options-update",
         "summary": "Update the cluster firewall options",
-        "description": "Changes the cluster firewall options; absent fields keep their value. Needs node.manage on the connection. Not available to a vDC tenant token.",
+        "description": "Changes the cluster firewall options; absent fields keep their value. Needs node.manage on the connection. Not available to a vDC tenant token.\n\nRequired scope: `firewall:write`",
         "tags": [
           "Firewall"
         ],
@@ -24086,7 +24086,7 @@
       "post": {
         "operationId": "fw-cluster-rule-add",
         "summary": "Add a cluster firewall rule",
-        "description": "Same as POST .../cluster/{connectionId}/rules. Answers 201. Needs node.manage on the connection. Not available to a vDC tenant token.",
+        "description": "Same as POST .../cluster/{connectionId}/rules. Answers 201. Needs node.manage on the connection. Not available to a vDC tenant token.\n\nRequired scope: `firewall:write`",
         "tags": [
           "Firewall"
         ],
@@ -24299,7 +24299,7 @@
       "post": {
         "operationId": "fw-cluster-rule-create",
         "summary": "Create a cluster firewall rule",
-        "description": "Adds a rule to the cluster firewall, at position `pos` when given. Answers 201. Needs node.manage on the connection. Not available to a vDC tenant token.",
+        "description": "Adds a rule to the cluster firewall, at position `pos` when given. Answers 201. Needs node.manage on the connection. Not available to a vDC tenant token.\n\nRequired scope: `firewall:write`",
         "tags": [
           "Firewall"
         ],
@@ -24512,7 +24512,7 @@
       "put": {
         "operationId": "fw-cluster-rule-update",
         "summary": "Update or move a cluster firewall rule",
-        "description": "Changes the cluster rule at position {pos}. `moveto` moves the rule to that position; an empty optional field clears it. Needs node.manage on the connection. Not available to a vDC tenant token.",
+        "description": "Changes the cluster rule at position {pos}. `moveto` moves the rule to that position; an empty optional field clears it. Needs node.manage on the connection. Not available to a vDC tenant token.\n\nRequired scope: `firewall:write`",
         "tags": [
           "Firewall"
         ],
@@ -24725,7 +24725,7 @@
       "delete": {
         "operationId": "fw-cluster-rule-delete",
         "summary": "Delete a cluster firewall rule",
-        "description": "Removes the cluster rule at position {pos}. Needs node.manage on the connection. Not available to a vDC tenant token.",
+        "description": "Removes the cluster rule at position {pos}. Needs node.manage on the connection. Not available to a vDC tenant token.\n\nRequired scope: `firewall:write`",
         "tags": [
           "Firewall"
         ],
@@ -24858,7 +24858,7 @@
       "get": {
         "operationId": "fw-groups-list",
         "summary": "Firewall security groups of a cluster",
-        "description": "The cluster security groups with their rules. Needs node.view on the connection (scope nodes:read or firewall:write). Not available to a vDC tenant token.",
+        "description": "The cluster security groups with their rules. Needs node.view on the connection (scope nodes:read or firewall:write). Not available to a vDC tenant token.\n\nRequired scope: `nodes:read` or `firewall:write`",
         "tags": [
           "Firewall"
         ],
@@ -25064,7 +25064,7 @@
       "post": {
         "operationId": "fw-group-create",
         "summary": "Create a firewall security group",
-        "description": "Creates the cluster security group `group`. Answers 201. Needs node.manage on the connection. Not available to a vDC tenant token.",
+        "description": "Creates the cluster security group `group`. Answers 201. Needs node.manage on the connection. Not available to a vDC tenant token.\n\nRequired scope: `firewall:write`",
         "tags": [
           "Firewall"
         ],
@@ -25209,7 +25209,7 @@
       "delete": {
         "operationId": "fw-group-delete",
         "summary": "Delete a firewall security group",
-        "description": "Removes the security group {groupName}. Needs node.manage on the connection. Not available to a vDC tenant token.",
+        "description": "Removes the security group {groupName}. Needs node.manage on the connection. Not available to a vDC tenant token.\n\nRequired scope: `firewall:write`",
         "tags": [
           "Firewall"
         ],
@@ -25337,7 +25337,7 @@
       "post": {
         "operationId": "fw-group-rule-create",
         "summary": "Create a security group rule",
-        "description": "Adds a rule to the security group {groupName}, at position `pos` when given. Answers 201. Needs node.manage on the connection. Not available to a vDC tenant token.",
+        "description": "Adds a rule to the security group {groupName}, at position `pos` when given. Answers 201. Needs node.manage on the connection. Not available to a vDC tenant token.\n\nRequired scope: `firewall:write`",
         "tags": [
           "Firewall"
         ],
@@ -25559,7 +25559,7 @@
       "put": {
         "operationId": "fw-group-rule-update",
         "summary": "Update or move a security group rule",
-        "description": "Changes the rule at position {pos} of the security group {groupName}. `moveto` moves the rule to that position; an empty optional field clears it. Needs node.manage on the connection. Not available to a vDC tenant token.",
+        "description": "Changes the rule at position {pos} of the security group {groupName}. `moveto` moves the rule to that position; an empty optional field clears it. Needs node.manage on the connection. Not available to a vDC tenant token.\n\nRequired scope: `firewall:write`",
         "tags": [
           "Firewall"
         ],
@@ -25776,7 +25776,7 @@
       "delete": {
         "operationId": "fw-group-rule-delete",
         "summary": "Delete a security group rule",
-        "description": "Removes the rule at position {pos} of the security group {groupName}. Needs node.manage on the connection. Not available to a vDC tenant token.",
+        "description": "Removes the rule at position {pos} of the security group {groupName}. Needs node.manage on the connection. Not available to a vDC tenant token.\n\nRequired scope: `firewall:write`",
         "tags": [
           "Firewall"
         ],
@@ -25913,7 +25913,7 @@
       "get": {
         "operationId": "fw-ipsets-list",
         "summary": "Firewall IP sets of a cluster",
-        "description": "The cluster IP sets with their entries. Needs node.view on the connection (scope nodes:read or firewall:write). Not available to a vDC tenant token.",
+        "description": "The cluster IP sets with their entries. Needs node.view on the connection (scope nodes:read or firewall:write). Not available to a vDC tenant token.\n\nRequired scope: `nodes:read` or `firewall:write`",
         "tags": [
           "Firewall"
         ],
@@ -26057,7 +26057,7 @@
       "post": {
         "operationId": "fw-ipset-create",
         "summary": "Create a firewall IP set",
-        "description": "Creates the cluster IP set `name`, empty. Answers 201. Needs node.manage on the connection. Not available to a vDC tenant token.",
+        "description": "Creates the cluster IP set `name`, empty. Answers 201. Needs node.manage on the connection. Not available to a vDC tenant token.\n\nRequired scope: `firewall:write`",
         "tags": [
           "Firewall"
         ],
@@ -26202,7 +26202,7 @@
       "delete": {
         "operationId": "fw-ipset-delete",
         "summary": "Delete a firewall IP set",
-        "description": "Removes the IP set {ipsetName}. Needs node.manage on the connection. Not available to a vDC tenant token.",
+        "description": "Removes the IP set {ipsetName}. Needs node.manage on the connection. Not available to a vDC tenant token.\n\nRequired scope: `firewall:write`",
         "tags": [
           "Firewall"
         ],
@@ -26330,7 +26330,7 @@
       "post": {
         "operationId": "fw-ipset-entry-create",
         "summary": "Add an IP set entry",
-        "description": "Adds `cidr` to the IP set {ipsetName}. Answers 201. Needs node.manage on the connection. Not available to a vDC tenant token.",
+        "description": "Adds `cidr` to the IP set {ipsetName}. Answers 201. Needs node.manage on the connection. Not available to a vDC tenant token.\n\nRequired scope: `firewall:write`",
         "tags": [
           "Firewall"
         ],
@@ -26489,7 +26489,7 @@
       "delete": {
         "operationId": "fw-ipset-entry-delete",
         "summary": "Remove an IP set entry",
-        "description": "Removes the entry {cidr} from the IP set {ipsetName}. {cidr} is URL-encoded, its slash included (10.0.0.0%2F24). Needs node.manage on the connection. Not available to a vDC tenant token.",
+        "description": "Removes the entry {cidr} from the IP set {ipsetName}. {cidr} is URL-encoded, its slash included (10.0.0.0%2F24). Needs node.manage on the connection. Not available to a vDC tenant token.\n\nRequired scope: `firewall:write`",
         "tags": [
           "Firewall"
         ],
@@ -26626,7 +26626,7 @@
       "get": {
         "operationId": "fw-node-get",
         "summary": "Node firewall options or rules",
-        "description": "The firewall options of the node, or its rules with `type=rules`. Needs node.view on the connection (scope nodes:read or firewall:write). Not available to a vDC tenant token.",
+        "description": "The firewall options of the node, or its rules with `type=rules`. Needs node.view on the connection (scope nodes:read or firewall:write). Not available to a vDC tenant token.\n\nRequired scope: `nodes:read` or `firewall:write`",
         "tags": [
           "Firewall"
         ],
@@ -26896,7 +26896,7 @@
       "put": {
         "operationId": "fw-node-options-update",
         "summary": "Update the node firewall options",
-        "description": "Changes the firewall options of the node; absent fields keep their value. Needs node.manage on the connection. Not available to a vDC tenant token.",
+        "description": "Changes the firewall options of the node; absent fields keep their value. Needs node.manage on the connection. Not available to a vDC tenant token.\n\nRequired scope: `firewall:write`",
         "tags": [
           "Firewall"
         ],
@@ -27091,7 +27091,7 @@
       "post": {
         "operationId": "fw-node-rule-add",
         "summary": "Add a node firewall rule",
-        "description": "Same as POST .../nodes/{connectionId}/{node}/rules. Answers 201. Needs node.manage on the connection. Not available to a vDC tenant token.",
+        "description": "Same as POST .../nodes/{connectionId}/{node}/rules. Answers 201. Needs node.manage on the connection. Not available to a vDC tenant token.\n\nRequired scope: `firewall:write`",
         "tags": [
           "Firewall"
         ],
@@ -27313,7 +27313,7 @@
       "post": {
         "operationId": "fw-node-rule-create",
         "summary": "Create a node firewall rule",
-        "description": "Adds a rule to the firewall of the node, at position `pos` when given. Answers 201. Needs node.manage on the connection. Not available to a vDC tenant token.",
+        "description": "Adds a rule to the firewall of the node, at position `pos` when given. Answers 201. Needs node.manage on the connection. Not available to a vDC tenant token.\n\nRequired scope: `firewall:write`",
         "tags": [
           "Firewall"
         ],
@@ -27535,7 +27535,7 @@
       "put": {
         "operationId": "fw-node-rule-update",
         "summary": "Update or move a node firewall rule",
-        "description": "Changes the node rule at position {pos}. `moveto` moves the rule to that position; an empty optional field clears it. Needs node.manage on the connection. Not available to a vDC tenant token.",
+        "description": "Changes the node rule at position {pos}. `moveto` moves the rule to that position; an empty optional field clears it. Needs node.manage on the connection. Not available to a vDC tenant token.\n\nRequired scope: `firewall:write`",
         "tags": [
           "Firewall"
         ],
@@ -27757,7 +27757,7 @@
       "delete": {
         "operationId": "fw-node-rule-delete",
         "summary": "Delete a node firewall rule",
-        "description": "Removes the node rule at position {pos}. Needs node.manage on the connection. Not available to a vDC tenant token.",
+        "description": "Removes the node rule at position {pos}. Needs node.manage on the connection. Not available to a vDC tenant token.\n\nRequired scope: `firewall:write`",
         "tags": [
           "Firewall"
         ],
@@ -27899,7 +27899,7 @@
       "post": {
         "operationId": "fw-microseg-base-generate",
         "summary": "Generate the base micro-segmentation security groups",
-        "description": "Creates one base security group (sg-base-*) per network alias (net-*), and with `create_gateways` the missing gateway aliases (gw-*). `dry_run` only returns the plan. Runs on the orchestrator only (no direct Proxmox fallback). Needs node.manage on the connection. Not available to a vDC tenant token.",
+        "description": "Creates one base security group (sg-base-*) per network alias (net-*), and with `create_gateways` the missing gateway aliases (gw-*). `dry_run` only returns the plan. Runs on the orchestrator only (no direct Proxmox fallback). Needs node.manage on the connection. Not available to a vDC tenant token.\n\nRequired scope: `firewall:write`",
         "tags": [
           "Firewall"
         ],
@@ -28089,7 +28089,7 @@
       "post": {
         "operationId": "fw-vm-isolate",
         "summary": "Isolate a guest",
-        "description": "Applies micro-segmentation to the guest: enables its firewall, sets DROP policies, applies the base security groups of its networks (creating a missing one) and `additional_sgs`, and enables the firewall on its NICs, as the flags ask. {vmType} is qemu or lxc. Runs on the orchestrator only (no direct Proxmox fallback). Needs node.manage on the connection. A vDC tenant token reaches the guests of its own vDC pools only. `apply_base_sgs` is refused to a vDC tenant token (it may create cluster-level groups and aliases): 403.",
+        "description": "Applies micro-segmentation to the guest: enables its firewall, sets DROP policies, applies the base security groups of its networks (creating a missing one) and `additional_sgs`, and enables the firewall on its NICs, as the flags ask. {vmType} is qemu or lxc. Runs on the orchestrator only (no direct Proxmox fallback). Needs node.manage on the connection. A vDC tenant token reaches the guests of its own vDC pools only. `apply_base_sgs` is refused to a vDC tenant token (it may create cluster-level groups and aliases): 403.\n\nRequired scope: `firewall:write`",
         "tags": [
           "Firewall"
         ],
@@ -28295,7 +28295,7 @@
       "get": {
         "operationId": "fw-vm-get",
         "summary": "Guest firewall options or rules",
-        "description": "The firewall options of the guest, or its rules with `type=rules`. {vmType} is qemu or lxc. Needs node.view on the connection (scope nodes:read or firewall:write). A vDC tenant token reaches the guests of its own vDC pools only.",
+        "description": "The firewall options of the guest, or its rules with `type=rules`. {vmType} is qemu or lxc. Needs node.view on the connection (scope nodes:read or firewall:write). A vDC tenant token reaches the guests of its own vDC pools only.\n\nRequired scope: `nodes:read` or `firewall:write`",
         "tags": [
           "Firewall"
         ],
@@ -28583,7 +28583,7 @@
       "post": {
         "operationId": "fw-vm-rule-create",
         "summary": "Create a guest firewall rule",
-        "description": "Adds a rule to the firewall of the guest, at position `pos` when given. Answers 201. Needs node.manage on the connection. A vDC tenant token reaches the guests of its own vDC pools only.",
+        "description": "Adds a rule to the firewall of the guest, at position `pos` when given. Answers 201. Needs node.manage on the connection. A vDC tenant token reaches the guests of its own vDC pools only.\n\nRequired scope: `firewall:write`",
         "tags": [
           "Firewall"
         ],
@@ -28821,7 +28821,7 @@
       "put": {
         "operationId": "fw-vm-options-update",
         "summary": "Update the guest firewall options",
-        "description": "Changes the firewall options of the guest; absent fields keep their value. Needs node.manage on the connection. A vDC tenant token reaches the guests of its own vDC pools only.",
+        "description": "Changes the firewall options of the guest; absent fields keep their value. Needs node.manage on the connection. A vDC tenant token reaches the guests of its own vDC pools only.\n\nRequired scope: `firewall:write`",
         "tags": [
           "Firewall"
         ],
@@ -29036,7 +29036,7 @@
       "put": {
         "operationId": "fw-vm-rule-update",
         "summary": "Update or move a guest firewall rule",
-        "description": "Changes the guest rule at position {pos}. `moveto` moves the rule to that position; an empty optional field clears it. Needs node.manage on the connection. A vDC tenant token reaches the guests of its own vDC pools only.",
+        "description": "Changes the guest rule at position {pos}. `moveto` moves the rule to that position; an empty optional field clears it. Needs node.manage on the connection. A vDC tenant token reaches the guests of its own vDC pools only.\n\nRequired scope: `firewall:write`",
         "tags": [
           "Firewall"
         ],
@@ -29276,7 +29276,7 @@
       "delete": {
         "operationId": "fw-vm-rule-delete",
         "summary": "Delete a guest firewall rule",
-        "description": "Removes the guest rule at position {pos}. Needs node.manage on the connection. A vDC tenant token reaches the guests of its own vDC pools only.",
+        "description": "Removes the guest rule at position {pos}. Needs node.manage on the connection. A vDC tenant token reaches the guests of its own vDC pools only.\n\nRequired scope: `firewall:write`",
         "tags": [
           "Firewall"
         ],
@@ -29436,7 +29436,7 @@
       "put": {
         "operationId": "fw-vm-nic-firewall-update",
         "summary": "Toggle the firewall on every NIC of a guest",
-        "description": "Rewrites `firewall=1` (or 0) on every network interface of the guest configuration, the second level of the guest firewall. Needs node.manage on the connection. A vDC tenant token reaches the guests of its own vDC pools only.",
+        "description": "Rewrites `firewall=1` (or 0) on every network interface of the guest configuration, the second level of the guest firewall. Needs node.manage on the connection. A vDC tenant token reaches the guests of its own vDC pools only.\n\nRequired scope: `firewall:write`",
         "tags": [
           "Firewall"
         ],

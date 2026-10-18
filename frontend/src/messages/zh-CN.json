@@ -3522,9 +3522,7 @@
         "hint": "从此页面发送的请求会转到此 ProxCenter 实例。打开身份验证面板并粘贴 pxc_ 令牌，即可使用您自己的数据试用这些端点。",
         "backToTokens": "返回 API 令牌",
         "thisInstance": "此 ProxCenter 实例",
-        "writeWarning": "写操作会作用于您的真实基础设施。\"Try it\" 会使用您粘贴的令牌发送真实请求:从本页面发送的 POST、PUT 或 DELETE 会启动、修改或删除真实资源。",
-        "requiredScope": "所需范围",
-        "requiredScopesAnyOf": "所需范围(任选其一)"
+        "writeWarning": "写操作会作用于您的真实基础设施。\"Try it\" 会使用您粘贴的令牌发送真实请求:从本页面发送的 POST、PUT 或 DELETE 会启动、修改或删除真实资源。"
       },
       "columns": {
         "prefix": "前缀",

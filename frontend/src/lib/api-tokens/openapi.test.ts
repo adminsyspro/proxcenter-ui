@@ -30,6 +30,19 @@ describe('buildOpenApiDocument', () => {
     }
   })
 
+  // Scalar renders no custom extension, so x-required-scopes alone would stay
+  // invisible in the reference: the description carries it too.
+  it('ends every operation description with the scopes it requires', () => {
+    for (const entry of PUBLIC_API_ALLOWLIST) {
+      const op = doc.paths[entry.pattern][entry.method.toLowerCase()]
+      const line = entry.requiredScopes.length
+        ? `Required scope: ${entry.requiredScopes.map(scope => `\`${scope}\``).join(' or ')}`
+        : 'Required scope: any valid token'
+      expect(op.description, entry.id).toBe(entry.description ? `${entry.description}\n\n${line}` : line)
+    }
+    expect(doc.paths['/api/v1/public/health'].get.description).toMatch(/Required scope: any valid token$/)
+  })
+
   it('declares the dynamic segment as a required path parameter', () => {
     const params = doc.paths['/api/v1/pbs/{id}/backups'].get.parameters
     expect(params).toEqual(expect.arrayContaining([

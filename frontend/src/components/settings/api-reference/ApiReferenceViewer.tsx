@@ -46,35 +46,6 @@ export function withLogo(document: OpenApiDocument, logoUrl: string, alt: string
   return { ...document, info: { ...info, description: `${img}${description}` } }
 }
 
-type RequiredScopeLabels = { one: string; anyOf: string }
-
-const OPERATION_METHODS = new Set(['get', 'put', 'post', 'delete', 'options', 'head', 'patch', 'trace'])
-
-/**
- * Shows each operation's `x-required-scopes` (any one of them is enough) at
- * the end of its description: Scalar renders no custom extension, and the
- * scope is the first thing an operator needs to know before minting a token.
- * Like withLogo, only the in-memory copy is patched.
- */
-export function withRequiredScopes(document: OpenApiDocument, labels: RequiredScopeLabels): OpenApiDocument {
-  const paths = document.paths as Record<string, Record<string, any>> | undefined
-  if (!paths || typeof paths !== 'object') return document
-  const patchedPaths: Record<string, Record<string, any>> = {}
-  for (const [path, item] of Object.entries(paths)) {
-    const patchedItem: Record<string, any> = { ...item }
-    for (const [method, operation] of Object.entries(item ?? {})) {
-      const scopes = operation?.['x-required-scopes']
-      if (!OPERATION_METHODS.has(method) || !Array.isArray(scopes) || scopes.length === 0) continue
-      const label = scopes.length === 1 ? labels.one : labels.anyOf
-      const line = `**${label}:** ${scopes.map((scope: string) => `\`${scope}\``).join(', ')}`
-      const description = typeof operation.description === 'string' && operation.description ? `${operation.description}\n\n` : ''
-      patchedItem[method] = { ...operation, description: `${description}${line}` }
-    }
-    patchedPaths[path] = patchedItem
-  }
-  return { ...document, paths: patchedPaths }
-}
-
 /**
  * Embeds the Scalar API reference for the public API, reads and writes.
  * Try-it sends real requests: a write operation fired from here acts on the
@@ -124,8 +95,6 @@ export default function ApiReferenceViewer() {
   }, [])
 
   const serverDescription = t('thisInstance')
-  const requiredScope = t('requiredScope')
-  const requiredScopesAnyOf = t('requiredScopesAnyOf')
   const mode = theme.palette.mode
   const logoUrl = branding.logoUrl || DEFAULT_LOGO[mode]
   const logoAlt = branding.appName || 'ProxCenter'
@@ -135,14 +104,7 @@ export default function ApiReferenceViewer() {
   // the reference on each parent re-render.
   const configuration = useMemo(
     () => ({
-      ...(document
-        ? {
-            content: withRequiredScopes(withLogo(document, logoUrl, logoAlt), {
-              one: requiredScope,
-              anyOf: requiredScopesAnyOf,
-            }),
-          }
-        : { url: PUBLIC_API_SPEC_URL }),
+      ...(document ? { content: withLogo(document, logoUrl, logoAlt) } : { url: PUBLIC_API_SPEC_URL }),
       // Try-it targets the instance the operator is logged into, with the
       // token they just minted. That is the whole point of an in-product
       // reference over a static page hosted elsewhere, and it replaces the
@@ -170,7 +132,7 @@ export default function ApiReferenceViewer() {
       documentDownloadType: 'json' as const,
       showSidebar: true,
     }),
-    [document, logoUrl, logoAlt, mode, serverDescription, requiredScope, requiredScopesAnyOf],
+    [document, logoUrl, logoAlt, mode, serverDescription],
   )
 
   const ready = height > 0 && (document !== null || loadFailed)

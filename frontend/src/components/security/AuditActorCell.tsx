@@ -26,6 +26,11 @@ export function auditActorText(row: AuditActorRow, labels: ActorLabels): string 
   return row.user_email || labels.system
 }
 
+/** DataGrid valueGetter: sort and filter on the text the cell shows. */
+export function auditActorValueGetter(labels: ActorLabels) {
+  return (_value: unknown, row: AuditActorRow) => auditActorText(row, labels)
+}
+
 export default function AuditActorCell({ row }: { row: AuditActorRow }) {
   const t = useTranslations()
   const text = auditActorText(row, {

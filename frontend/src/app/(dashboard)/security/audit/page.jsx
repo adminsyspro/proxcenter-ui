@@ -26,7 +26,7 @@ import ChartContainer from '@/components/ChartContainer'
 
 import { getDateLocale } from '@/lib/i18n/date'
 import { usePageTitle } from '@/contexts/PageTitleContext'
-import AuditActorCell, { auditActorText } from '@/components/security/AuditActorCell'
+import AuditActorCell, { auditActorText, auditActorValueGetter } from '@/components/security/AuditActorCell'
 
 /* --------------------------------
    Constants
@@ -401,7 +401,12 @@ return () => clearTimeout(timer)
         field: 'user_email',
         headerName: t('navigation.users'),
         width: 250,
-        // A token-written row names the token (key icon, name and prefix).
+        // A token-written row names the token (key icon, name and prefix);
+        // sorting and filtering read that same text.
+        valueGetter: auditActorValueGetter({
+          deletedToken: t('settings.apiTokens.deletedToken'),
+          system: t('audit.categories.system'),
+        }),
         renderCell: params => <AuditActorCell row={params.row} />,
       },
       {

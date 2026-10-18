@@ -3518,9 +3518,7 @@
         "hint": "Requests sent from this page go to this ProxCenter instance. Open the Authentication panel and paste a pxc_ token to try the endpoints against your own data.",
         "backToTokens": "Back to API tokens",
         "thisInstance": "This ProxCenter instance",
-        "writeWarning": "Write operations act on your real infrastructure. \"Try it\" sends real requests with the token you paste: a POST, PUT or DELETE sent from this page starts, changes or deletes actual resources.",
-        "requiredScope": "Required scope",
-        "requiredScopesAnyOf": "Required scope, any one of"
+        "writeWarning": "Write operations act on your real infrastructure. \"Try it\" sends real requests with the token you paste: a POST, PUT or DELETE sent from this page starts, changes or deletes actual resources."
       },
       "columns": {
         "prefix": "Prefix",

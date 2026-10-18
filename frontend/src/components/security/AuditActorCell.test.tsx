@@ -3,7 +3,7 @@ import { cleanup, screen } from '@testing-library/react'
 
 import { renderWithProviders } from '@/__tests__/setup/renderWithProviders'
 import en from '@/messages/en.json'
-import AuditActorCell, { auditActorText } from './AuditActorCell'
+import AuditActorCell, { auditActorText, auditActorValueGetter } from './AuditActorCell'
 
 // A display prefix, not a secret (the first characters of a token).
 const PREFIX = 'pxc_Ab12Cd34'
@@ -44,5 +44,21 @@ describe('auditActorText', () => {
     expect(auditActorText({ api_token_id: 't', api_token_name: null, api_token_prefix: null }, LABELS)).toBe(LABELS.deletedToken)
     expect(auditActorText({ user_email: 'admin@example.com' }, LABELS)).toBe('admin@example.com')
     expect(auditActorText({ user_email: null }, LABELS)).toBe(LABELS.system)
+  })
+})
+
+describe('auditActorValueGetter', () => {
+  // The grid sorts and filters on the value, not on the rendered cell: a
+  // token row must sort by its token name, not by its empty email.
+  it('hands the grid the same text the cell shows', () => {
+    const getValue = auditActorValueGetter(LABELS)
+    const rows = [
+      { user_email: 'zoe@example.com' },
+      { user_email: null, api_token_id: 't', api_token_name: 'ansible', api_token_prefix: PREFIX },
+      { user_email: 'bob@example.com' },
+    ]
+    expect(rows.map(row => getValue(undefined, row)).sort()).toEqual([
+      'ansible (pxc_Ab12Cd34)', 'bob@example.com', 'zoe@example.com',
+    ])
   })
 })

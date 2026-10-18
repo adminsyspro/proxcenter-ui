@@ -280,6 +280,11 @@ export default function CreateTokenDialog({ open, onClose, onCreated }: Props) {
     return grantableResult.list.includes(scope) ? '' : t('dialog.scopeNotGrantable')
   }
 
+  const hasWriteScope = scopes.some(isWriteScope)
+  // A write scope checked against an answer that is not (yet) a success for
+  // the current tenant and perimeter: the request would likely be refused.
+  const writeCheckPending = hasWriteScope && (grantableResult?.key !== grantableKey || !grantableResult.list)
+
   async function handleCreate() {
     setSaving(true)
     setError('')
@@ -293,7 +298,9 @@ export default function CreateTokenDialog({ open, onClose, onCreated }: Props) {
           scopes,
           connectionIds: resolvedConnectionIds.length ? resolvedConnectionIds : null,
           expiresInDays: expiresInDays(),
-          writeRateLimitPerMin: writeRateLimit,
+          // Only a write token has a write bucket; the server default
+          // applies otherwise.
+          ...(hasWriteScope ? { writeRateLimitPerMin: writeRateLimit } : {}),
           ...(tenantsAvailable && tenantId ? { tenantId } : {}),
         }),
       })
@@ -383,7 +390,7 @@ export default function CreateTokenDialog({ open, onClose, onCreated }: Props) {
                 <AccordionSummary expandIcon={<i className='ri-arrow-down-s-line' />}>
                   <Stack direction='row' alignItems='center' spacing={1}>
                     <Typography variant='body2' color='text.secondary' sx={{ fontWeight: 600 }}>{t('dialog.writeScopes')}</Typography>
-                    {scopes.some(isWriteScope) && (
+                    {hasWriteScope && (
                       <Chip size='small' color='warning' label={scopes.filter(isWriteScope).length} />
                     )}
                   </Stack>
@@ -514,7 +521,7 @@ export default function CreateTokenDialog({ open, onClose, onCreated }: Props) {
             <Button onClick={handleClose}>{t('dialog.cancel')}</Button>
             <Button
               variant='contained'
-              disabled={saving || !name.trim() || scopes.length === 0}
+              disabled={saving || !name.trim() || scopes.length === 0 || writeCheckPending}
               onClick={handleCreate}
             >
               {t('dialog.create')}

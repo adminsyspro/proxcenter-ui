@@ -39,7 +39,7 @@ describe('settings.apiTokens i18n parity across the 6 served locales', () => {
       // rate limit, the reference warning and the audit actor of a gone token.
       'dialog.readScopes', 'dialog.writeScopes', 'dialog.writeWarning', 'dialog.scopeNotGrantable',
       'dialog.scopesLoading', 'dialog.grantableError', 'dialog.writeRateLimit', 'dialog.writeRateLimitHelp',
-      'reference.writeWarning', 'reference.requiredScope', 'reference.requiredScopesAnyOf', 'deletedToken',
+      'reference.writeWarning', 'deletedToken',
     ]) {
       expect(reference).toContain(key)
     }

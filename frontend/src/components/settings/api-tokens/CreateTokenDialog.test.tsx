@@ -240,12 +240,74 @@ describe('CreateTokenDialog write scopes', () => {
     expect(expiration).toHaveTextContent(dialogT.expiration30)
   })
 
-  it('sends writeRateLimitPerMin, 60 by default', async () => {
+  it('sends writeRateLimitPerMin, 60 by default, only with a write scope', async () => {
+    const dialog = await openDialog()
+    await userEvent.type(within(dialog).getByLabelText(new RegExp(`^${dialogT.name}`)), 'ci')
+    await expandWrite(dialog)
+    await waitFor(() => expect(checkboxOf(dialog, 'vms:power')).toBeEnabled())
+    await userEvent.click(checkboxOf(dialog, 'vms:power'))
+    await userEvent.click(within(dialog).getByRole('button', { name: new RegExp(`^${dialogT.create}$`) }))
+    await waitFor(() => expect(postBody().writeRateLimitPerMin).toBe(60))
+  })
+
+  it('leaves writeRateLimitPerMin out of a read-only token (server default)', async () => {
     const dialog = await openDialog()
     await userEvent.type(within(dialog).getByLabelText(new RegExp(`^${dialogT.name}`)), 'ci')
     await userEvent.click(checkboxOf(dialog, 'vms:read'))
     await userEvent.click(within(dialog).getByRole('button', { name: new RegExp(`^${dialogT.create}$`) }))
-    await waitFor(() => expect(postBody().writeRateLimitPerMin).toBe(60))
+    await waitFor(() => expect(postBody()).not.toHaveProperty('writeRateLimitPerMin'))
+  })
+
+  it('disables Create while a write scope is checked and the grantable answer for the new perimeter is pending', async () => {
+    // The first answer comes at once; the one for tenant-a is held back.
+    let release: () => void = () => {}
+    const held = new Promise<void>(resolve => { release = resolve })
+    const answer = vi.mocked(fetch).getMockImplementation()!
+    vi.mocked(fetch).mockImplementation(async (url: any, init?: any) => {
+      if (String(url).includes('tenantId=tenant-a')) await held
+      return answer(url, init)
+    })
+    grantableFor = () => [...READ_GRANTABLE, ...WRITE_SCOPE_IDS]
+
+    const dialog = await openDialog()
+    const create = () => within(dialog).getByRole('button', { name: new RegExp(`^${dialogT.create}$`) })
+    await userEvent.type(within(dialog).getByLabelText(new RegExp(`^${dialogT.name}`)), 'ci')
+    await expandWrite(dialog)
+    await waitFor(() => expect(checkboxOf(dialog, 'vms:power')).toBeEnabled())
+    await userEvent.click(checkboxOf(dialog, 'vms:power'))
+    expect(create()).toBeEnabled()
+
+    fireEvent.mouseDown(within(dialog).getAllByRole('combobox')[1])
+    await userEvent.click(await screen.findByRole('option', { name: 'Tenant A' }))
+    await waitFor(() => expect(grantableCalls().some(url => url.includes('tenantId=tenant-a'))).toBe(true))
+    expect(checkboxOf(dialog, 'vms:power')).toBeChecked()
+    expect(create()).toBeDisabled()
+
+    release()
+    await waitFor(() => expect(create()).toBeEnabled())
+  })
+
+  it('drops the write scope when the check fails, so Create stays usable for the read scopes', async () => {
+    let fail = false
+    const answer = vi.mocked(fetch).getMockImplementation()!
+    vi.mocked(fetch).mockImplementation(async (url: any, init?: any) => {
+      if (String(url).startsWith('/api/v1/settings/api-tokens/grantable-scopes') && fail) {
+        return new Response('{}', { status: 500 })
+      }
+      return answer(url, init)
+    })
+    const dialog = await openDialog()
+    await userEvent.type(within(dialog).getByLabelText(new RegExp(`^${dialogT.name}`)), 'ci')
+    await expandWrite(dialog)
+    await waitFor(() => expect(checkboxOf(dialog, 'vms:power')).toBeEnabled())
+    await userEvent.click(checkboxOf(dialog, 'vms:power'))
+    await userEvent.click(checkboxOf(dialog, 'vms:read'))
+    fail = true
+    fireEvent.mouseDown(within(dialog).getAllByRole('combobox')[1])
+    await userEvent.click(await screen.findByRole('option', { name: 'Tenant A' }))
+    // A failed check unchecks the write scope; the read scope keeps Create usable.
+    await waitFor(() => expect(checkboxOf(dialog, 'vms:power')).not.toBeChecked())
+    expect(within(dialog).getByRole('button', { name: new RegExp(`^${dialogT.create}$`) })).toBeEnabled()
   })
 
   it('sends the writes-per-minute value the user typed', async () => {

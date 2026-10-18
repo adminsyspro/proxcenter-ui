@@ -3518,9 +3518,7 @@
         "hint": "Les requêtes envoyées depuis cette page sont adressées à cette instance ProxCenter. Ouvrez le panneau Authentification et collez un jeton pxc_ pour tester les points de terminaison avec vos propres données.",
         "backToTokens": "Retour aux jetons API",
         "thisInstance": "Cette instance ProxCenter",
-        "writeWarning": "Les opérations d'écriture agissent sur votre infrastructure réelle. « Try it » envoie de vraies requêtes avec le jeton que vous collez : un POST, PUT ou DELETE envoyé depuis cette page démarre, modifie ou supprime de vraies ressources.",
-        "requiredScope": "Scope requis",
-        "requiredScopesAnyOf": "Scope requis, l'un de"
+        "writeWarning": "Les opérations d'écriture agissent sur votre infrastructure réelle. « Try it » envoie de vraies requêtes avec le jeton que vous collez : un POST, PUT ou DELETE envoyé depuis cette page démarre, modifie ou supprime de vraies ressources."
       },
       "columns": {
         "prefix": "Préfixe",

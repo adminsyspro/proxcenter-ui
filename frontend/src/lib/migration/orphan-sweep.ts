@@ -35,6 +35,8 @@ export interface OrphanSweepResult {
   owned: number
   foreign: number
   total: number
+  /** Jobs this sweep may have failed (a row that moved on meanwhile was left alone). */
+  jobIds: string[]
 }
 
 /**
@@ -55,7 +57,10 @@ export async function sweepOrphanedMigrationJobs(deps: {
   now?: Date
 }): Promise<OrphanSweepResult> {
   const { prisma, instanceId, now = new Date() } = deps
-  const nonTerminal = { notIn: [...TERMINAL_STATUSES] }
+  // A "queued" job of a bulk migration (roadmap#53) has not started: nothing
+  // of it can be running, and the batch scheduler starts it after the
+  // restart. Only started, non-terminal jobs are orphans.
+  const nonTerminal = { notIn: [...TERMINAL_STATUSES, "queued"] }
   // currentStep tracks status everywhere else (pipelines, cancel route).
   const failure = {
     status: "failed",
@@ -64,20 +69,32 @@ export async function sweepOrphanedMigrationJobs(deps: {
     completedAt: now,
   }
 
+  const ownedWhere = { ownerInstanceId: instanceId, status: nonTerminal }
+  const foreignWhere = {
+    // Spelled out rather than `{ not: instanceId }`: on a nullable column
+    // that comparison drops the NULL rows, which are exactly the legacy ones.
+    OR: [{ ownerInstanceId: null }, { ownerInstanceId: { not: instanceId } }],
+    status: nonTerminal,
+    updatedAt: { lt: new Date(now.getTime() - FOREIGN_ORPHAN_MAX_AGE_MS) },
+  }
+  // The ids are read first so the caller can clean up after the jobs it
+  // failed (what a warm run left on its source); the update keeps the same
+  // predicate, so a row that moved on in between is left alone.
+  const [ownedIds, foreignIds] = await Promise.all([
+    prisma.migrationJob.findMany({ where: ownedWhere, select: { id: true } }),
+    prisma.migrationJob.findMany({ where: foreignWhere, select: { id: true } }),
+  ])
   const owned = await prisma.migrationJob.updateMany({
-    where: { ownerInstanceId: instanceId, status: nonTerminal },
+    where: { ...ownedWhere, id: { in: ownedIds.map(j => j.id) } },
     data: failure,
   })
   const foreign = await prisma.migrationJob.updateMany({
-    where: {
-      // Spelled out rather than `{ not: instanceId }`: on a nullable column
-      // that comparison drops the NULL rows, which are exactly the legacy ones.
-      OR: [{ ownerInstanceId: null }, { ownerInstanceId: { not: instanceId } }],
-      status: nonTerminal,
-      updatedAt: { lt: new Date(now.getTime() - FOREIGN_ORPHAN_MAX_AGE_MS) },
-    },
+    where: { ...foreignWhere, id: { in: foreignIds.map(j => j.id) } },
     data: failure,
   })
 
-  return { owned: owned.count, foreign: foreign.count, total: owned.count + foreign.count }
+  return {
+    owned: owned.count, foreign: foreign.count, total: owned.count + foreign.count,
+    jobIds: [...ownedIds, ...foreignIds].map(j => j.id),
+  }
 }

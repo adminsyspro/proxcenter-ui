@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db/prisma"
 import { decryptSecret } from "@/lib/crypto/secret"
 import { getCurrentTenantId } from "@/lib/tenant"
+import { backgroundTenantId } from "@/lib/tenant/background"
 import { DEFAULT_TENANT_ID } from "@/lib/tenant/constants"
 
 export type PveConn = {
@@ -107,8 +108,11 @@ export async function getConnectionById(id: string, tenantId?: string): Promise<
     throw new Error('Default connection is not configured. Create a connection in SQLite (POST /api/v1/connections).')
   }
 
-  const explicitTenant = tenantId !== undefined
-  const resolvedTenantId = tenantId ?? await getCurrentTenantId()
+  // A job started by the batch scheduler outside any request carries its
+  // batch's tenant (roadmap#53): as trusted as an explicit one, no session.
+  const background = tenantId === undefined ? backgroundTenantId() : undefined
+  const explicitTenant = tenantId !== undefined || background !== undefined
+  const resolvedTenantId = tenantId ?? background ?? await getCurrentTenantId()
 
   const cacheKey = `${resolvedTenantId}:${id}`
   const cached = connectionCache.get(cacheKey)

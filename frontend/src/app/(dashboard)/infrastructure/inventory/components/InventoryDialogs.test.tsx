@@ -349,7 +349,8 @@ function makeProps(overrides: Partial<InventoryDialogsProps> = {}): InventoryDia
     setBulkMigLogsExpanded: vi.fn(),
     bulkMigLogsFilter: null,
     setBulkMigLogsFilter: vi.fn(),
-    bulkMigConfigRef: { current: null } as React.MutableRefObject<any>,
+    bulkMigBatch: null,
+    setBulkMigBatch: vi.fn(),
     bulkMigHostInfo: null,
 
     // Upgrade
@@ -363,6 +364,10 @@ function makeProps(overrides: Partial<InventoryDialogsProps> = {}): InventoryDia
     setMigHardware: vi.fn(),
     migNics: [],
     setMigNics: vi.fn(),
+    migBulkConcurrency: 1,
+    setMigBulkConcurrency: vi.fn(),
+    migCopyVmk: '',
+    setMigCopyVmk: vi.fn(),
 
     ...overrides,
   }
@@ -1525,15 +1530,14 @@ describe('migration dialog options', () => {
     expect(bodies[0].convertDisksToQcow2).toBe(false)
   })
 
-  it('bulk dialog forwards convertDisksToQcow2 and records it for queued jobs', async () => {
+  it('bulk dialog forwards convertDisksToQcow2 in the batch request', async () => {
     const bodies: any[] = []
     server.use(
-      http.post('*/api/v1/migrations', async ({ request }) => {
+      http.post('*/api/v1/migrations/batches', async ({ request }) => {
         bodies.push(await request.json())
-        return HttpResponse.json({ data: { jobId: 'job-bulk-1' } })
+        return HttpResponse.json({ data: { batchId: 'batch-1', jobIds: ['job-bulk-1'] } })
       }),
     )
-    const bulkMigConfigRef = { current: null } as React.MutableRefObject<any>
     renderWithProviders(
       <InventoryDialogs
         {...makeProps({
@@ -1552,17 +1556,15 @@ describe('migration dialog options', () => {
           migConvertToQcow2: true,
           migNetworkBridge: 'vmbr0',
           migPveConnections: [{ id: CONN_ID, name: 'pve-lab', sshEnabled: true }],
-          bulkMigConfigRef,
         })}
       />,
     )
     expect(screen.getByText(QCOW2_LABEL)).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /migrate to proxmox/i }))
     await waitFor(() => expect(bodies).toHaveLength(1))
+    // One shared option for the whole batch: the server copies it into every job.
     expect(bodies[0].convertDisksToQcow2).toBe(true)
-    // The queued-job poller in InventoryDetails restarts jobs from this ref,
-    // so the option must survive there too.
-    expect(bulkMigConfigRef.current?.convertDisksToQcow2).toBe(true)
+    expect(bodies[0].vms).toEqual([{ sourceVmId: '42', sourceVmName: 'web01', targetNode: NODE_NAME, diskBytes: expect.any(Number) }])
   })
 
   // The Hyper-V VHDX pre-fill moved into the reset-on-open hook (a blind reset
@@ -1612,5 +1614,486 @@ describe('requestedMigrationType', () => {
     ['vmware', 'sshfs_boot', 'sshfs_boot'], ['xcpng', 'warm', 'warm'], [undefined, 'cold', 'cold'],
   ])('source %s, choice %s -> %s', (host, choice, want) => {
     expect(requestedMigrationType(host as string | undefined, choice)).toBe(want)
+  })
+})
+
+// roadmap#53: a batch of dozens of VMs stays readable in the bulk dialog.
+describe('bulk migration dialog with a large selection', () => {
+  const vms = Array.from({ length: 25 }, (_, i) => ({
+    vmid: `vm-${i + 1}`,
+    name: `bulk-${String(i + 1).padStart(2, '0')}`,
+    status: i < 23 ? 'poweredOn' : 'poweredOff',
+  }))
+  const host = { hostType: 'vcenter', connectionId: 'src', vms }
+  const base = { bulkMigOpen: true, bulkMigHostInfo: host, bulkMigSelected: new Set(vms.map(v => v.vmid)) }
+
+  it('folds the selected VMs behind a summary, pages them, and shows VMware poweredOn as running', async () => {
+    renderWithProviders(<InventoryDialogs {...makeProps(base)} />)
+    const summary = await screen.findByTestId('bulk-selected-summary')
+    expect(summary).toHaveTextContent('25 VMs · 23 running, 2 stopped')
+    expect(screen.queryByTestId('bulk-selected-dot-vm-1')).toBeNull()
+
+    fireEvent.click(summary)
+    const dots = screen.getAllByTestId(/^bulk-selected-dot-/)
+    expect(dots).toHaveLength(10)
+    expect(dots[0]).toHaveAttribute('data-power', 'on')
+    fireEvent.click(screen.getByRole('button', { name: /next page/i }))
+    fireEvent.click(screen.getByRole('button', { name: /next page/i }))
+    expect(screen.getAllByTestId(/^bulk-selected-dot-/).map(d => d.getAttribute('data-power'))).toEqual(['on', 'on', 'on', 'off', 'off'])
+  })
+
+  it('names five running VMs in the cold warning and counts the rest', async () => {
+    renderWithProviders(<InventoryDialogs {...makeProps({ ...base, migType: 'cold' })} />)
+    expect(await screen.findByText('bulk-05')).toBeInTheDocument()
+    expect(screen.queryByText('bulk-06')).toBeNull()
+    expect(screen.getByText('and 18 more')).toBeInTheDocument()
+  })
+
+  it('filters the logs with a list instead of one chip per VM past five VMs', async () => {
+    const bulkMigJobs = Array.from({ length: 8 }, (_, i) => ({ vmid: `vm-${i + 1}`, name: `job-${i + 1}`, jobId: `j${i + 1}`, status: 'transferring', progress: 10 }))
+    const setBulkMigLogsFilter = vi.fn()
+    renderWithProviders(<InventoryDialogs {...makeProps({ ...base, bulkMigJobs, bulkMigLogsExpanded: true, setBulkMigLogsFilter })} />)
+    const filter = await screen.findByTestId('bulk-logs-vm-filter')
+    expect(screen.queryByRole('button', { name: 'job-3' })).toBeNull()
+    fireEvent.change(filter, { target: { value: 'j3' } })
+    expect(setBulkMigLogsFilter).toHaveBeenCalledWith('j3')
+  })
+
+  it('lists failed then running jobs first, ten per page, with the in-flight counts', async () => {
+    const statuses = ['completed', 'completed', 'queued', 'queued', 'queued', 'queued', 'queued', 'queued', 'queued', 'transferring', 'failed', 'queued']
+    const bulkMigJobs = statuses.map((status, i) => ({ vmid: `vm-${i + 1}`, name: `job-${i + 1}`, jobId: `j${i + 1}`, status, progress: status === 'completed' ? 100 : 0 }))
+    renderWithProviders(<InventoryDialogs {...makeProps({ ...base, bulkMigJobs, bulkMigProgressExpanded: true })} />)
+    expect(await screen.findByTestId('bulk-job-counts')).toHaveTextContent('1 running, 8 queued')
+    const order = (names: string[]) => names.map(n => screen.queryByText(n) ? n : null)
+    // job-11 (failed) and job-10 (running) on page one; the two completed ones on page two
+    expect(order(['job-11', 'job-10', 'job-3'])).toEqual(['job-11', 'job-10', 'job-3'])
+    expect(screen.queryByText('job-1')).toBeNull()
+    fireEvent.click(within(screen.getByTestId('bulk-job-pagination')).getByRole('button', { name: /next page/i }))
+    expect(screen.getByText('job-1')).toBeInTheDocument()
+    expect(screen.getByText('job-2')).toBeInTheDocument()
+  })
+})
+
+// roadmap#53 part B: the queue of a bulk migration lives on the server.
+describe('bulk migration batch on the server', () => {
+  const THICK = { storage: 'san-lvm', type: 'lvm', content: 'images', total: 1099511627776, avail: 879609302220 }
+  const host = {
+    hostType: 'esxi',
+    connectionId: 'esxi-1',
+    connectionName: 'esxi-lab',
+    vms: [
+      { vmid: '1', name: 'a', status: 'poweredOff' },
+      { vmid: '2', name: 'b', status: 'poweredOff' },
+      { vmid: '3', name: '', status: 'poweredOff' },
+    ],
+  }
+  const launchProps = (overrides: Partial<InventoryDialogsProps> = {}) => makeProps({
+    bulkMigOpen: true,
+    bulkMigHostInfo: host,
+    bulkMigSelected: new Set(['1', '2', '3']),
+    migTargetConn: CONN_ID,
+    migTargetNode: '__auto__',
+    migNodeOptions: [
+      { connId: CONN_ID, node: 'pve1', status: 'online' },
+      { connId: CONN_ID, node: 'pve2', status: 'online' },
+      { connId: CONN_ID, node: 'pve3', status: 'offline' },
+    ],
+    migTargetStorage: 'san-lvm',
+    migStorages: [THICK],
+    migNetworkBridge: 'vmbr0',
+    migPveConnections: [{ id: CONN_ID, name: 'pve-lab', sshEnabled: true }],
+    migBulkConcurrency: 2,
+    ...overrides,
+  })
+
+  it('launches the whole selection in one request, nodes round-robined, and follows the batch', async () => {
+    const bodies: any[] = []
+    let perVmPosts = 0
+    server.use(
+      http.post('*/api/v1/migrations', () => { perVmPosts++; return HttpResponse.json({ data: { jobId: 'nope' } }) }),
+      http.post('*/api/v1/migrations/batches', async ({ request }) => {
+        bodies.push(await request.json())
+        return HttpResponse.json({ data: { batchId: 'b1', jobIds: ['j1', 'j2', 'j3'] } })
+      }),
+    )
+    const setBulkMigBatch = vi.fn()
+    const setBulkMigJobs = vi.fn()
+    renderWithProviders(<InventoryDialogs {...launchProps({ setBulkMigBatch, setBulkMigJobs })} />)
+    fireEvent.click(screen.getByRole('button', { name: /migrate to proxmox/i }))
+    await waitFor(() => expect(setBulkMigBatch).toHaveBeenCalled())
+    expect(bodies).toHaveLength(1)
+    expect(perVmPosts).toBe(0)
+    expect(bodies[0]).toMatchObject({ sourceConnectionId: 'esxi-1', targetConnectionId: CONN_ID, targetStorage: 'san-lvm', networkBridge: 'vmbr0', concurrency: 2 })
+    // The offline node gets nothing; a VM without a name goes by its id.
+    expect(bodies[0].vms).toEqual([
+      { sourceVmId: '1', sourceVmName: 'a', targetNode: 'pve1', diskBytes: 0 },
+      { sourceVmId: '2', sourceVmName: 'b', targetNode: 'pve2', diskBytes: 0 },
+      { sourceVmId: '3', sourceVmName: '3', targetNode: 'pve1', diskBytes: 0 },
+    ])
+    expect(bodies[0]).not.toHaveProperty('sourceVmId')
+    expect(setBulkMigBatch).toHaveBeenCalledWith(expect.objectContaining({ id: 'b1', status: 'running', concurrency: 2 }))
+    expect(setBulkMigJobs).toHaveBeenCalledWith([
+      { vmid: '1', name: 'a', jobId: 'j1', status: 'queued', progress: 0, targetNode: 'pve1' },
+      { vmid: '2', name: 'b', jobId: 'j2', status: 'queued', progress: 0, targetNode: 'pve2' },
+      { vmid: '3', name: '3', jobId: 'j3', status: 'queued', progress: 0, targetNode: 'pve1' },
+    ])
+  })
+
+  describe('copy network of a warm batch', () => {
+    const warmHost = { ...host, vms: host.vms.map(vm => ({ ...vm, status: 'poweredOn' })) }
+
+    it('places the VMs on Auto where the server says they reach their copy network, and says so', async () => {
+      const checks: any[] = []
+      const launches: any[] = []
+      server.use(
+        http.post('*/api/v1/migrations/batches/copy-check', async ({ request }) => {
+          checks.push(await request.json())
+          return HttpResponse.json({ data: { assignment: { '1': 'pve1', '2': 'pve1', '3': 'pve2' }, problems: [], unchecked: [], infos: [{ vm: 'a', nodes: ['pve1'], excluded: ['pve2'] }, { vm: 'b', nodes: ['pve1'], excluded: ['pve2'] }] } })
+        }),
+        http.post('*/api/v1/migrations/batches', async ({ request }) => { launches.push(await request.json()); return HttpResponse.json({ data: { batchId: 'b1', jobIds: ['j1', 'j2', 'j3'] } }) }),
+      )
+      renderWithProviders(<InventoryDialogs {...launchProps({ bulkMigHostInfo: warmHost, migType: 'warm' })} />)
+      await waitFor(() => expect(checks).toHaveLength(1))
+      expect(checks[0]).toMatchObject({ sourceConnectionId: 'esxi-1', targetConnectionId: CONN_ID, nodes: ['pve1', 'pve2'], auto: true, vms: [{ sourceVmId: '1', sourceVmName: 'a' }, { sourceVmId: '2', sourceVmName: 'b' }, { sourceVmId: '3', sourceVmName: '3' }] })
+      const info = await screen.findByTestId('bulk-copy-info')
+      expect(info).toHaveTextContent('a → pve1 only (pve2 cannot reach its copy network)')
+      fireEvent.click(screen.getByRole('button', { name: /migrate to proxmox/i }))
+      await waitFor(() => expect(launches).toHaveLength(1))
+      expect(launches[0].vms.map((v: any) => v.targetNode)).toEqual(['pve1', 'pve1', 'pve2'])
+    })
+
+    it('blocks the launch when a node cannot reach a copy adapter', async () => {
+      server.use(
+        http.post('*/api/v1/migrations/batches/copy-check', () => HttpResponse.json({ data: { assignment: {}, infos: [], unchecked: [], problems: [
+          { kind: 'unreachable', node: 'pve3', host: '10.42.0.21', device: 'vmk1', address: '192.168.1.103', ports: [902] },
+          { kind: 'noNode', vm: 'b', host: '10.42.0.21', device: 'vmk1', address: '192.168.1.103' },
+        ] } })),
+      )
+      renderWithProviders(<InventoryDialogs {...launchProps({ bulkMigHostInfo: warmHost, migType: 'warm', migTargetNode: 'pve3' })} />)
+      const alert = await screen.findByTestId('bulk-copy-error')
+      expect(alert).toHaveTextContent('pve3 cannot reach vmk1 192.168.1.103 (host 10.42.0.21) on port 902')
+      expect(alert).toHaveTextContent('No target node can reach the copy network of b: vmk1 192.168.1.103 (host 10.42.0.21)')
+      expect(screen.getByRole('button', { name: /migrate to proxmox/i })).toBeDisabled()
+    })
+
+    it('does not check a cold batch', async () => {
+      let called = 0
+      server.use(http.post('*/api/v1/migrations/batches/copy-check', () => { called++; return HttpResponse.json({ data: {} }) }))
+      renderWithProviders(<InventoryDialogs {...launchProps({ migType: 'cold' })} />)
+      await new Promise(r => setTimeout(r, 500))
+      expect(called).toBe(0)
+    })
+  })
+
+  describe('target space of the whole batch', () => {
+    const GB = 1024 ** 3
+    const sized = { ...host, vms: host.vms.map(vm => ({ ...vm, committed: 3 * GB, uncommitted: GB })) }
+
+    it('asks the server with the round-robin nodes and each VM size, and sends the sizes with the batch', async () => {
+      const checks: any[] = []
+      const launches: any[] = []
+      server.use(
+        http.post('*/api/v1/migrations/batches/space-check', async ({ request }) => { checks.push(await request.json()); return HttpResponse.json({ data: { ok: true, problems: [] } }) }),
+        http.post('*/api/v1/migrations/batches', async ({ request }) => { launches.push(await request.json()); return HttpResponse.json({ data: { batchId: 'b1', jobIds: ['j1', 'j2', 'j3'] } }) }),
+      )
+      renderWithProviders(<InventoryDialogs {...launchProps({ bulkMigHostInfo: sized })} />)
+      await waitFor(() => expect(checks).toHaveLength(1))
+      expect(checks[0]).toEqual({
+        sourceConnectionId: 'esxi-1', targetConnectionId: CONN_ID, targetStorage: 'san-lvm',
+        vms: [{ sourceVmId: '1', targetNode: 'pve1', diskBytes: 4 * GB }, { sourceVmId: '2', targetNode: 'pve2', diskBytes: 4 * GB }, { sourceVmId: '3', targetNode: 'pve1', diskBytes: 4 * GB }],
+      })
+      expect(screen.queryByTestId('bulk-space-error')).toBeNull()
+      const launch = screen.getByRole('button', { name: /migrate to proxmox/i })
+      expect(launch).toBeEnabled()
+      fireEvent.click(launch)
+      await waitFor(() => expect(launches).toHaveLength(1))
+      expect(launches[0].vms.map((v: any) => v.diskBytes)).toEqual([4 * GB, 4 * GB, 4 * GB])
+    })
+
+    it('says which storage is short and keeps the launch disabled', async () => {
+      server.use(
+        http.post('*/api/v1/migrations/batches/space-check', () => HttpResponse.json({ data: { ok: false, problems: [
+          { storage: 'ZFS-Pool', node: 'pve1', availableBytes: 6.7 * GB, requiredBytes: 9 * GB },
+          { storage: 'ZFS-Pool', node: 'pve2', availableBytes: 0, requiredBytes: 4 * GB, error: 'storage is not online' },
+        ] } })),
+      )
+      renderWithProviders(<InventoryDialogs {...launchProps({ bulkMigHostInfo: sized, migTargetStorage: 'ZFS-Pool' })} />)
+      const alert = await screen.findByTestId('bulk-space-error')
+      expect(alert).toHaveTextContent('Not enough space on ZFS-Pool (pve1): 6.7 GB free, this batch needs 9.0 GB plus a 10% margin')
+      expect(alert).toHaveTextContent('Cannot read free space on ZFS-Pool (pve2): storage is not online')
+      expect(screen.getByRole('button', { name: /migrate to proxmox/i })).toBeDisabled()
+    })
+
+    it('only warns, launch enabled, when the shortfall rests on estimated sizes', async () => {
+      server.use(
+        http.post('*/api/v1/migrations/batches/space-check', () => HttpResponse.json({ data: { ok: true, problems: [], warnings: [
+          { storage: 'ZFS-Pool', node: 'pve1', availableBytes: 6 * GB, requiredBytes: 8 * GB, estimated: true },
+        ] } })),
+      )
+      renderWithProviders(<InventoryDialogs {...launchProps({ bulkMigHostInfo: sized, migTargetStorage: 'ZFS-Pool' })} />)
+      expect(await screen.findByTestId('bulk-space-warning')).toHaveTextContent("Maybe not enough space on ZFS-Pool (pve1): 6.0 GB free, this batch needs about 8.0 GB plus a 10% margin (estimated from the source's used space)")
+      expect(screen.queryByTestId('bulk-space-error')).toBeNull()
+      expect(screen.getByRole('button', { name: /migrate to proxmox/i })).toBeEnabled()
+    })
+
+    it('words a shared storage without a node', async () => {
+      server.use(
+        http.post('*/api/v1/migrations/batches/space-check', () => HttpResponse.json({ data: { ok: false, problems: [
+          { storage: 'CephStoragePool', node: null, availableBytes: 2 * GB, requiredBytes: 12 * GB },
+        ] } })),
+      )
+      renderWithProviders(<InventoryDialogs {...launchProps({ bulkMigHostInfo: sized })} />)
+      expect(await screen.findByTestId('bulk-space-error')).toHaveTextContent('Not enough space on CephStoragePool: 2.0 GB free, this batch needs 12.0 GB plus a 10% margin')
+    })
+  })
+
+  it('keeps the form and names the VM the server refused', async () => {
+    server.use(
+      http.post('*/api/v1/migrations/batches', () => HttpResponse.json({ error: 'VM is locked', sourceVmId: '2' }, { status: 409 })),
+    )
+    const setBulkMigBatch = vi.fn()
+    const setBulkMigJobs = vi.fn()
+    renderWithProviders(<InventoryDialogs {...launchProps({ setBulkMigBatch, setBulkMigJobs })} />)
+    fireEvent.click(screen.getByRole('button', { name: /migrate to proxmox/i }))
+    const alert = await screen.findByTestId('bulk-start-error')
+    expect(alert).toHaveTextContent('The bulk migration could not be started')
+    expect(alert).toHaveTextContent('b: VM is locked')
+    expect(setBulkMigBatch).not.toHaveBeenCalled()
+    expect(setBulkMigJobs).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: /migrate to proxmox/i })).toBeInTheDocument()
+  })
+
+  describe('load projection on the target nodes', () => {
+    const GiB = 1024 ** 3
+    const sizedVms = { ...host, vms: host.vms.map(vm => ({ ...vm, cpu: 4, memory_size_MiB: 8192 })) }
+    const loaded = [
+      { connId: CONN_ID, node: 'pve1', status: 'online', cpu: 0.25, maxcpu: 16, mem: 40 * GiB, maxmem: 64 * GiB },
+      { connId: CONN_ID, node: 'pve2', status: 'online', cpu: 0.1, maxcpu: 8, mem: 4 * GiB, maxmem: 32 * GiB },
+    ]
+    beforeEach(() => {
+      server.use(http.post('*/api/v1/migrations/batches/space-check', () => HttpResponse.json({ data: { ok: true, problems: [] } })))
+    })
+
+    it('shows each target node now and after the batch, round-robined like the launch', async () => {
+      renderWithProviders(<InventoryDialogs {...launchProps({ bulkMigHostInfo: sizedVms, migNodeOptions: loaded })} />)
+      const block = await screen.findByTestId('bulk-load-projection')
+      expect(within(block).getByText('Load on the target nodes')).toBeInTheDocument()
+      // pve1 takes VMs 1 and 3: 40 + 16 GiB of 64; pve2 takes VM 2: 4 + 8 GiB of 32.
+      expect(within(block).getByTestId('bulk-projection-node-pve1')).toHaveTextContent('pve1+2')
+      expect(within(block).getByTestId('bulk-projection-mem-pve1')).toHaveTextContent('63 → 88 %')
+      expect(within(block).getByTestId('bulk-projection-mem-pve2')).toHaveTextContent('13 → 38 %')
+      // CPU: every vCPU booked busy over the node's cores, as the drain books busy cores.
+      expect(within(block).getByTestId('bulk-projection-cpu-pve1')).toHaveTextContent('25 → 75 %')
+      expect(within(block).getByTestId('bulk-projection-cpu-pve2')).toHaveTextContent('10 → 60 %')
+      expect(screen.queryByTestId('bulk-projection-mem-alert')).toBeNull()
+    })
+
+    it('warns, without blocking the launch, when a node would pass 90 % of its memory', async () => {
+      const tight = [{ ...loaded[0], mem: 48 * GiB }, loaded[1]]
+      renderWithProviders(<InventoryDialogs {...launchProps({ bulkMigHostInfo: sizedVms, migNodeOptions: tight })} />)
+      const alert = await screen.findByTestId('bulk-projection-mem-alert')
+      expect(alert).toHaveTextContent('pve1: memory would reach 100 % (64.0/64.0 GB) once this batch has landed.')
+      expect(alert).not.toHaveTextContent('pve2')
+      await waitFor(() => expect(screen.getByRole('button', { name: /migrate to proxmox/i })).toBeEnabled())
+    })
+  })
+
+  const rows = [
+    { vmid: '1', name: 'a', jobId: 'j1', status: 'transferring', progress: 40 },
+    { vmid: '2', name: 'b', jobId: 'j2', status: 'queued', progress: 0 },
+    { vmid: '3', name: 'c', jobId: 'j3', status: 'queued', progress: 0 },
+  ]
+  const trackingProps = (status: string, overrides: Partial<InventoryDialogsProps> = {}) => makeProps({
+    bulkMigOpen: true,
+    // A batch reopened from the server: no host snapshot, no selection.
+    bulkMigHostInfo: null,
+    bulkMigJobs: rows,
+    bulkMigBatch: { id: 'b1', status, concurrency: 1 },
+    bulkMigProgressExpanded: true,
+    ...overrides,
+  })
+
+  it('offers Pause while the batch runs with VMs still queued', async () => {
+    renderWithProviders(<InventoryDialogs {...trackingProps('running')} />)
+    expect(await screen.findByRole('button', { name: 'Pause' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Resume' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Cancel queued' })).toBeInTheDocument()
+    expect(screen.getByTestId('bulk-job-counts')).toHaveTextContent('1 running, 2 queued')
+    expect(screen.getAllByText('Queued')).toHaveLength(2)
+    expect(screen.getByText(/Bulk Migration \(3 VMs\)/i)).toBeInTheDocument()
+  })
+
+  it('offers Resume when paused, says so and marks the queued rows Paused', async () => {
+    const setBulkMigProgressExpanded = vi.fn()
+    renderWithProviders(<InventoryDialogs {...trackingProps('paused', { setBulkMigProgressExpanded })} />)
+    expect(await screen.findByRole('button', { name: 'Resume' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Pause' })).toBeNull()
+    expect(screen.getByTestId('bulk-job-counts')).toHaveTextContent('Paused: 1 running, 2 queued')
+    expect(screen.getAllByText('Paused')).toHaveLength(2)
+    expect(screen.queryByText('Queued')).toBeNull()
+    // The header buttons do not fold the job list.
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel queued' }))
+    expect(setBulkMigProgressExpanded).not.toHaveBeenCalled()
+  })
+
+  it('shows the jobs dropped by Cancel queued as cancelled, not as failures', async () => {
+    const cancelledRows = [rows[0], { ...rows[1], status: 'cancelled' }, { ...rows[2], status: 'cancelled' }]
+    renderWithProviders(<InventoryDialogs {...trackingProps('cancelled', { bulkMigJobs: cancelledRows })} />)
+    expect(await screen.findByTestId('bulk-cancelled-count')).toHaveTextContent('(2 cancelled)')
+    expect(screen.getAllByText('Cancelled')).toHaveLength(2)
+    expect(screen.queryByText('Failed')).toBeNull()
+    expect(screen.queryByText(/failed/)).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Cancel queued' })).toBeNull()
+  })
+
+  describe('live columns of the follow-up', () => {
+    const liveRows = [
+      { vmid: '1', name: 'a', jobId: 'j1', status: 'transferring', progress: 40, targetNode: 'pve1', bytesTransferred: 1024 },
+      { vmid: '2', name: 'b', jobId: 'j2', status: 'queued', progress: 0, targetNode: 'pve2' },
+      { vmid: '3', name: 'c', jobId: 'j3', status: 'queued', progress: 0, targetNode: 'pve1' },
+    ]
+    const GiB = 1024 ** 3
+
+    it('shows the throughput and one card per target node with its live load', async () => {
+      const reads: any[] = []
+      server.use(
+        http.post(`*/api/v1/connections/${CONN_ID}/rrd/batch`, async ({ request }) => {
+          reads.push(await request.json())
+          return HttpResponse.json({ data: {
+            '/nodes/pve1': [
+              { time: 60, cpu: 0.3, iowait: 0.02, memused: 19.8 * GiB, memtotal: 32 * GiB, netin: 12.5 * 1024 * 1024 },
+              { time: 120 },
+            ],
+            '/nodes/pve2': [{ time: 60, cpu: 0.9, iowait: 0.97, memused: 31 * GiB, memtotal: 32 * GiB, netin: 0 }],
+          } })
+        }),
+      )
+      renderWithProviders(<InventoryDialogs {...trackingProps('running', {
+        bulkMigJobs: liveRows,
+        bulkMigBatch: { id: 'b1', status: 'running', concurrency: 1, targetConnectionId: CONN_ID },
+      })} />)
+      const throughput = await screen.findByTestId('migration-live-throughput')
+      // Range picker: 1m / 5m / 1h / 24h, 5m first.
+      const range = within(throughput).getByTestId('migration-live-throughput-range')
+      expect(within(range).getAllByRole('button').map(b => b.textContent)).toEqual(['1m', '5m', '1h', '24h'])
+      expect(within(range).getByRole('button', { name: '5m' })).toHaveAttribute('aria-pressed', 'true')
+      fireEvent.click(within(range).getByRole('button', { name: '1h' }))
+      expect(within(range).getByRole('button', { name: '1h' })).toHaveAttribute('aria-pressed', 'true')
+      expect(within(throughput).getByText('Throughput')).toBeInTheDocument()
+      expect(screen.getByTestId('migration-live-throughput-figures')).toHaveTextContent('Now 0.0 MB/s · peak 0.0 MB/s')
+      const pve1 = await screen.findByTestId('migration-live-node-pve1')
+      const pve2 = screen.getByTestId('migration-live-node-pve2')
+      expect(screen.getAllByTestId(/^migration-live-node-pve\d$/)).toHaveLength(2)
+      expect(reads).toEqual([{ paths: ['/nodes/pve1', '/nodes/pve2'], timeframe: 'hour' }])
+      expect(within(pve1).getByTestId('migration-live-node-jobs-pve1')).toHaveTextContent('2 VMs (1 running, 1 queued)')
+      expect(within(pve2).getByTestId('migration-live-node-jobs-pve2')).toHaveTextContent('1 VM (0 running, 1 queued)')
+      await waitFor(() => expect(within(pve1).getByText('62 % (19.8/32.0 GB)')).toBeInTheDocument())
+      expect(within(pve1).getByText('30 %')).toBeInTheDocument()
+      // No network figure: the node's RRD average does not reflect the copy, the chart does.
+      expect(within(pve1).queryByTestId('migration-live-node-netin-pve1')).toBeNull()
+      expect(within(pve2).getByText('97 %')).toBeInTheDocument()
+      // The job rows stay on the left.
+      expect(within(screen.getByTestId('migration-live-columns')).getAllByText('Queued')).toHaveLength(2)
+    })
+  })
+
+  describe('copy of the migration logs', () => {
+    const writeText = vi.fn(async (_t: string) => {})
+    beforeEach(() => {
+      writeText.mockClear()
+      Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+    })
+    const at = (s: number) => new Date(2026, 9, 18, 7, 5, s).toISOString()
+    const logRows = [
+      { ...rows[0], logs: [{ ts: at(1), level: 'info', msg: 'planning' }, { ts: at(3), level: 'success', msg: 'done' }] },
+      { ...rows[1], status: 'transferring', logs: [{ ts: at(2), level: 'warn', msg: 'slow' }] },
+      rows[2],
+    ]
+
+    it('copies the lines shown, in time order, with the VM of each', async () => {
+      renderWithProviders(<InventoryDialogs {...trackingProps('running', { bulkMigJobs: logRows, bulkMigLogsExpanded: true })} />)
+      fireEvent.click(await screen.findByTestId('copy-migration-logs'))
+      await waitFor(() => expect(writeText).toHaveBeenCalledWith('07:05:01 info [a] planning\n07:05:02 warn [b] slow\n07:05:03 success [a] done'))
+    })
+
+    it('honours the VM filter of the panel', async () => {
+      renderWithProviders(<InventoryDialogs {...trackingProps('running', { bulkMigJobs: logRows, bulkMigLogsExpanded: true, bulkMigLogsFilter: 'j2' })} />)
+      fireEvent.click(await screen.findByTestId('copy-migration-logs'))
+      await waitFor(() => expect(writeText).toHaveBeenCalledWith('07:05:02 warn [b] slow'))
+    })
+
+    it('does not fold the panel when clicked', async () => {
+      const setBulkMigLogsExpanded = vi.fn()
+      renderWithProviders(<InventoryDialogs {...trackingProps('running', { bulkMigJobs: logRows, bulkMigLogsExpanded: true, setBulkMigLogsExpanded })} />)
+      fireEvent.click(await screen.findByTestId('copy-migration-logs'))
+      await waitFor(() => expect(writeText).toHaveBeenCalled())
+      expect(setBulkMigLogsExpanded).not.toHaveBeenCalled()
+    })
+
+    it('is on the log panel of a single migration too, without VM names', async () => {
+      renderWithProviders(<InventoryDialogs {...makeProps({
+        esxiMigrateVm: { vmid: 'vm-9', name: 'web-1', status: 'poweredOff', hostType: 'vmware', connectionId: 'esxi-1' }, migJobId: 'job-1',
+        migJob: { id: 'job-1', status: 'transferring', progress: 20, logs: [{ ts: at(4), level: 'info', msg: 'copying' }] },
+      })} />)
+      fireEvent.click(await screen.findByTestId('copy-migration-logs'))
+      await waitFor(() => expect(writeText).toHaveBeenCalledWith('07:05:04 info copying'))
+    })
+  })
+
+  it('posts the pause and reads the batch back', async () => {
+    const posts: string[] = []
+    server.use(
+      http.post('*/api/v1/migrations/batches/b1/pause', () => { posts.push('pause'); return HttpResponse.json({ data: { status: 'paused' } }) }),
+      http.get('*/api/v1/migrations/batches/b1', () => HttpResponse.json({ data: {
+        id: 'b1', status: 'paused', concurrency: 1, sourceConnectionId: 'esxi-1', targetConnectionId: CONN_ID,
+        jobs: rows.map(r => ({ id: r.jobId, sourceVmId: r.vmid, sourceVmName: r.name, status: r.status, progress: r.progress, logs: [] })),
+      } })),
+    )
+    const setBulkMigBatch = vi.fn()
+    renderWithProviders(<InventoryDialogs {...trackingProps('running', { setBulkMigBatch })} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Pause' }))
+    await waitFor(() => expect(setBulkMigBatch).toHaveBeenCalledWith(expect.objectContaining({ id: 'b1', status: 'paused' })))
+    expect(posts).toEqual(['pause'])
+  })
+
+  it('shows the refusal of a transition that no longer applies', async () => {
+    server.use(
+      http.post('*/api/v1/migrations/batches/b1/resume', () => HttpResponse.json({ error: 'Batch is not paused' }, { status: 409 })),
+      http.get('*/api/v1/migrations/batches/b1', () => HttpResponse.json({ error: 'gone' }, { status: 404 })),
+    )
+    renderWithProviders(<InventoryDialogs {...trackingProps('paused')} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Resume' }))
+    expect(await screen.findByTestId('bulk-batch-error')).toHaveTextContent('Batch is not paused')
+  })
+
+  it('asks before cancelling the queued migrations, then posts cancel-queued', async () => {
+    const posts: string[] = []
+    server.use(
+      http.post('*/api/v1/migrations/batches/b1/cancel-queued', () => { posts.push('cancel-queued'); return HttpResponse.json({ data: { status: 'cancelled', cancelled: 2 } }) }),
+      http.get('*/api/v1/migrations/batches/b1', () => HttpResponse.json({ data: {
+        id: 'b1', status: 'cancelled', concurrency: 1, sourceConnectionId: 'esxi-1', targetConnectionId: CONN_ID,
+        jobs: rows.map(r => ({ id: r.jobId, sourceVmId: r.vmid, sourceVmName: r.name, status: r.status === 'queued' ? 'cancelled' : r.status, progress: r.progress, logs: [] })),
+      } })),
+    )
+    const setBulkMigBatch = vi.fn()
+    const setBulkMigJobs = vi.fn()
+    renderWithProviders(<InventoryDialogs {...trackingProps('running', { setBulkMigBatch, setBulkMigJobs })} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Cancel queued' }))
+    const body = await screen.findByText('Cancel the 2 queued migrations? Running migrations carry on.')
+    expect(posts).toEqual([])
+    const confirm = body.closest('[role="dialog"]') as HTMLElement
+    fireEvent.click(within(confirm).getByRole('button', { name: 'Cancel queued' }))
+    await waitFor(() => expect(setBulkMigBatch).toHaveBeenCalledWith(expect.objectContaining({ status: 'cancelled' })))
+    expect(posts).toEqual(['cancel-queued'])
+    expect(setBulkMigJobs.mock.calls.at(-1)?.[0].map((j: any) => j.status)).toEqual(['transferring', 'cancelled', 'cancelled'])
+  })
+
+  it('clears the batch on Close once every job is over', async () => {
+    const setBulkMigBatch = vi.fn()
+    const done = rows.map(r => ({ ...r, status: 'completed', progress: 100 }))
+    renderWithProviders(<InventoryDialogs {...trackingProps('completed', { bulkMigJobs: done, setBulkMigBatch })} />)
+    expect(screen.queryByRole('button', { name: 'Pause' })).toBeNull()
+    fireEvent.click(await screen.findByRole('button', { name: 'Close' }))
+    expect(setBulkMigBatch).toHaveBeenCalledWith(null)
   })
 })

@@ -609,6 +609,36 @@ export async function soapWaitForConsolidation(
 }
 
 /**
+ * Consolidate the disks of a VM whose runtime.consolidationNeeded is set
+ * (ConsolidateVMDisks_Task). A snapshot removed while its disks were still
+ * held open (a copy killed by a server restart) can leave the delta merge
+ * pending: until it runs, the next warm run of the VM waits on it.
+ */
+export async function soapConsolidateVmDisks(session: SoapSession, vmid: string, opts: SoapTaskWaitOptions = {}): Promise<void> {
+  const body = `<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:urn="urn:vim25">
+  <soapenv:Body>
+    <urn:ConsolidateVMDisks_Task>
+      <urn:_this type="VirtualMachine">${vmid}</urn:_this>
+    </urn:ConsolidateVMDisks_Task>
+  </soapenv:Body>
+</soapenv:Envelope>`
+
+  const result = await soapRequest(session.baseUrl, body, session.cookie, session.insecureTLS)
+  if (result.text.includes("faultstring")) {
+    const fault = result.text.match(/<faultstring>([\s\S]*?)<\/faultstring>/)?.[1] || ""
+    throw new Error(`Failed to consolidate the disks of ${vmid}: ${fault}`)
+  }
+  const taskMor = result.text.match(/<returnval type="Task">([^<]+)<\/returnval>/)?.[1]
+  if (!taskMor) return
+  await waitForSoapTask(session, taskMor, {
+    ...opts,
+    timeoutMs: opts.timeoutMs ?? SNAPSHOT_REMOVE_TIMEOUT_MS,
+    label: `Disk consolidation of ${vmid}`,
+  })
+}
+
+/**
  * Flatten a VirtualMachine `snapshot` property payload into {name, mor} pairs.
  *
  * The payload nests VirtualMachineSnapshotTree entries: each carries its own

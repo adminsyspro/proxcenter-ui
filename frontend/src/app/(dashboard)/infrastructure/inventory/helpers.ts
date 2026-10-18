@@ -1,3 +1,4 @@
+import { sumMigrationStats } from '@/lib/migration/migration-stats'
 import { QEMU_NIC_MODELS } from '@/lib/rbac/nicPermissions'
 import { parseMemoryProperty } from '@/lib/proxmox/memoryProperty'
 import type { RrdRangeMeta, RrdWindow } from '@/lib/metrics/rrdRange'
@@ -2007,6 +2008,10 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
     const migsR = await fetch('/api/v1/migrations', { cache: 'no-store' }).catch(() => null)
     const migsData = migsR?.ok ? await migsR.json().catch(() => ({})) : {}
     const migrations = ((migsData?.data || []) as any[]).filter((j: any) => connIds.has(j.sourceConnectionId))
+    // Counters over the whole history: the list above is the last 50 jobs only.
+    const statsR = await fetch('/api/v1/migrations/stats', { cache: 'no-store' }).catch(() => null)
+    const statsData = statsR?.ok ? await statsR.json().catch(() => ({})) : {}
+    const migrationStats = sumMigrationStats(statsData?.data?.bySource, connIds as Set<string>)
 
     return {
       kindLabel: label.toUpperCase(),
@@ -2028,6 +2033,7 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
         label,
         hosts: hostsWithVms,
         migrations,
+        migrationStats,
       },
     }
   }

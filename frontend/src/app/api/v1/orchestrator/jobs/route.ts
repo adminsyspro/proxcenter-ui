@@ -48,7 +48,8 @@ function extractHostname(baseUrl: string): string {
 function migrationJobStatus(status: string): string {
   if (status === "completed") return "success"
   if (status === "failed" || status === "cancelled") return status
-  if (status === "pending") return "pending"
+  // A queued job of a bulk migration (roadmap#53) has not started yet.
+  if (status === "pending" || status === "queued") return "pending"
 
   return "running"
 }

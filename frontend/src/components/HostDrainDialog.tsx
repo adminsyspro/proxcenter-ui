@@ -208,7 +208,7 @@ const pct = (ratio: number) => Math.round(ratio * 100)
  * A load before and after: the part both share, then the part the drain adds
  * (solid) or frees (faded). Past the ceiling the bar turns red.
  */
-function LoadBar({ before, after, limit, testId }: Readonly<{ before: number; after: number; limit: number; testId: string }>) {
+export function LoadBar({ before, after, limit, testId }: Readonly<{ before: number; after: number; limit: number; testId: string }>) {
   const clamp = (v: number) => Math.max(0, Math.min(1, v))
   const base = clamp(Math.min(before, after))
   const delta = clamp(Math.max(before, after)) - base

@@ -19,6 +19,10 @@ describe('hasDeepLinkSelection', () => {
     expect(hasDeepLinkSelection(params('selectType=pbs&selectId=pbs1'))).toBe(true)
   })
 
+  it('sees an external host deep-link (taskbar entry of a bulk migration, roadmap#53)', () => {
+    expect(hasDeepLinkSelection(params('selectType=ext&selectId=vc1&openBatch=b1'))).toBe(true)
+  })
+
   it('sees nothing on a plain inventory URL', () => {
     expect(hasDeepLinkSelection(params(''))).toBe(false)
   })

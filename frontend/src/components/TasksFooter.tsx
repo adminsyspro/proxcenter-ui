@@ -41,6 +41,7 @@ import {
   runPveTaskStop
 } from '@/lib/tasks/jobActions'
 import StopTaskButton from '@/components/tasks/StopTaskButton'
+import ActiveBulkBatchChips from '@/components/tasks/ActiveBulkBatchChips'
 import TaskLogButton from '@/components/tasks/TaskLogButton'
 import FailureReasonText from '@/components/tasks/FailureReasonText'
 import { useTaskFailureReasons } from '@/hooks/useTaskFailureReasons'
@@ -929,6 +930,8 @@ export default function TasksFooter({
                 }}
               />
             )}
+            {/* Bulk migrations in flight, whatever the tab (roadmap#53). */}
+            <ActiveBulkBatchChips />
           </Box>
 
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>

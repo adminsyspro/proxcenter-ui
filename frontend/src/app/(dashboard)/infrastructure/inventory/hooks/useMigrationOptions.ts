@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { DOWNTIME_BUDGET_DEFAULT_SEC } from '../components/migrationGuards'
 import { NFC_CONCURRENCY_DEFAULT } from '@/lib/migration/nfc-progress'
 import { MIGRATION_CPU_TYPE_DEFAULT } from '@/lib/migration/cpu-type'
+import { BULK_MIG_CONCURRENCY_DEFAULT } from '../bulkMigrationConfig'
 import type { ReviewHardwareState, ReviewNicState } from '../components/migrationReview'
 
 /**
@@ -92,6 +93,15 @@ export function useMigrationOptions({
   // cap of the target PVE connection", 0 means unlimited. Starts empty so
   // a cap typed for one busy array never silently slows the next run.
   const [migZeroRateLimit, setMigZeroRateLimit] = useState('')
+  // Bulk only (roadmap#53): how many migrations of the batch run at once, 1 to
+  // 5. Starts sequential every time: a wave sized for an idle night must never
+  // inherit the parallelism of the previous one.
+  const [migBulkConcurrency, setMigBulkConcurrency] = useState<number>(BULK_MIG_CONCURRENCY_DEFAULT)
+  // Warm VMware only (roadmap#53): VMkernel adapter of the source host the NFC
+  // copy goes through, "vmkN". Empty means the host's default (its adapter
+  // tagged vSphereBackupNFC, otherwise management). Starts empty so an adapter
+  // picked for one host never applies to a VM running on another.
+  const [migCopyVmk, setMigCopyVmk] = useState('')
   // Two-step VMware dialog (#317): 'config' is the form, 'review' the step
   // where the hardware and the NIC mapping of the target are edited. The
   // review state starts empty and is seeded from the source VM when the
@@ -120,6 +130,8 @@ export function useMigrationOptions({
     setMigManualCutover(false)
     setMigDowntimeBudget(String(DOWNTIME_BUDGET_DEFAULT_SEC))
     setMigZeroRateLimit('')
+    setMigBulkConcurrency(BULK_MIG_CONCURRENCY_DEFAULT)
+    setMigCopyVmk('')
   }, [esxiMigrateVm, bulkMigOpen])
 
   return {
@@ -148,6 +160,10 @@ export function useMigrationOptions({
     migManualCutover,
     setMigManualCutover,
     migDowntimeBudget,
+    migBulkConcurrency,
+    setMigBulkConcurrency,
+    migCopyVmk,
+    setMigCopyVmk,
     setMigDowntimeBudget,
     migZeroRateLimit,
     setMigZeroRateLimit,

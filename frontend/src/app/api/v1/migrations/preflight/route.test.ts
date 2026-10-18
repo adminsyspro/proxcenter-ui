@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 // RBAC allows; the route gates on VM_MIGRATE.
 vi.mock("@/lib/rbac", () => ({
   checkPermission: vi.fn(async () => null),
-  PERMISSIONS: { VM_MIGRATE: "vm.migrate" },
+  PERMISSIONS: { VM_MIGRATE: "vm.migrate", CONNECTION_VIEW: "connection.view" },
 }))
 // v2v-preflight is the default action; stub all its exports the route imports.
 vi.mock("@/lib/migration/v2v-preflight", () => ({
@@ -22,6 +22,19 @@ vi.mock("@/lib/migration/warm/xcpng-node-preflight", () => ({
 vi.mock("@/lib/migration/warm/target-space", () => ({
   checkTargetStorageSpace: vi.fn(),
 }))
+// roadmap#53: the copy-address probe from the node; the address grammar check stays real.
+const readIfaces = vi.hoisted(() => vi.fn())
+const scope = vi.hoisted(() => ({ tenant: "default", infra: { kind: "provider" } as any }))
+vi.mock("@/lib/tenant", () => ({ getCurrentTenantId: vi.fn(async () => scope.tenant), getSessionPrisma: vi.fn(async () => ({ session: true })) }))
+vi.mock("@/lib/tenant/infraScope", async (orig) => ({
+  ...(await orig<typeof import("@/lib/tenant/infraScope")>()),
+  getTenantInfrastructureScope: vi.fn(async () => scope.infra),
+}))
+vi.mock("@/lib/vmware/copy-interfaces-server", () => ({ readVmCopyInterfaces: (...a: any[]) => readIfaces(...a) }))
+vi.mock("@/lib/migration/warm/nfc-reachability", async (io) => {
+  const actual = await io<typeof import("@/lib/migration/warm/nfc-reachability")>()
+  return { ...actual, runWarmCopyReachability: vi.fn() }
+})
 vi.mock("@/lib/db/prisma", () => ({
   prisma: { connection: { findUnique: vi.fn(async () => ({ type: "vmware" })) } },
 }))
@@ -38,6 +51,8 @@ import { isVddkPackageTokenConfigured } from "@/lib/migration/warm/vddk-provisio
 import { runV2vPreflight } from "@/lib/migration/v2v-preflight"
 import { runXcpngWarmNodePreflight } from "@/lib/migration/warm/xcpng-node-preflight"
 import { checkTargetStorageSpace, type TargetSpaceResult } from "@/lib/migration/warm/target-space"
+import { runWarmCopyReachability } from "@/lib/migration/warm/nfc-reachability"
+const mockReach = runWarmCopyReachability as unknown as ReturnType<typeof vi.fn>
 import { prisma } from "@/lib/db/prisma"
 
 const mockWarm = runWarmNodePreflight as unknown as ReturnType<typeof vi.fn>
@@ -54,6 +69,7 @@ const warmBody = {
 }
 
 beforeEach(() => {
+  readIfaces.mockReset()
   vi.clearAllMocks()
   mockSource.mockResolvedValue({ type: "vmware" })
   mockSpace.mockResolvedValue(spaceVerdict)
@@ -125,6 +141,92 @@ describe("POST /api/v1/migrations/preflight — warm-check action", () => {
     expect(mockWarm).toHaveBeenCalledWith("c1", "pve1", "/opt/vddk")
     const json = await readJson<{ ok: boolean }>(res)
     expect(json?.ok).toBe(true)
+  })
+
+  // roadmap#53: reachability of the VMkernel adapter the copy will use.
+  // roadmap#53: reachability of the VMkernel adapter the copy will use. The
+  // address comes from vSphere for the adapter named, never from the request.
+  const ifaces = (source: "esxi" | "vcenter") => ({
+    hostName: "esxi1", source, defaultDevice: "vmk0",
+    vnics: [{ device: "vmk0", address: "10.42.0.21", services: ["management"] }, { device: "vmk2", address: "10.42.53.21", services: [] }],
+  })
+  const copyBody = { ...warmBody, sourceConnectionId: "src", sourceVmId: "vm-14" }
+
+  it("probes the address vSphere reports for the chosen adapter, with 443 only for a direct ESXi source", async () => {
+    readIfaces.mockResolvedValueOnce(ifaces("esxi"))
+    const verdict = { address: "10.42.53.21", ports: { 902: true, 443: true }, ok: true }
+    mockReach.mockResolvedValueOnce(verdict)
+    const res = await callRoute(POST, { body: { ...copyBody, copyVmk: "vmk2", copyAddress: "192.168.0.66" } })
+    expect(res.status).toBe(200)
+    expect(readIfaces).toHaveBeenCalledWith(expect.anything(), "src", "vm-14")
+    // a copyAddress sent by the browser is ignored: the node probes the host's own adapter
+    expect(mockReach).toHaveBeenCalledExactlyOnceWith("c1", "pve1", "10.42.53.21", true)
+    expect((await readJson<{ copy: unknown }>(res))?.copy).toEqual(verdict)
+
+    readIfaces.mockResolvedValueOnce(ifaces("vcenter"))
+    mockReach.mockResolvedValueOnce({ address: "10.42.0.21", ports: { 902: false }, ok: false })
+    const res2 = await callRoute(POST, { body: { ...copyBody, copyVmk: "vmk0" } })
+    expect(mockReach).toHaveBeenLastCalledWith("c1", "pve1", "10.42.0.21", false)
+    expect((await readJson<{ copy: { ok: boolean } }>(res2))?.copy.ok).toBe(false)
+  })
+
+  it("omits the copy verdict without an adapter, rejects a malformed one, and never probes an unknown adapter", async () => {
+    const res = await callRoute(POST, { body: warmBody })
+    expect(mockReach).not.toHaveBeenCalled()
+    expect("copy" in ((await res.json()) as object)).toBe(false)
+
+    for (const bad of [{ ...copyBody, copyVmk: "vmk0; reboot" }, { ...copyBody, copyVmk: "vmk0", sourceVmId: undefined }]) {
+      expect((await callRoute(POST, { body: bad })).status).toBe(400)
+    }
+
+    readIfaces.mockResolvedValueOnce(ifaces("esxi"))
+    const unknown = await callRoute(POST, { body: { ...copyBody, copyVmk: "vmk9" } })
+    expect((await readJson<{ copy: { ok: boolean } }>(unknown))?.copy.ok).toBe(false)
+    expect(mockReach).not.toHaveBeenCalled()
+
+    readIfaces.mockRejectedValueOnce(new Error("vCenter unreachable"))
+    const failed = await callRoute(POST, { body: { ...copyBody, copyVmk: "vmk2" } })
+    expect(failed.status).toBe(200)
+    expect((await readJson<{ copy: { ok: boolean; error: string } }>(failed))?.copy).toMatchObject({ ok: false, error: "vCenter unreachable" })
+  })
+
+  it("runs nothing for a vDC tenant, nor for an MSP outside its own clusters (404)", async () => {
+    try {
+      scope.tenant = "t1"
+      for (const infra of [{ kind: "iaas", vdcScope: {} }, { kind: "msp", connectionIds: new Set(["c1"]) }]) {
+        scope.infra = infra
+        const res = await callRoute(POST, { body: { ...warmBody, sourceConnectionId: "src", sourceVmId: "vm-14", copyVmk: "vmk2" } })
+        expect(res.status).toBe(404)
+      }
+      expect(mockWarm).not.toHaveBeenCalled()
+      expect(readIfaces).not.toHaveBeenCalled()
+    } finally {
+      scope.tenant = "default"
+      scope.infra = { kind: "provider" }
+    }
+  })
+
+  it("probes an adapter only for a caller who may view the source connection", async () => {
+    const { checkPermission } = await import("@/lib/rbac")
+    vi.mocked(checkPermission).mockImplementation(async (perm: string) => (perm === "connection.view" ? Response.json({ error: "denied" }, { status: 403 }) as any : null))
+    try {
+      const res = await callRoute(POST, { body: { ...copyBody, copyVmk: "vmk2" } })
+      expect(res.status).toBe(403)
+      expect(checkPermission).toHaveBeenCalledWith("connection.view", "connection", "src")
+      expect(readIfaces).not.toHaveBeenCalled()
+      expect(mockReach).not.toHaveBeenCalled()
+      // without an adapter the preflight does not need it
+      expect((await callRoute(POST, { body: warmBody })).status).toBe(200)
+    } finally {
+      vi.mocked(checkPermission).mockImplementation(async () => null)
+    }
+  })
+
+  it("reads the source adapters through the tenant-scoped client", async () => {
+    readIfaces.mockResolvedValueOnce(ifaces("esxi"))
+    mockReach.mockResolvedValueOnce({ address: "10.42.53.21", ports: { 902: true, 443: true }, ok: true })
+    await callRoute(POST, { body: { ...copyBody, copyVmk: "vmk2" } })
+    expect(readIfaces).toHaveBeenCalledWith({ session: true }, "src", "vm-14")
   })
 
   it("400s when targetConnectionId/targetNode are missing", async () => {

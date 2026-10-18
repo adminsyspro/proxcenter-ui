@@ -22,6 +22,8 @@ import { startOperatorSignalWatch, stopOperatorSignalWatch } from "@/lib/migrati
 import { decryptSecret } from "@/lib/crypto/secret"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { pveFetch } from "@/lib/proxmox/client"
+import { reserveTargetVmid } from "./reserve-target-vmid"
+import { releaseVmids } from "./vmid-reservation"
 import { isFileBasedStorage } from "@/lib/proxmox/storage"
 import { executeSSH, shellEscape } from "@/lib/ssh/exec"
 import { HyperVClient } from "@/lib/hyperv/client"
@@ -1896,7 +1898,7 @@ export async function runV2vMigrationPipeline(
       await appendLog(jobId, `Using user-specified VMID ${targetVmid}`)
     } else {
       await appendLog(jobId, "Allocating VMID on Proxmox cluster...")
-      targetVmid = Number(await pveFetch<number | string>(pveConn, "/cluster/nextid"))
+      targetVmid = await reserveTargetVmid(pveConn, config.targetConnectionId, jobId)
       await appendLog(jobId, `Allocated VMID ${targetVmid}`)
     }
     await updateJob(jobId, "creating_vm", { targetVmid })
@@ -2477,11 +2479,13 @@ export async function runV2vMigrationPipeline(
         if (!isConflict || attempt === MAX_VMID_RETRIES - 1) {
           throw err
         }
-        const freshId = Number(await pveFetch<number | string>(pveConn, "/cluster/nextid"))
+        // Jobs of this server never share an id (reserveTargetVmid): the VM was
+        // made outside ProxCenter meanwhile.
+        const freshId = await reserveTargetVmid(pveConn, config.targetConnectionId, jobId)
         await appendLog(
           jobId,
-          `VMID ${createdVmid} taken (race with concurrent migration), retrying with fresh id ${freshId}`,
-          "warn",
+          `VMID ${createdVmid} was created on the cluster meanwhile, using ${freshId}`,
+          "info",
         )
         createdVmid = freshId
       }
@@ -3007,6 +3011,8 @@ export async function runV2vMigrationPipeline(
       }
     }
   } finally {
+    // The VMID reserved for this job is either created on the cluster or unused now.
+    releaseVmids(jobId)
     stopHeartbeat()
     // Always close the vCenter SOAP session if one is open. Leaving it dangling
     // would slowly exhaust vCenter's session pool (default cap ~250). Idempotent

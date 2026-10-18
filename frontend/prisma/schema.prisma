@@ -357,10 +357,41 @@ model MigrationJob {
   // (#608). Null on rows created before this column existed.
   ownerInstanceId String? @map("owner_instance_id")
 
+  // Bulk migration this job belongs to (roadmap#53). A job of a batch is
+  // created up front as "queued" with its full config; the batch scheduler
+  // (lib/migration/batch-scheduler) starts it, in batchOrder, when a slot of
+  // the batch frees up. Null for a migration started on its own.
+  batchId    String?         @map("batch_id")
+  batch      MigrationBatch? @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  batchOrder Int?            @map("batch_order")
+
   @@index([status])
   @@index([sourceConnectionId])
   @@index([targetConnectionId])
+  @@index([batchId])
   @@map("migration_jobs")
+}
+
+// A bulk migration (roadmap#53): the queue of its jobs lives here, not in the
+// browser that launched it, so the batch keeps going with the tab closed and
+// across a server restart, and any browser can pause, resume or cancel it.
+model MigrationBatch {
+  id                 String   @id @default(cuid())
+  tenantId           String   @default("default") @map("tenant_id")
+  createdBy          String?  @map("created_by")
+  sourceConnectionId String   @map("source_connection_id")
+  targetConnectionId String   @map("target_connection_id")
+  // Jobs of the batch running at once, 1..BULK_CONCURRENCY_MAX.
+  concurrency        Int      @default(1)
+  status             String   @default("running") // running|paused|cancelled|completed
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  jobs MigrationJob[]
+
+  @@index([status])
+  @@index([tenantId, sourceConnectionId])
+  @@map("migration_batches")
 }
 
 // ============================================================================

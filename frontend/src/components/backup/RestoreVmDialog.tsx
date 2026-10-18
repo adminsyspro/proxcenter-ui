@@ -306,6 +306,7 @@ export default function RestoreVmDialog({
   const overwriting = isVdcTenant ? !restoreAsNew : targetExists
   const overwriteBlocked = !isVdcTenant && targetExists && !canOverwrite
   const overwriteVmid = isVdcTenant ? sourceVmid : targetVmidNumber
+  const targetExistsKey = canOverwrite ? 'inventory.pbsRestoreTargetExists' : 'inventory.pbsRestoreTargetExistsNoOverwrite'
 
   const vmidValid = useMemo(() => {
     if (!Number.isFinite(targetVmidNumber)) return false
@@ -520,7 +521,7 @@ export default function RestoreVmDialog({
               error={(!!vmid && !vmidValid) || overwriteBlocked}
               helperText={
                 targetExists
-                  ? t(canOverwrite ? 'inventory.pbsRestoreTargetExists' : 'inventory.pbsRestoreTargetExistsNoOverwrite', { vmid: targetVmidNumber })
+                  ? t(targetExistsKey, { vmid: targetVmidNumber })
                   : undefined
               }
               fullWidth

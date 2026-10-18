@@ -287,11 +287,16 @@ const isUpid = (value: unknown): value is string => typeof value === "string" &&
  * string, `data.upid` or `data.tasks[].upid`: a client could otherwise journal
  * a UPID of its choosing and read another tenant's task through it.
  */
+function singleUpid(data: any): string | null {
+  if (isUpid(data)) return data
+  return isUpid(data?.upid) ? data.upid : null
+}
+
 async function responseUpids(res: Response): Promise<{ upid: string | null; upids?: string[] }> {
   if (!(res.headers.get("content-type") || "").includes("application/json")) return { upid: null }
   try {
     const data = (await res.clone().json())?.data
-    const upid = isUpid(data) ? data : isUpid(data?.upid) ? data.upid : null
+    const upid = singleUpid(data)
     if (!Array.isArray(data?.tasks)) return { upid }
     return { upid, upids: data.tasks.map((task: { upid?: unknown }) => task?.upid).filter(isUpid) }
   } catch {

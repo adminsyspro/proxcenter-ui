@@ -12,6 +12,7 @@ import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
 import type { Principal } from '@/lib/auth/principal'
 import { prisma } from '@/lib/db/prisma'
 import { checkTenantGuestScope } from '@/lib/vdc/guestScope'
+import { getTenantInfrastructureScope } from '@/lib/tenant/infraScope'
 
 export const runtime = 'nodejs'
 
@@ -568,25 +569,31 @@ async function startedByToken(principal: Principal, upid: string): Promise<boole
 /**
  * A vDC tenant token only follows the tasks of its own guests, or the tasks it
  * started itself (the destroy task of a guest that is gone, for one): a task of
- * another tenant's guest on a shared provider connection stays hidden. The
- * helper lets every other tenant through. A task on another node than the URL
- * one, or of no guest, is checked with an empty vmid, which matches no guest.
+ * another tenant's guest on a shared provider connection stays hidden. Every
+ * other tenant kind passes. A task the guest check cannot confine (its UPID
+ * names another node than the URL one, or no guest) is judged on the tenant
+ * kind alone: refused to a vDC tenant, unless it is its own task on that node.
+ * A lookup that fails is a 503, never a pass.
  */
 async function taskOutsideTokenScope(
   principal: Principal, connection: PveConn, connectionId: string, node: string, upid: string,
 ): Promise<Response | null> {
   const task = parseTaskUpid(upid)
   const sameNode = task?.node === node
-  let refused: Response | null
+  const outside = () => NextResponse.json({ error: TASK_OUTSIDE }, { status: 403 })
   try {
-    refused = await checkTenantGuestScope(principal.tenantId, connection, connectionId, null, node, (sameNode && task?.vmid) || '', true)
+    if (!sameNode || !task?.vmid) {
+      const infra = await getTenantInfrastructureScope(principal.tenantId, { ignoreVdcContext: true })
+      if (infra.kind !== 'iaas') return null
+      return sameNode && (await startedByToken(principal, upid)) ? null : outside()
+    }
+    const refused = await checkTenantGuestScope(principal.tenantId, connection, connectionId, null, node, task.vmid, true)
+    // null: inside the vDC (or not a vDC tenant). A 503 (scope unverifiable) is returned as is.
+    if (!refused || refused.status !== 403) return refused
+    return (await startedByToken(principal, upid)) ? null : outside()
   } catch {
     return NextResponse.json({ error: 'Unable to verify guest vDC scope' }, { status: 503 })
   }
-  // null: inside the vDC (or not a vDC tenant). A 503 (scope unverifiable) is returned as is.
-  if (!refused || refused.status !== 403) return refused
-  if (sameNode && (await startedByToken(principal, upid))) return null
-  return NextResponse.json({ error: TASK_OUTSIDE }, { status: 403 })
 }
 
 async function handler(

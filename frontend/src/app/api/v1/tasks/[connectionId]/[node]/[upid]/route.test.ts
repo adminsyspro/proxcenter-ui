@@ -52,6 +52,7 @@ import { GET } from './route'
 import { checkPermission } from '@/lib/rbac'
 import { getConnectionById } from '@/lib/connections/getConnection'
 import { pveFetch } from '@/lib/proxmox/client'
+import { prisma } from '@/lib/db/prisma'
 import { executeSSH } from '@/lib/ssh/exec'
 import { getNodeIp } from '@/lib/ssh/node-ip'
 import { formatBytes as formatSize } from '@/utils/format'
@@ -533,6 +534,15 @@ describe('GET /api/v1/tasks/[connectionId]/[node]/[upid]: connection and vDC per
     expect(await readJson<any>(res)).toEqual({ error: 'Task outside your vDC scope' })
   })
 
+  it('a task on another node or of no guest is judged on the tenant kind alone, without listing the guests', async () => {
+    tenantGuests([{ type: 'qemu', vmid: 100, node: 'pve1', pool: 'pool-a' }])
+    expect((await tokenGet(UPID, token, 'pve2')).status).toBe(403)
+    expect((await tokenGet('UPID:pve1:0000ABCD:00001234:6A000000:aptupdate::root@pam:')).status).toBe(403)
+    expect(pveFetchMock.mock.calls.some((c: any[]) => c[1] === '/cluster/resources?type=vm')).toBe(false)
+    getTenantInfrastructureScopeMock.mockResolvedValue({ kind: 'msp', connectionIds: new Set(['conn-1']) })
+    expect((await tokenGet(UPID, token, 'pve2')).status).toBe(200)
+  })
+
   it('a vDC tenant token fails closed (503) when its guests cannot be listed or its scope resolved', async () => {
     tenantGuests([])
     pveFetchMock.mockImplementation(() => Promise.reject(new Error('pve down')))
@@ -551,6 +561,21 @@ describe('GET /api/v1/tasks/[connectionId]/[node]/[upid]: connection and vDC per
     it('reads the final status of its own vm-delete whose guest no longer exists', async () => {
       const res = await tokenGet(DESTROY_UPID)
       expect(res.status).toBe(200)
+    })
+
+    it('its own task is refused when the UPID node is not the URL node', async () => {
+      const res = await tokenGet(DESTROY_UPID, token, 'pve2')
+      expect(res.status).toBe(403)
+      expect(await readJson<any>(res)).toEqual({ error: 'Task outside your vDC scope' })
+      expect(askedProxmoxForTheTask()).toBe(false)
+    })
+
+    it('fails closed (503, generic message) when its task journal cannot be read', async () => {
+      const findFirst = vi.spyOn(prisma.auditLog, 'findFirst').mockRejectedValueOnce(new Error('db down: secret'))
+      const res = await tokenGet('UPID:pve1:0000ABCD:00001234:6A000001:vzdump::root@pam:')
+      expect(res.status).toBe(503)
+      expect(await readJson<any>(res)).toEqual({ error: 'Unable to verify guest vDC scope' })
+      findFirst.mockRestore()
     })
 
     it('another token of the same tenant is refused the same UPID', async () => {

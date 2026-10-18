@@ -183,6 +183,41 @@ describe('shared canonical matcher', () => {
       'vdc-vnet-get': '/api/v1/vdcs/vdc1/vnets/lan',
       'vdc-vnet-update': '/api/v1/vdcs/vdc1/vnets/lan',
       'vdc-vnet-delete': '/api/v1/vdcs/vdc1/vnets/dmz',
+      'fw-aliases-list': '/api/v1/firewall/aliases/c1',
+      'fw-alias-create': '/api/v1/firewall/aliases/c1',
+      'fw-alias-update': '/api/v1/firewall/aliases/c1/gw-lan',
+      'fw-alias-delete': '/api/v1/firewall/aliases/c1/gw-lan',
+      'fw-cluster-get': '/api/v1/firewall/cluster/c1',
+      'fw-cluster-options-update': '/api/v1/firewall/cluster/c1',
+      'fw-cluster-rule-add': '/api/v1/firewall/cluster/c1',
+      'fw-cluster-rule-create': '/api/v1/firewall/cluster/c1/rules',
+      'fw-cluster-rule-update': '/api/v1/firewall/cluster/c1/rules/0',
+      'fw-cluster-rule-delete': '/api/v1/firewall/cluster/c1/rules/3',
+      'fw-groups-list': '/api/v1/firewall/groups/c1',
+      'fw-group-create': '/api/v1/firewall/groups/c1',
+      'fw-group-delete': '/api/v1/firewall/groups/c1/web',
+      'fw-group-rule-create': '/api/v1/firewall/groups/c1/web/rules',
+      'fw-group-rule-update': '/api/v1/firewall/groups/c1/web/rules/1',
+      'fw-group-rule-delete': '/api/v1/firewall/groups/c1/web/rules/1',
+      'fw-ipsets-list': '/api/v1/firewall/ipsets/c1',
+      'fw-ipset-create': '/api/v1/firewall/ipsets/c1',
+      'fw-ipset-delete': '/api/v1/firewall/ipsets/c1/blocklist',
+      'fw-ipset-entry-create': '/api/v1/firewall/ipsets/c1/blocklist/entries',
+      'fw-ipset-entry-delete': '/api/v1/firewall/ipsets/c1/blocklist/entries/10.0.0.0%2F24',
+      'fw-node-get': '/api/v1/firewall/nodes/c1/pve1',
+      'fw-node-options-update': '/api/v1/firewall/nodes/c1/pve1',
+      'fw-node-rule-add': '/api/v1/firewall/nodes/c1/pve1',
+      'fw-node-rule-create': '/api/v1/firewall/nodes/c1/pve1/rules',
+      'fw-node-rule-update': '/api/v1/firewall/nodes/c1/pve1/rules/2',
+      'fw-node-rule-delete': '/api/v1/firewall/nodes/c1/pve1/rules/2',
+      'fw-microseg-base-generate': '/api/v1/firewall/microseg/c1/generate-base',
+      'fw-vm-isolate': '/api/v1/firewall/microseg/c1/vm/pve1/qemu/100/isolate',
+      'fw-vm-get': '/api/v1/firewall/vms/c1/pve1/qemu/100',
+      'fw-vm-rule-create': '/api/v1/firewall/vms/c1/pve1/qemu/100',
+      'fw-vm-options-update': '/api/v1/firewall/vms/c1/pve1/qemu/100',
+      'fw-vm-rule-update': '/api/v1/firewall/vms/c1/pve1/qemu/100/rules/0',
+      'fw-vm-rule-delete': '/api/v1/firewall/vms/c1/pve1/qemu/100/rules/0',
+      'fw-vm-nic-firewall-update': '/api/v1/firewall/vms/c1/pve1/qemu/100/nic-firewall',
     }
     for (const entry of PUBLIC_API_ALLOWLIST) {
       const path = samplePathById[entry.id]
@@ -270,6 +305,23 @@ describe('method-aware matching', () => {
     expect(matchPublicApiPath(`${content}/local%3Aiso%2F..%2Fdebian.iso`, 'DELETE').ok).toBe(false)
     expect(matchPublicApiPath(`${content}/local%3Aiso%5Cdebian.iso`, 'DELETE').ok).toBe(false)
     expect(matchPublicApiPath('/api/v1/connections/c1/nodes/pve1/storage/lo%2Fcal/content/local%3Aiso%2Fdebian.iso', 'DELETE').ok).toBe(false)
+  })
+
+  it('an IP set entry CIDR carries its slash encoded in its one segment only', () => {
+    const entries = '/api/v1/firewall/ipsets/c1/blocklist/entries'
+    expect(matchPublicApiPath(`${entries}/10.0.0.0%2F24`, 'DELETE'))
+      .toMatchObject({ entryId: 'fw-ipset-entry-delete', params: { cidr: '10.0.0.0%2F24' } })
+    expect(matchPublicApiPath(`${entries}/10.0.0.0%2F..`, 'DELETE').ok).toBe(false)
+    expect(matchPublicApiPath(`${entries}/10.0.0.0%5C24`, 'DELETE').ok).toBe(false)
+    expect(matchPublicApiPath('/api/v1/firewall/ipsets/c1/block%2Flist/entries/10.0.0.0%2F24', 'DELETE').ok).toBe(false)
+    expect(matchPublicApiPath('/api/v1/firewall/ipsets/c1/block%2Flist', 'DELETE').ok).toBe(false)
+  })
+
+  it('the firewall root and its unopened reads stay closed to tokens', () => {
+    expect(matchPublicApiPath('/api/v1/firewall', 'GET').ok).toBe(false)
+    expect(matchPublicApiPath('/api/v1/firewall/logs/c1', 'GET').ok).toBe(false)
+    expect(matchPublicApiPath('/api/v1/firewall/microseg/c1/analyze', 'GET').ok).toBe(false)
+    expect(matchPublicApiPath('/api/v1/firewall/vms/c1/pve1/qemu/100/log', 'GET').ok).toBe(false)
   })
 
   it('matchesEntry checks the method and isWriteEntry flags non-GET', () => {

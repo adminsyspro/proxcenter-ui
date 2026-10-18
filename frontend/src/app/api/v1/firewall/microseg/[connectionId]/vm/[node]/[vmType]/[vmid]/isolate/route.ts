@@ -5,11 +5,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getOrchestratorClient } from '@/lib/orchestrator/client'
 import { verifyConnectionOwnership } from '@/lib/tenant'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
+import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
 
 type Params = { connectionId: string; node: string; vmType: string; vmid: string }
 
 // POST - Isolate VM
-export async function POST(
+async function postHandler(
   request: NextRequest,
   { params }: { params: Promise<Params> }
 ) {
@@ -41,3 +42,5 @@ return NextResponse.json(
     )
   }
 }
+
+export const POST = withPublicApiGuard("fw-vm-isolate", postHandler)

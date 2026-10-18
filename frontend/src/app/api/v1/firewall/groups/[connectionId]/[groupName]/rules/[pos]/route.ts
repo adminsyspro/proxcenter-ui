@@ -8,9 +8,10 @@ import * as pveDirect from '@/lib/firewall/pveDirect'
 import { orchestratorOrPve } from '@/lib/firewall/withPveFallback'
 import { verifyConnectionOwnership } from '@/lib/tenant'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
+import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
 
 // PUT /api/v1/firewall/groups/[connectionId]/[groupName]/rules/[pos] - Update rule
-export async function PUT(
+async function putHandler(
   request: NextRequest,
   { params }: { params: Promise<{ connectionId: string; groupName: string; pos: string }> }
 ) {
@@ -45,7 +46,7 @@ return NextResponse.json(
 }
 
 // DELETE /api/v1/firewall/groups/[connectionId]/[groupName]/rules/[pos] - Delete rule
-export async function DELETE(
+async function deleteHandler(
   request: NextRequest,
   { params }: { params: Promise<{ connectionId: string; groupName: string; pos: string }> }
 ) {
@@ -75,3 +76,6 @@ return NextResponse.json(
     )
   }
 }
+
+export const PUT = withPublicApiGuard("fw-group-rule-update", putHandler)
+export const DELETE = withPublicApiGuard("fw-group-rule-delete", deleteHandler)

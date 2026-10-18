@@ -596,8 +596,8 @@ async function checkSessionTaskAccess(connectionId: string, node: string, upid: 
 /**
  * Whether the caller journaled the UPID, i.e. started the task: a token in its
  * own apitoken.write line (as `upid`, or among the `upids` of a multi-task
- * answer), a session in an audit line of its tenant (the guest deletion
- * records the destroy task it started).
+ * answer), a session in the audit line of a guest deletion by its tenant
+ * (which records the destroy task it started).
  */
 async function startedByCaller(principal: Principal, upid: string): Promise<boolean> {
   const upidMatch = [
@@ -605,9 +605,11 @@ async function startedByCaller(principal: Principal, upid: string): Promise<bool
     { details: { path: ['upids'], array_contains: [upid] } },
   ]
   if (principal.kind === 'token' && !principal.tokenId) return false
+  // Only lines whose UPID the server wrote itself: some audit lines carry
+  // request fields in their details, and a tenant could plant any UPID there.
   const where = principal.kind === 'token'
     ? { action: 'apitoken.write', apiTokenId: principal.tokenId, tenantId: principal.tenantId, OR: upidMatch }
-    : { tenantId: principal.tenantId, OR: upidMatch }
+    : { action: 'delete', resourceType: { in: ['qemu', 'lxc'] }, tenantId: principal.tenantId, details: { path: ['upid'], equals: upid } }
   const row = await prisma.auditLog.findFirst({ where, select: { id: true } })
   return row !== null
 }

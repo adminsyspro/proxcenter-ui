@@ -673,14 +673,17 @@ describe('GET /api/v1/tasks/[connectionId]/[node]/[upid]: connection and vDC per
       expect(askedProxmoxForTheTask()).toBe(false)
     })
 
-    it('polls a vzdump task its tenant journaled among the upids of a run', async () => {
-      const VZDUMP = 'UPID:pve1:0000ABCD:00001234:6A000001:vzdump::root@pam:'
+    it('is refused a UPID its tenant planted in another audit line', async () => {
+      // Some audit lines carry request fields in their details: only the
+      // guest deletion's own line, written by the server, proves the task.
       tenantGuests([])
       await prismaTest.auditLog.create({ data: {
-        id: 'audit-session-run', tenantId: 'tenant-v', userId: 'u1', timestamp: new Date(), action: 'run',
-        category: 'backups', details: { upid: null, upids: [VZDUMP] },
+        id: 'audit-session-planted', tenantId: 'tenant-v', userId: 'u1', timestamp: new Date(), action: 'update',
+        category: 'vms', resourceType: 'qemu', resourceId: '100', details: { upid: DESTROY_UPID, upids: [DESTROY_UPID] },
       } })
-      expect((await sessionGet(VZDUMP)).status).toBe(200)
+      const res = await sessionGet(DESTROY_UPID)
+      expect(res.status).toBe(403)
+      expect(askedProxmoxForTheTask()).toBe(false)
     })
 
     it('an MSP tenant session is not confined to vDC guests', async () => {

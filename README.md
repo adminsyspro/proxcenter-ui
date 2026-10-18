@@ -3,25 +3,24 @@
 </p>
 
 <p align="center">
-  <a href="https://www.proxcenter.io/">www.proxcenter.io</a> · <a href="https://demo.proxcenter.io/">Live Demo</a> · <a href="https://docs.proxcenter.io/">Documentation</a>
-</p>
-
-<p align="center">
   <strong>Enterprise-grade management platform for Proxmox Virtual Environment</strong>
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Proxmox-8.x%20%7C%209.x-E57000" alt="Proxmox">
-  <img src="https://img.shields.io/badge/License-Community%20%7C%20Enterprise-blue" alt="License">
-  <a href="https://github.com/adminsyspro/proxcenter-ui/actions/workflows/codeql.yml"><img src="https://github.com/adminsyspro/proxcenter-ui/actions/workflows/codeql.yml/badge.svg" alt="CodeQL"></a>
-  <a href="https://github.com/adminsyspro/proxcenter-ui/actions/workflows/security-scan.yml"><img src="https://github.com/adminsyspro/proxcenter-ui/actions/workflows/security-scan.yml/badge.svg" alt="Security Scan"></a>
-  <a href="https://github.com/adminsyspro/proxcenter-ui/stargazers"><img src="https://img.shields.io/github/stars/adminsyspro/proxcenter-ui?style=flat&color=f5c542&logo=github" alt="Stars"></a>
+  <a href="https://github.com/adminsyspro/proxcenter-ui/stargazers"><img src="https://img.shields.io/github/stars/adminsyspro/proxcenter-ui?style=flat-square&logo=github&label=Star&color=E57000&labelColor=1C1C24" alt="GitHub stars"></a>
+  <a href="https://github.com/adminsyspro/proxcenter-ui/releases"><img src="https://img.shields.io/github/v/release/adminsyspro/proxcenter-ui?style=flat-square&label=Release&color=E57000&labelColor=1C1C24" alt="Latest release"></a>
+  <a href="https://www.proxmox.com/en/products/proxmox-virtual-environment/overview"><img src="https://img.shields.io/badge/Proxmox%20VE-8.x%20%7C%209.x-F28C28?style=flat-square&logo=proxmox&logoColor=white&labelColor=1C1C24" alt="Proxmox VE 8.x and 9.x"></a>
+  <a href="https://www.proxcenter.io/"><img src="https://img.shields.io/badge/License-Community%20%7C%20Enterprise-FFC48A?style=flat-square&labelColor=1C1C24" alt="License Community or Enterprise"></a>
 </p>
 
 <p align="center">
-  <a href="https://sonarcloud.io/summary/overall?id=adminsyspro_proxcenter-ui"><img src="https://sonarcloud.io/api/project_badges/measure?project=adminsyspro_proxcenter-ui&metric=security_rating" alt="Security Rating"></a>
-  <a href="https://sonarcloud.io/summary/overall?id=adminsyspro_proxcenter-ui"><img src="https://sonarcloud.io/api/project_badges/measure?project=adminsyspro_proxcenter-ui&metric=reliability_rating" alt="Reliability Rating"></a>
-  <a href="https://sonarcloud.io/summary/overall?id=adminsyspro_proxcenter-ui"><img src="https://sonarcloud.io/api/project_badges/measure?project=adminsyspro_proxcenter-ui&metric=sqale_rating" alt="Maintainability Rating"></a>
+  <a href="https://github.com/adminsyspro/proxcenter-ui/actions/workflows/codeql.yml"><img src="https://img.shields.io/github/actions/workflow/status/adminsyspro/proxcenter-ui/codeql.yml?branch=main&style=flat-square&logo=github&label=CodeQL&labelColor=1C1C24" alt="CodeQL"></a>
+  <a href="https://github.com/adminsyspro/proxcenter-ui/actions/workflows/security-scan.yml"><img src="https://img.shields.io/github/actions/workflow/status/adminsyspro/proxcenter-ui/security-scan.yml?branch=main&style=flat-square&logo=github&label=Security%20Scan&labelColor=1C1C24" alt="Security Scan"></a>
+  <a href="https://sonarcloud.io/summary/overall?id=adminsyspro_proxcenter-ui"><img src="https://img.shields.io/sonar/quality_gate/adminsyspro_proxcenter-ui?server=https%3A%2F%2Fsonarcloud.io&style=flat-square&logo=sonarcloud&label=Quality%20Gate&labelColor=1C1C24" alt="SonarCloud Quality Gate"></a>
+</p>
+
+<p align="center">
+  <a href="https://www.proxcenter.io/"><b>🌐 Website</b></a> · <a href="https://demo.proxcenter.io/"><b>▶️ Live Demo</b></a> · <a href="https://docs.proxcenter.io/"><b>📖 Documentation</b></a>
 </p>
 
 ---
@@ -35,6 +34,17 @@
 <p align="center">
   <img src="docs/screenshots/dashboard.png" alt="Modular Dashboard" width="100%">
 </p>
+
+---
+
+## Requirements
+
+- **Host**: Linux with Docker Engine 24+ and Docker Compose v2
+- **Sizing**: 2 GB RAM and 10 GB disk minimum, more for database growth
+- **Ports**: 3000 inbound, outbound to Proxmox VE 8006 and Proxmox Backup Server 8007
+- **Proxmox**: Proxmox VE 8.x or 9.x
+
+High availability adds its own sizing and network prerequisites, listed in the [documentation](https://docs.proxcenter.io/operations/ha-prerequisites).
 
 ---
 
@@ -56,16 +66,45 @@ Running behind a reverse proxy? Enable the *"Behind reverse proxy"* toggle in th
 
 ## Features
 
-- **Multi-cluster management**: monitor and operate every Proxmox cluster from one console
-- **Inventory & topology**: nodes, guests, storage, networks, and the Ceph CRUSH tree at a glance
-- **Cross-hypervisor migration**: bring VMs over from VMware, Hyper-V, Nutanix, and XCP-ng, including warm (CBT) migration
-- **In-browser consoles**: noVNC and SPICE for QEMU guests
-- **Backups & replication**: fleet-wide visibility and reporting
-- **RBAC & SSO**: granular roles and scopes
-- **DRS workload balancing** *(Enterprise)*: automatic load distribution via the Go orchestrator
-- **Alerts, reports & notifications** *(Enterprise)*: email digests, severity routing, and scheduled reports
-- **MSP mode** *(Enterprise)*: multi-tenant fleet management with license stacking
-- **High availability** *(Enterprise)*: three-node control plane with a virtual IP, replicated PostgreSQL, and leader election
+| Feature | Community | Enterprise |
+|---|:---:|:---:|
+| Multi-cluster management | ✅ | ✅ |
+| Modular dashboard (drag-and-drop widgets) | ✅ | ✅ |
+| Advanced VM inventory | ✅ | ✅ |
+| Unified storage view | ✅ | ✅ |
+| Real-time Ceph monitoring | ✅ | ✅ |
+| PBS multi-server management | ✅ | ✅ |
+| In-browser consoles (noVNC, SPICE) | ✅ | ✅ |
+| Network topology map | ✅ | ✅ |
+| Cloud-Init templates | ✅ | ✅ |
+| Integrated IPAM | ✅ | ✅ |
+| Proxmox firewall rules (cluster, node, guest) | ✅ | ✅ |
+| Events & audit logs | ✅ | ✅ |
+| Self-hosted / on-premise | ✅ | ✅ |
+| Alerts (dashboard widgets in Community, rules, routing and notifications in Enterprise) | 🟡 | ✅ |
+| Cross-cluster migration | ❌ | ✅ |
+| Hypervisor migration (VMware ESXi, XCP-ng, Nutanix, Hyper-V) | ❌ | ✅ |
+| DRS load balancing | ❌ | ✅ |
+| Site Recovery (Ceph cross-cluster replication) | ❌ | ✅ |
+| Micro-segmentation | ❌ | ✅ |
+| sFlow network flow analysis | ❌ | ✅ |
+| Rolling updates | ❌ | ✅ |
+| CVE vulnerability scanning | ❌ | ✅ |
+| Compliance auditing | ❌ | ✅ |
+| Change tracking & configuration drift | ❌ | ✅ |
+| AI analytics & predictions | ❌ | ✅ |
+| Green IT metrics | ❌ | ✅ |
+| Custom infrastructure reports | ❌ | ✅ |
+| Task center | ❌ | ✅ |
+| Syslog / SIEM forwarding | ❌ | ✅ |
+| RBAC + LDAP / AD | ❌ | ✅ |
+| OIDC SSO (Keycloak, Entra ID, Okta, Auth0) | ❌ | ✅ |
+| Virtual Data Centers (vDC) & tenant self-service portal | ❌ | ✅ |
+| Full white-label (MSP branding) | ❌ | ✅ |
+| ProxCenter HA: highly available control plane (3 nodes, VIP failover) | ❌ | ➕ |
+| REST API (service-account tokens) | ❌ | ➕ |
+
+✅ included · 🟡 partial · ❌ not included · ➕ paid add-on on top of Enterprise
 
 See the [documentation](https://docs.proxcenter.io/) for the full feature list and the Community vs Enterprise breakdown.
 
@@ -130,13 +169,18 @@ docker compose up -d
 
 Schema migrations run automatically on startup. Nothing else is required for a Community install.
 
-**Enterprise, when a release adds a setting**: `docker compose pull` refreshes the images, never `docker-compose.yml`, and the shipped Compose files pass their environment through an explicit `environment:` list. A setting introduced by a newer release therefore never reaches the container on a pull-only update, whatever `/opt/proxcenter/.env` holds. Re-run the installer to refresh the Compose file:
+<details>
+<summary><b>Enterprise: when a release adds a setting</b></summary>
+
+`docker compose pull` refreshes the images, never `docker-compose.yml`, and the shipped Compose files pass their environment through an explicit `environment:` list. A setting introduced by a newer release therefore never reaches the container on a pull-only update, whatever `/opt/proxcenter/.env` holds. Re-run the installer to refresh the Compose file:
 
 ```bash
 curl -fsSL https://proxcenter.io/install/enterprise | sudo bash -s -- --token YOUR_TOKEN
 ```
 
 It keeps your secrets, your customised `NEXTAUTH_URL` and `APP_URL`, and your license key, leaves the data untouched, then pulls and recreates only the containers whose environment changed. An install that pinned a version in `.env` has to pass it again with `--version`, since a re-run otherwise resets it to `latest`.
+
+</details>
 
 **High availability**: the three nodes run the same Compose file, so the same two commands apply per node. Upgrade one node at a time and keep the version identical across the cluster.
 
@@ -156,6 +200,9 @@ docker compose restart          # Restart the stack
 ## Build from source
 
 The Docker install above is the supported path. Building by hand suits hosts without Docker, such as an LXC container, and covers the Community Edition only: the Enterprise features need the closed-source orchestrator.
+
+<details>
+<summary><b>Build steps</b></summary>
 
 You need Node.js 22.12 or later, PostgreSQL 16 or later with an empty database, and **4 GB of RAM for the build**. The running application needs far less, around 300 MB.
 
@@ -195,20 +242,22 @@ node start.js           # listens on 0.0.0.0:3000, override with PORT and HOSTNA
 
 Run `node start.js` under a service manager, such as a systemd unit with `WorkingDirectory=/opt/proxcenter/frontend` and `EnvironmentFile=/opt/proxcenter_data/.env`. To upgrade, fetch the new tag, repeat the build, run `npx prisma migrate deploy` and restart the service. The seed is idempotent and safe to run again.
 
+</details>
+
 ---
-
-## Requirements
-
-- **Host**: Linux with Docker Engine 24+ and Docker Compose v2
-- **Sizing**: 2 GB RAM and 10 GB disk minimum, more for database growth
-- **Ports**: 3000 inbound, outbound to Proxmox VE 8006 and Proxmox Backup Server 8007
-- **Proxmox**: Proxmox VE 8.x or 9.x
-
-High availability adds its own sizing and network prerequisites, listed in the [documentation](https://docs.proxcenter.io/operations/ha-prerequisites).
 
 ## Security
 
 Automated scanning via **CodeQL**, **Trivy**, and **Dependabot**. Report vulnerabilities to [security@proxcenter.io](mailto:security@proxcenter.io).
+
+## Star History
+
+<a href="https://star-history.com/#adminsyspro/proxcenter-ui&Date">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=adminsyspro/proxcenter-ui&type=Date&theme=dark">
+    <img src="https://api.star-history.com/svg?repos=adminsyspro/proxcenter-ui&type=Date" alt="Star History Chart" width="100%">
+  </picture>
+</a>
 
 ## License
 

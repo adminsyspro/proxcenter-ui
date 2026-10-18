@@ -11,7 +11,9 @@ import { prismaTest, truncate } from '@/__tests__/setup/prisma-test'
 
 vi.mock('@/lib/rbac', () => ({
   checkPermission: vi.fn<(...a: any[]) => Promise<any>>(),
-  PERMISSIONS: { CONNECTION_VIEW: 'connection.view', NODE_MANAGE: 'node.manage' },
+  PERMISSIONS: { CONNECTION_VIEW: 'connection.view', NODE_MANAGE: 'node.manage', VM_VIEW: 'vm.view', NODE_VIEW: 'node.view' },
+  buildVmResourceId: (c: string, n: string, t: string, v: string) => `${c}:${n}:${t}:${v}`,
+  buildNodeResourceId: (c: string, n: string) => `${c}:${n}`,
 }))
 
 vi.mock('@/lib/connections/getConnection', () => ({
@@ -492,14 +494,15 @@ describe('GET /api/v1/tasks/[connectionId]/[node]/[upid]: connection and vDC per
     expect(checkPermissionMock).toHaveBeenCalledWith('connection.view', 'connection', 'conn-1')
   })
 
-  it('keeps the resource-less check for sessions, so a narrowly scoped user still polls', async () => {
-    // scopeMatches: a vm-scoped grant matches a resource-less check, never a "connection" resource.
+  it('judges a session on the connection first, then on the guest the UPID names (sessionTaskScope.test.ts)', async () => {
+    // A vm-scoped grant never matches a "connection" resource, it matches the VM one (#378).
     checkPermissionMock.mockImplementation(async (_perm: string, resourceType?: string) =>
-      resourceType ? Response.json({ error: 'Permission denied: connection.view' }, { status: 403 }) : null)
+      resourceType === 'vm' ? null : Response.json({ error: 'Permission denied: connection.view' }, { status: 403 }))
     const { req, params } = ctx()
     const res = await GET(req, { params })
     expect(res.status).toBe(200)
-    expect(checkPermissionMock).toHaveBeenCalledWith('connection.view')
+    expect(checkPermissionMock).toHaveBeenCalledWith('connection.view', 'connection', 'conn-1')
+    expect(checkPermissionMock).toHaveBeenCalledWith('vm.view', 'vm', 'conn-1:pve1:qemu:100')
   })
 
   it('a vDC tenant token reads the task of one of its guests, checked on the task node', async () => {

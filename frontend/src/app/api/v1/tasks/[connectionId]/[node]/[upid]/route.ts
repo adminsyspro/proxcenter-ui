@@ -6,7 +6,7 @@ import { fetchTaskLog } from '@/lib/proxmox/taskLog'
 import { extractTaskFailureReason } from '@/lib/proxmox/taskFailureReason'
 import { getConnectionById, type PveConn } from '@/lib/connections/getConnection'
 import { formatBytes as formatSize } from '@/utils/format'
-import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { buildNodeResourceId, buildVmResourceId, checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { assertVmid } from '@/lib/ssh/validate'
 import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
 import type { Principal } from '@/lib/auth/principal'
@@ -538,11 +538,39 @@ function parseGenericProgress(logs: TaskLogEntry[]): { progress: number; message
 
 const TASK_OUTSIDE = 'Task outside your vDC scope'
 
-/** `UPID:node:pid:pstart:starttime:type:id:user:`: its node, and its guest when the id is a vmid. */
-function parseTaskUpid(upid: string): { node: string; vmid: string | null } | null {
+/** `UPID:node:pid:pstart:starttime:type:id:user:`: its node, its task type, and its guest when the id is a vmid. */
+function parseTaskUpid(upid: string): { node: string; type: string; vmid: string | null } | null {
   const parts = upid.split(':')
   if (parts[0] !== 'UPID' || !parts[1]) return null
-  return { node: parts[1], vmid: /^\d+$/.test(parts[6] || '') ? parts[6] : null }
+  return { node: parts[1], type: parts[5] || '', vmid: /^\d+$/.test(parts[6] || '') ? parts[6] : null }
+}
+
+/** Guest types a task type can be about: qm* a VM, vz* a container (vzdump, like any other type, either). */
+function taskGuestTypes(taskType: string): Array<'qemu' | 'lxc'> {
+  if (taskType.startsWith('qm')) return ['qemu']
+  if (taskType.startsWith('vz') && taskType !== 'vzdump') return ['lxc']
+  return ['qemu', 'lxc']
+}
+
+/**
+ * A session follows a task when it may view the task's connection, or the
+ * guest its UPID names (vm.view; pool and tag grants resolve in
+ * checkPermission), or its node (node.view): a vm-, pool- or node-scoped
+ * user keeps polling the tasks of what it sees (#378), a grant on another
+ * connection opens nothing. The guest and node fallbacks need the UPID node
+ * to be the URL node. Anything but a 403 (401: no session) is final.
+ */
+async function checkSessionTaskAccess(connectionId: string, node: string, upid: string): Promise<Response | null> {
+  const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW, 'connection', connectionId)
+  if (!denied || denied.status !== 403) return denied
+  const task = parseTaskUpid(upid)
+  if (task?.node !== node) return denied
+  if (task.vmid) {
+    for (const type of taskGuestTypes(task.type)) {
+      if (!(await checkPermission(PERMISSIONS.VM_VIEW, 'vm', buildVmResourceId(connectionId, node, type, task.vmid)))) return null
+    }
+  }
+  return (await checkPermission(PERMISSIONS.NODE_VIEW, 'node', buildNodeResourceId(connectionId, node))) ? denied : null
 }
 
 /**
@@ -603,16 +631,15 @@ async function handler(
   try {
     const { connectionId, node, upid } = await params
 
-    // Tokens are judged on the connection of the task. Sessions keep the
-    // resource-less check: a vm/node/pool-scoped grant never matches a
-    // "connection" resource, and those users poll their tasks here (#378).
+    const decodedUpid = decodeURIComponent(upid)
+
+    // Tokens are judged on the connection of the task. Sessions may also
+    // reach it through the guest or the node it names (#378).
     const isToken = principal?.kind === 'token'
     const denied = isToken
       ? await checkPermission(PERMISSIONS.CONNECTION_VIEW, 'connection', connectionId)
-      : await checkPermission(PERMISSIONS.CONNECTION_VIEW)
+      : await checkSessionTaskAccess(connectionId, node, decodedUpid)
     if (denied) return denied
-
-    const decodedUpid = decodeURIComponent(upid)
 
     const connection = await getConnectionById(connectionId)
 

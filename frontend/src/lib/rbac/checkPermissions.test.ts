@@ -33,7 +33,7 @@ vi.mock('@/lib/tenant', () => ({
 }))
 
 import { expandScopes } from '@/lib/api-tokens/scopes'
-import { checkPermission, checkPermissions, expandPermissionHierarchy, holdsBroadPermission, PERMISSIONS } from './index'
+import { checkPermission, checkPermissions, expandPermissionHierarchy, hasPermission, holdsBroadPermission, PERMISSIONS } from './index'
 
 const VM = 'conn-1:pve1:qemu:100'
 
@@ -235,6 +235,39 @@ describe('vms:write scope against the permission hierarchy', () => {
     expect(await checkPermission(PERMISSIONS.VM_CONFIG_HARDWARE, 'vm', VM)).toBeNull()
     expect(await errorOf(await checkPermission(PERMISSIONS.VM_CONFIG_NIC_MAC, 'vm', VM))).toEqual({ status: 403, error: 'Permission denied: vm.config.nic.mac' })
     expect(await errorOf(await checkPermission(PERMISSIONS.VM_CONFIG_NIC_VLAN, 'vm', VM))).toEqual({ status: 403, error: 'Permission denied: vm.config.nic.vlan' })
+  })
+})
+
+describe('connection scope: the connection id, never a bare prefix of another one', () => {
+  // conn-a is a prefix of conn-ab: a grant on the first must not open the second.
+  beforeEach(() => {
+    grantRole(['vm.view', 'node.view', 'connection.view'], 'connection', 'conn-a')
+    m.getTenantConnectionIds.mockResolvedValue(new Set(['conn-a', 'conn-ab']))
+  })
+  const has = (permission: string, resourceType: any, resourceId: string) =>
+    hasPermission({ userId: 'u1', tenantId: 't1', permission, resourceType, resourceId })
+
+  it('opens the connection itself and what sits under it', async () => {
+    expect(await has(PERMISSIONS.CONNECTION_VIEW, 'connection', 'conn-a')).toBe(true)
+    expect(await has(PERMISSIONS.NODE_VIEW, 'node', 'conn-a:pve1')).toBe(true)
+    expect(await has(PERMISSIONS.VM_VIEW, 'vm', 'conn-a:pve1:qemu:100')).toBe(true)
+  })
+
+  it('never opens a connection whose id merely starts with it', async () => {
+    expect(await has(PERMISSIONS.CONNECTION_VIEW, 'connection', 'conn-ab')).toBe(false)
+    expect(await has(PERMISSIONS.NODE_VIEW, 'node', 'conn-ab:pve1')).toBe(false)
+    expect(await has(PERMISSIONS.VM_VIEW, 'vm', 'conn-ab:pve1:qemu:100')).toBe(false)
+  })
+
+  it('checkPermission of a session draws the same line', async () => {
+    m.getPrincipal.mockResolvedValue(userPrincipal)
+    expect(await checkPermission(PERMISSIONS.VM_VIEW, 'vm', 'conn-a:pve1:qemu:100')).toBeNull()
+    expect(await errorOf(await checkPermission(PERMISSIONS.VM_VIEW, 'vm', 'conn-ab:pve1:qemu:100'))).toEqual({ status: 403, error: 'Permission denied: vm.view' })
+  })
+
+  it('a connection grant without a target opens nothing', async () => {
+    grantRole(['vm.view'], 'connection', null)
+    expect(await has(PERMISSIONS.VM_VIEW, 'vm', 'conn-a:pve1:qemu:100')).toBe(false)
   })
 })
 

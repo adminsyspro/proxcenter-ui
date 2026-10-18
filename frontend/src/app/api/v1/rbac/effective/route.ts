@@ -274,8 +274,9 @@ function checkScopeMatch(
   // Vérifier selon le type de scope
   switch (scopeType) {
     case "connection":
-      // Le scope connection correspond si resourceId commence par le connection_id
-      return resourceId.startsWith(scopeTarget || "")
+      // The connection itself, or a resource under it ("connId:..."): a bare
+      // prefix would let connection "abc" open connection "abcd".
+      return !!scopeTarget && (resourceId === scopeTarget || resourceId.startsWith(scopeTarget + ":"))
 
     case "node":
       // Node scope matches when the resource sits on this node. Both

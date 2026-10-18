@@ -148,6 +148,7 @@ import TemplateDownloadDialog from '@/components/storage/TemplateDownloadDialog'
 import { loadNodeAptUpdates } from '@/lib/proxmox/loadNodeAptUpdates'
 import { PAGE_SIZES } from '@/components/ui/PagedRows'
 import { countExtVmPower, filterExtVms, filteredSelectionState, toggleFilteredSelection, type ExtVmPowerFilter } from './extVmList'
+import { isNodeReachable } from './nodeStatusMeta'
 
 /**
  * Rang de l'onglet Sauvegardes d'une VM dans `VmDetailTabs` (Résumé, Matériel,
@@ -2091,8 +2092,12 @@ return
       const connId = selection.id || ''
       // Charger les mises à jour et les VMs locales pour chaque nœud
       data.nodesData.forEach((node: any) => {
+        // A node in HA maintenance (the one a rolling update is working on)
+        // still answers: only an offline node is skipped.
+        const reachable = isNodeReachable(node.status)
+
         // Charger les mises à jour
-        if (node.status === 'online' && !nodeUpdates[node.node]?.loading && nodeUpdates[node.node] === undefined) {
+        if (reachable && !nodeUpdates[node.node]?.loading && nodeUpdates[node.node] === undefined) {
           setNodeUpdates(prev => ({
             ...prev,
             [node.node]: { count: 0, updates: [], version: null, loading: true }
@@ -2107,7 +2112,7 @@ return
         }
         
         // Charger les VMs avec stockage local
-        if (node.status === 'online' && !nodeLocalVms[node.node]?.loading && nodeLocalVms[node.node] === undefined) {
+        if (reachable && !nodeLocalVms[node.node]?.loading && nodeLocalVms[node.node] === undefined) {
           setNodeLocalVms(prev => ({
             ...prev,
             [node.node]: { total: 0, running: 0, blockingMigration: 0, withReplication: 0, canMigrate: true, vms: [], loading: true }

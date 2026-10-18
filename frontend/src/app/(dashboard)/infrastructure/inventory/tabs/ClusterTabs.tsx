@@ -88,6 +88,7 @@ import MetricsRangeSelector, { type MetricsRangeValue } from '@/components/metri
 import useChartDragRange from '@/components/metrics/useChartDragRange'
 import { timeframeForWindow, type RrdRangeMeta, type RrdWindow } from '@/lib/metrics/rrdRange'
 import { osdGridStates, type OsdGridState } from '@/lib/ceph/osdGrid'
+import { isNodeReachable, nodeStatusMeta } from '../nodeStatusMeta'
 
 const INVENTORY_OSD_STYLE: Record<OsdGridState, { color: string; label: string; opacity: number }> = {
   down: { color: '#ef4444', label: 'Down', opacity: 1 },
@@ -1612,7 +1613,7 @@ export default function ClusterTabs(props: any) {
                                   />
                                   <Box sx={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                                     <img src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" style={{ width: 16, height: 16, opacity: 0.8 }} />
-                                    <Box sx={{ position: 'absolute', bottom: -2, right: -2, width: 8, height: 8, borderRadius: '50%', bgcolor: node.status === 'online' ? 'success.main' : 'error.main', border: '1.5px solid', borderColor: 'background.paper' }} />
+                                    <Box sx={{ position: 'absolute', bottom: -2, right: -2, width: 8, height: 8, borderRadius: '50%', bgcolor: nodeStatusMeta(node.status).dot, border: '1.5px solid', borderColor: 'background.paper' }} />
                                   </Box>
                                   <Typography fontWeight={600}>{node.name}</Typography>
                                   <Chip 
@@ -3245,6 +3246,7 @@ export default function ClusterTabs(props: any) {
                               <TableBody>
                                 {data.nodesData.map((node: any) => {
                                   const nodeUpdate = nodeUpdates[node.node]
+                                  const reachable = isNodeReachable(node.status)
                                   // Calcul du temps estimé (réaliste pour rolling update)
                                   const hasKernel = nodeUpdate?.updates?.some((u: any) => 
                                     (u.Package || u.package || '').toLowerCase().includes('kernel') ||
@@ -3283,7 +3285,7 @@ export default function ClusterTabs(props: any) {
                                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                           <Box sx={{ position: 'relative', display: 'inline-flex', alignItems: 'center', width: 16, height: 16, flexShrink: 0 }}>
                                             <img src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" width={16} height={16} style={{ opacity: 0.8 }} />
-                                            <Box sx={{ position: 'absolute', bottom: -2, right: -2, width: 8, height: 8, borderRadius: '50%', bgcolor: node.status === 'online' ? 'success.main' : 'error.main', border: '1.5px solid', borderColor: 'background.paper' }} />
+                                            <Box sx={{ position: 'absolute', bottom: -2, right: -2, width: 8, height: 8, borderRadius: '50%', bgcolor: nodeStatusMeta(node.status).dot, border: '1.5px solid', borderColor: 'background.paper' }} />
                                           </Box>
                                           <Typography variant="body2" fontWeight={600}>{node.node}</Typography>
                                         </Box>
@@ -3384,7 +3386,7 @@ export default function ClusterTabs(props: any) {
                                       <TableCell align="center">
                                         {nodeUpdate?.loading ? (
                                           <CircularProgress size={14} />
-                                        ) : node.status !== 'online' ? (
+                                        ) : !reachable ? (
                                           <Typography variant="caption" sx={{ opacity: 0.5 }}>—</Typography>
                                         ) : (
                                           <Chip 
@@ -3411,7 +3413,7 @@ export default function ClusterTabs(props: any) {
                                       <TableCell align="center">
                                         {nodeUpdate?.loading ? (
                                           <CircularProgress size={14} />
-                                        ) : node.status !== 'online' || pkgCount === 0 ? (
+                                        ) : !reachable || pkgCount === 0 ? (
                                           <Typography variant="caption" sx={{ opacity: 0.5 }}>—</Typography>
                                         ) : (
                                           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.5 }}>
@@ -3427,23 +3429,19 @@ export default function ClusterTabs(props: any) {
                                         )}
                                       </TableCell>
                                       <TableCell align="center">
-                                        {node.status === 'online' ? (
-                                          <Chip 
-                                            size="small" 
-                                            label={t('updates.online')} 
-                                            color="success" 
-                                            icon={<i className="ri-checkbox-circle-fill" style={{ fontSize: 14 }} />}
-                                            sx={{ height: 24 }}
-                                          />
-                                        ) : (
-                                          <Chip 
-                                            size="small" 
-                                            label={t('updates.offline')} 
-                                            color="error"
-                                            icon={<i className="ri-close-circle-fill" style={{ fontSize: 14 }} />}
-                                            sx={{ height: 24 }}
-                                          />
-                                        )}
+                                        {(() => {
+                                          const meta = nodeStatusMeta(node.status)
+
+                                          return (
+                                            <Chip
+                                              size="small"
+                                              label={t(meta.label)}
+                                              color={meta.chipColor}
+                                              icon={<i className={meta.icon} style={{ fontSize: 14 }} />}
+                                              sx={{ height: 24 }}
+                                            />
+                                          )
+                                        })()}
                                       </TableCell>
                                     </TableRow>
                                   )

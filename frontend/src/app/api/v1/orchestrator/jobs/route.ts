@@ -8,6 +8,7 @@ import { orchestratorHeaders } from "@/lib/orchestrator/headers"
 import { TERMINAL_STATUSES, sourceTypeLabel } from "@/lib/tasks/sharedTask"
 import { replicationJobStatus } from "@/lib/tasks/replicationJobStatus"
 import { hostDrainJobRows } from "@/lib/tasks/hostDrainRows"
+import { rollingUpdateNeutralDetail } from "@/lib/tasks/rollingUpdateDetail"
 import { filterViewableDrains } from "@/lib/hostDrain/access"
 
 export const runtime = "nodejs"
@@ -167,9 +168,8 @@ export async function GET(req: Request) {
             startedAt: ru.started_at,
             endedAt: ru.completed_at,
             createdAt: ru.created_at,
-            detail: ru.current_node
-              ? `En cours: ${ru.current_node} (${ru.completed_nodes}/${ru.total_nodes} nœuds)`
-              : `${ru.completed_nodes}/${ru.total_nodes} nœuds`,
+            // Neutral: the Task Center page localizes it (rollingUpdateDetail)
+            detail: rollingUpdateNeutralDetail(ru),
             target: ruTarget,
             // Additional data for drill-down
             metadata: {

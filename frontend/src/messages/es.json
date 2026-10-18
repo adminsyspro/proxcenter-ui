@@ -5075,6 +5075,8 @@
     "typeHostDrain": "Drenaje de host",
     "drainGuests": "Invitados",
     "drainRemaining": "{count} aún en {node}",
+    "rollingDetailCurrent": "{node}: {done}/{total} nodos",
+    "rollingDetailNodes": "{done}/{total} nodos",
     "drainMaintenanceEnabled": "Nodo en mantenimiento"
   },
   "tasks": {
@@ -7459,6 +7461,7 @@
     "vmMovedAlert": "Esta VM se ha movido desde que se creó la recomendación. La lista se ha actualizado.",
     "recommendationExpiredAlert": "Esta recomendación ha caducado tras una reevaluación. La lista se ha actualizado.",
     "vmAlreadyOnTargetAlert": "Esta VM ya está en el nodo de destino. La lista se ha actualizado.",
+    "actionNoticeTitle": "Recomendación no aplicada",
     "rebalanceSchedule": "Programación de rebalanceo",
     "scheduleInterval": "Cada intervalo",
     "scheduleDaily": "Diariamente a una hora específica",
@@ -8130,6 +8133,7 @@
     "vms": "VMs",
     "online": "Online",
     "offline": "Offline",
+    "maintenance": "En mantenimiento",
     "close": "Cerrar",
     "localStorageWarning": "Almacenamiento local detectado",
     "cannotMigrate": "no se puede migrar en vivo",

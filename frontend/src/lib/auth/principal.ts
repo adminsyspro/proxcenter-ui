@@ -45,6 +45,11 @@ export type PrincipalRejection = {
   status: number
   body: Record<string, unknown>
   headers?: Record<string, string>
+  /** Audit attribution only, never sent to the caller: set on refusals that
+   * happen once the token is identified (steps 7-10), never on the 401 of an
+   * unknown, invalid, revoked or expired token. */
+  tokenId?: string
+  tenantId?: string
 }
 
 export type RateLimitInfo = { limit: number; remaining: number; reset: number }
@@ -141,6 +146,11 @@ export async function getPrincipal(options: GetPrincipalOptions = {}): Promise<P
     return reject(INVALID_TOKEN)
   }
 
+  // From here the token is identified: a refusal names it (and its tenant,
+  // once known to exist) for the audit row, never in the response.
+  const refuse = (rejection: PrincipalRejection, tenantId?: string): PrincipalResult =>
+    reject({ ...rejection, tokenId: token.id, tenantId })
+
   // 7. Tenant must exist AND be enabled. Never the session-path fallback to
   //    DEFAULT_TENANT_ID: for a token that would be a silent promotion to the
   //    provider tenant (spec section 10).
@@ -149,15 +159,15 @@ export async function getPrincipal(options: GetPrincipalOptions = {}): Promise<P
     select: { id: true, enabled: true },
   })
   if (!tenant || !tenant.enabled) {
-    return reject({ status: 403, body: { error: "API token tenant is disabled or missing" } })
+    return refuse({ status: 403, body: { error: "API token tenant is disabled or missing" } }, tenant?.id)
   }
 
   // 8. License verdict behind the 60s cache (D6, fail-closed, no grace period).
   if (!(await isApiAccessLicensed())) {
-    return reject({
+    return refuse({
       status: 403,
       body: { error: "Feature not licensed", feature: Features.API_ACCESS },
-    })
+    }, tenant.id)
   }
 
   // 9. Rate limit, counted BEFORE the scope check so every authenticated call
@@ -171,7 +181,7 @@ export async function getPrincipal(options: GetPrincipalOptions = {}): Promise<P
       : consumeRateLimit(token.id, token.rateLimitPerMin)
     rateLimit = { limit: verdict.limit, remaining: verdict.remaining, reset: verdict.reset }
     if (!verdict.allowed) {
-      return reject({
+      return refuse({
         status: 429,
         body: { error: "Rate limit exceeded", retryAfter: verdict.retryAfter },
         headers: {
@@ -180,7 +190,7 @@ export async function getPrincipal(options: GetPrincipalOptions = {}): Promise<P
           "RateLimit-Remaining": "0",
           "RateLimit-Reset": String(verdict.reset),
         },
-      })
+      }, tenant.id)
     }
   }
 
@@ -189,10 +199,10 @@ export async function getPrincipal(options: GetPrincipalOptions = {}): Promise<P
   if (!matchesEntry(entry, path, method)) return reject(INVALID_TOKEN)
   const scopes = Array.isArray(token.scopes) ? (token.scopes as string[]) : []
   if (entry.requiredScopes.length > 0 && !entry.requiredScopes.some(s => scopes.includes(s))) {
-    return reject({
+    return refuse({
       status: 403,
       body: { error: "Route not available to API tokens", route: path },
-    })
+    }, tenant.id)
   }
 
   // 11. Expand scopes, build the principal, conditional last_used update.

@@ -137,6 +137,9 @@ export interface AuditLogEntry {
   ipAddress?: string
   userAgent?: string
   apiTokenId?: string
+  /** Tenant of the row when the caller knows it better than the ambient
+   * request (a token refused before its principal resolves). */
+  tenantId?: string
 }
 
 /**
@@ -199,11 +202,13 @@ export async function audit(entry: AuditLogEntry, tx?: Prisma.TransactionClient)
   }
 
   // Get tenant ID for scoping
-  let tenantId = "default"
-  try {
-    tenantId = await getCurrentTenantId()
-  } catch {
-    // Fallback to default (e.g. during login before session exists)
+  let tenantId = entry.tenantId || "default"
+  if (!entry.tenantId) {
+    try {
+      tenantId = await getCurrentTenantId()
+    } catch {
+      // Fallback to default (e.g. during login before session exists)
+    }
   }
 
   const client = tx ?? prisma

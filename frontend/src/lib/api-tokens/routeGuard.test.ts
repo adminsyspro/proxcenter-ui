@@ -213,6 +213,34 @@ describe('withPublicApiGuard', () => {
     expect((rows[0].details as any).tokenPrefix).toBeUndefined()
   })
 
+  it('a tenant token refused for a missing scope is audited against that token and its tenant', async () => {
+    const now = new Date()
+    await prismaTest.tenant.create({
+      data: { id: 'tenant-msp', slug: 'msp', name: 'MSP', operatingModel: 'msp', createdAt: now, updatedAt: now },
+    })
+    const { id, secret } = await seedApiToken({ tenantId: 'tenant-msp', scopes: ['storage:read'] })
+    headersMock.mockResolvedValue(tokenHeaders(secret, 'vms-list', '/api/v1/vms'))
+    const guarded = withPublicApiGuard('vms-list', okHandler)
+    const res = await guarded(new Request('http://t/_'), {})
+    expect(res.status).toBe(403)
+    expect(await res.json()).toEqual({ error: 'Route not available to API tokens', route: '/api/v1/vms' })
+    const rows = await prismaTest.auditLog.findMany({ where: { action: 'apitoken.denied' } })
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({ apiTokenId: id, tenantId: 'tenant-msp', userId: null })
+    expect((rows[0].details as any).reason).toBe('Route not available to API tokens')
+  })
+
+  it('an invalid token stays unattributed in the denial audit', async () => {
+    const { secret } = await seedApiToken({ revokedAt: new Date() })
+    headersMock.mockResolvedValue(tokenHeaders(secret, 'vms-list', '/api/v1/vms'))
+    const guarded = withPublicApiGuard('vms-list', okHandler)
+    const res = await guarded(new Request('http://t/_'), {})
+    expect(res.status).toBe(401)
+    const rows = await prismaTest.auditLog.findMany({ where: { action: 'apitoken.denied' } })
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({ apiTokenId: null, tenantId: 'default' })
+  })
+
   describe('write entries', () => {
     const writeEntry = {
       id: 'test-write',

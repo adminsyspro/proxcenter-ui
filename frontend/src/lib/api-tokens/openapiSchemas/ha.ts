@@ -69,6 +69,7 @@ export const HA_REQUEST_SCHEMAS: Record<string, Record<string, unknown>> = {
   HaAffinityUpdateRequest: {
     type: "object",
     properties: {
+      type: { type: "string", enum: ["node-affinity", "resource-affinity"], description: "Type of the rule; read from the existing rule when omitted" },
       resources: { type: "string" },
       nodes: NODES_LIST,
       strict: { type: "boolean" },

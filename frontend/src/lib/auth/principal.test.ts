@@ -321,6 +321,25 @@ describe('getPrincipal, quota and scopes (steps 9-10)', () => {
     })
   })
 
+  it('a refusal after the token is identified names the token and its tenant (audit attribution, never the body)', async () => {
+    const { id, secret } = await seedApiToken({ scopes: ['storage:read'] })
+    setHeaders(tokenHeaders(secret, 'vms-list', '/api/v1/vms'))
+    const result = await getPrincipal()
+    expect(result.rejection?.status).toBe(403)
+    expect(result.rejection?.tokenId).toBe(id)
+    expect(result.rejection?.tenantId).toBe('default')
+    expect(JSON.stringify(result.rejection?.body)).not.toContain(id)
+  })
+
+  it('an unknown token is refused unattributed', async () => {
+    const { secret } = await seedApiToken({ revokedAt: new Date() })
+    setHeaders(tokenHeaders(secret, 'vms-list', '/api/v1/vms'))
+    const result = await getPrincipal()
+    expect(result.rejection?.status).toBe(401)
+    expect(result.rejection?.tokenId).toBeUndefined()
+    expect(result.rejection?.tenantId).toBeUndefined()
+  })
+
   it('anyOf: a token holding only ONE of several acceptable scopes is admitted', async () => {
     // public-metrics lists nodes:read, vms:read AND backups:read; holding a
     // single one must yield a (filtered) 200 downstream, never a 403.

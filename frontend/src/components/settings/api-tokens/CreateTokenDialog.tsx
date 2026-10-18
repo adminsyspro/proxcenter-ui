@@ -423,7 +423,9 @@ export default function CreateTokenDialog({ open, onClose, onCreated }: Props) {
                                 label={
                                   <Stack direction='row' alignItems='center' spacing={1}>
                                     <Box component='i' className={SCOPE_ICONS[scope] || DEFAULT_SCOPE_ICON} sx={{ color: labelColor }} />
-                                    <Typography variant='body2' sx={{ color: labelColor }}>{scope}</Typography>
+                                    {/* Not a Typography: the theme's `.MuiAccordionDetails-root .MuiTypography-root`
+                                        rule (text.secondary) outranks a Typography's own sx colour. */}
+                                    <Box component='span' sx={{ typography: 'body2', color: labelColor ?? 'text.secondary' }}>{scope}</Box>
                                   </Stack>
                                 }
                               />

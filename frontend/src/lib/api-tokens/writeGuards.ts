@@ -354,7 +354,8 @@ export async function auditTokenDenied(
       action: "apitoken.denied",
       category: "api_tokens",
       status: "failure",
-      apiTokenId: context.tokenId,
+      apiTokenId: context.tokenId ?? rejection?.tokenId,
+      tenantId: rejection?.tenantId,
       details: {
         status: rejection?.status ?? 401,
         reason: (rejection?.body as Record<string, unknown> | undefined)?.error ?? "invalid",

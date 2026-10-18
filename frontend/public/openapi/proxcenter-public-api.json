@@ -1791,6 +1791,14 @@
       "HaAffinityUpdateRequest": {
         "type": "object",
         "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "node-affinity",
+              "resource-affinity"
+            ],
+            "description": "Type of the rule; read from the existing rule when omitted"
+          },
           "resources": {
             "type": "string"
           },
@@ -19339,7 +19347,7 @@
       "put": {
         "operationId": "ha-affinity-update",
         "summary": "Update an HA affinity rule",
-        "description": "Changes the given properties of the HA rule {ruleId}; `delete` lists the properties to clear, `digest` guards against a concurrent change. Not available to a vDC tenant token.\n\nRequired scope: `ha:write`",
+        "description": "Changes the given properties of the HA rule {ruleId}; `type` defaults to the rule's current type, `delete` lists the properties to clear, `digest` guards against a concurrent change. Not available to a vDC tenant token.\n\nRequired scope: `ha:write`",
         "tags": [
           "HA"
         ],
@@ -19373,6 +19381,14 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "node-affinity",
+                      "resource-affinity"
+                    ],
+                    "description": "Type of the rule; read from the existing rule when omitted"
+                  },
                   "resources": {
                     "type": "string"
                   },

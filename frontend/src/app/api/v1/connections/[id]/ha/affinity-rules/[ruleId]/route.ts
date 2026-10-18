@@ -7,6 +7,12 @@ import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 
 export const runtime = "nodejs"
 
+const RULE_TYPES = new Set(['node-affinity', 'resource-affinity'])
+
+function isNotFound(e: any): boolean {
+  return Boolean(e?.message?.includes('404') || e?.message?.includes('does not exist'))
+}
+
 // GET /api/v1/connections/{id}/ha/affinity-rules/{ruleId}
 // Récupère une règle d'affinité HA spécifique
 async function getHandler(
@@ -27,7 +33,7 @@ async function getHandler(
 
     return NextResponse.json({ data: rule })
   } catch (e: any) {
-    if (e?.message?.includes('404') || e?.message?.includes('does not exist')) {
+    if (isNotFound(e)) {
       return NextResponse.json({ error: 'Règle d\'affinité HA non trouvée' }, { status: 404 })
     }
 
@@ -51,12 +57,40 @@ async function putHandler(
 
     if (permError) return permError
 
-    const conn = await getConnectionById(id)
     const body = await req.json()
+
+    if (body.type !== undefined && !RULE_TYPES.has(body.type)) {
+      return NextResponse.json({ error: 'Le type de règle doit être node-affinity ou resource-affinity' }, { status: 400 })
+    }
+
+    const conn = await getConnectionById(id)
+    const rulePath = `/cluster/ha/rules/${encodeURIComponent(ruleId)}`
+
+    // PVE 9 exige `type` en mise à jour (il choisit le schéma node-affinity / resource-affinity) :
+    // celui du corps s'il est donné, sinon celui de la règle existante.
+    let ruleType: string | undefined = body.type
+
+    if (ruleType === undefined) {
+      try {
+        const existing = await pveFetch<any>(conn, rulePath)
+
+        ruleType = existing?.type
+      } catch (e: any) {
+        if (isNotFound(e)) {
+          return NextResponse.json({ error: 'Règle d\'affinité HA non trouvée' }, { status: 404 })
+        }
+
+        throw e
+      }
+    }
 
     // Construire les paramètres
     const params = new URLSearchParams()
-    
+
+    if (ruleType) {
+      params.append('type', ruleType)
+    }
+
     if (body.resources !== undefined) {
       params.append('resources', body.resources)
     }
@@ -93,7 +127,7 @@ async function putHandler(
       params.append('digest', body.digest)
     }
 
-    const result = await pveFetch<any>(conn, `/cluster/ha/rules/${encodeURIComponent(ruleId)}`, {
+    const result = await pveFetch<any>(conn, rulePath, {
       method: 'PUT',
       body: params.toString(),
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' }

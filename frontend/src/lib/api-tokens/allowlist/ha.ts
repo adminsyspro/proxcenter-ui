@@ -150,7 +150,7 @@ export const HA_ENTRIES: AllowlistEntry[] = [
     pattern: `${HA}/affinity-rules/{ruleId}`,
     summary: "Update an HA affinity rule",
     description:
-      `Changes the given properties of the HA rule {ruleId}; \`delete\` lists the properties to clear, \`digest\` guards against a concurrent change. ${TENANT_NOTE}`,
+      `Changes the given properties of the HA rule {ruleId}; \`type\` defaults to the rule's current type, \`delete\` lists the properties to clear, \`digest\` guards against a concurrent change. ${TENANT_NOTE}`,
     requestSchemaRef: "HaAffinityUpdateRequest",
     responseSchemaRef: "HaWriteResponse",
   }),

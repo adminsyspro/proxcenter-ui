@@ -44,6 +44,39 @@ function scopeChipColor(scope: string): 'default' | 'warning' | 'error' {
   return isWriteScope(scope) ? 'warning' : 'default'
 }
 
+// A list row stays on one line: the cell shows the most sensitive scopes (a
+// chip too long for the column ellipsizes, the +N chip never does), the full
+// list in its granted order on hover.
+const INLINE_SCOPES = 2
+const SCOPE_SENSITIVITY = { error: 2, warning: 1, default: 0 } as const
+
+function ScopesCell({ scopes }: { scopes: string[] }) {
+  const chip = (scope: string) => (
+    <Chip key={scope} label={scope} size='small' color={scopeChipColor(scope)} sx={{ minWidth: 0 }} />
+  )
+  const hidden = scopes.length - INLINE_SCOPES
+  const inline = hidden > 0
+    ? [...scopes]
+      .sort((a, b) => SCOPE_SENSITIVITY[scopeChipColor(b)] - SCOPE_SENSITIVITY[scopeChipColor(a)])
+      .slice(0, INLINE_SCOPES)
+    : scopes
+  const cell = (
+    <Box sx={{ display: 'flex', gap: 0.5, minWidth: 0, overflow: 'hidden' }}>
+      {inline.map(chip)}
+      {hidden > 0 && <Chip label={`+${hidden}`} size='small' variant='outlined' sx={{ flexShrink: 0 }} />}
+    </Box>
+  )
+  if (scopes.length < 2) return cell
+  return (
+    <Tooltip
+      title={<Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, py: 0.5 }}>{scopes.map(chip)}</Box>}
+      slotProps={tooltipSlotProps}
+    >
+      {cell}
+    </Tooltip>
+  )
+}
+
 function ApiTokensPanel() {
   const t = useTranslations('settings.apiTokens')
   const [tokens, setTokens] = useState<ApiTokenView[]>([])
@@ -113,15 +146,9 @@ function ApiTokensPanel() {
       field: 'scopes',
       headerName: t('columns.scopes'),
       flex: 1,
-      minWidth: 200,
+      minWidth: 240,
       sortable: false,
-      renderCell: params => (
-        <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
-          {(params.value as string[]).map(scope => (
-            <Chip key={scope} label={scope} size='small' color={scopeChipColor(scope)} />
-          ))}
-        </Box>
-      ),
+      renderCell: params => <ScopesCell scopes={params.value as string[]} />,
     },
     {
       field: 'expiresAt',

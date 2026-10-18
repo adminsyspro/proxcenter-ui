@@ -168,6 +168,22 @@ describe('CreateTokenDialog write scopes', () => {
     expect(checkboxOf(dialog, 'vms:power').closest('.MuiCheckbox-root')?.className).not.toContain('MuiCheckbox-colorError')
   })
 
+  it('paints the destructive scope LABELS in the error colour, out of reach of the accordion text override', async () => {
+    const dialog = await openDialog()
+    await expandWrite(dialog)
+    const label = (scope: string) => within(checkboxOf(dialog, scope).closest('label') as HTMLElement).getByText(scope)
+    for (const scope of WRITE_SCOPE_IDS) {
+      // The app theme forces `.MuiAccordionDetails-root .MuiTypography-root`
+      // to text.secondary (overrides/accordion.jsx), which outranks a
+      // Typography's own sx colour: the label must not be such a Typography.
+      expect(label(scope).matches('.MuiAccordionDetails-root .MuiTypography-root'), scope).toBe(false)
+    }
+    for (const scope of DESTRUCTIVE_SCOPE_IDS) {
+      expect(getComputedStyle(label(scope)).color, scope).toBe('rgb(211, 47, 47)')
+    }
+    expect(getComputedStyle(label('vms:power')).color).not.toBe('rgb(211, 47, 47)')
+  })
+
   it('disables a write scope the caller cannot grant, with a tooltip saying why', async () => {
     grantableFor = () => [...READ_GRANTABLE, 'vms:power']
     const dialog = await openDialog()

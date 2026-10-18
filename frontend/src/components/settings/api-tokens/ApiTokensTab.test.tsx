@@ -197,7 +197,7 @@ describe('ApiTokensTab', () => {
   // Write scopes stand out from read ones, and the destructive ones stand out
   // from the rest of the write scopes.
   it('colours write scope chips in warning and destructive ones in error', async () => {
-    tokensFixture = [{ ...TOKEN_ROW, scopes: ['vms:read', 'vms:power', 'vms:delete'] }]
+    tokensFixture = [{ ...TOKEN_ROW, scopes: ['vms:read', 'vms:power'] }, { ...TOKEN_ROW, id: 'tok_2', scopes: ['vms:delete'] }]
     renderWithProviders(<ApiTokensTab />)
     const readChip = (await screen.findByText('vms:read')).closest('.MuiChip-root') as HTMLElement
     const writeChip = screen.getByText('vms:power').closest('.MuiChip-root') as HTMLElement
@@ -205,6 +205,33 @@ describe('ApiTokensTab', () => {
     expect(readChip.className).toContain('MuiChip-colorDefault')
     expect(writeChip.className).toContain('MuiChip-colorWarning')
     expect(destructiveChip.className).toContain('MuiChip-colorError')
+  })
+
+  // One line per row: past two scopes the cell shows the two most sensitive
+  // ones and a "+N" chip, the full list on hover.
+  it('keeps the scopes on one line: the two most sensitive first, the rest behind +N', async () => {
+    const scopes = ['vms:read', 'nodes:read', 'vms:power', 'storage:read', 'vms:delete']
+    tokensFixture = [{ ...TOKEN_ROW, scopes }]
+    renderWithProviders(<ApiTokensTab />)
+    const more = await screen.findByText('+3')
+    const cell = more.closest('.MuiDataGrid-cell') as HTMLElement
+    const inline = [...cell.querySelectorAll('.MuiChip-root')].map(c => c.textContent)
+    expect(inline).toEqual(['vms:delete', 'vms:power', '+3'])
+
+    await userEvent.hover(more)
+    const tooltip = await screen.findByRole('tooltip')
+    expect([...tooltip.querySelectorAll('.MuiChip-root')].map(c => c.textContent)).toEqual(scopes)
+    expect(within(tooltip).getByText('vms:delete').closest('.MuiChip-root')?.className).toContain('MuiChip-colorError')
+    expect(within(tooltip).getByText('vms:power').closest('.MuiChip-root')?.className).toContain('MuiChip-colorWarning')
+    expect(within(tooltip).getByText('vms:read').closest('.MuiChip-root')?.className).toContain('MuiChip-colorDefault')
+  })
+
+  it('shows no +N chip when every scope fits', async () => {
+    tokensFixture = [{ ...TOKEN_ROW, scopes: ['vms:read', 'nodes:read'] }]
+    renderWithProviders(<ApiTokensTab />)
+    const chip = await screen.findByText('nodes:read')
+    const cell = chip.closest('.MuiDataGrid-cell') as HTMLElement
+    expect([...cell.querySelectorAll('.MuiChip-root')].map(c => c.textContent)).toEqual(['vms:read', 'nodes:read'])
   })
 
   it('no longer calls the tokens read-only', async () => {

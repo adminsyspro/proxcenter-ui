@@ -31,6 +31,10 @@ vi.mock("@/lib/vdc/vnets", () => ({
   listVnetsForTenant: h.listVnetsForTenant,
 }))
 vi.mock("@/lib/vdc/ipam", () => ({ getSubnetUsage: h.getSubnetUsage }))
+// The tenant check of vnetPermission.ts: the vDC belongs to the caller's tenant.
+vi.mock("@/lib/db/prisma", () => ({
+  prisma: { vdc: { findUnique: async () => ({ tenantId: "tenant-a", connectionId: "c1" }) } },
+}))
 
 import { POST } from "./route"
 import { VniError } from "@/lib/vdc/vniPolicy"

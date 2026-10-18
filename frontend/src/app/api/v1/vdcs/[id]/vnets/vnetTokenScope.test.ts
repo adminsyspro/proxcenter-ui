@@ -12,6 +12,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const h = vi.hoisted(() => ({
   headers: vi.fn<() => Promise<Headers>>(),
   currentTenant: vi.fn<() => Promise<string>>(),
+  tenantMember: vi.fn<(...a: any[]) => Promise<boolean>>(),
   getPrincipal: vi.fn<(...a: any[]) => Promise<any>>(),
   infra: vi.fn<(...a: any[]) => Promise<any>>(),
   checkPermission: vi.fn<(...a: any[]) => Promise<Response | null>>(),
@@ -37,6 +38,7 @@ vi.mock('@/lib/tenant/infraScope', async io => ({
 }))
 vi.mock('@/lib/tenant', () => ({
   getCurrentTenantId: () => h.currentTenant(),
+  userHasAccessToTenant: (...a: any[]) => h.tenantMember(...a),
   getTenantConnectionIds: async () => new Set(['c1', 'c2']),
   DEFAULT_TENANT_ID: 'default',
 }))
@@ -104,6 +106,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   h.getPrincipal.mockResolvedValue({ ok: true, principal: TOKEN_A })
   h.currentTenant.mockResolvedValue('tenant-a')
+  h.tenantMember.mockResolvedValue(false)
   h.infra.mockResolvedValue({ kind: 'iaas' })
   h.creator.mockResolvedValue(true)
   h.checkPermission.mockResolvedValue(null)
@@ -223,25 +226,78 @@ describe('vDC VNets with a provider token, as with a provider session', () => {
 })
 
 describe('vDC VNets with a session', () => {
+  const json = (method: string) => ({ method, body: JSON.stringify({ displayName: 'lan' }), headers: { 'content-type': 'application/json' } })
+  const SESSION_CALLS = [
+    ['GET list', (vdc: string) => LIST(new Request('http://test.local/x'), listParams(vdc))],
+    ['POST list', (vdc: string) => CREATE(new Request('http://test.local/x', json('POST')), listParams(vdc))],
+    ['GET item', (vdc: string) => GET(new Request('http://test.local/x'), itemParams(vdc))],
+    ['PUT item', (vdc: string) => PUT(new Request('http://test.local/x', json('PUT')), itemParams(vdc))],
+    ['DELETE item', (vdc: string) => DELETE(new Request('http://test.local/x', { method: 'DELETE' }), itemParams(vdc))],
+  ] as const
+
   beforeEach(() => {
     h.getPrincipal.mockResolvedValue({ ok: true, principal: SESSION })
   })
 
-  it('keeps the resource-less sdn.vnet.* checks and the session user as creator', async () => {
-    const json = (method: string) => ({ method, body: JSON.stringify({ displayName: 'lan' }), headers: { 'content-type': 'application/json' } })
-
-    expect((await CREATE(new Request('http://test.local/x', json('POST')), listParams('vdc-b'))).status).toBe(201)
+  it('keeps the resource-less sdn.vnet.* checks and the session user as creator on its own vDC', async () => {
+    expect((await CREATE(new Request('http://test.local/x', json('POST')), listParams('vdc-a'))).status).toBe(201)
     expect(h.checkPermission).toHaveBeenLastCalledWith('sdn.vnet.create')
     expect(h.createVnet).toHaveBeenCalledWith(expect.objectContaining({ createdBy: 'u-1' }))
 
-    await LIST(new Request('http://test.local/x'), listParams('vdc-b'))
+    expect((await LIST(new Request('http://test.local/x'), listParams('vdc-a'))).status).toBe(200)
     expect(h.checkPermission).toHaveBeenLastCalledWith('sdn.vnet.view')
-    await PUT(new Request('http://test.local/x', json('PUT')), itemParams('vdc-b'))
+    expect(h.listVnets).toHaveBeenCalledWith('vdc-a')
+    await PUT(new Request('http://test.local/x', json('PUT')), itemParams('vdc-a'))
     expect(h.checkPermission).toHaveBeenLastCalledWith('sdn.vnet.edit')
-    await DELETE(new Request('http://test.local/x', { method: 'DELETE' }), itemParams('vdc-b'))
+    expect(h.updateVnet).toHaveBeenCalledWith('vdc-a', 'tenant-a', 'lan', expect.anything())
+    await DELETE(new Request('http://test.local/x', { method: 'DELETE' }), itemParams('vdc-a'))
     expect(h.checkPermission).toHaveBeenLastCalledWith('sdn.vnet.delete')
-    await GET(new Request('http://test.local/x'), itemParams('vdc-b'))
+    expect(h.deleteVnet).toHaveBeenCalledWith('vdc-a', 'tenant-a', 'lan')
+    await GET(new Request('http://test.local/x'), itemParams('vdc-a'))
     expect(h.checkPermission).toHaveBeenLastCalledWith('sdn.vnet.view')
+  })
+
+  it.each(SESSION_CALLS)('%s of tenant A on a vDC of tenant B: 404 like a missing vDC, nothing read or written', async (_name, call) => {
+    const foreign = await call('vdc-b')
+    const missing = await call('vdc-none')
+
+    expect(foreign.status).toBe(404)
+    expect(await foreign.json()).toEqual({ error: 'vDC not found' })
+    expect(missing.status).toBe(404)
+    expect(await missing.json()).toEqual({ error: 'vDC not found' })
+    for (const lib of [h.listVnets, h.createVnet, h.updateVnet, h.deleteVnet, h.vnetFindFirst]) expect(lib).not.toHaveBeenCalled()
+  })
+
+  it.each(SESSION_CALLS)('%s without the permission: 403 before any vDC lookup', async (_name, call) => {
+    h.checkPermission.mockResolvedValue(new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403 }))
+
+    expect((await call('vdc-b')).status).toBe(403)
     expect(h.vdcFindUnique).not.toHaveBeenCalled()
+  })
+
+  it('a provider session keeps its fleet view: lists the VNets of a tenant vDC, no vDC lookup', async () => {
+    h.getPrincipal.mockResolvedValue({ ok: true, principal: { ...SESSION, tenantId: 'default' } })
+    h.currentTenant.mockResolvedValue('default')
+    h.tenantMember.mockImplementation(async (userId: string, tenantId: string) => userId === 'u-1' && tenantId === 'default')
+
+    const res = await LIST(new Request('http://test.local/x'), listParams('vdc-b'))
+
+    expect(res.status).toBe(200)
+    expect(h.checkPermission).toHaveBeenLastCalledWith('sdn.vnet.view')
+    expect(h.listVnets).toHaveBeenCalledWith('vdc-b')
+    expect(h.vdcFindUnique).not.toHaveBeenCalled()
+  })
+
+  it.each(SESSION_CALLS)('%s of a session that lands on the provider tenant only by fallback (not a member): 404 on a tenant vDC', async (_name, call) => {
+    // getCurrentTenantId answers "default" for a session without a tenant, or with a stale or disabled one.
+    h.getPrincipal.mockResolvedValue({ ok: true, principal: { ...SESSION, tenantId: 'default' } })
+    h.currentTenant.mockResolvedValue('default')
+
+    const res = await call('vdc-b')
+
+    expect(res.status).toBe(404)
+    expect(await res.json()).toEqual({ error: 'vDC not found' })
+    expect(h.tenantMember).toHaveBeenCalledWith('u-1', 'default')
+    for (const lib of [h.listVnets, h.createVnet, h.updateVnet, h.deleteVnet, h.vnetFindFirst]) expect(lib).not.toHaveBeenCalled()
   })
 })

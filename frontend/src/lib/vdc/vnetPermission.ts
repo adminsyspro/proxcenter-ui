@@ -1,26 +1,28 @@
 import { NextResponse } from "next/server"
 
 import { resolveVisibleConnectionIds } from "@/lib/api-tokens/scope"
-import type { Principal } from "@/lib/auth/principal"
+import { getPrincipal, type Principal } from "@/lib/auth/principal"
 import { prisma } from "@/lib/db/prisma"
 import { checkPermission } from "@/lib/rbac"
+import { getCurrentTenantId, userHasAccessToTenant } from "@/lib/tenant"
 import { DEFAULT_TENANT_ID } from "@/lib/tenant/constants"
 
 /**
- * sdn.vnet.* verdict of the /vdcs/{id}/vnets routes. A session keeps the
- * resource-less check: a connection-scoped one would refuse a holder whose
- * grant is scoped below the connection (#378 class).
- * An API token (perimeter "handler") reaches the vDCs of its own tenant only
- * (404 otherwise, as a session of another tenant gets; a provider token
- * mirrors a provider session), on a connection inside its perimeter, and is
- * judged on that connection.
+ * sdn.vnet.* verdict of the /vdcs/{id}/vnets routes. Every caller of a
+ * tenant reaches the vDCs of its own tenant only: another tenant's vDC
+ * answers the 404 of a missing one (no existence oracle); the provider
+ * tenant keeps its fleet view.
+ * A session keeps the resource-less check: a connection-scoped one would
+ * refuse a holder whose grant is scoped below the connection (#378 class).
+ * An API token (perimeter "handler") must also hit a connection inside its
+ * perimeter, and is judged on that connection.
  */
 export async function checkVnetPermission(
   principal: Principal | undefined,
   vdcId: string,
   permission: string,
 ): Promise<Response | null> {
-  if (principal?.kind !== "token") return checkPermission(permission)
+  if (principal?.kind !== "token") return checkSessionVnetPermission(vdcId, permission)
   try {
     return await checkTokenVnetPermission(principal, vdcId, permission)
   } catch (e) {
@@ -30,11 +32,35 @@ export async function checkVnetPermission(
   }
 }
 
-async function checkTokenVnetPermission(principal: Principal, vdcId: string, permission: string): Promise<Response | null> {
+const VDC_NOT_FOUND = () => NextResponse.json({ error: "vDC not found" }, { status: 404 })
+
+/** The vDC as seen from `tenantId`: null when missing or another tenant's (the provider sees them all). */
+async function findVisibleVdc(tenantId: string, vdcId: string) {
   const vdc = await prisma.vdc.findUnique({ where: { id: vdcId }, select: { tenantId: true, connectionId: true } })
-  if (!vdc || (principal.tenantId !== DEFAULT_TENANT_ID && vdc.tenantId !== principal.tenantId)) {
-    return NextResponse.json({ error: "vDC not found" }, { status: 404 })
+  if (!vdc || (tenantId !== DEFAULT_TENANT_ID && vdc.tenantId !== tenantId)) return null
+  return vdc
+}
+
+async function checkSessionVnetPermission(vdcId: string, permission: string): Promise<Response | null> {
+  const denied = await checkPermission(permission)
+  if (denied) return denied
+  try {
+    const tenantId = await getCurrentTenantId()
+    if (tenantId !== DEFAULT_TENANT_ID) return (await findVisibleVdc(tenantId, vdcId)) ? null : VDC_NOT_FOUND()
+    // getCurrentTenantId falls back to the provider tenant for a session with
+    // no tenant, or a stale or disabled one: the provider view (no lookup, as
+    // today) goes to real members of it only, the others reach no vDC.
+    const userId = (await getPrincipal()).principal?.userId
+    return userId && (await userHasAccessToTenant(userId, DEFAULT_TENANT_ID)) ? null : VDC_NOT_FOUND()
+  } catch (e) {
+    console.error("[vnets] vDC tenant lookup failed, denying:", (e as Error)?.message ?? e)
+    return NextResponse.json({ error: "Unable to verify vDC access" }, { status: 503 })
   }
+}
+
+async function checkTokenVnetPermission(principal: Principal, vdcId: string, permission: string): Promise<Response | null> {
+  const vdc = await findVisibleVdc(principal.tenantId, vdcId)
+  if (!vdc) return VDC_NOT_FOUND()
   if (!(await resolveVisibleConnectionIds(principal)).has(vdc.connectionId)) {
     return NextResponse.json({ error: "Connection not in token scope", connection: vdc.connectionId }, { status: 403 })
   }

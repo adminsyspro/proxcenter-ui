@@ -20,6 +20,8 @@ vi.mock('next-auth', () => ({ getServerSession: async () => ({ user: { id: 'user
 vi.mock('@/lib/auth/config', () => ({ authOptions: {} }))
 vi.mock('@/lib/db/prisma', () => ({ prisma: { customImage: { findUnique: async () => null, findFirst: async () => null }, tenant: { findUnique: async () => ({ slug: 'provider' }) } } }))
 vi.mock('@/lib/audit', () => ({ audit: async () => {} }))
+// The provider, and an MSP tenant: neither is refused a URL image (#69).
+vi.mock('@/lib/tenant/infraScope', () => ({ getTenantInfrastructureScope: async (tenantId: string) => (tenantId === 'default' ? { kind: 'provider' } : { kind: 'msp', connectionIds: new Set() }) }))
 vi.mock('@/lib/templates/catalogGrants', () => ({
   loadGrantSummaries: m.loadGrantSummaries, loadGrantSummary: m.loadGrantSummary, replaceTenantGrants: m.replaceTenantGrants,
 }))

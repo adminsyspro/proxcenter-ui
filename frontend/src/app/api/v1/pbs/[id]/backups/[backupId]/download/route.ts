@@ -16,6 +16,7 @@ import { getPbsConnectionById, getPbsConnectionByIdUnscoped } from '@/lib/connec
 import { getInsecureAgent } from '@/lib/proxmox/client'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { assertVdcPbsAccess } from '@/lib/vdc/scope'
+import { residualEscapeRefusal } from '@/lib/api/pathParam'
 
 export const runtime = 'nodejs'
 
@@ -53,7 +54,9 @@ export async function GET(
 
     // Same anchor-on-the-end parsing as the content route. Sub-namespaces
     // contain '/', so a left-aligned split misassigns segments.
-    const decoded = decodeURIComponent(rawBackupId)
+    const malformed = residualEscapeRefusal(rawBackupId, 'backupId')
+    if (malformed) return malformed
+    const decoded = rawBackupId
     const parts = decoded.split('/')
     if (parts.length < 4) {
       return new Response('Invalid backupId format', { status: 400 })

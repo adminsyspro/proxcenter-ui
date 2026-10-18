@@ -6,6 +6,7 @@ import { getConnectionById } from '@/lib/connections/getConnection'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { getCurrentTenantId } from '@/lib/tenant'
 import { getAllowedJobPools } from '@/lib/vdc/backupJobs'
+import { residualEscapeRefusal } from '@/lib/api/pathParam'
 
 export const runtime = 'nodejs'
 
@@ -26,12 +27,9 @@ export async function GET(req: Request, ctx: RouteContext) {
   try {
     const { id, node, upid } = await ctx.params
 
-    let decodedUpid: string
-    try {
-      decodedUpid = decodeURIComponent(upid)
-    } catch {
-      return NextResponse.json({ error: 'Malformed UPID' }, { status: 400 })
-    }
+    const malformed = residualEscapeRefusal(upid, 'UPID')
+    if (malformed) return malformed
+    const decodedUpid = upid
 
     const parts = decodedUpid.split(':')
     if (parts[0] !== 'UPID' || parts[1] !== node || parts[5] !== 'vzdump') {

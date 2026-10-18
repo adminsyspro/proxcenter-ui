@@ -6,6 +6,7 @@ import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { updateCustomImageSchema } from "@/lib/schemas"
 import { authorizeImageLocations, authorizeImageVolume, extraImageLocations, SourceVolumeError } from '@/lib/templates/sourceVolume'
 import { loadGrantSummary, replaceTenantGrants } from '@/lib/templates/catalogGrants'
+import { isNodeUrlFetchRefused, URL_IMAGE_REFUSED } from '@/lib/vdc/nodeUrlFetch'
 
 export const runtime = "nodejs"
 
@@ -68,6 +69,12 @@ export async function PUT(req: Request, ctx: Ctx) {
         await authorizeImageLocations({ tenantId, source, locations: extraImageLocations(source) })
       }
     } else {
+      // Setting or changing the URL a node will fetch: refused to a vDC tenant
+      // like at creation. A metadata edit of an existing URL image goes through.
+      const urlTouched = ['sourceType', 'downloadUrl'].some(key => (body as Record<string, unknown>)[key] !== undefined)
+      if (urlTouched && await isNodeUrlFetchRefused(tenantId)) {
+        return NextResponse.json({ error: URL_IMAGE_REFUSED }, { status: 403 })
+      }
       data.sourceConnectionId = null
       data.sourceNode = null
       data.volumeId = null

@@ -131,7 +131,9 @@ async function handler(
       category: type === 'lxc' ? 'containers' : 'vms',
       resourceType: type,
       resourceId: vmid,
-      details: { node, connectionId: id, ipamReleaseError: ipamWarning },
+      // The destroy task: a vDC tenant follows it by this line once the
+      // guest, and with it its vDC scope, is gone (task status route).
+      details: { node, connectionId: id, upid: result, ipamReleaseError: ipamWarning },
     })
 
     return NextResponse.json({

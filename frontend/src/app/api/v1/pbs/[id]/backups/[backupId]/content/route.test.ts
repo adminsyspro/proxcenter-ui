@@ -21,7 +21,8 @@ vi.mock('@/lib/proxmox/pbs-client', () => ({ pbsFetch: pbsFetchMock }))
 
 import { GET } from './route'
 
-const backupId = encodeURIComponent('test-vdc/tenant-msp/vdc-a/ct/101/1790254249')
+// As Next hands it: the client's %2F already decoded.
+const backupId = 'test-vdc/tenant-msp/vdc-a/ct/101/1790254249'
 
 function call(query: string, id = backupId, pbsId = 'pbs1') {
   return GET(new Request(`http://x/api/v1/pbs/${pbsId}/backups/${id}/content?${query}`), {
@@ -94,7 +95,7 @@ describe('GET /api/v1/pbs/{id}/backups/{backupId}/content (snapshot listing and 
     expect((await call('')).status).toBe(404)
 
     pbsFetchMock.mockResolvedValue([{ 'backup-time': 5 }])
-    const res = await call('', encodeURIComponent('ds/vm/100/5'))
+    const res = await call('', 'ds/vm/100/5')
     expect(res.status).toBe(200)
     expect((await res.json()).data.files).toEqual([])
     expect(pbsFetchMock.mock.calls[1][1]).not.toContain('ns=')
@@ -119,7 +120,7 @@ describe('GET /api/v1/pbs/{id}/backups/{backupId}/content (snapshot listing and 
       { text: 'a-dir', leaf: false },
       { type: 'f' },
     ])
-    const body = await (await call('archive=root.pxar.didx&filepath=%2Fetc', encodeURIComponent('ds/vm/100/5'))).json()
+    const body = await (await call('archive=root.pxar.didx&filepath=%2Fetc', 'ds/vm/100/5')).json()
     expect(body.data.files.map((f: any) => [f.name, f.type])).toEqual([
       ['a-dir', 'directory'], ['b-dir', 'directory'], [undefined, 'file'], ['hard', 'hardlink'], ['link', 'symlink'], ['z.txt', 'file'],
     ])
@@ -135,7 +136,17 @@ describe('GET /api/v1/pbs/{id}/backups/{backupId}/content (snapshot listing and 
   it('validates the params', async () => {
     expect((await call('', backupId, '')).status).toBe(400)
     expect((await call('', '')).status).toBe(400)
-    expect((await call('', encodeURIComponent('ds/vm/100'))).status).toBe(400)
+    expect((await call('', 'ds/vm/100')).status).toBe(400)
+  })
+
+  // A "%" left after Next's decode is an escape sent twice or garbage: a 400
+  // before PBS, never decoded again (a 500 "URI malformed" on a bad one).
+  it.each(['test-vdc/ct/101/2026%zz', 'test-vdc/ct/101%41/1790254249'])('answers 400 on a backupId still holding an escape (%s), before PBS', async id => {
+    const res = await call('', id)
+    expect(res.status).toBe(400)
+    expect(await res.json()).toEqual({ error: 'Malformed backupId' })
+    expect(connMock).not.toHaveBeenCalled()
+    expect(pbsFetchMock).not.toHaveBeenCalled()
   })
 
   it('returns the RBAC and vDC refusals', async () => {

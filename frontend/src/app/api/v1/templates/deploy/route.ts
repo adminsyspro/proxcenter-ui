@@ -10,6 +10,7 @@ import { deploySchema } from "@/lib/schemas"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { pveFetch } from "@/lib/proxmox/client"
 import { downloadToStorage } from "@/lib/proxmox/download"
+import { isNodeUrlFetchRefused, URL_IMAGE_REFUSED } from "@/lib/vdc/nodeUrlFetch"
 import { selectDownloadStorage } from "@/lib/templates/downloadStorage"
 import { customImageToCloudImage } from "@/lib/templates/cloudImages"
 import { findCustomImageForTenant, isProviderImageSlug } from "@/lib/templates/customImageScope"
@@ -164,6 +165,12 @@ export async function POST(req: Request) {
           return NextResponse.json({ error: CATALOG_NOT_GRANTED_IMAGE }, { status: 403 })
         }
         return NextResponse.json({ error: "Unknown image slug" }, { status: 400 })
+      }
+      // A URL image of a vDC tenant would have the node fetch that tenant's
+      // URL, which download-url refuses it (images created before that rule
+      // included). Provider images keep their URL, the provider set it.
+      if (customRow.sourceType === 'url' && customRow.tenantId !== DEFAULT_TENANT_ID && await isNodeUrlFetchRefused(customRow.tenantId)) {
+        return NextResponse.json({ error: URL_IMAGE_REFUSED }, { status: 403 })
       }
       image = customImageToCloudImage(customRow)
       isCustom = true

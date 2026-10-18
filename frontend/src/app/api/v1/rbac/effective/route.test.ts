@@ -86,4 +86,16 @@ describe('GET /api/v1/rbac/effective with role default scope (issue #383)', () =
     // dropped vm.view whenever a resource filter was present.
     expect(json.data.permissions).toContain('vm.view')
   })
+
+  it('a connection assignment opens its own resources, never those of a connection it is a prefix of', async () => {
+    roleFindManyMock.mockResolvedValue([{ ...inheritDbRole, scopeType: 'connection', scopeTarget: 'conn-a', role: { ...inheritDbRole.role, defaultScopes: null } }])
+    const permissionsOn = async (resource_id: string) => {
+      const res = await callRoute(GET, { searchParams: { user_id: 'u1', resource_type: 'vm', resource_id } })
+      expect(res.status).toBe(200)
+      return ((await readJson(res)) as any).data.permissions
+    }
+
+    expect(await permissionsOn('conn-a:pve1:qemu:100')).toContain('vm.view')
+    expect(await permissionsOn('conn-ab:pve1:qemu:100')).not.toContain('vm.view')
+  })
 })

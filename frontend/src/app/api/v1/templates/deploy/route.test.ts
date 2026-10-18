@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 import { callRoute, readJson } from '@/__tests__/setup/route-test'
+import { URL_IMAGE_REFUSED } from '@/lib/vdc/nodeUrlFetch'
 
 // The success path schedules the deployment pipeline through after(). Most
 // tests only care about the synchronous response, so the callback is merely
@@ -87,6 +88,13 @@ vi.mock('@/lib/vdc/scope', async (io) => {
   return { ...actual, getVdcScope: getVdcScopeMock, loadTenantSlugs: async () => ({ mine: 'acme', all: ['acme', 'acme-prod'] }) }
 })
 vi.mock('@/lib/tenant/infraScope', () => ({ getTenantInfrastructureScope: async () => ({ kind: 'iaas', vdcScope: await getVdcScopeMock() }) }))
+// The real URL refusal (#69) runs on the infraScope stub above; only the
+// staging tests of a tenant's own URL image switch it off.
+const { urlFetchRefusalOff } = vi.hoisted(() => ({ urlFetchRefusalOff: { value: false } }))
+vi.mock('@/lib/vdc/nodeUrlFetch', async (io) => {
+  const actual = await io<typeof import('@/lib/vdc/nodeUrlFetch')>()
+  return { ...actual, isNodeUrlFetchRefused: vi.fn(async (tenantId: string) => !urlFetchRefusalOff.value && actual.isNodeUrlFetchRefused(tenantId)) }
+})
 vi.mock('@/lib/vdc/providerTarget', () => ({ resolveProviderVdcTarget: (...a: any[]) => resolveProviderVdcTargetMock(...a) }))
 const auditMock = vi.fn<(...args: any[]) => Promise<any>>()
 vi.mock('@/lib/audit', () => ({ audit: (...a: any[]) => auditMock(...a) }))
@@ -130,6 +138,7 @@ beforeEach(async () => {
   checkVdcQuotaMock.mockReset().mockResolvedValue({ allowed: true })
   getCurrentTenantIdMock.mockReset().mockResolvedValue('tenant-1')
   auditMock.mockReset().mockResolvedValue({})
+  urlFetchRefusalOff.value = false
 })
 
 /** Generic PVE stub covering both deploy pipeline branches (cloud-image
@@ -828,6 +837,9 @@ describe('template staging on a vDC ISO library (#1120)', () => {
       const { customImageToCloudImage } = await import('@/lib/templates/cloudImages')
       vi.mocked(customImageToCloudImage).mockImplementation((row: any) => row)
       findCustomImageForTenantMock.mockResolvedValue({ id: 'cmacmeapp1', tenantId: 'tenant-1', isShared: false, slug: 'custom-acme-app', format: 'qcow2', sourceType: 'url', downloadUrl: 'https://acme.test/app.qcow2' })
+      // A vDC tenant's URL image is refused before staging now (#69, below):
+      // these cases keep the staging rule of tenant content covered.
+      urlFetchRefusalOff.value = true
     })
 
     it('is not written onto a read-only library', async () => {
@@ -858,6 +870,46 @@ describe('template staging on a vDC ISO library (#1120)', () => {
       expect(downloadTargets()).toEqual(['/nodes/pve1/storage/ceph-fs/download-url'])
       expect(qemuCreateParams().get('scsi0')).not.toContain('custom-acme-app.qcow2')
     })
+  })
+})
+
+describe("POST templates/deploy: a vDC tenant's URL image (#69)", () => {
+  // The node would fetch a URL the tenant chose: refused like download-url,
+  // images created before that rule included.
+  beforeEach(async () => {
+    const { customImageToCloudImage } = await import('@/lib/templates/cloudImages')
+    vi.mocked(customImageToCloudImage).mockImplementation((row: any) => row)
+    resolveVdcForTenantMock.mockResolvedValue({ poolName: 'pool-a', quota: null })
+    getVdcScopeMock.mockResolvedValue({
+      connectionIds: new Set(['conn-1']),
+      nodesByConnection: new Map([['conn-1', new Set(['pve1'])]]),
+      storagesByConnection: new Map([['conn-1', new Set(['local-lvm', 'library'])]]),
+      writableStoragesByConnection: new Map([['conn-1', new Set(['local-lvm'])]]),
+      poolsByConnection: new Map([['conn-1', new Set(['pool-a'])]]),
+      isoLibrariesByConnection: new Map([['conn-1', new Set(['library'])]]),
+    })
+    stubPveFetchForDeploy()
+    const { isNodeUrlFetchRefused } = await import('@/lib/vdc/nodeUrlFetch')
+    vi.mocked(isNodeUrlFetchRefused).mockClear()
+  })
+
+  it('refuses it before any PVE call or deployment row', async () => {
+    findCustomImageForTenantMock.mockResolvedValue({ id: 'cmacmeapp1', tenantId: 'tenant-1', isShared: false, slug: 'custom-acme-app', format: 'qcow2', sourceType: 'url', downloadUrl: 'http://10.0.0.5/app.qcow2' })
+    const res = await callRoute(await loadPost(), { body: { ...baseBody, imageSlug: 'custom-acme-app' } })
+    expect(res.status).toBe(403)
+    expect((await readJson<{ error: string }>(res))?.error).toBe(URL_IMAGE_REFUSED)
+    expect(pveFetchMock).not.toHaveBeenCalled()
+    expect(deploymentCreateMock).not.toHaveBeenCalled()
+    expect(afterCbs).toHaveLength(0)
+  })
+
+  it('keeps a provider URL image granted to that tenant', async () => {
+    findCustomImageForTenantMock.mockResolvedValue({ id: 'cmgolden1', tenantId: 'default', isShared: false, visibleViaGrant: true, slug: 'custom-golden', format: 'qcow2', sourceType: 'url', downloadUrl: 'https://image.test/golden.qcow2' })
+    const res = await callRoute(await loadPost(), { body: { ...baseBody, imageSlug: 'custom-golden' } })
+    // The provider set that URL: not judged on the tenant kind at all.
+    expect((await readJson<{ error?: string }>(res))?.error).not.toBe(URL_IMAGE_REFUSED)
+    const { isNodeUrlFetchRefused } = await import('@/lib/vdc/nodeUrlFetch')
+    expect(isNodeUrlFetchRefused).not.toHaveBeenCalledWith('default')
   })
 })
 

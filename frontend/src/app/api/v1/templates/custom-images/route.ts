@@ -9,6 +9,7 @@ import { createCustomImageSchema } from "@/lib/schemas"
 import { prisma as basePrisma } from "@/lib/db/prisma"
 import { authorizeImageLocations, authorizeImageVolume, SourceVolumeError } from '@/lib/templates/sourceVolume'
 import { loadGrantSummaries, replaceTenantGrants } from '@/lib/templates/catalogGrants'
+import { isNodeUrlFetchRefused, URL_IMAGE_REFUSED } from '@/lib/vdc/nodeUrlFetch'
 
 export const runtime = "nodejs"
 
@@ -61,6 +62,10 @@ export async function POST(req: Request) {
     const body = parseResult.data
 
     const tenantId = await getCurrentTenantId()
+
+    if (body.sourceType === 'url' && await isNodeUrlFetchRefused(tenantId)) {
+      return NextResponse.json({ error: URL_IMAGE_REFUSED }, { status: 403 })
+    }
 
     if (body.sourceType === 'volume') {
       await authorizeImageVolume({ tenantId, source: body })

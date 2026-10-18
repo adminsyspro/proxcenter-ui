@@ -5,21 +5,13 @@ import { getConnectionById } from "@/lib/connections/getConnection"
 import { buildStorageResourceId, checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { guardTenantStorageWrite, tenantUploadFilename } from "@/lib/vdc/scope"
 import { getPrincipal, type Principal } from "@/lib/auth/principal"
-import { getTenantInfrastructureScope } from "@/lib/tenant/infraScope"
+import { isNodeUrlFetchRefused } from "@/lib/vdc/nodeUrlFetch"
 import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 
 export const runtime = "nodejs"
 
-/**
- * The node fetches the URL itself, follows redirects and resolves the name on
- * its own, so no check made here can keep it off a private network: a vDC
- * tenant, token or session, may not have the provider's node download
- * anything. A token may moreover only name an http(s) URL.
- */
-async function isVdcTenant(tenantId: string): Promise<boolean> {
-  return (await getTenantInfrastructureScope(tenantId, { ignoreVdcContext: true })).kind === "iaas"
-}
-
+// A vDC tenant, token or session, may not have the provider's node download
+// anything (isNodeUrlFetchRefused). A token may moreover only name an http(s) URL.
 async function tokenUrlRefusal(principal: Principal, url: unknown): Promise<string | null> {
   let protocol = ""
   try {
@@ -28,13 +20,13 @@ async function tokenUrlRefusal(principal: Principal, url: unknown): Promise<stri
     // Not a URL: refused like any other scheme.
   }
   if (protocol !== "http:" && protocol !== "https:") return "Download URL not allowed for this token"
-  return (await isVdcTenant(principal.tenantId)) ? "Download URL not available to a vDC tenant token" : null
+  return (await isNodeUrlFetchRefused(principal.tenantId)) ? "Download URL not available to a vDC tenant token" : null
 }
 
 /** The session's own tenant, the one its grants were just judged in (no provider fallback). */
 async function sessionUrlRefusal(): Promise<string | null> {
   const tenantId = (await getPrincipal()).principal?.tenantId
-  return tenantId && (await isVdcTenant(tenantId)) ? "Download URL not available to a vDC tenant" : null
+  return tenantId && (await isNodeUrlFetchRefused(tenantId)) ? "Download URL not available to a vDC tenant" : null
 }
 
 // POST /api/v1/connections/{id}/nodes/{node}/storage/{storage}/download-url

@@ -39,16 +39,10 @@ const fact = (upid: string, vmids: number[], opts = '--node pve1 --storage local
 
 const raw = (facts: any[], jobs: any[] = []) => ({ jobs, facts, unreachableNodes: [], truncatedNodes: [], since: 0, days: 30 })
 
+/** The upid param as Next hands it: the path segment already decoded once. */
 async function get(node: string, upid: string, searchParams?: Record<string, string>) {
   const { GET } = await import('./route')
-  const res = await callRoute(GET as any, { params: { id: 'conn-1', node, upid: encodeURIComponent(upid) }, method: 'GET', searchParams })
-  return { status: res.status, body: await readJson<any>(res) }
-}
-
-/** Like get(), but passes the upid param through as-is (no encodeURIComponent). */
-async function getRaw(node: string, upid: string) {
-  const { GET } = await import('./route')
-  const res = await callRoute(GET as any, { params: { id: 'conn-1', node, upid }, method: 'GET' })
+  const res = await callRoute(GET as any, { params: { id: 'conn-1', node, upid }, method: 'GET', searchParams })
   return { status: res.status, body: await readJson<any>(res) }
 }
 
@@ -102,9 +96,15 @@ describe('GET …/backup-jobs/runs/[node]/[upid]', () => {
     expect(detailMock).not.toHaveBeenCalled()
   })
 
-  it('answers 400 on a malformed UPID escape sequence instead of 500', async () => {
-    const { status } = await getRaw('pve1', '%E0')
+  // A "%" left after Next's decode is an escape sent twice or garbage: a 400
+  // before any lookup, never decoded again (a 500 on a malformed one).
+  it.each(['%E0', 'UPID:pve1:0001:0002:6AB525DA:vzdump:105%3A:root@pam:'])('answers 400 on a UPID still holding an escape (%s), before any lookup', async upid => {
+    const { status, body } = await get('pve1', upid)
     expect(status).toBe(400)
+    expect(body).toEqual({ error: 'Malformed UPID' })
+    expect(checkPermissionMock).not.toHaveBeenCalled()
+    expect(detailMock).not.toHaveBeenCalled()
+    expect(loadRawMock).not.toHaveBeenCalled()
   })
 
   // #1003 final review (F2): the drawer passes its window; the route checks

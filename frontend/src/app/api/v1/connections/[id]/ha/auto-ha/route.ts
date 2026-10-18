@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server"
 
 import { getSetting, setSetting } from "@/lib/db/settings"
-import type { Principal } from "@/lib/auth/principal"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 
@@ -35,15 +34,12 @@ async function getHandler(_req: Request, ctx: { params: Promise<{ id: string }> 
   }
 }
 
-async function putHandler(req: Request, ctx: { params: Promise<{ id: string }>; principal?: Principal }) {
+async function putHandler(req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await ctx.params
-    // An API token is judged on this connection. A session keeps the
-    // resource-less check: the Auto-HA card is offered to node-scoped
-    // node.manage holders, who never match a connection-scoped check.
-    const denied = ctx.principal?.kind === "token"
-      ? await checkPermission(PERMISSIONS.NODE_MANAGE, "connection", id)
-      : await checkPermission(PERMISSIONS.NODE_MANAGE)
+    // The settings cover the whole connection: node.manage on it, for a
+    // token and a session alike (a node-scoped holder does not qualify).
+    const denied = await checkPermission(PERMISSIONS.NODE_MANAGE, "connection", id)
     if (denied) return denied
 
     const body = await req.json()

@@ -219,7 +219,7 @@ export default function ClusterTabs(props: any) {
   const t = useTranslations()
   const router = useRouter()
   const { hasFeature, loading: licenseLoading } = useLicense()
-  const { hasPermission } = useRBAC()
+  const { hasPermission, hasPermissionOn } = useRBAC()
   const isEnterprise = !licenseLoading && hasFeature(Features.DRS)
   const drsEnabled = isEnterprise && hasPermission('automation.view')
   const { data: drsStatus } = useDRSStatus(drsEnabled)
@@ -354,6 +354,8 @@ export default function ClusterTabs(props: any) {
   const canManageCluster = hasPermission('connection.manage')
   // Unsetting an OSD flag is a storage.admin action on the API side (#920).
   const canSetCephFlags = hasPermission('storage.admin')
+  // Auto-HA settings cover the whole connection: node.manage on it, as the routes require.
+  const canManageAutoHa = !!clusterConnId && hasPermissionOn('node.manage', 'connection', clusterConnId)
   const activeRollingUpdateId = hasActiveUpdate(clusterConnId)
 
   const drsHealth = useMemo(() => {
@@ -520,10 +522,12 @@ export default function ClusterTabs(props: any) {
         body: JSON.stringify(data),
       })
       const json = await res.json()
-      setAutoHaSettings(json.data)
+      // A refusal keeps the stored settings on screen and says why.
+      if (res.ok) setAutoHaSettings(json.data)
+      else toast.error(json.error || t('errors.genericError'))
     } catch { /* ignore */ }
     setAutoHaSaving(false)
-  }, [connId])
+  }, [connId, toast, t])
 
   const syncAutoHa = useCallback(async () => {
     if (!connId) return
@@ -1771,7 +1775,7 @@ export default function ClusterTabs(props: any) {
                                 <Switch
                                   checked={autoHaSettings.enabled}
                                   onChange={(e) => saveAutoHaSettings({ ...autoHaSettings, enabled: e.target.checked })}
-                                  disabled={autoHaSaving}
+                                  disabled={autoHaSaving || !canManageAutoHa}
                                 />
                               </Box>
 
@@ -1832,7 +1836,7 @@ export default function ClusterTabs(props: any) {
                                       size="small"
                                       variant="outlined"
                                       onClick={() => saveAutoHaSettings(autoHaSettings)}
-                                      disabled={autoHaSaving}
+                                      disabled={autoHaSaving || !canManageAutoHa}
                                       startIcon={autoHaSaving ? <CircularProgress size={14} /> : <i className="ri-save-line" />}
                                     >
                                       {t('common.save')}
@@ -1841,7 +1845,7 @@ export default function ClusterTabs(props: any) {
                                       size="small"
                                       variant="contained"
                                       onClick={syncAutoHa}
-                                      disabled={autoHaSyncing}
+                                      disabled={autoHaSyncing || !canManageAutoHa}
                                       startIcon={autoHaSyncing ? <CircularProgress size={14} /> : <i className="ri-refresh-line" />}
                                     >
                                       {t('cluster.autoHaSyncNow')}

@@ -1,9 +1,9 @@
 /**
- * Auto-HA settings are stored per connection while their handlers check
- * node.manage without a resource. An API token limited to connection c1 must
- * not rewrite (or apply) the Auto-HA of c2: the guard refuses it on the path
- * connection, and the handlers judge a token on ("connection", id). A session
- * keeps the resource-less check. Real route, real guard, real perimeter
+ * Auto-HA settings are stored per connection, so their writes are judged on
+ * node.manage over ("connection", id) for every caller. An API token limited
+ * to connection c1 must not rewrite (or apply) the Auto-HA of c2: the guard
+ * refuses it on the path connection. A session holding node.manage on one
+ * node only is refused too. Real route, real guard, real perimeter
  * resolution; only the principal, the tenant, settings, RBAC and Proxmox are
  * stubbed.
  */
@@ -114,17 +114,36 @@ describe('Auto-HA writes with an API token limited to c1', () => {
     expect(checkPermissionMock).toHaveBeenCalledWith('node.manage', 'connection', 'c1')
   })
 
-  it('a session keeps the resource-less node.manage check', async () => {
-    getPrincipalMock.mockResolvedValue({ ok: true, principal: SESSION })
-    const req = new Request('http://test.local/api/v1/connections/c2/ha/auto-ha', {
-      method: 'PUT', body: JSON.stringify({ enabled: false }), headers: { 'content-type': 'application/json' },
-    })
+})
 
-    const res = await PUT(req, params('c2'))
+describe('Auto-HA writes with a session', () => {
+  const sessionPut = () => PUT(new Request('http://test.local/api/v1/connections/c2/ha/auto-ha', {
+    method: 'PUT', body: JSON.stringify({ enabled: false }), headers: { 'content-type': 'application/json' },
+  }), params('c2'))
+  const sessionSync = () => SYNC(new Request('http://test.local/x', { method: 'POST' }), params('c2'))
+
+  beforeEach(() => {
+    getPrincipalMock.mockResolvedValue({ ok: true, principal: SESSION })
+  })
+
+  it('a node-scoped node.manage holder is refused: nothing stored, Proxmox untouched', async () => {
+    // scopeMatches: a node-scoped grant never matches a "connection" resource.
+    checkPermissionMock.mockImplementation(async (_perm: string, resourceType?: string) =>
+      resourceType === 'connection' ? Response.json({ error: 'Permission denied: node.manage' }, { status: 403 }) : null)
+
+    expect((await sessionPut()).status).toBe(403)
+    expect((await sessionSync()).status).toBe(403)
+    expect(setSettingMock).not.toHaveBeenCalled()
+    expect(pveFetchMock).not.toHaveBeenCalled()
+  })
+
+  it('a connection-scoped holder writes and applies the Auto-HA of that connection', async () => {
+    const res = await sessionPut()
 
     expect(res.status).toBe(200)
-    expect(checkPermissionMock).toHaveBeenCalledWith('node.manage')
-    expect(await SYNC(new Request('http://test.local/x', { method: 'POST' }), params('c2'))).toHaveProperty('status', 200)
-    expect(checkPermissionMock).toHaveBeenLastCalledWith('node.manage')
+    expect(checkPermissionMock).toHaveBeenCalledWith('node.manage', 'connection', 'c2')
+    expect(setSettingMock).toHaveBeenCalledWith('auto_ha:c2', 'default', expect.objectContaining({ enabled: false }))
+    expect((await sessionSync()).status).toBe(200)
+    expect(checkPermissionMock).toHaveBeenLastCalledWith('node.manage', 'connection', 'c2')
   })
 })

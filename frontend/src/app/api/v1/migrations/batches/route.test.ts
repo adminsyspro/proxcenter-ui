@@ -203,6 +203,8 @@ describe("POST /api/v1/migrations/batches", () => {
     [{ concurrency: 1.5 }, "concurrency"],
     [{ vms: [] }, "vms"],
     [{ vms: [vms[0], vms[0]] }, "twice"],
+    [{ disks: [{ index: 1, targetStorage: "ZFS-Pool" }] }, "disks"],
+    [{ vms: [{ ...vms[0], disks: [{ index: 1, exclude: true }] }] }, "disks"],
     [{ vms: Array.from({ length: MAX_BATCH_VMS + 1 }, (_, i) => ({ sourceVmId: `v${i}`, targetNode: "pve1" })) }, "vms"],
   ])("refuses %j", async (over, word) => {
     const res = await create({ ...shared, vms, ...over })

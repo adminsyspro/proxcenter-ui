@@ -169,39 +169,62 @@ export async function createTargetVmShell(pveConn: any, node: string, pveParams:
   return pveFetch<Record<string, any>>(pveConn, `/nodes/${encodeURIComponent(node)}/qemu/${pveParams.vmid}/config`)
 }
 
-/** One source disk to provision a raw block target for. */
-export interface ProvisionDisk { key: number; capacityBytes: number }
+/**
+ * One source disk to provision a raw block target for, on its own storage: the
+ * operator can send each disk of a VMware source to a different block storage
+ * (#317, lot 2), so the storage and its PVE type travel with the disk.
+ */
+export interface ProvisionDisk {
+  key: number
+  capacityBytes: number
+  /** Target storage of this disk. */
+  storage: string
+  /** PVE type of that storage (lvm, lvmthin, zfspool, rbd, ...), which decides the zeroing. */
+  storageType: string
+}
+
+/**
+ * Storage types whose fresh volumes already read as zero. Plain (thick) LVM is
+ * not one of them, see the zeroing note in provisionBlockTargets.
+ */
+const PRE_ZEROED_STORAGE_TYPES = ["lvmthin", "zfspool", "zfs", "rbd"]
+
+/** Whether a fresh volume on this disk's storage needs the mandatory thick zeroing. */
+function needsThickZero(disk: ProvisionDisk): boolean {
+  return !PRE_ZEROED_STORAGE_TYPES.includes(disk.storageType)
+}
 
 // ── preparing_disks: allocate a raw block volume per disk, zero the thick ones ──
 // A dedicated phase, not enabling_cbt: on thick LVM the mandatory pre-zero
 // below can run for hours, and the badge must say what the job is doing (#606).
-// Progress covers 0→10 of the locked scale, weighted by bytes zeroed across
-// all disks (they share the target storage, so it is all-thick or none).
+// Progress covers 0→10 of the locked scale, weighted by the bytes that are
+// actually zeroed: only the disks on a thick storage count, a disk on a thin
+// pool costs one discard and no progress.
 export async function provisionBlockTargets(a: {
-  jobId: string; connectionId: string; nodeIp: SshTarget
-  targetStorage: string; storageType: string; targetVmid: number
+  jobId: string; connectionId: string; nodeIp: SshTarget; targetVmid: number
   shellConf: Record<string, any>; disks: ProvisionDisk[]; allocatedVolumes: AllocatedVolume[]
   /** Cap on the thick zeroing write rate in MB/s; 0 or absent = unlimited (roadmap#45). */
   zeroRateLimitMBps?: number
 }): Promise<Map<number, string>> {
-  const { jobId, connectionId, nodeIp, targetStorage, storageType, targetVmid, shellConf, disks, allocatedVolumes } = a
+  const { jobId, connectionId, nodeIp, targetVmid, shellConf, disks, allocatedVolumes } = a
   const rateLimitMBps = a.zeroRateLimitMBps && a.zeroRateLimitMBps > 0 ? Math.floor(a.zeroRateLimitMBps) : 0
   const sliceMiB = zeroSliceBytes(rateLimitMBps * ZERO_RATE_MIB) / ZERO_RATE_MIB
   const targetDev = new Map<number, string>()
   await updateJob(jobId, "preparing_disks")
-  const zeroTotalBytes = disks.reduce((s, d) => s + d.capacityBytes, 0)
+  const zeroTotalBytes = disks.filter(needsThickZero).reduce((s, d) => s + d.capacityBytes, 0)
   let zeroedBytes = 0
   let lastZeroPct = 0
   for (let i = 0; i < disks.length; i++) {
     const disk = disks[i]
     const sizeKB = Math.ceil(disk.capacityBytes / 1024)
-    // Numbering walks forward as each disk registers itself in allocatedVolumes.
+    // Numbering walks forward as each disk registers itself in allocatedVolumes,
+    // across every storage of the run: vm-<vmid>-disk-N is unique per VM.
     const volName = nextFreeDiskName(shellConf, allocatedVolumes, targetVmid)
     // See allocateAndMapBlockVolume for the raw format and why the volume is
     // registered for cleanup before the allocation runs (#587).
     const vol = await allocateAndMapBlockVolume({
       connectionId, nodeIp,
-      targetStorage, targetVmid, volName, sizeKB,
+      targetStorage: disk.storage, targetVmid, volName, sizeKB,
       allocatedVolumes,
     })
     const dev = vol.devicePath
@@ -213,9 +236,9 @@ export async function provisionBlockTargets(a: {
     // *permits* zero reads, it does not guarantee them, so a freshly-alloc'd
     // thick LV can surface a previous tenant's bytes (a correctness AND
     // information-leak bug). Write-zero those (slow but mandatory); fail hard if
-    // it doesn't succeed rather than copy onto stale data.
-    const preZeroed = ["lvmthin", "zfspool", "zfs", "rbd"].includes(storageType)
-    if (preZeroed) {
+    // it doesn't succeed rather than copy onto stale data. Decided per disk:
+    // the disks of one run may sit on storages of different types.
+    if (!needsThickZero(disk)) {
       await executeSSH(connectionId, nodeIp, `blkdiscard ${shellEscape(dev)} 2>/dev/null || true`)
     } else {
       // #606: this step used to be hours of total silence (no start line, no
@@ -278,8 +301,8 @@ export async function provisionBlockTargets(a: {
       const avgMBps = disk.capacityBytes / elapsedSec / ZERO_RATE_MIB
       const modeLabel = zeroMode.value === "stream" ? "streamed zeros" : "write-zeroes offload"
       await appendLog(jobId, `Disk ${i}: zeroed thick target ${dev} in ${formatZeroElapsed(elapsedSec)} (${modeLabel}, ${avgMBps.toFixed(0)} MB/s average, limit ${describeZeroRateLimit(rateLimitMBps)})`, "success")
+      zeroedBytes += disk.capacityBytes
     }
-    zeroedBytes += disk.capacityBytes
     await appendLog(jobId, `Disk ${i}: target ${vol.volumeId} → ${dev} (${(disk.capacityBytes / 1073741824).toFixed(1)} GB)`)
   }
   return targetDev

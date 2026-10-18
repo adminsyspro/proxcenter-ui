@@ -1,21 +1,30 @@
 /**
- * State and payload helpers of the migration review step (#317, lot 1).
+ * State and payload helpers of the migration review step (#317, lots 1 and 2).
  *
- * The review step shows the hardware and the NICs read from the source VM
- * and lets the operator change the target values. Everything the step edits
- * is kept as strings (what the inputs hold); these helpers build the initial
- * state from the source VM, validate it, and turn it into the `hardware` and
- * `nics` fields of POST /api/v1/migrations. Pure, so the node test project
- * covers them without rendering.
+ * The review step shows the hardware, the disks and the NICs read from the
+ * source VM and lets the operator change the target values. Everything the
+ * step edits is kept as strings (what the inputs hold); these helpers build
+ * the initial state from the source VM, validate it, and turn it into the
+ * `hardware`, `disks` and `nics` fields of POST /api/v1/migrations. Pure, so
+ * the node test project covers them without rendering.
  */
 
-import { HARDWARE_LIMITS, type MigrationHardwareOverrides, type MigrationNicMapping } from '@/lib/migration/target-overrides'
+import { HARDWARE_LIMITS, type MigrationDiskMapping, type MigrationHardwareOverrides, type MigrationNicMapping } from '@/lib/migration/target-overrides'
+import { isFileBasedStorage } from '@/lib/proxmox/storage'
 
 export interface ReviewSourceNic {
   label: string
   type: string
   macAddress: string
   network: string
+}
+
+/** One source disk, in the order the pipelines index them (parseVmConfig). */
+export interface ReviewSourceDisk {
+  label: string
+  capacityBytes: number
+  /** "[Datastore] folder/disk.vmdk" as vSphere reports it. */
+  fileName: string
 }
 
 /** What the review step needs from GET /api/v1/vmware/[id]/vms/[vmid]. */
@@ -25,8 +34,15 @@ export interface ReviewSource {
   sockets: number
   memoryMB: number
   nics: ReviewSourceNic[]
+  disks: ReviewSourceDisk[]
   /** The source carries a virtual TPM; its state is never copied (roadmap#1). */
   hasVtpm?: boolean
+}
+
+/** One row of the disk table: its target storage, and whether the operator left it out. */
+export interface ReviewDiskState {
+  storage: string
+  exclude: boolean
 }
 
 export interface ReviewHardwareState {
@@ -63,6 +79,49 @@ export function initialNicState(source: ReviewSource | null | undefined, default
   return (source?.nics ?? []).map(() => ({ bridge: defaultBridge, vlanTag: defaultVlanTag, model: '' }))
 }
 
+/** One row per source disk, all on the dialog's target storage and all migrated. */
+export function initialDiskState(source: ReviewSource | null | undefined, defaultStorage: string): ReviewDiskState[] {
+  return (source?.disks ?? []).map(() => ({ storage: defaultStorage, exclude: false }))
+}
+
+/**
+ * The disks the job will copy, with their position in the source list and
+ * their storage. Disk 0 is the boot disk and is kept whatever its row says,
+ * as the API and planDiskTargets do.
+ */
+export function keptReviewDisks(disks: ReviewDiskState[]): { index: number; storage: string }[] {
+  return disks
+    .map((d, index) => ({ index, storage: d.storage, kept: index === 0 || !d.exclude }))
+    .filter(d => d.kept)
+    .map(({ index, storage }) => ({ index, storage }))
+}
+
+/**
+ * The distinct storages the job writes disks to: those of the kept rows in
+ * the review step, or the default storage alone when the step has no row
+ * (source not read yet, or outside the review step). Blank rows are left out;
+ * they already block the launch.
+ */
+export function reviewDiskStorages(disks: ReviewDiskState[], defaultStorage: string): string[] {
+  const kept = keptReviewDisks(disks)
+  if (kept.length === 0) return defaultStorage ? [defaultStorage] : []
+  return [...new Set(kept.map(k => k.storage.trim()).filter(Boolean))]
+}
+
+/**
+ * The storage type the cold temp-space rule should assume for a set of
+ * targets: a disk bound for a block storage is staged twice on the temporary
+ * storage (download, then converted image), so one block target among the
+ * kept disks makes requiredTempBytes count the whole run twice; only when
+ * every kept disk goes to a file-based storage does the 1x rule hold. An
+ * unknown type counts as block, as requiredTempBytes already treats it.
+ */
+export function tempStorageTypeFor(types: (string | undefined)[]): string | undefined {
+  if (types.length === 0) return undefined
+  const block = types.findIndex(t => !t || !isFileBasedStorage(t))
+  return block >= 0 ? types[block] : types[0]
+}
+
 type HardwareField = keyof ReviewHardwareState
 
 function fieldValue(raw: string): number | null {
@@ -88,9 +147,15 @@ export function vlanTagInvalid(raw: string): boolean {
   return !Number.isInteger(n) || n < 1 || n > 4094
 }
 
-export function reviewIsValid(hw: ReviewHardwareState, nics: ReviewNicState[]): boolean {
+/** Every disk the job copies names its storage; an excluded disk needs none. */
+export function disksValid(disks: ReviewDiskState[]): boolean {
+  return keptReviewDisks(disks).every(k => k.storage.trim() !== '')
+}
+
+export function reviewIsValid(hw: ReviewHardwareState, nics: ReviewNicState[], disks: ReviewDiskState[] = []): boolean {
   const errors = hardwareErrors(hw)
   if (errors.cores || errors.sockets || errors.memoryMB) return false
+  if (!disksValid(disks)) return false
   return nics.every(n => n.bridge.trim() !== '' && !vlanTagInvalid(n.vlanTag))
 }
 
@@ -123,6 +188,55 @@ export function buildNicsPayload(nics: ReviewNicState[], canEditVlan: boolean): 
     if (n.model) m.model = n.model
     return m
   })
+}
+
+/**
+ * The `disks` field of the request: every source disk with its chosen
+ * storage, so the mapping persisted in the job never depends on what the
+ * default storage was at the time, and `exclude` on the disks left out. Disk
+ * 0 is never excluded (the API refuses it). Undefined when the source has no disk.
+ */
+export function buildDisksPayload(disks: ReviewDiskState[]): MigrationDiskMapping[] | undefined {
+  if (disks.length === 0) return undefined
+  return disks.map((d, index) => {
+    if (d.exclude && index !== 0) return { index, exclude: true }
+    return { index, targetStorage: d.storage.trim() }
+  })
+}
+
+export interface StorageNeed {
+  storage: string
+  requiredBytes: number
+}
+
+/**
+ * Bytes each target storage must hold for a warm run. vSphere only reports
+ * the committed size of the whole VM, so it is apportioned to the kept disks
+ * by their share of the total capacity and summed per storage: every disk on
+ * the default storage asks exactly what the step-1 check asks, and the share
+ * of an excluded disk is not asked for. Without any row the default storage
+ * takes everything, as before the review step existed.
+ */
+export function warmSpaceNeeds(
+  disks: ReviewDiskState[],
+  source: ReviewSource | null | undefined,
+  committedBytes: number,
+  defaultStorage: string,
+): StorageNeed[] {
+  const committed = Math.max(0, committedBytes || 0)
+  const kept = keptReviewDisks(disks).filter(k => k.storage.trim() !== '')
+  if (kept.length === 0) return defaultStorage ? [{ storage: defaultStorage, requiredBytes: committed }] : []
+  const capacities = (source?.disks ?? []).map(d => Math.max(0, d.capacityBytes || 0))
+  const total = capacities.reduce((sum, c) => sum + c, 0)
+  // Capacity per storage first, so a single storage holding every disk gets
+  // total/total = 1 exactly rather than a sum of rounded fractions.
+  const perStorage = new Map<string, number>()
+  for (const k of kept) {
+    const weight = total > 0 ? (capacities[k.index] ?? 0) : 1
+    perStorage.set(k.storage, (perStorage.get(k.storage) ?? 0) + weight)
+  }
+  const divisor = total > 0 ? total : kept.length
+  return [...perStorage.entries()].map(([storage, weight]) => ({ storage, requiredBytes: Math.round(committed * (weight / divisor)) }))
 }
 
 /** The quick models of the migration dialog first, then the node's own list, without duplicates. */

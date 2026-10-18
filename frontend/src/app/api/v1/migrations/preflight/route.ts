@@ -6,6 +6,8 @@ import { runWarmNodePreflight } from "@/lib/migration/warm/vddk-preflight"
 import { runXcpngWarmNodePreflight } from "@/lib/migration/warm/xcpng-node-preflight"
 import { isVddkPackageTokenConfigured } from "@/lib/migration/warm/vddk-provision"
 import { checkTargetStorageSpace } from "@/lib/migration/warm/target-space"
+import { MAX_DISKS } from "@/lib/migration/target-overrides"
+import { assertStorageName } from "@/lib/ssh/validate"
 import { checkWarmSourceVersion, fetchSourceApiVersion, warmSourceVersionError, warmSourceVersionWarning } from "@/lib/migration/warm/source-version"
 import { runWarmCopyReachability } from "@/lib/migration/warm/nfc-reachability"
 import { readVmCopyInterfaces } from "@/lib/vmware/copy-interfaces-server"
@@ -33,6 +35,8 @@ export async function POST(req: Request) {
     /** The source VM and the VMkernel adapter its copy should use (roadmap#53). */
     sourceVmId?: string
     copyVmk?: string
+    /** storage-space (#317 lot 2): bytes each target storage must hold. */
+    needs?: unknown
   }
 
   try {
@@ -41,7 +45,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 })
   }
 
-  const { sourceConnectionId, targetConnectionId, targetNode, targetStorage, requiredDiskBytes, action, vmName, sourceType, vddkLibdir, sourceVmId, copyVmk } = body
+  const { sourceConnectionId, targetConnectionId, targetNode, targetStorage, requiredDiskBytes, action, vmName, sourceType, vddkLibdir, sourceVmId, copyVmk, needs } = body
 
   if (!targetConnectionId || !targetNode) {
     return NextResponse.json(
@@ -73,6 +77,19 @@ export async function POST(req: Request) {
     if (action === "check-virtio-win") {
       const result = await checkVirtioWinProgress(targetConnectionId, targetNode)
       return NextResponse.json(result)
+    }
+
+    // #317 lot 2: the review step may send the disks of one VM to several
+    // storages, so the dialog asks for the live free space of each one against
+    // what the disks bound for it need. Same verdict as warm-check's `space`,
+    // one entry per storage; the same tenant scope and VM_MIGRATE right apply
+    // (checked above, before any action). The storage names reach the PVE
+    // API path, hence the grammar check.
+    if (action === "storage-space") {
+      const parsed = parseStorageNeeds(needs)
+      if ("error" in parsed) return NextResponse.json({ error: parsed.error }, { status: 400 })
+      const spaces = await Promise.all(parsed.needs.map(n => checkTargetStorageSpace(targetConnectionId, targetNode, n.storage, n.requiredBytes)))
+      return NextResponse.json({ spaces })
     }
 
     // Warm migration go/no-go: report whether the target node has the VDDK
@@ -158,6 +175,29 @@ export async function POST(req: Request) {
     console.error("[migrations/preflight] Error:", safeLog(message))
     return NextResponse.json({ error: message }, { status: 500 })
   }
+}
+
+/** `needs` of a storage-space call: 1 to MAX_DISKS entries of `{ storage, requiredBytes }`. */
+function parseStorageNeeds(raw: unknown): { needs: { storage: string; requiredBytes: number }[] } | { error: string } {
+  if (!Array.isArray(raw) || raw.length === 0 || raw.length > MAX_DISKS) {
+    return { error: `needs must list 1 to ${MAX_DISKS} storages` }
+  }
+  const needs: { storage: string; requiredBytes: number }[] = []
+  for (const entry of raw) {
+    const e = (entry && typeof entry === "object" ? entry : {}) as Record<string, unknown>
+    let storage: string
+    try {
+      storage = assertStorageName(e.storage)
+    } catch {
+      return { error: "needs[].storage must be a storage name" }
+    }
+    const requiredBytes = e.requiredBytes
+    if (typeof requiredBytes !== "number" || !Number.isFinite(requiredBytes) || requiredBytes < 0) {
+      return { error: `needs[].requiredBytes of ${storage} must be a number of bytes, 0 or more` }
+    }
+    needs.push({ storage, requiredBytes })
+  }
+  return { needs }
 }
 
 /** Reachability of the source host's adapter `device`, at the address vSphere reports for it. */

@@ -15,7 +15,7 @@ import { sanitizeV2vRoot } from "@/lib/migration/v2v-root-select"
 import { persistedV2vInputs } from "@/lib/migration/retry-dispatch"
 import { parseNfcConcurrency, NFC_CONCURRENCY_MIN, NFC_CONCURRENCY_MAX } from "@/lib/migration/nfc-progress"
 import { MIGRATION_CPU_TYPES, resolveMigrationCpuType } from "@/lib/migration/cpu-type"
-import { parseHardwareOverrides, parseNicMappings, isAcceptableCpuType } from "@/lib/migration/target-overrides"
+import { parseHardwareOverrides, parseNicMappings, parseDiskMappings, isAcceptableCpuType } from "@/lib/migration/target-overrides"
 import { parseZeroRateLimit, ZERO_RATE_LIMIT_MIN_MBPS, ZERO_RATE_LIMIT_MAX_MBPS } from "@/lib/migration/warm/zero-rate"
 import { hasServerFeature } from "@/lib/auth/requireEnterprise"
 import { Features } from "@/lib/license/features"
@@ -137,6 +137,12 @@ export async function validateMigrationRequest(
   const nicsParsed = parseNicMappings(body.nics)
   if (nicsParsed.ok === false) return bad(nicsParsed.error)
   const nics = nicsParsed.value
+  // Per-disk target storage and disk exclusion (#317, lot 2). Same rule: the
+  // storage names reach `pvesm alloc` and `qm disk import` on the node, so
+  // they pass the storage-id grammar here.
+  const disksParsed = parseDiskMappings(body.disks)
+  if (disksParsed.ok === false) return bad(disksParsed.error)
+  const disks = disksParsed.value
 
   const unauthorized = await authorizeMigrationTarget({
     tenantId, sourceConnectionId, targetConnectionId, targetNode, targetVmid, networkBridge, vlanTag, nics,
@@ -238,8 +244,8 @@ export async function validateMigrationRequest(
   if (sourceConn.type === "vmware" && sourceConn.subType === "vcenter") {
     effectiveSourceType = "vcenter"
   }
-  if ((hardware || nics) && effectiveSourceType !== "vmware" && effectiveSourceType !== "vcenter") {
-    return bad("hardware and nics overrides are only supported for VMware sources (ESXi and vCenter)")
+  if ((hardware || nics || disks) && effectiveSourceType !== "vmware" && effectiveSourceType !== "vcenter") {
+    return bad("hardware, nics and disks overrides are only supported for VMware sources (ESXi and vCenter)")
   }
 
   // Warm migration (CBT) is available for VMware sources (ESXi-direct and
@@ -298,8 +304,8 @@ export async function validateMigrationRequest(
       // silently reverting to the defaults.
       config: { sourceConnectionId, sourceVmId, sourceVmName: body.sourceVmName, targetConnectionId, targetNode, targetStorage, networkBridge, vlanTag, startAfterMigration, convertDisksToQcow2, cpuType, migrationType, transferMode, ...(targetVmid !== undefined && { targetVmid }), ...(body.vddkLibdir && { vddkLibdir: body.vddkLibdir }), ...(downtimeBudgetSec !== undefined && { downtimeBudgetSec }), ...(cutoverMode !== undefined && { cutoverMode }), ...(zeroRateLimitMBps !== undefined && { zeroRateLimitMBps }), ...(copyVmk && { copyVmk }),
         // Review-step overrides (#317), persisted so a retry keeps the same
-        // hardware and NIC layout.
-        ...(hardware && { hardware }), ...(nics && { nics }),
+        // hardware, NIC layout and disk placement.
+        ...(hardware && { hardware }), ...(nics && { nics }), ...(disks && { disks }),
         // Source type and virt-v2v inputs (disk paths, vCenter placement, temp
         // storage, root override): persisted so a retry rebuilds the same job.
         sourceType: effectiveSourceType,

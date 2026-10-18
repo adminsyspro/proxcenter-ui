@@ -110,6 +110,13 @@ describe("v2vConfigFromJobConfig", () => {
     expect(v2vConfigFromJobConfig({ sourceType: "vcenter", nfcConcurrency: "3" }, job)).not.toHaveProperty("nfcConcurrency")
   })
 
+  it("replays the per-disk storage and exclusions (#317), and drops an empty list", () => {
+    const disks = [{ index: 1, targetStorage: "ZFS-Pool" }, { index: 2, exclude: true }]
+    expect(v2vConfigFromJobConfig({ sourceType: "vcenter", disks }, job)).toMatchObject({ disks })
+    expect(v2vConfigFromJobConfig({ sourceType: "vcenter", disks: [] }, job)).not.toHaveProperty("disks")
+    expect(v2vConfigFromJobConfig({ sourceType: "vcenter", disks: "x" }, job)).not.toHaveProperty("disks")
+  })
+
   it("takes the source type from the live connection for a legacy job without sourceType", () => {
     const result = v2vConfigFromJobConfig({ migrationType: "cold" }, job, { type: "hyperv", subType: null })
     expect(result.sourceType).toBe("hyperv")

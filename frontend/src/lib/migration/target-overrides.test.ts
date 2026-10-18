@@ -3,6 +3,7 @@ import { describe, it, expect } from "vitest"
 import {
   parseHardwareOverrides, parseNicMappings, isAcceptableCpuType, resolveNicTarget,
   buildNetValue, applyHardwareOverrides, describeOverrides, MAX_NICS,
+  parseDiskMappings, planDiskTargets, planStorages, bytesPerStorage, describeDiskPlan, storageOfVolume, MAX_DISKS,
 } from "./target-overrides"
 
 describe("parseHardwareOverrides", () => {
@@ -105,5 +106,84 @@ describe("applyHardwareOverrides / describeOverrides", () => {
     expect(describeOverrides({ hardware: {}, nics: [] })).toBeNull()
     expect(describeOverrides({ hardware: { cores: 4, memoryMB: 2048 }, nics: [{ index: 1, bridge: "vf95117a", vlanTag: 20, model: "e1000" }] }))
       .toBe("Operator overrides: hardware cores=4, memory=2048MB; NICs net1->vf95117a tag 20 (e1000)")
+  })
+})
+
+describe("parseDiskMappings (#317, lot 2)", () => {
+  it("resolves absent, null and empty to undefined", () => {
+    expect(parseDiskMappings(undefined)).toEqual({ ok: true, value: undefined })
+    expect(parseDiskMappings(null)).toEqual({ ok: true, value: undefined })
+    expect(parseDiskMappings([])).toEqual({ ok: true, value: undefined })
+  })
+
+  it("keeps storages and exclusions, sorted by index, and drops entries that change nothing", () => {
+    const r = parseDiskMappings([
+      { index: 2, exclude: true, targetStorage: "ignored" },
+      { index: 0, targetStorage: "CephStoragePool" },
+      { index: 3 },
+      { index: "1", targetStorage: "ZFS-Pool", exclude: false },
+    ])
+    expect(r).toEqual({ ok: true, value: [
+      { index: 0, targetStorage: "CephStoragePool" },
+      { index: 1, targetStorage: "ZFS-Pool" },
+      { index: 2, exclude: true },
+    ] })
+  })
+
+  it.each([
+    ["not an array", { index: 0 }, /must be an array/],
+    ["a non-object entry", [1], /must be objects/],
+    ["a negative index", [{ index: -1, targetStorage: "a" }], /index/],
+    ["an index past the bound", [{ index: MAX_DISKS, targetStorage: "a" }], /index/],
+    ["a duplicate index", [{ index: 1, targetStorage: "a" }, { index: 1, targetStorage: "b" }], /listed twice/],
+    ["a storage name that is a shell command", [{ index: 1, targetStorage: "a;reboot" }], /targetStorage/],
+    ["a non-string storage", [{ index: 1, targetStorage: 7 }], /targetStorage/],
+    ["a non-boolean exclude", [{ index: 1, exclude: "yes" }], /exclude must be a boolean/],
+    ["the boot disk excluded", [{ index: 0, exclude: true }], /boot disk/],
+  ])("refuses %s", (_label, raw, message) => {
+    const r = parseDiskMappings(raw)
+    expect(r.ok).toBe(false)
+    if (r.ok === false) expect(r.error).toMatch(message)
+  })
+
+  it("refuses more entries than the bound", () => {
+    const raw = Array.from({ length: MAX_DISKS + 1 }, (_, index) => ({ index, targetStorage: "a" }))
+    expect(parseDiskMappings(raw).ok).toBe(false)
+  })
+})
+
+describe("planDiskTargets / describeDiskPlan / bytesPerStorage", () => {
+  const disks = [{ cap: 10 }, { cap: 20 }, { cap: 30 }]
+
+  it("puts every disk on the default storage when nothing is mapped", () => {
+    const plan = planDiskTargets(disks, undefined, "Ceph")
+    expect(plan.kept.map(k => [k.sourceIndex, k.storage])).toEqual([[0, "Ceph"], [1, "Ceph"], [2, "Ceph"]])
+    expect(plan.excluded).toEqual([])
+    expect(describeDiskPlan(plan, "Ceph")).toBeNull()
+    expect(planStorages(plan)).toEqual(["Ceph"])
+  })
+
+  it("applies per-disk storages, drops excluded disks and reports mappings past the source list", () => {
+    const plan = planDiskTargets(disks, [{ index: 1, targetStorage: "ZFS" }, { index: 2, exclude: true }, { index: 5, targetStorage: "x" }], "Ceph")
+    expect(plan.kept.map(k => [k.disk.cap, k.sourceIndex, k.storage])).toEqual([[10, 0, "Ceph"], [20, 1, "ZFS"]])
+    expect(plan.excluded).toEqual([2])
+    expect(plan.unknown).toEqual([5])
+    expect(planStorages(plan)).toEqual(["Ceph", "ZFS"])
+    expect(Object.fromEntries(bytesPerStorage(plan, d => d.cap))).toEqual({ Ceph: 10, ZFS: 20 })
+    expect(describeDiskPlan(plan, "Ceph")).toBe("Per-disk choices: storage disk 1->Ceph, disk 2->ZFS; excluded disk 3; ignored mapping for missing disk 6")
+  })
+
+  it("never drops the boot disk, even from a hand-made mapping", () => {
+    const plan = planDiskTargets(disks, [{ index: 0, exclude: true }], "Ceph")
+    expect(plan.kept[0].sourceIndex).toBe(0)
+    expect(plan.excluded).toEqual([])
+  })
+})
+
+describe("storageOfVolume", () => {
+  it("reads the storage id of a volume id, or falls back", () => {
+    expect(storageOfVolume("CephStoragePool:vm-101-disk-0", "x")).toBe("CephStoragePool")
+    expect(storageOfVolume("ISO:101/vm-101-disk-1.qcow2", "x")).toBe("ISO")
+    expect(storageOfVolume("/dev/sdb", "fallback")).toBe("fallback")
   })
 })

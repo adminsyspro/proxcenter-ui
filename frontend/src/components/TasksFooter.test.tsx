@@ -69,6 +69,9 @@ vi.mock('@mui/x-data-grid', () => ({
 }))
 
 vi.mock('./TaskDetailDialog', () => ({ default: () => null }))
+// The bulk batch tabs poll through SWR: left real, a revalidation lands after
+// jsdom is torn down and fails the run with "document is not defined".
+vi.mock('@/hooks/useActiveBulkBatches', () => ({ useActiveBulkBatches: () => ({ data: undefined }) }))
 vi.mock('@/components/SharedTaskDetailDialog', () => ({ default: () => null }))
 vi.mock('@/components/tasks/JobDetailDialog', () => ({ default: () => null }))
 

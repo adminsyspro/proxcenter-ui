@@ -2239,7 +2239,7 @@
               0,
               1
             ],
-            "description": "Defaults to 1 on a creation; through the orchestrator an explicit 0 is also created as 1"
+            "description": "Defaults to 1 when absent on a creation; an explicit 0 creates the rule disabled"
           },
           "source": {
             "type": "string",
@@ -2318,7 +2318,7 @@
               0,
               1
             ],
-            "description": "Defaults to 1 on a creation; through the orchestrator an explicit 0 is also created as 1"
+            "description": "Defaults to 1 when absent on a creation; an explicit 0 creates the rule disabled"
           },
           "source": {
             "type": "string",
@@ -5025,7 +5025,7 @@
                     0,
                     1
                   ],
-                  "description": "Defaults to 1 on a creation; through the orchestrator an explicit 0 is also created as 1"
+                  "description": "Defaults to 1 when absent on a creation; an explicit 0 creates the rule disabled"
                 },
                 "source": {
                   "type": "string",
@@ -5140,7 +5140,7 @@
                       0,
                       1
                     ],
-                    "description": "Defaults to 1 on a creation; through the orchestrator an explicit 0 is also created as 1"
+                    "description": "Defaults to 1 when absent on a creation; an explicit 0 creates the rule disabled"
                   },
                   "source": {
                     "type": "string",
@@ -23796,7 +23796,7 @@
                               0,
                               1
                             ],
-                            "description": "Defaults to 1 on a creation; through the orchestrator an explicit 0 is also created as 1"
+                            "description": "Defaults to 1 when absent on a creation; an explicit 0 creates the rule disabled"
                           },
                           "source": {
                             "type": "string",
@@ -24150,7 +24150,7 @@
                       0,
                       1
                     ],
-                    "description": "Defaults to 1 on a creation; through the orchestrator an explicit 0 is also created as 1"
+                    "description": "Defaults to 1 when absent on a creation; an explicit 0 creates the rule disabled"
                   },
                   "source": {
                     "type": "string",
@@ -24363,7 +24363,7 @@
                       0,
                       1
                     ],
-                    "description": "Defaults to 1 on a creation; through the orchestrator an explicit 0 is also created as 1"
+                    "description": "Defaults to 1 when absent on a creation; an explicit 0 creates the rule disabled"
                   },
                   "source": {
                     "type": "string",
@@ -24582,7 +24582,7 @@
                       0,
                       1
                     ],
-                    "description": "Defaults to 1 on a creation; through the orchestrator an explicit 0 is also created as 1"
+                    "description": "Defaults to 1 when absent on a creation; an explicit 0 creates the rule disabled"
                   },
                   "source": {
                     "type": "string",
@@ -24959,7 +24959,7 @@
                                 0,
                                 1
                               ],
-                              "description": "Defaults to 1 on a creation; through the orchestrator an explicit 0 is also created as 1"
+                              "description": "Defaults to 1 when absent on a creation; an explicit 0 creates the rule disabled"
                             },
                             "source": {
                               "type": "string",
@@ -25410,7 +25410,7 @@
                       0,
                       1
                     ],
-                    "description": "Defaults to 1 on a creation; through the orchestrator an explicit 0 is also created as 1"
+                    "description": "Defaults to 1 when absent on a creation; an explicit 0 creates the rule disabled"
                   },
                   "source": {
                     "type": "string",
@@ -25638,7 +25638,7 @@
                       0,
                       1
                     ],
-                    "description": "Defaults to 1 on a creation; through the orchestrator an explicit 0 is also created as 1"
+                    "description": "Defaults to 1 when absent on a creation; an explicit 0 creates the rule disabled"
                   },
                   "source": {
                     "type": "string",
@@ -26792,7 +26792,7 @@
                               0,
                               1
                             ],
-                            "description": "Defaults to 1 on a creation; through the orchestrator an explicit 0 is also created as 1"
+                            "description": "Defaults to 1 when absent on a creation; an explicit 0 creates the rule disabled"
                           },
                           "source": {
                             "type": "string",
@@ -27164,7 +27164,7 @@
                       0,
                       1
                     ],
-                    "description": "Defaults to 1 on a creation; through the orchestrator an explicit 0 is also created as 1"
+                    "description": "Defaults to 1 when absent on a creation; an explicit 0 creates the rule disabled"
                   },
                   "source": {
                     "type": "string",
@@ -27386,7 +27386,7 @@
                       0,
                       1
                     ],
-                    "description": "Defaults to 1 on a creation; through the orchestrator an explicit 0 is also created as 1"
+                    "description": "Defaults to 1 when absent on a creation; an explicit 0 creates the rule disabled"
                   },
                   "source": {
                     "type": "string",
@@ -27614,7 +27614,7 @@
                       0,
                       1
                     ],
-                    "description": "Defaults to 1 on a creation; through the orchestrator an explicit 0 is also created as 1"
+                    "description": "Defaults to 1 when absent on a creation; an explicit 0 creates the rule disabled"
                   },
                   "source": {
                     "type": "string",
@@ -28480,7 +28480,7 @@
                               0,
                               1
                             ],
-                            "description": "Defaults to 1 on a creation; through the orchestrator an explicit 0 is also created as 1"
+                            "description": "Defaults to 1 when absent on a creation; an explicit 0 creates the rule disabled"
                           },
                           "source": {
                             "type": "string",
@@ -28675,7 +28675,7 @@
                       0,
                       1
                     ],
-                    "description": "Defaults to 1 on a creation; through the orchestrator an explicit 0 is also created as 1"
+                    "description": "Defaults to 1 when absent on a creation; an explicit 0 creates the rule disabled"
                   },
                   "source": {
                     "type": "string",
@@ -29134,7 +29134,7 @@
                       0,
                       1
                     ],
-                    "description": "Defaults to 1 on a creation; through the orchestrator an explicit 0 is also created as 1"
+                    "description": "Defaults to 1 when absent on a creation; an explicit 0 creates the rule disabled"
                   },
                   "source": {
                     "type": "string",

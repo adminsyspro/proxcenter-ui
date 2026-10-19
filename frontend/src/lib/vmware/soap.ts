@@ -903,6 +903,8 @@ export interface EsxiNicInfo {
   type: string // Vmxnet3, E1000, etc.
   macAddress: string
   network: string
+  /** `pciSlotNumber` of the adapter: a Linux guest names it `ens<slot>` (ens160, ens192, ...). */
+  pciSlot?: number
 }
 
 export interface EsxiVmConfig {
@@ -982,11 +984,13 @@ export function parseNicDevices(devicesXml: string): EsxiNicInfo[] {
   let nicMatch
   while ((nicMatch = nicRegex.exec(devicesXml)) !== null) {
     const n = nicMatch[2]
+    const slot = Number(n.match(/<pciSlotNumber>(\d+)<\/pciSlotNumber>/)?.[1])
     nics.push({
       label: n.match(/<label>([^<]*)<\/label>/)?.[1] || "",
       type: nicMatch[1],
       macAddress: n.match(/<macAddress>([^<]*)<\/macAddress>/)?.[1] || "",
       network: n.match(/<summary>([^<]*)<\/summary>/)?.[1] || "",
+      ...(Number.isInteger(slot) && slot > 0 && { pciSlot: slot }),
     })
   }
   return nics
@@ -1220,6 +1224,80 @@ ${ids.map(id => `        <urn:objectSet><urn:obj type="VirtualMachine">${id}</ur
     out.set(moId, { guestId: prop("guest.guestId"), guestOS: prop("guest.guestFullName"), detailedData: prop("guest.guestDetailedData") || unescape(fromVmx) })
   }
   return out
+}
+
+/** The static IPv4 configuration a running guest reports for one NIC (VMware Tools). */
+export interface GuestStaticIpv4 { mac: string; address: string; prefixLength: number; gateway?: string; dns: string[]; extraAddresses: number }
+
+const IPV4_RE = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/
+const isIpv4 = (v: string) => IPV4_RE.test(v) && v.split(".").every(o => Number(o) <= 255)
+const tagValues = (xml: string, tag: string) => [...xml.matchAll(new RegExp(`<${tag}>([^<]*)</${tag}>`, "g"))].map(m => m[1])
+/** Top-level `<tag>...</tag>` blocks of an array property, in order. */
+const blocks = (xml: string, tag: string) => [...xml.matchAll(new RegExp(`<${tag}(?:\\s[^>]*)?>([\\s\\S]*?)</${tag}>`, "g"))].map(m => m[1])
+
+/**
+ * The NICs a guest configured by hand, from `guest.net` and `guest.ipStack`:
+ * DHCP off for IPv4 and a manual IPv4 address. The default gateway is the
+ * 0.0.0.0/0 route whose `device` is the NIC's index in `guest.net`; DNS comes
+ * from the NIC, else from the stack. A NIC on DHCP, without a MAC or without a
+ * manual IPv4 is left out: there is nothing to restore for it.
+ */
+export function parseGuestStaticIpv4(xml: string): GuestStaticIpv4[] {
+  const prop = (name: string) => new RegExp(`<name>${name.replaceAll(".", "\\.")}</name>\\s*<val[^>]*>([\\s\\S]*?)</val>`).exec(xml || "")?.[1] ?? ""
+  const stacks = blocks(prop("guest.ipStack"), "GuestStackInfo")
+  const routes = stacks.flatMap(st => blocks(st, "ipRoute"))
+  const stackDns = stacks.flatMap(st => tagValues(blocks(st, "dnsConfig")[0] ?? "", "ipAddress")).filter(isIpv4)
+  const out: GuestStaticIpv4[] = []
+  for (const [index, nic] of blocks(prop("guest.net"), "GuestNicInfo").entries()) {
+    const mac = tagValues(nic, "macAddress")[0]?.toLowerCase() ?? ""
+    const ipConfig = blocks(nic, "ipConfig")[0] ?? ""
+    const dhcp4 = /<ipv4>\s*<enable>([^<]*)<\/enable>/.exec(ipConfig)?.[1]
+    if (!/^([0-9a-f]{2}:){5}[0-9a-f]{2}$/.test(mac) || dhcp4 !== "false") continue
+    // NetIpConfigInfoIpAddress nests a same-named <ipAddress> inside each <ipAddress>.
+    const manual = [...ipConfig.matchAll(/<ipAddress>\s*<ipAddress>([^<]*)<\/ipAddress>\s*<prefixLength>(\d+)<\/prefixLength>\s*(?:<origin>([^<]*)<\/origin>)?/g)]
+      .map(m => ({ address: m[1], prefixLength: Number(m[2]), origin: m[3] ?? "" }))
+      .filter(a => isIpv4(a.address) && a.origin === "manual" && a.prefixLength > 0 && a.prefixLength <= 32)
+    if (manual.length === 0) continue
+    const gateway = routes
+      .filter(r => tagValues(r, "network")[0] === "0.0.0.0" && tagValues(r, "prefixLength")[0] === "0" && tagValues(r, "device")[0] === String(index))
+      .map(r => tagValues(r, "ipAddress")[0] ?? "").find(isIpv4)
+    const nicDns = tagValues(blocks(nic, "dnsConfig")[0] ?? "", "ipAddress").filter(isIpv4)
+    out.push({ mac, address: manual[0].address, prefixLength: manual[0].prefixLength, ...(gateway && { gateway }), dns: nicDns.length > 0 ? nicDns : stackDns, extraAddresses: manual.length - 1 })
+  }
+  return out
+}
+
+/**
+ * The static IPv4 configuration of a running guest, read through VMware
+ * Tools before the cutover shuts it down: a Windows guest loses it on
+ * Proxmox, where it sees a new network adapter. Empty when Tools do not
+ * report the network (not running, too old) or on any error.
+ */
+export async function soapGetGuestStaticIpv4(session: SoapSession, moId: string): Promise<GuestStaticIpv4[]> {
+  if (!/^[A-Za-z0-9_-]+$/.test(moId)) return []
+  const body = `<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:urn="urn:vim25">
+  <soapenv:Body>
+    <urn:RetrievePropertiesEx>
+      <urn:_this type="PropertyCollector">${session.propertyCollector}</urn:_this>
+      <urn:specSet>
+        <urn:propSet>
+          <urn:type>VirtualMachine</urn:type>
+          <urn:pathSet>guest.net</urn:pathSet>
+          <urn:pathSet>guest.ipStack</urn:pathSet>
+        </urn:propSet>
+        <urn:objectSet><urn:obj type="VirtualMachine">${moId}</urn:obj><urn:skip>false</urn:skip></urn:objectSet>
+      </urn:specSet>
+      <urn:options/>
+    </urn:RetrievePropertiesEx>
+  </soapenv:Body>
+</soapenv:Envelope>`
+  try {
+    const text = await retrieveAllPropertiesEx(b => soapRequest(session.baseUrl, b, session.cookie, session.insecureTLS), body, session.propertyCollector)
+    return parseGuestStaticIpv4(text)
+  } catch {
+    return []
+  }
 }
 
 /**

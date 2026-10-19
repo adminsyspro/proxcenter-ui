@@ -2546,7 +2546,7 @@
       "andMoreVms": "and {count} more",
       "logsOfVm": "Logs of",
       "convertGuest": "Convert the guest at cutover",
-      "convertGuestTooltip": "With the source off, virt-v2v-in-place installs the VirtIO drivers in the copied guest (initramfs on Linux, driver store on Windows) and removes VMware Tools, so the VM boots from VirtIO SCSI with VirtIO NICs. Adds about a minute to the cutover. You can still change it in the \"Cutover now\" dialog; an automatic cutover applies this value. If the conversion fails, the copied disks are left untouched and the VM boots on SATA/e1000 as before.",
+      "convertGuestTooltip": "With the source off, virt-v2v-in-place installs the VirtIO drivers in the copied guest (initramfs on Linux, driver store on Windows) and removes the source hypervisor's tools, so the VM boots from VirtIO SCSI with VirtIO NICs. A static IP configuration is kept: Linux network interfaces keep the names they had on the source, and a Windows guest from VMware gets its addresses set again at the first boot. Adds about a minute to the cutover. You can still change it in the \"Cutover now\" dialog; an automatic cutover applies this value. If the conversion fails, the copied disks are left untouched and the VM boots on SATA/e1000 as before.",
       "cutoverConvertGuest": "Guest conversion",
       "cutoverConvertGuestOn": "VirtIO drivers installed with the source off, then boot from VirtIO SCSI with VirtIO NICs. Adds about {seconds} s to the downtime. If it fails, the disks are left untouched and the VM boots on SATA/e1000.",
       "cutoverConvertGuestOff": "No conversion: the VM boots on the hardware it supports without new drivers (SATA boot disk for Windows and UEFI guests, e1000 NICs for Windows).",

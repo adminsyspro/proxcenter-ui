@@ -9,10 +9,10 @@ import { isFileBasedStorage } from "@/lib/proxmox/storage"
 import { executeSSH, shellEscape } from "@/lib/ssh/exec"
 import {
   soapLogin, soapLogout, soapGetVmConfig, parseVmConfig, vmwareToolsState, soapCreateSnapshot, soapRemoveSnapshot,
-  soapWaitForConsolidation, soapFindSnapshotsByNamePrefix, CONSOLIDATION_TIMEOUT_MS,
+  soapWaitForConsolidation, soapFindSnapshotsByNamePrefix, CONSOLIDATION_TIMEOUT_MS, soapGetGuestStaticIpv4,
   SNAPSHOT_REMOVE_TERMINAL_TIMEOUT_MS, soapPowerOffVm,
 } from "@/lib/vmware/soap"
-import type { SoapSession, EsxiVmConfig, EsxiDiskInfo } from "@/lib/vmware/soap"
+import type { SoapSession, EsxiVmConfig, EsxiDiskInfo, GuestStaticIpv4 } from "@/lib/vmware/soap"
 import {
   cbtEligibility, soapEnableCbt, soapDisableCbt, queryAllChangedAreas, soapGetSnapshotChangeIds,
   soapGuestShutdown, soapWaitPoweredOff, soapKeepAlive,
@@ -55,6 +55,7 @@ import { createTargetVmShell, provisionBlockTargets, markVolumesCopied } from ".
 import { cleanShutdownAndConfirm, isVmwareToolsUnavailable, type PowerOffOps } from "./power-off"
 import { attachDisksAndBoot, removeTargetVmOnFailure, unmapTargetVolumes, verifyWarmDiskIntegrity } from "./finish"
 import { convertGuestAtCutover, GUEST_CONVERSION_ESTIMATE_SEC } from "./guest-conversion"
+import { guestNicsFromNets } from "./guest-network"
 import { warnIfEl10OnLowCpu } from "../el10-check"
 import { type SshTarget } from "@/lib/ssh/node-endpoint-core"
 
@@ -572,6 +573,17 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
     // Bytes copied over every pass, left on the job when it completes (warmFinalTransfer).
     let copiedBytes = 0
 
+    // A Windows guest loses a static IP on Proxmox (new adapter): what it
+    // reports through VMware Tools is read while it still runs, so the guest
+    // conversion can set it again (#1000 follow-up). Empty without Tools.
+    let staticIps: GuestStaticIpv4[] = []
+    const readWindowsStaticIps = async (): Promise<GuestStaticIpv4[]> => {
+      if (!isWindowsVm(vmConfig)) return []
+      const ips = await soapGetGuestStaticIpv4(soapSession!, config.sourceVmId)
+      if (ips.length > 0) await appendLog(jobId, `Guest network: static IPv4 configuration read from VMware Tools for ${ips.map(ip => `${ip.mac} (${ip.address}/${ip.prefixLength})`).join(", ")}`)
+      return ips
+    }
+
     // Source-side power operations for the confirmed power-off (see cleanShutdownAndConfirm).
     const powerOffOps: PowerOffOps = {
       requestShutdown: () => soapGuestShutdown(soapSession!, config.sourceVmId),
@@ -656,6 +668,7 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
       // ── cutover: confirmed power-off → final delta → verify → attach → boot ──
       await updateJob(jobId, "cutover", { progress: 95 })
       await appendStep(jobId, "cutover", "Cutover")
+      staticIps = await readWindowsStaticIps()
       await cleanShutdownAndConfirm(jobId, powerOffOps,
         "Cutover: requesting clean guest shutdown (VMware Tools)…", "cutover")
       await appendLog(jobId, "Source powered off (confirmed) — applying final delta", "success")
@@ -677,6 +690,7 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
       // off for the entire transfer (#587 field feedback).
       await updateJob(jobId, "full_copy", { currentStep: "source_shutdown", progress: 10 })
       await appendStep(jobId, "full_copy", "Full copy (checksum, source powered off)")
+      staticIps = await readWindowsStaticIps()
       await cleanShutdownAndConfirm(jobId, powerOffOps,
         "Checksum fallback: requesting clean guest shutdown of the source BEFORE the copy — the VM stays powered off until the migration completes (CBT unavailable)…", "full_copy")
       await updateJob(jobId, "full_copy", { progress: 10 })
@@ -792,16 +806,25 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
         jobId, connectionId: config.targetConnectionId, nodeIp,
         name: vmConfig.name, firmware: vmConfig.firmware === "efi" ? "efi" : "bios", isWindows: isWindowsVm(vmConfig),
         memoryMB: vmConfig.memoryMB, devices: vmConfig.disks.map(d => targetDev.get(d.deviceKey) ?? ""),
+        staticIps,
+        nics: guestNicsFromNets(pveParams.nets, i => {
+          const slot = vmConfig.nics[i]?.pciSlot
+          return slot ? [`ens${slot}`] : []
+        }),
         log: (msg, level) => appendLog(jobId, msg, level), isCancelled: () => isCancelled(jobId),
       })
       if (result.converted) {
         bootParams = mapEsxiToPveConfig(vmConfig, targetVmid, config.targetStorage, config.networkBridge, config.vlanTag, config.cpuType, overrides, { buses, guestConverted: true })
         await appendLog(jobId, `Guest converted in ${result.seconds ?? 0}s${result.os ? ` (${result.os})` : ""}: VirtIO drivers installed, VMware Tools removed or scheduled for removal; the target boots from VirtIO SCSI with VirtIO NICs`, "success")
+        for (const line of result.network ?? []) await appendLog(jobId, line.msg, line.level)
       } else {
         await appendLog(jobId, `Guest conversion not applied: ${(result.reason || "").replace(/\.+$/, "")}. The copied disks are unchanged and the guest keeps the hardware it boots on without new drivers (SATA boot disk for Windows and UEFI guests, e1000 NICs for Windows)`, "warn")
       }
     } else {
       await appendLog(jobId, "Guest conversion not requested for this cutover: the guest keeps the hardware it boots on without new drivers", "info")
+    }
+    if (staticIps.length > 0 && bootParams === pveParams) {
+      await appendLog(jobId, `Guest network: Windows sees a new network adapter on Proxmox and the guest was not converted, so its static IPv4 configuration (${staticIps.map(ip => `${ip.address}/${ip.prefixLength}`).join(", ")}) must be set again from the console`, "warn")
     }
 
     await appendStep(jobId, "finish", "Attach and start")

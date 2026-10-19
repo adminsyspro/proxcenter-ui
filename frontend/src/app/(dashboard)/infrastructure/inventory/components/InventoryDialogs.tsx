@@ -1094,7 +1094,7 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
   // compatible hardware, so the launch is never blocked on it.
   const conversionMissing = (() => {
     const gc = warmPreflightCurrent?.guestConversion
-    if (!gc || warmPreflightCurrent?.loading || !migConvertGuest || migType !== 'warm' || !isVmwareSource) return []
+    if (!gc || warmPreflightCurrent?.loading || !migConvertGuest || migType !== 'warm' || !(isVmwareSource || esxiMigrateVm?.hostType === 'xcpng')) return []
     return /windows/i.test(sourceVmDetail?.guestOS || esxiMigrateVm?.guestOS || '') ? gc.windows : gc.linux
   })()
   const [convPrep, setConvPrep] = useState<{ key: string; running: boolean; error?: string } | null>(null)
@@ -1415,10 +1415,10 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
     />
   )
 
-  // Guest conversion at cutover (#1000), warm from VMware only (ESXi or
-  // vCenter, single VM or batch). The default the "Cutover now" dialog opens
+  // Guest conversion at cutover (#1000), every warm source (ESXi, vCenter,
+  // XCP-ng; single VM or batch). The default the "Cutover now" dialog opens
   // with, and what an automatic cutover applies.
-  const renderConvertGuestSwitch = (hostType: string | undefined) => migType === 'warm' && (hostType === 'vmware' || hostType === 'vcenter') && (
+  const renderConvertGuestSwitch = (hostType: string | undefined) => migType === 'warm' && (hostType === 'vmware' || hostType === 'vcenter' || hostType === 'xcpng') && (
     <FormControlLabel
       control={<Switch size="small" checked={migConvertGuest} onChange={(_, v) => setMigConvertGuest(v)} data-testid="mig-convert-guest" />}
       label={
@@ -1927,7 +1927,7 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
           // rather than trusting the UI state.
           ...(migType === 'warm' && migManualCutover && { cutoverMode: 'manual' as const }),
           // Guest conversion default (#1000), warm VMware only like the switch.
-          ...(migType === 'warm' && isVmwareSource && { convertGuest: migConvertGuest }),
+          ...(migType === 'warm' && (isVmwareSource || esxiMigrateVm?.hostType === 'xcpng') && { convertGuest: migConvertGuest }),
           ...(migType === 'warm' && !migManualCutover && migDowntimeBudget.trim() !== '' && {
             downtimeBudgetSec: Number(migDowntimeBudget.trim()),
           }),
@@ -5788,8 +5788,8 @@ return
                         ...(migV2vRoot.trim() && { v2vRoot: migV2vRoot.trim() }),
                         // Parallel NFC downloads (#807).
                         ...(isVcenterBulk && migType !== 'warm' && { nfcConcurrency: migNfcConcurrency }),
-                        // Guest conversion at each VM's automatic cutover (#1000), VMware sources only.
-                        ...(migType === 'warm' && (bulkMigHostInfo.hostType === 'vmware' || isVcenterBulk) && { convertGuest: migConvertGuest }),
+                        // Guest conversion at each VM's automatic cutover (#1000), every warm source.
+                        ...(migType === 'warm' && (bulkMigHostInfo.hostType === 'vmware' || isVcenterBulk || bulkMigHostInfo.hostType === 'xcpng') && { convertGuest: migConvertGuest }),
                         // Thick zeroing cap of a warm batch (roadmap#45).
                         ...(showZeroRateLimit && migZeroRateLimit.trim() !== '' && { zeroRateLimitMBps: Number(migZeroRateLimit.trim()) }),
                         // VMkernel adapter of the copy (roadmap#53), ESXi-direct batches only.

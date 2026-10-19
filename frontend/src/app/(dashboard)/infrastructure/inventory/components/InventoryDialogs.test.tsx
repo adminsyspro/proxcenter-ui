@@ -1388,6 +1388,21 @@ describe('migration dialog options', () => {
     expect(screen.queryByText(AUTO_CUTOVER_LABEL)).not.toBeInTheDocument()
   })
 
+  it('offers the guest conversion on every warm source, XCP-ng included (#1000)', () => {
+    const CONVERT_LABEL = 'Convert the guest at cutover'
+    for (const vm of [WARM_VM, { ...ESXI_VM, hostType: 'xcpng', connSubType: 'xapi' }]) {
+      const { unmount } = renderWithProviders(
+        <InventoryDialogs {...makeProps({ esxiMigrateVm: vm, migTargetConn: CONN_ID, migTargetNode: NODE_NAME, migType: 'warm' })} />,
+      )
+      expect(screen.getByText(CONVERT_LABEL)).toBeInTheDocument()
+      unmount()
+    }
+    renderWithProviders(
+      <InventoryDialogs {...makeProps({ esxiMigrateVm: { ...ESXI_VM, hostType: 'hyperv' }, migTargetConn: CONN_ID, migTargetNode: NODE_NAME, migType: 'warm' })} />,
+    )
+    expect(screen.queryByText(CONVERT_LABEL)).not.toBeInTheDocument()
+  })
+
   it('shows the qcow2 switch only when the selected target storage is thick LVM', () => {
     const { unmount } = renderWithProviders(
       <InventoryDialogs

@@ -2546,7 +2546,7 @@
       "andMoreVms": "외 {count}개",
       "logsOfVm": "로그 대상",
       "convertGuest": "컷오버 시 게스트 변환",
-      "convertGuestTooltip": "소스가 꺼진 상태에서 virt-v2v-in-place가 복사된 게스트에 VirtIO 드라이버를 설치하고(Linux는 initramfs, Windows는 드라이버 저장소) VMware Tools를 제거하여, VM이 VirtIO NIC와 함께 VirtIO SCSI로 부팅됩니다. 컷오버에 약 1분이 추가됩니다. \"Cutover now\" 대화 상자에서 다시 변경할 수 있으며, 자동 컷오버는 이 값을 적용합니다. 변환이 실패하면 복사된 디스크는 그대로 유지되고 VM은 이전처럼 SATA/e1000으로 부팅됩니다.",
+      "convertGuestTooltip": "소스가 꺼진 상태에서 virt-v2v-in-place가 복사된 게스트에 VirtIO 드라이버를 설치하고(Linux는 initramfs, Windows는 드라이버 저장소) 소스 하이퍼바이저의 도구를 제거하여, VM이 VirtIO NIC와 함께 VirtIO SCSI로 부팅됩니다. 고정 IP 구성이 유지됩니다. Linux 네트워크 인터페이스는 소스에서의 이름을 유지하고, VMware에서 온 Windows 게스트는 첫 부팅 시 주소가 다시 설정됩니다. 컷오버에 약 1분이 추가됩니다. \"Cutover now\" 대화 상자에서 다시 변경할 수 있으며, 자동 컷오버는 이 값을 적용합니다. 변환이 실패하면 복사된 디스크는 그대로 유지되고 VM은 이전처럼 SATA/e1000으로 부팅됩니다.",
       "cutoverConvertGuest": "게스트 변환",
       "cutoverConvertGuestOn": "소스가 꺼진 상태에서 VirtIO 드라이버를 설치한 뒤 VirtIO NIC와 함께 VirtIO SCSI로 부팅합니다. 다운타임이 약 {seconds}초 늘어납니다. 실패하면 디스크는 그대로 유지되고 VM은 SATA/e1000으로 부팅됩니다.",
       "cutoverConvertGuestOff": "변환 없음: VM은 새 드라이버 없이 지원하는 하드웨어로 부팅됩니다(Windows 및 UEFI 게스트는 SATA 부팅 디스크, Windows는 e1000 NIC).",

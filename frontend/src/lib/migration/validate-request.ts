@@ -267,22 +267,23 @@ export async function validateMigrationRequest(
       : "Warm migration is only available for VMware and XCP-ng sources.")
   }
 
-  // Guest conversion at cutover and the per-disk bus (#1000) belong to the
-  // VMware warm engine, the only one that applies them: refused elsewhere
-  // rather than silently ignored.
+  // Guest conversion at cutover (#1000) belongs to the warm engines (VMware
+  // and XCP-ng), the per-disk bus to the VMware one, the only engines that
+  // apply them: refused elsewhere rather than silently ignored.
   const vmwareWarm = migrationType === "warm" && isVmwareSource
+  const warm = migrationType === "warm" && warmAllowed
   if (body.convertGuest !== undefined && body.convertGuest !== null && typeof body.convertGuest !== "boolean") {
     return bad("convertGuest must be a boolean")
   }
-  if (body.convertGuest === true && !vmwareWarm) {
-    return bad("convertGuest is only available for warm migrations from VMware")
+  if (body.convertGuest === true && !warm) {
+    return bad("convertGuest is only available for warm migrations")
   }
   if (disks?.some(d => d.bus) && !vmwareWarm) {
     return bad("disks[].bus is only available for warm migrations from VMware")
   }
   // Absent means on, the product default; persisted explicitly so the
   // "Cutover now" dialog shows it and a retry replays it.
-  const convertGuest = vmwareWarm ? body.convertGuest !== false : undefined
+  const convertGuest = warm ? body.convertGuest !== false : undefined
 
   // One migration per source VM at a time (roadmap#23). The warm engine already
   // refuses a second run through its in-memory lock, but only after the job row

@@ -21,8 +21,12 @@
 /** One target NIC: the MAC it keeps on Proxmox and the names it may have had on the source. */
 export interface GuestNic { mac: string; names: string[] }
 
-/** Where the in-guest script leaves its report, copied out of the overlay afterwards. */
-export const NETWORK_PIN_REPORT = "/tmp/proxcenter-netpin.txt"
+/**
+ * Where the in-guest script and its report live while guestfish runs it:
+ * root's home, not a world-writable directory of the guest.
+ */
+export const NETWORK_PIN_SCRIPT = "/root/.proxcenter-netpin.sh"
+export const NETWORK_PIN_REPORT = "/root/.proxcenter-netpin.txt"
 
 const MAC_RE = /^([0-9a-f]{2}:){5}[0-9a-f]{2}$/i
 const NAME_RE = /^[A-Za-z0-9_-]{1,15}$/

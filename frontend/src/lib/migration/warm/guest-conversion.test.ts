@@ -111,7 +111,7 @@ describe("buildConversionScript", () => {
     expect(pin).toBeGreaterThan(lines.findIndex(l => l.includes("disk1.qcow2")))
     expect(pin).toBeLessThan(v2v)
     expect(lines[pin]).toContain('--format=qcow2 -a "$D/disk0.qcow2" -a "$D/disk1.qcow2" -i')
-    expect(lines[pin]).toContain('sh "/bin/sh /tmp/proxcenter-netpin.sh" : download /tmp/proxcenter-netpin.txt "$D/netpin.txt"')
+    expect(lines[pin]).toContain('sh "/bin/sh /root/.proxcenter-netpin.sh" : download /root/.proxcenter-netpin.txt "$D/netpin.txt"')
     expect(lines[pin]).not.toMatch(/\|\||&&|exit/)
     expect(script).toContain(Buffer.from("#!/bin/sh\necho pinned\n").toString("base64"))
     expect(buildConversionScript("job-1", ["/dev/rbd3"], "<domain/>")).not.toContain("guestfish")

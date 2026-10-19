@@ -24,7 +24,7 @@
 import { executeSSH, shellEscape } from "@/lib/ssh/exec"
 import type { SshTarget } from "@/lib/ssh/node-endpoint-core"
 import type { GuestStaticIpv4 } from "@/lib/vmware/soap"
-import { buildNetworkPinScript, describeNetworkPinReport, NETWORK_PIN_REPORT, parseNetworkPinReport, type GuestNic } from "./guest-network"
+import { buildNetworkPinScript, describeNetworkPinReport, NETWORK_PIN_REPORT, NETWORK_PIN_SCRIPT, parseNetworkPinReport, type GuestNic } from "./guest-network"
 
 export { GUEST_CONVERSION_ESTIMATE_SEC } from "./guest-conversion-estimate"
 
@@ -94,8 +94,8 @@ export function buildConversionScript(jobId: string, devices: string[], xml: str
     ...(netpin ? [
       `echo ${q(Buffer.from(netpin).toString("base64"))} | base64 -d > "$D/netpin.sh"`,
       `LIBGUESTFS_BACKEND=direct guestfish --format=qcow2 ${devices.map((_, i) => `-a "$D/disk${i}.qcow2"`).join(" ")} -i`
-        + ` upload "$D/netpin.sh" /tmp/proxcenter-netpin.sh : sh "/bin/sh /tmp/proxcenter-netpin.sh"`
-        + ` : download ${NETWORK_PIN_REPORT} "$D/netpin.txt" : rm-f /tmp/proxcenter-netpin.sh : rm-f ${NETWORK_PIN_REPORT}`
+        + ` upload "$D/netpin.sh" ${NETWORK_PIN_SCRIPT} : sh "/bin/sh ${NETWORK_PIN_SCRIPT}"`
+        + ` : download ${NETWORK_PIN_REPORT} "$D/netpin.txt" : rm-f ${NETWORK_PIN_SCRIPT} : rm-f ${NETWORK_PIN_REPORT}`
         + ` < /dev/null > "$D/netpin.log" 2>&1`,
     ] : []),
     `LIBGUESTFS_BACKEND=direct stdbuf -oL virt-v2v-in-place -i libvirtxml "$D/guest.xml" --block-driver virtio-scsi${extraArgs.map(x => ` ${q(x)}`).join("")} --machine-readable < /dev/null > "$D/v2v.log" 2>&1`,

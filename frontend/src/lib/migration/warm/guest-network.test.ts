@@ -24,8 +24,8 @@ function runPin(nics: GuestNic[], files: Record<string, string>, opts: { systemd
     mkdirSync(dirname(join(root, path)), { recursive: true })
     writeFileSync(join(root, path), content)
   }
-  mkdirSync(join(root, "tmp"), { recursive: true })
-  const script = buildNetworkPinScript(nics).replaceAll(/(?<![\w/])\/(etc|usr|lib|boot|tmp)\//g, `${root}/$1/`)
+  mkdirSync(join(root, "root"), { recursive: true })
+  const script = buildNetworkPinScript(nics).replaceAll(/(?<![\w/])\/(etc|usr|lib|boot|root)\//g, `${root}/$1/`)
   writeFileSync(join(root, "pin.sh"), script)
   execFileSync("sh", [join(root, "pin.sh")])
   const dir = join(root, "etc/systemd/network")

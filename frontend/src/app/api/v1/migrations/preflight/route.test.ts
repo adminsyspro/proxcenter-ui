@@ -121,7 +121,11 @@ describe("POST /api/v1/migrations/preflight — warm-check action", () => {
     expect(mockSpace).toHaveBeenCalledExactlyOnceWith("c1", "pve1", "ZFS-Pool", spaceVerdict.requiredBytes)
     expect(runXcpngWarmNodePreflight).toHaveBeenCalledExactlyOnceWith("c1", "pve1")
     expect(mockWarm).not.toHaveBeenCalled()
-    expect(await res.json()).toEqual({ ok: true, missing: [], kind: "nbd", vddkTokenConfigured: false, space: spaceVerdict })
+    expect(await res.json()).toEqual({
+      ok: true, missing: [], kind: "nbd", vddkTokenConfigured: false, space: spaceVerdict,
+      // #1000: the guest conversion is offered on XCP-ng warm too
+      guestConversion: { linux: [], windows: ["the VirtIO drivers for Windows (/usr/share/virtio-win/virtio-win.iso)"] },
+    })
   })
 
   it("dispatches warm-check to runWarmNodePreflight and returns its go/no-go verbatim", async () => {

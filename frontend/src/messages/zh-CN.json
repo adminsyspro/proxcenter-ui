@@ -2550,7 +2550,7 @@
       "andMoreVms": "以及另外 {count} 台",
       "logsOfVm": "日志对象",
       "convertGuest": "在切换时转换客户机",
-      "convertGuestTooltip": "在源虚拟机关闭后，virt-v2v-in-place 会在复制的客户机中安装 VirtIO 驱动（Linux 写入 initramfs，Windows 写入驱动存储）并移除 VMware Tools，使虚拟机通过 VirtIO SCSI 和 VirtIO 网卡启动。切换时间约增加一分钟。仍可在“Cutover now”对话框中修改；自动切换会使用此值。如果转换失败，复制的磁盘保持不变，虚拟机仍按原方式以 SATA/e1000 启动。",
+      "convertGuestTooltip": "在源虚拟机关闭后，virt-v2v-in-place 会在复制的客户机中安装 VirtIO 驱动（Linux 写入 initramfs，Windows 写入驱动存储）并移除源虚拟化平台的工具，使虚拟机通过 VirtIO SCSI 和 VirtIO 网卡启动。静态 IP 配置得以保留：Linux 网络接口保留其在源端的名称，来自 VMware 的 Windows 客户机在首次启动时重新设置其地址。切换时间约增加一分钟。仍可在“Cutover now”对话框中修改；自动切换会使用此值。如果转换失败，复制的磁盘保持不变，虚拟机仍按原方式以 SATA/e1000 启动。",
       "cutoverConvertGuest": "客户机转换",
       "cutoverConvertGuestOn": "在源关闭后安装 VirtIO 驱动，然后通过 VirtIO SCSI 和 VirtIO 网卡启动。停机时间约增加 {seconds} 秒。如果失败，磁盘保持不变，虚拟机以 SATA/e1000 启动。",
       "cutoverConvertGuestOff": "不转换：虚拟机使用无需新驱动即可支持的硬件启动（Windows 和 UEFI 客户机使用 SATA 启动盘，Windows 使用 e1000 网卡）。",

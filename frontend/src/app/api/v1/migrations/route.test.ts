@@ -739,17 +739,25 @@ describe("POST /api/v1/migrations — guest conversion at cutover (#1000)", () =
     expect((await readJson<any>(res))?.error).toBe("convertGuest must be a boolean")
   })
 
-  it("refuses the conversion and the bus outside a VMware warm migration, and stores nothing for them", async () => {
+  it("refuses the conversion outside a warm migration and the bus outside a VMware warm one", async () => {
     esxi()
     const cold = await callRoute(POST, { body: { ...body, migrationType: "cold", convertGuest: true } })
-    expect((await readJson<any>(cold))?.error).toBe("convertGuest is only available for warm migrations from VMware")
+    expect((await readJson<any>(cold))?.error).toBe("convertGuest is only available for warm migrations")
     esxi()
     const bus = await callRoute(POST, { body: { ...body, migrationType: "cold", disks: [{ index: 0, bus: "sata" }] } })
     expect((await readJson<any>(bus))?.error).toBe("disks[].bus is only available for warm migrations from VMware")
+    esxi()
+    await callRoute(POST, { body: { ...body, migrationType: "cold" } })
+    expect(createdJobData().config).not.toHaveProperty("convertGuest")
+  })
+
+  it("persists and forwards the conversion of an XCP-ng warm migration too", async () => {
     h.prisma.connection.findUnique
       .mockResolvedValueOnce({ id: "src", type: "xcpng", subType: "xapi", name: "pool", baseUrl: "https://xcpng" })
       .mockResolvedValueOnce({ id: "tgt", type: "pve", name: "pve" })
-    expect((await callRoute(POST, { body })).status).toBe(200)
-    expect(createdJobData().config).not.toHaveProperty("convertGuest")
+    expect((await callRoute(POST, { body: { ...body, convertGuest: false } })).status).toBe(200)
+    expect(createdJobData().config).toMatchObject({ convertGuest: false })
+    await runAfters()
+    expect(xcpngWarm.mock.calls[0][1]).toMatchObject({ convertGuest: false })
   })
 })

@@ -5,7 +5,7 @@ vi.mock("@/lib/ssh/exec", async (importActual) => ({ ...(await importActual<type
 import { executeSSH } from "@/lib/ssh/exec"
 import {
   buildConversionScript, buildConversionXml, conversionDir, conversionPreflightCommand, convertGuestAtCutover,
-  missingConversionPrereqs, parseConversionOutcome, GUEST_CONVERSION_ESTIMATE_SEC,
+  describeWindowsStaticIps, missingConversionPrereqs, parseConversionOutcome, windowsStaticIpArgs, GUEST_CONVERSION_ESTIMATE_SEC,
 } from "./guest-conversion"
 
 const msg = (type: string, message: string) => JSON.stringify({ message, timestamp: "2026-10-19T08:35:37+02:00", type })
@@ -101,6 +101,25 @@ describe("buildConversionScript", () => {
     expect(script.trim().endsWith('echo $? > "$D/exit"')).toBe(true)
     // The domain XML travels base64-encoded, so no quoting can break it.
     expect(script).toContain(Buffer.from("<domain/>").toString("base64"))
+  })
+
+  it("pins the interface names inside the overlays before virt-v2v, without stopping the run on failure (#1000 follow-up)", () => {
+    const script = buildConversionScript("job-1", ["/dev/rbd3", "/dev/rbd4"], "<domain/>", "#!/bin/sh\necho pinned\n")
+    const lines = script.split("\n")
+    const pin = lines.findIndex(l => l.startsWith("LIBGUESTFS_BACKEND=direct guestfish"))
+    const v2v = lines.findIndex(l => l.includes("virt-v2v-in-place"))
+    expect(pin).toBeGreaterThan(lines.findIndex(l => l.includes("disk1.qcow2")))
+    expect(pin).toBeLessThan(v2v)
+    expect(lines[pin]).toContain('--format=qcow2 -a "$D/disk0.qcow2" -a "$D/disk1.qcow2" -i')
+    expect(lines[pin]).toContain('sh "/bin/sh /root/.proxcenter-netpin.sh" : download /root/.proxcenter-netpin.txt "$D/netpin.txt"')
+    expect(lines[pin]).not.toMatch(/\|\||&&|exit/)
+    expect(script).toContain(Buffer.from("#!/bin/sh\necho pinned\n").toString("base64"))
+    expect(buildConversionScript("job-1", ["/dev/rbd3"], "<domain/>")).not.toContain("guestfish")
+  })
+
+  it("passes extra virt-v2v arguments quoted, before the machine-readable flag", () => {
+    const script = buildConversionScript("job-1", ["/dev/rbd3"], "<domain/>", undefined, ["--mac", "00:50:56:9c:a1:f0:ip:10.42.0.239,10.42.0.1,24,1.1.1.1"])
+    expect(script).toContain("--block-driver virtio-scsi '--mac' '00:50:56:9c:a1:f0:ip:10.42.0.239,10.42.0.1,24,1.1.1.1' --machine-readable")
   })
 
   it("keeps the job id out of the shell", () => {
@@ -219,6 +238,44 @@ describe("convertGuestAtCutover", () => {
     expect(await convertGuestAtCutover(base)).toEqual({ converted: false, reason: "Keepalive timeout" })
   })
 
+  it("pins a Linux guest's interfaces and logs it once the conversion is committed (#1000 follow-up)", async () => {
+    node()
+    const read = ssh.getMockImplementation()!
+    ssh.mockImplementation(async (c: string, n: any, cmd: string) =>
+      cmd.startsWith("cat ") && cmd.includes("netpin.txt") ? ok("pinned ens33 00:50:56:9c:c0:8f\n") : read(c, n, cmd))
+    const r = await convertGuestAtCutover({ ...base, nics: [{ mac: "00:50:56:9c:c0:8f", names: ["ens33"] }] })
+    expect(r.converted).toBe(true)
+    expect(commands().find(c => c.startsWith("nohup"))).toContain("guestfish")
+    expect(r.network).toEqual([{ msg: expect.stringMatching(/^Guest network: ens33 \(00:50:56:9c:c0:8f\) keeps the name/), level: "success" }])
+  })
+
+  it("says so when the pinning left no report", async () => {
+    node()
+    const read = ssh.getMockImplementation()!
+    ssh.mockImplementation(async (c: string, n: any, cmd: string) =>
+      cmd.startsWith("cat ") && cmd.includes("netpin.txt") ? ok("FAILED\nguestfish: no operating system was found") : read(c, n, cmd))
+    const r = await convertGuestAtCutover({ ...base, nics: [{ mac: "00:50:56:9c:c0:8f", names: [] }] })
+    expect(r.network).toEqual([{ msg: "Guest network: the interface names could not be pinned (guestfish: no operating system was found); check the network settings after the first boot", level: "warn" }])
+  })
+
+  it("never pins a Windows guest, nor logs anything about it when the conversion fails", async () => {
+    node()
+    await convertGuestAtCutover({ ...base, isWindows: true, nics: [{ mac: "00:50:56:9c:c0:8f", names: ["ens33"] }] })
+    expect(commands().find(c => c.startsWith("nohup"))).not.toContain("guestfish")
+    node({ log: win2025 })
+    expect(await convertGuestAtCutover({ ...base, nics: [{ mac: "00:50:56:9c:c0:8f", names: ["ens33"] }] })).not.toHaveProperty("network")
+  })
+
+  it("sets a Windows guest's static IP again through virt-v2v, and says so once committed (#1000 follow-up)", async () => {
+    node()
+    const ip = { mac: "00:50:56:9c:a1:f0", address: "10.42.0.239", prefixLength: 24, gateway: "10.42.0.1", dns: ["1.1.1.1"], extraAddresses: 0 }
+    const r = await convertGuestAtCutover({ ...base, isWindows: true, nics: [{ mac: "00:50:56:9c:a1:f0", names: [] }], staticIps: [ip] })
+    const launch = commands().find(c => c.startsWith("nohup"))!
+    expect(launch).not.toContain("guestfish")
+    expect(launch).toContain("--mac")
+    expect(r.network).toEqual([{ msg: "Guest network: the static IPv4 configuration of 00:50:56:9c:a1:f0 (10.42.0.239/24, gateway 10.42.0.1, DNS 1.1.1.1) is set again on the new adapter at the first boot", level: "success" }])
+  })
+
   it("announces about a minute of downtime", () => {
     expect(GUEST_CONVERSION_ESTIMATE_SEC).toBe(60)
   })
@@ -229,7 +286,7 @@ describe("parseConversionOutcome: a Windows powered off hard (#1000, lab 19/10)"
     const log = JSON.stringify({ type: "error", message: "filesystem was mounted read-only, even though we asked for it to be mounted read-write. This usually means that the filesystem was not cleanly unmounted. Possible causes include trying to convert a guest which is running, or using Windows Hibernation or Fast Restart. Original error message: touch" })
     const out = parseConversionOutcome(log, 1)
     expect(out.ok).toBe(false)
-    expect(out.reason).toMatch(/^the Windows filesystem was not shut down cleanly .*Install VMware Tools on the source/)
+    expect(out.reason).toMatch(/^the Windows filesystem was not shut down cleanly .*Install the guest tools on the source \(VMware Tools, XCP-ng Windows PV tools\)/)
   })
 })
 
@@ -237,5 +294,23 @@ describe("parseConversionOutcome: a guest named by its version only (#1000, lab 
   it("keeps the inspector's id when the name is a bare version", () => {
     const log = [msg("message", "Converting 13.7 (debian13) to run on KVM"), msg("info", "This guest has virtio drivers installed.")].join("\n")
     expect(parseConversionOutcome(log, 0).os).toBe("13.7 (debian13)")
+  })
+})
+
+describe("Windows static IPv4 (#1000 follow-up)", () => {
+  const ip = (mac: string, extra = 0, gateway?: string) => ({ mac, address: "10.0.0.5", prefixLength: 24, ...(gateway && { gateway }), dns: ["10.0.0.53", "1.1.1.1"], extraAddresses: extra })
+
+  it("only sets the NICs the target keeps the MAC of, in virt-v2v's format", () => {
+    expect(windowsStaticIpArgs([ip("00:50:56:AA:00:01", 0, "10.0.0.1"), ip("00:50:56:aa:00:02")], ["00:50:56:aa:00:01"]))
+      .toEqual(["--mac", "00:50:56:aa:00:01:ip:10.0.0.5,10.0.0.1,24,10.0.0.53,1.1.1.1"])
+    expect(windowsStaticIpArgs([ip("00:50:56:aa:00:02")], ["00:50:56:aa:00:02"])).toEqual(["--mac", "00:50:56:aa:00:02:ip:10.0.0.5,,24,10.0.0.53,1.1.1.1"])
+  })
+
+  it("warns when a NIC had more addresses than virt-v2v sets", () => {
+    const lines = describeWindowsStaticIps([ip("00:50:56:aa:00:01", 2)], ["00:50:56:aa:00:01"])
+    expect(lines.map(l => l.level)).toEqual(["success", "warn"])
+    expect(lines[0].msg).toBe("Guest network: the static IPv4 configuration of 00:50:56:aa:00:01 (10.0.0.5/24, DNS 10.0.0.53 1.1.1.1) is set again on the new adapter at the first boot")
+    expect(lines[1].msg).toContain("2 more static IPv4 address(es)")
+    expect(describeWindowsStaticIps([ip("00:50:56:aa:00:01")], [])).toEqual([])
   })
 })

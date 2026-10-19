@@ -66,7 +66,7 @@ vi.mock("@/lib/vmware/soap", async importOriginal => {
     soapLogin: vi.fn(), soapLogout: vi.fn(async () => {}), soapGetVmConfig: vi.fn(async () => "<vm/>"), parseVmConfig: vi.fn(),
     soapCreateSnapshot: vi.fn(), soapRemoveSnapshot: vi.fn(async () => {}), soapWaitForConsolidation: vi.fn(async () => true),
     soapFindSnapshotsByNamePrefix: vi.fn(async () => []), soapPowerOffVm: vi.fn(async () => {}),
-    soapGetGuestIdentities: vi.fn(async () => new Map()),
+    soapGetGuestIdentities: vi.fn(async () => new Map()), soapGetGuestStaticIpv4: vi.fn(async () => []),
   }
 })
 vi.mock("@/lib/vmware/cbt", () => ({
@@ -92,7 +92,7 @@ import { checkNfcReachability } from "./nfc-reachability"
 import { startVddkReader } from "./vddk-reader"
 import { applyExtentsWithProgress } from "./apply"
 import { attachDisksAndBoot, verifyWarmDiskIntegrity } from "./finish"
-import { soapLogin, parseVmConfig, soapCreateSnapshot, type EsxiVmConfig } from "@/lib/vmware/soap"
+import { soapLogin, parseVmConfig, soapCreateSnapshot, soapGetGuestStaticIpv4, type EsxiVmConfig } from "@/lib/vmware/soap"
 import { queryAllChangedAreas, soapGetSnapshotChangeIds } from "@/lib/vmware/cbt"
 import { ZERO_MODE_OFFLOAD_MARKER } from "./target-provision"
 import type { WarmMigrationConfig } from "./types"
@@ -328,16 +328,16 @@ describe("runWarmMigration per-disk choices (#317 lot 2)", () => {
 })
 
 describe("runWarmMigration guest conversion at cutover (#1000)", () => {
-  const efiVm = () => ({ ...makeVmConfig(), firmware: "efi", nics: [{ label: "n", type: "Vmxnet3", macAddress: "00:50:56:00:00:09", network: "VM Network" }] })
+  const efiVm = () => ({ ...makeVmConfig(), firmware: "efi", nics: [{ label: "n", type: "Vmxnet3", macAddress: "00:50:56:00:00:09", network: "VM Network", pciSlot: 192 }] })
   const v2vLog = (drivers: boolean) => [
     JSON.stringify({ type: "message", message: "Converting Rocky Linux 9.8 (Blue Onyx) (rocky9) to run on KVM" }),
     JSON.stringify({ type: "info", message: drivers ? "This guest has virtio drivers installed." : "This guest does not have virtio drivers installed." }),
   ].join("\n")
 
   /** The node answers the conversion like pve1 did on the lab. */
-  function conversionNode(drivers: boolean) {
+  function conversionNode(drivers: boolean, prereqs = "v2v-in-place\n") {
     vi.mocked(executeSSH).mockImplementation(async (c: string, h: any, command: string, t?: number, opts?: SSHExecOpts) => {
-      if (command.startsWith("test -x /usr/bin/virt-v2v-in-place")) { sshCommands.push(command); return { success: true, output: "v2v-in-place\n" } }
+      if (command.startsWith("test -x /usr/bin/virt-v2v-in-place")) { sshCommands.push(command); return { success: true, output: prereqs } }
       if (command.startsWith("nohup bash")) { sshCommands.push(command); return { success: true, output: "777\n" } }
       if (command.startsWith("cat '/tmp/proxcenter-convert-") && command.includes("/exit")) return { success: true, output: "0\n" }
       if (command.startsWith("cat '/tmp/proxcenter-convert-")) return { success: true, output: v2vLog(drivers) }
@@ -354,6 +354,10 @@ describe("runWarmMigration guest conversion at cutover (#1000)", () => {
 
     expect(err).toBeNull()
     expect(sshCommands.some(c => c.startsWith("nohup bash") && c.includes("virt-v2v-in-place"))).toBe(true)
+    // the guest's interface names are pinned in the same overlays: the NIC was ens192 on vSphere
+    const launch = sshCommands.find(c => c.startsWith("nohup bash"))!
+    const netpin = Buffer.from(/([A-Za-z0-9+/=]{20,})\W+\| base64 -d > "\$D\/netpin\.sh"/.exec(launch)![1], "base64").toString()
+    expect(netpin).toContain("NICS='00:50:56:00:00:09 ens192'")
     // overlays on the three copied volumes, committed once the drivers are in
     expect(sshCommands.filter(c => c.startsWith("qemu-img commit -q '/tmp/proxcenter-convert-warm-conv-1/disk"))).toHaveLength(3)
     expect(messages().some(m => /^Guest converted in \d+s \(Rocky Linux 9\.8 \(Blue Onyx\)\)/.test(m))).toBe(true)
@@ -386,6 +390,28 @@ describe("runWarmMigration guest conversion at cutover (#1000)", () => {
     expect(sshCommands.some(c => c.startsWith("nohup bash"))).toBe(false)
     expect(messages()).toContain("Guest conversion not requested for this cutover: the guest keeps the hardware it boots on without new drivers")
     expect(attach().bootDiskSlot).toBe("sata0")
+  })
+
+  it("reads a Windows guest's static IPv4 before the shutdown and has virt-v2v set it again (#1000 follow-up)", async () => {
+    const winVm = () => ({ ...efiVm(), guestId: "windows2019srvNext_64Guest", guestOS: "Microsoft Windows Server 2022 (64-bit)" })
+    vi.mocked(parseVmConfig).mockImplementation(() => winVm() as any)
+    vi.mocked(soapGetGuestStaticIpv4).mockResolvedValue([{ mac: "00:50:56:00:00:09", address: "10.42.0.239", prefixLength: 24, gateway: "10.42.0.1", dns: ["1.1.1.1"], extraAddresses: 0 }])
+    conversionNode(true, "v2v-in-place\nvirtio-win\nsrvany\n")
+
+    expect(await runToEnd("warm-conv-win", makeConfig())).toBeNull()
+
+    expect(messages()).toContain("Guest network: static IPv4 configuration read from VMware Tools for 00:50:56:00:00:09 (10.42.0.239/24)")
+    expect(sshCommands.find(c => c.startsWith("nohup bash"))).toContain("00:50:56:00:00:09:ip:10.42.0.239,10.42.0.1,24,1.1.1.1")
+    expect(messages().some(m => m.startsWith("Guest network: the static IPv4 configuration of 00:50:56:00:00:09"))).toBe(true)
+  })
+
+  it("tells the operator to set the Windows static IP again when the guest is not converted", async () => {
+    vi.mocked(parseVmConfig).mockImplementation(() => ({ ...efiVm(), guestId: "windows2019srvNext_64Guest", guestOS: "Microsoft Windows Server 2022 (64-bit)" }) as any)
+    vi.mocked(soapGetGuestStaticIpv4).mockResolvedValue([{ mac: "00:50:56:00:00:09", address: "10.42.0.239", prefixLength: 24, dns: [], extraAddresses: 0 }])
+
+    expect(await runToEnd("warm-conv-win-off", makeConfig({ convertGuest: false }))).toBeNull()
+
+    expect(messages()).toContain("Guest network: Windows sees a new network adapter on Proxmox and the guest was not converted, so its static IPv4 configuration (10.42.0.239/24) must be set again from the console")
   })
 
   it("applies the review step's forced bus without conversion", async () => {

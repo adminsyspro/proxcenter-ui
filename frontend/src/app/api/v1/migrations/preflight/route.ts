@@ -136,8 +136,11 @@ export async function POST(req: Request) {
         ? await checkTargetStorageSpace(targetConnectionId, targetNode, targetStorage, Math.max(0, Number(requiredDiskBytes) || 0))
         : undefined
       if (sourceConn?.type === "xcpng") {
-        const nbdResult = await runXcpngWarmNodePreflight(targetConnectionId, targetNode)
-        return NextResponse.json({ ...nbdResult, kind: "nbd", vddkTokenConfigured: false, space })
+        const [nbdResult, guestConversion] = await Promise.all([
+          runXcpngWarmNodePreflight(targetConnectionId, targetNode),
+          checkGuestConversionNode(targetConnectionId, targetNode),
+        ])
+        return NextResponse.json({ ...nbdResult, kind: "nbd", guestConversion, vddkTokenConfigured: false, space })
       }
       // #1000: whether the node can convert the guest at cutover. Advisory:
       // without it the cutover keeps the compatible hardware, so it never

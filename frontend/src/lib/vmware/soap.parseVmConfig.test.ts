@@ -66,6 +66,13 @@ describe("parseVmConfig NICs (#317)", () => {
       { label: "Network adapter 3", type: "E1000e", macAddress: "00:50:56:aa:00:03", network: "backup" },
     ])
   })
+
+  it("reads the PCI slot a Linux guest names the adapter after (ens192), when vSphere gives it", () => {
+    const slotted = nic("Vmxnet3", "Network adapter 1", "00:50:56:aa:00:01", "VM Network")
+      .replace("</macAddress>", '</macAddress><slotInfo xsi:type="VirtualDevicePciBusSlotInfo"><pciSlotNumber>192</pciSlotNumber></slotInfo>')
+    const cfg = parseVmConfig(answer(slotted + nic("E1000", "Network adapter 2", "00:50:56:aa:00:02", "dmz")))
+    expect(cfg.nics.map(n => n.pciSlot)).toEqual([192, undefined])
+  })
 })
 
 describe("parseVmConfig vTPM (roadmap#1)", () => {

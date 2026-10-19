@@ -23,6 +23,8 @@
 
 import { executeSSH, shellEscape } from "@/lib/ssh/exec"
 import type { SshTarget } from "@/lib/ssh/node-endpoint-core"
+import type { GuestStaticIpv4 } from "@/lib/vmware/soap"
+import { buildNetworkPinScript, describeNetworkPinReport, NETWORK_PIN_REPORT, NETWORK_PIN_SCRIPT, parseNetworkPinReport, type GuestNic } from "./guest-network"
 
 export { GUEST_CONVERSION_ESTIMATE_SEC } from "./guest-conversion-estimate"
 
@@ -71,8 +73,17 @@ export function buildConversionXml(a: { name: string; firmware: "efi" | "bios"; 
  * `--block-driver virtio-scsi` makes Windows boot-start vioscsi rather than
  * viostor, matching the scsi0 slot the guest gets. `< /dev/null` turns any
  * interactive question (`--root ask` on a multi-root guest) into a failure.
+ *
+ * With `netpin` (a Linux guest), guestfish first runs it inside the guest to
+ * pin the interface names (see guest-network.ts) and copies its report to
+ * `<dir>/netpin.txt`. It writes to the same overlays, so it reaches the
+ * volumes only with the conversion, and it runs BEFORE virt-v2v: the SELinux
+ * relabel virt-v2v sets up (`/.autorelabel` on PVE, whose appliance has no
+ * setfiles) then covers the new files too. Its failure never stops the run.
+ *
+ * `extraArgs` go to virt-v2v-in-place as they are (see windowsStaticIpArgs).
  */
-export function buildConversionScript(jobId: string, devices: string[], xml: string): string {
+export function buildConversionScript(jobId: string, devices: string[], xml: string, netpin?: string, extraArgs: string[] = []): string {
   const dir = conversionDir(jobId)
   const q = shellEscape
   const lines = [
@@ -80,7 +91,14 @@ export function buildConversionScript(jobId: string, devices: string[], xml: str
     'rm -rf "$D"; mkdir -p "$D" || exit 1',
     `echo ${q(Buffer.from(xml).toString("base64"))} | base64 -d > "$D/guest.xml"`,
     ...devices.map((dev, i) => `qemu-img create -q -f qcow2 -b ${q(dev)} -F raw "$D/disk${i}.qcow2" > "$D/overlay.log" 2>&1 || { echo 90 > "$D/exit"; exit 0; }`),
-    'LIBGUESTFS_BACKEND=direct stdbuf -oL virt-v2v-in-place -i libvirtxml "$D/guest.xml" --block-driver virtio-scsi --machine-readable < /dev/null > "$D/v2v.log" 2>&1',
+    ...(netpin ? [
+      `echo ${q(Buffer.from(netpin).toString("base64"))} | base64 -d > "$D/netpin.sh"`,
+      `LIBGUESTFS_BACKEND=direct guestfish --format=qcow2 ${devices.map((_, i) => `-a "$D/disk${i}.qcow2"`).join(" ")} -i`
+        + ` upload "$D/netpin.sh" ${NETWORK_PIN_SCRIPT} : sh "/bin/sh ${NETWORK_PIN_SCRIPT}"`
+        + ` : download ${NETWORK_PIN_REPORT} "$D/netpin.txt" : rm-f ${NETWORK_PIN_SCRIPT} : rm-f ${NETWORK_PIN_REPORT}`
+        + ` < /dev/null > "$D/netpin.log" 2>&1`,
+    ] : []),
+    `LIBGUESTFS_BACKEND=direct stdbuf -oL virt-v2v-in-place -i libvirtxml "$D/guest.xml" --block-driver virtio-scsi${extraArgs.map(x => ` ${q(x)}`).join("")} --machine-readable < /dev/null > "$D/v2v.log" 2>&1`,
     'echo $? > "$D/exit"',
   ]
   return lines.join("\n")
@@ -145,12 +163,12 @@ export function parseConversionOutcome(log: string, exitCode: number | null): Co
   }
   if (exitCode !== 0) {
     const all = [...messages.map(m => m.message), ...plain].join("\n")
-    // A Windows powered off hard (no VMware Tools at cutover), hibernated or
+    // A Windows powered off hard (no guest tools at cutover), hibernated or
     // shut down with Fast Startup: libguestfs refuses to write to a dirty NTFS,
     // and repairing it behind the guest's back is not ours to do (the cold
     // pipeline stopped running ntfsfix for the same reason).
     if (/mounted read-only|not cleanly unmounted|Windows Hibernation|Fast Restart/i.test(all)) {
-      return { ok: false, os, warnings, reason: "the Windows filesystem was not shut down cleanly (powered off hard because VMware Tools were not running, or hibernation / Fast Startup), and virt-v2v does not write to it. Install VMware Tools on the source so the cutover shuts Windows down cleanly" }
+      return { ok: false, os, warnings, reason: "the Windows filesystem was not shut down cleanly (powered off hard because the guest tools were not running, or hibernation / Fast Startup), and virt-v2v does not write to it. Install the guest tools on the source (VMware Tools, XCP-ng Windows PV tools) so the cutover shuts Windows down cleanly" }
     }
     const err = [...messages].reverse().find(m => m.type === "error")?.message
       ?? [...plain].reverse().find(l => /error/i.test(l))
@@ -186,6 +204,46 @@ export function missingConversionPrereqs(output: string, isWindows: boolean): st
   return missing
 }
 
+/**
+ * A Windows guest binds its IP configuration to the adapter, and on Proxmox
+ * it finds a new one (VirtIO, or e1000 where the source had vmxnet3): a
+ * static IP is gone. virt-v2v sets it again at first boot on the adapter
+ * with the given MAC (`--mac <mac>:ip:<address>,<gateway>,<len>,<dns>...`).
+ * Only the NICs the target keeps the MAC of, and one address per NIC: the
+ * first manual IPv4 the guest reported.
+ */
+export function windowsStaticIpArgs(ips: GuestStaticIpv4[], targetMacs: string[]): string[] {
+  const keep = new Set(targetMacs.map(m => m.toLowerCase()))
+  return ips
+    .filter(ip => keep.has(ip.mac.toLowerCase()))
+    .flatMap(ip => ["--mac", `${ip.mac.toLowerCase()}:ip:${[ip.address, ip.gateway ?? "", String(ip.prefixLength), ...ip.dns].join(",")}`])
+}
+
+/** Job log lines for the static IPs a converted Windows gets back at first boot. */
+export function describeWindowsStaticIps(ips: GuestStaticIpv4[], targetMacs: string[]): { msg: string; level: LogLevel }[] {
+  const keep = new Set(targetMacs.map(m => m.toLowerCase()))
+  return ips.filter(ip => keep.has(ip.mac.toLowerCase())).flatMap(ip => {
+    const parts = [`${ip.address}/${ip.prefixLength}`]
+    if (ip.gateway) parts.push(`gateway ${ip.gateway}`)
+    if (ip.dns.length > 0) parts.push(`DNS ${ip.dns.join(" ")}`)
+    const what = parts.join(", ")
+    const lines: { msg: string; level: LogLevel }[] = [{ msg: `Guest network: the static IPv4 configuration of ${ip.mac} (${what}) is set again on the new adapter at the first boot`, level: "success" }]
+    if (ip.extraAddresses > 0) lines.push({ msg: `Guest network: ${ip.mac} had ${ip.extraAddresses} more static IPv4 address(es); only the first one is set again, add the others after the first boot`, level: "warn" })
+    return lines
+  })
+}
+
+/** What the interface pinning did, read from the node once the conversion is committed. */
+async function readNetworkPin(ssh: (cmd: string) => Promise<{ output?: string }>, dir: string): Promise<{ msg: string; level: LogLevel }[]> {
+  const r = await ssh(`cat ${shellEscape(`${dir}/netpin.txt`)} 2>/dev/null || { echo FAILED; tail -n 3 ${shellEscape(`${dir}/netpin.log`)} 2>/dev/null; }`).catch(() => null)
+  const out = r?.output || ""
+  if (out.startsWith("FAILED")) {
+    const why = clip(out.slice("FAILED".length)) || "no report"
+    return [{ msg: `Guest network: the interface names could not be pinned (${why}); check the network settings after the first boot`, level: "warn" }]
+  }
+  return describeNetworkPinReport(parseNetworkPinReport(out))
+}
+
 export interface GuestConversionInput {
   jobId: string
   connectionId: string
@@ -197,14 +255,28 @@ export interface GuestConversionInput {
   memoryMB?: number
   /** Block device of every copied volume, in target disk order. */
   devices: string[]
+  /** Target NICs with their source names: a Linux guest gets its interface names pinned (guest-network.ts). */
+  nics?: GuestNic[]
+  /** Static IPv4 configuration the guest reported before the cutover: a Windows guest gets it set again. */
+  staticIps?: GuestStaticIpv4[]
   log: (msg: string, level?: LogLevel) => Promise<void>
   isCancelled: () => boolean
   pollMs?: number
   timeoutMs?: number
 }
 
-/** `seconds` and `os` when converted; `reason` when not. */
-export interface GuestConversionResult { converted: boolean; os?: string; seconds?: number; reason?: string }
+/**
+ * `seconds` and `os` when converted; `reason` when not. `network` holds the
+ * log lines of the interface pinning, for the caller to write after its own
+ * "converted" line.
+ */
+export interface GuestConversionResult {
+  converted: boolean
+  os?: string
+  seconds?: number
+  reason?: string
+  network?: { msg: string; level: LogLevel }[]
+}
 
 /**
  * Run the conversion and commit it only when it succeeded. Never throws, except
@@ -232,7 +304,10 @@ export async function convertGuestAtCutover(a: GuestConversionInput): Promise<Gu
 
     const overlays = a.devices.map((_, i) => `${dir}/disk${i}.qcow2`)
     const xml = buildConversionXml({ name: a.name, firmware: a.firmware, overlays, memoryMB: a.memoryMB })
-    const script = buildConversionScript(a.jobId, a.devices, xml)
+    const netpin = !a.isWindows && a.nics && a.nics.length > 0 ? buildNetworkPinScript(a.nics) : undefined
+    const targetMacs = (a.nics ?? []).map(n => n.mac)
+    const winIps = a.isWindows ? a.staticIps ?? [] : []
+    const script = buildConversionScript(a.jobId, a.devices, xml, netpin, windowsStaticIpArgs(winIps, targetMacs))
     const launch = await ssh(`nohup bash -c ${shellEscape(script)} > /dev/null 2>&1 & echo $!`)
     pid = /^\d+$/.test((launch.output || "").trim()) ? (launch.output || "").trim() : ""
     if (!launch.success || !pid) return { converted: false, reason: `virt-v2v-in-place could not be started: ${launch.error || "no process id"}` }
@@ -267,7 +342,8 @@ export async function convertGuestAtCutover(a: GuestConversionInput): Promise<Gu
         return { converted: false, reason: `the converted disk ${i + 1} could not be written back (${c.error || c.output || "qemu-img commit failed"})${i > 0 ? `; disks 1 to ${i} were already converted` : ""}` }
       }
     }
-    return { converted: true, os: outcome.os, seconds }
+    const network = netpin ? await readNetworkPin(ssh, dir) : describeWindowsStaticIps(winIps, targetMacs)
+    return { converted: true, os: outcome.os, seconds, ...(network.length > 0 && { network }) }
   } catch (e: any) {
     if (String(e?.message || e) === "Migration cancelled") throw e
     return { converted: false, reason: String(e?.message || e) }

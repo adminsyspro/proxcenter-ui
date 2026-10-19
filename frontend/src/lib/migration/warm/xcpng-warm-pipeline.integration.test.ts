@@ -137,6 +137,8 @@ let readerFailsFor: string | null
 let rbdMapped: boolean
 /** UEFI shell: `qm create` already owns vm-<vmid>-disk-0 as efidisk0, data disks must number after it. */
 let shellEfidisk: boolean
+/** The node can convert the guest (#1000): virt-v2v-in-place succeeds and the interface pinning reports this. */
+let conversion: { netpin: string } | null
 let snapCounter: number
 let readerCounter: number
 let destroyed: string[]
@@ -169,6 +171,18 @@ async function sshRouter(_connId: string, _host: string, command: string, _timeo
     opts?.onData?.("1073741824 bytes (1.1 GB, 1.0 GiB) copied, 5 s, 214 MB/s\r")
     opts?.onData?.("2147483648 bytes (2.1 GB, 2.0 GiB) copied, 10 s, 214 MB/s\r")
     return ok("")
+  }
+  if (conversion) {
+    if (command.startsWith("test -x /usr/bin/virt-v2v-in-place")) return ok("v2v-in-place\n")
+    if (command.startsWith("nohup bash")) return ok("4242\n")
+    if (command.startsWith("cat ") && command.includes("/exit")) return ok("0\n")
+    if (command.startsWith("cat ") && command.includes("v2v.log")) {
+      return ok([
+        JSON.stringify({ type: "message", message: "Converting Debian GNU/Linux 13 (trixie) (debian13) to run on KVM" }),
+        JSON.stringify({ type: "info", message: "This guest has virtio drivers installed." }),
+      ].join("\n"))
+    }
+    if (command.startsWith("cat ") && command.includes("netpin.txt")) return ok(conversion.netpin)
   }
   // blkdiscard, pvesm free, rbd unmap: plain success
   return ok("")
@@ -261,6 +275,7 @@ beforeEach(() => {
   readerFailsFor = null
   rbdMapped = false
   shellEfidisk = false
+  conversion = null
   snapCounter = 0
   readerCounter = 0
   destroyed = []
@@ -417,7 +432,8 @@ describe("runXcpngWarmMigration CBT path", () => {
     expect(hasLog("Full copy done: 15.00 GB")).toBe(true)
     expect(hasLog("Delta pass 1: 0.1 MB")).toBe(true)
     expect(hasLog("Delta pass 2: 0.0 MB")).toBe(true)
-    expect(prisma.row.projectedDowntimeSec).toBe(50)
+    // 50 s of shutdown, boot and transfer, plus the guest conversion (#1000), on by default
+    expect(prisma.row.projectedDowntimeSec).toBe(110)
 
     // cutover: confirmed power off, final delta, CBT switched back off
     expect(xapiCleanShutdown).toHaveBeenCalledTimes(1)
@@ -444,6 +460,52 @@ describe("runXcpngWarmMigration CBT path", () => {
     expect(sshCommands.some(c => c.startsWith("pvesm free"))).toBe(false)
     expect(hasLog("Kept target volume")).toBe(false)
     expect(xapiLogout).toHaveBeenCalledTimes(1)
+  })
+
+  it("converts the guest at cutover, pins its netfront NIC and attaches it on VirtIO (#1000)", { timeout: 20000 }, async () => {
+    const jobId = "xcp-it-convert"
+    vmConfig = {
+      ...makeVmConfig(), firmware: "uefi",
+      networks: [{ device: "1", mac: "aa:bb:cc:dd:ee:02", network: "n2" }, { device: "0", mac: "aa:bb:cc:dd:ee:01", network: "n1" }],
+    }
+    shellEfidisk = true
+    conversion = { netpin: "pinned eth0 aa:bb:cc:dd:ee:01\npinned eth1 aa:bb:cc:dd:ee:02\n" }
+
+    const err = await runToEnd(jobId, makeConfig())
+
+    expect(err).toBeNull()
+    // every VIF keeps its MAC, in device order
+    const create = pveCalls.find(c => c.path === "/nodes/pve1/qemu" && c.method === "POST")
+    expect(create?.body).toEqual(expect.objectContaining({
+      net0: "virtio,bridge=vmbr0,macaddr=aa:bb:cc:dd:ee:01", net1: "virtio,bridge=vmbr0,macaddr=aa:bb:cc:dd:ee:02",
+    }))
+    // netfront names the VIFs eth<device>: that is what the guest gets pinned to
+    const launch = sshCommands.find(c => c.startsWith("nohup bash"))!
+    const netpin = Buffer.from(/([A-Za-z0-9+/=]{20,})\W+\| base64 -d > "\$D\/netpin\.sh"/.exec(launch)![1], "base64").toString()
+    expect(netpin).toContain("NICS='aa:bb:cc:dd:ee:01 eth0 enX0\naa:bb:cc:dd:ee:02 eth1 enX1'")
+    expect(sshCommands).toContain(`qemu-img commit -q '/tmp/proxcenter-convert-${jobId}/disk0.qcow2'`)
+    expect(hasLog("Guest converted in")).toBe(true)
+    expect(hasLog("Guest network: eth0 (aa:bb:cc:dd:ee:01), eth1 (aa:bb:cc:dd:ee:02) keep the name they had on the source")).toBe(true)
+    // said after the conversion it belongs to
+    expect(messages().findIndex(m => m.startsWith("Guest network"))).toBeGreaterThan(messages().findIndex(m => m.startsWith("Guest converted")))
+    // converted: a UEFI guest boots from SCSI, where it would stay on SATA otherwise
+    const attach = vi.mocked(pveSetVmConfig).mock.calls[0]
+    expect(attach[3].get("scsi0")).toBe("DatastoreVM:vm-900-disk-1")
+    expect(attach[3].get("boot")).toBe("order=scsi0")
+    expect(attach[3].get("net0")).toBe("virtio,bridge=vmbr0,macaddr=aa:bb:cc:dd:ee:01")
+    // the phases of the log, as on the VMware engine
+    expect(prisma.row.logs.filter((l: any) => l.level === "step").map((l: any) => l.step)).toEqual(
+      ["planning", "prepare", "full_copy", "delta", "cutover", "verify", "conversion", "finish"])
+  })
+
+  it("leaves the guest as copied when the operator turned the conversion off", { timeout: 20000 }, async () => {
+    conversion = { netpin: "" }
+    const err = await runToEnd("xcp-it-noconvert", makeConfig({ convertGuest: false }))
+
+    expect(err).toBeNull()
+    expect(sshCommands.some(c => c.startsWith("nohup bash"))).toBe(false)
+    expect(hasLog("Guest conversion not requested for this cutover")).toBe(true)
+    expect(prisma.row.projectedDowntimeSec).toBe(50)
   })
 
   it("holds in manual mode until the operator requests the cutover", { timeout: 20000 }, async () => {
@@ -493,7 +555,7 @@ describe("runXcpngWarmMigration CBT path", () => {
     expect(err).toBeNull()
     expect(prisma.row.status).toBe("completed")
     expect(prisma.statusHistory).toEqual(["planning", "enabling_cbt", "preparing_disks", "full_copy", "delta_sync", "awaiting_cutover", "cutover", "verify", "completed"])
-    expect(hasLog("Reached 1 delta passes; projected cutover downtime ~450s")).toBe(true)
+    expect(hasLog("Reached 1 delta passes; projected cutover downtime ~510s")).toBe(true)
     expect(hasLog("The source is changing faster than it converges.")).toBe(true)
     expect(hasLog("Operator requested cutover")).toBe(true)
     expect(createdSnapshots()).toBe(3) // full, delta-1, cutover

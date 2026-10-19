@@ -64,3 +64,31 @@ describe("mapXoToPveConfig — name sanitising", () => {
     expect(mapXoToPveConfig(makeConfig({ name: "---" }), 100, "local-lvm", "vmbr0").name).toBe("vm")
   })
 })
+
+describe("mapXoToPveConfig — NICs and guest conversion (#1000 follow-up)", () => {
+  it("maps every VIF in device order with its source MAC and the VLAN tag", () => {
+    const p = mapXoToPveConfig(makeConfig({
+      networks: [
+        { device: "1", mac: "aa:bb:cc:dd:ee:02", network: "n2" },
+        { device: "0", mac: "aa:bb:cc:dd:ee:01", network: "n1" },
+      ],
+    }), 100, "local-lvm", "vmbr1", 20)
+    expect(p.nets).toEqual({
+      net0: "virtio,bridge=vmbr1,macaddr=aa:bb:cc:dd:ee:01,tag=20",
+      net1: "virtio,bridge=vmbr1,macaddr=aa:bb:cc:dd:ee:02,tag=20",
+    })
+  })
+
+  it("still creates one NIC for a VM without VIF, and drops a malformed MAC", () => {
+    expect(mapXoToPveConfig(makeConfig({ networks: [] }), 100, "local-lvm", "vmbr0").nets).toEqual({ net0: "virtio,bridge=vmbr0" })
+    expect(mapXoToPveConfig(makeConfig({ networks: [{ device: "0", mac: "", network: "n" }] }), 100, "local-lvm", "vmbr0").nets.net0).toBe("virtio,bridge=vmbr0")
+  })
+
+  it("boots a converted Windows or UEFI guest from SCSI with VirtIO NICs", () => {
+    const win = mapXoToPveConfig(makeConfig({ guestOS: "Windows Server 2022", firmware: "uefi" }), 100, "local-lvm", "vmbr0", undefined, undefined, { guestConverted: true })
+    expect(win.bootDiskSlot).toBe("scsi0")
+    expect(win.diskSlots).toEqual(["scsi0"])
+    expect(win.nets.net0.startsWith("virtio,")).toBe(true)
+    expect(win.efidisk0).toBeDefined()
+  })
+})

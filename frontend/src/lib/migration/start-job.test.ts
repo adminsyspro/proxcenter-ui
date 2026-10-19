@@ -151,4 +151,10 @@ describe("config builders", () => {
     expect(c).not.toHaveProperty("targetVmid")
     expect(c).not.toHaveProperty("disks")
   })
+
+  it("replay the guest conversion choice on both warm engines (#1000)", () => {
+    expect(warmConfigFromJobConfig({ ...base, convertGuest: false }, "warm-xcpng")).toMatchObject({ convertGuest: false })
+    expect(warmConfigFromJobConfig({ ...base, convertGuest: true }, "warm-vmware")).toMatchObject({ convertGuest: true })
+    expect(warmConfigFromJobConfig({ ...base }, "warm-xcpng")).not.toHaveProperty("convertGuest")
+  })
 })

@@ -1,5 +1,35 @@
 [
   {
+    "version": "1.4.12",
+    "title": "Backup restore drills, alert notifications to Slack, Teams and webhooks, host drain, per VM failover and write access for API tokens",
+    "items": [
+      { "type": "new", "text": "Backup restore drills: test restores of PBS backups in an isolated VM, on demand or on a schedule" },
+      { "type": "new", "text": "Send alert notifications to Slack, Teams, ntfy, Discord and webhooks" },
+      { "type": "new", "text": "Drain a host from the inventory: maintenance, Migrate all VMs and reboot through one evacuation plan" },
+      { "type": "new", "text": "Fail over and fail back one VM of a DR plan from Site Recovery" },
+      { "type": "new", "text": "API tokens can write, with per creator rights, tenant confinement and audit" },
+      { "type": "new", "text": "Restore files from a backup straight into a running guest" },
+      { "type": "new", "text": "List and alert on guests covered by no backup job" },
+      { "type": "new", "text": "The Top consumers widget ranks guests by CPU, memory, disk or network over a time window" },
+      { "type": "new", "text": "vDC usage history with charts and CSV export" },
+      { "type": "new", "text": "Tenants create pure L2 networks, and the L3 edge model is explicit per vDC" },
+      { "type": "new", "text": "Grant catalogue images and blueprints per tenant or per vDC" },
+      { "type": "new", "text": "Search and filter firewall logs per security group, rule, node and cluster" },
+      { "type": "new", "text": "Create, delete and comment Proxmox pools from the Pools view" },
+      { "type": "improved", "text": "Warm migrations convert the guest at cutover: the VM boots from VirtIO and keeps its static IP" },
+      { "type": "improved", "text": "The migration dialog gets a review step with per NIC networks, hardware overrides and a target storage per disk" },
+      { "type": "improved", "text": "Bulk migrations run in parallel from a server side queue" },
+      { "type": "improved", "text": "DRS explains placement per guest and why an action is refused" },
+      { "type": "improved", "text": "Configure each node's SSH address and port" },
+      { "type": "improved", "text": "LDAP sign-in refusals are explained by a connection test and a read only user lookup" },
+      { "type": "improved", "text": "The login lockout policy is enforced, with client IPs resolved through trusted proxies" },
+      { "type": "fix", "text": "Replication snapshots are named in UTC, so the end of daylight saving time no longer breaks the next sync" },
+      { "type": "fix", "text": "A rolling update waits until the node is really evacuated, and DRS stays out of the cluster meanwhile" },
+      { "type": "fix", "text": "Every copied disk is verified before a VMware VM is handed over" },
+      { "type": "fix", "text": "The bell, the summary and the alerts page count the same alerts" }
+    ]
+  },
+  {
     "version": "1.4.11",
     "title": "Licenses delivered from your proxcenter.io account, a redesigned License tab, air-gapped installs and PVE backup job history",
     "items": [

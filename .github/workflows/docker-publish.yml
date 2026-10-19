@@ -503,9 +503,18 @@ jobs:
           if [[ "$INPUT_STAGING" == "true" ]]; then
             REF="$INPUT_BACKEND_REF"
           elif [[ "$GH_REF" == refs/tags/v* ]]; then
-            if git ls-remote --tags "https://x-access-token:${PAT}@github.com/adminsyspro/proxcenter-backend.git" "$GH_REF_NAME" | grep -q "$GH_REF_NAME"; then
-              REF="$GH_REF_NAME"
+            # A release tests and builds the orchestrator from its own tag,
+            # never from main. Ask the API with the PAT: a git ls-remote run
+            # in this checkout sends the persisted GITHUB_TOKEN header, which
+            # cannot see the private backend repository.
+            STATUS=$(curl -sS -o /dev/null -w '%{http_code}' \
+              -H "Authorization: Bearer ${PAT}" -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/adminsyspro/proxcenter-backend/git/ref/tags/${GH_REF_NAME}")
+            if [[ "$STATUS" != "200" ]]; then
+              echo "::error::cannot find proxcenter-backend tag ${GH_REF_NAME} (HTTP ${STATUS}): push the orchestrator tag before the frontend tag, or check ORCHESTRATOR_PAT"
+              exit 1
             fi
+            REF="$GH_REF_NAME"
           fi
           echo "ref=$REF" >> "$GITHUB_OUTPUT"
 
@@ -557,9 +566,15 @@ jobs:
           if [[ "$INPUT_STAGING" == "true" ]]; then
             REF="$INPUT_BACKEND_REF"
           elif [[ "$GH_REF" == refs/tags/v* ]]; then
-            if git ls-remote --tags "https://x-access-token:${PAT}@github.com/adminsyspro/proxcenter-backend.git" "$GH_REF_NAME" | grep -q "$GH_REF_NAME"; then
-              REF="$GH_REF_NAME"
+            # Same check as test-backend: never build a release from main.
+            STATUS=$(curl -sS -o /dev/null -w '%{http_code}' \
+              -H "Authorization: Bearer ${PAT}" -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/adminsyspro/proxcenter-backend/git/ref/tags/${GH_REF_NAME}")
+            if [[ "$STATUS" != "200" ]]; then
+              echo "::error::cannot find proxcenter-backend tag ${GH_REF_NAME} (HTTP ${STATUS}): push the orchestrator tag before the frontend tag, or check ORCHESTRATOR_PAT"
+              exit 1
             fi
+            REF="$GH_REF_NAME"
           fi
           echo "ref=$REF" >> "$GITHUB_OUTPUT"
 

@@ -608,6 +608,29 @@
       "window": "최근 {minutes}분: 평균 {avg}, 최대 {max}",
       "guests": "VM {vms}개 · 디스크 {disks}개"
     },
+    "widgetTopConsumers": {
+      "metric": "지표",
+      "period": "기간",
+      "metrics": {
+        "cpu": "CPU",
+        "ram": "메모리",
+        "diskread": "디스크 읽기",
+        "diskwrite": "디스크 쓰기",
+        "netin": "네트워크 수신",
+        "netout": "네트워크 송신"
+      },
+      "live": "실시간",
+      "dashboardRange": "대시보드 ({range})",
+      "custom": "사용자 지정",
+      "avg": "평균",
+      "peak": "최대",
+      "from": "시작",
+      "to": "종료",
+      "invalidRange": "종료 시각은 시작 시각 이후여야 합니다",
+      "needsOrchestrator": "기록을 보려면 오케스트레이터가 필요합니다",
+      "loadFailed": "기록을 불러오지 못했습니다",
+      "historySince": "{date}부터 기록이 있습니다"
+    },
     "nodeGuests": {
       "guests": "게스트 {count}개",
       "running": "실행 중 {count}개",
@@ -775,6 +798,8 @@
     "diskLatencyPeakInterval": "최대값은 개별 I/O가 아니라 한 수집 간격({interval})의 지연 시간입니다",
     "diskLatencyCollection": "실행 중인 모든 VM의 지연 시간을 그래프와 목록용으로 수집 (수집마다 VM당 API 호출 1회)",
     "diskLatencyRetention": "Disk I/O 그래프용 지연 시간 기록 보관 일수",
+    "metricsRetention": "지표 기록 보관 일수",
+    "metricsRetentionDesc": "대시보드의 상위 소비 게스트와 그래프가 되돌아볼 수 있는 범위를 제한합니다. 더 오래된 수집 데이터는 오케스트레이터가 삭제합니다.",
     "metricsInterval": "수집 간격",
     "snapshots": "스냅샷",
     "collectionRecovery": "수집 및 정상 복귀",

@@ -47,6 +47,9 @@ const DEFAULT_THRESHOLDS = {
   // switch itself (1 = on): one PVE call per running VM per collection.
   disk_latency_retention_days: 7,
   disk_latency_collection: 1,
+  // Days of metrics collections kept (#1129): what the dashboard top consumers
+  // and charts can look back on. The orchestrator prunes older rows.
+  metrics_retention_days: 14,
   // Seconds between two metrics collections of the orchestrator (#881), the
   // cadence every resource alert and recovery confirmation counts in. The
   // config.yaml value is only the starting point; 30 s to 10 min.

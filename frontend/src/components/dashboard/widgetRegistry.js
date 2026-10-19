@@ -160,7 +160,7 @@ export const WIDGET_REGISTRY = {
   'top-consumers': {
     type: 'top-consumers',
     name: 'Top Consumers',
-    description: 'Most resource-intensive guests',
+    description: 'Most resource-intensive guests, live or over a time window',
     icon: 'ri-bar-chart-line',
     category: 'resources',
     defaultSize: { w: 6, h: 4 },

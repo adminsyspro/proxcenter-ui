@@ -608,6 +608,29 @@
       "window": "Últimos {minutes} min: media {avg}, máx {max}",
       "guests": "{vms} VM · {disks} discos"
     },
+    "widgetTopConsumers": {
+      "metric": "Métrica",
+      "period": "Periodo",
+      "metrics": {
+        "cpu": "CPU",
+        "ram": "Memoria",
+        "diskread": "Lectura de disco",
+        "diskwrite": "Escritura de disco",
+        "netin": "Red entrante",
+        "netout": "Red saliente"
+      },
+      "live": "En directo",
+      "dashboardRange": "Panel ({range})",
+      "custom": "Personalizado",
+      "avg": "Media",
+      "peak": "Pico",
+      "from": "Desde",
+      "to": "Hasta",
+      "invalidRange": "El final debe ser posterior al inicio",
+      "needsOrchestrator": "El historial requiere el orquestador",
+      "loadFailed": "No se pudo cargar el historial",
+      "historySince": "Historial disponible desde el {date}"
+    },
     "nodeGuests": {
       "guests": "{count} guests",
       "running": "{count} en ejecución",
@@ -775,6 +798,8 @@
     "diskLatencyPeakInterval": "Un pico es la latencia de un intervalo de recogida ({interval}), no la de una E/S aislada",
     "diskLatencyCollection": "Recoger la latencia de cada VM en ejecución para los gráficos y listas (una llamada API por VM y recogida)",
     "diskLatencyRetention": "días de historial de latencia conservados para los gráficos de E/S de disco",
+    "metricsRetention": "días de historial de métricas conservados",
+    "metricsRetentionDesc": "Limita hasta dónde pueden retroceder los principales consumidores y los gráficos del panel. El orquestador elimina las recogidas más antiguas.",
     "metricsInterval": "Intervalo de recogida",
     "snapshots": "Snapshots",
     "collectionRecovery": "Recogida y recuperación",

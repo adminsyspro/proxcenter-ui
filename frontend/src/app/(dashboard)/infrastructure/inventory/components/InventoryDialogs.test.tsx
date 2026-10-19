@@ -1197,8 +1197,8 @@ describe('migration dialog options', () => {
     // VMware source: the form's launch button is "Review" (#317); the space
     // verdict holds it, so the review step and the launch stay out of reach.
     expect(screen.getByRole('button', { name: /^Review$/ })).toBeDisabled()
-    expect(preflightBodies[0]).toMatchObject({
-      action: 'warm-check', targetStorage: 'san-lvm', requiredDiskBytes: 20 * 1024 ** 3,
+    expect(preflightBodies.find(b => b.action === 'warm-check')).toMatchObject({
+      targetStorage: 'san-lvm', requiredDiskBytes: 20 * 1024 ** 3,
     })
   })
 
@@ -1242,8 +1242,8 @@ describe('migration dialog options', () => {
     fireEvent.click(review)
     await screen.findByTestId('migration-review-step')
     await waitFor(() => expect(screen.getByRole('button', { name: /Migrate to Proxmox/ })).toBeEnabled())
-    expect(preflightBodies[0]).toMatchObject({
-      action: 'warm-check', targetStorage: 'san-lvm', requiredDiskBytes: 20 * 1024 ** 3,
+    expect(preflightBodies.find(b => b.action === 'warm-check')).toMatchObject({
+      targetStorage: 'san-lvm', requiredDiskBytes: 20 * 1024 ** 3,
     })
     // Without any per-disk change the review asks exactly what warm-check asked.
     expect(preflightBodies.find(b => b.action === 'storage-space')).toMatchObject({
@@ -1274,7 +1274,7 @@ describe('migration dialog options', () => {
     await screen.findByText(/Could not read the free space of san-lvm on the target node: No such storage\./)
     // VMware source: the form's launch button is "Review" (#317) and the read error holds it.
     expect(screen.getByRole('button', { name: /^Review$/ })).toBeDisabled()
-    expect(preflightBodies[0]).toMatchObject({ action: 'warm-check', targetStorage: 'san-lvm' })
+    expect(preflightBodies.find(b => b.action === 'warm-check')).toMatchObject({ targetStorage: 'san-lvm' })
   })
 
   it('sends no targetStorage when none is selected', async () => {
@@ -1297,9 +1297,11 @@ describe('migration dialog options', () => {
     )
 
     fireEvent.click(screen.getByText('harness-open-single'))
-    await waitFor(() => expect(preflightBodies.length).toBeGreaterThan(0))
-    expect(preflightBodies[0].targetStorage).toBeUndefined()
-    expect(preflightBodies[0].requiredDiskBytes).toBe(0)
+    // The cpu-levels check runs alongside, so pick the warm-check by its action.
+    await waitFor(() => expect(preflightBodies.some(b => b.action === 'warm-check')).toBe(true))
+    const warmCheck = preflightBodies.find(b => b.action === 'warm-check')
+    expect(warmCheck.targetStorage).toBeUndefined()
+    expect(warmCheck.requiredDiskBytes).toBe(0)
   })
 
   // #663: the budget only governs the automatic decision, so it follows the

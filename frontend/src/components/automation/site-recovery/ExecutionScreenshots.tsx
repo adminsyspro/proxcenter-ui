@@ -4,7 +4,9 @@ import { useState } from 'react'
 import useSWR from 'swr'
 import { useTranslations } from 'next-intl'
 
-import { Box, Dialog, DialogContent, DialogTitle, Tooltip, Typography } from '@mui/material'
+import { Box, Tooltip } from '@mui/material'
+
+import ImagePreviewDialog from '@/components/ui/ImagePreviewDialog'
 
 export interface ScreenshotMeta {
   vm_id: number
@@ -39,27 +41,13 @@ export function ScreenshotPreviewDialog({ executionId, shot, label, onClose }: {
   const t = useTranslations()
 
   return (
-    <Dialog open={!!shot} onClose={onClose} maxWidth='md' fullWidth>
-      {shot && (
-        <>
-          <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <i className='ri-computer-line' style={{ fontSize: 18, opacity: 0.7 }} />
-            {label}
-            <Typography variant='caption' sx={{ color: 'text.secondary', ml: 'auto' }}>
-              {t('siteRecovery.screenshots.capturedAt')} {new Date(shot.captured_at).toLocaleString()}
-            </Typography>
-          </DialogTitle>
-          <DialogContent>
-            <Box
-              component='img'
-              src={screenshotUrl(executionId, shot.vm_id)}
-              alt={label}
-              sx={{ maxWidth: '100%', display: 'block', borderRadius: 1, mx: 'auto' }}
-            />
-          </DialogContent>
-        </>
-      )}
-    </Dialog>
+    <ImagePreviewDialog
+      open={!!shot}
+      src={shot ? screenshotUrl(executionId, shot.vm_id) : ''}
+      label={label}
+      capturedAt={shot ? `${t('siteRecovery.screenshots.capturedAt')} ${new Date(shot.captured_at).toLocaleString()}` : undefined}
+      onClose={onClose}
+    />
   )
 }
 

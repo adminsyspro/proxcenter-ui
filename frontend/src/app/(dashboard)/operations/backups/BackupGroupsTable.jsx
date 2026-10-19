@@ -5,6 +5,8 @@ import { Box, Chip, IconButton, LinearProgress, Table, TableBody, TableCell, Tab
 
 import { groupBackupMachines } from '@/lib/backups/machineGroups'
 
+import BackupTypeIcon from './BackupTypeIcon'
+
 const snapshotFields = new Set(['backupTime', 'sizeFormatted', 'verified', 'protected', 'actions'])
 
 // Pagination counts machines. Expanding one must never consume the remaining
@@ -78,7 +80,7 @@ export default function BackupGroupsTable({ backups, pbsId, columns, loading, to
                       let content = null
                       if (column.field === 'vmName') content = (
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <i className={open ? 'ri-folder-open-line' : 'ri-folder-line'} />
+                          <BackupTypeIcon type={row.backupType} />
                           <Typography variant='body2' sx={{ fontWeight: 600 }}>{label}</Typography>
                           <Chip size='small' label={group.points.length} aria-label={`${group.points.length} ${t('backups.title')}`} />
                         </Box>

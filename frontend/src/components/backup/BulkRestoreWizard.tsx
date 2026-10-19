@@ -76,6 +76,14 @@ const SMALL_SELECT_SX = {
   '& .MuiInputBase-input.MuiSelect-select': { minHeight: '1.4375em', lineHeight: '1.4375em' },
 } as const
 
+// A select inside a compact grid row (rowHeight 46 scaled to 32 px by the
+// compact density): 28 px high, text only, ellipsis before the chevron, so
+// the row never crops it.
+const GRID_SELECT_SX = {
+  '& .MuiInputBase-root': { height: 28, fontSize: '0.8125rem' },
+  '& .MuiInputBase-input.MuiSelect-select': { py: 0, minHeight: 0, lineHeight: '28px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+} as const
+
 const STEP_KEYS = ['guests', 'target', 'review'] as const
 
 const POLL_INTERVAL_MS = 2_500
@@ -591,28 +599,36 @@ export default function BulkRestoreWizard({
     {
       field: 'points',
       headerName: t('backups.bulkRestore.restorePoint'),
-      width: 260,
+      width: 300,
       sortable: false,
       renderCell: params => {
         const guest: GuestBackupGroup = params.row
         const value = pointByKey[guest.key] || guest.points[0]?.id || ''
+        const pointLabel = (id: unknown) => {
+          const i = guest.points.findIndex(p => p.id === id)
+          if (i < 0) return ''
+          return `${guest.points[i].backupTimeFormatted}${i === 0 ? ` · ${t('backups.bulkRestore.latest')}` : ''}`
+        }
         return (
-          <FormControl size='small' fullWidth sx={SMALL_SELECT_SX}>
-            <Select
-              value={value}
-              onChange={e => setPointByKey(prev => ({ ...prev, [guest.key]: String(e.target.value) }))}
-              onClick={e => e.stopPropagation()}
-            >
-              {guest.points.map((p, i) => (
-                <MenuItem key={p.id} value={p.id}>
-                  <OptionLabel
-                    icon={i === 0 ? 'ri-history-line' : 'ri-time-line'}
-                    label={`${p.backupTimeFormatted}${i === 0 ? ` · ${t('backups.bulkRestore.latest')}` : ''}`}
-                  />
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
+          <Box sx={{ display: 'flex', alignItems: 'center', height: '100%', width: '100%' }}>
+            <FormControl size='small' fullWidth sx={GRID_SELECT_SX}>
+              <Select
+                value={value}
+                renderValue={pointLabel}
+                onChange={e => setPointByKey(prev => ({ ...prev, [guest.key]: String(e.target.value) }))}
+                onClick={e => e.stopPropagation()}
+              >
+                {guest.points.map((p, i) => (
+                  <MenuItem key={p.id} value={p.id}>
+                    <OptionLabel
+                      icon={i === 0 ? 'ri-history-line' : 'ri-time-line'}
+                      label={`${p.backupTimeFormatted}${i === 0 ? ` · ${t('backups.bulkRestore.latest')}` : ''}`}
+                    />
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Box>
         )
       },
     },

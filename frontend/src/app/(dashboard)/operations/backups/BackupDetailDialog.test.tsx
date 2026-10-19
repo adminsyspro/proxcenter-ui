@@ -102,6 +102,17 @@ describe('BackupDetailDialog', () => {
     expect(screen.getByText('(ago)', { exact: false })).toBeInTheDocument()
   })
 
+  it('offers a test restore on VM backups only, when allowed (roadmap#35)', () => {
+    const onTestRestore = vi.fn()
+    const { rerender } = render(<BackupDetailDialog {...base} backup={newer} />)
+    expect(screen.queryByRole('button', { name: 'backups.restoreDrills.testRestore' })).toBeNull()
+    rerender(<BackupDetailDialog {...base} backup={newer} canTestRestore onTestRestore={onTestRestore} />)
+    fireEvent.click(screen.getByRole('button', { name: 'backups.restoreDrills.testRestore' }))
+    expect(onTestRestore).toHaveBeenCalled()
+    rerender(<BackupDetailDialog {...base} backup={{ ...newer, backupType: 'ct' }} canTestRestore onTestRestore={onTestRestore} />)
+    expect(screen.queryByRole('button', { name: 'backups.restoreDrills.testRestore' })).toBeNull()
+  })
+
   it('renders nothing without a selected backup', () => {
     render(<BackupDetailDialog {...base} backup={null} />)
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()

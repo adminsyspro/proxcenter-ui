@@ -32,6 +32,7 @@ const DEFAULT_COMMUNITY_FEATURES = {
     { id: 'syslog_forwarding', name: 'Syslog / SIEM Forwarding', enabled: false },
     { id: 'cve_scanner', name: 'CVE Scanner', enabled: false },
     { id: 'white_label', name: 'White Label', enabled: false },
+    { id: 'backup_restore_drills', name: 'Backup Restore Drills', enabled: false },
   ],
   options: [],
 }

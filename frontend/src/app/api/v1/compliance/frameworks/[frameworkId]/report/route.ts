@@ -8,9 +8,7 @@ import path from 'node:path'
 import { getConnectionById } from '@/lib/connections/getConnection'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { requireEnterprise } from '@/lib/auth/requireEnterprise'
-import { verifyConnectionOwnership, getSessionPrisma, getCurrentTenantId } from '@/lib/tenant'
-import { getSettingWithSource } from '@/lib/db/settings'
-import { getAsset, slotFromFilename } from '@/lib/branding/assetStore'
+import { verifyConnectionOwnership, getSessionPrisma } from '@/lib/tenant'
 import { collectHardeningData } from '@/lib/compliance/collectHardeningData'
 import { runAllChecks } from '@/lib/compliance/hardening'
 import { FRAMEWORKS, getCrosswalk, getFramework } from '@/lib/compliance/frameworks'
@@ -20,6 +18,7 @@ import { assessFramework } from '@/lib/compliance/frameworkAssessment'
 import { computeNodeBreakdown } from '@/lib/compliance/nodeBreakdown'
 import { frameworkReportHtml } from '@/lib/compliance/report/frameworkReportHtml'
 import { sanitizeFilename } from '@/lib/compliance/report/escapeHtml'
+import { resolveReportBranding } from '@/lib/reporting/reportBranding'
 import { renderPdf } from '@/lib/reporting/weasyprintClient'
 import { safeLog } from '@/lib/log/sanitize'
 
@@ -67,44 +66,8 @@ export async function GET(req: Request, ctx: { params: Promise<{ frameworkId: st
       select: { sshEnabled: true },
     })
 
-    // Fetch branding settings server-side. Wrapped in try/catch so a DB or FS
-    // hiccup never crashes the report; falls back to defaults.
-    let brandColor = '#E57000'
-    let logoDataUri = ''
-    let appName = ''
-    try {
-      const tenantId = await getCurrentTenantId()
-      const resolvedBranding = await getSettingWithSource<any>('branding', tenantId)
-      const branding = resolvedBranding?.value
-      if (branding?.enabled && branding?.primaryColor) {
-        brandColor = String(branding.primaryColor)
-      }
-
-      // #681: the colour and the logo were already honoured here, the name was
-      // not, so a white-labelled report still read "ProxCenter" on its cover.
-      if (branding?.enabled && branding?.appName) {
-        appName = String(branding.appName)
-      }
-
-      const brandingLogoUrl = branding?.enabled ? branding?.logoUrl : ''
-      if (brandingLogoUrl) {
-        // path.basename strips any traversal in the stored URL, then we map
-        // the served filename back to its storage slot (logo/favicon/...).
-        const filename = path.basename(String(brandingLogoUrl).split('?')[0])
-        const asset = await getAsset(resolvedBranding!.tenantId, 'branding', slotFromFilename(filename))
-        if (asset) {
-          logoDataUri = `data:${asset.contentType};base64,${Buffer.from(asset.data).toString('base64')}`
-        }
-      }
-      if (!logoDataUri) {
-        const def = path.join(process.cwd(), 'public', 'images', 'proxcenter.png')
-        if (fs.existsSync(def)) {
-          logoDataUri = `data:image/png;base64,${fs.readFileSync(def).toString('base64')}`
-        }
-      }
-    } catch {
-      // Branding/logo failures are non-fatal; report renders with defaults.
-    }
+    // Branding (colour, logo, white-label name); never fatal.
+    const { brandColor, logoDataUri, appName } = await resolveReportBranding()
 
     // Collect raw data (no profile, mirrors Task 8)
     const hardeningData = await collectHardeningData({

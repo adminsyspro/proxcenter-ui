@@ -46,6 +46,16 @@ describe('BackupGroupsTable', () => {
     expect(onPaginationModelChange).toHaveBeenCalledWith({ page: 1, pageSize: 25 })
   })
 
+  it('leads each machine with the icon of what was backed up', () => {
+    const ct = { ...older, id: 'ct', backupId: '101', backupType: 'ct', vmName: 'web-ct' }
+    const host = { ...older, id: 'host', backupId: 'pbs-host', backupType: 'host', vmName: 'pbs-host' }
+    render(<BackupGroupsTable {...props} backups={[newer, ct, host]} pbsId='pbs1' />)
+    const rowOf = (name: string) => screen.getByRole('button', { name: new RegExp(name) }).closest('tr') as HTMLElement
+    expect(within(rowOf('current-name')).getByTestId('backup-type-icon-vm')).toHaveClass('ri-computer-line')
+    expect(within(rowOf('web-ct')).getByTestId('backup-type-icon-ct')).toHaveClass('ri-instance-line')
+    expect(within(rowOf('pbs-host')).getByTestId('backup-type-icon-host')).toHaveClass('ri-server-line')
+  })
+
   it('keeps equal IDs from different namespaces separate and resets expansion when the PBS changes', () => {
     const rows = [newer, { ...newer, id: 'other', namespace: 'tenant', vmName: 'other-name' }]
     const { rerender } = render(<BackupGroupsTable {...props} backups={rows} pbsId='pbs1' />)

@@ -38,6 +38,7 @@ import {
 
 import BackupDetailDialog from './BackupDetailDialog'
 import BackupGroupsTable from './BackupGroupsTable'
+import BackupTypeIcon from './BackupTypeIcon'
 
 import { usePageTitle } from '@/contexts/PageTitleContext'
 import { formatBytes } from '@/utils/format'
@@ -52,6 +53,8 @@ import RestoreVmDialog from '@/components/backup/RestoreVmDialog'
 import BulkRestoreWizard from '@/components/backup/BulkRestoreWizard'
 import { useTenant } from '@/contexts/TenantContext'
 import { useRBAC } from '@/contexts/RBACContext'
+import { Features, useLicense } from '@/contexts/LicenseContext'
+import RestoreDrillDialog from '@/components/backup/restoreDrills/RestoreDrillDialog'
 import { useToast } from '@/contexts/ToastContext'
 import RestoreToGuestDialog from '@/components/backups/RestoreToGuestDialog'
 import { isRestorableItemPath } from '@/lib/guestFileRestore/paths'
@@ -200,6 +203,11 @@ export default function BackupsPage() {
   const canDeleteSnapshot = !rbac.loading && rbac.hasPermission('backup.delete')
   const canVerifySnapshot = !rbac.loading && rbac.hasPermission('vm.backup')
   const canRestoreSnapshot = !rbac.loading && rbac.hasAllPermissions(['vm.backup', 'backup.restore'])
+  // Restore drills (roadmap#35): Enterprise, provider only, same rights as a restore.
+  const { hasFeature } = useLicense()
+  const canRunDrill = !isVdcTenant && canRestoreSnapshot && hasFeature(Features.BACKUP_RESTORE_DRILLS)
+  const [drillBackup, setDrillBackup] = useState(null)
+  const [drillRequest, setDrillRequest] = useState(null)
   const [jobCreateRequest, setJobCreateRequest] = useState(null)
   const [coverageRefresh, setCoverageRefresh] = useState(0)
   const requestJobCreate = useCallback(guest => {
@@ -836,7 +844,8 @@ return () => clearTimeout(timer)
       flex: 1,
       minWidth: 150,
       renderCell: params => (
-        <Box sx={{ display: 'flex', alignItems: 'center', height: '100%' }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, height: '100%' }}>
+          <BackupTypeIcon type={params.row?.backupType} />
           <Typography variant='body2' sx={{ opacity: params.value ? 1 : 0.4 }}>
             {params.value || '-'}
           </Typography>
@@ -967,7 +976,7 @@ return () => clearTimeout(timer)
     {
       field: 'actions',
       headerName: '',
-      width: 110,
+      width: canRunDrill ? 140 : 110,
       sortable: false,
       renderCell: params => (
         <Box sx={{ display: 'flex', alignItems: 'center', height: '100%', gap: 0.25 }}>
@@ -980,6 +989,20 @@ return () => clearTimeout(timer)
               <i className='ri-eye-line' style={{ fontSize: 16 }} />
             </IconButton>
           </Tooltip>
+          {canRunDrill && params.row.backupType === 'vm' && (
+            <Tooltip title={t('backups.restoreDrills.testRestore')}>
+              <IconButton
+                size='small'
+                aria-label={t('backups.restoreDrills.testRestore')}
+                onClick={(ev) => {
+                  ev.stopPropagation()
+                  setDrillBackup(params.row)
+                }}
+              >
+                <i className='ri-lifebuoy-line' style={{ fontSize: 16 }} />
+              </IconButton>
+            </Tooltip>
+          )}
           {params.row.backupType !== 'host' && (
             <Tooltip title={t('audit.actions.restore')}>
               <IconButton
@@ -997,7 +1020,7 @@ return () => clearTimeout(timer)
         </Box>
       )
     }
-  ], [t, locale, vdcByPair])
+  ], [t, locale, vdcByPair, canRunDrill])
 
   // KPI values
   const currentPbs = pbsConnections.find(p => p.id === selectedPbs)
@@ -1093,6 +1116,7 @@ return () => clearTimeout(timer)
           pbsConnections={pbsConnections}
           createRequest={jobCreateRequest}
           onJobsChanged={refreshCoverage}
+          drillRequest={drillRequest}
         />
       )}
 
@@ -1347,6 +1371,8 @@ return () => clearTimeout(timer)
         canDelete={canDeleteSnapshot}
         canVerify={canVerifySnapshot}
         canRestore={canRestoreSnapshot}
+        canTestRestore={canRunDrill}
+        onTestRestore={() => setDrillBackup(selectedBackup)}
         timeAgo={timeAgo}
         t={t}
         locale={locale}
@@ -1605,6 +1631,19 @@ return () => clearTimeout(timer)
           backupLabel={selectedBackup
             ? `${selectedBackup.backupType === 'ct' ? 'CT' : 'VM'} ${selectedBackup.backupId}${selectedBackup.backupTime ? ` · ${formatDateTime(selectedBackup.backupTime * 1000, locale)}` : ''}`
             : undefined}
+        />
+      )}
+
+      {drillBackup && selectedPbs && (
+        <RestoreDrillDialog
+          open
+          onClose={() => setDrillBackup(null)}
+          pbsId={selectedPbs}
+          backup={drillBackup}
+          onStarted={() => {
+            setDetailOpen(false)
+            setDrillRequest({ nonce: Date.now() })
+          }}
         />
       )}
 

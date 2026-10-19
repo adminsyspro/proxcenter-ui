@@ -1,3 +1,4 @@
+import type { Drill, DrillEvent, DrillRequest, DrillSettings, Preflight, Schedule, ScheduleInput, ScheduleRun } from '@/lib/backups/restoreDrills/types'
 import type { CleanupStarted, RecoveryExecutionEvent, ReplicationJob, ReplicationCheckRequest, ReplicationHealthStatus, SnapshotIdentity, SSHConnectivityResult } from './site-recovery.types'
 
 // src/lib/orchestrator/client.ts
@@ -81,6 +82,9 @@ export async function orchestratorFetch<T>(
 
       throw new Error(`Orchestrator ${res.status}: ${text}`)
     }
+
+    // No content (a DELETE answered 204): nothing to parse.
+    if (res.status === 204) return undefined as T
 
     return (await res.json()) as T
   } catch (error: any) {
@@ -762,6 +766,67 @@ return this.get<ClusterMetrics[]>(`/metrics/${connectionId}/history${query ? `?$
 
   getExecutionScreenshots(id: string) {
     return this.get<{ vm_id: number; target_vmid: number; captured_at: string }[]>(`/replication/executions/${id}/screenshots`)
+  }
+
+  // ============================================
+  // Restore drills (roadmap#35)
+  // ============================================
+
+  listRestoreDrills(limit = 20, offset = 0, scheduleId = '') {
+    const filter = scheduleId ? `&schedule_id=${encodeURIComponent(scheduleId)}` : ''
+    return this.get<{ data: Drill[]; total: number }>(`/restore-drills?limit=${limit}&offset=${offset}${filter}`)
+  }
+
+  preflightRestoreDrill(body: DrillRequest) {
+    return this.post<Preflight>('/restore-drills/preflight', body)
+  }
+
+  createRestoreDrill(body: DrillRequest) {
+    return this.post<{ drill: Drill }>('/restore-drills', body)
+  }
+
+  getRestoreDrill(id: string) {
+    return this.get<{ drill: Drill; events: DrillEvent[] }>(`/restore-drills/${encodeURIComponent(id)}`)
+  }
+
+  cancelRestoreDrill(id: string) {
+    return this.post<{ drill: Drill }>(`/restore-drills/${encodeURIComponent(id)}/cancel`)
+  }
+
+  cleanupRestoreDrill(id: string) {
+    return this.post<{ drill: Drill }>(`/restore-drills/${encodeURIComponent(id)}/cleanup`)
+  }
+
+  getRestoreDrillSettings() {
+    return this.get<DrillSettings>('/restore-drills/settings')
+  }
+
+  updateRestoreDrillSettings(body: DrillSettings) {
+    return this.put<DrillSettings>('/restore-drills/settings', body)
+  }
+
+  listRestoreDrillSchedules(limit = 20, offset = 0) {
+    return this.get<{ data: Schedule[]; total: number }>(`/restore-drills/schedules?limit=${limit}&offset=${offset}`)
+  }
+
+  createRestoreDrillSchedule(body: ScheduleInput) {
+    return this.post<{ schedule: Schedule }>('/restore-drills/schedules', body)
+  }
+
+  getRestoreDrillSchedule(id: string) {
+    return this.get<{ schedule: Schedule; runs: ScheduleRun[]; events: DrillEvent[] }>(`/restore-drills/schedules/${encodeURIComponent(id)}`)
+  }
+
+  updateRestoreDrillSchedule(id: string, body: ScheduleInput) {
+    return this.put<{ schedule: Schedule }>(`/restore-drills/schedules/${encodeURIComponent(id)}`, body)
+  }
+
+  deleteRestoreDrillSchedule(id: string) {
+    return this.delete<void>(`/restore-drills/schedules/${encodeURIComponent(id)}`)
+  }
+
+  runRestoreDrillSchedule(id: string) {
+    return this.post<{ run: ScheduleRun }>(`/restore-drills/schedules/${encodeURIComponent(id)}/run`)
   }
 }
 

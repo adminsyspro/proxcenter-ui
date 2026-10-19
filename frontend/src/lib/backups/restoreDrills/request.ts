@@ -6,9 +6,12 @@
 // a `pbs` storage of the target cluster pointing at this PBS server,
 // datastore and namespace, then `<storage>:backup/<type>/<id>/<time>`.
 
+import { normalizeNamespace } from '@/lib/backups/namespaceText'
 import { matchingPbsStorages, pbsHostOf } from '@/lib/guestFileRestore/pbsPveStorages'
 
 import { SETTINGS_RANGES, type DrillNetworkMode, type DrillRequest, type DrillSettings, type DrillVerifyState } from './types'
+
+export { normalizeNamespace }
 
 export const CT_NOT_SUPPORTED = 'guest type ct is not supported by restore drills yet'
 export const NO_MATCHING_STORAGE = 'No PVE storage of this cluster points to this PBS datastore and namespace'
@@ -127,7 +130,7 @@ export function parseDrillInput(body: unknown): ParseResult<DrillInput> {
     ok: true,
     value: {
       ...required,
-      namespace: typeof b.namespace === 'string' ? b.namespace.trim().replace(/^\/+|\/+$/g, '') : '',
+      namespace: normalizeNamespace(b.namespace),
       backupTime,
       vmName: str(b.vmName),
       verifyState: verifyState as DrillVerifyState,

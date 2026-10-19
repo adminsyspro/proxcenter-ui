@@ -5,7 +5,7 @@
 // orchestrator), its translation into the orchestrator's ScheduleInput once
 // the route resolved the PBS storage, and the form helpers of the modal.
 
-import { NETWORK_MODES, PVE_NAME_RE, type ParseResult } from './request'
+import { NETWORK_MODES, PVE_NAME_RE, normalizeNamespace, type ParseResult } from './request'
 import {
   SCHEDULE_LIMITS,
   SCHEDULE_RESTORE_POINTS,
@@ -15,6 +15,8 @@ import {
   type ScheduleRestorePoint,
   type ScheduleScopeMode,
 } from './types'
+
+export { normalizeNamespace }
 
 /** What the UI sends: everything but what the route resolves or stamps. */
 export interface ScheduleBody {
@@ -43,9 +45,6 @@ function obj(v: unknown): Record<string, unknown> {
   return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {}
 }
 
-export function normalizeNamespace(v: unknown): string {
-  return typeof v === 'string' ? v.trim().replace(/^\/+|\/+$/g, '') : ''
-}
 
 function parseVmids(raw: unknown): ParseResult<number[]> {
   if (raw === undefined || raw === null) return { ok: true, value: [] }

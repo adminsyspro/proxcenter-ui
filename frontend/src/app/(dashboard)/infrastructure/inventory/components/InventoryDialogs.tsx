@@ -50,7 +50,11 @@ import { isZeroRateLimitValid, describeZeroRateLimit } from '@/lib/migration/war
 import ZeroRateSlider from '@/components/migration/ZeroRateSlider'
 import { estimateIntegritySecondsPerDisk, integritySettingsFromConnection } from '@/lib/migration/integrity-settings'
 import { MIGRATION_CPU_TYPES, MIGRATION_CPU_TYPE_DEFAULT, type MigrationCpuType } from '@/lib/migration/cpu-type'
+import { EL10_CPU_TYPE, cpuModelLevel, cpuTooLowForEl10 } from '@/lib/migration/cpu-level'
+import { diskControllerLabel } from '@/lib/proxmox/diskController'
+import MigrationLogLines from './MigrationLogLines'
 import MigrationReviewStep from './MigrationReviewStep'
+import type { GuestConversionReadiness } from '@/lib/migration/warm/guest-conversion-node'
 import { initialHardwareState, initialNicState, initialDiskState, reviewIsValid, buildHardwarePayload, buildNicsPayload, buildDisksPayload, keptReviewDisks, reviewDiskStorages, tempStorageTypeFor, warmSpaceNeeds, type ReviewSource, type ReviewSourceDisk, type ReviewHardwareState, type ReviewNicState, type ReviewDiskState } from './migrationReview'
 import { usedVmidsOnConnection, nextVmidOnConnection } from '@/components/hardware/utils'
 import { tooltipSlotProps } from '@/components/settings/ha/tooltipSlotProps'
@@ -328,6 +332,10 @@ export interface InventoryDialogsProps {
   migConvertToQcow2: boolean
   migManualCutover: boolean
   setMigManualCutover: (v: boolean) => void
+  migConvertGuest: boolean
+  setMigConvertGuest: (v: boolean) => void
+  migEfiPreEnrolledKeys: boolean
+  setMigEfiPreEnrolledKeys: (v: boolean) => void
   migDowntimeBudget: string
   setMigDowntimeBudget: (v: string) => void
   migZeroRateLimit: string
@@ -580,6 +588,7 @@ export default function InventoryDialogs(props: InventoryDialogsProps) {
     migCpuType, setMigCpuType,
     migStep, setMigStep, migHardware, setMigHardware, migNics, setMigNics,
     migManualCutover, setMigManualCutover,
+    migConvertGuest, setMigConvertGuest, migEfiPreEnrolledKeys, setMigEfiPreEnrolledKeys,
     migDowntimeBudget, setMigDowntimeBudget,
     migZeroRateLimit, setMigZeroRateLimit,
     migBulkConcurrency, setMigBulkConcurrency,
@@ -853,6 +862,9 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
             ? detail.nics.map((n: any) => ({ label: String(n?.label || ''), type: String(n?.type || ''), macAddress: String(n?.macAddress || ''), network: String(n?.network || '') }))
             : [],
           hasVtpm: detail.hasVtpm === true,
+          firmware: typeof detail.firmware === 'string' ? detail.firmware : undefined,
+          el10: detail.el10 === true,
+          guestOS: typeof detail.guestOS === 'string' ? detail.guestOS : undefined,
         } : null)
       })
       .catch(() => { if (!cancelled) { setSourceDatastores([]); setSourceVmDetail(null) } })
@@ -981,7 +993,7 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
   type WarmSource = { sourceVersion: string; vddkMajor?: number; minVersion: string; absoluteMin: string; blocked: boolean; warning: boolean }
   // roadmap#53: can the node reach the VMkernel adapter the copy goes through?
   type WarmCopyReach = { address: string; ports: Record<string, boolean>; ok: boolean; error?: string }
-  const [warmPreflight, setWarmPreflight] = useState<{ key: string; loading: boolean; ok: boolean; missing: string[]; kind: 'nbd' | 'vddk'; error?: string; tokenConfigured?: boolean; osUnsupported?: boolean; debianMajor?: number; space?: WarmSpace; source?: WarmSource; copy?: WarmCopyReach } | null>(null)
+  const [warmPreflight, setWarmPreflight] = useState<{ key: string; loading: boolean; ok: boolean; missing: string[]; kind: 'nbd' | 'vddk'; error?: string; tokenConfigured?: boolean; osUnsupported?: boolean; debianMajor?: number; space?: WarmSpace; source?: WarmSource; copy?: WarmCopyReach; guestConversion?: GuestConversionReadiness } | null>(null)
   // Bumped after a successful automated node setup so this effect re-runs and
   // the go/no-go flips to ready without the user having to reselect the node.
   const [warmPreflightRefresh, setWarmPreflightRefresh] = useState(0)
@@ -1014,11 +1026,11 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
       body: JSON.stringify({ targetConnectionId: migTargetConn, targetNode: migTargetNode, action: 'warm-check', sourceConnectionId: esxiMigrateVm?.connId, targetStorage: migTargetStorage || undefined, requiredDiskBytes: esxiMigrateVm?.committed || 0, ...(copyVnic?.address && { sourceVmId: esxiMigrateVm?.vmid, copyVmk: copyVnic.device }) }),
     })
       .then(r => r.json())
-      .then((d: { ok?: boolean; missing?: string[]; kind?: string; error?: string; vddkTokenConfigured?: boolean; osUnsupported?: boolean; debianMajor?: number; space?: WarmSpace; source?: WarmSource; copy?: WarmCopyReach }) => {
+      .then((d: { ok?: boolean; missing?: string[]; kind?: string; error?: string; vddkTokenConfigured?: boolean; osUnsupported?: boolean; debianMajor?: number; space?: WarmSpace; source?: WarmSource; copy?: WarmCopyReach; guestConversion?: GuestConversionReadiness }) => {
         // vddkTokenConfigured: server-side boolean saying an Enterprise VDDK
         // package token exists, i.e. the automated "Prepare this node" action
         // can work. The token itself never reaches the client.
-        if (!cancelled) setWarmPreflight({ key, loading: false, ok: !!d.ok, missing: d.missing || [], kind: d.kind === 'nbd' ? 'nbd' : 'vddk', error: d.error, tokenConfigured: !!d.vddkTokenConfigured, osUnsupported: !!d.osUnsupported, debianMajor: d.debianMajor, space: d.space, source: d.source, copy: d.copy })
+        if (!cancelled) setWarmPreflight({ key, loading: false, ok: !!d.ok, missing: d.missing || [], kind: d.kind === 'nbd' ? 'nbd' : 'vddk', error: d.error, tokenConfigured: !!d.vddkTokenConfigured, osUnsupported: !!d.osUnsupported, debianMajor: d.debianMajor, space: d.space, source: d.source, copy: d.copy, guestConversion: d.guestConversion })
       })
       .catch(() => { if (!cancelled) setWarmPreflight({ key, loading: false, ok: false, missing: [], kind: expectedKind }) })
     return () => { cancelled = true }
@@ -1076,6 +1088,65 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
   const reviewSpaceCurrent = reviewSpace && reviewSpace.key === reviewSpaceKey ? reviewSpace : null
   const reviewSpacePending = !!reviewSpaceKey && (!reviewSpaceCurrent || reviewSpaceCurrent.loading)
   const reviewSpaceShort = reviewSpaceCurrent && !reviewSpaceCurrent.loading ? reviewSpaceCurrent.spaces.filter(s => !s.sufficient) : []
+
+  // Guest conversion at cutover (#1000): what the node still lacks for this
+  // guest, from the warm check. Advisory: the cutover then keeps the
+  // compatible hardware, so the launch is never blocked on it.
+  const conversionMissing = (() => {
+    const gc = warmPreflightCurrent?.guestConversion
+    if (!gc || warmPreflightCurrent?.loading || !migConvertGuest || migType !== 'warm' || !isVmwareSource) return []
+    return /windows/i.test(sourceVmDetail?.guestOS || esxiMigrateVm?.guestOS || '') ? gc.windows : gc.linux
+  })()
+  const [convPrep, setConvPrep] = useState<{ key: string; running: boolean; error?: string } | null>(null)
+  const convPrepCurrent = convPrep && convPrep.key === `${migTargetConn}::${migTargetNode}` ? convPrep : null
+  // The packages (virt-v2v-in-place, rhsrvany) come from the existing install
+  // action, the Windows drivers from the background virtio-win download, the
+  // same two steps the cold virt-v2v checklist offers. Then the check re-runs.
+  const prepareConversionNode = React.useCallback(async (missing: string[]) => {
+    const key = `${migTargetConn}::${migTargetNode}`
+    const post = (action: string) => fetch('/api/v1/migrations/preflight', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ targetConnectionId: migTargetConn, targetNode: migTargetNode, action }),
+    }).then(r => r.json().catch(() => ({})))
+    setConvPrep({ key, running: true })
+    try {
+      if (missing.some(m => !m.startsWith('the VirtIO drivers'))) {
+        const d = await post('install')
+        if (d?.success === false) throw new Error(String(d.error || d.output || 'install failed').slice(-400))
+      }
+      if (missing.some(m => m.startsWith('the VirtIO drivers'))) {
+        await post('install-virtio-win')
+        for (let i = 0; i < 600; i++) {
+          await new Promise(r => setTimeout(r, 2000))
+          const p = await post('check-virtio-win')
+          if (p?.done) { if (p.error) throw new Error(String(p.error)); break }
+        }
+      }
+      setConvPrep(null)
+      setWarmPreflightRefresh(n => n + 1)
+    } catch (e) {
+      setConvPrep({ key, running: false, error: e instanceof Error ? e.message : String(e) })
+    }
+  }, [migTargetConn, migTargetNode])
+  const renderConvertGuestReadiness = () => conversionMissing.length > 0 && (
+    <Alert
+      severity="warning"
+      sx={{ fontSize: 12 }}
+      icon={<i className="ri-tools-line" style={{ fontSize: 18 }} />}
+      data-testid="mig-convert-guest-missing"
+      action={(
+        <Button size="small" color="inherit" disabled={!!convPrepCurrent?.running} onClick={() => { void prepareConversionNode(conversionMissing) }}
+          startIcon={convPrepCurrent?.running ? <CircularProgress size={12} /> : undefined}>
+          {convPrepCurrent?.running ? t('inventoryPage.esxiMigration.convertGuestInstalling') : t('inventoryPage.esxiMigration.convertGuestInstall')}
+        </Button>
+      )}
+    >
+      {t('inventoryPage.esxiMigration.convertGuestMissing', { node: migTargetNode, items: conversionMissing.join(', ') })}
+      {convPrepCurrent?.error && (
+        <Typography variant="caption" sx={{ display: 'block', mt: 0.5 }}>{t('inventoryPage.esxiMigration.convertGuestInstallFailed', { error: convPrepCurrent.error })}</Typography>
+      )}
+    </Alert>
+  )
 
   // Automated warm-node provisioning (Enterprise VDDK package). Offered inside
   // the not-ready alert only when the server reported a configured package
@@ -1226,6 +1297,70 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
     />
   )
 
+  // EL10 guests and the x86-64 level of the target cluster (#1000). An EL10
+  // guest (RHEL 10 family) is built for x86-64-v3: the dialogs preselect it,
+  // and say so when a lower model is picked; a node of the target cluster
+  // below the chosen level can neither start the VM nor take it in a
+  // migration. Both are warnings: the operator decides.
+  const [clusterCpuLevels, setClusterCpuLevels] = useState<{ conn: string; nodes: { node: string; level: number | null }[] } | null>(null)
+  React.useEffect(() => {
+    if (!migTargetConn || (!esxiMigrateVm && !bulkMigOpen)) return
+    if (clusterCpuLevels?.conn === migTargetConn) return
+    let cancelled = false
+    fetch('/api/v1/migrations/preflight', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'cpu-levels', targetConnectionId: migTargetConn, targetNode: migTargetNode || '__auto__' }),
+    })
+      .then(r => r.json())
+      .then(d => { if (!cancelled) setClusterCpuLevels({ conn: migTargetConn, nodes: Array.isArray(d?.nodes) ? d.nodes : [] }) })
+      .catch(() => {})
+    return () => { cancelled = true }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- the levels belong to the connection only
+  }, [migTargetConn, !!esxiMigrateVm, bulkMigOpen])
+  const bulkEl10Names: string[] = bulkMigOpen
+    ? (bulkMigHostInfo?.vms || []).filter((vm: any) => bulkMigSelected.has(vm.vmid) && vm.el10 === true).map((vm: any) => String(vm.name))
+    : []
+  const singleEl10Names: string[] = sourceVmDetail?.el10 ? [esxiMigrateVm?.name || ''] : []
+  // Preselect x86-64-v3 once per source read (single VM) or per opening (batch);
+  // a later pick by the operator is never overridden.
+  React.useEffect(() => { if (sourceVmDetail?.el10) setMigCpuType(EL10_CPU_TYPE) }, [sourceVmDetail, setMigCpuType])
+  // The parent resets the options when the batch dialog opens, after this
+  // component's effects ran: the preselection waits for that reset to land.
+  const [bulkEl10Pending, setBulkEl10Pending] = useState(false)
+  React.useEffect(() => { setBulkEl10Pending(bulkMigOpen) }, [bulkMigOpen])
+  React.useEffect(() => {
+    if (!bulkEl10Pending || migCpuType !== MIGRATION_CPU_TYPE_DEFAULT) return
+    setBulkEl10Pending(false)
+    if (bulkEl10Names.length > 0) setMigCpuType(EL10_CPU_TYPE)
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- bulkEl10Names is read at that moment only
+  }, [bulkEl10Pending, migCpuType])
+  const renderCpuLevelNotes = (el10Names: string[]) => {
+    const level = cpuModelLevel(migCpuType)
+    const slowNodes = clusterCpuLevels?.conn === migTargetConn && level !== null
+      ? clusterCpuLevels.nodes.filter(n => n.level !== null && n.level < level).map(n => n.node)
+      : []
+    const names = el10Names.filter(Boolean).join(', ')
+    return (
+      <>
+        {el10Names.length > 0 && cpuTooLowForEl10(migCpuType) && (
+          <Alert severity="warning" sx={{ fontSize: 12 }} data-testid="mig-cpu-el10-too-low">
+            {t('inventoryPage.esxiMigration.cpuEl10TooLow', { model: migCpuType, names, target: EL10_CPU_TYPE })}
+          </Alert>
+        )}
+        {el10Names.length > 0 && migCpuType === EL10_CPU_TYPE && (
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', px: 0.5 }} data-testid="mig-cpu-el10-preselected">
+            {t('inventoryPage.esxiMigration.cpuEl10Preselected', { names, target: EL10_CPU_TYPE })}
+          </Typography>
+        )}
+        {slowNodes.length > 0 && (
+          <Alert severity="warning" sx={{ fontSize: 12 }} data-testid="mig-cpu-nodes-too-old">
+            {t('inventoryPage.esxiMigration.cpuNodesTooOld', { model: migCpuType, nodes: slowNodes.join(', ') })}
+          </Alert>
+        )}
+      </>
+    )
+  }
+
   // CPU type of the created VM (roadmap#24), shared by both dialogs like the
   // qcow2 switch. The Proxmox default keeps the VM movable between nodes with
   // different CPUs; `host` stays offered, with its coupling spelled out.
@@ -1252,6 +1387,12 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
       {migCpuType === 'host' && <FormHelperText>{t('inventoryPage.esxiMigration.cpuTypeHostHint')}</FormHelperText>}
     </FormControl>
   )
+  const renderCpuTypeBlock = (el10Names: string[]) => (
+    <Stack spacing={1}>
+      {renderCpuTypeSelect()}
+      {renderCpuLevelNotes(el10Names)}
+    </Stack>
+  )
 
   // Single-VM dialog only. A batch held for the operator would need one cutover
   // click per VM and would keep as many VDDK sessions open as VMs, so the hold
@@ -1267,6 +1408,23 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
           <Typography variant="body2">{t('inventoryPage.esxiMigration.automaticCutover')}</Typography>
           <MuiTooltip title={t('inventoryPage.esxiMigration.automaticCutoverTooltip')} arrow placement="top" slotProps={tooltipSlotProps}>
+            <i className="ri-question-line" style={{ fontSize: 14, opacity: 0.6 }} />
+          </MuiTooltip>
+        </Box>
+      }
+    />
+  )
+
+  // Guest conversion at cutover (#1000), warm from VMware only (ESXi or
+  // vCenter, single VM or batch). The default the "Cutover now" dialog opens
+  // with, and what an automatic cutover applies.
+  const renderConvertGuestSwitch = (hostType: string | undefined) => migType === 'warm' && (hostType === 'vmware' || hostType === 'vcenter') && (
+    <FormControlLabel
+      control={<Switch size="small" checked={migConvertGuest} onChange={(_, v) => setMigConvertGuest(v)} data-testid="mig-convert-guest" />}
+      label={
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+          <Typography variant="body2">{t('inventoryPage.esxiMigration.convertGuest')}</Typography>
+          <MuiTooltip title={t('inventoryPage.esxiMigration.convertGuestTooltip')} arrow placement="top" slotProps={tooltipSlotProps}>
             <i className="ri-question-line" style={{ fontSize: 14, opacity: 0.6 }} />
           </MuiTooltip>
         </Box>
@@ -1717,8 +1875,12 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [migStep, sourceVmDetail])
   const launchMigration = async () => {
-    const reviewHardware = buildHardwarePayload(migHardware, sourceVmDetail)
-    const reviewDisks = buildDisksPayload(migDisks)
+    // Secure Boot keys of a UEFI target (#1000): only the departure from the default travels.
+    const keysOff = sourceVmDetail?.firmware === 'efi' && !migEfiPreEnrolledKeys
+    const builtHardware = buildHardwarePayload(migHardware, sourceVmDetail)
+    const reviewHardware = keysOff ? { ...builtHardware, efiPreEnrolledKeys: false } : builtHardware
+    // The Bus column only exists for a warm run from VMware, the engine that applies it.
+    const reviewDisks = buildDisksPayload(migDisks, { withBus: migType === 'warm' && isVmwareSource })
     const reviewNics = buildNicsPayload(migNics, canEditVlan)
     if (!esxiMigrateVm) return
     setMigStarting(true)
@@ -1764,6 +1926,8 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
           // everywhere else, so the payload is gated on the type too
           // rather than trusting the UI state.
           ...(migType === 'warm' && migManualCutover && { cutoverMode: 'manual' as const }),
+          // Guest conversion default (#1000), warm VMware only like the switch.
+          ...(migType === 'warm' && isVmwareSource && { convertGuest: migConvertGuest }),
           ...(migType === 'warm' && !migManualCutover && migDowntimeBudget.trim() !== '' && {
             downtimeBudgetSec: Number(migDowntimeBudget.trim()),
           }),
@@ -2230,6 +2394,7 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
               canDeleteSnapshots={canSnapshot}
               disk={selectedDisk}
               existingDisks={data?.disksInfo?.map((d: any) => d.id) || []}
+              controller={selectedDisk ? diskControllerLabel(selectedDisk.id, data?.optionsInfo?.scsihw || data?.systemInfo?.scsihw)?.label : undefined}
               initialTab={editDiskInitialTab}
             />
 
@@ -3979,7 +4144,7 @@ return
                   )}
 
                   {/* VMware sources pick the CPU model in the review step (#317), next to the node's own list. */}
-                  {!isVmwareSource && renderCpuTypeSelect()}
+                  {!isVmwareSource && renderCpuTypeBlock([])}
 
                   <FormControlLabel
                     control={<Switch size="small" checked={migStartAfter} onChange={(_, v) => setMigStartAfter(v)} />}
@@ -3988,6 +4153,8 @@ return
 
                   {/* Post-migration qcow2 conversion (#595) — thick LVM targets only */}
                   {renderAutomaticCutoverSwitch()}
+                  {renderConvertGuestSwitch(esxiMigrateVm?.hostType)}
+                  {renderConvertGuestReadiness()}
                   {renderDowntimeBudgetField()}
                   {renderZeroRateLimitField()}
                   {renderCopyVmkSelect()}
@@ -4098,6 +4265,9 @@ return
               )}
               nics={migNics}
               onNicsChange={setMigNics}
+              busChoice={migType === 'warm' ? { convertGuest: migConvertGuest } : undefined}
+              cpuNotes={renderCpuLevelNotes(singleEl10Names)}
+              efiKeys={sourceVmDetail?.firmware === 'efi' ? { value: migEfiPreEnrolledKeys, onChange: setMigEfiPreEnrolledKeys } : undefined}
             />
           )}
 
@@ -4235,15 +4405,7 @@ return
                 <Box sx={{ position: 'relative' }}>
                 <CopyLogsButton sx={{ position: 'absolute', top: 4, right: 12, zIndex: 1 }} getText={() => migrationLogText(migJob.logs)} />
                 <Box sx={{ p: 1.5, pr: 6, bgcolor: theme.palette.mode === 'dark' ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.03)', fontFamily: '"JetBrains Mono", monospace', fontSize: 11, maxHeight: 250, overflow: 'auto', borderRadius: 1.5, lineHeight: 1.8 }}>
-                  {migJob.logs.map((log: any, i: number) => (
-                    <Box key={i}>
-                      <Box component="span" sx={{ color: 'text.secondary' }}>[{new Date(log.ts).toLocaleTimeString()}]</Box>{' '}
-                      {log.level === 'success' && <Box component="span" sx={{ color: 'success.main' }}>✓ </Box>}
-                      {log.level === 'error' && <Box component="span" sx={{ color: 'error.main' }}>✗ </Box>}
-                      {log.level === 'warn' && <Box component="span" sx={{ color: 'warning.main' }}>⚠ </Box>}
-                      {log.msg}
-                    </Box>
-                  ))}
+                  <MigrationLogLines logs={migJob.logs} />
                 </Box>
                 </Box>
               )}
@@ -5117,12 +5279,13 @@ return
                 )}
 
                 {renderBulkConcurrencyField()}
+                {renderConvertGuestSwitch(bulkMigHostInfo?.hostType)}
                 {renderNfcConcurrencyField(bulkMigHostInfo?.hostType === 'vcenter')}
                 {renderZeroRateLimitField()}
                 {renderCopyVmkSelect()}
                 {renderIntegrityNote(bulkMigHostInfo?.hostType)}
 
-                {renderCpuTypeSelect()}
+                {renderCpuTypeBlock(bulkEl10Names)}
 
                 <FormControlLabel
                   control={<Switch size="small" checked={migStartAfter} onChange={(_, v) => setMigStartAfter(v)} />}
@@ -5482,24 +5645,11 @@ return
                       {/* Log entries */}
                       {/* Grows down to the dialog's bottom edge, like the right-hand panels. */}
                       <Box sx={{ flex: 1, minHeight: 250, maxHeight: '55vh', overflowY: 'auto', bgcolor: theme.palette.mode === 'dark' ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.03)', borderRadius: 1, p: 1 }}>
-                        {allLogs.length > 0 ? allLogs.map((log, i) => (
-                          <Box key={i} sx={{ display: 'flex', gap: 0.75, py: 0.25, fontFamily: 'JetBrains Mono, monospace', fontSize: 11, lineHeight: 1.5 }}>
-                            <Typography component="span" sx={{ fontSize: 10, opacity: 0.4, whiteSpace: 'nowrap', fontFamily: 'inherit' }}>
-                              {new Date(log.ts).toLocaleTimeString()}
-                            </Typography>
-                            <Typography component="span" sx={{ fontSize: 11, fontFamily: 'inherit', color: log.level === 'error' ? 'error.main' : log.level === 'warn' ? 'warning.main' : log.level === 'success' ? 'success.main' : 'text.secondary' }}>
-                              {log.level === 'success' ? '✓' : log.level === 'error' ? '✗' : log.level === 'warn' ? '⚠' : '·'}
-                            </Typography>
-                            {!bulkMigLogsFilter && bulkMigJobs.length > 1 && (
-                              <Typography component="span" sx={{ fontSize: 10, fontFamily: 'inherit', fontWeight: 700, opacity: 0.5, whiteSpace: 'nowrap' }}>
-                                [{log.vmName}]
-                              </Typography>
-                            )}
-                            <Typography component="span" sx={{ fontSize: 11, fontFamily: 'inherit', color: log.level === 'error' ? 'error.main' : 'text.primary' }}>
-                              {log.msg}
-                            </Typography>
+                        {allLogs.length > 0 ? (
+                          <Box sx={{ fontFamily: '"JetBrains Mono", monospace', fontSize: 11, lineHeight: 1.6 }}>
+                            <MigrationLogLines logs={allLogs} showVm={!bulkMigLogsFilter && bulkMigJobs.length > 1} />
                           </Box>
-                        )) : (
+                        ) : (
                           <Typography variant="caption" sx={{ opacity: 0.4 }}>
                             {t('inventoryPage.esxiMigration.logsWillAppear')}
                           </Typography>
@@ -5638,6 +5788,8 @@ return
                         ...(migV2vRoot.trim() && { v2vRoot: migV2vRoot.trim() }),
                         // Parallel NFC downloads (#807).
                         ...(isVcenterBulk && migType !== 'warm' && { nfcConcurrency: migNfcConcurrency }),
+                        // Guest conversion at each VM's automatic cutover (#1000), VMware sources only.
+                        ...(migType === 'warm' && (bulkMigHostInfo.hostType === 'vmware' || isVcenterBulk) && { convertGuest: migConvertGuest }),
                         // Thick zeroing cap of a warm batch (roadmap#45).
                         ...(showZeroRateLimit && migZeroRateLimit.trim() !== '' && { zeroRateLimitMBps: Number(migZeroRateLimit.trim()) }),
                         // VMkernel adapter of the copy (roadmap#53), ESXi-direct batches only.

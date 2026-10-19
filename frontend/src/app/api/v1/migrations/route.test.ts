@@ -711,3 +711,45 @@ describe("POST /api/v1/migrations: review-step overrides (#317)", () => {
     expect(h.prisma.migrationJob.create).not.toHaveBeenCalled()
   })
 })
+
+describe("POST /api/v1/migrations — guest conversion at cutover (#1000)", () => {
+  const esxi = () => h.prisma.connection.findUnique
+    .mockResolvedValueOnce({ id: "src", type: "vmware", subType: null, name: "esxi", baseUrl: "https://esxi" })
+    .mockResolvedValueOnce({ id: "tgt", type: "pve", name: "pve" })
+
+  it("persists the conversion as on when a VMware warm caller omits it, and forwards it", async () => {
+    esxi()
+    expect((await callRoute(POST, { body })).status).toBe(200)
+    expect(createdJobData().config).toMatchObject({ convertGuest: true })
+    await runAfters()
+    expect(warm.mock.calls[0][1]).toMatchObject({ convertGuest: true })
+  })
+
+  it("keeps an explicit off, and a forced bus per disk", async () => {
+    esxi()
+    const res = await callRoute(POST, { body: { ...body, convertGuest: false, disks: [{ index: 0, bus: "scsi" }] } })
+    expect(res.status).toBe(200)
+    expect(createdJobData().config).toMatchObject({ convertGuest: false, disks: [{ index: 0, bus: "scsi" }] })
+  })
+
+  it("refuses a non-boolean value", async () => {
+    esxi()
+    const res = await callRoute(POST, { body: { ...body, convertGuest: "yes" } })
+    expect(res.status).toBe(400)
+    expect((await readJson<any>(res))?.error).toBe("convertGuest must be a boolean")
+  })
+
+  it("refuses the conversion and the bus outside a VMware warm migration, and stores nothing for them", async () => {
+    esxi()
+    const cold = await callRoute(POST, { body: { ...body, migrationType: "cold", convertGuest: true } })
+    expect((await readJson<any>(cold))?.error).toBe("convertGuest is only available for warm migrations from VMware")
+    esxi()
+    const bus = await callRoute(POST, { body: { ...body, migrationType: "cold", disks: [{ index: 0, bus: "sata" }] } })
+    expect((await readJson<any>(bus))?.error).toBe("disks[].bus is only available for warm migrations from VMware")
+    h.prisma.connection.findUnique
+      .mockResolvedValueOnce({ id: "src", type: "xcpng", subType: "xapi", name: "pool", baseUrl: "https://xcpng" })
+      .mockResolvedValueOnce({ id: "tgt", type: "pve", name: "pve" })
+    expect((await callRoute(POST, { body })).status).toBe(200)
+    expect(createdJobData().config).not.toHaveProperty("convertGuest")
+  })
+})

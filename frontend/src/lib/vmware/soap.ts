@@ -1168,6 +1168,61 @@ export interface VmwareHostInventoryPath {
 }
 
 /**
+ * What the guest itself told vSphere (#1000, EL10 detection), per VM: the
+ * Tools-reported guest id and name, and the detailed data carrying the
+ * distribution and its version ("distroName='AlmaLinux' distroVersion='10.1'").
+ * The live `guest.guestDetailedData` is cleared when the guest shuts itself
+ * down (seen on the lab), while ESXi keeps the same string in the VMX as
+ * `guestInfo.detailed.data`, so `config.extraConfig` is read too and wins when
+ * the live one is empty. `guest.guestDetailedData` only exists from vSphere
+ * 8.0 U2: an older server refuses the whole request with InvalidProperty, so
+ * the read is retried without it, and any failure returns what is known so
+ * far. Never throws, it only refines a default.
+ */
+export async function soapGetGuestIdentities(
+  session: SoapSession,
+  moIds: string[],
+): Promise<Map<string, { guestId: string; guestOS: string; detailedData: string }>> {
+  const out = new Map<string, { guestId: string; guestOS: string; detailedData: string }>()
+  const ids = [...new Set(moIds.filter(id => /^[A-Za-z0-9_-]+$/.test(id)))]
+  if (ids.length === 0) return out
+  const body = (paths: string[]) => `<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:urn="urn:vim25">
+  <soapenv:Body>
+    <urn:RetrievePropertiesEx>
+      <urn:_this type="PropertyCollector">${session.propertyCollector}</urn:_this>
+      <urn:specSet>
+        <urn:propSet>
+          <urn:type>VirtualMachine</urn:type>
+${paths.map(p => `          <urn:pathSet>${p}</urn:pathSet>`).join("\n")}
+        </urn:propSet>
+${ids.map(id => `        <urn:objectSet><urn:obj type="VirtualMachine">${id}</urn:obj><urn:skip>false</urn:skip></urn:objectSet>`).join("\n")}
+      </urn:specSet>
+      <urn:options/>
+    </urn:RetrievePropertiesEx>
+  </soapenv:Body>
+</soapenv:Envelope>`
+  const sendReq = (b: string) => soapRequest(session.baseUrl, b, session.cookie, session.insecureTLS)
+  let text = ""
+  for (const paths of [["guest.guestId", "guest.guestFullName", "config.extraConfig", "guest.guestDetailedData"], ["guest.guestId", "guest.guestFullName", "config.extraConfig"]]) {
+    try {
+      text = await retrieveAllPropertiesEx(sendReq, body(paths), session.propertyCollector)
+      break
+    } catch { /* InvalidProperty on vSphere < 8.0 U2: retry without the detailed data */ }
+  }
+  const unescape = (v: string) => v.replaceAll("&apos;", "'").replaceAll("&quot;", '"').replaceAll("&lt;", "<").replaceAll("&gt;", ">").replaceAll("&amp;", "&")
+  for (const m of text.matchAll(/<objects>([\s\S]*?)<\/objects>/g)) {
+    const block = m[1]
+    const moId = /<obj type="VirtualMachine">([^<]+)<\/obj>/.exec(block)?.[1]
+    if (!moId) continue
+    const prop = (name: string) => unescape(new RegExp(`<name>${name.replaceAll(".", "\\.")}</name>\\s*<val[^>]*>([\\s\\S]*?)</val>`).exec(block)?.[1] ?? "")
+    const fromVmx = /<key>guestInfo\.detailed\.data<\/key>\s*<value[^>]*>([^<]*)<\/value>/.exec(block)?.[1] ?? ""
+    out.set(moId, { guestId: prop("guest.guestId"), guestOS: prop("guest.guestFullName"), detailedData: prop("guest.guestDetailedData") || unescape(fromVmx) })
+  }
+  return out
+}
+
+/**
  * List all VMs using CreateContainerView + RetrievePropertiesEx.
  * Works on both ESXi (rootFolder = ha-folder-root) and vCenter (rootFolder = group-d1).
  * Optionally accepts a rootFolder override for datacenter-specific queries on vCenter.

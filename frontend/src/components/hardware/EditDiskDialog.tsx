@@ -101,11 +101,13 @@ type EditDiskDialogProps = {
     rawValue?: string
   } | null
   existingDisks?: string[]
+  /** Controller the disk sits on ("VirtIO SCSI single", "SATA"…), shown next to its size (#1000). */
+  controller?: string
   availableStorages?: Array<{ storage: string; type: string; avail?: number; total?: number; used?: number; formats?: string[]; defaultFormat?: string; policy?: StoragePolicyCaps }>
   initialTab?: number
 }
 
-export function EditDiskDialog({ open, onClose, onSave, onDelete, canEditHardware, canChangeMedia, onResize, onMoveStorage, connId, node, guestType, vmid, canDeleteSnapshots = false, disk, existingDisks, availableStorages, initialTab }: Readonly<EditDiskDialogProps>) {
+export function EditDiskDialog({ open, onClose, onSave, onDelete, canEditHardware, canChangeMedia, onResize, onMoveStorage, connId, node, guestType, vmid, canDeleteSnapshots = false, disk, existingDisks, controller, availableStorages, initialTab }: Readonly<EditDiskDialogProps>) {
   const t = useTranslations()
   const [tab, setTab] = useState(initialTab ?? 0)
 
@@ -759,7 +761,7 @@ return
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <span>{t('common.edit')}: {disk.id}</span>
           <Typography variant="caption" sx={{ opacity: 0.7 }}>
-            {disk.size} • {disk.storage}
+            {disk.size} • {disk.storage}{controller ? ` • ${controller}` : ''}
           </Typography>
         </Box>
       </AppDialogTitle>
@@ -776,6 +778,15 @@ return
 
         {tab === 0 && (
           <Stack spacing={2} sx={{ mt: 1 }}>
+            {/* Controller of the disk (#1000), read only: moving a disk to
+                another bus means detaching and attaching it again. */}
+            {controller && (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, pb: 1.5 }} data-testid="edit-disk-controller">
+                <i className="ri-hard-drive-3-line" style={{ fontSize: 16, opacity: 0.7 }} />
+                <Typography variant="body2" color="text.secondary">{t('inventory.diskController')}</Typography>
+                <Typography variant="body2" fontWeight={600}>{controller} ({disk.id})</Typography>
+              </Box>
+            )}
             {/* Cache & Async IO */}
             <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
               <FormControl fullWidth size="small">

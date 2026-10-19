@@ -2201,7 +2201,9 @@
     "nodeActionDrainPartialDesc": "노드가 비워지지 않았습니다. {action}을(를) 강제하면 Proxmox VE가 해당 게스트를 중지합니다. 또는 취소하고 직접 이동하세요. 드레인은 Task Center에 표시됩니다.",
     "nodeActionForceOption": "그래도 {action} 강제 실행, 이 게스트들은 중지됩니다",
     "nodeActionDrainDesc": "공유 스토리지의 게스트는 오케스트레이터가 배치 엔진이 선택한 노드로 각각 비웁니다. Task Center에서 확인하세요.",
-    "nodeActionDrainFailed": "드레인을 시작할 수 없습니다: {error}"
+    "nodeActionDrainFailed": "드레인을 시작할 수 없습니다: {error}",
+    "diskControllerTooltip": "디스크가 연결된 컨트롤러",
+    "diskController": "컨트롤러"
   },
   "inventoryPage": {
     "newTag": "새 태그...",
@@ -2542,7 +2544,38 @@
       "loadProjectionUnknown": "이 노드는 부하를 보고하지 않습니다",
       "loadProjectionMemAlert": "{node}: 이 일괄 작업 후 메모리가 {pct}%에 도달합니다 ({used}/{total} GB).",
       "andMoreVms": "외 {count}개",
-      "logsOfVm": "로그 대상"
+      "logsOfVm": "로그 대상",
+      "convertGuest": "컷오버 시 게스트 변환",
+      "convertGuestTooltip": "소스가 꺼진 상태에서 virt-v2v-in-place가 복사된 게스트에 VirtIO 드라이버를 설치하고(Linux는 initramfs, Windows는 드라이버 저장소) VMware Tools를 제거하여, VM이 VirtIO NIC와 함께 VirtIO SCSI로 부팅됩니다. 컷오버에 약 1분이 추가됩니다. \"Cutover now\" 대화 상자에서 다시 변경할 수 있으며, 자동 컷오버는 이 값을 적용합니다. 변환이 실패하면 복사된 디스크는 그대로 유지되고 VM은 이전처럼 SATA/e1000으로 부팅됩니다.",
+      "cutoverConvertGuest": "게스트 변환",
+      "cutoverConvertGuestOn": "소스가 꺼진 상태에서 VirtIO 드라이버를 설치한 뒤 VirtIO NIC와 함께 VirtIO SCSI로 부팅합니다. 다운타임이 약 {seconds}초 늘어납니다. 실패하면 디스크는 그대로 유지되고 VM은 SATA/e1000으로 부팅됩니다.",
+      "cutoverConvertGuestOff": "변환 없음: VM은 새 드라이버 없이 지원하는 하드웨어로 부팅됩니다(Windows 및 UEFI 게스트는 SATA 부팅 디스크, Windows는 e1000 NIC).",
+      "reviewEfiKeys": "사전 등록된 Secure Boot 키",
+      "reviewEfiKeysOn": "EFI 디스크에 Microsoft 키가 포함되어 Secure Boot가 vSphere에서처럼 동작합니다.",
+      "reviewEfiKeysOff": "키가 없는 EFI 디스크: Secure Boot가 꺼집니다. 현재 폐기 목록이 부트로더를 거부하는 게스트(예: CentOS 8)에 사용합니다.",
+      "reviewDiskBus": "버스",
+      "reviewBusAuto": "자동",
+      "reviewBusAutoAs": "자동 ({bus})",
+      "reviewBusScsi": "VirtIO SCSI",
+      "reviewBusSata": "SATA",
+      "reviewScsiBootWarning": "게스트 변환 없이 부팅 디스크가 VirtIO SCSI로 강제되었습니다. 게스트의 initramfs(Linux) 또는 부팅 드라이버(Windows)에 VirtIO SCSI 드라이버가 이미 있어야 하며, 그렇지 않으면 dracut 비상 셸이나 INACCESSIBLE_BOOT_DEVICE에서 멈춥니다. 드라이버를 설치하려면 \"컷오버 시 게스트 변환\"을 켜십시오.",
+      "convertGuestMissing": "{node}에서는 아직 게스트 변환을 할 수 없습니다. 누락: {items}. 변환 없이 컷오버는 호환 하드웨어(SATA/e1000)를 유지합니다.",
+      "convertGuestInstall": "노드에 설치",
+      "convertGuestInstalling": "설치 중…",
+      "convertGuestInstallFailed": "설치 실패: {error}",
+      "cpuEl10TooLow": "{names}: {target}용으로 빌드된 EL10 게스트(RHEL 10 계열)입니다. {model}(으)로는 부팅되지 않고 \"Run /init\"에서 멈춥니다. {target} 또는 host를 선택하십시오.",
+      "cpuEl10Preselected": "{target} 미리 선택됨: {names}은(는) 이 수준 미만에서는 부팅되지 않는 EL10 게스트(RHEL 10 계열)입니다.",
+      "cpuNodesTooOld": "대상 클러스터의 노드 {nodes}은(는) {model}을(를) 실행할 수 없습니다. VM을 해당 노드에서 시작하거나 그 노드로 마이그레이션할 수 없습니다.",
+      "logSteps": {
+        "planning": "계획",
+        "prepare": "소스 및 대상 준비",
+        "full_copy": "전체 복사",
+        "delta": "델타 동기화",
+        "cutover": "컷오버",
+        "verify": "무결성 검사",
+        "conversion": "게스트 변환",
+        "finish": "연결 및 시작"
+      }
     },
     "extDashboard": {
       "hosts": "호스트",
@@ -5457,7 +5490,8 @@
       "transferring": "디스크 전송 중",
       "creating_vm": "VM 생성 중",
       "configuring": "VM 구성 중",
-      "pending": "대기 중"
+      "pending": "대기 중",
+      "guest_conversion": "게스트 변환 중"
     },
     "shared": {
       "detailTitle": "마이그레이션 작업",

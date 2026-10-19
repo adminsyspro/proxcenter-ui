@@ -9,7 +9,7 @@
  * the node test project covers them without rendering.
  */
 
-import { HARDWARE_LIMITS, type MigrationDiskMapping, type MigrationHardwareOverrides, type MigrationNicMapping } from '@/lib/migration/target-overrides'
+import { HARDWARE_LIMITS, type MigrationDiskBus, type MigrationDiskMapping, type MigrationHardwareOverrides, type MigrationNicMapping } from '@/lib/migration/target-overrides'
 import { isFileBasedStorage } from '@/lib/proxmox/storage'
 
 export interface ReviewSourceNic {
@@ -37,12 +37,20 @@ export interface ReviewSource {
   disks: ReviewSourceDisk[]
   /** The source carries a virtual TPM; its state is never copied (roadmap#1). */
   hasVtpm?: boolean
+  /** "efi" or "bios", as vSphere reports it (#1000: Secure Boot keys, boot bus). */
+  firmware?: string
+  /** vSphere's guest OS name ("Microsoft Windows Server 2022 (64-bit)"). */
+  guestOS?: string
+  /** An EL10 guest (RHEL 10 family), built for x86-64-v3 (#1000). */
+  el10?: boolean
 }
 
 /** One row of the disk table: its target storage, and whether the operator left it out. */
 export interface ReviewDiskState {
   storage: string
   exclude: boolean
+  /** Forced target bus (#1000, warm only); absent or 'auto' keeps the engine's rule. */
+  bus?: MigrationDiskBus
 }
 
 export interface ReviewHardwareState {
@@ -196,12 +204,37 @@ export function buildNicsPayload(nics: ReviewNicState[], canEditVlan: boolean): 
  * default storage was at the time, and `exclude` on the disks left out. Disk
  * 0 is never excluded (the API refuses it). Undefined when the source has no disk.
  */
-export function buildDisksPayload(disks: ReviewDiskState[]): MigrationDiskMapping[] | undefined {
+export function buildDisksPayload(disks: ReviewDiskState[], opts: { withBus?: boolean } = {}): MigrationDiskMapping[] | undefined {
   if (disks.length === 0) return undefined
   return disks.map((d, index) => {
     if (d.exclude && index !== 0) return { index, exclude: true }
-    return { index, targetStorage: d.storage.trim() }
+    // The bus only travels where the engine applies it (warm from VMware).
+    return { index, targetStorage: d.storage.trim(), ...(opts.withBus && d.bus && d.bus !== 'auto' && { bus: d.bus }) }
   })
+}
+
+/** Windows guest, by vSphere's guest OS name (the engine also checks the guest id). */
+export function isWindowsSource(source: ReviewSource | null | undefined): boolean {
+  return /windows/i.test(source?.guestOS || '')
+}
+
+/**
+ * The bus "Auto" gives the boot disk (#1000): VirtIO SCSI once the guest is
+ * converted at cutover, otherwise SATA for a Windows or UEFI guest (inbox
+ * drivers) and SCSI for a BIOS Linux, the engine's rule for a SCSI source disk.
+ */
+export function autoBootBus(source: ReviewSource | null | undefined, convertGuest: boolean): 'scsi' | 'sata' {
+  if (convertGuest) return 'scsi'
+  return source?.firmware === 'efi' || isWindowsSource(source) ? 'sata' : 'scsi'
+}
+
+/**
+ * Forcing the boot disk onto SCSI without converting the guest only boots a
+ * guest that already carries the VirtIO SCSI driver in its initramfs (Linux)
+ * or as a boot-start driver (Windows): the review step says so.
+ */
+export function scsiBootNeedsDrivers(disks: ReviewDiskState[], convertGuest: boolean): boolean {
+  return !convertGuest && disks[0]?.bus === 'scsi'
 }
 
 export interface StorageNeed {

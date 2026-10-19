@@ -19,5 +19,8 @@ export function logClock(ts: string): string {
 }
 
 export function migrationLogText(lines: MigrationLogLine[]): string {
-  return lines.map(l => `${logClock(l.ts)} ${l.level || 'info'}${l.vmName ? ` [${l.vmName}]` : ''} ${l.msg}`).join('\n')
+  return lines.map(l => l.level === 'step'
+    // A phase header (#1000) stands out in the copied text too.
+    ? `${logClock(l.ts)} ==${l.vmName ? ` [${l.vmName}]` : ''} ${l.msg} ==`
+    : `${logClock(l.ts)} ${l.level || 'info'}${l.vmName ? ` [${l.vmName}]` : ''} ${l.msg}`).join('\n')
 }

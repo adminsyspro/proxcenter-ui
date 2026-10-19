@@ -66,6 +66,7 @@ vi.mock("@/lib/vmware/soap", async importOriginal => {
     ...actual,
     soapLogin: vi.fn(), soapGetVmConfig: vi.fn(), parseVmConfig: vi.fn(), soapLogout: vi.fn(),
     soapPowerOffVm: vi.fn(), soapCreateSnapshot: vi.fn(), soapRemoveAllSnapshots: vi.fn(),
+    soapGetGuestIdentities: vi.fn(async () => new Map()),
   }
 })
 vi.mock("./integrity", async importOriginal => {

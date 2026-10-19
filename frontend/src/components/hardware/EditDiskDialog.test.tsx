@@ -394,3 +394,29 @@ describe('EditDiskDialog — resize in the unit PVE wrote (#1036)', () => {
     await waitFor(() => expect(props.onResize).toHaveBeenCalledWith('+8704M'))
   })
 })
+
+describe('EditDiskDialog, controller of the disk (#1000)', () => {
+  afterEach(cleanup)
+  const disk = { id: 'scsi0', size: '3G', storage: 'CephStoragePool', rawValue: 'CephStoragePool:vm-109-disk-0,size=3G' }
+
+  it('names the controller next to the size and the storage', () => {
+    renderWithProviders(<EditDiskDialog {...makeProps({ disk, controller: 'VirtIO SCSI single' })} />)
+    expect(screen.getByText('3G • CephStoragePool • VirtIO SCSI single')).toBeInTheDocument()
+  })
+
+  it('keeps the former caption without a controller', () => {
+    renderWithProviders(<EditDiskDialog {...makeProps({ disk })} />)
+    expect(screen.getByText('3G • CephStoragePool')).toBeInTheDocument()
+  })
+})
+
+describe('EditDiskDialog, controller field of the Options tab (#1000)', () => {
+  afterEach(cleanup)
+  it('shows the controller and the slot as plain information', () => {
+    renderWithProviders(<EditDiskDialog {...makeProps({ disk: { id: 'scsi1', size: '1G', storage: 'CephStoragePool', rawValue: 'CephStoragePool:vm-109-disk-1,size=1G' }, controller: 'VirtIO SCSI single' })} />)
+    // Information, not a field: nothing to type into, nothing that takes the focus.
+    const line = screen.getByTestId('edit-disk-controller')
+    expect(line.textContent).toContain('VirtIO SCSI single (scsi1)')
+    expect(line.querySelector('input')).toBeNull()
+  })
+})

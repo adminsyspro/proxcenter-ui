@@ -16,7 +16,7 @@ import {
 } from '@/__tests__/setup/renderWithProviders'
 import { server, http, HttpResponse } from '@/__tests__/setup/msw-server'
 
-import WarmCutoverButton, { canRequestCutover, isAwaitingOperator, isWarmHold } from './WarmCutoverButton'
+import WarmCutoverButton, { canRequestCutover, guestConversionDefault, isAwaitingOperator, isWarmHold } from './WarmCutoverButton'
 
 const hold = { id: 'j1', status: 'delta_sync', projectedDowntimeSec: 59, config: { cutoverMode: 'manual' } }
 const auto = { id: 'j2', status: 'delta_sync', projectedDowntimeSec: 59, config: { cutoverMode: 'auto' } }
@@ -188,5 +188,64 @@ describe('WarmCutoverButton', () => {
 
     await waitFor(() => expect(screen.queryByText(CONFIRM_TITLE)).not.toBeInTheDocument())
     expect(calls).toEqual([])
+  })
+})
+
+describe('guest conversion at cutover (#1000)', () => {
+  const vmwareHold = { ...hold, config: { cutoverMode: 'manual', convertGuest: true } }
+
+  it('reads the default only from a job that offers the choice', () => {
+    expect(guestConversionDefault(vmwareHold)).toBe(true)
+    expect(guestConversionDefault({ ...hold, config: { convertGuest: false } })).toBe(false)
+    expect(guestConversionDefault(hold)).toBeNull()
+    expect(guestConversionDefault(null)).toBeNull()
+  })
+
+  it('pre-fills the box with the job default and sends the changed choice', async () => {
+    const bodies: unknown[] = []
+    server.use(http.post('*/api/v1/migrations/:id/cutover', async ({ request }) => {
+      bodies.push(await request.json())
+      return HttpResponse.json({ data: {} })
+    }))
+
+    renderWithProviders(<WarmCutoverButton job={vmwareHold} />)
+    fireEvent.click(screen.getByRole('button', { name: CUTOVER_LABEL }))
+    const box = await screen.findByTestId('cutover-convert-guest') as HTMLInputElement
+    expect(box.checked).toBe(true)
+    expect(screen.getByText(/Adds about 60 s to the downtime/)).toBeInTheDocument()
+
+    fireEvent.click(box)
+    expect(screen.getByText(/No conversion: the VM boots on the hardware it supports/)).toBeInTheDocument()
+    const dialogButtons = screen.getAllByRole('button', { name: CUTOVER_LABEL })
+    fireEvent.click(dialogButtons[dialogButtons.length - 1])
+
+    await waitFor(() => expect(bodies).toEqual([{ convertGuest: false }]))
+  })
+
+  it('reopens on the job default rather than on an abandoned edit', async () => {
+    renderWithProviders(<WarmCutoverButton job={vmwareHold} />)
+    fireEvent.click(screen.getByRole('button', { name: CUTOVER_LABEL }))
+    fireEvent.click(await screen.findByTestId('cutover-convert-guest'))
+    fireEvent.click(screen.getByRole('button', { name: /^cancel$/i }))
+    await waitFor(() => expect(screen.queryByText(CONFIRM_TITLE)).not.toBeInTheDocument())
+
+    fireEvent.click(screen.getByRole('button', { name: CUTOVER_LABEL }))
+    expect((await screen.findByTestId('cutover-convert-guest') as HTMLInputElement).checked).toBe(true)
+  })
+
+  it('shows no box and sends no body for a job without the choice (XCP-ng)', async () => {
+    const bodies: string[] = []
+    server.use(http.post('*/api/v1/migrations/:id/cutover', async ({ request }) => {
+      bodies.push(await request.text())
+      return HttpResponse.json({ data: {} })
+    }))
+
+    renderWithProviders(<WarmCutoverButton job={hold} />)
+    fireEvent.click(screen.getByRole('button', { name: CUTOVER_LABEL }))
+    await screen.findByText(CONFIRM_TITLE)
+    expect(screen.queryByTestId('cutover-convert-guest')).not.toBeInTheDocument()
+    const dialogButtons = screen.getAllByRole('button', { name: CUTOVER_LABEL })
+    fireEvent.click(dialogButtons[dialogButtons.length - 1])
+    await waitFor(() => expect(bodies).toEqual(['']))
   })
 })

@@ -21,3 +21,12 @@ describe('migrationLogText (roadmap#53)', () => {
     expect(logClock('nope')).toBe('--:--:--')
   })
 })
+
+describe('migrationLogText: phase headers (#1000)', () => {
+  it('frames a step so it stands out in the copied text', () => {
+    expect(migrationLogText([
+      { ts: at(9, 0, 0), level: 'step', msg: 'Guest conversion' },
+      { ts: at(9, 0, 1), level: 'step', msg: 'Cutover', vmName: 'r9' },
+    ])).toBe('09:00:00 == Guest conversion ==\n09:00:01 == [r9] Cutover ==')
+  })
+})

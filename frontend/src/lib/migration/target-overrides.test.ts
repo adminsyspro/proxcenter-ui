@@ -187,3 +187,27 @@ describe("storageOfVolume", () => {
     expect(storageOfVolume("/dev/sdb", "fallback")).toBe("fallback")
   })
 })
+
+describe("guest conversion overrides (#1000)", () => {
+  it("keeps the Secure Boot keys off only when the operator turned them off", () => {
+    expect(parseHardwareOverrides({ efiPreEnrolledKeys: false })).toEqual({ ok: true, value: { efiPreEnrolledKeys: false } })
+    expect(parseHardwareOverrides({ efiPreEnrolledKeys: true })).toEqual({ ok: true, value: undefined })
+    expect(parseHardwareOverrides({ efiPreEnrolledKeys: "no" })).toEqual({ ok: false, error: "hardware.efiPreEnrolledKeys must be a boolean" })
+    expect(describeOverrides({ hardware: { efiPreEnrolledKeys: false } })).toBe("Operator overrides: hardware EFI disk without pre-enrolled Secure Boot keys")
+  })
+
+  it("parses a forced bus, drops 'auto' and refuses anything else", () => {
+    expect(parseDiskMappings([{ index: 0, bus: "scsi" }, { index: 1, bus: "auto" }, { index: 2, targetStorage: "Z", bus: "sata" }])).toEqual({ ok: true, value: [
+      { index: 0, bus: "scsi" },
+      { index: 2, targetStorage: "Z", bus: "sata" },
+    ] })
+    const r = parseDiskMappings([{ index: 0, bus: "ide" }])
+    expect(r).toEqual({ ok: false, error: "disks[0].bus must be one of auto, scsi, sata" })
+  })
+
+  it("carries the forced bus to the kept disk and into the job log line", () => {
+    const plan = planDiskTargets([{ cap: 1 }, { cap: 2 }], [{ index: 0, bus: "scsi" }, { index: 1, bus: "auto" }], "Ceph")
+    expect(plan.kept.map(k => k.bus)).toEqual(["scsi", undefined])
+    expect(describeDiskPlan(plan, "Ceph")).toBe("Per-disk choices: bus disk 1->SCSI")
+  })
+})

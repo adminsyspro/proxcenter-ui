@@ -17,7 +17,7 @@ import {
   cbtEligibility, soapEnableCbt, soapDisableCbt, queryAllChangedAreas, soapGetSnapshotChangeIds,
   soapGuestShutdown, soapWaitPoweredOff, soapKeepAlive,
 } from "@/lib/vmware/cbt"
-import { mapEsxiToPveConfig } from "../configMapper"
+import { isWindowsVm, mapEsxiToPveConfig } from "../configMapper"
 import { bytesPerStorage, describeDiskPlan, describeOverrides, planDiskTargets, planStorages } from "../target-overrides"
 import { volumesToFree, volumesToKeep, PVESM_FREE_TIMEOUT_MS, type AllocatedVolume } from "../pvesm-alloc"
 import { getNodeSshEndpointForMigration } from "../pve-tasks"
@@ -44,7 +44,7 @@ import { describeHeadroom, isThinHeadroom, parseVmDatastoreMors, soapGetDatastor
 import type { WarmMigrationConfig } from "./types"
 import {
   registerJob, unregisterJob, acquireVmLock, releaseVmLock,
-  updateJob, updateJobLive, appendLog, isCancelled, isCutoverRequested,
+  updateJob, updateJobLive, appendLog, appendStep, readJobConfig, isCancelled, isCutoverRequested,
   sleepUnlessCutover, awaitOperatorCutover, runDeltaPassWithRetry, HOLD_PASS_INTERVAL_MS,
 } from "./job-control"
 import {
@@ -54,6 +54,8 @@ import {
 import { createTargetVmShell, provisionBlockTargets, markVolumesCopied } from "./target-provision"
 import { cleanShutdownAndConfirm, isVmwareToolsUnavailable, type PowerOffOps } from "./power-off"
 import { attachDisksAndBoot, removeTargetVmOnFailure, unmapTargetVolumes, verifyWarmDiskIntegrity } from "./finish"
+import { convertGuestAtCutover, GUEST_CONVERSION_ESTIMATE_SEC } from "./guest-conversion"
+import { warnIfEl10OnLowCpu } from "../el10-check"
 import { type SshTarget } from "@/lib/ssh/node-endpoint-core"
 
 // ── Pure convergence planning (unit-tested) ──
@@ -238,6 +240,7 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
   try {
     // ── planning ──
     await updateJob(jobId, "planning")
+    await appendStep(jobId, "planning", "Planning")
     await appendLog(jobId, "Warm migration: planning")
 
     if (!acquireVmLock(vmKey)) {
@@ -291,6 +294,8 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
     if (tools !== "running" && tools !== "unknown") {
       await appendLog(jobId, `VMware Tools are ${tools === "not-installed" ? "not installed" : "not running"} on the source: a clean shutdown will not be possible, so the source will be powered off hard at cutover (crash-consistent final delta)`, "warn")
     }
+    // EL10 on a CPU type below x86-64-v3 does not boot (#1000): say it now.
+    await warnIfEl10OnLowCpu({ session: soapSession, vmid: config.sourceVmId, guest: vmConfig, cpuType: config.cpuType, log: m => appendLog(jobId, m, "warn") })
     // vTPM awareness (roadmap#1): say it at planning time, hours before the
     // cutover, so the operator has the BitLocker recovery key ready.
     if (vmConfig.hasVtpm) await appendLog(jobId, vtpmPreflightWarning(), "warn")
@@ -398,6 +403,7 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
 
     // ── enabling_cbt: enable CBT + provision the target VM shell and raw volumes ──
     await updateJob(jobId, "enabling_cbt")
+    await appendStep(jobId, "prepare", "Preparing the source and the target")
     if (useCbt && vmConfig.changeTrackingEnabled === true) {
       // Someone else's CBT (a backup product, usually): use it, and leave it on.
       await appendLog(jobId, "CBT already enabled on source, left as is", "info")
@@ -408,17 +414,19 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
     }
 
     const overrides = { hardware: config.hardware, nics: config.nics }
+    // The review step's Bus column (#1000), per kept disk in target order.
+    const buses = diskPlan.kept.map(k => k.bus)
     const overridesLine = describeOverrides(overrides)
     if (overridesLine) await appendLog(jobId, overridesLine)
     // The id comes from reserveTargetVmid, so the jobs of a parallel batch
     // (roadmap#53) never share one. A create can still fail with "VM <id>
     // already exists" when a VM was made outside ProxCenter meanwhile: take a
     // fresh id and retry, unless the operator picked the vmid (their conflict).
-    let pveParams = mapEsxiToPveConfig(vmConfig, targetVmid ?? 0, config.targetStorage, config.networkBridge, config.vlanTag, config.cpuType, overrides)
+    let pveParams = mapEsxiToPveConfig(vmConfig, targetVmid ?? 0, config.targetStorage, config.networkBridge, config.vlanTag, config.cpuType, overrides, { buses })
     let shellConf: Record<string, any> | undefined
     for (let attempt = 1; shellConf === undefined; attempt++) {
       if (targetVmid == null) targetVmid = await reserveTargetVmid(pveConn, config.targetConnectionId, jobId)
-      pveParams = mapEsxiToPveConfig(vmConfig, targetVmid, config.targetStorage, config.networkBridge, config.vlanTag, config.cpuType, overrides)
+      pveParams = mapEsxiToPveConfig(vmConfig, targetVmid, config.targetStorage, config.networkBridge, config.vlanTag, config.cpuType, overrides, { buses })
       try {
         shellConf = await createTargetVmShell(pveConn, config.targetNode, pveParams)
       } catch (e: any) {
@@ -577,6 +585,7 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
     if (useCbt) {
       // ── full_copy: pass 0 with the "*" baseline (10→80 on the locked scale) ──
       await updateJob(jobId, "full_copy", { progress: 10 })
+      await appendStep(jobId, "full_copy", "Full copy")
       await appendLog(jobId, "Full copy (CBT allocated map)…")
       const t0 = Date.now()
       const fullBytes = await runCbtPass("full", () => "*", { status: "full_copy", currentStep: "full_copy", rangeStart: 10, rangeEnd: 80 })
@@ -593,11 +602,15 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
       // ── delta_sync: converge by downtime budget, or hold for the operator ──
       // The integrity check runs at cutover with the source off (roadmap#1): its
       // time is part of the downtime the budget is measured against.
+      // The guest conversion chosen at launch (#1000) runs in the same window;
+      // the projection counts it like the integrity check.
       const verifySec = estimateIntegritySecondsPerDisk(await resolveIntegritySettings(config.targetConnectionId)) * vmConfig.disks.length
+        + (config.convertGuest === false ? 0 : GUEST_CONVERSION_ESTIMATE_SEC)
       const cfg: ConvergenceConfig = { downtimeBudgetSec: budget, maxPasses, shutdownSec: 20, bootSec: 30, verifySec, cutoverMode }
       if (cutoverMode === "manual") {
         await appendLog(jobId, `Manual cutover: replication will keep running and the migration will wait for you. Click "Cutover now" when your window opens.`, "info")
       }
+      await appendStep(jobId, "delta", "Delta sync")
       let pass = 0
       while (true) {
         if (isCancelled(jobId)) throw new Error("Migration cancelled")
@@ -642,6 +655,7 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
 
       // ── cutover: confirmed power-off → final delta → verify → attach → boot ──
       await updateJob(jobId, "cutover", { progress: 95 })
+      await appendStep(jobId, "cutover", "Cutover")
       await cleanShutdownAndConfirm(jobId, powerOffOps,
         "Cutover: requesting clean guest shutdown (VMware Tools)…", "cutover")
       await appendLog(jobId, "Source powered off (confirmed) — applying final delta", "success")
@@ -662,6 +676,7 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
       // was still ahead, and the generic shutdown line hid that the VM would stay
       // off for the entire transfer (#587 field feedback).
       await updateJob(jobId, "full_copy", { currentStep: "source_shutdown", progress: 10 })
+      await appendStep(jobId, "full_copy", "Full copy (checksum, source powered off)")
       await cleanShutdownAndConfirm(jobId, powerOffOps,
         "Checksum fallback: requesting clean guest shutdown of the source BEFORE the copy — the VM stays powered off until the migration completes (CBT unavailable)…", "full_copy")
       await updateJob(jobId, "full_copy", { progress: 10 })
@@ -746,6 +761,7 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
     // attached (roadmap#1). The baseline and the intermediate deltas never run
     // it: only this final copy is the one handed over. Knobs: the target PVE connection (Migrations tab).
     await updateJob(jobId, "verify", { progress: 98 })
+    await appendStep(jobId, "verify", "Integrity check")
     const integrity = await resolveIntegritySettings(config.targetConnectionId)
     const fault = faultInjectionFromEnv()
     for (let i = 0; i < vmConfig.disks.length; i++) {
@@ -763,12 +779,39 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
         },
       })
     }
+
+    // ── guest conversion (#1000): the operator's latest choice, read back from
+    // the job row (the "Cutover now" dialog writes it there), else the launch value ──
+    const latest = await readJobConfig(jobId).catch(() => ({} as Record<string, any>))
+    const convertGuest = typeof latest.convertGuest === "boolean" ? latest.convertGuest : config.convertGuest !== false
+    let bootParams = pveParams
+    if (convertGuest) {
+      await updateJob(jobId, "verify", { currentStep: "guest_conversion", progress: 98 })
+      await appendStep(jobId, "conversion", "Guest conversion")
+      const result = await convertGuestAtCutover({
+        jobId, connectionId: config.targetConnectionId, nodeIp,
+        name: vmConfig.name, firmware: vmConfig.firmware === "efi" ? "efi" : "bios", isWindows: isWindowsVm(vmConfig),
+        memoryMB: vmConfig.memoryMB, devices: vmConfig.disks.map(d => targetDev.get(d.deviceKey) ?? ""),
+        log: (msg, level) => appendLog(jobId, msg, level), isCancelled: () => isCancelled(jobId),
+      })
+      if (result.converted) {
+        bootParams = mapEsxiToPveConfig(vmConfig, targetVmid, config.targetStorage, config.networkBridge, config.vlanTag, config.cpuType, overrides, { buses, guestConverted: true })
+        await appendLog(jobId, `Guest converted in ${result.seconds ?? 0}s${result.os ? ` (${result.os})` : ""}: VirtIO drivers installed, VMware Tools removed or scheduled for removal; the target boots from VirtIO SCSI with VirtIO NICs`, "success")
+      } else {
+        await appendLog(jobId, `Guest conversion not applied: ${(result.reason || "").replace(/\.+$/, "")}. The copied disks are unchanged and the guest keeps the hardware it boots on without new drivers (SATA boot disk for Windows and UEFI guests, e1000 NICs for Windows)`, "warn")
+      }
+    } else {
+      await appendLog(jobId, "Guest conversion not requested for this cutover: the guest keeps the hardware it boots on without new drivers", "info")
+    }
+
+    await appendStep(jobId, "finish", "Attach and start")
     await unmapTargetVolumes(config.targetConnectionId, nodeIp, allocatedVolumes)
     await attachDisksAndBoot({
       jobId, pveConn, node: config.targetNode, vmid: targetVmid, diskCount: vmConfig.disks.length,
-      diskSlots: pveParams.diskSlots, bootDiskSlot: pveParams.bootDiskSlot, allocatedVolumes,
+      diskSlots: bootParams.diskSlots, bootDiskSlot: bootParams.bootDiskSlot, allocatedVolumes,
       startAfterMigration: config.startAfterMigration, convertDisksToQcow2: config.convertDisksToQcow2 === true,
       targetStorage: config.targetStorage,
+      ...(bootParams !== pveParams && { nets: bootParams.nets }),
     })
 
     // The source is powered off for good: give it back CBT the way we found it.

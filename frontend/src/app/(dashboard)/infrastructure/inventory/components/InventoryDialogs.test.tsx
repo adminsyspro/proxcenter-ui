@@ -299,6 +299,10 @@ function makeProps(overrides: Partial<InventoryDialogsProps> = {}): InventoryDia
     setMigStartAfter: vi.fn(),
     migConvertToQcow2: false,
     migManualCutover: false,
+    migConvertGuest: true,
+    setMigConvertGuest: vi.fn(),
+    migEfiPreEnrolledKeys: true,
+    setMigEfiPreEnrolledKeys: vi.fn(),
     setMigManualCutover: () => {},
     migDowntimeBudget: '',
     setMigDowntimeBudget: () => {},
@@ -1614,7 +1618,11 @@ describe('migration dialog options', () => {
     }
     async function openReview() {
       fireEvent.click(screen.getByText('harness-open-single'))
-      fireEvent.click(await screen.findByRole('button', { name: /^Review$/ }))
+      // A warm run keeps Review disabled until its preflight answers: under a
+      // loaded full run the click used to land on the disabled button.
+      const review = await screen.findByRole('button', { name: /^Review$/ })
+      await waitFor(() => expect(review).toBeEnabled(), { timeout: 5000 })
+      fireEvent.click(review)
       // the rows appear once the source answer is in, whichever came first
       await screen.findByTestId('review-disk-1')
     }

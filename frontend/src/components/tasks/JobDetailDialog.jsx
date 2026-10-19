@@ -200,7 +200,7 @@ export default function JobDetailDialog({ open, onClose, job, onAction, actionEr
   // as it was closed or the page reloaded.
   const migDetail = job.type === 'migration' && forThisJob ? logState.detail : null
   const cutoverJob = migDetail
-    ? { id: job.id, status: migDetail.status, projectedDowntimeSec: migDetail.projectedDowntimeSec, config: { cutoverMode: migDetail.cutoverMode } }
+    ? { id: job.id, status: migDetail.status, projectedDowntimeSec: migDetail.projectedDowntimeSec, config: { cutoverMode: migDetail.cutoverMode, convertGuest: migDetail.convertGuest } }
     : null
   const showCutover = canRequestCutover(cutoverJob)
   const isRollingUpdate = job.type === 'rolling_update'
@@ -497,7 +497,10 @@ export default function JobDetailDialog({ open, onClose, job, onAction, actionEr
                         color: log.level === 'error' ? 'error.main' :
                                (log.level === 'warning' || log.level === 'warn') ? 'warning.main' :
                                log.level === 'success' ? 'success.main' :
+                               log.level === 'step' ? 'primary.main' :
                                'text.primary',
+                        // A phase of a warm migration (#1000): a header line.
+                        ...(log.level === 'step' && { fontWeight: 700, mt: i === 0 ? 0 : 1 }),
                         lineHeight: 1.4,
                       }}
                     >

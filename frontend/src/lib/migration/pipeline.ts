@@ -27,6 +27,7 @@ import { executeSSH, shellEscape } from "@/lib/ssh/exec"
 import { formatSshEndpoint, resolveSshTargetPort, sshTargetHost, type SshTarget } from "@/lib/ssh/node-endpoint-core"
 import { soapLogin, soapLogout, soapGetVmConfig, parseVmConfig, buildVmdkDownloadUrl, buildVmdkDescriptorUrl, extractProp, soapCreateSnapshot, soapRemoveAllSnapshots, soapPowerOffVm, soapExportVm, soapWaitForNfcLease, soapNfcLeaseProgress, soapNfcLeaseComplete, soapNfcLeaseAbort, SNAPSHOT_REMOVE_TERMINAL_TIMEOUT_MS } from "@/lib/vmware/soap"
 import { mapEsxiToPveConfig, isWindowsVm } from "./configMapper"
+import { warnIfEl10OnLowCpu } from "./el10-check"
 import { describeOverrides, planDiskTargets, describeDiskPlan, bytesPerStorage, type MigrationDiskMapping, type MigrationHardwareOverrides, type MigrationNicMapping } from "./target-overrides"
 import { coldStorageTarget, coldStorages, localVolumeKinds, describeStorageSpace, storageSpaceShortfall, type ColdStorageTarget } from "./cold-disk-targets"
 import type { SoapSession, EsxiVmConfig, EsxiDiskInfo, NfcLeaseDeviceUrl } from "@/lib/vmware/soap"
@@ -255,6 +256,8 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
     await appendLog(jobId, `Retrieving VM configuration for "${config.sourceVmId}"...`)
     const vmXml = await soapGetVmConfig(soapSession, config.sourceVmId)
     const vmConfig = parseVmConfig(vmXml)
+    // EL10 on a CPU type below x86-64-v3 does not boot (#1000): say it now.
+    await warnIfEl10OnLowCpu({ session: soapSession, vmid: config.sourceVmId, guest: vmConfig, cpuType: config.cpuType, log: m => appendLog(jobId, m, "warn") })
 
     await appendLog(
       jobId,

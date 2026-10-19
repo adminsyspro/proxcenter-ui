@@ -4,7 +4,7 @@ import {
   sourceHardware, initialHardwareState, initialNicState, hardwareErrors, vlanTagInvalid, reviewIsValid,
   buildHardwarePayload, buildNicsPayload, mergeCpuModels, type ReviewSource,
   initialDiskState, keptReviewDisks, reviewDiskStorages, disksValid, buildDisksPayload, warmSpaceNeeds, tempStorageTypeFor,
-  type ReviewDiskState,
+  type ReviewDiskState, autoBootBus, isWindowsSource, scsiBootNeedsDrivers,
 } from './migrationReview'
 
 const GIB = 1024 ** 3
@@ -139,5 +139,33 @@ describe('disks (lot 2)', () => {
     expect(tempStorageTypeFor(['nfs', 'dir'])).toBe('nfs')
     expect(tempStorageTypeFor(['nfs', 'lvm'])).toBe('lvm')
     expect(tempStorageTypeFor(['nfs', undefined])).toBeUndefined()
+  })
+})
+
+describe('guest conversion helpers (#1000)', () => {
+  const rows: ReviewDiskState[] = [{ storage: 'Ceph', exclude: false, bus: 'scsi' }, { storage: 'Ceph', exclude: false, bus: 'auto' }, { storage: 'Ceph', exclude: true, bus: 'sata' }]
+
+  it('sends the forced buses only where the engine applies them', () => {
+    expect(buildDisksPayload(rows, { withBus: true })).toEqual([
+      { index: 0, targetStorage: 'Ceph', bus: 'scsi' },
+      { index: 1, targetStorage: 'Ceph' },
+      { index: 2, exclude: true },
+    ])
+    expect(buildDisksPayload(rows)).toEqual([{ index: 0, targetStorage: 'Ceph' }, { index: 1, targetStorage: 'Ceph' }, { index: 2, exclude: true }])
+  })
+
+  it('resolves Auto for the boot disk like the engine', () => {
+    const linuxBios = { numCPU: 1, numCoresPerSocket: 1, sockets: 1, memoryMB: 1, nics: [], disks: [], firmware: 'bios', guestOS: 'CentOS 7 (64-bit)' }
+    expect(autoBootBus(linuxBios, false)).toBe('scsi')
+    expect(autoBootBus({ ...linuxBios, firmware: 'efi' }, false)).toBe('sata')
+    expect(autoBootBus({ ...linuxBios, guestOS: 'Microsoft Windows Server 2022 (64-bit)' }, false)).toBe('sata')
+    expect(autoBootBus({ ...linuxBios, firmware: 'efi' }, true)).toBe('scsi')
+    expect(isWindowsSource(null)).toBe(false)
+  })
+
+  it('flags a forced SCSI boot disk only without the conversion', () => {
+    expect(scsiBootNeedsDrivers(rows, false)).toBe(true)
+    expect(scsiBootNeedsDrivers(rows, true)).toBe(false)
+    expect(scsiBootNeedsDrivers([], false)).toBe(false)
   })
 })

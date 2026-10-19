@@ -2201,7 +2201,9 @@
     "nodeActionDrainPartialDesc": "The node is not drained. Force the {action} to let Proxmox VE stop them, or cancel and move them yourself. The drain is listed in the Task Center.",
     "nodeActionForceOption": "Force the {action} anyway, these guests will be stopped",
     "nodeActionDrainDesc": "Guests on shared storage are evacuated by the orchestrator, each one to the node the placement engine picks. Follow them in the Task Center.",
-    "nodeActionDrainFailed": "The drain could not start: {error}"
+    "nodeActionDrainFailed": "The drain could not start: {error}",
+    "diskControllerTooltip": "Controller the disk is attached to",
+    "diskController": "Controller"
   },
   "inventoryPage": {
     "newTag": "New tag...",
@@ -2542,7 +2544,38 @@
       "loadProjectionUnknown": "No load reported by this node",
       "loadProjectionMemAlert": "{node}: memory would reach {pct} % ({used}/{total} GB) once this batch has landed.",
       "andMoreVms": "and {count} more",
-      "logsOfVm": "Logs of"
+      "logsOfVm": "Logs of",
+      "convertGuest": "Convert the guest at cutover",
+      "convertGuestTooltip": "With the source off, virt-v2v-in-place installs the VirtIO drivers in the copied guest (initramfs on Linux, driver store on Windows) and removes VMware Tools, so the VM boots from VirtIO SCSI with VirtIO NICs. Adds about a minute to the cutover. You can still change it in the \"Cutover now\" dialog; an automatic cutover applies this value. If the conversion fails, the copied disks are left untouched and the VM boots on SATA/e1000 as before.",
+      "cutoverConvertGuest": "Guest conversion",
+      "cutoverConvertGuestOn": "VirtIO drivers installed with the source off, then boot from VirtIO SCSI with VirtIO NICs. Adds about {seconds} s to the downtime. If it fails, the disks are left untouched and the VM boots on SATA/e1000.",
+      "cutoverConvertGuestOff": "No conversion: the VM boots on the hardware it supports without new drivers (SATA boot disk for Windows and UEFI guests, e1000 NICs for Windows).",
+      "reviewEfiKeys": "Pre-enrolled Secure Boot keys",
+      "reviewEfiKeysOn": "The EFI disk carries the Microsoft keys: Secure Boot works as on vSphere.",
+      "reviewEfiKeysOff": "EFI disk without keys: Secure Boot is off. For a guest whose bootloader the current revocation list rejects (CentOS 8, for example).",
+      "reviewDiskBus": "Bus",
+      "reviewBusAuto": "Auto",
+      "reviewBusAutoAs": "Auto ({bus})",
+      "reviewBusScsi": "VirtIO SCSI",
+      "reviewBusSata": "SATA",
+      "reviewScsiBootWarning": "The boot disk is forced to VirtIO SCSI without guest conversion: the guest must already have the VirtIO SCSI driver in its initramfs (Linux) or as a boot driver (Windows), otherwise it stops in the dracut emergency shell or with INACCESSIBLE_BOOT_DEVICE. Turn on \"Convert the guest at cutover\" to install it.",
+      "convertGuestMissing": "Guest conversion is not possible on {node} yet, missing: {items}. Without it the cutover keeps the compatible hardware (SATA/e1000).",
+      "convertGuestInstall": "Install on the node",
+      "convertGuestInstalling": "Installing…",
+      "convertGuestInstallFailed": "Installation failed: {error}",
+      "cpuEl10TooLow": "{names}: EL10 guest (RHEL 10 family), built for {target}. With {model} it will not boot: it stops at \"Run /init\". Pick {target} or host.",
+      "cpuEl10Preselected": "{target} preselected: {names} is an EL10 guest (RHEL 10 family), which does not boot below this level.",
+      "cpuNodesTooOld": "Node(s) {nodes} of the target cluster cannot run {model}: the VM can neither start there nor be migrated there.",
+      "logSteps": {
+        "planning": "Planning",
+        "prepare": "Preparing the source and the target",
+        "full_copy": "Full copy",
+        "delta": "Delta sync",
+        "cutover": "Cutover",
+        "verify": "Integrity check",
+        "conversion": "Guest conversion",
+        "finish": "Attach and start"
+      }
     },
     "extDashboard": {
       "hosts": "Hosts",
@@ -5457,7 +5490,8 @@
       "transferring": "Transferring disks",
       "creating_vm": "Creating the VM",
       "configuring": "Configuring the VM",
-      "pending": "Pending"
+      "pending": "Pending",
+      "guest_conversion": "Converting the guest"
     },
     "shared": {
       "detailTitle": "Migration task",

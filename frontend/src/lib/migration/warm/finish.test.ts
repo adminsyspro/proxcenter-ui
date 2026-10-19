@@ -92,3 +92,20 @@ describe("unmapTargetVolumes (roadmap#57)", () => {
     expect(executeSSH).not.toHaveBeenCalled()
   })
 })
+
+describe("attachDisksAndBoot NICs after a guest conversion (#1000)", () => {
+  it("sets the VirtIO NICs in the same call as the disks", async () => {
+    const { pveSetVmConfig } = await import("../pve-vm-config")
+    const { attachDisksAndBoot } = await import("./finish")
+    vi.mocked(pveSetVmConfig).mockResolvedValue(undefined as any)
+    await attachDisksAndBoot({
+      jobId: "j", pveConn: conn, node: "pve1", vmid: 7, diskCount: 1, diskSlots: ["scsi0"], bootDiskSlot: "scsi0",
+      allocatedVolumes: [{ volumeId: "c:vm-7-disk-1", devicePath: "/dev/rbd1" }], startAfterMigration: false, convertDisksToQcow2: false,
+      targetStorage: "c", nets: { net0: "virtio,bridge=vmbr0" },
+    })
+    const body = vi.mocked(pveSetVmConfig).mock.calls.at(-1)![3] as URLSearchParams
+    expect(body.get("scsi0")).toBe("c:vm-7-disk-1")
+    expect(body.get("net0")).toBe("virtio,bridge=vmbr0")
+    expect(body.get("boot")).toBe("order=scsi0")
+  })
+})

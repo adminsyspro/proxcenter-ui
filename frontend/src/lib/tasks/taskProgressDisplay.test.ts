@@ -74,7 +74,7 @@ describe("stepLabelKey", () => {
   it("maps every known pipeline step to itself", () => {
     for (const step of [
       "planning", "enabling_cbt", "preparing_disks", "full_copy", "source_shutdown",
-      "awaiting_cutover", "cutover", "verify", "converting_disks",
+      "awaiting_cutover", "cutover", "verify", "guest_conversion", "converting_disks",
       "preflight", "transferring", "creating_vm", "configuring", "pending",
     ]) {
       expect(stepLabelKey(step)).toBe(step)

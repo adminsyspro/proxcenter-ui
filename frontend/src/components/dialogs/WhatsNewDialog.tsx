@@ -146,6 +146,7 @@ export default function WhatsNewDialog({ open, onClose }: WhatsNewDialogProps) {
                     alignItems: 'center',
                     gap: 1.5,
                     my: 1,
+                    minWidth: 0,
                   },
                 }}
               >
@@ -168,13 +169,14 @@ export default function WhatsNewDialog({ open, onClose }: WhatsNewDialogProps) {
                   color={isLatest ? 'primary' : 'default'}
                   variant={isLatest ? 'filled' : 'outlined'}
                   sx={{
+                    flexShrink: 0,
                     fontFamily: 'JetBrains Mono, monospace',
                     fontSize: '0.7rem',
                     fontWeight: 600,
                     height: 22,
                   }}
                 />
-                <Typography variant='subtitle2' fontWeight={700} sx={{ flexGrow: 1 }} noWrap>
+                <Typography variant='subtitle2' fontWeight={700} sx={{ flexGrow: 1, minWidth: 0 }}>
                   {entry.title}
                 </Typography>
               </AccordionSummary>

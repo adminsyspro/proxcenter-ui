@@ -1,5 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup } from '@testing-library/react'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { cleanup, configure, getConfig } from '@testing-library/react'
 
 import { fireEvent, renderWithProviders, screen, waitFor, within } from '@/__tests__/setup/renderWithProviders'
 import { http, HttpResponse, server } from '@/__tests__/setup/msw-server'
@@ -72,7 +72,14 @@ async function pick(label: string, option: string) {
 
 const storageSelected = () => waitFor(() => expect(screen.getByRole('combobox', { name: 'Disk storage' })).toHaveTextContent('local-lvm'))
 
-describe('RestoreDrillScheduleDialog', () => {
+// The dialog chains several requests (clusters, node, storages, VMs) before
+// a field settles; under the CI coverage run that takes more than the default
+// one second of the async queries.
+const defaultAsyncTimeout = getConfig().asyncUtilTimeout
+beforeAll(() => configure({ asyncUtilTimeout: 8000 }))
+afterAll(() => configure({ asyncUtilTimeout: defaultAsyncTimeout }))
+
+describe('RestoreDrillScheduleDialog', { timeout: 30_000 }, () => {
   it('shows the inline errors instead of saving an incomplete schedule', async () => {
     seed()
     open()

@@ -118,6 +118,12 @@ export async function GET(req: Request) {
     connections = filterCandidateConnections(connections, rbacScope)
     if (wanted) connections = connections.filter(c => wanted.has(c.id))
 
+    // An iaas tenant's perimeter is its vDC pools, and a guest's pool can
+    // change within the window (or its VMID be reused across tenants): the
+    // orchestrator only counts the samples taken while the guest sat in one
+    // of the tenant's pools. A connection where it holds none is not asked.
+    if (vdcScope) connections = connections.filter(c => (vdcScope.poolsByConnection.get(c.id)?.size ?? 0) > 0)
+
     // An unrestricted caller (null scope, not iaas) keeps every row the
     // orchestrator stored, guests deleted since included: that is the point of
     // a history. Everyone else is judged guest by guest; the predicate answers
@@ -126,7 +132,10 @@ export async function GET(req: Request) {
 
     const client = getOrchestratorClient()
     const window = { metric: metric as TopGuestsMetric, agg: agg as TopGuestsAgg, from: from.toISOString(), to: to.toISOString(), limit: 0 }
-    const results = await Promise.allSettled(connections.map(c => client.getTopGuests(c.id, window)))
+    const results = await Promise.allSettled(connections.map(c => client.getTopGuests(c.id, {
+      ...window,
+      ...(vdcScope ? { pools: [...(vdcScope.poolsByConnection.get(c.id) ?? [])] } : {}),
+    })))
 
     const merged: TopConsumerItem[] = []
     let answered = 0

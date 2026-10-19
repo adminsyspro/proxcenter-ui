@@ -532,8 +532,11 @@ return this.get<DRSRecommendation[]>(`/drs/recommendations${query}`)
     return this.get<DiskLatencySeries>(`/metrics/${connectionId}/vms/${vmid}/disk-latency${query ? `?${query}` : ''}`)
   }
 
-  /** Guests of a connection ranked by a metric over a window, for the dashboard top consumers (#1129). `limit` 0 = every guest. */
-  getTopGuests(connectionId: string, opts: { metric: TopGuestsMetric; agg?: TopGuestsAgg; from?: string; to?: string; limit?: number }) {
+  /**
+   * Guests of a connection ranked by a metric over a window, for the dashboard top consumers (#1129). `limit` 0 = every guest.
+   * `pools` keeps only the samples taken while the guest sat in one of them (a vDC's perimeter); omitted = no filter.
+   */
+  getTopGuests(connectionId: string, opts: { metric: TopGuestsMetric; agg?: TopGuestsAgg; from?: string; to?: string; limit?: number; pools?: string[] }) {
     const params = new URLSearchParams()
 
     params.set('metric', opts.metric)
@@ -541,6 +544,7 @@ return this.get<DRSRecommendation[]>(`/drs/recommendations${query}`)
     if (opts.from) params.set('from', opts.from)
     if (opts.to) params.set('to', opts.to)
     if (opts.limit !== undefined) params.set('limit', String(opts.limit))
+    if (opts.pools) params.set('pools', opts.pools.join(','))
 
     return this.get<TopGuests>(`/metrics/${connectionId}/top?${params.toString()}`)
   }

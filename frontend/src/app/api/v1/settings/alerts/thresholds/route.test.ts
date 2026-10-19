@@ -5,13 +5,15 @@ const checkPermissionMock = vi.fn()
 const getSettingMock = vi.fn()
 const setSettingMock = vi.fn()
 const updateThresholdsMock = vi.fn()
+let currentTenant = 'default'
 
 vi.mock('@/lib/rbac', () => ({
   checkPermission: (...a: any[]) => checkPermissionMock(...a),
   PERMISSIONS: { ADMIN_SETTINGS: 'admin.settings' },
 }))
 vi.mock('@/lib/tenant', () => ({
-  getCurrentTenantId: async () => 'tenant-1',
+  DEFAULT_TENANT_ID: 'default',
+  getCurrentTenantId: async () => currentTenant,
 }))
 vi.mock('@/lib/db/settings', () => ({
   getSetting: (...a: any[]) => getSettingMock(...a),
@@ -34,6 +36,7 @@ const originalOrchestratorUrl = process.env.ORCHESTRATOR_URL
 
 beforeEach(() => {
   vi.clearAllMocks()
+  currentTenant = 'default'
   checkPermissionMock.mockResolvedValue(null)
   getSettingMock.mockResolvedValue(null)
   setSettingMock.mockResolvedValue(undefined)
@@ -81,7 +84,7 @@ describe('guest disk latency peak thresholds (#881)', () => {
     expect(res.status).toBe(200)
     const expected = expect.objectContaining({ disk_latency_peak_warning: 150, disk_latency_peak_critical: 400 })
     expect(updateThresholdsMock).toHaveBeenCalledWith(expected)
-    expect(setSettingMock).toHaveBeenCalledWith('alert_thresholds', 'tenant-1', expected)
+    expect(setSettingMock).toHaveBeenCalledWith('alert_thresholds', 'default', expected)
   })
 })
 
@@ -99,7 +102,7 @@ describe('backup coverage settings (roadmap#48)', () => {
     expect(res.status).toBe(200)
     const expected = expect.objectContaining({ backup_coverage_alerts: 1, backup_coverage_grace_hours: 48, backup_coverage_exclude_tag: 'skip' })
     expect(updateThresholdsMock).toHaveBeenCalledWith(expected)
-    expect(setSettingMock).toHaveBeenCalledWith('alert_thresholds', 'tenant-1', expected)
+    expect(setSettingMock).toHaveBeenCalledWith('alert_thresholds', 'default', expected)
   })
 
   it('falls back to the default tag when PVE would refuse the value', async () => {
@@ -117,7 +120,7 @@ describe('PUT /api/v1/settings/alerts/thresholds', () => {
     expect(res.status).toBe(200)
     expect((await res.json()).snapshot_exclude_pattern).toBe('(?i)replica')
     expect(updateThresholdsMock).toHaveBeenCalledWith(expect.objectContaining({ snapshot_exclude_pattern: '(?i)replica' }))
-    expect(setSettingMock).toHaveBeenCalledWith('alert_thresholds', 'tenant-1', expect.objectContaining({ snapshot_exclude_pattern: '(?i)replica' }))
+    expect(setSettingMock).toHaveBeenCalledWith('alert_thresholds', 'default', expect.objectContaining({ snapshot_exclude_pattern: '(?i)replica' }))
   })
 
   it('relays the orchestrator refusal of an invalid RE2 pattern and stores nothing', async () => {
@@ -145,6 +148,22 @@ describe('PUT /api/v1/settings/alerts/thresholds', () => {
     expect(res.status).toBe(200)
     expect(setSettingMock).toHaveBeenCalledTimes(1)
     warn.mockRestore()
+  })
+
+  it('stores a tenant\'s thresholds without pushing them to the shared orchestrator', async () => {
+    currentTenant = 'tenant-1'
+    const res = await callRoute(PUT as any, { method: 'PUT', body: { cpu_warning: 75, metrics_retention_days: 1 } })
+    expect(res.status).toBe(200)
+    expect(updateThresholdsMock).not.toHaveBeenCalled()
+    expect(setSettingMock).toHaveBeenCalledWith('alert_thresholds', 'tenant-1', expect.objectContaining({ cpu_warning: 75 }))
+  })
+
+  it('keeps the metrics retention within 1 to 365 whole days (#1129)', async () => {
+    for (const [sent, kept] of [[0, 1], [-5, 1], [30.7, 30], [9999, 365]]) {
+      updateThresholdsMock.mockClear()
+      await callRoute(PUT as any, { method: 'PUT', body: { metrics_retention_days: sent } })
+      expect(updateThresholdsMock).toHaveBeenCalledWith(expect.objectContaining({ metrics_retention_days: kept }))
+    }
   })
 
   it('skips the orchestrator entirely without ORCHESTRATOR_URL', async () => {

@@ -129,8 +129,28 @@ describe('GET /api/v1/dashboard/top-consumers', () => {
 
     expect(res.status).toBe(200)
     expect(getTopGuestsMock).toHaveBeenCalledTimes(1)
-    expect(getTopGuestsMock).toHaveBeenCalledWith('p1', expect.anything())
+    // The pools travel to the orchestrator, which only counts the samples
+    // taken while the guest sat in one of them (a move or a reused VMID).
+    expect(getTopGuestsMock).toHaveBeenCalledWith('p1', expect.objectContaining({ pools: ['acme'] }))
     expect(body.items.map((i: any) => i.name)).toEqual(['theirs'])
+  })
+
+  it('does not ask for a vDC connection where the tenant holds no pool', async () => {
+    getInfraMock.mockResolvedValue({
+      kind: 'iaas',
+      vdcScope: {
+        connectionIds: new Set(['p1']),
+        pbsConnectionIds: new Set(),
+        nodesByConnection: new Map([['p1', new Set(['pve1'])]]),
+        poolsByConnection: new Map([['p1', new Set()]]),
+      },
+    })
+
+    const res = await get({ metric: 'cpu' })
+
+    expect(res.status).toBe(200)
+    expect(getTopGuestsMock).not.toHaveBeenCalled()
+    expect((await readJson<any>(res)).items).toEqual([])
   })
 
   it('judges every guest with the RBAC predicate for a scoped caller and skips ungranted connections', async () => {

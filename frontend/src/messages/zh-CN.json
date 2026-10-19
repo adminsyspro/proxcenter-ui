@@ -612,6 +612,29 @@
       "window": "最近 {minutes} 分钟：平均 {avg}，最大 {max}",
       "guests": "{vms} 台虚拟机 · {disks} 个磁盘"
     },
+    "widgetTopConsumers": {
+      "metric": "指标",
+      "period": "时间段",
+      "metrics": {
+        "cpu": "CPU",
+        "ram": "内存",
+        "diskread": "磁盘读取",
+        "diskwrite": "磁盘写入",
+        "netin": "网络入站",
+        "netout": "网络出站"
+      },
+      "live": "实时",
+      "dashboardRange": "仪表板 ({range})",
+      "custom": "自定义",
+      "avg": "平均",
+      "peak": "峰值",
+      "from": "开始",
+      "to": "结束",
+      "invalidRange": "结束时间必须晚于开始时间",
+      "needsOrchestrator": "历史数据需要编排器",
+      "loadFailed": "无法加载历史数据",
+      "historySince": "历史数据自 {date} 起可用"
+    },
     "nodeGuests": {
       "guests": "{count} 个客户机",
       "running": "{count} 个运行中",
@@ -779,6 +802,8 @@
     "diskLatencyPeakInterval": "峰值是一次采集间隔（{interval}）的延迟，而不是单个 I/O 的延迟",
     "diskLatencyCollection": "为图表和列表采集每台运行中虚拟机的延迟（每次采集每台虚拟机一次 API 调用）",
     "diskLatencyRetention": "为 Disk I/O 图表保留的延迟历史天数",
+    "metricsRetention": "指标历史保留天数",
+    "metricsRetentionDesc": "限制仪表板的资源消耗排行和图表可回溯的时间范围。更早的采集数据由编排器删除。",
     "metricsInterval": "采集间隔",
     "snapshots": "快照",
     "collectionRecovery": "采集与恢复",

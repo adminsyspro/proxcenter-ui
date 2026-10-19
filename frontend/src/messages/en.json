@@ -608,6 +608,29 @@
       "window": "Last {minutes} min: average {avg}, max {max}",
       "guests": "{vms} VMs · {disks} disks"
     },
+    "widgetTopConsumers": {
+      "metric": "Metric",
+      "period": "Period",
+      "metrics": {
+        "cpu": "CPU",
+        "ram": "Memory",
+        "diskread": "Disk read",
+        "diskwrite": "Disk write",
+        "netin": "Network in",
+        "netout": "Network out"
+      },
+      "live": "Live",
+      "dashboardRange": "Dashboard ({range})",
+      "custom": "Custom",
+      "avg": "Avg",
+      "peak": "Peak",
+      "from": "From",
+      "to": "To",
+      "invalidRange": "The end must come after the start",
+      "needsOrchestrator": "History needs the orchestrator",
+      "loadFailed": "The history could not be loaded",
+      "historySince": "History available since {date}"
+    },
     "nodeGuests": {
       "guests": "{count} guests",
       "running": "{count} running",
@@ -775,6 +798,8 @@
     "diskLatencyPeakInterval": "A peak is the latency of one collection interval ({interval}), not of a single I/O",
     "diskLatencyCollection": "Collect the latency of every running VM for the charts and lists (one API call per VM per collection)",
     "diskLatencyRetention": "days of latency history kept for the Disk I/O charts",
+    "metricsRetention": "days of metrics history kept",
+    "metricsRetentionDesc": "Bounds how far back the dashboard's top consumers and charts can look. The orchestrator drops older collections.",
     "metricsInterval": "Collection interval",
     "snapshots": "Snapshots",
     "collectionRecovery": "Collection & recovery",

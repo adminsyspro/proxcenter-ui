@@ -2106,6 +2106,7 @@ export const EXTRA_MOCKS: MockDataMap = {
     disk_latency_retention_days: 7,
     disk_latency_collection: 1,
     metrics_interval_seconds: 60,
+    metrics_retention_days: 14,
     replication_rpo_grace_percent: 25,
     replication_failure_alerts: 1,
   },

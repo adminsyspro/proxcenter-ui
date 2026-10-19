@@ -266,6 +266,37 @@ export interface StorageLatency {
   vms: number
 }
 
+/** Metric a top guests ranking is built on (#1129): percentages for cpu/ram, byte rates for the four IO counters. */
+export type TopGuestsMetric = 'cpu' | 'ram' | 'diskread' | 'diskwrite' | 'netin' | 'netout'
+export type TopGuestsAgg = 'avg' | 'max'
+
+export interface TopGuestItem {
+  vmid: number
+  name: string
+  node: string
+  /** `type`, `pool` and `tags` come from the latest sample of the window; absent on rows written before #1129. */
+  type?: string
+  status: string
+  pool?: string
+  tags?: string
+  value: number
+  samples: number
+}
+
+/** One connection's guests ranked over a window, from the stored collections (#1129). */
+export interface TopGuests {
+  metric: TopGuestsMetric
+  agg: TopGuestsAgg
+  unit: 'percent' | 'bytes_per_second'
+  from: string
+  to: string
+  /** Oldest row of this connection in the whole table, null when none. */
+  first_sample_at: string | null
+  samples: number
+  stride: number
+  items: TopGuestItem[]
+}
+
 export interface NodeMetrics {
   node: string
   status: string
@@ -499,6 +530,23 @@ return this.get<DRSRecommendation[]>(`/drs/recommendations${query}`)
     const query = params.toString()
 
     return this.get<DiskLatencySeries>(`/metrics/${connectionId}/vms/${vmid}/disk-latency${query ? `?${query}` : ''}`)
+  }
+
+  /**
+   * Guests of a connection ranked by a metric over a window, for the dashboard top consumers (#1129). `limit` 0 = every guest.
+   * `pools` keeps only the samples taken while the guest sat in one of them (a vDC's perimeter); omitted = no filter.
+   */
+  getTopGuests(connectionId: string, opts: { metric: TopGuestsMetric; agg?: TopGuestsAgg; from?: string; to?: string; limit?: number; pools?: string[] }) {
+    const params = new URLSearchParams()
+
+    params.set('metric', opts.metric)
+    if (opts.agg) params.set('agg', opts.agg)
+    if (opts.from) params.set('from', opts.from)
+    if (opts.to) params.set('to', opts.to)
+    if (opts.limit !== undefined) params.set('limit', String(opts.limit))
+    if (opts.pools) params.set('pools', opts.pools.join(','))
+
+    return this.get<TopGuests>(`/metrics/${connectionId}/top?${params.toString()}`)
   }
 
   getMetricsHistory(connectionId: string, from?: string, to?: string) {
@@ -965,6 +1013,8 @@ export interface AlertThresholds {
   disk_latency_peak_critical: number
   /** Days of per-disk latency history kept for the Disk I/O charts (#881). */
   disk_latency_retention_days: number
+  /** Days of metrics collections kept, the history the dashboard top consumers and charts can look back on (#1129), 1 to 365. */
+  metrics_retention_days: number
   /** 1 = the orchestrator reads QEMU block statistics of every running VM (#881); 0 stops the collection, charts and alert included. */
   disk_latency_collection: number
   /** Seconds between two metrics collections of the orchestrator (#881), 30 to 600; applied to the scheduler on save. */

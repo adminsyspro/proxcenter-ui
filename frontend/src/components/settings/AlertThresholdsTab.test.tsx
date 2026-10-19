@@ -205,6 +205,23 @@ describe('AlertThresholdsTab metrics collection interval', () => {
     expect(JSON.parse(put[1].body)).toMatchObject({ metrics_interval_seconds: 120 })
   })
 
+  it('keeps 14 days of history by default and saves an edited retention, capped at 365', async () => {
+    const user = userEvent.setup()
+
+    renderWithProviders(<AlertThresholdsTab />)
+    await openSection('Collection & recovery')
+    const retention = await screen.findByRole('spinbutton', { name: 'days of metrics history kept' })
+
+    expect(retention).toHaveValue(14)
+    await user.clear(retention)
+    await user.type(retention, '500')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(fetchMock.mock.calls.some(([, options]) => options?.method === 'PUT')).toBe(true))
+    const put = fetchMock.mock.calls.find(([, options]) => options?.method === 'PUT')
+    expect(JSON.parse(put[1].body)).toMatchObject({ metrics_retention_days: 365 })
+  })
+
   it('cannot leave the 30 s to 10 min range', async () => {
     const user = userEvent.setup()
 

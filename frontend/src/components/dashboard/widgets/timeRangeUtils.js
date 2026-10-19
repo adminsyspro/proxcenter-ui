@@ -1,12 +1,13 @@
 /**
- * Maps global time range value to API-compatible parameters.
+ * Maps global time range value to API-compatible parameters. `label` is the
+ * short form the dashboard's range picker shows for it.
  */
 const RANGE_MAP = {
-  hour:  { rrdTimeframe: 'hour',  trendsTimeframe: 'hour',  days: 1,  hours: 1 },
-  '6h':  { rrdTimeframe: 'day',   trendsTimeframe: 'day',   days: 1,  hours: 6 },
-  day:   { rrdTimeframe: 'day',   trendsTimeframe: 'day',   days: 1,  hours: 24 },
-  week:  { rrdTimeframe: 'week',  trendsTimeframe: 'week',  days: 7,  hours: 168 },
-  month: { rrdTimeframe: 'month', trendsTimeframe: 'month', days: 30, hours: 720 },
+  hour:  { rrdTimeframe: 'hour',  trendsTimeframe: 'hour',  days: 1,  hours: 1,   label: '1h' },
+  '6h':  { rrdTimeframe: 'day',   trendsTimeframe: 'day',   days: 1,  hours: 6,   label: '6h' },
+  day:   { rrdTimeframe: 'day',   trendsTimeframe: 'day',   days: 1,  hours: 24,  label: '24h' },
+  week:  { rrdTimeframe: 'week',  trendsTimeframe: 'week',  days: 7,  hours: 168, label: '7d' },
+  month: { rrdTimeframe: 'month', trendsTimeframe: 'month', days: 30, hours: 720, label: '30d' },
 }
 
 export function mapTimeRange(range) {

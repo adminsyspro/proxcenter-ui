@@ -38,6 +38,8 @@ const DEFAULT_THRESHOLDS = {
   disk_latency_collection: 1,
   // Metrics collection cadence in seconds (#881), an int on the Go side too.
   metrics_interval_seconds: 60,
+  // Days of metrics collections kept (#1129), an int on the Go side.
+  metrics_retention_days: 14,
   // Backup coverage (roadmap#48), see the settings route. Hours are an int.
   backup_coverage_grace_hours: 24,
   backup_coverage_exclude_tag: 'no-backup',
@@ -61,6 +63,7 @@ const INT_THRESHOLD_KEYS: ReadonlySet<keyof Thresholds> = new Set([
   'disk_latency_window_minutes',
   'disk_latency_retention_days',
   'metrics_interval_seconds',
+  'metrics_retention_days',
   'backup_coverage_grace_hours',
   'sflow_telemetry_timeout_seconds',
   'sflow_telemetry_grace_seconds',

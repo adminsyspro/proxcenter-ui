@@ -597,6 +597,29 @@
       "window": "Letzte {minutes} Min: Durchschnitt {avg}, max {max}",
       "guests": "{vms} VMs · {disks} Datenträger"
     },
+    "widgetTopConsumers": {
+      "metric": "Metrik",
+      "period": "Zeitraum",
+      "metrics": {
+        "cpu": "CPU",
+        "ram": "Arbeitsspeicher",
+        "diskread": "Disk-Lesen",
+        "diskwrite": "Disk-Schreiben",
+        "netin": "Netzwerk eingehend",
+        "netout": "Netzwerk ausgehend"
+      },
+      "live": "Live",
+      "dashboardRange": "Dashboard ({range})",
+      "custom": "Benutzerdefiniert",
+      "avg": "Mittel",
+      "peak": "Spitze",
+      "from": "Von",
+      "to": "Bis",
+      "invalidRange": "Das Ende muss nach dem Anfang liegen",
+      "needsOrchestrator": "Der Verlauf benötigt den Orchestrator",
+      "loadFailed": "Der Verlauf konnte nicht geladen werden",
+      "historySince": "Verlauf verfügbar seit {date}"
+    },
     "nodeGuests": {
       "guests": "{count} Guests",
       "running": "{count} aktiv",
@@ -764,6 +787,8 @@
     "diskLatencyPeakInterval": "Eine Spitze ist die Latenz eines Erfassungsintervalls ({interval}), nicht die einer einzelnen I/O",
     "diskLatencyCollection": "Latenz jeder laufenden VM für Diagramme und Listen erfassen (ein API-Aufruf pro VM und Erfassung)",
     "diskLatencyRetention": "Tage Latenzverlauf für die Disk-I/O-Diagramme",
+    "metricsRetention": "Tage Metrikverlauf, die aufbewahrt werden",
+    "metricsRetentionDesc": "Begrenzt, wie weit die Top-Verbraucher und Diagramme des Dashboards zurückblicken können. Ältere Erfassungen löscht der Orchestrator.",
     "metricsInterval": "Erfassungsintervall",
     "snapshots": "Snapshots",
     "collectionRecovery": "Erfassung und Entwarnung",

@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server'
 
 import { getSetting, setSetting } from '@/lib/db/settings'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
-import { getCurrentTenantId } from '@/lib/tenant'
+import { DEFAULT_TENANT_ID, getCurrentTenantId } from '@/lib/tenant'
 import { alertsApi, parseOrchestratorError } from '@/lib/orchestrator/client'
 import { demoResponse } from '@/lib/demo/demo-api'
 import { DEFAULT_COVERAGE_SETTINGS, normalizeExcludeTag, normalizeGraceHours } from '@/lib/backups/coverage'
@@ -47,6 +47,9 @@ const DEFAULT_THRESHOLDS = {
   // switch itself (1 = on): one PVE call per running VM per collection.
   disk_latency_retention_days: 7,
   disk_latency_collection: 1,
+  // Days of metrics collections kept (#1129): what the dashboard top consumers
+  // and charts can look back on. The orchestrator prunes older rows.
+  metrics_retention_days: 14,
   // Seconds between two metrics collections of the orchestrator (#881), the
   // cadence every resource alert and recovery confirmation counts in. The
   // config.yaml value is only the starting point; 30 s to 10 min.
@@ -100,6 +103,9 @@ function coerceThresholds(raw: any): Thresholds {
   // Whole seconds for the Go side (int fields), never negative.
   t.sflow_telemetry_timeout_seconds = Math.max(0, Math.trunc(t.sflow_telemetry_timeout_seconds as number))
   t.sflow_telemetry_grace_seconds = Math.max(0, Math.trunc(t.sflow_telemetry_grace_seconds as number))
+  // Days of metrics history the orchestrator keeps (#1129), the bounds of the
+  // settings field: a request outside them would purge the whole history.
+  t.metrics_retention_days = Math.min(365, Math.max(1, Math.trunc(t.metrics_retention_days as number)))
   return t as Thresholds
 }
 
@@ -143,8 +149,12 @@ export async function PUT(req: Request) {
 
     const body = await req.json()
     const thresholds = coerceThresholds(body)
+    const tenantId = await getCurrentTenantId()
 
-    if (process.env.ORCHESTRATOR_URL) {
+    // The orchestrator is shared by every tenant and its config sync reads the
+    // provider's thresholds: only the provider tenant may push them, or a
+    // tenant admin could reset the cadence or purge everyone's metrics history.
+    if (process.env.ORCHESTRATOR_URL && tenantId === DEFAULT_TENANT_ID) {
       try {
         await alertsApi.updateThresholds(thresholds)
       } catch (e) {
@@ -159,7 +169,6 @@ export async function PUT(req: Request) {
       }
     }
 
-    const tenantId = await getCurrentTenantId()
     await setSetting('alert_thresholds', tenantId, thresholds)
 
     return NextResponse.json(thresholds)

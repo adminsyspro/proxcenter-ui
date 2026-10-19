@@ -42,6 +42,7 @@ const DEFAULTS = {
   disk_latency_retention_days: 7,
   disk_latency_collection: 1,
   metrics_interval_seconds: 60,
+  metrics_retention_days: 14,
   replication_rpo_grace_percent: 25,
   replication_failure_alerts: 1,
   // Edited from the backup coverage card of the Backups page (roadmap#48),
@@ -416,7 +417,9 @@ export default function AlertThresholdsTab() {
         <MetricsIntervalCard
           seconds={thresholds.metrics_interval_seconds}
           confirmations={thresholds.recovery_confirmations}
+          retentionDays={thresholds.metrics_retention_days}
           onChange={(seconds) => setThresholds(th => ({ ...th, metrics_interval_seconds: seconds }))}
+          onRetentionChange={(days) => setThresholds(th => ({ ...th, metrics_retention_days: Math.min(365, Math.max(1, Math.trunc(days))) }))}
           t={t}
         />
 
@@ -505,9 +508,11 @@ export function formatCalm(seconds, confirmations) {
 /**
  * The collection cadence of the orchestrator. The caption below the slider
  * translates it into what the operator feels, the calm required before an
- * alert resolves, since the recovery confirmations count collections.
+ * alert resolves, since the recovery confirmations count collections. The
+ * same card holds how long those collections are kept (#1129): the history
+ * the dashboard top consumers and charts can look back on.
  */
-function MetricsIntervalCard({ seconds, confirmations, onChange, t }) {
+function MetricsIntervalCard({ seconds, confirmations, retentionDays, onChange, onRetentionChange, t }) {
   return (
     <SingleThresholdCard
       icon='ri-timer-line'
@@ -525,6 +530,22 @@ function MetricsIntervalCard({ seconds, confirmations, onChange, t }) {
     >
       <Typography variant='caption' color='text.secondary' display='block' sx={{ mt: 1 }}>
         {t('alerts.metricsIntervalHelp', { count: confirmations, duration: formatCalm(seconds, confirmations) })}
+      </Typography>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mt: 1.5 }}>
+        <NumericTextField
+          type='number'
+          size='small'
+          value={retentionDays}
+          onChange={onRetentionChange}
+          fallback={14}
+          min={1}
+          slotProps={{ htmlInput: { min: 1, max: 365, 'aria-label': t('alerts.metricsRetention') } }}
+          sx={{ width: 80 }}
+        />
+        <Typography variant='body2' color='text.secondary'>{t('alerts.metricsRetention')}</Typography>
+      </Box>
+      <Typography variant='caption' color='text.secondary' display='block' sx={{ mt: 0.5 }}>
+        {t('alerts.metricsRetentionDesc')}
       </Typography>
     </SingleThresholdCard>
   )

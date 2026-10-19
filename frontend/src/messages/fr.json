@@ -608,6 +608,29 @@
       "window": "{minutes} dernières min : moyenne {avg}, max {max}",
       "guests": "{vms} VM · {disks} disques"
     },
+    "widgetTopConsumers": {
+      "metric": "Métrique",
+      "period": "Période",
+      "metrics": {
+        "cpu": "CPU",
+        "ram": "Mémoire",
+        "diskread": "Lecture disque",
+        "diskwrite": "Écriture disque",
+        "netin": "Réseau entrant",
+        "netout": "Réseau sortant"
+      },
+      "live": "Direct",
+      "dashboardRange": "Tableau de bord ({range})",
+      "custom": "Personnalisé",
+      "avg": "Moy.",
+      "peak": "Pic",
+      "from": "Du",
+      "to": "Au",
+      "invalidRange": "La fin doit être après le début",
+      "needsOrchestrator": "L'historique nécessite l'orchestrateur",
+      "loadFailed": "L'historique n'a pas pu être chargé",
+      "historySince": "Historique disponible depuis le {date}"
+    },
     "nodeGuests": {
       "guests": "{count} guests",
       "running": "{count} en cours",
@@ -775,6 +798,8 @@
     "diskLatencyPeakInterval": "Un pic est la latence d'une collecte (intervalle de {interval}), pas celle d'une I/O isolée",
     "diskLatencyCollection": "Collecter la latence de chaque VM en marche pour les graphes et les listes (un appel API par VM et par collecte)",
     "diskLatencyRetention": "jours d'historique de latence conservés pour les graphes Disk I/O",
+    "metricsRetention": "jours d'historique de métriques conservés",
+    "metricsRetentionDesc": "Borne jusqu'où les top consommateurs et les graphes du tableau de bord peuvent remonter. L'orchestrateur supprime les collectes plus anciennes.",
     "metricsInterval": "Intervalle de collecte",
     "snapshots": "Snapshots",
     "collectionRecovery": "Collecte et rétablissement",

@@ -6,6 +6,8 @@ import { useLocale, useTranslations } from 'next-intl'
 
 import { formatDateTime, getDateLocale } from '@/lib/i18n/date'
 import { useTenant } from '@/contexts/TenantContext'
+import { Features, useLicense } from '@/contexts/LicenseContext'
+import RestoreDrillsTab from '@/components/backup/restoreDrills/RestoreDrillsTab'
 import NumericTextField from '@/components/ui/NumericTextField'
 import BackupSchedulePicker from './BackupSchedulePicker'
 import { useSWRFetch } from '@/hooks/useSWRFetch'
@@ -2014,7 +2016,10 @@ function PbsJobsTab({ pbsConnections = [], isVdcTenant = false }) {
 const SMALL_SELECT_SX = { '& .MuiInputBase-input.MuiSelect-select': { minHeight: '1.4375em', lineHeight: '1.4375em' } }
 const TOOLBAR_CONTROL_SX = { height: 35.86 }
 
-export default function BackupJobsTabs({ pveConnections = [], pbsConnections = [], createRequest = null, onJobsChanged }) {
+// Index of the Restore drills tab (roadmap#35), shown after PVE and PBS.
+const DRILLS_TAB = 2
+
+export default function BackupJobsTabs({ pveConnections = [], pbsConnections = [], createRequest = null, onJobsChanged, drillRequest = null }) {
   const theme = useTheme()
   const t = useTranslations()
   const [activeTab, setActiveTab] = useState(0)
@@ -2032,6 +2037,19 @@ export default function BackupJobsTabs({ pveConnections = [], pbsConnections = [
     setExpanded(true)
     setActiveTab(0)
   }
+
+  // Restore drills: Enterprise feature, provider only (a vDC tenant never sees it).
+  const { hasFeature } = useLicense()
+  const showDrills = hasFeature(Features.BACKUP_RESTORE_DRILLS) && !isVdcTenant
+
+  // A drill started from the backups list opens this section on its tab.
+  const [seenDrillRequest, setSeenDrillRequest] = useState(null)
+  if (drillRequest && drillRequest !== seenDrillRequest) {
+    setSeenDrillRequest(drillRequest)
+    setExpanded(true)
+    setActiveTab(DRILLS_TAB)
+  }
+  const currentTab = activeTab === DRILLS_TAB && !showDrills ? 0 : activeTab
 
   return (
     <Card variant="outlined">
@@ -2054,7 +2072,7 @@ export default function BackupJobsTabs({ pveConnections = [], pbsConnections = [
 
         <Collapse in={expanded}>
           <Tabs
-            value={activeTab}
+            value={currentTab}
             onChange={(_, v) => setActiveTab(v)}
             sx={{ mt: 2, mb: 3, borderBottom: 1, borderColor: 'divider' }}
           >
@@ -2068,10 +2086,18 @@ export default function BackupJobsTabs({ pveConnections = [], pbsConnections = [
               iconPosition="start"
               label={`PBS (${pbsConnections.length})`}
             />
+            {showDrills && (
+              <Tab
+                icon={<i className="ri-lifebuoy-line" style={{ fontSize: 18 }} />}
+                iconPosition="start"
+                label={t('backups.restoreDrills.tab')}
+              />
+            )}
           </Tabs>
 
-          {activeTab === 0 && <PveJobsTab pveConnections={pveConnections} isVdcTenant={isVdcTenant} createRequest={createRequest} onJobsChanged={onJobsChanged} />}
-          {activeTab === 1 && <PbsJobsTab pbsConnections={pbsConnections} isVdcTenant={isVdcTenant} />}
+          {currentTab === 0 && <PveJobsTab pveConnections={pveConnections} isVdcTenant={isVdcTenant} createRequest={createRequest} onJobsChanged={onJobsChanged} />}
+          {currentTab === 1 && <PbsJobsTab pbsConnections={pbsConnections} isVdcTenant={isVdcTenant} />}
+          {currentTab === DRILLS_TAB && showDrills && <RestoreDrillsTab pveConnections={pveConnections} pbsConnections={pbsConnections} refreshKey={drillRequest?.nonce ?? 0} />}
         </Collapse>
       </CardContent>
     </Card>

@@ -8,8 +8,10 @@ FROM python:3.13-slim AS base
 
 # WeasyPrint runtime: needs Cairo/Pango/HarfBuzz/GdkPixbuf and a few fonts.
 # `fonts-dejavu-core` keeps the layer small while covering Latin, accented
-# characters and basic Cyrillic; reports that need other scripts can mount
-# extra fonts at /usr/share/fonts/.
+# characters and basic Cyrillic; `fonts-wqy-microhei` (a few MB) covers the
+# Chinese and Korean the UI is translated into, without which a report in
+# those languages prints blank labels. Other scripts can mount extra fonts at
+# /usr/share/fonts/.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         libcairo2 \
         libpango-1.0-0 \
@@ -20,6 +22,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         shared-mime-info \
         fonts-dejavu-core \
         fonts-liberation \
+        fonts-wqy-microhei \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

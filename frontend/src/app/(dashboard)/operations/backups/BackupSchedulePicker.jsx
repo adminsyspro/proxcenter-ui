@@ -46,6 +46,9 @@ const WEEKLY_RE = /^([a-z]{3}(?:,[a-z]{3})*)\s+(\d{2}:\d{2})$/i
 const WEEKLY_RANGE_RE = /^([a-z]{3})\.\.([a-z]{3})\s+(\d{2}:\d{2})$/i
 const MONTHLY_RE = /^\*-\*-(\d{1,2})\s+(\d{2}:\d{2})$/
 
+// What a structured-only picker shows for a value it cannot represent.
+const DEFAULT_STRUCTURED = '02:00'
+
 /**
  * Parse a PVE schedule string into a structured shape, or fall back to
  * { frequency: 'advanced', raw } if no pattern matches. Exported so
@@ -122,13 +125,19 @@ export function serializeSchedule(state) {
  * Controlled component. `value` is the PVE schedule string, `onChange`
  * receives the new string each time the structured pieces change.
  */
-export default function BackupSchedulePicker({ value, onChange, disabled = false }) {
+// structuredOnly hides the raw expression: the caller only accepts what the
+// structured controls produce (restore drill schedules). A stored value they
+// cannot show is replaced by the default daily schedule.
+export default function BackupSchedulePicker({ value, onChange, disabled = false, structuredOnly = false }) {
   const t = useTranslations()
 
   // Initial parse — re-run only when `value` is meaningfully different
   // from what we last produced, so flipping the structured controls
   // doesn't fight the parent's onChange round-trip.
-  const initial = useMemo(() => parseSchedule(value), [value])
+  const initial = useMemo(() => {
+    const parsed = parseSchedule(value)
+    return structuredOnly && parsed.advanced ? parseSchedule(DEFAULT_STRUCTURED) : parsed
+  }, [value, structuredOnly])
   const [frequency, setFrequency] = useState(initial.frequency)
   const [time, setTime] = useState(initial.time)
   const [days, setDays] = useState(initial.days)
@@ -142,7 +151,7 @@ export default function BackupSchedulePicker({ value, onChange, disabled = false
   useEffect(() => {
     const reproduced = serializeSchedule({ frequency, time, days, dayOfMonth, advanced, raw })
     if (reproduced === (value ?? '')) return
-    const parsed = parseSchedule(value)
+    const parsed = initial
     setFrequency(parsed.frequency)
     setTime(parsed.time)
     setDays(parsed.days)
@@ -152,13 +161,20 @@ export default function BackupSchedulePicker({ value, onChange, disabled = false
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value])
 
+  // A value the structured controls cannot show is replaced, once, by the
+  // default they display, so what is saved is what is on screen.
+  useEffect(() => {
+    if (structuredOnly && parseSchedule(value).advanced) onChange?.(DEFAULT_STRUCTURED)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value, structuredOnly])
+
   // Push every structured change up.
   const emit = (next) => {
     const merged = { frequency, time, days, dayOfMonth, advanced, raw, ...next }
     onChange?.(serializeSchedule(merged))
   }
 
-  if (advanced) {
+  if (advanced && !structuredOnly) {
     return (
       <Stack spacing={1}>
         <FormControlLabel
@@ -246,10 +262,12 @@ export default function BackupSchedulePicker({ value, onChange, disabled = false
         />
       )}
 
-      <FormControlLabel
-        control={<Switch size="small" checked={advanced} onChange={(_, v) => { setAdvanced(v); emit({ advanced: v }) }} disabled={disabled} />}
-        label={<Typography variant="caption">{t('backups.scheduleAdvanced')}</Typography>}
-      />
+      {!structuredOnly && (
+        <FormControlLabel
+          control={<Switch size="small" checked={advanced} onChange={(_, v) => { setAdvanced(v); emit({ advanced: v }) }} disabled={disabled} />}
+          label={<Typography variant="caption">{t('backups.scheduleAdvanced')}</Typography>}
+        />
+      )}
     </Stack>
   )
 }

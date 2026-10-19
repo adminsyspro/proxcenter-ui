@@ -50,6 +50,8 @@ export default function BackupDetailDialog({
   onRestore, onVerify, verifying, onDelete, deleting, deleteAwaitingConfirm, timeAgo, t, locale,
   // Each action shows only when the caller holds the right the route checks.
   canDelete = true, canVerify = true, canRestore = true,
+  // Restore drill (roadmap#35): VM backups only, when the caller may run one.
+  canTestRestore = false, onTestRestore,
 }) {
   const theme = useTheme()
   const fullScreen = useMediaQuery(theme.breakpoints.down('md'))
@@ -225,6 +227,12 @@ export default function BackupDetailDialog({
           <Button size='small' variant='outlined' onClick={onVerify} disabled={verifying}
             startIcon={verifying ? <CircularProgress size={14} /> : <i className='ri-shield-check-line' />}>
             {t('backups.verifyAction')}
+          </Button>
+        )}
+        {canTestRestore && backup.backupType === 'vm' && (
+          <Button size='small' variant='outlined' onClick={onTestRestore}
+            startIcon={<i className='ri-lifebuoy-line' />}>
+            {t('backups.restoreDrills.testRestore')}
           </Button>
         )}
         {canRestore && (

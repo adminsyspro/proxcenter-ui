@@ -542,3 +542,39 @@ describe('per-guest Site Recovery calls (ui#943)', () => {
     expect(urls[5]).toMatch(/\/replication\/executions\/exec-1\/events\?after=12$/)
   })
 })
+
+describe('restore drill schedules (roadmap#35)', () => {
+  it('reads a 204 as no content instead of failing on an empty body', async () => {
+    fetchMock.mockResolvedValueOnce({ ok: true, status: 204, json: async () => { throw new SyntaxError('Unexpected end of JSON input') }, text: async () => '' })
+    const { getOrchestratorClient } = await import('./client')
+    const res = await getOrchestratorClient().deleteRestoreDrillSchedule('s/1')
+    expect(res.data).toBeUndefined()
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(url).toBe('http://localhost:8080/api/v1/restore-drills/schedules/s%2F1')
+    expect(init.method).toBe('DELETE')
+  })
+
+  it('maps every schedule call to its orchestrator route', async () => {
+    fetchMock.mockImplementation(async () => jsonResponse({}))
+    const { getOrchestratorClient } = await import('./client')
+    const c = getOrchestratorClient()
+    const input = { name: 'n' } as any
+    await c.listRestoreDrills(50, 100, 'sched-1')
+    await c.listRestoreDrills()
+    await c.listRestoreDrillSchedules(20, 40)
+    await c.createRestoreDrillSchedule(input)
+    await c.getRestoreDrillSchedule('s1')
+    await c.updateRestoreDrillSchedule('s1', input)
+    await c.runRestoreDrillSchedule('s1')
+    const seen = fetchMock.mock.calls.map(([url, init]: any) => `${init.method} ${String(url).replace('http://localhost:8080/api/v1', '')}`)
+    expect(seen).toEqual([
+      'GET /restore-drills?limit=50&offset=100&schedule_id=sched-1',
+      'GET /restore-drills?limit=20&offset=0',
+      'GET /restore-drills/schedules?limit=20&offset=40',
+      'POST /restore-drills/schedules',
+      'GET /restore-drills/schedules/s1',
+      'PUT /restore-drills/schedules/s1',
+      'POST /restore-drills/schedules/s1/run',
+    ])
+  })
+})

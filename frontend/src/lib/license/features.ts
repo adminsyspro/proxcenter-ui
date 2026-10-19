@@ -30,6 +30,10 @@ export const Features = {
   WHITE_LABEL: 'white_label',
   MULTI_TENANCY: 'multi_tenancy',
   SFLOW_MONITORING: 'sflow_monitoring',
+  // Restore drills (roadmap#35): restore a PBS backup into a temporary,
+  // network-isolated VM, boot it, record the evidence and clean up. Routes
+  // under /api/v1/backups/restore-drills and the Backups page gate on it.
+  BACKUP_RESTORE_DRILLS: 'backup_restore_drills',
   // Option capabilities (granted by stackable add-on licenses, never by an
   // edition). NEVER add these to EDITION_FEATURES.
   // ProxCenter control-plane HA (this paid add-on): multi-node conversion of
@@ -74,6 +78,7 @@ export const EDITION_FEATURES: Record<string, readonly FeatureId[]> = {
     'white_label',
     'multi_tenancy',
     'sflow_monitoring',
+    'backup_restore_drills',
   ],
   enterprise_plus: [
     'drs',
@@ -100,6 +105,7 @@ export const EDITION_FEATURES: Record<string, readonly FeatureId[]> = {
     'white_label',
     'multi_tenancy',
     'sflow_monitoring',
+    'backup_restore_drills',
   ],
 }
 

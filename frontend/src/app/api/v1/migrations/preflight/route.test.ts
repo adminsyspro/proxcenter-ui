@@ -16,6 +16,10 @@ vi.mock("@/lib/migration/v2v-preflight", () => ({
 vi.mock("@/lib/migration/warm/vddk-preflight", () => ({
   runWarmNodePreflight: vi.fn(async () => ({ ok: true, missing: [] })),
 }))
+// #1000: the guest conversion readiness rides along with the VMware warm check.
+vi.mock("@/lib/migration/warm/guest-conversion-node", () => ({
+  checkGuestConversionNode: vi.fn(async () => ({ linux: [], windows: ["the VirtIO drivers for Windows (/usr/share/virtio-win/virtio-win.iso)"] })),
+}))
 vi.mock("@/lib/migration/warm/xcpng-node-preflight", () => ({
   runXcpngWarmNodePreflight: vi.fn(async () => ({ ok: true, missing: [] })),
 }))
@@ -84,7 +88,7 @@ describe("POST /api/v1/migrations/preflight — warm-check action", () => {
     expect(res.status).toBe(200)
     expect(mockSource).toHaveBeenCalledWith({ where: { id: "src" }, select: { type: true } })
     expect(mockSpace).toHaveBeenCalledExactlyOnceWith("c1", "pve1", "ZFS-Pool", spaceVerdict.requiredBytes)
-    expect(await res.json()).toEqual({ ok: true, missing: [], kind: "vddk", vddkTokenConfigured: false, space: spaceVerdict })
+    expect(await res.json()).toEqual({ ok: true, missing: [], kind: "vddk", vddkTokenConfigured: false, space: spaceVerdict, guestConversion: { linux: [], windows: ["the VirtIO drivers for Windows (/usr/share/virtio-win/virtio-win.iso)"] } })
     expect(runXcpngWarmNodePreflight).not.toHaveBeenCalled()
   })
 
@@ -128,6 +132,8 @@ describe("POST /api/v1/migrations/preflight — warm-check action", () => {
     const json = await readJson<{ ok: boolean; missing: string[] }>(res)
     expect(json?.ok).toBe(false)
     expect(json?.missing).toContain("vddk-plugin")
+    // the guest conversion readiness is reported, and advisory only
+    expect((json as any)?.guestConversion).toEqual({ linux: [], windows: ["the VirtIO drivers for Windows (/usr/share/virtio-win/virtio-win.iso)"] })
     // Must NOT fall through to the v2v preflight.
     expect(mockV2v).not.toHaveBeenCalled()
   })

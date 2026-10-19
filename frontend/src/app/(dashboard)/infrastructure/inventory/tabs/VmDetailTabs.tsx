@@ -64,6 +64,7 @@ import { AreaChart, Area, ComposedChart, Line, XAxis, YAxis, Tooltip } from 'rec
 import ChartContainer from '@/components/ChartContainer'
 
 import { formatBytes } from '@/utils/format'
+import { diskControllerLabel, scsiControllerLabel } from '@/lib/proxmox/diskController'
 import { formatDateTime } from '@/lib/i18n/date'
 import VmFirewallTab from '@/components/VmFirewallTab'
 import RestoreVmDialog from '@/components/backup/RestoreVmDialog'
@@ -1278,7 +1279,7 @@ export default function VmDetailTabs(props: any) {
                             <Typography variant="body2" fontWeight={600} sx={{ mb: 0.5 }}>
                               {t('inventory.totalVcpus', { count: cpuSockets * cpuCores })}
                             </Typography>
-                            <Typography variant="caption" sx={{ opacity: 0.7 }}>
+                            <Typography variant="caption" color="text.secondary">
                               {t('inventory.socketsCoresBreakdown', { sockets: cpuSockets, cores: cpuCores })}
                             </Typography>
                           </Box>
@@ -1551,7 +1552,7 @@ export default function VmDetailTabs(props: any) {
                             </Typography>
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                                 {canConfigHardware && (
-                                <MuiTooltip title={data.optionsInfo?.scsihw || 'virtio-scsi-single'}>
+                                <MuiTooltip title={`${t('inventory.scsiController')}: ${scsiControllerLabel(data.optionsInfo?.scsihw || data.systemInfo?.scsihw)}`}>
                                   <IconButton size="small" onClick={(e) => { e.stopPropagation(); setEditScsiControllerDialogOpen(true) }}>
                                     <i className="ri-settings-3-line" style={{ fontSize: 16 }} />
                                   </IconButton>
@@ -1621,13 +1622,19 @@ export default function VmDetailTabs(props: any) {
                                       </Box>
                                     }
                                     secondary={
-                                      <Typography variant="caption" sx={{ opacity: 0.7, overflowWrap: 'anywhere' }}>
+                                      <Typography variant="caption" color="text.secondary" sx={{ overflowWrap: 'anywhere' }}>
                                         {disk.isUnused
                                           ? disk.rawValue
                                           : disk.isCdrom
                                             ? (disk.storage === 'none' ? t('inventory.noDiskInserted') : (disk.volume || disk.storage))
                                             : <>
                                                 {disk.volume || disk.storage} • {disk.format || 'raw'}
+                                                {/* Which controller the disk sits on (#1000): after a migration the
+                                                    operator checks at a glance that it landed on VirtIO. */}
+                                                {(() => {
+                                                  const ctrl = diskControllerLabel(disk.id, data.optionsInfo?.scsihw || data.systemInfo?.scsihw)
+                                                  return ctrl && <span title={t('inventory.diskControllerTooltip')} data-testid={`disk-controller-${disk.id}`}> • {ctrl.label}</span>
+                                                })()}
                                                 {disk.cache && ` • Cache: ${disk.cache}`}
                                                 {disk.iothread && ' • IOThread'}
                                               </>
@@ -1868,7 +1875,7 @@ export default function VmDetailTabs(props: any) {
                                       </Box>
                                     }
                                     secondary={
-                                      <Typography variant="caption" sx={{ opacity: 0.7 }}>
+                                      <Typography variant="caption" color="text.secondary">
                                         Bridge: {net.bridge}
                                         {net.tag && ` • VLAN: ${net.tag}`}
                                         {net.rate && ` • Limit: ${net.rate} MB/s`}
@@ -1988,7 +1995,7 @@ export default function VmDetailTabs(props: any) {
                                         </Box>
                                       }
                                       secondary={
-                                        <Typography variant="caption" sx={{ opacity: 0.7 }}>
+                                        <Typography variant="caption" color="text.secondary">
                                           {hw.rawValue}
                                         </Typography>
                                       }
@@ -2082,15 +2089,7 @@ export default function VmDetailTabs(props: any) {
                                       key: 'scsihw',
                                       icon: 'ri-hard-drive-3-line',
                                       label: t('inventory.scsiController'),
-                                      value: (() => {
-                                        const hw = data.systemInfo.scsihw || 'virtio-scsi-single'
-                                        const labels: Record<string, string> = {
-                                          'lsi': 'LSI 53C895A', 'lsi53c810': 'LSI 53C810',
-                                          'megasas': 'MegaRAID SAS 8708EM2', 'pvscsi': 'VMware PVSCSI',
-                                          'virtio-scsi-pci': 'VirtIO SCSI', 'virtio-scsi-single': 'VirtIO SCSI single',
-                                        }
-                                        return labels[hw] || hw
-                                      })(),
+                                      value: scsiControllerLabel(data.systemInfo.scsihw),
                                       editValue: data.systemInfo.scsihw || 'virtio-scsi-single',
                                       options: [
                                         { value: 'virtio-scsi-single', label: 'VirtIO SCSI single' },

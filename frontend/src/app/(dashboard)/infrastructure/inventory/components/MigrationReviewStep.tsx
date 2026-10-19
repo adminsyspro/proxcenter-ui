@@ -22,6 +22,7 @@ import Typography from '@mui/material/Typography'
 import TextField from '@mui/material/TextField'
 import Slider from '@mui/material/Slider'
 import Checkbox from '@mui/material/Checkbox'
+import FormControlLabel from '@mui/material/FormControlLabel'
 import Tooltip from '@mui/material/Tooltip'
 import FormControl from '@mui/material/FormControl'
 import FormHelperText from '@mui/material/FormHelperText'
@@ -38,9 +39,9 @@ import CircularProgress from '@mui/material/CircularProgress'
 import { useTheme } from '@mui/material/styles'
 
 import { MIGRATION_CPU_TYPES, MIGRATION_CPU_TYPE_DEFAULT } from '@/lib/migration/cpu-type'
-import { MIGRATION_NIC_MODELS, HARDWARE_LIMITS } from '@/lib/migration/target-overrides'
+import { MIGRATION_NIC_MODELS, MIGRATION_DISK_BUSES, HARDWARE_LIMITS, type MigrationDiskBus } from '@/lib/migration/target-overrides'
 import {
-  hardwareErrors, mergeCpuModels, sourceHardware, vlanTagInvalid,
+  autoBootBus, hardwareErrors, mergeCpuModels, scsiBootNeedsDrivers, sourceHardware, vlanTagInvalid,
   type ReviewDiskState, type ReviewHardwareState, type ReviewNicState, type ReviewSource,
 } from './migrationReview'
 
@@ -108,6 +109,17 @@ export interface MigrationReviewStepProps {
   belowDisks?: React.ReactNode
   nics: ReviewNicState[]
   onNicsChange: (next: ReviewNicState[]) => void
+  /**
+   * Warm from VMware only (#1000): shows the Bus column of the disk table.
+   * `convertGuest` is the launch default of the guest conversion, which
+   * decides what "Auto" means for the boot disk and whether forcing SCSI
+   * needs drivers the guest may not have.
+   */
+  busChoice?: { convertGuest: boolean }
+  /** Rendered under the CPU type: the parent's EL10 and node-level notes (#1000). */
+  cpuNotes?: React.ReactNode
+  /** UEFI sources only (#1000): enrol the Microsoft Secure Boot keys in the EFI disk. */
+  efiKeys?: { value: boolean; onChange: (value: boolean) => void }
 }
 
 /** A slider over a value: linear for counts, by steps for memory (as the deploy wizard). */
@@ -168,6 +180,7 @@ const SOCKETS_SCALE = linearScale(1, 4, [1, 2, 3, 4])
 export default function MigrationReviewStep({
   source, sourceLoading, sourceName, targetConnId, targetNode, defaultBridge, canEditVlan,
   cpuType, onCpuTypeChange, hardware, onHardwareChange, disks, onDisksChange, storages, belowDisks, nics, onNicsChange,
+  busChoice, efiKeys, cpuNotes,
 }: MigrationReviewStepProps) {
   const t = useTranslations()
   const theme = useTheme()
@@ -224,6 +237,16 @@ export default function MigrationReviewStep({
     onDisksChange(disks.map((d, i) => (i === index ? { ...d, ...patch } : d)))
   const setNic = (index: number, patch: Partial<ReviewNicState>) =>
     onNicsChange(nics.map((n, i) => (i === index ? { ...n, ...patch } : n)))
+
+  // "Auto" names what it resolves to on the boot disk, where the rule depends
+  // on the guest and on the conversion; on a data disk it keeps the source bus.
+  const busLabel = (bus: MigrationDiskBus, boot: boolean) => {
+    const name = (b: 'scsi' | 'sata') => t(b === 'scsi' ? 'inventoryPage.esxiMigration.reviewBusScsi' : 'inventoryPage.esxiMigration.reviewBusSata')
+    if (bus !== 'auto') return name(bus)
+    return boot && busChoice
+      ? t('inventoryPage.esxiMigration.reviewBusAutoAs', { bus: name(autoBootBus(source, busChoice.convertGuest)) })
+      : t('inventoryPage.esxiMigration.reviewBusAuto')
+  }
 
   const tableSx = { '& td, & th': { px: 0.75, py: 0.75, borderBottom: '1px solid', borderColor: 'divider' }, '& th': { fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5, color: 'text.secondary', fontWeight: 600 } } as const
 
@@ -323,6 +346,32 @@ export default function MigrationReviewStep({
           </Select>
           {cpuType === 'host' && <FormHelperText>{t('inventoryPage.esxiMigration.cpuTypeHostHint')}</FormHelperText>}
         </FormControl>
+        {cpuNotes && <Stack spacing={1} sx={{ mt: 1 }} data-testid="review-cpu-notes">{cpuNotes}</Stack>}
+        {efiKeys && (
+          <FormControlLabel
+            sx={{ mt: 1.5, ml: 0, alignItems: 'flex-start' }}
+            control={(
+              <Checkbox
+                size="small"
+                checked={efiKeys.value}
+                onChange={(_, v) => efiKeys.onChange(v)}
+                sx={{ mt: -0.5 }}
+                slotProps={{ input: { 'data-testid': 'review-efi-keys' } as any }}
+              />
+            )}
+            label={(
+              <Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                  <Box component="i" className="ri-shield-keyhole-line" sx={{ fontSize: 15, opacity: 0.7 }} />
+                  <Typography variant="body2" fontWeight={500}>{t('inventoryPage.esxiMigration.reviewEfiKeys')}</Typography>
+                </Box>
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                  {efiKeys.value ? t('inventoryPage.esxiMigration.reviewEfiKeysOn') : t('inventoryPage.esxiMigration.reviewEfiKeysOff')}
+                </Typography>
+              </Box>
+            )}
+          />
+        )}
       </Box>
 
       <Box sx={sectionSx} data-testid="review-disks">
@@ -335,6 +384,7 @@ export default function MigrationReviewStep({
               <TableRow>
                 <TableCell>{t('inventoryPage.esxiMigration.reviewDiskName')}</TableCell>
                 <TableCell sx={{ minWidth: 220 }}>{t('inventoryPage.esxiMigration.reviewDiskStorage')}</TableCell>
+                {busChoice && <TableCell sx={{ width: 150 }}>{t('inventoryPage.esxiMigration.reviewDiskBus')}</TableCell>}
                 <TableCell align="center" sx={{ width: 80, whiteSpace: 'nowrap' }}>{t('inventoryPage.esxiMigration.reviewDiskMigrate')}</TableCell>
               </TableRow>
             </TableHead>
@@ -377,6 +427,22 @@ export default function MigrationReviewStep({
                         </Select>
                       </FormControl>
                     </TableCell>
+                    {busChoice && (
+                      <TableCell>
+                        <FormControl fullWidth size="small" data-testid={`review-disk-${index}-bus`} disabled={excluded}>
+                          <Select
+                            value={disk.bus || 'auto'}
+                            onChange={e => setDisk(index, { bus: e.target.value as MigrationDiskBus })}
+                            sx={SELECT_SX}
+                            renderValue={val => busLabel(val as MigrationDiskBus, boot)}
+                          >
+                            {MIGRATION_DISK_BUSES.map(bus => (
+                              <MenuItem key={bus} value={bus}>{busLabel(bus, boot)}</MenuItem>
+                            ))}
+                          </Select>
+                        </FormControl>
+                      </TableCell>
+                    )}
                     <TableCell align="center">
                       <Tooltip title={boot ? t('inventoryPage.esxiMigration.reviewDiskBootLocked') : ''} arrow placement="top">
                         <span>
@@ -395,6 +461,11 @@ export default function MigrationReviewStep({
               })}
             </TableBody>
           </Table>
+        )}
+        {busChoice && scsiBootNeedsDrivers(disks, busChoice.convertGuest) && (
+          <Alert severity="warning" sx={{ fontSize: 12, mt: 1.5 }} data-testid="review-scsi-boot-warning">
+            {t('inventoryPage.esxiMigration.reviewScsiBootWarning')}
+          </Alert>
         )}
         {belowDisks && <Stack spacing={1} sx={{ mt: 1.5 }} data-testid="review-disks-below">{belowDisks}</Stack>}
       </Box>

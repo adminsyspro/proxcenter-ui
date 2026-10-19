@@ -10,6 +10,8 @@ import { MAX_DISKS } from "@/lib/migration/target-overrides"
 import { assertStorageName } from "@/lib/ssh/validate"
 import { checkWarmSourceVersion, fetchSourceApiVersion, warmSourceVersionError, warmSourceVersionWarning } from "@/lib/migration/warm/source-version"
 import { runWarmCopyReachability } from "@/lib/migration/warm/nfc-reachability"
+import { checkGuestConversionNode } from "@/lib/migration/warm/guest-conversion-node"
+import { readClusterCpuLevels } from "@/lib/migration/cpu-level-nodes"
 import { readVmCopyInterfaces } from "@/lib/vmware/copy-interfaces-server"
 import { prisma } from "@/lib/db/prisma"
 import { getCurrentTenantId, getSessionPrisma } from "@/lib/tenant"
@@ -74,6 +76,13 @@ export async function POST(req: Request) {
       return NextResponse.json(result)
     }
 
+    // x86-64 level of every node of the target cluster (#1000): a VM created
+    // with x86-64-v3 (an EL10 guest) cannot start or migrate on a node below
+    // it. Read-only, advisory: the dialog warns, the launch is not blocked.
+    if (action === "cpu-levels") {
+      return NextResponse.json({ nodes: await readClusterCpuLevels(targetConnectionId) })
+    }
+
     if (action === "check-virtio-win") {
       const result = await checkVirtioWinProgress(targetConnectionId, targetNode)
       return NextResponse.json(result)
@@ -130,7 +139,13 @@ export async function POST(req: Request) {
         const nbdResult = await runXcpngWarmNodePreflight(targetConnectionId, targetNode)
         return NextResponse.json({ ...nbdResult, kind: "nbd", vddkTokenConfigured: false, space })
       }
-      const result = await runWarmNodePreflight(targetConnectionId, targetNode, vddkLibdir)
+      // #1000: whether the node can convert the guest at cutover. Advisory:
+      // without it the cutover keeps the compatible hardware, so it never
+      // clears `ok`; the dialog offers to install what is missing.
+      const [result, guestConversion] = await Promise.all([
+        runWarmNodePreflight(targetConnectionId, targetNode, vddkLibdir),
+        checkGuestConversionNode(targetConnectionId, targetNode),
+      ])
       // roadmap#53: can the node reach the VMkernel adapter the copy will use?
       // Probed from the node itself; a vCenter source only needs the NFC data
       // port there, a standalone host also serves the VDDK's API calls at it.
@@ -153,6 +168,7 @@ export async function POST(req: Request) {
         ...result,
         ok: result.ok && !source?.blocked,
         kind: "vddk",
+        guestConversion,
         vddkTokenConfigured: isVddkPackageTokenConfigured(),
         space,
         ...(copy && { copy }),

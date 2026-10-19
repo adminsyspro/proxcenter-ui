@@ -66,6 +66,7 @@ vi.mock("@/lib/vmware/soap", async importOriginal => {
     soapLogin: vi.fn(), soapLogout: vi.fn(async () => {}), soapGetVmConfig: vi.fn(async () => "<vm/>"), parseVmConfig: vi.fn(),
     soapCreateSnapshot: vi.fn(), soapRemoveSnapshot: vi.fn(async () => {}), soapWaitForConsolidation: vi.fn(async () => true),
     soapFindSnapshotsByNamePrefix: vi.fn(async () => []), soapPowerOffVm: vi.fn(async () => {}),
+    soapGetGuestIdentities: vi.fn(async () => new Map()),
   }
 })
 vi.mock("@/lib/vmware/cbt", () => ({
@@ -323,5 +324,90 @@ describe("runWarmMigration per-disk choices (#317 lot 2)", () => {
     expect(messages()).toContain("Per-disk choices: ignored mapping for missing disk 5")
     expect(storageReads()).toEqual(["/storage/vg-thick"])
     expect(attachDisksAndBoot).toHaveBeenCalledWith(expect.objectContaining({ diskCount: 3 }))
+  })
+})
+
+describe("runWarmMigration guest conversion at cutover (#1000)", () => {
+  const efiVm = () => ({ ...makeVmConfig(), firmware: "efi", nics: [{ label: "n", type: "Vmxnet3", macAddress: "00:50:56:00:00:09", network: "VM Network" }] })
+  const v2vLog = (drivers: boolean) => [
+    JSON.stringify({ type: "message", message: "Converting Rocky Linux 9.8 (Blue Onyx) (rocky9) to run on KVM" }),
+    JSON.stringify({ type: "info", message: drivers ? "This guest has virtio drivers installed." : "This guest does not have virtio drivers installed." }),
+  ].join("\n")
+
+  /** The node answers the conversion like pve1 did on the lab. */
+  function conversionNode(drivers: boolean) {
+    vi.mocked(executeSSH).mockImplementation(async (c: string, h: any, command: string, t?: number, opts?: SSHExecOpts) => {
+      if (command.startsWith("test -x /usr/bin/virt-v2v-in-place")) { sshCommands.push(command); return { success: true, output: "v2v-in-place\n" } }
+      if (command.startsWith("nohup bash")) { sshCommands.push(command); return { success: true, output: "777\n" } }
+      if (command.startsWith("cat '/tmp/proxcenter-convert-") && command.includes("/exit")) return { success: true, output: "0\n" }
+      if (command.startsWith("cat '/tmp/proxcenter-convert-")) return { success: true, output: v2vLog(drivers) }
+      return sshRouter(c, h, command, t, opts)
+    })
+  }
+  const attach = () => vi.mocked(attachDisksAndBoot).mock.calls[0][0]
+
+  it("converts the guest with the source off and attaches VirtIO SCSI disks and VirtIO NICs", async () => {
+    vi.mocked(parseVmConfig).mockImplementation(() => efiVm() as any)
+    conversionNode(true)
+
+    const err = await runToEnd("warm-conv-1", makeConfig())
+
+    expect(err).toBeNull()
+    expect(sshCommands.some(c => c.startsWith("nohup bash") && c.includes("virt-v2v-in-place"))).toBe(true)
+    // overlays on the three copied volumes, committed once the drivers are in
+    expect(sshCommands.filter(c => c.startsWith("qemu-img commit -q '/tmp/proxcenter-convert-warm-conv-1/disk"))).toHaveLength(3)
+    expect(messages().some(m => /^Guest converted in \d+s \(Rocky Linux 9\.8 \(Blue Onyx\)\)/.test(m))).toBe(true)
+    expect(attach()).toMatchObject({ diskSlots: ["scsi0", "scsi1", "scsi2"], bootDiskSlot: "scsi0", nets: { net0: "virtio,bridge=vmbr0,macaddr=00:50:56:00:00:09" } })
+    // the phases the dialogs render as section headers, in order
+    const steps = (prisma.row.logs as Array<{ level: string; step?: string }>).filter(l => l.level === "step").map(l => l.step)
+    expect(steps).toEqual(["planning", "prepare", "full_copy", "delta", "cutover", "verify", "conversion", "finish"])
+  })
+
+  it("keeps the compatible hardware and the copied disks when the conversion installs no driver", async () => {
+    vi.mocked(parseVmConfig).mockImplementation(() => efiVm() as any)
+    conversionNode(false)
+
+    expect(await runToEnd("warm-conv-2", makeConfig())).toBeNull()
+
+    expect(sshCommands.some(c => c.startsWith("qemu-img commit"))).toBe(false)
+    expect(messages()).toContain("Guest conversion not applied: virt-v2v could not install the VirtIO drivers in this guest. The copied disks are unchanged and the guest keeps the hardware it boots on without new drivers (SATA boot disk for Windows and UEFI guests, e1000 NICs for Windows)")
+    expect(attach().bootDiskSlot).toBe("sata0")
+    expect(attach()).not.toHaveProperty("nets")
+  })
+
+  it("follows the choice made in the cutover dialog over the launch value", async () => {
+    vi.mocked(parseVmConfig).mockImplementation(() => efiVm() as any)
+    conversionNode(true)
+    // The cutover route wrote the operator's "no" into the job row.
+    prisma.row.config = { convertGuest: false }
+
+    expect(await runToEnd("warm-conv-3", makeConfig({ convertGuest: true }))).toBeNull()
+
+    expect(sshCommands.some(c => c.startsWith("nohup bash"))).toBe(false)
+    expect(messages()).toContain("Guest conversion not requested for this cutover: the guest keeps the hardware it boots on without new drivers")
+    expect(attach().bootDiskSlot).toBe("sata0")
+  })
+
+  it("applies the review step's forced bus without conversion", async () => {
+    vi.mocked(parseVmConfig).mockImplementation(() => efiVm() as any)
+
+    expect(await runToEnd("warm-conv-4", makeConfig({ convertGuest: false, disks: [{ index: 0, bus: "scsi" }] }))).toBeNull()
+
+    expect(messages()).toContain("Per-disk choices: bus disk 1->SCSI")
+    expect(attach()).toMatchObject({ diskSlots: ["scsi0", "scsi1", "scsi2"], bootDiskSlot: "scsi0" })
+  })
+})
+
+describe("runWarmMigration EL10 CPU level (#1000)", () => {
+  it("warns at planning when an EL10 guest is bound for a CPU type below x86-64-v3, and keeps the choice", async () => {
+    vi.mocked(parseVmConfig).mockImplementation(() => ({ ...makeVmConfig(), guestId: "rhel10_64Guest", guestOS: "Red Hat Enterprise Linux 10 (64-bit)" }) as any)
+    expect(await runToEnd("warm-el10-1", makeConfig({ convertGuest: false }))).toBeNull()
+    expect(messages().some(m => m.startsWith("This guest is an EL10 (RHEL 10 family), built for x86-64-v3: with the x86-64-v2-AES CPU type"))).toBe(true)
+  })
+
+  it("stays quiet on x86-64-v3", async () => {
+    vi.mocked(parseVmConfig).mockImplementation(() => ({ ...makeVmConfig(), guestId: "rhel10_64Guest", guestOS: "Red Hat Enterprise Linux 10 (64-bit)" }) as any)
+    expect(await runToEnd("warm-el10-2", makeConfig({ convertGuest: false, cpuType: "x86-64-v3" }))).toBeNull()
+    expect(messages().some(m => m.startsWith("This guest is an EL10"))).toBe(false)
   })
 })

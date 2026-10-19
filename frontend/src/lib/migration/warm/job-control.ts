@@ -1,7 +1,7 @@
 import { getTenantPrisma } from "@/lib/tenant"
 import { TERMINAL_STATUSES } from "@/lib/tasks/sharedTask"
 import { startOperatorSignalWatch, stopOperatorSignalWatch } from "@/lib/migration/operator-signals"
-import type { WarmStatus, LogEntry } from "./types"
+import type { WarmStatus, LogEntry, WarmLogStep } from "./types"
 
 // ── Job tracking (per-orchestrator, mirrors the other migration pipelines) ──
 const cancelledJobs = new Set<string>()
@@ -94,12 +94,33 @@ export async function updateJobLive(id: string, status: WarmStatus, extra: Recor
   })
 }
 
-export async function appendLog(id: string, msg: string, level: LogEntry["level"] = "info") {
+/**
+ * The job's persisted config as it is NOW, not as the pipeline received it:
+ * the cutover route writes the operator's guest-conversion choice into it
+ * (#1000), from whichever module instance served the click.
+ */
+export async function readJobConfig(id: string): Promise<Record<string, any>> {
+  const prisma = jobPrisma.get(id)
+  const job = await prisma?.migrationJob.findUnique({ where: { id }, select: { config: true } })
+  const config = job?.config
+  return config && typeof config === "object" && !Array.isArray(config) ? config as Record<string, any> : {}
+}
+
+export async function appendLog(id: string, msg: string, level: LogEntry["level"] = "info", extra: Partial<LogEntry> = {}) {
   const prisma = jobPrisma.get(id)
   const job = await prisma.migrationJob.findUnique({ where: { id }, select: { logs: true, progress: true } })
   const logs: LogEntry[] = (job?.logs as LogEntry[] | null) ?? []
-  logs.push({ ts: new Date().toISOString(), msg, level, progress: job?.progress ?? 0 } as any)
+  logs.push({ ts: new Date().toISOString(), msg, level, progress: job?.progress ?? 0, ...extra } as any)
   await prisma.migrationJob.update({ where: { id }, data: { logs } })
+}
+
+/**
+ * Open a phase of the job log (#1000): one `step` entry the dialogs render as
+ * a section header. `title` is the English text kept for the copied log and
+ * for any reader that does not know the step.
+ */
+export async function appendStep(id: string, step: WarmLogStep, title: string) {
+  await appendLog(id, title, "step", { step })
 }
 
 const OPERATOR_GATE_TIMEOUT_MS = 2 * 60 * 60 * 1000 // 2h safety cap

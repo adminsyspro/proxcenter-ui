@@ -45,7 +45,7 @@ export function formatEta(seconds: number): string {
 // passes are numbered, see below). Cold/v2v: preflight…awaiting_root_choice.
 const KNOWN_STEPS = new Set([
   "planning", "enabling_cbt", "preparing_disks", "full_copy", "source_shutdown",
-  "awaiting_cutover", "cutover", "verify", "converting_disks",
+  "awaiting_cutover", "cutover", "verify", "guest_conversion", "converting_disks",
   "preflight", "transferring", "creating_vm", "configuring", "pending",
   "awaiting_root_choice",
 ])

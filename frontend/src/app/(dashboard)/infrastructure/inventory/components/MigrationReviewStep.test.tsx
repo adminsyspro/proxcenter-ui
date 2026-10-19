@@ -214,3 +214,68 @@ describe('MigrationReviewStep', () => {
     expect(screen.queryByTestId('review-vtpm-warning')).toBeNull()
   })
 })
+
+describe('MigrationReviewStep: Bus column and Secure Boot keys (#1000)', () => {
+  const efiLinux: ReviewSource = { ...source, firmware: 'efi', guestOS: 'Rocky Linux (64-bit)' }
+
+  it('has no Bus column outside a warm run', () => {
+    seedNode()
+    renderStep()
+    expect(screen.queryByTestId('review-disk-0-bus')).toBeNull()
+  })
+
+  it('names what Auto gives the boot disk, with and without the conversion', () => {
+    seedNode()
+    renderStep({ source: efiLinux, busChoice: { convertGuest: false } })
+    expect(within(screen.getByTestId('review-disk-0-bus')).getByText('Auto (SATA)')).toBeTruthy()
+    expect(within(screen.getByTestId('review-disk-1-bus')).getByText('Auto')).toBeTruthy()
+    cleanup()
+    seedNode()
+    renderStep({ source: efiLinux, busChoice: { convertGuest: true } })
+    expect(within(screen.getByTestId('review-disk-0-bus')).getByText('Auto (VirtIO SCSI)')).toBeTruthy()
+  })
+
+  it('forces a bus on a disk', async () => {
+    seedNode()
+    const props = renderStep({ source: efiLinux, busChoice: { convertGuest: true } })
+    fireEvent.mouseDown(within(screen.getByTestId('review-disk-1-bus')).getByRole('combobox'))
+    fireEvent.click(await screen.findByRole('option', { name: 'SATA' }))
+    expect(props.onDisksChange).toHaveBeenCalledWith([onDefault, { ...onDefault, bus: 'sata' }])
+  })
+
+  it('warns when the boot disk is forced onto SCSI without the conversion', () => {
+    seedNode()
+    renderStep({ source: efiLinux, busChoice: { convertGuest: false }, disks: [{ ...onDefault, bus: 'scsi' }, onDefault] })
+    expect(screen.getByTestId('review-scsi-boot-warning').textContent).toMatch(/dracut emergency shell/)
+    expect(within(screen.getByTestId('review-disk-0-bus')).getByText('VirtIO SCSI')).toBeTruthy()
+    cleanup()
+    seedNode()
+    renderStep({ source: efiLinux, busChoice: { convertGuest: true }, disks: [{ ...onDefault, bus: 'scsi' }, onDefault] })
+    expect(screen.queryByTestId('review-scsi-boot-warning')).toBeNull()
+  })
+
+  it('offers the Secure Boot keys of a UEFI source and explains turning them off', () => {
+    seedNode()
+    const onChange = vi.fn()
+    renderStep({ source: efiLinux, efiKeys: { value: false, onChange } })
+    const box = screen.getByTestId('review-efi-keys') as HTMLInputElement
+    expect(box.checked).toBe(false)
+    expect(screen.getByText(/Secure Boot is off/)).toBeTruthy()
+    fireEvent.click(box)
+    expect(onChange).toHaveBeenCalledWith(true)
+  })
+})
+
+describe('MigrationReviewStep: CPU notes (#1000)', () => {
+  it('renders the parent EL10 and node-level notes under the CPU type', () => {
+    seedNode()
+    renderStep({ cpuNotes: <span>x86-64-v3 preselected</span> })
+    expect(screen.getByTestId('review-cpu-notes').textContent).toBe('x86-64-v3 preselected')
+  })
+
+  it('renders nothing when there is no note', () => {
+    seedNode()
+    renderStep()
+    expect(screen.queryByTestId('review-cpu-notes')).toBeNull()
+  })
+})

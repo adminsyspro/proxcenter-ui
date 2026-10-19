@@ -104,14 +104,17 @@ describe("toSharedTask", () => {
 
   it("carries what the cutover control needs", () => {
     const held = toSharedTask(
-      { ...baseJob, status: "delta_sync", projectedDowntimeSec: 60, config: { ...(baseJob as any).config, cutoverMode: "manual" } } as any,
+      { ...baseJob, status: "delta_sync", projectedDowntimeSec: 60, config: { ...(baseJob as any).config, cutoverMode: "manual", convertGuest: false } } as any,
       { isMine: false, createdByName: "Alice" },
     )
     expect(held.projectedDowntimeSec).toBe(60)
     expect(held.cutoverMode).toBe("manual")
+    // the guest conversion default of a VMware warm job (#1000)
+    expect(held.convertGuest).toBe(false)
 
     const st = toSharedTask(baseJob as any, { isMine: true, createdByName: "Alice" })
     expect(st.projectedDowntimeSec).toBeNull()
     expect(st.cutoverMode).toBeNull()
+    expect(st.convertGuest).toBeNull()
   })
 })

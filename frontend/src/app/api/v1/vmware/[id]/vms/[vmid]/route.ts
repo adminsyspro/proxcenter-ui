@@ -3,7 +3,8 @@ import { NextResponse } from "next/server"
 import { getSessionPrisma } from "@/lib/tenant"
 import { decryptSecret } from "@/lib/crypto/secret"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
-import { soapLogin, soapLogout, soapRequest, extractProp, soapResolveHostInventoryPaths, parseNicDevices, hasVirtualTpm } from "@/lib/vmware/soap"
+import { soapLogin, soapLogout, soapRequest, extractProp, soapResolveHostInventoryPaths, parseNicDevices, hasVirtualTpm, soapGetGuestIdentities } from "@/lib/vmware/soap"
+import { isEl10Guest } from "@/lib/migration/cpu-level"
 
 export const runtime = "nodejs"
 
@@ -55,6 +56,7 @@ export async function GET(
           <urn:type>VirtualMachine</urn:type>
           <urn:pathSet>name</urn:pathSet>
           <urn:pathSet>config.guestFullName</urn:pathSet>
+          <urn:pathSet>config.guestId</urn:pathSet>
           <urn:pathSet>config.hardware.numCPU</urn:pathSet>
           <urn:pathSet>config.hardware.numCoresPerSocket</urn:pathSet>
           <urn:pathSet>config.hardware.memoryMB</urn:pathSet>
@@ -204,11 +206,19 @@ export async function GET(
         console.warn(`[vmware/vms/${vmid}] vCenter session but no runtime.host extracted from VM properties; the migration will fail with "vcenterDatacenter required"`)
       }
 
+      // EL10 guests need an x86-64-v3 CPU type (#1000): the dialog preselects
+      // it. What the guest reported through Tools decides, the configured
+      // guest type rarely carries the version (best effort, never fails the route).
+      const reported = (await soapGetGuestIdentities(session, [vmid]).catch(() => new Map())).get(vmid)
+      const el10 = isEl10Guest({ guestId: extractProp(xml, 'config.guestId'), guestOS, detailedData: reported?.detailedData })
+        || (!!reported && isEl10Guest({ guestId: reported.guestId, guestOS: reported.guestOS }))
+
       return NextResponse.json({
         data: {
           vmid,
           name: name || vmid,
           guestOS,
+          el10,
           numCPU,
           numCoresPerSocket,
           sockets,

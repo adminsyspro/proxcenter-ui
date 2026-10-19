@@ -119,6 +119,8 @@ import EntityTagManager from './components/EntityTagManager'
 import VmActions from './components/VmActions'
 import NodeActions from './components/NodeActions'
 import WarmCutoverButton, { canRequestCutover, isAwaitingOperator } from './components/WarmCutoverButton'
+import MigrationLogLines from './components/MigrationLogLines'
+import { migrationLogText } from './migrationLogText'
 import ForcePowerOffButton, { isAwaitingPowerOff } from './components/ForcePowerOffButton'
 import RootChoiceButton, { isAwaitingRootChoice } from './components/RootChoiceButton'
 import { statusChipLabelKey, waitIconClass, waitTitleKey, isWaitDisplayKey } from './components/migrationWaitDisplay'
@@ -413,6 +415,7 @@ export default function InventoryDetails({
     migTransferMode, setMigTransferMode,
     migConvertToQcow2, setMigConvertToQcow2,
     migManualCutover, setMigManualCutover,
+    migConvertGuest, setMigConvertGuest, migEfiPreEnrolledKeys, setMigEfiPreEnrolledKeys,
     migDowntimeBudget, setMigDowntimeBudget,
     migZeroRateLimit, setMigZeroRateLimit,
     migBulkConcurrency, setMigBulkConcurrency,
@@ -4494,7 +4497,7 @@ return vm?.isCluster ?? false
                       {vmMigJob?.logs?.length > 0 && (
                         <MuiTooltip title={logCopy.copied ? t('common.copied') : t('common.copy')}>
                           <IconButton size="small" sx={{ opacity: 0.5, '&:hover': { opacity: 1 } }} onClick={() => {
-                            const text = vmMigJob.logs.map((l: any) => `[${new Date(l.ts).toLocaleTimeString()}] ${l.level === 'success' ? '✓' : l.level === 'error' ? '✗' : l.level === 'warn' ? '⚠' : '·'} ${l.msg}`).join('\n')
+                            const text = migrationLogText(vmMigJob.logs)
                             void logCopy.copy(text)
                           }}>
                             <i className={logCopy.copied ? 'ri-check-line' : 'ri-file-copy-line'} style={{ fontSize: 14 }} />
@@ -4504,15 +4507,7 @@ return vm?.isCluster ?? false
                     </Box>
                     <Box ref={migLogsRef} sx={{ p: 1.5, bgcolor: theme.palette.mode === 'dark' ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.03)', fontFamily: '"JetBrains Mono", monospace', fontSize: 11, overflow: 'auto', borderRadius: '0 0 8px 8px', lineHeight: 1.8, flex: 1, minHeight: 220 }}>
                       {vmMigJob?.logs?.length > 0 ? (
-                        vmMigJob.logs.map((log: any, i: number) => (
-                          <Box key={i}>
-                            <Box component="span" sx={{ color: 'text.secondary' }}>[{new Date(log.ts).toLocaleTimeString()}]</Box>{' '}
-                            {log.level === 'success' && <Box component="span" sx={{ color: 'success.main' }}>✓ </Box>}
-                            {log.level === 'error' && <Box component="span" sx={{ color: 'error.main' }}>✗ </Box>}
-                            {log.level === 'warn' && <Box component="span" sx={{ color: 'warning.main' }}>⚠ </Box>}
-                            {log.msg}
-                          </Box>
-                        ))
+                        <MigrationLogLines logs={vmMigJob.logs} />
                       ) : (
                         <Typography variant="body2" sx={{ fontFamily: 'inherit', fontSize: 'inherit', opacity: 0.3, fontStyle: 'italic' }}>
                           {t('inventoryPage.esxiMigration.logsWillAppear')}
@@ -4723,6 +4718,10 @@ return vm?.isCluster ?? false
         setMigStartAfter={setMigStartAfter}
         migConvertToQcow2={migConvertToQcow2}
         migManualCutover={migManualCutover}
+        migConvertGuest={migConvertGuest}
+        setMigConvertGuest={setMigConvertGuest}
+        migEfiPreEnrolledKeys={migEfiPreEnrolledKeys}
+        setMigEfiPreEnrolledKeys={setMigEfiPreEnrolledKeys}
         setMigManualCutover={setMigManualCutover}
         migDowntimeBudget={migDowntimeBudget}
         setMigDowntimeBudget={setMigDowntimeBudget}

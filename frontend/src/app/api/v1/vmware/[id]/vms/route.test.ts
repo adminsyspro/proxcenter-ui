@@ -10,6 +10,7 @@ const h = vi.hoisted(() => ({
   soapLogout: vi.fn(),
   soapListVMs: vi.fn(),
   soapResolveHostInventoryPaths: vi.fn(),
+  soapGetGuestIdentities: vi.fn(async () => new Map()),
 }))
 
 vi.mock("@/lib/tenant", () => ({ getSessionPrisma: vi.fn(async () => h.prisma) }))
@@ -20,6 +21,7 @@ vi.mock("@/lib/vmware/soap", () => ({
   soapLogout: h.soapLogout,
   soapListVMs: h.soapListVMs,
   soapResolveHostInventoryPaths: h.soapResolveHostInventoryPaths,
+  soapGetGuestIdentities: h.soapGetGuestIdentities,
 }))
 
 import { GET } from "./route"
@@ -63,5 +65,25 @@ describe("GET /api/v1/vmware/[id]/vms", () => {
     const res = await callRoute(GET, { params: { id: "conn-1" } })
     expect(res.status).toBe(200)
     expect((await readJson<any>(res)).data.vms).toHaveLength(1)
+  })
+})
+
+describe("GET /api/v1/vmware/[id]/vms — EL10 guests (#1000)", () => {
+  it("asks only the EL-family guests what they reported, and flags the EL10 ones", async () => {
+    h.soapListVMs.mockResolvedValue([
+      { moId: "vm-1", name: "alma", powerState: "poweredOn", guestId: "almalinux_64Guest", guestOS: "AlmaLinux (64-bit)", hostMor: "" },
+      { moId: "vm-2", name: "web", powerState: "poweredOn", guestId: "ubuntu64Guest", guestOS: "Ubuntu", hostMor: "" },
+    ])
+    h.soapGetGuestIdentities.mockResolvedValueOnce(new Map([["vm-1", { guestId: "almalinux_64Guest", guestOS: "AlmaLinux (64-bit)", detailedData: "distroName='AlmaLinux' distroVersion='10.1'" }]]) as any)
+    const body = await readJson<any>(await callRoute(GET, { params: { id: "conn-1" } }))
+    expect(h.soapGetGuestIdentities.mock.calls.at(-1)![1]).toEqual(["vm-1"])
+    expect(body.data.vms.map((v: any) => [v.vmid, v.el10])).toEqual([["vm-1", true], ["vm-2", false]])
+  })
+
+  it("still lists the VMs when the identity read fails", async () => {
+    h.soapListVMs.mockResolvedValue([{ moId: "vm-1", name: "r10", powerState: "poweredOff", guestId: "rhel10_64Guest", guestOS: "Red Hat Enterprise Linux 10 (64-bit)", hostMor: "" }])
+    h.soapGetGuestIdentities.mockRejectedValueOnce(new Error("down"))
+    const body = await readJson<any>(await callRoute(GET, { params: { id: "conn-1" } }))
+    expect(body.data.vms[0].el10).toBe(true)
   })
 })

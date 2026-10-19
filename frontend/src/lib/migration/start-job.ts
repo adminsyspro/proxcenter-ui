@@ -53,6 +53,9 @@ export function warmConfigFromJobConfig(c: Record<string, any>, engine: "warm-vm
     ...(c.cutoverMode !== undefined && { cutoverMode: c.cutoverMode }),
     ...(c.zeroRateLimitMBps !== undefined && { zeroRateLimitMBps: c.zeroRateLimitMBps }),
     ...(engine === "warm-vmware" && c.copyVmk && { copyVmk: c.copyVmk }),
+    // Guest conversion at cutover (#1000): VMware engine only, the operator's
+    // last choice when the job was cut over before (a retry replays it).
+    ...(engine === "warm-vmware" && typeof c.convertGuest === "boolean" && { convertGuest: c.convertGuest }),
   }
 }
 

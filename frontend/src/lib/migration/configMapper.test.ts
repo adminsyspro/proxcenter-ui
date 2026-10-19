@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { mapEsxiToPveConfig } from "./configMapper"
+import { efiDiskValue, mapEsxiToPveConfig, planDiskSlots } from "./configMapper"
 import type { EsxiVmConfig } from "@/lib/vmware/soap"
 
 function makeConfig(overrides: Partial<EsxiVmConfig> = {}): EsxiVmConfig {
@@ -243,3 +243,84 @@ describe("mapEsxiToPveConfig: vTPM (roadmap#1)", () => {
   })
 })
 
+
+describe("mapEsxiToPveConfig: guest conversion and forced buses (#1000)", () => {
+  const scsi = (label: string, unitNumber: number) => ({
+    label, fileName: `[ds] vm/${label}.vmdk`, capacityBytes: 1 << 30, thinProvisioned: true,
+    datastoreName: "ds", relativePath: `vm/${label}.vmdk`, controllerType: "pvscsi", controllerKey: 1000, unitNumber,
+  })
+  const win = { guestId: "windows2019srvNext_64Guest", guestOS: "Microsoft Windows Server 2022 (64-bit)" }
+
+  it("boots a converted UEFI Linux from VirtIO SCSI instead of SATA", () => {
+    const cfg = makeConfig({ firmware: "efi", disks: [scsi("boot", 0), scsi("data", 1)] })
+    expect(mapEsxiToPveConfig(cfg, 100, "ceph").diskSlots).toEqual(["sata0", "scsi1"])
+    const p = mapEsxiToPveConfig(cfg, 100, "ceph", "vmbr0", undefined, undefined, undefined, { guestConverted: true })
+    expect(p.diskSlots).toEqual(["scsi0", "scsi1"])
+    expect(p.boot).toBe("order=scsi0")
+  })
+
+  it("gives a converted Windows VirtIO SCSI and VirtIO NICs, unless the operator chose a model", () => {
+    const cfg = makeConfig({ ...win, disks: [scsi("c", 0)], nics: [
+      { label: "a", type: "Vmxnet3", macAddress: "00:50:56:00:00:01", network: "n" },
+      { label: "b", type: "Vmxnet3", macAddress: "00:50:56:00:00:02", network: "n" },
+    ] })
+    const plain = mapEsxiToPveConfig(cfg, 100, "ceph")
+    expect(plain.bootDiskSlot).toBe("sata0")
+    expect(plain.nets.net0.startsWith("e1000,")).toBe(true)
+    const p = mapEsxiToPveConfig(cfg, 100, "ceph", "vmbr0", undefined, undefined, { nics: [{ index: 1, bridge: "vmbr1", model: "e1000e" }] }, { guestConverted: true })
+    expect(p.bootDiskSlot).toBe("scsi0")
+    expect(p.nets.net0.startsWith("virtio,")).toBe(true)
+    expect(p.nets.net1.startsWith("e1000e,bridge=vmbr1")).toBe(true)
+  })
+
+  it("puts the boot disk where the operator forced it, whatever the rule says", () => {
+    const cfg = makeConfig({ firmware: "efi", disks: [scsi("boot", 0), scsi("data", 1)] })
+    const forcedScsi = mapEsxiToPveConfig(cfg, 100, "ceph", "vmbr0", undefined, undefined, undefined, { buses: ["scsi", undefined] })
+    expect(forcedScsi.diskSlots).toEqual(["scsi0", "scsi1"])
+    // A converted guest forced back onto SATA stays there.
+    const forcedSata = mapEsxiToPveConfig(cfg, 100, "ceph", "vmbr0", undefined, undefined, undefined, { buses: ["sata", "sata"], guestConverted: true })
+    expect(forcedSata.diskSlots).toEqual(["sata0", "sata1"])
+    expect(forcedSata.boot).toBe("order=sata0")
+  })
+
+  it("moves a forced data disk off its source bus, and 'auto' changes nothing", () => {
+    const sata = { ...scsi("cd", 0), controllerType: "sata", controllerKey: 15000 }
+    expect(planDiskSlots([scsi("boot", 0), sata], { bootOnSata: false, buses: ["auto", "scsi"] })).toEqual(["scsi0", "scsi1"])
+    expect(planDiskSlots([scsi("boot", 0), sata], { bootOnSata: false, buses: ["auto", "auto"] })).toEqual(["scsi0", "sata0"])
+  })
+
+  it("builds the EFI disk with or without the Secure Boot keys", () => {
+    const cfg = makeConfig({ firmware: "efi" })
+    expect(mapEsxiToPveConfig(cfg, 100, "ceph").efidisk0).toBe("ceph:1,efitype=4m,pre-enrolled-keys=1")
+    expect(mapEsxiToPveConfig(cfg, 100, "ceph", "vmbr0", undefined, undefined, { hardware: { efiPreEnrolledKeys: false } }).efidisk0)
+      .toBe("ceph:1,efitype=4m,pre-enrolled-keys=0")
+    expect(efiDiskValue("lvm", true)).toBe("lvm:1,efitype=4m,pre-enrolled-keys=1")
+    expect(efiDiskValue("lvm")).toBe("lvm:1,efitype=4m,pre-enrolled-keys=1")
+  })
+})
+
+describe("mapEsxiToPveConfig: SATA source disks of a converted guest (#1000)", () => {
+  const disk = (label: string, controllerType: string, unitNumber: number, controllerKey: number) => ({
+    label, fileName: `[ds] vm/${label}.vmdk`, capacityBytes: 1 << 30, thinProvisioned: true,
+    datastoreName: "ds", relativePath: `vm/${label}.vmdk`, controllerType, controllerKey, unitNumber,
+  })
+
+  it("moves them to VirtIO SCSI once converted, and leaves IDE disks alone", () => {
+    const cfg = makeConfig({ guestId: "windows2019srvNext_64Guest", guestOS: "Microsoft Windows Server 2022 (64-bit)", disks: [disk("c", "sata", 0, 15000), disk("d", "sata", 1, 15000), disk("e", "ide", 0, 200)] })
+    expect(mapEsxiToPveConfig(cfg, 100, "ceph").diskSlots).toEqual(["sata0", "sata1", "ide0"])
+    const p = mapEsxiToPveConfig(cfg, 100, "ceph", "vmbr0", undefined, undefined, undefined, { guestConverted: true })
+    expect(p.diskSlots).toEqual(["scsi0", "scsi1", "ide0"])
+    expect(p.boot).toBe("order=ide0")
+  })
+})
+
+describe("mapEsxiToPveConfig: NICs of a converted guest (#1000, lab 19/10)", () => {
+  it("turns an E1000/E1000e source adapter into VirtIO once the guest is converted", () => {
+    const cfg = makeConfig({ guestId: "windows2019srvNext_64Guest", guestOS: "Microsoft Windows Server 2022 (64-bit)", nics: [{ label: "a", type: "E1000e", macAddress: "00:50:56:9c:a1:f0", network: "VM Network" }] })
+    expect(mapEsxiToPveConfig(cfg, 100, "ceph").nets.net0).toBe("e1000,bridge=vmbr0,macaddr=00:50:56:9c:a1:f0")
+    expect(mapEsxiToPveConfig(cfg, 100, "ceph", "vmbr0", undefined, undefined, undefined, { guestConverted: true }).nets.net0).toBe("virtio,bridge=vmbr0,macaddr=00:50:56:9c:a1:f0")
+    const linux = makeConfig({ nics: [{ label: "a", type: "E1000", macAddress: "00:50:56:9c:a1:f1", network: "n" }] })
+    expect(mapEsxiToPveConfig(linux, 100, "ceph").nets.net0.startsWith("e1000,")).toBe(true)
+    expect(mapEsxiToPveConfig(linux, 100, "ceph", "vmbr0", undefined, undefined, undefined, { guestConverted: true }).nets.net0.startsWith("virtio,")).toBe(true)
+  })
+})

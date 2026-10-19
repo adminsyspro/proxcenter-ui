@@ -5,7 +5,7 @@
 import type { EsxiVmConfig, EsxiDiskInfo } from "@/lib/vmware/soap"
 import { vmwareToolsState } from "@/lib/vmware/soap"
 import { MIGRATION_CPU_TYPE_DEFAULT } from "./cpu-type"
-import { applyHardwareOverrides, buildNetValue, resolveNicTarget, type MigrationTargetOverrides } from "./target-overrides"
+import { applyHardwareOverrides, buildNetValue, resolveNicTarget, type MigrationDiskBus, type MigrationTargetOverrides } from "./target-overrides"
 import { tpmstate0Param } from "./vtpm"
 
 export interface PveVmCreateParams {
@@ -34,6 +34,19 @@ export interface PveVmCreateParams {
   efidisk0?: string
   /** Empty TPM 2.0 state, only when the source has a vTPM (roadmap#1). */
   tpmstate0?: string
+}
+
+/** What the warm engine decides at cutover rather than at creation (#1000). */
+export interface MapperOptions {
+  /** The guest went through virt-v2v-in-place: it boots from VirtIO SCSI and drives VirtIO NICs. */
+  guestConverted?: boolean
+  /** Forced bus per disk, in the order of `esxiConfig.disks` (the review step's Bus column). */
+  buses?: (MigrationDiskBus | undefined)[]
+}
+
+/** `efidisk0` value: the Proxmox default enrols the Microsoft Secure Boot keys, false leaves the store empty. */
+export function efiDiskValue(storage: string, preEnrolledKeys?: boolean): string {
+  return `${storage}:1,efitype=4m,pre-enrolled-keys=${preEnrolledKeys === false ? 0 : 1}`
 }
 
 /** Map ESXi guest ID / guest full name to Proxmox ostype */
@@ -81,8 +94,9 @@ function idePosition(d: Pick<EsxiDiskInfo, "controllerKey" | "unitNumber">): num
   return controller * 2 + d.unitNumber
 }
 
-function busOf(d: Pick<EsxiDiskInfo, "controllerType">): "ide" | "sata" | "scsi" {
+function busOf(d: Pick<EsxiDiskInfo, "controllerType">, sataAsScsi = false): "ide" | "sata" | "scsi" {
   const t = (d.controllerType || "").toLowerCase()
+  if (t === "sata" && sataAsScsi) return "scsi"
   return t === "ide" || t === "sata" ? t : "scsi"
 }
 
@@ -103,10 +117,17 @@ function busOf(d: Pick<EsxiDiskInfo, "controllerType">): "ide" | "sata" | "scsi"
  * SCSI boot disk on `sata0` pushes a SATA data disk to `sata1`. A disk whose
  * exact position is unknown, or already taken, gets the next free slot of its
  * bus, in listing order.
+ *
+ * `buses` carries the operator's choice per disk (#1000, review step): a disk
+ * forced to SCSI or SATA goes there whatever its source bus, the boot disk
+ * claiming slot 0 of that bus; "auto" or absent keeps the rule above.
+ * `sataAsScsi` (a guest converted at cutover, #1000) moves the SATA source
+ * disks to SCSI too: the guest now carries the VirtIO SCSI driver. IDE disks
+ * keep their bus, the closed appliances they belong to are not converted.
  */
 export function planDiskSlots(
   disks: Pick<EsxiDiskInfo, "controllerType" | "controllerKey" | "unitNumber">[],
-  opts: { bootOnSata: boolean },
+  opts: { bootOnSata: boolean; buses?: (MigrationDiskBus | undefined)[]; sataAsScsi?: boolean },
 ): string[] {
   const taken = new Set<string>()
   const claim = (bus: "ide" | "sata" | "scsi", preferred?: number): string | undefined => {
@@ -127,10 +148,21 @@ export function planDiskSlots(
   }
 
   const slots: (string | undefined)[] = disks.map(() => undefined)
+  const forced = (i: number): "scsi" | "sata" | undefined => {
+    const b = opts.buses?.[i]
+    return b === "scsi" || b === "sata" ? b : undefined
+  }
+  // Pass 0, the operator's forced buses: the boot disk takes slot 0 of its
+  // bus, so it claims before anything else does.
+  disks.forEach((_, i) => {
+    const bus = forced(i)
+    if (bus && i === 0) slots[i] = exact(bus, 0)
+  })
   // Pass 1, exact positions: the boot disk of a Windows/UEFI SCSI guest takes
   // sata0, IDE and SATA disks take their source position when it is free.
   disks.forEach((d, i) => {
-    const bus = busOf(d)
+    if (slots[i] || forced(i)) return
+    const bus = busOf(d, opts.sataAsScsi)
     if (bus === "ide") {
       const pos = idePosition(d)
       if (pos !== undefined) slots[i] = exact("ide", pos)
@@ -145,7 +177,7 @@ export function planDiskSlots(
   // data disks therefore keep their historical `scsiN`).
   disks.forEach((d, i) => {
     if (slots[i]) return
-    const bus = busOf(d)
+    const bus = forced(i) ?? busOf(d, opts.sataAsScsi)
     slots[i] = (bus === "scsi" ? undefined : claim(bus)) ?? claim("scsi", i) ?? `scsi${i}`
   })
   return slots as string[]
@@ -177,9 +209,14 @@ export function mapEsxiToPveConfig(
   vlanTag?: number,
   cpuType: string = MIGRATION_CPU_TYPE_DEFAULT,
   overrides?: MigrationTargetOverrides,
+  opts: MapperOptions = {},
 ): PveVmCreateParams {
   const isEfi = esxiConfig.firmware === "efi"
   const isWin = isWindowsVm(esxiConfig)
+  // A guest converted at cutover (#1000) carries the VirtIO drivers in its
+  // initramfs or its driver store: nothing forces its boot disk onto SATA or
+  // its Windows NICs onto e1000 any more.
+  const needsInboxDrivers = !opts.guestConverted
 
   // virtio-scsi for every guest: data disks appear as soon as VirtIO drivers are
   // installed. The boot disk cannot rely on that (a raw byte copy never has a
@@ -191,8 +228,9 @@ export function mapEsxiToPveConfig(
   // Boot disk bus: SATA when the firmware is OVMF (existing rule — OVMF cannot
   // enumerate an LSI controller) or the guest is Windows (#653). Data disks
   // stay on SCSI. IDE and SATA source disks keep their bus, see planDiskSlots.
-  const diskSlots = planDiskSlots(esxiConfig.disks, { bootOnSata: isEfi || isWin })
-  const bootDiskSlot = bootSlotOf(diskSlots, isEfi || isWin ? "sata0" : "scsi0")
+  const bootOnSata = needsInboxDrivers && (isEfi || isWin)
+  const diskSlots = planDiskSlots(esxiConfig.disks, { bootOnSata, buses: opts.buses, sataAsScsi: opts.guestConverted })
+  const bootDiskSlot = bootSlotOf(diskSlots, bootOnSata ? "sata0" : "scsi0")
   // q35 has no legacy IDE controller: Proxmox hangs its `ideN` off the ICH9 AHCI,
   // where only one unit per port exists (ide1 and ide3 cannot even be created)
   // and a guest built for PIIX IDE finds no disk. Any IDE slot means i440fx.
@@ -212,15 +250,22 @@ export function mapEsxiToPveConfig(
   // is no MAC collision. A Windows guest gets e1000 (inbox driver) unless the
   // operator picked a model; a source without any adapter still gets one
   // default NIC on the default bridge, as before.
+  const defaultNicModel = (sourceType: string | undefined): string => {
+    if (opts.guestConverted) return "virtio"
+    return isWin ? "e1000" : mapNicModel(sourceType || "Vmxnet3")
+  }
   const nets: Record<string, string> = {}
   esxiConfig.nics.forEach((nic, i) => {
     const target = resolveNicTarget(i, overrides?.nics, { bridge: networkBridge, vlanTag })
-    const model = target.model ?? (isWin ? "e1000" : mapNicModel(nic.type || "Vmxnet3"))
+    // A converted guest has the VirtIO network driver (netkvm on Windows), so
+    // every NIC the operator left on "auto" becomes VirtIO, an E1000 source
+    // adapter included.
+    const model = target.model ?? defaultNicModel(nic.type)
     nets[`net${i}`] = buildNetValue(model, target.bridge, nic.macAddress, target.vlanTag)
   })
   if (esxiConfig.nics.length === 0) {
     const target = resolveNicTarget(0, overrides?.nics, { bridge: networkBridge, vlanTag })
-    nets.net0 = buildNetValue(target.model ?? (isWin ? "e1000" : "virtio"), target.bridge, undefined, target.vlanTag)
+    nets.net0 = buildNetValue(target.model ?? (isWin && needsInboxDrivers ? "e1000" : "virtio"), target.bridge, undefined, target.vlanTag)
   }
 
   const params: PveVmCreateParams = applyHardwareOverrides({
@@ -246,8 +291,10 @@ export function mapEsxiToPveConfig(
     // OVMF ships with the standard Microsoft Secure Boot keys (PK, KEK,
     // db, dbx) so Windows (and signed Linux shim bootloaders) pass
     // Secure Boot verification after migration. Using =0 caused silent
-    // boot failures when the source VM had Secure Boot enabled.
-    params.efidisk0 = `${targetStorage}:1,efitype=4m,pre-enrolled-keys=1`
+    // boot failures when the source VM had Secure Boot enabled. The operator
+    // can still turn the keys off (#1000): a guest whose shim the current
+    // revocation list rejects (CentOS 8) only boots with Secure Boot off.
+    params.efidisk0 = efiDiskValue(targetStorage, overrides?.hardware?.efiPreEnrolledKeys)
   }
   // A source with a virtual TPM keeps a TPM device on the target: an empty
   // TPM 2.0 state (the vSphere one is encrypted and never copied, roadmap#1).

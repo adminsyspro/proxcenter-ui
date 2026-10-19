@@ -84,6 +84,14 @@ export function useMigrationOptions({
   // Warm only (#443). Off by default: the automatic budget stays the norm, and a
   // hold left on from an earlier run would park a migration nobody is watching.
   const [migManualCutover, setMigManualCutover] = useState(false)
+  // Warm VMware only (#1000): default of the guest conversion at cutover. On
+  // by default, the operator confirms or changes it in the "Cutover now"
+  // dialog; an automatic cutover applies it as is.
+  const [migConvertGuest, setMigConvertGuest] = useState(true)
+  // UEFI sources, review step (#1000): enrol the Microsoft Secure Boot keys in
+  // the EFI disk, the Proxmox default. Off is for a guest whose shim the
+  // revocation list rejects (CentOS 8).
+  const [migEfiPreEnrolledKeys, setMigEfiPreEnrolledKeys] = useState(true)
   // Warm only, automatic mode only (#663). Seconds, as a string because the
   // payload builder and the API both speak in seconds and the slider snaps to a
   // fixed scale. Starts at the pipeline default so the control opens where the
@@ -128,6 +136,8 @@ export function useMigrationOptions({
     setMigConvertToQcow2(false)
     setMigCpuType(MIGRATION_CPU_TYPE_DEFAULT)
     setMigManualCutover(false)
+    setMigConvertGuest(true)
+    setMigEfiPreEnrolledKeys(true)
     setMigDowntimeBudget(String(DOWNTIME_BUDGET_DEFAULT_SEC))
     setMigZeroRateLimit('')
     setMigBulkConcurrency(BULK_MIG_CONCURRENCY_DEFAULT)
@@ -159,6 +169,10 @@ export function useMigrationOptions({
     setMigCpuType,
     migManualCutover,
     setMigManualCutover,
+    migConvertGuest,
+    setMigConvertGuest,
+    migEfiPreEnrolledKeys,
+    setMigEfiPreEnrolledKeys,
     migDowntimeBudget,
     migBulkConcurrency,
     setMigBulkConcurrency,

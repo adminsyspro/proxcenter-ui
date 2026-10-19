@@ -3,7 +3,8 @@ import { NextResponse } from "next/server"
 import { getSessionPrisma } from "@/lib/tenant"
 import { decryptSecret } from "@/lib/crypto/secret"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
-import { soapLogin, soapLogout, soapListVMs, soapResolveHostInventoryPaths } from "@/lib/vmware/soap"
+import { soapLogin, soapLogout, soapListVMs, soapResolveHostInventoryPaths, soapGetGuestIdentities } from "@/lib/vmware/soap"
+import { isEl10Guest } from "@/lib/migration/cpu-level"
 
 export const runtime = "nodejs"
 
@@ -78,8 +79,17 @@ export async function GET(
         )
       }
 
+      // EL10 guests need an x86-64-v3 CPU type (#1000), and the configured
+      // guest type rarely says "10": ask the guests of the EL family what they
+      // reported through Tools, in one best-effort read.
+      const elFamily = vmList.filter(vm => /rhel|centos|alma|rocky|oracle|red hat/i.test(`${vm.guestId} ${vm.guestOS}`)).map(vm => vm.moId)
+      const reported = elFamily.length > 0 ? await soapGetGuestIdentities(session, elFamily).catch(() => new Map()) : new Map()
+
       // Map VmwareVmSummary to the response format expected by the frontend
       const vms = vmList.map(vm => {
+        const guest = reported.get(vm.moId)
+        const el10 = isEl10Guest({ guestId: vm.guestId, guestOS: vm.guestOS, detailedData: guest?.detailedData })
+          || (!!guest && isEl10Guest({ guestId: guest.guestId, guestOS: guest.guestOS }))
         const path = vm.hostMor ? hostPathByMor.get(vm.hostMor) : undefined
         return {
           vmid: vm.moId,
@@ -89,6 +99,7 @@ export async function GET(
           memory_size_MiB: vm.memoryMB || undefined,
           power_state: vm.powerState,
           guest_OS: vm.guestOS || undefined,
+          el10,
           committed: vm.committedStorage || undefined,
           uncommitted: vm.uncommittedStorage || undefined,
           // VMware Tools state, used by the migration modal to preflight

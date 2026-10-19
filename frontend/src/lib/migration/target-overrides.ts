@@ -35,6 +35,13 @@ export interface MigrationHardwareOverrides {
   cores?: number
   sockets?: number
   memoryMB?: number
+  /**
+   * UEFI targets only (#1000): enrol the standard Microsoft Secure Boot keys in
+   * the EFI disk (`pre-enrolled-keys=1`, the Proxmox default). False creates an
+   * EFI disk without keys, so Secure Boot is off: what a guest whose shim the
+   * current revocation list rejects (CentOS 8) needs to boot. Absent means true.
+   */
+  efiPreEnrolledKeys?: boolean
 }
 
 export interface MigrationDiskMapping {
@@ -44,7 +51,17 @@ export interface MigrationDiskMapping {
   targetStorage?: string
   /** Leave this disk out of the migration. Never allowed on disk 0, the boot disk. */
   exclude?: boolean
+  /**
+   * Target bus of this disk (#1000); absent or "auto" keeps the mapper's rule
+   * (the source bus, SATA for the boot disk of a Windows or UEFI guest, SCSI
+   * once the guest is converted). Applied by the warm VMware engine.
+   */
+  bus?: MigrationDiskBus
 }
+
+/** Disk bus choices of the review step: the mapper's rule, or one forced bus. */
+export const MIGRATION_DISK_BUSES = ["auto", "scsi", "sata"] as const
+export type MigrationDiskBus = typeof MIGRATION_DISK_BUSES[number]
 
 export interface MigrationTargetOverrides {
   nics?: MigrationNicMapping[]
@@ -96,6 +113,12 @@ export function parseHardwareOverrides(raw: unknown): ParseResult<MigrationHardw
     const n = intInRange(v, min, max)
     if (n === null) return { ok: false, error: `hardware.${key} must be an integer between ${min} and ${max}` }
     out[key] = n
+  }
+  const keys = src.efiPreEnrolledKeys
+  if (keys !== undefined && keys !== null) {
+    if (typeof keys !== "boolean") return { ok: false, error: "hardware.efiPreEnrolledKeys must be a boolean" }
+    // Only the departure from the default is kept, like the other fields.
+    if (!keys) out.efiPreEnrolledKeys = false
   }
   return { ok: true, value: Object.keys(out).length > 0 ? out : undefined }
 }
@@ -166,13 +189,22 @@ export function parseDiskMappings(raw: unknown): ParseResult<MigrationDiskMappin
       out.push({ index, exclude: true })
       continue
     }
-    if (e.targetStorage === undefined || e.targetStorage === null || e.targetStorage === "") continue
-    try {
-      assertStorageName(e.targetStorage)
-    } catch {
-      return { ok: false, error: `disks[${index}].targetStorage must be a storage name` }
+    const disk: MigrationDiskMapping = { index }
+    if (e.targetStorage !== undefined && e.targetStorage !== null && e.targetStorage !== "") {
+      try {
+        assertStorageName(e.targetStorage)
+      } catch {
+        return { ok: false, error: `disks[${index}].targetStorage must be a storage name` }
+      }
+      disk.targetStorage = e.targetStorage as string
     }
-    out.push({ index, targetStorage: e.targetStorage as string })
+    if (e.bus !== undefined && e.bus !== null && e.bus !== "") {
+      if (typeof e.bus !== "string" || !(MIGRATION_DISK_BUSES as readonly string[]).includes(e.bus)) {
+        return { ok: false, error: `disks[${index}].bus must be one of ${MIGRATION_DISK_BUSES.join(", ")}` }
+      }
+      if (e.bus !== "auto") disk.bus = e.bus as MigrationDiskBus
+    }
+    if (disk.targetStorage || disk.bus) out.push(disk)
   }
   out.sort((a, b) => a.index - b.index)
   return { ok: true, value: out.length > 0 ? out : undefined }
@@ -183,6 +215,8 @@ export interface PlannedDisk<T> {
   disk: T
   sourceIndex: number
   storage: string
+  /** The operator's forced bus (#1000); absent means the mapper's rule. */
+  bus?: Exclude<MigrationDiskBus, "auto">
 }
 
 export interface DiskPlan<T> {
@@ -215,7 +249,7 @@ export function planDiskTargets<T>(
       excluded.push(sourceIndex)
       return
     }
-    kept.push({ disk, sourceIndex, storage: m?.targetStorage || defaultStorage })
+    kept.push({ disk, sourceIndex, storage: m?.targetStorage || defaultStorage, ...(m?.bus && m.bus !== "auto" && { bus: m.bus }) })
   })
   const unknown = [...byIndex.keys()].filter(i => i >= disks.length).sort((a, b) => a - b)
   return { kept, excluded, unknown }
@@ -242,6 +276,8 @@ export function describeDiskPlan(plan: DiskPlan<unknown>, defaultStorage: string
   if (plan.kept.some(k => k.storage !== defaultStorage)) {
     parts.push(`storage ${plan.kept.map(k => `disk ${k.sourceIndex + 1}->${k.storage}`).join(", ")}`)
   }
+  const forced = plan.kept.filter(k => k.bus)
+  if (forced.length > 0) parts.push(`bus ${forced.map(k => `disk ${k.sourceIndex + 1}->${k.bus!.toUpperCase()}`).join(", ")}`)
   if (plan.excluded.length > 0) parts.push(`excluded ${plan.excluded.map(i => `disk ${i + 1}`).join(", ")}`)
   if (plan.unknown.length > 0) parts.push(`ignored mapping for missing ${plan.unknown.map(i => `disk ${i + 1}`).join(", ")}`)
   return parts.length > 0 ? `Per-disk choices: ${parts.join("; ")}` : null
@@ -310,6 +346,7 @@ export function describeOverrides(overrides: MigrationTargetOverrides | undefine
     if (hw.cores !== undefined) hwParts.push(`cores=${hw.cores}`)
     if (hw.sockets !== undefined) hwParts.push(`sockets=${hw.sockets}`)
     if (hw.memoryMB !== undefined) hwParts.push(`memory=${hw.memoryMB}MB`)
+    if (hw.efiPreEnrolledKeys === false) hwParts.push("EFI disk without pre-enrolled Secure Boot keys")
     if (hwParts.length > 0) parts.push(`hardware ${hwParts.join(", ")}`)
   }
   if (overrides.nics && overrides.nics.length > 0) {

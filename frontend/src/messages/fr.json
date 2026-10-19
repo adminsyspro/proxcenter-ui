@@ -2201,7 +2201,9 @@
     "nodeActionDrainPartialDesc": "Le nœud n'est pas vidé. Forcez le {action} pour laisser Proxmox VE les arrêter, ou annulez et déplacez-les vous-même. Le drain est listé dans le Task Center.",
     "nodeActionForceOption": "Forcer le {action} malgré tout, ces invités seront arrêtés",
     "nodeActionDrainDesc": "Les invités sur stockage partagé sont évacués par l'orchestrateur, chacun vers le nœud choisi par le moteur de placement. Suivez-les dans le Task Center.",
-    "nodeActionDrainFailed": "Le drain n'a pas pu démarrer : {error}"
+    "nodeActionDrainFailed": "Le drain n'a pas pu démarrer : {error}",
+    "diskControllerTooltip": "Contrôleur auquel le disque est rattaché",
+    "diskController": "Contrôleur"
   },
   "inventoryPage": {
     "newTag": "Nouveau tag...",
@@ -2542,7 +2544,38 @@
       "loadProjectionUnknown": "Ce nœud ne remonte pas sa charge",
       "loadProjectionMemAlert": "{node} : la mémoire atteindrait {pct} % ({used}/{total} Go) une fois ce lot arrivé.",
       "andMoreVms": "et {count} autre(s)",
-      "logsOfVm": "Journal de"
+      "logsOfVm": "Journal de",
+      "convertGuest": "Convertir l'invité au cutover",
+      "convertGuestTooltip": "Source éteinte, virt-v2v-in-place installe les pilotes VirtIO dans l'invité copié (initramfs sous Linux, magasin de pilotes sous Windows) et retire VMware Tools : la VM démarre en VirtIO SCSI avec des cartes VirtIO. Ajoute environ une minute au cutover. Le choix reste modifiable dans le dialogue « Cutover now » ; un cutover automatique applique cette valeur. Si la conversion échoue, les disques copiés restent intacts et la VM démarre en SATA/e1000 comme avant.",
+      "cutoverConvertGuest": "Conversion de l'invité",
+      "cutoverConvertGuestOn": "Pilotes VirtIO installés source éteinte, puis démarrage en VirtIO SCSI avec des cartes VirtIO. Ajoute environ {seconds} s à la coupure. En cas d'échec, les disques restent intacts et la VM démarre en SATA/e1000.",
+      "cutoverConvertGuestOff": "Pas de conversion : la VM démarre sur le matériel qu'elle gère sans nouveau pilote (disque de boot SATA pour Windows et les invités UEFI, cartes e1000 pour Windows).",
+      "reviewEfiKeys": "Clés Secure Boot pré-enregistrées",
+      "reviewEfiKeysOn": "Le disque EFI porte les clés Microsoft : Secure Boot fonctionne comme sur vSphere.",
+      "reviewEfiKeysOff": "Disque EFI sans clés : Secure Boot est désactivé. Pour un invité dont le chargeur d'amorçage est rejeté par la liste de révocation actuelle (CentOS 8, par exemple).",
+      "reviewDiskBus": "Bus",
+      "reviewBusAuto": "Auto",
+      "reviewBusAutoAs": "Auto ({bus})",
+      "reviewBusScsi": "VirtIO SCSI",
+      "reviewBusSata": "SATA",
+      "reviewScsiBootWarning": "Le disque de boot est forcé en VirtIO SCSI sans conversion de l'invité : l'invité doit déjà avoir le pilote VirtIO SCSI dans son initramfs (Linux) ou comme pilote de démarrage (Windows), sinon il s'arrête dans le shell d'urgence dracut ou sur INACCESSIBLE_BOOT_DEVICE. Activez « Convertir l'invité au cutover » pour l'installer.",
+      "convertGuestMissing": "La conversion de l'invité n'est pas encore possible sur {node}, il manque : {items}. Sans elle, le cutover garde le matériel compatible (SATA/e1000).",
+      "convertGuestInstall": "Installer sur le nœud",
+      "convertGuestInstalling": "Installation…",
+      "convertGuestInstallFailed": "Échec de l'installation : {error}",
+      "cpuEl10TooLow": "{names} : invité EL10 (famille RHEL 10), compilé pour {target}. Avec {model}, il ne démarrera pas : il s'arrête sur « Run /init ». Choisissez {target} ou host.",
+      "cpuEl10Preselected": "{target} présélectionné : {names} est un invité EL10 (famille RHEL 10), qui ne démarre pas en dessous de ce niveau.",
+      "cpuNodesTooOld": "Le ou les nœuds {nodes} du cluster cible ne savent pas exécuter {model} : la VM ne pourra ni y démarrer ni y être migrée.",
+      "logSteps": {
+        "planning": "Planification",
+        "prepare": "Préparation de la source et de la cible",
+        "full_copy": "Copie complète",
+        "delta": "Synchronisation delta",
+        "cutover": "Bascule",
+        "verify": "Contrôle d'intégrité",
+        "conversion": "Conversion de l'invité",
+        "finish": "Attachement et démarrage"
+      }
     },
     "extDashboard": {
       "hosts": "Hôtes",
@@ -5457,7 +5490,8 @@
       "transferring": "Transfert des disques",
       "creating_vm": "Création de la VM",
       "configuring": "Configuration de la VM",
-      "pending": "En attente"
+      "pending": "En attente",
+      "guest_conversion": "Conversion de l'invité"
     },
     "shared": {
       "detailTitle": "Tâche de migration",

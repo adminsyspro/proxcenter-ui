@@ -38,6 +38,8 @@ export default function ConfirmActionButton({
   title,
   body,
   alert,
+  extra,
+  onOpen,
   onConfirm,
 }: {
   label: string
@@ -50,6 +52,10 @@ export default function ConfirmActionButton({
   body: ReactNode
   /** Shown as a warning inside the dialog when the action deserves a caveat. */
   alert?: ReactNode
+  /** Controls the operator sets with the confirmation, under the text (outside its paragraph). */
+  extra?: ReactNode
+  /** Called when the dialog opens, so the caller can reset what `extra` edits. */
+  onOpen?: () => void
   /** Rejected by throwing: the message is shown in the dialog, which stays open. */
   onConfirm: () => Promise<void>
 }) {
@@ -80,7 +86,7 @@ export default function ConfirmActionButton({
         color={color}
         disabled={busy}
         startIcon={<i className={icon} style={{ fontSize: 14 }} />}
-        onClick={() => { setError(null); setOpen(true) }}
+        onClick={() => { setError(null); onOpen?.(); setOpen(true) }}
         sx={{ textTransform: 'none' }}
       >
         {label}
@@ -99,6 +105,7 @@ export default function ConfirmActionButton({
         </DialogTitle>
         <DialogContent>
           <DialogContentText>{body}</DialogContentText>
+          {extra && <Box sx={{ mt: 2 }}>{extra}</Box>}
           {alert && <Alert severity="warning" sx={{ mt: 2 }}>{alert}</Alert>}
           {error && <Alert severity="error" sx={{ mt: 2 }}>{t('common.errorWithMessage', { error })}</Alert>}
         </DialogContent>

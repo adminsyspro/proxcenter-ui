@@ -93,3 +93,36 @@ describe("POST /api/v1/migrations/[id]/cutover", () => {
     expect(h.prisma.migrationJob.findUnique).not.toHaveBeenCalled()
   })
 })
+
+describe("POST /api/v1/migrations/[id]/cutover — guest conversion choice (#1000)", () => {
+  const vmwareJob = { id: "j1", status: "delta_sync", config: { cutoverMode: "manual", convertGuest: true } }
+
+  it("writes the operator's choice into the job config with the request, so the engine and a retry read it", async () => {
+    h.prisma.migrationJob.findUnique.mockResolvedValue(vmwareJob)
+    const res = await callRoute(POST, { params: { id: "j1" }, body: { convertGuest: false } })
+    expect(res.status).toBe(200)
+    expect(h.prisma.migrationJob.update).toHaveBeenCalledWith({
+      where: { id: "j1" },
+      data: { cutoverRequestedAt: expect.any(Date), config: { cutoverMode: "manual", convertGuest: false } },
+    })
+    expect(signal).toHaveBeenCalledWith("j1")
+  })
+
+  it("keeps the launch value when the body says nothing", async () => {
+    h.prisma.migrationJob.findUnique.mockResolvedValue(vmwareJob)
+    await callRoute(POST, { params: { id: "j1" }, body: {} })
+    expect(h.prisma.migrationJob.update).toHaveBeenCalledWith({ where: { id: "j1" }, data: { cutoverRequestedAt: expect.any(Date) } })
+  })
+
+  it("refuses a malformed choice, and a choice for a job that has none", async () => {
+    h.prisma.migrationJob.findUnique.mockResolvedValue(vmwareJob)
+    const bad = await callRoute(POST, { params: { id: "j1" }, body: { convertGuest: "no" } })
+    expect(bad.status).toBe(400)
+    h.prisma.migrationJob.findUnique.mockResolvedValue({ id: "x", status: "delta_sync", config: { cutoverMode: "manual" } })
+    const none = await callRoute(POST, { params: { id: "x" }, body: { convertGuest: true } })
+    expect(none.status).toBe(400)
+    expect((await readJson<any>(none))?.error).toBe("This migration does not offer a guest conversion at cutover")
+    expect(h.prisma.migrationJob.update).not.toHaveBeenCalled()
+    expect(signal).not.toHaveBeenCalled()
+  })
+})

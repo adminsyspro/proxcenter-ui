@@ -2205,7 +2205,9 @@
     "nodeActionDrainPartialDesc": "节点未清空。强制执行 {action} 以让 Proxmox VE 停止这些客户机，或取消并自行迁移。清空任务已列在 Task Center 中。",
     "nodeActionForceOption": "仍然强制执行 {action}，这些客户机将被停止",
     "nodeActionDrainDesc": "共享存储上的客户机由编排器清空，每个客户机都迁往放置引擎选择的节点。可在 Task Center 中跟踪。",
-    "nodeActionDrainFailed": "无法启动清空：{error}"
+    "nodeActionDrainFailed": "无法启动清空：{error}",
+    "diskControllerTooltip": "磁盘所连接的控制器",
+    "diskController": "控制器"
   },
   "inventoryPage": {
     "newTag": "新标签...",
@@ -2546,7 +2548,38 @@
       "loadProjectionUnknown": "此节点未报告负载",
       "loadProjectionMemAlert": "{node}：此批次完成后内存将达到 {pct}%（{used}/{total} GB）。",
       "andMoreVms": "以及另外 {count} 台",
-      "logsOfVm": "日志对象"
+      "logsOfVm": "日志对象",
+      "convertGuest": "在切换时转换客户机",
+      "convertGuestTooltip": "在源虚拟机关闭后，virt-v2v-in-place 会在复制的客户机中安装 VirtIO 驱动（Linux 写入 initramfs，Windows 写入驱动存储）并移除 VMware Tools，使虚拟机通过 VirtIO SCSI 和 VirtIO 网卡启动。切换时间约增加一分钟。仍可在“Cutover now”对话框中修改；自动切换会使用此值。如果转换失败，复制的磁盘保持不变，虚拟机仍按原方式以 SATA/e1000 启动。",
+      "cutoverConvertGuest": "客户机转换",
+      "cutoverConvertGuestOn": "在源关闭后安装 VirtIO 驱动，然后通过 VirtIO SCSI 和 VirtIO 网卡启动。停机时间约增加 {seconds} 秒。如果失败，磁盘保持不变，虚拟机以 SATA/e1000 启动。",
+      "cutoverConvertGuestOff": "不转换：虚拟机使用无需新驱动即可支持的硬件启动（Windows 和 UEFI 客户机使用 SATA 启动盘，Windows 使用 e1000 网卡）。",
+      "reviewEfiKeys": "预注册的安全启动密钥",
+      "reviewEfiKeysOn": "EFI 磁盘包含 Microsoft 密钥：安全启动的行为与 vSphere 上相同。",
+      "reviewEfiKeysOff": "EFI 磁盘不含密钥：安全启动关闭。适用于其引导程序被当前吊销列表拒绝的客户机（例如 CentOS 8）。",
+      "reviewDiskBus": "总线",
+      "reviewBusAuto": "自动",
+      "reviewBusAutoAs": "自动（{bus}）",
+      "reviewBusScsi": "VirtIO SCSI",
+      "reviewBusSata": "SATA",
+      "reviewScsiBootWarning": "启动盘被强制设为 VirtIO SCSI 且未转换客户机：客户机的 initramfs（Linux）或启动驱动（Windows）中必须已有 VirtIO SCSI 驱动，否则会停在 dracut 紧急 shell 或出现 INACCESSIBLE_BOOT_DEVICE。请开启“在切换时转换客户机”来安装该驱动。",
+      "convertGuestMissing": "{node} 上暂时无法转换客户机，缺少：{items}。不转换时，切换会保留兼容硬件（SATA/e1000）。",
+      "convertGuestInstall": "在节点上安装",
+      "convertGuestInstalling": "正在安装…",
+      "convertGuestInstallFailed": "安装失败：{error}",
+      "cpuEl10TooLow": "{names}：EL10 客户机（RHEL 10 系列），为 {target} 构建。使用 {model} 将无法启动，会停在“Run /init”。请选择 {target} 或 host。",
+      "cpuEl10Preselected": "已预选 {target}：{names} 是 EL10 客户机（RHEL 10 系列），低于此级别无法启动。",
+      "cpuNodesTooOld": "目标集群的节点 {nodes} 无法运行 {model}：虚拟机既不能在这些节点上启动，也不能迁移到这些节点。",
+      "logSteps": {
+        "planning": "规划",
+        "prepare": "准备源和目标",
+        "full_copy": "完整复制",
+        "delta": "增量同步",
+        "cutover": "切换",
+        "verify": "完整性检查",
+        "conversion": "客户机转换",
+        "finish": "挂载并启动"
+      }
     },
     "extDashboard": {
       "hosts": "主机",
@@ -5461,7 +5494,8 @@
       "transferring": "正在传输磁盘",
       "creating_vm": "正在创建虚拟机",
       "configuring": "正在配置虚拟机",
-      "pending": "等待中"
+      "pending": "等待中",
+      "guest_conversion": "正在转换客户机"
     },
     "shared": {
       "detailTitle": "迁移任务",

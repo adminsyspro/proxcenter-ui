@@ -31,7 +31,7 @@ export default function SharedTaskDetailDialog({ jobId, onClose }: { jobId: stri
   // the migrate dialog that offered it is gone once closed or reloaded. The
   // server enforces vm.migrate on the cutover route as well.
   const cutoverJob = task
-    ? { id: task.id, status: task.status, projectedDowntimeSec: task.projectedDowntimeSec, config: { cutoverMode: task.cutoverMode } }
+    ? { id: task.id, status: task.status, projectedDowntimeSec: task.projectedDowntimeSec, config: { cutoverMode: task.cutoverMode, convertGuest: task.convertGuest } }
     : null
   const canCutover = canRequestCutover(cutoverJob)
 

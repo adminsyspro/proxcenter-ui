@@ -68,6 +68,8 @@ import { formatSshEndpoint, type SshTarget } from '@/lib/ssh/node-endpoint-core'
 import { verifyDiskIntegrity, verifyConvertedImage, faultInjectionFromEnv, buildQemuImgInfoCmd, parseQemuImgInfo, type RegionSource } from "./integrity"
 import { resolveIntegritySettings } from "./integrity-target"
 import { tpmstate0Param, vtpmPreflightWarning, vtpmCreatedLine } from "./vtpm"
+import { efiDiskValue } from "./configMapper"
+import { el10InspectionWarning } from "./el10-check"
 
 type MigrationStatus = "pending" | "preflight" | "creating_vm" | "transferring" | "configuring" | "converting_disks" | "completed" | "failed" | "cancelled"
 
@@ -2179,6 +2181,10 @@ export async function runV2vMigrationPipeline(
       await executeSSH(config.targetConnectionId, nodeIp, `rm -f ${shellEscape(pwFile)}`).catch(() => {})
     }
 
+    // EL10 on a CPU type below x86-64-v3 does not boot (#1000): the inspection
+    // names the guest's version, whatever the source hypervisor said.
+    const el10Warning = v2vResult.success ? el10InspectionWarning(v2vResult.output || "", config.cpuType) : null
+    if (el10Warning) await appendLog(jobId, el10Warning, "warn")
     if (!v2vResult.success) {
       const rawError = v2vResult.error || v2vResult.output?.substring(0, 500) || ""
       const fullOutput = v2vResult.output || ""
@@ -2521,8 +2527,10 @@ export async function runV2vMigrationPipeline(
         // VMs: OVMF ships with the standard Microsoft Secure Boot keys
         // so Windows (and signed Linux shim bootloaders) pass Secure
         // Boot verification after migration. Using =0 caused silent
-        // boot failures when the source VM had Secure Boot enabled.
-        body.set("efidisk0", `${config.targetStorage}:1,efitype=4m,pre-enrolled-keys=1`)
+        // boot failures when the source VM had Secure Boot enabled. The
+        // review step can turn the keys off (#1000), for a guest whose shim
+        // the current revocation list rejects.
+        body.set("efidisk0", efiDiskValue(config.targetStorage, config.hardware?.efiPreEnrolledKeys))
       }
       // Empty TPM 2.0 state for a source with a vTPM (roadmap#1). It also takes
       // a vm-<vmid>-disk-N number, which nextFreeDiskName reads from the config.

@@ -18,6 +18,8 @@ export async function attachDisksAndBoot(a: {
   /** Target slot per disk and the boot slot, both from the hardware mapper (IDE/SATA sources keep their bus). */
   diskSlots: string[]; bootDiskSlot: string
   allocatedVolumes: AllocatedVolume[]; startAfterMigration: boolean; convertDisksToQcow2: boolean; targetStorage: string
+  /** NIC values to set with the attach, when the cutover changed them (VirtIO after a guest conversion, #1000). */
+  nets?: Record<string, string>
 }): Promise<void> {
   const { jobId, pveConn, node, vmid, diskCount, diskSlots, bootDiskSlot, allocatedVolumes, startAfterMigration, targetStorage } = a
   await appendLog(jobId, "Attaching target disks…")
@@ -30,6 +32,7 @@ export async function attachDisksAndBoot(a: {
     reconfig.set(slot, allocatedVolumes[i].volumeId)
   }
   reconfig.set("boot", `order=${bootDiskSlot}`)
+  for (const [key, value] of Object.entries(a.nets ?? {})) reconfig.set(key, value)
   try {
     await pveSetVmConfig(pveConn, node, vmid, reconfig)
   } catch (e: any) {

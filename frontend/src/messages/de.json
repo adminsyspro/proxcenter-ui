@@ -2188,7 +2188,9 @@
     "nodeActionDrainPartialDesc": "Der Knoten ist nicht geleert. Erzwingen Sie {action}, damit Proxmox VE sie stoppt, oder brechen Sie ab und verschieben Sie sie selbst. Der Drain steht im Task Center.",
     "nodeActionForceOption": "{action} trotzdem erzwingen, diese Gäste werden gestoppt",
     "nodeActionDrainDesc": "Gäste auf Shared Storage werden vom Orchestrator evakuiert, jeder auf den Knoten, den die Platzierungs-Engine wählt. Verfolgen Sie sie im Task Center.",
-    "nodeActionDrainFailed": "Der Drain konnte nicht starten: {error}"
+    "nodeActionDrainFailed": "Der Drain konnte nicht starten: {error}",
+    "diskControllerTooltip": "Controller, an dem die Disk hängt",
+    "diskController": "Controller"
   },
   "inventoryPage": {
     "newTag": "Neuer Tag...",
@@ -2529,7 +2531,38 @@
       "loadProjectionUnknown": "Dieser Knoten meldet keine Last",
       "loadProjectionMemAlert": "{node}: Der Arbeitsspeicher würde nach diesem Stapel {pct} % erreichen ({used}/{total} GB).",
       "andMoreVms": "und {count} weitere",
-      "logsOfVm": "Protokoll von"
+      "logsOfVm": "Protokoll von",
+      "convertGuest": "Gast beim Cutover konvertieren",
+      "convertGuestTooltip": "Bei ausgeschalteter Quelle installiert virt-v2v-in-place die VirtIO-Treiber im kopierten Gast (Initramfs unter Linux, Treiberspeicher unter Windows) und entfernt die VMware Tools, sodass die VM von VirtIO SCSI mit VirtIO-Netzwerkkarten startet. Verlängert den Cutover um etwa eine Minute. Im Dialog „Cutover now“ lässt sich die Wahl noch ändern; ein automatischer Cutover übernimmt diesen Wert. Schlägt die Konvertierung fehl, bleiben die kopierten Disks unverändert und die VM startet wie bisher mit SATA/e1000.",
+      "cutoverConvertGuest": "Gastkonvertierung",
+      "cutoverConvertGuestOn": "VirtIO-Treiber bei ausgeschalteter Quelle installiert, danach Start von VirtIO SCSI mit VirtIO-Netzwerkkarten. Verlängert die Ausfallzeit um etwa {seconds} s. Bei einem Fehler bleiben die Disks unverändert und die VM startet mit SATA/e1000.",
+      "cutoverConvertGuestOff": "Keine Konvertierung: Die VM startet auf der Hardware, die sie ohne neue Treiber unterstützt (SATA-Bootdisk für Windows- und UEFI-Gäste, e1000-Netzwerkkarten für Windows).",
+      "reviewEfiKeys": "Vorinstallierte Secure-Boot-Schlüssel",
+      "reviewEfiKeysOn": "Die EFI-Disk enthält die Microsoft-Schlüssel: Secure Boot funktioniert wie unter vSphere.",
+      "reviewEfiKeysOff": "EFI-Disk ohne Schlüssel: Secure Boot ist aus. Für einen Gast, dessen Bootloader von der aktuellen Sperrliste abgelehnt wird (zum Beispiel CentOS 8).",
+      "reviewDiskBus": "Bus",
+      "reviewBusAuto": "Auto",
+      "reviewBusAutoAs": "Auto ({bus})",
+      "reviewBusScsi": "VirtIO SCSI",
+      "reviewBusSata": "SATA",
+      "reviewScsiBootWarning": "Die Bootdisk ist ohne Gastkonvertierung auf VirtIO SCSI gesetzt: Der Gast braucht den VirtIO-SCSI-Treiber bereits im Initramfs (Linux) oder als Boottreiber (Windows), sonst bleibt er in der dracut-Notfallshell oder bei INACCESSIBLE_BOOT_DEVICE stehen. Aktivieren Sie „Gast beim Cutover konvertieren“, um ihn zu installieren.",
+      "convertGuestMissing": "Die Gastkonvertierung ist auf {node} noch nicht möglich, es fehlt: {items}. Ohne sie behält der Cutover die kompatible Hardware (SATA/e1000).",
+      "convertGuestInstall": "Auf dem Knoten installieren",
+      "convertGuestInstalling": "Wird installiert…",
+      "convertGuestInstallFailed": "Installation fehlgeschlagen: {error}",
+      "cpuEl10TooLow": "{names}: EL10-Gast (RHEL-10-Familie), gebaut für {target}. Mit {model} startet er nicht: er bleibt bei „Run /init“ stehen. Wählen Sie {target} oder host.",
+      "cpuEl10Preselected": "{target} vorausgewählt: {names} ist ein EL10-Gast (RHEL-10-Familie), der unterhalb dieser Stufe nicht startet.",
+      "cpuNodesTooOld": "Knoten {nodes} des Zielclusters können {model} nicht ausführen: Die VM kann dort weder starten noch dorthin migriert werden.",
+      "logSteps": {
+        "planning": "Planung",
+        "prepare": "Vorbereitung von Quelle und Ziel",
+        "full_copy": "Vollständige Kopie",
+        "delta": "Delta-Synchronisierung",
+        "cutover": "Umschaltung",
+        "verify": "Integritätsprüfung",
+        "conversion": "Gastkonvertierung",
+        "finish": "Anhängen und Starten"
+      }
     },
     "extDashboard": {
       "hosts": "Hosts",
@@ -5436,7 +5469,8 @@
       "transferring": "Disks werden übertragen",
       "creating_vm": "VM wird erstellt",
       "configuring": "VM wird konfiguriert",
-      "pending": "Ausstehend"
+      "pending": "Ausstehend",
+      "guest_conversion": "Gast wird konvertiert"
     },
     "shared": {
       "detailTitle": "Migrationsaufgabe",

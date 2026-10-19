@@ -259,12 +259,30 @@ export async function validateMigrationRequest(
   if (migrationType === "live" && effectiveSourceType === "xcpng") {
     return bad("Live migration is no longer available for XCP-ng; use Offline or Warm.")
   }
-  const warmAllowed = effectiveSourceType === "vmware" || effectiveSourceType === "vcenter" || (effectiveSourceType === "xcpng" && sourceSubType === "xapi")
+  const isVmwareSource = effectiveSourceType === "vmware" || effectiveSourceType === "vcenter"
+  const warmAllowed = isVmwareSource || (effectiveSourceType === "xcpng" && sourceSubType === "xapi")
   if (migrationType === "warm" && !warmAllowed) {
     return bad(effectiveSourceType === "xcpng"
       ? "Warm migration needs a direct XCP-ng pool connection; this connection goes through Xen Orchestra, which only supports offline migration."
       : "Warm migration is only available for VMware and XCP-ng sources.")
   }
+
+  // Guest conversion at cutover and the per-disk bus (#1000) belong to the
+  // VMware warm engine, the only one that applies them: refused elsewhere
+  // rather than silently ignored.
+  const vmwareWarm = migrationType === "warm" && isVmwareSource
+  if (body.convertGuest !== undefined && body.convertGuest !== null && typeof body.convertGuest !== "boolean") {
+    return bad("convertGuest must be a boolean")
+  }
+  if (body.convertGuest === true && !vmwareWarm) {
+    return bad("convertGuest is only available for warm migrations from VMware")
+  }
+  if (disks?.some(d => d.bus) && !vmwareWarm) {
+    return bad("disks[].bus is only available for warm migrations from VMware")
+  }
+  // Absent means on, the product default; persisted explicitly so the
+  // "Cutover now" dialog shows it and a retry replays it.
+  const convertGuest = vmwareWarm ? body.convertGuest !== false : undefined
 
   // One migration per source VM at a time (roadmap#23). The warm engine already
   // refuses a second run through its in-memory lock, but only after the job row
@@ -302,7 +320,7 @@ export async function validateMigrationRequest(
       // Warm-only options (vddkLibdir, downtimeBudgetSec) are persisted here so a
       // retry — which rebuilds the config from job.config — keeps them instead of
       // silently reverting to the defaults.
-      config: { sourceConnectionId, sourceVmId, sourceVmName: body.sourceVmName, targetConnectionId, targetNode, targetStorage, networkBridge, vlanTag, startAfterMigration, convertDisksToQcow2, cpuType, migrationType, transferMode, ...(targetVmid !== undefined && { targetVmid }), ...(body.vddkLibdir && { vddkLibdir: body.vddkLibdir }), ...(downtimeBudgetSec !== undefined && { downtimeBudgetSec }), ...(cutoverMode !== undefined && { cutoverMode }), ...(zeroRateLimitMBps !== undefined && { zeroRateLimitMBps }), ...(copyVmk && { copyVmk }),
+      config: { sourceConnectionId, sourceVmId, sourceVmName: body.sourceVmName, targetConnectionId, targetNode, targetStorage, networkBridge, vlanTag, startAfterMigration, convertDisksToQcow2, cpuType, migrationType, transferMode, ...(targetVmid !== undefined && { targetVmid }), ...(body.vddkLibdir && { vddkLibdir: body.vddkLibdir }), ...(downtimeBudgetSec !== undefined && { downtimeBudgetSec }), ...(cutoverMode !== undefined && { cutoverMode }), ...(convertGuest !== undefined && { convertGuest }), ...(zeroRateLimitMBps !== undefined && { zeroRateLimitMBps }), ...(copyVmk && { copyVmk }),
         // Review-step overrides (#317), persisted so a retry keeps the same
         // hardware, NIC layout and disk placement.
         ...(hardware && { hardware }), ...(nics && { nics }), ...(disks && { disks }),

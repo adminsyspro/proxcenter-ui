@@ -22,6 +22,16 @@ export interface WarmMigrationConfig {
    */
   convertDisksToQcow2?: boolean
   /**
+   * Convert the guest at cutover with virt-v2v-in-place (#1000): VirtIO drivers
+   * in the initramfs or the Windows driver store, VMware Tools removed, then a
+   * VirtIO SCSI boot disk and VirtIO NICs. Set at launch as the default; the
+   * operator's choice in the "Cutover now" dialog overwrites it in the job's
+   * config, which the engine reads back at cutover and a retry replays.
+   * Absent means true. A conversion that fails or is not possible leaves the
+   * copied volumes untouched and keeps the compatible hardware (SATA/e1000).
+   */
+  convertGuest?: boolean
+  /**
    * CPU type of the created VM (roadmap#24). One of MIGRATION_CPU_TYPES, validated
    * by the route; absent means the Proxmox default, x86-64-v2-AES.
    */
@@ -61,4 +71,16 @@ export interface WarmMigrationConfig {
   copyVmk?: string
 }
 
-export interface LogEntry { ts: string; msg: string; level: "info" | "success" | "warn" | "error" }
+/**
+ * The phases a warm job announces in its log (#1000): the dialogs render each
+ * as a section header, so the operator sees where the migration stands.
+ */
+export type WarmLogStep = "planning" | "prepare" | "full_copy" | "delta" | "cutover" | "verify" | "conversion" | "finish"
+
+export interface LogEntry {
+  ts: string
+  msg: string
+  /** "step" marks the start of a phase; `step` then names it. */
+  level: "info" | "success" | "warn" | "error" | "step"
+  step?: WarmLogStep
+}

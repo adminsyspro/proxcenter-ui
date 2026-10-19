@@ -11,6 +11,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 const h = vi.hoisted(() => ({
   prisma: { connection: { findUnique: vi.fn() } },
   soapText: "",
+  identities: new Map<string, any>(),
 }))
 
 vi.mock("@/lib/tenant", () => ({ getSessionPrisma: vi.fn(async () => h.prisma) }))
@@ -27,6 +28,7 @@ vi.mock("@/lib/vmware/soap", async (importActual) => {
     soapLogout: vi.fn(async () => {}),
     soapRequest: vi.fn(async () => ({ text: h.soapText })),
     soapResolveHostInventoryPaths: vi.fn(async () => new Map()),
+    soapGetGuestIdentities: vi.fn(async () => h.identities),
   }
 })
 
@@ -142,5 +144,25 @@ describe("GET /api/v1/vmware/[id]/vms/[vmid]: source NICs for the review step (#
       { label: "Network adapter 1", type: "E1000", macAddress: "00:50:56:aa:00:01", network: "VM Network" },
       { label: "Network adapter 2", type: "Vmxnet3", macAddress: "00:50:56:aa:00:02", network: "i317-net" },
     ])
+  })
+})
+
+describe("GET /api/v1/vmware/[id]/vms/[vmid] — EL10 guests (#1000)", () => {
+  beforeEach(() => {
+    h.prisma.connection.findUnique.mockResolvedValue({ id: "c1", name: "vc", baseUrl: "https://vc", apiTokenEnc: "x", insecureTLS: true, type: "vmware" })
+  })
+
+  it("flags an EL10 guest from what its Tools reported, the configured type saying nothing", async () => {
+    h.soapText = [prop("name", "alma"), prop("config.guestFullName", "AlmaLinux (64-bit)"), prop("config.guestId", "almalinux_64Guest")].join("")
+    h.identities = new Map([["vm-9", { guestId: "almalinux_64Guest", guestOS: "AlmaLinux (64-bit)", detailedData: "distroName='AlmaLinux' distroVersion='10.1' kernelVersion='6.12.0-124.el10_1.x86_64'" }]])
+    const res = await callRoute(GET, { params: { id: "c1", vmid: "vm-9" } })
+    expect((await readJson<any>(res)).data.el10).toBe(true)
+  })
+
+  it("leaves other guests alone", async () => {
+    h.soapText = [prop("name", "r9"), prop("config.guestFullName", "Red Hat Enterprise Linux 9 (64-bit)"), prop("config.guestId", "rhel9_64Guest")].join("")
+    h.identities = new Map()
+    const res = await callRoute(GET, { params: { id: "c1", vmid: "vm-9" } })
+    expect((await readJson<any>(res)).data.el10).toBe(false)
   })
 })

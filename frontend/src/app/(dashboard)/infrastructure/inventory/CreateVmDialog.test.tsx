@@ -18,7 +18,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { cleanup } from '@testing-library/react'
+import { cleanup, within } from '@testing-library/react'
 import {
   renderWithProviders,
   screen,
@@ -724,6 +724,53 @@ describe('CreateVmDialog - System tab', () => {
     await waitFor(() => {
       expect(screen.getByText(/UEFI requires a q35 machine type/i)).toBeInTheDocument()
     })
+  })
+
+  // #1157: the Graphic card list used to be dropped from the POST body, so
+  // every VM got PVE's default display whatever the user picked.
+  async function createAndCaptureBody(pickGraphicCard?: RegExp) {
+    let body: Record<string, unknown> | null = null
+    server.use(
+      http.post(`*/api/v1/connections/${CONN_ID}/guests/qemu/${NODE_NAME}`, async ({ request }) => {
+        body = (await request.json()) as Record<string, unknown>
+        return HttpResponse.json({ data: { upid: 'UPID:pve1:test' } })
+      }),
+    )
+
+    renderWithProviders(<CreateVmDialog {...makeProps()} />)
+    await waitForDataLoad()
+
+    if (pickGraphicCard) {
+      fireEvent.click(screen.getByRole('tab', { name: 'System' }))
+      // The Select has no labelId, so its accessible name is its value: reach
+      // it through the visible label instead.
+      const label = await screen.findByText('Graphic card', { selector: 'label' })
+      fireEvent.mouseDown(within(label.closest('.MuiFormControl-root') as HTMLElement).getByRole('combobox'))
+      fireEvent.click(await screen.findByRole('option', { name: pickGraphicCard }))
+    }
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Confirm' }))
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /create/i })).not.toBeDisabled()
+    })
+    fireEvent.click(screen.getByRole('button', { name: /create/i }))
+    await waitFor(() => {
+      expect(body).not.toBeNull()
+    })
+
+    return body as unknown as Record<string, unknown>
+  }
+
+  it('sends the picked graphic card as vga', async () => {
+    const body = await createAndCaptureBody(/SPICE \(qxl\)/)
+
+    expect(body.vga).toBe('qxl')
+  })
+
+  it('leaves vga out when the graphic card stays on Default', async () => {
+    const body = await createAndCaptureBody()
+
+    expect(body).not.toHaveProperty('vga')
   })
 })
 

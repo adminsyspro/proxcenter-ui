@@ -449,6 +449,28 @@ export function machineTypeRow(raw: string | undefined | null): {
 }
 
 /* ------------------------------------------------------------------ */
+/* USB tablet (issue #1157)                                           */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Whether QEMU really gets the USB tablet device. An explicit `tablet` key
+ * wins; without it PVE defaults to on, except for a SPICE display (qxl,
+ * qxl2-4) or a serial terminal, where it drops the device on purpose
+ * (qemu-server QemuServer.pm config_to_command). Reading only `tablet`
+ * showed "Enabled" on qxl guests whose noVNC console then drew two cursors.
+ */
+export function isTabletEnabled(tablet: unknown, vga: string | undefined | null): boolean {
+  if (tablet !== undefined && tablet !== null && tablet !== '') {
+    return !(tablet === 0 || tablet === false || tablet === '0')
+  }
+
+  const parts = String(vga ?? '').split(',').map(p => p.trim())
+  const type = (parts.find(p => !p.includes('=') || p.startsWith('type=')) ?? '').replace(/^type=/, '')
+
+  return !/^(qxl[234]?|serial\d+)$/.test(type)
+}
+
+/* ------------------------------------------------------------------ */
 /* Disk image format (issue #735)                                     */
 /* ------------------------------------------------------------------ */
 
@@ -1691,7 +1713,7 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
           startupOrder: config.startup || 'order=any',
           ostype: config.ostype || 'other',
           bootOrder: config.boot || '',
-          useTablet: config.tablet !== 0 && config.tablet !== false,
+          useTablet: isTabletEnabled(config.tablet, config.vga),
           hotplug: config.hotplug === 1 || config.hotplug === '1' ? 'disk,network,usb,memory,cpu' : (typeof config.hotplug === 'string' ? config.hotplug.toLowerCase() : 'disk,network,usb'),
           acpi: config.acpi !== 0 && config.acpi !== false,
           kvmEnabled: config.kvm !== 0 && config.kvm !== false,

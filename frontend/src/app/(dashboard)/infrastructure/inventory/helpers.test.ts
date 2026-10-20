@@ -38,6 +38,7 @@ import {
   buildMachineType,
   formatMachineType,
   machineTypeRow,
+  isTabletEnabled,
   parseDiskFormat,
   HOTPLUG_DEVICES,
   hotplugDevice,
@@ -898,6 +899,29 @@ describe('rrdTimeframeFromSeries', () => {
   it('falls back to hour when timestamps are not finite', () => {
     expect(rrdTimeframeFromSeries([pt(NaN), pt(NaN)])).toBe('hour')
     expect(rrdTimeframeFromSeries([{ t: 'x' } as any, { t: 'y' } as any])).toBe('hour')
+  })
+})
+
+describe('isTabletEnabled', () => {
+  it('follows an explicit tablet key whatever the display', () => {
+    expect(isTabletEnabled(1, 'qxl')).toBe(true)
+    expect(isTabletEnabled(0, 'std')).toBe(false)
+    expect(isTabletEnabled('0', undefined)).toBe(false)
+    expect(isTabletEnabled(false, undefined)).toBe(false)
+  })
+
+  it('defaults to on for the default and non-SPICE displays', () => {
+    expect(isTabletEnabled(undefined, undefined)).toBe(true)
+    expect(isTabletEnabled(undefined, 'std')).toBe(true)
+    expect(isTabletEnabled(undefined, 'virtio,memory=64')).toBe(true)
+    expect(isTabletEnabled(undefined, 'none')).toBe(true)
+  })
+
+  it('is off when PVE drops it for SPICE or a serial terminal (#1157)', () => {
+    expect(isTabletEnabled(undefined, 'qxl')).toBe(false)
+    expect(isTabletEnabled(undefined, 'qxl2,memory=32')).toBe(false)
+    expect(isTabletEnabled(undefined, 'type=qxl4')).toBe(false)
+    expect(isTabletEnabled(undefined, 'serial0')).toBe(false)
   })
 })
 

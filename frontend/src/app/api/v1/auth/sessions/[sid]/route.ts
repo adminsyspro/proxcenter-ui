@@ -10,6 +10,7 @@ import { getServerSession } from "next-auth"
 
 import { authOptions } from "@/lib/auth/config"
 import { revokeSession } from "@/lib/auth/sessions"
+import { withAudit } from "@/lib/audit/withAudit"
 
 interface RouteContext {
   params: Promise<{ sid: string }>
@@ -20,7 +21,7 @@ interface RouteContext {
 // belongs to another user updates zero rows exactly like a sid that doesn't
 // exist. Both cases return 404, never 403: a 403 would confirm the sid is
 // real, leaking whether a given session id exists.
-export async function DELETE(req: Request, context: RouteContext) {
+async function handleDelete(req: Request, context: RouteContext) {
   const session = await getServerSession(authOptions)
 
   if (!session?.user?.id) {
@@ -37,3 +38,5 @@ export async function DELETE(req: Request, context: RouteContext) {
 
   return NextResponse.json({ data: { ok: true } })
 }
+
+export const DELETE = withAudit({ category: "auth", resourceType: "session", resourceParam: "sid" }, handleDelete)

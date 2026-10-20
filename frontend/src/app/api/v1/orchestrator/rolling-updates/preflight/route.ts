@@ -106,7 +106,7 @@ export async function POST(req: Request) {
 
     const response = await fetch(`${ORCHESTRATOR_URL}/api/v1/rolling-updates/preflight`, {
       method: "POST",
-      headers: orchestratorHeaders({ "Content-Type": "application/json" }),
+      headers: await orchestratorHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify(payload),
     })
 

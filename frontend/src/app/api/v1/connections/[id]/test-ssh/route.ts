@@ -217,7 +217,7 @@ export async function POST(
 
       const res = await fetch(`${ORCHESTRATOR_URL}/api/v1/connections/${id}/test-ssh`, {
         method: 'POST',
-        headers: orchestratorHeaders({ 'Content-Type': 'application/json' }),
+        headers: await orchestratorHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify(sshCredentials),
         signal: controller.signal,
       })

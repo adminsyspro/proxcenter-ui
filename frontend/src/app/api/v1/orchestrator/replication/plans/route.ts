@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getOrchestratorClient } from "@/lib/orchestrator/client"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { getTenantConnectionIds } from "@/lib/tenant"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -68,7 +69,7 @@ export async function GET() {
   }
 }
 
-export async function POST(request: NextRequest) {
+async function handlePost(request: NextRequest) {
   try {
     const denied = await checkPermission(PERMISSIONS.AUTOMATION_MANAGE, "global", "*")
 
@@ -100,3 +101,5 @@ export async function POST(request: NextRequest) {
     )
   }
 }
+
+export const POST = withAudit({ category: "replication", resourceType: "plan" }, handlePost)

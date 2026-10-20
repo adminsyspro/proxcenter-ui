@@ -7,6 +7,7 @@ import { guardTenantStorageWrite, loadTenantSlugs, resolveUploadOwner } from "@/
 import { getTenantInfrastructureScope, maskingScope } from "@/lib/tenant/infraScope"
 import { getCurrentTenantId } from "@/lib/tenant"
 import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -84,4 +85,4 @@ async function deleteHandler(
   }
 }
 
-export const DELETE = withPublicApiGuard("storage-content-delete", deleteHandler)
+export const DELETE = withAudit({ category: "storage", resourceType: "content", resourceParam: "volid" }, withPublicApiGuard("storage-content-delete", deleteHandler))

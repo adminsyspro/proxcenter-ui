@@ -7,6 +7,7 @@ import { updateCustomImageSchema } from "@/lib/schemas"
 import { authorizeImageLocations, authorizeImageVolume, extraImageLocations, SourceVolumeError } from '@/lib/templates/sourceVolume'
 import { loadGrantSummary, replaceTenantGrants } from '@/lib/templates/catalogGrants'
 import { isNodeUrlFetchRefused, URL_IMAGE_REFUSED } from '@/lib/vdc/nodeUrlFetch'
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -30,7 +31,7 @@ export async function GET(req: Request, ctx: Ctx) {
   }
 }
 
-export async function PUT(req: Request, ctx: Ctx) {
+async function handlePut(req: Request, ctx: Ctx) {
   try {
     const prisma = await getSessionPrisma()
     const denied = await checkPermission(PERMISSIONS.VM_CREATE)
@@ -113,7 +114,7 @@ export async function PUT(req: Request, ctx: Ctx) {
   }
 }
 
-export async function DELETE(req: Request, ctx: Ctx) {
+async function handleDelete(req: Request, ctx: Ctx) {
   try {
     const prisma = await getSessionPrisma()
     const denied = await checkPermission(PERMISSIONS.VM_CREATE)
@@ -141,3 +142,6 @@ export async function DELETE(req: Request, ctx: Ctx) {
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const PUT = withAudit({ category: "templates", resourceType: "custom_image", resourceParam: "id" }, handlePut)
+export const DELETE = withAudit({ category: "templates", resourceType: "custom_image", resourceParam: "id" }, handleDelete)

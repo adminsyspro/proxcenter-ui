@@ -7,6 +7,7 @@ import { getTenantInfrastructureScope, maskingScope } from "@/lib/tenant/infraSc
 import { detachPbsStorage, PbsAttachError } from "@/lib/storage/attachPbsStorage"
 import { audit } from "@/lib/audit"
 import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -119,4 +120,4 @@ async function deleteHandler(
   }
 }
 
-export const DELETE = withPublicApiGuard("storage-detach", deleteHandler)
+export const DELETE = withAudit({ category: "storage", resourceType: "storage", resourceParam: "storage" }, withPublicApiGuard("storage-detach", deleteHandler))

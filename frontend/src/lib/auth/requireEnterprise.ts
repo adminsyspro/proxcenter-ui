@@ -40,7 +40,7 @@ export type ServerLicense = {
 export async function getServerLicense(): Promise<ServerLicense> {
   try {
     const res = await fetch(`${ORCHESTRATOR_URL}/api/v1/license/status`, {
-      headers: orchestratorHeaders(),
+      headers: await orchestratorHeaders(),
       cache: "no-store",
     })
 

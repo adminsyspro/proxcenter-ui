@@ -4,6 +4,7 @@ import { prisma } from '@/lib/db/prisma'
 import { getCurrentTenantId } from '@/lib/tenant'
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { METRIC_TYPES, OPERATORS, SEVERITIES } from '../route'
+import { withAudit } from '@/lib/audit/withAudit'
 
 export const runtime = 'nodejs'
 
@@ -52,7 +53,7 @@ return NextResponse.json(
 }
 
 // PUT - Modifier une règle
-export async function PUT(req: Request, { params }: Params) {
+async function handlePut(req: Request, { params }: Params) {
   try {
     const denied = await checkPermission(PERMISSIONS.ALERTS_MANAGE)
     if (denied) return denied
@@ -120,7 +121,7 @@ return NextResponse.json(
 }
 
 // PATCH - Activer/désactiver une règle
-export async function PATCH(req: Request, { params }: Params) {
+async function handlePatch(req: Request, { params }: Params) {
   try {
     const denied = await checkPermission(PERMISSIONS.ALERTS_MANAGE)
     if (denied) return denied
@@ -152,7 +153,7 @@ return NextResponse.json(
 }
 
 // DELETE - Supprimer une règle
-export async function DELETE(req: Request, { params }: Params) {
+async function handleDelete(req: Request, { params }: Params) {
   try {
     const denied = await checkPermission(PERMISSIONS.ALERTS_MANAGE)
     if (denied) return denied
@@ -178,3 +179,7 @@ return NextResponse.json(
     )
   }
 }
+
+export const PUT = withAudit({ category: 'alerts', resourceType: 'alert_rule', resourceParam: 'id' }, handlePut)
+export const PATCH = withAudit({ category: 'alerts', resourceType: 'alert_rule', resourceParam: 'id' }, handlePatch)
+export const DELETE = withAudit({ category: 'alerts', resourceType: 'alert_rule', resourceParam: 'id' }, handleDelete)

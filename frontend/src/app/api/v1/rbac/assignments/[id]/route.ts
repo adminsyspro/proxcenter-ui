@@ -12,6 +12,7 @@ import { roleHasSensitiveNicPermissions } from "@/lib/rbac/nicPermissions"
 import { scopeBreadth, validateAssignmentScope } from "@/lib/rbac/scope-validation"
 import { DEFAULT_TENANT_ID, getCurrentTenantId } from "@/lib/tenant"
 import { demoResponse } from "@/lib/demo/demo-api"
+import { withAudit } from "@/lib/audit/withAudit"
 
 /**
  * Build the `where` clause for a single-assignment lookup. Provider-tenant
@@ -113,7 +114,7 @@ return NextResponse.json(
 }
 
 // DELETE /api/v1/rbac/assignments/[id] - Supprimer une assignation
-export async function DELETE(req: NextRequest, context: RouteContext) {
+async function handleDelete(req: NextRequest, context: RouteContext) {
   const demo = demoResponse(req)
   if (demo) return demo
 
@@ -193,7 +194,7 @@ return NextResponse.json(
 }
 
 // PATCH /api/v1/rbac/assignments/[id] - Modifier une assignation
-export async function PATCH(req: NextRequest, context: RouteContext) {
+async function handlePatch(req: NextRequest, context: RouteContext) {
   const demo = demoResponse(req)
   if (demo) return demo
 
@@ -375,3 +376,6 @@ return NextResponse.json(
     )
   }
 }
+
+export const DELETE = withAudit({ category: "security", resourceType: "assignment", resourceParam: "id" }, handleDelete)
+export const PATCH = withAudit({ category: "security", resourceType: "assignment", resourceParam: "id" }, handlePatch)

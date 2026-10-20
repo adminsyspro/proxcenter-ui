@@ -17,7 +17,7 @@ export type DrillResourceFetch = { res: Response } | { response: Response }
 export async function fetchDrillResource(id: string, resource: string, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<DrillResourceFetch> {
   try {
     const res = await fetch(`${ORCHESTRATOR_URL}/api/v1/restore-drills/${encodeURIComponent(id)}/${resource}`, {
-      headers: orchestratorHeaders(),
+      headers: await orchestratorHeaders(),
       cache: 'no-store',
       signal: AbortSignal.timeout(timeoutMs),
     })

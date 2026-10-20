@@ -5,6 +5,7 @@ import { isUserSuperAdmin } from '@/lib/rbac'
 import { authOptions } from '@/lib/auth/config'
 import { listBindingsForVdc } from '@/lib/db/vdcPbsBindings'
 import { bindPbsToVdc, bindPbsToVdcManual } from '@/lib/vdc/pbsOrchestrator'
+import { withAudit } from '@/lib/audit/withAudit'
 
 export const runtime = 'nodejs'
 
@@ -24,7 +25,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   return NextResponse.json({ data: rows })
 }
 
-export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
+async function handlePost(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const denied = await requireSuperAdmin()
   if (denied) return denied
   const { id } = await ctx.params
@@ -68,3 +69,5 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const POST = withAudit({ category: 'admin', resourceType: 'vdc', resourceParam: 'id' }, handlePost)

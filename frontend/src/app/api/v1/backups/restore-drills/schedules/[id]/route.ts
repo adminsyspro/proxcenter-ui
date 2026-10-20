@@ -12,6 +12,7 @@ import { scheduleAuditDetails } from '@/lib/backups/restoreDrills/schedules'
 import { drillTargetDenied, prepareScheduleInput } from '@/lib/backups/restoreDrills/server'
 import { getOrchestratorClient } from '@/lib/orchestrator/client'
 import { PERMISSIONS, checkPermission } from '@/lib/rbac'
+import { withAudit } from '@/lib/audit/withAudit'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -41,7 +42,7 @@ export async function GET(_request: Request, ctx: Ctx) {
   }
 }
 
-export async function PUT(request: Request, ctx: Ctx) {
+async function handlePut(request: Request, ctx: Ctx) {
   try {
     const access = await requireRestoreDrillAccess()
     if (access.denied) return access.denied
@@ -86,7 +87,10 @@ export async function PUT(request: Request, ctx: Ctx) {
   }
 }
 
-export async function DELETE(_request: Request, ctx: Ctx) {
+async function handleDelete(_request: Request, ctx: Ctx) {
   const { id } = await ctx.params
   return runScheduleAction(id, 'delete')
 }
+
+export const PUT = withAudit({ category: 'backups', resourceType: 'schedule', resourceParam: 'id' }, handlePut)
+export const DELETE = withAudit({ category: 'backups', resourceType: 'schedule', resourceParam: 'id' }, handleDelete)

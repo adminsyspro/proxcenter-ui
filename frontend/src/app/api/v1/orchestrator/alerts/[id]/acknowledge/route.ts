@@ -7,6 +7,7 @@ import { getTenantInfrastructureScope, maskingScope } from '@/lib/tenant/infraSc
 import { checkPermission, PERMISSIONS, getCurrentRbacInfraScope } from '@/lib/rbac'
 import { isAlertVisibleToTenant } from '@/lib/alerts/visibility'
 import { getVdcVmidsByConnection } from '@/lib/alerts/vdcVmids'
+import { withAudit } from '@/lib/audit/withAudit'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -15,7 +16,7 @@ export const dynamic = 'force-dynamic'
  * POST /api/v1/orchestrator/alerts/[id]/acknowledge
  * Acquitte une alerte (vérifie l'appartenance au tenant)
  */
-export async function POST(
+async function handlePost(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -59,3 +60,5 @@ export async function POST(
     )
   }
 }
+
+export const POST = withAudit({ category: 'alerts', resourceType: 'alert', resourceParam: 'id', action: 'acknowledge' }, handlePost)

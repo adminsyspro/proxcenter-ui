@@ -18,6 +18,7 @@ import { assertVmid, assertNodeName } from "@/lib/ssh/validate"
 import { getCurrentTenantId } from "@/lib/tenant"
 import { getTenantInfrastructureScope, canMigrateConnections } from "@/lib/tenant/infraScope"
 import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -233,5 +234,5 @@ async function getHandler(
   }
 }
 
-export const POST = withPublicApiGuard("vm-remote-migrate-prepare", postHandler)
+export const POST = withAudit({ category: "vms", resourceType: "guest", resourceTypeParam: "type", resourceParam: "vmid" }, withPublicApiGuard("vm-remote-migrate-prepare", postHandler))
 export const GET = withPublicApiGuard("vm-remote-migrate-prepare-get", getHandler)

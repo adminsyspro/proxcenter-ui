@@ -15,6 +15,7 @@ import { parseCidr } from "@/lib/vdc/network"
 import { checkVmidAgainstTenantRange } from "@/lib/tenant/vmidRange"
 import { enforceTenantDrives, meterImportRefs, DriveScopeError } from "@/lib/vdc/driveGuard"
 import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -331,4 +332,4 @@ return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
 
-export const POST = withPublicApiGuard("vm-create", handler)
+export const POST = withAudit({ category: "vms", action: "create", resourceType: "guest", resourceTypeParam: "type", resourceBodyField: "vmid", resourceNameBodyField: "name" }, withPublicApiGuard("vm-create", handler))

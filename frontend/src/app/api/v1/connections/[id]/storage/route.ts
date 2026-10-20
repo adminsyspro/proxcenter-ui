@@ -11,6 +11,7 @@ import { getTenantInfrastructureScope, maskingScope } from "@/lib/tenant/infraSc
 import { attachPbsStorage, PbsAttachError } from "@/lib/storage/attachPbsStorage"
 import { audit } from "@/lib/audit"
 import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -407,4 +408,4 @@ async function postHandler(req: Request, ctx: { params: Promise<{ id: string }> 
 }
 
 export const GET = withPublicApiGuard("storage-connection-list", getHandler)
-export const POST = withPublicApiGuard("storage-attach-pbs", postHandler)
+export const POST = withAudit({ category: "storage", resourceType: "storage", resourceParam: "id" }, withPublicApiGuard("storage-attach-pbs", postHandler))

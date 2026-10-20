@@ -20,6 +20,7 @@ import { checkTenantGuestScope } from "@/lib/vdc/guestScope"
 import type { Principal } from "@/lib/auth/principal"
 import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 import { resolveVisibleConnectionIds } from "@/lib/api-tokens/scope"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -509,4 +510,4 @@ async function handler(
   }
 }
 
-export const POST = withPublicApiGuard("vm-restore", handler)
+export const POST = withAudit({ category: "backups", resourceType: "node", resourceParam: "node", action: "restore" }, withPublicApiGuard("vm-restore", handler))

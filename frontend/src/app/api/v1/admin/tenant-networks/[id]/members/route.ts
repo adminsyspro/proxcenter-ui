@@ -6,6 +6,7 @@ import { audit } from "@/lib/audit"
 import { addMember, removeMember } from "@/lib/vdc/tenantNetworkMembers"
 import { getTenantNetwork } from "@/lib/vdc/tenantNetworks"
 import { mapTenantNetworkError } from "@/lib/vdc/httpErrors"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -30,7 +31,7 @@ function fail(e: any): NextResponse {
 // POST /api/v1/admin/tenant-networks/[id]/members  { vdcId }
 // Make a vDC carry the network: local VNet with the network's VNI, then the
 // peers of every member zone (#901).
-export async function POST(req: NextRequest, ctx: RouteContext) {
+async function handlePost(req: NextRequest, ctx: RouteContext) {
   const g = await gate(ctx)
   if (g instanceof Response) return g
   try {
@@ -55,7 +56,7 @@ export async function POST(req: NextRequest, ctx: RouteContext) {
 
 // DELETE /api/v1/admin/tenant-networks/[id]/members?vdcId=xxx
 // Stop a vDC carrying the network; refused while a guest NIC still uses it.
-export async function DELETE(req: NextRequest, ctx: RouteContext) {
+async function handleDelete(req: NextRequest, ctx: RouteContext) {
   const g = await gate(ctx)
   if (g instanceof Response) return g
   try {
@@ -77,3 +78,6 @@ export async function DELETE(req: NextRequest, ctx: RouteContext) {
     return fail(e)
   }
 }
+
+export const POST = withAudit({ category: "sdn", resourceType: "tenant_network", resourceParam: "id" }, handlePost)
+export const DELETE = withAudit({ category: "sdn", resourceType: "tenant_network", resourceParam: "id" }, handleDelete)

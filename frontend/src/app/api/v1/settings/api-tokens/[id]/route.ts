@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db/prisma"
 import { audit } from "@/lib/audit"
 
 import { requireApiTokenAdmin, tenantVisibleToCaller } from "../_shared"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -23,7 +24,7 @@ export const runtime = "nodejs"
 //
 // NOT license-gated (D6): an administrator can still delete a token after the
 // option lapses.
-export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string }> | { id: string } }) {
+async function handleDelete(_req: Request, ctx: { params: Promise<{ id: string }> | { id: string } }) {
   const guard = await requireApiTokenAdmin()
   if (!guard.ok) return guard.response!
 
@@ -67,3 +68,5 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string 
 
   return NextResponse.json({ data: { id, deleted: true } })
 }
+
+export const DELETE = withAudit({ category: "api_tokens", resourceType: "api_token", resourceParam: "id" }, handleDelete)

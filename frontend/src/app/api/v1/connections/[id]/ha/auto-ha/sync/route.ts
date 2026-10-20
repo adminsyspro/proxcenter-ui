@@ -5,6 +5,7 @@ import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -81,4 +82,4 @@ async function postHandler(_req: Request, ctx: { params: Promise<{ id: string }>
   }
 }
 
-export const POST = withPublicApiGuard("ha-auto-sync", postHandler)
+export const POST = withAudit({ category: "ha", resourceType: "ha_auto_ha", resourceParam: "id", action: "sync" }, withPublicApiGuard("ha-auto-sync", postHandler))

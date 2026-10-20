@@ -8,12 +8,13 @@ import { prisma } from "@/lib/db/prisma"
 import { invalidateInventoryCache } from "@/lib/cache/inventoryCache"
 import { invalidateNodeIpCache } from "@/lib/cache/nodeIpCache"
 import { invalidateConnectionCache } from "@/lib/connections/getConnection"
+import { withAudit } from "@/lib/audit/withAudit"
 
 // POST /api/v1/auth/switch-tenant
 // Switches the user's active tenant by updating the JWT cookie.
 // The actual JWT update happens on next session refresh — this endpoint
 // validates the switch and updates the user_tenants default.
-export async function POST(req: NextRequest) {
+async function handlePost(req: NextRequest) {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 })
@@ -88,3 +89,5 @@ export async function POST(req: NextRequest) {
     message: "Tenant switched. Please refresh the page to apply.",
   })
 }
+
+export const POST = withAudit({ category: "auth", resourceType: "switch_tenant" }, handlePost)

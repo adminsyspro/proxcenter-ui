@@ -7,6 +7,7 @@ import { executeSSH } from "@/lib/ssh/exec"
 import { assertNodeName } from "@/lib/ssh/validate"
 import { safeLog } from "@/lib/log/sanitize"
 import { formatSshEndpoint, resolveNodeSshEndpoint } from "@/lib/ssh/node-endpoint"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -103,7 +104,7 @@ export async function GET(
  *
  * Enter maintenance mode via SSH: ha-manager crm-command node-maintenance enable <node>
  */
-export function POST(
+function handlePost(
   _req: Request,
   ctx: { params: Promise<{ id: string; node: string }> }
 ) {
@@ -115,9 +116,12 @@ export function POST(
  *
  * Exit maintenance mode via SSH: ha-manager crm-command node-maintenance disable <node>
  */
-export function DELETE(
+function handleDelete(
   _req: Request,
   ctx: { params: Promise<{ id: string; node: string }> }
 ) {
   return toggleMaintenance(ctx, false)
 }
+
+export const POST = withAudit({ category: "nodes", resourceType: "node", resourceParam: "node", action: "maintenance" }, handlePost)
+export const DELETE = withAudit({ category: "nodes", resourceType: "node", resourceParam: "node", action: "maintenance" }, handleDelete)

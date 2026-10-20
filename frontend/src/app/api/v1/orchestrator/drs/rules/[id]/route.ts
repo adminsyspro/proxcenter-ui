@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getOrchestratorClient } from '@/lib/orchestrator/client'
 import { getTenantConnectionIds } from '@/lib/tenant'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
+import { withAudit } from '@/lib/audit/withAudit'
 
 export const runtime = "nodejs"
 
@@ -23,7 +24,7 @@ async function verifyDrsRuleBelongsToTenant(client: any, id: string): Promise<bo
 }
 
 // PUT /api/v1/orchestrator/drs/rules/:id — tenant-scoped
-export async function PUT(request: NextRequest, { params }: RouteParams) {
+async function handlePut(request: NextRequest, { params }: RouteParams) {
   try {
     const denied = await checkPermission(PERMISSIONS.AUTOMATION_MANAGE)
     if (denied) return denied
@@ -66,7 +67,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 }
 
 // DELETE /api/v1/orchestrator/drs/rules/:id — tenant-scoped
-export async function DELETE(request: NextRequest, { params }: RouteParams) {
+async function handleDelete(request: NextRequest, { params }: RouteParams) {
   try {
     const denied = await checkPermission(PERMISSIONS.AUTOMATION_MANAGE)
     if (denied) return denied
@@ -93,3 +94,6 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     )
   }
 }
+
+export const PUT = withAudit({ category: 'automation', resourceType: 'rule', resourceParam: 'id' }, handlePut)
+export const DELETE = withAudit({ category: 'automation', resourceType: 'rule', resourceParam: 'id' }, handleDelete)

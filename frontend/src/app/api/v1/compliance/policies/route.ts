@@ -8,6 +8,7 @@ import { demoResponse } from '@/lib/demo/demo-api'
 import { getSecurityPolicies, updateSecurityPolicies } from '@/lib/compliance/policies'
 import { audit } from '@/lib/audit'
 import { getCurrentTenantId } from '@/lib/tenant'
+import { withAudit } from '@/lib/audit/withAudit'
 
 export const runtime = 'nodejs'
 
@@ -28,7 +29,7 @@ export async function GET(req: Request) {
   }
 }
 
-export async function PUT(req: Request) {
+async function handlePut(req: Request) {
   const demo = demoResponse(req)
   if (demo) return demo
 
@@ -69,3 +70,5 @@ export async function PUT(req: Request) {
     return NextResponse.json({ error: e?.message || 'Internal server error' }, { status: 500 })
   }
 }
+
+export const PUT = withAudit({ category: 'security', resourceType: 'policy' }, handlePut)

@@ -4,6 +4,7 @@ import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, buildNodeResourceId, PERMISSIONS } from "@/lib/rbac"
 import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -129,6 +130,6 @@ async function deleteHandler(
 }
 
 export const GET = withPublicApiGuard("node-network-list", getHandler)
-export const POST = withPublicApiGuard("node-network-create", postHandler)
-export const PUT = withPublicApiGuard("node-network-apply", putHandler)
-export const DELETE = withPublicApiGuard("node-network-revert", deleteHandler)
+export const POST = withAudit({ category: "nodes", resourceType: "node", resourceParam: "node" }, withPublicApiGuard("node-network-create", postHandler))
+export const PUT = withAudit({ category: "nodes", resourceType: "node", resourceParam: "node" }, withPublicApiGuard("node-network-apply", putHandler))
+export const DELETE = withAudit({ category: "nodes", resourceType: "node", resourceParam: "node" }, withPublicApiGuard("node-network-revert", deleteHandler))

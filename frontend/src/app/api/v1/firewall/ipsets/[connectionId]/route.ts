@@ -9,6 +9,7 @@ import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
 import { getConnectionById } from '@/lib/connections/getConnection'
 import { orchestratorOrPve } from '@/lib/firewall/withPveFallback'
 import * as pveDirect from '@/lib/firewall/pveDirect'
+import { withAudit } from '@/lib/audit/withAudit'
 
 // GET /api/v1/firewall/ipsets/[connectionId] - Get all IP sets
 async function getHandler(
@@ -75,4 +76,4 @@ return NextResponse.json(
 }
 
 export const GET = withPublicApiGuard("fw-ipsets-list", getHandler)
-export const POST = withPublicApiGuard("fw-ipset-create", postHandler)
+export const POST = withAudit({ category: 'firewall', resourceType: 'ipset', resourceParam: 'connectionId' }, withPublicApiGuard("fw-ipset-create", postHandler))

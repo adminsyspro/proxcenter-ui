@@ -9,6 +9,7 @@ import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
 import { getConnectionById } from '@/lib/connections/getConnection'
 import { orchestratorOrPve } from '@/lib/firewall/withPveFallback'
 import * as pveDirect from '@/lib/firewall/pveDirect'
+import { withAudit } from '@/lib/audit/withAudit'
 
 // GET /api/v1/firewall/nodes/[connectionId]/[node] - Get node options or rules
 async function getHandler(
@@ -117,5 +118,5 @@ return NextResponse.json(
 }
 
 export const GET = withPublicApiGuard("fw-node-get", getHandler)
-export const PUT = withPublicApiGuard("fw-node-options-update", putHandler)
-export const POST = withPublicApiGuard("fw-node-rule-add", postHandler)
+export const PUT = withAudit({ category: 'firewall', resourceType: 'node', resourceParam: 'node' }, withPublicApiGuard("fw-node-options-update", putHandler))
+export const POST = withAudit({ category: 'firewall', resourceType: 'node', resourceParam: 'node' }, withPublicApiGuard("fw-node-rule-add", postHandler))

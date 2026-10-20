@@ -4744,7 +4744,8 @@
         "framing": "分帧",
         "facility": "Facility",
         "categories": "审计类别",
-        "categoriesHelper": "留空则转发所有类别。",
+        "categoriesHelper": "仅转发勾选的类别。",
+        "categoriesNone": "请至少选择一个类别。",
         "enabled": "启用转发"
       },
       "transportHelper": {
@@ -4790,7 +4791,13 @@
         "migration": "迁移",
         "admin": "管理",
         "sdn": "SDN",
-        "api_tokens": "API 令牌"
+        "api_tokens": "API 令牌",
+        "firewall": "防火墙",
+        "ha": "高可用",
+        "cluster": "集群",
+        "automation": "自动化",
+        "replication": "复制",
+        "alerts": "告警"
       },
       "destinations": "目标"
     },
@@ -5040,7 +5047,13 @@
       "storage": "存储",
       "backups": "备份",
       "settings": "设置",
-      "system": "系统"
+      "system": "系统",
+      "firewall": "防火墙",
+      "ha": "高可用",
+      "cluster": "集群",
+      "automation": "自动化",
+      "replication": "复制",
+      "alerts": "告警"
     },
     "actions": {
       "login": "登录",
@@ -5068,7 +5081,30 @@
       "import": "导入",
       "test": "测试",
       "enable": "启用",
-      "disable": "禁用"
+      "disable": "禁用",
+      "upgrade": "升级",
+      "reboot": "重启",
+      "shutdown": "关机",
+      "maintenance": "维护",
+      "execute": "执行",
+      "apply": "应用",
+      "sync": "同步",
+      "run": "运行",
+      "acknowledge": "确认",
+      "resolve": "解决",
+      "failover": "故障转移",
+      "failback": "故障回切",
+      "cancel": "取消",
+      "drsMigrate": "DRS 迁移",
+      "rollingStart": "滚动更新开始",
+      "rollingStep": "滚动更新步骤",
+      "rollingFinish": "滚动更新结束",
+      "drainStart": "主机清空开始",
+      "drainStep": "排空步骤",
+      "drainFinish": "主机清空结束",
+      "replicationSync": "复制同步",
+      "replicationFix": "副本修复",
+      "drillRun": "恢复演练"
     }
   },
   "security": {

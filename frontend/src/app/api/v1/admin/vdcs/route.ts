@@ -7,6 +7,7 @@ import { mapCreateVdcError } from "@/lib/vdc/httpErrors"
 import { audit } from "@/lib/audit"
 import { requireProviderTenant } from "@/lib/tenant"
 import { normalizeIdList } from "@/lib/templates/catalogGrants"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -28,7 +29,7 @@ export async function GET(req: NextRequest) {
 }
 
 // POST /api/v1/admin/vdcs — create a vDC
-export async function POST(req: NextRequest) {
+async function handlePost(req: NextRequest) {
   try {
     const providerGate = await requireProviderTenant()
     if (providerGate) return providerGate
@@ -116,3 +117,5 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: message }, { status })
   }
 }
+
+export const POST = withAudit({ category: "admin", resourceType: "vdc" }, handlePost)

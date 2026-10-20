@@ -10,6 +10,7 @@ import { applySFlowOnNode, type SFlowDesiredConfig } from "@/lib/sflow/configure
 import { GUEST_MACS_COMMAND, parseGuestMACs } from "@/lib/sflow/guestMacs"
 import { saveDesiredSFlowConfig } from "@/lib/sflow/reconciler"
 import { reportExpectedAgents, type ExpectedAgentReport } from "@/lib/sflow/expectedAgents"
+import { withAudit } from "@/lib/audit/withAudit"
 
 // sFlow collector target: an "ip:port" / "host:port" string. Constrain it to
 // hostname / IPv4 / IPv6 characters plus the port colon so it can be safely
@@ -289,7 +290,7 @@ export async function GET() {
 }
 
 // POST /api/v1/orchestrator/sflow/agents — configure sFlow on selected nodes
-export async function POST(request: NextRequest) {
+async function handlePost(request: NextRequest) {
   try {
     const denied = await checkPermission(PERMISSIONS.CONNECTION_MANAGE)
     if (denied) return denied
@@ -425,3 +426,5 @@ export async function POST(request: NextRequest) {
     )
   }
 }
+
+export const POST = withAudit({ category: "nodes", resourceType: "agent" }, handlePost)

@@ -11,6 +11,7 @@ import { getNodeIp } from "@/lib/ssh/node-ip"
 
 import { captureReplicationJobs, type CcmRestorePlan } from '@/lib/migration/ccm-prereqs'
 import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -388,4 +389,4 @@ async function handler(
   }
 }
 
-export const POST = withPublicApiGuard("vm-remote-migrate", handler)
+export const POST = withAudit({ category: "vms", resourceType: "guest", resourceTypeParam: "type", resourceParam: "vmid", action: "migrate" }, withPublicApiGuard("vm-remote-migrate", handler))

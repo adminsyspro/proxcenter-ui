@@ -17,6 +17,7 @@ import { testXcpngConnection, xcpngDefaultUser, xcpngSubTypeOf, type XcpngSubTyp
 import { normalizeXapiBaseUrl } from "@/lib/xcpng/xapi-client"
 import { hasServerFeature } from "@/lib/auth/requireEnterprise"
 import { Features } from "@/lib/license/features"
+import { withAudit } from "@/lib/audit/withAudit"
 
 /** Warm migration settings are Enterprise (migration feature). */
 const migrationFeatureLicensed = () => hasServerFeature(Features.VMWARE_MIGRATION)
@@ -210,7 +211,7 @@ export async function GET(req: Request) {
 }
 
 // Création d'une connexion
-export async function POST(req: Request) {
+async function handlePost(req: Request) {
   try {
     // RBAC: Check connection.manage permission
     const denied = await checkPermission(PERMISSIONS.CONNECTION_MANAGE)
@@ -546,3 +547,5 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const POST = withAudit({ category: "connections", resourceType: "connection" }, handlePost)

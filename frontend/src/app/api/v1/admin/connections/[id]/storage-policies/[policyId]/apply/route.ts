@@ -27,6 +27,7 @@ import { audit } from "@/lib/audit"
 import { safeLog } from "@/lib/log/sanitize"
 
 import { storagePolicyProviderGuard } from "../../guard"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -48,7 +49,7 @@ function ndjson(obj: unknown): string {
   return `${JSON.stringify(obj)}\n`
 }
 
-export async function POST(_req: Request, ctx: RouteContext) {
+async function handlePost(_req: Request, ctx: RouteContext) {
   try {
     const { id, policyId } = (await Promise.resolve(ctx.params)) as { id: string; policyId: string }
     const denied = await storagePolicyProviderGuard()
@@ -141,3 +142,5 @@ export async function POST(_req: Request, ctx: RouteContext) {
     return NextResponse.json({ error: message }, { status })
   }
 }
+
+export const POST = withAudit({ category: "storage", resourceType: "storage_policy", resourceParam: "policyId", action: "apply" }, handlePost)

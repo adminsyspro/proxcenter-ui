@@ -18,6 +18,7 @@ import {
   REPORT_TEMPLATE_SETTING_KEY,
   type ReportTemplateSettings,
 } from '@/lib/reports/templateSettings'
+import { withAudit } from '@/lib/audit/withAudit'
 
 export async function GET() {
   try {
@@ -38,7 +39,7 @@ export async function GET() {
   }
 }
 
-export async function PUT(req: Request) {
+async function handlePut(req: Request) {
   try {
     const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
     if (denied) return denied
@@ -61,3 +62,5 @@ export async function PUT(req: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }
+
+export const PUT = withAudit({ category: 'settings', resourceType: 'reports_template' }, handlePut)

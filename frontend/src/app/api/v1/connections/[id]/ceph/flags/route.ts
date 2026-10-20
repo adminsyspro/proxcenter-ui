@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -82,7 +83,7 @@ async function setCephFlag(
 /**
  * PUT /api/v1/connections/[id]/ceph/flags — set a Ceph OSD flag. Body: { flag }
  */
-export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }) {
+async function handlePut(req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
     return await setCephFlag(req, ctx, true)
   } catch (e: any) {
@@ -94,7 +95,7 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
 /**
  * DELETE /api/v1/connections/[id]/ceph/flags — unset a Ceph OSD flag. Body: { flag }
  */
-export async function DELETE(req: Request, ctx: { params: Promise<{ id: string }> }) {
+async function handleDelete(req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
     return await setCephFlag(req, ctx, false)
   } catch (e: any) {
@@ -102,3 +103,6 @@ export async function DELETE(req: Request, ctx: { params: Promise<{ id: string }
     return NextResponse.json({ error: e?.message || "Failed to unset Ceph flag" }, { status: 500 })
   }
 }
+
+export const PUT = withAudit({ category: "cluster", resourceType: "ceph_flag", resourceParam: "id" }, handlePut)
+export const DELETE = withAudit({ category: "cluster", resourceType: "ceph_flag", resourceParam: "id" }, handleDelete)

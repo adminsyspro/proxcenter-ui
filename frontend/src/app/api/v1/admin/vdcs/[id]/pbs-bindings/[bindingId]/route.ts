@@ -4,10 +4,11 @@ import { getServerSession } from 'next-auth'
 import { isUserSuperAdmin } from '@/lib/rbac'
 import { authOptions } from '@/lib/auth/config'
 import { unbindFromVdc } from '@/lib/vdc/pbsOrchestrator'
+import { withAudit } from '@/lib/audit/withAudit'
 
 export const runtime = 'nodejs'
 
-export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string; bindingId: string }> }) {
+async function handleDelete(_req: Request, ctx: { params: Promise<{ id: string; bindingId: string }> }) {
   const s = await getServerSession(authOptions)
   if (!s?.user?.id || !(await isUserSuperAdmin(s.user.id))) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
@@ -20,3 +21,5 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string;
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const DELETE = withAudit({ category: 'admin', resourceType: 'pbs_binding', resourceParam: 'bindingId' }, handleDelete)

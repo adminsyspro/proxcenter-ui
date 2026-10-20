@@ -8,6 +8,7 @@
  */
 
 import { prisma } from "@/lib/db/prisma"
+import { audit } from "@/lib/audit"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getSetting } from "@/lib/db/settings"
@@ -410,13 +411,52 @@ async function handleAutoHaEvents(events: InventoryEvent[]) {
           })
 
           console.log(`[auto-ha] Enabled HA on ${sid} (${vm.name || 'unnamed'}) in ${connId}`)
+          await auditAutoHa(connId, row?.tenantId, sid, vm.name, settings)
         } catch (e: any) {
           console.error(`[auto-ha] Failed to enable HA on ${sid}:`, e?.message)
+          await auditAutoHa(connId, row?.tenantId, sid, vm.name, settings, e?.message)
         }
       }
     } catch (e: any) {
       console.error(`[auto-ha] Error processing connId ${connId}:`, e?.message)
     }
+  }
+}
+
+/**
+ * Journal one auto-HA enrolment (issue #1105). No request runs here, so
+ * audit() finds neither session nor headers and the actor is named
+ * explicitly; the row goes to the connection's tenant. Best-effort: a lost
+ * row is logged, the enrolment loop carries on.
+ */
+async function auditAutoHa(
+  connectionId: string,
+  tenantId: string | undefined,
+  sid: string,
+  name: string | undefined,
+  settings: Record<string, unknown>,
+  errorMessage?: string,
+): Promise<void> {
+  try {
+    await audit({
+      category: "ha",
+      action: "create",
+      resourceType: "ha_resource",
+      resourceId: sid,
+      resourceName: name,
+      userEmail: "system:auto-ha",
+      tenantId,
+      status: errorMessage ? "failure" : "success",
+      errorMessage,
+      details: {
+        connectionId,
+        reason: "auto_ha",
+        state: settings.state || "started",
+        group: settings.group || undefined,
+      },
+    })
+  } catch (e: any) {
+    console.error(`[auto-ha] Failed to audit HA enrolment of ${sid}:`, e?.message)
   }
 }
 

@@ -3,6 +3,7 @@ import { NextResponse } from "next/server"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, buildNodeResourceId, PERMISSIONS } from "@/lib/rbac"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -13,7 +14,7 @@ export const runtime = "nodejs"
  * Proxmox API: POST /nodes/{node}/apt/update (pour refresh) puis apt dist-upgrade via shell
  * Retourne un UPID pour suivre la tâche
  */
-export async function POST(
+async function handlePost(
   req: Request,
   ctx: { params: Promise<{ id: string; node: string }> }
 ) {
@@ -63,3 +64,5 @@ export async function POST(
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const POST = withAudit({ category: "nodes", resourceType: "node", resourceParam: "node", action: "console.open" }, handlePost)

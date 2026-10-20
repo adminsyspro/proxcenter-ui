@@ -4740,7 +4740,8 @@
         "framing": "Delimitación",
         "facility": "Facility",
         "categories": "Categorías de auditoría",
-        "categoriesHelper": "Deje vacío para reenviar todas las categorías.",
+        "categoriesHelper": "Solo se reenvían las categorías marcadas.",
+        "categoriesNone": "Seleccione al menos una categoría.",
         "enabled": "Reenvío activado"
       },
       "transportHelper": {
@@ -4786,7 +4787,13 @@
         "migration": "Migración",
         "admin": "Administración",
         "sdn": "SDN",
-        "api_tokens": "Tokens de API"
+        "api_tokens": "Tokens de API",
+        "firewall": "Firewall",
+        "ha": "Alta disponibilidad",
+        "cluster": "Clúster",
+        "automation": "Automatización",
+        "replication": "Replicación",
+        "alerts": "Alertas"
       },
       "destinations": "Destinos"
     },
@@ -5036,7 +5043,13 @@
       "storage": "Almacenamiento",
       "backups": "Backups",
       "settings": "Configuración",
-      "system": "Sistema"
+      "system": "Sistema",
+      "firewall": "Firewall",
+      "ha": "Alta disponibilidad",
+      "cluster": "Clúster",
+      "automation": "Automatización",
+      "replication": "Replicación",
+      "alerts": "Alertas"
     },
     "actions": {
       "login": "Inicio de sesión",
@@ -5064,7 +5077,30 @@
       "import": "Importar",
       "test": "Prueba",
       "enable": "Activar",
-      "disable": "Desactivar"
+      "disable": "Desactivar",
+      "upgrade": "Actualización",
+      "reboot": "Reinicio",
+      "shutdown": "Apagado",
+      "maintenance": "Mantenimiento",
+      "execute": "Ejecución",
+      "apply": "Aplicación",
+      "sync": "Sincronización",
+      "run": "Lanzamiento",
+      "acknowledge": "Reconocimiento",
+      "resolve": "Resolución",
+      "failover": "Failover",
+      "failback": "Failback",
+      "cancel": "Cancelación",
+      "drsMigrate": "Migración DRS",
+      "rollingStart": "Rolling update iniciado",
+      "rollingStep": "Paso de rolling update",
+      "rollingFinish": "Rolling update finalizado",
+      "drainStart": "Drenaje de host iniciado",
+      "drainStep": "Paso de drenaje",
+      "drainFinish": "Drenaje de host finalizado",
+      "replicationSync": "Sincronización de replicación",
+      "replicationFix": "Corrección de réplica",
+      "drillRun": "Simulacro de restauración"
     }
   },
   "security": {

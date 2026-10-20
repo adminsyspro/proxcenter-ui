@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { getSessionPrisma, getCurrentTenantId } from '@/lib/tenant'
 import { silenceAlertSchema } from '@/lib/schemas'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
+import { withAudit } from '@/lib/audit/withAudit'
 
 export const runtime = 'nodejs'
 
@@ -39,7 +40,7 @@ export async function GET(req: Request) {
  * POST /api/v1/alerts/silence
  * Silence an alert by fingerprint
  */
-export async function POST(req: Request) {
+async function handlePost(req: Request) {
   try {
     const prisma = await getSessionPrisma()
     const permError = await checkPermission(PERMISSIONS.ALERTS_MANAGE)
@@ -89,7 +90,7 @@ export async function POST(req: Request) {
  * DELETE /api/v1/alerts/silence
  * Remove a silence (unmute) by fingerprint
  */
-export async function DELETE(req: Request) {
+async function handleDelete(req: Request) {
   try {
     const prisma = await getSessionPrisma()
     const permError = await checkPermission(PERMISSIONS.ALERTS_MANAGE)
@@ -112,3 +113,6 @@ export async function DELETE(req: Request) {
     return NextResponse.json({ error: error?.message || 'Server error' }, { status: 500 })
   }
 }
+
+export const POST = withAudit({ category: 'alerts', resourceType: 'alert', action: 'update' }, handlePost)
+export const DELETE = withAudit({ category: 'alerts', resourceType: 'alert', action: 'update' }, handleDelete)

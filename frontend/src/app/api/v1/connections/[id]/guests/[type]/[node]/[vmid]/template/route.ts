@@ -5,6 +5,7 @@ import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
 import { invalidateInventoryCache } from "@/lib/cache/inventoryCache"
 import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -67,4 +68,4 @@ async function handler(
   }
 }
 
-export const POST = withPublicApiGuard("vm-template", handler)
+export const POST = withAudit({ category: "vms", resourceType: "guest", resourceTypeParam: "type", resourceParam: "vmid", action: "update" }, withPublicApiGuard("vm-template", handler))

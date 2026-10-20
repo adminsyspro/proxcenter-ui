@@ -9,6 +9,7 @@ import { orchestratorOrPve } from '@/lib/firewall/withPveFallback'
 import { verifyConnectionOwnership } from '@/lib/tenant'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
+import { withAudit } from '@/lib/audit/withAudit'
 
 // POST /api/v1/firewall/groups/[connectionId]/[groupName]/rules - Add rule
 async function postHandler(
@@ -44,4 +45,4 @@ return NextResponse.json(
   }
 }
 
-export const POST = withPublicApiGuard("fw-group-rule-create", postHandler)
+export const POST = withAudit({ category: 'firewall', resourceType: 'group', resourceParam: 'groupName' }, withPublicApiGuard("fw-group-rule-create", postHandler))

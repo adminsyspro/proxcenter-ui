@@ -9,6 +9,7 @@ import { drainCluster, DrainTargetDenied, filterViewableDrains, publicDrain, res
 import { loadOrchestratorSshAccess } from "@/lib/orchestrator/sshCredentials"
 import { assertNodeName } from "@/lib/ssh/validate"
 import { isConnectionNotFoundError } from "@/lib/connections/getConnection"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -42,7 +43,7 @@ export async function GET(req: Request) {
     let url = `${ORCHESTRATOR_URL}/api/v1/host-drains`
     if (connectionId) url += `?connection_id=${encodeURIComponent(connectionId)}`
 
-    const response = await fetch(url, { headers: orchestratorHeaders({ "Content-Type": "application/json" }) })
+    const response = await fetch(url, { headers: await orchestratorHeaders({ "Content-Type": "application/json" }) })
     const data = await response.json()
     if (!response.ok) {
       return NextResponse.json({ error: data.error || "Failed to list host drains" }, { status: response.status })
@@ -62,7 +63,7 @@ export async function GET(req: Request) {
 }
 
 // POST /api/v1/orchestrator/host-drains  { connection_id, node, config }
-export async function POST(req: Request) {
+async function handlePost(req: Request) {
   try {
     const body = await req.json().catch(() => null)
     const connectionId = body?.connection_id
@@ -126,7 +127,7 @@ export async function POST(req: Request) {
 
     const response = await fetch(`${ORCHESTRATOR_URL}/api/v1/host-drains`, {
       method: "POST",
-      headers: orchestratorHeaders({ "Content-Type": "application/json" }),
+      headers: await orchestratorHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({ connection_id: connectionId, node: safeNode, config }),
     })
     const data = await response.json()
@@ -140,3 +141,5 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: error.message || "Internal server error" }, { status: 500 })
   }
 }
+
+export const POST = withAudit({ category: "automation", resourceType: "host_drain" }, handlePost)

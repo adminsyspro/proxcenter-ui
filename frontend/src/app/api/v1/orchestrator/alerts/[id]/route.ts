@@ -7,6 +7,7 @@ import { getTenantInfrastructureScope, maskingScope } from '@/lib/tenant/infraSc
 import { checkPermission, PERMISSIONS, getCurrentRbacInfraScope } from '@/lib/rbac'
 import { isAlertVisibleToTenant } from '@/lib/alerts/visibility'
 import { getVdcVmidsByConnection } from '@/lib/alerts/vdcVmids'
+import { withAudit } from '@/lib/audit/withAudit'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -63,7 +64,7 @@ export async function GET(
  * DELETE /api/v1/orchestrator/alerts/[id]
  * Supprime une alerte par son ID
  */
-export async function DELETE(
+async function handleDelete(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -105,3 +106,5 @@ export async function DELETE(
     )
   }
 }
+
+export const DELETE = withAudit({ category: 'alerts', resourceType: 'alert', resourceParam: 'id' }, handleDelete)

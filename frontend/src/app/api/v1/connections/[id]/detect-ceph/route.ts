@@ -4,10 +4,11 @@ import { getSessionPrisma } from "@/lib/tenant"
 import { decryptSecret } from "@/lib/crypto/secret"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { pveFetch } from "@/lib/proxmox/client"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
-export async function POST(_req: Request, ctx: { params: Promise<{ id: string }> | { id: string } }) {
+async function handlePost(_req: Request, ctx: { params: Promise<{ id: string }> | { id: string } }) {
   try {
     const prisma = await getSessionPrisma()
     const params = await Promise.resolve(ctx.params)
@@ -59,3 +60,5 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const POST = withAudit({ category: "connections", resourceType: "detect_ceph", resourceParam: "id" }, handlePost)

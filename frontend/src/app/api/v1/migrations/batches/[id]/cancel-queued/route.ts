@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 
 import { loadBatchForCaller } from "@/lib/migration/batch-access"
 import { cancelQueuedJobs, OPEN_BATCH_STATUSES } from "@/lib/migration/batch-scheduler"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -10,7 +11,7 @@ export const runtime = "nodejs"
  * Cancel the jobs of the batch that have not started and close it. Running
  * jobs carry on; each one is cancelled through POST /api/v1/migrations/[id]/cancel.
  */
-export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+async function handlePost(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params
     const access = await loadBatchForCaller(id)
@@ -24,3 +25,5 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const POST = withAudit({ category: "migration", resourceType: "batch", resourceParam: "id", action: "cancel" }, handlePost)

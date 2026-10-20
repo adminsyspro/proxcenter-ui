@@ -4,6 +4,7 @@ import { getOrchestratorClient } from "@/lib/orchestrator/client"
 import { checkExecutionTenantScope } from "@/lib/orchestrator/executionScope"
 import { replicationErrorResponse } from "@/lib/orchestrator/replicationError"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -17,7 +18,7 @@ export const runtime = "nodejs"
  * guest. Every refusal comes back as a 409 carrying its reason, which the
  * task row shows as is.
  */
-export async function POST(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+async function handlePost(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const denied = await checkPermission(PERMISSIONS.AUTOMATION_MANAGE, "global", "*")
 
@@ -39,3 +40,5 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
     return replicationErrorResponse(e, "Failed to stop the recovery execution")
   }
 }
+
+export const POST = withAudit({ category: "replication", resourceType: "execution", resourceParam: "id", action: "cancel" }, handlePost)

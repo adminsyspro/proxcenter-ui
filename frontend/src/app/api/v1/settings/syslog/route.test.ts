@@ -1,7 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+const { auditMock } = vi.hoisted(() => ({ auditMock: vi.fn<(...a: any[]) => Promise<string>>() }))
+
 vi.mock('@/lib/syslog/guard', () => ({ requireSyslogAdmin: vi.fn() }))
-vi.mock('@/lib/audit', () => ({ audit: vi.fn() }))
+vi.mock('@/lib/audit', async () => {
+  // audit() flips the request's audit scope so withAudit() adds no row of its
+  // own (#1105); the stand-in must do the same or every explicit row doubles.
+  const { markAuditExplicit } = await vi.importActual<typeof import('@/lib/audit/scope')>('@/lib/audit/scope')
+  return { audit: (...a: any[]) => { markAuditExplicit(); return auditMock(...a) } }
+})
 vi.mock('@/lib/syslog/forwarder', () => ({
   loadSyslogConfig: vi.fn(),
   saveSyslogConfig: vi.fn(),
@@ -9,7 +16,6 @@ vi.mock('@/lib/syslog/forwarder', () => ({
   testSyslogDestination: vi.fn(),
 }))
 
-import { audit } from '@/lib/audit'
 import { getSyslogStatus, loadSyslogConfig, saveSyslogConfig } from '@/lib/syslog/forwarder'
 import { requireSyslogAdmin } from '@/lib/syslog/guard'
 import type { SyslogDestination, SyslogDestinationStatus } from '@/lib/syslog/types'
@@ -17,7 +23,6 @@ import type { SyslogDestination, SyslogDestinationStatus } from '@/lib/syslog/ty
 import { GET, PUT } from './route'
 
 const guardMock = vi.mocked(requireSyslogAdmin)
-const auditMock = vi.mocked(audit)
 const loadMock = vi.mocked(loadSyslogConfig)
 const saveMock = vi.mocked(saveSyslogConfig)
 const statusMock = vi.mocked(getSyslogStatus)
@@ -124,7 +129,12 @@ describe('PUT /api/v1/settings/syslog', () => {
 
     expect(res).toBe(denied)
     expect(saveMock).not.toHaveBeenCalled()
-    expect(auditMock).not.toHaveBeenCalled()
+    // The route never reached its own audit(): the refusal row is withAudit()'s.
+    expect(auditMock).toHaveBeenCalledTimes(1)
+    expect(auditMock.mock.calls[0][0]).toMatchObject({
+      category: 'settings', action: 'update', resourceType: 'syslog', status: 'failure', errorMessage: 'Forbidden',
+      details: expect.objectContaining({ method: 'PUT', httpStatus: 403 }),
+    })
   })
 
   it('rejects a body that is not JSON with 400', async () => {
@@ -269,7 +279,7 @@ describe('PUT /api/v1/settings/syslog', () => {
     expect(new Set(ids).size).toBe(2)
   })
 
-  it('answers 500 with the message when saving fails, and does not audit', async () => {
+  it('answers 500 with the message when saving fails, and only withAudit() journals it', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
     saveMock.mockRejectedValue(new Error('db down'))
 
@@ -277,6 +287,11 @@ describe('PUT /api/v1/settings/syslog', () => {
 
     expect(res.status).toBe(500)
     expect(await res.json()).toEqual({ error: 'db down' })
-    expect(auditMock).not.toHaveBeenCalled()
+    expect(auditMock).toHaveBeenCalledTimes(1)
+    expect(auditMock.mock.calls[0][0]).toMatchObject({
+      category: 'settings', action: 'update', resourceType: 'syslog', status: 'failure', errorMessage: 'db down',
+      details: expect.objectContaining({ method: 'PUT', httpStatus: 500 }),
+    })
+    expect(auditMock.mock.calls[0][0].details).not.toHaveProperty('after')
   })
 })

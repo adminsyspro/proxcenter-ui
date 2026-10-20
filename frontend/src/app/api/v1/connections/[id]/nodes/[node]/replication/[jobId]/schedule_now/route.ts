@@ -2,11 +2,12 @@ import { NextResponse } from "next/server"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
 // POST - Exécuter immédiatement un job de réplication
-export async function POST(
+async function handlePost(
   _req: Request,
   ctx: { params: Promise<{ id: string; node: string; jobId: string }> }
 ) {
@@ -36,3 +37,5 @@ export async function POST(
     }, { status: 500 })
   }
 }
+
+export const POST = withAudit({ category: "replication", resourceType: "replication", resourceParam: "jobId", action: "sync" }, handlePost)

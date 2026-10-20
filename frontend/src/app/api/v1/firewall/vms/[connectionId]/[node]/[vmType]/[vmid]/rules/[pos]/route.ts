@@ -9,6 +9,7 @@ import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
 import { getConnectionById } from '@/lib/connections/getConnection'
 import { orchestratorOrPve } from '@/lib/firewall/withPveFallback'
 import * as pveDirect from '@/lib/firewall/pveDirect'
+import { withAudit } from '@/lib/audit/withAudit'
 
 type RouteContext = {
   params: Promise<{ connectionId: string; node: string; vmType: string; vmid: string; pos: string }>
@@ -68,5 +69,5 @@ return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
 
-export const PUT = withPublicApiGuard("fw-vm-rule-update", putHandler)
-export const DELETE = withPublicApiGuard("fw-vm-rule-delete", deleteHandler)
+export const PUT = withAudit({ category: 'firewall', resourceType: 'rule', resourceParam: 'pos' }, withPublicApiGuard("fw-vm-rule-update", putHandler))
+export const DELETE = withAudit({ category: 'firewall', resourceType: 'rule', resourceParam: 'pos' }, withPublicApiGuard("fw-vm-rule-delete", deleteHandler))

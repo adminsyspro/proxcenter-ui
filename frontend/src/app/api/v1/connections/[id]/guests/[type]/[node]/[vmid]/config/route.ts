@@ -19,6 +19,7 @@ import { enforceTenantDrives, meterImportRefs, DriveScopeError } from "@/lib/vdc
 import { getAllowedNetworksForTenant, validateNetAgainstScope } from "@/lib/vdc/vnets"
 import { syncIpamForVmConfig, IpamHintUnavailableError, IpamExhaustedError } from "@/lib/vdc/ipamSync"
 import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -507,4 +508,4 @@ return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
 }
 
 export const GET = withPublicApiGuard("vm-config-get", getHandler)
-export const PUT = withPublicApiGuard("vm-config-update", putHandler)
+export const PUT = withAudit({ category: "vms", resourceType: "guest", resourceTypeParam: "type", resourceParam: "vmid" }, withPublicApiGuard("vm-config-update", putHandler))

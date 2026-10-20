@@ -18,6 +18,7 @@ import { assertVdcPbsAccess } from '@/lib/vdc/scope'
 import { invalidatePbsBackupCache } from '@/lib/cache/pbsBackupCache'
 import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
 import { residualEscapeRefusal } from '@/lib/api/pathParam'
+import { withAudit } from '@/lib/audit/withAudit'
 
 export const runtime = 'nodejs'
 
@@ -91,4 +92,4 @@ async function handler(
   }
 }
 
-export const DELETE = withPublicApiGuard("pbs-backup-delete", handler)
+export const DELETE = withAudit({ category: 'backups', resourceType: 'backup', resourceParam: 'backupId' }, withPublicApiGuard("pbs-backup-delete", handler))

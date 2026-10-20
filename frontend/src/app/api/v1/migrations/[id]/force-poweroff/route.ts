@@ -3,6 +3,7 @@ import { NextResponse } from "next/server"
 import { getSessionPrisma } from "@/lib/tenant"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { requestWarmForcePowerOff } from "@/lib/migration/warm/warm-pipeline"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -21,7 +22,7 @@ const FORCE_POWER_OFF_STEP = "awaiting_power_off"
  * Never automatic: a hard power off makes the final delta crash-consistent, so
  * the decision belongs to the operator (#614).
  */
-export async function POST(
+async function handlePost(
   _req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -45,3 +46,5 @@ export async function POST(
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const POST = withAudit({ category: "migration", resourceType: "migration", resourceParam: "id", action: "stop" }, handlePost)

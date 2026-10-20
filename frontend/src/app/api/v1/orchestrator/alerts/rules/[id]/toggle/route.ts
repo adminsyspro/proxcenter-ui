@@ -5,6 +5,7 @@ import { demoResponse } from '@/lib/demo/demo-api'
 import { getCurrentTenantId } from '@/lib/tenant'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { ruleVisibleToTenant } from '@/lib/alerts/ruleOwners'
+import { withAudit } from '@/lib/audit/withAudit'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -13,7 +14,7 @@ export const dynamic = 'force-dynamic'
  * POST /api/v1/orchestrator/alerts/rules/[id]/toggle
  * Active/désactive une règle (vérifie l'appartenance au tenant)
  */
-export async function POST(
+async function handlePost(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -50,3 +51,5 @@ export async function POST(
     )
   }
 }
+
+export const POST = withAudit({ category: 'alerts', resourceType: 'rule', resourceParam: 'id', action: 'update' }, handlePost)

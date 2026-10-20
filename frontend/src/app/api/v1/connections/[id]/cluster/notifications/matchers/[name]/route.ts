@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -21,7 +22,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string; nam
 }
 
 // POST - Create a matcher (POST goes to /matchers not /matchers/{name})
-export async function POST(req: Request, ctx: { params: Promise<{ id: string; name: string }> }) {
+async function handlePost(req: Request, ctx: { params: Promise<{ id: string; name: string }> }) {
   try {
     const { id } = await ctx.params
     if (!id) return NextResponse.json({ error: "Missing params" }, { status: 400 })
@@ -47,7 +48,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string; na
 }
 
 // PUT - Update a matcher
-export async function PUT(req: Request, ctx: { params: Promise<{ id: string; name: string }> }) {
+async function handlePut(req: Request, ctx: { params: Promise<{ id: string; name: string }> }) {
   try {
     const { id, name } = await ctx.params
     if (!id || !name) return NextResponse.json({ error: "Missing params" }, { status: 400 })
@@ -73,7 +74,7 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string; nam
 }
 
 // DELETE - Delete a matcher
-export async function DELETE(req: Request, ctx: { params: Promise<{ id: string; name: string }> }) {
+async function handleDelete(req: Request, ctx: { params: Promise<{ id: string; name: string }> }) {
   try {
     const { id, name } = await ctx.params
     if (!id || !name) return NextResponse.json({ error: "Missing params" }, { status: 400 })
@@ -86,3 +87,7 @@ export async function DELETE(req: Request, ctx: { params: Promise<{ id: string; 
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const POST = withAudit({ category: "cluster", resourceType: "matcher", resourceParam: "name" }, handlePost)
+export const PUT = withAudit({ category: "cluster", resourceType: "matcher", resourceParam: "name" }, handlePut)
+export const DELETE = withAudit({ category: "cluster", resourceType: "matcher", resourceParam: "name" }, handleDelete)

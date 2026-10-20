@@ -43,6 +43,12 @@ const CATEGORIES = {
   backups: { labelKey: 'audit.categories.backups', icon: 'ri-shield-check-line', color: 'success' },
   settings: { labelKey: 'audit.categories.settings', icon: 'ri-settings-3-line', color: 'default' },
   system: { labelKey: 'audit.categories.system', icon: 'ri-terminal-box-line', color: 'error' },
+  firewall: { labelKey: 'audit.categories.firewall', icon: 'ri-shield-flash-line', color: 'warning' },
+  ha: { labelKey: 'audit.categories.ha', icon: 'ri-heart-pulse-line', color: 'info' },
+  cluster: { labelKey: 'audit.categories.cluster', icon: 'ri-stack-line', color: 'primary' },
+  automation: { labelKey: 'audit.categories.automation', icon: 'ri-robot-line', color: 'secondary' },
+  replication: { labelKey: 'audit.categories.replication', icon: 'ri-file-copy-2-line', color: 'info' },
+  alerts: { labelKey: 'audit.categories.alerts', icon: 'ri-alarm-warning-line', color: 'warning' },
 }
 
 const ACTION_KEYS = {
@@ -79,6 +85,33 @@ const ACTION_KEYS = {
   test: 'audit.actions.test',
   enable: 'audit.actions.enable',
   disable: 'audit.actions.disable',
+
+  // Route wrapper verbs (#1105)
+  upgrade: 'audit.actions.upgrade',
+  reboot: 'audit.actions.reboot',
+  shutdown: 'audit.actions.shutdown',
+  maintenance: 'audit.actions.maintenance',
+  execute: 'audit.actions.execute',
+  apply: 'audit.actions.apply',
+  sync: 'audit.actions.sync',
+  run: 'audit.actions.run',
+  acknowledge: 'audit.actions.acknowledge',
+  resolve: 'audit.actions.resolve',
+  failover: 'audit.actions.failover',
+  failback: 'audit.actions.failback',
+  cancel: 'audit.actions.cancel',
+
+  // Orchestrator rows (#1105)
+  'drs.migrate': 'audit.actions.drsMigrate',
+  'rolling.start': 'audit.actions.rollingStart',
+  'rolling.step': 'audit.actions.rollingStep',
+  'rolling.finish': 'audit.actions.rollingFinish',
+  'drain.start': 'audit.actions.drainStart',
+  'drain.step': 'audit.actions.drainStep',
+  'drain.finish': 'audit.actions.drainFinish',
+  'replication.sync': 'audit.actions.replicationSync',
+  'replication.fix': 'audit.actions.replicationFix',
+  'drill.run': 'audit.actions.drillRun',
 }
 
 /* --------------------------------

@@ -7,6 +7,7 @@ import { prisma } from "@/lib/db/prisma"
 import { audit } from "@/lib/audit"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth/config"
+import { withAudit } from "@/lib/audit/withAudit"
 
 type Ctx = { params: Promise<{ id: string }> }
 
@@ -43,7 +44,7 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
 }
 
 // PUT /api/v1/tenants/:id
-export async function PUT(req: NextRequest, ctx: Ctx) {
+async function handlePut(req: NextRequest, ctx: Ctx) {
   const providerGate = await requireProviderTenant()
   if (providerGate) return providerGate
   const denied = await checkPermission(PERMISSIONS.ADMIN_TENANTS)
@@ -104,7 +105,7 @@ export async function PUT(req: NextRequest, ctx: Ctx) {
 }
 
 // DELETE /api/v1/tenants/:id
-export async function DELETE(_req: NextRequest, ctx: Ctx) {
+async function handleDelete(_req: NextRequest, ctx: Ctx) {
   const providerGate = await requireProviderTenant()
   if (providerGate) return providerGate
   const denied = await checkPermission(PERMISSIONS.ADMIN_TENANTS)
@@ -132,3 +133,6 @@ export async function DELETE(_req: NextRequest, ctx: Ctx) {
 
   return NextResponse.json({ success: true })
 }
+
+export const PUT = withAudit({ category: "admin", resourceType: "tenant", resourceParam: "id" }, handlePut)
+export const DELETE = withAudit({ category: "admin", resourceType: "tenant", resourceParam: "id" }, handleDelete)

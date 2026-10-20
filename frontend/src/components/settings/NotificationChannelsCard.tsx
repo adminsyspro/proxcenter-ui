@@ -360,8 +360,8 @@ function ChannelDialog({ channel, initial, saving, onCancel, onSave }: DialogPro
       <AppDialogTitle onClose={onCancel} icon={<i className={CHANNEL_TYPE_META[form.type]?.icon ?? 'ri-webhook-line'} />}>
         {isNew ? t('dialog.addTitle') : t('dialog.editTitle')}
       </AppDialogTitle>
-      <DialogContent>
-        <Stack spacing={2} sx={{ mt: 1 }}>
+      <DialogContent sx={{ pt: '20px !important' }}>
+        <Stack spacing={2}>
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '2fr 1fr' }, gap: 2 }}>
             <TextField
               size='small'

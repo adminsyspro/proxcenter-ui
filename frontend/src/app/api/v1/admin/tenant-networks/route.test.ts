@@ -21,7 +21,12 @@ vi.mock('@/lib/rbac', () => ({
   checkPermission: (...a: unknown[]) => checkPermissionMock(...a),
   PERMISSIONS: { ADMIN_SETTINGS: 'admin.settings' },
 }))
-vi.mock('@/lib/audit', () => ({ audit: (...a: unknown[]) => auditMock(...a) }))
+vi.mock('@/lib/audit', async () => {
+  // audit() flips the request's audit scope so withAudit() adds no row of its
+  // own (#1105); the stand-in must do the same or every explicit row doubles.
+  const { markAuditExplicit } = await vi.importActual<typeof import('@/lib/audit/scope')>('@/lib/audit/scope')
+  return { audit: (...a: unknown[]) => { markAuditExplicit(); return auditMock(...a) } }
+})
 vi.mock('next-auth', () => ({ getServerSession: vi.fn().mockResolvedValue({ user: { id: 'admin-1' } }) }))
 vi.mock('@/lib/auth/config', () => ({ authOptions: {} }))
 vi.mock('@/lib/vdc/tenantNetworks', () => ({
@@ -98,6 +103,15 @@ describe('POST /api/v1/admin/tenant-networks', () => {
     expect((await callRoute(POST as any, { method: 'POST', body: BODY })).status).toBe(400)
     createMock.mockRejectedValueOnce(Object.assign(new Error('unique'), { code: 'P2002' }))
     expect((await callRoute(POST as any, { method: 'POST', body: BODY })).status).toBe(409)
-    expect(auditMock).not.toHaveBeenCalled()
+    // The route never reached its own audit(): each refusal row is withAudit()'s.
+    expect(auditMock).toHaveBeenCalledTimes(3)
+    expect(auditMock.mock.calls.map(c => c[0])).toEqual([
+      [409, 'Tenant network: VNI 10001 is already used by network "dmz" of vDC "MSP-vDC".'],
+      [400, 'Tenant network: MTU must be an integer between 1280 and 9000.'],
+      [409, 'A tenant network with this name or VNI already exists.'],
+    ].map(([httpStatus, errorMessage]) => expect.objectContaining({
+      category: 'sdn', action: 'create', resourceType: 'tenant_network', status: 'failure', errorMessage,
+      details: expect.objectContaining({ method: 'POST', httpStatus }),
+    })))
   })
 })

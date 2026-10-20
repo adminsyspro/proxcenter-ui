@@ -15,6 +15,7 @@ import {
   vdcUsageHistorySettingsSchema,
   type VdcUsageHistorySettings,
 } from '@/lib/vdc/usageHistory/settings'
+import { withAudit } from '@/lib/audit/withAudit'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -55,7 +56,7 @@ export async function GET() {
   }
 }
 
-export async function PUT(request: Request) {
+async function handlePut(request: Request) {
   const denied = await guard()
   if (denied) return denied
 
@@ -97,3 +98,5 @@ export async function PUT(request: Request) {
     return NextResponse.json({ error: error?.message || 'Server error' }, { status: 500 })
   }
 }
+
+export const PUT = withAudit({ category: 'settings', resourceType: 'vdc_usage_history' }, handlePut)

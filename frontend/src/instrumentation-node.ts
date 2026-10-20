@@ -16,6 +16,7 @@ import { startBatchPump } from '@/lib/migration/batch-scheduler'
 import { resolveInstanceId, sweepOrphanedMigrationJobs } from '@/lib/migration/orphan-sweep'
 import { cleanupOrphanedWarmSources } from '@/lib/migration/warm/orphan-cleanup'
 import { startSFlowReconciler } from '@/lib/sflow/reconciler'
+import { startOrchestratorAuditRelay } from '@/lib/syslog/orchestratorRelay'
 import { startCatalogRefresher } from '@/lib/templates/catalogRefresher'
 import { isCatalogAutoUpdateEnabled } from '@/lib/templates/catalogStore'
 import { startVdcUsageSampler } from '@/lib/vdc/usageHistory/sampler'
@@ -110,5 +111,16 @@ export async function registerNode(): Promise<void> {
   } catch (err) {
     // Boot must never depend on this: the embedded catalog keeps serving.
     console.error('[startup] catalog refresher failed to start (non-fatal):', err)
+  }
+
+  try {
+    // Audit rows the Go orchestrator writes (DRS, rolling updates, drains,
+    // replication, #1105) reach the syslog destinations through this relay.
+    // Every replica starts it; a row lock on the cursor lets one forward.
+    startOrchestratorAuditRelay()
+  } catch (err) {
+    // Boot must never depend on this: the rows stay in the database and the
+    // next boot resumes from the cursor.
+    console.error('[startup] orchestrator audit relay failed to start (non-fatal):', err)
   }
 }

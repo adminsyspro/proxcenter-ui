@@ -3,6 +3,7 @@ import { NextResponse } from "next/server"
 import { getTenantConnectionIds } from "@/lib/tenant"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { orchestratorHeaders } from "@/lib/orchestrator/headers"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -10,7 +11,7 @@ const ORCHESTRATOR_URL = process.env.ORCHESTRATOR_URL || "http://localhost:8080"
 
 // POST /api/v1/orchestrator/rolling-updates/[id]/[action] — tenant-scoped
 // Actions: pause, resume, cancel, approve
-export async function POST(
+async function handlePost(
   _req: Request,
   ctx: { params: Promise<{ id: string; action: string }> }
 ) {
@@ -30,7 +31,7 @@ export async function POST(
 
     // Verify rolling update belongs to tenant
     const ruRes = await fetch(`${ORCHESTRATOR_URL}/api/v1/rolling-updates/${id}`, {
-      headers: orchestratorHeaders({ "Content-Type": "application/json" }),
+      headers: await orchestratorHeaders({ "Content-Type": "application/json" }),
     })
     if (ruRes.ok) {
       const ruData = await ruRes.json()
@@ -45,7 +46,7 @@ export async function POST(
 
     const response = await fetch(`${ORCHESTRATOR_URL}/api/v1/rolling-updates/${id}/${action}`, {
       method: "POST",
-      headers: orchestratorHeaders({ "Content-Type": "application/json" }),
+      headers: await orchestratorHeaders({ "Content-Type": "application/json" }),
     })
 
     const data = await response.json()
@@ -68,3 +69,5 @@ export async function POST(
     )
   }
 }
+
+export const POST = withAudit({ category: "automation", resourceType: "rolling_update", resourceParam: "id", action: "execute" }, handlePost)

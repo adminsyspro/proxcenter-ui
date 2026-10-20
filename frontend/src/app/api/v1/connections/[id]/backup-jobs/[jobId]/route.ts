@@ -12,6 +12,7 @@ import { getTenantInfrastructureScope, maskingScope } from "@/lib/tenant/infraSc
 import { getAllowedJobPools, isJobOwnedByTenantPools, validateTenantJobBody, validateTenantJobInfra } from "@/lib/vdc/backupJobs"
 import { denyJobGuestsOutsideBackupRight, jobSelection } from "@/lib/backups/jobGuestScope"
 import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
+import { withAudit } from "@/lib/audit/withAudit"
 
 /**
  * Connection-level RBAC check with the storage-scope fallback (issue #921): a
@@ -476,6 +477,6 @@ return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
 }
 
 export const GET = withPublicApiGuard("backup-job-get", getHandler)
-export const PUT = withPublicApiGuard("backup-job-update", putHandler)
-export const DELETE = withPublicApiGuard("backup-job-delete", deleteHandler)
-export const POST = withPublicApiGuard("backup-job-run", postHandler)
+export const PUT = withAudit({ category: "backups", resourceType: "backup_job", resourceParam: "jobId" }, withPublicApiGuard("backup-job-update", putHandler))
+export const DELETE = withAudit({ category: "backups", resourceType: "backup_job", resourceParam: "jobId" }, withPublicApiGuard("backup-job-delete", deleteHandler))
+export const POST = withAudit({ category: "backups", resourceType: "backup_job", resourceParam: "jobId" }, withPublicApiGuard("backup-job-run", postHandler))

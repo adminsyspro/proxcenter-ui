@@ -4,10 +4,11 @@ import { replicationErrorResponse } from '@/lib/orchestrator/replicationError'
 import { getOrchestratorClient } from "@/lib/orchestrator/client"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { getTenantConnectionIds } from "@/lib/tenant"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
-export async function POST(request: NextRequest) {
+async function handlePost(request: NextRequest) {
   try {
     const denied = await checkPermission(PERMISSIONS.AUTOMATION_MANAGE, "global", "*")
 
@@ -30,3 +31,5 @@ export async function POST(request: NextRequest) {
     return replicationErrorResponse(error, 'Failed to stop DR VM')
   }
 }
+
+export const POST = withAudit({ category: "replication", resourceType: "emergency", action: "stop" }, handlePost)

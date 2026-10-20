@@ -6,6 +6,7 @@ import { decryptSecret } from "@/lib/crypto/secret"
 import { buildOrchestratorSshOverrides } from "@/lib/ssh/node-endpoint-core"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { orchestratorHeaders } from "@/lib/orchestrator/headers"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -39,7 +40,7 @@ export async function GET(req: Request) {
     }
 
     const response = await fetch(url, {
-      headers: orchestratorHeaders({ "Content-Type": "application/json" }),
+      headers: await orchestratorHeaders({ "Content-Type": "application/json" }),
     })
 
     const data = await response.json()
@@ -75,7 +76,7 @@ export async function GET(req: Request) {
 }
 
 // POST /api/v1/orchestrator/rolling-updates - Start a new rolling update
-export async function POST(req: Request) {
+async function handlePost(req: Request) {
   try {
     const denied = await checkPermission(PERMISSIONS.AUTOMATION_EXECUTE)
     if (denied) return denied
@@ -178,7 +179,7 @@ export async function POST(req: Request) {
 
     const response = await fetch(`${ORCHESTRATOR_URL}/api/v1/rolling-updates`, {
       method: "POST",
-      headers: orchestratorHeaders({ "Content-Type": "application/json" }),
+      headers: await orchestratorHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify(payload),
     })
 
@@ -202,3 +203,5 @@ export async function POST(req: Request) {
     )
   }
 }
+
+export const POST = withAudit({ category: "automation", resourceType: "rolling_update" }, handlePost)

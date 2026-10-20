@@ -29,7 +29,12 @@ vi.mock('@/lib/rbac', () => ({
   PERMISSIONS: { VM_CONFIG_HARDWARE: 'vm.config.hardware' },
 }))
 vi.mock('@/lib/cache/inventoryCache', () => ({ invalidateInventoryCache: (...a: unknown[]) => m.invalidateInventoryCache(...a) }))
-vi.mock('@/lib/audit', () => ({ audit: (...a: unknown[]) => m.audit(...a) }))
+vi.mock('@/lib/audit', async () => {
+  // audit() flips the request's audit scope so withAudit() adds no row of its
+  // own (#1105); the stand-in must do the same or every explicit row doubles.
+  const { markAuditExplicit } = await vi.importActual<typeof import('@/lib/audit/scope')>('@/lib/audit/scope')
+  return { audit: (...a: unknown[]) => { markAuditExplicit(); return m.audit(...a) } }
+})
 
 import { POST } from './route'
 
@@ -76,6 +81,11 @@ describe('POST .../template', () => {
     const res = await call()
     expect(res.status).toBe(500)
     expect((await res.json()).error).toBe('VM is running')
-    expect(m.audit).not.toHaveBeenCalled()
+    // The route never reached its own audit(): the failure row is withAudit()'s.
+    expect(m.audit).toHaveBeenCalledTimes(1)
+    expect(m.audit.mock.calls[0][0]).toMatchObject({
+      category: 'vms', action: 'update', resourceType: 'qemu', resourceId: '100', status: 'failure', errorMessage: 'VM is running',
+      details: expect.objectContaining({ method: 'POST', httpStatus: 500, params: PARAMS }),
+    })
   })
 })

@@ -5,6 +5,7 @@ import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { audit } from "@/lib/audit"
 import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -56,4 +57,4 @@ async function postHandler(
   }
 }
 
-export const POST = withPublicApiGuard("sdn-apply", postHandler)
+export const POST = withAudit({ category: "sdn", resourceType: "sdn", resourceParam: "id", action: "apply" }, withPublicApiGuard("sdn-apply", postHandler))

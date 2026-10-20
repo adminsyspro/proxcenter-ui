@@ -46,7 +46,12 @@ vi.mock('@/lib/rbac', () => ({
 vi.mock('@/lib/db/prisma', () => ({ prisma: { connection: { findUnique: (...a: unknown[]) => m.findUnique(...a) } } }))
 vi.mock('@/lib/connections/getConnection', () => ({ getConnectionByIdOrNull: (...a: unknown[]) => m.getConn(...a) }))
 vi.mock('@/lib/proxmox/client', () => ({ pveFetch: (...a: unknown[]) => m.pveFetch(...a) }))
-vi.mock('@/lib/audit', () => ({ audit: (...a: unknown[]) => m.audit(...a) }))
+vi.mock('@/lib/audit', async () => {
+  // audit() flips the request's audit scope so withAudit() adds no row of its
+  // own (#1105); the stand-in must do the same or every explicit row doubles.
+  const { markAuditExplicit } = await vi.importActual<typeof import('@/lib/audit/scope')>('@/lib/audit/scope')
+  return { audit: (...a: unknown[]) => { markAuditExplicit(); return m.audit(...a) } }
+})
 vi.mock('next/headers', () => ({ cookies: async () => ({ get: (name: string) => (name === 'NEXT_LOCALE' && m.locale() ? { value: m.locale() } : undefined) }) }))
 vi.mock('@/lib/reporting/weasyprintClient', () => ({ renderPdf: (...a: unknown[]) => m.renderPdf(...a) }))
 vi.mock('@/lib/reporting/reportBranding', () => ({ resolveReportBranding: async () => ({ brandColor: '#E57000', logoDataUri: '', appName: '' }) }))
@@ -301,7 +306,12 @@ describe('POST /restore-drills and /preflight', () => {
     res = await call('create', { body: BODY })
     expect(res.status).toBe(409)
     expect(await res.json()).toEqual({ error: 'concurrency limit reached' })
-    expect(m.audit).not.toHaveBeenCalled()
+    // The route never reached its own audit(): the refusal rows are withAudit()'s.
+    expect(m.audit).toHaveBeenCalledTimes(2)
+    expect(m.audit.mock.calls.map(([entry]) => entry)).toEqual([
+      expect.objectContaining({ category: 'backups', action: 'create', resourceType: 'restore_drill', status: 'failure', errorMessage: 'preflight failed', details: expect.objectContaining({ method: 'POST', httpStatus: 422 }) }),
+      expect.objectContaining({ category: 'backups', action: 'create', resourceType: 'restore_drill', status: 'failure', errorMessage: 'concurrency limit reached', details: expect.objectContaining({ method: 'POST', httpStatus: 409 }) }),
+    ])
   })
 })
 
@@ -602,7 +612,11 @@ describe('schedules', () => {
     const res = await call('scheduleCreate', { body: SCHEDULE_BODY })
     expect(res.status).toBe(status)
     expect(await res.json()).toEqual({ error: 'unsupported calendar expression' })
-    expect(m.audit).not.toHaveBeenCalled()
+    expect(m.audit).toHaveBeenCalledTimes(1)
+    expect(m.audit.mock.calls[0][0]).toMatchObject({
+      category: 'backups', action: 'create', resourceType: 'schedule', status: 'failure', errorMessage: 'unsupported calendar expression',
+      details: expect.objectContaining({ method: 'POST', httpStatus: status }),
+    })
   })
 
   it('503 when the orchestrator is down', async () => {

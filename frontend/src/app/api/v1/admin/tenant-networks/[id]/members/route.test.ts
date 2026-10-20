@@ -3,7 +3,7 @@
  * or leaves a stretched tenant network. Error mapping kept REAL.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 
 import { callRoute } from '@/__tests__/setup/route-test'
 
@@ -21,7 +21,12 @@ vi.mock('@/lib/rbac', () => ({
   checkPermission: (...a: unknown[]) => checkPermissionMock(...a),
   PERMISSIONS: { ADMIN_SETTINGS: 'admin.settings' },
 }))
-vi.mock('@/lib/audit', () => ({ audit: (...a: unknown[]) => auditMock(...a) }))
+vi.mock('@/lib/audit', async () => {
+  // audit() flips the request's audit scope so withAudit() adds no row of its
+  // own (#1105); the stand-in must do the same or every explicit row doubles.
+  const { markAuditExplicit } = await vi.importActual<typeof import('@/lib/audit/scope')>('@/lib/audit/scope')
+  return { audit: (...a: unknown[]) => { markAuditExplicit(); return auditMock(...a) } }
+})
 vi.mock('@/lib/vdc/tenantNetworkMembers', () => ({
   addMember: (...a: unknown[]) => addMock(...a),
   removeMember: (...a: unknown[]) => removeMock(...a),
@@ -33,8 +38,9 @@ import { DELETE, POST } from './route'
 const NETWORK = { id: 'n1', tenantId: 't1', name: 'backbone', vni: 10002, members: [{ vdcId: 'v1' }] }
 const SYNC = [{ vdcId: 'v1', vdcName: 'MSP-vDC', connectionId: 'c1', zoneName: 'z', changed: true }]
 
-// DELETE reads req.nextUrl (NextRequest); callRoute builds a plain Request.
-const nextReq = (url: string) => ({ nextUrl: new URL(url) }) as any
+// DELETE reads req.nextUrl (NextRequest); callRoute builds a plain Request,
+// and withAudit() needs a real request (method, headers, url) in front of it.
+const nextReq = (url: string) => new NextRequest(url, { method: 'DELETE' })
 const ctx = (id?: string) => ({ params: Promise.resolve(id ? { id } : {}) })
 
 beforeEach(() => {
@@ -76,7 +82,12 @@ describe('POST .../members', () => {
       addMock.mockRejectedValueOnce(new Error(message))
       expect((await callRoute(POST as any, { method: 'POST', params: { id: 'n1' }, body: { vdcId: 'v1' } })).status).toBe(status)
     }
-    expect(auditMock).not.toHaveBeenCalled()
+    // The route never reached its own audit(): each refusal row is withAudit()'s.
+    expect(auditMock).toHaveBeenCalledTimes(cases.length)
+    expect(auditMock.mock.calls.map(c => c[0])).toEqual(cases.map(([errorMessage, httpStatus]) => expect.objectContaining({
+      category: 'sdn', action: 'create', resourceType: 'tenant_network', resourceId: 'n1', status: 'failure', errorMessage,
+      details: expect.objectContaining({ method: 'POST', httpStatus, params: { id: 'n1' } }),
+    })))
   })
 })
 

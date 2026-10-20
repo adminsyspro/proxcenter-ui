@@ -9,6 +9,7 @@ import { requireProviderTenant } from "@/lib/tenant"
 import { normalizeIdList } from "@/lib/templates/catalogGrants"
 import { listBindingsForVdc } from "@/lib/db/vdcPbsBindings"
 import { unbindFromVdc } from "@/lib/vdc/pbsOrchestrator"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -39,7 +40,7 @@ export async function GET(_req: Request, ctx: RouteContext) {
 }
 
 // PUT /api/v1/admin/vdcs/[id] — update vDC
-export async function PUT(req: Request, ctx: RouteContext) {
+async function handlePut(req: Request, ctx: RouteContext) {
   try {
     const params = await Promise.resolve(ctx.params)
     const id = (params as any)?.id
@@ -106,7 +107,7 @@ export async function PUT(req: Request, ctx: RouteContext) {
 }
 
 // DELETE /api/v1/admin/vdcs/[id] — delete vDC
-export async function DELETE(_req: Request, ctx: RouteContext) {
+async function handleDelete(_req: Request, ctx: RouteContext) {
   try {
     const params = await Promise.resolve(ctx.params)
     const id = (params as any)?.id
@@ -165,3 +166,6 @@ export async function DELETE(_req: Request, ctx: RouteContext) {
     return NextResponse.json({ error: msg }, { status: 500 })
   }
 }
+
+export const PUT = withAudit({ category: "admin", resourceType: "vdc", resourceParam: "id" }, handlePut)
+export const DELETE = withAudit({ category: "admin", resourceType: "vdc", resourceParam: "id" }, handleDelete)

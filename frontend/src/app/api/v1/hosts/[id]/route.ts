@@ -3,10 +3,11 @@ import { NextResponse } from "next/server"
 import { getSessionPrisma } from "@/lib/tenant"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { normalizeSshAddress, normalizeSshPort } from "@/lib/ssh/node-endpoint-core"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
-export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string }> | { id: string } }) {
+async function handleDelete(_req: Request, ctx: { params: Promise<{ id: string }> | { id: string } }) {
   try {
     const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
     if (denied) return denied
@@ -25,7 +26,7 @@ return NextResponse.json({ ok: true })
   }
 }
 
-export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> | { id: string } }) {
+async function handlePatch(req: Request, ctx: { params: Promise<{ id: string }> | { id: string } }) {
   try {
     const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
     if (denied) return denied
@@ -84,3 +85,5 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   }
 }
 
+export const DELETE = withAudit({ category: "nodes", resourceType: "host", resourceParam: "id" }, handleDelete)
+export const PATCH = withAudit({ category: "nodes", resourceType: "host", resourceParam: "id" }, handlePatch)

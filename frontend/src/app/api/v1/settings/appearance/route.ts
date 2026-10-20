@@ -7,6 +7,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth/config'
 import { demoResponse } from '@/lib/demo/demo-api'
 import { getUserAppearance, setUserAppearance } from '@/lib/db/userPreferences'
+import { withAudit } from '@/lib/audit/withAudit'
 
 export const runtime = "nodejs"
 
@@ -49,7 +50,7 @@ export async function GET(req: Request) {
   }
 }
 
-export async function PUT(req: Request) {
+async function handlePut(req: Request) {
   const demo = demoResponse(req)
 
   if (demo) return demo
@@ -76,3 +77,5 @@ export async function PUT(req: Request) {
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const PUT = withAudit({ category: 'settings', resourceType: 'appearance' }, handlePut)

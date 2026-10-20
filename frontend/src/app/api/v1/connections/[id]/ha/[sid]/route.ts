@@ -5,6 +5,7 @@ import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { requireProviderTenant } from "@/lib/tenant"
 import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -156,5 +157,5 @@ return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
 }
 
 export const GET = withPublicApiGuard("ha-resource-get", getHandler)
-export const POST = withPublicApiGuard("ha-resource-upsert", postHandler)
-export const DELETE = withPublicApiGuard("ha-resource-delete", deleteHandler)
+export const POST = withAudit({ category: "ha", resourceType: "ha", resourceParam: "sid" }, withPublicApiGuard("ha-resource-upsert", postHandler))
+export const DELETE = withAudit({ category: "ha", resourceType: "ha", resourceParam: "sid" }, withPublicApiGuard("ha-resource-delete", deleteHandler))

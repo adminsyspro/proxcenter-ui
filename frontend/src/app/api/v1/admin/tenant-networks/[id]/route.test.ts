@@ -21,7 +21,12 @@ vi.mock('@/lib/rbac', () => ({
   checkPermission: (...a: unknown[]) => checkPermissionMock(...a),
   PERMISSIONS: { ADMIN_SETTINGS: 'admin.settings' },
 }))
-vi.mock('@/lib/audit', () => ({ audit: (...a: unknown[]) => auditMock(...a) }))
+vi.mock('@/lib/audit', async () => {
+  // audit() flips the request's audit scope so withAudit() adds no row of its
+  // own (#1105); the stand-in must do the same or every explicit row doubles.
+  const { markAuditExplicit } = await vi.importActual<typeof import('@/lib/audit/scope')>('@/lib/audit/scope')
+  return { audit: (...a: unknown[]) => { markAuditExplicit(); return auditMock(...a) } }
+})
 vi.mock('@/lib/vdc/tenantNetworks', () => ({
   getTenantNetwork: (...a: unknown[]) => getMock(...a),
   updateTenantNetwork: (...a: unknown[]) => updateMock(...a),
@@ -74,7 +79,13 @@ describe('PUT', () => {
     updateMock.mockRejectedValueOnce(new Error('Tenant network: the MTU cannot change while 2 vDC(s) carry the network. Remove the members first.'))
     const res = await callRoute(PUT as any, { method: 'PUT', params: { id: 'n1' }, body: { mtu: 1400 } })
     expect(res.status).toBe(409)
-    expect(auditMock).not.toHaveBeenCalled()
+    // The route never reached its own audit(): the refusal row is withAudit()'s.
+    expect(auditMock).toHaveBeenCalledTimes(1)
+    expect(auditMock.mock.calls[0][0]).toMatchObject({
+      category: 'sdn', action: 'update', resourceType: 'tenant_network', resourceId: 'n1', status: 'failure',
+      errorMessage: 'Tenant network: the MTU cannot change while 2 vDC(s) carry the network. Remove the members first.',
+      details: expect.objectContaining({ method: 'PUT', httpStatus: 409, params: { id: 'n1' } }),
+    })
   })
 })
 

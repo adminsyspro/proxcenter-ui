@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server'
 import { getSetting, setSetting } from '@/lib/db/settings'
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { getCurrentTenantId } from "@/lib/tenant"
+import { withAudit } from '@/lib/audit/withAudit'
 
 const DEFAULT_AI_SETTINGS = {
   enabled: false,
@@ -34,7 +35,7 @@ export async function GET() {
 }
 
 // PUT /api/v1/settings/ai - Sauvegarder les paramètres IA
-export async function PUT(request: Request) {
+async function handlePut(request: Request) {
   try {
     // RBAC: Check admin.settings permission
     const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
@@ -50,3 +51,5 @@ export async function PUT(request: Request) {
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const PUT = withAudit({ category: 'settings', resourceType: 'ai' }, handlePut)

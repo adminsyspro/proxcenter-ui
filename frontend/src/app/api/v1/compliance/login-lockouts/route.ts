@@ -7,6 +7,7 @@ import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { demoResponse } from '@/lib/demo/demo-api'
 import { listActiveLocks, unlockLogin, type LockoutKind } from '@/lib/auth/loginLockout'
 import { audit } from '@/lib/audit'
+import { withAudit } from '@/lib/audit/withAudit'
 
 export const runtime = 'nodejs'
 
@@ -25,7 +26,7 @@ export async function GET(req: Request) {
   }
 }
 
-export async function DELETE(req: Request) {
+async function handleDelete(req: Request) {
   const demo = demoResponse(req)
   if (demo) return demo
 
@@ -60,3 +61,5 @@ export async function DELETE(req: Request) {
     return NextResponse.json({ error: e?.message || 'Internal server error' }, { status: 500 })
   }
 }
+
+export const DELETE = withAudit({ category: 'security', resourceType: 'login_lockout' }, handleDelete)

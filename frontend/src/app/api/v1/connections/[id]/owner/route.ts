@@ -10,8 +10,9 @@ import { invalidateConnectionCache } from '@/lib/connections/getConnection'
 import { invalidateInventoryCache } from '@/lib/cache/inventoryCache'
 import { audit } from '@/lib/audit'
 import { assignConnectionToMspTenant, releaseConnectionToProviderPool } from '@/lib/connections/assignment'
+import { withAudit } from '@/lib/audit/withAudit'
 
-export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
+async function handlePut(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
 
   // Scope the permission to THIS connection: an unscoped check would let a
@@ -82,3 +83,5 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
 
   return NextResponse.json({ success: true, connectionId: id, tenantId })
 }
+
+export const PUT = withAudit({ category: 'connections', resourceType: 'owner', resourceParam: 'id' }, handlePut)

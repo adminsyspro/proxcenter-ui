@@ -5,6 +5,7 @@ import { orchestratorHeaders } from "@/lib/orchestrator/headers"
 import { publicDrain } from "@/lib/hostDrain/access"
 import { getCurrentTenantId } from "@/lib/tenant"
 import { canMigrateConnections, getTenantInfrastructureScope } from "@/lib/tenant/infraScope"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -12,10 +13,10 @@ const ORCHESTRATOR_URL = process.env.ORCHESTRATOR_URL || "http://localhost:8080"
 
 // POST /api/v1/orchestrator/host-drains/[id]/cancel
 // Nothing new is started; the migrations Proxmox already runs finish on their own.
-export async function POST(_req: Request, ctx: { params: Promise<{ id: string }> }) {
+async function handlePost(_req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await ctx.params
-    const headers = orchestratorHeaders({ "Content-Type": "application/json" })
+    const headers = await orchestratorHeaders({ "Content-Type": "application/json" })
 
     // The permission is checked on the drained node, like starting the drain.
     const current = await fetch(`${ORCHESTRATOR_URL}/api/v1/host-drains/${encodeURIComponent(id)}`, { headers })
@@ -44,3 +45,5 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
     return NextResponse.json({ error: error.message || "Internal server error" }, { status: 500 })
   }
 }
+
+export const POST = withAudit({ category: "automation", resourceType: "host_drain", resourceParam: "id", action: "cancel" }, handlePost)

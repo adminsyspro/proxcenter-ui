@@ -8,6 +8,7 @@ import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
 import { getCurrentTenantId } from "@/lib/tenant"
 import { resolveVdcForTenant, checkVdcQuota } from "@/lib/vdc/quota"
 import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -267,5 +268,5 @@ return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
 }
 
 export const GET = withPublicApiGuard("vm-snapshots-list", getHandler)
-export const POST = withPublicApiGuard("vm-snapshot-create", postHandler)
-export const DELETE = withPublicApiGuard("vm-snapshot-delete", deleteHandler)
+export const POST = withAudit({ category: "vms", resourceType: "guest", resourceParam: "vmid", action: "snapshot" }, withPublicApiGuard("vm-snapshot-create", postHandler))
+export const DELETE = withAudit({ category: "vms", resourceType: "guest", resourceParam: "vmid" }, withPublicApiGuard("vm-snapshot-delete", deleteHandler))

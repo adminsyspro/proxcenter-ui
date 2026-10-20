@@ -4,6 +4,7 @@ import type { SnapshotIdentity } from '@/lib/orchestrator/site-recovery.types'
 import { getOrchestratorClient } from "@/lib/orchestrator/client"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { getTenantConnectionIds } from "@/lib/tenant"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -43,7 +44,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-export async function POST(request: NextRequest) {
+async function handlePost(request: NextRequest) {
   try {
     const denied = await checkPermission(PERMISSIONS.AUTOMATION_MANAGE, "global", "*")
     if (denied) return denied
@@ -78,3 +79,5 @@ export async function POST(request: NextRequest) {
     )
   }
 }
+
+export const POST = withAudit({ category: "replication", resourceType: "snapshot", action: "snapshot" }, handlePost)

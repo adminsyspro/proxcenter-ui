@@ -7,6 +7,7 @@ import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
 import { releaseAllocationsForVm } from "@/lib/vdc/ipam"
 import { deleteGuestIpEntry, guestKey } from "@/lib/cache/guestIpCache"
 import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -151,4 +152,4 @@ return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
 
-export const DELETE = withPublicApiGuard("vm-delete", handler)
+export const DELETE = withAudit({ category: "vms", resourceType: "guest", resourceTypeParam: "type", resourceParam: "vmid" }, withPublicApiGuard("vm-delete", handler))

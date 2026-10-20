@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -23,7 +24,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string; ser
 }
 
 // PUT - Update a metric server
-export async function PUT(req: Request, ctx: { params: Promise<{ id: string; serverId: string }> }) {
+async function handlePut(req: Request, ctx: { params: Promise<{ id: string; serverId: string }> }) {
   try {
     const { id, serverId } = await ctx.params
     if (!id || !serverId) return NextResponse.json({ error: "Missing params" }, { status: 400 })
@@ -54,7 +55,7 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string; ser
 }
 
 // DELETE - Delete a metric server
-export async function DELETE(req: Request, ctx: { params: Promise<{ id: string; serverId: string }> }) {
+async function handleDelete(req: Request, ctx: { params: Promise<{ id: string; serverId: string }> }) {
   try {
     const { id, serverId } = await ctx.params
     if (!id || !serverId) return NextResponse.json({ error: "Missing params" }, { status: 400 })
@@ -67,3 +68,6 @@ export async function DELETE(req: Request, ctx: { params: Promise<{ id: string; 
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const PUT = withAudit({ category: "cluster", resourceType: "server", resourceParam: "serverId" }, handlePut)
+export const DELETE = withAudit({ category: "cluster", resourceType: "server", resourceParam: "serverId" }, handleDelete)

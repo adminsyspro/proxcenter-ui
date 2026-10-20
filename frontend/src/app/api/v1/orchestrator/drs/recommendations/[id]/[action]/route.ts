@@ -5,6 +5,7 @@ import { getOrchestratorClient } from "@/lib/orchestrator/client"
 import { relayOrchestratorError } from "@/lib/orchestrator/relayError"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { getTenantConnectionIds } from "@/lib/tenant"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -12,7 +13,7 @@ type Params = { params: Promise<{ id: string; action: string }> }
 
 // POST /api/v1/orchestrator/drs/recommendations/{id}/{action}
 // Actions: approve, reject, execute
-export async function POST(req: Request, ctx: Params) {
+async function handlePost(req: Request, ctx: Params) {
   try {
     const { id, action } = await ctx.params
 
@@ -87,3 +88,5 @@ export async function POST(req: Request, ctx: Params) {
     return relayOrchestratorError(e, "Error executing recommendation action:")
   }
 }
+
+export const POST = withAudit({ category: "automation", resourceType: "recommendation", resourceParam: "id", action: "execute" }, handlePost)

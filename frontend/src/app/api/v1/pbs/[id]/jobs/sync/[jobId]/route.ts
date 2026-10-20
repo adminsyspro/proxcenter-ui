@@ -5,6 +5,7 @@ import {
 } from "@/lib/proxmox/pbsJobConfig"
 import { SYNC_JOB } from "@/lib/proxmox/pbsJobSpecs"
 import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -24,5 +25,5 @@ async function deleteHandler(req: Request, ctx: PbsJobRouteContext) {
   return deletePbsJobConfig(req, ctx, SYNC_JOB)
 }
 
-export const PUT = withPublicApiGuard("pbs-job-sync-update", putHandler)
-export const DELETE = withPublicApiGuard("pbs-job-sync-delete", deleteHandler)
+export const PUT = withAudit({ category: "backups", resourceType: "sync_job", resourceParam: "jobId" }, withPublicApiGuard("pbs-job-sync-update", putHandler))
+export const DELETE = withAudit({ category: "backups", resourceType: "sync_job", resourceParam: "jobId" }, withPublicApiGuard("pbs-job-sync-delete", deleteHandler))

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { requireProviderTenant } from "@/lib/tenant"
 import { orchestratorHeaders } from "@/lib/orchestrator/headers"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -9,7 +10,7 @@ const ORCHESTRATOR_URL = process.env.ORCHESTRATOR_URL || "http://localhost:8080"
 
 // Regenerates the install identity (new fingerprint). A license bound to the
 // previous fingerprint stops matching until it is rebound on the portal.
-export async function POST() {
+async function handlePost() {
   try {
     const providerGate = await requireProviderTenant()
     if (providerGate) return providerGate
@@ -18,7 +19,7 @@ export async function POST() {
 
     const res = await fetch(`${ORCHESTRATOR_URL}/api/v1/license/identity/reset`, {
       method: "POST",
-      headers: orchestratorHeaders({ "Content-Type": "application/json" }),
+      headers: await orchestratorHeaders({ "Content-Type": "application/json" }),
     })
     const data = await res.json().catch(() => null)
 
@@ -41,3 +42,5 @@ export async function POST() {
     return NextResponse.json({ success: false, error: msg || "Failed to reset the install identity" }, { status: 500 })
   }
 }
+
+export const POST = withAudit({ category: "system", resourceType: "reset" }, handlePost)

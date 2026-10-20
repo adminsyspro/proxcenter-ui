@@ -4,6 +4,7 @@ import { demoResponse } from "@/lib/demo/demo-api"
 import { pbsFetch } from "@/lib/proxmox/pbs-client"
 import { getPbsConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -15,7 +16,7 @@ function isAllowedAction(value: string): value is AllowedAction {
   return (ALLOWED_ACTIONS as readonly string[]).includes(value)
 }
 
-export async function POST(
+async function handlePost(
   req: Request,
   ctx: {
     params:
@@ -63,3 +64,5 @@ export async function POST(
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const POST = withAudit({ category: "backups", resourceType: "service", resourceParam: "service", action: "execute" }, handlePost)

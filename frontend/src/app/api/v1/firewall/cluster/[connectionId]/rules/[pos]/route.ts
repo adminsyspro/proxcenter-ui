@@ -9,6 +9,7 @@ import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
 import { orchestratorOrPve } from '@/lib/firewall/withPveFallback'
 import * as pveDirect from '@/lib/firewall/pveDirect'
 import { getConnectionById } from '@/lib/connections/getConnection'
+import { withAudit } from '@/lib/audit/withAudit'
 
 // PUT /api/v1/firewall/cluster/[connectionId]/rules/[pos] - Update/move cluster rule
 async function putHandler(
@@ -75,5 +76,5 @@ return NextResponse.json(
   }
 }
 
-export const PUT = withPublicApiGuard("fw-cluster-rule-update", putHandler)
-export const DELETE = withPublicApiGuard("fw-cluster-rule-delete", deleteHandler)
+export const PUT = withAudit({ category: 'firewall', resourceType: 'rule', resourceParam: 'pos' }, withPublicApiGuard("fw-cluster-rule-update", putHandler))
+export const DELETE = withAudit({ category: 'firewall', resourceType: 'rule', resourceParam: 'pos' }, withPublicApiGuard("fw-cluster-rule-delete", deleteHandler))

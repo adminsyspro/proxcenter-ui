@@ -3,11 +3,12 @@ import { NextRequest, NextResponse } from "next/server"
 import { getOrchestratorClient } from "@/lib/orchestrator/client"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { getTenantConnectionIds } from "@/lib/tenant"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
 // POST /api/v1/orchestrator/drs/rules/[id]/enforce — tenant-scoped
-export async function POST(
+async function handlePost(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -43,3 +44,5 @@ export async function POST(
     )
   }
 }
+
+export const POST = withAudit({ category: "automation", resourceType: "rule", resourceParam: "id", action: "execute" }, handlePost)

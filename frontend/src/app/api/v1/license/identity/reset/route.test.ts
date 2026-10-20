@@ -3,17 +3,30 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 const checkPermissionMock = vi.fn<(...a: any[]) => Promise<Response | null>>()
 const requireProviderTenantMock = vi.fn<() => Promise<Response | null>>()
 const fetchMock = vi.fn()
+const auditMock = vi.fn<(...a: any[]) => Promise<string>>()
 
 vi.mock('@/lib/rbac', () => ({ checkPermission: checkPermissionMock, PERMISSIONS: { ADMIN_SETTINGS: 'admin.settings' } }))
 vi.mock('@/lib/tenant', () => ({ requireProviderTenant: requireProviderTenantMock }))
 vi.mock('@/lib/orchestrator/headers', () => ({ orchestratorHeaders: (x: any) => ({ ...x }) }))
+vi.mock('@/lib/audit', () => ({ audit: (...a: any[]) => auditMock(...a) }))
 
-async function resetPOST() { const mod = await import('./route'); return mod.POST }
+// The handler ignores its request, but withAudit() (#1105) reads it.
+async function resetPOST() {
+  const mod = await import('./route')
+  return () => mod.POST(new Request('http://test/api/v1/license/identity/reset', { method: 'POST' }))
+}
+
+/** The one row withAudit() writes for this route, the route itself never audits. */
+function wrapperRow() {
+  expect(auditMock).toHaveBeenCalledTimes(1)
+  return auditMock.mock.calls[0][0]
+}
 
 beforeEach(() => {
   checkPermissionMock.mockReset().mockResolvedValue(null)
   requireProviderTenantMock.mockReset().mockResolvedValue(null)
   fetchMock.mockReset()
+  auditMock.mockReset().mockResolvedValue('audit-id')
   vi.stubGlobal('fetch', fetchMock)
 })
 
@@ -25,6 +38,11 @@ describe('POST /api/v1/license/identity/reset', () => {
     expect(res.status).toBe(403)
     expect(checkPermissionMock).not.toHaveBeenCalled()
     expect(fetchMock).not.toHaveBeenCalled()
+    expect(wrapperRow()).toMatchObject({
+      category: 'system', action: 'create', resourceType: 'reset', status: 'failure',
+      errorMessage: 'This operation is only available from the provider tenant',
+      details: expect.objectContaining({ route: '/api/v1/license/identity/reset', method: 'POST', httpStatus: 403 }),
+    })
   })
 
   it('403s when the caller lacks admin.settings', async () => {
@@ -41,6 +59,7 @@ describe('POST /api/v1/license/identity/reset', () => {
     expect(res.status).toBe(200)
     expect(await res.json()).toMatchObject({ success: true, install: { fingerprint: 'new' } })
     expect(fetchMock.mock.calls[0][1].method).toBe('POST')
+    expect(wrapperRow()).toMatchObject({ category: 'system', action: 'create', resourceType: 'reset', status: 'success', details: expect.objectContaining({ httpStatus: 200 }) })
   })
 
   it('forwards an orchestrator error and code with its status', async () => {
@@ -48,6 +67,7 @@ describe('POST /api/v1/license/identity/reset', () => {
     const res = await (await resetPOST())()
     expect(res.status).toBe(409)
     expect(await res.json()).toEqual({ success: false, error: 'boom', code: 'IDENTITY_SIGNING_UNAVAILABLE' })
+    expect(wrapperRow()).toMatchObject({ status: 'failure', errorMessage: 'boom', details: expect.objectContaining({ httpStatus: 409 }) })
   })
 
   it('forwards an orchestrator error without a code', async () => {

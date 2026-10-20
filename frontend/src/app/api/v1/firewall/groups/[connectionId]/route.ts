@@ -9,6 +9,7 @@ import { orchestratorOrPve } from '@/lib/firewall/withPveFallback'
 import { verifyConnectionOwnership } from '@/lib/tenant'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
+import { withAudit } from '@/lib/audit/withAudit'
 
 // GET /api/v1/firewall/groups/[connectionId] - Get all security groups
 async function getHandler(
@@ -77,4 +78,4 @@ return NextResponse.json(
 }
 
 export const GET = withPublicApiGuard("fw-groups-list", getHandler)
-export const POST = withPublicApiGuard("fw-group-create", postHandler)
+export const POST = withAudit({ category: 'firewall', resourceType: 'group', resourceParam: 'connectionId' }, withPublicApiGuard("fw-group-create", postHandler))

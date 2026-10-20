@@ -6,10 +6,11 @@ import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
 import { putSingleUse, takeSingleUse } from "@/lib/console/session"
 import { audit } from "@/lib/audit"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
-export async function POST(
+async function handlePost(
   _req: Request,
   ctx: { params: Promise<{ id: string; type: string; node: string; vmid: string }> }
 ) {
@@ -102,3 +103,5 @@ export async function POST(
 export function consumeConsoleSession(sessionId: string) {
   return takeSingleUse(sessionId)
 }
+
+export const POST = withAudit({ category: "vms", resourceType: "guest", resourceTypeParam: "type", resourceParam: "vmid", action: "console.open" }, handlePost)

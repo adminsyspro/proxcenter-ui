@@ -4,6 +4,7 @@ import { getSessionPrisma, getCurrentTenantId } from "@/lib/tenant"
 import { generateFingerprint } from '@/lib/alerts/fingerprint'
 import { createAlertSchema, patchAlertsSchema } from '@/lib/schemas'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
+import { withAudit } from '@/lib/audit/withAudit'
 
 export const runtime = 'nodejs'
 
@@ -108,7 +109,7 @@ return NextResponse.json({ error: error?.message || 'Server error' }, { status: 
  * POST /api/v1/alerts
  * Créer ou mettre à jour une alerte (upsert basé sur fingerprint)
  */
-export async function POST(req: Request) {
+async function handlePost(req: Request) {
   try {
     const prisma = await getSessionPrisma()
     // Same permission as PATCH, DELETE and /alerts/sync: writing an alert is a
@@ -174,7 +175,7 @@ return NextResponse.json({ error: error?.message || 'Server error' }, { status: 
  * PATCH /api/v1/alerts
  * Mettre à jour le statut d'une ou plusieurs alertes (acknowledge, resolve)
  */
-export async function PATCH(req: Request) {
+async function handlePatch(req: Request) {
   try {
     const prisma = await getSessionPrisma()
     const permError = await checkPermission(PERMISSIONS.ALERTS_MANAGE)
@@ -236,7 +237,7 @@ return NextResponse.json({ error: error?.message || 'Server error' }, { status: 
  * DELETE /api/v1/alerts
  * Supprimer les alertes résolues anciennes (cleanup)
  */
-export async function DELETE(req: Request) {
+async function handleDelete(req: Request) {
   try {
     const prisma = await getSessionPrisma()
     const permError = await checkPermission(PERMISSIONS.ALERTS_MANAGE)
@@ -268,3 +269,7 @@ export async function DELETE(req: Request) {
 return NextResponse.json({ error: error?.message || 'Server error' }, { status: 500 })
   }
 }
+
+export const POST = withAudit({ category: 'alerts', resourceType: 'alert' }, handlePost)
+export const PATCH = withAudit({ category: 'alerts', resourceType: 'alert' }, handlePatch)
+export const DELETE = withAudit({ category: 'alerts', resourceType: 'alert' }, handleDelete)

@@ -4,6 +4,7 @@ import { safeLog } from "@/lib/log/sanitize"
 import { orchestratorFetch, parseOrchestratorError } from "@/lib/orchestrator"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { forgetHostKey } from "@/lib/ssh/host-key-store"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -23,7 +24,7 @@ export const runtime = "nodejs"
 // removed nothing either. When the orchestrator could not be reached we never
 // 404: its pin may well still be in place, and `orchestratorUnavailable` tells
 // the UI to warn about it instead of claiming the node was re-trusted.
-export async function DELETE(
+async function handleDelete(
   _req: Request,
   ctx: { params: Promise<{ host: string }> | { host: string } }
 ) {
@@ -100,3 +101,5 @@ export async function DELETE(
     )
   }
 }
+
+export const DELETE = withAudit({ category: "security", resourceType: "host_key", resourceParam: "host" }, handleDelete)

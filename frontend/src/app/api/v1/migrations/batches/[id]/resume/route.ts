@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 
 import { loadBatchForCaller } from "@/lib/migration/batch-access"
 import { resumeBatch } from "@/lib/migration/batch-scheduler"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -9,7 +10,7 @@ export const runtime = "nodejs"
  * POST /api/v1/migrations/batches/[id]/resume
  * Start the queued jobs of a paused batch again, as many as its concurrency allows.
  */
-export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+async function handlePost(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params
     const access = await loadBatchForCaller(id)
@@ -22,3 +23,5 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const POST = withAudit({ category: "migration", resourceType: "batch", resourceParam: "id", action: "enable" }, handlePost)

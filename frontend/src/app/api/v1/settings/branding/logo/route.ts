@@ -4,13 +4,14 @@ import { scopedBrandingUrl } from '@/lib/branding/urls'
 import { requireBrandingAdmin } from '@/lib/branding/guard'
 import { getCurrentTenantId } from '@/lib/tenant'
 import { putAsset, deleteAsset } from '@/lib/branding/assetStore'
+import { withAudit } from '@/lib/audit/withAudit'
 
 const SERVE_PATH = '/api/v1/settings/branding/uploads'
 const MAX_SIZE = 5 * 1024 * 1024 // 5MB
 const ALLOWED_TYPES = ['image/png', 'image/jpeg', 'image/svg+xml', 'image/webp', 'image/x-icon', 'image/vnd.microsoft.icon']
 const SLOTS = ['logo', 'favicon', 'loginLogo']
 
-export async function POST(req: Request) {
+async function handlePost(req: Request) {
   try {
     const denied = await requireBrandingAdmin()
     if (denied) return denied
@@ -37,7 +38,7 @@ export async function POST(req: Request) {
   }
 }
 
-export async function DELETE(req: Request) {
+async function handleDelete(req: Request) {
   try {
     const denied = await requireBrandingAdmin()
     if (denied) return denied
@@ -52,3 +53,6 @@ export async function DELETE(req: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }
+
+export const POST = withAudit({ category: 'settings', resourceType: 'logo' }, handlePost)
+export const DELETE = withAudit({ category: 'settings', resourceType: 'logo' }, handleDelete)

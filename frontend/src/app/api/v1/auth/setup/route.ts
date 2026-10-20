@@ -8,6 +8,7 @@ import { nanoid } from "nanoid"
 import { prisma } from "@/lib/db/prisma"
 import { hashPassword } from "@/lib/auth/password"
 import { consumeRateLimit } from "@/lib/api-tokens/rateLimit"
+import { withAudit } from "@/lib/audit/withAudit"
 
 /**
  * First-run bootstrap is unauthenticated by nature: there is no account to
@@ -52,7 +53,7 @@ function setupTokenDenied(req: Request): boolean {
  * dans la même transaction Prisma : aucune incohérence possible entre les
  * trois tables si l'une des écritures échoue.
  */
-export async function POST(req: Request) {
+async function handlePost(req: Request) {
   try {
     const verdict = consumeRateLimit(RATE_LIMIT_KEY, SETUP_ATTEMPTS_PER_MINUTE)
 
@@ -205,3 +206,5 @@ export async function GET() {
     return NextResponse.json({ setupRequired: true })
   }
 }
+
+export const POST = withAudit({ category: "auth", resourceType: "setup" }, handlePost)

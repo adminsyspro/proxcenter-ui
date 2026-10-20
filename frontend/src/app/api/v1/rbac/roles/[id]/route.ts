@@ -13,6 +13,7 @@ import { isUserSuperAdmin, PROTECTED_ROLE_IDS } from "@/lib/rbac"
 import { validateRoleDefaultScopes } from "@/lib/rbac/scope-validation"
 import { getCurrentTenantId } from "@/lib/tenant"
 import { demoResponse } from "@/lib/demo/demo-api"
+import { withAudit } from "@/lib/audit/withAudit"
 
 /** See POST /api/v1/rbac/roles — same shape, same dedup rules. */
 function normalizeWidgetOverrides(raw: unknown): { hidden: string[] } | null | undefined {
@@ -138,7 +139,7 @@ return NextResponse.json(
 }
 
 // PATCH /api/v1/rbac/roles/[id] - Modifier un rôle
-export async function PATCH(req: NextRequest, context: RouteContext) {
+async function handlePatch(req: NextRequest, context: RouteContext) {
   const demo = demoResponse(req)
   if (demo) return demo
 
@@ -315,7 +316,7 @@ return NextResponse.json(
 }
 
 // DELETE /api/v1/rbac/roles/[id] - Supprimer un rôle
-export async function DELETE(req: NextRequest, context: RouteContext) {
+async function handleDelete(req: NextRequest, context: RouteContext) {
   const demo = demoResponse(req)
   if (demo) return demo
 
@@ -384,3 +385,6 @@ return NextResponse.json(
     )
   }
 }
+
+export const PATCH = withAudit({ category: "security", resourceType: "role", resourceParam: "id" }, handlePatch)
+export const DELETE = withAudit({ category: "security", resourceType: "role", resourceParam: "id" }, handleDelete)

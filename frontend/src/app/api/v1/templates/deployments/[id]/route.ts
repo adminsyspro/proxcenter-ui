@@ -3,6 +3,7 @@ import { NextResponse } from "next/server"
 
 import { getSessionPrisma } from "@/lib/tenant"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -25,7 +26,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   }
 }
 
-export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string }> | { id: string } }) {
+async function handleDelete(_req: Request, ctx: { params: Promise<{ id: string }> | { id: string } }) {
   try {
     const prisma = await getSessionPrisma()
     const params = await Promise.resolve(ctx.params)
@@ -42,3 +43,5 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string 
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const DELETE = withAudit({ category: "templates", resourceType: "deployment", resourceParam: "id" }, handleDelete)

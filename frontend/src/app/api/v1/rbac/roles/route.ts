@@ -14,6 +14,7 @@ import { audit } from "@/lib/audit"
 import { isUserSuperAdmin, PROTECTED_ROLE_IDS } from "@/lib/rbac"
 import { validateRoleDefaultScopes } from "@/lib/rbac/scope-validation"
 import { getCurrentTenantId } from "@/lib/tenant"
+import { withAudit } from "@/lib/audit/withAudit"
 
 /**
  * Normalize a client-supplied widget_overrides payload into the shape we
@@ -134,7 +135,7 @@ return NextResponse.json(
 }
 
 // POST /api/v1/rbac/roles - Créer un nouveau rôle
-export async function POST(req: NextRequest) {
+async function handlePost(req: NextRequest) {
   const demo = demoResponse(req)
   if (demo) return demo
 
@@ -279,3 +280,5 @@ return NextResponse.json(
     )
   }
 }
+
+export const POST = withAudit({ category: "security", resourceType: "role" }, handlePost)

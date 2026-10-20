@@ -10,10 +10,11 @@ import { NextResponse } from "next/server"
 import { requireAdmin } from "@/lib/rbac"
 import { getCurrentTenantId, DEFAULT_TENANT_ID } from "@/lib/tenant"
 import { getEffectiveCatalog, refreshRemoteCatalog } from "@/lib/templates/catalogStore"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
-export async function POST() {
+async function handlePost() {
   try {
     const denied = await requireAdmin()
     if (denied) return denied
@@ -50,3 +51,5 @@ export async function POST() {
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const POST = withAudit({ category: "templates", resourceType: "catalog", action: "sync" }, handlePost)

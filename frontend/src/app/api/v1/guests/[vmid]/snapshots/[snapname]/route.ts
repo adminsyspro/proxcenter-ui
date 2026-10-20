@@ -11,6 +11,7 @@ import { restampGuestDrives } from "@/lib/vdc/driveGuard"
 import type { DriveQosCaps } from "@/lib/vdc/drives"
 import { safeLog } from "@/lib/log/sanitize"
 import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -210,5 +211,5 @@ return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
 
-export const POST = withPublicApiGuard("vm-snapshot-rollback", postHandler)
-export const PUT = withPublicApiGuard("vm-snapshot-update", putHandler)
+export const POST = withAudit({ category: "vms", resourceType: "snapshot", resourceParam: "snapname" }, withPublicApiGuard("vm-snapshot-rollback", postHandler))
+export const PUT = withAudit({ category: "vms", resourceType: "snapshot", resourceParam: "snapname" }, withPublicApiGuard("vm-snapshot-update", putHandler))

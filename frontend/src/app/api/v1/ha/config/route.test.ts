@@ -18,6 +18,11 @@ vi.mock('@/lib/orchestrator/headers', () => ({
   orchestratorHeaders: (extra: Record<string, string> = {}) => ({ 'X-API-Key': 'test', ...extra }),
 }))
 
+// PUT is wrapped by withAudit() (#1105); the real audit() would reach Prisma
+// and the syslog forwarder.
+const auditMock = vi.fn()
+vi.mock('@/lib/audit', () => ({ audit: auditMock }))
+
 const fetchMock = vi.fn()
 vi.stubGlobal('fetch', fetchMock)
 
@@ -25,6 +30,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   checkPermissionMock.mockResolvedValue(null)
   requireFeatureMock.mockResolvedValue(null)
+  auditMock.mockResolvedValue('audit-id')
 })
 
 describe('GET /api/v1/ha/config', () => {
@@ -120,6 +126,12 @@ describe('PUT /api/v1/ha/config', () => {
       expect.stringContaining('/api/v1/ha/config'),
       expect.objectContaining({ method: 'PUT' })
     )
+    // The safety-net row: the route itself never audits.
+    expect(auditMock).toHaveBeenCalledTimes(1)
+    expect(auditMock.mock.calls[0][0]).toMatchObject({
+      category: 'system', action: 'update', resourceType: 'config', status: 'success',
+      details: expect.objectContaining({ method: 'PUT', httpStatus: 200 }),
+    })
   })
 
   it('rejects an unreadable body with 400 instead of blaming the orchestrator', async () => {
@@ -141,5 +153,7 @@ describe('PUT /api/v1/ha/config', () => {
     const res = await callRoute(PUT as any, { body: {}, method: 'PUT' })
 
     expect(res.status).toBe(400)
+    expect(auditMock).toHaveBeenCalledTimes(1)
+    expect(auditMock.mock.calls[0][0]).toMatchObject({ category: 'system', action: 'update', status: 'failure', details: expect.objectContaining({ httpStatus: 400 }) })
   })
 })

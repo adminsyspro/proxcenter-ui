@@ -15,6 +15,7 @@ import type { GuestFileRestoreJobStatus, GuestFileRestoreLogLine } from '@/lib/g
 import { PERMISSIONS, buildVmResourceId, checkPermission } from '@/lib/rbac'
 import { getSessionPrisma } from '@/lib/tenant'
 import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
+import { withAudit } from '@/lib/audit/withAudit'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -65,4 +66,4 @@ async function handler(_request: Request, ctx: { params: Promise<{ id: string }>
   }
 }
 
-export const POST = withPublicApiGuard("gfr-job-cancel", handler)
+export const POST = withAudit({ category: 'backups', resourceType: 'job', resourceParam: 'id', action: 'cancel' }, withPublicApiGuard("gfr-job-cancel", handler))

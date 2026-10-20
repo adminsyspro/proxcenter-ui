@@ -5,6 +5,7 @@ import { randomUUID } from 'crypto'
 import { getOrchestratorClient } from '@/lib/orchestrator/client'
 import { getTenantConnectionIds } from '@/lib/tenant'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
+import { withAudit } from '@/lib/audit/withAudit'
 
 export const runtime = "nodejs"
 
@@ -50,7 +51,7 @@ export async function GET() {
 }
 
 // POST /api/v1/orchestrator/drs/rules
-export async function POST(request: NextRequest) {
+async function handlePost(request: NextRequest) {
   try {
     const denied = await checkPermission(PERMISSIONS.AUTOMATION_MANAGE)
     if (denied) return denied
@@ -87,3 +88,5 @@ export async function POST(request: NextRequest) {
     )
   }
 }
+
+export const POST = withAudit({ category: 'automation', resourceType: 'rule' }, handlePost)

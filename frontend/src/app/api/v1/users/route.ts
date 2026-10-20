@@ -13,6 +13,7 @@ import { DEFAULT_TENANT_ID, getCurrentTenantId } from "@/lib/tenant"
 import { getServerLicense } from "@/lib/auth/requireEnterprise"
 import { isCommunityDeployment } from "@/lib/auth/communitySuperAdmin"
 import { aliveWhere } from "@/lib/auth/sessions"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -154,7 +155,7 @@ export async function GET() {
 }
 
 // POST /api/v1/users - Créer un utilisateur
-export async function POST(req: Request) {
+async function handlePost(req: Request) {
   try {
     // RBAC: Check admin.users permission
     const denied = await checkPermission(PERMISSIONS.ADMIN_USERS)
@@ -314,3 +315,5 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: error?.message || "Erreur serveur" }, { status: 500 })
   }
 }
+
+export const POST = withAudit({ category: "users", resourceType: "user" }, handlePost)

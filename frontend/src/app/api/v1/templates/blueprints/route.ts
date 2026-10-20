@@ -7,6 +7,7 @@ import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { authOptions } from "@/lib/auth/config"
 import { createBlueprintSchema } from "@/lib/schemas"
 import { listVisibleBlueprints, loadGrantSummaries, replaceTenantGrants } from "@/lib/templates/catalogGrants"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -34,7 +35,7 @@ export async function GET() {
   }
 }
 
-export async function POST(req: Request) {
+async function handlePost(req: Request) {
   try {
     const prisma = await getSessionPrisma()
     const denied = await checkPermission(PERMISSIONS.VM_CREATE)
@@ -91,3 +92,5 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const POST = withAudit({ category: "templates", resourceType: "blueprint" }, handlePost)

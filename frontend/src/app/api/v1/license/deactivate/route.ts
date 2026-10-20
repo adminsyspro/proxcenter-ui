@@ -2,12 +2,13 @@ import { NextResponse } from "next/server"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { requireProviderTenant } from "@/lib/tenant"
 import { orchestratorHeaders } from "@/lib/orchestrator/headers"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
 const ORCHESTRATOR_URL = process.env.ORCHESTRATOR_URL || "http://localhost:8080"
 
-export async function DELETE() {
+async function handleDelete() {
   try {
     const providerGate = await requireProviderTenant()
     if (providerGate) return providerGate
@@ -16,7 +17,7 @@ export async function DELETE() {
 
     const res = await fetch(`${ORCHESTRATOR_URL}/api/v1/license/deactivate`, {
       method: "DELETE",
-      headers: orchestratorHeaders(),
+      headers: await orchestratorHeaders(),
     })
 
     const data = await res.json()
@@ -50,3 +51,5 @@ export async function DELETE() {
     )
   }
 }
+
+export const DELETE = withAudit({ category: "system", resourceType: "deactivate" }, handleDelete)

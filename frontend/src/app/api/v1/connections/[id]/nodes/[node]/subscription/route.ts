@@ -3,6 +3,7 @@ import { NextResponse } from "next/server"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, buildNodeResourceId, PERMISSIONS } from "@/lib/rbac"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -75,7 +76,7 @@ export async function GET(
  * 
  * Proxmox API: POST /nodes/{node}/subscription
  */
-export async function POST(
+async function handlePost(
   _req: Request,
   ctx: { params: Promise<{ id: string; node: string }> }
 ) {
@@ -121,7 +122,7 @@ export async function POST(
  * Proxmox API: PUT /nodes/{node}/subscription
  * Body: { key: "pve2c-..." }
  */
-export async function PUT(
+async function handlePut(
   req: Request,
   ctx: { params: Promise<{ id: string; node: string }> }
 ) {
@@ -172,7 +173,7 @@ export async function PUT(
  * 
  * Proxmox API: DELETE /nodes/{node}/subscription
  */
-export async function DELETE(
+async function handleDelete(
   _req: Request,
   ctx: { params: Promise<{ id: string; node: string }> }
 ) {
@@ -206,3 +207,7 @@ export async function DELETE(
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const POST = withAudit({ category: "nodes", resourceType: "node", resourceParam: "node" }, handlePost)
+export const PUT = withAudit({ category: "nodes", resourceType: "node", resourceParam: "node" }, handlePut)
+export const DELETE = withAudit({ category: "nodes", resourceType: "node", resourceParam: "node" }, handleDelete)

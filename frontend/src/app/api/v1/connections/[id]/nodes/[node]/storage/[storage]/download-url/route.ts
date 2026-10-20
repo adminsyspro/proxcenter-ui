@@ -7,6 +7,7 @@ import { guardTenantStorageWrite, tenantUploadFilename } from "@/lib/vdc/scope"
 import { getPrincipal, type Principal } from "@/lib/auth/principal"
 import { isNodeUrlFetchRefused } from "@/lib/vdc/nodeUrlFetch"
 import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -91,4 +92,4 @@ async function postHandler(
   }
 }
 
-export const POST = withPublicApiGuard("storage-download-url", postHandler)
+export const POST = withAudit({ category: "storage", resourceType: "storage", resourceParam: "storage", action: "import" }, withPublicApiGuard("storage-download-url", postHandler))

@@ -14,6 +14,7 @@ import { checkBatchSpaceForRequest, requestDiskBytes } from "@/lib/migration/bat
 import { checkBatchCopyNetwork } from "@/lib/migration/batch-copy-reach"
 import { TERMINAL_STATUSES } from "@/lib/tasks/sharedTask"
 import { BULK_MIG_CONCURRENCY_MAX, BULK_MIG_CONCURRENCY_MIN } from "@/app/(dashboard)/infrastructure/inventory/bulkMigrationConfig"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -35,7 +36,7 @@ const PER_VM_FIELDS = ["sourceVmId", "sourceVmName", "targetNode", "vcenterDatac
  * checks of POST /api/v1/migrations; the first refusal is returned with the
  * VM's id and nothing is created.
  */
-export async function POST(req: Request) {
+async function handlePost(req: Request) {
   try {
     const prisma = await getSessionPrisma()
     const denied = await checkPermission(PERMISSIONS.VM_MIGRATE)
@@ -203,3 +204,5 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const POST = withAudit({ category: "migration", resourceType: "batch" }, handlePost)

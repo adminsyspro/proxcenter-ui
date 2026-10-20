@@ -4,10 +4,11 @@ import { getOrchestratorClient } from "@/lib/orchestrator/client"
 import { checkPlanTenantScope } from "@/lib/orchestrator/planTenantScope"
 import { replicationErrorResponse } from "@/lib/orchestrator/replicationError"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
-export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+async function handlePost(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const denied = await checkPermission(PERMISSIONS.AUTOMATION_MANAGE, "global", "*")
 
@@ -33,3 +34,5 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return replicationErrorResponse(e, "Failed to execute test failover")
   }
 }
+
+export const POST = withAudit({ category: "replication", resourceType: "plan", resourceParam: "id", action: "failover" }, handlePost)

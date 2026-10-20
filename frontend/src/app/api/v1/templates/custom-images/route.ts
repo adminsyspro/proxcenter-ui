@@ -10,6 +10,7 @@ import { prisma as basePrisma } from "@/lib/db/prisma"
 import { authorizeImageLocations, authorizeImageVolume, SourceVolumeError } from '@/lib/templates/sourceVolume'
 import { loadGrantSummaries, replaceTenantGrants } from '@/lib/templates/catalogGrants'
 import { isNodeUrlFetchRefused, URL_IMAGE_REFUSED } from '@/lib/vdc/nodeUrlFetch'
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -41,7 +42,7 @@ export async function GET(req: Request) {
   }
 }
 
-export async function POST(req: Request) {
+async function handlePost(req: Request) {
   try {
     const prisma = await getSessionPrisma()
     const denied = await checkPermission(PERMISSIONS.VM_CREATE)
@@ -149,3 +150,5 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const POST = withAudit({ category: "templates", resourceType: "custom_image" }, handlePost)

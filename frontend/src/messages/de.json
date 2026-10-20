@@ -4727,7 +4727,8 @@
         "framing": "Framing",
         "facility": "Facility",
         "categories": "Audit-Kategorien",
-        "categoriesHelper": "Leer lassen, um alle Kategorien weiterzuleiten.",
+        "categoriesHelper": "Nur die markierten Kategorien werden weitergeleitet.",
+        "categoriesNone": "Wählen Sie mindestens eine Kategorie aus.",
         "enabled": "Weiterleitung aktiviert"
       },
       "transportHelper": {
@@ -4773,7 +4774,13 @@
         "migration": "Migration",
         "admin": "Administration",
         "sdn": "SDN",
-        "api_tokens": "API-Token"
+        "api_tokens": "API-Token",
+        "firewall": "Firewall",
+        "ha": "Hochverfügbarkeit",
+        "cluster": "Cluster",
+        "automation": "Automatisierung",
+        "replication": "Replikation",
+        "alerts": "Warnmeldungen"
       },
       "destinations": "Ziele"
     },
@@ -5023,7 +5030,13 @@
       "storage": "Storage",
       "backups": "Backups",
       "settings": "Einstellungen",
-      "system": "System"
+      "system": "System",
+      "firewall": "Firewall",
+      "ha": "Hochverfügbarkeit",
+      "cluster": "Cluster",
+      "automation": "Automatisierung",
+      "replication": "Replikation",
+      "alerts": "Warnmeldungen"
     },
     "actions": {
       "login": "Anmelden",
@@ -5051,7 +5064,30 @@
       "import": "Importieren",
       "test": "Testen",
       "enable": "Aktivieren",
-      "disable": "Deaktivieren"
+      "disable": "Deaktivieren",
+      "upgrade": "Aktualisierung",
+      "reboot": "Neustart",
+      "shutdown": "Herunterfahren",
+      "maintenance": "Wartung",
+      "execute": "Ausführung",
+      "apply": "Anwenden",
+      "sync": "Synchronisierung",
+      "run": "Start",
+      "acknowledge": "Bestätigung",
+      "resolve": "Behebung",
+      "failover": "Failover",
+      "failback": "Failback",
+      "cancel": "Abbruch",
+      "drsMigrate": "DRS-Migration",
+      "rollingStart": "Rolling Update gestartet",
+      "rollingStep": "Rolling-Update-Schritt",
+      "rollingFinish": "Rolling Update beendet",
+      "drainStart": "Host-Drain gestartet",
+      "drainStep": "Drain-Schritt",
+      "drainFinish": "Host-Drain beendet",
+      "replicationSync": "Replikationssynchronisierung",
+      "replicationFix": "Replikat-Korrektur",
+      "drillRun": "Wiederherstellungsübung"
     }
   },
   "security": {

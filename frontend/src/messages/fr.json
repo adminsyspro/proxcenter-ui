@@ -4740,7 +4740,8 @@
         "framing": "Délimitation",
         "facility": "Facility",
         "categories": "Catégories d'audit",
-        "categoriesHelper": "Laissez vide pour transférer toutes les catégories.",
+        "categoriesHelper": "Seules les catégories cochées sont transférées.",
+        "categoriesNone": "Cochez au moins une catégorie.",
         "enabled": "Transfert activé"
       },
       "transportHelper": {
@@ -4786,7 +4787,13 @@
         "migration": "Migration",
         "admin": "Administration",
         "sdn": "SDN",
-        "api_tokens": "Jetons API"
+        "api_tokens": "Jetons API",
+        "firewall": "Firewall",
+        "ha": "Haute disponibilité",
+        "cluster": "Cluster",
+        "automation": "Automatisation",
+        "replication": "Réplication",
+        "alerts": "Alertes"
       },
       "destinations": "Destinations"
     },
@@ -5036,7 +5043,13 @@
       "storage": "Stockage",
       "backups": "Backups",
       "settings": "Paramètres",
-      "system": "Système"
+      "system": "Système",
+      "firewall": "Firewall",
+      "ha": "Haute disponibilité",
+      "cluster": "Cluster",
+      "automation": "Automatisation",
+      "replication": "Réplication",
+      "alerts": "Alertes"
     },
     "actions": {
       "login": "Connexion",
@@ -5064,7 +5077,30 @@
       "import": "Import",
       "test": "Test",
       "enable": "Activation",
-      "disable": "Désactivation"
+      "disable": "Désactivation",
+      "upgrade": "Mise à jour",
+      "reboot": "Redémarrage",
+      "shutdown": "Extinction",
+      "maintenance": "Maintenance",
+      "execute": "Exécution",
+      "apply": "Application",
+      "sync": "Synchronisation",
+      "run": "Lancement",
+      "acknowledge": "Acquittement",
+      "resolve": "Résolution",
+      "failover": "Failover",
+      "failback": "Failback",
+      "cancel": "Annulation",
+      "drsMigrate": "Migration DRS",
+      "rollingStart": "Mise à jour progressive démarrée",
+      "rollingStep": "Étape de mise à jour progressive",
+      "rollingFinish": "Mise à jour progressive terminée",
+      "drainStart": "Drain d'hôte démarré",
+      "drainStep": "Étape de drain",
+      "drainFinish": "Drain d'hôte terminé",
+      "replicationSync": "Synchronisation de réplication",
+      "replicationFix": "Correction de réplica",
+      "drillRun": "Exercice de restauration"
     }
   },
   "security": {

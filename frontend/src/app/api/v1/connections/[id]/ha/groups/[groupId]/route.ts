@@ -4,6 +4,7 @@ import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -128,5 +129,5 @@ return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
 }
 
 export const GET = withPublicApiGuard("ha-group-get", getHandler)
-export const PUT = withPublicApiGuard("ha-group-update", putHandler)
-export const DELETE = withPublicApiGuard("ha-group-delete", deleteHandler)
+export const PUT = withAudit({ category: "ha", resourceType: "group", resourceParam: "groupId" }, withPublicApiGuard("ha-group-update", putHandler))
+export const DELETE = withAudit({ category: "ha", resourceType: "group", resourceParam: "groupId" }, withPublicApiGuard("ha-group-delete", deleteHandler))

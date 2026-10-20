@@ -3,6 +3,7 @@ import { NextResponse } from "next/server"
 import { getSessionPrisma } from "@/lib/tenant"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { requestWarmCutover } from "@/lib/migration/warm/warm-pipeline"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -15,7 +16,7 @@ const CUTOVER_ELIGIBLE = new Set(["delta_sync", "awaiting_cutover"])
  * Ask a running warm migration to cut over now (accept the current downtime),
  * optionally with the guest conversion choice for this cutover (#1000).
  */
-export async function POST(
+async function handlePost(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -61,3 +62,5 @@ export async function POST(
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const POST = withAudit({ category: "migration", resourceType: "migration", resourceParam: "id", action: "run" }, handlePost)

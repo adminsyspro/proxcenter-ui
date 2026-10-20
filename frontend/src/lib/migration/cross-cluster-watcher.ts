@@ -97,7 +97,7 @@ async function runSshForWatcher(
 
     const res = await fetch(`${ORCHESTRATOR_URL}/api/v1/ssh/exec`, {
       method: 'POST',
-      headers: orchestratorHeaders({ 'Content-Type': 'application/json' }),
+      headers: await orchestratorHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(timeoutMs),
     })

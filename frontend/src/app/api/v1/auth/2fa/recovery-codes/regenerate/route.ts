@@ -6,10 +6,11 @@ import { prisma } from "@/lib/db/prisma"
 import { generateRecoveryCodes } from "@/lib/auth/recovery"
 import { replaceRecoveryCodes, verifyReauthCredentials } from "@/lib/auth/totp-admin"
 import { audit } from "@/lib/audit"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
-export async function POST(req: Request) {
+async function handlePost(req: Request) {
   const session = await getServerSession(authOptions)
 
   if (!session?.user?.id) {
@@ -47,3 +48,5 @@ export async function POST(req: Request) {
 
   return NextResponse.json({ data: { recoveryCodes: plain } })
 }
+
+export const POST = withAudit({ category: "auth", resourceType: "regenerate" }, handlePost)

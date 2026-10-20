@@ -20,7 +20,7 @@ export async function GET(
     const { id } = await ctx.params
 
     const response = await fetch(`${ORCHESTRATOR_URL}/api/v1/rolling-updates/${id}`, {
-      headers: orchestratorHeaders({ "Content-Type": "application/json" }),
+      headers: await orchestratorHeaders({ "Content-Type": "application/json" }),
     })
 
     const data = await response.json()

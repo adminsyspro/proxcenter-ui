@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 
 import { orchestratorFetch } from '@/lib/orchestrator'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
+import { withAudit } from '@/lib/audit/withAudit'
 
 export const runtime = 'nodejs'
 
@@ -34,7 +35,7 @@ export async function GET(
 }
 
 // DELETE /api/v1/orchestrator/reports/[id] - Delete a report
-export async function DELETE(
+async function handleDelete(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -58,3 +59,5 @@ export async function DELETE(
     )
   }
 }
+
+export const DELETE = withAudit({ category: 'alerts', resourceType: 'report', resourceParam: 'id' }, handleDelete)

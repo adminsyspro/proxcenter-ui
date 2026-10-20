@@ -87,8 +87,8 @@ export async function proxyHaJson(path: string, opts: HaProxyOptions = {}): Prom
       method,
       headers:
         body === undefined
-          ? orchestratorHeaders()
-          : orchestratorHeaders({ 'Content-Type': 'application/json' }),
+          ? await orchestratorHeaders()
+          : await orchestratorHeaders({ 'Content-Type': 'application/json' }),
       body: body === undefined ? undefined : JSON.stringify(body),
       cache: 'no-store',
     })

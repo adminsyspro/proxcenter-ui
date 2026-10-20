@@ -7,10 +7,11 @@ import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
 import { putMultiUse, readMultiUse } from "@/lib/console/session"
 import { parseSpiceConfig } from "@/lib/console/spiceConfig"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
-export async function POST(
+async function handlePost(
   _req: Request,
   ctx: { params: Promise<{ id: string; type: string; node: string; vmid: string }> }
 ) {
@@ -80,3 +81,5 @@ export async function POST(
 export function consumeSpiceSession(sessionId: string) {
   return readMultiUse(sessionId)
 }
+
+export const POST = withAudit({ category: "vms", resourceType: "guest", resourceTypeParam: "type", resourceParam: "vmid", action: "console.open" }, handlePost)

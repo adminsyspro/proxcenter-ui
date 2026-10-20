@@ -1,5 +1,6 @@
 import { proxyHaJson } from '@/lib/orchestrator/haProxy'
 import { haWriteGuard } from '@/lib/orchestrator/haRoute'
+import { withAudit } from '@/lib/audit/withAudit'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -18,16 +19,19 @@ async function proxyMaintenance(
   return proxyHaJson(`/ha/maintenance/${encodeURIComponent(node)}`, { method })
 }
 
-export async function POST(
+async function handlePost(
   _request: Request,
   { params }: { params: Promise<{ node: string }> }
 ) {
   return proxyMaintenance('POST', params)
 }
 
-export async function DELETE(
+async function handleDelete(
   _request: Request,
   { params }: { params: Promise<{ node: string }> }
 ) {
   return proxyMaintenance('DELETE', params)
 }
+
+export const POST = withAudit({ category: 'system', resourceType: 'node', resourceParam: 'node' }, handlePost)
+export const DELETE = withAudit({ category: 'system', resourceType: 'node', resourceParam: 'node' }, handleDelete)

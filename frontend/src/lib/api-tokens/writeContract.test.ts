@@ -121,7 +121,13 @@ describe('write contract: declared entries', () => {
   })
 
   it.each(PUBLIC_API_ALLOWLIST.map(e => [e.id, e] as const))('(a) %s is the guarded export of its route file', (_id, entry) => {
-    expect(routeSource(entry)).toContain(`export const ${entry.method} = withPublicApiGuard("${entry.id}"`)
+    // A mutating export is wrapped by withAudit() (#1105, enforced by
+    // lib/audit/routeCoverage.test.ts); the guard stays the innermost wrapper
+    // so the token verdict is decided before anything else runs.
+    const guarded = `withPublicApiGuard\\("${entry.id}"`
+    expect(routeSource(entry)).toMatch(
+      new RegExp(`export const ${entry.method} = (?:withAudit\\(\\{[^}]*\\}, )?${guarded}`),
+    )
   })
 
   it.each(writeEntries.map(e => [e.id, e] as const))('(b, c) %s needs one write scope and declares its perimeter', (_id, entry) => {

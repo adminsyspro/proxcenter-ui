@@ -2,11 +2,12 @@ import { NextRequest } from 'next/server'
 
 import { proxyHaJson } from '@/lib/orchestrator/haProxy'
 import { haWriteGuard } from '@/lib/orchestrator/haRoute'
+import { withAudit } from '@/lib/audit/withAudit'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-export async function POST(request: NextRequest) {
+async function handlePost(request: NextRequest) {
   const guard = await haWriteGuard()
   if (guard) return guard
 
@@ -17,3 +18,5 @@ export async function POST(request: NextRequest) {
 
   return proxyHaJson('/ha/deploy', { method: 'POST', body })
 }
+
+export const POST = withAudit({ category: 'system', resourceType: 'ha', action: 'create' }, handlePost)

@@ -4,6 +4,7 @@ import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { requireProviderTenant } from "@/lib/tenant"
 import { ensureDefaultDatacenter, insertDatacenter, listDatacenters } from "@/lib/db/datacenters"
 import { invalidateGreenResolution } from "@/lib/green/resolve"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -23,7 +24,7 @@ export async function GET() {
   }
 }
 
-export async function POST(req: NextRequest) {
+async function handlePost(req: NextRequest) {
   try {
     const providerGate = await requireProviderTenant()
     if (providerGate) return providerGate
@@ -57,3 +58,5 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const POST = withAudit({ category: "connections", resourceType: "datacenter" }, handlePost)

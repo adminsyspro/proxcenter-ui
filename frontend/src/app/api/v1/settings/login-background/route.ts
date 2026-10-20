@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { getCurrentTenantId } from '@/lib/tenant'
 import { getAsset, putAsset, deleteAsset } from '@/lib/branding/assetStore'
+import { withAudit } from '@/lib/audit/withAudit'
 
 const SERVE_PATH = '/api/v1/settings/login-background/serve'
 const VALID_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
@@ -17,7 +18,7 @@ export async function GET() {
   } catch { return NextResponse.json({ imageUrl: null }) }
 }
 
-export async function POST(request: Request) {
+async function handlePost(request: Request) {
   try {
     const permError = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
     if (permError) return permError
@@ -37,7 +38,7 @@ export async function POST(request: Request) {
   } catch { return NextResponse.json({ error: 'Upload failed' }, { status: 500 }) }
 }
 
-export async function DELETE() {
+async function handleDelete() {
   try {
     const permError = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
     if (permError) return permError
@@ -46,3 +47,6 @@ export async function DELETE() {
     return NextResponse.json({ success: true })
   } catch { return NextResponse.json({ error: 'Delete failed' }, { status: 500 }) }
 }
+
+export const POST = withAudit({ category: 'settings', resourceType: 'login_background' }, handlePost)
+export const DELETE = withAudit({ category: 'settings', resourceType: 'login_background' }, handleDelete)

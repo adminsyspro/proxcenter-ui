@@ -937,6 +937,9 @@ return
 
       // i440fx est le défaut, pas besoin de l'envoyer
 
+      // Carte graphique : "default" laisse PVE choisir selon l'OS (#1157)
+      if (graphicCard !== 'default') payload.vga = graphicCard
+
       // Disques
       for (const disk of disks) {
         if (disk.importMode && disk.storage && disk.importVolume) {

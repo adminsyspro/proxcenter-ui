@@ -10,6 +10,7 @@ import { getConnectionById } from '@/lib/connections/getConnection'
 import { orchestratorOrPve } from '@/lib/firewall/withPveFallback'
 import * as pveDirect from '@/lib/firewall/pveDirect'
 import { residualEscapeRefusal } from '@/lib/api/pathParam'
+import { withAudit } from '@/lib/audit/withAudit'
 
 // DELETE /api/v1/firewall/ipsets/[connectionId]/[ipsetName]/entries/[cidr] - Delete entry
 async function deleteHandler(
@@ -48,4 +49,4 @@ return NextResponse.json(
   }
 }
 
-export const DELETE = withPublicApiGuard("fw-ipset-entry-delete", deleteHandler)
+export const DELETE = withAudit({ category: 'firewall', resourceType: 'entry', resourceParam: 'cidr' }, withPublicApiGuard("fw-ipset-entry-delete", deleteHandler))

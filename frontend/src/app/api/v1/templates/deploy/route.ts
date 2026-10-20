@@ -31,6 +31,7 @@ import { policyQosSuffix } from "@/lib/vdc/drives"
 import { DEFAULT_TENANT_ID } from "@/lib/tenant"
 import { checkVmidAgainstTenantRange } from "@/lib/tenant/vmidRange"
 import { resolveProviderVdcTarget, type ProviderVdcTarget } from "@/lib/vdc/providerTarget"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -60,7 +61,7 @@ async function updateDeployment(id: string, status: DeploymentStatus, extra: Rec
   })
 }
 
-export async function POST(req: Request) {
+async function handlePost(req: Request) {
   try {
     const prisma = await getSessionPrisma()
     const denied = await checkPermission(PERMISSIONS.VM_CREATE)
@@ -976,3 +977,5 @@ async function runIsoDeploy(args: {
     status: "success",
   })
 }
+
+export const POST = withAudit({ category: "templates", resourceType: "template", action: "create" }, handlePost)

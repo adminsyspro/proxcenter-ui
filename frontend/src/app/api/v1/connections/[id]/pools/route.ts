@@ -8,6 +8,7 @@ import { audit } from '@/lib/audit'
 import { invalidateInventoryCache } from '@/lib/cache/inventoryCache'
 import { prisma } from '@/lib/db/prisma'
 import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
+import { withAudit } from '@/lib/audit/withAudit'
 
 export const runtime = 'nodejs'
 
@@ -250,6 +251,6 @@ async function deleteHandler(req: Request, ctx: Ctx) {
 }
 
 export const GET = withPublicApiGuard("pools-list", getHandler)
-export const POST = withPublicApiGuard("pool-create", postHandler)
-export const PUT = withPublicApiGuard("pool-update", putHandler)
-export const DELETE = withPublicApiGuard("pool-delete", deleteHandler)
+export const POST = withAudit({ category: 'connections', resourceType: 'pool', resourceParam: 'id' }, withPublicApiGuard("pool-create", postHandler))
+export const PUT = withAudit({ category: 'connections', resourceType: 'pool', resourceParam: 'id' }, withPublicApiGuard("pool-update", putHandler))
+export const DELETE = withAudit({ category: 'connections', resourceType: 'pool', resourceParam: 'id' }, withPublicApiGuard("pool-delete", deleteHandler))

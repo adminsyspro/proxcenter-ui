@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 
 import { getSessionPrisma } from "@/lib/tenant"
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
+import { withAudit } from '@/lib/audit/withAudit'
 
 export const runtime = 'nodejs'
 
@@ -9,7 +10,7 @@ export const runtime = 'nodejs'
  * DELETE /api/v1/alerts/batch
  * Supprimer des alertes par IDs
  */
-export async function DELETE(req: Request) {
+async function handleDelete(req: Request) {
   try {
     const prisma = await getSessionPrisma()
     const permError = await checkPermission(PERMISSIONS.ALERTS_MANAGE)
@@ -38,3 +39,5 @@ export async function DELETE(req: Request) {
 return NextResponse.json({ error: error?.message || 'Server error' }, { status: 500 })
   }
 }
+
+export const DELETE = withAudit({ category: 'alerts', resourceType: 'batch' }, handleDelete)

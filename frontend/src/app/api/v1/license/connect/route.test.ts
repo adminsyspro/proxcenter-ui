@@ -3,17 +3,25 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 const checkPermissionMock = vi.fn<(...a: any[]) => Promise<Response | null>>()
 const fetchMock = vi.fn()
 const requireProviderTenantMock = vi.fn<() => Promise<Response | null>>()
+const auditMock = vi.fn<(...a: any[]) => Promise<string>>()
 
 vi.mock('@/lib/rbac', () => ({ checkPermission: checkPermissionMock, PERMISSIONS: { ADMIN_SETTINGS: 'admin.settings' } }))
 vi.mock('@/lib/tenant', () => ({ requireProviderTenant: requireProviderTenantMock }))
 vi.mock('@/lib/orchestrator/headers', () => ({ orchestratorHeaders: (x: any) => ({ ...x }) }))
+vi.mock('@/lib/audit', () => ({ audit: (...a: any[]) => auditMock(...a) }))
 
-async function routes() { const mod = await import('./route'); return { POST: mod.POST, DELETE: mod.DELETE } }
+// The handlers ignore their request, but withAudit() (#1105) reads it.
+const req = (method: string) => new Request('http://test/api/v1/license/connect', { method })
+async function routes() {
+  const mod = await import('./route')
+  return { POST: () => mod.POST(req('POST')), DELETE: () => mod.DELETE(req('DELETE')) }
+}
 
 beforeEach(() => {
   checkPermissionMock.mockReset().mockResolvedValue(null)
   requireProviderTenantMock.mockReset().mockResolvedValue(null)
   fetchMock.mockReset()
+  auditMock.mockReset().mockResolvedValue('audit-id')
   vi.stubGlobal('fetch', fetchMock)
 })
 
@@ -25,6 +33,12 @@ describe('/api/v1/license/connect', () => {
     expect((await POST()).status).toBe(403)
     expect((await DELETE()).status).toBe(403)
     expect(fetchMock).not.toHaveBeenCalled()
+    // One failure row per refusal, from withAudit(): the route itself never audits.
+    expect(auditMock).toHaveBeenCalledTimes(2)
+    expect(auditMock.mock.calls.map(c => c[0])).toEqual([
+      expect.objectContaining({ category: 'system', action: 'create', resourceType: 'connect', status: 'failure', errorMessage: 'forbidden', details: expect.objectContaining({ method: 'POST', httpStatus: 403 }) }),
+      expect.objectContaining({ category: 'system', action: 'delete', resourceType: 'connect', status: 'failure', errorMessage: 'forbidden', details: expect.objectContaining({ method: 'DELETE', httpStatus: 403 }) }),
+    ])
   })
 
   it('refuses a caller outside the provider tenant before the permission check, on both verbs', async () => {
@@ -47,6 +61,8 @@ describe('/api/v1/license/connect', () => {
     expect(await res.json()).toMatchObject({ success: true, connection: { status: 'pairing', user_code: 'ABCD-2345' } })
     expect(fetchMock.mock.calls[0][0]).toMatch(/\/api\/v1\/license\/connect$/)
     expect(fetchMock.mock.calls[0][1].method).toBe('POST')
+    expect(auditMock).toHaveBeenCalledTimes(1)
+    expect(auditMock.mock.calls[0][0]).toMatchObject({ category: 'system', action: 'create', resourceType: 'connect', status: 'success', details: expect.objectContaining({ route: '/api/v1/license/connect', httpStatus: 200 }) })
   })
 
   it('forwards an orchestrator refusal with its code and portal code', async () => {

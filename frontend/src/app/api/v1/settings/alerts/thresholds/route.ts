@@ -7,6 +7,7 @@ import { DEFAULT_TENANT_ID, getCurrentTenantId } from '@/lib/tenant'
 import { alertsApi, parseOrchestratorError } from '@/lib/orchestrator/client'
 import { demoResponse } from '@/lib/demo/demo-api'
 import { DEFAULT_COVERAGE_SETTINGS, normalizeExcludeTag, normalizeGraceHours } from '@/lib/backups/coverage'
+import { withAudit } from '@/lib/audit/withAudit'
 
 export const runtime = 'nodejs'
 
@@ -139,7 +140,7 @@ export async function GET(req: Request) {
  * when ORCHESTRATOR_URL is configured (Enterprise), so orchestrator-driven
  * real-time monitoring stays in sync.
  */
-export async function PUT(req: Request) {
+async function handlePut(req: Request) {
   const demo = demoResponse(req)
   if (demo) return demo
 
@@ -180,3 +181,5 @@ export async function PUT(req: Request) {
     )
   }
 }
+
+export const PUT = withAudit({ category: 'settings', resourceType: 'threshold' }, handlePut)

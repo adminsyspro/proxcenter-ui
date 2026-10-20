@@ -4,6 +4,7 @@ import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { requireProviderTenant } from "@/lib/tenant"
 import { audit } from "@/lib/audit"
 import { getVdcZoneStatus, syncVdcZone } from "@/lib/vdc/transportOps"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -41,7 +42,7 @@ export async function GET(_req: Request, ctx: RouteContext) {
 
 // POST /api/v1/admin/vdcs/[id]/zone
 // Push the desired peers and MTU to Proxmox (recreating a missing zone) and apply.
-export async function POST(_req: Request, ctx: RouteContext) {
+async function handlePost(_req: Request, ctx: RouteContext) {
   const g = await gate(ctx)
   if (g instanceof Response) return g
   try {
@@ -60,3 +61,5 @@ export async function POST(_req: Request, ctx: RouteContext) {
     return fail(e)
   }
 }
+
+export const POST = withAudit({ category: "admin", resourceType: "vdc", resourceParam: "id" }, handlePost)

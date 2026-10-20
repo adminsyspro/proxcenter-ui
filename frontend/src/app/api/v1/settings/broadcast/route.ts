@@ -6,6 +6,7 @@ import { audit } from '@/lib/audit'
 import { requireBroadcastAdmin } from '@/lib/broadcast/guard'
 import { createBroadcast, listBroadcasts } from '@/lib/db/broadcasts'
 import { broadcastMessageSchema } from '@/lib/schemas'
+import { withAudit } from '@/lib/audit/withAudit'
 
 export async function GET() {
   const auth = await requireBroadcastAdmin()
@@ -18,7 +19,7 @@ export async function GET() {
   }
 }
 
-export async function POST(req: Request) {
+async function handlePost(req: Request) {
   const auth = await requireBroadcastAdmin()
   if (auth.denied) return auth.denied
 
@@ -51,3 +52,5 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }
+
+export const POST = withAudit({ category: 'settings', resourceType: 'broadcast' }, handlePost)

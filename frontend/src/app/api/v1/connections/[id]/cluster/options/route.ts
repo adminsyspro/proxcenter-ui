@@ -3,6 +3,7 @@ import { NextResponse } from "next/server"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -31,7 +32,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
 }
 
 // PUT - Mettre a jour les options du datacenter
-export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> | { id: string } }) {
+async function handlePut(req: Request, ctx: { params: Promise<{ id: string }> | { id: string } }) {
   try {
     const params = await Promise.resolve(ctx.params)
     const id = (params as any)?.id
@@ -85,3 +86,5 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> |
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const PUT = withAudit({ category: "cluster", resourceType: "cluster_option", resourceParam: "id" }, handlePut)

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { requireProviderTenant } from "@/lib/tenant"
 import { orchestratorHeaders } from "@/lib/orchestrator/headers"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -23,7 +24,7 @@ function unavailable(e: any): NextResponse | null {
   return null
 }
 
-export async function POST(req: Request) {
+async function handlePost(req: Request) {
   const providerGate = await requireProviderTenant()
   if (providerGate) return providerGate
   const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
@@ -34,7 +35,7 @@ export async function POST(req: Request) {
   try {
     const res = await fetch(`${ORCHESTRATOR_URL}/api/v1/license/import`, {
       method: "POST",
-      headers: orchestratorHeaders({ "Content-Type": "application/json" }),
+      headers: await orchestratorHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({ license: body.license, connection_id: body.connection_id }),
     })
     const data = await res.json().catch(() => null)
@@ -46,3 +47,5 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: e?.message || "Failed to import license" }, { status: 500 })
   }
 }
+
+export const POST = withAudit({ category: "system", resourceType: "import" }, handlePost)

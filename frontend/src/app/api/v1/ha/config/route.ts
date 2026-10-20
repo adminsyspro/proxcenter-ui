@@ -1,6 +1,7 @@
 import { proxyHaJson } from '@/lib/orchestrator/haProxy'
 import { haOperationWithBody } from '@/lib/orchestrator/haRoute'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
+import { withAudit } from '@/lib/audit/withAudit'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -14,4 +15,4 @@ export async function GET() {
   return proxyHaJson('/ha/config')
 }
 
-export const PUT = haOperationWithBody('/ha/config', 'PUT')
+export const PUT = withAudit({ category: 'system', resourceType: 'config' }, haOperationWithBody('/ha/config', 'PUT'))

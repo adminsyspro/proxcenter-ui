@@ -6,10 +6,11 @@ import { audit } from '@/lib/audit'
 import { requireBroadcastAdmin } from '@/lib/broadcast/guard'
 import { deleteBroadcast, updateBroadcast } from '@/lib/db/broadcasts'
 import { broadcastMessageSchema } from '@/lib/schemas'
+import { withAudit } from '@/lib/audit/withAudit'
 
 type Ctx = { params: Promise<{ id: string }> }
 
-export async function PUT(req: Request, ctx: Ctx) {
+async function handlePut(req: Request, ctx: Ctx) {
   const auth = await requireBroadcastAdmin()
   if (auth.denied) return auth.denied
 
@@ -46,7 +47,7 @@ export async function PUT(req: Request, ctx: Ctx) {
   }
 }
 
-export async function DELETE(_req: Request, ctx: Ctx) {
+async function handleDelete(_req: Request, ctx: Ctx) {
   const auth = await requireBroadcastAdmin()
   if (auth.denied) return auth.denied
 
@@ -67,3 +68,6 @@ export async function DELETE(_req: Request, ctx: Ctx) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }
+
+export const PUT = withAudit({ category: 'settings', resourceType: 'broadcast', resourceParam: 'id' }, handlePut)
+export const DELETE = withAudit({ category: 'settings', resourceType: 'broadcast', resourceParam: 'id' }, handleDelete)

@@ -8,6 +8,10 @@ vi.mock('@/lib/tenant', () => ({
   DEFAULT_TENANT_ID,
 }))
 
+const getPrincipalMock = vi.fn<() => Promise<any>>()
+
+vi.mock('@/lib/auth/principal', () => ({ getPrincipal: getPrincipalMock }))
+
 function jsonResponse(body: unknown, init: Partial<{ ok: boolean; status: number }> = {}) {
   return {
     ok: init.ok ?? true,
@@ -33,6 +37,8 @@ beforeEach(() => {
   vi.stubGlobal('fetch', fetchMock)
   getCurrentTenantIdMock.mockReset()
   getCurrentTenantIdMock.mockResolvedValue(null)
+  getPrincipalMock.mockReset()
+  getPrincipalMock.mockResolvedValue({ ok: true })
 })
 
 afterEach(() => {
@@ -66,6 +72,26 @@ describe('orchestratorFetch', () => {
     const [, init] = fetchMock.mock.calls[0]
     expect(init.method).toBe('POST')
     expect(init.body).toBe(JSON.stringify({ name: 'pin-db' }))
+  })
+
+  it('names the caller in the actor headers, and omits them outside a request (#1105)', async () => {
+    getPrincipalMock.mockResolvedValueOnce({
+      ok: true,
+      principal: { kind: 'session', userId: 'u1', userEmail: 'alice@example.org', tenantId: 'default', connectionIds: null },
+    })
+    fetchMock.mockResolvedValue(jsonResponse({}))
+
+    const { orchestratorFetch } = await import('./client')
+    await orchestratorFetch('/drs/recommendations/r1/execute', { method: 'POST' })
+
+    expect(fetchMock.mock.calls[0][1].headers['X-ProxCenter-Actor-Id']).toBe('u1')
+    expect(fetchMock.mock.calls[0][1].headers['X-ProxCenter-Actor-Email']).toBe('alice@example.org')
+
+    getPrincipalMock.mockRejectedValueOnce(new Error('headers() was called outside a request scope'))
+    await orchestratorFetch('/drs/status')
+
+    expect(fetchMock.mock.calls[1][1].headers).not.toHaveProperty('X-ProxCenter-Actor-Id')
+    expect(fetchMock.mock.calls[1][1].headers).not.toHaveProperty('X-ProxCenter-Actor-Email')
   })
 
   it('forwards the tenant header when the current tenant is not the default', async () => {

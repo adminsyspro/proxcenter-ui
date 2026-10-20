@@ -14,6 +14,7 @@ import {
   fetchOrchestratorAlerts,
   type OrchestratorAlertStatus,
 } from '@/lib/alerts/orchestratorAlertFeed'
+import { withAudit } from '@/lib/audit/withAudit'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -182,7 +183,7 @@ export async function GET(req: Request) {
  * DELETE /api/v1/orchestrator/alerts
  * Efface toutes les alertes actives (scoped to tenant connections)
  */
-export async function DELETE(req: Request) {
+async function handleDelete(req: Request) {
   const demo = demoResponse(req)
   if (demo) return demo
 
@@ -233,3 +234,5 @@ export async function DELETE(req: Request) {
     )
   }
 }
+
+export const DELETE = withAudit({ category: 'alerts', resourceType: 'alert' }, handleDelete)

@@ -11,6 +11,7 @@ import { setProgress, clearProgress } from "@/lib/upload-progress"
 import { UPLOAD_CHUNK_SIZE } from "@/lib/storage/uploadClient"
 import { licenseExcludedResponse } from "@/lib/api/response"
 import { isConnectionLicenseExcluded, licenseExcludedError } from "@/lib/license/exclusions"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 export const maxDuration = 600
@@ -117,7 +118,7 @@ function buildMultipartParts(boundary: string, contentType: string, fileName: st
 // Modes (via headers):
 //   X-Chunk-Index: stream a chunk directly to Proxmox
 //   X-Finalize: close the multipart form and get the Proxmox response
-export async function POST(
+async function handlePost(
   req: Request,
   ctx: { params: Promise<{ id: string; node: string; storage: string }> }
 ) {
@@ -138,7 +139,7 @@ export async function POST(
 // timeout with a Content-Length it will never satisfy. Destroying it makes
 // Proxmox drop the partial multipart body, and PVE only moves an upload into
 // place once it has received all of it, so nothing is left on the storage.
-export async function DELETE(
+async function handleDelete(
   req: Request,
   ctx: { params: Promise<{ id: string; node: string; storage: string }> }
 ) {
@@ -491,3 +492,6 @@ async function handleFinalize(
     setTimeout(() => clearProgress(uploadId), 30_000)
   }
 }
+
+export const POST = withAudit({ category: "storage", resourceType: "storage", resourceParam: "storage", action: "import" }, handlePost)
+export const DELETE = withAudit({ category: "storage", resourceType: "storage", resourceParam: "storage", action: "import" }, handleDelete)

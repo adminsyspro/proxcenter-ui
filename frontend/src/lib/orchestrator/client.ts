@@ -1,5 +1,6 @@
 import type { Drill, DrillEvent, DrillRequest, DrillSettings, Preflight, Schedule, ScheduleInput, ScheduleRun } from '@/lib/backups/restoreDrills/types'
 import type { CleanupStarted, RecoveryExecutionEvent, ReplicationJob, ReplicationCheckRequest, ReplicationHealthStatus, SnapshotIdentity, SSHConnectivityResult } from './site-recovery.types'
+import { actorHeaders } from './actor'
 
 // src/lib/orchestrator/client.ts
 // Client pour communiquer avec le backend Go d'orchestration
@@ -62,6 +63,10 @@ export async function orchestratorFetch<T>(
   } catch {
     // No session / not in a request: send without tenant header (provider mode)
   }
+
+  // Who is behind the call, for the orchestrator's own audit rows (#1105).
+  // Left out outside a request, where the orchestrator names itself.
+  Object.assign(headers, await actorHeaders())
 
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), timeout)

@@ -14,6 +14,7 @@ import {
   Button,
   Card,
   CardContent,
+  Checkbox,
   Chip,
   Collapse,
   Dialog,
@@ -23,7 +24,6 @@ import {
   FormHelperText,
   InputLabel,
   MenuItem,
-  OutlinedInput,
   Select,
   Stack,
   Switch,
@@ -306,10 +306,23 @@ function DestinationDialog({ initial, saving, onCancel, onSave, categoryLabel }:
   const [testResult, setTestResult] = useState<TestResult | null>(null)
   const [touched, setTouched] = useState(false)
 
+  // The stored filter keeps its meaning (empty = every category); the dialog
+  // shows it as boxes, all ticked for "every category".
+  const [picked, setPicked] = useState<SyslogDestination['categories']>(
+    initial.categories.length ? initial.categories : [...AUDIT_CATEGORIES],
+  )
+
   const isNew = !initial.id
   const nameMissing = form.name.trim() === ''
   const hostMissing = form.host.trim() === ''
-  const invalid = nameMissing || hostMissing
+  const noCategory = picked.length === 0
+  const invalid = nameMissing || hostMissing || noCategory
+  const allPicked = picked.length === AUDIT_CATEGORIES.length
+
+  const togglePicked = (c: SyslogDestination['categories'][number]) =>
+    setPicked(p => (p.includes(c) ? p.filter(x => x !== c) : AUDIT_CATEGORIES.filter(x => x === c || p.includes(x))))
+
+  const toSave = (): SyslogDestination => ({ ...form, categories: allPicked ? [] : picked })
 
   const patch = (partial: Partial<SyslogDestination>) => setForm(f => ({ ...f, ...partial }))
 
@@ -329,7 +342,7 @@ function DestinationDialog({ initial, saving, onCancel, onSave, categoryLabel }:
       const r = await fetchJson<TestResult>(`${API}/test`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
+        body: JSON.stringify(toSave()),
       })
       setTestResult(r)
     } catch (err: any) {
@@ -342,7 +355,7 @@ function DestinationDialog({ initial, saving, onCancel, onSave, categoryLabel }:
   const submit = async () => {
     setTouched(true)
     if (invalid) return
-    await onSave({ ...form, name: form.name.trim(), host: form.host.trim() })
+    await onSave({ ...toSave(), name: form.name.trim(), host: form.host.trim() })
   }
 
   const testText = (r: TestResult) => {
@@ -357,8 +370,8 @@ function DestinationDialog({ initial, saving, onCancel, onSave, categoryLabel }:
       <AppDialogTitle onClose={onCancel} icon={<i className='ri-broadcast-line' />}>
         {isNew ? t('dialog.addTitle') : t('dialog.editTitle')}
       </AppDialogTitle>
-      <DialogContent>
-        <Stack spacing={2} sx={{ mt: 1 }}>
+      <DialogContent sx={{ pt: '20px !important' }}>
+        <Stack spacing={2}>
           <TextField
             size='small'
             fullWidth
@@ -459,31 +472,38 @@ function DestinationDialog({ initial, saving, onCancel, onSave, categoryLabel }:
             </FormControl>
           )}
 
-          <FormControl size='small' fullWidth sx={SMALL_SELECT_SX}>
-            <InputLabel shrink>{t('fields.categories')}</InputLabel>
-            <Select
-              multiple
-              displayEmpty
-              value={form.categories}
-              input={<OutlinedInput notched label={t('fields.categories')} />}
-              onChange={e => {
-                const v = e.target.value
-                patch({ categories: (typeof v === 'string' ? v.split(',') : v) as SyslogDestination['categories'] })
-              }}
-              renderValue={selected => {
-                const list = selected as string[]
-                if (list.length === 0) return <em>{t('allCategories')}</em>
-                return list.map(categoryLabel).join(', ')
-              }}
-            >
+          <Box
+            component='fieldset'
+            sx={{ m: 0, px: 1.5, pt: 0.5, pb: 1, border: 1, borderColor: touched && noCategory ? 'error.main' : 'divider', borderRadius: 1 }}
+          >
+            <Typography component='legend' variant='caption' color='text.secondary' sx={{ px: 0.5 }}>
+              {t('fields.categories')}
+            </Typography>
+            <FormControlLabel
+              control={
+                <Checkbox
+                  size='small'
+                  checked={allPicked}
+                  indeterminate={!allPicked && !noCategory}
+                  onChange={() => setPicked(allPicked ? [] : [...AUDIT_CATEGORIES])}
+                />
+              }
+              label={<Typography variant='body2' fontWeight={600}>{t('allCategories')}</Typography>}
+            />
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(3, 1fr)' }, columnGap: 1 }}>
               {AUDIT_CATEGORIES.map(c => (
-                <MenuItem key={c} value={c}>
-                  {categoryLabel(c)}
-                </MenuItem>
+                <FormControlLabel
+                  key={c}
+                  sx={{ mr: 0 }}
+                  control={<Checkbox size='small' checked={picked.includes(c)} onChange={() => togglePicked(c)} />}
+                  label={<Typography variant='body2'>{categoryLabel(c)}</Typography>}
+                />
               ))}
-            </Select>
-            <FormHelperText>{t('fields.categoriesHelper')}</FormHelperText>
-          </FormControl>
+            </Box>
+            <FormHelperText error={touched && noCategory}>
+              {touched && noCategory ? t('fields.categoriesNone') : t('fields.categoriesHelper')}
+            </FormHelperText>
+          </Box>
 
           <Collapse in={form.transport === 'tls'} unmountOnExit>
             <Stack spacing={2} sx={{ p: 2, border: 1, borderColor: 'divider', borderRadius: 1 }}>

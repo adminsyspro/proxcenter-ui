@@ -9,6 +9,7 @@ import {
 import { prisma } from "@/lib/db/prisma"
 import { encryptSecret } from "@/lib/crypto/secret"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -187,7 +188,7 @@ async function validateGrantTargets(grants: readonly GroupGrant[]): Promise<stri
 }
 
 // PUT /api/v1/auth/oidc — save the singleton OIDC config (insert or update)
-export async function PUT(req: Request) {
+async function handlePut(req: Request) {
   try {
     const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
     if (denied) return denied
@@ -303,3 +304,5 @@ export async function PUT(req: Request) {
     return NextResponse.json({ error: error?.message || "Server error" }, { status: 500 })
   }
 }
+
+export const PUT = withAudit({ category: "settings", resourceType: "oidc" }, handlePut)

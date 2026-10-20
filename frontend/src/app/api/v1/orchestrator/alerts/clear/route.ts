@@ -5,6 +5,7 @@ import { demoResponse } from '@/lib/demo/demo-api'
 import { DEFAULT_TENANT_ID, getCurrentTenantId, getTenantConnectionIds } from '@/lib/tenant'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { clearVisibleTenantAlerts } from '@/lib/alerts/clearVisible'
+import { withAudit } from '@/lib/audit/withAudit'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -13,7 +14,7 @@ export const dynamic = 'force-dynamic'
  * DELETE /api/v1/orchestrator/alerts/clear
  * Résout toutes les alertes actives (scoped to tenant connections)
  */
-export async function DELETE(req: Request) {
+async function handleDelete(req: Request) {
   const demo = demoResponse(req)
   if (demo) return demo
 
@@ -65,3 +66,5 @@ return NextResponse.json(
     )
   }
 }
+
+export const DELETE = withAudit({ category: 'alerts', resourceType: 'clear' }, handleDelete)

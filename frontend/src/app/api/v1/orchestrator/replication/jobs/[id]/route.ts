@@ -4,6 +4,7 @@ import { getOrchestratorClient, parseOrchestratorError } from "@/lib/orchestrato
 import { replicationErrorResponse } from "@/lib/orchestrator/replicationError"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { getTenantConnectionIds } from "@/lib/tenant"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -51,7 +52,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
   }
 }
 
-export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+async function handlePut(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const denied = await checkPermission(PERMISSIONS.AUTOMATION_MANAGE, "global", "*")
 
@@ -91,7 +92,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   }
 }
 
-export async function DELETE(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+async function handleDelete(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const denied = await checkPermission(PERMISSIONS.AUTOMATION_MANAGE, "global", "*")
 
@@ -113,3 +114,6 @@ export async function DELETE(_request: NextRequest, { params }: { params: Promis
     return replicationErrorResponse(e, "Failed to delete replication job")
   }
 }
+
+export const PUT = withAudit({ category: "replication", resourceType: "job", resourceParam: "id" }, handlePut)
+export const DELETE = withAudit({ category: "replication", resourceType: "job", resourceParam: "id" }, handleDelete)

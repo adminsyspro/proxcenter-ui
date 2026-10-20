@@ -345,7 +345,10 @@ describe('SyslogDestinationsCard dialog', () => {
     expect(combobox('Transport')).toHaveTextContent('UDP')
     expect(combobox('Format')).toHaveTextContent('RFC 5424')
     expect(combobox('Facility')).toHaveTextContent('log audit (13)')
-    expect(combobox('Audit categories')).toHaveTextContent('All categories')
+    // Every category is ticked: the filter stays empty, i.e. forward everything.
+    expect(within(dialog).getByRole('checkbox', { name: 'All categories' })).toBeChecked()
+    expect(within(dialog).getByRole('checkbox', { name: 'Authentication' })).toBeChecked()
+    expect(within(dialog).getByRole('checkbox', { name: 'VMs' })).toBeChecked()
     expect(screen.getByText(/^No delivery confirmation/)).toBeInTheDocument()
     // UDP has neither framing nor TLS settings.
     expect(screen.queryByText('Framing', { selector: 'label' })).not.toBeInTheDocument()
@@ -448,13 +451,15 @@ describe('SyslogDestinationsCard dialog', () => {
     await pick('Format', 'CEF')
     await pick('Facility', 'local0 (16)')
 
-    fireEvent.mouseDown(combobox('Audit categories'))
-    const auth = await screen.findByRole('option', { name: 'Authentication' })
+    // Untick everything, then tick the two categories wanted.
+    const all = within(dialog).getByRole('checkbox', { name: 'All categories' })
 
-    fireEvent.click(auth)
-    fireEvent.click(screen.getByRole('option', { name: 'VMs' }))
-    fireEvent.keyDown(auth, { key: 'Escape' })
-    expect(combobox('Audit categories')).toHaveTextContent('Authentication, VMs')
+    fireEvent.click(all)
+    expect(within(dialog).getByRole('checkbox', { name: 'Authentication' })).not.toBeChecked()
+    fireEvent.click(within(dialog).getByRole('checkbox', { name: 'VMs' }))
+    fireEvent.click(within(dialog).getByRole('checkbox', { name: 'Authentication' }))
+    expect(all).not.toBeChecked()
+    expect(all).toHaveAttribute('data-indeterminate', 'true')
     expect(combobox('Format')).toHaveTextContent('CEF')
     expect(combobox('Facility')).toHaveTextContent('local0 (16)')
 
@@ -464,6 +469,27 @@ describe('SyslogDestinationsCard dialog', () => {
     expect(requests('PUT')[0].body.destinations[0]).toMatchObject({ format: 'cef', facility: 16, categories: ['auth', 'vms'] })
     expect(await screen.findByText('2 categories')).toBeInTheDocument()
     expect(screen.getByText('CEF')).toBeInTheDocument()
+  })
+
+  it('refuses to save with no category ticked, and saves every ticked box back as an empty filter', async () => {
+    mockFetch({ destinations: [], status: {} })
+    renderCard()
+    const dialog = await openAddDialog()
+
+    fillRequired()
+    const all = within(dialog).getByRole('checkbox', { name: 'All categories' })
+
+    fireEvent.click(all)
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
+    expect(await within(dialog).findByText('Select at least one category.')).toBeInTheDocument()
+    expect(requests('PUT')).toHaveLength(0)
+
+    // Every box ticked again is stored as the empty filter, "every category".
+    fireEvent.click(all)
+    expect(all).toBeChecked()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(requests('PUT')[0].body.destinations[0].categories).toEqual([])
   })
 
   it('edits a destination in place: prefilled, trimmed, written back under the same id', async () => {
@@ -492,7 +518,8 @@ describe('SyslogDestinationsCard dialog', () => {
     expect(field(/^Port/)).toHaveValue(6514)
     expect(combobox('Transport')).toHaveTextContent('TLS')
     expect(combobox('Framing')).toHaveTextContent('Octet counting')
-    expect(combobox('Audit categories')).toHaveTextContent('Authentication')
+    expect(within(dialog).getByRole('checkbox', { name: 'Authentication' })).toBeChecked()
+    expect(within(dialog).getByRole('checkbox', { name: 'VMs' })).not.toBeChecked()
     expect(field(/^Server name/)).toHaveValue('siem.internal')
     expect(field(/^CA certificate/)).toHaveValue('PEM')
 

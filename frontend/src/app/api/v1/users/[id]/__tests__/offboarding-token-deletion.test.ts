@@ -50,7 +50,7 @@ const {
   getCurrentTenantIdMock: vi.fn<() => Promise<string>>(),
   getServerSessionMock: vi.fn<() => Promise<any>>(),
   hashPasswordMock: vi.fn<() => Promise<string>>(),
-  auditMock: vi.fn<() => Promise<string>>(),
+  auditMock: vi.fn<(...a: any[]) => Promise<string>>(),
   revokeAllSessionsMock: vi.fn<() => Promise<number>>(),
 }))
 
@@ -58,7 +58,12 @@ vi.mock('next-auth', () => ({ getServerSession: getServerSessionMock }))
 vi.mock('@/lib/auth/config', () => ({ authOptions: {} }))
 vi.mock('@/lib/auth/password', () => ({ hashPassword: hashPasswordMock }))
 vi.mock('@/lib/auth/sessions', () => ({ revokeAllSessions: revokeAllSessionsMock }))
-vi.mock('@/lib/audit', () => ({ audit: auditMock }))
+vi.mock('@/lib/audit', async () => {
+  // audit() flips the request's audit scope so withAudit() adds no row of its
+  // own (#1105); the stand-in must do the same or every explicit row doubles.
+  const { markAuditExplicit } = await vi.importActual<typeof import('@/lib/audit/scope')>('@/lib/audit/scope')
+  return { audit: (...a: any[]) => { markAuditExplicit(); return auditMock(...a) } }
+})
 vi.mock('@/lib/rbac', () => ({
   checkPermission: checkPermissionMock,
   PERMISSIONS: { ADMIN_USERS: 'admin.users' },
@@ -261,7 +266,14 @@ describe('PATCH /users/[id] — deleteApiTokens', () => {
     // The whole point of the ordering: nobody was left believing the tokens
     // died with an account that is, in fact, still enabled.
     expect((await prismaTest.user.findUnique({ where: { id: 'u-leaver' } }))?.enabled).toBe(true)
-    expect(auditMock).not.toHaveBeenCalled()
+    // The route never reached its own audit(): the only row is the failure
+    // withAudit() journals for the 500 (#1105), naming no deleted token.
+    expect(auditMock).toHaveBeenCalledTimes(1)
+    expect(auditMock.mock.calls[0]![0]).toMatchObject({
+      category: 'users', action: 'update', resourceType: 'user', resourceId: 'u-leaver', status: 'failure',
+      errorMessage: 'token store unreachable', details: expect.objectContaining({ method: 'PATCH', httpStatus: 500 }),
+    })
+    expect(auditMock.mock.calls[0]![0].details).not.toHaveProperty('apiTokensDeleted')
     expect(await exists('live-default')).toBe(true)
   })
 })

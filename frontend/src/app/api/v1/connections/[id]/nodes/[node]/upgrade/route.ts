@@ -5,6 +5,7 @@ import { resolveNodeSshEndpoint } from "@/lib/ssh/node-endpoint"
 import { executeSSH, type SSHResult } from "@/lib/ssh/exec"
 import { checkPermission, PERMISSIONS, buildNodeResourceId } from "@/lib/rbac"
 import { verifyNodeTarget, sshTargetError } from "@/lib/ssh/verify-node-target"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -27,7 +28,7 @@ const REBOOT_REQUIRED_TEST =
  * POST — Start a node upgrade via SSH (apt-get dist-upgrade).
  * The command runs in background (nohup) so the HTTP request returns immediately.
  */
-export async function POST(req: Request, ctx: Ctx) {
+async function handlePost(req: Request, ctx: Ctx) {
   const { id, node } = await ctx.params
 
   const denied = await checkPermission(
@@ -147,3 +148,5 @@ export async function GET(_req: Request, ctx: Ctx) {
     reboot_required: rebootRequired,
   })
 }
+
+export const POST = withAudit({ category: "nodes", resourceType: "node", resourceParam: "node", action: "upgrade" }, handlePost)

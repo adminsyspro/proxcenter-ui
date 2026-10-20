@@ -21,7 +21,12 @@ vi.mock('@/lib/rbac', () => ({
   checkPermission: (...a: unknown[]) => checkPermissionMock(...a),
   PERMISSIONS: { ADMIN_SETTINGS: 'admin.settings' },
 }))
-vi.mock('@/lib/audit', () => ({ audit: (...a: unknown[]) => auditMock(...a) }))
+vi.mock('@/lib/audit', async () => {
+  // audit() flips the request's audit scope so withAudit() adds no row of its
+  // own (#1105); the stand-in must do the same or every explicit row doubles.
+  const { markAuditExplicit } = await vi.importActual<typeof import('@/lib/audit/scope')>('@/lib/audit/scope')
+  return { audit: (...a: unknown[]) => { markAuditExplicit(); return auditMock(...a) } }
+})
 vi.mock('@/lib/vdc/transportOps', () => ({
   getVdcTransportStatus: (...a: unknown[]) => statusMock(...a),
   provisionVdcTransport: (...a: unknown[]) => provisionMock(...a),
@@ -84,9 +89,15 @@ describe('POST .../transport/provision', () => {
     expect(auditMock).toHaveBeenCalledWith(expect.objectContaining({ status: 'failure' }))
   })
 
-  it('maps a transport definition error to 400 without auditing', async () => {
+  it('maps a transport definition error to 400, leaving only the wrapper failure row', async () => {
     provisionMock.mockRejectedValueOnce(new Error('VXLAN transport: the transport network is incomplete.'))
     expect((await callRoute(POST as any, { method: 'POST', params: { id: 'v1' } })).status).toBe(400)
-    expect(auditMock).not.toHaveBeenCalled()
+    // The route never reached its own audit(): the refusal row is withAudit()'s.
+    expect(auditMock).toHaveBeenCalledTimes(1)
+    expect(auditMock.mock.calls[0][0]).toMatchObject({
+      category: 'admin', action: 'apply', resourceType: 'vdc', resourceId: 'v1', status: 'failure',
+      errorMessage: 'VXLAN transport: the transport network is incomplete.',
+      details: expect.objectContaining({ method: 'POST', httpStatus: 400, params: { id: 'v1' } }),
+    })
   })
 })

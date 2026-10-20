@@ -7,6 +7,7 @@ import { authOptions } from "@/lib/auth/config"
 import { resolveInstanceId } from "@/lib/migration/orphan-sweep"
 import { startMigrationJob } from "@/lib/migration/start-job"
 import { authorizeMigrationTarget } from "@/lib/migration/authorize"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -14,7 +15,7 @@ export const runtime = "nodejs"
  * POST /api/v1/migrations/[id]/retry
  * Retry a failed migration
  */
-export async function POST(
+async function handlePost(
   _req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -100,3 +101,5 @@ export async function POST(
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const POST = withAudit({ category: "migration", resourceType: "migration", resourceParam: "id", action: "run" }, handlePost)

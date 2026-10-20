@@ -6,10 +6,11 @@ import { prisma } from "@/lib/db/prisma"
 import { audit } from "@/lib/audit"
 import { isEnrollmentRequiredFor } from "@/lib/auth/enforce-2fa"
 import { clearUserTotp, requireSuperAdminCaller } from "@/lib/auth/totp-admin"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
-export async function POST(_req: Request, ctx: { params: Promise<{ id: string }> }) {
+async function handlePost(_req: Request, ctx: { params: Promise<{ id: string }> }) {
   const denied = await requireSuperAdminCaller()
   if (denied) return denied
 
@@ -47,3 +48,5 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
 
   return NextResponse.json({ data: { ok: true } })
 }
+
+export const POST = withAudit({ category: "users", resourceType: "user", resourceParam: "id" }, handlePost)

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -48,7 +49,7 @@ export async function GET(
 }
 
 // POST - Exécuter immédiatement un job de réplication (Schedule now)
-export async function POST(
+async function handlePost(
   _req: Request,
   ctx: { params: Promise<{ id: string; node: string; jobId: string }> }
 ) {
@@ -80,7 +81,7 @@ export async function POST(
 }
 
 // DELETE - Supprimer un job de réplication
-export async function DELETE(
+async function handleDelete(
   _req: Request,
   ctx: { params: Promise<{ id: string; node: string; jobId: string }> }
 ) {
@@ -110,3 +111,6 @@ export async function DELETE(
     }, { status: 500 })
   }
 }
+
+export const POST = withAudit({ category: "replication", resourceType: "replication", resourceParam: "jobId" }, handlePost)
+export const DELETE = withAudit({ category: "replication", resourceType: "replication", resourceParam: "jobId" }, handleDelete)

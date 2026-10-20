@@ -11,6 +11,7 @@ import {
 import { invalidateGreenResolution } from "@/lib/green/resolve"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { pveFetch } from "@/lib/proxmox/client"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -74,7 +75,7 @@ export async function GET(_req: NextRequest, ctx: RouteContext) {
   }
 }
 
-export async function PUT(req: NextRequest, ctx: RouteContext) {
+async function handlePut(req: NextRequest, ctx: RouteContext) {
   try {
     const providerGate = await requireProviderTenant()
     if (providerGate) return providerGate
@@ -105,3 +106,5 @@ export async function PUT(req: NextRequest, ctx: RouteContext) {
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const PUT = withAudit({ category: "connections", resourceType: "green_config", resourceParam: "id" }, handlePut)

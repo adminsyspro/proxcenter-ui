@@ -14,6 +14,7 @@ import { findVmMetaByVmid } from '@/lib/cache/vmMetaCache'
 import { prisma } from '@/lib/db/prisma'
 import { checkTenantGuestScope } from '@/lib/vdc/guestScope'
 import { getTenantInfrastructureScope } from '@/lib/tenant/infraScope'
+import { withAudit } from '@/lib/audit/withAudit'
 
 export const runtime = 'nodejs'
 
@@ -804,7 +805,7 @@ return NextResponse.json(
   }
 }
 
-export async function DELETE(
+async function handleDelete(
   req: Request,
   { params }: { params: Promise<{ connectionId: string; node: string; upid: string }> }
 ) {
@@ -841,3 +842,5 @@ export async function DELETE(
 }
 
 export const GET = withPublicApiGuard("task-status", handler)
+
+export const DELETE = withAudit({ category: 'nodes', resourceType: 'task', resourceParam: 'upid' }, handleDelete)

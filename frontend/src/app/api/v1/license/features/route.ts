@@ -40,7 +40,7 @@ const DEFAULT_COMMUNITY_FEATURES = {
 export async function GET() {
   try {
     const res = await fetch(`${ORCHESTRATOR_URL}/api/v1/license/features`, {
-      headers: orchestratorHeaders(),
+      headers: await orchestratorHeaders(),
       cache: "no-store",
     })
 

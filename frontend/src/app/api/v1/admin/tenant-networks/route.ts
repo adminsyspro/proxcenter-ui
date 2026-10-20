@@ -7,6 +7,7 @@ import { requireProviderTenant } from "@/lib/tenant"
 import { audit } from "@/lib/audit"
 import { createTenantNetwork, listTenantNetworks } from "@/lib/vdc/tenantNetworks"
 import { mapTenantNetworkError } from "@/lib/vdc/httpErrors"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -37,7 +38,7 @@ export async function GET(req: NextRequest) {
 
 // POST /api/v1/admin/tenant-networks
 // Reserve a tenant-wide VNI and a PVE VNet id; no vDC carries it yet.
-export async function POST(req: NextRequest) {
+async function handlePost(req: NextRequest) {
   const denied = await gate()
   if (denied) return denied
   try {
@@ -64,3 +65,5 @@ export async function POST(req: NextRequest) {
     return fail(e)
   }
 }
+
+export const POST = withAudit({ category: "sdn", resourceType: "tenant_network" }, handlePost)

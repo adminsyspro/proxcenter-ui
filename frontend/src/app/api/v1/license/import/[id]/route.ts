@@ -2,12 +2,13 @@ import { NextResponse } from "next/server"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { requireProviderTenant } from "@/lib/tenant"
 import { orchestratorHeaders } from "@/lib/orchestrator/headers"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
 const ORCHESTRATOR_URL = process.env.ORCHESTRATOR_URL || "http://localhost:8080"
 
-export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string }> }) {
+async function handleDelete(_req: Request, ctx: { params: Promise<{ id: string }> }) {
   const providerGate = await requireProviderTenant()
   if (providerGate) return providerGate
   const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
@@ -17,7 +18,7 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string 
   try {
     const res = await fetch(`${ORCHESTRATOR_URL}/api/v1/license/import/${encodeURIComponent(id)}`, {
       method: "DELETE",
-      headers: orchestratorHeaders(),
+      headers: await orchestratorHeaders(),
     })
     const data = await res.json().catch(() => null)
     if (!res.ok) return NextResponse.json(data ?? { error: `HTTP ${res.status}` }, { status: res.status })
@@ -39,7 +40,7 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string 
   }
 }
 
-export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }) {
+async function handlePut(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const providerGate = await requireProviderTenant()
   if (providerGate) return providerGate
   const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
@@ -55,7 +56,7 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
   try {
     const res = await fetch(`${ORCHESTRATOR_URL}/api/v1/license/import/${encodeURIComponent(id)}`, {
       method: "PUT",
-      headers: orchestratorHeaders({ "Content-Type": "application/json" }),
+      headers: await orchestratorHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({ connection_ids: connectionIds }),
     })
     const data = await res.json().catch(() => null)
@@ -77,3 +78,6 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
     return NextResponse.json({ error: msg || "Failed to update license mapping" }, { status: 500 })
   }
 }
+
+export const DELETE = withAudit({ category: "system", resourceType: "import", resourceParam: "id" }, handleDelete)
+export const PUT = withAudit({ category: "system", resourceType: "import", resourceParam: "id" }, handlePut)

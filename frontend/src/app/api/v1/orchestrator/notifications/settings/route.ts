@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { orchestratorFetch } from '@/lib/orchestrator'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { requireProviderTenant } from '@/lib/tenant'
+import { withAudit } from '@/lib/audit/withAudit'
 
 export async function GET() {
   // Notification settings are global (orchestrator not tenant-aware) — restrict to admins
@@ -32,7 +33,7 @@ return NextResponse.json(
   }
 }
 
-export async function PUT(request: NextRequest) {
+async function handlePut(request: NextRequest) {
   // Notification settings are global (orchestrator not tenant-aware) — restrict to admins
   const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
   if (denied) return denied
@@ -60,3 +61,5 @@ return NextResponse.json(
     )
   }
 }
+
+export const PUT = withAudit({ category: 'alerts', resourceType: 'setting' }, handlePut)

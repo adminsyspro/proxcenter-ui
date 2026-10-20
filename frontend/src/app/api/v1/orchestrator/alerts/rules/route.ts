@@ -8,6 +8,7 @@ import { checkPermission, PERMISSIONS, getCurrentRbacInfraScope } from '@/lib/rb
 import { isFlatRecordVisible } from '@/lib/rbac/infraScope'
 import { ruleVisibleToTenant, setRuleOwner } from '@/lib/alerts/ruleOwners'
 import { injectVdcNodeScope } from '@/lib/alerts/ruleScope'
+import { withAudit } from '@/lib/audit/withAudit'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -76,7 +77,7 @@ export async function GET(req: Request) {
  * POST /api/v1/orchestrator/alerts/rules
  * Crée une nouvelle règle
  */
-export async function POST(req: Request) {
+async function handlePost(req: Request) {
   const demo = demoResponse(req)
   if (demo) return demo
 
@@ -172,3 +173,5 @@ return NextResponse.json(
     )
   }
 }
+
+export const POST = withAudit({ category: 'alerts', resourceType: 'rule' }, handlePost)

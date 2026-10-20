@@ -9,6 +9,7 @@ import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
 import { orchestratorOrPve } from '@/lib/firewall/withPveFallback'
 import * as pveDirect from '@/lib/firewall/pveDirect'
 import { getConnectionById } from '@/lib/connections/getConnection'
+import { withAudit } from '@/lib/audit/withAudit'
 
 // GET /api/v1/firewall/cluster/[connectionId] - Get cluster options or rules
 async function getHandler(
@@ -117,5 +118,5 @@ return NextResponse.json(
 }
 
 export const GET = withPublicApiGuard("fw-cluster-get", getHandler)
-export const PUT = withPublicApiGuard("fw-cluster-options-update", putHandler)
-export const POST = withPublicApiGuard("fw-cluster-rule-add", postHandler)
+export const PUT = withAudit({ category: 'firewall', resourceType: 'cluster', resourceParam: 'connectionId' }, withPublicApiGuard("fw-cluster-options-update", putHandler))
+export const POST = withAudit({ category: 'firewall', resourceType: 'cluster', resourceParam: 'connectionId' }, withPublicApiGuard("fw-cluster-rule-add", postHandler))

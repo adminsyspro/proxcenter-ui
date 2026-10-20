@@ -12,6 +12,7 @@ import { firstUngrantableScope } from "@/lib/api-tokens/grantable"
 import { audit } from "@/lib/audit"
 
 import { requireApiTokenAdmin, TOKEN_VIEW_SELECT } from "./_shared"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -35,7 +36,7 @@ export async function GET() {
   return NextResponse.json({ data: tokens })
 }
 
-export async function POST(req: Request) {
+async function handlePost(req: Request) {
   const guard = await requireApiTokenAdmin()
   if (!guard.ok) return guard.response!
 
@@ -196,3 +197,5 @@ export async function POST(req: Request) {
   // TOKEN_VIEW_SELECT, so GET can never leak it.
   return NextResponse.json({ data: { token, secret: generated.secret } }, { status: 201 })
 }
+
+export const POST = withAudit({ category: "api_tokens", resourceType: "api_token" }, handlePost)

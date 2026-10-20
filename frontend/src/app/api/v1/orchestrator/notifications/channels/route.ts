@@ -5,6 +5,7 @@ import { orchestratorFetch } from '@/lib/orchestrator'
 import { relayOrchestratorError } from '@/lib/orchestrator/relayError'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { requireProviderTenant } from '@/lib/tenant'
+import { withAudit } from '@/lib/audit/withAudit'
 
 // Notification channels (Slack, Teams, ntfy, Discord, generic webhook) live
 // in the orchestrator next to the email settings; these routes only relay.
@@ -29,7 +30,7 @@ export async function GET() {
   }
 }
 
-export async function POST(request: NextRequest) {
+async function handlePost(request: NextRequest) {
   const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
   if (denied) return denied
   const providerGate = await requireProviderTenant()
@@ -48,3 +49,5 @@ export async function POST(request: NextRequest) {
     return relayOrchestratorError(error, 'Failed to create notification channel')
   }
 }
+
+export const POST = withAudit({ category: 'alerts', resourceType: 'channel' }, handlePost)

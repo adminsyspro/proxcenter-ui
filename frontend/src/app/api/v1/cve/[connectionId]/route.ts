@@ -28,7 +28,7 @@ export async function GET(
     }
 
     const response = await fetch(url, {
-      headers: orchestratorHeaders({ 'Content-Type': 'application/json' }),
+      headers: await orchestratorHeaders({ 'Content-Type': 'application/json' }),
     })
 
     const data = await response.json()
@@ -71,7 +71,7 @@ export async function POST(
 
     const response = await fetch(url, {
       method: 'POST',
-      headers: orchestratorHeaders({ 'Content-Type': 'application/json' }),
+      headers: await orchestratorHeaders({ 'Content-Type': 'application/json' }),
     })
 
     const data = await response.json()

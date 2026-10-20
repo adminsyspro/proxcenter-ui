@@ -14,7 +14,19 @@ vi.mock('@/lib/db/broadcasts', () => ({
   listBroadcasts: (...a: any[]) => listMock(...a),
   createBroadcast: (...a: any[]) => createMock(...a),
 }))
-vi.mock('@/lib/audit', () => ({ audit: (...a: any[]) => auditMock(...a) }))
+vi.mock('@/lib/audit', async () => {
+  // audit() flips the request's audit scope so withAudit() adds no row of its
+  // own (#1105); the stand-in must do the same or every explicit row doubles.
+  const { markAuditExplicit } = await vi.importActual<typeof import('@/lib/audit/scope')>('@/lib/audit/scope')
+  return { audit: (...a: any[]) => { markAuditExplicit(); return auditMock(...a) } }
+})
+
+/** The route never reached its own audit(): the refusal row is withAudit()'s. */
+const refusalRow = (httpStatus: number, errorMessage?: string) => expect.objectContaining({
+  category: 'settings', action: 'create', resourceType: 'broadcast', status: 'failure',
+  ...(errorMessage === undefined ? {} : { errorMessage }),
+  details: expect.objectContaining({ method: 'POST', httpStatus }),
+})
 
 const body = {
   message: 'Maintenance 22:00 UTC',
@@ -62,7 +74,9 @@ describe('POST /api/v1/settings/broadcast', () => {
     const { POST } = await import('./route')
     expect((await callRoute(POST, { body })).status).toBe(403)
     expect(createMock).not.toHaveBeenCalled()
-    expect(auditMock).not.toHaveBeenCalled()
+    expect(auditMock).toHaveBeenCalledTimes(1)
+    expect(auditMock.mock.calls[0][0]).toEqual(refusalRow(403))
+    expect(auditMock.mock.calls[0][0].errorMessage).toBeUndefined()
   })
 
   it.each([
@@ -75,7 +89,8 @@ describe('POST /api/v1/settings/broadcast', () => {
     const res = await callRoute(POST, { body: payload })
     expect(res.status).toBe(400)
     expect(createMock).not.toHaveBeenCalled()
-    expect(auditMock).not.toHaveBeenCalled()
+    expect(auditMock).toHaveBeenCalledTimes(1)
+    expect(auditMock.mock.calls[0][0]).toEqual(refusalRow(400, 'Invalid input'))
   })
 
   it('rejects malformed JSON with 400 and writes nothing', async () => {
@@ -83,6 +98,7 @@ describe('POST /api/v1/settings/broadcast', () => {
     const res = await callRoute(POST, { body: '{' })
     expect(res.status).toBe(400)
     expect(createMock).not.toHaveBeenCalled()
-    expect(auditMock).not.toHaveBeenCalled()
+    expect(auditMock).toHaveBeenCalledTimes(1)
+    expect(auditMock.mock.calls[0][0]).toEqual(refusalRow(400, 'Invalid input'))
   })
 })

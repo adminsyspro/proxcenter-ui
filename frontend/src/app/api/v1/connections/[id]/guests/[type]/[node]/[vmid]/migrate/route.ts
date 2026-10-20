@@ -9,6 +9,7 @@ import { migrateVmSchema } from "@/lib/schemas"
 import { invalidateInventoryCache } from "@/lib/cache/inventoryCache"
 import { migrationTenantDenied } from "@/lib/tenant/migrationGuard"
 import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -142,4 +143,4 @@ return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
 
-export const POST = withPublicApiGuard("vm-migrate", handler)
+export const POST = withAudit({ category: "vms", resourceType: "guest", resourceTypeParam: "type", resourceParam: "vmid", action: "migrate" }, withPublicApiGuard("vm-migrate", handler))

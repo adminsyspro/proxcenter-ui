@@ -5,6 +5,7 @@ import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { listProfiles, createProfile } from '@/lib/compliance/profiles'
 import { getCurrentTenantId } from '@/lib/tenant'
 import { demoResponse } from '@/lib/demo/demo-api'
+import { withAudit } from '@/lib/audit/withAudit'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -28,7 +29,7 @@ export async function GET(req: Request) {
   }
 }
 
-export async function POST(req: Request) {
+async function handlePost(req: Request) {
   const demo = demoResponse(req)
   if (demo) return demo
 
@@ -51,3 +52,5 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: e?.message || 'Internal server error' }, { status: 500 })
   }
 }
+
+export const POST = withAudit({ category: 'security', resourceType: 'profile' }, handlePost)

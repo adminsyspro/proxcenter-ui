@@ -50,7 +50,12 @@ vi.mock("next-auth/jwt", () => ({ getToken: getTokenMock }))
 vi.mock("next-auth", () => ({ getServerSession: getServerSessionMock }))
 vi.mock("@/lib/auth/config", () => ({ authOptions: {} }))
 vi.mock("@/lib/auth/cookies", () => ({ sessionCookieName: () => "next-auth.session-token" }))
-vi.mock("@/lib/audit", () => ({ audit: auditMock }))
+vi.mock("@/lib/audit", async () => {
+  // audit() flips the request's audit scope so withAudit() adds no row of its
+  // own (#1105); the stand-in must do the same or every explicit row doubles.
+  const { markAuditExplicit } = await vi.importActual<typeof import("@/lib/audit/scope")>("@/lib/audit/scope")
+  return { audit: (...a: unknown[]) => { markAuditExplicit(); return auditMock(...a) } }
+})
 vi.mock("@/lib/db/prisma", () => ({
   prisma: {
     session: { findMany: sessionFindManyMock, updateMany: sessionUpdateManyMock },
@@ -275,7 +280,16 @@ describe("DELETE /api/v1/admin/sessions", () => {
 
     expect(res.status).toBe(403)
     expect(sessionUpdateManyMock).not.toHaveBeenCalled()
-    expect(auditMock).not.toHaveBeenCalled()
+    // The route never reached its own audit(): the refusal row is withAudit()'s.
+    expect(auditMock).toHaveBeenCalledTimes(1)
+    expect(auditMock.mock.calls[0][0]).toMatchObject({
+      category: "admin",
+      action: "delete",
+      resourceType: "session",
+      status: "failure",
+      errorMessage: "Forbidden",
+      details: expect.objectContaining({ method: "DELETE", httpStatus: 403 }),
+    })
   })
 
   it("revokes every live session, the caller's own included", async () => {

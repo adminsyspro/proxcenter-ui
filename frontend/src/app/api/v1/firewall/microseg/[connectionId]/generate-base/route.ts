@@ -6,6 +6,7 @@ import { getOrchestratorClient } from '@/lib/orchestrator/client'
 import { verifyConnectionOwnership } from '@/lib/tenant'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
+import { withAudit } from '@/lib/audit/withAudit'
 
 async function postHandler(
   request: NextRequest,
@@ -36,4 +37,4 @@ return NextResponse.json(
   }
 }
 
-export const POST = withPublicApiGuard("fw-microseg-base-generate", postHandler)
+export const POST = withAudit({ category: 'firewall', resourceType: 'microseg', resourceParam: 'connectionId', action: 'apply' }, withPublicApiGuard("fw-microseg-base-generate", postHandler))

@@ -34,7 +34,7 @@ export async function forwardLicenseAction(
 
     const res = await fetch(`${ORCHESTRATOR_URL}${path}`, {
       method,
-      headers: orchestratorHeaders(),
+      headers: await orchestratorHeaders(),
       cache: "no-store",
     })
 

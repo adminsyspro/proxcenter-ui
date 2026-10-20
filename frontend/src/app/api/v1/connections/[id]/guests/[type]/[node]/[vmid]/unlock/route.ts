@@ -8,6 +8,7 @@ import { executeSSH } from "@/lib/ssh/exec"
 import { assertVmid } from "@/lib/ssh/validate"
 import { resolveNodeSshEndpoint } from "@/lib/ssh/node-endpoint"
 import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -136,5 +137,5 @@ async function getHandler(
   }
 }
 
-export const POST = withPublicApiGuard("vm-unlock", postHandler)
+export const POST = withAudit({ category: "vms", resourceType: "guest", resourceTypeParam: "type", resourceParam: "vmid", action: "update" }, withPublicApiGuard("vm-unlock", postHandler))
 export const GET = withPublicApiGuard("vm-unlock-get", getHandler)

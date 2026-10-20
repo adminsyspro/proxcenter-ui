@@ -6,6 +6,7 @@ import { cancelMigrationJob } from "@/lib/migration/pipeline"
 import { cancelWarmMigrationJob } from "@/lib/migration/warm/warm-pipeline"
 import { cancelV2vMigrationJob } from "@/lib/migration/v2v-pipeline"
 import { cancelXcpngMigrationJob } from "@/lib/migration/xcpng-pipeline"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -13,7 +14,7 @@ export const runtime = "nodejs"
  * POST /api/v1/migrations/[id]/cancel
  * Cancel a running migration
  */
-export async function POST(
+async function handlePost(
   _req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -60,3 +61,5 @@ export async function POST(
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const POST = withAudit({ category: "migration", resourceType: "migration", resourceParam: "id", action: "cancel" }, handlePost)

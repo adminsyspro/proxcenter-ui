@@ -7,6 +7,7 @@ import { getCurrentTenantId, DEFAULT_TENANT_ID } from "@/lib/tenant"
 import { getTenantInfrastructureScope } from "@/lib/tenant/infraScope"
 import { writableStoragesFor, readOnlyLibraryError } from "@/lib/vdc/scope"
 import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -117,4 +118,4 @@ return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
 
-export const POST = withPublicApiGuard("vm-backup-now", handler)
+export const POST = withAudit({ category: "backups", resourceType: "node", resourceParam: "node", action: "backup" }, withPublicApiGuard("vm-backup-now", handler))

@@ -3,6 +3,7 @@ import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { requireProviderTenant } from "@/lib/tenant"
 import { orchestratorHeaders } from "@/lib/orchestrator/headers"
 import { invalidateLicenseExclusionCache } from "@/lib/license/exclusions"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -11,7 +12,7 @@ const ORCHESTRATOR_URL = process.env.ORCHESTRATOR_URL || "http://localhost:8080"
 // PUT /api/v1/license/exclusions/{connectionId} {"excluded": boolean}
 // Declares a cluster outside the license, or counts it again (roadmap#58).
 // A provider-level license action, behind the same gates as an import.
-export async function PUT(req: Request, ctx: { params: Promise<{ connectionId: string }> }) {
+async function handlePut(req: Request, ctx: { params: Promise<{ connectionId: string }> }) {
   const providerGate = await requireProviderTenant()
   if (providerGate) return providerGate
   const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
@@ -25,7 +26,7 @@ export async function PUT(req: Request, ctx: { params: Promise<{ connectionId: s
   try {
     const res = await fetch(`${ORCHESTRATOR_URL}/api/v1/license/exclusions/${encodeURIComponent(connectionId)}`, {
       method: "PUT",
-      headers: orchestratorHeaders({ "Content-Type": "application/json" }),
+      headers: await orchestratorHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({ excluded: body.excluded }),
     })
     const data = await res.json().catch(() => null)
@@ -44,3 +45,5 @@ export async function PUT(req: Request, ctx: { params: Promise<{ connectionId: s
     return NextResponse.json({ error: msg || "Failed to update the license exclusion" }, { status: 500 })
   }
 }
+
+export const PUT = withAudit({ category: "system", resourceType: "exclusion", resourceParam: "connectionId" }, handlePut)

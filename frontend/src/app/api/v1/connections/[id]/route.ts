@@ -17,6 +17,7 @@ import { xcpngSubTypeOf } from "@/lib/xcpng/source"
 import { normalizeXapiBaseUrl } from "@/lib/xcpng/xapi-client"
 import { hasServerFeature } from "@/lib/auth/requireEnterprise"
 import { Features } from "@/lib/license/features"
+import { withAudit } from "@/lib/audit/withAudit"
 
 /** Warm migration settings are Enterprise (migration feature). */
 const migrationFeatureLicensed = () => hasServerFeature(Features.VMWARE_MIGRATION)
@@ -75,7 +76,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   }
 }
 
-export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> | { id: string } }) {
+async function handlePatch(req: Request, ctx: { params: Promise<{ id: string }> | { id: string } }) {
   try {
     const prisma = await getSessionPrisma()
     const params = await Promise.resolve(ctx.params)
@@ -334,7 +335,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   }
 }
 
-export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string }> | { id: string } }) {
+async function handleDelete(_req: Request, ctx: { params: Promise<{ id: string }> | { id: string } }) {
   try {
     const prisma = await getSessionPrisma()
     const params = await Promise.resolve(ctx.params)
@@ -407,3 +408,6 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string 
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const PATCH = withAudit({ category: "connections", resourceType: "connection", resourceParam: "id" }, handlePatch)
+export const DELETE = withAudit({ category: "connections", resourceType: "connection", resourceParam: "id" }, handleDelete)

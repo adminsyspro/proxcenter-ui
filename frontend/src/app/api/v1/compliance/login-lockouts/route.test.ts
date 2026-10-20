@@ -16,7 +16,12 @@ vi.mock('@/lib/auth/loginLockout', () => ({
   listActiveLocks: listActiveLocksMock,
   unlockLogin: unlockLoginMock,
 }))
-vi.mock('@/lib/audit', () => ({ audit: auditMock }))
+vi.mock('@/lib/audit', async () => {
+  // audit() flips the request's audit scope so withAudit() adds no row of its
+  // own (#1105); the stand-in must do the same or every explicit row doubles.
+  const { markAuditExplicit } = await vi.importActual<typeof import('@/lib/audit/scope')>('@/lib/audit/scope')
+  return { audit: (...a: unknown[]) => { markAuditExplicit(); return auditMock(...a) } }
+})
 
 const { GET, DELETE } = await import('./route')
 
@@ -58,6 +63,11 @@ describe('/api/v1/compliance/login-lockouts', () => {
     unlockLoginMock.mockResolvedValue(false)
     const res = await callRoute(DELETE, { method: 'DELETE', searchParams: { kind: 'ip', key: '203.0.113.1' } })
     expect(res.status).toBe(404)
-    expect(auditMock).not.toHaveBeenCalled()
+    // The route never reached its own audit(): the refusal row is withAudit()'s.
+    expect(auditMock).toHaveBeenCalledTimes(1)
+    expect(auditMock.mock.calls[0][0]).toMatchObject({
+      category: 'security', action: 'delete', resourceType: 'login_lockout', status: 'failure', errorMessage: 'Not found',
+      details: expect.objectContaining({ method: 'DELETE', httpStatus: 404, query: { kind: 'ip', key: '203.0.113.1' } }),
+    })
   })
 })

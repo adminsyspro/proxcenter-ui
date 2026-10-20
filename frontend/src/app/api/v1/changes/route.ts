@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { orchestratorFetch } from '@/lib/orchestrator/client'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { buildChangeVisibilityCtx, isChangeVisibleToTenant } from '@/lib/changes/visibility'
+import { withAudit } from '@/lib/audit/withAudit'
 
 export const runtime = 'nodejs'
 
@@ -45,7 +46,7 @@ export async function GET(req: Request) {
   }
 }
 
-export async function DELETE() {
+async function handleDelete() {
   try {
     const permError = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
     if (permError) return permError
@@ -60,3 +61,5 @@ export async function DELETE() {
     )
   }
 }
+
+export const DELETE = withAudit({ category: 'security', resourceType: 'change' }, handleDelete)

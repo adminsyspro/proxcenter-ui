@@ -17,7 +17,7 @@ export async function GET(request: Request) {
   try {
     const ifNoneMatch = request.headers.get("if-none-match")
     const res = await fetch(`${ORCHESTRATOR_URL}/api/v1/license/connection/partner-logo`, {
-      headers: orchestratorHeaders(ifNoneMatch ? { "If-None-Match": ifNoneMatch } : {}),
+      headers: await orchestratorHeaders(ifNoneMatch ? { "If-None-Match": ifNoneMatch } : {}),
       cache: "no-store",
     })
     const etag = res.headers.get("etag")

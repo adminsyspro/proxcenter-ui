@@ -4740,7 +4740,8 @@
         "framing": "프레이밍",
         "facility": "Facility",
         "categories": "감사 카테고리",
-        "categoriesHelper": "비워 두면 모든 카테고리를 전달합니다.",
+        "categoriesHelper": "선택한 카테고리만 전달됩니다.",
+        "categoriesNone": "카테고리를 하나 이상 선택하세요.",
         "enabled": "전달 사용"
       },
       "transportHelper": {
@@ -4786,7 +4787,13 @@
         "migration": "마이그레이션",
         "admin": "관리",
         "sdn": "SDN",
-        "api_tokens": "API 토큰"
+        "api_tokens": "API 토큰",
+        "firewall": "방화벽",
+        "ha": "고가용성",
+        "cluster": "클러스터",
+        "automation": "자동화",
+        "replication": "복제",
+        "alerts": "알림"
       },
       "destinations": "대상"
     },
@@ -5036,7 +5043,13 @@
       "storage": "스토리지",
       "backups": "백업",
       "settings": "설정",
-      "system": "시스템"
+      "system": "시스템",
+      "firewall": "방화벽",
+      "ha": "고가용성",
+      "cluster": "클러스터",
+      "automation": "자동화",
+      "replication": "복제",
+      "alerts": "알림"
     },
     "actions": {
       "login": "로그인",
@@ -5064,7 +5077,30 @@
       "import": "가져오기",
       "test": "테스트",
       "enable": "활성화",
-      "disable": "비활성화"
+      "disable": "비활성화",
+      "upgrade": "업그레이드",
+      "reboot": "재부팅",
+      "shutdown": "종료",
+      "maintenance": "유지보수",
+      "execute": "실행",
+      "apply": "적용",
+      "sync": "동기화",
+      "run": "실행 시작",
+      "acknowledge": "확인 처리",
+      "resolve": "해결",
+      "failover": "페일오버",
+      "failback": "페일백",
+      "cancel": "취소",
+      "drsMigrate": "DRS 마이그레이션",
+      "rollingStart": "롤링 업데이트 시작",
+      "rollingStep": "롤링 업데이트 단계",
+      "rollingFinish": "롤링 업데이트 완료",
+      "drainStart": "호스트 드레인 시작",
+      "drainStep": "드레인 단계",
+      "drainFinish": "호스트 드레인 완료",
+      "replicationSync": "복제 동기화",
+      "replicationFix": "복제본 수정",
+      "drillRun": "복원 훈련"
     }
   },
   "security": {

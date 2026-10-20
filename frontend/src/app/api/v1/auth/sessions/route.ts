@@ -14,6 +14,7 @@ import { authOptions } from "@/lib/auth/config"
 import { sessionCookieName } from "@/lib/auth/cookies"
 import { deviceLabel } from "@/lib/auth/deviceLabel"
 import { listSessions, revokeAllSessions } from "@/lib/auth/sessions"
+import { withAudit } from "@/lib/audit/withAudit"
 
 // getServerSession's `session` callback deliberately does not carry `sid`
 // (lib/auth/config.ts) — reading the raw JWT is the only way to learn the
@@ -62,7 +63,7 @@ export async function GET(req: Request) {
 // DELETE /api/v1/auth/sessions — revoke all of the caller's sessions except
 // the one making this request. Excluding the current session is deliberate:
 // a single click must not log the user out of the screen they are on.
-export async function DELETE(req: Request) {
+async function handleDelete(req: Request) {
   const session = await getServerSession(authOptions)
 
   if (!session?.user?.id) {
@@ -74,3 +75,5 @@ export async function DELETE(req: Request) {
 
   return NextResponse.json({ data: { revoked } })
 }
+
+export const DELETE = withAudit({ category: "auth", resourceType: "session" }, handleDelete)

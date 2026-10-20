@@ -67,6 +67,12 @@ export const AUDIT_CATEGORIES = [
   'admin',
   'sdn',
   'api_tokens',
+  'firewall',
+  'ha',
+  'cluster',
+  'automation',
+  'replication',
+  'alerts',
 ] as const satisfies readonly AuditCategory[]
 
 export const syslogTlsSchema = z.object({

@@ -8,6 +8,7 @@ import { authOptions } from "@/lib/auth/config"
 import { resolveInstanceId } from "@/lib/migration/orphan-sweep"
 import { startMigrationJob } from "@/lib/migration/start-job"
 import { validateMigrationRequest } from "@/lib/migration/validate-request"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -15,7 +16,7 @@ export const runtime = "nodejs"
  * POST /api/v1/migrations
  * Start a new external hypervisor → Proxmox migration (ESXi or XCP-ng)
  */
-export async function POST(req: Request) {
+async function handlePost(req: Request) {
   try {
     const prisma = await getSessionPrisma()
     const denied = await checkPermission(PERMISSIONS.VM_MIGRATE)
@@ -89,3 +90,5 @@ export async function GET() {
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const POST = withAudit({ category: "migration", resourceType: "migration" }, handlePost)

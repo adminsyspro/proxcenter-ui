@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server'
 import { getSetting, setSetting } from '@/lib/db/settings'
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { getCurrentTenantId } from "@/lib/tenant"
+import { withAudit } from '@/lib/audit/withAudit'
 
 // Configuration par défaut pour les métriques Green IT / RSE
 const DEFAULT_GREEN_SETTINGS = {
@@ -107,7 +108,7 @@ return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
 }
 
 // PUT /api/v1/settings/green - Sauvegarder les paramètres RSE/Green IT
-export async function PUT(request: Request) {
+async function handlePut(request: Request) {
   try {
     // RBAC: Check admin.settings permission
     const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
@@ -128,3 +129,5 @@ export async function PUT(request: Request) {
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const PUT = withAudit({ category: 'settings', resourceType: 'green' }, handlePut)

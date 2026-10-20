@@ -14,6 +14,7 @@ import {
   saveGuestFileRestoreSettings,
 } from '@/lib/guestFileRestore/settings'
 import type { GuestFileRestoreSettings } from '@/lib/guestFileRestore/types'
+import { withAudit } from '@/lib/audit/withAudit'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -34,7 +35,7 @@ export async function GET() {
   }
 }
 
-export async function PUT(request: Request) {
+async function handlePut(request: Request) {
   const guard = await requireGuestFileRestoreAdmin()
   if (guard.denied) return guard.denied
 
@@ -75,3 +76,5 @@ export async function PUT(request: Request) {
     return NextResponse.json({ error: error?.message || 'Erreur serveur' }, { status: 500 })
   }
 }
+
+export const PUT = withAudit({ category: 'settings', resourceType: 'guest_file_restore' }, handlePut)

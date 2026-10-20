@@ -8,6 +8,7 @@ import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
 import type { Principal } from '@/lib/auth/principal'
 import { getTenantInfrastructureScope } from '@/lib/tenant/infraScope'
+import { withAudit } from '@/lib/audit/withAudit'
 
 type Params = { connectionId: string; node: string; vmType: string; vmid: string }
 
@@ -101,4 +102,4 @@ return NextResponse.json(
   }
 }
 
-export const POST = withPublicApiGuard("fw-vm-isolate", postHandler)
+export const POST = withAudit({ category: 'firewall', resourceType: 'guest', resourceParam: 'vmid', action: 'apply' }, withPublicApiGuard("fw-vm-isolate", postHandler))

@@ -5,6 +5,7 @@ import { requireProviderTenant } from "@/lib/tenant"
 import { getDatacenterById } from "@/lib/db/datacenters"
 import { invalidateGreenResolution } from "@/lib/green/resolve"
 import { prisma } from "@/lib/db/prisma"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -68,7 +69,7 @@ export async function GET(_req: NextRequest, ctx: RouteContext) {
  * but absent from the payload has its `datacenter_id` cleared back to
  * NULL — meaning "inherit from the level above".
  */
-export async function PUT(req: NextRequest, ctx: RouteContext) {
+async function handlePut(req: NextRequest, ctx: RouteContext) {
   try {
     const providerGate = await requireProviderTenant()
     if (providerGate) return providerGate
@@ -153,3 +154,5 @@ export async function PUT(req: NextRequest, ctx: RouteContext) {
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const PUT = withAudit({ category: "connections", resourceType: "datacenter", resourceParam: "id" }, handlePut)

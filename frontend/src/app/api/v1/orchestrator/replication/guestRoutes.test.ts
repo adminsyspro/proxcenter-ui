@@ -11,7 +11,13 @@ import { NextRequest } from 'next/server'
 const mocks = vi.hoisted(() => ({ action: vi.fn(), permission: vi.fn(), audit: vi.fn(), scope: vi.fn() }))
 
 vi.mock('@/lib/rbac', () => ({ checkPermission: mocks.permission, PERMISSIONS: { AUTOMATION_MANAGE: 'automation.manage' } }))
-vi.mock('@/lib/audit', () => ({ audit: mocks.audit }))
+vi.mock('@/lib/audit', async () => {
+  // audit() flips the request's audit scope so withAudit() adds no row of its
+  // own (#1105); the stand-in must do the same or every explicit row doubles.
+  const { markAuditExplicit } = await vi.importActual<typeof import('@/lib/audit/scope')>('@/lib/audit/scope')
+
+  return { audit: (...a: unknown[]) => { markAuditExplicit(); return mocks.audit(...a) } }
+})
 vi.mock('@/lib/orchestrator/planTenantScope', () => ({ checkPlanTenantScope: mocks.scope }))
 vi.mock('@/lib/orchestrator/client', async importOriginal => {
   const actual = await importOriginal<typeof import('@/lib/orchestrator/client')>()
@@ -87,7 +93,17 @@ describe('per-guest failover route', () => {
 
     expect(response.status).toBe(400)
     expect(mocks.action).not.toHaveBeenCalled()
-    expect(mocks.audit).not.toHaveBeenCalled()
+    // The route never reached its own audit(): the refusal row is withAudit()'s.
+    expect(mocks.audit).toHaveBeenCalledTimes(1)
+    expect(mocks.audit.mock.calls[0][0]).toMatchObject({
+      category: 'replication',
+      action: 'failover',
+      resourceType: 'guest',
+      resourceId: 'abc',
+      status: 'failure',
+      errorMessage: 'vmid must be a positive integer',
+      details: expect.objectContaining({ method: 'POST', httpStatus: 400, params: { id: 'plan-1', vmid: 'abc' } }),
+    })
   })
 
   it('keeps the orchestrator refusal and audits the failure', async () => {

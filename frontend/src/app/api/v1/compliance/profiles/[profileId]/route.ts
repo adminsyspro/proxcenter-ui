@@ -5,6 +5,7 @@ import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { getProfile, getProfileChecks, updateProfile, updateProfileChecks, deleteProfile } from '@/lib/compliance/profiles'
 import { getCurrentTenantId } from '@/lib/tenant'
 import { demoResponse } from '@/lib/demo/demo-api'
+import { withAudit } from '@/lib/audit/withAudit'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -34,7 +35,7 @@ export async function GET(
   }
 }
 
-export async function PUT(
+async function handlePut(
   req: Request,
   ctx: { params: Promise<{ profileId: string }> }
 ) {
@@ -72,7 +73,7 @@ export async function PUT(
   }
 }
 
-export async function DELETE(
+async function handleDelete(
   req: Request,
   ctx: { params: Promise<{ profileId: string }> }
 ) {
@@ -96,3 +97,6 @@ export async function DELETE(
     return NextResponse.json({ error: e?.message || 'Internal server error' }, { status: 500 })
   }
 }
+
+export const PUT = withAudit({ category: 'security', resourceType: 'profile', resourceParam: 'profileId' }, handlePut)
+export const DELETE = withAudit({ category: 'security', resourceType: 'profile', resourceParam: 'profileId' }, handleDelete)

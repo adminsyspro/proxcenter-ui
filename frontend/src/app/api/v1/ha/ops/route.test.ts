@@ -15,6 +15,11 @@ vi.mock('@/lib/orchestrator/headers', () => ({
   orchestratorHeaders: (extra: Record<string, string> = {}) => ({ 'X-API-Key': 'test', ...extra }),
 }))
 
+// Every HA write is wrapped by withAudit() (#1105); the real audit() would
+// reach Prisma and the syslog forwarder.
+const auditMock = vi.fn(async () => 'audit-id')
+vi.mock('@/lib/audit', () => ({ audit: auditMock }))
+
 const fetchMock = vi.fn()
 vi.stubGlobal('fetch', fetchMock)
 
@@ -38,6 +43,12 @@ describe('POST /api/v1/ha/switchover', () => {
       expect.stringContaining('/switchover'),
       expect.objectContaining({ method: 'POST' })
     )
+    // The safety-net row: none of these routes audits itself.
+    expect(auditMock).toHaveBeenCalledTimes(1)
+    expect(auditMock.mock.calls[0][0]).toMatchObject({
+      category: 'system', action: 'execute', resourceType: 'ha', status: 'success',
+      details: expect.objectContaining({ method: 'POST', httpStatus: 200 }),
+    })
   })
 
   it('rejects an unreadable body with 400 instead of blaming the orchestrator', async () => {
@@ -46,6 +57,8 @@ describe('POST /api/v1/ha/switchover', () => {
 
     expect(res.status).toBe(400)
     expect(fetchMock).not.toHaveBeenCalled()
+    expect(auditMock).toHaveBeenCalledTimes(1)
+    expect(auditMock.mock.calls[0][0]).toMatchObject({ action: 'execute', status: 'failure', errorMessage: 'Invalid JSON body', details: expect.objectContaining({ httpStatus: 400 }) })
   })
 })
 
@@ -165,5 +178,10 @@ describe('DELETE /api/v1/ha/maintenance/[node]', () => {
       expect.stringContaining('/maintenance/proxcenter-2'),
       expect.objectContaining({ method: 'DELETE' })
     )
+    expect(auditMock).toHaveBeenCalledTimes(1)
+    expect(auditMock.mock.calls[0][0]).toMatchObject({
+      category: 'system', action: 'delete', resourceType: 'node', resourceId: 'proxcenter-2', status: 'success',
+      details: expect.objectContaining({ params: { node: 'proxcenter-2' } }),
+    })
   })
 })

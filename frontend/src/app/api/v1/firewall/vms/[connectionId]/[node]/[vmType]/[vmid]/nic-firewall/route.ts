@@ -8,6 +8,7 @@ import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
 import { getConnectionById } from '@/lib/connections/getConnection'
 import { orchestratorOrPve } from '@/lib/firewall/withPveFallback'
 import * as pveDirect from '@/lib/firewall/pveDirect'
+import { withAudit } from '@/lib/audit/withAudit'
 
 type RouteContext = {
   params: Promise<{ connectionId: string; node: string; vmType: string; vmid: string }>
@@ -41,4 +42,4 @@ async function putHandler(req: NextRequest, ctx: RouteContext) {
   }
 }
 
-export const PUT = withPublicApiGuard("fw-vm-nic-firewall-update", putHandler)
+export const PUT = withAudit({ category: 'firewall', resourceType: 'guest', resourceParam: 'vmid', resourceTypeParam: 'vmType' }, withPublicApiGuard("fw-vm-nic-firewall-update", putHandler))

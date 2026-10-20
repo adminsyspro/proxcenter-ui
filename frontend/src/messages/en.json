@@ -4740,7 +4740,8 @@
         "framing": "Framing",
         "facility": "Facility",
         "categories": "Audit categories",
-        "categoriesHelper": "Leave empty to forward every category.",
+        "categoriesHelper": "Only the checked categories are forwarded.",
+        "categoriesNone": "Select at least one category.",
         "enabled": "Forwarding enabled"
       },
       "transportHelper": {
@@ -4786,7 +4787,13 @@
         "migration": "Migration",
         "admin": "Administration",
         "sdn": "SDN",
-        "api_tokens": "API tokens"
+        "api_tokens": "API tokens",
+        "firewall": "Firewall",
+        "ha": "High availability",
+        "cluster": "Cluster",
+        "automation": "Automation",
+        "replication": "Replication",
+        "alerts": "Alerts"
       },
       "destinations": "Destinations"
     },
@@ -5036,7 +5043,13 @@
       "storage": "Storage",
       "backups": "Backups",
       "settings": "Settings",
-      "system": "System"
+      "system": "System",
+      "firewall": "Firewall",
+      "ha": "High availability",
+      "cluster": "Cluster",
+      "automation": "Automation",
+      "replication": "Replication",
+      "alerts": "Alerts"
     },
     "actions": {
       "login": "Login",
@@ -5064,7 +5077,30 @@
       "import": "Import",
       "test": "Test",
       "enable": "Enable",
-      "disable": "Disable"
+      "disable": "Disable",
+      "upgrade": "Upgrade",
+      "reboot": "Reboot",
+      "shutdown": "Shutdown",
+      "maintenance": "Maintenance",
+      "execute": "Execute",
+      "apply": "Apply",
+      "sync": "Sync",
+      "run": "Run",
+      "acknowledge": "Acknowledge",
+      "resolve": "Resolve",
+      "failover": "Failover",
+      "failback": "Failback",
+      "cancel": "Cancel",
+      "drsMigrate": "DRS migration",
+      "rollingStart": "Rolling update started",
+      "rollingStep": "Rolling update step",
+      "rollingFinish": "Rolling update finished",
+      "drainStart": "Host drain started",
+      "drainStep": "Drain step",
+      "drainFinish": "Host drain finished",
+      "replicationSync": "Replication sync",
+      "replicationFix": "Replica fix",
+      "drillRun": "Restore drill"
     }
   },
   "security": {

@@ -9,6 +9,7 @@ import { orchestratorOrPve } from '@/lib/firewall/withPveFallback'
 import { verifyConnectionOwnership } from '@/lib/tenant'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
+import { withAudit } from '@/lib/audit/withAudit'
 
 // PUT /api/v1/firewall/groups/[connectionId]/[groupName]/rules/[pos] - Update rule
 async function putHandler(
@@ -77,5 +78,5 @@ return NextResponse.json(
   }
 }
 
-export const PUT = withPublicApiGuard("fw-group-rule-update", putHandler)
-export const DELETE = withPublicApiGuard("fw-group-rule-delete", deleteHandler)
+export const PUT = withAudit({ category: 'firewall', resourceType: 'rule', resourceParam: 'pos' }, withPublicApiGuard("fw-group-rule-update", putHandler))
+export const DELETE = withAudit({ category: 'firewall', resourceType: 'rule', resourceParam: 'pos' }, withPublicApiGuard("fw-group-rule-delete", deleteHandler))

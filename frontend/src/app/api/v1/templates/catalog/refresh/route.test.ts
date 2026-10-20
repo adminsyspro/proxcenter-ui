@@ -15,9 +15,17 @@ vi.mock('@/lib/templates/catalogStore', () => ({
   refreshRemoteCatalog: () => refreshRemoteCatalogMock(),
   getEffectiveCatalog: () => getEffectiveCatalogMock(),
 }))
-vi.mock('@/lib/audit', () => ({ audit: (...a: any[]) => auditMock(...a) }))
+vi.mock('@/lib/audit', async () => {
+  // audit() flips the request's audit scope so withAudit() adds no row of its
+  // own (#1105); the stand-in must do the same or every explicit row doubles.
+  const { markAuditExplicit } = await vi.importActual<typeof import('@/lib/audit/scope')>('@/lib/audit/scope')
+  return { audit: (...a: any[]) => { markAuditExplicit(); return auditMock(...a) } }
+})
 
 import { POST } from './route'
+
+// The handler ignores its request, but withAudit() reads it.
+const refresh = () => POST(new Request('http://test/api/v1/templates/catalog/refresh', { method: 'POST' }))
 
 const meta = { source: 'remote', catalogUpdatedAt: '2026-10-01', fetchedAt: 'x', lastCheckedAt: 'y', lastResult: 'updated', lastError: null, url: 'u', autoUpdate: true }
 
@@ -31,7 +39,7 @@ beforeEach(() => {
 
 describe('POST /api/v1/templates/catalog/refresh', () => {
   it('refreshes, audits and returns the outcome with the fresh meta', async () => {
-    const res = await POST()
+    const res = await refresh()
     expect(res.status).toBe(200)
     const body = await res.json()
     expect(body.data).toEqual({ result: 'updated', added: ['ubuntu-2610'], updated: [], removed: [], error: null, meta })
@@ -43,7 +51,7 @@ describe('POST /api/v1/templates/catalog/refresh', () => {
 
   it('still answers 200 with result error when the fetch failed, and audits a failure', async () => {
     refreshRemoteCatalogMock.mockResolvedValue({ result: 'error', added: [], updated: [], removed: [], error: 'HTTP 503' })
-    const res = await POST()
+    const res = await refresh()
     expect(res.status).toBe(200)
     const body = await res.json()
     expect(body.data.result).toBe('error')
@@ -53,22 +61,28 @@ describe('POST /api/v1/templates/catalog/refresh', () => {
 
   it('returns the admin denial untouched and never refreshes', async () => {
     requireAdminMock.mockResolvedValue(new Response(JSON.stringify({ error: 'forbidden' }), { status: 403 }))
-    const res = await POST()
+    const res = await refresh()
     expect(res.status).toBe(403)
     expect(refreshRemoteCatalogMock).not.toHaveBeenCalled()
   })
 
   it('refuses a non-provider tenant with 403 and never refreshes', async () => {
     getCurrentTenantIdMock.mockResolvedValue('acme')
-    const res = await POST()
+    const res = await refresh()
     expect(res.status).toBe(403)
     expect(refreshRemoteCatalogMock).not.toHaveBeenCalled()
-    expect(auditMock).not.toHaveBeenCalled()
+    // The route never reached its own audit(): the refusal row is withAudit()'s.
+    expect(auditMock).toHaveBeenCalledTimes(1)
+    expect(auditMock.mock.calls[0][0]).toMatchObject({
+      category: 'templates', action: 'sync', resourceType: 'catalog', status: 'failure',
+      errorMessage: 'Only the provider can refresh the image catalog',
+      details: expect.objectContaining({ route: '/api/v1/templates/catalog/refresh', method: 'POST', httpStatus: 403 }),
+    })
   })
 
   it('answers 500 when something unexpected throws', async () => {
     getEffectiveCatalogMock.mockRejectedValue(new Error('db down'))
-    const res = await POST()
+    const res = await refresh()
     expect(res.status).toBe(500)
     expect((await res.json()).error).toBe('db down')
   })

@@ -19,6 +19,7 @@ import { aliveWhere, revokeEverySession } from "@/lib/auth/sessions"
 import { deviceLabel } from "@/lib/auth/deviceLabel"
 import { requireSuperAdminCaller } from "@/lib/auth/totp-admin"
 import { audit } from "@/lib/audit"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -106,7 +107,7 @@ export async function GET(req: Request) {
 // caller to /login immediately after. All auth reads happen BEFORE the
 // revoke, so the audit entry can still name the caller.
 // Same response shape as the per-user collection DELETE: { data: { revoked: n } }.
-export async function DELETE() {
+async function handleDelete() {
   const denied = await requireSuperAdminCaller()
   if (denied) return denied
 
@@ -128,3 +129,5 @@ export async function DELETE() {
 
   return NextResponse.json({ data: { revoked } })
 }
+
+export const DELETE = withAudit({ category: "admin", resourceType: "session" }, handleDelete)

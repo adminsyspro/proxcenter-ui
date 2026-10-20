@@ -4,6 +4,7 @@ import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { requireProviderTenant } from "@/lib/tenant"
 import { deleteDatacenter, getDatacenterById, updateDatacenter } from "@/lib/db/datacenters"
 import { invalidateGreenResolution } from "@/lib/green/resolve"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -26,7 +27,7 @@ export async function GET(_req: NextRequest, ctx: RouteContext) {
   }
 }
 
-export async function PUT(req: NextRequest, ctx: RouteContext) {
+async function handlePut(req: NextRequest, ctx: RouteContext) {
   try {
     const providerGate = await requireProviderTenant()
     if (providerGate) return providerGate
@@ -63,7 +64,7 @@ export async function PUT(req: NextRequest, ctx: RouteContext) {
   }
 }
 
-export async function DELETE(_req: NextRequest, ctx: RouteContext) {
+async function handleDelete(_req: NextRequest, ctx: RouteContext) {
   try {
     const providerGate = await requireProviderTenant()
     if (providerGate) return providerGate
@@ -81,3 +82,6 @@ export async function DELETE(_req: NextRequest, ctx: RouteContext) {
     return NextResponse.json({ error: msg }, { status: 409 })
   }
 }
+
+export const PUT = withAudit({ category: "connections", resourceType: "datacenter", resourceParam: "id" }, handlePut)
+export const DELETE = withAudit({ category: "connections", resourceType: "datacenter", resourceParam: "id" }, handleDelete)

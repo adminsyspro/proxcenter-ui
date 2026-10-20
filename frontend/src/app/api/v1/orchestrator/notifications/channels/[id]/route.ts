@@ -5,10 +5,11 @@ import { orchestratorFetch } from '@/lib/orchestrator'
 import { relayOrchestratorError } from '@/lib/orchestrator/relayError'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { requireProviderTenant } from '@/lib/tenant'
+import { withAudit } from '@/lib/audit/withAudit'
 
 type Params = { params: Promise<{ id: string }> | { id: string } }
 
-export async function PUT(request: NextRequest, { params }: Params) {
+async function handlePut(request: NextRequest, { params }: Params) {
   const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
   if (denied) return denied
   // Notifications are global and the tab is provider-only: a tenant admin
@@ -33,7 +34,7 @@ export async function PUT(request: NextRequest, { params }: Params) {
   }
 }
 
-export async function DELETE(_request: NextRequest, { params }: Params) {
+async function handleDelete(_request: NextRequest, { params }: Params) {
   const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
   if (denied) return denied
   const providerGate = await requireProviderTenant()
@@ -51,3 +52,6 @@ export async function DELETE(_request: NextRequest, { params }: Params) {
     return relayOrchestratorError(error, 'Failed to delete notification channel')
   }
 }
+
+export const PUT = withAudit({ category: 'alerts', resourceType: 'channel', resourceParam: 'id' }, handlePut)
+export const DELETE = withAudit({ category: 'alerts', resourceType: 'channel', resourceParam: 'id' }, handleDelete)

@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getOrchestratorClient } from "@/lib/orchestrator/client"
 import { checkPlanTenantScope } from "@/lib/orchestrator/planTenantScope"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -29,7 +30,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
   }
 }
 
-export async function DELETE(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+async function handleDelete(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const denied = await checkPermission(PERMISSIONS.AUTOMATION_MANAGE, "global", "*")
 
@@ -54,3 +55,5 @@ export async function DELETE(_request: NextRequest, { params }: { params: Promis
     )
   }
 }
+
+export const DELETE = withAudit({ category: "replication", resourceType: "plan", resourceParam: "id" }, handleDelete)

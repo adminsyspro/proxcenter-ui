@@ -12,6 +12,7 @@ import { resolveVdcForTenant, checkVdcQuota } from "@/lib/vdc/quota"
 import { parseDriveString, parsePveSizeToMb, stampDriveQos, type DriveQosCaps } from "@/lib/vdc/drives"
 import { waitForTask } from "@/lib/proxmox/tasks"
 import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -173,4 +174,4 @@ return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
 
-export const POST = withPublicApiGuard("vm-disk-move", handler)
+export const POST = withAudit({ category: "vms", resourceType: "guest", resourceTypeParam: "type", resourceParam: "vmid" }, withPublicApiGuard("vm-disk-move", handler))

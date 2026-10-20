@@ -8,6 +8,7 @@ import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { getCurrentTenantId } from "@/lib/tenant"
 import { getAllowedJobPools } from "@/lib/vdc/backupJobs"
 import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -109,4 +110,4 @@ async function handler(req: Request, ctx: RouteContext) {
   }
 }
 
-export const POST = withPublicApiGuard("backup-job-guests", handler)
+export const POST = withAudit({ category: "backups", resourceType: "backup_job", resourceParam: "jobId" }, withPublicApiGuard("backup-job-guests", handler))

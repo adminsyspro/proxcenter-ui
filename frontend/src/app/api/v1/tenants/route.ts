@@ -6,6 +6,7 @@ import { parseVmidRangeInput, findVmidRangeConflict } from "@/lib/tenant/vmidRan
 import { audit } from "@/lib/audit"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth/config"
+import { withAudit } from "@/lib/audit/withAudit"
 
 // GET /api/v1/tenants — list all tenants (admin only)
 export async function GET() {
@@ -19,7 +20,7 @@ export async function GET() {
 }
 
 // POST /api/v1/tenants — create a new tenant
-export async function POST(req: NextRequest) {
+async function handlePost(req: NextRequest) {
   const providerGate = await requireProviderTenant()
   if (providerGate) return providerGate
   const denied = await checkPermission(PERMISSIONS.ADMIN_TENANTS)
@@ -90,3 +91,5 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: e.message }, { status: 500 })
   }
 }
+
+export const POST = withAudit({ category: "admin", resourceType: "tenant" }, handlePost)

@@ -4,6 +4,7 @@ import { licenseExcludedResponse } from "@/lib/api/response"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { putSingleUse, takeSingleUse } from "@/lib/console/session"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -43,7 +44,7 @@ type TerminalSession = {
  * open ws://.../api/internal/ws/shell/{sessionId} without ever
  * receiving the underlying PVE API token.
  */
-export async function POST(
+async function handlePost(
   _req: Request,
   ctx: { params: Promise<{ id: string; node: string }> }
 ) {
@@ -131,3 +132,5 @@ export async function POST(
 export function consumeTerminalSession(sessionId: string): TerminalSession | null {
   return takeSingleUse(sessionId) as TerminalSession | null
 }
+
+export const POST = withAudit({ category: "nodes", resourceType: "node", resourceParam: "node", action: "console.open" }, handlePost)

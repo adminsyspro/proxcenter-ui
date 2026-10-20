@@ -22,7 +22,12 @@ vi.mock('@/lib/rbac', () => ({
   buildVmResourceId: (id: string, node: string, type: string, vmid: string) => `${id}:${node}:${type}:${vmid}`,
   PERMISSIONS: { VM_CONSOLE: 'vm.console' },
 }))
-vi.mock('@/lib/audit', () => ({ audit: (...a: unknown[]) => m.audit(...a) }))
+vi.mock('@/lib/audit', async () => {
+  // audit() flips the request's audit scope so withAudit() adds no row of its
+  // own (#1105); the stand-in must do the same or every explicit row doubles.
+  const { markAuditExplicit } = await vi.importActual<typeof import('@/lib/audit/scope')>('@/lib/audit/scope')
+  return { audit: (...a: unknown[]) => { markAuditExplicit(); return m.audit(...a) } }
+})
 
 import { POST } from './route'
 import { PveLicenseExcludedError } from '@/lib/license/exclusions'
@@ -105,5 +110,11 @@ describe('POST .../console audit', () => {
     expect((await call()).status).toBe(403)
     expect(m.checkPermission).toHaveBeenCalledWith('vm.console', 'vm', 'c1:pve1:qemu:100')
     expect(m.pveFetch).not.toHaveBeenCalled()
+    // The route never reached its own audit(): the refusal row is withAudit()'s.
+    expect(m.audit).toHaveBeenCalledTimes(1)
+    expect(m.audit.mock.calls[0][0]).toMatchObject({
+      action: 'console.open', category: 'vms', resourceType: 'qemu', resourceId: '100', status: 'failure', errorMessage: 'denied',
+      details: expect.objectContaining({ method: 'POST', httpStatus: 403, params: PARAMS }),
+    })
   })
 })

@@ -5,6 +5,7 @@ import { getConnectionById } from "@/lib/connections/getConnection"
 import { buildStorageResourceId, checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { audit } from "@/lib/audit"
 import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -85,4 +86,4 @@ async function postHandler(
 }
 
 export const GET = withPublicApiGuard("aplinfo-list", getHandler)
-export const POST = withPublicApiGuard("aplinfo-download", postHandler)
+export const POST = withAudit({ category: "storage", resourceType: "node", resourceParam: "node" }, withPublicApiGuard("aplinfo-download", postHandler))

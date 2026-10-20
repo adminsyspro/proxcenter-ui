@@ -31,7 +31,7 @@ export async function GET() {
   if (denied) return denied
   try {
     const res = await fetch(`${ORCHESTRATOR_URL}/api/v1/license/imports`, {
-      headers: orchestratorHeaders(),
+      headers: await orchestratorHeaders(),
       cache: "no-store",
     })
     const data = await res.json().catch(() => null)

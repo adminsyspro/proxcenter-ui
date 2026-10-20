@@ -10,6 +10,8 @@ import { getPrincipal, getTokenPrincipalContext } from "@/lib/auth/principal"
 import { forwardAuditEvent } from "@/lib/syslog/forwarder"
 import { clientIpFromHeaders } from "@/lib/net/clientIp"
 
+import { markAuditExplicit } from "./scope"
+
 export type AuditCategory =
   | "auth"           // Connexion, déconnexion, changement de mot de passe
   | "users"          // Gestion des utilisateurs
@@ -27,6 +29,14 @@ export type AuditCategory =
   | "admin"          // Admin actions (tenants, etc.)
   | "sdn"            // SDN (zones, vnets, apply)
   | "api_tokens"    // Tokens API (creation, revocation, refus)
+  // Route-wrapper categories (issue #1105): every mutating route lands in one
+  // of these when it has no explicit audit call of its own.
+  | "firewall"       // Datacenter, node and guest firewall
+  | "ha"             // HA resources and groups
+  | "cluster"        // Cluster-level operations (join, options, ceph)
+  | "automation"     // DRS, rolling updates, host drains
+  | "replication"    // Replication jobs and site recovery
+  | "alerts"         // Alerts, notifications, reports
 
 export type AuditAction =
 
@@ -119,6 +129,33 @@ export type AuditAction =
   | "2fa_required_for_user"
   | "2fa_requirement_cleared"
 
+  // Route-wrapper verbs (issue #1105), chosen by the route path
+  | "upgrade"
+  | "reboot"
+  | "shutdown"
+  | "maintenance"
+  | "execute"
+  | "apply"
+  | "sync"
+  | "run"
+  | "acknowledge"
+  | "resolve"
+  | "failover"
+  | "failback"
+  | "cancel"
+
+  // Orchestrator rows (issue #1105), written by the Go backend and relayed to syslog
+  | "drs.migrate"
+  | "rolling.start"
+  | "rolling.step"
+  | "rolling.finish"
+  | "drain.start"
+  | "drain.step"
+  | "drain.finish"
+  | "replication.sync"
+  | "replication.fix"
+  | "drill.run"
+
 export type AuditStatus = "success" | "failure" | "warning"
 
 export interface AuditLogEntry {
@@ -158,6 +195,11 @@ export interface AuditLogEntry {
  * the default `prisma` client — behavior is unchanged when omitted.
  */
 export async function audit(entry: AuditLogEntry, tx?: Prisma.TransactionClient): Promise<string> {
+  // Flagged at call time, before any await: a route that fires audit() without
+  // awaiting it still counts as explicitly audited when withAudit() checks the
+  // scope after the handler returns (issue #1105).
+  markAuditExplicit()
+
   const id = nanoid()
   const timestamp = new Date()
 
@@ -230,6 +272,10 @@ export async function audit(entry: AuditLogEntry, tx?: Prisma.TransactionClient)
       status: entry.status || "success",
       errorMessage: entry.errorMessage || null,
       apiTokenId: apiTokenId || null,
+      // Rows written by the Go orchestrator carry 'orchestrator' (#1105) and
+      // reach syslog through lib/syslog/orchestratorRelay.ts; everything
+      // written here is forwarded below and must never be relayed twice.
+      source: "app",
     },
   })
 

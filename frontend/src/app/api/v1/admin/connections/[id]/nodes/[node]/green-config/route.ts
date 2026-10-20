@@ -4,12 +4,13 @@ import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { requireProviderTenant } from "@/lib/tenant"
 import { upsertNodeGreenConfig, deleteNodeGreenConfig } from "@/lib/db/greenConfig"
 import { invalidateGreenResolution } from "@/lib/green/resolve"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
 type RouteContext = { params: Promise<{ id: string; node: string }> | { id: string; node: string } }
 
-export async function PUT(req: NextRequest, ctx: RouteContext) {
+async function handlePut(req: NextRequest, ctx: RouteContext) {
   try {
     const providerGate = await requireProviderTenant()
     if (providerGate) return providerGate
@@ -35,7 +36,7 @@ export async function PUT(req: NextRequest, ctx: RouteContext) {
   }
 }
 
-export async function DELETE(_req: NextRequest, ctx: RouteContext) {
+async function handleDelete(_req: NextRequest, ctx: RouteContext) {
   try {
     const providerGate = await requireProviderTenant()
     if (providerGate) return providerGate
@@ -54,3 +55,6 @@ export async function DELETE(_req: NextRequest, ctx: RouteContext) {
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const PUT = withAudit({ category: "connections", resourceType: "node", resourceParam: "node" }, handlePut)
+export const DELETE = withAudit({ category: "connections", resourceType: "node", resourceParam: "node" }, handleDelete)

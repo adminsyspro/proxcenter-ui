@@ -18,6 +18,7 @@ import { mapCreateVdcError } from "@/lib/vdc/httpErrors"
 import { audit } from "@/lib/audit"
 
 import { storagePolicyProviderGuard } from "./guard"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -34,7 +35,7 @@ export async function GET(_req: Request, ctx: RouteContext) {
   }
 }
 
-export async function POST(req: Request, ctx: RouteContext) {
+async function handlePost(req: Request, ctx: RouteContext) {
   try {
     const { id } = (await Promise.resolve(ctx.params)) as { id: string }
     const denied = await storagePolicyProviderGuard()
@@ -63,3 +64,5 @@ export async function POST(req: Request, ctx: RouteContext) {
     return NextResponse.json({ error: message }, { status })
   }
 }
+
+export const POST = withAudit({ category: "storage", resourceType: "storage_policy", resourceParam: "id" }, handlePost)

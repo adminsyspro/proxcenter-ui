@@ -9,6 +9,7 @@ import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
 import { getConnectionById } from '@/lib/connections/getConnection'
 import { orchestratorOrPve } from '@/lib/firewall/withPveFallback'
 import * as pveDirect from '@/lib/firewall/pveDirect'
+import { withAudit } from '@/lib/audit/withAudit'
 
 // DELETE /api/v1/firewall/ipsets/[connectionId]/[ipsetName] - Delete IP set
 async function deleteHandler(
@@ -42,4 +43,4 @@ return NextResponse.json(
   }
 }
 
-export const DELETE = withPublicApiGuard("fw-ipset-delete", deleteHandler)
+export const DELETE = withAudit({ category: 'firewall', resourceType: 'ipset', resourceParam: 'ipsetName' }, withPublicApiGuard("fw-ipset-delete", deleteHandler))

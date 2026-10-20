@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 
 import { orchestratorFetch } from '@/lib/orchestrator/client'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
+import { withAudit } from '@/lib/audit/withAudit'
 
 export const runtime = 'nodejs'
 
@@ -18,7 +19,7 @@ export async function GET() {
   }
 }
 
-export async function PUT(req: Request) {
+async function handlePut(req: Request) {
   try {
     const permError = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
     if (permError) return permError
@@ -31,3 +32,5 @@ export async function PUT(req: Request) {
     return NextResponse.json({ error: error?.message || 'Server error' }, { status: 500 })
   }
 }
+
+export const PUT = withAudit({ category: 'security', resourceType: 'setting' }, handlePut)

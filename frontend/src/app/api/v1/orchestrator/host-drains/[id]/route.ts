@@ -21,7 +21,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
 
     const { id } = await ctx.params
     const response = await fetch(`${ORCHESTRATOR_URL}/api/v1/host-drains/${encodeURIComponent(id)}`, {
-      headers: orchestratorHeaders({ "Content-Type": "application/json" }),
+      headers: await orchestratorHeaders({ "Content-Type": "application/json" }),
     })
     const data = await response.json()
     if (!response.ok) {

@@ -37,13 +37,14 @@ import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { denyIfTargetIsProtectedAndCallerIsNot, findUserInTenant } from "@/lib/rbac/userTargetGuards"
 import { DEFAULT_TENANT_ID, getCurrentTenantId } from "@/lib/tenant"
 import { revokeAllSessions } from "@/lib/auth/sessions"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
 // DELETE /api/v1/admin/users/[id]/sessions — revoke every session of the
 // target user. The target may be the caller themselves: that is allowed and
 // simply logs them out too, same as disabling one's own account would.
-export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string }> }) {
+async function handleDelete(_req: Request, ctx: { params: Promise<{ id: string }> }) {
   const denied = await checkPermission(PERMISSIONS.ADMIN_USERS)
   if (denied) return denied
 
@@ -87,3 +88,5 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string 
 
   return NextResponse.json({ data: { revoked } })
 }
+
+export const DELETE = withAudit({ category: "users", resourceType: "user", resourceParam: "id" }, handleDelete)

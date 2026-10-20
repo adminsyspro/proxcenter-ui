@@ -73,7 +73,12 @@ vi.mock('@/lib/connections/getConnection', () => ({
   getConnectionById: (...a: unknown[]) => getConnectionByIdMock(...a),
 }))
 
-vi.mock('@/lib/audit', () => ({ audit: (...a: unknown[]) => auditMock(...a) }))
+vi.mock('@/lib/audit', async () => {
+  // audit() flips the request's audit scope so withAudit() adds no row of its
+  // own (#1105); the stand-in must do the same or every explicit row doubles.
+  const { markAuditExplicit } = await vi.importActual<typeof import('@/lib/audit/scope')>('@/lib/audit/scope')
+  return { audit: (...a: unknown[]) => { markAuditExplicit(); return auditMock(...a) } }
+})
 
 vi.mock('next-auth', () => ({
   getServerSession: (...a: unknown[]) => getServerSessionMock(...a),
@@ -240,7 +245,13 @@ describe('POST /api/v1/admin/connections/{id}/storage-policies', () => {
     })
 
     expect(res.status).toBe(409)
-    expect(auditMock).not.toHaveBeenCalled()
+    // The route never reached its own audit(): the refusal row is withAudit()'s.
+    expect(auditMock).toHaveBeenCalledTimes(1)
+    expect(auditMock.mock.calls[0][0]).toMatchObject({
+      category: 'storage', action: 'create', resourceType: 'storage_policy', resourceId: CONN_ID, status: 'failure',
+      errorMessage: 'A storage policy with this name or storage already exists on this connection',
+      details: expect.objectContaining({ method: 'POST', httpStatus: 409 }),
+    })
   })
 })
 
@@ -300,7 +311,12 @@ describe('PUT /api/v1/admin/connections/{id}/storage-policies/{policyId}', () =>
 
     expect(res.status).toBe(409)
     expect(clearScopeCacheForPolicyMock).not.toHaveBeenCalled()
-    expect(auditMock).not.toHaveBeenCalled()
+    expect(auditMock).toHaveBeenCalledTimes(1)
+    expect(auditMock.mock.calls[0][0]).toMatchObject({
+      category: 'storage', action: 'update', resourceType: 'storage_policy', resourceId: POLICY_ID, status: 'failure',
+      errorMessage: 'Storage policy storage cannot be changed while assigned to vDCs: "Acme"',
+      details: expect.objectContaining({ method: 'PUT', httpStatus: 409 }),
+    })
   })
 })
 
@@ -338,7 +354,12 @@ describe('DELETE /api/v1/admin/connections/{id}/storage-policies/{policyId}', ()
     })
 
     expect(res.status).toBe(409)
-    expect(auditMock).not.toHaveBeenCalled()
+    expect(auditMock).toHaveBeenCalledTimes(1)
+    expect(auditMock.mock.calls[0][0]).toMatchObject({
+      category: 'storage', action: 'delete', resourceType: 'storage_policy', resourceId: POLICY_ID, status: 'failure',
+      errorMessage: 'Storage policy is in use by vDC "prod-acme"',
+      details: expect.objectContaining({ method: 'DELETE', httpStatus: 409 }),
+    })
   })
 
   it('deletes, audits, returns success', async () => {

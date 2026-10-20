@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { orchestratorFetch } from '@/lib/orchestrator'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { applyReportRequestScope } from '@/lib/reports/connectionScope'
+import { withAudit } from '@/lib/audit/withAudit'
 
 export const runtime = 'nodejs'
 
@@ -36,7 +37,7 @@ export async function GET(
 }
 
 // PUT /api/v1/orchestrator/reports/schedules/[id] - Update a schedule
-export async function PUT(
+async function handlePut(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -70,7 +71,7 @@ export async function PUT(
 }
 
 // DELETE /api/v1/orchestrator/reports/schedules/[id] - Delete a schedule
-export async function DELETE(
+async function handleDelete(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -94,3 +95,6 @@ export async function DELETE(
     )
   }
 }
+
+export const PUT = withAudit({ category: 'alerts', resourceType: 'schedule', resourceParam: 'id' }, handlePut)
+export const DELETE = withAudit({ category: 'alerts', resourceType: 'schedule', resourceParam: 'id' }, handleDelete)

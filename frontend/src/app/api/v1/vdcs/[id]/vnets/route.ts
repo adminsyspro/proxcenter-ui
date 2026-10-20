@@ -8,6 +8,7 @@ import { checkVnetPermission } from "@/lib/vdc/vnetPermission"
 import { PERMISSIONS } from "@/lib/rbac"
 import { VniError } from "@/lib/vdc/vniPolicy"
 import { getSubnetUsage } from "@/lib/vdc/ipam"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -152,4 +153,4 @@ async function postHandler(req: Request, ctx: RouteContext) {
 }
 
 export const GET = withPublicApiGuard("vdc-vnets-list", getHandler)
-export const POST = withPublicApiGuard("vdc-vnet-create", postHandler)
+export const POST = withAudit({ category: "sdn", resourceType: "vdc", resourceParam: "id" }, withPublicApiGuard("vdc-vnet-create", postHandler))

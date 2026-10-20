@@ -11,6 +11,7 @@ import { checkPermission, PERMISSIONS, PROTECTED_ROLE_IDS, PROVIDER_ONLY_ROLE_ID
 import { denyIfTargetIsProtectedAndCallerIsNot, findUserInTenant } from "@/lib/rbac/userTargetGuards"
 import { nanoid } from "nanoid"
 import { DEFAULT_TENANT_ID, addUserToTenant, removeUserFromTenant, TenantMembershipError, getCurrentTenantId } from "@/lib/tenant"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -62,7 +63,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 }
 
 // PATCH /api/v1/users/[id] - Modifier un utilisateur
-export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
+async function handlePatch(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await getServerSession(authOptions)
     const { id } = await params
@@ -418,7 +419,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 }
 
 // DELETE /api/v1/users/[id] - Supprimer un utilisateur
-export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
+async function handleDelete(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     // RBAC: Check admin.users permission
     const denied = await checkPermission(PERMISSIONS.ADMIN_USERS)
@@ -528,3 +529,6 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     return NextResponse.json({ error: error?.message || "Erreur serveur" }, { status: 500 })
   }
 }
+
+export const PATCH = withAudit({ category: "users", resourceType: "user", resourceParam: "id" }, handlePatch)
+export const DELETE = withAudit({ category: "users", resourceType: "user", resourceParam: "id" }, handleDelete)

@@ -19,7 +19,12 @@ vi.mock('@/lib/guestFileRestore/settings', async importOriginal => ({
   loadGuestFileRestoreSettings: () => loadMock(),
   saveGuestFileRestoreSettings: (...a: any[]) => saveMock(...a),
 }))
-vi.mock('@/lib/audit', () => ({ audit: (...a: any[]) => auditMock(...a) }))
+vi.mock('@/lib/audit', async () => {
+  // audit() flips the request's audit scope so withAudit() adds no row of its
+  // own (#1105); the stand-in must do the same or every explicit row doubles.
+  const { markAuditExplicit } = await vi.importActual<typeof import('@/lib/audit/scope')>('@/lib/audit/scope')
+  return { audit: (...a: any[]) => { markAuditExplicit(); return auditMock(...a) } }
+})
 
 import { DEFAULT_GUEST_FILE_RESTORE_SETTINGS } from '@/lib/guestFileRestore/settings'
 
@@ -87,13 +92,19 @@ describe('settings route server errors', () => {
     expect(await readJson(await callRoute(GET, { method: 'GET' }))).toEqual({ error: 'Erreur serveur' })
   })
 
-  it('maps a save failure of PUT to 500 without auditing', async () => {
+  it('maps a save failure of PUT to 500, leaving only the failure row of withAudit()', async () => {
     saveMock.mockRejectedValueOnce(new Error('write failed')).mockRejectedValueOnce(null)
     const body = { ...DEFAULT_GUEST_FILE_RESTORE_SETTINGS }
     const first = await callRoute(PUT, { method: 'PUT', body })
     expect(first.status).toBe(500)
     expect(await readJson(first)).toEqual({ error: 'write failed' })
     expect(await readJson(await callRoute(PUT, { method: 'PUT', body }))).toEqual({ error: 'Erreur serveur' })
-    expect(auditMock).not.toHaveBeenCalled()
+    // The route never reached its own audit(): one safety-net row per failed call.
+    expect(auditMock).toHaveBeenCalledTimes(2)
+    const failed = (errorMessage: string) => expect.objectContaining({
+      category: 'settings', action: 'update', resourceType: 'guest_file_restore', status: 'failure', errorMessage,
+      details: expect.objectContaining({ method: 'PUT', httpStatus: 500 }),
+    })
+    expect(auditMock.mock.calls.map(c => c[0])).toEqual([failed('write failed'), failed('Erreur serveur')])
   })
 })

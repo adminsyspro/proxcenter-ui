@@ -523,6 +523,9 @@ model AuditLog {
   // to (or instead of) userId. Deliberately NO foreign key: audit rows must
   // survive token deletion (spec 2026-07-28, #264/#254).
   apiTokenId   String?  @map("api_token_id")
+  // Who wrote the row: 'app' for audit() in Next, 'orchestrator' for the Go
+  // backend (issue #1105). The syslog relay cursors over the orchestrator rows.
+  source       String   @default("app")
 
   @@index([timestamp])
   @@index([userId])
@@ -531,6 +534,7 @@ model AuditLog {
   @@index([resourceType, resourceId])
   @@index([tenantId])
   @@index([apiTokenId])
+  @@index([source, timestamp])
   @@map("audit_logs")
 }
 

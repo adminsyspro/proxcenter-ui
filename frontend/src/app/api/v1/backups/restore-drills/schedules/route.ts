@@ -14,6 +14,7 @@ import { scheduleAuditDetails } from '@/lib/backups/restoreDrills/schedules'
 import { prepareScheduleInput } from '@/lib/backups/restoreDrills/server'
 import { getOrchestratorClient } from '@/lib/orchestrator/client'
 import { PERMISSIONS, checkPermission } from '@/lib/rbac'
+import { withAudit } from '@/lib/audit/withAudit'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -37,7 +38,7 @@ export async function GET(request: Request) {
   }
 }
 
-export async function POST(request: Request) {
+async function handlePost(request: Request) {
   try {
     const access = await requireRestoreDrillAccess()
     if (access.denied) return access.denied
@@ -70,3 +71,5 @@ export async function POST(request: Request) {
     return drillErrorResponse(e, 'Failed to create the restore drill schedule')
   }
 }
+
+export const POST = withAudit({ category: 'backups', resourceType: 'schedule' }, handlePost)

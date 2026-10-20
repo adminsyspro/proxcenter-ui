@@ -20,7 +20,12 @@ vi.mock('@/lib/rbac', () => ({
   checkPermission: (...a: unknown[]) => checkPermissionMock(...a),
   PERMISSIONS: { ADMIN_SETTINGS: 'admin.settings' },
 }))
-vi.mock('@/lib/audit', () => ({ audit: (...a: unknown[]) => auditMock(...a) }))
+vi.mock('@/lib/audit', async () => {
+  // audit() flips the request's audit scope so withAudit() adds no row of its
+  // own (#1105); the stand-in must do the same or every explicit row doubles.
+  const { markAuditExplicit } = await vi.importActual<typeof import('@/lib/audit/scope')>('@/lib/audit/scope')
+  return { audit: (...a: unknown[]) => { markAuditExplicit(); return auditMock(...a) } }
+})
 vi.mock('@/lib/vdc/transportOps', () => ({
   getVdcZoneStatus: (...a: unknown[]) => statusMock(...a),
   syncVdcZone: (...a: unknown[]) => syncMock(...a),
@@ -81,9 +86,15 @@ describe('POST .../zone', () => {
     expect(await res.json()).toEqual({ data: { ...STATUS, changed: true } })
   })
 
-  it('maps a Proxmox refusal to 502 without auditing', async () => {
+  it('maps a Proxmox refusal to 502, leaving only the wrapper failure row', async () => {
     syncMock.mockRejectedValueOnce(new Error('Failed to update SDN zone "zacme": 400 bad peer'))
     expect((await callRoute(POST as any, { method: 'POST', params: { id: 'v1' } })).status).toBe(502)
-    expect(auditMock).not.toHaveBeenCalled()
+    // The route never reached its own audit(): the refusal row is withAudit()'s.
+    expect(auditMock).toHaveBeenCalledTimes(1)
+    expect(auditMock.mock.calls[0][0]).toMatchObject({
+      category: 'admin', action: 'create', resourceType: 'vdc', resourceId: 'v1', status: 'failure',
+      errorMessage: 'Failed to update SDN zone "zacme": 400 bad peer',
+      details: expect.objectContaining({ method: 'POST', httpStatus: 502, params: { id: 'v1' } }),
+    })
   })
 })

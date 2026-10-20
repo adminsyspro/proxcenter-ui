@@ -14,6 +14,7 @@ import { roleHasSensitiveNicPermissions } from "@/lib/rbac/nicPermissions"
 import { validateAssignmentScope } from "@/lib/rbac/scope-validation"
 import { DEFAULT_TENANT_ID, getCurrentTenantId } from "@/lib/tenant"
 import { demoResponse } from "@/lib/demo/demo-api"
+import { withAudit } from "@/lib/audit/withAudit"
 
 // GET /api/v1/rbac/assignments - Liste toutes les assignations
 export async function GET(req: NextRequest) {
@@ -214,7 +215,7 @@ return NextResponse.json(
 }
 
 // POST /api/v1/rbac/assignments - Assigner un rôle à un utilisateur
-export async function POST(req: NextRequest) {
+async function handlePost(req: NextRequest) {
   const demo = demoResponse(req)
   if (demo) return demo
 
@@ -439,3 +440,5 @@ return NextResponse.json(
     )
   }
 }
+
+export const POST = withAudit({ category: "security", resourceType: "assignment" }, handlePost)

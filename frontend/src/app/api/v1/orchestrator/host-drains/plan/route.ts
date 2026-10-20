@@ -57,7 +57,7 @@ export async function POST(req: Request) {
 
     const response = await fetch(`${ORCHESTRATOR_URL}/api/v1/host-drains/plan`, {
       method: "POST",
-      headers: orchestratorHeaders({ "Content-Type": "application/json" }),
+      headers: await orchestratorHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({ connection_id: connectionId, node: safeNode, config }),
     })
     const data = await response.json()

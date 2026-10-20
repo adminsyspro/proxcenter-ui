@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { orchestratorFetch } from '@/lib/orchestrator'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { applyReportRequestScope } from '@/lib/reports/connectionScope'
+import { withAudit } from '@/lib/audit/withAudit'
 
 export const runtime = 'nodejs'
 
@@ -28,7 +29,7 @@ export async function GET() {
 }
 
 // POST /api/v1/orchestrator/reports/schedules - Create a new schedule
-export async function POST(request: NextRequest) {
+async function handlePost(request: NextRequest) {
   try {
     const denied = await checkPermission(PERMISSIONS.REPORTS_VIEW)
     if (denied) return denied
@@ -56,3 +57,5 @@ export async function POST(request: NextRequest) {
     )
   }
 }
+
+export const POST = withAudit({ category: 'alerts', resourceType: 'schedule' }, handlePost)

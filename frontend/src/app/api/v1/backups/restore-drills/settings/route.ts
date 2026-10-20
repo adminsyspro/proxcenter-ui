@@ -11,6 +11,7 @@ import { requireRestoreDrillAccess } from '@/lib/backups/restoreDrills/guard'
 import { parseDrillSettings } from '@/lib/backups/restoreDrills/request'
 import { getOrchestratorClient } from '@/lib/orchestrator/client'
 import { PERMISSIONS, checkPermission } from '@/lib/rbac'
+import { withAudit } from '@/lib/audit/withAudit'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -31,7 +32,7 @@ export async function GET() {
   }
 }
 
-export async function PUT(request: Request) {
+async function handlePut(request: Request) {
   try {
     const access = await requireRestoreDrillAccess()
     if (access.denied) return access.denied
@@ -64,3 +65,5 @@ export async function PUT(request: Request) {
     return drillErrorResponse(e, 'Failed to save the restore drill settings')
   }
 }
+
+export const PUT = withAudit({ category: 'backups', resourceType: 'setting' }, handlePut)

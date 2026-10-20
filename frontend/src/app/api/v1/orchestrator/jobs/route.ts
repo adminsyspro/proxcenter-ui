@@ -127,7 +127,7 @@ export async function GET(req: Request) {
     // Fetch rolling updates
     try {
       const rollingRes = await fetch(`${ORCHESTRATOR_URL}/api/v1/rolling-updates`, {
-        headers: orchestratorHeaders({ "Content-Type": "application/json" }),
+        headers: await orchestratorHeaders({ "Content-Type": "application/json" }),
       })
 
       if (rollingRes.ok) {
@@ -195,7 +195,7 @@ export async function GET(req: Request) {
     // Fetch DRS migrations
     try {
       const drsRes = await fetch(`${ORCHESTRATOR_URL}/api/v1/drs/migrations?limit=50`, {
-        headers: orchestratorHeaders({ "Content-Type": "application/json" }),
+        headers: await orchestratorHeaders({ "Content-Type": "application/json" }),
       })
 
       if (drsRes.ok) {
@@ -225,7 +225,7 @@ export async function GET(req: Request) {
         await Promise.all(inFlight.map(async (m: any) => {
           try {
             const progRes = await fetch(`${ORCHESTRATOR_URL}/api/v1/drs/migrations/${m.id}/progress`, {
-              headers: orchestratorHeaders({ "Content-Type": "application/json" }),
+              headers: await orchestratorHeaders({ "Content-Type": "application/json" }),
             })
             if (!progRes.ok) return
 
@@ -281,7 +281,7 @@ export async function GET(req: Request) {
     // orchestrator keeps them fleet-wide.
     try {
       const drainRes = await fetch(`${ORCHESTRATOR_URL}/api/v1/host-drains?limit=50`, {
-        headers: orchestratorHeaders({ "Content-Type": "application/json" }),
+        headers: await orchestratorHeaders({ "Content-Type": "application/json" }),
       })
 
       if (drainRes.ok) {
@@ -365,7 +365,7 @@ export async function GET(req: Request) {
     // Fetch Site Recovery replication jobs
     try {
       const replRes = await fetch(`${ORCHESTRATOR_URL}/api/v1/replication/jobs`, {
-        headers: orchestratorHeaders({ "Content-Type": "application/json" }),
+        headers: await orchestratorHeaders({ "Content-Type": "application/json" }),
       })
 
       if (replRes.ok) {
@@ -417,7 +417,7 @@ export async function GET(req: Request) {
     // Fetch Site Recovery plan executions (failover/failback/test)
     try {
       const plansRes = await fetch(`${ORCHESTRATOR_URL}/api/v1/replication/plans`, {
-        headers: orchestratorHeaders({ "Content-Type": "application/json" }),
+        headers: await orchestratorHeaders({ "Content-Type": "application/json" }),
       })
 
       if (plansRes.ok) {
@@ -429,7 +429,7 @@ export async function GET(req: Request) {
           if (!plan.last_failover && !plan.last_test) continue
           try {
             const histRes = await fetch(`${ORCHESTRATOR_URL}/api/v1/replication/plans/${plan.id}/history`, {
-              headers: orchestratorHeaders({ "Content-Type": "application/json" }),
+              headers: await orchestratorHeaders({ "Content-Type": "application/json" }),
             })
             if (!histRes.ok) continue
             const histData = await histRes.json()

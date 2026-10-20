@@ -10,10 +10,11 @@ import { getConnectionById } from '@/lib/connections/getConnection'
 import { resolvePbsMeta } from '@/lib/proxmox/pbsConnMeta'
 import { readVdcAndTenant, readVdcNodeNames, appendVdcStorage } from '@/lib/vdc/pbsOrchestrator'
 import { clearVdcScopeCache } from '@/lib/vdc/scope'
+import { withAudit } from '@/lib/audit/withAudit'
 
 export const runtime = 'nodejs'
 
-export async function POST(_req: Request, ctx: { params: Promise<{ id: string; bindingId: string }> }) {
+async function handlePost(_req: Request, ctx: { params: Promise<{ id: string; bindingId: string }> }) {
   const s = await getServerSession(authOptions)
   if (!s?.user?.id || !(await isUserSuperAdmin(s.user.id))) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
@@ -63,3 +64,5 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string; b
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const POST = withAudit({ category: 'admin', resourceType: 'pbs_binding', resourceParam: 'bindingId', action: 'sync' }, handlePost)

@@ -6,6 +6,7 @@ import { audit } from "@/lib/audit"
 import { syncNetworkZones } from "@/lib/vdc/tenantNetworkMembers"
 import { getTenantNetwork } from "@/lib/vdc/tenantNetworks"
 import { mapTenantNetworkError } from "@/lib/vdc/httpErrors"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -14,7 +15,7 @@ type RouteContext = { params: Promise<{ id: string }> | { id: string } }
 // POST /api/v1/admin/tenant-networks/[id]/sync
 // Bring the zone of every member back to its own peers plus the other
 // members', rewriting and applying only where Proxmox differs (#901).
-export async function POST(_req: Request, ctx: RouteContext) {
+async function handlePost(_req: Request, ctx: RouteContext) {
   const params = await Promise.resolve(ctx.params)
   const id = (params as any)?.id
   if (!id) return NextResponse.json({ error: "Missing tenant network ID" }, { status: 400 })
@@ -40,3 +41,5 @@ export async function POST(_req: Request, ctx: RouteContext) {
     return NextResponse.json({ error: message }, { status })
   }
 }
+
+export const POST = withAudit({ category: "sdn", resourceType: "tenant_network", resourceParam: "id", action: "sync" }, handlePost)

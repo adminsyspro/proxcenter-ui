@@ -5,6 +5,7 @@ import { requireProviderTenant } from "@/lib/tenant"
 import { audit } from "@/lib/audit"
 import { deleteTenantNetwork, getTenantNetwork, updateTenantNetwork } from "@/lib/vdc/tenantNetworks"
 import { mapTenantNetworkError } from "@/lib/vdc/httpErrors"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -39,7 +40,7 @@ export async function GET(_req: Request, ctx: RouteContext) {
 
 // PUT /api/v1/admin/tenant-networks/[id]
 // Name, description and, while no vDC carries the network, its MTU.
-export async function PUT(req: Request, ctx: RouteContext) {
+async function handlePut(req: Request, ctx: RouteContext) {
   const g = await gate(ctx)
   if (g instanceof Response) return g
   try {
@@ -67,7 +68,7 @@ export async function PUT(req: Request, ctx: RouteContext) {
 
 // DELETE /api/v1/admin/tenant-networks/[id]
 // Only a network no vDC carries; the VNI is released with it.
-export async function DELETE(_req: Request, ctx: RouteContext) {
+async function handleDelete(_req: Request, ctx: RouteContext) {
   const g = await gate(ctx)
   if (g instanceof Response) return g
   try {
@@ -87,3 +88,6 @@ export async function DELETE(_req: Request, ctx: RouteContext) {
     return fail(e)
   }
 }
+
+export const PUT = withAudit({ category: "sdn", resourceType: "tenant_network", resourceParam: "id" }, handlePut)
+export const DELETE = withAudit({ category: "sdn", resourceType: "tenant_network", resourceParam: "id" }, handleDelete)

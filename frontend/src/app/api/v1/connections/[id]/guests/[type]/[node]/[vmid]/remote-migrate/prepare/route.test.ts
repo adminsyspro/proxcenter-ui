@@ -33,7 +33,12 @@ vi.mock("@/lib/tenant/infraScope", () => ({
   getTenantInfrastructureScope: (...a: any[]) => getInfraMock(...a),
   canMigrateConnections: (...a: any[]) => canMigrateConnectionsMock(...a),
 }))
-vi.mock("@/lib/audit", () => ({ audit: (...a: any[]) => auditMock(...a) }))
+vi.mock("@/lib/audit", async () => {
+  // audit() flips the request's audit scope so withAudit() adds no row of its
+  // own (#1105); the stand-in must do the same or every explicit row doubles.
+  const { markAuditExplicit } = await vi.importActual<typeof import("@/lib/audit/scope")>("@/lib/audit/scope")
+  return { audit: (...a: any[]) => { markAuditExplicit(); return auditMock(...a) } }
+})
 
 import { POST } from "./route"
 
@@ -86,6 +91,16 @@ function prepare(body: Record<string, unknown> = ALL_ACTIONS, params = PARAMS) {
 
 function deletes() {
   return pveFetchMock.mock.calls.filter(([, , init]) => init?.method === "DELETE")
+}
+
+/** The one row withAudit() writes when the route never reached its own audit(). */
+function expectWrapperRow(status: "success" | "failure", httpStatus: number, errorMessage?: unknown) {
+  expect(auditMock).toHaveBeenCalledTimes(1)
+  expect(auditMock.mock.calls[0][0]).toMatchObject({
+    category: "vms", action: "create", resourceType: "qemu", resourceId: "100", status,
+    ...(errorMessage === undefined ? {} : { errorMessage }),
+    details: expect.objectContaining({ method: "POST", httpStatus, params: PARAMS }),
+  })
 }
 
 beforeEach(() => {
@@ -152,7 +167,7 @@ describe("POST .../remote-migrate/prepare", () => {
     expect(res.status).toBe(400)
     expect((await res.json()).error).toContain(name)
     expect(deletes()).toEqual([])
-    expect(auditMock).not.toHaveBeenCalled()
+    expectWrapperRow("failure", 400, expect.stringContaining(name))
   })
 
   it.each([
@@ -224,7 +239,7 @@ describe("POST .../remote-migrate/prepare", () => {
     const res = await prepare()
     expect(res.status).toBe(500)
     expect(deletes()).toEqual([])
-    expect(auditMock).not.toHaveBeenCalled()
+    expectWrapperRow("failure", 500, `${captureError === "ha" ? "HA" : "replication"} capture failed`)
   })
 
   it("preserves capture and completed actions after a replication removal failure", async () => {
@@ -238,13 +253,14 @@ describe("POST .../remote-migrate/prepare", () => {
     expect(auditMock).toHaveBeenCalledTimes(2)
   })
 
-  it("does not delete or audit anything without explicit removal flags", async () => {
+  it("does not delete or journal any removal without explicit removal flags", async () => {
     const res = await prepare({})
     const json = await res.json()
     expect(res.status).toBe(200)
     expect(json.capture).toEqual(CAPTURE)
     expect(deletes()).toEqual([])
-    expect(auditMock).not.toHaveBeenCalled()
+    // No removal row of the route's own, only the safety-net row of withAudit().
+    expectWrapperRow("success", 200)
     expect(checkPermissionMock.mock.calls).toEqual([["vm.migrate", "vm", "conn-src/pve1/qemu/100"]])
   })
 
@@ -254,7 +270,7 @@ describe("POST .../remote-migrate/prepare", () => {
     expect(res.status).toBe(200)
     expect((await res.json()).cleared).toEqual({ ha: false, replicationJobs: [], snapshots: [] })
     expect(deletes()).toEqual([])
-    expect(auditMock).not.toHaveBeenCalled()
+    expectWrapperRow("success", 200)
   })
 
   it("deduplicates explicitly selected snapshots without requiring cluster permission", async () => {

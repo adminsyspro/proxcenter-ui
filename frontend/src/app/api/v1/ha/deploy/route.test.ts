@@ -18,6 +18,11 @@ vi.mock('@/lib/orchestrator/headers', () => ({
   orchestratorHeaders: (extra: Record<string, string> = {}) => ({ 'X-API-Key': 'test', ...extra }),
 }))
 
+// POST is wrapped by withAudit() (#1105); the real audit() would reach Prisma
+// and the syslog forwarder.
+const auditMock = vi.fn()
+vi.mock('@/lib/audit', () => ({ audit: auditMock }))
+
 const fetchMock = vi.fn()
 vi.stubGlobal('fetch', fetchMock)
 
@@ -25,6 +30,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   checkPermissionMock.mockResolvedValue(null)
   requireFeatureMock.mockResolvedValue(null)
+  auditMock.mockResolvedValue('audit-id')
 })
 
 describe('POST /api/v1/ha/deploy', () => {
@@ -78,6 +84,12 @@ describe('POST /api/v1/ha/deploy', () => {
     expect(res.status).toBe(403)
     expect(data).toEqual({ error: 'Feature not licensed', feature: 'control_plane_ha' })
     expect(checkPermissionMock).not.toHaveBeenCalled()
+    // The refusal still leaves a row, from withAudit(): the route never audits itself.
+    expect(auditMock).toHaveBeenCalledTimes(1)
+    expect(auditMock.mock.calls[0][0]).toMatchObject({
+      category: 'system', action: 'create', resourceType: 'ha', status: 'failure', errorMessage: 'Feature not licensed',
+      details: expect.objectContaining({ method: 'POST', httpStatus: 403 }),
+    })
   })
 })
 

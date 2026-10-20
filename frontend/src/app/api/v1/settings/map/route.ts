@@ -9,6 +9,7 @@ import { getSetting, setSetting } from '@/lib/db/settings'
 import { isTileTemplate, normalizeBasemapSettings, type BasemapSettings } from '@/lib/map/basemap'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { getCurrentTenantId } from '@/lib/tenant'
+import { withAudit } from '@/lib/audit/withAudit'
 
 export const runtime = "nodejs"
 
@@ -44,7 +45,7 @@ export async function GET() {
   }
 }
 
-export async function PUT(request: Request) {
+async function handlePut(request: Request) {
   try {
     const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
 
@@ -82,3 +83,5 @@ export async function PUT(request: Request) {
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const PUT = withAudit({ category: 'settings', resourceType: 'map' }, handlePut)

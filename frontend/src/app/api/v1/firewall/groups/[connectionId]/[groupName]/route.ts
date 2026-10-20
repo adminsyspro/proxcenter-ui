@@ -9,6 +9,7 @@ import { orchestratorOrPve } from '@/lib/firewall/withPveFallback'
 import { verifyConnectionOwnership } from '@/lib/tenant'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
+import { withAudit } from '@/lib/audit/withAudit'
 
 // DELETE /api/v1/firewall/groups/[connectionId]/[groupName] - Delete security group
 async function deleteHandler(
@@ -43,4 +44,4 @@ return NextResponse.json(
   }
 }
 
-export const DELETE = withPublicApiGuard("fw-group-delete", deleteHandler)
+export const DELETE = withAudit({ category: 'firewall', resourceType: 'group', resourceParam: 'groupName' }, withPublicApiGuard("fw-group-delete", deleteHandler))

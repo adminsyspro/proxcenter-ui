@@ -4,10 +4,11 @@ import { demoResponse } from "@/lib/demo/demo-api"
 import { pbsFetch } from "@/lib/proxmox/pbs-client"
 import { getPbsConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
-export async function POST(
+async function handlePost(
   req: Request,
   ctx: { params: Promise<{ id: string }> | { id: string } }
 ) {
@@ -39,3 +40,5 @@ export async function POST(
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const POST = withAudit({ category: "backups", resourceType: "pbs", resourceParam: "id", action: "sync" }, handlePost)

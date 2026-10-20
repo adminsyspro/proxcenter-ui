@@ -31,12 +31,31 @@ vi.mock("@/lib/auth/totp-admin", () => ({
   requireSuperAdminCaller: requireSuperAdminCallerMock,
 }))
 vi.mock("@/lib/auth/sessions", () => ({ revokeSession: revokeSessionMock }))
-vi.mock("@/lib/audit", () => ({ audit: auditMock }))
+vi.mock("@/lib/audit", async () => {
+  // audit() flips the request's audit scope so withAudit() adds no row of its
+  // own (#1105); the stand-in must do the same or every explicit row doubles.
+  const { markAuditExplicit } = await vi.importActual<typeof import("@/lib/audit/scope")>("@/lib/audit/scope")
+  return { audit: (...a: unknown[]) => { markAuditExplicit(); return auditMock(...a) } }
+})
 vi.mock("@/lib/db/prisma", () => ({
   prisma: {
     session: { findUnique: sessionFindUniqueMock },
   },
 }))
+
+/** The one row withAudit() writes when the route never reached its own audit(). */
+function wrapperFailureRow(sid: string, httpStatus: number, errorMessage: string) {
+  expect(auditMock).toHaveBeenCalledTimes(1)
+  expect(auditMock.mock.calls[0][0]).toMatchObject({
+    category: "admin",
+    action: "delete",
+    resourceType: "session",
+    resourceId: sid,
+    status: "failure",
+    errorMessage,
+    details: expect.objectContaining({ method: "DELETE", httpStatus, params: { sid } }),
+  })
+}
 
 async function importDELETE() {
   const mod = await import("./route")
@@ -65,7 +84,7 @@ describe("DELETE /api/v1/admin/sessions/[sid]", () => {
     expect(res.status).toBe(403)
     expect(sessionFindUniqueMock).not.toHaveBeenCalled()
     expect(revokeSessionMock).not.toHaveBeenCalled()
-    expect(auditMock).not.toHaveBeenCalled()
+    wrapperFailureRow("sess-1", 403, "Forbidden")
   })
 
   it("returns 404, not 403, when the sid does not exist, and reveals nothing about it", async () => {
@@ -77,7 +96,7 @@ describe("DELETE /api/v1/admin/sessions/[sid]", () => {
     expect(res.status).toBe(404)
     expect(res.status).not.toBe(403)
     expect(revokeSessionMock).not.toHaveBeenCalled()
-    expect(auditMock).not.toHaveBeenCalled()
+    wrapperFailureRow("ghost", 404, "Not found")
 
     const body = await readJson<any>(res)
     expect(JSON.stringify(body)).not.toMatch(/ghost/)
@@ -105,7 +124,7 @@ describe("DELETE /api/v1/admin/sessions/[sid]", () => {
     const res = await callRoute(DELETE as any, { method: "DELETE", params: { sid: "sess-1" } })
 
     expect(res.status).toBe(404)
-    expect(auditMock).not.toHaveBeenCalled()
+    wrapperFailureRow("sess-1", 404, "Not found")
   })
 
   it("audits the revocation naming the owning user, but never the sid", async () => {

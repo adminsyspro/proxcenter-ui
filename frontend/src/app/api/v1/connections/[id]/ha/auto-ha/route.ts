@@ -3,6 +3,7 @@ import { NextResponse } from "next/server"
 import { getSetting, setSetting } from "@/lib/db/settings"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -62,4 +63,4 @@ async function putHandler(req: Request, ctx: { params: Promise<{ id: string }> }
 }
 
 export const GET = withPublicApiGuard("ha-auto-get", getHandler)
-export const PUT = withPublicApiGuard("ha-auto-update", putHandler)
+export const PUT = withAudit({ category: "ha", resourceType: "ha_auto_ha", resourceParam: "id" }, withPublicApiGuard("ha-auto-update", putHandler))

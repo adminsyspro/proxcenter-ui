@@ -6,6 +6,7 @@ import { prisma } from "@/lib/db/prisma"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { clearVdcScopeCache } from "@/lib/vdc/scope"
 import { requireProviderTenant } from "@/lib/tenant"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -46,7 +47,7 @@ export async function GET(_req: Request, ctx: RouteContext) {
 
 // PUT /api/v1/admin/vdcs/{id}/shared-bridges
 // Body: { bridges: [{ bridge, label? }, ...] } - replaces the full set.
-export async function PUT(req: Request, ctx: RouteContext) {
+async function handlePut(req: Request, ctx: RouteContext) {
   try {
     const params = await Promise.resolve(ctx.params)
     const id = (params as any)?.id
@@ -108,3 +109,5 @@ export async function PUT(req: Request, ctx: RouteContext) {
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const PUT = withAudit({ category: "admin", resourceType: "vdc", resourceParam: "id" }, handlePut)

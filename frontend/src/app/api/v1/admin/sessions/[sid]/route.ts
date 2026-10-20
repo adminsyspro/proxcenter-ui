@@ -16,6 +16,7 @@ import { prisma } from "@/lib/db/prisma"
 import { audit } from "@/lib/audit"
 import { revokeSession } from "@/lib/auth/sessions"
 import { requireSuperAdminCaller } from "@/lib/auth/totp-admin"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -27,7 +28,7 @@ interface RouteContext {
 // not exist returns 404, never 403: matching
 // DELETE /api/v1/auth/sessions/[sid]'s convention, a 403 would confirm the
 // id is real. The audit entry names the owning user, never the sid.
-export async function DELETE(_req: Request, ctx: RouteContext) {
+async function handleDelete(_req: Request, ctx: RouteContext) {
   const denied = await requireSuperAdminCaller()
   if (denied) return denied
 
@@ -63,3 +64,5 @@ export async function DELETE(_req: Request, ctx: RouteContext) {
 
   return NextResponse.json({ data: { ok: true } })
 }
+
+export const DELETE = withAudit({ category: "admin", resourceType: "session", resourceParam: "sid" }, handleDelete)

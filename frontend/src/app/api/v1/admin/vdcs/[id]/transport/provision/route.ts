@@ -4,6 +4,7 @@ import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { requireProviderTenant } from "@/lib/tenant"
 import { audit } from "@/lib/audit"
 import { getVdcTransportStatus, provisionVdcTransport } from "@/lib/vdc/transportOps"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -44,7 +45,7 @@ export async function GET(_req: Request, ctx: RouteContext) {
 // Create or update the transport VLAN interface on each node of the vDC's
 // transport network, then reload that node's network (#899). Per-node
 // results; a failing node never hides the others.
-export async function POST(_req: Request, ctx: RouteContext) {
+async function handlePost(_req: Request, ctx: RouteContext) {
   const g = await gate(ctx)
   if (g instanceof Response) return g
   try {
@@ -66,3 +67,5 @@ export async function POST(_req: Request, ctx: RouteContext) {
     return fail(e)
   }
 }
+
+export const POST = withAudit({ category: "admin", resourceType: "vdc", resourceParam: "id", action: "apply" }, handlePost)

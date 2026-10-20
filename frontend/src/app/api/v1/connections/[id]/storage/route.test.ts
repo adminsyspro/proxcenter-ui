@@ -35,7 +35,13 @@ vi.mock('@/lib/tenant', () => ({
   getSessionPrisma: vi.fn(),
 }))
 
-vi.mock('@/lib/audit', () => ({ audit: vi.fn() }))
+vi.mock('@/lib/audit', async () => {
+  // audit() flips the request's audit scope so withAudit() adds no row of its
+  // own (#1105); the stand-in must do the same or every explicit row doubles.
+  // mockReset() restores this implementation.
+  const { markAuditExplicit } = await vi.importActual<typeof import('@/lib/audit/scope')>('@/lib/audit/scope')
+  return { audit: vi.fn(async () => { markAuditExplicit(); return 'audit-id' }) }
+})
 vi.mock('@/lib/storage/attachPbsStorage', () => ({
   attachPbsStorage: vi.fn(),
   PbsAttachError: class PbsAttachError extends Error {
@@ -343,7 +349,13 @@ describe('POST /api/v1/connections/[id]/storage', () => {
     expect(await readJson<any>(res)).toMatchObject({ code: 'pbs_connection_required' })
     expect(attachPbsStorage).not.toHaveBeenCalled()
     expect(getSessionPrisma).not.toHaveBeenCalled()
-    expect(audit).not.toHaveBeenCalled()
+    // The route never reached its own audit(): the refusal row is withAudit()'s.
+    expect(audit).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(audit).mock.calls[0][0]).toMatchObject({
+      category: 'storage', action: 'create', resourceType: 'storage', resourceId: 'c1', status: 'failure',
+      errorMessage: expect.stringContaining('pbsConnectionId is required'),
+      details: expect.objectContaining({ method: 'POST', httpStatus: 400, params: { id: 'c1' } }),
+    })
   })
 
   it.each([

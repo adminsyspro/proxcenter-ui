@@ -3,13 +3,14 @@ import { NextRequest, NextResponse } from 'next/server'
 
 import { orchestratorFetch } from '@/lib/orchestrator'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
+import { withAudit } from '@/lib/audit/withAudit'
 
 export const runtime = 'nodejs'
 
 // POST /api/v1/orchestrator/reports/schedules/[id]/run - Run schedule now.
 // Tenant ownership is enforced by the orchestrator (X-Tenant-ID header set
 // by orchestratorFetch returns 404 for cross-tenant ids).
-export async function POST(
+async function handlePost(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -34,3 +35,5 @@ export async function POST(
     )
   }
 }
+
+export const POST = withAudit({ category: 'alerts', resourceType: 'schedule', resourceParam: 'id', action: 'run' }, handlePost)

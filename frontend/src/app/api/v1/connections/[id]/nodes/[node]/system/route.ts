@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -165,7 +166,7 @@ export async function GET(
  * Met à jour les configurations système
  * Body: { section: 'dns' | 'hosts' | 'time' | 'options', data: {...} }
  */
-export async function PUT(
+async function handlePut(
   req: Request,
   ctx: { params: Promise<{ id: string; node: string }> }
 ) {
@@ -232,3 +233,5 @@ export async function PUT(
     return NextResponse.json({ error: e?.message || "Failed to update system config" }, { status: 500 })
   }
 }
+
+export const PUT = withAudit({ category: "nodes", resourceType: "node", resourceParam: "node" }, handlePut)

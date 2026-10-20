@@ -13,7 +13,7 @@ export async function GET() {
   // through instead of parsing it.
   try {
     const res = await fetch(`${orchestratorBaseUrl()}/api/v1/ha/deploy/status`, {
-      headers: orchestratorHeaders(),
+      headers: await orchestratorHeaders(),
     })
 
     if (!res.ok || !res.body) {

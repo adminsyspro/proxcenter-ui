@@ -4,6 +4,7 @@ import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -118,4 +119,4 @@ return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
 }
 
 export const GET = withPublicApiGuard("ha-affinity-list", getHandler)
-export const POST = withPublicApiGuard("ha-affinity-create", postHandler)
+export const POST = withAudit({ category: "ha", resourceType: "ha_affinity_rule", resourceParam: "id" }, withPublicApiGuard("ha-affinity-create", postHandler))

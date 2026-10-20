@@ -5,6 +5,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/prisma'
 import { getCurrentTenantId } from '@/lib/tenant'
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { withAudit } from '@/lib/audit/withAudit'
 
 export const runtime = 'nodejs'
 
@@ -91,7 +92,7 @@ return NextResponse.json(
 }
 
 // POST - Créer une règle
-export async function POST(req: Request) {
+async function handlePost(req: Request) {
   try {
     const denied = await checkPermission(PERMISSIONS.ALERTS_MANAGE)
     if (denied) return denied
@@ -156,3 +157,5 @@ return NextResponse.json(
     )
   }
 }
+
+export const POST = withAudit({ category: 'alerts', resourceType: 'alert_rule' }, handlePost)

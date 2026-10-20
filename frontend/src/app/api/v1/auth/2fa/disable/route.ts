@@ -6,10 +6,11 @@ import { prisma } from "@/lib/db/prisma"
 import { isEnrollmentRequiredFor } from "@/lib/auth/enforce-2fa"
 import { clearUserTotp, verifyReauthCredentials } from "@/lib/auth/totp-admin"
 import { audit } from "@/lib/audit"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
-export async function POST(req: Request) {
+async function handlePost(req: Request) {
   const session = await getServerSession(authOptions)
 
   if (!session?.user?.id) {
@@ -53,3 +54,5 @@ export async function POST(req: Request) {
 
   return NextResponse.json({ data: { ok: true } })
 }
+
+export const POST = withAudit({ category: "auth", resourceType: "disable" }, handlePost)

@@ -61,7 +61,12 @@ vi.mock('@/lib/guestFileRestore/store', async importOriginal => ({
   reconcileStaleJobs: (rows: any[]) => reconcileMock(rows),
 }))
 vi.mock('@/lib/proxmox/client', () => ({ pveFetch: (...a: any[]) => pveFetchMock(...a) }))
-vi.mock('@/lib/audit', () => ({ audit: (...a: any[]) => auditMock(...a) }))
+vi.mock('@/lib/audit', async () => {
+  // audit() flips the request's audit scope so withAudit() adds no row of its
+  // own (#1105); the stand-in must do the same or every explicit row doubles.
+  const { markAuditExplicit } = await vi.importActual<typeof import('@/lib/audit/scope')>('@/lib/audit/scope')
+  return { audit: (...a: any[]) => { markAuditExplicit(); return auditMock(...a) } }
+})
 vi.mock('@/lib/rbac', () => ({
   PERMISSIONS: { BACKUP_VIEW: 'backup.view' },
   checkPermission: (...a: any[]) => checkPermissionMock(...a),
@@ -212,6 +217,12 @@ describe('POST /api/v1/guest-file-restore/jobs', () => {
   it('answers 404 when the target connection is unknown', async () => {
     connMock.mockResolvedValue(null)
     expect((await callRoute(POST, { body: body() })).status).toBe(404)
+    // The route never reached its own audit(): the refusal row is withAudit()'s.
+    expect(auditMock).toHaveBeenCalledTimes(1)
+    expect(auditMock.mock.calls[0][0]).toMatchObject({
+      category: 'backups', action: 'create', resourceType: 'job', status: 'failure', errorMessage: 'Connection not found',
+      details: expect.objectContaining({ method: 'POST', httpStatus: 404 }),
+    })
   })
 })
 

@@ -12,10 +12,11 @@ import { generateRecoveryCodes } from "@/lib/auth/recovery"
 import { checkTotpCode } from "@/lib/auth/totp"
 import { replaceRecoveryCodes } from "@/lib/auth/totp-admin"
 import { audit } from "@/lib/audit"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
-export async function POST(req: Request) {
+async function handlePost(req: Request) {
   const session = await getServerSession(authOptions)
 
   if (!session?.user?.id) {
@@ -103,3 +104,5 @@ export async function POST(req: Request) {
 
   return res
 }
+
+export const POST = withAudit({ category: "auth", resourceType: "verify" }, handlePost)

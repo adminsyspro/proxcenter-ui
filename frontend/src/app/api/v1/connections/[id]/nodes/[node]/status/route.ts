@@ -3,6 +3,7 @@ import { NextResponse } from "next/server"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, buildNodeResourceId, PERMISSIONS } from "@/lib/rbac"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -42,7 +43,7 @@ const VALID_NODE_COMMANDS = ["reboot", "shutdown"] as const
  * Reboot or shutdown a node via PVE API: POST /nodes/{node}/status
  * Body: { command: "reboot" | "shutdown" }
  */
-export async function POST(
+async function handlePost(
   req: Request,
   ctx: { params: Promise<{ id: string; node: string }> }
 ) {
@@ -83,3 +84,4 @@ export async function POST(
   }
 }
 
+export const POST = withAudit({ category: "nodes", resourceType: "node", resourceParam: "node", action: "execute" }, handlePost)

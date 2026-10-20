@@ -4,6 +4,7 @@ import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, buildNodeResourceId, PERMISSIONS } from "@/lib/rbac"
 import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -136,5 +137,5 @@ async function deleteHandler(req: Request, ctx: Ctx) {
 }
 
 export const GET = withPublicApiGuard("node-iface-get", getHandler)
-export const PUT = withPublicApiGuard("node-iface-update", putHandler)
-export const DELETE = withPublicApiGuard("node-iface-delete", deleteHandler)
+export const PUT = withAudit({ category: "nodes", resourceType: "network", resourceParam: "iface" }, withPublicApiGuard("node-iface-update", putHandler))
+export const DELETE = withAudit({ category: "nodes", resourceType: "network", resourceParam: "iface" }, withPublicApiGuard("node-iface-delete", deleteHandler))

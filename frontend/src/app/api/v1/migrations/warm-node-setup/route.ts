@@ -5,6 +5,7 @@ import { requireFeature } from "@/lib/auth/requireEnterprise"
 import { Features } from "@/lib/license/features"
 import { provisionWarmNode } from "@/lib/migration/warm/vddk-provision"
 import { safeLog } from "@/lib/log/sanitize"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -17,7 +18,7 @@ export const runtime = "nodejs"
  * gated the same way, plus the vmware_migration feature (the VDDK package is
  * an Enterprise deliverable).
  */
-export async function POST(req: Request) {
+async function handlePost(req: Request) {
   const denied = await checkPermission(PERMISSIONS.VM_MIGRATE)
   if (denied) return denied
 
@@ -58,3 +59,5 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: message }, { status: 500 })
   }
 }
+
+export const POST = withAudit({ category: "migration", resourceType: "warm_node_setup" }, handlePost)

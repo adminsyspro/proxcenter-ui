@@ -6,6 +6,7 @@ import { getSetting, setSetting } from '@/lib/db/settings'
 import { getCurrentTenantId } from '@/lib/tenant'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { defaultDRSSettings } from '@/components/automation/drs/drsSettings'
+import { withAudit } from '@/lib/audit/withAudit'
 
 export const runtime = "nodejs"
 
@@ -77,7 +78,7 @@ export async function GET() {
 }
 
 // PUT /api/v1/orchestrator/drs/settings
-export async function PUT(request: NextRequest) {
+async function handlePut(request: NextRequest) {
   try {
     const denied = await checkPermission(PERMISSIONS.AUTOMATION_MANAGE)
     if (denied) return denied
@@ -130,3 +131,5 @@ return NextResponse.json(
     )
   }
 }
+
+export const PUT = withAudit({ category: 'automation', resourceType: 'setting' }, handlePut)

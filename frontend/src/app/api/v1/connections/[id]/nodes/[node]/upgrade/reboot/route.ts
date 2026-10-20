@@ -5,6 +5,7 @@ import { resolveNodeSshEndpoint } from "@/lib/ssh/node-endpoint"
 import { executeSSH, type SSHResult } from "@/lib/ssh/exec"
 import { checkPermission, PERMISSIONS, buildNodeResourceId } from "@/lib/rbac"
 import { verifyNodeTarget, sshTargetError } from "@/lib/ssh/verify-node-target"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -13,7 +14,7 @@ type Ctx = { params: Promise<{ id: string; node: string }> }
 /**
  * POST — Reboot a node after upgrade.
  */
-export async function POST(_req: Request, ctx: Ctx) {
+async function handlePost(_req: Request, ctx: Ctx) {
   const { id, node } = await ctx.params
 
   const denied = await checkPermission(
@@ -56,3 +57,5 @@ export async function POST(_req: Request, ctx: Ctx) {
 
   return NextResponse.json({ rebooting: true })
 }
+
+export const POST = withAudit({ category: "nodes", resourceType: "node", resourceParam: "node", action: "reboot" }, handlePost)

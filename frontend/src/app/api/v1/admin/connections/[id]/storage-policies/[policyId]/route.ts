@@ -22,6 +22,7 @@ import { mapCreateVdcError } from "@/lib/vdc/httpErrors"
 import { audit } from "@/lib/audit"
 
 import { storagePolicyProviderGuard } from "../guard"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -39,7 +40,7 @@ async function findPolicyForConnection(
   return { name: row.name }
 }
 
-export async function PUT(req: Request, ctx: RouteContext) {
+async function handlePut(req: Request, ctx: RouteContext) {
   try {
     const { id, policyId } = (await Promise.resolve(ctx.params)) as { id: string; policyId: string }
     const denied = await storagePolicyProviderGuard()
@@ -73,7 +74,7 @@ export async function PUT(req: Request, ctx: RouteContext) {
   }
 }
 
-export async function DELETE(_req: Request, ctx: RouteContext) {
+async function handleDelete(_req: Request, ctx: RouteContext) {
   try {
     const { id, policyId } = (await Promise.resolve(ctx.params)) as { id: string; policyId: string }
     const denied = await storagePolicyProviderGuard()
@@ -99,3 +100,6 @@ export async function DELETE(_req: Request, ctx: RouteContext) {
     return NextResponse.json({ error: message }, { status })
   }
 }
+
+export const PUT = withAudit({ category: "storage", resourceType: "storage_policy", resourceParam: "policyId" }, handlePut)
+export const DELETE = withAudit({ category: "storage", resourceType: "storage_policy", resourceParam: "policyId" }, handleDelete)

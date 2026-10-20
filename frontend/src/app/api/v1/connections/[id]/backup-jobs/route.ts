@@ -11,6 +11,7 @@ import { getAllowedJobPools, isJobOwnedByTenantPools, validateTenantJobBody, val
 import { denyJobGuestsOutsideBackupRight, jobSelection } from "@/lib/backups/jobGuestScope"
 import { writableStoragesFor } from "@/lib/vdc/scope"
 import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -469,4 +470,4 @@ return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
 }
 
 export const GET = withPublicApiGuard("backup-jobs-list", getHandler)
-export const POST = withPublicApiGuard("backup-job-create", postHandler)
+export const POST = withAudit({ category: "backups", resourceType: "backup_job", resourceParam: "id" }, withPublicApiGuard("backup-job-create", postHandler))

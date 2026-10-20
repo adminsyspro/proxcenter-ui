@@ -62,7 +62,12 @@ vi.mock("@/lib/tenant", () => ({
   getCurrentTenantId: getCurrentTenantIdMock,
 }))
 vi.mock("@/lib/auth/sessions", () => ({ revokeAllSessions: revokeAllSessionsMock }))
-vi.mock("@/lib/audit", () => ({ audit: auditMock }))
+vi.mock("@/lib/audit", async () => {
+  // audit() flips the request's audit scope so withAudit() adds no row of its
+  // own (#1105); the stand-in must do the same or every explicit row doubles.
+  const { markAuditExplicit } = await vi.importActual<typeof import("@/lib/audit/scope")>("@/lib/audit/scope")
+  return { audit: (...a: unknown[]) => { markAuditExplicit(); return auditMock(...a) } }
+})
 vi.mock("@/lib/db/prisma", () => ({
   prisma: {
     user: { findUnique: userFindUniqueMock },
@@ -105,6 +110,17 @@ describe("DELETE /api/v1/admin/users/[id]/sessions", () => {
     expect(res.status).toBe(403)
     expect(revokeAllSessionsMock).not.toHaveBeenCalled()
     expect(userFindUniqueMock).not.toHaveBeenCalled()
+    // The route never reached its own audit(): the refusal row is withAudit()'s.
+    expect(auditMock).toHaveBeenCalledTimes(1)
+    expect(auditMock.mock.calls[0][0]).toMatchObject({
+      category: "users",
+      action: "delete",
+      resourceType: "user",
+      resourceId: "target-1",
+      status: "failure",
+      errorMessage: "Permission denied: admin.users",
+      details: expect.objectContaining({ method: "DELETE", httpStatus: 403, params: { id: "target-1" } }),
+    })
   })
 
   it("revokes every session of the TARGET user, not the caller — no exception sid", async () => {

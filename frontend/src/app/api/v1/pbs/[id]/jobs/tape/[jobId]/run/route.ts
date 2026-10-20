@@ -5,6 +5,7 @@ import { pbsFetch } from "@/lib/proxmox/pbs-client"
 import { getPbsConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -51,4 +52,4 @@ return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
 
-export const POST = withPublicApiGuard("pbs-job-tape-run", handler)
+export const POST = withAudit({ category: "backups", resourceType: "tape_job", resourceParam: "jobId", action: "run" }, withPublicApiGuard("pbs-job-tape-run", handler))

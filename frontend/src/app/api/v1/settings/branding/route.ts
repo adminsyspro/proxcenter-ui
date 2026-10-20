@@ -5,6 +5,7 @@ import { requireBrandingAdmin } from '@/lib/branding/guard'
 import { getCurrentTenantId } from '@/lib/tenant'
 import { scopedBrandingUrl, unscopedBrandingUrl } from '@/lib/branding/urls'
 import { normalizeHexColor } from '@/lib/theme/hexColor'
+import { withAudit } from '@/lib/audit/withAudit'
 
 
 const DEFAULT_BRANDING = {
@@ -52,7 +53,7 @@ export async function GET() {
   }
 }
 
-export async function PUT(req: Request) {
+async function handlePut(req: Request) {
   try {
     const denied = await requireBrandingAdmin()
     if (denied) return denied
@@ -95,3 +96,5 @@ export async function PUT(req: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }
+
+export const PUT = withAudit({ category: 'settings', resourceType: 'branding' }, handlePut)

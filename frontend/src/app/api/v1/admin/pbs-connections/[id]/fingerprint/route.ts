@@ -5,10 +5,11 @@ import { authOptions } from '@/lib/auth/config'
 import { isUserSuperAdmin } from '@/lib/rbac'
 import { prisma } from '@/lib/db/prisma'
 import { captureFingerprint } from '@/lib/proxmox/pbsFingerprint'
+import { withAudit } from '@/lib/audit/withAudit'
 
 export const runtime = 'nodejs'
 
-export async function POST(_req: Request, ctx: { params: Promise<{ id: string }> }) {
+async function handlePost(_req: Request, ctx: { params: Promise<{ id: string }> }) {
   const s = await getServerSession(authOptions)
   if (!s?.user?.id || !(await isUserSuperAdmin(s.user.id))) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
@@ -26,3 +27,5 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
     return NextResponse.json({ error: e?.message || String(e) }, { status: 502 })
   }
 }
+
+export const POST = withAudit({ category: 'connections', resourceType: 'pbs_connection', resourceParam: 'id' }, handlePost)

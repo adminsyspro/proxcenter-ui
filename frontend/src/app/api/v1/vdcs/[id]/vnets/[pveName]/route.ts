@@ -7,6 +7,7 @@ import { prisma } from "@/lib/db/prisma"
 import { updateVnetForTenant, deleteVnetForTenant } from "@/lib/vdc/vnets"
 import { checkVnetPermission } from "@/lib/vdc/vnetPermission"
 import { PERMISSIONS } from "@/lib/rbac"
+import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
@@ -164,5 +165,5 @@ async function deleteHandler(_req: Request, ctx: RouteContext) {
 }
 
 export const GET = withPublicApiGuard("vdc-vnet-get", getHandler)
-export const PUT = withPublicApiGuard("vdc-vnet-update", putHandler)
-export const DELETE = withPublicApiGuard("vdc-vnet-delete", deleteHandler)
+export const PUT = withAudit({ category: "sdn", resourceType: "vnet", resourceParam: "pveName" }, withPublicApiGuard("vdc-vnet-update", putHandler))
+export const DELETE = withAudit({ category: "sdn", resourceType: "vnet", resourceParam: "pveName" }, withPublicApiGuard("vdc-vnet-delete", deleteHandler))

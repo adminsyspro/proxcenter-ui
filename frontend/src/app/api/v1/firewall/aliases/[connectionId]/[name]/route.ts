@@ -9,6 +9,7 @@ import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
 import { getConnectionById } from '@/lib/connections/getConnection'
 import { orchestratorOrPve } from '@/lib/firewall/withPveFallback'
 import * as pveDirect from '@/lib/firewall/pveDirect'
+import { withAudit } from '@/lib/audit/withAudit'
 
 // PUT /api/v1/firewall/aliases/[connectionId]/[name] - Update alias
 async function putHandler(
@@ -75,5 +76,5 @@ return NextResponse.json(
   }
 }
 
-export const PUT = withPublicApiGuard("fw-alias-update", putHandler)
-export const DELETE = withPublicApiGuard("fw-alias-delete", deleteHandler)
+export const PUT = withAudit({ category: 'firewall', resourceType: 'alias', resourceParam: 'name' }, withPublicApiGuard("fw-alias-update", putHandler))
+export const DELETE = withAudit({ category: 'firewall', resourceType: 'alias', resourceParam: 'name' }, withPublicApiGuard("fw-alias-delete", deleteHandler))

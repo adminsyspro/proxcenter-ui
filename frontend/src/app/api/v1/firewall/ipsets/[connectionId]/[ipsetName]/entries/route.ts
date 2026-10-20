@@ -9,6 +9,7 @@ import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
 import { getConnectionById } from '@/lib/connections/getConnection'
 import { orchestratorOrPve } from '@/lib/firewall/withPveFallback'
 import * as pveDirect from '@/lib/firewall/pveDirect'
+import { withAudit } from '@/lib/audit/withAudit'
 
 // POST /api/v1/firewall/ipsets/[connectionId]/[ipsetName]/entries - Add entry
 async function postHandler(
@@ -43,4 +44,4 @@ return NextResponse.json(
   }
 }
 
-export const POST = withPublicApiGuard("fw-ipset-entry-create", postHandler)
+export const POST = withAudit({ category: 'firewall', resourceType: 'ipset', resourceParam: 'ipsetName' }, withPublicApiGuard("fw-ipset-entry-create", postHandler))

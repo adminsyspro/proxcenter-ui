@@ -23,6 +23,7 @@ import { pveFetch } from '@/lib/proxmox/client'
 import { PERMISSIONS, checkPermission } from '@/lib/rbac'
 import { getCurrentTenantId, getSessionPrisma } from '@/lib/tenant'
 import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
+import { withAudit } from '@/lib/audit/withAudit'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -198,4 +199,4 @@ async function postHandler(request: Request) {
 }
 
 export const GET = withPublicApiGuard("gfr-jobs-list", getHandler)
-export const POST = withPublicApiGuard("gfr-job-create", postHandler)
+export const POST = withAudit({ category: 'backups', resourceType: 'job' }, withPublicApiGuard("gfr-job-create", postHandler))

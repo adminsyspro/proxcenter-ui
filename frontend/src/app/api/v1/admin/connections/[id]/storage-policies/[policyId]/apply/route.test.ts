@@ -75,7 +75,12 @@ vi.mock('@/lib/vdc/driveGuard', () => ({
   restampGuestDrives: (...a: unknown[]) => restampGuestDrivesMock(...a),
 }))
 
-vi.mock('@/lib/audit', () => ({ audit: (...a: unknown[]) => auditMock(...a) }))
+vi.mock('@/lib/audit', async () => {
+  // audit() flips the request's audit scope so withAudit() adds no row of its
+  // own (#1105); the stand-in must do the same or every explicit row doubles.
+  const { markAuditExplicit } = await vi.importActual<typeof import('@/lib/audit/scope')>('@/lib/audit/scope')
+  return { audit: (...a: unknown[]) => { markAuditExplicit(); return auditMock(...a) } }
+})
 
 import { POST } from './route'
 
@@ -157,7 +162,12 @@ describe('POST .../storage-policies/{policyId}/apply', () => {
       { type: 'done', updated: 0, unchanged: 0, errors: 0 },
     ])
     expect(getConnectionByIdMock).not.toHaveBeenCalled()
-    expect(auditMock).not.toHaveBeenCalled()
+    // Nothing to re-stamp, so the route never audits: the row is withAudit()'s.
+    expect(auditMock).toHaveBeenCalledTimes(1)
+    expect(auditMock.mock.calls[0][0]).toMatchObject({
+      category: 'storage', action: 'apply', resourceType: 'storage_policy', resourceId: POLICY_ID, status: 'success',
+      details: expect.objectContaining({ method: 'POST', httpStatus: 200, params: { id: CONN_ID, policyId: POLICY_ID } }),
+    })
   })
 
   it('streams start/vm/done for a 2-VM qemu pool (lxc excluded), 1 updated + 1 unchanged', async () => {

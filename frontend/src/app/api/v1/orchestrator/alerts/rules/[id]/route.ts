@@ -6,6 +6,7 @@ import { getCurrentTenantId, DEFAULT_TENANT_ID } from '@/lib/tenant'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { deleteRuleOwner, ruleVisibleToTenant } from '@/lib/alerts/ruleOwners'
 import { injectVdcNodeScope } from '@/lib/alerts/ruleScope'
+import { withAudit } from '@/lib/audit/withAudit'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -53,7 +54,7 @@ export async function GET(
 /**
  * PUT /api/v1/orchestrator/alerts/rules/[id]
  */
-export async function PUT(
+async function handlePut(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -108,7 +109,7 @@ export async function PUT(
 /**
  * DELETE /api/v1/orchestrator/alerts/rules/[id]
  */
-export async function DELETE(
+async function handleDelete(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -145,3 +146,6 @@ export async function DELETE(
     )
   }
 }
+
+export const PUT = withAudit({ category: 'alerts', resourceType: 'rule', resourceParam: 'id' }, handlePut)
+export const DELETE = withAudit({ category: 'alerts', resourceType: 'rule', resourceParam: 'id' }, handleDelete)

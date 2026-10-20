@@ -9,7 +9,7 @@ const {
   getCurrentTenantIdMock: vi.fn<() => Promise<string>>(),
   userHasAccessToTenantMock: vi.fn<() => Promise<boolean>>(),
   requireFeatureMock: vi.fn<() => Promise<Response | null>>(),
-  auditMock: vi.fn<() => Promise<string>>(),
+  auditMock: vi.fn<(...a: any[]) => Promise<string>>(),
   holdsMock: vi.fn<(...a: any[]) => Promise<boolean>>(),
 }))
 
@@ -26,7 +26,12 @@ vi.mock('@/lib/tenant', () => ({
 }))
 
 vi.mock('@/lib/auth/requireEnterprise', () => ({ requireFeature: requireFeatureMock }))
-vi.mock('@/lib/audit', () => ({ audit: auditMock }))
+vi.mock('@/lib/audit', async () => {
+  // audit() flips the request's audit scope so withAudit() adds no row of its
+  // own (#1105); the stand-in must do the same or every explicit row doubles.
+  const { markAuditExplicit } = await vi.importActual<typeof import('@/lib/audit/scope')>('@/lib/audit/scope')
+  return { audit: (...a: any[]) => { markAuditExplicit(); return auditMock(...a) } }
+})
 
 import { prismaTest, truncate } from '@/__tests__/setup/prisma-test'
 import { seedApiToken, seedDefaultTenant } from '@/__tests__/setup/apiTokens'
@@ -418,7 +423,7 @@ describe('DELETE /api/v1/settings/api-tokens/{id}', () => {
   // it replaces (which answered 200 forever). Once the row is gone 404 is the
   // honest answer, and the only caller reloads the list rather than reading
   // this response.
-  it('answers 404 on a second DELETE of the same id, and journals nothing the second time', async () => {
+  it('answers 404 on a second DELETE of the same id, and only withAudit() journals the second time', async () => {
     const { id } = await seedApiToken()
     const { DELETE } = await import('./[id]/route')
 
@@ -429,8 +434,15 @@ describe('DELETE /api/v1/settings/api-tokens/{id}', () => {
     const second = await callRoute(DELETE, { method: 'DELETE', params: { id } })
     expect(second.status).toBe(404)
     expect(await readJson<any>(second)).toEqual({ error: 'API token not found' })
-    // The lookup fails before the transaction, so no second journal entry.
-    expect(auditMock).toHaveBeenCalledTimes(1)
+    // The lookup fails before the transaction, so the route writes no second
+    // apitoken.delete entry; the 404 itself is journalled by withAudit()'s
+    // safety-net row (#1105), outside any transaction.
+    expect(auditMock).toHaveBeenCalledTimes(2)
+    expect(auditMock.mock.calls[1]).toHaveLength(1)
+    expect(auditMock.mock.calls[1][0]).toMatchObject({
+      category: 'api_tokens', action: 'delete', resourceType: 'api_token', resourceId: id, status: 'failure',
+      errorMessage: 'API token not found', details: expect.objectContaining({ method: 'DELETE', httpStatus: 404 }),
+    })
   })
 
   // A legacy row still carrying revoked_at from the soft-revocation era is

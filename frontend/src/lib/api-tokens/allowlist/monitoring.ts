@@ -13,10 +13,11 @@ export const MONITORING_ENTRIES: AllowlistEntry[] = [
     routeFile: "src/app/api/v1/vms/route.ts",
     summary: "List all VMs and containers across visible connections",
     description:
-      "Aggregated VM/LXC list with status, usage and config-derived fields (cpuType, scsihw, agentEnabled, bios, ostype, onboot, description, macs) served by default. `ips` merges the addresses pinned in the config with the last known guest agent / LXC addresses from a background index; `staleIps` lists the last known addresses a guest could not re-confirm (stopped, agent down) and `ipIndexWarming` tells that the index is still being built. Pass include=agent to probe the QEMU guest agent on running VMs (about 7x slower).",
+      "Aggregated VM/LXC list with status, usage and config-derived fields (cpuType, scsihw, agentEnabled, bios, ostype, machine, createdAt, onboot, description, macs) served by default. `ips` merges the addresses pinned in the config with the last known guest agent / LXC addresses from a background index; `staleIps` lists the last known addresses a guest could not re-confirm (stopped, agent down) and `ipIndexWarming` tells that the index is still being built. Pass include=agent to probe the QEMU guest agent on running VMs (about 7x slower): agentResponding, agentVersion, agentOsName.",
     queryParams: [
       { name: "connId", description: "Restrict to a single connection id" },
       { name: "include", description: "Set to 'agent' to probe the guest agent on running VMs" },
+      { name: "vmids", description: "Comma-separated VMIDs: only these guests are returned" },
     ],
     responseSchemaRef: "VmsResponse",
   },

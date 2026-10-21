@@ -8924,7 +8924,7 @@
       "network": "网络利用率",
       "containers": "容器",
       "templates": "模板",
-      "specs": "规格",
+      "specs": "客户机详情",
       "current": "当前容量",
       "predictions": "预测",
       "recommendations": "建议",

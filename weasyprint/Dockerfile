@@ -7,6 +7,8 @@
 FROM python:3.13-slim AS base
 
 # WeasyPrint runtime: needs Cairo/Pango/HarfBuzz/GdkPixbuf and a few fonts.
+# `fonts-inter` is the face the reports ask for first (the "sans" stack of
+# internal/reports/template_settings.go); without it they fell back to DejaVu.
 # `fonts-dejavu-core` keeps the layer small while covering Latin, accented
 # characters and basic Cyrillic; `fonts-wqy-microhei` (a few MB) covers the
 # Chinese and Korean the UI is translated into, without which a report in
@@ -20,6 +22,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libgdk-pixbuf-2.0-0 \
         libffi8 \
         shared-mime-info \
+        fonts-inter \
         fonts-dejavu-core \
         fonts-liberation \
         fonts-wqy-microhei \

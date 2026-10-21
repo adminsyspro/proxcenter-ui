@@ -8920,7 +8920,7 @@
       "network": "Network Utilization",
       "containers": "Containers",
       "templates": "Templates",
-      "specs": "Specifications",
+      "specs": "Guest Details",
       "current": "Current Capacity",
       "predictions": "Predictions",
       "recommendations": "Recommendations",

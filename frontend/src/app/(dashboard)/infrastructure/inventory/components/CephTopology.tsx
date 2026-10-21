@@ -5,7 +5,8 @@ import {
   Box, Card, CardContent, CircularProgress, Stack, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow, Tooltip as MuiTooltip, Typography, useTheme,
 } from '@mui/material'
-import { buildCrushTopology, capacityColor, type CrushNode } from './cephCrushTopology'
+import { buildCrushTopology, capacityColor, crushNodeFlags, type CrushFlags, type CrushNode } from './cephCrushTopology'
+import { useCephOsdFlags } from '@/components/ceph/CephOsdFlags'
 import { formatBytes } from '@/utils/format'
 
 // Theme-aware tooltip styling, mirroring InventoryTree's tooltipSlotProps.
@@ -61,9 +62,19 @@ function TypeIcon({ type, logoSrc }: Readonly<{ type: string; logoSrc: string }>
   return <Box component="i" className={crushTypeIcon(type)} sx={{ fontSize: 15, width: 16, textAlign: 'center', opacity: 0.7, flexShrink: 0, mr: 0.75, color: 'text.secondary' }} />
 }
 
-function TreeRow({ node, depth, expanded, toggle, onSelect, selectedId, logoSrc }: Readonly<{
+/** The flags a node carries, in the warning colour after its chips (ui#1164). */
+function FlagText({ flags }: Readonly<{ flags: string[] }>) {
+  if (flags.length === 0) return null
+  return (
+    <Typography component="span" variant="caption" data-testid="crush-node-flags" sx={{ ml: 1, color: 'warning.main', fontWeight: 700, whiteSpace: 'nowrap' }}>
+      {flags.join(' · ')}
+    </Typography>
+  )
+}
+
+function TreeRow({ node, depth, expanded, toggle, onSelect, selectedId, logoSrc, crushFlags }: Readonly<{
   node: CrushNode; depth: number; expanded: Set<string>; toggle: (k: string) => void
-  onSelect: (n: CrushNode) => void; selectedId: string; logoSrc: string
+  onSelect: (n: CrushNode) => void; selectedId: string; logoSrc: string; crushFlags: CrushFlags
 }>) {
   const key = `${node.type}:${node.id}:${node.name}`
   const hasChildren = !!node.children && node.children.length > 0
@@ -97,10 +108,11 @@ function TreeRow({ node, depth, expanded, toggle, onSelect, selectedId, logoSrc 
           </>
         )}
         {node.type === 'host' && node.daemons && <DaemonChips d={node.daemons} />}
+        <FlagText flags={crushNodeFlags(node, crushFlags)} />
         {node.totalBytes > 0 && <CapacityBar pct={node.usedPct} />}
       </Box>
       {hasChildren && isOpen && node.children!.map((c) => (
-        <TreeRow key={`${c.type}:${c.id}:${c.name}`} node={c} depth={depth + 1} expanded={expanded} toggle={toggle} onSelect={onSelect} selectedId={selectedId} logoSrc={logoSrc} />
+        <TreeRow key={`${c.type}:${c.id}:${c.name}`} node={c} depth={depth + 1} expanded={expanded} toggle={toggle} onSelect={onSelect} selectedId={selectedId} logoSrc={logoSrc} crushFlags={crushFlags} />
       ))}
     </Box>
   )
@@ -110,7 +122,7 @@ function daemonSummary(d: NonNullable<CrushNode['daemons']>): string {
   return [d.monLeader ? 'mon (leader)' : d.mon ? 'mon' : '', d.mgr ? 'mgr' : '', d.mds ? 'mds' : ''].filter(Boolean).join(', ') || 'none'
 }
 
-function DetailsPanel({ node }: Readonly<{ node: CrushNode | null }>) {
+function DetailsPanel({ node, crushFlags }: Readonly<{ node: CrushNode | null; crushFlags: CrushFlags }>) {
   if (!node) return <Typography variant="caption" sx={{ opacity: 0.6 }}>Select a node to see details.</Typography>
   const cap = node.totalBytes > 0 ? `${formatBytes(node.usedBytes)} / ${formatBytes(node.totalBytes)} (${node.usedPct}%)` : 'n/a'
   const rows: [string, string][] = [['Type', node.type], ['Capacity', cap]]
@@ -130,6 +142,8 @@ function DetailsPanel({ node }: Readonly<{ node: CrushNode | null }>) {
     if (node.classes.length > 0) rows.push(['Device classes', node.classes.join(', ')])
     if (node.daemons) rows.push(['Daemons', daemonSummary(node.daemons)])
   }
+  const flags = crushNodeFlags(node, crushFlags, true)
+  if (flags.length > 0) rows.push(['Flags', flags.join(' · ')])
   return (
     <Box>
       <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1 }}>{node.name}</Typography>
@@ -152,6 +166,12 @@ export default function CephTopology({ connId }: Readonly<{ connId: string }>) {
   const tooltipSlotProps = useTooltipSlotProps()
   const theme = useTheme()
   const logoSrc = theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'
+  // OSD flags at each level of the tree, kept in sync with the other views.
+  const osdFlags = useCephOsdFlags(connId, !!connId)
+  const crushFlags = useMemo<CrushFlags>(
+    () => ({ flags: osdFlags.flags, hostFlags: osdFlags.hostFlags, osdFlags: osdFlags.osdFlags }),
+    [osdFlags.flags, osdFlags.hostFlags, osdFlags.osdFlags],
+  )
 
   useEffect(() => {
     if (!connId) return
@@ -196,12 +216,12 @@ export default function CephTopology({ connId }: Readonly<{ connId: string }>) {
         <Card variant="outlined"><CardContent>
           <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1 }}>CRUSH tree</Typography>
           {tree.map((n) => (
-            <TreeRow key={`${n.type}:${n.id}:${n.name}`} node={n} depth={0} expanded={expanded} toggle={toggle} onSelect={setSelected} selectedId={selectedId} logoSrc={logoSrc} />
+            <TreeRow key={`${n.type}:${n.id}:${n.name}`} node={n} depth={0} expanded={expanded} toggle={toggle} onSelect={setSelected} selectedId={selectedId} logoSrc={logoSrc} crushFlags={crushFlags} />
           ))}
         </CardContent></Card>
         <Card variant="outlined"><CardContent>
           <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1 }}>Details</Typography>
-          <DetailsPanel node={selected} />
+          <DetailsPanel node={selected} crushFlags={crushFlags} />
         </CardContent></Card>
       </Box>
       <Card variant="outlined"><CardContent>

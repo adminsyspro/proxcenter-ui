@@ -2096,6 +2096,8 @@ export const EXTRA_MOCKS: MockDataMap = {
     recovery_confirmations: 3,
     osd_latency_warning: 100,
     osd_latency_critical: 250,
+    ceph_noout_max_hours: 8,
+    ceph_noout_orphan_minutes: 30,
     // Same story for the guest disk latency check (#881): the demo has a
     // "Disk I/O latency" alert above, so its card shows the check enabled.
     disk_latency_warning: 30,

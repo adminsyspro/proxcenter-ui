@@ -607,6 +607,90 @@ describe('InventoryDialogs', () => {
       expect(setNodeActionFailedVms).not.toHaveBeenCalledWith(expect.arrayContaining([expect.anything()]))
     })
 
+    // ui#1164: a cluster node with Ceph OSDs gets the per-host noout option,
+    // set before the drain; a refusal stops the action before anything moves.
+    describe('with Ceph noout', () => {
+      const NOOUT = {
+        hasCeph: true, crushHost: NODE_NAME, osds: [{ id: 2, status: 'up', in: true }], noout: false, globalNoout: false,
+        health: { status: 'HEALTH_OK', checks: [] }, otherHostsWithNoout: [],
+        okToStop: { ok: true, osds: [2], numOkPgs: 6, numNotOkPgs: 0, message: null },
+      }
+      function seedNoout(post: () => Response) {
+        const posts: unknown[] = []
+        server.use(
+          http.get('*/api/v1/connections/:id/nodes/:node/ceph/noout', () => HttpResponse.json({ data: NOOUT })),
+          http.post('*/api/v1/connections/:id/nodes/:node/ceph/noout', async ({ request }) => { posts.push(await request.json()); return post() }),
+        )
+        return posts
+      }
+
+      it('sets the flag before the drain, checked by default', async () => {
+        const calls = recordRequests()
+        const requests = drainOutcome({ status: 'completed', maintenance_enabled: true, guests: [] })
+        const posts = seedNoout(() => HttpResponse.json({ success: true }))
+        const setNodeActionDialog = vi.fn()
+        renderWithProviders(<InventoryDialogs {...makeProps({
+          nodeActionDialog: { action: 'reboot', nodeName: NODE_NAME, connId: CONN_ID, node: NODE_NAME },
+          setNodeActionDialog,
+          allVms: [runningVm('100')],
+          hosts: [host(NODE_NAME), host('pve2')],
+        })} />)
+
+        expect(await screen.findByRole('checkbox', { name: "Set Ceph noout on this node's OSDs (1)" })).toBeChecked()
+        fireEvent.click(screen.getByRole('button', { name: /confirm/i }))
+
+        await waitFor(() => expect(setNodeActionDialog).toHaveBeenCalledWith(null), { timeout: 10000 })
+        expect(posts).toEqual([{ force: false }])
+        expect(requests).toHaveLength(1)
+        expect(calls.nodeCommands).toEqual(['reboot'])
+      })
+
+      it('stops before the drain when the flag is refused', async () => {
+        const calls = recordRequests()
+        const requests = drainOutcome({ status: 'completed', maintenance_enabled: true, guests: [] })
+        seedNoout(() => HttpResponse.json({ error: 'Stopping the OSDs of this node would take 33 PG(s) offline', code: 'not_ok_to_stop' }, { status: 409 }))
+        const setNodeActionBusy = vi.fn()
+        renderWithProviders(<InventoryDialogs {...makeProps({
+          nodeActionDialog: { action: 'reboot', nodeName: NODE_NAME, connId: CONN_ID, node: NODE_NAME },
+          setNodeActionBusy,
+          allVms: [runningVm('100')],
+          hosts: [host(NODE_NAME), host('pve2')],
+        })} />)
+
+        await screen.findByTestId('ceph-noout-option')
+        fireEvent.click(screen.getByRole('button', { name: /confirm/i }))
+
+        await waitFor(() => expect(setNodeActionBusy).toHaveBeenLastCalledWith(false), { timeout: 10000 })
+        expect(requests).toHaveLength(0)
+        expect(calls.nodeCommands).toEqual([])
+      })
+
+      it('removes the flag it set when the drain is refused, nothing having moved', async () => {
+        const calls = recordRequests()
+        const posts = seedNoout(() => HttpResponse.json({ success: true }))
+        let deletes = 0
+        server.use(
+          http.post('*/api/v1/orchestrator/host-drains', () => HttpResponse.json({ error: 'A drain is already running' }, { status: 409 })),
+          http.delete('*/api/v1/connections/:id/nodes/:node/ceph/noout', () => { deletes++; return HttpResponse.json({ success: true }) }),
+        )
+        const setNodeActionBusy = vi.fn()
+        renderWithProviders(<InventoryDialogs {...makeProps({
+          nodeActionDialog: { action: 'reboot', nodeName: NODE_NAME, connId: CONN_ID, node: NODE_NAME },
+          setNodeActionBusy,
+          allVms: [runningVm('100')],
+          hosts: [host(NODE_NAME), host('pve2')],
+        })} />)
+
+        await screen.findByTestId('ceph-noout-option')
+        fireEvent.click(screen.getByRole('button', { name: /confirm/i }))
+
+        await waitFor(() => expect(setNodeActionBusy).toHaveBeenLastCalledWith(false), { timeout: 10000 })
+        expect(posts).toEqual([{ force: false }])
+        expect(deletes).toBe(1)
+        expect(calls.nodeCommands).toEqual([])
+      })
+    })
+
     it('sends a manual target to the drain when the operator insists on one', async () => {
       recordRequests()
       const requests = drainOutcome({ status: 'completed', maintenance_enabled: true, guests: [] })

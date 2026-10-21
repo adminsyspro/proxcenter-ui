@@ -193,6 +193,25 @@ describe('GET /api/v1/internal/alert-config', () => {
     expect(body.thresholds.disk_latency_peak_critical).toBe(500)
   })
 
+  it('ships the Ceph noout delays as whole hours and minutes, 8 h and 30 min by default (ui#1164)', async () => {
+    findManyMock.mockResolvedValue([])
+    getSettingMock.mockResolvedValueOnce({ ceph_noout_max_hours: 12.9, ceph_noout_orphan_minutes: 45.2 })
+    let body = await (await GET(makeReq({ 'X-API-Key': 'secret-key' }))).json()
+    expect(body.thresholds.ceph_noout_max_hours).toBe(12)
+    expect(body.thresholds.ceph_noout_orphan_minutes).toBe(45)
+
+    getSettingMock.mockResolvedValueOnce({ memory_warning: 90 })
+    body = await (await GET(makeReq({ 'X-API-Key': 'secret-key' }))).json()
+    expect(body.thresholds.ceph_noout_max_hours).toBe(8)
+    expect(body.thresholds.ceph_noout_orphan_minutes).toBe(30)
+
+    // 0 disables each check on its own, like every other threshold here.
+    getSettingMock.mockResolvedValueOnce({ ceph_noout_max_hours: 0, ceph_noout_orphan_minutes: 0 })
+    body = await (await GET(makeReq({ 'X-API-Key': 'secret-key' }))).json()
+    expect(body.thresholds.ceph_noout_max_hours).toBe(0)
+    expect(body.thresholds.ceph_noout_orphan_minutes).toBe(0)
+  })
+
   it('preserves an explicit 0 for the disable-the-check convention', async () => {
     // 0 means "check disabled" for both families, exactly like
     // snapshot_max_age_days. A falsy-guarded merge would silently re-enable them.

@@ -134,6 +134,11 @@ export type AuditAction =
   | "reboot"
   | "shutdown"
   | "maintenance"
+  // Per-host Ceph noout set or removed around a maintenance (ui#1164)
+  | "ceph_noout"
+  // Ceph daemon started, stopped or restarted, and OSD / monitor / manager created from the node Ceph tab (ui#1164)
+  | "ceph_service"
+  | "ceph_create"
   | "execute"
   | "apply"
   | "sync"

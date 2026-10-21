@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
     const session = await getServerSession(authOptions)
 
     if (!session?.user) {
-      return NextResponse.json({ error: "Non autorisé" }, { status: 401 })
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
     const url = new URL(req.url)
@@ -36,7 +36,7 @@ export async function GET(req: NextRequest) {
       !(await hasPermission({ userId: session.user.id, permission: "admin.rbac", tenantId }))
     ) {
       return NextResponse.json(
-        { error: "Non autorisé à voir les permissions d'autres utilisateurs" },
+        { error: "Not allowed to view other users' permissions" },
         { status: 403 },
       )
     }
@@ -48,7 +48,7 @@ export async function GET(req: NextRequest) {
     })
 
     if (!user) {
-      return NextResponse.json({ error: "Utilisateur non trouvé" }, { status: 404 })
+      return NextResponse.json({ error: "User not found" }, { status: 404 })
     }
 
     const now = new Date()
@@ -248,7 +248,7 @@ export async function GET(req: NextRequest) {
     console.error("GET /api/v1/rbac/effective error:", error)
 
 return NextResponse.json(
-      { error: error.message || "Erreur serveur" },
+      { error: error.message || "Server error" },
       { status: 500 }
     )
   }

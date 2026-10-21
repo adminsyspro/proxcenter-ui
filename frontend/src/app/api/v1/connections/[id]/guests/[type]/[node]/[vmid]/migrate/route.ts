@@ -132,7 +132,7 @@ async function handler(
     return NextResponse.json({
       success: true,
       data: result,
-      message: `Migration de VM ${vmid} vers ${target} lancée`
+      message: `Migration of VM ${vmid} to ${target} started`
     })
   } catch (e: any) {
     const excluded = licenseExcludedResponse(e)

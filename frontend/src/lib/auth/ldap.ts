@@ -82,7 +82,7 @@ export async function getLdapConfig(): Promise<LdapConfig | null> {
     try {
       bindPassword = decryptSecret(row.bindPasswordEnc)
     } catch (e) {
-      console.error("Erreur déchiffrement bind password LDAP:", e)
+      console.error("LDAP bind password decryption error:", e)
     }
   }
 
@@ -218,8 +218,8 @@ export async function authenticateLdapDetailed(
       },
     }
   } catch (error: any) {
-    console.error("Erreur orchestrator LDAP auth:", error?.message || error)
-    throw new Error("Erreur de communication avec l'orchestrator pour l'authentification LDAP")
+    console.error("Orchestrator LDAP auth error:", error?.message || error)
+    throw new Error("Communication error with the orchestrator during LDAP authentication")
   }
 }
 

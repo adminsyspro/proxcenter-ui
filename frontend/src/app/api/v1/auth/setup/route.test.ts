@@ -114,7 +114,7 @@ describe("POST /api/v1/auth/setup: the raceable window", () => {
     const res = await callRoute(POST, { body: VALID })
 
     expect(res.status).toBe(400)
-    expect(await readJson<any>(res)).toEqual({ error: "Le setup initial a déjà été effectué" })
+    expect(await readJson<any>(res)).toEqual({ error: "Initial setup has already been completed" })
     expect(userCreateMock).not.toHaveBeenCalled()
   })
 
@@ -124,7 +124,7 @@ describe("POST /api/v1/auth/setup: the raceable window", () => {
     const res = await callRoute(POST, { body: VALID })
 
     expect(res.status).toBe(400)
-    expect(await readJson<any>(res)).toEqual({ error: "Le setup initial a déjà été effectué" })
+    expect(await readJson<any>(res)).toEqual({ error: "Initial setup has already been completed" })
   })
 
   it("still reports a genuine failure as a 500", async () => {

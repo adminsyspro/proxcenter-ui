@@ -171,7 +171,7 @@ export const authOptions: NextAuthOptions = {
       },
       async authorize(credentials, req) {
         if (!credentials?.email || !credentials?.password) {
-          throw new Error("Email et mot de passe requis")
+          throw new Error("Email and password are required")
         }
 
         const email = credentials.email.toLowerCase().trim()
@@ -181,7 +181,7 @@ export const authOptions: NextAuthOptions = {
         // reveals nothing either.
         const attempt = await beginLoginAttempt(email, req, "credentials")
         if (attempt.locked) {
-          throw new Error("Identifiants invalides")
+          throw new Error("Invalid credentials")
         }
 
         // Chercher l'utilisateur
@@ -220,25 +220,25 @@ export const authOptions: NextAuthOptions = {
 
         if (!user) {
           await logFailure("User not found", "ip")
-          throw new Error("Identifiants invalides")
+          throw new Error("Invalid credentials")
         }
 
         if (!user.enabled) {
           await logFailure("Account disabled", user.password ? "account" : "ip")
-          throw new Error("Compte désactivé")
+          throw new Error("Account disabled")
         }
 
         // Vérifier le mot de passe
         if (!user.password) {
           await logFailure("No local password", "ip")
-          throw new Error("Ce compte utilise une autre méthode d'authentification")
+          throw new Error("This account uses another authentication method")
         }
 
         const isValid = await verifyPassword(credentials.password, user.password)
 
         if (!isValid) {
           await logFailure("Incorrect password")
-          throw new Error("Identifiants invalides")
+          throw new Error("Invalid credentials")
         }
 
         if (user.totpEnabled) {
@@ -249,7 +249,7 @@ export const authOptions: NextAuthOptions = {
           const ok = await verifyTotpOrRecovery(user.id, credentials.totpCode, null)
           if (!ok) {
             await logFailure("Invalid TOTP")
-            throw new Error("Identifiants invalides")
+            throw new Error("Invalid credentials")
           }
         }
 
@@ -283,7 +283,7 @@ export const authOptions: NextAuthOptions = {
           })
           if (!isSuperAdmin) {
             await logFailure("No tenant membership", "none")
-            throw new Error("Compte sans tenant — contactez votre administrateur")
+            throw new Error("Account has no tenant, contact your administrator")
           }
           await prisma.userTenant.upsert({
             where: { userId_tenantId: { userId: user.id, tenantId: "default" } },
@@ -315,18 +315,18 @@ export const authOptions: NextAuthOptions = {
       },
       async authorize(credentials, req) {
         if (!credentials?.username || !credentials?.password) {
-          throw new Error("Username et mot de passe requis")
+          throw new Error("Username and password are required")
         }
 
         // Vérifier si LDAP est activé
         if (!(await isLdapEnabled())) {
-          throw new Error("Authentification LDAP non configurée")
+          throw new Error("LDAP authentication is not configured")
         }
 
         // Lockout policy, checked before the LDAP bind (see credentials above).
         const attempt = await beginLoginAttempt(credentials.username, req, "ldap")
         if (attempt.locked) {
-          throw new Error("Identifiants LDAP invalides")
+          throw new Error("Invalid LDAP credentials")
         }
 
         // Authentifier via LDAP
@@ -344,7 +344,7 @@ export const authOptions: NextAuthOptions = {
           // The cause stays server-side (log + audit trail, roadmap#38): the
           // person signing in sees the same message whatever the reason.
           await logLdapRefusal(credentials.username, reason, detail)
-          throw new Error("Identifiants LDAP invalides")
+          throw new Error("Invalid LDAP credentials")
         }
 
         // Check group restriction BEFORE creating/updating user
@@ -395,7 +395,7 @@ export const authOptions: NextAuthOptions = {
           user = { id, email, name: ldapUser.name, role: "viewer", enabled: true }
         } else {
           if (!user.enabled) {
-            throw new Error("Compte désactivé")
+            throw new Error("Account disabled")
           }
 
           // Mettre à jour les infos LDAP, avatar et last_login_at
@@ -426,7 +426,7 @@ export const authOptions: NextAuthOptions = {
               select: { id: true },
             })
             if (!isSuperAdmin) {
-              throw new Error("Compte sans tenant — contactez votre administrateur")
+              throw new Error("Account has no tenant, contact your administrator")
             }
             await prisma.userTenant.upsert({
               where: { userId_tenantId: { userId: user.id, tenantId: "default" } },
@@ -464,7 +464,7 @@ export const authOptions: NextAuthOptions = {
           const ok = await verifyTotpOrRecovery(user.id, credentials.totpCode, null)
           if (!ok) {
             await attempt.fail(true)
-            throw new Error("Identifiants LDAP invalides")
+            throw new Error("Invalid LDAP credentials")
           }
         }
 
@@ -551,7 +551,7 @@ export const authOptions: NextAuthOptions = {
               select: { id: true },
             })
             if (!isSuperAdmin) {
-              throw new Error("Compte sans tenant — contactez votre administrateur")
+              throw new Error("Account has no tenant, contact your administrator")
             }
             await prisma.userTenant.upsert({
               where: { userId_tenantId: { userId: existing.id, tenantId: "default" } },

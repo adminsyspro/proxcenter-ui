@@ -45,7 +45,7 @@ async function denyIfAssignmentTouchesProtected(
     (PROTECTED_ROLE_IDS as readonly string[]).includes(assignment.roleId) ||
     (await isUserProtected(assignment.userId))
   ) {
-    return NextResponse.json({ error: "Assignation non trouvée" }, { status: 404 })
+    return NextResponse.json({ error: "Assignment not found" }, { status: 404 })
   }
   return null
 }
@@ -59,7 +59,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
     const session = await getServerSession(authOptions)
 
     if (!session?.user) {
-      return NextResponse.json({ error: "Non autorisé" }, { status: 401 })
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
     const { id } = await context.params
@@ -75,7 +75,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
     })
 
     if (!assignment) {
-      return NextResponse.json({ error: "Assignation non trouvée" }, { status: 404 })
+      return NextResponse.json({ error: "Assignment not found" }, { status: 404 })
     }
 
     const superAdminBlock = await denyIfAssignmentTouchesProtected(
@@ -107,7 +107,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
     console.error("GET /api/v1/rbac/assignments/[id] error:", error)
 
 return NextResponse.json(
-      { error: error.message || "Erreur serveur" },
+      { error: error.message || "Server error" },
       { status: 500 }
     )
   }
@@ -122,13 +122,13 @@ async function handleDelete(req: NextRequest, context: RouteContext) {
     const session = await getServerSession(authOptions)
 
     if (!session?.user) {
-      return NextResponse.json({ error: "Non autorisé" }, { status: 401 })
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
     const tenantId = await getCurrentTenantId()
 
     if (!(await hasPermission({ userId: session.user.id, permission: "admin.rbac", tenantId }))) {
-      return NextResponse.json({ error: "Droits administrateur requis" }, { status: 403 })
+      return NextResponse.json({ error: "Admin rights required" }, { status: 403 })
     }
 
     const { id } = await context.params
@@ -143,7 +143,7 @@ async function handleDelete(req: NextRequest, context: RouteContext) {
     })
 
     if (!assignment) {
-      return NextResponse.json({ error: "Assignation non trouvée" }, { status: 404 })
+      return NextResponse.json({ error: "Assignment not found" }, { status: 404 })
     }
 
     const superAdminBlock = await denyIfAssignmentTouchesProtected(
@@ -155,7 +155,7 @@ async function handleDelete(req: NextRequest, context: RouteContext) {
     // Prevent self-lockout: nobody may revoke their own role.
     if (assignment.userId === session.user.id) {
       return NextResponse.json(
-        { error: "Vous ne pouvez pas révoquer vos propres rôles" },
+        { error: "You cannot revoke your own roles" },
         { status: 400 }
       )
     }
@@ -187,7 +187,7 @@ async function handleDelete(req: NextRequest, context: RouteContext) {
     console.error("DELETE /api/v1/rbac/assignments/[id] error:", error)
 
 return NextResponse.json(
-      { error: error.message || "Erreur serveur" },
+      { error: error.message || "Server error" },
       { status: 500 }
     )
   }
@@ -202,13 +202,13 @@ async function handlePatch(req: NextRequest, context: RouteContext) {
     const session = await getServerSession(authOptions)
 
     if (!session?.user) {
-      return NextResponse.json({ error: "Non autorisé" }, { status: 401 })
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
     const tenantId = await getCurrentTenantId()
 
     if (!(await hasPermission({ userId: session.user.id, permission: "admin.rbac", tenantId }))) {
-      return NextResponse.json({ error: "Droits administrateur requis" }, { status: 403 })
+      return NextResponse.json({ error: "Admin rights required" }, { status: 403 })
     }
 
     const { id } = await context.params
@@ -225,7 +225,7 @@ async function handlePatch(req: NextRequest, context: RouteContext) {
     })
 
     if (!assignment) {
-      return NextResponse.json({ error: "Assignation non trouvée" }, { status: 404 })
+      return NextResponse.json({ error: "Assignment not found" }, { status: 404 })
     }
 
     const superAdminBlock = await denyIfAssignmentTouchesProtected(
@@ -237,7 +237,7 @@ async function handlePatch(req: NextRequest, context: RouteContext) {
     // Prevent self-escalation: nobody may change their own role assignment.
     if (assignment.userId === session.user.id) {
       return NextResponse.json(
-        { error: "Vous ne pouvez pas modifier vos propres rôles" },
+        { error: "You cannot change your own roles" },
         { status: 400 }
       )
     }
@@ -250,7 +250,7 @@ async function handlePatch(req: NextRequest, context: RouteContext) {
       role_id &&
       (PROTECTED_ROLE_IDS as readonly string[]).includes(role_id)
     ) {
-      return NextResponse.json({ error: "Rôle non trouvé" }, { status: 404 })
+      return NextResponse.json({ error: "Role not found" }, { status: 404 })
     }
 
     // Same guard as POST: tenant rows must reject both legacy "global" roles
@@ -263,7 +263,7 @@ async function handlePatch(req: NextRequest, context: RouteContext) {
       tenantForbiddenRoles.includes(role_id)
     ) {
       return NextResponse.json(
-        { error: "Ce rôle ne peut être assigné que dans le tenant provider (default)" },
+        { error: "This role can only be assigned in the provider tenant (default)" },
         { status: 400 }
       )
     }
@@ -284,7 +284,7 @@ async function handlePatch(req: NextRequest, context: RouteContext) {
       // Vérifier que le rôle existe
       const role = await prisma.rbacRole.findUnique({ where: { id: role_id }, select: { id: true, permissions: { select: { permissionId: true } } } })
       if (!role) {
-        return NextResponse.json({ error: "Rôle non trouvé" }, { status: 404 })
+        return NextResponse.json({ error: "Role not found" }, { status: 404 })
       }
       if (!callerIsSuperAdmin && roleHasSensitiveNicPermissions(role)) {
         return NextResponse.json({ error: 'Only a super admin may grant NIC identity permissions' }, { status: 403 })
@@ -311,7 +311,7 @@ async function handlePatch(req: NextRequest, context: RouteContext) {
     }
 
     if (Object.keys(data).length === 0) {
-      return NextResponse.json({ error: "Aucun champ à mettre à jour" }, { status: 400 })
+      return NextResponse.json({ error: "No fields to update" }, { status: 400 })
     }
 
     await prisma.rbacUserRole.updateMany({ where: buildAssignmentWhere(id, tenantId), data })
@@ -326,7 +326,7 @@ async function handlePatch(req: NextRequest, context: RouteContext) {
     })
 
     if (!updated) {
-      return NextResponse.json({ error: "Assignation non trouvée" }, { status: 404 })
+      return NextResponse.json({ error: "Assignment not found" }, { status: 404 })
     }
 
     // Audit
@@ -371,7 +371,7 @@ async function handlePatch(req: NextRequest, context: RouteContext) {
     console.error("PATCH /api/v1/rbac/assignments/[id] error:", error)
 
 return NextResponse.json(
-      { error: error.message || "Erreur serveur" },
+      { error: error.message || "Server error" },
       { status: 500 }
     )
   }

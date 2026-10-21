@@ -147,3 +147,13 @@ describe('POST /api/v1/guest-file-restore/probe', () => {
     expect((await callRoute(POST, { body: { target, method: 'agent' } })).status).toBe(404)
   })
 })
+
+describe('POST /api/v1/guest-file-restore/probe server error', () => {
+  it('answers "Server error" when loading the settings throws without a message', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    settingsMock.mockRejectedValue({})
+    const res = await callRoute(POST, { body: { target, method: 'agent' } })
+    expect(res.status).toBe(500)
+    expect(((await readJson(res)) as any).error).toBe('Server error')
+  })
+})

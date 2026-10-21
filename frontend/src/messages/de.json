@@ -6766,7 +6766,13 @@
     "enableIsolation": "Isolation aktivieren ({count} Schnittstelle)",
     "enableIsolationPlural": "Isolation aktivieren ({count} Schnittstellen)",
     "container": "Container",
-    "vm": "VM"
+    "vm": "VM",
+    "simulationWarnings": {
+      "moreThan10AffectedVMs": "Mehr als 10 VMs im selben Netzwerk können betroffen sein",
+      "noBusinessSG": "Keine fachliche Security Group angewendet: nur Verkehr zum Gateway wird erlaubt",
+      "baseSGMissing": "Die Security Group sg-base-{network} existiert noch nicht: zuerst generieren",
+      "networkUndetected": "Das Netzwerk der VM kann nicht erkannt werden: Netzwerkkonfiguration prüfen"
+    }
   },
   "setup": {
     "title": "Ersteinrichtung",
@@ -7903,7 +7909,23 @@
     "limitBridgeShort": "Bridge {resource}",
     "excludedTagShort": "Tag {tag}",
     "excludedLocalDisksShort": "Lokale Disks auf {storages}",
-    "excludedGuestTypeShort": "Gasttyp wird nicht ausgeglichen"
+    "excludedGuestTypeShort": "Gasttyp wird nicht ausgeglichen",
+    "migrationSteps": {
+      "pending": "Warten auf Start...",
+      "fetchingStatus": "Status wird abgerufen...",
+      "inProgress": "Migration läuft...",
+      "starting": "Migration wird gestartet...",
+      "analyzingDisks": "Lokale Datenträger werden analysiert...",
+      "startingDiskCopy": "Datenträgerkopie wird gestartet...",
+      "initDiskMirror": "Datenträgerspiegel wird initialisiert...",
+      "copying": "Daten werden kopiert: {detail}",
+      "finalSync": "Abschließende Synchronisierung...",
+      "liveMemory": "Live-Migration des Arbeitsspeichers...",
+      "memoryDone": "Migration des Arbeitsspeichers abgeschlossen...",
+      "completed": "Migration abgeschlossen",
+      "failed": "Migration fehlgeschlagen",
+      "failedWithReason": "Migration fehlgeschlagen: {detail}"
+    }
   },
   "usersPage": {
     "currentRoles": "Aktuelle Rollen",
@@ -8283,7 +8305,8 @@
     "protectedLabel": "Geschützt",
     "unprotectedLabel": "Ungeschützt",
     "withSgLabel": "Mit SG",
-    "logLevelShort": "Log"
+    "logLevelShort": "Log",
+    "cidrAliasIpsetHelper": "CIDR, Alias oder +ipset"
   },
   "themes": {
     "categories": {

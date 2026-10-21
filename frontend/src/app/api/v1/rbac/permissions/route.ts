@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
     const session = await getServerSession(authOptions)
 
     if (!session?.user) {
-      return NextResponse.json({ error: "Non autorisé" }, { status: 401 })
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
     // Récupérer toutes les permissions groupées par catégorie
@@ -61,7 +61,7 @@ export async function GET(req: NextRequest) {
     console.error("GET /api/v1/rbac/permissions error:", error)
 
 return NextResponse.json(
-      { error: error.message || "Erreur serveur" },
+      { error: error.message || "Server error" },
       { status: 500 }
     )
   }

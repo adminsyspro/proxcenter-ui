@@ -87,6 +87,7 @@ import PlacementConstraintsCard, {
 } from '@/components/automation/drs/PlacementConstraintsCard'
 import MigrationHistoryTab from '@/components/automation/drs/MigrationHistoryTab'
 import { GuestGlyph, NodeGlyph } from '@/components/automation/drs/glyphs'
+import { migrationProgressMessage } from '@/components/automation/drs/migrationProgress'
 import DrsActionNoticeDialog from '@/components/automation/drs/DrsActionNoticeDialog'
 import AffinityRulesManager, {
   type AffinityRule, 
@@ -193,6 +194,8 @@ interface MigrationProgress {
   status: string
   progress: number
   message: string
+  step?: string
+  step_detail?: string
   started_at: string
 }
 
@@ -896,7 +899,7 @@ const ActiveMigrationRow = ({
   const dark = theme.palette.mode === 'dark'
   const dotBorder = theme.palette.background.paper
   const pct = progress?.progress ?? 0
-  const message = progress?.message ?? t('drsPage.loading')
+  const message = progress ? migrationProgressMessage(progress, t) : t('drsPage.loading')
   const isComplete = migration.status === 'completed'
   const isFailed = migration.status === 'failed'
   

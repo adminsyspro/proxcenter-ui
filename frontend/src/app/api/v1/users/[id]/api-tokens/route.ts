@@ -43,7 +43,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       : await findUserInTenant(id, tenantId)
 
     if (!user) {
-      return NextResponse.json({ error: "Utilisateur non trouvé" }, { status: 404 })
+      return NextResponse.json({ error: "User not found" }, { status: 404 })
     }
 
     // A tenant-scoped admin only sees, and later only revokes, the tokens
@@ -64,7 +64,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       })),
     })
   } catch (error: any) {
-    console.error("Erreur GET user api-tokens:", error)
-    return NextResponse.json({ error: error?.message || "Erreur serveur" }, { status: 500 })
+    console.error("GET user api-tokens error:", error)
+    return NextResponse.json({ error: error?.message || "Server error" }, { status: 500 })
   }
 }

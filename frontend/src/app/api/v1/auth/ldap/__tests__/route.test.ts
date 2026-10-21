@@ -123,3 +123,52 @@ describe("PUT /api/v1/auth/ldap", () => {
     expect(upsertMock).not.toHaveBeenCalled()
   })
 })
+
+describe("/api/v1/auth/ldap English messages", () => {
+  beforeEach(() => {
+    vi.spyOn(console, "error").mockImplementation(() => {})
+  })
+
+  it("GET answers 'Server error' when the lookup throws without a message", async () => {
+    findUniqueMock.mockRejectedValue({})
+    const { GET } = await routes()
+    const res = await callRoute(GET as any, { method: "GET" })
+    expect(res.status).toBe(500)
+    expect((await readJson<any>(res)).error).toBe("Server error")
+  })
+
+  it("PUT answers 'LDAP URL is required'", async () => {
+    const { PUT } = await routes()
+    const res = await callRoute(PUT as any, { method: "PUT", body: body({ url: "" }) })
+    expect((await readJson<any>(res)).error).toBe("LDAP URL is required")
+  })
+
+  it("PUT answers 'Base DN is required'", async () => {
+    const { PUT } = await routes()
+    const res = await callRoute(PUT as any, { method: "PUT", body: body({ base_dn: "" }) })
+    expect(res.status).toBe(400)
+    expect((await readJson<any>(res)).error).toBe("Base DN is required")
+  })
+
+  it("PUT explains the expected PEM format", async () => {
+    const { PUT } = await routes()
+    const res = await callRoute(PUT as any, { method: "PUT", body: body({ ca_cert: "not a cert" }) })
+    expect((await readJson<any>(res)).error).toBe(
+      "The CA certificate must be in PEM format (-----BEGIN CERTIFICATE-----)",
+    )
+  })
+
+  it("PUT names the resource 'LDAP configuration' in the audit trail", async () => {
+    const { PUT } = await routes()
+    await callRoute(PUT as any, { method: "PUT", body: body() })
+    expect(auditMock).toHaveBeenCalledWith(expect.objectContaining({ resourceName: "LDAP configuration" }))
+  })
+
+  it("PUT answers 'Server error' when the upsert throws without a message", async () => {
+    upsertMock.mockRejectedValue({})
+    const { PUT } = await routes()
+    const res = await callRoute(PUT as any, { method: "PUT", body: body() })
+    expect(res.status).toBe(500)
+    expect((await readJson<any>(res)).error).toBe("Server error")
+  })
+})

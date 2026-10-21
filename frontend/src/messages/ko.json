@@ -6787,7 +6787,13 @@
     "enableIsolation": "격리 활성화 (인터페이스 {count}개)",
     "enableIsolationPlural": "격리 활성화 (인터페이스 {count}개)",
     "container": "컨테이너",
-    "vm": "VM"
+    "vm": "VM",
+    "simulationWarnings": {
+      "moreThan10AffectedVMs": "같은 네트워크의 VM 10개 이상이 영향을 받을 수 있습니다",
+      "noBusinessSG": "적용된 업무용 Security Group이 없습니다: 게이트웨이로의 트래픽만 허용됩니다",
+      "baseSGMissing": "Security Group sg-base-{network}이(가) 아직 없습니다: 먼저 생성하세요",
+      "networkUndetected": "VM 네트워크를 감지할 수 없습니다: 네트워크 구성을 확인하세요"
+    }
   },
   "setup": {
     "title": "초기 설정",
@@ -7951,7 +7957,23 @@
     "limitBridgeShort": "브리지 {resource}",
     "excludedTagShort": "태그 {tag}",
     "excludedLocalDisksShort": "{storages}의 로컬 디스크",
-    "excludedGuestTypeShort": "균형 조정 대상이 아닌 게스트 유형"
+    "excludedGuestTypeShort": "균형 조정 대상이 아닌 게스트 유형",
+    "migrationSteps": {
+      "pending": "시작 대기 중...",
+      "fetchingStatus": "상태 가져오는 중...",
+      "inProgress": "마이그레이션 진행 중...",
+      "starting": "마이그레이션 시작 중...",
+      "analyzingDisks": "로컬 디스크 분석 중...",
+      "startingDiskCopy": "디스크 복사 시작 중...",
+      "initDiskMirror": "디스크 미러 초기화 중...",
+      "copying": "데이터 복사 중: {detail}",
+      "finalSync": "최종 동기화 중...",
+      "liveMemory": "메모리 라이브 마이그레이션 중...",
+      "memoryDone": "메모리 마이그레이션 완료...",
+      "completed": "마이그레이션 완료",
+      "failed": "마이그레이션 실패",
+      "failedWithReason": "마이그레이션 실패: {detail}"
+    }
   },
   "usersPage": {
     "currentRoles": "현재 역할",
@@ -8339,7 +8361,8 @@
     "protectedLabel": "보호됨",
     "unprotectedLabel": "보호되지 않음",
     "withSgLabel": "SG 있음",
-    "logLevelShort": "로그"
+    "logLevelShort": "로그",
+    "cidrAliasIpsetHelper": "CIDR, 별칭 또는 +ipset"
   },
   "themes": {
     "categories": {

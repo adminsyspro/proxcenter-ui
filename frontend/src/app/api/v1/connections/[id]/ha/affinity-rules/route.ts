@@ -58,11 +58,11 @@ async function postHandler(
 
     // Valider les paramètres requis
     if (!body.type) {
-      return NextResponse.json({ error: 'Le type de règle est requis (node-affinity ou resource-affinity)' }, { status: 400 })
+      return NextResponse.json({ error: 'Rule type is required (node-affinity or resource-affinity)' }, { status: 400 })
     }
 
     if (!body.rule) {
-      return NextResponse.json({ error: 'Le nom de la règle est requis' }, { status: 400 })
+      return NextResponse.json({ error: 'Rule name is required' }, { status: 400 })
     }
 
     // Construire les paramètres
@@ -109,7 +109,7 @@ async function postHandler(
 
     return NextResponse.json({ 
       data: result,
-      message: 'Règle d\'affinité HA créée avec succès'
+      message: 'HA affinity rule created'
     })
   } catch (e: any) {
     console.error('Error creating HA affinity rule:', e)

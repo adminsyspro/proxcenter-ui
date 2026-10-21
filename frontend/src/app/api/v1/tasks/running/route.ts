@@ -225,7 +225,7 @@ return true
             })
           }
         } catch (e) {
-          console.error(`Erreur connexion ${conn.name}:`, e)
+          console.error(`Connection error ${conn.name}:`, e)
         }
       })
     )
@@ -238,10 +238,10 @@ return true
       count: runningTasks.length
     })
   } catch (error: any) {
-    console.error('Erreur API tasks/running:', error)
+    console.error('API tasks/running error:', error)
     
 return NextResponse.json(
-      { error: error?.message || 'Erreur serveur' },
+      { error: error?.message || 'Server error' },
       { status: 500 }
     )
   }

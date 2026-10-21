@@ -43,8 +43,8 @@ export async function GET(req: Request) {
 
     return NextResponse.json(result)
   } catch (error: any) {
-    console.error("Erreur GET audit:", error)
+    console.error("GET audit error:", error)
 
-return NextResponse.json({ error: error?.message || "Erreur serveur" }, { status: 500 })
+return NextResponse.json({ error: error?.message || "Server error" }, { status: 500 })
   }
 }

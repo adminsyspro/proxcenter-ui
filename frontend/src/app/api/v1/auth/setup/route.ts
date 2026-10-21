@@ -59,14 +59,14 @@ async function handlePost(req: Request) {
 
     if (!verdict.allowed) {
       return NextResponse.json(
-        { error: "Trop de tentatives, réessayez dans une minute" },
+        { error: "Too many attempts, try again in a minute" },
         { status: 429, headers: { "Retry-After": String(verdict.retryAfter) } }
       )
     }
 
     if (setupTokenDenied(req)) {
       return NextResponse.json(
-        { error: "Jeton d'initialisation invalide" },
+        { error: "Invalid setup token" },
         { status: 403 }
       )
     }
@@ -77,7 +77,7 @@ async function handlePost(req: Request) {
     const userCount = await prisma.user.count()
     if (userCount > 0) {
       return NextResponse.json(
-        { error: "Le setup initial a déjà été effectué" },
+        { error: "Initial setup has already been completed" },
         { status: 400 }
       )
     }
@@ -87,7 +87,7 @@ async function handlePost(req: Request) {
 
     if (!email || !password) {
       return NextResponse.json(
-        { error: "Email et mot de passe requis" },
+        { error: "Email and password are required" },
         { status: 400 }
       )
     }
@@ -97,7 +97,7 @@ async function handlePost(req: Request) {
 
     if (email.length > 254 || !emailRegex.test(email)) {
       return NextResponse.json(
-        { error: "Format d'email invalide" },
+        { error: "Invalid email format" },
         { status: 400 }
       )
     }
@@ -105,7 +105,7 @@ async function handlePost(req: Request) {
     // Valider le mot de passe (min 8 caractères)
     if (password.length < 8) {
       return NextResponse.json(
-        { error: "Le mot de passe doit contenir au moins 8 caractères" },
+        { error: "Password must be at least 8 characters" },
         { status: 400 }
       )
     }
@@ -161,7 +161,7 @@ async function handlePost(req: Request) {
 
     return NextResponse.json({
       success: true,
-      message: "Compte administrateur créé avec succès",
+      message: "Administrator account created",
       user: {
         id,
         email: normalisedEmail,
@@ -176,15 +176,15 @@ async function handlePost(req: Request) {
     // to lose safely.
     if (error?.message === ALREADY_INITIALISED || error?.code === "P2034") {
       return NextResponse.json(
-        { error: "Le setup initial a déjà été effectué" },
+        { error: "Initial setup has already been completed" },
         { status: 400 }
       )
     }
 
-    console.error("Erreur setup:", error)
+    console.error("Setup error:", error)
 
     return NextResponse.json(
-      { error: error?.message || "Erreur lors de la création du compte" },
+      { error: error?.message || "Failed to create the account" },
       { status: 500 }
     )
   }

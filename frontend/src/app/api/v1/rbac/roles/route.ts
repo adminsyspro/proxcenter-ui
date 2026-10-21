@@ -49,7 +49,7 @@ export async function GET(req: NextRequest) {
     const session = await getServerSession(authOptions)
 
     if (!session?.user) {
-      return NextResponse.json({ error: "Non autorisé" }, { status: 401 })
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
     // Hide protected (wildcard) roles from non-super-admin callers so a tenant
@@ -128,7 +128,7 @@ export async function GET(req: NextRequest) {
     console.error("GET /api/v1/rbac/roles error:", error)
 
 return NextResponse.json(
-      { error: error.message || "Erreur serveur" },
+      { error: error.message || "Server error" },
       { status: 500 }
     )
   }
@@ -143,7 +143,7 @@ async function handlePost(req: NextRequest) {
     const session = await getServerSession(authOptions)
 
     if (!session?.user) {
-      return NextResponse.json({ error: "Non autorisé" }, { status: 401 })
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
     // Creating a role lets the caller bundle any permission — including
@@ -151,14 +151,14 @@ async function handlePost(req: NextRequest) {
     // super admin to prevent tenant admins from shadowing role_super_admin
     // via a custom wildcard role.
     if (!(await isUserSuperAdmin(session.user.id))) {
-      return NextResponse.json({ error: "Droits administrateur requis" }, { status: 403 })
+      return NextResponse.json({ error: "Admin rights required" }, { status: 403 })
     }
 
     const body = await req.json()
     const { name, description, color, permissions, widget_overrides, default_scopes } = body
 
     if (!name || typeof name !== "string" || name.trim().length === 0) {
-      return NextResponse.json({ error: "Nom du rôle requis" }, { status: 400 })
+      return NextResponse.json({ error: "Role name is required" }, { status: 400 })
     }
 
     // Role-level default scope (issue #383). New roles are always custom, so
@@ -187,7 +187,7 @@ async function handlePost(req: NextRequest) {
     })
 
     if (existing) {
-      return NextResponse.json({ error: "Un rôle avec ce nom existe déjà" }, { status: 400 })
+      return NextResponse.json({ error: "A role with this name already exists" }, { status: 400 })
     }
 
     const permIds: string[] = Array.isArray(permissions) ? permissions.filter((p: any) => typeof p === "string") : []
@@ -245,7 +245,7 @@ async function handlePost(req: NextRequest) {
     })
 
     if (!newRole) {
-      return NextResponse.json({ error: "Erreur lors de la création" }, { status: 500 })
+      return NextResponse.json({ error: "Creation failed" }, { status: 500 })
     }
 
     return NextResponse.json({
@@ -275,7 +275,7 @@ async function handlePost(req: NextRequest) {
     console.error("POST /api/v1/rbac/roles error:", error)
 
 return NextResponse.json(
-      { error: error.message || "Erreur serveur" },
+      { error: error.message || "Server error" },
       { status: 500 }
     )
   }

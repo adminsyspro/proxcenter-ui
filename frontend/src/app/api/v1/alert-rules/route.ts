@@ -13,20 +13,20 @@ export const runtime = 'nodejs'
 export const METRIC_TYPES = {
   'cpu': { label: 'CPU (%)', unit: '%', min: 0, max: 100 },
   'memory': { label: 'RAM (%)', unit: '%', min: 0, max: 100 },
-  'disk': { label: 'Disque (%)', unit: '%', min: 0, max: 100 },
-  'uptime': { label: 'Uptime (jours)', unit: 'jours', min: 0, max: null },
-  'node_offline': { label: 'Node hors ligne', unit: '', min: 0, max: 1 },
-  'vm_stopped': { label: 'VM arrêtée', unit: '', min: 0, max: 1 },
+  'disk': { label: 'Disk (%)', unit: '%', min: 0, max: 100 },
+  'uptime': { label: 'Uptime (days)', unit: 'days', min: 0, max: null },
+  'node_offline': { label: 'Node offline', unit: '', min: 0, max: 1 },
+  'vm_stopped': { label: 'VM stopped', unit: '', min: 0, max: 1 },
 } as const
 
 // Opérateurs supportés
 export const OPERATORS = {
-  'gt': { label: '>', description: 'supérieur à' },
-  'gte': { label: '>=', description: 'supérieur ou égal à' },
-  'lt': { label: '<', description: 'inférieur à' },
-  'lte': { label: '<=', description: 'inférieur ou égal à' },
-  'eq': { label: '=', description: 'égal à' },
-  'neq': { label: '!=', description: 'différent de' },
+  'gt': { label: '>', description: 'greater than' },
+  'gte': { label: '>=', description: 'greater than or equal to' },
+  'lt': { label: '<', description: 'less than' },
+  'lte': { label: '<=', description: 'less than or equal to' },
+  'eq': { label: '=', description: 'equal to' },
+  'neq': { label: '!=', description: 'not equal to' },
 } as const
 
 // Niveaux de sévérité
@@ -34,10 +34,10 @@ export const SEVERITIES = ['info', 'warning', 'critical'] as const
 
 // Types de scope
 export const SCOPE_TYPES = {
-  'all': { label: 'Tout' },
-  'connection': { label: 'Connexion spécifique' },
-  'node': { label: 'Node spécifique' },
-  'vm': { label: 'VM spécifique' },
+  'all': { label: 'All' },
+  'connection': { label: 'Specific connection' },
+  'node': { label: 'Specific node' },
+  'vm': { label: 'Specific VM' },
 } as const
 
 // GET - Liste des règles
@@ -82,10 +82,10 @@ export async function GET() {
       }
     })
   } catch (error: any) {
-    console.error('Erreur GET alert-rules:', error)
+    console.error('GET alert-rules error:', error)
 
 return NextResponse.json(
-      { error: error?.message || 'Erreur serveur' },
+      { error: error?.message || 'Server error' },
       { status: 500 }
     )
   }
@@ -102,23 +102,23 @@ async function handlePost(req: Request) {
 
     // Validation
     if (!name?.trim()) {
-      return NextResponse.json({ error: 'Le nom est requis' }, { status: 400 })
+      return NextResponse.json({ error: 'Name is required' }, { status: 400 })
     }
 
     if (!metric || !METRIC_TYPES[metric as keyof typeof METRIC_TYPES]) {
-      return NextResponse.json({ error: 'Métrique invalide' }, { status: 400 })
+      return NextResponse.json({ error: 'Invalid metric' }, { status: 400 })
     }
 
     if (!operator || !OPERATORS[operator as keyof typeof OPERATORS]) {
-      return NextResponse.json({ error: 'Opérateur invalide' }, { status: 400 })
+      return NextResponse.json({ error: 'Invalid operator' }, { status: 400 })
     }
 
     if (threshold === undefined || threshold === null || Number.isNaN(Number(threshold))) {
-      return NextResponse.json({ error: 'Seuil invalide' }, { status: 400 })
+      return NextResponse.json({ error: 'Invalid threshold' }, { status: 400 })
     }
 
     if (!severity || !SEVERITIES.includes(severity)) {
-      return NextResponse.json({ error: 'Sévérité invalide' }, { status: 400 })
+      return NextResponse.json({ error: 'Invalid severity' }, { status: 400 })
     }
 
     const tenantId = await getCurrentTenantId()
@@ -146,13 +146,13 @@ async function handlePost(req: Request) {
 
     return NextResponse.json({
       data: { id },
-      message: 'Règle créée avec succès'
+      message: 'Rule created'
     }, { status: 201 })
   } catch (error: any) {
-    console.error('Erreur POST alert-rules:', error)
+    console.error('POST alert-rules error:', error)
 
 return NextResponse.json(
-      { error: error?.message || 'Erreur serveur' },
+      { error: error?.message || 'Server error' },
       { status: 500 }
     )
   }

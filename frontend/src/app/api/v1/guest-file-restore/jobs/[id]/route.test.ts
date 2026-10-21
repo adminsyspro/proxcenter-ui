@@ -90,6 +90,6 @@ describe('GET /api/v1/guest-file-restore/jobs/[id]', () => {
     findUniqueMock.mockRejectedValue({})
     const res = await callRoute(GET, { params: { id: 'job1' } })
     expect(res.status).toBe(500)
-    expect(await readJson(res)).toEqual({ error: 'Erreur serveur' })
+    expect(await readJson(res)).toEqual({ error: 'Server error' })
   })
 })

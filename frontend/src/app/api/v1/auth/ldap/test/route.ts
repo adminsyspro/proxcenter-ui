@@ -38,7 +38,7 @@ export async function POST(req: Request) {
     if (!url) {
       return NextResponse.json({
         success: false,
-        error: "URL LDAP requise"
+        error: "LDAP URL is required"
       }, { status: 400 })
     }
 
@@ -66,7 +66,7 @@ export async function POST(req: Request) {
       category: "settings",
       resourceType: "ldap_config",
       resourceId: "default",
-      resourceName: "Configuration LDAP",
+      resourceName: "LDAP configuration",
       details: { 
         url,
         base_dn,
@@ -93,11 +93,11 @@ export async function POST(req: Request) {
       })
     }
   } catch (error: any) {
-    console.error("Erreur test LDAP:", error)
+    console.error("LDAP test error:", error)
     
     return NextResponse.json({ 
       success: false,
-      error: error?.message || "Erreur lors du test LDAP" 
+      error: error?.message || "LDAP test failed" 
     }, { status: 500 })
   }
 }
@@ -156,7 +156,7 @@ async function testLdapViaOrchestrator(config: {
   } catch (error: any) {
     return {
       success: false,
-      message: `Erreur de communication avec l'orchestrator: ${error?.message || error}`,
+      message: `Communication error with the orchestrator: ${error?.message || error}`,
     }
   }
 }

@@ -45,7 +45,7 @@ async function denyIfProtectedRoleAndCallerIsNot(
 ): Promise<NextResponse | null> {
   if (!(PROTECTED_ROLE_IDS as readonly string[]).includes(roleId)) return null
   if (callerUserId && (await isUserSuperAdmin(callerUserId))) return null
-  return NextResponse.json({ error: "Rôle non trouvé" }, { status: 404 })
+  return NextResponse.json({ error: "Role not found" }, { status: 404 })
 }
 
 /** A role is reachable from the current tenant if it is global (system role,
@@ -64,7 +64,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
     const session = await getServerSession(authOptions)
 
     if (!session?.user) {
-      return NextResponse.json({ error: "Non autorisé" }, { status: 401 })
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
     const { id } = await context.params
@@ -92,7 +92,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
     })
 
     if (!role || !isRoleReachableFromTenant(role, tenantId)) {
-      return NextResponse.json({ error: "Rôle non trouvé" }, { status: 404 })
+      return NextResponse.json({ error: "Role not found" }, { status: 404 })
     }
 
     return NextResponse.json({
@@ -132,7 +132,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
     console.error("GET /api/v1/rbac/roles/[id] error:", error)
 
 return NextResponse.json(
-      { error: error.message || "Erreur serveur" },
+      { error: error.message || "Server error" },
       { status: 500 }
     )
   }
@@ -147,14 +147,14 @@ async function handlePatch(req: NextRequest, context: RouteContext) {
     const session = await getServerSession(authOptions)
 
     if (!session?.user) {
-      return NextResponse.json({ error: "Non autorisé" }, { status: 401 })
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
     // Modifying or deleting a role (including its permission set) is reserved
     // to super admins — otherwise a tenant admin with admin.rbac could swap
     // their role's perms for wildcard and self-escalate.
     if (!(await isUserSuperAdmin(session.user.id))) {
-      return NextResponse.json({ error: "Droits administrateur requis" }, { status: 403 })
+      return NextResponse.json({ error: "Admin rights required" }, { status: 403 })
     }
 
     const { id } = await context.params
@@ -165,7 +165,7 @@ async function handlePatch(req: NextRequest, context: RouteContext) {
     const callerTenantId = await getCurrentTenantId()
 
     if (!role || !isRoleReachableFromTenant(role, callerTenantId)) {
-      return NextResponse.json({ error: "Rôle non trouvé" }, { status: 404 })
+      return NextResponse.json({ error: "Role not found" }, { status: 404 })
     }
 
     const body = await req.json()
@@ -187,7 +187,7 @@ async function handlePatch(req: NextRequest, context: RouteContext) {
         Array.isArray(permissions)
 
       if (touchedSystemImmutable) {
-        return NextResponse.json({ error: "Impossible de modifier un rôle système" }, { status: 400 })
+        return NextResponse.json({ error: "Cannot modify a system role" }, { status: 400 })
       }
     }
 
@@ -215,7 +215,7 @@ async function handlePatch(req: NextRequest, context: RouteContext) {
       })
 
       if (existing) {
-        return NextResponse.json({ error: "Un rôle avec ce nom existe déjà" }, { status: 400 })
+        return NextResponse.json({ error: "A role with this name already exists" }, { status: 400 })
       }
     }
 
@@ -280,7 +280,7 @@ async function handlePatch(req: NextRequest, context: RouteContext) {
     })
 
     if (!updated) {
-      return NextResponse.json({ error: "Rôle non trouvé" }, { status: 404 })
+      return NextResponse.json({ error: "Role not found" }, { status: 404 })
     }
 
     return NextResponse.json({
@@ -309,7 +309,7 @@ async function handlePatch(req: NextRequest, context: RouteContext) {
     console.error("PATCH /api/v1/rbac/roles/[id] error:", error)
 
 return NextResponse.json(
-      { error: error.message || "Erreur serveur" },
+      { error: error.message || "Server error" },
       { status: 500 }
     )
   }
@@ -324,14 +324,14 @@ async function handleDelete(req: NextRequest, context: RouteContext) {
     const session = await getServerSession(authOptions)
 
     if (!session?.user) {
-      return NextResponse.json({ error: "Non autorisé" }, { status: 401 })
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
     // Modifying or deleting a role (including its permission set) is reserved
     // to super admins — otherwise a tenant admin with admin.rbac could swap
     // their role's perms for wildcard and self-escalate.
     if (!(await isUserSuperAdmin(session.user.id))) {
-      return NextResponse.json({ error: "Droits administrateur requis" }, { status: 403 })
+      return NextResponse.json({ error: "Admin rights required" }, { status: 403 })
     }
 
     const { id } = await context.params
@@ -342,11 +342,11 @@ async function handleDelete(req: NextRequest, context: RouteContext) {
     const callerTenantIdForDelete = await getCurrentTenantId()
 
     if (!role || !isRoleReachableFromTenant(role, callerTenantIdForDelete)) {
-      return NextResponse.json({ error: "Rôle non trouvé" }, { status: 404 })
+      return NextResponse.json({ error: "Role not found" }, { status: 404 })
     }
 
     if (role.isSystem) {
-      return NextResponse.json({ error: "Impossible de supprimer un rôle système" }, { status: 400 })
+      return NextResponse.json({ error: "Cannot delete a system role" }, { status: 400 })
     }
 
     // Vérifier si des utilisateurs utilisent ce rôle (tous tenants confondus,
@@ -355,7 +355,7 @@ async function handleDelete(req: NextRequest, context: RouteContext) {
 
     if (userCount > 0) {
       return NextResponse.json({
-        error: `Ce rôle est assigné à ${userCount} utilisateur(s). Retirez les assignations d'abord.`
+        error: `This role is assigned to ${userCount} user(s). Remove the assignments first.`
       }, { status: 400 })
     }
 
@@ -380,7 +380,7 @@ async function handleDelete(req: NextRequest, context: RouteContext) {
     console.error("DELETE /api/v1/rbac/roles/[id] error:", error)
 
 return NextResponse.json(
-      { error: error.message || "Erreur serveur" },
+      { error: error.message || "Server error" },
       { status: 500 }
     )
   }

@@ -89,7 +89,7 @@ describe('settings route server errors', () => {
     const first = await callRoute(GET, { method: 'GET' })
     expect(first.status).toBe(500)
     expect(await readJson(first)).toEqual({ error: 'db down' })
-    expect(await readJson(await callRoute(GET, { method: 'GET' }))).toEqual({ error: 'Erreur serveur' })
+    expect(await readJson(await callRoute(GET, { method: 'GET' }))).toEqual({ error: 'Server error' })
   })
 
   it('maps a save failure of PUT to 500, leaving only the failure row of withAudit()', async () => {
@@ -98,13 +98,13 @@ describe('settings route server errors', () => {
     const first = await callRoute(PUT, { method: 'PUT', body })
     expect(first.status).toBe(500)
     expect(await readJson(first)).toEqual({ error: 'write failed' })
-    expect(await readJson(await callRoute(PUT, { method: 'PUT', body }))).toEqual({ error: 'Erreur serveur' })
+    expect(await readJson(await callRoute(PUT, { method: 'PUT', body }))).toEqual({ error: 'Server error' })
     // The route never reached its own audit(): one safety-net row per failed call.
     expect(auditMock).toHaveBeenCalledTimes(2)
     const failed = (errorMessage: string) => expect.objectContaining({
       category: 'settings', action: 'update', resourceType: 'guest_file_restore', status: 'failure', errorMessage,
       details: expect.objectContaining({ method: 'PUT', httpStatus: 500 }),
     })
-    expect(auditMock.mock.calls.map(c => c[0])).toEqual([failed('write failed'), failed('Erreur serveur')])
+    expect(auditMock.mock.calls.map(c => c[0])).toEqual([failed('write failed'), failed('Server error')])
   })
 })

@@ -32,7 +32,7 @@ export async function GET(_request: Request, ctx: { params: Promise<{ id: string
     const [reconciled] = await reconcileStaleJobs([row])
     return NextResponse.json({ data: toJobDto(reconciled) })
   } catch (error: any) {
-    console.error('Erreur GET guest-file-restore/jobs/[id]:', error)
-    return NextResponse.json({ error: error?.message || 'Erreur serveur' }, { status: 500 })
+    console.error('GET guest-file-restore/jobs/[id] error:', error)
+    return NextResponse.json({ error: error?.message || 'Server error' }, { status: 500 })
   }
 }

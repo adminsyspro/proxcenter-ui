@@ -44,7 +44,7 @@ export async function POST(request: Request) {
     const result = await testSyslogDestination(dest, { userId: guard.userId, userEmail: guard.userEmail })
     return NextResponse.json(result)
   } catch (error: any) {
-    console.error('Erreur POST settings/syslog/test:', error)
-    return NextResponse.json({ ok: false, error: error?.message || 'Erreur serveur' }, { status: 500 })
+    console.error('POST settings/syslog/test error:', error)
+    return NextResponse.json({ ok: false, error: error?.message || 'Server error' }, { status: 500 })
   }
 }

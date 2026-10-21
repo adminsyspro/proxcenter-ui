@@ -150,7 +150,7 @@ async function handler(
     return NextResponse.json({
       success: true,
       data: result,
-      message: `Disque ${disk} redimensionné de ${size}`
+      message: `Disk ${disk} resized by ${size}`
     })
   } catch (e: any) {
     const excluded = licenseExcludedResponse(e)

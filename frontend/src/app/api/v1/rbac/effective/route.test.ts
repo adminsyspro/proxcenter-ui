@@ -99,3 +99,36 @@ describe('GET /api/v1/rbac/effective with role default scope (issue #383)', () =
     expect(await permissionsOn('conn-ab:pve1:qemu:100')).not.toContain('vm.view')
   })
 })
+
+describe('GET /api/v1/rbac/effective English messages', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    getServerSessionMock.mockResolvedValue({ user: { id: 'u1' } })
+    userFindUniqueMock.mockResolvedValue({ id: 'u1', email: 'u1@x', role: 'viewer' })
+  })
+
+  async function expectError(res: Response, status: number, message: string) {
+    expect(res.status).toBe(status)
+    expect(((await readJson(res)) as any).error).toBe(message)
+  }
+
+  it('401 "Unauthorized" without a session', async () => {
+    getServerSessionMock.mockResolvedValue(null)
+    await expectError(await callRoute(GET), 401, 'Unauthorized')
+  })
+
+  it('403 when reading another user without admin.rbac', async () => {
+    await expectError(await callRoute(GET, { searchParams: { user_id: 'u2' } }), 403, "Not allowed to view other users' permissions")
+  })
+
+  it('404 "User not found"', async () => {
+    userFindUniqueMock.mockResolvedValue(null)
+    await expectError(await callRoute(GET), 404, 'User not found')
+  })
+
+  it('500 "Server error" when the lookup throws without a message', async () => {
+    userFindUniqueMock.mockRejectedValue(new Error(''))
+    await expectError(await callRoute(GET), 500, 'Server error')
+  })
+})

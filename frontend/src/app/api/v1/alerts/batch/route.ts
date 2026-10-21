@@ -30,7 +30,7 @@ async function handleDelete(req: Request) {
     return NextResponse.json({
       data: {
         deleted: result.count,
-        message: `${result.count} alerte(s) supprimée(s)`
+        message: `${result.count} alert(s) deleted`
       }
     })
   } catch (error: any) {

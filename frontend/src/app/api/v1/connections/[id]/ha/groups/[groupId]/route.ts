@@ -29,7 +29,7 @@ async function getHandler(
     return NextResponse.json({ data: group })
   } catch (e: any) {
     if (e?.message?.includes('404') || e?.message?.includes('does not exist')) {
-      return NextResponse.json({ error: 'Groupe HA non trouvé' }, { status: 404 })
+      return NextResponse.json({ error: 'HA group not found' }, { status: 404 })
     }
 
     console.error('Error fetching HA group:', e)
@@ -88,7 +88,7 @@ async function putHandler(
 
     return NextResponse.json({ 
       data: result,
-      message: 'Groupe HA mis à jour avec succès'
+      message: 'HA group updated'
     })
   } catch (e: any) {
     console.error('Error updating HA group:', e)
@@ -119,7 +119,7 @@ async function deleteHandler(
 
     return NextResponse.json({ 
       data: null,
-      message: 'Groupe HA supprimé avec succès'
+      message: 'HA group deleted'
     })
   } catch (e: any) {
     console.error('Error deleting HA group:', e)

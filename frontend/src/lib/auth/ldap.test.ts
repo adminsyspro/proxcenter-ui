@@ -277,3 +277,29 @@ describe('bindPasswordOrSaved', () => {
     expect(await bindPasswordOrSaved('cn=svc', '')).toBeUndefined()
   })
 })
+
+describe('ldap English error messages', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('logs a bind password that cannot be decrypted and carries on without it', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    findUniqueMock.mockResolvedValue({ ...ROW, bindPasswordEnc: 42 })
+    const { getLdapConfig } = await import('./ldap')
+    const cfg = await getLdapConfig()
+    expect(cfg?.bindPassword).toBeNull()
+    expect(errorSpy).toHaveBeenCalledWith('LDAP bind password decryption error:', expect.anything())
+  })
+
+  it('reports an unreachable orchestrator in English', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    findUniqueMock.mockResolvedValue(ROW)
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('ECONNREFUSED')))
+    const { authenticateLdapDetailed } = await import('./ldap')
+    await expect(authenticateLdapDetailed('jdoe', 'x')).rejects.toThrow(
+      'Communication error with the orchestrator during LDAP authentication',
+    )
+    expect(errorSpy).toHaveBeenCalledWith('Orchestrator LDAP auth error:', 'ECONNREFUSED')
+  })
+})

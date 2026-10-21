@@ -153,3 +153,18 @@ describe("POST /api/v1/auth/ldap/diagnose", () => {
     expect(userFindUniqueMock).not.toHaveBeenCalled()
   })
 })
+
+describe("POST /api/v1/auth/ldap/diagnose English messages", () => {
+  it("answers 'LDAP URL is required'", async () => {
+    const res = await post({ ...FORM, url: "" })
+    expect((await readJson<any>(res)).error).toBe("LDAP URL is required")
+  })
+
+  it("answers 'LDAP diagnosis failed' when an unexpected error has no message", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {})
+    checkPermissionMock.mockRejectedValue({})
+    const res = await post(FORM)
+    expect(res.status).toBe(500)
+    expect((await readJson<any>(res)).error).toBe("LDAP diagnosis failed")
+  })
+})

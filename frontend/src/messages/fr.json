@@ -6787,7 +6787,13 @@
     "enableIsolation": "Activer l'isolation ({count} interface)",
     "enableIsolationPlural": "Activer l'isolation ({count} interfaces)",
     "container": "Container",
-    "vm": "VM"
+    "vm": "VM",
+    "simulationWarnings": {
+      "moreThan10AffectedVMs": "Plus de 10 VMs du même réseau peuvent être affectées",
+      "noBusinessSG": "Aucun Security Group métier appliqué : seul le trafic vers la passerelle sera autorisé",
+      "baseSGMissing": "Le Security Group sg-base-{network} n'existe pas encore : générez-le d'abord",
+      "networkUndetected": "Impossible de détecter le réseau de la VM : vérifiez sa configuration réseau"
+    }
   },
   "setup": {
     "title": "Configuration initiale",
@@ -7951,7 +7957,23 @@
     "limitBridgeShort": "Bridge {resource}",
     "excludedTagShort": "Tag {tag}",
     "excludedLocalDisksShort": "Disques locaux sur {storages}",
-    "excludedGuestTypeShort": "Type d’invité non équilibré"
+    "excludedGuestTypeShort": "Type d’invité non équilibré",
+    "migrationSteps": {
+      "pending": "En attente de démarrage...",
+      "fetchingStatus": "Récupération du statut...",
+      "inProgress": "Migration en cours...",
+      "starting": "Démarrage de la migration...",
+      "analyzingDisks": "Analyse des disques locaux...",
+      "startingDiskCopy": "Démarrage de la copie des disques...",
+      "initDiskMirror": "Initialisation du miroir de disque...",
+      "copying": "Copie des données : {detail}",
+      "finalSync": "Synchronisation finale...",
+      "liveMemory": "Migration live de la mémoire...",
+      "memoryDone": "Migration de la mémoire terminée...",
+      "completed": "Migration terminée",
+      "failed": "Migration échouée",
+      "failedWithReason": "Migration échouée : {detail}"
+    }
   },
   "usersPage": {
     "currentRoles": "Rôles actuels",
@@ -8339,7 +8361,8 @@
     "protectedLabel": "Protégées",
     "unprotectedLabel": "Non protégées",
     "withSgLabel": "Avec SG",
-    "logLevelShort": "Journalisation"
+    "logLevelShort": "Journalisation",
+    "cidrAliasIpsetHelper": "CIDR, alias ou +ipset"
   },
   "themes": {
     "categories": {

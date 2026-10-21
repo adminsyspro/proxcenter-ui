@@ -193,3 +193,29 @@ describe("GET /api/v1/tasks/running scope routing", () => {
     expect(getConnectionByIdMock).toHaveBeenCalledWith("conn-msp-1", "msp-1")
   })
 })
+
+describe("GET /api/v1/tasks/running English error logs and messages", () => {
+  it("logs a connection failure in English and keeps answering", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {})
+    getInfraMock.mockResolvedValue({ kind: "provider" })
+    prismFindManyMock.mockResolvedValue([{ id: "c1", name: "PVE-1", type: "pve", tenantId: "default" }])
+    getConnectionByIdMock.mockRejectedValue(new Error("gone"))
+
+    const { GET } = await import("./route")
+    const res = await callRoute(GET, { method: "GET" })
+
+    expect(res.status).toBe(200)
+    expect(errorSpy).toHaveBeenCalledWith("Connection error PVE-1:", expect.any(Error))
+  })
+
+  it("answers 'Server error' when an unexpected failure has no message", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {})
+    getInfraMock.mockRejectedValue({})
+
+    const { GET } = await import("./route")
+    const res = await callRoute(GET, { method: "GET" })
+
+    expect(res.status).toBe(500)
+    expect((await res.json()).error).toBe("Server error")
+  })
+})

@@ -132,7 +132,7 @@ export default function FirewallDialogs({
                   fullWidth
                   size="small"
                   placeholder="IP, CIDR, alias, +ipset"
-                  helperText="CIDR, alias, ou +ipset"
+                  helperText={t('firewall.cidrAliasIpsetHelper')}
                  
                 />
               )}
@@ -153,7 +153,7 @@ export default function FirewallDialogs({
                   fullWidth
                   size="small"
                   placeholder="IP, CIDR, alias, +ipset"
-                  helperText="CIDR, alias, ou +ipset"
+                  helperText={t('firewall.cidrAliasIpsetHelper')}
                  
                 />
               )}
@@ -173,7 +173,7 @@ export default function FirewallDialogs({
             placeholder="any, 10.0.0.0/8, alias"
             fullWidth
             size="small"
-            helperText="CIDR, alias, ou +ipset"
+            helperText={t('firewall.cidrAliasIpsetHelper')}
 
           />
         </Grid>
@@ -185,7 +185,7 @@ export default function FirewallDialogs({
             placeholder="any, 10.0.0.0/8, alias"
             fullWidth
             size="small"
-            helperText="CIDR, alias, ou +ipset"
+            helperText={t('firewall.cidrAliasIpsetHelper')}
 
           />
         </Grid>

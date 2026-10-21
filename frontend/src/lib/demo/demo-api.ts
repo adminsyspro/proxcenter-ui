@@ -1589,7 +1589,7 @@ function generateHealthHistory(): { date: string, score: number }[] {
 
 function demoLocked(): Response {
   return new Response(
-    JSON.stringify({ error: "Action désactivée en mode démo" }),
+    JSON.stringify({ error: "Action disabled in demo mode" }),
     { status: 403, headers: { "Content-Type": "application/json" } }
   )
 }

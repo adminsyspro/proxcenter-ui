@@ -24,6 +24,17 @@ export const runtime = "nodejs"
  * l'index d'adresses live rafraîchi en arrière-plan : jamais d'appel bloquant.
  */
 
+/**
+ * `vmids=100,101`: only these guests are enriched (#1163, the inventory export
+ * asks for its rows in batches so no request reads a whole fleet's configs).
+ * null when absent or empty: every guest.
+ */
+function parseVmidFilter(raw: string | null): Set<string> | null {
+  const ids = (raw ?? '').split(',').map(id => id.trim()).filter(Boolean)
+
+  return ids.length > 0 ? new Set(ids) : null
+}
+
 function round1(n: number) {
   return Math.round((n + Number.EPSILON) * 10) / 10
 }
@@ -37,6 +48,7 @@ async function handler(req: Request, ctx: GuardedRouteContext) {
     const url = new URL(req.url)
     const connIdFilter = url.searchParams.get('connId')
     const includeAgent = url.searchParams.get('include') === 'agent'
+    const vmidFilter = parseVmidFilter(url.searchParams.get('vmids'))
 
     // Resolve infrastructure scope once; used for both connection enumeration
     // and vDC masking later. Provider and MSP avoid calling getVdcScope.
@@ -112,7 +124,8 @@ async function handler(req: Request, ctx: GuardedRouteContext) {
           : null
 
         // Transformer les resources en format attendu
-        const mapped = resources.map((r: any) => {
+        const listed = vmidFilter ? resources.filter((r: any) => vmidFilter.has(String(r.vmid))) : resources
+        const mapped = listed.map((r: any) => {
           const cpuPct = round1(Number(r.cpu || 0) * 100)
           const ramPct = r.maxmem ? round1((Number(r.mem || 0) / Number(r.maxmem)) * 100) : 0
 
@@ -154,8 +167,9 @@ async function handler(req: Request, ctx: GuardedRouteContext) {
           .map(vm => ({ ...vm, diskGb: round1(Math.max(Number(vm.diskTotal) || 0, vm.maxdisk) / 1073741824) }))
         // A rejected /cluster/resources gave an EMPTY `mapped`: reading the
         // index is fine, rebuilding it from that list is not.
+        // A vmids subset is not the connection's guest list either.
         const { vms: withIps, warming } = attachGuestIps(conn.id, connData, enriched, {
-          refresh: resourcesResult.status === 'fulfilled',
+          refresh: resourcesResult.status === 'fulfilled' && !vmidFilter,
         })
         if (warming) ipIndexWarming = true
 

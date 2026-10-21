@@ -131,3 +131,38 @@ describe("GET /api/v1/vms scope routing", () => {
     expect(getConnByIdMock).toHaveBeenCalledWith("conn-msp-1", "msp-1")
   })
 })
+
+describe("GET /api/v1/vms?vmids= (#1163)", () => {
+  it("enriches only the listed guests, and reports their machine, creation date and agent version", async () => {
+    getInfraMock.mockResolvedValue({ kind: "provider" })
+    globalFindMany.mockResolvedValue([{ id: "c1", name: "PVE", tenantId: "default" }])
+    getConnByIdMock.mockResolvedValue({ baseUrl: "https://pve.test", apiToken: "t" })
+
+    const { pveFetch } = await import("@/lib/proxmox/client")
+    const fetchMock = vi.mocked(pveFetch)
+    fetchMock.mockImplementation(async (_conn: any, path: string) => {
+      if (path === "/cluster/resources?type=vm") {
+        return [
+          { vmid: 100, node: "pve1", type: "qemu", status: "running", uptime: 600, maxmem: 1 },
+          { vmid: 101, node: "pve1", type: "qemu", status: "running", uptime: 60, maxmem: 1 },
+        ]
+      }
+      if (path === "/nodes") return [{ node: "pve1", status: "online" }]
+      if (path.endsWith("/config")) return { agent: "1", machine: "q35", meta: "ctime=1760000000" }
+      if (path.endsWith("/agent/info")) return { result: { version: "9.2.0" } }
+      if (path.endsWith("/agent/get-osinfo")) return { result: { "pretty-name": "Debian GNU/Linux 13" } }
+      return []
+    })
+
+    const { GET } = await import("./route")
+    const res = await callRoute(GET, { method: "GET", searchParams: { vmids: "101", include: "agent" } })
+    const vms = (await res.json()).data.vms
+
+    expect(vms.map((v: any) => v.vmid)).toEqual(["101"])
+    expect(vms[0]).toMatchObject({
+      machine: "q35", createdAt: 1760000000, uptimeSeconds: 60,
+      agentResponding: true, agentVersion: "9.2.0", agentOsName: "Debian GNU/Linux 13",
+    })
+    expect(fetchMock.mock.calls.some(([, path]) => String(path).includes("/100/"))).toBe(false)
+  })
+})

@@ -8920,7 +8920,7 @@
       "network": "네트워크 사용률",
       "containers": "컨테이너",
       "templates": "템플릿",
-      "specs": "사양",
+      "specs": "게스트 세부 정보",
       "current": "현재 용량",
       "predictions": "예측",
       "recommendations": "권장 사항",

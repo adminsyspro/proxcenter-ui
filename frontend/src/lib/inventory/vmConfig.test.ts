@@ -22,6 +22,8 @@ describe('parseVmConfig', () => {
       agent: '1,fstrim_cloned_disks=1',
       bios: 'ovmf',
       ostype: 'l26',
+      machine: 'pc-q35-9.2+pve1',
+      meta: 'creation-qemu=9.2.0,ctime=1760000000',
       onboot: 1,
       cores: 4,
       sockets: 2,
@@ -32,6 +34,8 @@ describe('parseVmConfig', () => {
       agentEnabled: true,
       bios: 'ovmf',
       ostype: 'l26',
+      machine: 'pc-q35-9.2+pve1',
+      createdAt: 1760000000,
       onboot: true,
       cores: 4,
       sockets: 2,
@@ -49,14 +53,18 @@ describe('parseVmConfig', () => {
   it('returns all-null fields for a null config', () => {
     expect(parseVmConfig(null)).toEqual({
       cpuType: null, scsihw: null, agentEnabled: false, bios: null,
-      ostype: null, onboot: false, cores: null, sockets: null, memoryMb: null,
+      ostype: null, machine: null, createdAt: null, onboot: false, cores: null, sockets: null, memoryMb: null,
     })
+  })
+
+  it('reads no creation date from a meta without ctime', () => {
+    expect(parseVmConfig({ meta: 'creation-qemu=6.1.0' }).createdAt).toBeNull()
   })
 
   it('normalises non-finite numeric fields to null and reads onboot: 0 as false inside a non-null config', () => {
     expect(parseVmConfig({ cores: 'not-a-number', sockets: Infinity, memory: NaN, onboot: 0 })).toEqual({
       cpuType: null, scsihw: null, agentEnabled: false, bios: null,
-      ostype: null, onboot: false, cores: null, sockets: null, memoryMb: null,
+      ostype: null, machine: null, createdAt: null, onboot: false, cores: null, sockets: null, memoryMb: null,
     })
   })
 })
@@ -127,6 +135,7 @@ describe('enrichVmsWithConfig', () => {
   it('probes the agent only with includeAgent, only on running VMs with the flag ON', async () => {
     pveFetchMock.mockImplementation(async (_conn, path) => {
       if (path.endsWith('/config')) return { agent: '1' }
+      if (path.endsWith('/agent/info')) return { result: { version: '9.2.0', supported_commands: [] } }
       if (path.endsWith('/agent/get-osinfo')) return { result: { 'pretty-name': 'Debian GNU/Linux 12' } }
       throw new Error('unexpected path')
     })
@@ -137,6 +146,7 @@ describe('enrichVmsWithConfig', () => {
     const probed = await enrichVmsWithConfig(CONN, [vms[0]], new Set(['n1']), { includeAgent: true })
     expect(probed[0].agentResponding).toBe(true)
     expect(probed[0].agentOsName).toBe('Debian GNU/Linux 12')
+    expect(probed[0].agentVersion).toBe('9.2.0')
 
     pveFetchMock.mockClear()
     pveFetchMock.mockResolvedValue({ agent: '1' })
@@ -155,6 +165,19 @@ describe('enrichVmsWithConfig', () => {
     const out = await enrichVmsWithConfig(CONN, [vms[0]], new Set(['n1']), { includeAgent: true })
     expect(out[0].agentResponding).toBe(false)
     expect(out[0].agentOsName).toBeNull()
+    expect(out[0].agentVersion).toBeNull()
+    // A silent agent is not asked for its OS on top.
+    expect(pveFetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('keeps the agent version when get-osinfo is not supported (old agent)', async () => {
+    pveFetchMock.mockImplementation(async (_conn, path) => {
+      if (path.endsWith('/config')) return { agent: '1' }
+      if (path.endsWith('/agent/info')) return { result: { version: '2.5.0' } }
+      throw new Error('The command guest-get-osinfo has not been found')
+    })
+    const out = await enrichVmsWithConfig(CONN, [vms[0]], new Set(['n1']), { includeAgent: true })
+    expect(out[0]).toMatchObject({ agentResponding: true, agentVersion: '2.5.0', agentOsName: null })
   })
 
   it('does not call the probe when the agent flag is OFF, even with includeAgent on a running qemu VM', async () => {

@@ -8864,7 +8864,7 @@
       "network": "Network Auslastung",
       "containers": "Container",
       "templates": "Vorlagen",
-      "specs": "Spezifikationen",
+      "specs": "Gastdetails",
       "current": "aktuell Capacity",
       "predictions": "Vorhersagen",
       "recommendations": "Empfehlungen",

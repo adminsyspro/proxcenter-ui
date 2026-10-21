@@ -4,6 +4,16 @@ import React, { useMemo, useEffect, useLayoutEffect, useRef, useState, useCallba
 import { useTranslations } from 'next-intl'
 import { getOsSvgIcon } from '@/lib/utils/osIcons'
 import { tagsSortValue } from '@/lib/inventory/guestSearch'
+import {
+  agentStatusLabel,
+  createdDate,
+  fetchGuestDetails,
+  firmwareLabel,
+  guestDetailsKey,
+  guestOsLabel,
+  lastBootDate,
+  machineLabel,
+} from '@/lib/inventory/guestDetails'
 import { useTagColors } from '@/contexts/TagColorContext'
 import { vmIconOpacity } from '@/app/(dashboard)/infrastructure/inventory/helpers'
 import { NodeIcon } from '@/app/(dashboard)/infrastructure/inventory/components/TreeIcons'
@@ -797,9 +807,11 @@ return { id: vm.id, data }
     void loadTrends()
   }, [showTrends, visibleVms, onLoadTrends, onLoadTrendsBatch]) // Ne dépend que des VMs visibles
 
-  // Fonction d'export Excel
-  const handleExportExcel = useCallback(async () => {
-    const ExcelJS = await import('exceljs')
+  // Fonction d'export Excel. #1163: the guest details are not in the rows,
+  // they are asked for at click time (lib/inventory/guestDetails.ts).
+  const exportVmsToExcel = useCallback(async () => {
+    const [ExcelJS, details] = await Promise.all([import('exceljs'), fetchGuestDetails(vms)])
+    const now = Date.now()
     const wb = new ExcelJS.Workbook()
     const ws = wb.addWorksheet('VMs')
 
@@ -824,6 +836,13 @@ return { id: vm.id, data }
       { header: 'Snapshots', key: 'snapshots', width: 10 },
       { header: 'Tags', key: 'tags', width: 20 },
       { header: 'Template', key: 'template', width: 10 },
+      { header: 'Guest OS', key: 'os', width: 30 },
+      { header: 'BIOS', key: 'bios', width: 12 },
+      { header: 'Machine Type', key: 'machine', width: 14 },
+      { header: 'QEMU Agent', key: 'agent', width: 22 },
+      { header: 'QEMU Agent Version', key: 'agentversion', width: 18 },
+      { header: 'Created', key: 'created', width: 18, style: { numFmt: 'yyyy-mm-dd hh:mm' } },
+      { header: 'Last Boot', key: 'lastboot', width: 18, style: { numFmt: 'yyyy-mm-dd hh:mm' } },
     ]
 
     ws.columns = columns
@@ -835,6 +854,7 @@ return { id: vm.id, data }
       const diskAllocGB = diskAllocBytes ? Math.round(diskAllocBytes / 1073741824 * 10) / 10 : ''
       const diskUsedGB = vm.disk ? Math.round(vm.disk / 1073741824 * 10) / 10 : ''
       const diskPct = vm.maxdisk && vm.disk ? Math.round((vm.disk / vm.maxdisk) * 100) : ''
+      const detail = details.get(guestDetailsKey(vm))
 
       ws.addRow({
         id: vm.vmid,
@@ -857,6 +877,13 @@ return { id: vm.id, data }
         snapshots: vm.snapshots ?? '',
         tags: vm.tags?.join(', ') || '',
         template: vm.template ? 'Yes' : 'No',
+        os: guestOsLabel(vm.type, detail, vm.osInfo?.name),
+        bios: firmwareLabel(vm.type, detail),
+        machine: machineLabel(vm.type, detail),
+        agent: agentStatusLabel(vm, detail),
+        agentversion: detail?.agentVersion || '',
+        created: createdDate(detail) ?? '',
+        lastboot: lastBootDate(vm, detail, now) ?? '',
       })
     }
 
@@ -872,6 +899,18 @@ return { id: vm.id, data }
     a.click()
     URL.revokeObjectURL(url)
   }, [vms])
+
+  const [exporting, setExporting] = useState(false)
+
+  const handleExportExcel = useCallback(async () => {
+    if (exporting) return
+    setExporting(true)
+    try {
+      await exportVmsToExcel()
+    } finally {
+      setExporting(false)
+    }
+  }, [exportVmsToExcel, exporting])
 
   const columns: GridColDef[] = useMemo(() => {
     // Helper pour créer un header avec icône
@@ -1860,6 +1899,8 @@ return (
             <Tooltip title={t('common.export')}>
               <Box
                 onClick={handleExportExcel}
+                aria-busy={exporting}
+                data-testid='vms-export-excel'
                 sx={{
                   display: 'flex',
                   alignItems: 'center',
@@ -1867,13 +1908,15 @@ return (
                   px: 1,
                   py: 0.5,
                   borderRadius: 1,
-                  cursor: 'pointer',
+                  cursor: exporting ? 'default' : 'pointer',
                   fontSize: '0.75rem',
                   color: 'text.secondary',
                   '&:hover': { bgcolor: 'action.hover' }
                 }}
               >
-                <i className='ri-file-excel-2-line' style={{ fontSize: 14 }} />
+                {exporting
+                  ? <CircularProgress size={14} />
+                  : <i className='ri-file-excel-2-line' style={{ fontSize: 14 }} />}
               </Box>
             </Tooltip>
             

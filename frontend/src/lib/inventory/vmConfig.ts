@@ -18,6 +18,10 @@ export type VmConfigFields = {
   agentEnabled: boolean
   bios: string | null
   ostype: string | null
+  /** `machine` as configured, null for the Proxmox default (i440fx). */
+  machine: string | null
+  /** Unix seconds of the `meta: ctime=` PVE 7+ writes at creation, null without it (#1163). */
+  createdAt: number | null
   onboot: boolean
   cores: number | null
   sockets: number | null
@@ -27,6 +31,8 @@ export type VmConfigFields = {
 export type VmAgentProbe = {
   agentResponding: boolean
   agentOsName: string | null
+  /** Version the agent reports through /agent/info (#1163). */
+  agentVersion: string | null
 }
 
 export type EnrichableVm = {
@@ -42,6 +48,8 @@ const EMPTY_CONFIG: VmConfigFields = {
   agentEnabled: false,
   bios: null,
   ostype: null,
+  machine: null,
+  createdAt: null,
   onboot: false,
   cores: null,
   sockets: null,
@@ -57,6 +65,13 @@ function parseAgentFlag(raw: unknown): boolean {
   return text.startsWith("1")
 }
 
+function parseMetaCtime(raw: unknown): number | null {
+  const match = /(?:^|,)\s*ctime=(\d+)/.exec(String(raw ?? ""))
+  const ctime = match ? Number(match[1]) : 0
+
+  return ctime > 0 ? ctime : null
+}
+
 function num(raw: unknown): number | null {
   const parsed = Number(raw)
   return Number.isFinite(parsed) ? parsed : null
@@ -70,6 +85,8 @@ export function parseVmConfig(config: Record<string, any> | null): VmConfigField
     agentEnabled: parseAgentFlag(config.agent),
     bios: config.bios ? String(config.bios) : null,
     ostype: config.ostype ? String(config.ostype) : null,
+    machine: config.machine ? String(config.machine) : null,
+    createdAt: parseMetaCtime(config.meta),
     onboot: String(config.onboot ?? "0") === "1",
     cores: num(config.cores),
     sockets: num(config.sockets),
@@ -117,17 +134,24 @@ export async function enrichVmsWithConfig<T extends EnrichableVm>(
     // installed and running" (spec section 9). Only worth 7x the cost on a
     // running VM whose flag is ON.
     if (kind !== "qemu" || vm.status !== "running" || !fields.agentEnabled) {
-      return { ...enriched, agentResponding: false, agentOsName: null }
+      return { ...enriched, agentResponding: false, agentOsName: null, agentVersion: null }
+    }
+    const agentPath = `/nodes/${encodeURIComponent(vm.node)}/qemu/${encodeURIComponent(vm.vmid)}/agent`
+    let agentVersion: string | null = null
+    try {
+      // /agent/info answers on every agent version: it is the liveness probe,
+      // and get-osinfo, which old agents lack, is only asked once it answered.
+      const info = await pveFetch<any>(connData, `${agentPath}/info`)
+      agentVersion = info?.result?.version ? String(info.result.version) : null
+    } catch {
+      return { ...enriched, agentResponding: false, agentOsName: null, agentVersion: null }
     }
     try {
-      const info = await pveFetch<any>(
-        connData,
-        `/nodes/${encodeURIComponent(vm.node)}/qemu/${encodeURIComponent(vm.vmid)}/agent/get-osinfo`,
-      )
+      const info = await pveFetch<any>(connData, `${agentPath}/get-osinfo`)
       const name = info?.result?.["pretty-name"] ?? info?.result?.name ?? null
-      return { ...enriched, agentResponding: true, agentOsName: name ? String(name) : null }
+      return { ...enriched, agentResponding: true, agentOsName: name ? String(name) : null, agentVersion }
     } catch {
-      return { ...enriched, agentResponding: false, agentOsName: null }
+      return { ...enriched, agentResponding: true, agentOsName: null, agentVersion }
     }
   })
 }

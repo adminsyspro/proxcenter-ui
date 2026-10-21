@@ -9,11 +9,11 @@
 
 import { describe, it, expect } from 'vitest'
 
-import type { AiGuest, AiSnapshot } from '@/lib/ai/context'
+import type { SnapshotGuest, InventorySnapshot } from '@/lib/tools/snapshot'
 import { rankGuestHardwareTool } from './guests'
-import { ToolArgumentError, type AiToolContext } from './types'
+import { ToolArgumentError, type ToolContext } from './types'
 
-function guest(o: Partial<AiGuest> & { name: string; vmid: string }): AiGuest {
+function guest(o: Partial<SnapshotGuest> & { name: string; vmid: string }): SnapshotGuest {
   return {
     connId: 'conn-1', cluster: 'prod', type: 'VM', kind: 'qemu', status: 'running', node: 'pve1',
     cpuPct: 5, memPct: 40, memUsedGb: 2, memTotalGb: 4, vcpus: 2, diskTotalGb: 32, template: false,
@@ -29,7 +29,7 @@ const guests = [
   guest({ name: 'tpl', vmid: '900', template: true, cpuPct: 99, memPct: 99, vcpus: 64 }),
 ]
 
-const snapshot: AiSnapshot = {
+const snapshot: InventorySnapshot = {
   clusters: [{ id: 'conn-1', name: 'prod', nodeCount: 1, guestCount: guests.length }],
   nodes: [],
   guests,
@@ -37,7 +37,7 @@ const snapshot: AiSnapshot = {
   cached: false,
 }
 
-const ctx: AiToolContext = { snapshot, tenantId: 't1', locale: 'en' }
+const ctx: ToolContext = { snapshot, tenantId: 't1', locale: 'en' }
 
 async function rank(args: Record<string, unknown>) {
   return rankGuestHardwareTool.execute(args, ctx) as Promise<any>

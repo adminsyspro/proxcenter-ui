@@ -17,9 +17,9 @@
  * any Proxmox path is built.
  */
 
-import type { AiGuest } from '@/lib/ai/context'
-import type { AiTool, AiToolContext } from '@/lib/ai/tools/types'
-import { argEnum, argNumber, argString, resolveConnection, resolveGuest } from '@/lib/ai/tools/types'
+import type { SnapshotGuest } from '@/lib/tools/snapshot'
+import type { CatalogTool, ToolContext } from '@/lib/tools/types'
+import { argEnum, argNumber, argString, resolveConnection, resolveGuest } from '@/lib/tools/types'
 import { getConnectionById } from '@/lib/connections/getConnection'
 import type { PveConn } from '@/lib/connections/getConnection'
 import { pveFetch } from '@/lib/proxmox/client'
@@ -83,7 +83,7 @@ const DISK_RANK_NOTE =
  * here means "not reported" rather than a guest genuinely sized at zero. A VM
  * with no memory does not exist; a VM whose memory we never received does.
  */
-function rankedValue(guest: AiGuest, metric: RankMetric): number | undefined {
+function rankedValue(guest: SnapshotGuest, metric: RankMetric): number | undefined {
   // Usage is a live percentage: zero is a real reading for an idle or stopped
   // guest, so it stays in the ranking instead of being dropped as "missing".
   if (metric === 'cpu_usage') return typeof guest.cpuPct === 'number' ? guest.cpuPct : undefined
@@ -98,16 +98,17 @@ function rankedValue(guest: AiGuest, metric: RankMetric): number | undefined {
   return typeof raw === 'number' && raw > 0 ? raw : undefined
 }
 
-export const rankGuestHardwareTool: AiTool = {
+export const rankGuestHardwareTool: CatalogTool = {
   name: 'rank_guest_hardware',
+  readOnly: true,
   description:
-    'Rank the VMs and containers you can see, either by the hardware ASSIGNED to them (metric vcpus, memory or disk) or by their CURRENT usage (metric cpu_usage or memory_usage, in percent). Answers "which VM has the most vCPUs", "which VM has the most memory", "which VM has the biggest disk", and "which VM is using the most CPU right now" when the top 10 of the snapshot is not enough. Templates are excluded. Example: metric=\'vcpus\', limit=5 or metric=\'cpu_usage\', status=\'running\'.',
+    'Rank the VMs and containers you can see, either by the hardware ASSIGNED to them (metric vcpus, memory or disk) or by their CURRENT usage (metric cpu_usage or memory_usage, in percent). Answers "which VM has the most vCPUs", "which VM has the most memory", "which VM has the biggest disk" or "the most consumed space" (both metric=disk: space always means disk, never RAM), and "which VM is using the most CPU right now" when the top 10 of the snapshot is not enough. Templates are excluded. Example: metric=\'vcpus\', limit=5 or metric=\'cpu_usage\', status=\'running\'.',
   parameters: {
     type: 'object',
     properties: {
       metric: {
         type: 'string',
-        description: 'What to rank on: vcpus, memory (assigned RAM) or disk (provisioned disk) for sizing; cpu_usage or memory_usage (percent, right now) for load.',
+        description: 'What to rank on: vcpus, memory (assigned RAM) or disk (disk space, the answer to any question about space) for sizing; cpu_usage or memory_usage (percent of RAM in use, right now) for load.',
         enum: [...RANK_METRICS],
         default: 'vcpus',
       },
@@ -126,11 +127,11 @@ export const rankGuestHardwareTool: AiTool = {
       },
       cluster: {
         type: 'string',
-        description: 'Cluster name to restrict to. Omit to rank across every visible cluster.',
+        description: 'Cluster name, only when the user names one. Omit it to rank across every visible cluster.',
       },
     },
   },
-  async execute(args: Record<string, unknown>, ctx: AiToolContext) {
+  async execute(args: Record<string, unknown>, ctx: ToolContext) {
     const metric = argEnum(args, 'metric', RANK_METRICS, 'vcpus')
     const limit = argNumber(args, 'limit', 10, { min: 1, max: 50 })
     const status = argEnum(args, 'status', STATUS_FILTERS, 'all')
@@ -150,7 +151,7 @@ export const rankGuestHardwareTool: AiTool = {
       return true
     })
 
-    const scored: { guest: AiGuest; value: number }[] = []
+    const scored: { guest: SnapshotGuest; value: number }[] = []
     let missingMetric = 0
 
     for (const guest of population) {
@@ -471,7 +472,7 @@ async function readAgentConsumedSpace(
 }
 
 /** Best effort by design: a missing agent is a normal answer, not an error. */
-async function resolveConsumedSpace(guest: AiGuest, conn: PveConn): Promise<ConsumedSpace> {
+async function resolveConsumedSpace(guest: SnapshotGuest, conn: PveConn): Promise<ConsumedSpace> {
   if (guest.status !== 'running') {
     return { available: false, reason: 'guest-not-running' }
   }
@@ -510,8 +511,9 @@ async function resolveConsumedSpace(guest: AiGuest, conn: PveConn): Promise<Cons
   }
 }
 
-export const getGuestHardwareTool: AiTool = {
+export const getGuestHardwareTool: CatalogTool = {
   name: 'get_guest_hardware',
+  readOnly: true,
   description:
     'Full hardware sheet for ONE VM or container: cores, sockets, vCPUs, CPU type, memory, BIOS, every disk with its size and storage, every network interface with its bridge, VLAN and MAC, and the space really consumed inside the guest when its agent answers. Answers "how is this VM configured" and "how much space does it really use". Example: guest=\'db-01\' or guest=\'104\'.',
   parameters: {
@@ -524,7 +526,7 @@ export const getGuestHardwareTool: AiTool = {
     },
     required: ['guest'],
   },
-  async execute(args: Record<string, unknown>, ctx: AiToolContext) {
+  async execute(args: Record<string, unknown>, ctx: ToolContext) {
     // The security gate: resolves against the caller's own snapshot, so no
     // Proxmox path is ever built from a reference outside their perimeter.
     const guest = resolveGuest(ctx, argString(args, 'guest'))

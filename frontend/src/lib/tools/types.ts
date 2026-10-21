@@ -1,10 +1,14 @@
 /**
- * Tool contract for the agentic assistant (#459).
+ * Tool contract for the ProxCenter tool catalog.
  *
- * Every tool is read-only. There is deliberately no write verb in the registry:
- * the assistant answers questions about the infrastructure, it never changes
- * it, and the absence of a mutating tool is the enforcement, not a prompt line
- * asking the model to behave.
+ * The catalog is consumer-agnostic: the in-app assistant (#459) drives it
+ * through a tool-calling loop today, and the MCP endpoint planned for external
+ * agents will list and call the very same entries. Nothing here knows about a
+ * provider wire format or a context window; that lives in `@/lib/ai/tools`.
+ *
+ * Every tool declares whether it is read-only. The assistant only ever gets
+ * the read-only ones, and the absence of a mutating tool in what it is handed
+ * is the enforcement, not a prompt line asking the model to behave.
  *
  * SECURITY: tool arguments are produced by the model, which is itself steered
  * by user text. They are therefore untrusted input, exactly like a query
@@ -16,7 +20,7 @@
  * outside the caller's scope gets a "not found" and no Proxmox call is made.
  */
 
-import type { AiSnapshot, AiGuest, AiNode } from '@/lib/ai/context'
+import type { InventorySnapshot, SnapshotGuest, SnapshotNode } from '@/lib/tools/snapshot'
 
 export type JsonSchemaProperty = {
   type: 'string' | 'number' | 'integer' | 'boolean'
@@ -33,18 +37,20 @@ export type ToolParameterSchema = {
   required?: string[]
 }
 
-export type AiToolContext = {
-  snapshot: AiSnapshot
+export type ToolContext = {
+  snapshot: InventorySnapshot
   tenantId: string
   locale: string
 }
 
-export type AiTool = {
+export type CatalogTool = {
   name: string
+  /** True when the tool cannot change anything. Mirrors MCP's `readOnlyHint`. */
+  readOnly: boolean
   /** Shown to the model. Says what question it answers, not how it works. */
   description: string
   parameters: ToolParameterSchema
-  execute: (args: Record<string, unknown>, ctx: AiToolContext) => Promise<unknown>
+  execute: (args: Record<string, unknown>, ctx: ToolContext) => Promise<unknown>
 }
 
 /** Raised when the model asks for something the caller may not see. */
@@ -125,6 +131,35 @@ export function argEnum<T extends string>(
   throw new ToolArgumentError(`Invalid value "${raw}" for "${key}". Accepted values: ${allowed.join(', ')}.`)
 }
 
+/**
+ * An enum argument that only orders or groups the output, never changes what
+ * it means. An unknown value falls back to the default and leaves a note for
+ * the caller instead of refusing the call.
+ *
+ * Refusing it is what lost an answer the tool already had: asked how many OSDs
+ * each host carries, llama3.1:8b sent sortBy="none" (borrowed from groupBy),
+ * got a refusal, and answered that the data did not say, while the per-host
+ * roll-up does not depend on the sort at all. Arguments that change the
+ * meaning of the result (a metric, a status filter) stay on `argEnum`.
+ */
+export function argPresentationEnum<T extends string>(
+  args: Record<string, unknown>,
+  key: string,
+  allowed: readonly T[],
+  fallback: T,
+  notes: string[]
+): T {
+  try {
+    return argEnum(args, key, allowed, fallback)
+  } catch (e) {
+    if (!(e instanceof ToolArgumentError)) throw e
+
+    notes.push(`${key}="${argString(args, key)}" is not accepted (${allowed.join(', ')}), used "${fallback}".`)
+
+    return fallback
+  }
+}
+
 /* ------------------------------------------------------------------ */
 /* Perimeter resolution                                               */
 /* ------------------------------------------------------------------ */
@@ -132,7 +167,7 @@ export function argEnum<T extends string>(
 export type ResolvedConnection = { id: string; name: string }
 
 /** Every connection present in the snapshot, deduplicated. */
-export function visibleConnections(snapshot: AiSnapshot): ResolvedConnection[] {
+export function visibleConnections(snapshot: InventorySnapshot): ResolvedConnection[] {
   return snapshot.clusters.map(c => ({ id: c.id, name: c.name }))
 }
 
@@ -144,7 +179,7 @@ export function visibleConnections(snapshot: AiSnapshot): ResolvedConnection[] {
  * a single-cluster operator to name their cluster is friction for nothing.
  * With no argument and several clusters, the caller must be explicit.
  */
-export function resolveConnection(ctx: AiToolContext, ref?: string): ResolvedConnection {
+export function resolveConnection(ctx: ToolContext, ref?: string): ResolvedConnection {
   const available = visibleConnections(ctx.snapshot)
 
   if (available.length === 0) {
@@ -174,15 +209,43 @@ export function resolveConnection(ctx: AiToolContext, ref?: string): ResolvedCon
 }
 
 /**
- * Resolve a node name inside a connection the caller may see.
+ * Resolve a node name the caller may see.
  *
  * The node must appear in the RBAC-filtered snapshot: a node pruned by the
  * caller's infra scope is indistinguishable from a node that does not exist.
+ *
+ * Without a cluster, a host name that exists in a single visible cluster is
+ * enough. Demanding the cluster anyway cost a failed call against the lab,
+ * where PVE-PROD and PVE-DR are both visible and "pve1" only lives in one.
  */
-export function resolveNode(ctx: AiToolContext, nodeRef: string | undefined, clusterRef?: string): {
+export function resolveNode(ctx: ToolContext, nodeRef: string | undefined, clusterRef?: string): {
   connection: ResolvedConnection
-  node: AiNode
+  node: SnapshotNode
 } {
+  if (nodeRef && !clusterRef) {
+    const needle = nodeRef.trim().toLowerCase()
+    const matches = ctx.snapshot.nodes.filter(n => n.name.toLowerCase() === needle)
+    const connections = visibleConnections(ctx.snapshot)
+
+    if (matches.length === 1) {
+      const connection = connections.find(c => c.id === matches[0].connId)
+
+      if (connection) return { connection, node: matches[0] }
+    }
+
+    if (matches.length > 1) {
+      throw new ToolScopeError(
+        `Several clusters have a host named "${nodeRef}": pass the "cluster" argument with one of: ${matches.map(n => n.cluster).join(', ')}.`
+      )
+    }
+
+    if (connections.length > 1) {
+      throw new ToolScopeError(
+        `Unknown host "${nodeRef}". Visible hosts: ${ctx.snapshot.nodes.map(n => n.name).join(', ') || 'none'}.`
+      )
+    }
+  }
+
   const connection = resolveConnection(ctx, clusterRef)
   const candidates = ctx.snapshot.nodes.filter(n => n.connId === connection.id)
 
@@ -213,7 +276,7 @@ export function resolveNode(ctx: AiToolContext, nodeRef: string | undefined, clu
  * a user says "the database VM" and the model passes "database", which should
  * find `db-01` if that is the only candidate rather than failing outright.
  */
-export function resolveGuest(ctx: AiToolContext, ref: string | undefined): AiGuest {
+export function resolveGuest(ctx: ToolContext, ref: string | undefined): SnapshotGuest {
   if (!ref) throw new ToolScopeError('Name a VM or container, by name or by vmid.')
 
   const needle = ref.trim().toLowerCase()

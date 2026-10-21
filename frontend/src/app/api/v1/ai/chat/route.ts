@@ -7,11 +7,11 @@ import { getCurrentTenantId } from "@/lib/tenant"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { getRequestLocale, languageInstruction, normalizeLocale } from '@/lib/ai/locale'
 import { validateAIUrl } from '@/lib/ai/url-guard'
-import { ollamaOptions } from '@/lib/ai/ollama'
+import { ollamaOptions, ollamaThread } from '@/lib/ai/ollama'
 import { buildAiSystemPrompt } from '@/lib/ai/context'
-import { AI_TOOLS, buildToolContext } from '@/lib/ai/tools/registry'
+import { READ_ONLY_TOOLS, buildToolContext } from '@/lib/tools/catalog'
 import { toolsForProvider, type AiProvider } from '@/lib/ai/tools/adapters'
-import { runToolRounds, type SendTurn, type ToolMode } from '@/lib/ai/tools/loop'
+import { runToolRounds, userTextOf, type SendTurn, type ToolMode } from '@/lib/ai/tools/loop'
 
 // Récupérer les paramètres IA (tenant-scoped)
 async function getAISettings() {
@@ -74,23 +74,7 @@ export async function POST(request: Request) {
       toolsEnabled: true,
     })
     const toolCtx = buildToolContext(snapshot, tenantId, uiLocale)
-    const wireTools = toolsForProvider(provider, AI_TOOLS)
-
-    const lastUserMessage = messages[messages.length - 1]
-    const userInstruction = lang === 'fr'
-      ? 'Réponds en utilisant les données de l\'infrastructure ci-dessus, ou appelle un outil si la réponse n\'y figure pas. Cite les noms exacts des VMs et leurs métriques.'
-      : 'Respond using the infrastructure data above, or call a tool if the answer is not in it. Cite exact VM names and their metrics.'
-
-    // Ollama gets the system prompt inlined in the user message, so the
-    // language instruction is repeated last where models weigh it most.
-    const contextualizedMessage = `${systemPrompt}
-
-=== ${lang === 'fr' ? 'QUESTION DE L\'UTILISATEUR' : 'USER QUESTION'} ===
-${lastUserMessage.content}
-
-${userInstruction}
-
-${languageInstruction(uiLocale)}`
+    const wireTools = toolsForProvider(provider, READ_ONLY_TOOLS)
 
     let send: SendTurn
     let initialMessages: any[]
@@ -123,10 +107,7 @@ ${languageInstruction(uiLocale)}`
       const ollamaBase = await validateAIUrl(settings.ollamaUrl)
 
       model = settings.ollamaModel
-      initialMessages = [
-        ...messages.slice(0, -1),
-        { role: 'user', content: contextualizedMessage },
-      ]
+      initialMessages = ollamaThread(systemPrompt, messages, languageInstruction(uiLocale))
 
       send = async (msgs, mode) => {
         const response = await fetch(`${ollamaBase}/api/chat`, {
@@ -222,8 +203,9 @@ ${languageInstruction(uiLocale)}`
 
     const outcome = await runToolRounds({
       provider,
-      tools: AI_TOOLS,
+      tools: READ_ONLY_TOOLS,
       ctx: toolCtx,
+      userText: userTextOf(messages),
       messages: initialMessages,
       send,
     })

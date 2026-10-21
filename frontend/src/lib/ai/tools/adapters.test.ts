@@ -25,7 +25,7 @@ import {
   toolsForProvider,
   type ToolCallRequest,
 } from './adapters'
-import type { AiTool, ToolParameterSchema } from './types'
+import type { CatalogTool, ToolParameterSchema } from '@/lib/tools/types'
 
 const nodeParams: ToolParameterSchema = {
   type: 'object',
@@ -36,15 +36,17 @@ const nodeParams: ToolParameterSchema = {
   required: ['cluster'],
 }
 
-const listNodes: AiTool = {
+const listNodes: CatalogTool = {
   name: 'list_nodes',
+  readOnly: true,
   description: 'List the hosts of a cluster with their load.',
   parameters: nodeParams,
   execute: async () => ({ nodes: [] }),
 }
 
-const listGuests: AiTool = {
+const listGuests: CatalogTool = {
   name: 'list_guests',
+  readOnly: true,
   description: 'List the VMs and containers the caller may see.',
   parameters: { type: 'object', properties: {} },
   execute: async () => ({ guests: [] }),

@@ -13,7 +13,7 @@ beforeEach(() => {
       return { ok: true, json: async () => ({ data: { enabled: true, provider: 'ollama', ollamaUrl: 'http://10.42.0.50:11434' } }) } as any
     }
     if (url === '/api/v1/ai/models') {
-      return { ok: true, json: async () => ({ models: ['mistral:7b', 'llama3.1:8b'] }) } as any
+      return { ok: true, json: async () => ({ models: ['mistral:7b', 'llama3.1:8b'], toolCalling: { 'mistral:7b': false, 'llama3.1:8b': true } }) } as any
     }
 
     return { ok: false, json: async () => ({}) } as any
@@ -31,7 +31,8 @@ describe('useAISettings', () => {
 
     await waitFor(() => expect(result.current.settings.enabled).toBe(true))
     expect(result.current.settings.ollamaUrl).toBe('http://10.42.0.50:11434')
-    expect(result.current.settings.ollamaModel).toBe('mistral:7b')
+    // The default when nothing is saved: mistral:7b called no tool at all (#459).
+    expect(result.current.settings.ollamaModel).toBe('llama3.1:8b')
     expect(fetchSpy).toHaveBeenCalledWith('/api/v1/settings/ai')
   })
 
@@ -43,5 +44,6 @@ describe('useAISettings', () => {
     const modelsCall = fetchSpy.mock.calls.find(c => c[0] === '/api/v1/ai/models')!
     expect(JSON.parse((modelsCall[1] as any).body)).toMatchObject({ provider: 'ollama', ollamaUrl: 'http://10.42.0.50:11434' })
     expect(result.current.loadingModels).toBe(false)
+    expect(result.current.modelToolCalling).toEqual({ 'mistral:7b': false, 'llama3.1:8b': true })
   })
 })

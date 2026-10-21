@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 
-import { fetchOllamaCapabilities } from './ollama'
+import { fetchOllamaCapabilities, ollamaThread } from './ollama'
 
 function jsonOk(body: unknown): Response {
   return new Response(JSON.stringify(body), {
@@ -65,5 +65,28 @@ describe('fetchOllamaCapabilities', () => {
     expect(init.method).toBe('POST')
     expect(JSON.parse(init.body as string)).toEqual({ model: 'llama3.1:8b' })
     expect(init.signal).toBeInstanceOf(AbortSignal)
+  })
+})
+
+describe('ollamaThread', () => {
+  it('sends the prompt as a system message and the conversation untouched', () => {
+    const thread = ollamaThread('PROMPT', [
+      { role: 'user', content: 'Are there any improvements to Ceph?' },
+      { role: 'assistant', content: 'Remove the noout flag.' },
+      { role: 'user', content: 'Can you do that?' },
+    ], 'Answer in English.')
+
+    // The follow-up sits right after the answer it refers to (#459), and the
+    // language instruction closes the system message (#686).
+    expect(thread).toEqual([
+      { role: 'system', content: 'PROMPT\n\nAnswer in English.' },
+      { role: 'user', content: 'Are there any improvements to Ceph?' },
+      { role: 'assistant', content: 'Remove the noout flag.' },
+      { role: 'user', content: 'Can you do that?' },
+    ])
+  })
+
+  it('sends the prompt alone for an empty conversation', () => {
+    expect(ollamaThread('PROMPT', [], 'x')).toEqual([{ role: 'system', content: 'PROMPT\n\nx' }])
   })
 })

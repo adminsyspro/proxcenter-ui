@@ -13,8 +13,8 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-import type { AiSnapshot } from '@/lib/ai/context'
-import { ToolArgumentError, type AiToolContext } from './types'
+import type { InventorySnapshot } from '@/lib/tools/snapshot'
+import { ToolArgumentError, type ToolContext } from './types'
 
 const pveFetch = vi.fn()
 
@@ -63,8 +63,8 @@ function labCeph(path: string) {
   return []
 }
 
-function ctx(): AiToolContext {
-  const snapshot: AiSnapshot = {
+function ctx(): ToolContext {
+  const snapshot: InventorySnapshot = {
     clusters: [{ id: 'conn-1', name: 'PVE-CLUSTER', nodeCount: 3, guestCount: 0 }],
     nodes: ['pve1', 'pve2', 'pve3'].map(name => ({
       connId: 'conn-1', cluster: 'PVE-CLUSTER', name, status: 'online',
@@ -119,12 +119,42 @@ describe("focus='improvements'", () => {
     expect(joined).toMatch(/standby/i)
   })
 
-  it('carries a measured value in every finding, so the model can quote one', async () => {
+  it('carries a measured value in every finding it derives, so the model can quote one', async () => {
     const res = await run({ focus: 'improvements' })
 
-    for (const finding of res.findings) {
+    // Health checks quote Ceph's own message, which need not hold a number.
+    for (const finding of res.findings.filter((f: string) => !f.startsWith('Ceph check '))) {
       expect(finding).toMatch(/\d/)
     }
+  })
+
+  it('names every health check with its severity and Ceph\'s own message', async () => {
+    // Counting the checks alone made llama3.1:8b invent four problems for the
+    // lab's HEALTH_ERR.
+    const res = await run({ focus: 'improvements' })
+
+    expect(res.findings).toContain('Ceph check MON_CLOCK_SKEW (HEALTH_WARN): clock skew detected on mon.pve2.')
+  })
+
+  it('caps the listed health checks and names the rest', async () => {
+    pveFetch.mockImplementation(async (_conn: unknown, path: string) => {
+      const data: any = labCeph(path)
+
+      if (path.includes('/ceph/status')) {
+        data.health = {
+          status: 'HEALTH_ERR',
+          checks: Object.fromEntries(Array.from({ length: 10 }, (_, i) => [`CHECK_${i}`, { severity: 'HEALTH_WARN', summary: { message: `problem ${i}` } }])),
+        }
+      }
+
+      return data
+    })
+
+    const res = await run({ focus: 'improvements' })
+    const checks = res.findings.filter((f: string) => f.startsWith('Ceph check '))
+
+    expect(checks).toHaveLength(8)
+    expect(res.findings).toContain('2 more Ceph check(s) not listed: CHECK_8, CHECK_9.')
   })
 
   it('states an all-clear explicitly rather than leaving an empty array to interpret', async () => {
@@ -152,7 +182,8 @@ describe('the other views', () => {
   it("keeps focus='devices' to the device class counts that answer the NVMe question", async () => {
     const res = await run({ focus: 'devices' })
 
-    expect(res.deviceClassCounts).toEqual({ ssd: 3 })
+    // nvme and hdd stated at zero: a missing class does not read as "none".
+    expect(res.deviceClassCounts).toEqual({ nvme: 0, ssd: 3, hdd: 0 })
     expect(res.osdTotal).toBe(3)
     expect(res.capacity).toBeUndefined()
     expect(res.findings).toBeUndefined()
@@ -193,5 +224,37 @@ describe('the other views', () => {
       expect(res.hasCeph).toBe(false)
       expect(res.cluster).toBe('PVE-CLUSTER')
     }
+  })
+})
+
+describe('list_ceph_osds ordering arguments', () => {
+  async function listOsds(args: Record<string, unknown>) {
+    const { listCephOsdsTool } = await import('./ceph')
+
+    return listCephOsdsTool.execute(args, ctx()) as Promise<any>
+  }
+
+  it('still answers the per-host question when the sort value is invented', async () => {
+    // llama3.1:8b sent sortBy="none" (borrowed from groupBy), was refused, and
+    // answered that the data did not say. The per-host roll-up never depended
+    // on the sort.
+    const res = await listOsds({ groupBy: 'host', sortBy: 'none' })
+
+    expect(res.sortBy).toBe('latency')
+    expect(res.argumentNotes).toEqual(['sortBy="none" is not accepted (latency, usage, id), used "latency".'])
+    expect(res.byHost.map((h: any) => [h.host, h.osdCount])).toEqual([['pve1', 1], ['pve2', 1], ['pve3', 1]])
+  })
+
+  it('states every standard device class, at zero when absent', async () => {
+    const res = await listOsds({})
+
+    expect(Object.fromEntries(Object.entries(res.byDeviceClass).map(([k, v]: [string, any]) => [k, v.count]))).toEqual({ nvme: 0, ssd: 3, hdd: 0 })
+  })
+
+  it('leaves no note when the arguments are valid', async () => {
+    const res = await listOsds({ groupBy: 'device_class', sortBy: 'usage' })
+
+    expect(res.groupBy).toBe('device_class')
+    expect(res.argumentNotes).toBeUndefined()
   })
 })

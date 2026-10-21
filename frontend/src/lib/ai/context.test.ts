@@ -16,11 +16,10 @@ import {
   STOPPED_GUEST_PROMPT_CAP,
   RUNNING_GUEST_PROMPT_CAP,
   type AiAlert,
-  type AiGuest,
-  type AiSnapshot,
 } from './context'
+import type { SnapshotGuest, InventorySnapshot } from '@/lib/tools/snapshot'
 
-function guest(overrides: Partial<AiGuest> & { name: string; vmid: string }): AiGuest {
+function guest(overrides: Partial<SnapshotGuest> & { name: string; vmid: string }): SnapshotGuest {
   return {
     connId: 'conn-1',
     cluster: 'prod',
@@ -37,7 +36,7 @@ function guest(overrides: Partial<AiGuest> & { name: string; vmid: string }): Ai
   }
 }
 
-function snapshot(overrides: Partial<AiSnapshot> = {}): AiSnapshot {
+function snapshot(overrides: Partial<InventorySnapshot> = {}): InventorySnapshot {
   const guests = overrides.guests ?? [
     guest({ name: 'db-01', vmid: '101', cpuPct: 80, memPct: 90 }),
     guest({ name: 'web-01', vmid: '102', cpuPct: 10, memPct: 20 }),
@@ -362,7 +361,7 @@ describe('list caps', () => {
 
 describe('an empty estate', () => {
   it('still produces a usable prompt', () => {
-    const empty: AiSnapshot = {
+    const empty: InventorySnapshot = {
       clusters: [],
       nodes: [],
       guests: [],

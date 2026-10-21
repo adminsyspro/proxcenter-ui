@@ -1,7 +1,7 @@
 /**
  * Host hardware lookups for the agentic assistant (#459).
  *
- * The snapshot in `@/lib/ai/context` carries a host's live CPU and RAM usage
+ * The snapshot in `@/lib/tools/snapshot` carries a host's live CPU and RAM usage
  * but nothing about its physical build, so the two questions the issue asks
  * literally ("how many interfaces does host 1 have?", "how many hard disks
  * does this host have?") were unanswerable without a tool call.
@@ -16,7 +16,7 @@
 import { pveFetch } from '@/lib/proxmox/client'
 import { getConnectionById } from '@/lib/connections/getConnection'
 
-import { argString, resolveNode, type AiTool } from './types'
+import { argString, resolveNode, type CatalogTool } from './types'
 
 const BYTES_PER_GB = 1024 * 1024 * 1024
 
@@ -111,28 +111,39 @@ function buildCpuSection(status: any) {
   })
 }
 
+function describeInterface(entry: any) {
+  return compact({
+    iface: entry?.iface || null,
+    type: entry?.type || null,
+    active: entry?.active === 1 || entry?.active === true,
+    address: entry?.address || null,
+    cidr: entry?.cidr || null,
+    gateway: entry?.gateway || null,
+    bridgePorts: entry?.bridge_ports || null,
+    bondMode: entry?.bond_mode || null,
+    slaves: entry?.slaves || null,
+    // PVE serialises this one hyphenated; the underscore form is a fallback
+    // for older releases.
+    vlanId: entry?.['vlan-id'] ?? entry?.vlan_id ?? null,
+    mtu: entry?.mtu ?? null,
+  })
+}
+
 function buildNetworkSection(entries: any[]) {
+  const cards = entries.filter(e => e?.type === PHYSICAL_IFACE_TYPE)
+  const software = entries.filter(e => e?.type !== PHYSICAL_IFACE_TYPE)
+
+  // Someone counting "interfaces" on a host means the cards. Against a lab host
+  // with one card, a bridge and a VLAN, llama3.1:8b answered 3 twice: first
+  // from a total shipped as `interfaceCount`, then by counting an `interfaces`
+  // list that held all three. Whatever is named like the question, field or
+  // list, must hold the cards only.
   return {
-    interfaceCount: entries.length,
-    // Bridges, bonds and VLAN sub-interfaces are software constructs. Someone
-    // counting "interfaces" on a host means the cards, so both figures ship.
-    physicalInterfaceCount: entries.filter(e => e?.type === PHYSICAL_IFACE_TYPE).length,
+    interfaceCount: cards.length,
+    softwareInterfaceCount: software.length,
     interfaceCountByType: countBy(entries, 'type'),
-    interfaces: entries.map(entry => compact({
-      iface: entry?.iface || null,
-      type: entry?.type || null,
-      active: entry?.active === 1 || entry?.active === true,
-      address: entry?.address || null,
-      cidr: entry?.cidr || null,
-      gateway: entry?.gateway || null,
-      bridgePorts: entry?.bridge_ports || null,
-      bondMode: entry?.bond_mode || null,
-      slaves: entry?.slaves || null,
-      // PVE serialises this one hyphenated; the underscore form is a fallback
-      // for older releases.
-      vlanId: entry?.['vlan-id'] ?? entry?.vlan_id ?? null,
-      mtu: entry?.mtu ?? null,
-    })),
+    interfaces: cards.map(describeInterface),
+    softwareInterfaces: software.map(describeInterface),
   }
 }
 
@@ -182,11 +193,12 @@ function buildDisksSection(entries: any[]) {
   }
 }
 
-export const getNodeHardwareTool: AiTool = {
+export const getNodeHardwareTool: CatalogTool = {
   name: 'get_node_hardware',
+  readOnly: true,
 
   description:
-    'Physical hardware of one Proxmox host: CPU model and total cores, RAM, how many network interfaces it has, and how many physical disks with their size and SMART health. Answers "how many interfaces does host X have?", "how many disks does this host have?" and "is any disk failing on host X?" (SMART health per disk). Example: node=\'pve1\'',
+    'Physical hardware of one Proxmox host: CPU model and total cores, RAM, how many physical network interfaces it has (bridges, bonds and VLANs counted apart), and how many physical disks with their size and SMART health. Answers "how many interfaces does host X have?", "how many disks does this host have?" and "is any disk failing on host X?" (SMART health per disk). Example: node=\'pve1\'',
 
   parameters: {
     type: 'object',
@@ -197,7 +209,7 @@ export const getNodeHardwareTool: AiTool = {
       },
       cluster: {
         type: 'string',
-        description: 'Cluster name. Omit when only one cluster is visible.',
+        description: 'Cluster name. Omit it unless two clusters have a host of that name.',
       },
     },
   },

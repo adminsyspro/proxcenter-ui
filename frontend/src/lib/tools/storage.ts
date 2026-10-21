@@ -3,7 +3,7 @@
  *
  * Answers "what is the biggest storage device?" and "which storage device has
  * the least free space?", neither of which the snapshot in
- * `@/lib/ai/context` can answer: it carries guests and hosts, not pools.
+ * `@/lib/tools/snapshot` can answer: it carries guests and hosts, not pools.
  *
  * The whole difficulty is the aggregation, and it is deliberately NOT
  * reimplemented here. Proxmox reports a shared pool (Ceph RBD, CephFS, NFS)
@@ -29,15 +29,19 @@ import {
   argString,
   resolveConnection,
   visibleConnections,
+  ToolArgumentError,
   ToolScopeError,
-  type AiToolContext,
-  type AiTool,
+  type ToolContext,
+  type CatalogTool,
   type ResolvedConnection,
 } from './types'
 
 const BYTES_PER_GB = 1024 * 1024 * 1024
 
 const METRICS = ['total', 'free', 'used_pct'] as const
+
+/** Values a model sends to mean "no content filter". */
+const NO_CONTENT_FILTER = new Set(['none', 'all', 'any', '*'])
 
 type StorageMetric = (typeof METRICS)[number]
 
@@ -128,6 +132,32 @@ async function collectConnectionStorage(
   return entries
 }
 
+/**
+ * One row per device: a shared pool once, a local pool once per host.
+ *
+ * `aggregateStorage` sums a local pool across the hosts that carry it, which is
+ * right for the storage dashboard's cluster totals and wrong here. Against the
+ * lab it reported three 96 GB ZFS-Pool as one 289 GB device, and hid
+ * local@pve1, 5.9 GB free, behind the summed `local` when asked which storage
+ * had the least free space.
+ */
+function rankableStorage(entries: RawStorageEntry[]) {
+  const localByNode = new Map<string, RawStorageEntry[]>()
+
+  for (const entry of entries) {
+    if (isSharedStorage(entry)) continue
+
+    const key = `${entry.connId}:${entry.node}`
+
+    localByNode.set(key, [...(localByNode.get(key) ?? []), entry])
+  }
+
+  return [
+    ...aggregateStorage(entries.filter(entry => isSharedStorage(entry))),
+    ...[...localByNode.values()].flatMap(group => aggregateStorage(group)),
+  ]
+}
+
 type RankableStorage = { total: number; free: number; usedPct: number }
 
 function sortByMetric(metric: StorageMetric) {
@@ -145,7 +175,7 @@ function matchesContent(contentTypes: string[], wanted: string): boolean {
 }
 
 /** Which connections to sweep. The snapshot is already RBAC-filtered. */
-function targetConnections(ctx: AiToolContext, clusterRef?: string): ResolvedConnection[] {
+function targetConnections(ctx: ToolContext, clusterRef?: string): ResolvedConnection[] {
   if (clusterRef) return [resolveConnection(ctx, clusterRef)]
 
   const all = visibleConnections(ctx.snapshot)
@@ -155,11 +185,12 @@ function targetConnections(ctx: AiToolContext, clusterRef?: string): ResolvedCon
   return all
 }
 
-export const rankStorageTool: AiTool = {
+export const rankStorageTool: CatalogTool = {
   name: 'rank_storage',
+  readOnly: true,
 
   description:
-    'Rank storage pools by size, free space or fill level. Answers "what is the biggest storage?" and "which storage has the least free space?". Shared pools (Ceph, NFS) count once, not once per host. Example: metric=\'free\', limit=5',
+    'Rank storage pools by size, free space or fill level. Answers "what is the biggest storage?" and "which storage has the least free space?". Shared pools (Ceph, NFS) count once; a local pool is ranked once per host, with its host. Example: metric=\'free\', limit=5',
 
   parameters: {
     type: 'object',
@@ -179,7 +210,7 @@ export const rankStorageTool: AiTool = {
       },
       cluster: {
         type: 'string',
-        description: 'Cluster name. Omit to rank across every visible cluster.',
+        description: 'Cluster name, only when the user names one. Omit it to rank across every visible cluster.',
       },
       content: {
         type: 'string',
@@ -191,7 +222,10 @@ export const rankStorageTool: AiTool = {
   async execute(args, ctx) {
     const metric = argEnum<StorageMetric>(args, 'metric', METRICS, 'total')
     const limit = argNumber(args, 'limit', 10, { min: 1, max: 50 })
-    const content = argString(args, 'content')?.toLowerCase()
+    // llama3.1:8b pads unused arguments with Python's "None"; read as a
+    // filter, it matched nothing and the model made up a ranking.
+    const rawContent = argString(args, 'content')?.toLowerCase()
+    const content = rawContent && !NO_CONTENT_FILTER.has(rawContent) ? rawContent : undefined
 
     const connections = targetConnections(ctx, argString(args, 'cluster'))
 
@@ -214,10 +248,17 @@ export const rankStorageTool: AiTool = {
       rawEntries.push(...entries)
     }
 
-    let pools = aggregateStorage(rawEntries)
+    let pools = rankableStorage(rawEntries)
 
     if (content) {
+      const present = [...new Set(pools.flatMap(pool => pool.content || []))].sort((a, b) => a.localeCompare(b))
+
       pools = pools.filter(pool => matchesContent(pool.content || [], content))
+
+      // An empty ranking is something a small model fills in on its own.
+      if (pools.length === 0) {
+        throw new ToolArgumentError(`No storage holds content "${content}". Content types present: ${present.join(', ') || 'none'}. Omit "content" to rank every storage.`)
+      }
     }
 
     // A disabled or unreachable storage reports 0/0. Left in, it wins the
@@ -236,6 +277,8 @@ export const rankStorageTool: AiTool = {
         rank: index + 1,
         name: pool.storage,
         cluster: pool.connName,
+        // Null for a shared pool, which no single host owns.
+        host: pool.shared ? null : (pool.allNodes[0] ?? null),
         type: pool.type,
         shared: pool.shared,
         totalGb: gb(pool.total),

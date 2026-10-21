@@ -18,7 +18,8 @@ import {
   type AiProvider,
   type ToolCallRequest,
 } from '@/lib/ai/tools/adapters'
-import { ToolArgumentError, ToolScopeError, type AiTool, type AiToolContext } from '@/lib/ai/tools/types'
+import { invokeTool } from '@/lib/tools/invoke'
+import type { CatalogTool, ToolContext } from '@/lib/tools/types'
 
 /**
  * How many times the model may come back for more data.
@@ -101,31 +102,6 @@ function serialiseResult(value: unknown): { content: string; truncated: boolean 
 }
 
 /**
- * An argument the schema does not declare is a mistake to report, not to skip.
- *
- * Skipping it is what turned a recoverable error into a dead end: asked to
- * pass "cluster", llama3.1:8b sent `clusterName`, the tool ignored the key,
- * answered with the very same refusal, and the model concluded the refusal
- * was about something else. Empty values are tolerated: small models pad
- * calls with `""` and `null` for the arguments they do not use.
- */
-function rejectUnknownArguments(tool: AiTool, args: Record<string, unknown>) {
-  const known = Object.keys(tool.parameters.properties)
-
-  // A schema declaring nothing cannot say what it accepts; every registered
-  // tool declares its arguments, so this only ever concerns bare fixtures.
-  if (known.length === 0) return
-
-  const unknown = Object.keys(args).filter(key => !known.includes(key) && args[key] !== '' && args[key] !== null && args[key] !== undefined)
-
-  if (unknown.length === 0) return
-
-  throw new ToolArgumentError(
-    `Unknown argument${unknown.length > 1 ? 's' : ''} ${unknown.map(k => `"${k}"`).join(', ')} for ${tool.name}. Accepted arguments: ${known.join(', ')}.`
-  )
-}
-
-/**
  * What the user reads when the round budget is spent and the closing turn is
  * still a tool call written as text. A raw JSON call is never an answer; the
  * last refusal or failure the tools gave is the honest one.
@@ -145,10 +121,47 @@ export function budgetFallbackText(locale: string, trace: ToolTraceEntry[]): str
     : 'I could not conclude within the allowed number of lookups. Rephrase the question or name the cluster.'
 }
 
+/**
+ * What the user wrote, from the request body rather than the provider thread:
+ * for Ollama the last user turn also carries the whole system prompt, which
+ * names every cluster.
+ */
+export function userTextOf(messages: Array<{ role?: string; content?: unknown }>): string {
+  return messages
+    .filter(m => m?.role === 'user' && typeof m.content === 'string')
+    .map(m => m.content as string)
+    .join('\n')
+    .toLowerCase()
+}
+
+/**
+ * Drop a `cluster` the user never named.
+ *
+ * Asked which storage had the least free space, llama3.1:8b passed
+ * cluster="PVE-PROD" on 5 of 8 calls with two clusters visible and none named,
+ * then answered for PVE-PROD alone; no tool description stopped it. Without the
+ * filter, every tool covers every visible cluster, so the answer can only get
+ * wider, never wrong. Only the assistant does this: an MCP client names its
+ * own arguments.
+ */
+export function groundClusterArgument(
+  args: Record<string, unknown>,
+  userText: string | undefined
+): { args: Record<string, unknown>; dropped?: string } {
+  const cluster = typeof args?.cluster === 'string' ? args.cluster.trim() : ''
+
+  if (userText === undefined || !cluster || userText.includes(cluster.toLowerCase())) return { args }
+
+  const { cluster: _dropped, ...rest } = args
+
+  return { args: rest, dropped: cluster }
+}
+
 export async function executeToolCalls(
   calls: ToolCallRequest[],
-  tools: AiTool[],
-  ctx: AiToolContext
+  tools: CatalogTool[],
+  ctx: ToolContext,
+  { userText }: { userText?: string } = {}
 ): Promise<{ results: Array<{ call: ToolCallRequest; content: string }>; trace: ToolTraceEntry[] }> {
   const results: Array<{ call: ToolCallRequest; content: string }> = []
   const trace: ToolTraceEntry[] = []
@@ -180,43 +193,32 @@ export async function executeToolCalls(
         }
       }
 
-      try {
-        rejectUnknownArguments(tool, call.args)
+      const grounded = groundClusterArgument(call.args, userText)
 
-        const value = await tool.execute(call.args, ctx)
-        const { content, truncated } = serialiseResult(value)
+      if (grounded.dropped) console.warn(`[ai-tools] ${call.name}: ignored cluster="${grounded.dropped}", the user named no such cluster`)
+
+      const outcome = await invokeTool(tool, grounded.args, ctx)
+
+      if (outcome.ok === true) {
+        const { content, truncated } = serialiseResult(outcome.value)
 
         return {
           entry: { name: call.name, args: call.args, ok: true, durationMs: Date.now() - startedAt, truncated },
           result: { call, content },
         }
-      } catch (e: any) {
-        // A scope refusal or a rejected argument is a legitimate answer: the
-        // model asked for something outside the caller's perimeter, or with a
-        // value the tool cannot take, and must be told so in words it can act
-        // on. Anything else is a real failure and stays generic upstream.
-        const isScope = e instanceof ToolScopeError
-        const isArgument = e instanceof ToolArgumentError
-        const isExpected = isScope || isArgument
+      }
 
-        if (!isExpected) console.error(`[ai-tools] ${call.name} failed:`, e)
-
-        const message = isExpected
-          ? String(e?.message || 'Out of scope.')
-          : `The "${call.name}" lookup failed: ${String(e?.message || e).slice(0, 200)}`
-
-        return {
-          entry: {
-            name: call.name,
-            args: call.args,
-            ok: false,
-            error: isScope ? 'out-of-scope' : isArgument ? 'bad-argument' : 'failed',
-            detail: message,
-            durationMs: Date.now() - startedAt,
-            truncated: false,
-          },
-          result: { call, content: JSON.stringify({ error: message }) },
-        }
+      return {
+        entry: {
+          name: call.name,
+          args: call.args,
+          ok: false,
+          error: outcome.error,
+          detail: outcome.message,
+          durationMs: Date.now() - startedAt,
+          truncated: false,
+        },
+        result: { call, content: JSON.stringify({ error: outcome.message }) },
       }
     }))
 
@@ -246,14 +248,16 @@ export async function executeToolCalls(
  */
 export async function runToolRounds(opts: {
   provider: AiProvider
-  tools: AiTool[]
-  ctx: AiToolContext
+  tools: CatalogTool[]
+  ctx: ToolContext
   messages: any[]
   send: SendTurn
   maxRounds?: number
   onToolCalls?: (calls: ToolCallRequest[]) => void
+  /** The user's own words (`userTextOf` on the request body), to ground model-chosen filters. */
+  userText?: string
 }): Promise<ToolRoundsResult> {
-  const { provider, tools, ctx, send, onToolCalls } = opts
+  const { provider, tools, ctx, send, onToolCalls, userText } = opts
   const maxRounds = opts.maxRounds ?? MAX_TOOL_ROUNDS
 
   const messages = [...opts.messages]
@@ -338,7 +342,7 @@ export async function runToolRounds(opts: {
 
     messages.push(assistantTurnFor(provider, json))
 
-    const { results, trace: roundTrace } = await executeToolCalls(calls, tools, ctx)
+    const { results, trace: roundTrace } = await executeToolCalls(calls, tools, ctx, { userText })
 
     trace.push(...roundTrace)
     messages.push(...toolResultTurns(provider, results))

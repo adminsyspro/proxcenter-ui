@@ -59,8 +59,8 @@ const rankToolExecute = vi.fn(
   async (_args: Record<string, unknown>, _ctx: unknown) => ({ ranking: [{ rank: 1, name: 'db-01', vcpus: 16 }] })
 )
 
-vi.mock('@/lib/ai/tools/registry', () => ({
-  AI_TOOLS: [
+vi.mock('@/lib/tools/catalog', () => ({
+  READ_ONLY_TOOLS: [
     {
       name: 'rank_guest_hardware',
       description: 'Rank guests by assigned hardware.',
@@ -187,10 +187,17 @@ async function importHandler() {
   return mod.POST
 }
 
+/** The body of the first upstream call. */
+function sentBody(): any {
+  return JSON.parse(fetchMock.mock.calls[0][1].body as string)
+}
+
+/** What the model reads for the question: the system message, then the last user turn. */
 function sentMessage(): string {
   const body = JSON.parse(fetchMock.mock.calls[0][1].body as string)
+  const system = body.messages.find((m: any) => m.role === 'system')?.content ?? ''
 
-  return body.messages[body.messages.length - 1].content
+  return `${system}\n${body.messages[body.messages.length - 1].content}`
 }
 
 async function ask(body: Record<string, unknown> = {}) {
@@ -446,6 +453,27 @@ describe('POST /api/v1/ai/chat/stream', () => {
     })
   })
 
+  describe('conversation thread (#459)', () => {
+    it('sends the prompt as a system message and the follow-up right after the answer it refers to', async () => {
+      // With the prompt inlined in the last turn, "Can you do that?" lost its
+      // referent and llama3.1:8b invented OSD latencies instead of refusing.
+      await ask({
+        messages: [
+          { role: 'user', content: 'Are there any improvements to Ceph?' },
+          { role: 'assistant', content: 'Remove the noout flag.' },
+          { role: 'user', content: 'Can you do that?' },
+        ],
+      })
+
+      const { messages } = JSON.parse(fetchMock.mock.calls[0][1].body as string)
+
+      expect(messages.map((m: any) => m.role)).toEqual(['system', 'user', 'assistant', 'user'])
+      expect(messages[0].content).toContain('You can read anything and CHANGE nothing')
+      expect(messages[2].content).toBe('Remove the noout flag.')
+      expect(messages[3].content).toBe('Can you do that?')
+    })
+  })
+
   describe('answer language (#686)', () => {
     it.each([
       ['de', 'German'],
@@ -476,13 +504,17 @@ describe('POST /api/v1/ai/chat/stream', () => {
       expect(message).not.toContain('Respond in')
     })
 
-    it('closes the message with the language instruction', async () => {
+    it('closes the system message with the language instruction and leaves the question untouched', async () => {
       await ask({ locale: 'de' })
 
-      const message = sentMessage()
+      const { messages } = sentBody()
 
-      expect(message.trimEnd().endsWith('This overrides any other language mentioned in this prompt.')).toBe(true)
-      expect(message.indexOf('Which node is the busiest?')).toBeLessThan(message.lastIndexOf('written in German'))
+      // Measured on the lab (#459): with the instruction trailing the question,
+      // a follow-up like "Can you do that?" was refused 6 times of 8 instead
+      // of 8, and the German and Korean answers held either way (#686).
+      expect(messages[0].role).toBe('system')
+      expect(messages[0].content.trimEnd().endsWith('This overrides any other language mentioned in this prompt.')).toBe(true)
+      expect(messages.at(-1).content).toBe('Which node is the busiest?')
     })
 
     it('falls back to the NEXT_LOCALE cookie when the body carries no locale', async () => {

@@ -22,7 +22,7 @@ import { callRoute, readJson } from '@/__tests__/setup/route-test'
 
 const checkPermissionMock = vi.fn<(...args: any[]) => Promise<Response | null>>()
 
-// An admin principal: `collectAiSnapshot` then skips the per-guest RBAC filter,
+// An admin principal: `collectInventorySnapshot` then skips the per-guest RBAC filter,
 // which is what the dedicated RBAC tests cover, not this file.
 vi.mock('@/lib/rbac', () => ({
   checkPermission: checkPermissionMock,
@@ -68,8 +68,8 @@ const rankToolExecute = vi.fn(
   async (_args: Record<string, unknown>, _ctx: unknown) => ({ ranking: [{ rank: 1, name: 'db-01', vcpus: 16 }] })
 )
 
-vi.mock('@/lib/ai/tools/registry', () => ({
-  AI_TOOLS: [
+vi.mock('@/lib/tools/catalog', () => ({
+  READ_ONLY_TOOLS: [
     {
       name: 'rank_guest_hardware',
       description: 'Rank guests by assigned hardware.',
@@ -167,11 +167,12 @@ function sentBody(call = 0): any {
   return JSON.parse(fetchMock.mock.calls[call][1].body as string)
 }
 
-/** The user message actually sent upstream, system prompt included. */
+/** What the model reads for the question: the system message, then the last user turn. */
 function sentMessage(call = 0): string {
   const body = sentBody(call)
+  const system = body.messages.find((m: any) => m.role === 'system')?.content ?? ''
 
-  return body.messages[body.messages.length - 1].content
+  return `${system}\n${body.messages[body.messages.length - 1].content}`
 }
 
 async function ask(body: Record<string, unknown> = {}) {
@@ -355,15 +356,17 @@ describe('POST /api/v1/ai/chat', () => {
       expect(message).not.toContain('Respond in')
     })
 
-    it('repeats the instruction last, after the user question', async () => {
+    it('closes the system message with the language instruction and leaves the question untouched', async () => {
       await ask({ locale: 'de' })
 
-      const message = sentMessage()
+      const { messages } = sentBody(0)
 
-      // Ollama reads the system prompt inlined in the user message, and
-      // weighs the tail of it most, so the instruction closes the message.
-      expect(message.trimEnd().endsWith('This overrides any other language mentioned in this prompt.')).toBe(true)
-      expect(message.indexOf('How many VMs are running?')).toBeLessThan(message.lastIndexOf('written in German'))
+      // Measured on the lab (#459): with the instruction trailing the question,
+      // a follow-up like "Can you do that?" was refused 6 times of 8 instead
+      // of 8, and the German and Korean answers held either way (#686).
+      expect(messages[0].role).toBe('system')
+      expect(messages[0].content.trimEnd().endsWith('This overrides any other language mentioned in this prompt.')).toBe(true)
+      expect(messages.at(-1).content).toBe('How many VMs are running?')
     })
 
     it('falls back to the NEXT_LOCALE cookie when the body carries no locale', async () => {
@@ -422,7 +425,7 @@ describe('POST /api/v1/ai/chat', () => {
 
       expect(fetchMock.mock.calls[0][0]).toBe('https://llm.example.com/v1/chat/completions')
       expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe('Bearer sk-test')
-      expect(body).toEqual({ response: 'answer', provider: 'openai', model: 'gpt-4o-mini' })
+      expect(body).toMatchObject({ response: 'answer', provider: 'openai', model: 'gpt-4o-mini' })
     })
 
     it('keeps a base URL without trailing slash unchanged', async () => {

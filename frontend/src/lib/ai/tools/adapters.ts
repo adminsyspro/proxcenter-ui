@@ -9,7 +9,7 @@
  * content block. `parseToolCalls` normalises all three.
  */
 
-import type { AiTool } from '@/lib/ai/tools/types'
+import type { CatalogTool } from '@/lib/tools/types'
 
 export type AiProvider = 'ollama' | 'openai' | 'anthropic'
 
@@ -21,7 +21,7 @@ export type ToolCallRequest = {
   args: Record<string, unknown>
 }
 
-export function toOpenAiStyleTools(tools: AiTool[]) {
+export function toOpenAiStyleTools(tools: CatalogTool[]) {
   return tools.map(t => ({
     type: 'function',
     function: {
@@ -32,7 +32,7 @@ export function toOpenAiStyleTools(tools: AiTool[]) {
   }))
 }
 
-export function toAnthropicTools(tools: AiTool[]) {
+export function toAnthropicTools(tools: CatalogTool[]) {
   return tools.map(t => ({
     name: t.name,
     description: t.description,
@@ -40,7 +40,7 @@ export function toAnthropicTools(tools: AiTool[]) {
   }))
 }
 
-export function toolsForProvider(provider: AiProvider, tools: AiTool[]) {
+export function toolsForProvider(provider: AiProvider, tools: CatalogTool[]) {
   return provider === 'anthropic' ? toAnthropicTools(tools) : toOpenAiStyleTools(tools)
 }
 

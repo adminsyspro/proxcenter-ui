@@ -16,13 +16,14 @@
 import { writeFileSync, mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
 
-import { renderAiSystemPrompt, type AiAlert, type AiGuest, type AiNode, type AiSnapshot } from '@/lib/ai/context'
+import { renderAiSystemPrompt, type AiAlert } from '@/lib/ai/context'
+import type { SnapshotGuest, SnapshotNode, InventorySnapshot } from '@/lib/tools/snapshot'
 import { languageInstruction } from '@/lib/ai/locale'
 import { ollamaOptions } from '@/lib/ai/ollama'
-import { AI_TOOLS } from '@/lib/ai/tools/registry'
+import { READ_ONLY_TOOLS } from '@/lib/tools/catalog'
 import { extractTextToolCall, parseAssistantText, parseToolCalls, toolsForProvider } from '@/lib/ai/tools/adapters'
 import { runToolRounds, type ToolMode } from '@/lib/ai/tools/loop'
-import { ToolArgumentError, type AiTool, type AiToolContext } from '@/lib/ai/tools/types'
+import { ToolArgumentError, type CatalogTool, type ToolContext } from '@/lib/tools/types'
 
 /* ------------------------------------------------------------------ */
 /* CLI                                                                */
@@ -59,7 +60,7 @@ const OUT = flag('out', `/root/saas/proxcenter-frontend/.superpowers/sdd/459-ai-
 const PROD = 'conn-prod'
 const LAB = 'conn-lab'
 
-function g(o: Partial<AiGuest> & { name: string; vmid: string; node: string }): AiGuest {
+function g(o: Partial<SnapshotGuest> & { name: string; vmid: string; node: string }): SnapshotGuest {
   const connId = o.node.startsWith('lab') ? LAB : PROD
 
   return {
@@ -77,7 +78,7 @@ function g(o: Partial<AiGuest> & { name: string; vmid: string; node: string }): 
   }
 }
 
-const guests: AiGuest[] = [
+const guests: SnapshotGuest[] = [
   // The snapshot's CPU/RAM leaders. None of them is the answer to a hardware
   // question, so a model answering from the snapshot is visibly wrong.
   g({ name: 'db-01', vmid: '101', node: 'pve1', cpuPct: 81.2, memPct: 88.5, memUsedGb: 28.3, memTotalGb: 32, vcpus: 8, diskTotalGb: 200 }),
@@ -124,7 +125,7 @@ const guests: AiGuest[] = [
   g({ name: 'vpn-old', vmid: '156', node: 'pve2', status: 'stopped', cpuPct: 0, memPct: 0, memUsedGb: 0, memTotalGb: 1, vcpus: 1, diskTotalGb: 8 }),
 ]
 
-const nodes: AiNode[] = [
+const nodes: SnapshotNode[] = [
   { connId: PROD, cluster: 'prod', name: 'pve1', status: 'online', cpuPct: 34.2, cores: 48, memPct: 71.5, memUsedGb: 183, memTotalGb: 256 },
   { connId: PROD, cluster: 'prod', name: 'pve2', status: 'online', cpuPct: 41.8, cores: 48, memPct: 68.0, memUsedGb: 174, memTotalGb: 256 },
   { connId: PROD, cluster: 'prod', name: 'pve3', status: 'online', cpuPct: 27.6, cores: 32, memPct: 80.9, memUsedGb: 155, memTotalGb: 192 },
@@ -134,7 +135,7 @@ const nodes: AiNode[] = [
 
 const running = guests.filter(x => x.status === 'running').length
 
-const snapshot: AiSnapshot = {
+const snapshot: InventorySnapshot = {
   clusters: [
     { id: PROD, name: 'prod', nodeCount: 3, guestCount: guests.filter(x => x.connId === PROD).length, cephHealth: 'HEALTH_WARN' },
     { id: LAB, name: 'lab', nodeCount: 2, guestCount: guests.filter(x => x.connId === LAB).length },
@@ -272,7 +273,7 @@ function canned(name: string, args: Record<string, unknown>): unknown {
       return { cluster: 'prod', osdCount: 11, byHost, byDeviceClass: { nvme: 4, ssd: 4, hdd: 3 }, latency: { avgApplyMs: 15.5, maxApplyMs: 42, maxCommitMs: 39, slowest: { id: 'osd.7', host: 'pve3', deviceClass: 'hdd', applyMs: 42, commitMs: 39 } }, osds: sorted.slice(0, Number(args.limit ?? 30)) }
     }
     default:
-      return { error: `Unknown tool "${name}". Available tools: ${AI_TOOLS.map(t => t.name).join(', ')}.` }
+      return { error: `Unknown tool "${name}". Available tools: ${READ_ONLY_TOOLS.map(t => t.name).join(', ')}.` }
   }
 }
 
@@ -283,11 +284,16 @@ function canned(name: string, args: Record<string, unknown>): unknown {
  * differently. The 30/08 run scored llama3.1's correct metric="used_pct" as a
  * miss for that very reason.
  */
-function validateEnums(tool: AiTool, args: Record<string, unknown>) {
+// Ordering-only arguments the real tool reads with `argPresentationEnum`: an
+// unknown value falls back to the default there instead of being refused.
+const PRESENTATION_ARGS: Record<string, string[]> = { list_ceph_osds: ['groupBy', 'sortBy'] }
+
+function validateEnums(tool: CatalogTool, args: Record<string, unknown>) {
   for (const [key, prop] of Object.entries(tool.parameters.properties)) {
     const raw = args[key]
 
     if (!prop.enum || raw === undefined || raw === null || raw === '') continue
+    if (PRESENTATION_ARGS[tool.name]?.includes(key)) continue
 
     const value = String(raw).trim().toLowerCase()
 
@@ -297,7 +303,7 @@ function validateEnums(tool: AiTool, args: Record<string, unknown>) {
   }
 }
 
-const stubTools: AiTool[] = AI_TOOLS.map(t => ({
+const stubTools: CatalogTool[] = READ_ONLY_TOOLS.map(t => ({
   ...t,
   execute: async args => {
     validateEnums(t, args)
@@ -362,7 +368,7 @@ const ACTIVE_QUESTIONS = VARIANTS ? VARIANT_QUESTIONS : QUESTIONS
 /* ------------------------------------------------------------------ */
 
 const systemPrompt = renderAiSystemPrompt(snapshot, alerts, LANG, LOCALE, { toolsEnabled: true })
-const wireTools = toolsForProvider('ollama', AI_TOOLS)
+const wireTools = toolsForProvider('ollama', READ_ONLY_TOOLS)
 const userInstruction = LANG === 'fr'
   ? 'Réponds en utilisant les données de l\'infrastructure ci-dessus, ou appelle un outil si la réponse n\'y figure pas. Cite les noms exacts des VMs et leurs métriques.'
   : 'Respond using the infrastructure data above, or call a tool if the answer is not in it. Cite exact VM names and their metrics.'
@@ -451,7 +457,7 @@ type QuestionResult = {
   answer: string
 }
 
-const TOOL_NAMES = AI_TOOLS.map(t => t.name)
+const TOOL_NAMES = READ_ONLY_TOOLS.map(t => t.name)
 
 function leaks(text: string): boolean {
   const lower = text.toLowerCase()
@@ -463,7 +469,7 @@ async function askOne(model: string, q: Question, run: number): Promise<Question
   const stats: TurnStats[] = []
   const firstCalls: QuestionResult['firstCalls'] = []
   const started = Date.now()
-  const ctx: AiToolContext = { snapshot, tenantId: 'bench', locale: LOCALE }
+  const ctx: ToolContext = { snapshot, tenantId: 'bench', locale: LOCALE }
   let seenCalls = false
 
   try {

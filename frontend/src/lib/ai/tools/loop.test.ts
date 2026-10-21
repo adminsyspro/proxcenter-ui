@@ -15,18 +15,20 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 import {
   executeToolCalls,
+  groundClusterArgument,
   runToolRounds,
+  userTextOf,
   MAX_TOOL_RESULT_CHARS,
   budgetFallbackText, MAX_TOOL_ROUNDS,
 } from './loop'
 import type { ToolCallRequest } from './adapters'
-import { ToolArgumentError, ToolScopeError, type AiTool, type AiToolContext } from './types'
+import { ToolArgumentError, ToolScopeError, type CatalogTool, type ToolContext } from '@/lib/tools/types'
 
 /* ------------------------------------------------------------------ */
 /* Fixtures                                                           */
 /* ------------------------------------------------------------------ */
 
-function makeCtx(): AiToolContext {
+function makeCtx(): ToolContext {
   return {
     snapshot: {
       clusters: [],
@@ -48,10 +50,11 @@ function makeCtx(): AiToolContext {
 
 function makeTool(
   name: string,
-  execute: AiTool['execute'] = async () => ({ ok: true })
-): AiTool {
+  execute: CatalogTool['execute'] = async () => ({ ok: true })
+): CatalogTool {
   return {
     name,
+    readOnly: true,
     description: `Answers questions with ${name}.`,
     parameters: { type: 'object', properties: {} },
     execute,
@@ -155,7 +158,7 @@ describe('running the tool calls of one round', () => {
 
   it('rejects an argument the schema does not declare, naming the accepted ones', async () => {
     const execute = vi.fn(async () => ({ ok: true }))
-    const tool: AiTool = { ...makeTool('list_ceph_osds', execute), parameters: { type: 'object', properties: { cluster: { type: 'string', description: 'c' }, limit: { type: 'integer', description: 'l' } } } }
+    const tool: CatalogTool = { ...makeTool('list_ceph_osds', execute), parameters: { type: 'object', properties: { cluster: { type: 'string', description: 'c' }, limit: { type: 'integer', description: 'l' } } } }
 
     const { results, trace } = await executeToolCalls([call('list_ceph_osds', { clusterName: 'prod' })], [tool], makeCtx())
 
@@ -168,7 +171,7 @@ describe('running the tool calls of one round', () => {
 
   it('tolerates empty values on undeclared keys, which small models pad calls with', async () => {
     const execute = vi.fn(async () => ({ ok: true }))
-    const tool: AiTool = { ...makeTool('list_hosts', execute), parameters: { type: 'object', properties: { cluster: { type: 'string', description: 'c' } } } }
+    const tool: CatalogTool = { ...makeTool('list_hosts', execute), parameters: { type: 'object', properties: { cluster: { type: 'string', description: 'c' } } } }
 
     const { trace } = await executeToolCalls([call('list_hosts', { cluster: 'prod', node: '', pool: null })], [tool], makeCtx())
 
@@ -415,7 +418,7 @@ describe('driving the model until it answers', () => {
     const refusing = makeTool('list_ceph_osds', async () => {
       throw new ToolScopeError('Several clusters are visible: pass the "cluster" argument with one of: prod, lab.')
     })
-    const bodies = Array.from({ length: MAX_TOOL_ROUNDS }, () => toolTurn('list_ceph_osds'))
+    const bodies: any[] = Array.from({ length: MAX_TOOL_ROUNDS }, () => toolTurn('list_ceph_osds'))
 
     bodies.push(answerTurn('I will try another cluster: {"name": "list_ceph_osds", "parameters": {"clusterName": "prod"}}'))
 
@@ -519,3 +522,58 @@ describe('driving the model until it answers', () => {
     expect(messages).toHaveLength(1)
   })
 })
+
+/* ------------------------------------------------------------------ */
+/* Grounding model-chosen filters                                     */
+/* ------------------------------------------------------------------ */
+
+describe('grounding the cluster argument in what the user wrote', () => {
+  it('keeps only the string user turns, lower-cased, ignoring tool results', () => {
+    expect(userTextOf([
+      { role: 'system', content: 'Clusters: PVE-PROD, PVE-DR' },
+      { role: 'user', content: 'Least free storage on PVE-DR?' },
+      { role: 'assistant', content: 'local' },
+      { role: 'user', content: [{ type: 'tool_result', content: 'PVE-PROD' }] },
+    ])).toBe('least free storage on pve-dr?')
+  })
+
+  it('drops a cluster the user never named', () => {
+    expect(groundClusterArgument({ cluster: 'PVE-PROD', metric: 'free' }, 'which storage has the least free space?'))
+      .toEqual({ args: { metric: 'free' }, dropped: 'PVE-PROD' })
+  })
+
+  it('keeps a cluster the user named, whatever the case', () => {
+    expect(groundClusterArgument({ cluster: 'PVE-DR' }, 'least free storage on pve-dr?')).toEqual({ args: { cluster: 'PVE-DR' } })
+  })
+
+  it('leaves the arguments alone without a user text or a cluster', () => {
+    expect(groundClusterArgument({ cluster: 'PVE-PROD' }, undefined)).toEqual({ args: { cluster: 'PVE-PROD' } })
+    expect(groundClusterArgument({ metric: 'free' }, 'anything')).toEqual({ args: { metric: 'free' } })
+  })
+
+  it('runs the tool without the ungrounded cluster', async () => {
+    const execute = vi.fn(async () => ({ ok: true }))
+    const tool: CatalogTool = {
+      ...makeTool('rank_storage', execute),
+      parameters: { type: 'object', properties: { cluster: { type: 'string', description: 'c' }, metric: { type: 'string', description: 'm' } } },
+    }
+
+    await executeToolCalls([call('rank_storage', { cluster: 'PVE-PROD', metric: 'free' })], [tool], makeCtx(), { userText: 'least free storage?' })
+
+    expect(execute).toHaveBeenCalledWith({ metric: 'free' }, expect.anything())
+  })
+
+  it('hands the user text to every round', async () => {
+    const execute = vi.fn(async () => ({ ok: true }))
+    const tool: CatalogTool = {
+      ...makeTool('rank_storage', execute),
+      parameters: { type: 'object', properties: { cluster: { type: 'string', description: 'c' } } },
+    }
+    const { send } = makeSend([toolTurn('rank_storage', { cluster: 'PVE-PROD' }), answerTurn('local')])
+
+    await runToolRounds({ provider: 'ollama', tools: [tool], ctx: makeCtx(), messages: [{ role: 'user', content: 'x' }], send, userText: 'least free storage?' })
+
+    expect(execute).toHaveBeenCalledWith({}, expect.anything())
+  })
+})
+

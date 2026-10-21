@@ -1,7 +1,7 @@
 /**
  * Snapshot-only inventory tools.
  *
- * These answer from the already-collected `AiSnapshot` and never touch
+ * These answer from the already-collected `InventorySnapshot` and never touch
  * Proxmox, which makes them the cheap path for the listing questions. The
  * prompt caps the stopped-guest list it inlines and points the model here for
  * the rest.
@@ -12,11 +12,12 @@ import {
   argNumber,
   argString,
   resolveConnection,
-  type AiTool,
-} from '@/lib/ai/tools/types'
+  type CatalogTool,
+} from '@/lib/tools/types'
 
-export const listGuestsTool: AiTool = {
+export const listGuestsTool: CatalogTool = {
   name: 'list_guests',
+  readOnly: true,
   description:
     'List the VMs and containers visible to the user, with optional filters. Use it when the user asks for a full list that the snapshot truncated, or for the guests of one host, pool or tag. Example: status=\'stopped\', limit=100',
   parameters: {
@@ -28,7 +29,7 @@ export const listGuestsTool: AiTool = {
         enum: ['all', 'running', 'stopped'],
         default: 'all',
       },
-      cluster: { type: 'string', description: 'Restrict to one cluster, by name.' },
+      cluster: { type: 'string', description: 'Cluster name, only when the user names one. Omit it to list every visible cluster.' },
       node: { type: 'string', description: 'Restrict to one host, by name.' },
       pool: { type: 'string', description: 'Restrict to one Proxmox pool.' },
       tag: { type: 'string', description: 'Restrict to guests carrying this tag.' },
@@ -86,14 +87,15 @@ export const listGuestsTool: AiTool = {
   },
 }
 
-export const listHostsTool: AiTool = {
+export const listHostsTool: CatalogTool = {
   name: 'list_hosts',
+  readOnly: true,
   description:
     'List the Proxmox hosts visible to the user with their live CPU and RAM usage, core count and cluster. Use it to know which host names exist before asking for one host\'s hardware. Example: cluster=\'production\'',
   parameters: {
     type: 'object',
     properties: {
-      cluster: { type: 'string', description: 'Restrict to one cluster, by name.' },
+      cluster: { type: 'string', description: 'Cluster name, only when the user names one. Omit it to list every visible cluster.' },
     },
   },
   async execute(args, ctx) {

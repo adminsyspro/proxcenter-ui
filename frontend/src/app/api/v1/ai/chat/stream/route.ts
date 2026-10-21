@@ -7,12 +7,12 @@ import { getCurrentTenantId } from "@/lib/tenant"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { getRequestLocale, languageInstruction, normalizeLocale } from '@/lib/ai/locale'
 import { validateAIUrl } from '@/lib/ai/url-guard'
-import { ollamaOptions } from '@/lib/ai/ollama'
+import { ollamaOptions, ollamaThread } from '@/lib/ai/ollama'
 import { buildAiSystemPrompt } from '@/lib/ai/context'
-import { AI_TOOLS, buildToolContext } from '@/lib/ai/tools/registry'
+import { READ_ONLY_TOOLS, buildToolContext } from '@/lib/tools/catalog'
 import { coerceToolArgs, extractTextToolCall, toolResultTurns, toolsForProvider, type ToolCallRequest } from '@/lib/ai/tools/adapters'
-import { budgetFallbackText, executeToolCalls, MAX_TOOL_ROUNDS, type ToolTraceEntry } from '@/lib/ai/tools/loop'
-import type { AiToolContext } from '@/lib/ai/tools/types'
+import { budgetFallbackText, executeToolCalls, MAX_TOOL_ROUNDS, userTextOf, type ToolTraceEntry } from '@/lib/ai/tools/loop'
+import type { ToolContext } from '@/lib/tools/types'
 import { encodeFrame } from '@/lib/ai/streamFrames'
 
 // Récupérer les paramètres IA (tenant-scoped)
@@ -182,14 +182,16 @@ async function streamAgenticConversation(opts: {
   model: string
   messages: any[]
   wireTools: unknown[]
-  ctx: AiToolContext
+  ctx: ToolContext
+  /** The user's own words, see `userTextOf`. */
+  userText: string
   controller: ReadableStreamDefaultController
   encoder: TextEncoder
 }) {
   const { base, model, wireTools, ctx, controller, encoder } = opts
   const messages = [...opts.messages]
 
-  const toolNames = AI_TOOLS.map(t => t.name)
+  const toolNames = READ_ONLY_TOOLS.map(t => t.name)
   const trace: ToolTraceEntry[] = []
 
   for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
@@ -225,7 +227,7 @@ async function streamAgenticConversation(opts: {
     // the user waits, in place of the generic spinner.
     controller.enqueue(encoder.encode(encodeFrame({ type: 'tool', names: turn.toolCalls.map(c => c.name) })))
 
-    const { results, trace: roundTrace } = await executeToolCalls(turn.toolCalls, AI_TOOLS, ctx)
+    const { results, trace: roundTrace } = await executeToolCalls(turn.toolCalls, READ_ONLY_TOOLS, ctx, { userText: opts.userText })
 
     trace.push(...roundTrace)
     messages.push(...toolResultTurns('ollama', results))
@@ -277,28 +279,13 @@ export async function POST(request: Request) {
       terse: true,
     })
     const toolCtx = buildToolContext(snapshot, tenantId, uiLocale)
-    const wireTools = toolsForProvider('ollama', AI_TOOLS)
+    const wireTools = toolsForProvider('ollama', READ_ONLY_TOOLS)
 
     // The SSRF guard's own contract requires every AI route fetching an
     // operator-supplied base URL to go through it; this route used to skip it.
     const ollamaBase = await validateAIUrl(settings.ollamaUrl)
 
-    const lastUserMessage = messages[messages.length - 1]
-    const contextualizedMessage = `${systemPrompt}
-
-=== QUESTION ===
-${lastUserMessage.content}
-
-${lang === 'fr'
-  ? 'Réponds en utilisant les données ci-dessus, ou appelle un outil si la réponse n\'y figure pas.'
-  : 'Respond using the data above, or call a tool if the answer is not in it.'}
-
-${languageInstruction(uiLocale)}`
-
-    const ollamaMessages = [
-      ...messages.slice(0, -1),
-      { role: 'user', content: contextualizedMessage }
-    ]
+    const ollamaMessages = ollamaThread(systemPrompt, messages, languageInstruction(uiLocale))
 
     const encoder = new TextEncoder()
 
@@ -311,6 +298,7 @@ ${languageInstruction(uiLocale)}`
             messages: ollamaMessages,
             wireTools,
             ctx: toolCtx,
+            userText: userTextOf(messages),
             controller,
             encoder,
           })

@@ -76,3 +76,21 @@ export async function fetchOllamaCapabilities(
     clearTimeout(timer)
   }
 }
+
+type ChatTurn = { role: string; content: string }
+
+/**
+ * The thread sent to Ollama: the system prompt as a system message, closed by
+ * the language instruction, then the conversation exactly as the user wrote it.
+ *
+ * The prompt used to be inlined into the last user turn, so 5.7 KB of
+ * infrastructure data sat between the previous answer and the follow-up.
+ * Asked "Can you do that?" after a list of Ceph fixes, llama3.1:8b replayed the
+ * lookup or answered a question nobody asked, 4 runs of 4, once inventing OSD
+ * latencies (#459). Measured over 8 runs on the lab: 8 refusals with this
+ * thread, 6 when the language instruction trails the question instead, and the
+ * German and Korean answers held either way (#686).
+ */
+export function ollamaThread(systemPrompt: string, messages: ChatTurn[], languageLine: string): ChatTurn[] {
+  return [{ role: 'system', content: `${systemPrompt}\n\n${languageLine}` }, ...messages]
+}

@@ -13,10 +13,11 @@
 
 import { describe, it, expect } from 'vitest'
 
-import type { AiGuest, AiNode, AiSnapshot } from '@/lib/ai/context'
+import type { SnapshotGuest, SnapshotNode, InventorySnapshot } from '@/lib/tools/snapshot'
 
 import {
   argEnum,
+  argPresentationEnum,
   ToolArgumentError,
   argNumber,
   argString,
@@ -25,10 +26,10 @@ import {
   resolveNode,
   ToolScopeError,
   visibleConnections,
-  type AiToolContext,
+  type ToolContext,
 } from './types'
 
-function node(overrides: Partial<AiNode> & { name: string; connId: string }): AiNode {
+function node(overrides: Partial<SnapshotNode> & { name: string; connId: string }): SnapshotNode {
   return {
     cluster: 'prod',
     status: 'online',
@@ -40,7 +41,7 @@ function node(overrides: Partial<AiNode> & { name: string; connId: string }): Ai
   }
 }
 
-function guest(overrides: Partial<AiGuest> & { name: string; vmid: string; connId: string }): AiGuest {
+function guest(overrides: Partial<SnapshotGuest> & { name: string; vmid: string; connId: string }): SnapshotGuest {
   return {
     cluster: 'prod',
     type: 'VM',
@@ -56,7 +57,7 @@ function guest(overrides: Partial<AiGuest> & { name: string; vmid: string; connI
   }
 }
 
-function snapshot(overrides: Partial<AiSnapshot> = {}): AiSnapshot {
+function snapshot(overrides: Partial<InventorySnapshot> = {}): InventorySnapshot {
   return {
     clusters: [{ id: 'conn-1', name: 'prod', nodeCount: 2, guestCount: 2 }],
     nodes: [node({ name: 'pve1', connId: 'conn-1' }), node({ name: 'pve2', connId: 'conn-1' })],
@@ -70,7 +71,7 @@ function snapshot(overrides: Partial<AiSnapshot> = {}): AiSnapshot {
   }
 }
 
-function ctx(snap: AiSnapshot = snapshot()): AiToolContext {
+function ctx(snap: InventorySnapshot = snapshot()): ToolContext {
   return { snapshot: snap, tenantId: 'tenant-1', locale: 'en' }
 }
 
@@ -118,7 +119,7 @@ describe('argument coercion', () => {
 
 describe('resolveConnection', () => {
   it('names the argument to pass when several clusters are visible', () => {
-    const ctx: AiToolContext = {
+    const ctx: ToolContext = {
       snapshot: { ...snapshot(), clusters: [{ id: 'a', name: 'prod', nodeCount: 1, guestCount: 0 }, { id: 'b', name: 'lab', nodeCount: 1, guestCount: 0 }] },
       tenantId: 't', locale: 'en',
     }
@@ -206,6 +207,37 @@ describe('resolveNode', () => {
   it('asks for a host name when the cluster has several', () => {
     expect(() => resolveNode(ctx(), undefined)).toThrow(/pve1, pve2/)
   })
+
+  describe('across several visible clusters, without a cluster argument', () => {
+    const twoClusters = () => snapshot({
+      clusters: [
+        { id: 'conn-1', name: 'prod', nodeCount: 2, guestCount: 0 },
+        { id: 'conn-2', name: 'dr', nodeCount: 2, guestCount: 0 },
+      ],
+      nodes: [
+        node({ name: 'pve1', connId: 'conn-1' }),
+        node({ name: 'shared-name', connId: 'conn-1' }),
+        node({ name: 'pve1-dr', connId: 'conn-2', cluster: 'dr' }),
+        node({ name: 'shared-name', connId: 'conn-2', cluster: 'dr' }),
+      ],
+    })
+
+    it('finds a host name that only one cluster has', () => {
+      // The lab: PVE-PROD and PVE-DR both visible, "pve1" only in PVE-PROD.
+      const { connection, node: hit } = resolveNode(ctx(twoClusters()), 'PVE1-DR')
+
+      expect(connection).toEqual({ id: 'conn-2', name: 'dr' })
+      expect(hit.name).toBe('pve1-dr')
+    })
+
+    it('asks for the cluster when two clusters have a host of that name', () => {
+      expect(() => resolveNode(ctx(twoClusters()), 'shared-name')).toThrow('pass the "cluster" argument with one of: prod, dr')
+    })
+
+    it('refuses an unknown host, listing every visible one', () => {
+      expect(() => resolveNode(ctx(twoClusters()), 'pve9')).toThrow('Unknown host "pve9". Visible hosts: pve1, shared-name, pve1-dr, shared-name.')
+    })
+  })
 })
 
 describe('resolveGuest', () => {
@@ -268,5 +300,25 @@ describe('visibleConnections', () => {
   it('lists exactly the clusters the snapshot carries', () => {
     expect(visibleConnections(snapshot())).toEqual([{ id: 'conn-1', name: 'prod' }])
     expect(visibleConnections(snapshot({ clusters: [] }))).toEqual([])
+  })
+})
+
+describe('argPresentationEnum', () => {
+  const allowed = ['latency', 'usage', 'id'] as const
+
+  it('reads an accepted value like argEnum and leaves no note', () => {
+    const notes: string[] = []
+
+    expect(argPresentationEnum({ sortBy: 'USAGE' }, 'sortBy', allowed, 'latency', notes)).toBe('usage')
+    expect(argPresentationEnum({}, 'sortBy', allowed, 'latency', notes)).toBe('latency')
+    expect(notes).toEqual([])
+  })
+
+  it('falls back to the default on an unknown value and says so', () => {
+    // llama3.1:8b sent sortBy="none" to list_ceph_osds, borrowed from groupBy.
+    const notes: string[] = []
+
+    expect(argPresentationEnum({ sortBy: 'none' }, 'sortBy', allowed, 'latency', notes)).toBe('latency')
+    expect(notes).toEqual(['sortBy="none" is not accepted (latency, usage, id), used "latency".'])
   })
 })

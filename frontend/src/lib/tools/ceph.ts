@@ -19,17 +19,18 @@ import {
   buildCrushTopology,
   type CephTopology,
   type CrushNode,
-} from '@/app/(dashboard)/infrastructure/inventory/components/cephTopology'
+} from '@/app/(dashboard)/infrastructure/inventory/components/cephCrushTopology'
 
 import {
   argEnum,
+  argPresentationEnum,
   argNumber,
   argString,
   resolveConnection,
   ToolScopeError,
   visibleConnections,
-  type AiTool,
-  type AiToolContext,
+  type CatalogTool,
+  type ToolContext,
   type ResolvedConnection,
 } from './types'
 
@@ -49,6 +50,14 @@ const PG_DRIFT_RATIO = 0.25
 
 /** Names listed inline in an observation before it switches to a count. */
 const OBSERVATION_LIST_CAP = 8
+
+/**
+ * Device classes every count starts from, at zero. A class missing from the
+ * result does not read as "none" to a small model: on the all-HDD lab,
+ * llama3.1:8b asked four times for the same OSD list before answering, and
+ * once answered "3 NVMe devices, listed under device_class hdd".
+ */
+const STANDARD_DEVICE_CLASSES = ['nvme', 'ssd', 'hdd'] as const
 
 const round1 = (n: number) => Math.round(n * 10) / 10
 
@@ -464,7 +473,7 @@ async function gatherCephPayload(conn: PveConn, nodeName: string): Promise<CephP
  * cluster, as the connection-level ceph route picks it. Never `nodes[0]`
  * blindly, a cluster whose first node is down must still answer.
  */
-function pickQueryNode(ctx: AiToolContext, connId: string): string {
+function pickQueryNode(ctx: ToolContext, connId: string): string {
   const nodes = ctx.snapshot.nodes.filter(n => n.connId === connId)
 
   if (nodes.length === 0) {
@@ -476,7 +485,7 @@ function pickQueryNode(ctx: AiToolContext, connId: string): string {
 
 type LoadedCeph = { nodeQueried: string; payload: CephPayload; topology: CephTopology }
 
-async function loadCeph(ctx: AiToolContext, connection: ResolvedConnection): Promise<LoadedCeph | null> {
+async function loadCeph(ctx: ToolContext, connection: ResolvedConnection): Promise<LoadedCeph | null> {
   const nodeQueried = pickQueryNode(ctx, connection.id)
   const conn = await getConnectionById(connection.id, ctx.tenantId)
   const payload = await gatherCephPayload(conn, nodeQueried)
@@ -612,10 +621,18 @@ function buildObservations(payload: CephPayload, topology: CephTopology): string
     obs.push(`Ceph health is ${payload.health.status} with ${payload.health.issues.length} check(s) raised.`)
   }
 
-  for (const issue of payload.health.issues) {
-    if (/full/i.test(issue.name)) {
-      obs.push(`Ceph raises the capacity check ${issue.name}: ${issue.summary}.`)
-    }
+  // Every check by name and Ceph's own message. Counting them alone left the
+  // model to fill the gap: against the lab's HEALTH_ERR, llama3.1:8b invented
+  // four problems ("8 OSDs are not up-to-date", "5.6 seconds of latency")
+  // where Ceph reported insecure auth key types and a noout flag.
+  const issues = payload.health.issues
+
+  for (const issue of issues.slice(0, OBSERVATION_LIST_CAP)) {
+    obs.push(`Ceph check ${issue.name} (${issue.severity}): ${issue.summary}.`)
+  }
+
+  if (issues.length > OBSERVATION_LIST_CAP) {
+    obs.push(`${issues.length - OBSERVATION_LIST_CAP} more Ceph check(s) not listed: ${issues.slice(OBSERVATION_LIST_CAP).map(i => i.name).join(', ')}.`)
   }
 
   obs.push(...poolObservations(payload.pools.list))
@@ -663,28 +680,27 @@ function buildObservations(payload: CephPayload, topology: CephTopology): string
 /* Tool 1: get_ceph_status                                            */
 /* ------------------------------------------------------------------ */
 
+/** How many Ceph clusters one call covers when the caller names none. */
+export const MAX_CEPH_CLUSTERS_PER_CALL = 4
+
 /**
- * The cluster a Ceph question is about.
+ * The clusters a Ceph question is about.
  *
  * With an explicit reference, the usual perimeter check. Without one, the
- * snapshot already knows which visible clusters report a Ceph health, and on
- * an estate where exactly one does, that is the cluster meant: asking the
- * model to name it first sent llama3.1:8b into four rounds of guessing
- * argument names and ended in a raw JSON call printed to the user.
+ * snapshot already knows which visible clusters report a Ceph health, and
+ * those are the clusters meant. Asking the model to name one was a dead end
+ * twice: on an estate with one Ceph cluster, llama3.1:8b spent four rounds
+ * guessing argument names; on the lab, with Ceph on PVE-PROD and PVE-DR, it
+ * took the refusal for an answer and wrote generic advice instead of the
+ * monitor warning the cluster actually raised.
  */
-export function resolveCephConnection(ctx: AiToolContext, ref?: string): ResolvedConnection {
-  if (ref) return resolveConnection(ctx, ref)
+export function resolveCephConnections(ctx: ToolContext, ref?: string): ResolvedConnection[] {
+  if (ref) return [resolveConnection(ctx, ref)]
 
   const visible = visibleConnections(ctx.snapshot)
   const withCeph = ctx.snapshot.clusters.filter(c => c.cephHealth).map(c => ({ id: c.id, name: c.name }))
 
-  if (withCeph.length === 1) return withCeph[0]
-
-  if (withCeph.length > 1) {
-    throw new ToolScopeError(
-      `Several visible clusters run Ceph: pass the "cluster" argument with one of: ${withCeph.map(c => c.name).join(', ')}.`
-    )
-  }
+  if (withCeph.length > 0) return withCeph.slice(0, MAX_CEPH_CLUSTERS_PER_CALL)
 
   if (visible.length > 1) {
     throw new ToolScopeError(
@@ -692,11 +708,82 @@ export function resolveCephConnection(ctx: AiToolContext, ref?: string): Resolve
     )
   }
 
-  return resolveConnection(ctx)
+  return [resolveConnection(ctx)]
 }
 
-export const getCephStatusTool: AiTool = {
+/**
+ * Run a per-cluster Ceph view over every cluster the question is about. One
+ * cluster keeps the flat shape; several come back side by side, each result
+ * naming its own cluster, plus whatever `combine` adds across them.
+ *
+ * The cross-cluster roll-up is not a convenience. Handed two separate lists,
+ * llama3.1:8b reported the improvements of the first cluster only, and summed
+ * six hosts of one OSD each into "3 OSDs in total".
+ */
+async function acrossCephClusters(
+  ctx: ToolContext,
+  ref: string | undefined,
+  run: (connection: ResolvedConnection) => Promise<Record<string, unknown>>,
+  combine?: (results: Record<string, any>[]) => Record<string, unknown>
+): Promise<Record<string, unknown>> {
+  const targets = resolveCephConnections(ctx, ref)
+
+  if (targets.length === 1) return run(targets[0])
+
+  const cephClusters = ctx.snapshot.clusters.filter(c => c.cephHealth).length
+  const results = await Promise.all(targets.map(run))
+
+  return {
+    clusterCount: targets.length,
+    ...(cephClusters > targets.length
+      ? { note: `${cephClusters} clusters run Ceph, only the first ${targets.length} are shown. Pass "cluster" for another one.` }
+      : {}),
+    ...combine?.(results),
+    clusters: results,
+  }
+}
+
+/** Every cluster's findings in one list, each prefixed with its cluster. */
+function combineFindings(results: Record<string, any>[]): Record<string, unknown> {
+  const findings = results.flatMap(r => (Array.isArray(r.findings) ? r.findings.map((f: string) => `${r.cluster}: ${f}`) : []))
+
+  return { findingCount: findings.length, findings, allClear: findings.length === 0 }
+}
+
+/** Device class counts summed across clusters, for focus='devices'. */
+function combineDeviceClassCounts(results: Record<string, any>[]): Record<string, unknown> {
+  const deviceClassCounts: Record<string, number> = Object.fromEntries(STANDARD_DEVICE_CLASSES.map(c => [c, 0]))
+
+  for (const r of results) {
+    for (const [deviceClass, count] of Object.entries<any>(r.deviceClassCounts ?? {})) {
+      deviceClassCounts[deviceClass] = (deviceClassCounts[deviceClass] ?? 0) + (Number(count) || 0)
+    }
+  }
+
+  return { deviceClassCounts }
+}
+
+/** OSD totals across clusters, every standard device class included. */
+function combineOsdCounts(results: Record<string, any>[]): Record<string, unknown> {
+  const osdCountByDeviceClass: Record<string, number> = Object.fromEntries(STANDARD_DEVICE_CLASSES.map(c => [c, 0]))
+  let osdTotal = 0
+
+  for (const r of results) {
+    osdTotal += Number(r.osdTotal) || 0
+
+    for (const [deviceClass, row] of Object.entries<any>(r.byDeviceClass ?? {})) {
+      osdCountByDeviceClass[deviceClass] = (osdCountByDeviceClass[deviceClass] ?? 0) + (Number(row?.count) || 0)
+    }
+  }
+
+  const osdCountByHost = results.flatMap(r => (Array.isArray(r.byHost) ? r.byHost.map((h: any) => ({ cluster: r.cluster, host: h.host, osdCount: h.osdCount })) : []))
+
+  return { osdTotal, osdCountByDeviceClass, osdCountByHost }
+}
+
+export const getCephStatusTool: CatalogTool = {
   name: 'get_ceph_status',
+  readOnly: true,
   description:
     'Ceph health, capacity, pools, monitors, and how many OSDs of each device class (nvme, ssd, hdd) the cluster has. '
     + 'Use focus=\'improvements\' for "are there any improvements to make?", "is anything wrong?" or "what should I fix?": '
@@ -709,7 +796,7 @@ export const getCephStatusTool: AiTool = {
     properties: {
       cluster: {
         type: 'string',
-        description: 'Cluster name or id. Optional when a single cluster is visible.',
+        description: 'Cluster name or id, only when the user names one. Omit it to cover every visible cluster that runs Ceph.',
       },
       focus: {
         type: 'string',
@@ -721,104 +808,106 @@ export const getCephStatusTool: AiTool = {
     },
   },
   execute: async (args, ctx) => {
-    const connection = resolveCephConnection(ctx, argString(args, 'cluster'))
     const focus = argEnum(args, 'focus', ['all', 'improvements', 'capacity', 'devices'] as const, 'all')
-    const loaded = await loadCeph(ctx, connection)
 
-    if (!loaded) return { hasCeph: false, cluster: connection.name }
+    return acrossCephClusters(ctx, argString(args, 'cluster'), async connection => {
+      const loaded = await loadCeph(ctx, connection)
 
-    const { nodeQueried, payload, topology } = loaded
+      if (!loaded) return { hasCeph: false, cluster: connection.name }
 
-    const deviceClassCounts: Record<string, number> = {}
+      const { nodeQueried, payload, topology } = loaded
 
-    for (const osd of payload.osds.list) {
-      deviceClassCounts[osd.deviceClass] = (deviceClassCounts[osd.deviceClass] ?? 0) + 1
-    }
+      const deviceClassCounts: Record<string, number> = Object.fromEntries(STANDARD_DEVICE_CLASSES.map(c => [c, 0]))
 
-    const ruleNameByPool = new Map(topology.poolRules.map(r => [r.pool, r.ruleName]))
-    const observations = buildObservations(payload, topology)
-
-    /*
-     * Narrow views exist because the full payload defeats a small model. Asked
-     * "are there improvements to make?", qwen2.5:7b first transcribed all ten
-     * sections and then, once the prompt discouraged that, answered that
-     * improvements existed without naming one. Handing it the findings alone
-     * removes the sorting problem instead of arguing with it in the prompt.
-     */
-    if (focus === 'improvements') {
-      return {
-        hasCeph: true,
-        cluster: connection.name,
-        healthStatus: payload.health.status,
-        findingCount: observations.length,
-        findings: observations,
-        // An empty list is an answer, and one the model states badly if left to
-        // infer it from `findings: []`.
-        allClear: observations.length === 0,
+      for (const osd of payload.osds.list) {
+        deviceClassCounts[osd.deviceClass] = (deviceClassCounts[osd.deviceClass] ?? 0) + 1
       }
-    }
 
-    if (focus === 'capacity') {
+      const ruleNameByPool = new Map(topology.poolRules.map(r => [r.pool, r.ruleName]))
+      const observations = buildObservations(payload, topology)
+
+      /*
+       * Narrow views exist because the full payload defeats a small model. Asked
+       * "are there improvements to make?", qwen2.5:7b first transcribed all ten
+       * sections and then, once the prompt discouraged that, answered that
+       * improvements existed without naming one. Handing it the findings alone
+       * removes the sorting problem instead of arguing with it in the prompt.
+       */
+      if (focus === 'improvements') {
+        return {
+          hasCeph: true,
+          cluster: connection.name,
+          healthStatus: payload.health.status,
+          findingCount: observations.length,
+          findings: observations,
+          // An empty list is an answer, and one the model states badly if left to
+          // infer it from `findings: []`.
+          allClear: observations.length === 0,
+        }
+      }
+
+      if (focus === 'capacity') {
+        return {
+          hasCeph: true,
+          cluster: connection.name,
+          capacity: payload.capacity,
+          pools: payload.pools.list.map(p => ({
+            name: p.name,
+            usedGb: gb(p.usedBytes),
+            maxAvailGb: gb(p.maxAvailBytes),
+            percentUsed: round1(p.percentUsed),
+          })),
+        }
+      }
+
+      if (focus === 'devices') {
+        return {
+          hasCeph: true,
+          cluster: connection.name,
+          deviceClassCounts,
+          osdTotal: payload.osdCounts.total,
+          osdUp: payload.osdCounts.up,
+        }
+      }
+
       return {
         hasCeph: true,
         cluster: connection.name,
+        nodeQueried,
+        // First on purpose. A 7B model weighs the head of a payload most, and
+        // with this last it transcribed health, capacity, pools and monitors in
+        // order and never reached the answer to "what can be improved?".
+        observations,
+        health: payload.health,
         capacity: payload.capacity,
+        performance: payload.performance,
+        pgs: payload.pgs,
+        osdCounts: payload.osdCounts,
+        monitors: {
+          total: payload.monitors.total,
+          inQuorum: payload.monitors.inQuorum,
+          leader: payload.monitors.leader,
+        },
+        managers: {
+          active: payload.managers.active?.name ?? null,
+          standbys: payload.managers.standbys.map(s => s.name),
+        },
         pools: payload.pools.list.map(p => ({
           name: p.name,
+          size: p.size,
+          minSize: p.minSize,
+          pgNum: p.pgNum,
+          pgAutoscaleMode: p.pgAutoscaleMode,
+          application: p.application,
+          crushRuleName: p.crushRuleName ?? ruleNameByPool.get(p.name) ?? null,
           usedGb: gb(p.usedBytes),
           maxAvailGb: gb(p.maxAvailBytes),
           percentUsed: round1(p.percentUsed),
+          objects: p.objects,
         })),
-      }
-    }
-
-    if (focus === 'devices') {
-      return {
-        hasCeph: true,
-        cluster: connection.name,
         deviceClassCounts,
-        osdTotal: payload.osdCounts.total,
-        osdUp: payload.osdCounts.up,
       }
-    }
-
-    return {
-      hasCeph: true,
-      cluster: connection.name,
-      nodeQueried,
-      // First on purpose. A 7B model weighs the head of a payload most, and
-      // with this last it transcribed health, capacity, pools and monitors in
-      // order and never reached the answer to "what can be improved?".
-      observations,
-      health: payload.health,
-      capacity: payload.capacity,
-      performance: payload.performance,
-      pgs: payload.pgs,
-      osdCounts: payload.osdCounts,
-      monitors: {
-        total: payload.monitors.total,
-        inQuorum: payload.monitors.inQuorum,
-        leader: payload.monitors.leader,
-      },
-      managers: {
-        active: payload.managers.active?.name ?? null,
-        standbys: payload.managers.standbys.map(s => s.name),
-      },
-      pools: payload.pools.list.map(p => ({
-        name: p.name,
-        size: p.size,
-        minSize: p.minSize,
-        pgNum: p.pgNum,
-        pgAutoscaleMode: p.pgAutoscaleMode,
-        application: p.application,
-        crushRuleName: p.crushRuleName ?? ruleNameByPool.get(p.name) ?? null,
-        usedGb: gb(p.usedBytes),
-        maxAvailGb: gb(p.maxAvailBytes),
-        percentUsed: round1(p.percentUsed),
-        objects: p.objects,
-      })),
-      deviceClassCounts,
-    }
+    }, focus === 'capacity' ? undefined : focus === 'devices' ? combineDeviceClassCounts : combineFindings)
   },
 }
 
@@ -902,8 +991,9 @@ function latencyStats(osds: NormalisedOsd[]) {
   }
 }
 
-export const listCephOsdsTool: AiTool = {
+export const listCephOsdsTool: CatalogTool = {
   name: 'list_ceph_osds',
+  readOnly: true,
   description:
     'Ceph OSD inventory: how many OSDs each host carries, their device class, usage, and disk latency. '
     + 'Answers "how many OSDs are on each host?", "what is the highest disk latency seen?" and "which OSD is the slowest or the fullest?". '
@@ -914,7 +1004,7 @@ export const listCephOsdsTool: AiTool = {
     properties: {
       cluster: {
         type: 'string',
-        description: 'Cluster name or id. Optional when a single cluster is visible.',
+        description: 'Cluster name or id, only when the user names one. Omit it to cover every visible cluster that runs Ceph.',
       },
       groupBy: {
         type: 'string',
@@ -938,90 +1028,95 @@ export const listCephOsdsTool: AiTool = {
     },
   },
   execute: async (args, ctx) => {
-    const connection = resolveCephConnection(ctx, argString(args, 'cluster'))
-    const groupBy = argEnum<GroupBy>(args, 'groupBy', GROUP_BY, 'host')
-    const sortBy = argEnum<SortBy>(args, 'sortBy', SORT_BY, 'latency')
+    const argumentNotes: string[] = []
+    const groupBy = argPresentationEnum<GroupBy>(args, 'groupBy', GROUP_BY, 'host', argumentNotes)
+    const sortBy = argPresentationEnum<SortBy>(args, 'sortBy', SORT_BY, 'latency', argumentNotes)
     const limit = argNumber(args, 'limit', 30, { min: 1, max: 200 })
 
-    const loaded = await loadCeph(ctx, connection)
+    return acrossCephClusters(ctx, argString(args, 'cluster'), async connection => {
+      const loaded = await loadCeph(ctx, connection)
 
-    if (!loaded) return { hasCeph: false, cluster: connection.name }
+      if (!loaded) return { hasCeph: false, cluster: connection.name }
 
-    const { nodeQueried, payload, topology } = loaded
-    const osds = payload.osds.list
+      const { nodeQueried, payload, topology } = loaded
+      const osds = payload.osds.list
 
-    // Per-host roll-up comes from the shared CRUSH derivation, which already
-    // aggregates OSD counts, device classes and (percent-derived) used bytes.
-    const byHost = collectBuckets(topology.tree, 'host')
-      .map(host => ({
-        host: host.name,
-        osdCount: host.osdCount,
-        osdUp: host.osdUp,
-        deviceClasses: host.classes,
-        totalGb: gb(host.totalBytes),
-        usedGb: gb(host.usedBytes),
-        usedPct: host.usedPct,
-      }))
-      .sort((a, b) => a.host.localeCompare(b.host))
+      // Per-host roll-up comes from the shared CRUSH derivation, which already
+      // aggregates OSD counts, device classes and (percent-derived) used bytes.
+      const byHost = collectBuckets(topology.tree, 'host')
+        .map(host => ({
+          host: host.name,
+          osdCount: host.osdCount,
+          osdUp: host.osdUp,
+          deviceClasses: host.classes,
+          totalGb: gb(host.totalBytes),
+          usedGb: gb(host.usedBytes),
+          usedPct: host.usedPct,
+        }))
+        .sort((a, b) => a.host.localeCompare(b.host))
 
-    const classBytes = new Map<string, { count: number; up: number; totalBytes: number; usedBytes: number }>()
+      const classBytes = new Map<string, { count: number; up: number; totalBytes: number; usedBytes: number }>(
+        STANDARD_DEVICE_CLASSES.map(c => [c, { count: 0, up: 0, totalBytes: 0, usedBytes: 0 }])
+      )
 
-    for (const osd of osds) {
-      const row = classBytes.get(osd.deviceClass)
-        ?? { count: 0, up: 0, totalBytes: 0, usedBytes: 0 }
+      for (const osd of osds) {
+        const row = classBytes.get(osd.deviceClass)
+          ?? { count: 0, up: 0, totalBytes: 0, usedBytes: 0 }
 
-      row.count += 1
-      row.up += osd.up ? 1 : 0
-      row.totalBytes += osd.totalBytes
-      row.usedBytes += osd.usedBytes
-      classBytes.set(osd.deviceClass, row)
-    }
-
-    const byDeviceClass: Record<string, { count: number; up: number; totalGb: number; usedGb: number }> = {}
-
-    for (const [deviceClass, row] of classBytes) {
-      byDeviceClass[deviceClass] = {
-        count: row.count,
-        up: row.up,
-        totalGb: gb(row.totalBytes),
-        usedGb: gb(row.usedBytes),
+        row.count += 1
+        row.up += osd.up ? 1 : 0
+        row.totalBytes += osd.totalBytes
+        row.usedBytes += osd.usedBytes
+        classBytes.set(osd.deviceClass, row)
       }
-    }
 
-    return {
-      hasCeph: true,
-      cluster: connection.name,
-      nodeQueried,
-      osdTotal: payload.osdCounts.total || osds.length,
-      groupBy,
-      sortBy,
-      byHost,
-      byDeviceClass,
-      latency: latencyStats(osds),
-      // Up but out is reported here too: such an OSD carries no data and is
-      // just as much a missing disk as a down one, only quieter.
-      downOsds: osds
-        .filter(o => !o.up || !o.in)
-        .map(o => ({ id: o.id, host: o.host, status: o.up ? 'out' : 'down' })),
-      osdsListed: Math.min(limit, osds.length),
-      osds: orderOsds(osds, groupBy, sortBy).slice(0, limit).map(o => ({
-        id: o.id,
-        name: o.name,
-        host: o.host,
-        deviceClass: o.deviceClass,
-        up: o.up,
-        in: o.in,
-        status: o.status,
-        totalGb: gb(o.totalBytes),
-        usedGb: gb(o.usedBytes),
-        usedPct: round1(o.usedPct),
-        // Null rather than 0 for a down OSD: 0 ms would read as a fast disk.
-        applyMs: o.up ? (o.applyLatencyMs ?? null) : null,
-        commitMs: o.up ? (o.commitLatencyMs ?? null) : null,
-        reweight: o.reweight ?? null,
-        pgs: o.pgs ?? null,
-        version: o.version,
-      })),
-    }
+      const byDeviceClass: Record<string, { count: number; up: number; totalGb: number; usedGb: number }> = {}
+
+      for (const [deviceClass, row] of classBytes) {
+        byDeviceClass[deviceClass] = {
+          count: row.count,
+          up: row.up,
+          totalGb: gb(row.totalBytes),
+          usedGb: gb(row.usedBytes),
+        }
+      }
+
+      return {
+        hasCeph: true,
+        cluster: connection.name,
+        nodeQueried,
+        osdTotal: payload.osdCounts.total || osds.length,
+        groupBy,
+        sortBy,
+        ...(argumentNotes.length > 0 ? { argumentNotes } : {}),
+        byHost,
+        byDeviceClass,
+        latency: latencyStats(osds),
+        // Up but out is reported here too: such an OSD carries no data and is
+        // just as much a missing disk as a down one, only quieter.
+        downOsds: osds
+          .filter(o => !o.up || !o.in)
+          .map(o => ({ id: o.id, host: o.host, status: o.up ? 'out' : 'down' })),
+        osdsListed: Math.min(limit, osds.length),
+        osds: orderOsds(osds, groupBy, sortBy).slice(0, limit).map(o => ({
+          id: o.id,
+          name: o.name,
+          host: o.host,
+          deviceClass: o.deviceClass,
+          up: o.up,
+          in: o.in,
+          status: o.status,
+          totalGb: gb(o.totalBytes),
+          usedGb: gb(o.usedBytes),
+          usedPct: round1(o.usedPct),
+          // Null rather than 0 for a down OSD: 0 ms would read as a fast disk.
+          applyMs: o.up ? (o.applyLatencyMs ?? null) : null,
+          commitMs: o.up ? (o.commitLatencyMs ?? null) : null,
+          reweight: o.reweight ?? null,
+          pgs: o.pgs ?? null,
+          version: o.version,
+        })),
+      }
+    }, combineOsdCounts)
   },
 }

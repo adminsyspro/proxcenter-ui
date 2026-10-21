@@ -24,6 +24,10 @@ const DEFAULT_THRESHOLDS = {
   // All three are float64 on the Go side, so they must NOT be truncated below.
   osd_latency_warning: 0,
   osd_latency_critical: 250,
+  // Per-host Ceph noout (ui#1164), see the settings route. Whole hours and
+  // minutes on the Go side, hence their place in INT_THRESHOLD_KEYS.
+  ceph_noout_max_hours: 8,
+  ceph_noout_orphan_minutes: 30,
   replication_rpo_grace_percent: 25,
   replication_failure_alerts: 1,
   // Guest disk latency (#881), see the settings route. The window is a whole
@@ -67,6 +71,8 @@ const INT_THRESHOLD_KEYS: ReadonlySet<keyof Thresholds> = new Set([
   'backup_coverage_grace_hours',
   'sflow_telemetry_timeout_seconds',
   'sflow_telemetry_grace_seconds',
+  'ceph_noout_max_hours',
+  'ceph_noout_orphan_minutes',
 ])
 
 function coerceThresholds(raw: unknown): Thresholds {

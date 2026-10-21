@@ -34,6 +34,10 @@ const DEFAULTS = {
   recovery_confirmations: 3,
   osd_latency_warning: 0,
   osd_latency_critical: 250,
+  // Per-host Ceph noout left set (ui#1164): hours before an alert, and
+  // minutes a flag may exist while no node is in maintenance. 0 = disabled.
+  ceph_noout_max_hours: 8,
+  ceph_noout_orphan_minutes: 30,
   disk_latency_warning: 0,
   disk_latency_critical: 100,
   disk_latency_window_minutes: 5,
@@ -223,6 +227,42 @@ export default function AlertThresholdsTab() {
             ? { ...th, osd_latency_warning: 100, osd_latency_critical: Math.max(100, th.osd_latency_critical) }
             : { ...th, osd_latency_warning: 0 }
           ))}
+          tDisabled={t('alerts.snapshotDisabled')}
+        />
+
+        {/* Per-host Ceph noout (ui#1164): a flag set for a maintenance and
+            forgotten keeps Ceph from healing after a real failure. Two
+            checks, each with its own switch: how long a flag may stay, and
+            how long one may exist while no node is in maintenance. */}
+        <SingleThresholdCard
+          icon='ri-flag-line'
+          label={t('alerts.cephNooutMaxHours')}
+          description={t('alerts.cephNooutMaxHoursDesc')}
+          value={thresholds.ceph_noout_max_hours || 8}
+          onChange={(hours) => setThresholds(th => ({ ...th, ceph_noout_max_hours: hours }))}
+          min={1}
+          max={Math.max(72, thresholds.ceph_noout_max_hours || 0)}
+          step={1}
+          formatValue={(v) => `${v} ${t('alerts.cephNooutHoursUnit')}`}
+          markFormat={(v) => `${v}`}
+          enabled={thresholds.ceph_noout_max_hours > 0}
+          onToggle={(checked) => setThresholds(th => ({ ...th, ceph_noout_max_hours: checked ? 8 : 0 }))}
+          tDisabled={t('alerts.snapshotDisabled')}
+        />
+
+        <SingleThresholdCard
+          icon='ri-flag-2-line'
+          label={t('alerts.cephNooutOrphan')}
+          description={t('alerts.cephNooutOrphanDesc')}
+          value={thresholds.ceph_noout_orphan_minutes || 30}
+          onChange={(minutes) => setThresholds(th => ({ ...th, ceph_noout_orphan_minutes: minutes }))}
+          min={5}
+          max={Math.max(240, thresholds.ceph_noout_orphan_minutes || 0)}
+          step={5}
+          formatValue={(v) => `${v} ${t('alerts.cephNooutMinutesUnit')}`}
+          markFormat={(v) => `${v}`}
+          enabled={thresholds.ceph_noout_orphan_minutes > 0}
+          onToggle={(checked) => setThresholds(th => ({ ...th, ceph_noout_orphan_minutes: checked ? 30 : 0 }))}
           tDisabled={t('alerts.snapshotDisabled')}
         />
 

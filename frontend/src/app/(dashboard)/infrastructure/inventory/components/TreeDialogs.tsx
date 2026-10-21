@@ -38,6 +38,8 @@ import { crossClusterMigrate } from '@/lib/migration/crossClusterMigrate'
 import { startTrackedMigration } from '@/lib/migration/guestMigrateClient'
 import { useTaskTracker } from '@/hooks/useTaskTracker'
 import HostDrainDialog from '@/components/HostDrainDialog'
+import CephNooutOption from '@/components/ceph/CephNooutOption'
+import { useCephNoout } from '@/hooks/useCephNoout'
 import { NodeIcon, ClusterIcon, StatusIcon } from './TreeIcons'
 import { useTenant } from '@/contexts/TenantContext'
 
@@ -295,6 +297,14 @@ export interface TreeDialogsProps {
 export default function TreeDialogs(props: TreeDialogsProps) {
   const t = useTranslations()
   const { trackTask } = useTaskTracker()
+  // Leaving maintenance: the per-host Ceph noout set on entry is removed
+  // once ha-manager has let the node go (ui#1164).
+  const exitNoout = useCephNoout({
+    connId: props.maintenanceTarget?.connId,
+    node: props.maintenanceTarget?.node,
+    open: !!props.maintenanceTarget?.maintenance,
+    mode: 'exit',
+  })
   // Migration is allowed for provider AND MSP tenants (full-cluster view).
   // vDC / iaas tenants cannot migrate (placement is the provider's job).
   // MSP users only see connections they own; the backend enforces ownership.
@@ -750,6 +760,8 @@ export default function TreeDialogs(props: TreeDialogsProps) {
                 : t('inventory.confirmEnterMaintenance')}
             </DialogContentText>
 
+            <CephNooutOption state={exitNoout} disabled={maintenanceBusy} />
+
             {!mSshEnabled && (
               <Alert severity="warning" icon={<i className="ri-ssh-line" style={{ fontSize: 18 }} />}>
                 <Typography variant="body2">{t('inventory.maintenanceRequiresSsh')}</Typography>
@@ -769,7 +781,9 @@ export default function TreeDialogs(props: TreeDialogsProps) {
               {t('common.cancel')}
             </Button>
             <Button
-              onClick={handleMaintenanceConfirm}
+              onClick={async () => {
+                if (await handleMaintenanceConfirm()) await exitNoout.removeAfterExit()
+              }}
               variant="contained"
               color={maintenanceTarget?.maintenance ? 'success' : 'warning'}
               disabled={maintenanceBusy || !mSshEnabled}

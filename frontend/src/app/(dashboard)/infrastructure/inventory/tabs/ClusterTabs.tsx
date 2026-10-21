@@ -88,6 +88,9 @@ import MetricsRangeSelector, { type MetricsRangeValue } from '@/components/metri
 import useChartDragRange from '@/components/metrics/useChartDragRange'
 import { timeframeForWindow, type RrdRangeMeta, type RrdWindow } from '@/lib/metrics/rrdRange'
 import { osdGridStates, type OsdGridState } from '@/lib/ceph/osdGrid'
+import { normalizeScopedFlags, scopedFlagEntries, withScopedFlag, type ScopedFlagMap } from '@/lib/ceph/osdFlagsView'
+import { CephScopedFlagChips } from '@/components/ceph/CephFlagChips'
+import CephHealthCheckDetail from '@/components/ceph/CephHealthCheckDetail'
 import { isNodeReachable, nodeStatusMeta } from '../nodeStatusMeta'
 
 const INVENTORY_OSD_STYLE: Record<OsdGridState, { color: string; label: string; opacity: number }> = {
@@ -216,6 +219,17 @@ function HaResourceStateCell({ sid, state, group, connId, t }: {
   )
 }
 
+/** One status line of the Guests card: its icon, label and count. */
+function GuestStatusRow({ icon, color, label, count }: Readonly<{ icon: string; color: string; label: string; count: number }>) {
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+      <Box component="i" className={icon} sx={{ fontSize: 14, color, flexShrink: 0 }} />
+      <Typography variant="body2">{label}</Typography>
+      <Typography variant="body2" fontWeight={700} sx={{ ml: 'auto' }}>{count}</Typography>
+    </Box>
+  )
+}
+
 export default function ClusterTabs(props: any) {
   const t = useTranslations()
   const router = useRouter()
@@ -237,7 +251,9 @@ export default function ClusterTabs(props: any) {
   const [recSeries, setRecSeries] = useState<SeriesPoint[]>([])
   const [recRrdLoading, setRecRrdLoading] = useState(false)
   const [cephOsdFlags, setCephOsdFlags] = useState<string[]>([])
-  const [cephOsdFlagsLoading, setCephOsdFlagsLoading] = useState(false)
+  // Flags set on one CRUSH host or one OSD (`ceph osd set-group`, ui#1164): target -> flags.
+  const [cephHostFlags, setCephHostFlags] = useState<ScopedFlagMap>({})
+  const [cephOsdScopedFlags, setCephOsdScopedFlags] = useState<ScopedFlagMap>({})
   const [cephFlagToggling, setCephFlagToggling] = useState<string | null>(null)
   const [refreshingUpdates, setRefreshingUpdates] = useState(false)
   const [addHaDialogOpen, setAddHaDialogOpen] = useState(false)
@@ -632,16 +648,46 @@ export default function ClusterTabs(props: any) {
   useEffect(() => {
     if (clusterTab !== 0 || !['HEALTH_OK', 'HEALTH_WARN', 'HEALTH_ERR'].includes(data.cephHealth) || !connId) return
     let cancelled = false
-    setCephOsdFlagsLoading(true)
     fetch(`/api/v1/connections/${connId}/ceph/flags`)
       .then(res => res.json())
       .then(json => {
-        if (!cancelled) setCephOsdFlags(json.data?.flags || [])
+        if (cancelled) return
+        setCephOsdFlags(json.data?.flags || [])
+        setCephHostFlags(normalizeScopedFlags(json.data?.hostFlags))
+        setCephOsdScopedFlags(normalizeScopedFlags(json.data?.osdFlags))
       })
       .catch(() => {})
-      .finally(() => { if (!cancelled) setCephOsdFlagsLoading(false) })
     return () => { cancelled = true }
   }, [clusterTab, data.cephHealth, connId])
+
+  // The per-host and per-OSD chips live next to the cluster-wide ones.
+  const cephScopedFlagCount = useMemo(
+    () => scopedFlagEntries(cephHostFlags, cephOsdScopedFlags).length,
+    [cephHostFlags, cephOsdScopedFlags],
+  )
+
+  const handleRemoveCephHostFlag = useCallback(async (host: string, flag: string) => {
+    if (!connId) return
+    const key = `${host}:${flag}`
+    setCephFlagToggling(key)
+    try {
+      const res = await fetch(`/api/v1/connections/${connId}/ceph/flags`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ flag, host }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (res.ok) {
+        setCephHostFlags(prev => withScopedFlag(prev, host, flag, false))
+        toast.success(t('cephNoout.hostFlagUnset', { flag, host }))
+      } else {
+        toast.error(json?.error || `HTTP ${res.status}`)
+      }
+    } catch (e: any) {
+      toast.error(e?.message || t('common.error'))
+    }
+    setCephFlagToggling(null)
+  }, [connId, toast, t])
 
   const handleRemoveCephFlag = useCallback(async (flag: string) => {
     if (!connId) return
@@ -895,9 +941,19 @@ export default function ClusterTabs(props: any) {
                                     <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: 'error.main' }} />
                                     <Typography variant="body2">{t('inventory.offline')}</Typography>
                                     <Typography variant="body2" fontWeight={700}>
-                                      {(data.nodesData as any[])?.filter((n: any) => n.status !== 'online').length || 0}
+                                      {(data.nodesData as any[])?.filter((n: any) => n.status === 'offline').length || 0}
                                     </Typography>
                                   </Box>
+                                  {/* A node in HA maintenance is up: counted apart, never as offline */}
+                                  {(data.nodesData as any[])?.some((n: any) => n.status === 'maintenance') && (
+                                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
+                                      <Box sx={{ width: 8, height: 8, flexShrink: 0, borderRadius: '50%', bgcolor: 'warning.main' }} />
+                                      <Typography variant="body2">{t('ha.node.maintenanceChip')}</Typography>
+                                      <Typography variant="body2" fontWeight={700}>
+                                        {(data.nodesData as any[]).filter((n: any) => n.status === 'maintenance').length}
+                                      </Typography>
+                                    </Box>
+                                  )}
                                 </Box>
                               </Grid>
                               {/* Ceph */}
@@ -908,7 +964,7 @@ export default function ClusterTabs(props: any) {
                                   height: 48,
                                   borderRadius: '50%',
                                   bgcolor: data.cephHealth === 'HEALTH_OK' ? 'success.main' :
-                                           data.cephHealth === 'HEALTH_WARN' ? 'warning.dark' :
+                                           data.cephHealth === 'HEALTH_WARN' ? 'warning.main' :
                                            data.cephHealth ? 'error.main' : 'action.disabledBackground',
                                   display: 'flex',
                                   alignItems: 'center',
@@ -930,6 +986,22 @@ export default function ClusterTabs(props: any) {
                                 </Typography>
                               </Grid>
                             </Grid>
+                          {/* Ceph OSD flags set on the cluster, a host or an OSD (ui#1164), as the
+                              footer of the health card rather than a card of their own */}
+                          {['HEALTH_OK', 'HEALTH_WARN', 'HEALTH_ERR'].includes(data.cephHealth) && (cephOsdFlags.length > 0 || cephScopedFlagCount > 0) && (
+                            <Box sx={{ mt: 2, pt: 1.5, borderTop: 1, borderColor: 'divider', display: 'flex', flexDirection: 'column', gap: 0.5 }} data-testid="cluster-health-osd-flags">
+                              <Typography variant="caption" color="text.secondary">{t('ceph.osdFlags')}</Typography>
+                              <CephScopedFlagChips
+                                globalFlags={cephOsdFlags}
+                                hostFlags={cephHostFlags}
+                                osdFlags={cephOsdScopedFlags}
+                                toggling={cephFlagToggling}
+                                onRemoveGlobal={canSetCephFlags ? handleRemoveCephFlag : undefined}
+                                onRemoveHost={canSetCephFlags ? handleRemoveCephHostFlag : undefined}
+                                stacked
+                              />
+                            </Box>
+                          )}
                           </CardContent>
                         </Card>
 
@@ -947,25 +1019,15 @@ export default function ClusterTabs(props: any) {
                                   const allVms = (data as any).allVms || []
                                   const qemuVms = allVms.filter((v: any) => v.type === 'qemu')
                                   const running = qemuVms.filter((v: any) => v.status === 'running').length
+                                  const paused = qemuVms.filter((v: any) => v.status === 'paused').length
                                   const stopped = qemuVms.filter((v: any) => v.status === 'stopped').length
                                   const templates = qemuVms.filter((v: any) => v.template).length
                                   return (
                                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-                                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                        <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: 'success.main' }} />
-                                        <Typography variant="body2">{t('inventory.running')}</Typography>
-                                        <Typography variant="body2" fontWeight={700} sx={{ ml: 'auto' }}>{running}</Typography>
-                                      </Box>
-                                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                        <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: 'text.disabled' }} />
-                                        <Typography variant="body2">{t('inventory.stopped')}</Typography>
-                                        <Typography variant="body2" fontWeight={700} sx={{ ml: 'auto' }}>{stopped}</Typography>
-                                      </Box>
-                                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                        <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: 'transparent', border: '1px solid', borderColor: 'text.disabled' }} />
-                                        <Typography variant="body2">{t('inventory.templates')}</Typography>
-                                        <Typography variant="body2" fontWeight={700} sx={{ ml: 'auto' }}>{templates}</Typography>
-                                      </Box>
+                                      <GuestStatusRow icon="ri-play-fill" color="success.main" label={t('inventory.running')} count={running} />
+                                      <GuestStatusRow icon="ri-pause-fill" color="warning.main" label={t('inventory.paused')} count={paused} />
+                                      <GuestStatusRow icon="ri-stop-fill" color="text.disabled" label={t('inventory.stopped')} count={stopped} />
+                                      <GuestStatusRow icon="ri-file-copy-line" color="text.disabled" label={t('inventory.templates')} count={templates} />
                                     </Box>
                                   )
                                 })()}
@@ -980,16 +1042,8 @@ export default function ClusterTabs(props: any) {
                                   const stopped = lxcVms.filter((v: any) => v.status === 'stopped').length
                                   return (
                                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-                                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                        <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: 'success.main' }} />
-                                        <Typography variant="body2">{t('inventory.running')}</Typography>
-                                        <Typography variant="body2" fontWeight={700} sx={{ ml: 'auto' }}>{running}</Typography>
-                                      </Box>
-                                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                        <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: 'text.disabled' }} />
-                                        <Typography variant="body2">{t('inventory.stopped')}</Typography>
-                                        <Typography variant="body2" fontWeight={700} sx={{ ml: 'auto' }}>{stopped}</Typography>
-                                      </Box>
+                                      <GuestStatusRow icon="ri-play-fill" color="success.main" label={t('inventory.running')} count={running} />
+                                      <GuestStatusRow icon="ri-stop-fill" color="text.disabled" label={t('inventory.stopped')} count={stopped} />
                                     </Box>
                                   )
                                 })()}
@@ -1085,42 +1139,6 @@ export default function ClusterTabs(props: any) {
                           </CardContent>
                         </Card>
                     </Box>
-
-                    {/* Ceph OSD Flags */}
-                    {['HEALTH_OK', 'HEALTH_WARN', 'HEALTH_ERR'].includes(data.cephHealth) && cephOsdFlags.length > 0 && (
-                      <Card variant="outlined" sx={{ mb: 2 }}>
-                        <CardContent sx={{ py: 1.5, px: 2 }}>
-                          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                              <img src="/images/ceph-logo.svg" alt="Ceph" width={18} height={18} />
-                              <Typography variant="subtitle2" fontWeight={700}>{t('ceph.osdFlags')}</Typography>
-                            </Box>
-                            {cephOsdFlagsLoading && <CircularProgress size={16} />}
-                          </Box>
-                          {!cephOsdFlagsLoading && cephOsdFlags.length === 0 && (
-                            <Typography variant="body2" color="text.secondary" sx={{ opacity: 0.6 }}>
-                              {t('ceph.noOsdFlagsActive')}
-                            </Typography>
-                          )}
-                          {cephOsdFlags.length > 0 && (
-                            <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
-                              {cephOsdFlags.map(flag => (
-                                <Chip
-                                  key={flag}
-                                  label={flag}
-                                  size="small"
-                                  color="warning"
-                                  onDelete={canSetCephFlags ? () => handleRemoveCephFlag(flag) : undefined}
-                                  disabled={cephFlagToggling === flag}
-                                  deleteIcon={cephFlagToggling === flag ? <CircularProgress size={14} /> : undefined}
-                                  sx={{ fontFamily: 'monospace', fontSize: 11, height: 24 }}
-                                />
-                              ))}
-                            </Box>
-                          )}
-                        </CardContent>
-                      </Card>
-                    )}
 
                     {/* DRS Status */}
                     {drsHealth !== null && (
@@ -2305,7 +2323,7 @@ export default function ClusterTabs(props: any) {
                                     height: 56, 
                                     borderRadius: '50%', 
                                     bgcolor: clusterCephData.health?.status === 'HEALTH_OK' ? 'success.main' :
-                                             clusterCephData.health?.status === 'HEALTH_WARN' ? 'warning.dark' : 'error.main',
+                                             clusterCephData.health?.status === 'HEALTH_WARN' ? 'warning.main' : 'error.main',
                                     display: 'flex',
                                     alignItems: 'center',
                                     justifyContent: 'center',
@@ -2333,9 +2351,13 @@ export default function ClusterTabs(props: any) {
                                               marginTop: 2
                                             }} 
                                           />
-                                          <Typography variant="caption" sx={{ lineHeight: 1.3 }}>
-                                            {check.summary}
-                                          </Typography>
+                                          <Box sx={{ minWidth: 0 }}>
+                                            <Typography variant="caption" sx={{ lineHeight: 1.3 }}>
+                                              {check.summary}
+                                            </Typography>
+                                            {/* `host pve3 has flags noout` under OSD_FLAGS (ui#1164) */}
+                                            <CephHealthCheckDetail detail={check.detail} />
+                                          </Box>
                                         </Box>
                                       ))}
                                     </Box>
@@ -2462,14 +2484,14 @@ export default function ClusterTabs(props: any) {
                           </Card>
                         </Box>
 
-                        {/* Services */}
+                        {/* Services: title and the three daemon groups on one line, wrapping when narrow */}
                         <Card variant="outlined">
                           <CardContent>
-                            <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 2 }}>{t('cluster.services')}</Typography>
-                            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr 1fr' }, gap: 2 }}>
-                              <Box>
-                                <Typography variant="caption" sx={{ opacity: 0.7 }}>{t('cluster.monitors')}</Typography>
-                                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.5 }}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', columnGap: 3, rowGap: 1.5 }}>
+                            <Typography variant="subtitle2" fontWeight={700}>{t('cluster.services')}</Typography>
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, pl: 0, }}>
+                                <Typography variant="caption" sx={{ opacity: 0.7, whiteSpace: 'nowrap' }}>{t('cluster.monitors')}</Typography>
+                                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
                                   {clusterCephData.monmap?.mons?.map((mon: any) => (
                                     <MuiTooltip 
                                       key={mon.name} 
@@ -2488,9 +2510,9 @@ export default function ClusterTabs(props: any) {
                                   )) || <Typography variant="body2">—</Typography>}
                                 </Box>
                               </Box>
-                              <Box>
-                                <Typography variant="caption" sx={{ opacity: 0.7 }}>{t('cluster.managers')}</Typography>
-                                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.5 }}>
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, pl: 3, borderLeft: 1, borderColor: 'divider', }}>
+                                <Typography variant="caption" sx={{ opacity: 0.7, whiteSpace: 'nowrap' }}>{t('cluster.managers')}</Typography>
+                                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
                                   {clusterCephData.mgrmap?.active_name && (
                                     <MuiTooltip 
                                       title={
@@ -2522,9 +2544,9 @@ export default function ClusterTabs(props: any) {
                                   ))}
                                 </Box>
                               </Box>
-                              <Box>
-                                <Typography variant="caption" sx={{ opacity: 0.7 }}>{t('cluster.metadataServers')}</Typography>
-                                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.5 }}>
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, pl: 3, borderLeft: 1, borderColor: 'divider', }}>
+                                <Typography variant="caption" sx={{ opacity: 0.7, whiteSpace: 'nowrap' }}>{t('cluster.metadataServers')}</Typography>
+                                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
                                   {(clusterCephData._normalized?.mds?.length > 0 
                                     ? clusterCephData._normalized.mds 
                                     : clusterCephData.fsmap?.by_rank

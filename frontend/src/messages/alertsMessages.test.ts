@@ -71,6 +71,13 @@ describe('alerts message namespace', () => {
       'diskLatencyPeak',
       'diskLatencyPeakDesc',
       'diskLatencyPeakInterval',
+      // ui#1164: per-host Ceph noout left set, or set without a maintenance.
+      'cephNooutMaxHours',
+      'cephNooutMaxHoursDesc',
+      'cephNooutOrphan',
+      'cephNooutOrphanDesc',
+      'cephNooutHoursUnit',
+      'cephNooutMinutesUnit',
     ]) {
       expect(reference).toContain(required)
     }

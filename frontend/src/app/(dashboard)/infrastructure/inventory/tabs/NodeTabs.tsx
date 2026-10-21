@@ -63,7 +63,10 @@ import { useLicense, Features } from '@/contexts/LicenseContext'
 import SnapshotsTab from '@/components/SnapshotsTab'
 import NodeFirewallTab from '@/components/NodeFirewallTab'
 import NodeUpdateDialog from '@/components/NodeUpdateDialog'
-import { CephOsdFlagsPanel } from '@/components/ceph/CephOsdFlags'
+import { CephOsdFlagsPanel, useCephOsdFlags } from '@/components/ceph/CephOsdFlags'
+import { CephScopedFlagChips, OsdFlagChips } from '@/components/ceph/CephFlagChips'
+import { CephCardHeaderActions, CephServiceActionsCell } from '@/components/ceph/CephServiceActions'
+import CephCreateDaemonDialog from '@/components/ceph/CephCreateDaemonDialog'
 import RollingUpdateWizard from '@/components/RollingUpdateWizard'
 import { loadNodeAptUpdates } from '@/lib/proxmox/loadNodeAptUpdates'
 import { formatNodeLocalTime } from '@/lib/inventory/nodeTime'
@@ -150,6 +153,24 @@ function CephConfigurationBlock({ config }: Readonly<{ config: any }>) {
         ))
       )}
     </Box>
+  )
+}
+
+/**
+ * The name cell of a node's Ceph tables: the object's icon first, then its
+ * name, in the table's own font (ui#1164 recette: names were monospace beside
+ * proportional columns, and rows had no icon).
+ */
+function CephNameCell({ icon, logoSrc, children }: Readonly<{ icon?: string; logoSrc?: string; children: React.ReactNode }>) {
+  return (
+    <TableCell>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+        {logoSrc
+          ? <img src={logoSrc} alt="" width={16} height={16} style={{ opacity: 0.8, flexShrink: 0 }} />
+          : <Box component="i" className={icon} sx={{ fontSize: 16, opacity: 0.7, flexShrink: 0 }} />}
+        {children}
+      </Box>
+    </TableCell>
   )
 }
 
@@ -387,6 +408,59 @@ export default function NodeTabs(props: any) {
 
   const nodeConnId = selection?.type === 'node' ? parseNodeId(selection.id).connId : ''
   const nodeNodeName = selection?.type === 'node' ? parseNodeId(selection.id).node : ''
+
+  // Ceph OSD flags of the node's cluster, read once the OSD sub-tab is open:
+  // the flags panel and the Status cell of the OSD table share them (ui#1164).
+  const nodeOsdFlags = useCephOsdFlags(nodeConnId, nodeTab === 8 && nodeCephSubTab === 2 && !!data.clusterName)
+
+  // Ceph service management of the node tab (ui#1164): the create dialogs,
+  // and a reload of the node Ceph data, on demand or a few seconds after an
+  // action so the daemon states follow the task.
+  const canManageCeph = hasPermission('storage.admin')
+  const [cephCreateKind, setCephCreateKind] = useState<'mon' | 'mgr' | null>(null)
+  const [nodeCephRefreshing, setNodeCephRefreshing] = useState(false)
+  const nodeCephRefreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const nodeCephSelectionRef = useRef<string | undefined>(undefined)
+  useEffect(() => {
+    nodeCephSelectionRef.current = selection?.id
+  }, [selection?.id])
+  useEffect(() => () => {
+    if (nodeCephRefreshTimer.current) clearTimeout(nodeCephRefreshTimer.current)
+  }, [])
+  const refreshNodeCeph = async (connId = nodeConnId, node = nodeNodeName) => {
+    if (!connId || !node) return
+    setNodeCephRefreshing(true)
+    try {
+      const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/ceph`, { cache: 'no-store' })
+      if (res.ok) {
+        const json = await res.json()
+        setNodeCephData(json.data || json)
+      }
+    } catch {
+      // The data shown stays what it was; the next refresh will tell.
+    } finally {
+      setNodeCephRefreshing(false)
+    }
+  }
+  const scheduleNodeCephRefresh = () => {
+    const forSelection = selection?.id
+    const connId = nodeConnId
+    const node = nodeNodeName
+    if (nodeCephRefreshTimer.current) clearTimeout(nodeCephRefreshTimer.current)
+    nodeCephRefreshTimer.current = setTimeout(() => {
+      nodeCephRefreshTimer.current = null
+      // The operator moved to another node meanwhile: its own load wins.
+      if (nodeCephSelectionRef.current !== forSelection) return
+      void refreshNodeCeph(connId, node)
+    }, 3000)
+  }
+  const cephMonitors: any[] = Array.isArray(nodeCephData?.monitors) ? nodeCephData.monitors : []
+  const cephManagerNames: string[] = [
+    ...(nodeCephData?.managers?.active ? [String(nodeCephData.managers.active)] : []),
+    ...((nodeCephData?.managers?.standbys || []).map((m: any) => String(m?.name || m))),
+  ]
+  const nodeHasMon = cephMonitors.some((m: any) => m?.host === nodeNodeName || m?.name === nodeNodeName)
+  const nodeHasMgr = cephManagerNames.some(n => n === nodeNodeName || n.split('.')[0] === nodeNodeName)
 
   // Node tags
   // Node tags via shared SWR (dedup with InventoryDetails)
@@ -2437,12 +2511,14 @@ export default function NodeTabs(props: any) {
                             '& .MuiTab-root': { minHeight: 36, py: 0.5, fontSize: 13 }
                           }}
                         >
-                          <Tab label="Configuration" />
-                          <Tab label="Monitor" />
-                          <Tab label="OSD" />
-                          <Tab label="CephFS" />
-                          <Tab label="Pools" />
-                          <Tab label="Log" />
+                          {/* OSD first (ui#1164): the flags and the OSD states are what a node's
+                              Ceph tab is opened for. Values keep their historic numbering. */}
+                          <Tab label="OSD" value={2} />
+                          <Tab label="Configuration" value={0} />
+                          <Tab label="Monitor" value={1} />
+                          <Tab label="CephFS" value={3} />
+                          <Tab label="Pools" value={4} />
+                          <Tab label="Log" value={5} />
                         </Tabs>
 
                         <Box sx={{ flex: 1, overflow: 'auto', p: 2 }}>
@@ -2475,9 +2551,9 @@ export default function NodeTabs(props: any) {
                                           <TableBody>
                                             {nodeCephData.config.database.map((item: any, idx: number) => (
                                               <TableRow key={idx}>
-                                                <TableCell sx={{ fontFamily: 'monospace', fontSize: 12 }}>{item.section || item.who || 'global'}</TableCell>
-                                                <TableCell sx={{ fontFamily: 'monospace', fontSize: 12 }}>{item.name || item.option}</TableCell>
-                                                <TableCell sx={{ fontFamily: 'monospace', fontSize: 12 }}>{item.value}</TableCell>
+                                                <TableCell sx={{ fontSize: 12 }}>{item.section || item.who || 'global'}</TableCell>
+                                                <TableCell sx={{ fontSize: 12 }}>{item.name || item.option}</TableCell>
+                                                <TableCell sx={{ fontSize: 12 }}>{item.value}</TableCell>
                                               </TableRow>
                                             ))}
                                           </TableBody>
@@ -2524,12 +2600,14 @@ export default function NodeTabs(props: any) {
                                 <CardContent>
                                   <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
                                     <Typography variant="subtitle2" fontWeight={700}>Monitor</Typography>
-                                    <Box sx={{ display: 'flex', gap: 1 }}>
-                                      <Button size="small" variant="outlined" startIcon={<i className="ri-play-line" style={{ fontSize: 14 }} />} disabled>Start</Button>
-                                      <Button size="small" variant="outlined" startIcon={<i className="ri-stop-line" style={{ fontSize: 14 }} />} disabled>Stop</Button>
-                                      <Button size="small" variant="outlined" startIcon={<i className="ri-restart-line" style={{ fontSize: 14 }} />} disabled>Restart</Button>
-                                      <Button size="small" variant="contained" startIcon={<i className="ri-add-line" style={{ fontSize: 14 }} />} disabled>Create</Button>
-                                    </Box>
+                                    <CephCardHeaderActions
+                                      onRefresh={() => void refreshNodeCeph()}
+                                      refreshing={nodeCephRefreshing}
+                                      onCreate={() => setCephCreateKind('mon')}
+                                      createLabel={t('cephService.createMon')}
+                                      createDisabledReason={nodeHasMon ? t('cephService.monExists') : null}
+                                      canManage={canManageCeph}
+                                    />
                                   </Box>
                                   <TableContainer>
                                     <Table size="small">
@@ -2541,12 +2619,13 @@ export default function NodeTabs(props: any) {
                                           <TableCell sx={{ fontWeight: 700 }}>Address</TableCell>
                                           <TableCell sx={{ fontWeight: 700 }}>Version</TableCell>
                                           <TableCell sx={{ fontWeight: 700 }}>Quorum</TableCell>
+                                          <TableCell sx={{ fontWeight: 700 }} align="right">{t('common.actions')}</TableCell>
                                         </TableRow>
                                       </TableHead>
                                       <TableBody>
-                                        {(Array.isArray(nodeCephData.monitors) ? nodeCephData.monitors : []).map((mon: any) => (
+                                        {cephMonitors.map((mon: any) => (
                                           <TableRow key={mon.name}>
-                                            <TableCell sx={{ fontFamily: 'monospace' }}>{mon.name}</TableCell>
+                                            <CephNameCell logoSrc={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'}>{mon.name}</CephNameCell>
                                             <TableCell>{mon.host}</TableCell>
                                             <TableCell>
                                               <Chip 
@@ -2556,7 +2635,7 @@ export default function NodeTabs(props: any) {
                                                 sx={{ height: 20, fontSize: 11 }}
                                               />
                                             </TableCell>
-                                            <TableCell sx={{ fontFamily: 'monospace', fontSize: 12 }}>{mon.addr}</TableCell>
+                                            <TableCell>{mon.addr}</TableCell>
                                             <TableCell>{mon.ceph_version_short || mon.ceph_version?.split(' ')[2]}</TableCell>
                                             <TableCell>
                                               {mon.quorum ? (
@@ -2565,6 +2644,17 @@ export default function NodeTabs(props: any) {
                                                 <Chip size="small" label="No" color="error" sx={{ height: 20, fontSize: 11 }} />
                                               )}
                                             </TableCell>
+                                            <CephServiceActionsCell
+                                              connId={nodeConnId}
+                                              target={{
+                                                kind: 'mon',
+                                                service: `mon.${mon.name}`,
+                                                host: mon.host || mon.name,
+                                                running: mon.state ? mon.state === 'running' : !!mon.quorum,
+                                              }}
+                                              canManage={canManageCeph}
+                                              onDone={scheduleNodeCephRefresh}
+                                            />
                                           </TableRow>
                                         ))}
                                       </TableBody>
@@ -2578,12 +2668,14 @@ export default function NodeTabs(props: any) {
                                 <CardContent>
                                   <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
                                     <Typography variant="subtitle2" fontWeight={700}>Manager</Typography>
-                                    <Box sx={{ display: 'flex', gap: 1 }}>
-                                      <Button size="small" variant="outlined" startIcon={<i className="ri-play-line" style={{ fontSize: 14 }} />} disabled>Start</Button>
-                                      <Button size="small" variant="outlined" startIcon={<i className="ri-stop-line" style={{ fontSize: 14 }} />} disabled>Stop</Button>
-                                      <Button size="small" variant="outlined" startIcon={<i className="ri-restart-line" style={{ fontSize: 14 }} />} disabled>Restart</Button>
-                                      <Button size="small" variant="contained" startIcon={<i className="ri-add-line" style={{ fontSize: 14 }} />} disabled>Create</Button>
-                                    </Box>
+                                    <CephCardHeaderActions
+                                      onRefresh={() => void refreshNodeCeph()}
+                                      refreshing={nodeCephRefreshing}
+                                      onCreate={() => setCephCreateKind('mgr')}
+                                      createLabel={t('cephService.createMgr')}
+                                      createDisabledReason={nodeHasMgr ? t('cephService.mgrExists') : null}
+                                      canManage={canManageCeph}
+                                    />
                                   </Box>
                                   <TableContainer>
                                     <Table size="small">
@@ -2594,29 +2686,52 @@ export default function NodeTabs(props: any) {
                                           <TableCell sx={{ fontWeight: 700 }}>Status</TableCell>
                                           <TableCell sx={{ fontWeight: 700 }}>Address</TableCell>
                                           <TableCell sx={{ fontWeight: 700 }}>Version</TableCell>
+                                          <TableCell sx={{ fontWeight: 700 }} align="right">{t('common.actions')}</TableCell>
                                         </TableRow>
                                       </TableHead>
                                       <TableBody>
                                         {nodeCephData.managers?.active && (
                                           <TableRow>
-                                            <TableCell sx={{ fontFamily: 'monospace' }}>mgr.{nodeCephData.managers.active}</TableCell>
+                                            <CephNameCell logoSrc={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'}>mgr.{nodeCephData.managers.active}</CephNameCell>
                                             <TableCell>{nodeCephData.managers.active?.split('.')[0] || nodeCephData.managers.active}</TableCell>
                                             <TableCell>
                                               <Chip size="small" label="active" color="success" sx={{ height: 20, fontSize: 11 }} />
                                             </TableCell>
-                                            <TableCell sx={{ fontFamily: 'monospace', fontSize: 12 }}>—</TableCell>
                                             <TableCell>—</TableCell>
+                                            <TableCell>—</TableCell>
+                                            <CephServiceActionsCell
+                                              connId={nodeConnId}
+                                              target={{
+                                                kind: 'mgr',
+                                                service: `mgr.${nodeCephData.managers.active}`,
+                                                host: String(nodeCephData.managers.active).split('.')[0],
+                                                running: true,
+                                              }}
+                                              canManage={canManageCeph}
+                                              onDone={scheduleNodeCephRefresh}
+                                            />
                                           </TableRow>
                                         )}
                                         {(nodeCephData.managers?.standbys || []).map((mgr: any) => (
                                           <TableRow key={mgr.name || mgr}>
-                                            <TableCell sx={{ fontFamily: 'monospace' }}>mgr.{mgr.name || mgr}</TableCell>
+                                            <CephNameCell logoSrc={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'}>mgr.{mgr.name || mgr}</CephNameCell>
                                             <TableCell>{(mgr.name || mgr)?.split('.')[0] || mgr.name || mgr}</TableCell>
                                             <TableCell>
                                               <Chip size="small" label="standby" color="default" sx={{ height: 20, fontSize: 11 }} />
                                             </TableCell>
-                                            <TableCell sx={{ fontFamily: 'monospace', fontSize: 12 }}>—</TableCell>
                                             <TableCell>—</TableCell>
+                                            <TableCell>—</TableCell>
+                                            <CephServiceActionsCell
+                                              connId={nodeConnId}
+                                              target={{
+                                                kind: 'mgr',
+                                                service: `mgr.${mgr.name || mgr}`,
+                                                host: String(mgr.name || mgr).split('.')[0],
+                                                running: true,
+                                              }}
+                                              canManage={canManageCeph}
+                                              onDone={scheduleNodeCephRefresh}
+                                            />
                                           </TableRow>
                                         ))}
                                       </TableBody>
@@ -2632,20 +2747,25 @@ export default function NodeTabs(props: any) {
                             <Stack spacing={2}>
                             {/* OSD Flags Panel */}
                             <CephOsdFlagsPanel
-                              connId={nodeConnId}
-                              enabled={nodeTab === 8 && nodeCephSubTab === 2 && !!data.clusterName}
+                              state={nodeOsdFlags}
+                              host={nodeNodeName}
                               readOnly={!hasPermission('storage.admin')}
                             />
 
                             {/* OSD Table */}
                             <Card variant="outlined">
                               <CardContent>
-                                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
-                                  <Typography variant="subtitle2" fontWeight={700}>OSD (Object Storage Daemon)</Typography>
-                                  <Box sx={{ display: 'flex', gap: 1 }}>
-                                    <Button size="small" variant="outlined" startIcon={<i className="ri-refresh-line" style={{ fontSize: 14 }} />}>Reload</Button>
-                                    <Button size="small" variant="contained" startIcon={<i className="ri-add-line" style={{ fontSize: 14 }} />} disabled>Create OSD</Button>
+                                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, mb: 2 }}>
+                                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 2.5, minWidth: 0, flexWrap: 'wrap' }}>
+                                    <Typography variant="subtitle2" fontWeight={700}>OSD (Object Storage Daemon)</Typography>
+                                    {/* Cluster-wide flags apply to every OSD alike: once here, not on each row (ui#1164) */}
+                                    <CephScopedFlagChips globalFlags={nodeOsdFlags.flags} hostFlags={{}} osdFlags={{}} />
                                   </Box>
+                                  <CephCardHeaderActions
+                                    onRefresh={() => void refreshNodeCeph()}
+                                    refreshing={nodeCephRefreshing}
+                                    canManage={canManageCeph}
+                                  />
                                 </Box>
                                 <TableContainer sx={{ maxHeight: 400 }}>
                                   <Table size="small" stickyHeader>
@@ -2661,12 +2781,13 @@ export default function NodeTabs(props: any) {
                                         <TableCell sx={{ fontWeight: 700 }} align="right">Used (%)</TableCell>
                                         <TableCell sx={{ fontWeight: 700 }} align="right">Total</TableCell>
                                         <TableCell sx={{ fontWeight: 700 }} align="right">PGs</TableCell>
+                                        <TableCell sx={{ fontWeight: 700 }} align="right">{t('common.actions')}</TableCell>
                                       </TableRow>
                                     </TableHead>
                                     <TableBody>
                                       {(Array.isArray(nodeCephData.osds) ? nodeCephData.osds : []).map((osd: any) => (
                                         <TableRow key={osd.id}>
-                                          <TableCell sx={{ fontFamily: 'monospace' }}>osd.{osd.id}</TableCell>
+                                          <CephNameCell icon="ri-hard-drive-2-line">osd.{osd.id}</CephNameCell>
                                           <TableCell>{osd.device_class || osd.class || 'nvme'}</TableCell>
                                           <TableCell>{osd.osdtype || 'bluestore'}</TableCell>
                                           <TableCell>
@@ -2683,6 +2804,14 @@ export default function NodeTabs(props: any) {
                                                 label={osd.in ? 'in' : 'out'}
                                                 color={osd.in ? 'success' : 'warning'}
                                                 sx={{ height: 18, fontSize: 10 }}
+                                              />
+                                              {/* Per-host and per-OSD flags that apply to this OSD (ui#1164) */}
+                                              <OsdFlagChips
+                                                osdId={osd.id}
+                                                host={osd.host || nodeNodeName}
+                                                osdFlags={nodeOsdFlags.osdFlags}
+                                                hostFlags={nodeOsdFlags.hostFlags}
+                                                height={18}
                                               />
                                             </Box>
                                           </TableCell>
@@ -2716,10 +2845,21 @@ export default function NodeTabs(props: any) {
                                               )
                                             })()}
                                           </TableCell>
-                                          <TableCell align="right" sx={{ fontFamily: 'monospace', fontSize: 12 }}>
+                                          <TableCell align="right">
                                             {osd.kb ? `${(osd.kb / 1024 / 1024 / 1024).toFixed(2)} TiB` : osd.total_space || '—'}
                                           </TableCell>
                                           <TableCell align="right">{osd.num_pgs || osd.pgs || '—'}</TableCell>
+                                          <CephServiceActionsCell
+                                            connId={nodeConnId}
+                                            target={{
+                                              kind: 'osd',
+                                              service: `osd.${osd.id}`,
+                                              host: osd.host && osd.host !== 'unknown' ? osd.host : nodeNodeName,
+                                              running: !!osd.up,
+                                            }}
+                                            canManage={canManageCeph}
+                                            onDone={scheduleNodeCephRefresh}
+                                          />
                                         </TableRow>
                                       ))}
                                     </TableBody>
@@ -2752,7 +2892,7 @@ export default function NodeTabs(props: any) {
                                         <TableBody>
                                           {(Array.isArray(nodeCephData.cephfs) ? nodeCephData.cephfs : []).map((fs: any) => (
                                             <TableRow key={fs.name}>
-                                              <TableCell sx={{ fontFamily: 'monospace' }}>{fs.name}</TableCell>
+                                              <CephNameCell icon="ri-folder-3-line">{fs.name}</CephNameCell>
                                               <TableCell>{fs.data_pool}</TableCell>
                                               <TableCell>{fs.metadata_pool}</TableCell>
                                             </TableRow>
@@ -2792,7 +2932,7 @@ export default function NodeTabs(props: any) {
                                         <TableBody>
                                           {(Array.isArray(nodeCephData.mds) ? nodeCephData.mds : []).map((mds: any) => (
                                             <TableRow key={mds.name}>
-                                              <TableCell sx={{ fontFamily: 'monospace' }}>{mds.name}</TableCell>
+                                              <CephNameCell logoSrc={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'}>{mds.name}</CephNameCell>
                                               <TableCell>{mds.host}</TableCell>
                                               <TableCell>
                                                 <Chip 
@@ -2802,7 +2942,7 @@ export default function NodeTabs(props: any) {
                                                   sx={{ height: 20, fontSize: 11 }}
                                                 />
                                               </TableCell>
-                                              <TableCell sx={{ fontFamily: 'monospace', fontSize: 12 }}>{mds.addr}</TableCell>
+                                              <TableCell>{mds.addr}</TableCell>
                                               <TableCell>{mds.ceph_version_short}</TableCell>
                                             </TableRow>
                                           ))}
@@ -2847,7 +2987,7 @@ export default function NodeTabs(props: any) {
                                       {(Array.isArray(nodeCephData.pools) ? nodeCephData.pools : []).map((pool: any) => (
                                         <TableRow key={pool.pool || pool.pool_name}>
                                           <TableCell>{pool.pool}</TableCell>
-                                          <TableCell sx={{ fontFamily: 'monospace' }}>{pool.pool_name}</TableCell>
+                                          <CephNameCell icon="ri-database-2-line">{pool.pool_name}</CephNameCell>
                                           <TableCell align="center">{pool.size}/{pool.min_size}</TableCell>
                                           <TableCell align="right">{pool.pg_num}</TableCell>
                                           <TableCell align="right">{pool.pg_num_target || pool.pg_num}</TableCell>
@@ -3004,6 +3144,16 @@ export default function NodeTabs(props: any) {
                             </Card>
                           )}
                         </Box>
+
+                        {/* Ceph service creation (ui#1164), opened from the card headers above */}
+                        <CephCreateDaemonDialog
+                          open={cephCreateKind === 'mon' || cephCreateKind === 'mgr'}
+                          kind={cephCreateKind === 'mgr' ? 'mgr' : 'mon'}
+                          connId={nodeConnId}
+                          node={nodeNodeName}
+                          onClose={() => setCephCreateKind(null)}
+                          onCreated={scheduleNodeCephRefresh}
+                        />
                       </>
                     ) : (
                       <Box sx={{ p: 4, textAlign: 'center', opacity: 0.5 }}>

@@ -158,6 +158,20 @@ describe('PUT /api/v1/settings/alerts/thresholds', () => {
     expect(setSettingMock).toHaveBeenCalledWith('alert_thresholds', 'tenant-1', expect.objectContaining({ cpu_warning: 75 }))
   })
 
+  it('defaults the Ceph noout delays to 8 h and 30 min and stores them as whole, non-negative numbers (ui#1164)', async () => {
+    let body = await (await callRoute(GET as any)).json()
+    expect(body.ceph_noout_max_hours).toBe(8)
+    expect(body.ceph_noout_orphan_minutes).toBe(30)
+
+    const res = await callRoute(PUT as any, { method: 'PUT', body: { ceph_noout_max_hours: 4.7, ceph_noout_orphan_minutes: -5 } })
+    expect(res.status).toBe(200)
+    body = await res.json()
+    expect(body.ceph_noout_max_hours).toBe(4)
+    expect(body.ceph_noout_orphan_minutes).toBe(0)
+    expect(updateThresholdsMock).toHaveBeenCalledWith(expect.objectContaining({ ceph_noout_max_hours: 4, ceph_noout_orphan_minutes: 0 }))
+    expect(setSettingMock).toHaveBeenCalledWith('alert_thresholds', 'default', expect.objectContaining({ ceph_noout_max_hours: 4, ceph_noout_orphan_minutes: 0 }))
+  })
+
   it('keeps the metrics retention within 1 to 365 whole days (#1129)', async () => {
     for (const [sent, kept] of [[0, 1], [-5, 1], [30.7, 30], [9999, 365]]) {
       updateThresholdsMock.mockClear()

@@ -29,8 +29,10 @@ import {
 import { useTheme } from '@mui/material/styles'
 
 import NumericTextField from '@/components/ui/NumericTextField'
+import CephNooutOption from '@/components/ceph/CephNooutOption'
 import { GuestGlyph, NodeGlyph } from '@/components/automation/drs/glyphs'
 import { useToast } from '@/contexts/ToastContext'
+import { useCephNoout } from '@/hooks/useCephNoout'
 
 /*
    Host drain dialog (#248).
@@ -302,6 +304,10 @@ export default function HostDrainDialog(props: HostDrainDialogProps) {
   const [page, setPage] = useState(0)
   const [rowsPerPage, setRowsPerPage] = useState(PLAN_ROWS_PER_PAGE[0])
   const [error, setError] = useState<string | null>(null)
+  // The per-host Ceph noout of a node entering maintenance (ui#1164), set
+  // before the drain or the ha-manager call so the OSDs are covered first.
+  const noout = useCephNoout({ connId, node, open: open && mode === 'maintenance', mode: 'enter' })
+  const { active: nooutWanted, setFlag: setNoout, rollback: rollbackNoout } = noout
 
   const config = useMemo(
     () => buildHostDrainConfig({ mode, maxParallel, memCeiling, includeStopped, overrides }),
@@ -352,6 +358,9 @@ export default function HostDrainDialog(props: HostDrainDialogProps) {
     setStarting(true)
     setError(null)
     try {
+      // A refused flag stops here: the node must not enter maintenance
+      // without the protection the operator asked for.
+      if (nooutWanted) await setNoout()
       if (!drainWanted) {
         await onMaintenanceOnly?.()
         onClose()
@@ -364,6 +373,8 @@ export default function HostDrainDialog(props: HostDrainDialogProps) {
       })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) {
+        // The node never entered maintenance: the flag set above goes too.
+        await rollbackNoout()
         setError(json?.error || `HTTP ${res.status}`)
         return
       }
@@ -371,11 +382,12 @@ export default function HostDrainDialog(props: HostDrainDialogProps) {
       onStarted?.(json?.data ?? json)
       onClose()
     } catch (e: any) {
+      await rollbackNoout()
       setError(e?.message || t('hostDrain.orchestratorUnavailable'))
     } finally {
       setStarting(false)
     }
-  }, [drainWanted, onMaintenanceOnly, onClose, connId, node, config, toast, t, onStarted])
+  }, [nooutWanted, setNoout, rollbackNoout, drainWanted, onMaintenanceOnly, onClose, connId, node, config, toast, t, onStarted])
 
   const modeLabel = (m: string) => {
     switch (m) {
@@ -392,7 +404,7 @@ export default function HostDrainDialog(props: HostDrainDialogProps) {
   const lastPage = Math.max(0, Math.ceil(sortedGuests.length / rowsPerPage) - 1)
   const currentPage = Math.min(page, lastPage)
   const shownGuests = sortedGuests.slice(currentPage * rowsPerPage, (currentPage + 1) * rowsPerPage)
-  const canStart = !starting && !sshBlocked && (!drainWanted || (!!plan && !planLoading && !planError))
+  const canStart = !starting && !sshBlocked && !noout.blocked && (!drainWanted || (!!plan && !planLoading && !planError))
   const canKeep = mode === 'migrate-all'
   // A guest gets a target selector when it will move, or when the operator
   // already chose for it (a refused choice stays editable). HA guests of a
@@ -455,6 +467,8 @@ export default function HostDrainDialog(props: HostDrainDialogProps) {
             )}
           </Box>
         )}
+
+        {mode === 'maintenance' && <CephNooutOption state={noout} disabled={starting} />}
 
         {drainWanted && (
           <>

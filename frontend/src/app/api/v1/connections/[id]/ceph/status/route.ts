@@ -121,7 +121,8 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
         // L'API MDS peut ne pas exister
       }
 
-      // Extraire les warnings/errors du health
+      // Extraire les warnings/errors du health, avec leurs lignes de détail
+      // (`host pve3 has flags noout` sous OSD_FLAGS, ui#1164)
       const healthChecks: any[] = []
       if (status?.health?.checks) {
         for (const [checkName, checkData] of Object.entries(status.health.checks as Record<string, any>)) {
@@ -129,6 +130,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
             name: checkName,
             severity: checkData.severity,
             summary: checkData.summary?.message || checkData.message || checkName,
+            detail: Array.isArray(checkData.detail) ? checkData.detail : [],
           })
         }
       }

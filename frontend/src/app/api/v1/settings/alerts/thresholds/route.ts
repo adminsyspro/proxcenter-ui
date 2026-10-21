@@ -33,6 +33,12 @@ const DEFAULT_THRESHOLDS = {
   // OSD latency check, mirroring the snapshot_max_age_days convention.
   osd_latency_warning: 0,
   osd_latency_critical: 250,
+  // Per-host Ceph noout left behind (ui#1164). Hours a flag set on a CRUSH
+  // host may stay before it is reported, and minutes a flag may exist while
+  // no node of the cluster is in maintenance (set by hand, or a maintenance
+  // left without removing it). 0 disables each check on its own.
+  ceph_noout_max_hours: 8,
+  ceph_noout_orphan_minutes: 30,
   // Guest disk latency in milliseconds, derived from QEMU block statistics
   // (#881). 0 disables the check like the OSD one; the window is how long a
   // disk or storage must stay above a threshold before it alerts.
@@ -104,6 +110,9 @@ function coerceThresholds(raw: any): Thresholds {
   // Whole seconds for the Go side (int fields), never negative.
   t.sflow_telemetry_timeout_seconds = Math.max(0, Math.trunc(t.sflow_telemetry_timeout_seconds as number))
   t.sflow_telemetry_grace_seconds = Math.max(0, Math.trunc(t.sflow_telemetry_grace_seconds as number))
+  // Whole hours and minutes for the Go side too, never negative (ui#1164).
+  t.ceph_noout_max_hours = Math.max(0, Math.trunc(t.ceph_noout_max_hours as number))
+  t.ceph_noout_orphan_minutes = Math.max(0, Math.trunc(t.ceph_noout_orphan_minutes as number))
   // Days of metrics history the orchestrator keeps (#1129), the bounds of the
   // settings field: a request outside them would purge the whole history.
   t.metrics_retention_days = Math.min(365, Math.max(1, Math.trunc(t.metrics_retention_days as number)))

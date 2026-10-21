@@ -13,6 +13,7 @@ import {
   renderWithProviders,
   screen,
   waitFor,
+  within,
 } from '@/__tests__/setup/renderWithProviders'
 import { HttpResponse, http, server } from '@/__tests__/setup/msw-server'
 
@@ -278,5 +279,196 @@ describe('CephOsdFlagsDialog', () => {
 
     expect(screen.queryByText('OSD Flags')).not.toBeInTheDocument()
     expect(screen.queryAllByRole('switch')).toHaveLength(0)
+  })
+
+  // ui#1164: the flags set on one host or one OSD, under the cluster grid.
+  it('lists the per-host and per-OSD flags under the grid, removes a host flag, keeps OSD flags read-only', () => {
+    const onToggleHost = vi.fn()
+
+    renderWithProviders(
+      <CephOsdFlagsDialog
+        open
+        onClose={vi.fn()}
+        flags={[]}
+        loading={false}
+        toggling={null}
+        onToggle={vi.fn()}
+        hostFlags={{ pve3: ['noout'] }}
+        osdFlags={{ 'osd.4': ['nodown'] }}
+        onToggleHost={onToggleHost}
+      />,
+    )
+
+    expect(screen.getByText('Cluster-wide')).toBeInTheDocument()
+    expect(screen.getByText('Per host')).toBeInTheDocument()
+    expect(screen.getByText(/Flags set on one CRUSH host or one OSD/)).toBeInTheDocument()
+
+    expect(screen.getByTestId('ceph-flag-group-pve3')).toHaveTextContent('pve3noout')
+    expect(screen.getByLabelText('noout is set on CRUSH host pve3 (ceph osd set-group)')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Remove noout from pve3' }))
+    expect(onToggleHost).toHaveBeenCalledWith('pve3', 'noout', false)
+
+    expect(screen.getByTestId('ceph-flag-group-osd.4')).toHaveTextContent('osd.4nodown')
+    expect(screen.getByLabelText('nodown set on osd.4')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /osd\.4/ })).toBeNull()
+  })
+
+  it('hides the per-host block without scoped flags, and every write in read-only mode', () => {
+    const { unmount } = renderWithProviders(
+      <CephOsdFlagsDialog open onClose={vi.fn()} flags={[]} loading={false} toggling={null} onToggle={vi.fn()} hostFlags={{}} osdFlags={{}} onToggleHost={vi.fn()} />,
+    )
+
+    expect(screen.queryByText('Per host')).not.toBeInTheDocument()
+    expect(screen.queryByText('Cluster-wide')).not.toBeInTheDocument()
+    unmount()
+
+    renderWithProviders(
+      <CephOsdFlagsDialog open onClose={vi.fn()} flags={['noout']} loading={false} toggling={null} onToggle={vi.fn()} hostFlags={{ pve3: ['noout'] }} onToggleHost={vi.fn()} readOnly />,
+    )
+
+    expect(screen.getByTestId('ceph-flag-group-pve3')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Remove noout from pve3' })).toBeNull()
+    for (const toggle of screen.getAllByRole('switch')) expect(toggle).toBeDisabled()
+  })
+})
+
+/*
+   ui#1164: with a host, the panel gets a second section for the four flags
+   `ceph osd set-group` sets on that node alone.
+*/
+describe('CephOsdFlagsPanel with a host', () => {
+  const seedScoped = (hostFlags: Record<string, string[]> = {}, osdFlags: Record<string, string[]> = {}, flags: string[] = []) =>
+    server.use(http.get(FLAGS_URL, () => HttpResponse.json({ data: { flags, hostFlags, osdFlags } })))
+  const hostSection = () => within(screen.getByTestId('ceph-flags-host'))
+  const clusterSection = () => within(screen.getByTestId('ceph-flags-cluster'))
+  const hostSwitch = (flag: string) => hostSection().getByRole('switch', { name: new RegExp(`^${flag}\\b`, 'i') })
+  const clusterSwitch = (flag: string) => clusterSection().getByRole('switch', { name: new RegExp(`^${flag}\\b`, 'i') })
+  const ownedState = () => ({
+    flags: ['norebalance'],
+    hostFlags: { pve3: ['noout'] },
+    osdFlags: {},
+    loading: false,
+    toggling: null as string | null,
+    forbidden: false,
+    toggle: vi.fn(),
+    toggleHost: vi.fn(),
+  })
+
+  it('adds a "This host" section with the four group flags, ON for the flags of the node\'s CRUSH host, matched on the first FQDN label', async () => {
+    seedScoped({ 'PVE3.lab.local': ['noout', 'noin'] })
+
+    renderWithProviders(<CephOsdFlagsPanel connId={CONN_ID} host='pve3' />)
+
+    expect(screen.getByText('Cluster-wide')).toBeInTheDocument()
+    expect(screen.getByText('This host (pve3)')).toBeInTheDocument()
+    expect(screen.getByText(/only apply to the OSDs of this node/)).toBeInTheDocument()
+    expect(clusterSection().getAllByRole('switch')).toHaveLength(8)
+    expect(hostSection().getAllByRole('switch')).toHaveLength(4)
+    expect(hostSection().getByText('Prevent OSDs from being marked in')).toBeInTheDocument()
+
+    await waitFor(() => expect(hostSwitch('noout')).toBeChecked())
+    expect(hostSwitch('noin')).toBeChecked()
+    expect(hostSwitch('noup')).not.toBeChecked()
+    expect(hostSwitch('nodown')).not.toBeChecked()
+
+    // The host flag is not the cluster-wide one.
+    expect(clusterSwitch('noout')).not.toBeChecked()
+  })
+
+  it('writes a host flag with {flag, host} on the CRUSH host name: PUT to set, DELETE to unset', async () => {
+    seedScoped({ 'pve3.lab.local': ['noout'] })
+    const calls: { method: string; body: unknown }[] = []
+    const record = async ({ request }: { request: Request }) => {
+      calls.push({ method: request.method, body: await request.json() })
+
+      return HttpResponse.json({ success: true })
+    }
+    server.use(http.put(FLAGS_URL, record), http.delete(FLAGS_URL, record))
+
+    renderWithProviders(<CephOsdFlagsPanel connId={CONN_ID} host='pve3' />)
+    await waitFor(() => expect(hostSwitch('noout')).toBeChecked())
+
+    fireEvent.click(hostSwitch('noup'))
+    await waitFor(() => expect(hostSwitch('noup')).toBeChecked())
+    fireEvent.click(hostSwitch('noout'))
+    await waitFor(() => expect(hostSwitch('noout')).not.toBeChecked())
+
+    expect(calls).toEqual([
+      { method: 'PUT', body: { flag: 'noup', host: 'pve3.lab.local' } },
+      { method: 'DELETE', body: { flag: 'noout', host: 'pve3.lab.local' } },
+    ])
+    // The cluster-wide grid did not move.
+    expect(clusterSwitch('noup')).not.toBeChecked()
+  })
+
+  it('targets the node name when no CRUSH host carries a flag yet', async () => {
+    seedScoped()
+    let body: unknown
+    server.use(
+      http.put(FLAGS_URL, async ({ request }) => {
+        body = await request.json()
+
+        return HttpResponse.json({ success: true })
+      }),
+    )
+
+    renderWithProviders(<CephOsdFlagsPanel connId={CONN_ID} host='pve2' />)
+    await waitFor(() => expect(hostSwitch('noout')).not.toBeDisabled())
+    fireEvent.click(hostSwitch('noout'))
+
+    await waitFor(() => expect(hostSwitch('noout')).toBeChecked())
+    expect(body).toEqual({ flag: 'noout', host: 'pve2' })
+  })
+
+  it('leaves a host flag in place when the server refuses', async () => {
+    seedScoped({ pve3: ['noout'] })
+    server.use(http.delete(FLAGS_URL, () => new HttpResponse(null, { status: 500 })))
+
+    renderWithProviders(<CephOsdFlagsPanel connId={CONN_ID} host='pve3' />)
+    await waitFor(() => expect(hostSwitch('noout')).toBeChecked())
+    fireEvent.click(hostSwitch('noout'))
+
+    await waitFor(() => expect(hostSwitch('noout')).not.toBeDisabled())
+    expect(hostSwitch('noout')).toBeChecked()
+  })
+
+  it('greys the twelve switches out in read-only mode', async () => {
+    seedScoped({ pve3: ['noout'] })
+
+    renderWithProviders(<CephOsdFlagsPanel connId={CONN_ID} host='pve3' readOnly />)
+    await waitFor(() => expect(hostSwitch('noout')).toBeChecked())
+
+    expect(screen.getAllByRole('switch')).toHaveLength(12)
+    for (const toggle of screen.getAllByRole('switch')) expect(toggle).toBeDisabled()
+  })
+
+  it('runs on a state owned by the caller without loading anything itself', () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch')
+    const state = ownedState()
+
+    renderWithProviders(<CephOsdFlagsPanel state={state} host='pve3' />)
+
+    expect(fetchSpy).not.toHaveBeenCalled()
+    expect(clusterSwitch('norebalance')).toBeChecked()
+    expect(hostSwitch('noout')).toBeChecked()
+
+    fireEvent.click(hostSwitch('nodown'))
+    expect(state.toggleHost).toHaveBeenCalledWith('pve3', 'nodown', true)
+    fireEvent.click(clusterSwitch('noout'))
+    expect(state.toggle).toHaveBeenCalledWith('noout', true)
+  })
+
+  it('disables only the host switch being written', () => {
+    renderWithProviders(<CephOsdFlagsPanel state={{ ...ownedState(), toggling: 'pve3:noout' }} host='pve3' />)
+
+    expect(hostSwitch('noout')).toBeDisabled()
+    expect(hostSwitch('noin')).not.toBeDisabled()
+    expect(clusterSwitch('noout')).not.toBeDisabled()
+  })
+
+  it('shows nothing when the caller\'s state was denied', () => {
+    const { container } = renderWithProviders(<CephOsdFlagsPanel state={{ ...ownedState(), forbidden: true }} host='pve3' />)
+
+    expect(container).toBeEmptyDOMElement()
   })
 })

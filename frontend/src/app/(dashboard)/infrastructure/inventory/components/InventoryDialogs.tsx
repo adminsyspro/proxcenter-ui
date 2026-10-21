@@ -83,6 +83,8 @@ import FailureReasonText from '@/components/tasks/FailureReasonText'
 import TaskLogButton from '@/components/tasks/TaskLogButton'
 import PendingChangesWarning from '@/components/migration/PendingChangesWarning'
 import HostDrainDialog from '@/components/HostDrainDialog'
+import CephNooutOption from '@/components/ceph/CephNooutOption'
+import { useCephNoout } from '@/hooks/useCephNoout'
 import CreateVmDialog from '../CreateVmDialog'
 import CreateLxcDialog from '../CreateLxcDialog'
 import HaGroupDialog from '../HaGroupDialog'
@@ -616,6 +618,11 @@ export default function InventoryDialogs(props: InventoryDialogsProps) {
   // so a partial one can be forced past explicitly.
   const [nodeActionPlacement, setNodeActionPlacement] = useState<'auto' | 'manual'>('auto')
   const [nodeActionDrain, setNodeActionDrain] = useState<NodeActionDrain | null>(null)
+  // The node of the reboot/shutdown dialog, and its per-host Ceph noout
+  // (ui#1164), read when the dialog opens and set before the drain.
+  const nodeActionConnId = nodeActionDialog?.connId || (selection?.type === 'node' ? parseNodeId(selection.id).connId : '')
+  const nodeActionNode = nodeActionDialog?.node || (selection?.type === 'node' ? parseNodeId(selection.id).node : '')
+  const nodeActionNoout = useCephNoout({ connId: nodeActionConnId, node: nodeActionNode, open: nodeActionDialog !== null, mode: 'enter' })
 
   // virtio-win ISO download progress (background curl + polling)
   const [virtioWinProgress, setVirtioWinProgress] = useState<{ downloading: boolean; percent: number; sizeBytes: number } | null>(null)
@@ -2007,8 +2014,8 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
     <>
       {/* Node Reboot/Shutdown confirmation dialog */}
       {(() => {
-        const resolvedConnId = nodeActionDialog?.connId || (selection?.type === 'node' ? parseNodeId(selection.id).connId : '')
-        const resolvedNode = nodeActionDialog?.node || (selection?.type === 'node' ? parseNodeId(selection.id).node : '')
+        const resolvedConnId = nodeActionConnId
+        const resolvedNode = nodeActionNode
         const runningVmsOnNode = allVms.filter(vm =>
           vm.connId === resolvedConnId && vm.node === resolvedNode && vm.status === 'running' && !vm.template
         )
@@ -2185,6 +2192,7 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
                         <Typography variant="body2">{t('inventory.nodeActionMaintenanceAuto')}</Typography>
                       </Alert>
                     )}
+                    {isClusterNode && <CephNooutOption state={nodeActionNoout} disabled={nodeActionBusy} />}
   
                     {/* Progress steps */}
                     {nodeActionStep && (
@@ -2208,6 +2216,7 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
                       disabled={(() => {
                         if (nodeActionBusy || nodeActionStorageLoading) return true
                         if (nodeActionFailedVms.length > 0 && !nodeActionShutdownFailed) return true
+                        if (isClusterNode && nodeActionNoout.blocked) return true
                         if (isClusterNode && runningVmsOnNode.length > 0) {
                           const hasShared = runningVmsOnNode.length > nodeActionLocalVms.size
                           const hasLocal = nodeActionLocalVms.size > 0
@@ -2224,6 +2233,13 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
                         const node = resolvedNode
   
                         try {
+                          // Step 0 (ui#1164): the per-host Ceph noout the operator asked
+                          // for, before anything moves; a refusal stops the action here.
+                          if (isClusterNode && nodeActionNoout.active) {
+                            setNodeActionStep(t('cephNoout.settingStep'))
+                            await nodeActionNoout.setFlag()
+                          }
+
                           // Step 1 (#248): drain the node through the orchestrator. Each
                           // guest is placed by the engine, the node enters HA maintenance
                           // (cluster), and the action only follows a complete drain. A
@@ -2241,7 +2257,12 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
                                 body: JSON.stringify({ connection_id: connId, node, config }),
                               })
                               const startJson = await startRes.json().catch(() => ({}))
-                              if (!startRes.ok) throw new Error(t('inventory.nodeActionDrainFailed', { error: startJson?.error || `HTTP ${startRes.status}` }))
+                              if (!startRes.ok) {
+                                // Nothing moved and the node is not in maintenance:
+                                // the flag set in step 0 must not outlive the action.
+                                await nodeActionNoout.rollback()
+                                throw new Error(t('inventory.nodeActionDrainFailed', { error: startJson?.error || `HTTP ${startRes.status}` }))
+                              }
                               let drain: NodeActionDrain = startJson?.data ?? startJson
                               setNodeActionDrain(drain)
                               while (!isNodeActionDrainOver(drain.status)) {

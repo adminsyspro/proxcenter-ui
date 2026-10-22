@@ -89,6 +89,7 @@ import MigrationHistoryTab from '@/components/automation/drs/MigrationHistoryTab
 import { GuestGlyph, NodeGlyph } from '@/components/automation/drs/glyphs'
 import { migrationProgressMessage } from '@/components/automation/drs/migrationProgress'
 import { drsReasonText } from '@/components/automation/drs/drsReason'
+import { excessRecommendations, keptRecommendations, staleRecommendations } from '@/components/automation/drs/recommendationPruning'
 import DrsActionNoticeDialog from '@/components/automation/drs/DrsActionNoticeDialog'
 import AffinityRulesManager, {
   type AffinityRule, 
@@ -156,6 +157,7 @@ interface DRSRecommendation {
   confirmation_count?: number
   last_seen_at?: string
   maintenance_evacuation?: boolean
+  rule_violation?: boolean
 }
 
 interface DRSMigration {
@@ -1633,22 +1635,10 @@ return allVMsData.data.vms.map(vm => ({
     [recommendations, maintenanceNodeNames]
   )
 
-  // Auto-reject excess recommendations per cluster (oldest/lowest score first)
+  // Auto-reject excess recommendations per cluster (lowest score first),
+  // never an evacuation or a rule violation
   useEffect(() => {
-    // Group pending recs by cluster
-    const byCluster = new Map()
-    for (const rec of allPendingRecs) {
-      const cid = rec.connection_id
-      if (!byCluster.has(cid)) byCluster.set(cid, [])
-      byCluster.get(cid).push(rec)
-    }
-    // For each cluster, reject recs beyond maxPending
-    const toReject = []
-    for (const [, clusterRecs] of byCluster) {
-      if (clusterRecs.length > maxPending) {
-        toReject.push(...clusterRecs.slice(maxPending))
-      }
-    }
+    const toReject = excessRecommendations(allPendingRecs, maxPending)
     if (toReject.length === 0) return
     toReject.forEach(rec => {
       fetch(`/api/v1/orchestrator/drs/recommendations/${rec.id}/reject`, { method: 'POST' }).catch(() => {})
@@ -1658,23 +1648,11 @@ return allVMsData.data.vms.map(vm => ({
     return () => clearTimeout(timer)
   }, [allPendingRecs.length, maxPending])
 
-  // Auto-reject stale recommendations where the source node is no longer above cluster average
-  // This ensures recommendations stay in sync with live cluster state
+  // Auto-reject load-balancing recommendations whose source node is no longer above cluster average,
+  // so they stay in sync with live cluster state. An evacuation or a rule violation was not raised by load.
   useEffect(() => {
     if (!metricsData || allPendingRecs.length === 0) return
-    const staleRecs: DRSRecommendation[] = []
-    for (const rec of allPendingRecs) {
-      const clusterMetrics = (metricsData as any)[rec.connection_id]
-      if (!clusterMetrics?.nodes || clusterMetrics.nodes.length < 2) continue
-      const nodes = clusterMetrics.nodes as { node: string; memory_usage: number }[]
-      const avgMem = nodes.reduce((sum, n) => sum + n.memory_usage, 0) / nodes.length
-      const sourceNode = nodes.find(n => n.node === rec.source_node)
-      if (!sourceNode) continue
-      // If source node is now at or below average (+2% tolerance), the recommendation is stale
-      if (sourceNode.memory_usage <= avgMem + 2) {
-        staleRecs.push(rec)
-      }
-    }
+    const staleRecs = staleRecommendations(allPendingRecs, metricsData as any)
     if (staleRecs.length === 0) return
     console.log(`[DRS] Auto-rejecting ${staleRecs.length} stale recommendation(s) — source node(s) no longer above cluster average`)
     staleRecs.forEach(rec => {
@@ -1684,17 +1662,8 @@ return allVMsData.data.vms.map(vm => ({
     return () => clearTimeout(timer)
   }, [allPendingRecs, metricsData])
 
-  const pendingRecs = useMemo(() => {
-    // Limit per cluster
-    const byCluster = new Map()
-    for (const rec of allPendingRecs) {
-      const cid = rec.connection_id
-      if (!byCluster.has(cid)) byCluster.set(cid, [])
-      const arr = byCluster.get(cid)
-      if (arr.length < maxPending) arr.push(rec)
-    }
-    return Array.from(byCluster.values()).flat()
-  }, [allPendingRecs, maxPending])
+  // Limit per cluster, every evacuation and rule violation shown
+  const pendingRecs = useMemo(() => keptRecommendations(allPendingRecs, maxPending), [allPendingRecs, maxPending])
 
   // Group recommendations by cluster for display
   const pendingRecsByCluster = useMemo(() => {

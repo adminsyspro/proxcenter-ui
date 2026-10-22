@@ -5,6 +5,7 @@ import { pveFetch } from "@/lib/proxmox/client"
 import { getRBACContext, hasPermission } from "@/lib/rbac"
 import { resolveRrdScope } from "@/lib/rbac/rrdScope"
 import { applyRrdWindow, presetRangeMeta, resolveRrdRequest } from "@/lib/metrics/rrdRange"
+import { RRD_BATCH_MAX_PATHS } from "@/lib/metrics/rrdBatchLimit"
 
 export const runtime = "nodejs"
 
@@ -39,9 +40,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       return NextResponse.json({ data: {} })
     }
 
-    // Cap at 50 paths to prevent abuse
-    if (paths.length > 50) {
-      return NextResponse.json({ error: "Too many paths (max 50)" }, { status: 400 })
+    // Cap the batch to prevent abuse; the client splits longer lists itself.
+    if (paths.length > RRD_BATCH_MAX_PATHS) {
+      return NextResponse.json({ error: `Too many paths (max ${RRD_BATCH_MAX_PATHS})` }, { status: 400 })
     }
 
     // Gate each path on the resource it addresses (node.view for a node path,

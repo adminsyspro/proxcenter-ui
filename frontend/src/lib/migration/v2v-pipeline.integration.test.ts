@@ -708,7 +708,7 @@ describe("runV2vMigrationPipeline Windows data disks (lab 22/10)", () => {
 
     expect(prisma.row.status).toBe("completed")
     const [run] = customizeRuns()
-    expect(run).toMatch(/ -a '[^']*\/testvm-sda' --upload /)
+    expect(run).toMatch(/ -a '[^']*\/testvm-sda' --mkdir /)
     // Phase 6 attaches whatever lies in the output dir: the script is not there.
     const outputDir = /-a '([^']*)\/testvm-sda'/.exec(run)?.[1]
     expect(run).not.toContain(`${outputDir}/online-disks`)

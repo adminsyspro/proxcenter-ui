@@ -29,6 +29,12 @@ describe("windowsOnlineDisksPs1 (lab 22/10, Windows Server 2025 data disk offlin
 })
 
 describe("windowsOnlineDisksCommand", () => {
+  it("keeps the script out of directories any guest user can write: it runs as SYSTEM (Sonar S5443)", () => {
+    const cmd = windowsOnlineDisksCommand({ disk: "'/t/vm-sda'", disks: 2, localPath: "'/t/x.ps1'", logPath: "'/t/x.log'" })
+    expect(cmd).not.toMatch(/Temp/i)
+    expect(cmd).toContain(":'/Program Files/Guestfs/Firstboot/")
+  })
+
   it("writes the script on the node and schedules it at first boot of the boot disk", () => {
     const cmd = windowsOnlineDisksCommand({ disk: '"$D/disk0.qcow2"', disks: 2, localPath: '"$D/online-disks.ps1"', logPath: '"$D/online-disks.log"', format: "qcow2" })
     const [write, customize] = cmd.split("\n")
@@ -36,14 +42,15 @@ describe("windowsOnlineDisksCommand", () => {
     expect(Buffer.from(b64!, "base64").toString()).toBe(windowsOnlineDisksPs1(2))
     expect(customize).toBe(
       "LIBGUESTFS_BACKEND=direct virt-customize --no-network --format qcow2 -a \"$D/disk0.qcow2\""
-      + " --upload \"$D/online-disks.ps1\":/Windows/Temp/proxcenter-online-disks.ps1"
-      + " --firstboot-command 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\\Windows\\Temp\\proxcenter-online-disks.ps1'"
+      + " --mkdir '/Program Files/Guestfs/Firstboot'"
+      + " --upload \"$D/online-disks.ps1\":'/Program Files/Guestfs/Firstboot/proxcenter-online-disks.ps1'"
+      + String.raw` --firstboot-command 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\Program Files\Guestfs\Firstboot\proxcenter-online-disks.ps1"'`
       + " < /dev/null > \"$D/online-disks.log\" 2>&1",
     )
   })
 
   it("lets libguestfs pick the format when none is given", () => {
-    expect(windowsOnlineDisksCommand({ disk: "'/t/vm-sda'", disks: 2, localPath: "'/t/x.ps1'", logPath: "'/t/x.log'" })).toContain("--no-network -a '/t/vm-sda' --upload")
+    expect(windowsOnlineDisksCommand({ disk: "'/t/vm-sda'", disks: 2, localPath: "'/t/x.ps1'", logPath: "'/t/x.log'" })).toContain("--no-network -a '/t/vm-sda' --mkdir")
   })
 })
 

@@ -36,9 +36,15 @@ export function windowsOnlineDisksPs1(disks: number): string {
   ].join("\r\n")
 }
 
-/** Where the script lands in the guest, as virt-customize and as Windows name it. */
-const GUEST_PATH = "/Windows/Temp/proxcenter-online-disks.ps1"
-const GUEST_PATH_WIN = "C:\\Windows\\Temp\\proxcenter-online-disks.ps1"
+/**
+ * Where the script lands in the guest, as virt-customize and as Windows name
+ * it: the first-boot service's own directory, which only administrators can
+ * write, since the script runs as SYSTEM (not C:\Windows\Temp, where any
+ * user can create files).
+ */
+const GUEST_DIR = "/Program Files/Guestfs/Firstboot"
+const GUEST_PATH = `${GUEST_DIR}/proxcenter-online-disks.ps1`
+const GUEST_PATH_WIN = String.raw`C:\Program Files\Guestfs\Firstboot\proxcenter-online-disks.ps1`
 
 /**
  * POSIX sh lines that write the script to `localPath` and have virt-customize
@@ -54,15 +60,17 @@ export function windowsOnlineDisksCommand(a: { disk: string; disks: number; loca
     `echo '${b64}' | base64 -d > ${a.localPath}`,
     "LIBGUESTFS_BACKEND=direct virt-customize --no-network"
       + `${format} -a ${a.disk}`
-      + ` --upload ${a.localPath}:${GUEST_PATH}`
-      + ` --firstboot-command 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File ${GUEST_PATH_WIN}'`
+      + ` --mkdir '${GUEST_DIR}'`
+      + ` --upload ${a.localPath}:'${GUEST_PATH}'`
+      + ` --firstboot-command 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "${GUEST_PATH_WIN}"'`
       + ` < /dev/null > ${a.logPath} 2>&1`,
   ].join("\n")
 }
 
 /** The job log line once the script is scheduled, for `dataDisks` disks besides the boot one. */
 export function windowsOnlineDisksScheduled(dataDisks: number): string {
-  return `Guest disks: Windows keeps the disks it finds on a new controller offline, so the ${dataDisks === 1 ? "data disk is" : `${dataDisks} data disks are`} brought online at the first boot`
+  const which = dataDisks === 1 ? "data disk is" : `${dataDisks} data disks are`
+  return `Guest disks: Windows keeps the disks it finds on a new controller offline, so the ${which} brought online at the first boot`
 }
 
 /** The job log line when it could not be scheduled (`why`: the tool's last words), with the operator's way out. */

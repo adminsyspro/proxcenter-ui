@@ -15,6 +15,7 @@ import {
 import type { XoVmConfig, XoDiskInfo } from "@/lib/xcpng/client"
 import { splitCreds, xcpngSubTypeOf } from "@/lib/xcpng/source"
 import { isWindowsXoVm, mapXoToPveConfig } from "../xcpngConfigMapper"
+import { virtioDevices } from "../configMapper"
 import { volumesToFree, volumesToKeep, PVESM_FREE_TIMEOUT_MS, type AllocatedVolume } from "../pvesm-alloc"
 import { getNodeSshEndpointForMigration } from "../pve-tasks"
 import { startJobHeartbeat } from "../job-heartbeat"
@@ -376,7 +377,7 @@ export async function runXcpngWarmMigration(jobId: string, config: WarmMigration
           try {
             const dev = targetDev.get(disk.position)!
             const win = checksumDiskWindows(i, vmConfig.disks.length)
-            await appendLog(jobId, `Disk ${i}: scanning source and target block checksums (${(disk.sizeBytes / 1073741824).toFixed(1)} GB); nothing is copied during this phase`)
+            await appendLog(jobId, `Disk ${i + 1}: scanning source and target block checksums (${(disk.sizeBytes / 1073741824).toFixed(1)} GB); nothing is copied during this phase`)
             let lastScanFlush = 0
             const extents = await detectChangedExtentsByChecksum(config.targetConnectionId, nodeIp, reader.nbdDev, dev, 256 * 1024 * 1024, disk.sizeBytes, {
               inactivityMs: APPLY_INACTIVITY_MS,
@@ -413,12 +414,13 @@ export async function runXcpngWarmMigration(jobId: string, config: WarmMigration
     const latest = await readJobConfig(jobId).catch(() => ({} as Record<string, any>))
     const convertGuest = typeof latest.convertGuest === "boolean" ? latest.convertGuest : config.convertGuest !== false
     let bootParams = pveParams
+    let converted = false
     if (convertGuest) {
       await updateJob(jobId, "verify", { currentStep: "guest_conversion", progress: 98 })
       await appendStep(jobId, "conversion", "Guest conversion")
       const result = await convertGuestAtCutover({
         jobId, connectionId: config.targetConnectionId, nodeIp,
-        name: vmConfig.name, firmware: vmConfig.firmware === "uefi" ? "efi" : "bios", isWindows: isWindowsXoVm(vmConfig),
+        name: vmConfig.name, firmware: vmConfig.firmware === "uefi" ? "efi" : "bios", isWindows: isWindowsXoVm(vmConfig), guestOs: vmConfig.guestOS,
         memoryMB: vmConfig.memoryMB, devices: vmConfig.disks.map(d => targetDev.get(d.position) ?? ""),
         // A netfront VIF is eth<device> in the guest, enX<device> under
         // systemd 253 and later (Debian 13, measured on the lab).
@@ -429,6 +431,7 @@ export async function runXcpngWarmMigration(jobId: string, config: WarmMigration
         log: (msg, level) => appendLog(jobId, msg, level), isCancelled: () => isCancelled(jobId),
       })
       if (result.converted) {
+        converted = true
         bootParams = mapXoToPveConfig(vmConfig, targetVmid, config.targetStorage, config.networkBridge, config.vlanTag, config.cpuType, { guestConverted: true })
         const os = result.os ? ` (${result.os})` : ""
         await appendLog(jobId, `Guest converted in ${result.seconds ?? 0}s${os}: VirtIO drivers installed; the target boots from VirtIO SCSI with VirtIO NICs`, "success")
@@ -439,6 +442,10 @@ export async function runXcpngWarmMigration(jobId: string, config: WarmMigration
       }
     } else {
       await appendLog(jobId, "Guest conversion not requested for this cutover: the guest keeps the hardware it boots on without new drivers", "info")
+    }
+    const unusable = isWindowsXoVm(vmConfig) && !converted ? virtioDevices(bootParams) : []
+    if (unusable.length > 0) {
+      await appendLog(jobId, `Windows has no VirtIO driver yet and does not see ${unusable.join(", ")}: install virtio-win-guest-tools.exe from the VirtIO ISO in the guest`, "warn")
     }
 
     await appendStep(jobId, "finish", "Attach and start")

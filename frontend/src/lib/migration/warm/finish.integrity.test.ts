@@ -43,7 +43,7 @@ describe("verifyWarmDiskIntegrity (roadmap#1)", () => {
 
   it("fails, never hands over, when the source disk cannot be reopened for the check", async () => {
     await expect(verifyWarmDiskIntegrity({ ...base, openReader: async () => { throw new Error("vddk refused") } }))
-      .rejects.toThrow("could not open the source disk 0 for verification: vddk refused")
+      .rejects.toThrow("could not open the source disk 1 for verification: vddk refused")
     expect(verifyDiskIntegrity).not.toHaveBeenCalled()
   })
 })

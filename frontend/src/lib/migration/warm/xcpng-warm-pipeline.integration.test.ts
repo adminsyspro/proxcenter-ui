@@ -406,7 +406,7 @@ describe("runXcpngWarmMigration CBT path", () => {
     // thin storage: a cheap discard, never the thick zero script
     expect(sshCommands.some(c => c.startsWith("blkdiscard '/dev/zvol/DatastoreVM/vm-900-disk-0'"))).toBe(true)
     expect(sshCommands.some(c => c.includes("blockdev --getsize64"))).toBe(false)
-    expect(hasLog("Disk 0: target DatastoreVM:vm-900-disk-0")).toBe(true)
+    expect(hasLog("Disk 1: target DatastoreVM:vm-900-disk-0")).toBe(true)
 
     // four snapshots (full, delta-1, delta-2, cutover): each pass drops the previous one, the cutover drops its own
     expect(createdSnapshots()).toBe(4)
@@ -426,7 +426,7 @@ describe("runXcpngWarmMigration CBT path", () => {
     expect(stopXapiReader).toHaveBeenCalledTimes(3)
     expect(readAllocatedExtents).toHaveBeenCalledTimes(1)
     // the apply streamed dd progress into the job (live write + throttled log line)
-    expect(messages().some(m => /^Disk 0: copying [\d.]+ GB at \d+ MB\/s$/.test(m))).toBe(true)
+    expect(messages().some(m => /^Disk 1: copying [\d.]+ GB at \d+ MB\/s$/.test(m))).toBe(true)
     expect(prisma.migrationJob.updateMany).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ status: "full_copy", bytesTransferred: expect.any(BigInt) }),
     }))
@@ -444,7 +444,7 @@ describe("runXcpngWarmMigration CBT path", () => {
     expect(xapiDisableCbt).toHaveBeenCalledWith(expect.anything(), "OpaqueRef:vdi0")
 
     // verify then attach + boot
-    expect(hasLog("Verify: disk 0 sampled block matches")).toBe(true)
+    expect(hasLog("Verify: disk 1 sampled block matches")).toBe(true)
     expect(pveSetVmConfig).toHaveBeenCalledTimes(1)
     const attach = vi.mocked(pveSetVmConfig).mock.calls[0]
     expect(attach[1]).toBe("pve1")
@@ -537,7 +537,7 @@ describe("runXcpngWarmMigration CBT path", () => {
     // a manual hold pins the bar at 88-90 while it waits
     expect(prisma.updates.some(u => u.status === "delta_sync" && u.progress === 90)).toBe(true)
     // the verify reader refused to start: warning, not failure
-    expect(hasLog("Verify (sampled) skipped on disk 0: nbd-client failed to attach")).toBe(true)
+    expect(hasLog("Verify (sampled) skipped on disk 1: nbd-client failed to attach")).toBe(true)
     expect(createdSnapshots()).toBe(4) // full, delta-1, delta-2, cutover
     expect(destroyed).toHaveLength(4)
     expect(xapiLogout).toHaveBeenCalledTimes(1)
@@ -653,14 +653,14 @@ describe("runXcpngWarmMigration checksum fallback", () => {
     expect(vi.mocked(xapiSnapshotVm).mock.calls.map(c => c[2])).toEqual([`${XCPNG_SNAPSHOT_PREFIX}-checksum`])
     expect(readerTags(jobId)).toEqual(["checksum-0", "vrfy-0"])
     expect(detectChangedExtentsByChecksum).toHaveBeenCalledWith("conn-pve", { host: "10.0.0.5", port: 2202, source: "override" }, "/dev/nbd1", "/dev/zvol/DatastoreVM/vm-777-disk-1", 256 * 1024 * KiB, DISK_BYTES, expect.anything())
-    expect(hasLog("Disk 0: scanning source and target block checksums (15.0 GB)")).toBe(true)
+    expect(hasLog("Disk 1: scanning source and target block checksums (15.0 GB)")).toBe(true)
     // the scan progress callback drove a live write on the full_copy scale
     expect(prisma.migrationJob.updateMany).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ status: "full_copy", transferSpeed: null }),
     }))
     expect(sshCommands.filter(c => c.includes("dd if=")).length).toBe(1)
     expect(destroyed).toEqual(["OpaqueRef:snap1"])
-    expect(hasLog("Verify: disk 0 first-block checksum differs")).toBe(true)
+    expect(hasLog("Verify: disk 1 first-block checksum differs")).toBe(true)
     expect(prisma.row.status).toBe("completed")
     // UEFI boot disk goes to sata0 (no boot-start VirtIO driver in an untouched guest)
     const attach = vi.mocked(pveSetVmConfig).mock.calls[0]
@@ -681,20 +681,20 @@ describe("runXcpngWarmMigration failure cleanup", () => {
     const err = await runToEnd(jobId, makeConfig())
 
     expect(err).toBeInstanceOf(Error)
-    expect(err?.message.startsWith("block apply failed on disk 0: dd: error writing")).toBe(true)
+    expect(err?.message.startsWith("block apply failed on disk 1: dd: error writing")).toBe(true)
     expect(prisma.row.status).toBe("failed")
     expect(prisma.row.error.startsWith("block apply failed")).toBe(true)
     expect(prisma.statusHistory).toEqual(["planning", "enabling_cbt", "preparing_disks", "full_copy", "failed"])
-    expect(hasLog("Warm migration failed: block apply failed on disk 0")).toBe(true)
+    expect(hasLog("Warm migration failed: block apply failed on disk 1")).toBe(true)
 
     // thick path: announced with its cap, refusal of the offload surfaced and the
     // streamed mode named, progress streamed with the average rate, completion
     // logged with mode and rate (roadmap#45 wording)
-    expect(hasLog("Disk 0: zeroing thick target /dev/zvol/DatastoreVM/vm-900-disk-0 (15.0 GB)")).toBe(true)
+    expect(hasLog("Disk 1: zeroing thick target /dev/zvol/DatastoreVM/vm-900-disk-0 (15.0 GB)")).toBe(true)
     expect(messages().some(m => m.includes("Rate limit unlimited"))).toBe(true)
-    expect(hasLog("Disk 0: the array refused the write-zeroes offload (Operation not supported); streaming zeros")).toBe(true)
-    expect(messages().some(m => /^Disk 0: zeroed [\d.]+ of 15\.0 GB \(\d+ MB\/s average\)$/.test(m))).toBe(true)
-    expect(messages().some(m => /^Disk 0: zeroed thick target \/dev\/zvol\/DatastoreVM\/vm-900-disk-0 in .* \(streamed zeros, \d+ MB\/s average, limit unlimited\)$/.test(m))).toBe(true)
+    expect(hasLog("Disk 1: the array refused the write-zeroes offload (Operation not supported); streaming zeros")).toBe(true)
+    expect(messages().some(m => /^Disk 1: zeroed [\d.]+ of 15\.0 GB \(\d+ MB\/s average\)$/.test(m))).toBe(true)
+    expect(messages().some(m => /^Disk 1: zeroed thick target \/dev\/zvol\/DatastoreVM\/vm-900-disk-0 in .* \(streamed zeros, \d+ MB\/s average, limit unlimited\)$/.test(m))).toBe(true)
     expect(prisma.migrationJob.updateMany).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ status: "preparing_disks", transferSpeed: expect.stringMatching(/^Zeroing: \d+ MB\/s$/) }),
     }))

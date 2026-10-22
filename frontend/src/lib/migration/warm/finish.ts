@@ -79,15 +79,15 @@ export async function verifySampledFirstBlock(a: {
         scanBlockChecksums(connectionId, nodeIp, dev, 256 * 1024 * 1024, 1),
       ])
       if (src[0] && dst[0] && src[0] !== dst[0]) {
-        await appendLog(jobId, `Verify: disk ${i} first-block checksum differs (source vs target) — investigate before relying on the copy`, "warn")
+        await appendLog(jobId, `Verify: disk ${i + 1} first-block checksum differs (source vs target) — investigate before relying on the copy`, "warn")
       } else {
-        await appendLog(jobId, `Verify: disk ${i} sampled block matches`, "success")
+        await appendLog(jobId, `Verify: disk ${i + 1} sampled block matches`, "success")
       }
     } finally {
       await reader.close().catch(() => {})
     }
   } catch (e: any) {
-    await appendLog(jobId, `Verify (sampled) skipped on disk ${i}: ${e?.message || e}`, "warn")
+    await appendLog(jobId, `Verify (sampled) skipped on disk ${i + 1}: ${e?.message || e}`, "warn")
   }
 }
 
@@ -152,7 +152,7 @@ export async function verifyWarmDiskIntegrity(a: {
 }): Promise<void> {
   const { jobId, connectionId, nodeIp, diskIndex: i, dev } = a
   if (!a.settings.enabled) {
-    await appendLog(jobId, `Integrity check disabled on the target cluster (Settings > Connections > Migrations tab): disk ${i} is handed over unverified`, "warn")
+    await appendLog(jobId, `Integrity check disabled on the target cluster (Settings > Connections > Migrations tab): disk ${i + 1} is handed over unverified`, "warn")
     return
   }
   let reader: { nbdDev: string; close: () => Promise<void> }
@@ -161,7 +161,7 @@ export async function verifyWarmDiskIntegrity(a: {
   } catch (e: any) {
     // Blocking by design: a disk that cannot be re-read on the source cannot be
     // verified, and the check exists to never hand over an unverified copy.
-    throw new Error(`Integrity check could not open the source disk ${i} for verification: ${e?.message || e}. The copied volumes are kept; retry once the source is reachable, or disable the check on the target cluster (Settings > Connections > Migrations tab).`)
+    throw new Error(`Integrity check could not open the source disk ${i + 1} for verification: ${e?.message || e}. The copied volumes are kept; retry once the source is reachable, or disable the check on the target cluster (Settings > Connections > Migrations tab).`)
   }
   try {
     await verifyDiskIntegrity({

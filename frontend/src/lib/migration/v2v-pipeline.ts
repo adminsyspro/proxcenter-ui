@@ -1610,7 +1610,7 @@ export async function runV2vMigrationPipeline(
         if (isCancelled(jobId)) throw new Error("Migration cancelled")
 
         const imageName = `proxcenter-mig-${jobId}-disk${i}`
-        await appendLog(jobId, `Creating image from disk ${i} (${(disk.sizeBytes / 1073741824).toFixed(1)} GB)...`)
+        await appendLog(jobId, `Creating image from disk ${i + 1} (${(disk.sizeBytes / 1073741824).toFixed(1)} GB)...`)
 
         // Create image from disk via Prism API
         const { imageUuid, taskUuid } = await ntxClient.createDiskImage(
@@ -1638,7 +1638,7 @@ export async function runV2vMigrationPipeline(
         // Credentials stored in a curl config file (chmod 600), deleted after download
         const pidFile = `${downloadDir}/curl-${i}.pid`
         const curlCfg = `${downloadDir}/.curlcfg-${i}`
-        await appendLog(jobId, `Downloading disk ${i} to ${diskPath} (${(disk.sizeBytes / 1073741824).toFixed(1)} GB)...`)
+        await appendLog(jobId, `Downloading disk ${i + 1} to ${diskPath} (${(disk.sizeBytes / 1073741824).toFixed(1)} GB)...`)
 
         // Write curl config file with auth header (restricted permissions)
         const cfgContent = `header = "Authorization: ${authHeader}"\noutput = "${diskPath}"\nurl = "${downloadUrl}"\nsilent\n${insecureTLS ? "insecure" : ""}`
@@ -1652,7 +1652,7 @@ export async function runV2vMigrationPipeline(
         const launchResult = await executeSSH(config.targetConnectionId, nodeIp,
           `nohup bash -c "curl -K ${shellEscape(curlCfg)} && rm -f ${shellEscape(curlCfg)} && echo done > ${shellEscape(diskPath)}.complete" > /dev/null 2>&1 & echo $! > ${shellEscape(pidFile)}`)
         if (!launchResult.success) {
-          throw new Error(`Failed to start disk ${i} download: ${launchResult.error}`)
+          throw new Error(`Failed to start disk ${i + 1} download: ${launchResult.error}`)
         }
 
         // Poll download progress until complete
@@ -1679,7 +1679,7 @@ export async function runV2vMigrationPipeline(
           if (currentSize === lastSize) {
             stallCount++
             if (stallCount >= maxStallChecks) {
-              throw new Error(`Disk ${i} download stalled: no progress for 5 minutes at ${(currentSize / 1073741824).toFixed(1)} GB`)
+              throw new Error(`Disk ${i + 1} download stalled: no progress for 5 minutes at ${(currentSize / 1073741824).toFixed(1)} GB`)
             }
           } else {
             stallCount = 0
@@ -1691,7 +1691,7 @@ export async function runV2vMigrationPipeline(
           if (expectedSize > 0) {
             const diskPct = Math.round((currentSize / expectedSize) * 100)
             if (diskPct > lastLoggedPct + 9) {
-              await appendLog(jobId, `Disk ${i} download: ${diskPct}% (${(currentSize / 1073741824).toFixed(1)} GB)`)
+              await appendLog(jobId, `Disk ${i + 1} download: ${diskPct}% (${(currentSize / 1073741824).toFixed(1)} GB)`)
               lastLoggedPct = diskPct
             }
             const totalDisks = disks.length
@@ -1707,7 +1707,7 @@ export async function runV2vMigrationPipeline(
           throw new Error(`Downloaded disk file is empty or missing: ${diskPath}`)
         }
         const fileSize = Number(statResult.output.trim())
-        await appendLog(jobId, `Disk ${i} downloaded: ${(fileSize / 1073741824).toFixed(1)} GB`, "success")
+        await appendLog(jobId, `Disk ${i + 1} downloaded: ${(fileSize / 1073741824).toFixed(1)} GB`, "success")
 
         // pid and complete files cleaned up with the nutanix download dir at end of pipeline
 

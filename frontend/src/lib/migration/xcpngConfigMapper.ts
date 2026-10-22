@@ -55,8 +55,14 @@ export function mapXoToPveConfig(
   const nicModel = isWin && !options.guestConverted ? "e1000" : "virtio"
   const bootDiskSlot: "sata0" | "scsi0" = (isEfi || isWin) && !options.guestConverted ? "sata0" : "scsi0"
   // One slot per source disk, boot disk first then scsiN, so the attach steps
-  // shared with the ESXi pipelines read the same list on both sources.
-  const diskSlots = (xoConfig.disks || []).map((_, i) => i === 0 ? bootDiskSlot : `scsi${i}`)
+  // shared with the ESXi pipelines read the same list on both sources. An
+  // untouched Windows sees no disk on VirtIO SCSI: its data disks go to the
+  // inbox AHCI too, up to the sixth SATA slot (#1173).
+  const dataOnSata = isWin && !options.guestConverted
+  const diskSlots = (xoConfig.disks || []).map((_, i) => {
+    if (i === 0) return bootDiskSlot
+    return dataOnSata && i < 6 ? `sata${i}` : `scsi${i}`
+  })
 
   // Every VIF in device order, each with its source MAC: the guest keeps its
   // network identity (DHCP reservations, a configuration bound to the MAC),

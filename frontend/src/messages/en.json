@@ -2569,6 +2569,7 @@
       "reviewBusSata": "SATA",
       "reviewScsiBootWarning": "The boot disk is forced to VirtIO SCSI without guest conversion: the guest must already have the VirtIO SCSI driver in its initramfs (Linux) or as a boot driver (Windows), otherwise it stops in the dracut emergency shell or with INACCESSIBLE_BOOT_DEVICE. Turn on \"Convert the guest at cutover\" to install it.",
       "convertGuestMissing": "Guest conversion is not possible on {node} yet, missing: {items}. Without it the cutover keeps the compatible hardware (SATA/e1000).",
+      "convertGuestUnsupportedOs": "virt-v2v {version} on {node} does not support {release} (support starts with virt-v2v {minVersion}): this guest will not be converted and boots on SATA disks with e1000 NICs. For VirtIO, install virtio-win-guest-tools.exe in the source before the cutover, turn the guest conversion off and pick VirtIO SCSI and VirtIO in the review step, or install the drivers after the migration.",
       "convertGuestInstall": "Install on the node",
       "convertGuestInstalling": "Installing…",
       "convertGuestInstallFailed": "Installation failed: {error}",

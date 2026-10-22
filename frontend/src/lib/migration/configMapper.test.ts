@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { efiDiskValue, mapEsxiToPveConfig, planDiskSlots } from "./configMapper"
+import { describeHardwareChanges, efiDiskValue, mapEsxiToPveConfig, planDiskSlots, virtioDevices, withoutVirtioChoices } from "./configMapper"
 import type { EsxiVmConfig } from "@/lib/vmware/soap"
 
 function makeConfig(overrides: Partial<EsxiVmConfig> = {}): EsxiVmConfig {
@@ -139,12 +139,12 @@ describe("mapEsxiToPveConfig — disk bus follows the source controller", () => 
     expect(p.boot).toBe("order=sata0")
   })
 
-  it("keeps the #653 rule for SCSI sources: Windows boots from sata0, data disks on scsi", () => {
+  it("keeps the #653 rule for SCSI sources: Windows boots from sata0, its data disks on SATA too (#1173)", () => {
     const p = mapEsxiToPveConfig(makeConfig({
       guestId: "windows9Server64Guest", guestOS: "Microsoft Windows Server 2022 (64-bit)",
       disks: [busDisk("os", "scsi", 0), busDisk("data", "scsi", 1)],
     }), 100, "local-lvm", "vmbr0")
-    expect(p.diskSlots).toEqual(["sata0", "scsi1"])
+    expect(p.diskSlots).toEqual(["sata0", "sata1"])
     expect(p.machine).toBe("q35")
   })
 
@@ -322,5 +322,49 @@ describe("mapEsxiToPveConfig: NICs of a converted guest (#1000, lab 19/10)", () 
     const linux = makeConfig({ nics: [{ label: "a", type: "E1000", macAddress: "00:50:56:9c:a1:f1", network: "n" }] })
     expect(mapEsxiToPveConfig(linux, 100, "ceph").nets.net0.startsWith("e1000,")).toBe(true)
     expect(mapEsxiToPveConfig(linux, 100, "ceph", "vmbr0", undefined, undefined, undefined, { guestConverted: true }).nets.net0.startsWith("virtio,")).toBe(true)
+  })
+})
+
+describe("mapEsxiToPveConfig: a Windows without the VirtIO drivers (#1173)", () => {
+  const disk = (label: string, unitNumber: number) => ({
+    label, fileName: `[ds] vm/${label}.vmdk`, capacityBytes: 1 << 30, thinProvisioned: true,
+    datastoreName: "ds", relativePath: `vm/${label}.vmdk`, controllerType: "pvscsi", controllerKey: 1000, unitNumber,
+  })
+  const win = { guestId: "windows2022srvNext_64Guest", guestOS: "Microsoft Windows Server 2025 (64-bit)", firmware: "efi" as const }
+  const nic = { label: "a", type: "Vmxnet3", macAddress: "00:50:56:9c:19:0f", network: "VM Network" }
+
+  it("puts every data disk on SATA up to the sixth slot, then on SCSI", () => {
+    const cfg = makeConfig({ ...win, disks: Array.from({ length: 8 }, (_, i) => disk(`d${i}`, i)) })
+    expect(mapEsxiToPveConfig(cfg, 100, "ceph").diskSlots).toEqual(["sata0", "sata1", "sata2", "sata3", "sata4", "sata5", "scsi6", "scsi7"])
+  })
+
+  it("keeps a Linux data disk on SCSI, and a converted Windows on SCSI", () => {
+    expect(mapEsxiToPveConfig(makeConfig({ disks: [disk("os", 0), disk("data", 1)] }), 100, "ceph").diskSlots).toEqual(["scsi0", "scsi1"])
+    const cfg = makeConfig({ ...win, disks: [disk("os", 0), disk("data", 1)] })
+    expect(mapEsxiToPveConfig(cfg, 100, "ceph", "vmbr0", undefined, undefined, undefined, { guestConverted: true }).diskSlots).toEqual(["scsi0", "scsi1"])
+  })
+
+  it("drops the review step's VirtIO choices and says what moved", () => {
+    const cfg = makeConfig({ ...win, disks: [disk("os", 0), disk("data", 1)], nics: [nic] })
+    const overrides = { nics: [{ index: 0, bridge: "vmbr1", vlanTag: 20, model: "virtio" }] }
+    const buses = [undefined, "scsi" as const]
+    const chosen = mapEsxiToPveConfig(cfg, 100, "ceph", "vmbr0", undefined, undefined, overrides, { buses })
+    expect(chosen.diskSlots).toEqual(["sata0", "scsi1"])
+    expect(virtioDevices(chosen)).toEqual(["scsi1", "net0"])
+
+    const inbox = withoutVirtioChoices(overrides, buses)
+    expect(inbox.buses).toEqual([undefined, undefined])
+    expect(inbox.overrides.nics).toEqual([{ index: 0, bridge: "vmbr1", vlanTag: 20, model: undefined }])
+    const fallback = mapEsxiToPveConfig(cfg, 100, "ceph", "vmbr0", undefined, undefined, inbox.overrides, { buses: inbox.buses })
+    expect(fallback.diskSlots).toEqual(["sata0", "sata1"])
+    expect(fallback.nets.net0).toBe("e1000,bridge=vmbr1,macaddr=00:50:56:9c:19:0f,tag=20")
+    expect(virtioDevices(fallback)).toEqual([])
+    expect(describeHardwareChanges(chosen, fallback)).toEqual(["Disk 2 scsi1 → sata1", "net0 virtio → e1000"])
+    expect(describeHardwareChanges(fallback, fallback)).toEqual([])
+  })
+
+  it("keeps the other choices: a forced SATA bus, an E1000 or vmxnet3 model, no override at all", () => {
+    expect(withoutVirtioChoices({}, ["sata"])).toEqual({ overrides: {}, buses: ["sata"] })
+    expect(withoutVirtioChoices({ nics: [{ index: 0, bridge: "vmbr0", model: "vmxnet3" }] }, []).overrides.nics?.[0].model).toBe("vmxnet3")
   })
 })

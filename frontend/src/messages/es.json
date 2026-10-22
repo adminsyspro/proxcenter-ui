@@ -1643,7 +1643,9 @@
         "noBridgeBlocker": "No hay ningún bridge autorizado en tu vDC. Crea una VNet en \"Mi datacenter\" o pide al proveedor un bridge compartido, o marca \"Sin dispositivo de red\".",
         "invalidBridgeBlocker": "Bridge no autorizado en {nicDetails}. Elige uno de los bridges permitidos en la pestaña Red.",
         "nicLabel": "NIC {index} (bridge \"{bridge}\")"
-      }
+      },
+      "noBlankVmVdc": "Ninguno de sus vDC permite VM vacías. Despliegue desde el catálogo de plantillas.",
+      "noVdcNode": "Ningún nodo de este vDC está disponible en este momento."
     },
     "createLxc": {
       "title": "Crear: Contenedor LXC",
@@ -10119,6 +10121,9 @@
     "cpuDefaultModelAuto": "Automático (primer modelo permitido)",
     "cpuAdvancedSettings": "Ajustes avanzados de CPU",
     "cpuAdvancedSettingsHint": "Desactivado, los tenants solo eligen un modelo y un número de núcleos: NUMA, flags de CPU adicionales, límite y unidades de CPU quedan ocultos y rechazados.",
+    "blankVmsTitle": "VM vacías",
+    "allowBlankVms": "Permitir VM vacías",
+    "allowBlankVmsHint": "Los tenants pueden crear una VM desde cero (CPU, memoria, discos y red dentro de las cuotas del vDC) e instalar su sistema operativo desde una ISO de las bibliotecas del vDC. Desactivado, solo despliegan desde el catálogo de plantillas.",
     "tabGeneral": "General",
     "tabQuotas": "Cuotas",
     "tabCompute": "Cómputo",

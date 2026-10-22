@@ -25,6 +25,9 @@ export interface Vdc {
    *  at a shared+images storage. */
   primaryStorage: string | null
   computePolicy: VdcComputePolicy
+  /** The tenant may create blank VMs and install them from an ISO (#1171);
+   *  off, it deploys from the template catalogue only. */
+  allowBlankVms: boolean
   /** How the vDC's VXLAN zone reaches its peers (#899). */
   transport: VdcTransport
   /** `tenant`: the tenant brings its own L3 edge, pure L2 networks allowed.
@@ -209,6 +212,7 @@ export interface CreateVdcInput {
   vlanPools?: Array<{ bridge: string; rangeStart: number; rangeEnd: number }>
   storagePolicies?: Array<{ policyId: string; quotaMb: number | null }>
   computePolicy?: Partial<VdcComputePolicy>
+  allowBlankVms?: boolean
   isoLibraries?: VdcIsoLibraryInput[]
   transport?: Partial<VdcTransport>
   catalogGrants?: Partial<VdcCatalogGrantsDto>
@@ -226,6 +230,7 @@ export interface UpdateVdcInput {
   vlanPools?: Array<{ bridge: string; rangeStart: number; rangeEnd: number }>
   storagePolicies?: Array<{ policyId: string; quotaMb: number | null }>
   computePolicy?: Partial<VdcComputePolicy>
+  allowBlankVms?: boolean
   isoLibraries?: VdcIsoLibraryInput[]
   transport?: Partial<VdcTransport>
   catalogGrants?: Partial<VdcCatalogGrantsDto>

@@ -126,6 +126,20 @@ describe('PUT /api/v1/admin/vdcs/[id]', () => {
     expect(updateVdcMock).toHaveBeenCalledWith('vdc-1', expect.objectContaining({ isoLibraries: undefined }))
   })
 
+  it('forwards a boolean allowBlankVms, drops anything else (#1171)', async () => {
+    let res = await callRoute(PUT as Parameters<typeof callRoute>[0], {
+      method: 'PUT', params: { id: 'vdc-1' }, body: { allowBlankVms: true },
+    })
+    expect(res.status).toBe(200)
+    expect(updateVdcMock).toHaveBeenLastCalledWith('vdc-1', expect.objectContaining({ allowBlankVms: true }))
+
+    res = await callRoute(PUT as Parameters<typeof callRoute>[0], {
+      method: 'PUT', params: { id: 'vdc-1' }, body: { allowBlankVms: 'yes' },
+    })
+    expect(res.status).toBe(200)
+    expect(updateVdcMock).toHaveBeenLastCalledWith('vdc-1', expect.objectContaining({ allowBlankVms: undefined }))
+  })
+
   it('maps a storage-policy unassign-safety rejection from updateVdc to 409', async () => {
     updateVdcMock.mockRejectedValue(
       new Error('Cannot remove storage policy "Gold": VMs 100 still hold volumes on "ceph-nvme"')

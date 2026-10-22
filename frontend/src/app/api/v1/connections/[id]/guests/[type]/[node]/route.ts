@@ -118,6 +118,18 @@ async function handler(
     // below, because the stamp must precede the PVE POST regardless of
     // whether a vDC quota is even configured, and the metered total feeds
     // the same checkVdcQuota call.
+    // `cdrom` is PVE's alias of ide2, and the drive guard only reads disk
+    // keys: folded here, a tenant's ISO goes through the library scope and
+    // the ownership check like any CD/DVD line (#1171).
+    if (type === 'qemu' && body.cdrom !== undefined) {
+      if (body.ide2 !== undefined) {
+        return NextResponse.json({ error: "cdrom and ide2 cannot both be set" }, { status: 400 })
+      }
+      const cdrom = String(body.cdrom)
+      body.ide2 = /(^|,)media=/.test(cdrom) ? cdrom : `${cdrom},media=cdrom`
+      delete body.cdrom
+    }
+
     let drives: Awaited<ReturnType<typeof enforceTenantDrives>> = null
     try {
       drives = await enforceTenantDrives({ tenantId, connectionId: id, type, body })
@@ -130,6 +142,12 @@ async function handler(
       const vdcInfo = await resolveVdcForTenant(tenantId, id, node)
 
       if (vdcInfo) {
+        // Blank VMs (#1171): a vDC that does not allow them deploys from the
+        // template catalogue only, whatever client sends the request.
+        if (type === 'qemu' && !vdcInfo.allowBlankVms) {
+          return NextResponse.json({ error: 'This vDC does not allow blank VMs: deploy from the template catalogue.' }, { status: 403 })
+        }
+
         // vDC compute policy (#893): the model must sit inside the allowed
         // set and the advanced CPU options are refused when the switch is off.
         // A body without `cpu` would let PVE pick kvm64 behind the policy's

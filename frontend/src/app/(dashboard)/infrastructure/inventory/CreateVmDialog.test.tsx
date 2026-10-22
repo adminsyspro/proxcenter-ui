@@ -1022,6 +1022,11 @@ describe('CreateVmDialog - default node and cluster selection', () => {
       loading: false,
       isFullClusterView: false,
     })
+    // The VM goes in a vDC open to blank VMs (#1171), here spanning both nodes.
+    server.use(
+      http.get('*/api/v1/vdcs', () => HttpResponse.json({ data: [{ id: 'vdc-1', name: 'Acme', connectionId: CONN_ID, enabled: true, allowBlankVms: true, nodes: [] }] })),
+      http.get(`*/api/v1/connections/${CONN_ID}/nodes/:node/storages`, () => HttpResponse.json({ data: [] })),
+    )
 
     renderWithProviders(<CreateVmDialog {...makeProps()} />)
 

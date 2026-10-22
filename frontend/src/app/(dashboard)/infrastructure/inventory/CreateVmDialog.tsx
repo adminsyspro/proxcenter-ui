@@ -49,6 +49,9 @@ import { onPrimaryTextColor } from '@/lib/theme/onPrimary'
 import NumericTextField from '@/components/ui/NumericTextField'
 import QuotaDonut from '@/components/mydc/QuotaDonut'
 import { usedVmidsOnConnection } from '@/components/hardware/utils'
+import { IsoUploadControls } from '@/components/hardware/IsoUploadControls'
+import { readVdcContextCookie } from '@/lib/vdc/contextCookie'
+import { blankVmVdcs } from '@/lib/vdc/blankVms'
 import { formatBytes } from '@/utils/format'
 import { AllVmItem } from './InventoryTree'
 
@@ -110,6 +113,53 @@ const createDefaultNic = (): NicConfig => ({
   mtu: '1500',
 })
 
+// Least-loaded online node. Score = cpuPct + 1.5*memPct, RAM weighted higher
+// because it's the harder constraint at provisioning time. Falls back to the
+// first online node, then to the first node.
+const pickBestNode = (pool: any[]): any => {
+  if (pool.length === 0) return null
+  const online = pool.filter(n => n.status === 'online')
+  const candidates = online.length > 0 ? online : pool
+  const scored = candidates.map(n => ({
+    node: n,
+    score: (n.cpuPct ?? 0) + 1.5 * (n.memPct ?? 0),
+  }))
+  scored.sort((a, b) => a.score - b.score)
+  return scored[0].node
+}
+
+/** Nodes of `vdc` among the loaded nodes: its connection, and its node list
+ *  when the vDC pins one. */
+export function vdcNodePool(vdc: any, nodes: any[]): any[] {
+  const connId = vdc.connectionId ?? vdc.connection_id
+  const pinned = new Set<string>(Array.isArray(vdc.nodes) ? vdc.nodes : [])
+  return nodes.filter(n => n.connId === connId && (pinned.size === 0 || pinned.has(n.node)))
+}
+
+/** Storage rows for a vDC tenant on one node: the node route scopes them to
+ *  the vDC (the cluster route drops the shared primary storage), and its iso
+ *  listing adds the ISO libraries, kept out of the disk pickers. */
+export async function loadTenantNodeStorages(connId: string, node: string): Promise<any[]> {
+  const base = `/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/storages`
+  const read = async (url: string): Promise<any[]> => {
+    try {
+      const res = await fetch(url)
+      if (!res.ok) return []
+      const json = await res.json()
+      return Array.isArray(json?.data) ? json.data : []
+    } catch {
+      return []
+    }
+  }
+  const [main, iso] = await Promise.all([read(base), read(`${base}?content=iso`)])
+  const byName = new Map<string, any>(main.map(s => [s.storage, { ...s, node }]))
+  for (const s of iso) {
+    const known = byName.get(s.storage)
+    byName.set(s.storage, known ? { ...known, tenantCanUpload: s.tenantCanUpload } : { ...s, node, isoOnly: true })
+  }
+  return [...byName.values()]
+}
+
 function CreateVmDialog({
   open,
   onClose,
@@ -160,6 +210,11 @@ function CreateVmDialog({
   const cpuTypeTouched = React.useRef(false)
   const [storages, setStorages] = useState<any[]>([])
   const [isoImages, setIsoImages] = useState<any[]>([])
+  // An ISO upload in flight freezes the Create button (#1171).
+  const [isoBusy, setIsoBusy] = useState(false)
+  // vDC tenant (#1171): the vDCs open to blank VMs and the one the VM goes in.
+  const [blankVdcs, setBlankVdcs] = useState<any[]>([])
+  const [tenantVdcId, setTenantVdcId] = useState('')
   const [networks, setNetworks] = useState<any[]>([])
   const [bridges, setBridges] = useState<any[]>([])
   const [pools, setPools] = useState<any[]>([])
@@ -462,6 +517,8 @@ function CreateVmDialog({
       setNics([createDefaultNic()])
       setExpandedNics(new Set([0]))
       setNoNetwork(false)
+      setBlankVdcs([])
+      setTenantVdcId('')
       void loadAllData()
     }
   }, [open])
@@ -511,7 +568,9 @@ function CreateVmDialog({
         if (!res.ok) { if (!cancelled) { setVdcQuota(null); setVdcUsage(null) } ; return }
         const json = await res.json()
         const vdcs: any[] = Array.isArray(json?.data) ? json.data : []
-        const match = vdcs.find(v => v.connectionId === selectedConnection || v.connection_id === selectedConnection)
+        const match = tenantVdcId
+          ? vdcs.find(v => v.id === tenantVdcId)
+          : vdcs.find(v => v.connectionId === selectedConnection || v.connection_id === selectedConnection)
         if (cancelled) return
         if (match?.quota) {
           setVdcQuota({
@@ -535,7 +594,7 @@ function CreateVmDialog({
       }
     })()
     return () => { cancelled = true }
-  }, [open, selectedConnection])
+  }, [open, selectedConnection, tenantVdcId])
 
   // Charger les pools de ressources quand la connexion change
   useEffect(() => {
@@ -677,38 +736,20 @@ return
 
       setNodes(allNodes)
 
-      // Pick the least-loaded online node. Score = cpuPct + 1.5*memPct, RAM
-      // weighted higher because it's the harder constraint at provisioning
-      // time. Falls back to the first online node, then to the first node.
-      const pickBestNode = (pool: any[]): any => {
-        if (pool.length === 0) return null
-        const online = pool.filter(n => n.status === 'online')
-        const candidates = online.length > 0 ? online : pool
-        const scored = candidates.map(n => ({
-          node: n,
-          score: (n.cpuPct ?? 0) + 1.5 * (n.memPct ?? 0),
-        }))
-        scored.sort((a, b) => a.score - b.score)
-        return scored[0].node
-      }
-
       // 3. Sélectionner le node par défaut. For tenants we always go through
       // pickBestNode (auto-placement, picker is hidden). The provider keeps
       // the legacy precedence (defaultNode/defaultConnId/first).
       if (allNodes.length > 0) {
         if (hideNodePicker) {
-          // Tenant: pick best across the whole pool; if a defaultConnId was
-          // hinted, restrict to that cluster's nodes first.
-          const pool = defaultConnId
-            ? allNodes.filter((n: any) => n.connId === defaultConnId)
-            : allNodes
-          const target = pickBestNode(pool.length > 0 ? pool : allNodes)
-          if (target) {
-            setSelectedNodeValue(target.node)
-            setResolvedNode(target.node)
-            setSelectedConnection(target.connId)
-            void loadNextVmid(target.connId)
-          }
+          // Tenant: the VM goes in one of its vDCs open to blank VMs (#1171),
+          // the context vDC or the hinted cluster's first, on its least-loaded
+          // node. No such vDC leaves the wizard without a target.
+          const vdcsRes = await fetch('/api/v1/vdcs')
+          const vdcsJson = vdcsRes.ok ? await vdcsRes.json() : null
+          const eligible = blankVmVdcs(Array.isArray(vdcsJson?.data) ? vdcsJson.data : [], readVdcContextCookie())
+          setBlankVdcs(eligible)
+          const target = (defaultConnId && eligible.find(v => (v.connectionId ?? v.connection_id) === defaultConnId)) || eligible[0]
+          if (target) placeInVdc(target, allNodes)
         } else if (defaultConnId && defaultNode) {
           const match = allNodes.find((n: any) => n.connId === defaultConnId && n.node === defaultNode)
           const target = match || allNodes[0]
@@ -741,6 +782,33 @@ return
     } finally {
       setLoadingData(false)
     }
+  }
+
+  // vDC tenant (#1171): the VM goes in the picked vDC, on its least-loaded node.
+  const placeInVdc = (vdc: any, pool: any[]) => {
+    setTenantVdcId(vdc.id)
+    const target = pickBestNode(vdcNodePool(vdc, pool))
+    if (!target) {
+      setSelectedNodeValue('')
+      setResolvedNode('')
+      setSelectedConnection(vdc.connectionId ?? vdc.connection_id ?? '')
+      return
+    }
+    setSelectedNodeValue(target.node)
+    setResolvedNode(target.node)
+    setSelectedConnection(target.connId)
+    void loadNextVmid(target.connId)
+  }
+
+  const handleTenantVdcChange = (vdcId: string) => {
+    const vdc = blankVdcs.find(v => v.id === vdcId)
+    if (!vdc || vdc.id === tenantVdcId) return
+    // Storages, bridges and ISOs picked in the vDC left behind do not apply.
+    setDisks([createDefaultDisk()])
+    setNics([createDefaultNic()])
+    setIsoStorage('')
+    setIsoImage('')
+    placeInVdc(vdc, nodes)
   }
 
   // Grouper les nodes par cluster avec stats agrégées
@@ -844,10 +912,14 @@ return
 
   const loadStorages = async (connId: string) => {
     try {
-      const storagesRes = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/storage`)
-      const storagesJson = await storagesRes.json()
-      
-      const allStorages = storagesJson.data || []
+      let allStorages: any[]
+      if (hideNodePicker) {
+        allStorages = await loadTenantNodeStorages(connId, resolvedNode)
+      } else {
+        const storagesRes = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/storage`)
+        const storagesJson = await storagesRes.json()
+        allStorages = storagesJson.data || []
+      }
       setStorages(allStorages)
 
       // Auto-select defaults from filtered storages (only shared + local for resolvedNode)
@@ -855,7 +927,7 @@ return
         s.content?.includes('iso') && (s.shared || s.node === resolvedNode)
       )
       const filteredDisk = allStorages.filter((s: any) =>
-        (s.content?.includes('images') || s.content?.includes('rootdir')) && (s.shared || s.node === resolvedNode)
+        !s.isoOnly && (s.content?.includes('images') || s.content?.includes('rootdir')) && (s.shared || s.node === resolvedNode)
       )
 
       if (filteredIso.length > 0 && !isoStorage) {
@@ -1054,7 +1126,7 @@ return
     [storages, resolvedNode]
   )
   const diskStoragesList = useMemo(() =>
-    storages.filter(s => (s.content?.includes('images') || s.content?.includes('rootdir')) && (s.shared || s.node === resolvedNode)),
+    storages.filter(s => !s.isoOnly && (s.content?.includes('images') || s.content?.includes('rootdir')) && (s.shared || s.node === resolvedNode)),
     [storages, resolvedNode]
   )
 
@@ -1182,6 +1254,29 @@ return
                 ]).flat().filter(Boolean)}
               </Select>
             </FormControl>
+            )}
+            {/* vDC tenant (#1171): the vDC replaces the node picker, among those
+                open to blank VMs, when there is a choice to make. */}
+            {hideNodePicker && blankVdcs.length > 1 && (
+              <FormControl fullWidth size="small">
+                <InputLabel id="create-vm-vdc-label">{t('myVdc.selectVdc')}</InputLabel>
+                <Select
+                  labelId="create-vm-vdc-label"
+                  value={tenantVdcId}
+                  label={t('myVdc.selectVdc')}
+                  onChange={(e) => handleTenantVdcChange(String(e.target.value))}
+                >
+                  {blankVdcs.map(v => (
+                    <MenuItem key={v.id} value={v.id}>{v.name}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            )}
+            {hideNodePicker && !loadingData && blankVdcs.length === 0 && (
+              <Alert severity="info">{t('inventory.createVm.noBlankVmVdc')}</Alert>
+            )}
+            {hideNodePicker && !loadingData && !!tenantVdcId && !resolvedNode && (
+              <Alert severity="warning">{t('inventory.createVm.noVdcNode')}</Alert>
             )}
             {/* Resource pool selector, hidden for vDC tenants (pool assigned
                 automatically). Pool-scoped callers keep it: the list is their
@@ -1332,7 +1427,7 @@ return
                       <Select value={isoStorage} onChange={(e) => setIsoStorage(e.target.value)} label={t('inventory.createVm.storage')}>
                         {isoStoragesList.map(s => (
                           <MenuItem key={s.id || s.storage} value={s.storage}>
-                            {s.storage} ({s.type}){!s.shared && s.node ? ` — ${s.node}` : ''}
+                            {s.storage} ({s.type}){!hideNodePicker && !s.shared && s.node ? ` — ${s.node}` : ''}
                           </MenuItem>
                         ))}
                       </Select>
@@ -1351,6 +1446,22 @@ return
                         )}
                       </Select>
                     </FormControl>
+                    {/* Bring your own ISO (#1171): renders only on a storage
+                        the tenant may upload to, so the provider sees nothing. */}
+                    {isoStoragesList.find(s => s.storage === isoStorage)?.tenantCanUpload && (
+                    <Box sx={{ gridColumn: '1 / -1' }}>
+                      <IsoUploadControls
+                        connId={selectedConnection}
+                        node={resolvedNode}
+                        storage={isoStorage}
+                        storageRow={isoStoragesList.find(s => s.storage === isoStorage)}
+                        selectedIso={isoImage}
+                        onBusy={setIsoBusy}
+                        onUploaded={async (filename) => { await loadIsoImages(selectedConnection, resolvedNode, isoStorage); setIsoImage(filename) }}
+                        onDeleted={async () => { setIsoImage(''); await loadIsoImages(selectedConnection, resolvedNode, isoStorage) }}
+                      />
+                    </Box>
+                    )}
                   </Box>
                 </Collapse>
 
@@ -1588,7 +1699,7 @@ return
                           </FormControl>
                           <FormControl size="small">
                             <InputLabel>{t('inventory.createVm.storage')} ({t('inventory.createVm.target')})</InputLabel>
-                            <Select value={disk.storage} onChange={(e) => updateDisk(diskIdx, { storage: e.target.value })} label={`${t('inventory.createVm.storage')} (${t('inventory.createVm.target')})`} renderValue={(val) => { const s = diskStoragesList.find(x => x.storage === val); return s ? `${s.storage}${!s.shared && s.node ? ` — ${s.node}` : ''}` : String(val) }}>
+                            <Select value={disk.storage} onChange={(e) => updateDisk(diskIdx, { storage: e.target.value })} label={`${t('inventory.createVm.storage')} (${t('inventory.createVm.target')})`} renderValue={(val) => { const s = diskStoragesList.find(x => x.storage === val); return s ? `${s.storage}${!hideNodePicker && !s.shared && s.node ? ` — ${s.node}` : ''}` : String(val) }}>
                               {diskStoragesList.map(s => {
                                 const total = s.total || 0
                                 const used = s.used || 0
@@ -1599,7 +1710,7 @@ return
                                   <MenuItem key={s.id || s.storage} value={s.storage}>
                                     <Box sx={{ width: '100%' }}>
                                       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.25 }}>
-                                        <Typography variant="body2" fontSize={13}>{s.storage}{!s.shared && s.node ? ` — ${s.node}` : ''}</Typography>
+                                        <Typography variant="body2" fontSize={13}>{s.storage}{!hideNodePicker && !s.shared && s.node ? ` — ${s.node}` : ''}</Typography>
                                         {total > 0 && <Typography variant="caption" color="text.secondary">{formatBytes(avail)} free / {formatBytes(total)}</Typography>}
                                       </Box>
                                       {total > 0 && <LinearProgress variant="determinate" value={usagePct} color={usageColor as any} sx={{ height: 4, borderRadius: 1 }} />}
@@ -1670,7 +1781,7 @@ return
                           </FormControl>
                           <FormControl size="small" error={diskStoragesList.length === 0}>
                             <InputLabel>{t('inventory.createVm.storage')}</InputLabel>
-                            <Select value={disk.storage} onChange={(e) => updateDisk(diskIdx, { storage: e.target.value })} label={t('inventory.createVm.storage')} disabled={diskStoragesList.length === 0} renderValue={(val) => { const s = diskStoragesList.find(x => x.storage === val); return s ? `${s.storage}${!s.shared && s.node ? ` — ${s.node}` : ''}` : String(val) }}>
+                            <Select value={disk.storage} onChange={(e) => updateDisk(diskIdx, { storage: e.target.value })} label={t('inventory.createVm.storage')} disabled={diskStoragesList.length === 0} renderValue={(val) => { const s = diskStoragesList.find(x => x.storage === val); return s ? `${s.storage}${!hideNodePicker && !s.shared && s.node ? ` — ${s.node}` : ''}` : String(val) }}>
                               {diskStoragesList.length === 0 ? (
                                 <MenuItem value="" disabled>
                                   {storages.length === 0
@@ -1688,7 +1799,7 @@ return
                                     <MenuItem key={s.id || s.storage} value={s.storage}>
                                       <Box sx={{ width: '100%' }}>
                                         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.25 }}>
-                                          <Typography variant="body2" fontSize={13}>{s.storage}{!s.shared && s.node ? ` — ${s.node}` : ''}</Typography>
+                                          <Typography variant="body2" fontSize={13}>{s.storage}{!hideNodePicker && !s.shared && s.node ? ` — ${s.node}` : ''}</Typography>
                                           {total > 0 && <Typography variant="caption" color="text.secondary">{formatBytes(avail)} free / {formatBytes(total)}</Typography>}
                                         </Box>
                                         {total > 0 && <LinearProgress variant="determinate" value={usagePct} color={usageColor as any} sx={{ height: 4, borderRadius: 1 }} />}
@@ -2197,8 +2308,17 @@ return
                 {/* General */}
                 {confirmCard('ri-server-line', 'General', (
                   <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
-                    <Chip label={`Node: ${resolvedNode}`} size="small" variant="outlined" sx={{ fontSize: 11 }} />
-                    <Chip label={`ID: ${vmid}`} size="small" variant="outlined" sx={{ fontSize: 11 }} />
+                    {/* A vDC tenant never sees the node nor the VMID (#1171): its vDC instead. */}
+                    {hideNodePicker ? (
+                      blankVdcs.find(v => v.id === tenantVdcId)?.name && (
+                        <Chip label={`vDC: ${blankVdcs.find(v => v.id === tenantVdcId)?.name}`} size="small" variant="outlined" sx={{ fontSize: 11 }} />
+                      )
+                    ) : (
+                      <>
+                        <Chip label={`Node: ${resolvedNode}`} size="small" variant="outlined" sx={{ fontSize: 11 }} />
+                        <Chip label={`ID: ${vmid}`} size="small" variant="outlined" sx={{ fontSize: 11 }} />
+                      </>
+                    )}
                     {vmName && <Chip label={vmName} size="small" color="primary" sx={{ fontSize: 11 }} />}
                   </Box>
                 ))}
@@ -2552,7 +2672,7 @@ return
             onClick={handleCreate}
             variant="contained"
             color="primary"
-            disabled={creating || !vmid || !resolvedNode || !!vmidError || quotaBlocked || networkBlocked}
+            disabled={creating || isoBusy || !vmid || !resolvedNode || !!vmidError || quotaBlocked || networkBlocked}
             startIcon={creating ? <CircularProgress size={16} /> : null}
           >
             Create

@@ -123,6 +123,16 @@ describe('POST /api/v1/admin/vdcs', () => {
     expect((await res.json()).data.id).toBe('vdc-new')
   })
 
+  it('forwards a boolean allowBlankVms to createVdc (#1171)', async () => {
+    const res = await callRoute(POST as Parameters<typeof callRoute>[0], {
+      method: 'POST',
+      body: { ...VALID_BODY, allowBlankVms: true },
+    })
+
+    expect(res.status).toBe(201)
+    expect(createVdcMock).toHaveBeenCalledWith(expect.objectContaining({ allowBlankVms: true }), 'admin-1')
+  })
+
   it('forwards vlanPools to createVdc', async () => {
     const vlanPools = [{ bridge: 'vmbr0', rangeStart: 100, rangeEnd: 199 }]
     const res = await callRoute(POST as Parameters<typeof callRoute>[0], {

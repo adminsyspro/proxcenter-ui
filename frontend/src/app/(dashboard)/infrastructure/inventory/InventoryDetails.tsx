@@ -107,6 +107,7 @@ import { useTagColors } from '@/contexts/TagColorContext'
 import { useTenant } from '@/contexts/TenantContext'
 import { useMyVdcs } from '@/hooks/useMyVdcs'
 import { readVdcContextCookie } from '@/lib/vdc/contextCookie'
+import { blankVmVdcs } from '@/lib/vdc/blankVms'
 import { useRouter } from 'next/navigation'
 import { getOsSvgIcon } from '@/lib/utils/osIcons'
 import GuestOsLogo from '@/components/ui/GuestOsLogo'
@@ -277,7 +278,10 @@ export default function InventoryDetails({
   const ctxIsActiveVdc = !!ctxCookie && myVdcs.some((v) => v.id === ctxCookie && v.enabled !== false)
   const showVdcColumn = !isFullClusterView && vdcNameByConn.size > 1 && !ctxIsActiveVdc
   const allowLxc = !tenantLoading && (currentTenant === null || isFullClusterView)
-  const allowBlankVm = allowLxc
+  // Blank VMs (#1171): the provider always; a vDC tenant when a vDC in view
+  // allows them, next to the template catalogue that stays its main path.
+  const tenantBlankVm = !tenantLoading && !allowLxc && blankVmVdcs(myVdcs, ctxCookie).length > 0
+  const allowBlankVm = allowLxc || tenantBlankVm
   const router = useRouter()
   const { trackTask } = useTaskTracker()
   const { addTask: addPCTask, updateTask: updatePCTask, registerOnRestore, unregisterOnRestore } = useProxCenterTasks()
@@ -2828,17 +2832,7 @@ return vm?.isCluster ?? false
                   </Typography>
                   {canCreate && (
                   <Stack direction="row" spacing={1}>
-                    {allowBlankVm ? (
-                      <Button
-                        size="small"
-                        variant="contained"
-                        startIcon={<i className="ri-add-line" />}
-                        onClick={() => setCreateVmDialogOpen(true)}
-                        sx={{ textTransform: 'none' }}
-                      >
-                        {t('common.create')} VM
-                      </Button>
-                    ) : (
+                    {!allowLxc && (
                       <Button
                         size="small"
                         variant="contained"
@@ -2847,6 +2841,17 @@ return vm?.isCluster ?? false
                         sx={{ textTransform: 'none' }}
                       >
                         {t('inventory.deployFromTemplate')}
+                      </Button>
+                    )}
+                    {allowBlankVm && (
+                      <Button
+                        size="small"
+                        variant={allowLxc ? 'contained' : 'outlined'}
+                        startIcon={<i className="ri-add-line" />}
+                        onClick={() => setCreateVmDialogOpen(true)}
+                        sx={{ textTransform: 'none' }}
+                      >
+                        {t('common.create')} VM
                       </Button>
                     )}
                     {allowLxc && (
@@ -3485,9 +3490,8 @@ return vm?.isCluster ?? false
                     }}
                   >
                     {[
-                      allowBlankVm
-                        ? { key: 'vm', label: `${t('common.create')} VM`, icon: 'ri-computer-line', plus: true, onClick: () => setCreateVmDialogOpen(true) }
-                        : { key: 'tpl', label: t('inventory.deployFromTemplate'), icon: 'ri-rocket-2-line', plus: false, onClick: () => router.push('/automation/templates') },
+                      ...(allowLxc ? [] : [{ key: 'tpl', label: t('inventory.deployFromTemplate'), icon: 'ri-rocket-2-line', plus: false, onClick: () => router.push('/automation/templates') }]),
+                      ...(allowBlankVm ? [{ key: 'vm', label: `${t('common.create')} VM`, icon: 'ri-computer-line', plus: true, onClick: () => setCreateVmDialogOpen(true) }] : []),
                       ...(allowLxc ? [{ key: 'lxc', label: `${t('common.create')} LXC`, icon: 'ri-instance-line', plus: true, onClick: () => setCreateLxcDialogOpen(true) }] : []),
                     ].map((b, i) => (
                       <MuiTooltip key={b.key} title={b.label}>

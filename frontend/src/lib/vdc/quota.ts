@@ -46,6 +46,8 @@ export interface VdcResolveResult {
   } | null
   storagePolicies: Array<{ policyId: string; name: string; storageId: string; quotaMb: number | null }>
   computePolicy: VdcComputePolicy
+  /** Blank VM creation allowed on this vDC (#1171). */
+  allowBlankVms: boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -97,6 +99,7 @@ export async function resolveVdcForTenant(
       cpuAllowedModels: true,
       cpuDefaultModel: true,
       cpuAdvancedSettings: true,
+      allowBlankVms: true,
       nodes: { select: { nodeName: true } },
       storagePolicies: {
         select: { policyId: true, quotaMb: true, policy: { select: { name: true, storageId: true } } },
@@ -150,6 +153,7 @@ export async function resolveVdcForTenant(
       cpuDefaultModel: vdc.cpuDefaultModel,
       cpuAdvancedSettings: vdc.cpuAdvancedSettings,
     }),
+    allowBlankVms: vdc.allowBlankVms === true,
   }
 }
 

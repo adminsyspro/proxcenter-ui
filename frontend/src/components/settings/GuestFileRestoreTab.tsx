@@ -8,6 +8,7 @@
 import { useState } from 'react'
 import useSWR from 'swr'
 import { useTranslations } from 'next-intl'
+import type { ReactNode } from 'react'
 import {
   Alert,
   Box,
@@ -15,16 +16,13 @@ import {
   Card,
   CardContent,
   CircularProgress,
-  FormControl,
-  FormControlLabel,
-  FormHelperText,
-  InputLabel,
+  InputAdornment,
   MenuItem,
-  Select,
   Skeleton,
   Stack,
   Switch,
   TextField,
+  Tooltip,
   Typography,
 } from '@mui/material'
 
@@ -38,6 +36,14 @@ const MIB = 1024 * 1024
 // pins both to the same line height so a row of fields sits level.
 const SMALL_SELECT_SX = {
   '& .MuiInputBase-input.MuiSelect-select': { minHeight: '1.4375em', lineHeight: '1.4375em' },
+} as const
+
+// Every card lays its fields on the same four columns, so fields line up from
+// one card to the next.
+const FIELD_GRID_SX = {
+  display: 'grid',
+  gap: 2,
+  gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))', lg: 'repeat(4, minmax(0, 1fr))' },
 } as const
 
 type Conflict = 'keep' | 'overwrite' | 'skip'
@@ -104,8 +110,54 @@ function spoolDirError(dir: string): boolean {
   return v !== '' && !v.startsWith('/')
 }
 
+// Explanations live in tooltips (same glyph as the vDC tab); only a validation
+// error is written under a field.
+function hintIcon(title: ReactNode) {
+  return (
+    <Tooltip arrow placement='top' title={title}>
+      <Box component='i' className='ri-information-line' sx={{ fontSize: 14, opacity: 0.55, cursor: 'help' }} />
+    </Tooltip>
+  )
+}
+
+// Unit then hint, at the end of the field so every field keeps its full width.
+// `insideSelect` leaves room for the dropdown arrow of a Select.
+function endAdornment(hint: ReactNode, unit?: string, insideSelect = false) {
+  return (
+    <InputAdornment position='end' sx={{ gap: 1, mr: insideSelect ? 4 : 0, pointerEvents: 'auto' }}>
+      {unit && <Typography variant='body2' color='text.secondary'>{unit}</Typography>}
+      {hintIcon(hint)}
+    </InputAdornment>
+  )
+}
+
+function SectionCard({ icon, title, description, action, children }: {
+  icon: string
+  title: string
+  description: string
+  action?: ReactNode
+  children: ReactNode
+}) {
+  return (
+    <Card variant='outlined'>
+      <CardContent>
+        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5, mb: 3 }}>
+          <Box component='i' className={icon} sx={{ fontSize: 20, color: 'primary.main', mt: 0.25 }} />
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Typography variant='subtitle1' fontWeight={600} lineHeight={1.4}>{title}</Typography>
+            <Typography variant='body2' color='text.secondary'>{description}</Typography>
+          </Box>
+          {action}
+        </Box>
+        {children}
+      </CardContent>
+    </Card>
+  )
+}
+
 export default function GuestFileRestoreTab() {
   const t = useTranslations('guestFileRestore.settings')
+  const tg = useTranslations('guestFileRestore')
   const toast = useToast()
   const { data, error, isLoading, mutate } = useSWR(API, fetcher, { revalidateOnFocus: false })
 
@@ -168,196 +220,189 @@ export default function GuestFileRestoreTab() {
         </Stack>
       ) : (
         <>
-          <Card variant='outlined'>
-            <CardContent>
-              <Typography variant='h6' sx={{ mb: 0.5 }}>{t('methodsHeading')}</Typography>
-              <Typography variant='body2' color='text.secondary' sx={{ mb: 2 }}>{t('methodsDescription')}</Typography>
-              <Stack spacing={3}>
-                <Box>
-                  <FormControlLabel
-                    control={<Switch checked={form.agentEnabled} onChange={e => patch({ agentEnabled: e.target.checked })} />}
-                    label={t('agentEnabled')}
-                  />
-                  <FormHelperText sx={{ mt: 0 }}>{t('agentEnabledHelper')}</FormHelperText>
-                </Box>
-                <NumericTextField
-                  size='small'
-                  type='number'
-                  label={t('agentMaxMib')}
-                  value={Math.round(form.agentMaxBytes / MIB)}
-                  onChange={v => patch({ agentMaxBytes: v * MIB })}
-                  fallback={1024}
-                  min={1}
-                  max={65536}
-                  disabled={!form.agentEnabled}
-                  helperText={t('agentMaxMibHelper')}
-                  sx={{ maxWidth: 360 }}
-                />
-                <NumericTextField
-                  size='small'
-                  type='number'
-                  label={t('agentParallelWrites')}
-                  value={form.agentParallelWrites}
-                  onChange={v => patch({ agentParallelWrites: v })}
-                  fallback={4}
-                  min={1}
-                  max={16}
-                  disabled={!form.agentEnabled}
-                  helperText={t('agentParallelWritesHelper')}
-                  sx={{ maxWidth: 360 }}
-                />
-                <Box>
-                  <FormControlLabel
-                    control={<Switch checked={form.sshEnabled} onChange={e => patch({ sshEnabled: e.target.checked })} />}
-                    label={t('sshEnabled')}
-                  />
-                  <FormHelperText sx={{ mt: 0 }}>{t('sshEnabledHelper')}</FormHelperText>
-                </Box>
-                <NumericTextField
-                  size='small'
-                  type='number'
-                  label={t('sshConnectTimeoutSec')}
-                  value={form.sshConnectTimeoutSec}
-                  onChange={v => patch({ sshConnectTimeoutSec: v })}
-                  fallback={20}
-                  min={5}
-                  max={120}
-                  disabled={!form.sshEnabled}
-                  helperText={t('sshConnectTimeoutSecHelper')}
-                  sx={{ maxWidth: 360 }}
-                />
-                {!form.agentEnabled && !form.sshEnabled && (
-                  <Alert severity='warning'>{t('noMethodWarning')}</Alert>
-                )}
-              </Stack>
-            </CardContent>
-          </Card>
+          <SectionCard
+            icon='ri-cpu-line'
+            title={tg('methodAgent')}
+            description={t('agentEnabledHelper')}
+            action={
+              <Switch
+                checked={form.agentEnabled}
+                onChange={e => patch({ agentEnabled: e.target.checked })}
+                slotProps={{ input: { 'aria-label': t('agentEnabled') } }}
+              />
+            }
+          >
+            <Box sx={FIELD_GRID_SX}>
+              <NumericTextField
+                size='small'
+                type='number'
+                label={t('agentMaxMib')}
+                value={Math.round(form.agentMaxBytes / MIB)}
+                onChange={v => patch({ agentMaxBytes: v * MIB })}
+                fallback={1024}
+                min={1}
+                max={65536}
+                disabled={!form.agentEnabled}
+                slotProps={{ input: { endAdornment: endAdornment(t('agentMaxMibHelper'), t('unitMib')) } }}
+              />
+              <NumericTextField
+                size='small'
+                type='number'
+                label={t('agentParallelWrites')}
+                value={form.agentParallelWrites}
+                onChange={v => patch({ agentParallelWrites: v })}
+                fallback={4}
+                min={1}
+                max={16}
+                disabled={!form.agentEnabled}
+                slotProps={{ input: { endAdornment: endAdornment(t('agentParallelWritesHelper')) } }}
+              />
+              <TextField
+                size='small'
+                label={t('spoolDir')}
+                value={form.spoolDir}
+                onChange={e => patch({ spoolDir: e.target.value })}
+                error={spoolDirError(form.spoolDir)}
+                helperText={spoolDirError(form.spoolDir) ? t('spoolDirInvalid') : undefined}
+                disabled={!form.agentEnabled}
+                slotProps={{
+                  htmlInput: { spellCheck: false },
+                  input: { endAdornment: endAdornment(t('spoolDirHelper')) },
+                }}
+              />
+              <NumericTextField
+                size='small'
+                type='number'
+                label={t('spoolMinFreeMib')}
+                value={Math.round(form.spoolMinFreeBytes / MIB)}
+                onChange={v => patch({ spoolMinFreeBytes: v * MIB })}
+                fallback={2048}
+                min={0}
+                max={1048576}
+                disabled={!form.agentEnabled}
+                slotProps={{ input: { endAdornment: endAdornment(t('spoolMinFreeMibHelper'), t('unitMib')) } }}
+              />
+            </Box>
+          </SectionCard>
 
-          <Card variant='outlined'>
-            <CardContent>
-              <Typography variant='h6' sx={{ mb: 0.5 }}>{t('transfersHeading')}</Typography>
-              <Typography variant='body2' color='text.secondary' sx={{ mb: 2 }}>{t('transfersDescription')}</Typography>
-              <Stack spacing={3}>
-                <TextField
-                  size='small'
-                  label={t('spoolDir')}
-                  value={form.spoolDir}
-                  onChange={e => patch({ spoolDir: e.target.value })}
-                  error={spoolDirError(form.spoolDir)}
-                  helperText={spoolDirError(form.spoolDir) ? t('spoolDirInvalid') : t('spoolDirHelper')}
-                  disabled={!form.agentEnabled}
-                  slotProps={{ htmlInput: { spellCheck: false, style: { fontFamily: 'JetBrains Mono, monospace', fontSize: 13 } } }}
-                />
-                <NumericTextField
-                  size='small'
-                  type='number'
-                  label={t('spoolMinFreeMib')}
-                  value={Math.round(form.spoolMinFreeBytes / MIB)}
-                  onChange={v => patch({ spoolMinFreeBytes: v * MIB })}
-                  fallback={2048}
-                  min={0}
-                  max={1048576}
-                  disabled={!form.agentEnabled}
-                  helperText={t('spoolMinFreeMibHelper')}
-                  sx={{ maxWidth: 360 }}
-                />
-                <NumericTextField
-                  size='small'
-                  type='number'
-                  label={t('sourceStallTimeoutSec')}
-                  value={form.sourceStallTimeoutSec}
-                  onChange={v => patch({ sourceStallTimeoutSec: v })}
-                  fallback={120}
-                  min={10}
-                  max={3600}
-                  helperText={t('sourceStallTimeoutSecHelper')}
-                  sx={{ maxWidth: 360 }}
-                />
-              </Stack>
-            </CardContent>
-          </Card>
+          <SectionCard
+            icon='ri-terminal-box-line'
+            title={tg('methodSsh')}
+            description={t('sshEnabledHelper')}
+            action={
+              <Switch
+                checked={form.sshEnabled}
+                onChange={e => patch({ sshEnabled: e.target.checked })}
+                slotProps={{ input: { 'aria-label': t('sshEnabled') } }}
+              />
+            }
+          >
+            <Box sx={FIELD_GRID_SX}>
+              <NumericTextField
+                size='small'
+                type='number'
+                label={t('sshConnectTimeoutSec')}
+                value={form.sshConnectTimeoutSec}
+                onChange={v => patch({ sshConnectTimeoutSec: v })}
+                fallback={20}
+                min={5}
+                max={120}
+                disabled={!form.sshEnabled}
+                slotProps={{ input: { endAdornment: endAdornment(t('sshConnectTimeoutSecHelper'), t('unitSeconds')) } }}
+              />
+            </Box>
+          </SectionCard>
 
-          <Card variant='outlined'>
-            <CardContent>
-              <Typography variant='h6' sx={{ mb: 0.5 }}>{t('defaultsHeading')}</Typography>
-              <Typography variant='body2' color='text.secondary' sx={{ mb: 2 }}>{t('defaultsDescription')}</Typography>
-              <Stack spacing={3}>
-                <FormControl size='small' sx={{ maxWidth: 360, ...SMALL_SELECT_SX }}>
-                  <InputLabel>{t('defaultConflict')}</InputLabel>
-                  <Select
-                    label={t('defaultConflict')}
-                    value={form.defaultConflict}
-                    onChange={e => patch({ defaultConflict: e.target.value as Conflict })}
-                  >
-                    <MenuItem value='keep'>{t('conflictKeep')}</MenuItem>
-                    <MenuItem value='overwrite'>{t('conflictOverwrite')}</MenuItem>
-                    <MenuItem value='skip'>{t('conflictSkip')}</MenuItem>
-                  </Select>
-                  <FormHelperText>{t('defaultConflictHelper')}</FormHelperText>
-                </FormControl>
-                <TextField
-                  size='small'
-                  label={t('restoredPrefix')}
-                  value={form.restoredPrefix}
-                  onChange={e => patch({ restoredPrefix: e.target.value })}
-                  error={prefixError(form.restoredPrefix)}
-                  helperText={prefixError(form.restoredPrefix) ? t('restoredPrefixInvalid') : t('restoredPrefixHelper')}
-                  sx={{ maxWidth: 360 }}
-                />
-                <TextField
-                  size='small'
-                  label={t('defaultCustomDirLinux')}
-                  value={form.defaultCustomDirLinux}
-                  onChange={e => patch({ defaultCustomDirLinux: e.target.value })}
-                  error={!form.defaultCustomDirLinux.trim()}
-                  helperText={t('defaultCustomDirLinuxHelper')}
-                  slotProps={{ htmlInput: { spellCheck: false, style: { fontFamily: 'JetBrains Mono, monospace', fontSize: 13 } } }}
-                />
-                <TextField
-                  size='small'
-                  label={t('defaultCustomDirWindows')}
-                  value={form.defaultCustomDirWindows}
-                  onChange={e => patch({ defaultCustomDirWindows: e.target.value })}
-                  error={!form.defaultCustomDirWindows.trim()}
-                  helperText={t('defaultCustomDirWindowsHelper')}
-                  slotProps={{ htmlInput: { spellCheck: false, style: { fontFamily: 'JetBrains Mono, monospace', fontSize: 13 } } }}
-                />
-              </Stack>
-            </CardContent>
-          </Card>
+          {!form.agentEnabled && !form.sshEnabled && (
+            <Alert severity='warning'>{t('noMethodWarning')}</Alert>
+          )}
 
-          <Card variant='outlined'>
-            <CardContent>
-              <Typography variant='h6' sx={{ mb: 0.5 }}>{t('jobsHeading')}</Typography>
-              <Typography variant='body2' color='text.secondary' sx={{ mb: 2 }}>{t('jobsDescription')}</Typography>
-              <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-                <NumericTextField
-                  size='small'
-                  type='number'
-                  label={t('maxConcurrentJobs')}
-                  value={form.maxConcurrentJobs}
-                  onChange={v => patch({ maxConcurrentJobs: v })}
-                  fallback={3}
-                  min={1}
-                  max={20}
-                  helperText={t('maxConcurrentJobsHelper')}
-                  sx={{ flex: '1 1 240px', maxWidth: 360 }}
-                />
-                <NumericTextField
-                  size='small'
-                  type='number'
-                  label={t('jobRetentionDays')}
-                  value={form.jobRetentionDays}
-                  onChange={v => patch({ jobRetentionDays: v })}
-                  fallback={30}
-                  min={1}
-                  max={365}
-                  helperText={t('jobRetentionDaysHelper')}
-                  sx={{ flex: '1 1 240px', maxWidth: 360 }}
-                />
-              </Box>
-            </CardContent>
-          </Card>
+          <SectionCard icon='ri-equalizer-line' title={t('defaultsHeading')} description={t('defaultsDescription')}>
+            <Box sx={FIELD_GRID_SX}>
+              <TextField
+                select
+                size='small'
+                label={t('defaultConflict')}
+                value={form.defaultConflict}
+                onChange={e => patch({ defaultConflict: e.target.value as Conflict })}
+                sx={SMALL_SELECT_SX}
+                slotProps={{ input: { endAdornment: endAdornment(t('defaultConflictHelper'), undefined, true) } }}
+              >
+                <MenuItem value='keep'>{t('conflictKeep')}</MenuItem>
+                <MenuItem value='overwrite'>{t('conflictOverwrite')}</MenuItem>
+                <MenuItem value='skip'>{t('conflictSkip')}</MenuItem>
+              </TextField>
+              <TextField
+                size='small'
+                label={t('restoredPrefix')}
+                value={form.restoredPrefix}
+                onChange={e => patch({ restoredPrefix: e.target.value })}
+                error={prefixError(form.restoredPrefix)}
+                helperText={prefixError(form.restoredPrefix) ? t('restoredPrefixInvalid') : undefined}
+                slotProps={{ input: { endAdornment: endAdornment(t('restoredPrefixHelper')) } }}
+              />
+              <TextField
+                size='small'
+                label={t('defaultCustomDirLinux')}
+                value={form.defaultCustomDirLinux}
+                onChange={e => patch({ defaultCustomDirLinux: e.target.value })}
+                error={!form.defaultCustomDirLinux.trim()}
+                slotProps={{
+                  htmlInput: { spellCheck: false },
+                  input: { endAdornment: endAdornment(t('defaultCustomDirLinuxHelper')) },
+                }}
+              />
+              <TextField
+                size='small'
+                label={t('defaultCustomDirWindows')}
+                value={form.defaultCustomDirWindows}
+                onChange={e => patch({ defaultCustomDirWindows: e.target.value })}
+                error={!form.defaultCustomDirWindows.trim()}
+                slotProps={{
+                  htmlInput: { spellCheck: false },
+                  input: { endAdornment: endAdornment(t('defaultCustomDirWindowsHelper')) },
+                }}
+              />
+            </Box>
+          </SectionCard>
+
+          <SectionCard icon='ri-list-check-3' title={t('jobsHeading')} description={t('jobsDescription')}>
+            <Box sx={FIELD_GRID_SX}>
+              <NumericTextField
+                size='small'
+                type='number'
+                label={t('maxConcurrentJobs')}
+                value={form.maxConcurrentJobs}
+                onChange={v => patch({ maxConcurrentJobs: v })}
+                fallback={3}
+                min={1}
+                max={20}
+                slotProps={{ input: { endAdornment: endAdornment(t('maxConcurrentJobsHelper')) } }}
+              />
+              <NumericTextField
+                size='small'
+                type='number'
+                label={t('jobRetentionDays')}
+                value={form.jobRetentionDays}
+                onChange={v => patch({ jobRetentionDays: v })}
+                fallback={30}
+                min={1}
+                max={365}
+                slotProps={{ input: { endAdornment: endAdornment(t('jobRetentionDaysHelper'), t('unitDays')) } }}
+              />
+              <NumericTextField
+                size='small'
+                type='number'
+                label={t('sourceStallTimeoutSec')}
+                value={form.sourceStallTimeoutSec}
+                onChange={v => patch({ sourceStallTimeoutSec: v })}
+                fallback={120}
+                min={10}
+                max={3600}
+                slotProps={{ input: { endAdornment: endAdornment(t('sourceStallTimeoutSecHelper'), t('unitSeconds')) } }}
+              />
+            </Box>
+          </SectionCard>
 
           <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
             <Button disabled={!dirty || saving} onClick={() => setEdits(null)}>

@@ -3,6 +3,8 @@
 import React, { useEffect, useState, useMemo } from 'react'
 
 import { useTranslations } from 'next-intl'
+
+import { drsReasonText } from '@/components/automation/drs/drsReason'
 import { Box, CircularProgress, Typography, useTheme } from '@mui/material'
 import { AreaChart, Area, Tooltip as RTooltip } from 'recharts'
 import ChartContainer from '@/components/ChartContainer'
@@ -129,6 +131,7 @@ return `${Math.floor(diff / 86400)}d`
 
 // ─── DRS Cluster Card ────────────────────────────────────────────────────────
 function DrsClusterCard({ clusterId, clusterMetrics, clusterInfo, drsStatus, theme, recommendations, migrations, trends }) {
+  const t = useTranslations()
   const isDark = theme.palette.mode === 'dark'
   const c = widgetColors(isDark)
   const summary = clusterMetrics?.summary || {}
@@ -222,7 +225,7 @@ return (
             Recommendations ({clusterRecs.length})
           </Typography>
           {clusterRecs.slice(0, 3).map((rec, idx) => (
-            <Box key={idx} title={`${rec.vm_name || rec.vmid} -> ${rec.target_node}: ${rec.reason || ''}`} sx={{ display: 'flex', alignItems: 'center', gap: 0.5, py: 0.25 }}>
+            <Box key={idx} title={`${rec.vm_name || rec.vmid} -> ${rec.target_node}: ${drsReasonText(rec, t)}`} sx={{ display: 'flex', alignItems: 'center', gap: 0.5, py: 0.25 }}>
               <i className='ri-arrow-right-line' style={{ fontSize: '0.6429rem', color: '#ff9800', flexShrink: 0 }} />
               <Typography sx={{ fontSize: '0.6429rem', fontWeight: 600, flexShrink: 0, maxWidth: 80 }} noWrap>
                 {rec.vm_name || `VM ${rec.vmid}`}

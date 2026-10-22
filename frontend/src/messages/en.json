@@ -8056,6 +8056,21 @@
       "completed": "Migration completed",
       "failed": "Migration failed",
       "failedWithReason": "Migration failed: {detail}"
+    },
+    "reasons": {
+      "evacuation": "Node evacuation for maintenance",
+      "highCpu": "High CPU load on source node",
+      "highMemory": "High memory usage on source node",
+      "loadBalancing": "Load balancing optimization",
+      "homogenization": "Homogenization: reduce load from {from, number}% to {to, number}%",
+      "affinity": "Affinity rule “{rule}”: VMs should be on the same node",
+      "antiAffinity": "Anti-affinity rule “{rule}”: VMs should be on different nodes",
+      "nodeAffinity": "Node affinity rule “{rule}”: VM should run on {node}"
+    },
+    "pinnedReasons": {
+      "noTarget": "No other node carries this guest's network or storage",
+      "network": "Network {resource} unavailable on node {node}",
+      "storage": "Storage {resource} unavailable on node {node}"
     }
   },
   "usersPage": {

@@ -25,6 +25,7 @@ import {
 
 // i18n
 import { useTranslations } from 'next-intl'
+import { drsReasonText } from '@/components/automation/drs/drsReason'
 
 import { useLocale } from '@/contexts/LocaleContext'
 import { localeCountryCodes } from '@/i18n/config'
@@ -1156,7 +1157,7 @@ return () => window.removeEventListener('keydown', onKeyDown)
                         </Typography>
                       </Box>
                       <Typography variant='caption' sx={{ opacity: 0.5, fontSize: '0.6rem', display: 'block', mt: 0.25 }}>
-                        {rec.reason}
+                        {drsReasonText(rec, t)}
                       </Typography>
                     </Box>
                     <Box sx={{ display: 'flex', ml: 1 }}>

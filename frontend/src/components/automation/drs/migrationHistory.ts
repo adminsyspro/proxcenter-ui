@@ -23,6 +23,8 @@ export interface MigrationHistoryEntry {
   failure_reason?: string
   /** Why DRS decided the move. Empty on rows written before the orchestrator stored it. */
   reason?: string
+  reason_code?: string
+  reason_params?: Record<string, string>
   maintenance_evacuation?: boolean
 }
 

@@ -2,6 +2,8 @@
 
 import React, { useEffect, useMemo, useState, useCallback } from 'react'
 import { useTranslations } from 'next-intl'
+
+import { drsReasonText } from '@/components/automation/drs/drsReason'
 import { useRouter } from 'next/navigation'
 import DOMPurify from 'dompurify'
 
@@ -1295,7 +1297,7 @@ export default function ClusterTabs(props: any) {
                                           <Typography variant="body2" fontWeight={600} noWrap sx={{ flex: 1, minWidth: 0, fontSize: '0.8rem' }}>
                                             {rec.vm_name || `VM ${rec.vmid}`}{' '}
                                             <Typography component="span" variant="caption" color="text.secondary" sx={{ fontWeight: 400 }}>
-                                              ({rec.reason})
+                                              ({drsReasonText(rec, t)})
                                             </Typography>
                                           </Typography>
                                           <Chip

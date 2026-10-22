@@ -1643,7 +1643,9 @@
         "noBridgeBlocker": "vDC에 허용된 브리지가 없습니다. \"내 데이터센터\"에서 VNet을 생성하거나 공급자에게 공유 브리지를 요청하세요. 또는 \"네트워크 장치 없음\"을 선택하세요.",
         "invalidBridgeBlocker": "{nicDetails}에서 브리지가 허용되지 않습니다. 네트워크 탭에서 허용된 브리지 중 하나를 선택하세요.",
         "nicLabel": "NIC {index} (브리지 \"{bridge}\")"
-      }
+      },
+      "noBlankVmVdc": "빈 VM을 허용하는 vDC가 없습니다. 템플릿 카탈로그에서 배포하세요.",
+      "noVdcNode": "현재 이 vDC에서 사용할 수 있는 노드가 없습니다."
     },
     "createLxc": {
       "title": "생성: LXC 컨테이너",
@@ -10120,6 +10122,9 @@
     "cpuDefaultModelAuto": "자동 (첫 번째 허용 모델)",
     "cpuAdvancedSettings": "고급 CPU 설정",
     "cpuAdvancedSettingsHint": "끄면 테넌트는 모델과 코어 수만 선택합니다. NUMA, 추가 CPU 플래그, CPU 제한 및 단위는 숨겨지고 거부됩니다.",
+    "blankVmsTitle": "빈 VM",
+    "allowBlankVms": "빈 VM 허용",
+    "allowBlankVmsHint": "테넌트는 vDC 할당량 안에서 CPU, 메모리, 디스크, 네트워크를 정해 VM을 처음부터 만들고 vDC 라이브러리의 ISO로 OS를 설치할 수 있습니다. 끄면 템플릿 카탈로그에서만 배포합니다.",
     "tabGeneral": "일반",
     "tabQuotas": "할당량",
     "tabCompute": "컴퓨팅",

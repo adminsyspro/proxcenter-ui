@@ -1630,7 +1630,9 @@
         "noBridgeBlocker": "Keine Bridge in Ihrem vDC autorisiert. Erstellen Sie ein VNet in „Mein Datacenter“ oder bitten Sie den Provider um eine geteilte Bridge — oder aktivieren Sie „Keine Netzwerkkarte“.",
         "invalidBridgeBlocker": "Bridge nicht autorisiert auf {nicDetails}. Wählen Sie eine erlaubte Bridge im Tab Netzwerk.",
         "nicLabel": "NIC {index} (Bridge „{bridge}“)"
-      }
+      },
+      "noBlankVmVdc": "Keines Ihrer vDCs erlaubt leere VMs. Stellen Sie stattdessen aus dem Vorlagenkatalog bereit.",
+      "noVdcNode": "Derzeit ist kein Knoten dieses vDC verfügbar."
     },
     "createLxc": {
       "title": "erstellen: LXC Container",
@@ -9968,7 +9970,10 @@
     "vniRangeInvalid": "Beide Grenzen, 1 bis {max}, Anfang kleiner oder gleich Ende.",
     "sharedBridgesHintRevised": "Optional: Host-Bridges für WAN- oder Management-Uplinks freigeben. Die eigenen Netzwerke des Tenants sind die VNets, die er in seiner SDN-Zone erstellt.",
     "vdcPolicyQuotaGb": "Kontingent (GB)",
-    "vdcPolicyUnlimited": "Leer = unbegrenzt"
+    "vdcPolicyUnlimited": "Leer = unbegrenzt",
+    "blankVmsTitle": "Leere VMs",
+    "allowBlankVms": "Leere VMs erlauben",
+    "allowBlankVmsHint": "Mandanten können eine VM von Grund auf erstellen (CPU, Arbeitsspeicher, Festplatten und Netzwerk innerhalb der vDC-Kontingente) und ihr Betriebssystem von einer ISO der vDC-Bibliotheken installieren. Deaktiviert stellen sie nur aus dem Vorlagenkatalog bereit."
   },
   "sdn": {
     "subtab": {

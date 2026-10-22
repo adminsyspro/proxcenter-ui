@@ -70,6 +70,7 @@ async function handlePut(req: Request, ctx: RouteContext) {
       vlanPools: body.vlanPools,
       storagePolicies: body.storagePolicies,
       computePolicy: body.computePolicy,
+      allowBlankVms: typeof body.allowBlankVms === 'boolean' ? body.allowBlankVms : undefined,
       isoLibraries: Array.isArray(body.isoLibraries) ? body.isoLibraries : undefined,
       catalogGrants: body.catalogGrants && typeof body.catalogGrants === 'object'
         ? { imageIds: normalizeIdList(body.catalogGrants.imageIds), blueprintIds: normalizeIdList(body.catalogGrants.blueprintIds) }

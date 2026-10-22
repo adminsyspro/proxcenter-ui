@@ -320,3 +320,32 @@ describe('VdcTab: vDC list backups column', () => {
     expect(mock).toHaveBeenCalled()
   })
 })
+
+describe('VdcTab: blank VM switch (#1171)', () => {
+  it('stays off for an existing vDC and sends it once turned on', async () => {
+    renderWithProviders(<VdcTab />)
+    const row = (await screen.findByText(/^ACME/)).closest('[role="row"]') as HTMLElement
+    fireEvent.click(row.querySelector('.ri-pencil-line')?.closest('button') as HTMLElement)
+    const scope = within(await screen.findByRole('dialog'))
+
+    fireEvent.click(scope.getByRole('tab', { name: /compute/i }))
+    const toggle = await scope.findByLabelText('Allow blank VMs')
+    expect((toggle as HTMLInputElement).checked).toBe(false)
+    fireEvent.click(toggle)
+
+    const saveBtn = scope.getByRole('button', { name: 'Update' })
+    await waitFor(() => expect(saveBtn.hasAttribute('disabled')).toBe(false))
+    fireEvent.click(saveBtn)
+
+    await waitFor(() => expect(putBody).toBeDefined())
+    expect(putBody.allowBlankVms).toBe(true)
+  })
+
+  it('creates a vDC closed to blank VMs unless the switch is turned on', async () => {
+    const scope = await openCreateDialog()
+    await pickCluster(scope, 'frankfurt')
+    await submitCreate(scope)
+
+    expect(posted.allowBlankVms).toBe(false)
+  })
+})

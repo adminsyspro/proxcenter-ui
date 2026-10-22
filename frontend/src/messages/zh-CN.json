@@ -1647,7 +1647,9 @@
         "noBridgeBlocker": "您的 vDC 未授权任何网桥。请在 \"我的数据中心\" 创建 VNet、向提供商申请共享网桥，或勾选 \"无网卡\"。",
         "invalidBridgeBlocker": "{nicDetails} 上的网桥未授权。请在网络标签页中选择允许的网桥。",
         "nicLabel": "NIC {index}（网桥 \"{bridge}\"）"
-      }
+      },
+      "noBlankVmVdc": "您的 vDC 均不允许空白虚拟机。请改为从模板目录部署。",
+      "noVdcNode": "此 vDC 当前没有可用节点。"
     },
     "createLxc": {
       "title": "创建：LXC 容器",
@@ -10299,6 +10301,9 @@
     "cpuDefaultModelAuto": "自动（第一个允许的型号）",
     "cpuAdvancedSettings": "高级 CPU 设置",
     "cpuAdvancedSettingsHint": "关闭后，租户只能选择型号和核心数：NUMA、额外 CPU 标志、CPU 限制和权重将被隐藏并拒绝。",
+    "blankVmsTitle": "空白虚拟机",
+    "allowBlankVms": "允许空白虚拟机",
+    "allowBlankVmsHint": "租户可以从头创建虚拟机（在 vDC 配额内设置 CPU、内存、磁盘和网络），并从 vDC 库中的 ISO 安装操作系统。关闭后，租户只能从模板目录部署。",
     "tabGeneral": "常规",
     "tabQuotas": "配额",
     "tabCompute": "计算",

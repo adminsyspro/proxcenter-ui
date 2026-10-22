@@ -54,7 +54,7 @@ import {
 import { createTargetVmShell, provisionBlockTargets, markVolumesCopied } from "./target-provision"
 import { cleanShutdownAndConfirm, isVmwareToolsUnavailable, type PowerOffOps } from "./power-off"
 import { attachDisksAndBoot, removeTargetVmOnFailure, unmapTargetVolumes, verifyWarmDiskIntegrity } from "./finish"
-import { convertGuestAtCutover, GUEST_CONVERSION_ESTIMATE_SEC } from "./guest-conversion"
+import { conversionNotAppliedMessage, convertGuestAtCutover, GUEST_CONVERSION_ESTIMATE_SEC } from "./guest-conversion"
 import { guestNicsFromNets } from "./guest-network"
 import { warnIfEl10OnLowCpu } from "../el10-check"
 import { type SshTarget } from "@/lib/ssh/node-endpoint-core"
@@ -818,7 +818,8 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
         await appendLog(jobId, `Guest converted in ${result.seconds ?? 0}s${result.os ? ` (${result.os})` : ""}: VirtIO drivers installed, VMware Tools removed or scheduled for removal; the target boots from VirtIO SCSI with VirtIO NICs`, "success")
         for (const line of result.network ?? []) await appendLog(jobId, line.msg, line.level)
       } else {
-        await appendLog(jobId, `Guest conversion not applied: ${(result.reason || "").replace(/\.+$/, "")}. The copied disks are unchanged and the guest keeps the hardware it boots on without new drivers (SATA boot disk for Windows and UEFI guests, e1000 NICs for Windows)`, "warn")
+        const notApplied = conversionNotAppliedMessage(result)
+        await appendLog(jobId, notApplied.msg, notApplied.level)
       }
     } else {
       await appendLog(jobId, "Guest conversion not requested for this cutover: the guest keeps the hardware it boots on without new drivers", "info")

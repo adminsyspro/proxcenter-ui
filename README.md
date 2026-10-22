@@ -40,9 +40,23 @@
 ## Requirements
 
 - **Host**: Linux with Docker Engine 24+ and Docker Compose v2
-- **Sizing**: 2 GB RAM and 10 GB disk minimum, more for database growth
+- **Sizing**: see the matrix below, 2 vCPU, 4 GB RAM and 40 GB disk at minimum
 - **Ports**: 3000 inbound, outbound to Proxmox VE 8006 and Proxmox Backup Server 8007
 - **Proxmox**: Proxmox VE 8.x or 9.x
+
+### Sizing
+
+One ProxCenter instance (frontend, orchestrator and PostgreSQL on the same host) per infrastructure size:
+
+| Infrastructure | Proxmox nodes | Guests (VMs + CTs) | vCPU | RAM | Disk |
+|---|---|---|---|---|---|
+| 🏠 Small | up to 50 | up to 1,500 | 2 | 4 GB | 40 GB |
+| 🏢 Medium | up to 150 | up to 4,500 | 4 | 8 GB | 80 GB |
+| 🏭 Large | up to 300 | up to 9,000 | 8 | 16 GB | 150 GB |
+| 🌐 Very large | up to 500 | up to 15,000 | 8 | 16 GB | 250 GB |
+
+- Disk grows with metrics history, about 90 MB per node at the default retention of 14 days.
+- Give the host dedicated CPU rather than a heavily shared one: a starved host can miss the first-start health checks.
 
 High availability adds its own sizing and network prerequisites, listed in the [documentation](https://docs.proxcenter.io/operations/ha-prerequisites).
 

@@ -69,9 +69,14 @@ vi.mock("@/lib/vdc/scope", () => ({
 }))
 
 // Helper: collect the raw SSE bytes from the response stream into a string.
-// Reads until it sees vm:* or node:* OR until maxChunks are consumed.
+// The deltas of a poll cycle travel in ONE `batch` frame whose data is the
+// JSON array of events, so the text is asserted on `"event":"vm:update"`
+// (inside the array), not on an `event: vm:update` frame.
+// Reads until it sees a batch frame OR until maxChunks are consumed.
 // Pass stopAfterConnected=true when you only expect the initial "connected" event
-// and no vm/node events follow (avoids indefinite blocking on open streams).
+// and no batch follows: one more read is then raced against a short timer, so a
+// batch enqueued right after "connected" is still caught, and the stream is
+// cancelled rather than left open.
 async function collectSseText(res: Response, opts: { stopAfterConnected?: boolean } = {}): Promise<string> {
   const reader = res.body?.getReader()
   if (!reader) return ""
@@ -82,12 +87,20 @@ async function collectSseText(res: Response, opts: { stopAfterConnected?: boolea
     const { done, value } = await reader.read()
     if (done) break
     result += decoder.decode(value, { stream: true })
-    // If a vm/node event has arrived, we have enough to assert on
-    if (result.includes("event: vm:") || result.includes("event: node:")) break
-    // Caller says no vm/node events are expected; stop once we've seen the initial connected event
-    if (opts.stopAfterConnected && result.includes("event: connected")) break
+    // If a batch has arrived, we have enough to assert on
+    if (result.includes("event: batch")) break
+    // Caller says no batch is expected; stop once we've seen the initial
+    // connected event, after a look at whatever was queued right behind it
+    if (opts.stopAfterConnected && result.includes("event: connected")) {
+      const extra = await Promise.race([
+        reader.read().then(r => (r.done ? "" : decoder.decode(r.value))),
+        new Promise<string>(resolve => setTimeout(() => resolve(""), 30)),
+      ])
+      result += extra
+      break
+    }
   }
-  reader.releaseLock()
+  await reader.cancel()
   return result
 }
 
@@ -126,8 +139,9 @@ describe("GET /api/v1/inventory/events scope routing", () => {
     expect(res.headers.get("content-type")).toContain("text/event-stream")
 
     const text = await collectSseText(res)
-    // The vm:update event must appear in the stream
-    expect(text).toContain("event: vm:update")
+    // The vm:update event must appear in the stream, inside the cycle's batch
+    expect(text).toContain("event: batch")
+    expect(text).toContain('"event":"vm:update"')
     expect(text).toContain('"connId":"c1"')
   })
 
@@ -140,7 +154,8 @@ describe("GET /api/v1/inventory/events scope routing", () => {
 
     const text = await collectSseText(res)
     // MSP sees full cluster; pool guard is inactive
-    expect(text).toContain("event: vm:update")
+    expect(text).toContain("event: batch")
+    expect(text).toContain('"event":"vm:update"')
     expect(text).toContain('"connId":"c1"')
   })
 
@@ -162,7 +177,7 @@ describe("GET /api/v1/inventory/events scope routing", () => {
     const text = await collectSseText(res, { stopAfterConnected: true })
     // Only the connected event should be present; no vm:update
     expect(text).toContain("event: connected")
-    expect(text).not.toContain("event: vm:update")
+    expect(text).not.toContain("event: batch")
   })
 
   it("iaas: vm:* event PASSES when the event pool is in the vDC scope", async () => {
@@ -180,7 +195,8 @@ describe("GET /api/v1/inventory/events scope routing", () => {
     expect(res.status).toBe(200)
 
     const text = await collectSseText(res)
-    expect(text).toContain("event: vm:update")
+    expect(text).toContain("event: batch")
+    expect(text).toContain('"event":"vm:update"')
     expect(text).toContain('"connId":"c1"')
   })
 
@@ -211,7 +227,7 @@ describe("GET /api/v1/inventory/events scope routing", () => {
     const text = await collectSseText(res, { stopAfterConnected: true })
     expect(text).toContain("event: connected")
     // VM_EVENT is on c1 which is not in the scope -> must be dropped
-    expect(text).not.toContain("event: vm:update")
+    expect(text).not.toContain("event: batch")
   })
 
   it("RBAC scope: vm:* event PASSES when connection is in user scope", async () => {
@@ -228,7 +244,8 @@ describe("GET /api/v1/inventory/events scope routing", () => {
     expect(res.status).toBe(200)
 
     const text = await collectSseText(res)
-    expect(text).toContain("event: vm:update")
+    expect(text).toContain("event: batch")
+    expect(text).toContain('"event":"vm:update"')
     expect(text).toContain('"connId":"c1"')
   })
 
@@ -242,7 +259,8 @@ describe("GET /api/v1/inventory/events scope routing", () => {
     expect(res.status).toBe(200)
 
     const text = await collectSseText(res)
-    expect(text).toContain("event: vm:update")
+    expect(text).toContain("event: batch")
+    expect(text).toContain('"event":"vm:update"')
     // Scope lookup must not be called for admins
     expect(getRbacInfraScopeMock).not.toHaveBeenCalled()
   })
@@ -273,7 +291,7 @@ describe("GET /api/v1/inventory/events scope routing", () => {
     expect(res.status).toBe(200)
 
     const text = await collectSseText(res, { stopAfterConnected: true })
-    expect(text).not.toContain("event: node:update")
+    expect(text).not.toContain("event: batch")
   })
 
   it("RBAC node-scope: vm:update is DROPPED when node not in user scope (leak fix)", async () => {
@@ -297,7 +315,7 @@ describe("GET /api/v1/inventory/events scope routing", () => {
 
     const text = await collectSseText(res, { stopAfterConnected: true })
     expect(text).toContain("event: connected")
-    expect(text).not.toContain("event: vm:update")
+    expect(text).not.toContain("event: batch")
   })
 
   it("RBAC node-scope: vm:update PASSES when node is in user scope", async () => {
@@ -320,7 +338,8 @@ describe("GET /api/v1/inventory/events scope routing", () => {
     expect(res.status).toBe(200)
 
     const text = await collectSseText(res)
-    expect(text).toContain("event: vm:update")
+    expect(text).toContain("event: batch")
+    expect(text).toContain('"event":"vm:update"')
     expect(text).toContain('"connId":"c1"')
   })
 
@@ -350,7 +369,8 @@ describe("GET /api/v1/inventory/events scope routing", () => {
     expect(res.status).toBe(200)
 
     const text = await collectSseText(res)
-    expect(text).toContain("event: node:update")
+    expect(text).toContain("event: batch")
+    expect(text).toContain('"event":"node:update"')
     expect(text).toContain('"node":"node1"')
   })
 })
@@ -406,10 +426,11 @@ async function drainQueued(reader: ReadableStreamDefaultReader<Uint8Array>): Pro
 }
 
 /**
- * Open the SSE route, push `events` through the subscriber, and return the
- * events the gate forwarded (the initial `connected` frame excluded).
+ * Open the SSE route, push each of `cycles` through the subscriber as one poll
+ * cycle, and return the frames the route sent (the initial `connected` frame
+ * excluded): at most one `batch` frame per cycle, holding the forwarded events.
  */
-async function emitThroughGate(events: any[]): Promise<SentEvent[]> {
+async function emitFramesThroughGate(cycles: any[][]): Promise<SentEvent[]> {
   let captured: ((evs: any[]) => void) | null = null
   subscribeMock.mockImplementation((fn: (evs: any[]) => void) => {
     captured = fn
@@ -428,12 +449,23 @@ async function emitThroughGate(events: any[]): Promise<SentEvent[]> {
   expect(connected[0].event).toBe("connected")
 
   expect(captured).toBeTypeOf("function")
-  captured!(events)
+  for (const events of cycles) captured!(events)
 
   const sent = await drainQueued(reader)
   // Cancelling unsubscribes and clears the heartbeat interval.
   await reader.cancel()
   return sent
+}
+
+/**
+ * Push `events` through the gate as one cycle and return the events it
+ * forwarded, one entry per event under its own `event` name, so the
+ * assertions read as they did when each delta was its own frame.
+ */
+async function emitThroughGate(events: any[]): Promise<SentEvent[]> {
+  const frames = await emitFramesThroughGate([events])
+  for (const frame of frames) expect(frame.event).toBe("batch")
+  return frames.flatMap(frame => (frame.data as any[]).map(d => ({ event: d.event, data: d })))
 }
 
 const VM_PROD = {
@@ -617,15 +649,63 @@ describe("GET /api/v1/inventory/events tag/pool guest-derived delta gate", () =>
   })
 })
 
+// One poll cycle goes out as one frame, holding only what the gate let through.
+describe("GET /api/v1/inventory/events one batch per poll cycle", () => {
+  beforeEach(() => {
+    tenantConnectionIdsMock.mockResolvedValue(new Set(["connA"]))
+    getInfraMock.mockResolvedValue({ kind: "provider" })
+  })
+
+  it("sends the survivors of a cycle as a single batch frame, in their order", async () => {
+    const frames = await emitFramesThroughGate([[
+      VM_PROD,
+      // Outside the tenant: filtered out of the batch, not sent on its own.
+      { ...VM_STAGING, connId: "connOther" },
+      { event: "node:update", connId: "connA", node: "n1", status: "online" },
+      { ...VM_PROD, event: "vm:removed" },
+    ]])
+
+    expect(frames).toHaveLength(1)
+    expect(frames[0].event).toBe("batch")
+    expect(frames[0].data.map((d: any) => `${d.event}:${d.vmid ?? d.node}`)).toEqual([
+      "vm:update:100",
+      "node:update:n1",
+      "vm:removed:100",
+    ])
+  })
+
+  it("sends one frame per cycle", async () => {
+    const frames = await emitFramesThroughGate([[VM_PROD], [VM_STAGING, VM_PROD]])
+
+    expect(frames.map(f => f.event)).toEqual(["batch", "batch"])
+    expect(frames.map(f => f.data.length)).toEqual([1, 2])
+  })
+
+  it("sends nothing for a cycle whose every delta is filtered out, or that is empty", async () => {
+    expect(await emitFramesThroughGate([[{ ...VM_PROD, connId: "connOther" }]])).toEqual([])
+    expect(await emitFramesThroughGate([[]])).toEqual([])
+  })
+})
+
 // A consumer that stops reading without closing its connection
 // never fires cancel(), so the route has to release it on its own.
 describe("GET /api/v1/inventory/events consumer lifecycle", () => {
   let handler: ((evs: any[]) => void) | null
   let unsubscribe: ReturnType<typeof vi.fn>
 
-  // ~140 KiB of vm:update events per call, about a poll burst on a large estate.
-  const burst = () =>
-    Array.from({ length: 400 }, (_, i) => ({ ...VM_EVENT, vmid: i, name: "x".repeat(200) }))
+  // One poll cycle: ~640 KiB of vm:update deltas by default, about a cycle on
+  // a large estate. Two left unread exceed MAX_UNREAD_BYTES (1 MiB).
+  const burst = (events = 2000) =>
+    Array.from({ length: events }, (_, i) => ({ ...VM_EVENT, vmid: i, name: "x".repeat(200) }))
+
+  const decoder = new TextDecoder()
+
+  /** The events of the next frame, which has to be a batch. */
+  async function readBatch(reader: ReadableStreamDefaultReader<Uint8Array>): Promise<any[]> {
+    const text = decoder.decode((await reader.read()).value)
+    expect(text.startsWith("event: batch\ndata: ")).toBe(true)
+    return JSON.parse(text.slice("event: batch\ndata: ".length))
+  }
 
   beforeEach(() => {
     getInfraMock.mockResolvedValue({ kind: "provider" })
@@ -637,15 +717,20 @@ describe("GET /api/v1/inventory/events consumer lifecycle", () => {
     })
   })
 
-  it("drops a consumer that stops reading once its unread bytes pass the bound", async () => {
+  it("drops a consumer that left more than the bound unread, at the next delivery", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
     const { GET } = await import("./route")
     const res = await callRoute(GET, { method: "GET" })
 
-    for (let i = 0; i < 6; i++) handler!(burst())
+    // The first cycle finds nothing unread, the second ~640 KiB: both are
+    // enqueued, and together they leave ~1.3 MiB unread.
+    handler!(burst())
+    handler!(burst())
     expect(unsubscribe).not.toHaveBeenCalled()
+    expect(warn).not.toHaveBeenCalled()
 
-    for (let i = 0; i < 2; i++) handler!(burst())
+    // The third finds more than the bound unread and drops the consumer.
+    handler!(burst())
     expect(unsubscribe).toHaveBeenCalledTimes(1)
     expect(warn).toHaveBeenCalledWith(expect.stringContaining("Dropping an SSE consumer"))
 
@@ -654,18 +739,54 @@ describe("GET /api/v1/inventory/events consumer lifecycle", () => {
     warn.mockRestore()
   })
 
+  it("keeps a consumer handed one delivery larger than the bound, and lets it read the whole of it", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+    const { GET } = await import("./route")
+    const res = await callRoute(GET, { method: "GET" })
+    const reader = res.body!.getReader()
+    expect(decoder.decode((await reader.read()).value)).toContain("event: connected")
+
+    // ~1.3 MiB in one message, past MAX_UNREAD_BYTES on its own.
+    handler!(burst(4000))
+    expect(unsubscribe).not.toHaveBeenCalled()
+    expect(warn).not.toHaveBeenCalled()
+
+    // It arrives whole, and once drained the next cycle is taken as usual.
+    expect(await readBatch(reader)).toHaveLength(4000)
+    handler!(burst())
+    expect(await readBatch(reader)).toHaveLength(2000)
+    expect(unsubscribe).not.toHaveBeenCalled()
+
+    await reader.cancel()
+    warn.mockRestore()
+  })
+
+  it("drops a consumer that left one oversized delivery unread, at the next delivery", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+    const { GET } = await import("./route")
+    const res = await callRoute(GET, { method: "GET" })
+
+    handler!(burst(4000))
+    expect(unsubscribe).not.toHaveBeenCalled()
+
+    // Still unread a cycle later: the queue is bounded to MAX_UNREAD_BYTES plus
+    // one delivery, however small the next one is.
+    handler!([VM_EVENT])
+    expect(unsubscribe).toHaveBeenCalledTimes(1)
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("Dropping an SSE consumer"))
+    await expect(res.body!.getReader().read()).rejects.toThrow("SSE consumer stopped reading")
+    warn.mockRestore()
+  })
+
   it("keeps a consumer that reads, however much it receives", async () => {
     const { GET } = await import("./route")
     const res = await callRoute(GET, { method: "GET" })
     const reader = res.body!.getReader()
+    expect(decoder.decode((await reader.read()).value)).toContain("event: connected")
 
     for (let i = 0; i < 40; i++) {
       handler!(burst())
-      let drained = 0
-      while (drained < 400) {
-        const { value } = await reader.read()
-        drained += new TextDecoder().decode(value).split("event: vm:update").length - 1
-      }
+      expect(await readBatch(reader)).toHaveLength(2000)
     }
     expect(unsubscribe).not.toHaveBeenCalled()
     reader.releaseLock()
@@ -689,7 +810,7 @@ describe("GET /api/v1/inventory/events consumer lifecycle", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
     subscribeMock.mockImplementation((fn: (evs: any[]) => void) => {
       handler = fn
-      for (let i = 0; i < 8; i++) fn(burst())
+      for (let i = 0; i < 3; i++) fn(burst())
       return unsubscribe
     })
     const { GET } = await import("./route")

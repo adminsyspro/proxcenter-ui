@@ -3713,11 +3713,16 @@ function buildInventoryEventsSSE(): Response {
       timer = setInterval(() => {
         tick += 1
 
+        // Like the real route, one `batch` message per cycle holding the
+        // deltas, each tagged by its `event` field.
+        const batch: Array<Record<string, unknown>> = []
+
         // Three guests per tick, rotating through the running set.
         for (let k = 0; k < 3 && running.length > 0; k++) {
           const g = running[(tick * 3 + k) % running.length]
           const drift = 1 + Math.sin((tick + k) / 3) * 0.18
-          send('vm:update', {
+          batch.push({
+            event: 'vm:update',
             connId: 'demo-pve-cluster-001',
             vmid: g.vmid,
             node: g.node,
@@ -3736,7 +3741,8 @@ function buildInventoryEventsSSE(): Response {
         if (nodes.length > 0) {
           const n = nodes[tick % nodes.length]
           const drift = 1 + Math.cos(tick / 4) * 0.12
-          send('node:update', {
+          batch.push({
+            event: 'node:update',
             connId: 'demo-pve-cluster-001',
             node: n.node,
             status: n.status || 'online',
@@ -3745,6 +3751,8 @@ function buildInventoryEventsSSE(): Response {
             maxmem: n.maxmem,
           })
         }
+
+        if (batch.length > 0) send('batch', batch)
 
         if (tick % 5 === 0) send('heartbeat', {})
 

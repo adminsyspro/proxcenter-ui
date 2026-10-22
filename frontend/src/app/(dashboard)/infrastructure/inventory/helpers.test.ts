@@ -1,4 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
+
+import { RRD_BATCH_MAX_PATHS } from '@/lib/metrics/rrdBatchLimit'
+
 import {
   TAG_PALETTE,
   hashStringToInt,
@@ -1653,6 +1656,84 @@ describe('fetchRrdRange / fetchRrd / fetchRrdBatch', () => {
 
     await expect(fetchRrdBatch('conn1', ['/nodes/pve1', '/nodes/pve2'], 'hour'))
       .rejects.toThrow('Too many paths (max 50)')
+  })
+
+  // Answers each request with one row per path it asked for, and records how
+  // many requests had already been issued when it got to answer.
+  function stubChunkedFetch() {
+    const inFlightAtAnswer: number[] = []
+    const fetchMock = vi.fn(async (_input?: any, init?: any) => {
+      const body = JSON.parse(String(init.body))
+
+      await Promise.resolve()
+      inFlightAtAnswer.push(fetchMock.mock.calls.length)
+
+      const data = Object.fromEntries(body.paths.map((p: string) => [p, [{ time: 1, path: p }]]))
+
+      return { ok: true, status: 200, json: async () => ({ data }) } as unknown as Response
+    })
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    return { fetchMock, inFlightAtAnswer }
+  }
+
+  it('fetchRrdBatch splits 120 paths into three parallel requests and merges their answers', async () => {
+    const { fetchMock, inFlightAtAnswer } = stubChunkedFetch()
+    const paths = Array.from({ length: 120 }, (_, i) => `/nodes/pve${i}`)
+    const signal = new AbortController().signal
+
+    const result = await fetchRrdBatch('conn1', paths, 'day', signal, { from: 1_799_999_000, to: 1_800_000_060 })
+
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+    // Every request had been issued before the first one was answered.
+    expect(inFlightAtAnswer).toEqual([3, 3, 3])
+
+    const bodies = fetchMock.mock.calls.map(([, init]) => JSON.parse(String(init.body)))
+
+    expect(bodies.map(b => b.paths.length)).toEqual([RRD_BATCH_MAX_PATHS, RRD_BATCH_MAX_PATHS, 20])
+    expect(bodies.flatMap(b => b.paths)).toEqual(paths)
+
+    for (const [i, [url, init]] of fetchMock.mock.calls.entries()) {
+      expect(String(url)).toBe('/api/v1/connections/conn1/rrd/batch')
+      expect(init.signal).toBe(signal)
+      expect(bodies[i]).toMatchObject({ timeframe: 'day', from: 1_799_999_000, to: 1_800_000_060 })
+    }
+
+    expect(result.size).toBe(120)
+    expect(result.get('/nodes/pve0')).toEqual([{ time: 1, path: '/nodes/pve0' }])
+    expect(result.get('/nodes/pve119')).toEqual([{ time: 1, path: '/nodes/pve119' }])
+  })
+
+  it('fetchRrdBatch never puts more than RRD_BATCH_MAX_PATHS paths in one request', async () => {
+    const { fetchMock } = stubChunkedFetch()
+    const paths = Array.from({ length: RRD_BATCH_MAX_PATHS + 1 }, (_, i) => `/nodes/pve${i}`)
+
+    const result = await fetchRrdBatch('conn1', paths, 'hour')
+
+    const sizes = fetchMock.mock.calls.map(([, init]) => JSON.parse(String(init.body)).paths.length)
+
+    expect(sizes).toEqual([RRD_BATCH_MAX_PATHS, 1])
+    expect(Math.max(...sizes)).toBeLessThanOrEqual(RRD_BATCH_MAX_PATHS)
+    expect(result.size).toBe(RRD_BATCH_MAX_PATHS + 1)
+  })
+
+  it('fetchRrdBatch rejects when one of the chunks is refused', async () => {
+    const fetchMock = vi.fn(async (_input?: any, init?: any) => {
+      const body = JSON.parse(String(init.body))
+
+      if (body.paths.includes('/nodes/pve60')) {
+        return { ok: false, status: 502, json: async () => ({ error: 'node unreachable' }) } as unknown as Response
+      }
+
+      return { ok: true, status: 200, json: async () => ({ data: {} }) } as unknown as Response
+    })
+
+    vi.stubGlobal('fetch', fetchMock)
+    const paths = Array.from({ length: 70 }, (_, i) => `/nodes/pve${i}`)
+
+    await expect(fetchRrdBatch('conn1', paths, 'hour')).rejects.toThrow('node unreachable')
+    expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 })
 

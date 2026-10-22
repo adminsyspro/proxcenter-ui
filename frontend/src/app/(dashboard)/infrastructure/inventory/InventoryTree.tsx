@@ -54,6 +54,7 @@ const PowerSettingsNewIcon = (props: any) => <i className="ri-shut-down-line" st
 
 import EntityTagManager from './components/EntityTagManager'
 import { resolveVmPowerAction } from './helpers'
+import { applyInventoryEvents } from './applyInventoryEvents'
 import { networkConnKey } from './networkConnKey'
 import { useRBAC } from '@/contexts/RBACContext'
 import { showsClusterLevel } from '@/lib/rbac/scopeKinds'
@@ -208,7 +209,7 @@ type GuestItem = {
   status?: string
 }
 
-type TreeCluster = {
+export type TreeCluster = {
   connId: string
   name: string
   isCluster: boolean  // true si cluster multi-nodes, false si standalone
@@ -1789,133 +1790,16 @@ return next
       if (!alive) return
       es = new EventSource('/api/v1/inventory/events')
 
-      es.addEventListener('vm:update', (e) => {
+      // One message per poll cycle carrying every delta (vm:update,
+      // node:update, vm:added, vm:removed), applied to the tree in a single
+      // pass: one state update per cycle instead of one per delta, each of
+      // which used to walk the whole tree.
+      es.addEventListener('batch', (e) => {
         if (!alive) return
         try {
-          const d = JSON.parse(e.data)
-          setClusters(prev => {
-            let anyClusterChanged = false
-            const next = prev.map(clu => {
-              if (clu.connId !== d.connId) return clu
-              let nodeChanged = false
-              const nodes = clu.nodes.map(n => {
-                let vmChanged = false
-                const vms = n.vms.map(vm => {
-                  if (String(vm.vmid) !== String(d.vmid) || vm.type !== d.type) return vm
-                  // Only create new object if values actually differ
-                  const newStatus = d.status
-                  const newCpu = d.cpu ?? vm.cpu
-                  const newMem = d.mem ?? vm.mem
-                  const newMaxmem = d.maxmem ?? vm.maxmem
-                  const newDisk = d.disk ?? vm.disk
-                  const newMaxdisk = d.maxdisk ?? vm.maxdisk
-                  const newName = d.name ?? vm.name
-                  if (vm.status === newStatus && vm.cpu === newCpu && vm.mem === newMem &&
-                      vm.maxmem === newMaxmem && vm.disk === newDisk && vm.maxdisk === newMaxdisk &&
-                      vm.name === newName) return vm
-                  vmChanged = true
-                  return { ...vm, status: newStatus, cpu: newCpu, mem: newMem, maxmem: newMaxmem, disk: newDisk, maxdisk: newMaxdisk, name: newName }
-                })
-                if (!vmChanged) return n
-                nodeChanged = true
-                return { ...n, vms }
-              })
-              if (!nodeChanged) return clu
-              anyClusterChanged = true
-              return { ...clu, nodes }
-            })
-            return anyClusterChanged ? next : prev
-          })
-        } catch { /* ignore */ }
-      })
-
-      es.addEventListener('node:update', (e) => {
-        if (!alive) return
-        try {
-          const d = JSON.parse(e.data)
-          setClusters(prev => {
-            let anyChanged = false
-            const next = prev.map(clu => {
-              if (clu.connId !== d.connId) return clu
-              let nodeChanged = false
-              const nodes = clu.nodes.map(n => {
-                if (n.node !== d.node) return n
-                const newStatus = d.status ?? n.status
-                const newCpu = d.cpu ?? n.cpu
-                const newMem = d.mem ?? n.mem
-                const newMaxmem = d.maxmem ?? n.maxmem
-                if (n.status === newStatus && n.cpu === newCpu && n.mem === newMem && n.maxmem === newMaxmem) return n
-                nodeChanged = true
-                return { ...n, status: newStatus, cpu: newCpu, mem: newMem, maxmem: newMaxmem }
-              })
-              if (!nodeChanged) return clu
-              anyChanged = true
-              return { ...clu, nodes }
-            })
-            return anyChanged ? next : prev
-          })
-        } catch { /* ignore */ }
-      })
-
-      es.addEventListener('vm:added', (e) => {
-        if (!alive) return
-        try {
-          const d = JSON.parse(e.data)
-          setClusters(prev => {
-            let anyChanged = false
-            const next = prev.map(clu => {
-              if (clu.connId !== d.connId) return clu
-              let nodeChanged = false
-              const nodes = clu.nodes.map(n => {
-                if (n.node !== d.node) return n
-                if (n.vms.some(vm => String(vm.vmid) === String(d.vmid) && vm.type === d.type)) return n
-                nodeChanged = true
-                return {
-                  ...n,
-                  vms: [...n.vms, {
-                    type: d.type,
-                    vmid: String(d.vmid),
-                    name: d.name || `${d.type}/${d.vmid}`,
-                    status: d.status || 'unknown',
-                    cpu: d.cpu,
-                    mem: d.mem,
-                    maxmem: d.maxmem,
-                    pool: null,
-                    tags: null,
-                    template: false,
-                  }].sort((a, b) => Number.parseInt(a.vmid, 10) - Number.parseInt(b.vmid, 10))
-                }
-              })
-              if (!nodeChanged) return clu
-              anyChanged = true
-              return { ...clu, nodes }
-            })
-            return anyChanged ? next : prev
-          })
-        } catch { /* ignore */ }
-      })
-
-      es.addEventListener('vm:removed', (e) => {
-        if (!alive) return
-        try {
-          const d = JSON.parse(e.data)
-          setClusters(prev => {
-            let anyChanged = false
-            const next = prev.map(clu => {
-              if (clu.connId !== d.connId) return clu
-              let nodeChanged = false
-              const nodes = clu.nodes.map(n => {
-                const vms = n.vms.filter(vm => !(String(vm.vmid) === String(d.vmid) && vm.type === d.type))
-                if (vms.length === n.vms.length) return n
-                nodeChanged = true
-                return { ...n, vms }
-              })
-              if (!nodeChanged) return clu
-              anyChanged = true
-              return { ...clu, nodes }
-            })
-            return anyChanged ? next : prev
-          })
+          const events = JSON.parse(e.data)
+          if (!Array.isArray(events) || events.length === 0) return
+          setClusters(prev => applyInventoryEvents(prev, events))
         } catch { /* ignore */ }
       })
 

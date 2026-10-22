@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 import { callRoute, readJson } from '@/__tests__/setup/route-test'
+import { RRD_BATCH_MAX_PATHS } from '@/lib/metrics/rrdBatchLimit'
 
 const getRBACContextMock = vi.fn<() => Promise<any>>()
 const hasPermissionMock = vi.fn<(check: any) => Promise<boolean>>()
@@ -216,14 +217,25 @@ describe('POST /api/v1/connections/:id/rrd/batch — guards', () => {
     expect(pveFetchMock).not.toHaveBeenCalled()
   })
 
-  it('refuses more than 50 paths', async () => {
-    const paths = Array.from({ length: 51 }, (_, i) => `/nodes/pve${i}`)
+  it('refuses more than RRD_BATCH_MAX_PATHS paths', async () => {
+    expect(RRD_BATCH_MAX_PATHS).toBe(50)
+    const paths = Array.from({ length: RRD_BATCH_MAX_PATHS + 1 }, (_, i) => `/nodes/pve${i}`)
 
     const res = await callRoute(await importPOST(), { params: { id: 'conn1' }, body: { paths } })
 
     expect(res.status).toBe(400)
     expect(await readJson<any>(res)).toEqual({ error: 'Too many paths (max 50)' })
     expect(pveFetchMock).not.toHaveBeenCalled()
+  })
+
+  it('serves a batch of exactly RRD_BATCH_MAX_PATHS paths', async () => {
+    const paths = Array.from({ length: RRD_BATCH_MAX_PATHS }, (_, i) => `/nodes/pve${i}`)
+
+    const res = await callRoute(await importPOST(), { params: { id: 'conn1' }, body: { paths } })
+
+    expect(res.status).toBe(200)
+    expect(Object.keys((await readJson<any>(res)).data)).toHaveLength(RRD_BATCH_MAX_PATHS)
+    expect(pveFetchMock).toHaveBeenCalledTimes(RRD_BATCH_MAX_PATHS)
   })
 
   it('500s when the connection lookup throws', async () => {

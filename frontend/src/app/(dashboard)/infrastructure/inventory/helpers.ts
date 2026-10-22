@@ -2,6 +2,7 @@ import { sumMigrationStats } from '@/lib/migration/migration-stats'
 import { QEMU_NIC_MODELS } from '@/lib/rbac/nicPermissions'
 import { parseMemoryProperty } from '@/lib/proxmox/memoryProperty'
 import type { RrdRangeMeta, RrdWindow } from '@/lib/metrics/rrdRange'
+import { RRD_BATCH_MAX_PATHS } from '@/lib/metrics/rrdBatchLimit'
 
 import type { InventorySelection, DetailsPayload, SeriesPoint, RrdTimeframe, Status } from './types'
 
@@ -926,8 +927,10 @@ export async function fetchRrd(connectionId: string, path: string, timeframe: Rr
 }
 
 /**
- * Batch RRD fetch: fetches RRD data for multiple paths on the same connection
- * in a single HTTP request. Returns a Map of path -> data[].
+ * Batch RRD fetch: fetches RRD data for multiple paths on the same connection.
+ * The batch route takes at most RRD_BATCH_MAX_PATHS paths per request, so a
+ * longer list (every node of a large cluster) goes out as parallel requests
+ * of that size, merged here. Returns a Map of path -> data[].
  */
 export async function fetchRrdBatch(
   connectionId: string,
@@ -945,6 +948,27 @@ export async function fetchRrdBatch(
     return new Map([[paths[0], rows]])
   }
 
+  const chunks: string[][] = []
+  for (let i = 0; i < paths.length; i += RRD_BATCH_MAX_PATHS) {
+    chunks.push(paths.slice(i, i + RRD_BATCH_MAX_PATHS))
+  }
+
+  const dataMap = new Map<string, any[]>()
+  const chunkMaps = await Promise.all(chunks.map(chunk => postRrdBatch(connectionId, chunk, timeframe, signal, window)))
+  for (const chunkMap of chunkMaps) {
+    for (const [path, data] of chunkMap) dataMap.set(path, data)
+  }
+  return dataMap
+}
+
+/** One request to the batch route, for a list the route accepts whole. */
+async function postRrdBatch(
+  connectionId: string,
+  paths: string[],
+  timeframe: RrdTimeframe,
+  signal?: AbortSignal,
+  window?: RrdWindow | null
+): Promise<Map<string, any[]>> {
   const url = `/api/v1/connections/${encodeURIComponent(connectionId)}/rrd/batch`
   const res = await fetch(url, {
     method: 'POST',

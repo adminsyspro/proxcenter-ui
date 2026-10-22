@@ -133,6 +133,8 @@ let currentRun: ScriptedRun | null
 let v2vLaunches: string[]
 /** What Phase 6 "ls -1 <outputDir>" reports as converted disk files. */
 let diskListing: string
+/** Answer of the online-disks virt-customize run (Phase 4.5), null = the run fails. */
+let onlineDisksAnswer: string | null
 /**
  * Output of the adoption attempt (#292: `mkdir -p images/<vmid> && stat && mv -n
  * && echo ADOPT_OK`). Empty = rename refused, so the pipeline falls back to
@@ -175,6 +177,14 @@ async function sshRouter(_connId: string, _host: string, command: string) {
   }
   if (command.startsWith("cat ") && command.includes("*.xml")) return ok("") // no domain XML: fallback VM config
   if (command.startsWith("ls -1 ")) return ok(diskListing)
+  // Phase 4.5: the converted disks, then the online-disks script for a Windows with data disks.
+  if (command.startsWith("find ") && command.includes('-name "*-sd*"')) {
+    const dir = /^find '([^']+)'/.exec(command)?.[1]
+    return ok(diskListing.split("\n").filter(Boolean).map(f => `${dir}/${f}`).join("\n"))
+  }
+  if (command.includes("virt-customize --no-network")) {
+    return onlineDisksAnswer === null ? { success: false as const, output: "virt-customize: error: no operating systems were found" } : ok(onlineDisksAnswer)
+  }
   if (command.startsWith("mkdir -p ") && command.includes("echo ADOPT_OK")) {
     return ok(adoptAnswer)
   }
@@ -283,6 +293,7 @@ beforeEach(() => {
   currentRun = null
   v2vLaunches = []
   diskListing = "testvm-sda\n"
+  onlineDisksAnswer = ""
   adoptAnswer = ""
   prisma = makeFakePrisma()
   vi.mocked(getTenantPrisma).mockImplementation(() => prisma as any)
@@ -682,5 +693,49 @@ describe("runV2vMigrationPipeline per-disk target storage (#317, lot 2)", () => 
     expect(messages()).toContain("Per-disk choices: storage disk 1->local, disk 2->thin")
     expect(sshCommands()).toContain("pvesm alloc 'thin' 120 'vm-120-disk-1' 1048576 --format raw 2>&1")
     expect(attachedSlots().scsi1).toBe("thin:vm-120-disk-1")
+  })
+})
+
+describe("runV2vMigrationPipeline Windows data disks (lab 22/10)", () => {
+  const WINDOWS_LOG = SUCCESS_LOG.replace("Converting Ubuntu 22.04 to run on KVM", "Converting Windows Server 2025 Standard Evaluation to run on KVM")
+  const customizeRuns = () => vi.mocked(executeSSH).mock.calls.map(c => String(c[2])).filter(c => c.includes("virt-customize --no-network"))
+
+  it("has the data disks of a Windows brought online at first boot, its files kept out of the output dir", { timeout: 15000 }, async () => {
+    queueV2vRuns([{ exit: 0, log: WINDOWS_LOG }])
+    diskListing = "testvm-sda\ntestvm-sdb\ntestvm-sdc\n"
+
+    await runPipelineToEnd("v2v-it-online-disks", makeConfig())
+
+    expect(prisma.row.status).toBe("completed")
+    const [run] = customizeRuns()
+    expect(run).toMatch(/ -a '[^']*\/testvm-sda' --upload /)
+    // Phase 6 attaches whatever lies in the output dir: the script is not there.
+    const outputDir = /-a '([^']*)\/testvm-sda'/.exec(run)?.[1]
+    expect(run).not.toContain(`${outputDir}/online-disks`)
+    expect(run).toMatch(/rm -f '[^']*online-disks-v2v-it-online-disks\.ps1'/)
+    expect(vi.mocked(executeSSH).mock.calls.find(c => String(c[2]).includes("virt-customize --no-network"))?.[3]).toBe(10 * 60 * 1000)
+    expect(messages()).toContain("Guest disks: Windows keeps the disks it finds on a new controller offline, so the 2 data disks are brought online at the first boot")
+  })
+
+  it("warns with the way out when the script cannot be scheduled, and still completes", { timeout: 15000 }, async () => {
+    queueV2vRuns([{ exit: 0, log: WINDOWS_LOG }])
+    diskListing = "testvm-sda\ntestvm-sdb\n"
+    onlineDisksAnswer = null
+
+    await runPipelineToEnd("v2v-it-online-disks-ko", makeConfig())
+
+    expect(prisma.row.status).toBe("completed")
+    expect(messages()).toContain("Guest disks: the data disks could not be set to come online at the first boot (virt-customize: error: no operating systems were found); Windows keeps the disks it finds on a new controller offline, bring them online in Disk Management")
+  })
+
+  it("leaves a single-disk Windows and a Linux guest alone", { timeout: 15000 }, async () => {
+    queueV2vRuns([{ exit: 0, log: WINDOWS_LOG }])
+    await runPipelineToEnd("v2v-it-online-disks-one", makeConfig())
+    queueV2vRuns([{ exit: 0, log: SUCCESS_LOG }])
+    diskListing = "testvm-sda\ntestvm-sdb\n"
+    await runPipelineToEnd("v2v-it-online-disks-linux", makeConfig())
+
+    expect(customizeRuns()).toHaveLength(0)
+    expect(messages().some(m => m.startsWith("Guest disks:"))).toBe(false)
   })
 })

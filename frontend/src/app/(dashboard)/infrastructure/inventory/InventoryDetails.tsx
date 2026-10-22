@@ -157,6 +157,7 @@ import { loadNodeAptUpdates } from '@/lib/proxmox/loadNodeAptUpdates'
 import { PAGE_SIZES } from '@/components/ui/PagedRows'
 import { countExtVmPower, filterExtVms, filteredSelectionState, toggleFilteredSelection, type ExtVmPowerFilter } from './extVmList'
 import { isNodeReachable } from './nodeStatusMeta'
+import { mergeVirtV2vSupport, type VirtV2vSupport } from '@/lib/migration/warm/virt-v2v-windows'
 
 /**
  * Rang de l'onglet Sauvegardes d'une VM dans `VmDetailTabs` (Résumé, Matériel,
@@ -386,7 +387,7 @@ export default function InventoryDetails({
   const [migStoragesLoading, setMigStoragesLoading] = useState(false)
   const [migStoragesError, setMigStoragesError] = useState<string | null>(null)
   const [migSshfsAvailable, setMigSshfsAvailable] = useState<boolean | null>(null) // null = not checked yet
-  const [vcenterPreflight, setVcenterPreflight] = useState<{ checked: boolean; ok: boolean; installing: boolean; errors: string[]; virtV2vInstalled: boolean; virtioWinInstalled: boolean; nbdkitInstalled: boolean; nbdcopyInstalled: boolean; guestfsToolsInstalled: boolean; ovmfInstalled: boolean; ntfsCompressionPluginInstalled: boolean; detectedDisks: string[]; tempStorages: { path: string; availableBytes: number; totalBytes: number; filesystem: string }[]; installError?: { hintKey?: '401_enterprise'; output: string } } | null>(null)
+  const [vcenterPreflight, setVcenterPreflight] = useState<{ checked: boolean; ok: boolean; installing: boolean; errors: string[]; virtV2vInstalled: boolean; virtioWinInstalled: boolean; nbdkitInstalled: boolean; nbdcopyInstalled: boolean; guestfsToolsInstalled: boolean; ovmfInstalled: boolean; ntfsCompressionPluginInstalled: boolean; detectedDisks: string[]; tempStorages: { path: string; availableBytes: number; totalBytes: number; filesystem: string }[]; installError?: { hintKey?: '401_enterprise'; output: string }; virtV2v?: VirtV2vSupport } | null>(null)
   const [migStarting, setMigStarting] = useState(false)
   const [migJobId, setMigJobId] = useState<string | null>(null)
   const [migJob, setMigJob] = useState<any>(null)
@@ -987,6 +988,7 @@ export default function InventoryDetails({
         ntfsCompressionPluginInstalled: allNtfsPlugin,
         detectedDisks,
         tempStorages: aggregatedTempStorages,
+        virtV2v: mergeVirtV2vSupport(results.map(r => r.virtV2v)),
       })
       if (detectedDisks.length > 0) {
         setMigDiskPaths(detectedDisks.join('\n'))

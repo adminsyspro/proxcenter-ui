@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
-import { runV2vPreflight, installV2vPackages, startVirtioWinDownload, checkVirtioWinProgress } from "@/lib/migration/v2v-preflight"
+import { runV2vPreflight, installV2vPackages, installVirtV2vBackport, startVirtioWinDownload, checkVirtioWinProgress } from "@/lib/migration/v2v-preflight"
 import { runWarmNodePreflight } from "@/lib/migration/warm/vddk-preflight"
 import { runXcpngWarmNodePreflight } from "@/lib/migration/warm/xcpng-node-preflight"
 import { isVddkPackageTokenConfigured } from "@/lib/migration/warm/vddk-provision"
@@ -68,6 +68,13 @@ export async function POST(req: Request) {
   try {
     if (action === "install") {
       const result = await installV2vPackages(targetConnectionId, targetNode)
+      return NextResponse.json(result)
+    }
+
+    // Windows Server 2025 support (#1173): ProxCenter's virt-v2v build, on a
+    // PVE 9 node whose virt-v2v lacks it. A no-op elsewhere.
+    if (action === "install-virt-v2v-backport") {
+      const result = await installVirtV2vBackport(targetConnectionId, targetNode)
       return NextResponse.json(result)
     }
 

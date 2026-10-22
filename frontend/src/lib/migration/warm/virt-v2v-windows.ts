@@ -10,8 +10,8 @@
  * virt-v2v 2.7.2): it finds nothing for it on an ISO that holds the drivers,
  * exits 0 and leaves the guest on emulated devices (measured on the lab).
  *
- * The version alone does not tell: a 2.6.0 rebuilt with that backport still
- * prints 2.6.0 (roadmap#83, lab). The directory name of a release is a string
+ * The version alone does not tell: a 2.6.0 rebuilt with that backport
+ * (virt-v2v-backport.ts) still prints 2.6.0. The directory name of a release is a string
  * of the binary only when the table has it, so the node probe looks for it
  * there (`VIRT_V2V_MARKERS`) and the version is only quoted.
  */
@@ -29,6 +29,8 @@ export interface VirtV2vSupport {
   version?: string
   /** The markers of `VIRT_V2V_MARKERS` found in the binary; absent when the probe did not look. */
   knows?: string[]
+  /** ProxCenter's virt-v2v build that knows them can be installed on the node (virt-v2v-backport.ts). */
+  backport?: boolean
 }
 
 const RELEASES: { release: string; marker: string; osinfo: RegExp; name: RegExp; minVersion: string }[] = [
@@ -49,6 +51,19 @@ export function windowsUnsupportedByVirtV2v(guest: string | undefined, node: Vir
   const r = RELEASES.find(x => x.name.test(guest) || x.osinfo.test(guest))
   if (!r || node.knows.includes(r.marker)) return null
   return { release: r.release, minVersion: r.minVersion }
+}
+
+/**
+ * One view of several nodes' virt-v2v, for a migration that may land on any
+ * of them (the cold dialog's Auto node): a release counts as known only when
+ * every node knows it, the backport as available when one node takes it.
+ */
+export function mergeVirtV2vSupport(nodes: (VirtV2vSupport | undefined)[]): VirtV2vSupport | undefined {
+  const probed = nodes.filter((n): n is VirtV2vSupport => !!n)
+  if (probed.length === 0 || probed.length < nodes.length) return undefined
+  const version = probed.find(n => n.version)?.version
+  const knows = probed.every(n => n.knows) ? VIRT_V2V_MARKERS.filter(m => probed.every(n => n.knows?.includes(m))) : undefined
+  return { ...(version && { version }), ...(knows && { knows }), ...(probed.some(n => n.backport) && { backport: true }) }
 }
 
 /** Why the conversion is not applied, for the job log: the node's virt-v2v, never the ISO. */

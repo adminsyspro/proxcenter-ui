@@ -175,6 +175,7 @@ async function sshRouter(_connId: string, _host: string, command: string, _timeo
   if (conversion) {
     if (command.startsWith("test -x /usr/bin/virt-v2v-in-place")) return ok("v2v-in-place\n")
     if (command.startsWith("nohup bash")) return ok("4242\n")
+    if (command.startsWith("cat ") && command.includes("/commit-exit")) return ok("ok\n")
     if (command.startsWith("cat ") && command.includes("/exit")) return ok("0\n")
     if (command.startsWith("cat ") && command.includes("v2v.log")) {
       return ok([
@@ -483,7 +484,9 @@ describe("runXcpngWarmMigration CBT path", () => {
     const launch = sshCommands.find(c => c.startsWith("nohup bash"))!
     const netpin = Buffer.from(/([A-Za-z0-9+/=]{20,})\W+\| base64 -d > "\$D\/netpin\.sh"/.exec(launch)![1], "base64").toString()
     expect(netpin).toContain("NICS='aa:bb:cc:dd:ee:01 eth0 enX0\naa:bb:cc:dd:ee:02 eth1 enX1'")
-    expect(sshCommands).toContain(`qemu-img commit -q '/tmp/proxcenter-convert-${jobId}/disk0.qcow2'`)
+    const commit = sshCommands.find(c => c.startsWith("nohup bash") && c.includes("qemu-img commit"))!
+    expect(commit).toContain(`/tmp/proxcenter-convert-${jobId}`)
+    expect(commit).toContain('qemu-img commit -q "$D/disk0.qcow2"')
     expect(hasLog("Guest converted in")).toBe(true)
     expect(hasLog("Guest network: eth0 (aa:bb:cc:dd:ee:01), eth1 (aa:bb:cc:dd:ee:02) keep the name they had on the source")).toBe(true)
     // said after the conversion it belongs to

@@ -4,8 +4,9 @@ vi.mock("@/lib/ssh/exec", async (importActual) => ({ ...(await importActual<type
 
 import { executeSSH } from "@/lib/ssh/exec"
 import {
-  buildConversionScript, buildConversionXml, conversionDir, conversionPreflightCommand, convertGuestAtCutover,
-  describeWindowsStaticIps, missingConversionPrereqs, parseConversionOutcome, windowsStaticIpArgs, GUEST_CONVERSION_ESTIMATE_SEC,
+  buildCommitScript, buildConversionScript, buildConversionXml, canKeepTrimsOut, conversionDir, conversionNotAppliedMessage, conversionPreflightCommand,
+  convertGuestAtCutover, describeWindowsStaticIps, missingConversionPrereqs, nbdChainFunctions, parseConversionOutcome, windowsStaticIpArgs,
+  GUEST_CONVERSION_ESTIMATE_SEC,
 } from "./guest-conversion"
 
 const msg = (type: string, message: string) => JSON.stringify({ message, timestamp: "2026-10-19T08:35:37+02:00", type })
@@ -82,6 +83,13 @@ describe("buildConversionXml", () => {
     expect(xml).toContain('<driver name="qemu" type="qcow2"/>')
   })
 
+  it("names each disk's NBD device by a placeholder when the overlays go through NBD (#1169)", () => {
+    const xml = buildConversionXml({ name: "r9", firmware: "bios", overlays: ["/tmp/d/disk0.qcow2", "/tmp/d/disk1.qcow2"], viaNbd: true })
+    expect(xml).toContain('<disk type="block" device="disk"><driver name="qemu" type="raw"/><source dev="@NBD0@"/><target dev="sda" bus="scsi"/></disk>')
+    expect(xml).toContain('<source dev="@NBD1@"/><target dev="sdb" bus="scsi"/>')
+    expect(xml).not.toContain("qcow2")
+  })
+
   it("leaves the firmware to BIOS and never asks for less than 256 MiB", () => {
     const xml = buildConversionXml({ name: "", firmware: "bios", overlays: ["/o"], memoryMB: 64 })
     expect(xml).toContain("<os><type")
@@ -122,8 +130,65 @@ describe("buildConversionScript", () => {
     expect(script).toContain("--block-driver virtio-scsi '--mac' '00:50:56:9c:a1:f0:ip:10.42.0.239,10.42.0.1,24,1.1.1.1' --machine-readable")
   })
 
+  it("converts through NBD chains that drop trims, and takes them down before the exit code (#1169)", () => {
+    const script = buildConversionScript("job-1", ["/dev/rbd3", "/dev/rbd4"], "<nbd/>", undefined, [], "<file/>")
+    const lines = script.split("\n")
+    const at = (re: RegExp) => lines.findIndex(l => re.test(l))
+    expect(script).toContain(Buffer.from("<file/>").toString("base64") + "' | base64 -d > \"$D/guest-file.xml\"")
+    expect(at(/^if nbd_chain_up 0 && nbd_chain_up 1; then$/)).toBeGreaterThan(at(/disk1\.qcow2" > "\$D\/overlay\.log"/))
+    expect(script).toContain('  sed -i "s|@NBD1@|$(cat "$D/nbd1.dev")|" "$D/guest.xml"')
+    // A chain that cannot come up: the direct overlays, said to the caller.
+    expect(script).toContain('  nbd_chain_down; mv "$D/guest-file.xml" "$D/guest.xml"; echo fallback > "$D/nbd-fallback"')
+    expect(at(/^RC=\$\?$/)).toBe(at(/virt-v2v-in-place/) + 1)
+    expect(lines.slice(-2)).toEqual(["nbd_chain_down", 'echo $RC > "$D/exit"'])
+  })
+
   it("keeps the job id out of the shell", () => {
     expect(conversionDir("a;b$(c)")).toBe("/tmp/proxcenter-convert-abc")
+  })
+})
+
+describe("NBD chains and commit (#1169)", () => {
+  const fns = nbdChainFunctions()
+
+  it("exposes an overlay through qemu-nbd without discard, behind nbdkit's nozero filter, on the first free device", () => {
+    expect(fns).toContain('qemu-nbd --fork --persistent --discard=ignore -f qcow2 -k "$D/q$1.sock" --pid-file="$D/q$1.pid" "$D/disk$1.qcow2"')
+    expect(fns).toContain('nbdkit -P "$D/k$1.pid" -U "$D/k$1.sock" --filter=nozero nbd socket="$D/q$1.sock" zeromode=none')
+    expect(fns).toContain("[ -s /sys/block/nbd$j/pid ] && continue")
+    expect(fns).toContain('echo /dev/nbd$j > "$D/nbd$1.dev"; return 0')
+  })
+
+  it("only detaches the devices it recorded, releases their holders first, and waits for nbdkit then qemu-nbd", () => {
+    const down = fns.slice(fns.indexOf("nbd_chain_down() {"))
+    expect(down.indexOf('nbd_release_holders "$n"')).toBeLessThan(down.indexOf('nbd-client -d "$n"'))
+    expect(down).toContain('for p in "$D"/k*.pid "$D"/q*.pid; do')
+    expect(down).toContain('while kill -0 "$pid" 2>/dev/null && [ $t -lt 100 ]')
+    expect(fns).toContain("nbd_release_holders() {")
+  })
+
+  it("commits the overlays in order and says which one failed", () => {
+    expect(buildCommitScript("j1", 2).split("\n")).toEqual([
+      "D='/tmp/proxcenter-convert-j1'",
+      ': > "$D/commit.log"',
+      `qemu-img commit -q "$D/disk0.qcow2" >> "$D/commit.log" 2>&1 || { echo 'failed 0' > "$D/commit-exit"; exit 0; }`,
+      `qemu-img commit -q "$D/disk1.qcow2" >> "$D/commit.log" 2>&1 || { echo 'failed 1' > "$D/commit-exit"; exit 0; }`,
+      'echo ok > "$D/commit-exit"',
+    ])
+  })
+})
+
+describe("conversionNotAppliedMessage", () => {
+  it("says the copy is unchanged when no commit ran", () => {
+    expect(conversionNotAppliedMessage({ converted: false, reason: "no drivers." })).toEqual({
+      msg: "Guest conversion not applied: no drivers. The copied disks are unchanged and the guest keeps the hardware it boots on without new drivers (SATA boot disk for Windows and UEFI guests, e1000 NICs for Windows)",
+      level: "warn",
+    })
+  })
+
+  it("never says so after a commit that did not finish (#1169)", () => {
+    const m = conversionNotAppliedMessage({ converted: false, volumesWritten: true, reason: "the converted disk 1 could not be written back (EIO)" })
+    expect(m.level).toBe("error")
+    expect(m.msg).toBe("Guest conversion failed while writing the converted disks back: the converted disk 1 could not be written back (EIO). A disk may be partly converted: the guest is started on the hardware it boots on without new drivers (SATA boot disk for Windows and UEFI guests, e1000 NICs for Windows), check that it boots")
   })
 })
 
@@ -133,6 +198,13 @@ describe("conversion prerequisites", () => {
     expect(cmd).toContain("test -x /usr/bin/virt-v2v-in-place")
     expect(cmd).toContain("/usr/share/virtio-win/virtio-win.iso")
     expect(cmd.trim().endsWith("true")).toBe(true)
+  })
+
+  it("probes the NBD chain apart: it is not a prerequisite (#1169)", () => {
+    expect(conversionPreflightCommand()).toContain("nbdkit --filter=nozero nbd --version >/dev/null 2>&1 && echo nbd-chain")
+    expect(canKeepTrimsOut("v2v-in-place\nnbd-chain\n")).toBe(true)
+    expect(canKeepTrimsOut("v2v-in-place")).toBe(false)
+    expect(missingConversionPrereqs("v2v-in-place", false)).toEqual([])
   })
 
   it("only asks Windows for the VirtIO drivers and the first-boot helper", () => {
@@ -156,15 +228,21 @@ describe("convertGuestAtCutover", () => {
   }
   const commands = () => ssh.mock.calls.map(c => String(c[2]))
 
-  /** Answer the node like the lab did: prerequisites, launch, exit file, log, commits. */
-  function node(opts: { prereqs?: string; launch?: string; exit?: string[]; log?: string; commit?: boolean } = {}) {
+  const launches = () => commands().filter(c => c.startsWith("nohup bash"))
+
+  /** Answer the node like the lab did: prerequisites, launches, exit files, log. */
+  function node(opts: { prereqs?: string; launch?: string; exit?: string[]; log?: string; commit?: string[]; fallback?: boolean } = {}) {
     const exits = [...(opts.exit ?? ["RUNNING", "0"])]
+    const commits = [...(opts.commit ?? ["RUNNING", "ok"])]
+    const next = (list: string[]) => list.length > 1 ? list.shift()! : list[0]
     ssh.mockImplementation(async (_c: string, _n: any, cmd: string) => {
       if (cmd.startsWith("test -x")) return ok(opts.prereqs ?? "v2v-in-place\nvirtio-win\nsrvany\n")
       if (cmd.startsWith("nohup bash")) return ok(opts.launch ?? "4242\n")
-      if (cmd.startsWith("cat ") && cmd.includes("/exit")) return ok(exits.length > 1 ? exits.shift()! : exits[0])
+      if (cmd.startsWith("cat ") && cmd.includes("/exit")) return ok(next(exits))
+      if (cmd.startsWith("cat ") && cmd.includes("/commit-exit")) return ok(next(commits))
+      if (cmd.startsWith("cat ") && cmd.includes("/nbd-fallback")) return ok(opts.fallback ? "fallback\n" : "RUNNING")
       if (cmd.startsWith("cat ") && cmd.includes("v2v.log")) return ok(opts.log ?? rockyOk)
-      if (cmd.startsWith("qemu-img commit")) return opts.commit === false ? { success: false, output: "", error: "No space left" } : ok()
+      if (cmd.startsWith("tail ") && cmd.includes("commit.log")) return ok("qemu-img: Could not write: No space left on device\n")
       return ok()
     })
   }
@@ -178,10 +256,80 @@ describe("convertGuestAtCutover", () => {
     node()
     const r = await convertGuestAtCutover(base)
     expect(r).toMatchObject({ converted: true, os: "Rocky Linux 9.8 (Blue Onyx)" })
-    expect(commands()).toContain("qemu-img commit -q '/tmp/proxcenter-convert-j1/disk0.qcow2'")
+    // The commit runs detached, polled like the conversion (#1169).
+    expect(launches()).toHaveLength(2)
+    expect(launches()[1]).toContain('qemu-img commit -q "$D/disk0.qcow2"')
+    expect(commands().filter(c => c.startsWith("cat ") && c.includes("/commit-exit"))).toHaveLength(2)
     expect(commands().at(-1)).toBe("rm -rf '/tmp/proxcenter-convert-j1'")
-    // The process ended on its own: nothing to kill.
-    expect(commands().some(c => c.startsWith("pkill"))).toBe(false)
+    // Both processes ended on their own: nothing to kill, no chain to take down.
+    expect(commands().some(c => c.startsWith("pkill") || c.includes("nbd_chain_down"))).toBe(false)
+  })
+
+  it("converts through the NBD chains when the node has them, and takes them down at the end (#1169)", async () => {
+    node({ prereqs: "v2v-in-place\nnbd-chain\n" })
+    const r = await convertGuestAtCutover(base)
+    expect(r.converted).toBe(true)
+    const conversion = launches()[0]
+    expect(conversion).toContain("nbd_chain_up 0")
+    expect(conversion).toContain(Buffer.from(buildConversionXml({ name: "r9", firmware: "efi", overlays: ["/tmp/proxcenter-convert-j1/disk0.qcow2"], viaNbd: true })).toString("base64"))
+    expect(conversion).toContain(Buffer.from(buildConversionXml({ name: "r9", firmware: "efi", overlays: ["/tmp/proxcenter-convert-j1/disk0.qcow2"] })).toString("base64"))
+    const down = commands().findIndex(c => c.endsWith("\nnbd_chain_down"))
+    expect(down).toBeGreaterThan(-1)
+    expect(commands()[down].startsWith("D='/tmp/proxcenter-convert-j1'\n")).toBe(true)
+    expect(down).toBeLessThan(commands().indexOf("rm -rf '/tmp/proxcenter-convert-j1'"))
+    expect(log.mock.calls.some(c => /could not be attached through NBD/.test(String(c[0])))).toBe(false)
+  })
+
+  it("says the write-back may be long when the chains fell back to the direct overlays (#1169)", async () => {
+    node({ prereqs: "v2v-in-place\nnbd-chain\n", fallback: true })
+    expect((await convertGuestAtCutover(base)).converted).toBe(true)
+    expect(log).toHaveBeenCalledWith(expect.stringMatching(/^Guest conversion: the overlays could not be attached through NBD/), "warn")
+  })
+
+  it("waits for a long commit, saying so every five minutes, before the guest may start (#1169)", async () => {
+    let now = 0
+    const clock = vi.spyOn(Date, "now").mockImplementation(() => (now += 60_000))
+    try {
+      node({ commit: [...Array(8).fill("RUNNING"), "ok"] })
+      const r = await convertGuestAtCutover(base)
+      expect(r.converted).toBe(true)
+      const notices = log.mock.calls.map(c => String(c[0])).filter(m => m.startsWith("Guest conversion: still writing"))
+      expect(notices[0]).toMatch(/^Guest conversion: still writing the converted disks back \(\d+ min\); the guest starts once it is done$/)
+      expect(notices.length).toBeGreaterThanOrEqual(1)
+      expect(commands().some(c => c.startsWith("pkill"))).toBe(false)
+    } finally {
+      clock.mockRestore()
+    }
+  })
+
+  it("stops a commit on cancellation", async () => {
+    let calls = 0
+    node({ commit: ["RUNNING"] })
+    const cancelled = () => commands().some(c => c.includes("/commit-exit")) && ++calls > 1
+    await expect(convertGuestAtCutover({ ...base, isCancelled: cancelled })).rejects.toThrow("Migration cancelled")
+    expect(commands()).toContain("pkill -TERM -P 4242; kill 4242")
+  })
+
+  it("reports a commit that could not be started, before anything is written", async () => {
+    node()
+    const read = ssh.getMockImplementation()!
+    let n = 0
+    ssh.mockImplementation(async (c: string, nd: any, cmd: string) =>
+      cmd.startsWith("nohup bash") && ++n === 2 ? { success: false, output: "", error: "Connection reset" } : read(c, nd, cmd))
+    expect(await convertGuestAtCutover(base)).toEqual({ converted: false, reason: "the converted disks could not be written back: Connection reset" })
+  })
+
+  it("marks the volumes written when something breaks during the commit", async () => {
+    node({ commit: ["RUNNING"] })
+    let now = 0
+    const clock = vi.spyOn(Date, "now").mockImplementation(() => (now += 10 * 60_000))
+    log.mockImplementation(async (m: string) => { if (m.startsWith("Guest conversion: still writing")) throw new Error("database gone") })
+    try {
+      expect(await convertGuestAtCutover(base)).toEqual({ converted: false, reason: "database gone", volumesWritten: true })
+    } finally {
+      clock.mockRestore()
+      log.mockImplementation(async () => {})
+    }
   })
 
   it("never commits a conversion that installed no drivers", async () => {
@@ -227,10 +375,15 @@ describe("convertGuestAtCutover", () => {
     expect(commands().at(-1)).toBe("rm -rf '/tmp/proxcenter-convert-j1'")
   })
 
-  it("says which disks were already written when a commit fails", async () => {
-    node({ commit: false })
-    const r = await convertGuestAtCutover({ ...base, devices: ["/dev/rbd3"] })
-    expect(r.reason).toBe("the converted disk 1 could not be written back (No space left)")
+  it("says which disks were already written when a commit fails, and that the volumes were written", async () => {
+    node({ commit: ["failed 0"] })
+    expect(await convertGuestAtCutover(base)).toEqual({
+      converted: false, volumesWritten: true,
+      reason: "the converted disk 1 could not be written back (qemu-img: Could not write: No space left on device)",
+    })
+    node({ commit: ["failed 1"] })
+    expect((await convertGuestAtCutover({ ...base, devices: ["/dev/rbd3", "/dev/rbd4"] })).reason)
+      .toBe("the converted disk 2 could not be written back (qemu-img: Could not write: No space left on device); disks 1 to 1 were already converted")
   })
 
   it("turns an SSH failure into a reason rather than an exception", async () => {

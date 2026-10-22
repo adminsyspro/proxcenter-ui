@@ -12,17 +12,33 @@
  * Safety: the conversion never writes to the target volumes directly. Each
  * volume gets a qcow2 overlay (`qemu-img create -b <device>`), virt-v2v-in-place
  * converts the overlays, and only a conversion that succeeded AND installed the
- * VirtIO drivers is committed into the volumes (`qemu-img commit`, a few tens of
- * MB). Anything else drops the overlays: the volumes are exactly the verified
- * copy, and the guest boots on the compatible hardware as before. This holds on
- * every block storage warm supports, thick LVM included, which has no snapshot.
+ * VirtIO drivers is committed into the volumes (`qemu-img commit`). Anything
+ * else drops the overlays: the volumes are exactly the verified copy, and the
+ * guest boots on the compatible hardware as before. This holds on every block
+ * storage warm supports, thick LVM included, which has no snapshot.
  *
- * Measured on the lab (virt-v2v 2.6.0, PVE 9): 41 to 64 s per guest, overlays
- * of 50 to 110 MB, commit under a second.
+ * Trim (discussion #1169): virt-v2v always ends with an fstrim of the guest
+ * filesystems, and every trimmed block lands in the overlay as a zero cluster.
+ * The commit then rewrites the whole free space of the disk as zeros: 11 GiB
+ * for 21 MiB of real changes on a 12 GiB disk, 113 s at 100 MB/s, past the old
+ * 15 min ceiling on a large disk. Neither `discard="ignore"` in the domain XML
+ * nor `qemu-nbd --discard=ignore` alone keeps them out (lab, virt-v2v 2.6.0).
+ * What does: virt-v2v converts a /dev/nbdN chained as qemu-nbd (discard
+ * ignored) behind nbdkit's nozero filter, so trims reach nothing and the
+ * overlay holds only the conversion (0 zero clusters, 26 MiB, commit 0.04 s).
+ * The blocks the guest trimmed keep their old content, which its filesystem
+ * holds as free. Warm already needs nbdkit and nbd-client on the node; without
+ * them the overlays are converted directly, as before.
+ *
+ * The commit runs detached and is polled like the conversion: the guest must
+ * never start while a commit still writes into its volumes.
+ *
+ * Measured on the lab (virt-v2v 2.6.0, PVE 9): 41 to 64 s per guest.
  */
 
 import { executeSSH, shellEscape } from "@/lib/ssh/exec"
 import type { SshTarget } from "@/lib/ssh/node-endpoint-core"
+import { NBD_RELEASE_HOLDERS_FN, nbdReleaseHoldersCall } from "../nbd-holders"
 import type { GuestStaticIpv4 } from "@/lib/vmware/soap"
 import { buildNetworkPinScript, describeNetworkPinReport, NETWORK_PIN_REPORT, NETWORK_PIN_SCRIPT, parseNetworkPinReport, type GuestNic } from "./guest-network"
 
@@ -32,7 +48,10 @@ export { GUEST_CONVERSION_ESTIMATE_SEC } from "./guest-conversion-estimate"
 export const GUEST_CONVERSION_TIMEOUT_MS = 30 * 60 * 1000
 
 const POLL_MS = 3000
-const COMMIT_TIMEOUT_MS = 15 * 60 * 1000
+/** A commit takes a fraction of a second once the trims are kept out: polled tighter, it adds no downtime. */
+const COMMIT_POLL_MS = 1000
+/** How often a commit still running is reported in the job log. */
+const COMMIT_NOTICE_MS = 5 * 60 * 1000
 const VIRTIO_WIN_ISO = "/usr/share/virtio-win/virtio-win.iso"
 
 export type LogLevel = "info" | "success" | "warn" | "error"
@@ -46,16 +65,24 @@ function xmlEscape(value: string): string {
   return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;")
 }
 
+/** Placeholder of disk i's /dev/nbdN in the domain XML, filled in by the script once attached. */
+export const nbdPlaceholder = (i: number) => `@NBD${i}@`
+
 /**
  * Minimal libvirt domain for `virt-v2v-in-place -i libvirtxml`: the firmware
  * (virt-v2v checks it against what it finds in the guest) and one disk per
- * overlay, in target order so disk 0 stays the boot disk.
+ * overlay, in target order so disk 0 stays the boot disk. With `viaNbd`, each
+ * disk is the block device the script attaches the overlay to (see
+ * buildConversionScript), named by its placeholder.
  */
-export function buildConversionXml(a: { name: string; firmware: "efi" | "bios"; overlays: string[]; memoryMB?: number }): string {
+export function buildConversionXml(a: { name: string; firmware: "efi" | "bios"; overlays: string[]; memoryMB?: number; viaNbd?: boolean }): string {
   const os = a.firmware === "efi" ? '<os firmware="efi">' : "<os>"
   const disks = a.overlays.map((path, i) => {
     const dev = `sd${String.fromCodePoint(97 + (i % 26))}`
-    return `<disk type="file" device="disk"><driver name="qemu" type="qcow2"/><source file="${xmlEscape(path)}"/><target dev="${dev}" bus="scsi"/></disk>`
+    const source = a.viaNbd
+      ? `<disk type="block" device="disk"><driver name="qemu" type="raw"/><source dev="${nbdPlaceholder(i)}"/>`
+      : `<disk type="file" device="disk"><driver name="qemu" type="qcow2"/><source file="${xmlEscape(path)}"/>`
+    return `${source}<target dev="${dev}" bus="scsi"/></disk>`
   })
   return [
     '<domain type="kvm">',
@@ -68,8 +95,59 @@ export function buildConversionXml(a: { name: string; firmware: "efi" | "bios"; 
 }
 
 /**
+ * Shell functions to expose overlay i as a /dev/nbdN that drops trims, and to
+ * take every such chain of a conversion down again. The chain is qemu-nbd
+ * (`--discard=ignore`) on a socket, nbdkit's nozero filter in front of it (it
+ * hides write-zeroes, the other road a trim takes from the appliance to the
+ * overlay), and the kernel client on the first free device, picked the way
+ * buildNbdConnectCmd does: a device another job grabs first only makes our
+ * attach fail. What is up is recorded in `$D` (pid files, `nbd<i>.dev`), so the
+ * same teardown serves the script's own end and a cancellation, and only ever
+ * detaches a device this conversion attached. POSIX sh: the cleanup runs it
+ * over SSH outside the script.
+ */
+export function nbdChainFunctions(): string {
+  return [
+    NBD_RELEASE_HOLDERS_FN,
+    "nbd_chain_up() {",
+    '  qemu-nbd --fork --persistent --discard=ignore -f qcow2 -k "$D/q$1.sock" --pid-file="$D/q$1.pid" "$D/disk$1.qcow2" >> "$D/nbd.log" 2>&1 || return 1',
+    '  nbdkit -P "$D/k$1.pid" -U "$D/k$1.sock" --filter=nozero nbd socket="$D/q$1.sock" zeromode=none >> "$D/nbd.log" 2>&1 || return 1',
+    "  modprobe nbd max_part=0 2>/dev/null",
+    "  for j in 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do",
+    "    [ -s /sys/block/nbd$j/pid ] && continue",
+    '    if nbd-client -unix "$D/k$1.sock" /dev/nbd$j >> "$D/nbd.log" 2>&1; then echo /dev/nbd$j > "$D/nbd$1.dev"; return 0; fi',
+    "  done",
+    "  return 1",
+    "}",
+    "nbd_chain_down() {",
+    '  for f in "$D"/nbd*.dev; do',
+    '    [ -s "$f" ] || continue',
+    '    n=$(cat "$f")',
+    `    ${nbdReleaseHoldersCall('"$n"')}`,
+    '    nbd-client -d "$n" >/dev/null 2>&1',
+    '    rm -f "$f"',
+    "  done",
+    // nbdkit before qemu-nbd, and wait for each: qemu-nbd flushes the overlay
+    // as it exits, and the commit must read it complete.
+    '  for p in "$D"/k*.pid "$D"/q*.pid; do',
+    '    [ -s "$p" ] || continue',
+    '    pid=$(cat "$p"); kill "$pid" 2>/dev/null',
+    '    t=0; while kill -0 "$pid" 2>/dev/null && [ $t -lt 100 ]; do sleep 0.1; t=$((t + 1)); done',
+    '    rm -f "$p"',
+    "  done",
+    "}",
+  ].join("\n")
+}
+
+/**
  * The detached script: overlays on the target devices, then the conversion,
  * then the exit code in `<dir>/exit` (90 when an overlay could not be made).
+ *
+ * With `viaNbd`, virt-v2v converts the overlays through nbdChainFunctions'
+ * chains so its trims stay out of them. A chain that cannot be set up falls
+ * back to the direct overlays (`guest-file.xml`) and leaves `<dir>/nbd-fallback`
+ * for the caller to say so. The chains are down before the exit code is
+ * written: once it is there, the overlays are complete.
  * `--block-driver virtio-scsi` makes Windows boot-start vioscsi rather than
  * viostor, matching the scsi0 slot the guest gets. `< /dev/null` turns any
  * interactive question (`--root ask` on a multi-root guest) into a failure.
@@ -83,13 +161,14 @@ export function buildConversionXml(a: { name: string; firmware: "efi" | "bios"; 
  *
  * `extraArgs` go to virt-v2v-in-place as they are (see windowsStaticIpArgs).
  */
-export function buildConversionScript(jobId: string, devices: string[], xml: string, netpin?: string, extraArgs: string[] = []): string {
+export function buildConversionScript(jobId: string, devices: string[], xml: string, netpin?: string, extraArgs: string[] = [], fileXml?: string): string {
   const dir = conversionDir(jobId)
   const q = shellEscape
+  const b64 = (text: string) => q(Buffer.from(text).toString("base64"))
   const lines = [
     `D=${q(dir)}`,
     'rm -rf "$D"; mkdir -p "$D" || exit 1',
-    `echo ${q(Buffer.from(xml).toString("base64"))} | base64 -d > "$D/guest.xml"`,
+    `echo ${b64(xml)} | base64 -d > "$D/guest.xml"`,
     ...devices.map((dev, i) => `qemu-img create -q -f qcow2 -b ${q(dev)} -F raw "$D/disk${i}.qcow2" > "$D/overlay.log" 2>&1 || { echo 90 > "$D/exit"; exit 0; }`),
     ...(netpin ? [
       `echo ${q(Buffer.from(netpin).toString("base64"))} | base64 -d > "$D/netpin.sh"`,
@@ -98,9 +177,32 @@ export function buildConversionScript(jobId: string, devices: string[], xml: str
         + ` : download ${NETWORK_PIN_REPORT} "$D/netpin.txt" : rm-f ${NETWORK_PIN_SCRIPT} : rm-f ${NETWORK_PIN_REPORT}`
         + ` < /dev/null > "$D/netpin.log" 2>&1`,
     ] : []),
+    ...(fileXml ? [
+      `echo ${b64(fileXml)} | base64 -d > "$D/guest-file.xml"`,
+      nbdChainFunctions(),
+      `if ${devices.map((_, i) => `nbd_chain_up ${i}`).join(" && ")}; then`,
+      ...devices.map((_, i) => `  sed -i "s|${nbdPlaceholder(i)}|$(cat "$D/nbd${i}.dev")|" "$D/guest.xml"`),
+      "else",
+      '  nbd_chain_down; mv "$D/guest-file.xml" "$D/guest.xml"; echo fallback > "$D/nbd-fallback"',
+      "fi",
+    ] : []),
     `LIBGUESTFS_BACKEND=direct stdbuf -oL virt-v2v-in-place -i libvirtxml "$D/guest.xml" --block-driver virtio-scsi${extraArgs.map(x => ` ${q(x)}`).join("")} --machine-readable < /dev/null > "$D/v2v.log" 2>&1`,
-    'echo $? > "$D/exit"',
+    ...(fileXml ? ['RC=$?', "nbd_chain_down", 'echo $RC > "$D/exit"'] : ['echo $? > "$D/exit"']),
   ]
+  return lines.join("\n")
+}
+
+/**
+ * The detached commit of every overlay into its volume, in disk order. It
+ * writes `ok` to `<dir>/commit-exit` when all are in, or `failed <i>` (0-based)
+ * at the first that is not, with qemu-img's message in `<dir>/commit.log`.
+ */
+export function buildCommitScript(jobId: string, count: number): string {
+  const lines = [`D=${shellEscape(conversionDir(jobId))}`, ': > "$D/commit.log"']
+  for (let i = 0; i < count; i++) {
+    lines.push(`qemu-img commit -q "$D/disk${i}.qcow2" >> "$D/commit.log" 2>&1 || { echo 'failed ${i}' > "$D/commit-exit"; exit 0; }`)
+  }
+  lines.push('echo ok > "$D/commit-exit"')
   return lines.join("\n")
 }
 
@@ -190,8 +292,14 @@ export function conversionPreflightCommand(): string {
     "test -x /usr/bin/virt-v2v-in-place && echo v2v-in-place",
     `test -f ${VIRTIO_WIN_ISO} && echo virtio-win`,
     "( test -f /usr/share/virt-tools/rhsrvany.exe || test -f /usr/share/virt-tools/pvvxsvc.exe ) && echo srvany",
+    "command -v qemu-nbd >/dev/null && command -v nbd-client >/dev/null && nbdkit --filter=nozero nbd --version >/dev/null 2>&1 && echo nbd-chain",
     "true",
   ].join("; ")
+}
+
+/** Whether the node can keep virt-v2v's trims out of the overlays (nbdChainFunctions), from the preflight output. */
+export function canKeepTrimsOut(output: string): boolean {
+  return output.split(/\s+/).includes("nbd-chain")
 }
 
 /** What is missing on the node to convert this guest, from the preflight output. */
@@ -268,49 +376,82 @@ export interface GuestConversionInput {
 /**
  * `seconds` and `os` when converted; `reason` when not. `network` holds the
  * log lines of the interface pinning, for the caller to write after its own
- * "converted" line.
+ * "converted" line. `volumesWritten` marks the one failure after which the
+ * volumes are not the copy any more: a commit that started and did not finish.
  */
 export interface GuestConversionResult {
   converted: boolean
   os?: string
   seconds?: number
   reason?: string
+  volumesWritten?: boolean
   network?: { msg: string; level: LogLevel }[]
+}
+
+/** The job log line of a conversion that is not used, for the warm pipelines. */
+export function conversionNotAppliedMessage(r: GuestConversionResult): { msg: string; level: LogLevel } {
+  const reason = (r.reason || "").replace(/\.+$/, "")
+  if (r.volumesWritten) {
+    return { msg: `Guest conversion failed while writing the converted disks back: ${reason}. A disk may be partly converted: the guest is started on the hardware it boots on without new drivers (SATA boot disk for Windows and UEFI guests, e1000 NICs for Windows), check that it boots`, level: "error" }
+  }
+  return { msg: `Guest conversion not applied: ${reason}. The copied disks are unchanged and the guest keeps the hardware it boots on without new drivers (SATA boot disk for Windows and UEFI guests, e1000 NICs for Windows)`, level: "warn" }
 }
 
 /**
  * Run the conversion and commit it only when it succeeded. Never throws, except
- * "Migration cancelled": any other failure leaves the volumes untouched and is
- * returned as a reason, so the cutover goes on with the compatible hardware.
+ * "Migration cancelled": any other failure is returned as a reason, so the
+ * cutover goes on with the compatible hardware. Until a commit starts, the
+ * volumes are untouched; a commit that fails is returned with `volumesWritten`.
+ * It returns only once nothing of the conversion runs on the node any more.
  */
 export async function convertGuestAtCutover(a: GuestConversionInput): Promise<GuestConversionResult> {
   const ssh = (cmd: string, timeoutMs?: number) => executeSSH(a.connectionId, a.nodeIp, cmd, timeoutMs)
   const dir = conversionDir(a.jobId)
+  const q = shellEscape
   const pollMs = a.pollMs ?? POLL_MS
   const timeoutMs = a.timeoutMs ?? GUEST_CONVERSION_TIMEOUT_MS
   let pid = ""
+  let viaNbd = false
+  let committing = false
   const cleanup = async () => {
     // The script's children first (virt-v2v-in-place, which tears its
-    // appliance down on SIGTERM), then the script itself.
+    // appliance down on SIGTERM, or qemu-img commit), then the script itself,
+    // then the NBD chains it may have left up.
     if (pid) await ssh(`pkill -TERM -P ${pid}; kill ${pid}`).catch(() => {})
-    await ssh(`rm -rf ${shellEscape(dir)}`).catch(() => {})
+    if (viaNbd) await ssh(`D=${q(dir)}\n${nbdChainFunctions()}\nnbd_chain_down`).catch(() => {})
+    await ssh(`rm -rf ${q(dir)}`).catch(() => {})
   }
+  /** Start a detached script on the node and keep its pid for the cleanup. */
+  const launch = async (script: string): Promise<string | null> => {
+    const r = await ssh(`nohup bash -c ${q(script)} > /dev/null 2>&1 & echo $!`)
+    const out = (r.output || "").trim()
+    pid = r.success && /^\d+$/.test(out) ? out : ""
+    return pid ? null : (r.error || "no process id")
+  }
+  /** One read of a file the detached script writes when it is done; null while it runs. */
+  const readDone = async (file: string): Promise<string | null> => {
+    const r = await ssh(`cat ${q(`${dir}/${file}`)} 2>/dev/null || echo RUNNING`).catch(() => null)
+    const out = (r?.output || "").trim()
+    return out && out !== "RUNNING" ? out : null
+  }
+  const sleep = (ms = pollMs) => new Promise(r => setTimeout(r, ms))
 
   try {
     const pf = await ssh(conversionPreflightCommand())
     const missing = missingConversionPrereqs(pf.output || "", a.isWindows)
     if (missing.length > 0) return { converted: false, reason: `missing on the node: ${missing.join(", ")}` }
     if (a.devices.length === 0 || a.devices.some(d => !d)) return { converted: false, reason: "a target volume has no block device on the node" }
+    viaNbd = canKeepTrimsOut(pf.output || "")
 
     const overlays = a.devices.map((_, i) => `${dir}/disk${i}.qcow2`)
-    const xml = buildConversionXml({ name: a.name, firmware: a.firmware, overlays, memoryMB: a.memoryMB })
+    const domain = { name: a.name, firmware: a.firmware, overlays, memoryMB: a.memoryMB }
+    const xml = buildConversionXml({ ...domain, viaNbd })
     const netpin = !a.isWindows && a.nics && a.nics.length > 0 ? buildNetworkPinScript(a.nics) : undefined
     const targetMacs = (a.nics ?? []).map(n => n.mac)
     const winIps = a.isWindows ? a.staticIps ?? [] : []
-    const script = buildConversionScript(a.jobId, a.devices, xml, netpin, windowsStaticIpArgs(winIps, targetMacs))
-    const launch = await ssh(`nohup bash -c ${shellEscape(script)} > /dev/null 2>&1 & echo $!`)
-    pid = /^\d+$/.test((launch.output || "").trim()) ? (launch.output || "").trim() : ""
-    if (!launch.success || !pid) return { converted: false, reason: `virt-v2v-in-place could not be started: ${launch.error || "no process id"}` }
+    const script = buildConversionScript(a.jobId, a.devices, xml, netpin, windowsStaticIpArgs(winIps, targetMacs), viaNbd ? buildConversionXml(domain) : undefined)
+    const launchError = await launch(script)
+    if (launchError) return { converted: false, reason: `virt-v2v-in-place could not be started: ${launchError}` }
     await a.log(`Guest conversion: virt-v2v-in-place running on ${a.devices.length} disk(s) through overlays; the target volumes are only written if it succeeds`)
 
     const t0 = Date.now()
@@ -320,33 +461,53 @@ export async function convertGuestAtCutover(a: GuestConversionInput): Promise<Gu
       if (Date.now() - t0 > timeoutMs) {
         return { converted: false, reason: `virt-v2v-in-place did not finish within ${Math.round(timeoutMs / 60000)} min` }
       }
-      await new Promise(r => setTimeout(r, pollMs))
-      const r = await ssh(`cat ${shellEscape(`${dir}/exit`)} 2>/dev/null || echo RUNNING`).catch(() => null)
-      const out = (r?.output || "").trim()
-      if (/^\d+$/.test(out)) exitCode = Number(out)
+      await sleep()
+      const out = await readDone("exit")
+      if (out && /^\d+$/.test(out)) exitCode = Number(out)
     }
     pid = ""
     const seconds = Math.round((Date.now() - t0) / 1000)
-    const logOut = await ssh(`cat ${shellEscape(`${dir}/v2v.log`)} 2>/dev/null || true`).catch(() => null)
+    if (viaNbd && await readDone("nbd-fallback") !== null) {
+      await a.log("Guest conversion: the overlays could not be attached through NBD, so virt-v2v trims the free space into them and writing them back may take as long as rewriting that free space", "warn")
+    }
+    const logOut = await ssh(`cat ${q(`${dir}/v2v.log`)} 2>/dev/null || true`).catch(() => null)
     const outcome = parseConversionOutcome(logOut?.output || "", exitCode)
     // The warning that became the reason is said once, in the caller's line.
     for (const w of outcome.warnings.filter(w => w !== outcome.reason)) await a.log(`Guest conversion: virt-v2v warning: ${w}`, "warn")
     if (!outcome.ok) return { converted: false, reason: outcome.reason || "conversion failed" }
 
-    // Commit disk by disk. A commit only copies the overlay's clusters into
-    // the volume; a failure here is the one case that may leave a volume half
-    // written, so it is reported as such rather than as a clean fallback.
-    for (let i = 0; i < overlays.length; i++) {
-      const c = await ssh(`qemu-img commit -q ${shellEscape(overlays[i])}`, COMMIT_TIMEOUT_MS)
-      if (!c.success) {
-        return { converted: false, reason: `the converted disk ${i + 1} could not be written back (${c.error || c.output || "qemu-img commit failed"})${i > 0 ? `; disks 1 to ${i} were already converted` : ""}` }
+    // The commit only copies the overlays' clusters into the volumes, but it is
+    // the one step that writes them: it runs detached, and the guest does not
+    // start before it ended, however long it takes (a cancellation stops it,
+    // the volumes are then dropped with the job).
+    const commitError = await launch(buildCommitScript(a.jobId, overlays.length))
+    if (commitError) return { converted: false, reason: `the converted disks could not be written back: ${commitError}` }
+    committing = true
+    const c0 = Date.now()
+    let notified = c0
+    let commit = await readDone("commit-exit")
+    while (commit === null) {
+      if (a.isCancelled()) throw new Error("Migration cancelled")
+      await sleep(Math.min(pollMs, COMMIT_POLL_MS))
+      commit = await readDone("commit-exit")
+      if (commit === null && Date.now() - notified >= COMMIT_NOTICE_MS) {
+        notified = Date.now()
+        await a.log(`Guest conversion: still writing the converted disks back (${Math.round((notified - c0) / 60000)} min); the guest starts once it is done`)
       }
+    }
+    pid = ""
+    const failed = /^failed (\d+)$/.exec(commit)
+    if (commit !== "ok") {
+      const i = failed ? Number(failed[1]) : 0
+      const detail = await ssh(`tail -n 3 ${q(`${dir}/commit.log`)} 2>/dev/null || true`).catch(() => null)
+      const why = clip(detail?.output || "") || "qemu-img commit failed"
+      return { converted: false, volumesWritten: true, reason: `the converted disk ${i + 1} could not be written back (${why})${i > 0 ? `; disks 1 to ${i} were already converted` : ""}` }
     }
     const network = netpin ? await readNetworkPin(ssh, dir) : describeWindowsStaticIps(winIps, targetMacs)
     return { converted: true, os: outcome.os, seconds, ...(network.length > 0 && { network }) }
   } catch (e: any) {
     if (String(e?.message || e) === "Migration cancelled") throw e
-    return { converted: false, reason: String(e?.message || e) }
+    return { converted: false, reason: String(e?.message || e), ...(committing && { volumesWritten: true }) }
   } finally {
     await cleanup()
   }

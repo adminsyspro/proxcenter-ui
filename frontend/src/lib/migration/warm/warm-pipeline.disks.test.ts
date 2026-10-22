@@ -339,6 +339,7 @@ describe("runWarmMigration guest conversion at cutover (#1000)", () => {
     vi.mocked(executeSSH).mockImplementation(async (c: string, h: any, command: string, t?: number, opts?: SSHExecOpts) => {
       if (command.startsWith("test -x /usr/bin/virt-v2v-in-place")) { sshCommands.push(command); return { success: true, output: prereqs } }
       if (command.startsWith("nohup bash")) { sshCommands.push(command); return { success: true, output: "777\n" } }
+      if (command.startsWith("cat '/tmp/proxcenter-convert-") && command.includes("/commit-exit")) return { success: true, output: "ok\n" }
       if (command.startsWith("cat '/tmp/proxcenter-convert-") && command.includes("/exit")) return { success: true, output: "0\n" }
       if (command.startsWith("cat '/tmp/proxcenter-convert-")) return { success: true, output: v2vLog(drivers) }
       return sshRouter(c, h, command, t, opts)
@@ -359,7 +360,9 @@ describe("runWarmMigration guest conversion at cutover (#1000)", () => {
     const netpin = Buffer.from(/([A-Za-z0-9+/=]{20,})\W+\| base64 -d > "\$D\/netpin\.sh"/.exec(launch)![1], "base64").toString()
     expect(netpin).toContain("NICS='00:50:56:00:00:09 ens192'")
     // overlays on the three copied volumes, committed once the drivers are in
-    expect(sshCommands.filter(c => c.startsWith("qemu-img commit -q '/tmp/proxcenter-convert-warm-conv-1/disk"))).toHaveLength(3)
+    const commit = sshCommands.find(c => c.startsWith("nohup bash") && c.includes("qemu-img commit"))!
+    expect(commit).toContain("/tmp/proxcenter-convert-warm-conv-1")
+    expect(commit.match(/qemu-img commit -q "\$D\/disk\d\.qcow2"/g)).toHaveLength(3)
     expect(messages().some(m => /^Guest converted in \d+s \(Rocky Linux 9\.8 \(Blue Onyx\)\)/.test(m))).toBe(true)
     expect(attach()).toMatchObject({ diskSlots: ["scsi0", "scsi1", "scsi2"], bootDiskSlot: "scsi0", nets: { net0: "virtio,bridge=vmbr0,macaddr=00:50:56:00:00:09" } })
     // the phases the dialogs render as section headers, in order
@@ -373,7 +376,7 @@ describe("runWarmMigration guest conversion at cutover (#1000)", () => {
 
     expect(await runToEnd("warm-conv-2", makeConfig())).toBeNull()
 
-    expect(sshCommands.some(c => c.startsWith("qemu-img commit"))).toBe(false)
+    expect(sshCommands.some(c => c.includes("qemu-img commit"))).toBe(false)
     expect(messages()).toContain("Guest conversion not applied: virt-v2v could not install the VirtIO drivers in this guest. The copied disks are unchanged and the guest keeps the hardware it boots on without new drivers (SATA boot disk for Windows and UEFI guests, e1000 NICs for Windows)")
     expect(attach().bootDiskSlot).toBe("sata0")
     expect(attach()).not.toHaveProperty("nets")

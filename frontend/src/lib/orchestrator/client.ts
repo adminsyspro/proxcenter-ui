@@ -949,6 +949,7 @@ export interface Alert {
     | 'event'
     | 'snapshot_stale'
     | 'osd_latency'
+    | 'ceph_noout'
     | 'disk_latency'
     | 'disk_latency_peak'
     | 'replication_rpo'
@@ -1006,6 +1007,10 @@ export interface AlertThresholds {
   osd_latency_warning: number
   /** Ceph OSD latency in ms that raises a critical alert (#721). */
   osd_latency_critical: number
+  /** Hours a per-host Ceph noout flag may stay set before it is reported (ui#1164). 0 disables the check. */
+  ceph_noout_max_hours: number
+  /** Minutes a per-host Ceph noout flag may exist while no node of the cluster is in maintenance (ui#1164). 0 disables the check. */
+  ceph_noout_orphan_minutes: number
   /** Guest disk latency in ms that raises a warning (#881). 0 disables the check. */
   disk_latency_warning: number
   /** Guest disk latency in ms that raises a critical alert (#881). */

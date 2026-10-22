@@ -343,7 +343,7 @@ export function useHardwareHandlers({
   const [nodeNotesEditValue, setNodeNotesEditValue] = useState('')
   const [nodeNotesSaving, setNodeNotesSaving] = useState(false)
 
-  const [nodeCephSubTab, setNodeCephSubTab] = useState(0) // 0=Config, 1=Monitor, 2=OSD, 3=CephFS, 4=Pools, 5=Log
+  const [nodeCephSubTab, setNodeCephSubTab] = useState(2) // 0=Config, 1=Monitor, 2=OSD (shown first, the default), 3=CephFS, 4=Pools, 5=Log
   const [nodeCephLogLive, setNodeCephLogLive] = useState(false)
 
   // États pour les backup jobs PVE (cluster et node)

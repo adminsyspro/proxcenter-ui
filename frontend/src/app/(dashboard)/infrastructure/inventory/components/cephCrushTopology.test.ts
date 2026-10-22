@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { buildCrushTopology, capacityColor } from "./cephCrushTopology"
+import { buildCrushTopology, capacityColor, crushNodeFlags } from "./cephCrushTopology"
 
 // Mirrors real PVE shapes: OSD ids are STRINGS, the /ceph/rules endpoint is
 // bare ({name} only, no id/steps), the pool carries crush_rule_name +
@@ -133,5 +133,22 @@ describe("capacityColor", () => {
     expect(capacityColor(10)).toBe("success")
     expect(capacityColor(75)).toBe("warning")
     expect(capacityColor(90)).toBe("error")
+  })
+})
+
+describe("crushNodeFlags (ui#1164)", () => {
+  const f = { flags: ["norebalance", "noout"], hostFlags: { "pve3.lab": ["noup", "noout"] }, osdFlags: { "osd.2": ["nodown"] } }
+
+  it("gives each level its own flags: cluster-wide on the root, set-group on the host, own on the OSD", () => {
+    expect(crushNodeFlags({ type: "root", name: "default", id: -1 }, f)).toEqual(["noout", "norebalance"])
+    expect(crushNodeFlags({ type: "host", name: "pve3", id: -7 }, f)).toEqual(["noout", "noup"])
+    expect(crushNodeFlags({ type: "osd", name: "osd.2", id: "2" }, f)).toEqual(["nodown"])
+    expect(crushNodeFlags({ type: "rack", name: "r1", id: -3 }, f)).toEqual([])
+  })
+
+  it("adds, for an OSD in the details, what its host and the cluster set on it", () => {
+    const osd = { type: "osd", name: "osd.2", id: "2", osd: { up: true, in: true, deviceClass: "hdd", host: "pve3" } } as any
+    expect(crushNodeFlags(osd, f, true)).toEqual(["noout", "noup", "nodown", "norebalance"])
+    expect(crushNodeFlags({ type: "osd", name: "osd.5", id: 5 }, { flags: [], hostFlags: {}, osdFlags: {} }, true)).toEqual([])
   })
 })

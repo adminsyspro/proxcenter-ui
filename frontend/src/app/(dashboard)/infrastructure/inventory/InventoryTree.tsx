@@ -68,6 +68,7 @@ import { CloneVmDialog } from '@/components/hardware/CloneVmDialog'
 import { StatusIcon, NodeIcon, ClusterIcon, getVmIcon } from './components/TreeIcons'
 import { VmItem } from './components/VmItem'
 import TreeDialogs from './components/TreeDialogs'
+import { waitForNodeMaintenance } from '@/lib/inventory/waitForNodeMaintenance'
 import PoolDialog, { type PoolDialogState, type PoolOwner } from './components/PoolDialog'
 
 // Re-export for external consumers (e.g. InventoryDetails.tsx)
@@ -1183,6 +1184,9 @@ return migratingVmIds.has(`${connId}:${vmid}`)
       }
       setMaintenanceTarget(null)
       setReloadTick(x => x + 1)
+      // The refresh above usually still reads the previous hastate: reload
+      // once Proxmox HA has applied the change.
+      void waitForNodeMaintenance(connId, node, entering).then(() => setReloadTick(x => x + 1))
       return true
     } catch (e: any) {
       setMaintenanceError(e?.message || t('inventory.unknownError'))

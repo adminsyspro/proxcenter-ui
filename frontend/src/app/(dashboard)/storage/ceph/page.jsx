@@ -36,6 +36,9 @@ import { AreaChart, Area, LineChart, Line, BarChart, Bar, XAxis, YAxis, Cartesia
 import ChartContainer from '@/components/ChartContainer'
 import AppDialogTitle from '@/components/ui/AppDialogTitle'
 import { CephOsdFlagsDialog, useCephOsdFlags } from '@/components/ceph/CephOsdFlags'
+import { OsdFlagChips } from '@/components/ceph/CephFlagChips'
+import CephHealthCheckDetail from '@/components/ceph/CephHealthCheckDetail'
+import { flagSummaryLabels } from '@/lib/ceph/osdFlagsView'
 
 import { getDateLocale } from '@/lib/i18n/date'
 import { usePageTitle } from '@/contexts/PageTitleContext'
@@ -671,6 +674,10 @@ return updated.slice(-30)
   const osdFlags = useCephOsdFlags(connId, !!cephData)
   const [flagsEditing, setFlagsEditing] = useState(false)
 
+  // Les flags d'un hôte ou d'un OSD seul comptent aussi (ui#1164) : un
+  // `pve3: noout` oublié après une maintenance se voit dès la rangée du haut.
+  const osdFlagLabels = flagSummaryLabels(osdFlags.flags, osdFlags.hostFlags, osdFlags.osdFlags)
+
   const openDetail = (kind, row) => {
     setDetail({ kind, row })
     setDetailOpen(true)
@@ -702,10 +709,12 @@ return updated.slice(-30)
     {
       field: 'status',
       headerName: t('common.status'),
-      width: 110,
+      width: 170,
       renderCell: params => (
-        <Box sx={{ display: 'flex', alignItems: 'center', height: '100%' }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, height: '100%' }}>
           <OsdStatusChip up={params.row.up} inCluster={params.row.in} status={params.row.status} />
+          {/* Flags posés sur cet OSD ou sur son hôte (ui#1164) */}
+          <OsdFlagChips osdId={params.row.id} host={params.row.host} osdFlags={osdFlags.osdFlags} hostFlags={osdFlags.hostFlags} />
         </Box>
       )
     },
@@ -746,7 +755,7 @@ return updated.slice(-30)
         </Box>
       )
     },
-  ], [t])
+  ], [t, osdFlags.osdFlags, osdFlags.hostFlags])
 
   // Colonnes Pools
   const poolColumns = useMemo(() => [
@@ -1073,10 +1082,10 @@ return updated.slice(-30)
             {!osdFlags.forbidden && (
               <KpiCard
                 title={t('ceph.osdFlags')}
-                value={osdFlags.flags.length}
-                subtitle={osdFlags.flags.length > 0 ? osdFlags.flags.join(', ') : t('ceph.noOsdFlagsActive')}
+                value={osdFlagLabels.length}
+                subtitle={osdFlagLabels.length > 0 ? osdFlagLabels.join(', ') : t('ceph.noOsdFlagsActive')}
                 icon='ri-flag-line'
-                color={osdFlags.flags.length > 0 ? '#ff9800' : undefined}
+                color={osdFlagLabels.length > 0 ? '#ff9800' : undefined}
               >
                 <Tooltip title={t('common.edit')}>
                   <IconButton size='small' aria-label={t('common.edit')} onClick={() => setFlagsEditing(true)}>
@@ -1146,6 +1155,8 @@ return updated.slice(-30)
                           </Typography>
                         </Box>
                         <Typography variant='body2' sx={{ opacity: 0.75 }}>{check.summary}</Typography>
+                        {/* Les lignes de détail : `host pve3 has flags noout` sous OSD_FLAGS (ui#1164) */}
+                        <CephHealthCheckDetail detail={check.detail} />
                       </Box>
                     )
                   })}
@@ -1726,6 +1737,9 @@ return updated.slice(-30)
         loading={osdFlags.loading}
         toggling={osdFlags.toggling}
         onToggle={osdFlags.toggle}
+        hostFlags={osdFlags.hostFlags}
+        osdFlags={osdFlags.osdFlags}
+        onToggleHost={osdFlags.toggleHost}
       />
     </Box>
   )

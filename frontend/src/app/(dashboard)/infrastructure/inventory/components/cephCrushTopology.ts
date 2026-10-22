@@ -1,6 +1,8 @@
 // Pure composition logic for the Ceph CRUSH topology view. No JSX, no React —
 // kept separate so it is unit-tested and measured by SonarCloud.
 
+import { byFlagOrder, flagsOnOsd, hostFlagsForNode, type ScopedFlagMap } from "@/lib/ceph/osdFlagsView"
+
 export type OsdDetail = {
   up: boolean
   in: boolean
@@ -156,4 +158,23 @@ export function capacityColor(pct: number): "success" | "warning" | "error" {
   if (pct > 85) return "error"
   if (pct >= 70) return "warning"
   return "success"
+}
+
+export type CrushFlags = { flags: string[]; hostFlags: ScopedFlagMap; osdFlags: ScopedFlagMap }
+
+/**
+ * The OSD flags a CRUSH node carries itself (ui#1164): the cluster-wide ones on
+ * the root, a host's `set-group` flags on the host, an OSD's own on the OSD.
+ * `withInherited` adds, for an OSD, the flags of its host and of the cluster
+ * that apply to it too (the details panel); the tree shows each at its level.
+ */
+export function crushNodeFlags(node: Pick<CrushNode, "type" | "name" | "id">, f: CrushFlags, withInherited = false): string[] {
+  let out: string[] = []
+  if (node.type === "root") out = f.flags
+  else if (node.type === "host") out = hostFlagsForNode(f.hostFlags, node.name).flags
+  else if (node.type === "osd") {
+    const own = f.osdFlags[`osd.${node.id}`] || []
+    out = withInherited ? [...flagsOnOsd(node.id, (node as CrushNode).osd?.host ?? null, f.osdFlags, f.hostFlags).map(a => a.flag), ...f.flags] : own
+  }
+  return [...new Set(out)].sort(byFlagOrder)
 }

@@ -295,3 +295,150 @@ describe('HostDrainDialog', () => {
     expect(onClose).not.toHaveBeenCalled()
   })
 })
+
+/*
+   ui#1164: a node entering maintenance with Ceph OSDs gets the per-host noout
+   option, set before the drain or the ha-manager call.
+*/
+describe('HostDrainDialog with Ceph noout (ui#1164)', () => {
+  const NOOUT = {
+    hasCeph: true, crushHost: 'pve3', osds: [{ id: 2, status: 'up', in: true }], noout: false, globalNoout: false,
+    health: { status: 'HEALTH_OK', checks: [] }, otherHostsWithNoout: [],
+    okToStop: { ok: true, osds: [2], numOkPgs: 6, numNotOkPgs: 0, message: null },
+  }
+  const nooutCalls = () => fetchMock.mock.calls.filter(([url, init]) => String(url).includes('/ceph/noout') && init?.method === 'POST')
+
+  function seed(info: unknown, nooutPost: { ok: boolean; status: number; body: unknown } = { ok: true, status: 200, body: { success: true } }) {
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      const u = String(url)
+      if (u.endsWith('/plan')) return { ok: true, status: 200, json: async () => ({ data: PLAN }) }
+      if (u.includes('/ceph/noout')) {
+        if (init?.method === 'POST') return { ok: nooutPost.ok, status: nooutPost.status, json: async () => nooutPost.body }
+        return { ok: true, status: 200, json: async () => ({ data: info }) }
+      }
+      return { ok: true, status: 200, json: async () => ({ data: { id: 'd-1' } }) }
+    })
+  }
+
+  it('sets the flag before the drain starts, with the precheck read on open', async () => {
+    seed(NOOUT)
+    const onStarted = vi.fn()
+    renderWithProviders(
+      <HostDrainDialog open mode="maintenance" connId="c1" node="pve3" otherNodes={['pve1']} sshEnabled onClose={vi.fn()} onStarted={onStarted} />,
+    )
+    expect(await screen.findByRole('checkbox', { name: "Set Ceph noout on this node's OSDs (1)" })).toBeChecked()
+    expect(fetchMock.mock.calls.some(([url]) => String(url) === '/api/v1/connections/c1/nodes/pve3/ceph/noout?precheck=1')).toBe(true)
+
+    const start = screen.getByRole('button', { name: 'Start the drain' })
+    await waitFor(() => expect(start).toBeEnabled())
+    fireEvent.click(start)
+    await waitFor(() => expect(onStarted).toHaveBeenCalled())
+    const order = fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST').map(([url]) => String(url))
+    expect(order.indexOf('/api/v1/connections/c1/nodes/pve3/ceph/noout')).toBeLessThan(order.indexOf('/api/v1/orchestrator/host-drains'))
+    expect(JSON.parse(String(nooutCalls()[0][1].body))).toEqual({ force: false })
+  })
+
+  it('holds Start while the precheck is unsafe, until acknowledged, and then forces', async () => {
+    seed({ ...NOOUT, okToStop: { ok: false, osds: [2], numOkPgs: 0, numNotOkPgs: 33, message: null } })
+    const onMaintenanceOnly = vi.fn().mockResolvedValue(undefined)
+    renderWithProviders(
+      <HostDrainDialog open mode="maintenance" connId="c1" node="pve3" otherNodes={['pve1']} sshEnabled onClose={vi.fn()} onMaintenanceOnly={onMaintenanceOnly} />,
+    )
+    await screen.findByTestId('ceph-noout-unsafe')
+    fireEvent.click(screen.getByLabelText('Evacuate the guests'))
+    expect(screen.getByRole('button', { name: 'Confirm' })).toBeDisabled()
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'I understand, proceed anyway' }))
+    expect(screen.getByRole('button', { name: 'Confirm' })).toBeEnabled()
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }))
+    await waitFor(() => expect(onMaintenanceOnly).toHaveBeenCalled())
+    expect(JSON.parse(String(nooutCalls()[0][1].body))).toEqual({ force: true })
+    expect(startCalls()).toHaveLength(0)
+  })
+
+  it('stops with the refusal and never enters maintenance when the flag cannot be set', async () => {
+    seed(NOOUT, { ok: false, status: 409, body: { error: 'Stopping the OSDs of this node would take 33 PG(s) offline', code: 'not_ok_to_stop' } })
+    const onMaintenanceOnly = vi.fn().mockResolvedValue(undefined)
+    const onClose = vi.fn()
+    renderWithProviders(
+      <HostDrainDialog open mode="maintenance" connId="c1" node="pve3" otherNodes={['pve1']} sshEnabled onClose={onClose} onMaintenanceOnly={onMaintenanceOnly} />,
+    )
+    await screen.findByTestId('ceph-noout-option')
+    fireEvent.click(screen.getByLabelText('Evacuate the guests'))
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }))
+    expect(await screen.findByText('Stopping the OSDs of this node would take 33 PG(s) offline')).toBeInTheDocument()
+    expect(onMaintenanceOnly).not.toHaveBeenCalled()
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
+  // The flag must not outlive an action that never put the node in maintenance.
+  const deleteCalls = () => fetchMock.mock.calls.filter(([url, init]) => String(url).includes('/ceph/noout') && init?.method === 'DELETE')
+  function seedRefusedDrain(info: unknown) {
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      const u = String(url)
+      if (u.endsWith('/plan')) return { ok: true, status: 200, json: async () => ({ data: PLAN }) }
+      if (u.includes('/ceph/noout')) {
+        if (init?.method) return { ok: true, status: 200, json: async () => ({ success: true }) }
+        return { ok: true, status: 200, json: async () => ({ data: info }) }
+      }
+      return { ok: false, status: 409, json: async () => ({ error: 'A drain is already running on pve3' }) }
+    })
+  }
+
+  it('removes the flag it just set when the drain is refused', async () => {
+    seedRefusedDrain(NOOUT)
+    renderWithProviders(<HostDrainDialog open mode="maintenance" connId="c1" node="pve3" otherNodes={['pve1']} sshEnabled onClose={vi.fn()} />)
+    await screen.findByTestId('ceph-noout-option')
+    const start = screen.getByRole('button', { name: 'Start the drain' })
+    await waitFor(() => expect(start).toBeEnabled())
+    fireEvent.click(start)
+    expect(await screen.findByText('A drain is already running on pve3')).toBeInTheDocument()
+    expect(nooutCalls()).toHaveLength(1)
+    expect(deleteCalls().map(([url]) => String(url))).toEqual(['/api/v1/connections/c1/nodes/pve3/ceph/noout'])
+  })
+
+  it('removes the flag when maintenance only fails, but never a flag that was already there', async () => {
+    seedRefusedDrain(NOOUT)
+    const onMaintenanceOnly = vi.fn().mockRejectedValue(new Error('ha-manager refused'))
+    const { unmount } = renderWithProviders(
+      <HostDrainDialog open mode="maintenance" connId="c1" node="pve3" otherNodes={['pve1']} sshEnabled onClose={vi.fn()} onMaintenanceOnly={onMaintenanceOnly} />,
+    )
+    await screen.findByTestId('ceph-noout-option')
+    fireEvent.click(screen.getByLabelText('Evacuate the guests'))
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }))
+    expect(await screen.findByText('ha-manager refused')).toBeInTheDocument()
+    expect(deleteCalls()).toHaveLength(1)
+    unmount()
+
+    fetchMock.mockClear()
+    seedRefusedDrain({ ...NOOUT, noout: true })
+    renderWithProviders(
+      <HostDrainDialog open mode="maintenance" connId="c1" node="pve3" otherNodes={['pve1']} sshEnabled onClose={vi.fn()} onMaintenanceOnly={onMaintenanceOnly} />,
+    )
+    await screen.findByTestId('ceph-noout-option')
+    fireEvent.click(screen.getByLabelText('Evacuate the guests'))
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }))
+    expect(await screen.findByText('ha-manager refused')).toBeInTheDocument()
+    expect(nooutCalls()).toHaveLength(1)
+    expect(deleteCalls()).toHaveLength(0)
+  })
+
+  it('skips the flag when the operator unchecks it, and shows nothing on a node without Ceph', async () => {
+    seed(NOOUT)
+    const onMaintenanceOnly = vi.fn().mockResolvedValue(undefined)
+    const { unmount } = renderWithProviders(
+      <HostDrainDialog open mode="maintenance" connId="c1" node="pve3" otherNodes={['pve1']} sshEnabled onClose={vi.fn()} onMaintenanceOnly={onMaintenanceOnly} />,
+    )
+    fireEvent.click(await screen.findByRole('checkbox', { name: /Set Ceph noout/ }))
+    fireEvent.click(screen.getByLabelText('Evacuate the guests'))
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }))
+    await waitFor(() => expect(onMaintenanceOnly).toHaveBeenCalled())
+    expect(nooutCalls()).toHaveLength(0)
+    unmount()
+
+    seed({ hasCeph: false })
+    renderWithProviders(<HostDrainDialog open mode="maintenance" connId="c1" node="pve3" otherNodes={['pve1']} sshEnabled onClose={vi.fn()} />)
+    await screen.findByTestId('drain-plan-guest-92481')
+    expect(screen.queryByTestId('ceph-noout-option')).toBeNull()
+  })
+})

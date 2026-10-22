@@ -20,6 +20,10 @@ import { formatBytes } from '@/utils/format'
 import { getDateLocale } from '@/lib/i18n/date'
 import { useCopyToClipboard } from '@/lib/clipboard'
 import { useRBAC } from '@/contexts/RBACContext'
+import { useCephNoout } from '@/hooks/useCephNoout'
+import { waitForNodeMaintenance } from '@/lib/inventory/waitForNodeMaintenance'
+import CephNooutChip from '@/components/ceph/CephNooutChip'
+import CephNooutOption from '@/components/ceph/CephNooutOption'
 
 import {
   Accordion,
@@ -30,6 +34,7 @@ import {
   Box,
   Breadcrumbs,
   Button,
+  ButtonBase,
   Card,
   CardContent,
   Checkbox,
@@ -294,6 +299,18 @@ export default function InventoryDetails({
     refreshData,
     loadVmTrendsBatch,
   } = useDetailData(selection)
+
+  // The per-host Ceph noout of the selected node (ui#1164): the header chip
+  // while the flag is set, and the option of the exit-maintenance dialog.
+  // Reread when the node changes and when its maintenance state flips.
+  const nooutNode = selection?.type === 'node' ? parseNodeId(selection.id) : null
+  const nodeNoout = useCephNoout({
+    connId: nooutNode?.connId,
+    node: nooutNode?.node,
+    open: !!nooutNode && !!data && data.status !== 'crit',
+    mode: 'exit',
+    refreshKey: data?.hostInfo?.maintenance ?? null,
+  })
 
   const [tf, setTf] = useState<RrdTimeframe>('hour')
 
@@ -2167,7 +2184,7 @@ return
     setClusterCephData(null)
     setClusterStorageLoaded(false)
     setClusterStorageData([])
-    setNodeCephSubTab(0)
+    setNodeCephSubTab(2)
     setNodeCephLogLive(false)
     setNodeUpdates({})
     setNodeLocalVms({})
@@ -3379,16 +3396,42 @@ return vm?.isCluster ?? false
                 />
               )}
 
+              {/* The per-host Ceph noout left set outside maintenance (ui#1164);
+                  during maintenance it shows inside the banner below */}
+              {selection?.type === 'node' && !(data.hostInfo?.maintenance && data.status !== 'crit') && (
+                <CephNooutChip state={nodeNoout} canManage={hasPermission('node.manage')} />
+              )}
+
               {/* Warning Ceph */}
               {data.cephHealth && data.cephHealth !== 'HEALTH_OK' && (
                 <MuiTooltip title={`Ceph: ${data.cephHealth === 'HEALTH_WARN' ? t('common.warning') : t('common.error')}`}>
-                  <Box component="span" sx={{ display: 'flex', alignItems: 'center', ml: 0.5 }}>
+                  <Box component="span" sx={{ display: 'flex', alignItems: 'center', ml: 0.5, color: data.cephHealth === 'HEALTH_ERR' ? 'error.main' : 'warning.main' }}>
                     <i
                       className={data.cephHealth === 'HEALTH_ERR' ? 'ri-close-circle-fill' : 'ri-alert-fill'}
-                      style={{ fontSize: 16, color: data.cephHealth === 'HEALTH_ERR' ? '#f44336' : '#ff9800' }}
+                      style={{ fontSize: 16 }}
                     />
                   </Box>
                 </MuiTooltip>
+              )}
+
+              {/* HA maintenance banner, on the title line between the node's
+                  name and its actions; the exit button sits with the actions */}
+              {selection?.type === 'node' && data.hostInfo?.maintenance && data.status !== 'crit' && (
+                <Alert
+                  severity="warning"
+                  icon={<i className="ri-tools-fill" style={{ fontSize: 18 }} />}
+                  sx={{
+                    flex: 1, minWidth: 0, py: 0, px: 1.25, borderRadius: 2,
+                    '& .MuiAlert-icon': { py: 0.5, mr: 1 },
+                    '& .MuiAlert-message': { py: 0.5, minWidth: 0, display: 'flex', alignItems: 'center', gap: 2.5, overflow: 'hidden' },
+                  }}
+                  data-testid="node-maintenance-banner"
+                >
+                  <Typography variant="body2" fontWeight={600} noWrap sx={{ flexShrink: 0 }}>
+                    {t('inventory.maintenanceInline')}
+                  </Typography>
+                  <CephNooutChip state={nodeNoout} canManage={hasPermission('node.manage')} inline />
+                </Alert>
               )}
 
               {/* Refresh button for storage */}
@@ -3410,38 +3453,59 @@ return vm?.isCluster ?? false
                       <i className="ri-refresh-line" style={{ fontSize: 18 }} />
                     </IconButton>
                   </MuiTooltip>
-                  {allowBlankVm ? (
-                    <Button
-                      size="small"
-                      variant="contained"
-                      startIcon={<i className="ri-add-line" />}
-                      onClick={() => setCreateVmDialogOpen(true)}
-                      sx={{ textTransform: 'none' }}
-                    >
-                      {t('common.create')} VM
-                    </Button>
-                  ) : (
-                    <Button
-                      size="small"
-                      variant="contained"
-                      startIcon={<i className="ri-rocket-2-line" />}
-                      onClick={() => router.push('/automation/templates')}
-                      sx={{ textTransform: 'none' }}
-                    >
-                      {t('inventory.deployFromTemplate')}
-                    </Button>
-                  )}
-                  {allowLxc && (
+                  {selection?.type === 'node' && data.hostInfo?.maintenance && (
                     <Button
                       size="small"
                       variant="outlined"
-                      startIcon={<i className="ri-add-line" />}
-                      onClick={() => setCreateLxcDialogOpen(true)}
-                      sx={{ textTransform: 'none' }}
+                      color="warning"
+                      startIcon={<i className="ri-play-circle-line" />}
+                      sx={{ textTransform: 'none', whiteSpace: 'nowrap' }}
+                      onClick={() => {
+                        // The OSDs may have gone down since the chip was read:
+                        // the dialog has to warn before the flag is kept.
+                        void nodeNoout.refresh()
+                        setExitMaintenanceDialogOpen(true)
+                      }}
                     >
-                      {t('common.create')} LXC
+                      {t('inventory.exitMaintenance')}
                     </Button>
                   )}
+                  {/* Create VM / LXC as one icon-only split button, to keep the
+                      title line room for the node's state (maintenance, Ceph) */}
+                  {/* One outlined block split in two, drawn here rather than with
+                      ButtonGroup: the theme rounds every Button on its own, so
+                      the group never joined, and it came out shorter than the
+                      neighbouring small buttons. */}
+                  <Box
+                    role="group"
+                    sx={{
+                      display: 'flex', alignItems: 'stretch', height: 30, flexShrink: 0,
+                      bgcolor: 'primary.main', borderRadius: '6px', overflow: 'hidden',
+                      boxShadow: 'var(--mui-customShadows-xs)',
+                    }}
+                  >
+                    {[
+                      allowBlankVm
+                        ? { key: 'vm', label: `${t('common.create')} VM`, icon: 'ri-computer-line', plus: true, onClick: () => setCreateVmDialogOpen(true) }
+                        : { key: 'tpl', label: t('inventory.deployFromTemplate'), icon: 'ri-rocket-2-line', plus: false, onClick: () => router.push('/automation/templates') },
+                      ...(allowLxc ? [{ key: 'lxc', label: `${t('common.create')} LXC`, icon: 'ri-instance-line', plus: true, onClick: () => setCreateLxcDialogOpen(true) }] : []),
+                    ].map((b, i) => (
+                      <MuiTooltip key={b.key} title={b.label}>
+                        <ButtonBase
+                          aria-label={b.label}
+                          onClick={b.onClick}
+                          sx={{
+                            px: 2.75, gap: 0.25, color: 'primary.contrastText',
+                            ...(i > 0 && { borderLeft: '1px solid rgba(255,255,255,0.35)' }),
+                            '&:hover': { bgcolor: 'primary.dark' },
+                          }}
+                        >
+                          {b.plus && <i className="ri-add-line" style={{ fontSize: 13 }} />}
+                          <i className={b.icon} style={{ fontSize: 16 }} />
+                        </ButtonBase>
+                      </MuiTooltip>
+                    ))}
+                  </Box>
                   {selection?.type === 'node' && (
                     <>
                       <Divider orientation="vertical" flexItem />
@@ -3479,27 +3543,6 @@ return vm?.isCluster ?? false
 
           {selection?.type === 'node' && data.hostInfo?.maintenance && data.status !== 'crit' && (
             <>
-              <Alert
-                severity="warning"
-                icon={<i className="ri-tools-fill" style={{ fontSize: 20 }} />}
-                sx={{ borderRadius: 2 }}
-                action={
-                  <Button
-                    size="small"
-                    variant="outlined"
-                    color="warning"
-                    startIcon={<i className="ri-play-circle-line" />}
-                    sx={{ textTransform: 'none', whiteSpace: 'nowrap' }}
-                    onClick={() => setExitMaintenanceDialogOpen(true)}
-                  >
-                    {t('inventory.exitMaintenance')}
-                  </Button>
-                }
-              >
-                <Typography variant="body2" fontWeight={600}>
-                  {t('inventory.maintenanceModeActive')}
-                </Typography>
-              </Alert>
               <Dialog
                 open={exitMaintenanceDialogOpen}
                 onClose={() => setExitMaintenanceDialogOpen(false)}
@@ -3523,6 +3566,11 @@ return vm?.isCluster ?? false
                   <Typography variant="body2" fontWeight={600} sx={{ mt: 1.5 }}>
                     {t('inventory.node')}: {selection?.id ? parseNodeId(selection.id).node : ''}
                   </Typography>
+                  {nodeNoout.available && (
+                    <Box sx={{ mt: 1.5 }}>
+                      <CephNooutOption state={nodeNoout} disabled={exitMaintenanceBusy} />
+                    </Box>
+                  )}
                   <Typography variant="caption" sx={{ display: 'block', mt: 1, opacity: 0.6 }}>
                     {t('inventory.maintenanceRequiresSsh')}
                   </Typography>
@@ -3553,8 +3601,15 @@ return vm?.isCluster ?? false
                           return
                         }
                         setExitMaintenanceDialogOpen(false)
+                        await nodeNoout.removeAfterExit()
                         void refreshData()
                         if (onRefresh) await onRefresh()
+                        // Proxmox HA applies the exit on its next round: refresh
+                        // again once it does, or the tree keeps the maintenance state.
+                        void waitForNodeMaintenance(connId, node, false).then(() => {
+                          void refreshData()
+                          void onRefresh?.()
+                        })
                       } catch (e: any) {
                         setExitMaintenanceError(e?.message || 'Unknown error')
                       } finally {
@@ -3571,9 +3626,12 @@ return vm?.isCluster ?? false
 
 
           {!(selection?.type === 'node' && data.status === 'crit') && selection?.type !== 'cluster' && selection?.type !== 'ext' && selection?.type !== 'ext-type' && selection?.type !== 'extvm' && selection?.type !== 'storage' && selection?.type !== 'datastore' && selection?.type !== 'pbs-datastore' && selection?.type !== 'pbs' && !data.isTemplate && (<>
-          <Divider sx={{ flexShrink: 0 }} />
+          {/* The node header (buttons, maintenance banner) sits in the same
+              Collapse as these panels, with no gap of its own between them:
+              a margin instead of the divider, which only showed as a stray line. */}
+          {selection?.type !== 'node' && <Divider sx={{ flexShrink: 0 }} />}
 
-          <Box sx={{ flexShrink: 0 }}>
+          <Box sx={{ flexShrink: 0, mt: selection?.type === 'node' ? 3 : 0 }}>
           <InventorySummary
             kindLabel={data.kindLabel}
             status={data.status}

@@ -819,7 +819,7 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
         converted = true
         bootParams = mapEsxiToPveConfig(vmConfig, targetVmid, config.targetStorage, config.networkBridge, config.vlanTag, config.cpuType, overrides, { buses, guestConverted: true })
         await appendLog(jobId, `Guest converted in ${result.seconds ?? 0}s${result.os ? ` (${result.os})` : ""}: VirtIO drivers installed, VMware Tools removed or scheduled for removal; the target boots from VirtIO SCSI with VirtIO NICs`, "success")
-        for (const line of result.network ?? []) await appendLog(jobId, line.msg, line.level)
+        for (const line of result.notes ?? []) await appendLog(jobId, line.msg, line.level)
       } else {
         const notApplied = conversionNotAppliedMessage(result)
         await appendLog(jobId, notApplied.msg, notApplied.level)

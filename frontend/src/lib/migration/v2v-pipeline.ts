@@ -70,6 +70,7 @@ import { resolveIntegritySettings } from "./integrity-target"
 import { tpmstate0Param, vtpmPreflightWarning, vtpmCreatedLine } from "./vtpm"
 import { efiDiskValue } from "./configMapper"
 import { el10InspectionWarning } from "./el10-check"
+import { windowsOnlineDisksCommand, windowsOnlineDisksFailed, windowsOnlineDisksScheduled } from "./windows-online-disks"
 
 type MigrationStatus = "pending" | "preflight" | "creating_vm" | "transferring" | "configuring" | "converting_disks" | "completed" | "failed" | "cancelled"
 
@@ -233,6 +234,8 @@ export function __getRequestedRootForTest(jobId: string): string | undefined {
  */
 const ROOT_CHOICE_GATE_TIMEOUT_MS = Number(process.env.V2V_ROOT_CHOICE_TIMEOUT_MS) || 2 * 60 * 60 * 1000
 const ROOT_CHOICE_POLL_MS = 3000
+/** virt-customize boots its own appliance: well past executeSSH's 30 s default on a busy node. */
+const V2V_CUSTOMIZE_TIMEOUT_MS = 10 * 60 * 1000
 
 async function updateJob(id: string, status: MigrationStatus, extra: Record<string, any> = {}) {
   const prisma = getPrismaForJob(id)
@@ -2293,6 +2296,25 @@ export async function runV2vMigrationPipeline(
         } else {
           await appendLog(jobId, "virt-customize or virtio-win ISO not available, skipping guest tools injection", "warn")
         }
+      }
+
+      // Windows Server keeps the data disks offline on their new controller,
+      // and virt-v2v's own first-boot script misses vioscsi disks
+      // (windows-online-disks.ts). The script's files stay out of outputDir:
+      // Phase 6 attaches whatever it finds there.
+      const listed = await executeSSH(config.targetConnectionId, nodeIp,
+        `find ${shellEscape(outputDir)} -maxdepth 1 -type f -name "*-sd*" | sort`)
+      const converted = (listed.output || "").split("\n").map(f => f.trim()).filter(Boolean)
+      const bootDisk = converted.find(f => f.endsWith("-sda"))
+      if (bootDisk && converted.length > 1) {
+        const ps1 = `${tempBase}/online-disks-${jobId}.ps1`
+        const log = `${tempBase}/online-disks-${jobId}.log`
+        const r = await executeSSH(config.targetConnectionId, nodeIp,
+          `${windowsOnlineDisksCommand({ disk: shellEscape(bootDisk), disks: converted.length, localPath: shellEscape(ps1), logPath: shellEscape(log) })}\n`
+            + `RC=$?; tail -n 3 ${shellEscape(log)}; rm -f ${shellEscape(ps1)} ${shellEscape(log)}; exit $RC`,
+          V2V_CUSTOMIZE_TIMEOUT_MS)
+        if (r.success) await appendLog(jobId, windowsOnlineDisksScheduled(converted.length - 1), "success")
+        else await appendLog(jobId, windowsOnlineDisksFailed((r.output || r.error || "").replaceAll(/\s+/g, " ").trim().substring(0, 200)), "warn")
       }
     }
 

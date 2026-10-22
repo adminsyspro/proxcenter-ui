@@ -42,6 +42,7 @@ import { NBD_RELEASE_HOLDERS_FN, nbdReleaseHoldersCall } from "../nbd-holders"
 import type { GuestStaticIpv4 } from "@/lib/vmware/soap"
 import { buildNetworkPinScript, describeNetworkPinReport, NETWORK_PIN_REPORT, NETWORK_PIN_SCRIPT, parseNetworkPinReport, type GuestNic } from "./guest-network"
 import { unsupportedWindowsReason, VIRT_V2V_MARKERS, windowsUnsupportedByVirtV2v, type VirtV2vSupport } from "./virt-v2v-windows"
+import { windowsOnlineDisksCommand, windowsOnlineDisksFailed, windowsOnlineDisksScheduled } from "../windows-online-disks"
 
 export { GUEST_CONVERSION_ESTIMATE_SEC } from "./guest-conversion-estimate"
 
@@ -161,8 +162,14 @@ export function nbdChainFunctions(): string {
  * setfiles) then covers the new files too. Its failure never stops the run.
  *
  * `extraArgs` go to virt-v2v-in-place as they are (see windowsStaticIpArgs).
+ *
+ * With `onlineDisks` (a Windows with data disks), a conversion that exited 0
+ * is followed by virt-customize on the boot overlay, which schedules the
+ * first-boot script that brings the data disks online (windows-online-disks.ts),
+ * its exit code in `<dir>/online-disks.exit`. It runs on the overlays once the
+ * NBD chains are down, and before the exit code that says the run is over.
  */
-export function buildConversionScript(jobId: string, devices: string[], xml: string, netpin?: string, extraArgs: string[] = [], fileXml?: string): string {
+export function buildConversionScript(jobId: string, devices: string[], xml: string, netpin?: string, extraArgs: string[] = [], fileXml?: string, onlineDisks = false): string {
   const dir = conversionDir(jobId)
   const q = shellEscape
   const b64 = (text: string) => q(Buffer.from(text).toString("base64"))
@@ -188,7 +195,15 @@ export function buildConversionScript(jobId: string, devices: string[], xml: str
       "fi",
     ] : []),
     `LIBGUESTFS_BACKEND=direct stdbuf -oL virt-v2v-in-place -i libvirtxml "$D/guest.xml" --block-driver virtio-scsi${extraArgs.map(x => ` ${q(x)}`).join("")} --machine-readable < /dev/null > "$D/v2v.log" 2>&1`,
-    ...(fileXml ? ['RC=$?', "nbd_chain_down", 'echo $RC > "$D/exit"'] : ['echo $? > "$D/exit"']),
+    "RC=$?",
+    ...(fileXml ? ["nbd_chain_down"] : []),
+    ...(onlineDisks ? [
+      'if [ "$RC" = 0 ]; then',
+      windowsOnlineDisksCommand({ disk: '"$D/disk0.qcow2"', disks: devices.length, localPath: '"$D/online-disks.ps1"', logPath: '"$D/online-disks.log"', format: "qcow2" }),
+      '  echo $? > "$D/online-disks.exit"',
+      "fi",
+    ] : []),
+    'echo $RC > "$D/exit"',
   ]
   return lines.join("\n")
 }
@@ -369,6 +384,16 @@ async function readNetworkPin(ssh: (cmd: string) => Promise<{ output?: string }>
   return describeNetworkPinReport(parseNetworkPinReport(out))
 }
 
+/** Whether the data disks of a converted Windows were set to come online at first boot (buildConversionScript's `onlineDisks`). */
+async function readOnlineDisks(ssh: (cmd: string) => Promise<{ output?: string }>, dir: string, dataDisks: number): Promise<{ msg: string; level: LogLevel }> {
+  const exitFile = shellEscape(`${dir}/online-disks.exit`)
+  const logFile = shellEscape(`${dir}/online-disks.log`)
+  const r = await ssh(`cat ${exitFile} 2>/dev/null; echo; tail -n 3 ${logFile} 2>/dev/null`).catch(() => null)
+  const [code = "", ...rest] = (r?.output || "").split("\n")
+  if (code.trim() === "0") return { msg: windowsOnlineDisksScheduled(dataDisks), level: "success" }
+  return { msg: windowsOnlineDisksFailed(clip(rest.join(" ").trim()) || (code.trim() ? `virt-customize exited with code ${code.trim()}` : "")), level: "warn" }
+}
+
 export interface GuestConversionInput {
   jobId: string
   connectionId: string
@@ -393,9 +418,9 @@ export interface GuestConversionInput {
 }
 
 /**
- * `seconds` and `os` when converted; `reason` when not. `network` holds the
- * log lines of the interface pinning, for the caller to write after its own
- * "converted" line. `volumesWritten` marks the one failure after which the
+ * `seconds` and `os` when converted; `reason` when not. `notes` holds the log
+ * lines of what came with the conversion (interface pinning, static IPs, data
+ * disks), for the caller to write after its own "converted" line. `volumesWritten` marks the one failure after which the
  * volumes are not the copy any more: a commit that started and did not finish.
  */
 export interface GuestConversionResult {
@@ -404,7 +429,7 @@ export interface GuestConversionResult {
   seconds?: number
   reason?: string
   volumesWritten?: boolean
-  network?: { msg: string; level: LogLevel }[]
+  notes?: { msg: string; level: LogLevel }[]
 }
 
 /** The job log line of a conversion that is not used, for the warm pipelines. */
@@ -473,7 +498,9 @@ export async function convertGuestAtCutover(a: GuestConversionInput): Promise<Gu
     const netpin = !a.isWindows && a.nics && a.nics.length > 0 ? buildNetworkPinScript(a.nics) : undefined
     const targetMacs = (a.nics ?? []).map(n => n.mac)
     const winIps = a.isWindows ? a.staticIps ?? [] : []
-    const script = buildConversionScript(a.jobId, a.devices, xml, netpin, windowsStaticIpArgs(winIps, targetMacs), viaNbd ? buildConversionXml(domain) : undefined)
+    // Windows Server keeps the data disks offline on their new controller (#1173 lab).
+    const onlineDisks = a.isWindows && a.devices.length > 1
+    const script = buildConversionScript(a.jobId, a.devices, xml, netpin, windowsStaticIpArgs(winIps, targetMacs), viaNbd ? buildConversionXml(domain) : undefined, onlineDisks)
     const launchError = await launch(script)
     if (launchError) return { converted: false, reason: `virt-v2v-in-place could not be started: ${launchError}` }
     await a.log(`Guest conversion: virt-v2v-in-place running on ${a.devices.length} disk(s) through overlays; the target volumes are only written if it succeeds`)
@@ -527,8 +554,9 @@ export async function convertGuestAtCutover(a: GuestConversionInput): Promise<Gu
       const why = clip(detail?.output || "") || "qemu-img commit failed"
       return { converted: false, volumesWritten: true, reason: `the converted disk ${i + 1} could not be written back (${why})${i > 0 ? `; disks 1 to ${i} were already converted` : ""}` }
     }
-    const network = netpin ? await readNetworkPin(ssh, dir) : describeWindowsStaticIps(winIps, targetMacs)
-    return { converted: true, os: outcome.os, seconds, ...(network.length > 0 && { network }) }
+    const notes = netpin ? await readNetworkPin(ssh, dir) : describeWindowsStaticIps(winIps, targetMacs)
+    if (onlineDisks) notes.push(await readOnlineDisks(ssh, dir, a.devices.length - 1))
+    return { converted: true, os: outcome.os, seconds, ...(notes.length > 0 && { notes }) }
   } catch (e: any) {
     if (String(e?.message || e) === "Migration cancelled") throw e
     return { converted: false, reason: String(e?.message || e), ...(committing && { volumesWritten: true }) }

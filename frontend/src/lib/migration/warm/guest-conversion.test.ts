@@ -115,7 +115,8 @@ describe("buildConversionScript", () => {
     expect(script).toContain("-b '/dev/pve/vm-1-disk-1' -F raw \"$D/disk1.qcow2\"")
     expect(script).toContain("echo 90 > \"$D/exit\"")
     expect(script).toMatch(/virt-v2v-in-place -i libvirtxml "\$D\/guest\.xml" --block-driver virtio-scsi --machine-readable < \/dev\/null/)
-    expect(script.trim().endsWith('echo $? > "$D/exit"')).toBe(true)
+    expect(script.trim().endsWith('RC=$?\necho $RC > "$D/exit"')).toBe(true)
+    expect(script).not.toContain("virt-customize")
     // The domain XML travels base64-encoded, so no quoting can break it.
     expect(script).toContain(Buffer.from("<domain/>").toString("base64"))
   })
@@ -132,6 +133,18 @@ describe("buildConversionScript", () => {
     expect(lines[pin]).not.toMatch(/\|\||&&|exit/)
     expect(script).toContain(Buffer.from("#!/bin/sh\necho pinned\n").toString("base64"))
     expect(buildConversionScript("job-1", ["/dev/rbd3"], "<domain/>")).not.toContain("guestfish")
+  })
+
+  it("schedules the data disks online after a successful run, on the overlays once the NBD chains are down (lab 22/10)", () => {
+    const lines = buildConversionScript("job-1", ["/dev/rbd3", "/dev/rbd4"], "<nbd/>", undefined, [], "<file/>", true).split("\n")
+    const at = (re: RegExp) => lines.findIndex(l => re.test(l))
+    const customize = at(/virt-customize --no-network --format qcow2 -a "\$D\/disk0\.qcow2"/)
+    expect(at(/^if \[ "\$RC" = 0 \]; then$/)).toBeGreaterThan(at(/^nbd_chain_down$/))
+    expect(customize).toBeGreaterThan(at(/^if \[ "\$RC" = 0 \]; then$/))
+    expect(lines[customize + 1]).toBe('  echo $? > "$D/online-disks.exit"')
+    expect(lines[customize + 2]).toBe("fi")
+    // The exit code is still virt-v2v's, and still the last word of the run.
+    expect(lines.at(-1)).toBe('echo $RC > "$D/exit"')
   })
 
   it("passes extra virt-v2v arguments quoted, before the machine-readable flag", () => {
@@ -249,7 +262,7 @@ describe("convertGuestAtCutover", () => {
   const launches = () => commands().filter(c => c.startsWith("nohup bash"))
 
   /** Answer the node like the lab did: prerequisites, launches, exit files, log. */
-  function node(opts: { prereqs?: string; launch?: string; exit?: string[]; log?: string; commit?: string[]; fallback?: boolean } = {}) {
+  function node(opts: { prereqs?: string; launch?: string; exit?: string[]; log?: string; commit?: string[]; fallback?: boolean; onlineDisks?: string } = {}) {
     const exits = [...(opts.exit ?? ["RUNNING", "0"])]
     const commits = [...(opts.commit ?? ["RUNNING", "ok"])]
     const next = (list: string[]) => list.length > 1 ? list.shift()! : list[0]
@@ -261,6 +274,7 @@ describe("convertGuestAtCutover", () => {
       if (cmd.startsWith("cat ") && cmd.includes("/nbd-fallback")) return ok(opts.fallback ? "fallback\n" : "RUNNING")
       if (cmd.startsWith("cat ") && cmd.includes("v2v.log")) return ok(opts.log ?? rockyOk)
       if (cmd.startsWith("tail ") && cmd.includes("commit.log")) return ok("qemu-img: Could not write: No space left on device\n")
+      if (cmd.startsWith("cat ") && cmd.includes("online-disks.exit")) return ok(opts.onlineDisks ?? "0\n\n")
       return ok()
     })
   }
@@ -439,7 +453,7 @@ describe("convertGuestAtCutover", () => {
     const r = await convertGuestAtCutover({ ...base, nics: [{ mac: "00:50:56:9c:c0:8f", names: ["ens33"] }] })
     expect(r.converted).toBe(true)
     expect(commands().find(c => c.startsWith("nohup"))).toContain("guestfish")
-    expect(r.network).toEqual([{ msg: expect.stringMatching(/^Guest network: ens33 \(00:50:56:9c:c0:8f\) keeps the name/), level: "success" }])
+    expect(r.notes).toEqual([{ msg: expect.stringMatching(/^Guest network: ens33 \(00:50:56:9c:c0:8f\) keeps the name/), level: "success" }])
   })
 
   it("says so when the pinning left no report", async () => {
@@ -448,7 +462,7 @@ describe("convertGuestAtCutover", () => {
     ssh.mockImplementation(async (c: string, n: any, cmd: string) =>
       cmd.startsWith("cat ") && cmd.includes("netpin.txt") ? ok("FAILED\nguestfish: no operating system was found") : read(c, n, cmd))
     const r = await convertGuestAtCutover({ ...base, nics: [{ mac: "00:50:56:9c:c0:8f", names: [] }] })
-    expect(r.network).toEqual([{ msg: "Guest network: the interface names could not be pinned (guestfish: no operating system was found); check the network settings after the first boot", level: "warn" }])
+    expect(r.notes).toEqual([{ msg: "Guest network: the interface names could not be pinned (guestfish: no operating system was found); check the network settings after the first boot", level: "warn" }])
   })
 
   it("never pins a Windows guest, nor logs anything about it when the conversion fails", async () => {
@@ -456,7 +470,7 @@ describe("convertGuestAtCutover", () => {
     await convertGuestAtCutover({ ...base, isWindows: true, nics: [{ mac: "00:50:56:9c:c0:8f", names: ["ens33"] }] })
     expect(commands().find(c => c.startsWith("nohup"))).not.toContain("guestfish")
     node({ log: win2025 })
-    expect(await convertGuestAtCutover({ ...base, nics: [{ mac: "00:50:56:9c:c0:8f", names: ["ens33"] }] })).not.toHaveProperty("network")
+    expect(await convertGuestAtCutover({ ...base, nics: [{ mac: "00:50:56:9c:c0:8f", names: ["ens33"] }] })).not.toHaveProperty("notes")
   })
 
   it("sets a Windows guest's static IP again through virt-v2v, and says so once committed (#1000 follow-up)", async () => {
@@ -466,7 +480,33 @@ describe("convertGuestAtCutover", () => {
     const launch = commands().find(c => c.startsWith("nohup"))!
     expect(launch).not.toContain("guestfish")
     expect(launch).toContain("--mac")
-    expect(r.network).toEqual([{ msg: "Guest network: the static IPv4 configuration of 00:50:56:9c:a1:f0 (10.42.0.239/24, gateway 10.42.0.1, DNS 1.1.1.1) is set again on the new adapter at the first boot", level: "success" }])
+    expect(r.notes).toEqual([{ msg: "Guest network: the static IPv4 configuration of 00:50:56:9c:a1:f0 (10.42.0.239/24, gateway 10.42.0.1, DNS 1.1.1.1) is set again on the new adapter at the first boot", level: "success" }])
+  })
+
+  it("brings a Windows' data disks online at first boot, and says so once committed (lab 22/10)", async () => {
+    node()
+    const r = await convertGuestAtCutover({ ...base, isWindows: true, devices: ["/dev/rbd3", "/dev/rbd4", "/dev/rbd5"] })
+    expect(launches()[0]).toContain("virt-customize")
+    expect(r.notes).toEqual([{ msg: "Guest disks: Windows keeps the disks it finds on a new controller offline, so the 2 data disks are brought online at the first boot", level: "success" }])
+  })
+
+  it("says how to bring them online when they could not be scheduled, without failing the conversion", async () => {
+    node({ onlineDisks: "1\nvirt-customize: error: no operating systems were found\n" })
+    const r = await convertGuestAtCutover({ ...base, isWindows: true, devices: ["/dev/rbd3", "/dev/rbd4"] })
+    expect(r.converted).toBe(true)
+    expect(r.notes).toEqual([{ msg: expect.stringMatching(/^Guest disks: the data disks could not be set to come online at the first boot \(virt-customize: error: no operating systems were found\); .*bring them online in Disk Management$/), level: "warn" }])
+    node({ onlineDisks: "\n" })
+    const lost = await convertGuestAtCutover({ ...base, isWindows: true, devices: ["/dev/rbd3", "/dev/rbd4"] })
+    expect(lost.notes?.[0].msg).toContain("(no detail)")
+  })
+
+  it("leaves a single-disk Windows and a Linux guest alone", async () => {
+    node()
+    await convertGuestAtCutover({ ...base, isWindows: true })
+    node()
+    await convertGuestAtCutover({ ...base, devices: ["/dev/rbd3", "/dev/rbd4"] })
+    expect(launches().some(l => l.includes("virt-customize"))).toBe(false)
+    expect(commands().some(c => c.includes("online-disks.exit"))).toBe(false)
   })
 
   it("announces about a minute of downtime", () => {

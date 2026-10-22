@@ -435,7 +435,7 @@ export async function runXcpngWarmMigration(jobId: string, config: WarmMigration
         bootParams = mapXoToPveConfig(vmConfig, targetVmid, config.targetStorage, config.networkBridge, config.vlanTag, config.cpuType, { guestConverted: true })
         const os = result.os ? ` (${result.os})` : ""
         await appendLog(jobId, `Guest converted in ${result.seconds ?? 0}s${os}: VirtIO drivers installed; the target boots from VirtIO SCSI with VirtIO NICs`, "success")
-        for (const line of result.network ?? []) await appendLog(jobId, line.msg, line.level)
+        for (const line of result.notes ?? []) await appendLog(jobId, line.msg, line.level)
       } else {
         const notApplied = conversionNotAppliedMessage(result)
         await appendLog(jobId, notApplied.msg, notApplied.level)

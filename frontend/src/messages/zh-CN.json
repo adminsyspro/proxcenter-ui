@@ -2573,6 +2573,7 @@
       "reviewBusSata": "SATA",
       "reviewScsiBootWarning": "启动盘被强制设为 VirtIO SCSI 且未转换客户机：客户机的 initramfs（Linux）或启动驱动（Windows）中必须已有 VirtIO SCSI 驱动，否则会停在 dracut 紧急 shell 或出现 INACCESSIBLE_BOOT_DEVICE。请开启“在切换时转换客户机”来安装该驱动。",
       "convertGuestMissing": "{node} 上暂时无法转换客户机，缺少：{items}。不转换时，切换会保留兼容硬件（SATA/e1000）。",
+      "convertGuestUnsupportedOs": "{node} 上的 virt-v2v {version} 不支持 {release}（virt-v2v {minVersion} 起支持）：此客户机不会被转换，将以 SATA 磁盘和 e1000 网卡启动。如需 VirtIO，请在切换前于源虚拟机中安装 virtio-win-guest-tools.exe，关闭客户机转换并在检查步骤中选择 VirtIO SCSI 和 VirtIO，或在迁移后安装驱动程序。",
       "convertGuestInstall": "在节点上安装",
       "convertGuestInstalling": "正在安装…",
       "convertGuestInstallFailed": "安装失败：{error}",

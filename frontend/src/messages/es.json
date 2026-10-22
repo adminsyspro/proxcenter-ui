@@ -2569,6 +2569,7 @@
       "reviewBusSata": "SATA",
       "reviewScsiBootWarning": "El disco de arranque está forzado a VirtIO SCSI sin conversión del invitado: el invitado debe tener ya el controlador VirtIO SCSI en su initramfs (Linux) o como controlador de arranque (Windows); si no, se detiene en el shell de emergencia de dracut o con INACCESSIBLE_BOOT_DEVICE. Active \"Convertir el invitado en el cutover\" para instalarlo.",
       "convertGuestMissing": "La conversión del invitado aún no es posible en {node}, falta: {items}. Sin ella, el cutover mantiene el hardware compatible (SATA/e1000).",
+      "convertGuestUnsupportedOs": "virt-v2v {version} en {node} no admite {release} (compatible a partir de virt-v2v {minVersion}): este invitado no se convertirá y arrancará con discos SATA y tarjetas e1000. Para VirtIO, instale virtio-win-guest-tools.exe en el origen antes del cutover, desactive la conversión del invitado y elija VirtIO SCSI y VirtIO en el paso de revisión, o instale los controladores después de la migración.",
       "convertGuestInstall": "Instalar en el nodo",
       "convertGuestInstalling": "Instalando…",
       "convertGuestInstallFailed": "La instalación falló: {error}",

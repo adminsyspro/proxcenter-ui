@@ -84,11 +84,11 @@ describe("provisionBlockTargets with one storage per disk (#317 lot 2)", () => {
     expect(zeroScripts()[0]).not.toContain("/dev/Ceph/")
 
     // the zeroing lines name disk 1 only; the target line of every disk carries its storage in the volume id
-    expect(logs().some(m => m.startsWith("Disk 1: zeroing thick target /dev/vg-thick/vm-250-disk-1 (20.0 GB)") && m.includes("Rate limit 100 MB/s"))).toBe(true)
-    expect(logs().some(m => /^Disk 1: zeroed thick target \/dev\/vg-thick\/vm-250-disk-1 in .*limit 100 MB\/s\)$/.test(m))).toBe(true)
-    expect(logs().some(m => m.startsWith("Disk 0: zero"))).toBe(false)
-    expect(logs()).toContain("Disk 0: target Ceph:vm-250-disk-0 → /dev/Ceph/vm-250-disk-0 (10.0 GB)")
-    expect(logs()).toContain("Disk 1: target vg-thick:vm-250-disk-1 → /dev/vg-thick/vm-250-disk-1 (20.0 GB)")
+    expect(logs().some(m => m.startsWith("Disk 2: zeroing thick target /dev/vg-thick/vm-250-disk-1 (20.0 GB)") && m.includes("Rate limit 100 MB/s"))).toBe(true)
+    expect(logs().some(m => /^Disk 2: zeroed thick target \/dev\/vg-thick\/vm-250-disk-1 in .*limit 100 MB\/s\)$/.test(m))).toBe(true)
+    expect(logs().some(m => m.startsWith("Disk 1: zero"))).toBe(false)
+    expect(logs()).toContain("Disk 1: target Ceph:vm-250-disk-0 → /dev/Ceph/vm-250-disk-0 (10.0 GB)")
+    expect(logs()).toContain("Disk 2: target vg-thick:vm-250-disk-1 → /dev/vg-thick/vm-250-disk-1 (20.0 GB)")
   })
 
   it("weights the 0 to 10 progress by the bytes actually zeroed: a disk on a thin pool does not count", async () => {
@@ -124,7 +124,7 @@ describe("provisionBlockTargets with one storage per disk (#317 lot 2)", () => {
     expect(zeroScripts()).toHaveLength(2)
     // disk 0 reports 10 of 30 GiB (3 %); disk 1 reports 10 GiB on top of the finished disk 0, 20 of 30 (7 %)
     expect(vi.mocked(updateJobLive).mock.calls.map(c => c[2]?.progress)).toEqual([3, 7])
-    expect(logs().filter(m => m.startsWith("Disk 0: zeroing") || m.startsWith("Disk 1: zeroing"))).toHaveLength(2)
+    expect(logs().filter(m => m.startsWith("Disk 1: zeroing") || m.startsWith("Disk 2: zeroing"))).toHaveLength(2)
   })
 
   it("fails hard when a thick target cannot be zeroed, with the device and the node's reason", async () => {

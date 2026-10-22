@@ -92,3 +92,14 @@ describe("mapXoToPveConfig — NICs and guest conversion (#1000 follow-up)", () 
     expect(win.efidisk0).toBeDefined()
   })
 })
+
+describe("mapXoToPveConfig: data disks of an unconverted Windows (#1173)", () => {
+  const disks = (n: number) => Array.from({ length: n }, (_, i) => ({ vdiUuid: `vdi-${i}`, label: `d${i}`, sizeBytes: 1 << 30, position: i, srUuid: "sr-1" }))
+
+  it("puts them on SATA up to the sixth slot, then on SCSI; Linux and a converted Windows stay on SCSI", () => {
+    const win = makeConfig({ guestOS: "Windows Server 2025 Standard", disks: disks(8) })
+    expect(mapXoToPveConfig(win, 100, "ceph").diskSlots).toEqual(["sata0", "sata1", "sata2", "sata3", "sata4", "sata5", "scsi6", "scsi7"])
+    expect(mapXoToPveConfig(win, 100, "ceph", "vmbr0", undefined, undefined, { guestConverted: true }).diskSlots).toEqual(["scsi0", "scsi1", "scsi2", "scsi3", "scsi4", "scsi5", "scsi6", "scsi7"])
+    expect(mapXoToPveConfig(makeConfig({ disks: disks(2) }), 100, "ceph").diskSlots).toEqual(["scsi0", "scsi1"])
+  })
+})

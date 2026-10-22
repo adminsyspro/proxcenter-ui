@@ -2133,9 +2133,9 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
             const sockCheck = await executeSSH(config.targetConnectionId, nodeIp, `test -S "${sockPath}" && echo EXISTS`)
             if (nbdStart.success && sockCheck.output?.includes("EXISTS")) {
               ndbSocketPaths.push(sockPath)
-              await appendLog(jobId, `NBD disk ${di}: ${sockPath} serving ${fusePath}`, "info")
+              await appendLog(jobId, `NBD disk ${di + 1}: ${sockPath} serving ${fusePath}`, "info")
             } else {
-              await appendLog(jobId, `NBD disk ${di}: failed to start - ${nbdStart.output?.substring(0, 150)}`, "warn")
+              await appendLog(jobId, `NBD disk ${di + 1}: failed to start - ${nbdStart.output?.substring(0, 150)}`, "warn")
               nbdOk = false
               break
             }
@@ -2210,12 +2210,12 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
               throw new Error(`Failed to create disk image: ${createResult.error || createResult.output}`)
             }
             localVolumes.push({ volumeId: `${target.storage}:${targetVmid}/vm-${targetVmid}-disk-${diskNum}.raw`, devicePath: imgPath, isFileVol: true })
-            await appendLog(jobId, `Disk ${di}: ${imgPath} (${sizeGB} GB raw image on "${target.storage}")`, "info")
+            await appendLog(jobId, `Disk ${di + 1}: ${imgPath} (${sizeGB} GB raw image on "${target.storage}")`, "info")
           } else {
             // Block storage (LVM, ZFS, RBD): pre-allocate volume
             const vol = await allocateBlockVolume(di)
             localVolumes.push(vol)
-            await appendLog(jobId, `Disk ${di}: ${vol.volumeId} -> ${vol.devicePath} (${(diskSizeBytes / 1073741824).toFixed(1)} GB)`, "info")
+            await appendLog(jobId, `Disk ${di + 1}: ${vol.volumeId} -> ${vol.devicePath} (${(diskSizeBytes / 1073741824).toFixed(1)} GB)`, "info")
           }
         }
 
@@ -2734,7 +2734,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
           if (entry) entry.attached = true
         }
         for (let di = 0; di < localVolumes.length; di++) {
-          await appendLog(jobId, `Disk ${di} attached as ${slotPerDisk[di]} (${localVolumes[di].volumeId})`, "success")
+          await appendLog(jobId, `Disk ${di + 1} attached as ${slotPerDisk[di]} (${localVolumes[di].volumeId})`, "success")
         }
 
         // Restart VM — always restart for SSHFS Boot (VM was running before reconfiguration)

@@ -5,7 +5,7 @@ vi.mock("@/lib/ssh/exec", async (importActual) => ({ ...(await importActual<type
 import { executeSSH } from "@/lib/ssh/exec"
 import {
   buildCommitScript, buildConversionScript, buildConversionXml, canKeepTrimsOut, conversionDir, conversionNotAppliedMessage, conversionPreflightCommand,
-  convertGuestAtCutover, describeWindowsStaticIps, missingConversionPrereqs, nbdChainFunctions, parseConversionOutcome, windowsStaticIpArgs,
+  convertGuestAtCutover, describeWindowsStaticIps, missingConversionPrereqs, nbdChainFunctions, parseConversionOutcome, virtV2vSupportOf, windowsStaticIpArgs,
   GUEST_CONVERSION_ESTIMATE_SEC,
 } from "./guest-conversion"
 
@@ -39,6 +39,15 @@ describe("parseConversionOutcome", () => {
     expect(out.os).toBe("Windows Server 2025 Standard Evaluation")
     expect(out.reason).toMatch(/^there are no virtio drivers available for this version of Windows \(10\.0 x86_64 Server win2k25\)/)
     expect(out.warnings).toHaveLength(2)
+  })
+
+  it("names the node's virt-v2v version as the cause, not the ISO (#1173)", () => {
+    const out = parseConversionOutcome(win2025, 0, { version: "2.6.0", knows: [] })
+    expect(out.ok).toBe(false)
+    expect(out.reason).toMatch(/^virt-v2v 2\.6\.0 on this node does not support Windows Server 2025 \(support starts with virt-v2v 2\.7\.2\)/)
+    expect(out.reason).not.toContain("virt-v2v looks for drivers")
+    // a virt-v2v that knows Server 2025 and still finds nothing: the ISO is to blame
+    expect(parseConversionOutcome(win2025, 0, { version: "2.6.0", knows: ["2k25"] }).reason).toMatch(/^there are no virtio drivers available/)
   })
 
   it("refuses a guest that reports no drivers without saying why", () => {
@@ -180,7 +189,7 @@ describe("NBD chains and commit (#1169)", () => {
 describe("conversionNotAppliedMessage", () => {
   it("says the copy is unchanged when no commit ran", () => {
     expect(conversionNotAppliedMessage({ converted: false, reason: "no drivers." })).toEqual({
-      msg: "Guest conversion not applied: no drivers. The copied disks are unchanged and the guest keeps the hardware it boots on without new drivers (SATA boot disk for Windows and UEFI guests, e1000 NICs for Windows)",
+      msg: "Guest conversion not applied: no drivers. The copied disks are unchanged and the guest keeps the hardware it boots on without new drivers (SATA disks and e1000 NICs for Windows, a SATA boot disk for UEFI guests)",
       level: "warn",
     })
   })
@@ -188,7 +197,7 @@ describe("conversionNotAppliedMessage", () => {
   it("never says so after a commit that did not finish (#1169)", () => {
     const m = conversionNotAppliedMessage({ converted: false, volumesWritten: true, reason: "the converted disk 1 could not be written back (EIO)" })
     expect(m.level).toBe("error")
-    expect(m.msg).toBe("Guest conversion failed while writing the converted disks back: the converted disk 1 could not be written back (EIO). A disk may be partly converted: the guest is started on the hardware it boots on without new drivers (SATA boot disk for Windows and UEFI guests, e1000 NICs for Windows), check that it boots")
+    expect(m.msg).toBe("Guest conversion failed while writing the converted disks back: the converted disk 1 could not be written back (EIO). A disk may be partly converted: the guest is started on the hardware it boots on without new drivers (SATA disks and e1000 NICs for Windows, a SATA boot disk for UEFI guests), check that it boots")
   })
 })
 
@@ -205,6 +214,15 @@ describe("conversion prerequisites", () => {
     expect(canKeepTrimsOut("v2v-in-place\nnbd-chain\n")).toBe(true)
     expect(canKeepTrimsOut("v2v-in-place")).toBe(false)
     expect(missingConversionPrereqs("v2v-in-place", false)).toEqual([])
+  })
+
+  it("reads the virt-v2v version and the Windows releases its binary knows (#1173)", () => {
+    expect(conversionPreflightCommand()).toContain(`v=$(virt-v2v-in-place --version 2>/dev/null | awk '{print $2; exit}'); test -n "$v" && echo "v2v-version=$v"`)
+    expect(conversionPreflightCommand()).toContain(`for m in 2k25; do grep -aqF "$m" /usr/bin/virt-v2v-in-place && echo "v2v-knows=$m"; done`)
+    expect(virtV2vSupportOf("v2v-in-place\nvirtio-win\nv2v-version=2.6.0\nv2v-probed\n")).toEqual({ version: "2.6.0", knows: [] })
+    expect(virtV2vSupportOf("v2v-in-place\nv2v-version=2.6.0\nv2v-probed\nv2v-knows=2k25\n")).toEqual({ version: "2.6.0", knows: ["2k25"] })
+    expect(virtV2vSupportOf("")).toEqual({})
+    expect(missingConversionPrereqs("v2v-in-place virtio-win srvany v2v-version=2.6.0 v2v-probed", true)).toEqual([])
   })
 
   it("only asks Windows for the VirtIO drivers and the first-boot helper", () => {
@@ -250,6 +268,28 @@ describe("convertGuestAtCutover", () => {
   beforeEach(() => {
     ssh.mockReset()
     log.mockClear()
+  })
+
+  it("does not run virt-v2v on a Windows release it does not know (#1173)", async () => {
+    node({ prereqs: "v2v-in-place\nvirtio-win\nsrvany\nv2v-version=2.6.0\nv2v-probed\n" })
+    const r = await convertGuestAtCutover({ ...base, isWindows: true, guestOs: "Microsoft Windows Server 2025 (64-bit)" })
+    expect(r.converted).toBe(false)
+    expect(r.reason).toMatch(/^virt-v2v 2\.6\.0 on this node does not support Windows Server 2025/)
+    expect(launches()).toHaveLength(0)
+  })
+
+  it("runs it when the node's virt-v2v knows the release, or on a Linux guest", async () => {
+    node({ prereqs: "v2v-in-place\nvirtio-win\nsrvany\nv2v-version=2.6.0\nv2v-probed\nv2v-knows=2k25\n" })
+    expect((await convertGuestAtCutover({ ...base, isWindows: true, guestOs: "Microsoft Windows Server 2025 (64-bit)" })).converted).toBe(true)
+    node({ prereqs: "v2v-in-place\nv2v-version=2.6.0\nv2v-probed\n" })
+    expect((await convertGuestAtCutover({ ...base, guestOs: "Microsoft Windows Server 2025 (64-bit)" })).converted).toBe(true)
+  })
+
+  it("names the version when virt-v2v reveals the release itself, a source declared as another Windows (#1173)", async () => {
+    node({ prereqs: "v2v-in-place\nvirtio-win\nsrvany\nv2v-version=2.6.0\nv2v-probed\n", log: win2025 })
+    const r = await convertGuestAtCutover({ ...base, isWindows: true, guestOs: "Microsoft Windows Server 2022 (64-bit)" })
+    expect(r.reason).toMatch(/^virt-v2v 2\.6\.0 on this node does not support Windows Server 2025/)
+    expect(launches()).toHaveLength(1)
   })
 
   it("commits the overlays of a successful conversion, then cleans up", async () => {

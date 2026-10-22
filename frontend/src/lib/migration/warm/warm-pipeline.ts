@@ -17,7 +17,7 @@ import {
   cbtEligibility, soapEnableCbt, soapDisableCbt, queryAllChangedAreas, soapGetSnapshotChangeIds,
   soapGuestShutdown, soapWaitPoweredOff, soapKeepAlive,
 } from "@/lib/vmware/cbt"
-import { isWindowsVm, mapEsxiToPveConfig } from "../configMapper"
+import { describeHardwareChanges, isWindowsVm, mapEsxiToPveConfig, virtioDevices, withoutVirtioChoices } from "../configMapper"
 import { bytesPerStorage, describeDiskPlan, describeOverrides, planDiskTargets, planStorages } from "../target-overrides"
 import { volumesToFree, volumesToKeep, PVESM_FREE_TIMEOUT_MS, type AllocatedVolume } from "../pvesm-alloc"
 import { getNodeSshEndpointForMigration } from "../pve-tasks"
@@ -715,7 +715,7 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
             // #587 field feedback: this scan ran ~25 min per 60 GB disk (hours on
             // multi-TB) in total silence — no log line, no progress — and read as
             // a hang. Announce it and stream its progress below.
-            await appendLog(jobId, `Disk ${i}: scanning source and target block checksums (${capGB} GB) — nothing is copied during this phase; it reads the whole disk and can take a long time`)
+            await appendLog(jobId, `Disk ${i + 1}: scanning source and target block checksums (${capGB} GB) — nothing is copied during this phase; it reads the whole disk and can take a long time`)
             let lastScanFlush = 0
             const extents = await detectChangedExtentsByChecksum(config.targetConnectionId, nodeIp, reader.nbdDev, dev, 256 * 1024 * 1024, disk.capacityBytes, {
               inactivityMs: APPLY_INACTIVITY_MS,
@@ -729,7 +729,7 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
                 // with the job's current progress (#502).
                 void (async () => {
                   await updateJobLive(jobId, "full_copy", { currentStep: "full_copy", currentDisk: i, progress: pct, transferSpeed: null })
-                  await appendLog(jobId, `Disk ${i}: checksum scan ${scanPct}% (reading source and target)`)
+                  await appendLog(jobId, `Disk ${i + 1}: checksum scan ${scanPct}% (reading source and target)`)
                 })().catch(() => {})
               },
             })
@@ -799,12 +799,14 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
     const latest = await readJobConfig(jobId).catch(() => ({} as Record<string, any>))
     const convertGuest = typeof latest.convertGuest === "boolean" ? latest.convertGuest : config.convertGuest !== false
     let bootParams = pveParams
+    let converted = false
+    const isWindows = isWindowsVm(vmConfig)
     if (convertGuest) {
       await updateJob(jobId, "verify", { currentStep: "guest_conversion", progress: 98 })
       await appendStep(jobId, "conversion", "Guest conversion")
       const result = await convertGuestAtCutover({
         jobId, connectionId: config.targetConnectionId, nodeIp,
-        name: vmConfig.name, firmware: vmConfig.firmware === "efi" ? "efi" : "bios", isWindows: isWindowsVm(vmConfig),
+        name: vmConfig.name, firmware: vmConfig.firmware === "efi" ? "efi" : "bios", isWindows, guestOs: vmConfig.guestOS,
         memoryMB: vmConfig.memoryMB, devices: vmConfig.disks.map(d => targetDev.get(d.deviceKey) ?? ""),
         staticIps,
         nics: guestNicsFromNets(pveParams.nets, i => {
@@ -814,17 +816,34 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
         log: (msg, level) => appendLog(jobId, msg, level), isCancelled: () => isCancelled(jobId),
       })
       if (result.converted) {
+        converted = true
         bootParams = mapEsxiToPveConfig(vmConfig, targetVmid, config.targetStorage, config.networkBridge, config.vlanTag, config.cpuType, overrides, { buses, guestConverted: true })
         await appendLog(jobId, `Guest converted in ${result.seconds ?? 0}s${result.os ? ` (${result.os})` : ""}: VirtIO drivers installed, VMware Tools removed or scheduled for removal; the target boots from VirtIO SCSI with VirtIO NICs`, "success")
         for (const line of result.network ?? []) await appendLog(jobId, line.msg, line.level)
       } else {
         const notApplied = conversionNotAppliedMessage(result)
         await appendLog(jobId, notApplied.msg, notApplied.level)
+        // #1173: the review step's VirtIO choices were made for a converted
+        // guest. A Windows left without the drivers would not see those disks
+        // and NICs: they go back to the hardware it has drivers for.
+        if (isWindows) {
+          const inbox = withoutVirtioChoices(overrides, buses)
+          const fallback = mapEsxiToPveConfig(vmConfig, targetVmid, config.targetStorage, config.networkBridge, config.vlanTag, config.cpuType, inbox.overrides, { buses: inbox.buses })
+          const changes = describeHardwareChanges(pveParams, fallback)
+          if (changes.length > 0) {
+            bootParams = fallback
+            await appendLog(jobId, `The VirtIO hardware chosen for this guest needs the drivers the conversion did not install, so it is replaced by hardware Windows has drivers for: ${changes.join(", ")}`, "warn")
+          }
+        }
       }
     } else {
       await appendLog(jobId, "Guest conversion not requested for this cutover: the guest keeps the hardware it boots on without new drivers", "info")
     }
-    if (staticIps.length > 0 && bootParams === pveParams) {
+    const unusable = isWindows && !converted ? virtioDevices(bootParams) : []
+    if (unusable.length > 0) {
+      await appendLog(jobId, `Windows has no VirtIO driver yet and does not see ${unusable.join(", ")}: install virtio-win-guest-tools.exe from the VirtIO ISO in the guest`, "warn")
+    }
+    if (staticIps.length > 0 && !converted) {
       await appendLog(jobId, `Guest network: Windows sees a new network adapter on Proxmox and the guest was not converted, so its static IPv4 configuration (${staticIps.map(ip => `${ip.address}/${ip.prefixLength}`).join(", ")}) must be set again from the console`, "warn")
     }
 

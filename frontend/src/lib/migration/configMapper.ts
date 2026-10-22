@@ -112,7 +112,11 @@ function busOf(d: Pick<EsxiDiskInfo, "controllerType">, sataAsScsi = false): "id
  * - a disk on a SATA controller stays on SATA (six slots on Proxmox, the
  *   overflow goes to SCSI);
  * - a disk on a SCSI controller follows the #653 rule: the boot disk of a
- *   Windows or UEFI guest goes to `sata0`, everything else to `scsiN`.
+ *   Windows or UEFI guest goes to `sata0`, everything else to `scsiN`;
+ *   `dataOnSata` (a Windows without the VirtIO drivers, #1173) sends the data
+ *   disks to SATA as well, AHCI being inbox: on VirtIO SCSI Windows sees none
+ *   of them until the drivers are installed. Past the sixth SATA slot they go
+ *   to SCSI.
  * A slot is never handed out twice, and the boot disk claims first: a Windows
  * SCSI boot disk on `sata0` pushes a SATA data disk to `sata1`. A disk whose
  * exact position is unknown, or already taken, gets the next free slot of its
@@ -127,7 +131,7 @@ function busOf(d: Pick<EsxiDiskInfo, "controllerType">, sataAsScsi = false): "id
  */
 export function planDiskSlots(
   disks: Pick<EsxiDiskInfo, "controllerType" | "controllerKey" | "unitNumber">[],
-  opts: { bootOnSata: boolean; buses?: (MigrationDiskBus | undefined)[]; sataAsScsi?: boolean },
+  opts: { bootOnSata: boolean; buses?: (MigrationDiskBus | undefined)[]; sataAsScsi?: boolean; dataOnSata?: boolean },
 ): string[] {
   const taken = new Set<string>()
   const claim = (bus: "ide" | "sata" | "scsi", preferred?: number): string | undefined => {
@@ -177,7 +181,7 @@ export function planDiskSlots(
   // data disks therefore keep their historical `scsiN`).
   disks.forEach((d, i) => {
     if (slots[i]) return
-    const bus = forced(i) ?? busOf(d, opts.sataAsScsi)
+    const bus = forced(i) ?? (opts.dataOnSata && busOf(d) === "scsi" ? "sata" : busOf(d, opts.sataAsScsi))
     slots[i] = (bus === "scsi" ? undefined : claim(bus)) ?? claim("scsi", i) ?? `scsi${i}`
   })
   return slots as string[]
@@ -226,10 +230,11 @@ export function mapEsxiToPveConfig(
   // since the XP era (#653).
   const scsihw = "virtio-scsi-single"
   // Boot disk bus: SATA when the firmware is OVMF (existing rule — OVMF cannot
-  // enumerate an LSI controller) or the guest is Windows (#653). Data disks
-  // stay on SCSI. IDE and SATA source disks keep their bus, see planDiskSlots.
+  // enumerate an LSI controller) or the guest is Windows (#653). A Windows
+  // keeps its data disks on SATA too (#1173), other guests on SCSI. IDE and
+  // SATA source disks keep their bus, see planDiskSlots.
   const bootOnSata = needsInboxDrivers && (isEfi || isWin)
-  const diskSlots = planDiskSlots(esxiConfig.disks, { bootOnSata, buses: opts.buses, sataAsScsi: opts.guestConverted })
+  const diskSlots = planDiskSlots(esxiConfig.disks, { bootOnSata, buses: opts.buses, sataAsScsi: opts.guestConverted, dataOnSata: needsInboxDrivers && isWin })
   const bootDiskSlot = bootSlotOf(diskSlots, bootOnSata ? "sata0" : "scsi0")
   // q35 has no legacy IDE controller: Proxmox hangs its `ideN` off the ICH9 AHCI,
   // where only one unit per port exists (ide1 and ide3 cannot even be created)
@@ -304,4 +309,35 @@ export function mapEsxiToPveConfig(
   }
 
   return params
+}
+
+/** The devices a guest without the VirtIO drivers cannot use (#1173): its VirtIO SCSI disk slots and VirtIO NICs. */
+export function virtioDevices(p: Pick<PveVmCreateParams, "diskSlots" | "nets">): string[] {
+  const nics = Object.entries(p.nets).filter(([, v]) => v.startsWith("virtio,")).map(([k]) => k)
+  return [...p.diskSlots.filter(s => s.startsWith("scsi")), ...nics]
+}
+
+/**
+ * The review step's choices without those that need the VirtIO drivers
+ * (#1173): a disk forced to SCSI and a NIC forced to VirtIO fall back to the
+ * mapper's rule. They were picked for a guest the cutover converts; a Windows
+ * the conversion left without the drivers sees neither.
+ */
+export function withoutVirtioChoices(
+  overrides: MigrationTargetOverrides,
+  buses: (MigrationDiskBus | undefined)[],
+): { overrides: MigrationTargetOverrides; buses: (MigrationDiskBus | undefined)[] } {
+  return {
+    overrides: { ...overrides, ...(overrides.nics && { nics: overrides.nics.map(n => n.model === "virtio" ? { ...n, model: undefined } : n) }) },
+    buses: buses.map(b => b === "scsi" ? undefined : b),
+  }
+}
+
+/** "Disk 2 scsi1 → sata1, net0 virtio → e1000": the disks that changed bus and the NICs that changed model between two plans of the same guest. */
+export function describeHardwareChanges(from: Pick<PveVmCreateParams, "diskSlots" | "nets">, to: Pick<PveVmCreateParams, "diskSlots" | "nets">): string[] {
+  const bus = (slot: string | undefined) => (slot || "").replace(/\d+$/, "")
+  const disks = from.diskSlots.flatMap((s, i) => to.diskSlots[i] && bus(to.diskSlots[i]) !== bus(s) ? [`Disk ${i + 1} ${s} → ${to.diskSlots[i]}`] : [])
+  const model = (v: string | undefined) => (v || "").split(",")[0]
+  const nics = Object.keys(from.nets).flatMap(k => model(to.nets[k]) && model(to.nets[k]) !== model(from.nets[k]) ? [`${k} ${model(from.nets[k])} → ${model(to.nets[k])}`] : [])
+  return [...disks, ...nics]
 }

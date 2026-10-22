@@ -377,7 +377,7 @@ describe("runWarmMigration guest conversion at cutover (#1000)", () => {
     expect(await runToEnd("warm-conv-2", makeConfig())).toBeNull()
 
     expect(sshCommands.some(c => c.includes("qemu-img commit"))).toBe(false)
-    expect(messages()).toContain("Guest conversion not applied: virt-v2v could not install the VirtIO drivers in this guest. The copied disks are unchanged and the guest keeps the hardware it boots on without new drivers (SATA boot disk for Windows and UEFI guests, e1000 NICs for Windows)")
+    expect(messages()).toContain("Guest conversion not applied: virt-v2v could not install the VirtIO drivers in this guest. The copied disks are unchanged and the guest keeps the hardware it boots on without new drivers (SATA disks and e1000 NICs for Windows, a SATA boot disk for UEFI guests)")
     expect(attach().bootDiskSlot).toBe("sata0")
     expect(attach()).not.toHaveProperty("nets")
   })
@@ -424,6 +424,32 @@ describe("runWarmMigration guest conversion at cutover (#1000)", () => {
 
     expect(messages()).toContain("Per-disk choices: bus disk 1->SCSI")
     expect(attach()).toMatchObject({ diskSlots: ["scsi0", "scsi1", "scsi2"], bootDiskSlot: "scsi0" })
+  })
+
+  const ws2025 = () => ({ ...efiVm(), guestId: "windows2022srvNext_64Guest", guestOS: "Microsoft Windows Server 2025 (64-bit)" })
+  const virtioChoices = { disks: [{ index: 1, bus: "scsi" as const }], nics: [{ index: 0, bridge: "vmbr0", model: "virtio" }] }
+
+  it("skips the conversion of a Windows the node's virt-v2v does not know and drops the VirtIO choices (#1173)", async () => {
+    vi.mocked(parseVmConfig).mockImplementation(() => ws2025() as any)
+    conversionNode(true, "v2v-in-place\nvirtio-win\nsrvany\nv2v-version=2.6.0\nv2v-probed\n")
+
+    expect(await runToEnd("warm-conv-2k25", makeConfig(virtioChoices))).toBeNull()
+
+    expect(sshCommands.some(c => c.startsWith("nohup bash"))).toBe(false)
+    expect(messages().some(m => m.startsWith("Guest conversion not applied: virt-v2v 2.6.0 on this node does not support Windows Server 2025 (support starts with virt-v2v 2.7.2)"))).toBe(true)
+    expect(messages().find(m => m.startsWith("The VirtIO hardware"))).toBe("The VirtIO hardware chosen for this guest needs the drivers the conversion did not install, so it is replaced by hardware Windows has drivers for: Disk 2 scsi1 → sata1, net0 virtio → e1000")
+    expect(attach()).toMatchObject({ diskSlots: ["sata0", "sata1", "sata2"], bootDiskSlot: "sata0", nets: { net0: "e1000,bridge=vmbr0,macaddr=00:50:56:00:00:09" } })
+    expect(messages().some(m => m.startsWith("Windows has no VirtIO driver yet"))).toBe(false)
+  })
+
+  it("keeps the VirtIO choices when the conversion was not requested, and says what Windows does not see (#1173)", async () => {
+    vi.mocked(parseVmConfig).mockImplementation(() => ws2025() as any)
+
+    expect(await runToEnd("warm-conv-2k25-off", makeConfig({ ...virtioChoices, convertGuest: false }))).toBeNull()
+
+    expect(attach().diskSlots).toEqual(["sata0", "scsi1", "sata1"])
+    expect(attach()).not.toHaveProperty("nets")
+    expect(messages()).toContain("Windows has no VirtIO driver yet and does not see scsi1, net0: install virtio-win-guest-tools.exe from the VirtIO ISO in the guest")
   })
 })
 

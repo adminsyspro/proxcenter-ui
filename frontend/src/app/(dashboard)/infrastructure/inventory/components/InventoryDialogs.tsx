@@ -55,6 +55,7 @@ import { diskControllerLabel } from '@/lib/proxmox/diskController'
 import MigrationLogLines from './MigrationLogLines'
 import MigrationReviewStep from './MigrationReviewStep'
 import type { GuestConversionReadiness } from '@/lib/migration/warm/guest-conversion-node'
+import { windowsUnsupportedByVirtV2v } from '@/lib/migration/warm/virt-v2v-windows'
 import { initialHardwareState, initialNicState, initialDiskState, reviewIsValid, buildHardwarePayload, buildNicsPayload, buildDisksPayload, keptReviewDisks, reviewDiskStorages, tempStorageTypeFor, warmSpaceNeeds, type ReviewSource, type ReviewSourceDisk, type ReviewHardwareState, type ReviewNicState, type ReviewDiskState } from './migrationReview'
 import { usedVmidsOnConnection, nextVmidOnConnection } from '@/components/hardware/utils'
 import { tooltipSlotProps } from '@/components/settings/ha/tooltipSlotProps'
@@ -1104,6 +1105,13 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
     if (!gc || warmPreflightCurrent?.loading || !migConvertGuest || migType !== 'warm' || !(isVmwareSource || esxiMigrateVm?.hostType === 'xcpng')) return []
     return /windows/i.test(sourceVmDetail?.guestOS || esxiMigrateVm?.guestOS || '') ? gc.windows : gc.linux
   })()
+  // #1173: a Windows release the node's virt-v2v does not know (Server 2025
+  // on the stock 2.6.0 of PVE 9) gets no driver, the cutover skips its conversion.
+  const conversionUnsupported = (() => {
+    const gc = warmPreflightCurrent?.guestConversion
+    if (!gc || warmPreflightCurrent?.loading || !migConvertGuest || migType !== 'warm' || !(isVmwareSource || esxiMigrateVm?.hostType === 'xcpng')) return null
+    return windowsUnsupportedByVirtV2v(sourceVmDetail?.guestOS || esxiMigrateVm?.guestOS, gc.virtV2v)
+  })()
   const [convPrep, setConvPrep] = useState<{ key: string; running: boolean; error?: string } | null>(null)
   const convPrepCurrent = convPrep && convPrep.key === `${migTargetConn}::${migTargetNode}` ? convPrep : null
   // The packages (virt-v2v-in-place, rhsrvany) come from the existing install
@@ -1135,7 +1143,7 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
       setConvPrep({ key, running: false, error: e instanceof Error ? e.message : String(e) })
     }
   }, [migTargetConn, migTargetNode])
-  const renderConvertGuestReadiness = () => conversionMissing.length > 0 && (
+  const renderConvertGuestMissing = () => (
     <Alert
       severity="warning"
       sx={{ fontSize: 12 }}
@@ -1153,6 +1161,16 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
         <Typography variant="caption" sx={{ display: 'block', mt: 0.5 }}>{t('inventoryPage.esxiMigration.convertGuestInstallFailed', { error: convPrepCurrent.error })}</Typography>
       )}
     </Alert>
+  )
+  const renderConvertGuestReadiness = () => (
+    <>
+      {conversionUnsupported && (
+        <Alert severity="warning" sx={{ fontSize: 12 }} data-testid="mig-convert-guest-unsupported-os">
+          {t('inventoryPage.esxiMigration.convertGuestUnsupportedOs', { version: warmPreflightCurrent?.guestConversion?.virtV2v?.version ?? '', node: migTargetNode, release: conversionUnsupported.release, minVersion: conversionUnsupported.minVersion })}
+        </Alert>
+      )}
+      {conversionMissing.length > 0 && renderConvertGuestMissing()}
+    </>
   )
 
   // Automated warm-node provisioning (Enterprise VDDK package). Offered inside

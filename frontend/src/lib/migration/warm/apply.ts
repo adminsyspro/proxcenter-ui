@@ -109,7 +109,7 @@ export async function applyExtentsWithProgress(a: {
     // the job's current progress, which is why the lines used to read 0 (#502).
     void (async () => {
       await updateJobLive(jobId, pass.status, { currentStep: pass.currentStep, currentDisk: diskIndex, progress: pct, bytesTransferred: BigInt(passBytes), transferSpeed: `${(p.bytesPerSec / 1048576).toFixed(0)} MB/s` })
-      await appendLog(jobId, `Disk ${diskIndex}: copying ${(passBytes / 1073741824).toFixed(1)} GB at ${(p.bytesPerSec / 1048576).toFixed(0)} MB/s`)
+      await appendLog(jobId, `Disk ${diskIndex + 1}: copying ${(passBytes / 1073741824).toFixed(1)} GB at ${(p.bytesPerSec / 1048576).toFixed(0)} MB/s`)
     })().catch(() => {})
   }
   for (const script of buildApplyScripts(nbdDev, dev, extents, capacityBytes)) {
@@ -121,6 +121,6 @@ export async function applyExtentsWithProgress(a: {
     // the orchestrator's "command failed: Process exited with status 1" wrapper on the
     // brokered one. Preferring error meant the brokered path NEVER showed the reason,
     // and #946 cost three round trips with the customer to recover a line we already had.
-    if (!res.success) throw new Error(`${label} on disk ${diskIndex}: ${res.output || res.error}`)
+    if (!res.success) throw new Error(`${label} on disk ${diskIndex + 1}: ${res.output || res.error}`)
   }
 }

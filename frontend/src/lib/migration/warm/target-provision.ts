@@ -248,7 +248,7 @@ export async function provisionBlockTargets(a: {
       // (offload or streamed zeros, roadmap#45) and surface why the blkdiscard
       // offload was refused when the streamed slow path runs.
       const capGB = (disk.capacityBytes / 1073741824).toFixed(1)
-      await appendLog(jobId, `Disk ${i}: zeroing thick target ${dev} (${capGB} GB): mandatory on thick storage and can take a long time. Rate limit ${describeZeroRateLimit(rateLimitMBps)}, ${sliceMiB} MiB slices; mode and progress follow`)
+      await appendLog(jobId, `Disk ${i + 1}: zeroing thick target ${dev} (${capGB} GB): mandatory on thick storage and can take a long time. Rate limit ${describeZeroRateLimit(rateLimitMBps)}, ${sliceMiB} MiB slices; mode and progress follow`)
       let markerBuf = ""              // first KBs of output; carries the mode and refusal markers
       let modeLogged = false
       let refusalLogged = false
@@ -263,14 +263,14 @@ export async function provisionBlockTargets(a: {
           if (!modeLogged && markerBuf.includes(ZERO_MODE_OFFLOAD_MARKER)) {
             modeLogged = true
             zeroMode.value = "offload"
-            void appendLog(jobId, `Disk ${i}: the array accepted the write-zeroes offload (blkdiscard -z); zeroing in ${sliceMiB} MiB slices`).catch(() => {})
+            void appendLog(jobId, `Disk ${i + 1}: the array accepted the write-zeroes offload (blkdiscard -z); zeroing in ${sliceMiB} MiB slices`).catch(() => {})
           }
           const m = /blkdiscard-refused: ([^\r\n]*)/.exec(markerBuf)
           if (!refusalLogged && m) {
             refusalLogged = true
             modeLogged = true
             zeroMode.value = "stream"
-            void appendLog(jobId, `Disk ${i}: the array refused the write-zeroes offload (${m[1].trim() || "no reason given"}); streaming zeros from /dev/zero in ${ZERO_PARALLEL_CHUNKS} parallel ranges per ${sliceMiB} MiB slice instead`, "warn").catch(() => {})
+            void appendLog(jobId, `Disk ${i + 1}: the array refused the write-zeroes offload (${m[1].trim() || "no reason given"}); streaming zeros from /dev/zero in ${ZERO_PARALLEL_CHUNKS} parallel ranges per ${sliceMiB} MiB slice instead`, "warn").catch(() => {})
           }
         }
         const p = parseDdProgress(chunk)
@@ -285,7 +285,7 @@ export async function provisionBlockTargets(a: {
         // the job's current progress, which is why the lines used to read 0 (#502).
         void (async () => {
           await updateJobLive(jobId, "preparing_disks", { progress: pct, transferSpeed: `Zeroing: ${(p.bytesPerSec / ZERO_RATE_MIB).toFixed(0)} MB/s` })
-          await appendLog(jobId, `Disk ${i}: zeroed ${(diskBytes / 1073741824).toFixed(1)} of ${capGB} GB (${(p.bytesPerSec / ZERO_RATE_MIB).toFixed(0)} MB/s average)`)
+          await appendLog(jobId, `Disk ${i + 1}: zeroed ${(diskBytes / 1073741824).toFixed(1)} of ${capGB} GB (${(p.bytesPerSec / ZERO_RATE_MIB).toFixed(0)} MB/s average)`)
         })().catch(() => {})
       }
       const z = await executeSSH(connectionId, nodeIp, buildThickZeroScript(dev, { rateLimitMBps }), APPLY_TIMEOUT_MS, { inactivityMs: APPLY_INACTIVITY_MS, onData })
@@ -300,10 +300,10 @@ export async function provisionBlockTargets(a: {
       const elapsedSec = Math.max(0.001, (Date.now() - zeroStart) / 1000)
       const avgMBps = disk.capacityBytes / elapsedSec / ZERO_RATE_MIB
       const modeLabel = zeroMode.value === "stream" ? "streamed zeros" : "write-zeroes offload"
-      await appendLog(jobId, `Disk ${i}: zeroed thick target ${dev} in ${formatZeroElapsed(elapsedSec)} (${modeLabel}, ${avgMBps.toFixed(0)} MB/s average, limit ${describeZeroRateLimit(rateLimitMBps)})`, "success")
+      await appendLog(jobId, `Disk ${i + 1}: zeroed thick target ${dev} in ${formatZeroElapsed(elapsedSec)} (${modeLabel}, ${avgMBps.toFixed(0)} MB/s average, limit ${describeZeroRateLimit(rateLimitMBps)})`, "success")
       zeroedBytes += disk.capacityBytes
     }
-    await appendLog(jobId, `Disk ${i}: target ${vol.volumeId} → ${dev} (${(disk.capacityBytes / 1073741824).toFixed(1)} GB)`)
+    await appendLog(jobId, `Disk ${i + 1}: target ${vol.volumeId} → ${dev} (${(disk.capacityBytes / 1073741824).toFixed(1)} GB)`)
   }
   return targetDev
 }

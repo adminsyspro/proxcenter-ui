@@ -12,10 +12,12 @@ beforeEach(() => { vi.mocked(executeSSH).mockReset() })
 
 describe("checkGuestConversionNode (#1000)", () => {
   it("reads the node with a read-only probe and splits what Linux and Windows guests need", async () => {
-    vi.mocked(executeSSH).mockResolvedValue({ success: true, output: "v2v-in-place\n" })
+    vi.mocked(executeSSH).mockResolvedValue({ success: true, output: "v2v-in-place\nv2v-version=2.6.0\nv2v-probed\n" })
     expect(await checkGuestConversionNode("c1", "pve1")).toEqual({
       linux: [],
       windows: ["the VirtIO drivers for Windows (/usr/share/virtio-win/virtio-win.iso)", "rhsrvany.exe (Windows first-boot helper)"],
+      // the dialog warns about a Windows release this virt-v2v does not know (#1173)
+      virtV2v: { version: "2.6.0", knows: [] },
     })
     expect(vi.mocked(executeSSH).mock.calls[0][1]).toBe("10.0.0.9")
     expect(vi.mocked(executeSSH).mock.calls[0][4]).toEqual({ readOnly: true })

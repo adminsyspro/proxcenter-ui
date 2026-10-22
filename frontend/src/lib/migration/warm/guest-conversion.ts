@@ -41,6 +41,7 @@ import type { SshTarget } from "@/lib/ssh/node-endpoint-core"
 import { NBD_RELEASE_HOLDERS_FN, nbdReleaseHoldersCall } from "../nbd-holders"
 import type { GuestStaticIpv4 } from "@/lib/vmware/soap"
 import { buildNetworkPinScript, describeNetworkPinReport, NETWORK_PIN_REPORT, NETWORK_PIN_SCRIPT, parseNetworkPinReport, type GuestNic } from "./guest-network"
+import { unsupportedWindowsReason, VIRT_V2V_MARKERS, windowsUnsupportedByVirtV2v, type VirtV2vSupport } from "./virt-v2v-windows"
 
 export { GUEST_CONVERSION_ESTIMATE_SEC } from "./guest-conversion-estimate"
 
@@ -245,9 +246,12 @@ const clip = (s: string) => {
  * the conversion may be committed. An exit code 0 is not enough: virt-v2v
  * finishes "successfully" on a Windows it has no drivers for (2.6.0 does not
  * know Server 2025, measured), leaving a guest set up for emulated devices.
- * Only an explicit "has virtio drivers installed" counts as converted.
+ * Only an explicit "has virtio drivers installed" counts as converted. With
+ * what the node probe found out about its virt-v2v, a release it does not
+ * know is named as the cause (#1173): its "no virtio drivers available"
+ * reads as if the ISO lacked them.
  */
-export function parseConversionOutcome(log: string, exitCode: number | null): ConversionOutcome {
+export function parseConversionOutcome(log: string, exitCode: number | null, virtV2v?: VirtV2vSupport): ConversionOutcome {
   const { messages, plain } = readMessages(log)
   // "Converting Rocky Linux 9.8 (Blue Onyx) (rocky9) to run on KVM": the name,
   // without the inspector's trailing short id, unless the name is a bare
@@ -281,6 +285,8 @@ export function parseConversionOutcome(log: string, exitCode: number | null): Co
   if (/This guest has virtio drivers installed/i.test(text)) return { ok: true, os, warnings }
   const noDrivers = messages.find(m => /no virtio drivers available/i.test(m.message))?.message
   if (noDrivers || /does not have virtio drivers installed/i.test(text)) {
+    const unsupported = windowsUnsupportedByVirtV2v(noDrivers, virtV2v)
+    if (unsupported) return { ok: false, os, warnings, reason: unsupportedWindowsReason(unsupported, virtV2v?.version) }
     return { ok: false, os, warnings, reason: clip(noDrivers ?? "virt-v2v could not install the VirtIO drivers in this guest") }
   }
   return { ok: false, os, warnings, reason: "virt-v2v-in-place did not report VirtIO drivers in the guest" }
@@ -293,6 +299,9 @@ export function conversionPreflightCommand(): string {
     `test -f ${VIRTIO_WIN_ISO} && echo virtio-win`,
     "( test -f /usr/share/virt-tools/rhsrvany.exe || test -f /usr/share/virt-tools/pvvxsvc.exe ) && echo srvany",
     "command -v qemu-nbd >/dev/null && command -v nbd-client >/dev/null && nbdkit --filter=nozero nbd --version >/dev/null 2>&1 && echo nbd-chain",
+    `v=$(virt-v2v-in-place --version 2>/dev/null | awk '{print $2; exit}'); test -n "$v" && echo "v2v-version=$v"`,
+    // The Windows releases its compiled driver table knows (virt-v2v-windows.ts)
+    `test -f /usr/bin/virt-v2v-in-place && echo v2v-probed && for m in ${VIRT_V2V_MARKERS.join(" ")}; do grep -aqF "$m" /usr/bin/virt-v2v-in-place && echo "v2v-knows=$m"; done`,
     "true",
   ].join("; ")
 }
@@ -300,6 +309,14 @@ export function conversionPreflightCommand(): string {
 /** Whether the node can keep virt-v2v's trims out of the overlays (nbdChainFunctions), from the preflight output. */
 export function canKeepTrimsOut(output: string): boolean {
   return output.split(/\s+/).includes("nbd-chain")
+}
+
+/** What the preflight output says of the node's virt-v2v: its version, and the Windows releases it knows when the binary was probed. */
+export function virtV2vSupportOf(output: string): VirtV2vSupport {
+  const tokens = output.split(/\s+/)
+  const version = tokens.find(t => t.startsWith("v2v-version="))?.slice("v2v-version=".length)
+  const knows = tokens.filter(t => t.startsWith("v2v-knows=")).map(t => t.slice("v2v-knows=".length))
+  return { ...(version && { version }), ...(tokens.includes("v2v-probed") && { knows }) }
 }
 
 /** What is missing on the node to convert this guest, from the preflight output. */
@@ -360,6 +377,8 @@ export interface GuestConversionInput {
   name: string
   firmware: "efi" | "bios"
   isWindows: boolean
+  /** The source's OS name ("Microsoft Windows Server 2025 (64-bit)"): a release the node's virt-v2v predates is not converted. */
+  guestOs?: string
   memoryMB?: number
   /** Block device of every copied volume, in target disk order. */
   devices: string[]
@@ -392,9 +411,9 @@ export interface GuestConversionResult {
 export function conversionNotAppliedMessage(r: GuestConversionResult): { msg: string; level: LogLevel } {
   const reason = (r.reason || "").replace(/\.+$/, "")
   if (r.volumesWritten) {
-    return { msg: `Guest conversion failed while writing the converted disks back: ${reason}. A disk may be partly converted: the guest is started on the hardware it boots on without new drivers (SATA boot disk for Windows and UEFI guests, e1000 NICs for Windows), check that it boots`, level: "error" }
+    return { msg: `Guest conversion failed while writing the converted disks back: ${reason}. A disk may be partly converted: the guest is started on the hardware it boots on without new drivers (SATA disks and e1000 NICs for Windows, a SATA boot disk for UEFI guests), check that it boots`, level: "error" }
   }
-  return { msg: `Guest conversion not applied: ${reason}. The copied disks are unchanged and the guest keeps the hardware it boots on without new drivers (SATA boot disk for Windows and UEFI guests, e1000 NICs for Windows)`, level: "warn" }
+  return { msg: `Guest conversion not applied: ${reason}. The copied disks are unchanged and the guest keeps the hardware it boots on without new drivers (SATA disks and e1000 NICs for Windows, a SATA boot disk for UEFI guests)`, level: "warn" }
 }
 
 /**
@@ -441,6 +460,11 @@ export async function convertGuestAtCutover(a: GuestConversionInput): Promise<Gu
     const missing = missingConversionPrereqs(pf.output || "", a.isWindows)
     if (missing.length > 0) return { converted: false, reason: `missing on the node: ${missing.join(", ")}` }
     if (a.devices.length === 0 || a.devices.some(d => !d)) return { converted: false, reason: "a target volume has no block device on the node" }
+    // A Windows the node's virt-v2v does not know gets no driver: not worth the
+    // minute of downtime the run costs (#1173).
+    const virtV2v = virtV2vSupportOf(pf.output || "")
+    const unsupported = a.isWindows ? windowsUnsupportedByVirtV2v(a.guestOs, virtV2v) : null
+    if (unsupported) return { converted: false, reason: unsupportedWindowsReason(unsupported, virtV2v.version) }
     viaNbd = canKeepTrimsOut(pf.output || "")
 
     const overlays = a.devices.map((_, i) => `${dir}/disk${i}.qcow2`)
@@ -471,7 +495,7 @@ export async function convertGuestAtCutover(a: GuestConversionInput): Promise<Gu
       await a.log("Guest conversion: the overlays could not be attached through NBD, so virt-v2v trims the free space into them and writing them back may take as long as rewriting that free space", "warn")
     }
     const logOut = await ssh(`cat ${q(`${dir}/v2v.log`)} 2>/dev/null || true`).catch(() => null)
-    const outcome = parseConversionOutcome(logOut?.output || "", exitCode)
+    const outcome = parseConversionOutcome(logOut?.output || "", exitCode, virtV2v)
     // The warning that became the reason is said once, in the caller's line.
     for (const w of outcome.warnings.filter(w => w !== outcome.reason)) await a.log(`Guest conversion: virt-v2v warning: ${w}`, "warn")
     if (!outcome.ok) return { converted: false, reason: outcome.reason || "conversion failed" }

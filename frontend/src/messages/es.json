@@ -8056,6 +8056,21 @@
       "completed": "Migración completada",
       "failed": "Migración fallida",
       "failedWithReason": "Migración fallida: {detail}"
+    },
+    "reasons": {
+      "evacuation": "Evacuación del nodo por mantenimiento",
+      "highCpu": "Carga de CPU alta en el nodo de origen",
+      "highMemory": "Uso de memoria alto en el nodo de origen",
+      "loadBalancing": "Optimización del equilibrio de carga",
+      "homogenization": "Homogeneización: reducir la carga del {from, number} % al {to, number} %",
+      "affinity": "Regla de afinidad «{rule}»: las VMs deben estar en el mismo nodo",
+      "antiAffinity": "Regla de antiafinidad «{rule}»: las VMs deben estar en nodos distintos",
+      "nodeAffinity": "Regla de afinidad de nodo «{rule}»: la VM debe ejecutarse en {node}"
+    },
+    "pinnedReasons": {
+      "noTarget": "Ningún otro nodo ofrece la red o el almacenamiento de este invitado",
+      "network": "Red {resource} no disponible en el nodo {node}",
+      "storage": "Almacenamiento {resource} no disponible en el nodo {node}"
     }
   },
   "usersPage": {

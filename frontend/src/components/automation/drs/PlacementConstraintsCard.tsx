@@ -14,6 +14,7 @@ import { useTheme } from '@mui/material/styles'
 import { useTranslations } from 'next-intl'
 
 import { GuestGlyph, NodeGlyph } from './glyphs'
+import { pinnedReasonText } from './drsReason'
 
 /** One guest that no node other than its own can run. */
 export interface PinnedGuest {
@@ -22,6 +23,8 @@ export interface PinnedGuest {
   name: string
   node: string
   reason: string
+  reason_code?: string
+  reason_params?: Record<string, string>
 }
 
 /** One set of nodes the guests of a cluster can move between. */
@@ -370,7 +373,7 @@ const PlacementConstraintsCard = ({
                       <Box sx={rowSx(EXCLUDED_COLUMNS)} data-vmid={g.vmid}>
                         {guest(cluster.id, g, true)}
                         {cell(node(cluster.id, g.node))}
-                        <Typography variant='body2' color='text.secondary' noWrap>{g.reason}</Typography>
+                        <Typography variant='body2' color='text.secondary' noWrap>{pinnedReasonText(g, t)}</Typography>
                       </Box>
                     )} />
                   </>

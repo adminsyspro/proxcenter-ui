@@ -88,6 +88,7 @@ import PlacementConstraintsCard, {
 import MigrationHistoryTab from '@/components/automation/drs/MigrationHistoryTab'
 import { GuestGlyph, NodeGlyph } from '@/components/automation/drs/glyphs'
 import { migrationProgressMessage } from '@/components/automation/drs/migrationProgress'
+import { drsReasonText } from '@/components/automation/drs/drsReason'
 import DrsActionNoticeDialog from '@/components/automation/drs/DrsActionNoticeDialog'
 import AffinityRulesManager, {
   type AffinityRule, 
@@ -146,6 +147,8 @@ interface DRSRecommendation {
   source_node: string
   target_node: string
   reason: string
+  reason_code?: string
+  reason_params?: Record<string, string>
   priority: number | 'low' | 'medium' | 'high' | 'critical'
   score: number
   created_at: string
@@ -1050,7 +1053,7 @@ const RecommendationRow = React.memo(({
           {rec.vm_name || `VM ${rec.vmid}`}
         </Typography>
         <Typography variant="caption" sx={{ opacity: 0.6, display: 'block', lineHeight: 1.2 }} noWrap>
-          {rec.reason}
+          {drsReasonText(rec, t)}
         </Typography>
         {rec.maintenance_evacuation && (
           <Chip label={t('drsPage.evacuation')} size="small" color="warning" sx={{ height: 16, fontSize: '0.6rem', ml: 0.5 }} />
@@ -2773,7 +2776,7 @@ return next
               <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
                 <Typography variant="body2" sx={{ opacity: 0.6 }}>{t('drsPage.reason')}</Typography>
                 <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                  {selectedRec.reason}
+                  {drsReasonText(selectedRec, t)}
                 </Typography>
               </Box>
               <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>

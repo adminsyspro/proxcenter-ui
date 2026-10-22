@@ -8060,6 +8060,21 @@
       "completed": "迁移已完成",
       "failed": "迁移失败",
       "failedWithReason": "迁移失败：{detail}"
+    },
+    "reasons": {
+      "evacuation": "为维护疏散节点",
+      "highCpu": "源节点 CPU 负载过高",
+      "highMemory": "源节点内存使用率过高",
+      "loadBalancing": "负载均衡优化",
+      "homogenization": "均衡化：将负载从 {from, number}% 降至 {to, number}%",
+      "affinity": "亲和性规则“{rule}”：虚拟机应位于同一节点",
+      "antiAffinity": "反亲和性规则“{rule}”：虚拟机应位于不同节点",
+      "nodeAffinity": "节点亲和性规则“{rule}”：虚拟机应运行在 {node} 上"
+    },
+    "pinnedReasons": {
+      "noTarget": "没有其他节点提供此虚拟机的网络或存储",
+      "network": "网络 {resource} 在节点 {node} 上不可用",
+      "storage": "存储 {resource} 在节点 {node} 上不可用"
     }
   },
   "usersPage": {

@@ -8008,6 +8008,21 @@
       "completed": "Migration abgeschlossen",
       "failed": "Migration fehlgeschlagen",
       "failedWithReason": "Migration fehlgeschlagen: {detail}"
+    },
+    "reasons": {
+      "evacuation": "Knotenräumung für Wartung",
+      "highCpu": "Hohe CPU-Last auf dem Quellknoten",
+      "highMemory": "Hohe Speichernutzung auf dem Quellknoten",
+      "loadBalancing": "Optimierung der Lastverteilung",
+      "homogenization": "Homogenisierung: Last von {from, number} % auf {to, number} % senken",
+      "affinity": "Affinitätsregel „{rule}“: VMs sollten auf demselben Knoten laufen",
+      "antiAffinity": "Anti-Affinitätsregel „{rule}“: VMs sollten auf verschiedenen Knoten laufen",
+      "nodeAffinity": "Knotenaffinitätsregel „{rule}“: VM sollte auf {node} laufen"
+    },
+    "pinnedReasons": {
+      "noTarget": "Kein anderer Knoten stellt das Netzwerk oder den Speicher dieses Gasts bereit",
+      "network": "Netzwerk {resource} auf Knoten {node} nicht verfügbar",
+      "storage": "Speicher {resource} auf Knoten {node} nicht verfügbar"
     }
   },
   "usersPage": {

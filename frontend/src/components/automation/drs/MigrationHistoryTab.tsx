@@ -27,6 +27,7 @@ import TaskLogButton from '@/components/tasks/TaskLogButton'
 import { DonutStatCard, DonutTotalCard } from '@/components/charts/DonutStatCards'
 import { formatDate, formatTime } from '@/lib/i18n/date'
 
+import { drsReasonText } from './drsReason'
 import { GuestGlyph, NodeGlyph } from './glyphs'
 import {
   filterMigrations,
@@ -351,7 +352,7 @@ const MigrationHistoryTab = ({ migrations, connectionNames, vmStatus = {}, nodeS
                                 variant='caption'
                                 sx={{ display: 'block', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', opacity: entry.reason ? 0.8 : 0.5, fontStyle: entry.reason ? 'normal' : 'italic' }}
                               >
-                                {entry.reason || t('drsPage.historyNoReason')}
+                                {drsReasonText(entry, t) || t('drsPage.historyNoReason')}
                               </Typography>
                               <FailureReasonText reason={migrationFailureReason(entry)} />
                             </Box>

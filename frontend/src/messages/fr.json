@@ -8056,6 +8056,21 @@
       "completed": "Migration terminée",
       "failed": "Migration échouée",
       "failedWithReason": "Migration échouée : {detail}"
+    },
+    "reasons": {
+      "evacuation": "Évacuation du nœud pour maintenance",
+      "highCpu": "Charge CPU élevée sur le nœud source",
+      "highMemory": "Mémoire très utilisée sur le nœud source",
+      "loadBalancing": "Optimisation de l'équilibrage de charge",
+      "homogenization": "Homogénéisation : charge réduite de {from, number} % à {to, number} %",
+      "affinity": "Règle d'affinité « {rule} » : les VM doivent être sur le même nœud",
+      "antiAffinity": "Règle d'anti-affinité « {rule} » : les VM doivent être sur des nœuds différents",
+      "nodeAffinity": "Règle d'affinité de nœud « {rule} » : la VM doit tourner sur {node}"
+    },
+    "pinnedReasons": {
+      "noTarget": "Aucun autre nœud ne porte le réseau ou le stockage de cet invité",
+      "network": "Réseau {resource} indisponible sur le nœud {node}",
+      "storage": "Stockage {resource} indisponible sur le nœud {node}"
     }
   },
   "usersPage": {

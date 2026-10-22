@@ -167,6 +167,8 @@ export interface DRSRecommendation {
   source_node: string
   target_node: string
   reason: string
+  reason_code?: string
+  reason_params?: Record<string, string>
   priority: 'low' | 'medium' | 'high' | 'critical'
   score: number
   created_at: string

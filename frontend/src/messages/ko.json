@@ -8056,6 +8056,21 @@
       "completed": "마이그레이션 완료",
       "failed": "마이그레이션 실패",
       "failedWithReason": "마이그레이션 실패: {detail}"
+    },
+    "reasons": {
+      "evacuation": "유지 관리를 위한 노드 비우기",
+      "highCpu": "소스 노드의 높은 CPU 부하",
+      "highMemory": "소스 노드의 높은 메모리 사용량",
+      "loadBalancing": "부하 분산 최적화",
+      "homogenization": "균등화: 부하를 {from, number}%에서 {to, number}%로 감소",
+      "affinity": "선호도 규칙 “{rule}”: VM이 같은 노드에 있어야 합니다",
+      "antiAffinity": "반선호도 규칙 “{rule}”: VM이 서로 다른 노드에 있어야 합니다",
+      "nodeAffinity": "노드 선호도 규칙 “{rule}”: VM이 {node}에서 실행되어야 합니다"
+    },
+    "pinnedReasons": {
+      "noTarget": "이 게스트의 네트워크나 스토리지를 제공하는 다른 노드가 없습니다",
+      "network": "노드 {node}에서 네트워크 {resource}을(를) 사용할 수 없습니다",
+      "storage": "노드 {node}에서 스토리지 {resource}을(를) 사용할 수 없습니다"
     }
   },
   "usersPage": {

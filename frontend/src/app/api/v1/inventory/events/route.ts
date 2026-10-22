@@ -8,26 +8,34 @@ import { demoResponse } from "@/lib/demo/demo-api"
 
 export const runtime = "nodejs"
 
-// What a consumer may leave unread before it is dropped. A live browser drains
-// a whole poll burst in milliseconds, far below this.
+// What a consumer may leave unread from earlier deliveries before the next one
+// drops it. Checked before enqueueing, never after: a poll cycle goes out as a
+// single message, and on a large estate that one message can exceed this on
+// its own. A live browser drains it well within the 15 s poll interval, so it
+// is never dropped; a consumer that stopped reading holds at most this plus one
+// delivery and goes at the next one.
 const MAX_UNREAD_BYTES = 1024 * 1024
 
 /**
  * GET /api/v1/inventory/events
  *
  * Persistent SSE connection that pushes real-time inventory changes.
- * The backend polls PVE /cluster/resources every ~10s and pushes only
+ * The backend polls PVE /cluster/resources every ~15s and pushes only
  * the deltas (VM status changes, node changes, VM additions/removals).
  *
  * Events are filtered to only include connections belonging to the
  * current user's tenant.
  *
  * Events:
- *   - event: vm:update    → { connId, vmid, node, type, status, cpu?, mem?, ... }
- *   - event: node:update  → { connId, node, status, cpu?, mem?, maxmem? }
- *   - event: vm:added     → { connId, vmid, node, type, status, name?, ... }
- *   - event: vm:removed   → { connId, vmid, node, type }
- *   - event: heartbeat    → {}  (keep-alive every 30s)
+ *   - event: connected    → { ts }
+ *   - event: batch        → [ ...deltas ]  one message per poll cycle, holding
+ *                           the deltas that passed the filters below, each
+ *                           tagged by its `event` field:
+ *       vm:update    { event, connId, vmid, node, type, status, cpu?, mem?, ... }
+ *       node:update  { event, connId, node, status, cpu?, mem?, maxmem? }
+ *       vm:added     { event, connId, vmid, node, type, status, name?, ... }
+ *       vm:removed   { event, connId, vmid, node, type }
+ *   - event: heartbeat    → { ts }  (keep-alive every 30s)
  */
 
 export async function GET(request: NextRequest) {
@@ -88,25 +96,29 @@ export async function GET(request: NextRequest) {
     start(controller) {
       const send = (event: string, data: any) => {
         if (closed) return
-        try {
-          controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`))
-        } catch {
-          // The stream is already closed or errored.
-          teardown()
-          return
-        }
 
         // Next stops pulling while the socket is backed up, so whatever the
         // consumer leaves unread stays in this queue. A consumer that stopped
         // reading without closing its TCP connection (a sleeping laptop, a
         // stalled proxy, a half-open socket) never fires cancel(): without this
-        // bound the queue grew for as long as the process lived.
+        // bound the queue grew for as long as the process lived. The check
+        // comes before the enqueue so it only ever sees what the consumer left
+        // from EARLIER deliveries: a single oversized message is still sent,
+        // and the consumer is judged on it at the next delivery.
         if ((controller.desiredSize ?? 0) < 0) {
           console.warn(`[inventory-events] Dropping an SSE consumer that left more than ${MAX_UNREAD_BYTES} bytes unread`)
           teardown()
           // Erroring discards the queue and makes Next destroy the response; a
           // live EventSource reconnects and reloads a fresh state.
           controller.error(new Error('SSE consumer stopped reading'))
+          return
+        }
+
+        try {
+          controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`))
+        } catch {
+          // The stream is already closed or errored.
+          teardown()
         }
       }
 
@@ -121,8 +133,13 @@ export async function GET(request: NextRequest) {
       // Subscribe to inventory changes — filter by tenant connections AND,
       // for VM events on a vDC-scoped tenant, by allowed pools.
       // Also filter by RBAC infra scope when the user is not an admin.
+      // The survivors of one poll cycle go out as ONE `batch` message: one
+      // enqueue per cycle keeps the backpressure check above meaningful (a
+      // burst of per-event messages could never drain between two of them),
+      // and the browser applies the whole cycle to its tree in one pass.
       const unsub = subscribe((events: InventoryEvent[]) => {
         if (closed) return
+        const batch: InventoryEvent[] = []
         for (const ev of events) {
           if (!tenantConnIds.has(ev.connId)) continue
 
@@ -161,8 +178,9 @@ export async function GET(request: NextRequest) {
             if (!evPool || !allowedPools || !allowedPools.has(evPool)) continue
           }
 
-          send(ev.event, ev)
+          batch.push(ev)
         }
+        if (batch.length > 0) send('batch', batch)
       })
 
       // The handler may already have torn the connection down before subscribe

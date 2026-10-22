@@ -1643,7 +1643,9 @@
         "noBridgeBlocker": "No bridge authorised in your vDC. Create a VNet in \"My Datacenter\" or ask the provider for a shared bridge — or tick \"No network device\".",
         "invalidBridgeBlocker": "Bridge not authorised on {nicDetails}. Pick one of the allowed bridges in the Network tab.",
         "nicLabel": "NIC {index} (bridge \"{bridge}\")"
-      }
+      },
+      "noBlankVmVdc": "None of your vDCs allows blank VMs. Deploy from the template catalogue instead.",
+      "noVdcNode": "No node of this vDC is available right now."
     },
     "createLxc": {
       "title": "Create: LXC Container",
@@ -10119,6 +10121,9 @@
     "cpuDefaultModelAuto": "Automatic (first allowed model)",
     "cpuAdvancedSettings": "Advanced CPU settings",
     "cpuAdvancedSettingsHint": "When off, tenants pick a model and a core count only: NUMA, extra CPU flags, CPU limit and units are hidden and refused.",
+    "blankVmsTitle": "Blank VMs",
+    "allowBlankVms": "Allow blank VMs",
+    "allowBlankVmsHint": "Tenants can create a VM from scratch (CPU, memory, disks and network within the vDC quotas) and install its OS from an ISO of the vDC libraries. When off, they deploy from the template catalogue only.",
     "tabGeneral": "General",
     "tabQuotas": "Quotas",
     "tabCompute": "Compute",

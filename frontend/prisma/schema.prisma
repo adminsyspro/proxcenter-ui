@@ -880,6 +880,9 @@ model Vdc {
   cpuAllowedModels    String[] @default([]) @map("cpu_allowed_models")
   cpuDefaultModel     String?  @map("cpu_default_model")
   cpuAdvancedSettings Boolean  @default(true) @map("cpu_advanced_settings")
+  // Blank VMs (#1171): the tenant may create a VM from scratch and install
+  // its OS from an ISO. Off, it deploys from the template catalogue only.
+  allowBlankVms       Boolean  @default(false) @map("allow_blank_vms")
   // VXLAN transport (#899): how the tenant zone's peers are derived and the
   // zone MTU. `cluster` is the historical behaviour (corosync node addresses),
   // `peers` an operator list, `transport` a dedicated VLAN segment with one

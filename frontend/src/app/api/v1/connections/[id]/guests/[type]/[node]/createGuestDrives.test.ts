@@ -54,6 +54,10 @@ vi.mock('@/lib/vdc/sdn', () => ({ generatePveMacAddress: () => 'BC:24:11:00:00:0
 vi.mock('@/lib/vdc/ipam', () => ({ allocateIp: vi.fn(), releaseIp: vi.fn(), IpamExhaustedError: class extends Error {} }))
 vi.mock('@/lib/vdc/network', () => ({ parseCidr: () => null }))
 vi.mock('@/lib/tenant/vmidRange', () => ({ checkVmidAgainstTenantRange: (...a: any[]) => checkVmidAgainstTenantRangeMock(...a) }))
+vi.mock('@/lib/vdc/scope', async (io) => ({
+  ...(await io<typeof import('@/lib/vdc/scope')>()),
+  loadTenantSlugs: async () => ({ mine: 'acme', all: ['acme', 'other'] }),
+}))
 
 async function loadPost() {
   const mod = await import('./route')
@@ -155,6 +159,7 @@ describe('POST guests create: disk storage allow-list + storage-policy QoS stamp
     )
     resolveVdcForTenantMock.mockResolvedValue({
       poolName: 'pool-1',
+      allowBlankVms: true,
       quota: { maxStorageMb: null },
       storagePolicies: [{ policyId: 'p-gold', name: 'Gold', storageId: 'ceph-nvme', quotaMb: 1024 }],
     })
@@ -191,6 +196,7 @@ describe('POST guests create: import-from metering (Finding I2 -- meter, never r
     getTenantInfrastructureScopeMock.mockResolvedValue(iaasInfra(['gold'], { gold }))
     resolveVdcForTenantMock.mockResolvedValue({
       poolName: 'pool-1',
+      allowBlankVms: true,
       quota: { maxStorageMb: null },
       storagePolicies: [{ policyId: 'p-gold', name: 'Gold', storageId: 'gold', quotaMb: 1024 }],
     })
@@ -220,6 +226,7 @@ describe('POST guests create: import-from metering (Finding I2 -- meter, never r
     getTenantInfrastructureScopeMock.mockResolvedValue(iaasInfra(['gold'], { gold }))
     resolveVdcForTenantMock.mockResolvedValue({
       poolName: 'pool-1',
+      allowBlankVms: true,
       quota: { maxStorageMb: null },
       storagePolicies: [{ policyId: 'p-gold', name: 'Gold', storageId: 'gold', quotaMb: 1024 }],
     })
@@ -238,5 +245,84 @@ describe('POST guests create: import-from metering (Finding I2 -- meter, never r
     const [, , , operation] = checkVdcQuotaMock.mock.calls[0]
     expect(operation.addStorageMb).toBe(0)
     expect(operation.addStorageMbByStorage).toEqual({})
+  })
+})
+
+describe('POST guests create: blank VMs and the cdrom alias (#1171)', () => {
+  /** An iaas tenant whose vDC has a Ceph primary and a read-only ISO library. */
+  function tenantWithLibrary() {
+    const infra: any = iaasInfra(['ceph', 'lib'])
+    infra.vdcScope.writableStoragesByConnection = new Map([['conn-1', new Set(['ceph'])]])
+    infra.vdcScope.isoLibrariesByConnection = new Map([['conn-1', new Set(['lib'])]])
+    getTenantInfrastructureScopeMock.mockResolvedValue(infra)
+  }
+
+  const vdcInfo = (allowBlankVms: boolean) => ({ poolName: 'pool-1', quota: null, storagePolicies: [], allowBlankVms })
+
+  it('403: a vDC closed to blank VMs refuses a qemu create, PVE never called', async () => {
+    tenantWithLibrary()
+    resolveVdcForTenantMock.mockResolvedValue(vdcInfo(false))
+    const POST = await loadPost()
+    const res = await callRoute(POST, { params: qemuParams, body: { vmid: 105, scsi0: 'ceph:4' } })
+    expect(res.status).toBe(403)
+    expect((await readJson<{ error: string }>(res))?.error).toContain('does not allow blank VMs')
+    expect(pveFetchMock).not.toHaveBeenCalled()
+  })
+
+  it('200: a vDC open to blank VMs creates it in the vDC pool', async () => {
+    tenantWithLibrary()
+    resolveVdcForTenantMock.mockResolvedValue(vdcInfo(true))
+    const POST = await loadPost()
+    const res = await callRoute(POST, { params: qemuParams, body: { vmid: 105, scsi0: 'ceph:4' } })
+    expect(res.status).toBe(200)
+    expect(createdBody('pve1', 'qemu').pool).toBe('pool-1')
+  })
+
+  it('200: the tenant mounts its own library ISO, sent to PVE as an ide2 CD/DVD line', async () => {
+    tenantWithLibrary()
+    resolveVdcForTenantMock.mockResolvedValue(vdcInfo(true))
+    const POST = await loadPost()
+    const res = await callRoute(POST, { params: qemuParams, body: { vmid: 105, cdrom: 'lib:iso/custom-acme-alpine.iso' } })
+    expect(res.status).toBe(200)
+    const sent = createdBody('pve1', 'qemu')
+    expect(sent.cdrom).toBeUndefined()
+    expect(sent.ide2).toMatch(/^lib:iso\/custom-acme-alpine\.iso,media=cdrom/)
+  })
+
+  it("403: another tenant's ISO cannot ride the cdrom alias", async () => {
+    tenantWithLibrary()
+    resolveVdcForTenantMock.mockResolvedValue(vdcInfo(true))
+    const POST = await loadPost()
+    const res = await callRoute(POST, { params: qemuParams, body: { vmid: 105, cdrom: 'lib:iso/custom-other-x.iso' } })
+    expect(res.status).toBe(403)
+    expect((await readJson<{ error: string }>(res))?.error).toContain('not yours to mount')
+    expect(pveFetchMock).not.toHaveBeenCalled()
+  })
+
+  it('403: an ISO outside the vDC storages cannot ride the cdrom alias', async () => {
+    tenantWithLibrary()
+    resolveVdcForTenantMock.mockResolvedValue(vdcInfo(true))
+    const POST = await loadPost()
+    const res = await callRoute(POST, { params: qemuParams, body: { vmid: 105, cdrom: 'provider-iso:iso/x.iso,media=cdrom' } })
+    expect(res.status).toBe(403)
+    expect(pveFetchMock).not.toHaveBeenCalled()
+  })
+
+  it('400: cdrom and ide2 together are ambiguous', async () => {
+    const POST = await loadPost()
+    const res = await callRoute(POST, { params: qemuParams, body: { vmid: 105, cdrom: 'none', ide2: 'none,media=cdrom' } })
+    expect(res.status).toBe(400)
+    expect(pveFetchMock).not.toHaveBeenCalled()
+  })
+
+  it('200: the provider CD/DVD is folded the same way, an lxc body is untouched', async () => {
+    const POST = await loadPost()
+    const res = await callRoute(POST, { params: qemuParams, body: { vmid: 105, cdrom: 'local:iso/debian.iso' } })
+    expect(res.status).toBe(200)
+    expect(createdBody('pve1', 'qemu').ide2).toBe('local:iso/debian.iso,media=cdrom')
+
+    const lxc = await callRoute(POST, { params: lxcParams, body: { vmid: 106, cdrom: 'x' } })
+    expect(lxc.status).toBe(200)
+    expect(createdBody('pve1', 'lxc').cdrom).toBe('x')
   })
 })

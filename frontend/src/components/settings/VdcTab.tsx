@@ -422,6 +422,9 @@ export default function VdcTab() {
   // cluster's cpu-models.conf, read through the first node of the connection.
   const [computePolicy, setComputePolicy] = useState<ComputePolicyForm>(emptyComputePolicy)
   const [customCpuModels, setCustomCpuModels] = useState<string[]>([])
+  // Blank VMs (#1171): the tenant may create a VM from scratch and install it
+  // from an ISO. Off by default, the tenant then deploys from templates only.
+  const [allowBlankVms, setAllowBlankVms] = useState(false)
 
   // ISO library (#894): read-only ISO storages granted to the tenant, picked
   // among the cluster storages that advertise `iso` content.
@@ -989,6 +992,7 @@ export default function VdcTab() {
     setVlanPools([])
     setVdcPolicies([])
     setComputePolicy(emptyComputePolicy)
+    setAllowBlankVms(false)
     setIsoLibraries([])
     setCatalogGrants({ imageIds: [], blueprintIds: [] })
     setTransport(emptyTransport)
@@ -1055,6 +1059,7 @@ export default function VdcTab() {
       cpuDefaultModel: cp?.cpuDefaultModel ?? '',
       cpuAdvancedSettings: cp?.cpuAdvancedSettings !== false,
     })
+    setAllowBlankVms(vdc.allowBlankVms === true)
     // Older payloads carried bare storage ids (read-only grants).
     setIsoLibraries(
       Array.isArray(vdc.isoLibraries)
@@ -1178,6 +1183,7 @@ export default function VdcTab() {
           vlanPools: vlanPoolsPayload,
           storagePolicies: storagePoliciesPayload,
           computePolicy: computePolicyPayload,
+          allowBlankVms,
           isoLibraries,
           catalogGrants,
           transport: transportPayload,
@@ -1214,6 +1220,7 @@ export default function VdcTab() {
           vlanPools: vlanPoolsPayload,
           storagePolicies: storagePoliciesPayload,
           computePolicy: computePolicyPayload,
+          allowBlankVms,
           isoLibraries,
           catalogGrants,
           transport: transportPayload,
@@ -2785,6 +2792,7 @@ export default function VdcTab() {
           {/* Compute: CPU models the tenant may pick, advanced CPU controls (#893) */}
           <TabPanel value={dialogTab} index={2}>
             {connectionGated(
+              <>
                   <Box sx={{ p: 2, border: 1, borderColor: 'divider', borderRadius: 1 }}>
                     <Typography variant="subtitle2" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                       <i className="ri-cpu-line" />
@@ -2875,6 +2883,27 @@ export default function VdcTab() {
                       </Box>
                     </Stack>
                   </Box>
+
+                  {/* Blank VMs (#1171): create from scratch, install from an ISO */}
+                  <Box sx={{ mt: 2, p: 2, border: 1, borderColor: 'divider', borderRadius: 1 }}>
+                    <Typography variant="subtitle2" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <i className="ri-disc-line" />
+                      {t('vdc.blankVmsTitle')}
+                    </Typography>
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={allowBlankVms}
+                          onChange={(e) => setAllowBlankVms(e.target.checked)}
+                        />
+                      }
+                      label={t('vdc.allowBlankVms')}
+                    />
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                      {t('vdc.allowBlankVmsHint')}
+                    </Typography>
+                  </Box>
+              </>
             )}
           </TabPanel>
 

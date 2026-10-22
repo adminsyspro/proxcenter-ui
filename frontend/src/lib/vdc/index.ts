@@ -64,6 +64,7 @@ type VdcRow = {
   cpuAllowedModels?: string[] | null
   cpuDefaultModel?: string | null
   cpuAdvancedSettings?: boolean | null
+  allowBlankVms?: boolean | null
   vxlanTransportMode?: string | null
   transportSharing?: string | null
   vniRangeStart?: number | null
@@ -108,6 +109,7 @@ function rowToVdc(row: VdcRow): Vdc {
     sdnZoneName: row.sdnZoneName ?? null,
     primaryStorage: row.primaryStorage ?? null,
     computePolicy: rowToComputePolicy(row),
+    allowBlankVms: row.allowBlankVms === true,
     transport: rowToTransport(row),
     edgeModel: rowToEdgeModel(row.edgeModel),
     enabled: row.enabled !== false,
@@ -561,6 +563,7 @@ export async function createVdc(input: CreateVdcInput, createdBy: string | null)
           sdnZoneName,
           primaryStorage: input.primaryStorage ?? null,
           ...computePolicyToRow(normalizeComputePolicyInput(input.computePolicy)),
+          allowBlankVms: input.allowBlankVms === true,
           ...transportToRow(transport),
           edgeModel,
           enabled: true,
@@ -761,6 +764,7 @@ export async function updateVdc(id: string, input: UpdateVdcInput): Promise<VdcW
       // only flips the advanced switch does not reset the mode or the list.
       Object.assign(updateData, computePolicyToRow(normalizeComputePolicyInput(input.computePolicy, rowToComputePolicy(existing))))
     }
+    if (input.allowBlankVms !== undefined) updateData.allowBlankVms = input.allowBlankVms
     if (nextTransport) Object.assign(updateData, transportToRow(nextTransport))
     if (nextEdgeModel) updateData.edgeModel = nextEdgeModel
 

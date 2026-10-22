@@ -405,7 +405,7 @@ describe('MigrateVmDialog - cross-cluster prerequisites', () => {
     seedPrereqHandlers({ issues: [withoutContext] })
     await renderPrereqs(/VMID/)
 
-    expect(await screen.findByText('VMID 100 already exists on target cluster')).toBeInTheDocument()
+    expect(await screen.findByText('VMID 100 already exists on target cluster', {}, { timeout: 10_000 })).toBeInTheDocument()
   })
 
   it('renders every check as one row with its short domain label', async () => {

@@ -157,6 +157,6 @@ describe('GET /api/v1/pbs/[id]/pve-storages', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
     pbsMock.mockRejectedValue({})
     const res = await call()
-    expect(await readJson(res)).toEqual({ error: 'Erreur serveur' })
+    expect(await readJson(res)).toEqual({ error: 'Server error' })
   })
 })

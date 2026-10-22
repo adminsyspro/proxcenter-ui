@@ -33,7 +33,7 @@ export async function POST(req: Request) {
     const username = typeof body.test_username === "string" ? body.test_username.trim() : ""
 
     if (!body.url) {
-      return NextResponse.json({ success: false, error: "URL LDAP requise" }, { status: 400 })
+      return NextResponse.json({ success: false, error: "LDAP URL is required" }, { status: 400 })
     }
     if (!username) {
       return NextResponse.json({ success: false, error: "username_required" }, { status: 400 })
@@ -118,7 +118,7 @@ export async function POST(req: Request) {
       category: "settings",
       resourceType: "ldap_config",
       resourceId: "default",
-      resourceName: "Configuration LDAP",
+      resourceName: "LDAP configuration",
       details: {
         diagnostic: "user_lookup",
         test_username: username,
@@ -130,7 +130,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ success: true, data: { lookup, evaluation, account } })
   } catch (error: any) {
-    console.error("Erreur diagnostic LDAP:", error)
-    return NextResponse.json({ success: false, error: error?.message || "Erreur lors du diagnostic LDAP" }, { status: 500 })
+    console.error("LDAP diagnosis error:", error)
+    return NextResponse.json({ success: false, error: error?.message || "LDAP diagnosis failed" }, { status: 500 })
   }
 }

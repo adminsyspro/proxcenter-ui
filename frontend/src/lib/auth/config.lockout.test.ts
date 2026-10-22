@@ -64,7 +64,7 @@ describe("credentials authorize with the lockout policy", () => {
     ;(verifyPassword as any).mockResolvedValue(true)
 
     await expect(authorizeOf("credentials")({ email: "A@b.com", password: "right" }, REQ)).rejects.toThrow(
-      /^Identifiants invalides$/,
+      /^Invalid credentials$/,
     )
     expect(beginLoginAttempt).toHaveBeenCalledWith("a@b.com", REQ, "credentials")
     expect(verifyPassword).not.toHaveBeenCalled()
@@ -75,7 +75,7 @@ describe("credentials authorize with the lockout policy", () => {
     ;(verifyPassword as any).mockResolvedValue(false)
 
     await expect(authorizeOf("credentials")({ email: "a@b.com", password: "bad" }, REQ)).rejects.toThrow(
-      /^Identifiants invalides$/,
+      /^Invalid credentials$/,
     )
     expect(fail).toHaveBeenCalledExactlyOnceWith(true)
     expect(succeed).not.toHaveBeenCalled()
@@ -85,7 +85,7 @@ describe("credentials authorize with the lockout policy", () => {
     ;(prisma.user.findUnique as any).mockResolvedValue(null)
 
     await expect(authorizeOf("credentials")({ email: "nobody@b.com", password: "x" }, REQ)).rejects.toThrow(
-      /^Identifiants invalides$/,
+      /^Invalid credentials$/,
     )
     expect(fail).toHaveBeenCalledExactlyOnceWith(false)
   })
@@ -104,7 +104,7 @@ describe("credentials authorize with the lockout policy", () => {
 
     await expect(
       authorizeOf("credentials")({ email: "a@b.com", password: "right", totpCode: "000000" }, REQ),
-    ).rejects.toThrow(/Identifiants invalides/)
+    ).rejects.toThrow(/Invalid credentials/)
     expect(fail).toHaveBeenCalledExactlyOnceWith(true)
   })
 
@@ -145,7 +145,7 @@ describe("LDAP authorize with the lockout policy", () => {
     lockoutReturns(true)
 
     await expect(authorizeOf("ldap")({ username: "jdoe", password: "right" }, REQ)).rejects.toThrow(
-      /^Identifiants LDAP invalides$/,
+      /^Invalid LDAP credentials$/,
     )
     expect(beginLoginAttempt).toHaveBeenCalledWith("jdoe", REQ, "ldap")
     expect(authenticateLdapDetailed).not.toHaveBeenCalled()
@@ -155,7 +155,7 @@ describe("LDAP authorize with the lockout policy", () => {
     ;(authenticateLdapDetailed as any).mockResolvedValue({ user: null, failure: "invalid_password" })
 
     await expect(authorizeOf("ldap")({ username: "jdoe", password: "bad" }, REQ)).rejects.toThrow(
-      /^Identifiants LDAP invalides$/,
+      /^Invalid LDAP credentials$/,
     )
     expect(fail).toHaveBeenCalledExactlyOnceWith(true)
   })
@@ -164,7 +164,7 @@ describe("LDAP authorize with the lockout policy", () => {
     ;(authenticateLdapDetailed as any).mockResolvedValue({ user: null, failure: "user_not_found" })
 
     await expect(authorizeOf("ldap")({ username: "ghost", password: "x" }, REQ)).rejects.toThrow(
-      /^Identifiants LDAP invalides$/,
+      /^Invalid LDAP credentials$/,
     )
     expect(fail).toHaveBeenCalledExactlyOnceWith(false)
   })
@@ -188,7 +188,7 @@ describe("LDAP authorize with the lockout policy", () => {
 
     await expect(
       authorizeOf("ldap")({ username: "jdoe", password: "right", totpCode: "000000" }, REQ),
-    ).rejects.toThrow(/Identifiants LDAP invalides/)
+    ).rejects.toThrow(/Invalid LDAP credentials/)
     expect(fail).toHaveBeenCalledTimes(1)
     expect(succeed).not.toHaveBeenCalled()
   })
@@ -219,7 +219,7 @@ describe("LDAP authorize records why a sign-in was refused", () => {
     })
 
     await expect(authorizeOf("ldap")({ username: "bob", password: "pa55" }, REQ)).rejects.toThrow(
-      /^Identifiants LDAP invalides$/,
+      /^Invalid LDAP credentials$/,
     )
     expect(audit).toHaveBeenCalledWith(expect.objectContaining({
       action: "login_failed",
@@ -235,7 +235,7 @@ describe("LDAP authorize records why a sign-in was refused", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
     ;(authenticateLdapDetailed as any).mockResolvedValue({ user: null, failure: "error", reason: "ambiguous_match" })
 
-    await expect(authorizeOf("ldap")({ username: "dup", password: "x" }, REQ)).rejects.toThrow(/^Identifiants LDAP invalides$/)
+    await expect(authorizeOf("ldap")({ username: "dup", password: "x" }, REQ)).rejects.toThrow(/^Invalid LDAP credentials$/)
     expect(fail).not.toHaveBeenCalled()
     expect(audit).toHaveBeenCalledWith(expect.objectContaining({ details: { reason: "ambiguous_match", provider: "ldap" } }))
     warn.mockRestore()
@@ -262,7 +262,7 @@ describe("LDAP authorize records why a sign-in was refused", () => {
     ;(audit as any).mockRejectedValueOnce(new Error("db down"))
     ;(authenticateLdapDetailed as any).mockResolvedValue({ user: null, failure: "invalid_password", reason: "invalid_password" })
 
-    await expect(authorizeOf("ldap")({ username: "jdoe", password: "x" }, REQ)).rejects.toThrow(/^Identifiants LDAP invalides$/)
+    await expect(authorizeOf("ldap")({ username: "jdoe", password: "x" }, REQ)).rejects.toThrow(/^Invalid LDAP credentials$/)
     expect(error).toHaveBeenCalled()
     warn.mockRestore()
     error.mockRestore()

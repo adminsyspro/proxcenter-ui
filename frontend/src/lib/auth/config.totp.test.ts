@@ -61,6 +61,6 @@ describe("credentials authorize step-up", () => {
       credsAuthorize()({
         email: "a@b.com", password: "p", totpCode: "000000",
       }),
-    ).rejects.toThrow(/Identifiants invalides/)
+    ).rejects.toThrow(/Invalid credentials/)
   })
 })

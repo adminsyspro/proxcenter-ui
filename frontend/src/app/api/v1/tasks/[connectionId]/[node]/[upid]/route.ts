@@ -282,7 +282,7 @@ function parseMigrationProgress(logs: TaskLogEntry[]): { progress: number; messa
 
     // Switching to active sync
     if (switchingRegex.test(text)) {
-      state.message = 'Synchronisation active...'
+      state.message = 'Active sync...'
       continue
     }
 

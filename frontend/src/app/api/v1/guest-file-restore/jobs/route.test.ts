@@ -254,3 +254,23 @@ describe('GET /api/v1/guest-file-restore/jobs', () => {
     expect(checkPermissionMock).toHaveBeenCalledWith('backup.view')
   })
 })
+
+describe('guest-file-restore/jobs English error messages', () => {
+  beforeEach(() => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+  })
+
+  it('GET answers "Server error" when loading the settings throws without a message', async () => {
+    settingsMock.mockRejectedValue({})
+    const res = await callRoute(GET, { searchParams: { connId: 'c1', vmid: '100' } })
+    expect(res.status).toBe(500)
+    expect((await readJson<any>(res)).error).toBe('Server error')
+  })
+
+  it('POST answers "Server error" when loading the settings throws without a message', async () => {
+    settingsMock.mockRejectedValue({})
+    const res = await callRoute(POST, { body: body() })
+    expect(res.status).toBe(500)
+    expect((await readJson<any>(res)).error).toBe('Server error')
+  })
+})

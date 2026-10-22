@@ -73,8 +73,8 @@ export async function GET() {
       },
     })
   } catch (error: any) {
-    console.error("Erreur GET LDAP config:", error)
-    return NextResponse.json({ error: error?.message || "Erreur serveur" }, { status: 500 })
+    console.error("GET LDAP config error:", error)
+    return NextResponse.json({ error: error?.message || "Server error" }, { status: 500 })
   }
 }
 
@@ -106,10 +106,10 @@ async function handlePut(req: Request) {
 
     if (enabled) {
       if (!url) {
-        return NextResponse.json({ error: "URL LDAP requise" }, { status: 400 })
+        return NextResponse.json({ error: "LDAP URL is required" }, { status: 400 })
       }
       if (!base_dn) {
-        return NextResponse.json({ error: "Base DN requise" }, { status: 400 })
+        return NextResponse.json({ error: "Base DN is required" }, { status: 400 })
       }
     }
 
@@ -118,7 +118,7 @@ async function handlePut(req: Request) {
     const caCert = typeof ca_cert === "string" ? ca_cert.trim() : ""
     if (caCert && !/-----BEGIN CERTIFICATE-----/.test(caCert)) {
       return NextResponse.json(
-        { error: "Le certificat CA doit être au format PEM (-----BEGIN CERTIFICATE-----)" },
+        { error: "The CA certificate must be in PEM format (-----BEGIN CERTIFICATE-----)" },
         { status: 400 },
       )
     }
@@ -176,7 +176,7 @@ async function handlePut(req: Request) {
       category: "settings",
       resourceType: "ldap_config",
       resourceId: "default",
-      resourceName: "Configuration LDAP",
+      resourceName: "LDAP configuration",
       details: {
         enabled,
         url: url || null,
@@ -189,8 +189,8 @@ async function handlePut(req: Request) {
 
     return NextResponse.json({ success: true })
   } catch (error: any) {
-    console.error("Erreur PUT LDAP config:", error)
-    return NextResponse.json({ error: error?.message || "Erreur serveur" }, { status: 500 })
+    console.error("PUT LDAP config error:", error)
+    return NextResponse.json({ error: error?.message || "Server error" }, { status: 500 })
   }
 }
 

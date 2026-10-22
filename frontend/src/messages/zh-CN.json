@@ -6798,7 +6798,13 @@
     "enableIsolation": "启用隔离（{count} 个接口）",
     "enableIsolationPlural": "启用隔离（{count} 个接口）",
     "container": "容器",
-    "vm": "VM"
+    "vm": "VM",
+    "simulationWarnings": {
+      "moreThan10AffectedVMs": "同一网络中可能有超过 10 台虚拟机受到影响",
+      "noBusinessSG": "未应用业务 Security Group：仅允许到网关的流量",
+      "baseSGMissing": "Security Group sg-base-{network} 尚不存在：请先生成",
+      "networkUndetected": "无法检测虚拟机网络：请检查其网络配置"
+    }
   },
   "setup": {
     "title": "初始设置",
@@ -8038,7 +8044,23 @@
     "limitBridgeShort": "网桥 {resource}",
     "excludedTagShort": "标签 {tag}",
     "excludedLocalDisksShort": "{storages} 上的本地磁盘",
-    "excludedGuestTypeShort": "该虚拟机类型不参与均衡"
+    "excludedGuestTypeShort": "该虚拟机类型不参与均衡",
+    "migrationSteps": {
+      "pending": "等待启动...",
+      "fetchingStatus": "正在获取状态...",
+      "inProgress": "迁移进行中...",
+      "starting": "正在启动迁移...",
+      "analyzingDisks": "正在分析本地磁盘...",
+      "startingDiskCopy": "正在开始复制磁盘...",
+      "initDiskMirror": "正在初始化磁盘镜像...",
+      "copying": "正在复制数据：{detail}",
+      "finalSync": "最终同步...",
+      "liveMemory": "正在实时迁移内存...",
+      "memoryDone": "内存迁移已完成...",
+      "completed": "迁移已完成",
+      "failed": "迁移失败",
+      "failedWithReason": "迁移失败：{detail}"
+    }
   },
   "usersPage": {
     "currentRoles": "当前角色",
@@ -8426,7 +8448,8 @@
     "protectedLabel": "受保护",
     "unprotectedLabel": "未保护",
     "withSgLabel": "有安全组",
-    "logLevelShort": "日志"
+    "logLevelShort": "日志",
+    "cidrAliasIpsetHelper": "CIDR、别名或 +ipset"
   },
   "themes": {
     "categories": {

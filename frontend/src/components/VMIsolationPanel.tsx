@@ -70,8 +70,25 @@ interface ImpactSimulation {
   blocked_flows: FlowAnalysis[]
   affected_vms: AffectedVM[]
   warnings: string[]
+  // The same warnings by code, translated here (vmIsolation.simulationWarnings)
+  warning_codes?: { code: string; network?: string }[]
   required_actions: string[]
 }
+
+const SIMULATION_WARNING_CODES = new Set(['moreThan10AffectedVMs', 'noBusinessSG', 'baseSGMissing', 'networkUndetected'])
+
+// The simulation warnings in the user's language, the orchestrator's English text for an unknown code
+const translatedSimulationWarnings = (
+  simulation: ImpactSimulation,
+  t: (key: string, values?: Record<string, string>) => string
+): string[] =>
+  simulation.warnings.map((text, i) => {
+    const warning = simulation.warning_codes?.[i]
+
+    return warning && SIMULATION_WARNING_CODES.has(warning.code)
+      ? t(`vmIsolation.simulationWarnings.${warning.code}`, { network: warning.network ?? '' })
+      : text
+  })
 
 interface VMIsolationState {
   firewall_enabled: boolean
@@ -684,7 +701,7 @@ return true
 
               {/* Warnings - filter out infrastructure network warnings */}
               {simulation?.warnings && simulation.warnings.length > 0 && (() => {
-                const filteredWarnings = simulation.warnings.filter(w => {
+                const filteredWarnings = translatedSimulationWarnings(simulation, t).filter(w => {
                   // Exclude warnings about infrastructure networks
                   for (const pattern of excludePatterns) {
                     if (w.toLowerCase().includes(pattern.toLowerCase())) {

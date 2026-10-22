@@ -83,3 +83,13 @@ describe('POST /api/v1/guest-file-restore/jobs/[id]/cancel', () => {
     expect(cancelMock).not.toHaveBeenCalled()
   })
 })
+
+describe('POST /api/v1/guest-file-restore/jobs/[id]/cancel server error', () => {
+  it('answers "Server error" when the lookup throws without a message', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    findUniqueMock.mockRejectedValue({})
+    const res = await callRoute(POST, { params: { id: 'job1' }, method: 'POST' })
+    expect(res.status).toBe(500)
+    expect(((await readJson(res)) as any).error).toBe('Server error')
+  })
+})

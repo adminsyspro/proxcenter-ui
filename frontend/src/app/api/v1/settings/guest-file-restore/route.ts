@@ -30,8 +30,8 @@ export async function GET() {
   try {
     return NextResponse.json(payload(await loadGuestFileRestoreSettings()))
   } catch (error: any) {
-    console.error('Erreur GET settings/guest-file-restore:', error)
-    return NextResponse.json({ error: error?.message || 'Erreur serveur' }, { status: 500 })
+    console.error('GET settings/guest-file-restore error:', error)
+    return NextResponse.json({ error: error?.message || 'Server error' }, { status: 500 })
   }
 }
 
@@ -72,8 +72,8 @@ async function handlePut(request: Request) {
 
     return NextResponse.json(payload(saved))
   } catch (error: any) {
-    console.error('Erreur PUT settings/guest-file-restore:', error)
-    return NextResponse.json({ error: error?.message || 'Erreur serveur' }, { status: 500 })
+    console.error('PUT settings/guest-file-restore error:', error)
+    return NextResponse.json({ error: error?.message || 'Server error' }, { status: 500 })
   }
 }
 

@@ -66,7 +66,7 @@ describe("PATCH /users/[id] — external-IdP password guard", () => {
       })
       expect(res.status).toBe(403)
       const json = await readJson<{ error: string }>(res)
-      expect(json?.error).toMatch(/fournisseur d'identité/i)
+      expect(json?.error).toMatch(/identity provider/i)
       expect(userUpdateMock).not.toHaveBeenCalled()
       expect(hashPasswordMock).not.toHaveBeenCalled()
     },

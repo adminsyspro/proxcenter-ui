@@ -6794,7 +6794,13 @@
     "enableIsolation": "Enable isolation ({count} interface)",
     "enableIsolationPlural": "Enable isolation ({count} interfaces)",
     "container": "Container",
-    "vm": "VM"
+    "vm": "VM",
+    "simulationWarnings": {
+      "moreThan10AffectedVMs": "More than 10 VMs in the same network may be affected",
+      "noBusinessSG": "No business Security Group applied: only traffic to the gateway will be allowed",
+      "baseSGMissing": "Security Group sg-base-{network} does not exist yet: generate it first",
+      "networkUndetected": "Unable to detect the VM network: check its network configuration"
+    }
   },
   "setup": {
     "title": "Initial Setup",
@@ -8034,7 +8040,23 @@
     "limitBridgeShort": "Bridge {resource}",
     "excludedTagShort": "Tag {tag}",
     "excludedLocalDisksShort": "Local disks on {storages}",
-    "excludedGuestTypeShort": "Guest type not balanced"
+    "excludedGuestTypeShort": "Guest type not balanced",
+    "migrationSteps": {
+      "pending": "Waiting to start...",
+      "fetchingStatus": "Fetching status...",
+      "inProgress": "Migration in progress...",
+      "starting": "Starting migration...",
+      "analyzingDisks": "Analyzing local disks...",
+      "startingDiskCopy": "Starting disk copy...",
+      "initDiskMirror": "Initializing disk mirror...",
+      "copying": "Copying data: {detail}",
+      "finalSync": "Final sync...",
+      "liveMemory": "Live memory migration...",
+      "memoryDone": "Memory migration completed...",
+      "completed": "Migration completed",
+      "failed": "Migration failed",
+      "failedWithReason": "Migration failed: {detail}"
+    }
   },
   "usersPage": {
     "currentRoles": "Current roles",
@@ -8422,7 +8444,8 @@
     "protectedLabel": "Protected",
     "unprotectedLabel": "Unprotected",
     "withSgLabel": "With SG",
-    "logLevelShort": "Log"
+    "logLevelShort": "Log",
+    "cidrAliasIpsetHelper": "CIDR, alias or +ipset"
   },
   "themes": {
     "categories": {

@@ -6794,7 +6794,13 @@
     "enableIsolation": "Activar aislamiento ({count} interfaz)",
     "enableIsolationPlural": "Activar aislamiento ({count} interfaces)",
     "container": "Contenedor",
-    "vm": "VM"
+    "vm": "VM",
+    "simulationWarnings": {
+      "moreThan10AffectedVMs": "Más de 10 VMs de la misma red pueden verse afectadas",
+      "noBusinessSG": "Ningún Security Group de negocio aplicado: solo se permitirá el tráfico hacia la puerta de enlace",
+      "baseSGMissing": "El Security Group sg-base-{network} aún no existe: genérelo primero",
+      "networkUndetected": "No se puede detectar la red de la VM: compruebe su configuración de red"
+    }
   },
   "setup": {
     "title": "Configuración inicial",
@@ -8034,7 +8040,23 @@
     "limitBridgeShort": "Bridge {resource}",
     "excludedTagShort": "Etiqueta {tag}",
     "excludedLocalDisksShort": "Discos locales en {storages}",
-    "excludedGuestTypeShort": "Tipo de invitado no equilibrado"
+    "excludedGuestTypeShort": "Tipo de invitado no equilibrado",
+    "migrationSteps": {
+      "pending": "Esperando para iniciar...",
+      "fetchingStatus": "Obteniendo el estado...",
+      "inProgress": "Migración en curso...",
+      "starting": "Iniciando la migración...",
+      "analyzingDisks": "Analizando los discos locales...",
+      "startingDiskCopy": "Iniciando la copia de discos...",
+      "initDiskMirror": "Inicializando el espejo de disco...",
+      "copying": "Copiando datos: {detail}",
+      "finalSync": "Sincronización final...",
+      "liveMemory": "Migración en vivo de la memoria...",
+      "memoryDone": "Migración de la memoria completada...",
+      "completed": "Migración completada",
+      "failed": "Migración fallida",
+      "failedWithReason": "Migración fallida: {detail}"
+    }
   },
   "usersPage": {
     "currentRoles": "Roles actuales",
@@ -8422,7 +8444,8 @@
     "protectedLabel": "Protegido",
     "unprotectedLabel": "No protegido",
     "withSgLabel": "Con SG",
-    "logLevelShort": "Log"
+    "logLevelShort": "Log",
+    "cidrAliasIpsetHelper": "CIDR, alias o +ipset"
   },
   "themes": {
     "categories": {

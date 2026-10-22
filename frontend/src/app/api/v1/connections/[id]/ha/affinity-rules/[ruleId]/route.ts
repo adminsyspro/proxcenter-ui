@@ -35,7 +35,7 @@ async function getHandler(
     return NextResponse.json({ data: rule })
   } catch (e: any) {
     if (isNotFound(e)) {
-      return NextResponse.json({ error: 'Règle d\'affinité HA non trouvée' }, { status: 404 })
+      return NextResponse.json({ error: 'HA affinity rule not found' }, { status: 404 })
     }
 
     console.error('Error fetching HA affinity rule:', e)
@@ -61,7 +61,7 @@ async function putHandler(
     const body = await req.json()
 
     if (body.type !== undefined && !RULE_TYPES.has(body.type)) {
-      return NextResponse.json({ error: 'Le type de règle doit être node-affinity ou resource-affinity' }, { status: 400 })
+      return NextResponse.json({ error: 'Rule type must be node-affinity or resource-affinity' }, { status: 400 })
     }
 
     const conn = await getConnectionById(id)
@@ -78,7 +78,7 @@ async function putHandler(
         ruleType = existing?.type
       } catch (e: any) {
         if (isNotFound(e)) {
-          return NextResponse.json({ error: 'Règle d\'affinité HA non trouvée' }, { status: 404 })
+          return NextResponse.json({ error: 'HA affinity rule not found' }, { status: 404 })
         }
 
         throw e
@@ -136,7 +136,7 @@ async function putHandler(
 
     return NextResponse.json({ 
       data: result,
-      message: 'Règle d\'affinité HA mise à jour avec succès'
+      message: 'HA affinity rule updated'
     })
   } catch (e: any) {
     console.error('Error updating HA affinity rule:', e)
@@ -167,7 +167,7 @@ async function deleteHandler(
 
     return NextResponse.json({ 
       data: null,
-      message: 'Règle d\'affinité HA supprimée avec succès'
+      message: 'HA affinity rule deleted'
     })
   } catch (e: any) {
     console.error('Error deleting HA affinity rule:', e)

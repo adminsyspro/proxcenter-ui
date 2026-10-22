@@ -40,7 +40,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       : await findUserInTenant(id, tenantId)
 
     if (!user) {
-      return NextResponse.json({ error: "Utilisateur non trouvé" }, { status: 404 })
+      return NextResponse.json({ error: "User not found" }, { status: 404 })
     }
 
     return NextResponse.json({
@@ -57,8 +57,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       },
     })
   } catch (error: any) {
-    console.error("Erreur GET user:", error)
-    return NextResponse.json({ error: error?.message || "Erreur serveur" }, { status: 500 })
+    console.error("GET user error:", error)
+    return NextResponse.json({ error: error?.message || "Server error" }, { status: 500 })
   }
 }
 
@@ -85,7 +85,7 @@ async function handlePatch(req: Request, { params }: { params: Promise<{ id: str
     // own account. Re-enabling needs another admin.
     if (isSelf && enabled === false) {
       return NextResponse.json(
-        { error: "Vous ne pouvez pas désactiver votre propre compte" },
+        { error: "You cannot disable your own account" },
         { status: 400 }
       )
     }
@@ -103,7 +103,7 @@ async function handlePatch(req: Request, { params }: { params: Promise<{ id: str
       ? await prisma.user.findUnique({ where: { id } })
       : await findUserInTenant(id, tenantId)
     if (!user) {
-      return NextResponse.json({ error: "Utilisateur non trouvé" }, { status: 404 })
+      return NextResponse.json({ error: "User not found" }, { status: 404 })
     }
 
     // Build the Prisma update payload from whitelisted fields only.
@@ -115,14 +115,14 @@ async function handlePatch(req: Request, { params }: { params: Promise<{ id: str
     // bypasses SSO/MFA. Covers both admin edits and self-service profile changes.
     if (password && (user.authProvider === "ldap" || user.authProvider === "oidc")) {
       return NextResponse.json(
-        { error: "Le mot de passe est géré par le fournisseur d'identité (OIDC/LDAP) et ne peut pas être défini ici." },
+        { error: "The password is managed by the identity provider (OIDC/LDAP) and cannot be set here." },
         { status: 403 }
       )
     }
     if (password) {
       if (password.length < 8) {
         return NextResponse.json(
-          { error: "Le mot de passe doit contenir au moins 8 caractères" },
+          { error: "Password must be at least 8 characters" },
           { status: 400 }
         )
       }
@@ -217,7 +217,7 @@ async function handlePatch(req: Request, { params }: { params: Promise<{ id: str
         memberships.some(m => m.tenantId !== DEFAULT_TENANT_ID)
       ) {
         return NextResponse.json(
-          { error: "Ce rôle ne peut être assigné que dans le tenant provider (default)" },
+          { error: "This role can only be assigned in the provider tenant (default)" },
           { status: 400 }
         )
       }
@@ -304,7 +304,7 @@ async function handlePatch(req: Request, { params }: { params: Promise<{ id: str
     const wantsTokenDeletion = deleteApiTokens === true
 
     if (Object.keys(data).length === 0 && !tenantsChanged && !rolesChanged && !wantsTokenDeletion) {
-      return NextResponse.json({ error: "Aucune modification fournie" }, { status: 400 })
+      return NextResponse.json({ error: "No changes provided" }, { status: 400 })
     }
 
     if (Object.keys(data).length > 0) data.updatedAt = new Date()
@@ -413,8 +413,8 @@ async function handlePatch(req: Request, { params }: { params: Promise<{ id: str
       },
     })
   } catch (error: any) {
-    console.error("Erreur PATCH user:", error)
-    return NextResponse.json({ error: error?.message || "Erreur serveur" }, { status: 500 })
+    console.error("PATCH user error:", error)
+    return NextResponse.json({ error: error?.message || "Server error" }, { status: 500 })
   }
 }
 
@@ -441,13 +441,13 @@ async function handleDelete(req: Request, { params }: { params: Promise<{ id: st
       ? await prisma.user.findUnique({ where: { id } })
       : await findUserInTenant(id, tenantId)
     if (!user) {
-      return NextResponse.json({ error: "Utilisateur non trouvé" }, { status: 404 })
+      return NextResponse.json({ error: "User not found" }, { status: 404 })
     }
 
     // Empêcher la suppression de son propre compte
     if (user.id === session?.user?.id) {
       return NextResponse.json(
-        { error: "Vous ne pouvez pas supprimer votre propre compte" },
+        { error: "You cannot delete your own account" },
         { status: 400 }
       )
     }
@@ -525,8 +525,8 @@ async function handleDelete(req: Request, { params }: { params: Promise<{ id: st
 
     return NextResponse.json({ success: true, api_tokens_deleted: tokensDeleted?.count ?? 0 })
   } catch (error: any) {
-    console.error("Erreur DELETE user:", error)
-    return NextResponse.json({ error: error?.message || "Erreur serveur" }, { status: 500 })
+    console.error("DELETE user error:", error)
+    return NextResponse.json({ error: error?.message || "Server error" }, { status: 500 })
   }
 }
 

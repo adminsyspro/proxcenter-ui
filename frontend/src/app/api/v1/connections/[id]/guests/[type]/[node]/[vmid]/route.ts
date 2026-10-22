@@ -140,7 +140,7 @@ async function handler(
     return NextResponse.json({
       success: true,
       data: result,
-      message: `VM ${vmid} supprimée avec succès`,
+      message: `VM ${vmid} deleted`,
       ...(ipamWarning ? { warning: ipamWarning } : {}),
     })
   } catch (e: any) {

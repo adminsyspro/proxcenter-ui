@@ -151,7 +151,7 @@ export async function GET(req: Request) {
                   }
                 }
               } catch (nodeErr) {
-                console.error(`Erreur nodes/tasks pour ${conn.name}:`, nodeErr)
+                console.error(`nodes/tasks error for ${conn.name}:`, nodeErr)
               }
             }
 
@@ -288,7 +288,7 @@ export async function GET(req: Request) {
             }
           }
         } catch (e) {
-          console.error(`Erreur connexion ${conn.name}:`, e)
+          console.error(`Connection error ${conn.name}:`, e)
         }
       })
     )
@@ -342,7 +342,7 @@ export async function GET(req: Request) {
         }
       } catch (e) {
         // Attribution is a bonus on top of the PVE feed, never a reason to fail it.
-        console.error('Erreur attribution events:', e)
+        console.error('Events attribution error:', e)
       }
     }
 
@@ -355,7 +355,7 @@ export async function GET(req: Request) {
       }
     })
   } catch (error: any) {
-    console.error('Erreur API events:', error)
+    console.error('API events error:', error)
     
 return NextResponse.json(
       { error: error?.message || 'Server error' },

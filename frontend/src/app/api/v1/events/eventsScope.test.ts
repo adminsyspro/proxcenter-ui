@@ -213,3 +213,47 @@ describe("GET /api/v1/events scope routing", () => {
     expect(getConnByIdMock).toHaveBeenCalledWith("conn-msp-1", "msp-1")
   })
 })
+
+describe("events English error logs and messages", () => {
+  beforeEach(() => {
+    getInfraMock.mockResolvedValue({ kind: "provider" })
+    globalFindMany.mockResolvedValue([{ id: "p1", name: "PVE 1", type: "pve" }])
+    getConnByIdMock.mockResolvedValue({ baseUrl: "https://pve", apiToken: "t" })
+  })
+
+  it("logs the per-node fallback failure in English", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {})
+    pveFetchMock.mockImplementation(async (_connection: any, path: string) => {
+      if (path === "/cluster/tasks" || path === "/nodes") throw new Error("down")
+      return []
+    })
+
+    const { GET } = await import("./route")
+    const res = await callRoute(GET, { method: "GET" })
+
+    expect(res.status).toBe(200)
+    expect(errorSpy).toHaveBeenCalledWith("nodes/tasks error for PVE 1:", expect.any(Error))
+  })
+
+  it("logs a connection failure in English and keeps answering", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {})
+    getConnByIdMock.mockRejectedValue(new Error("gone"))
+
+    const { GET } = await import("./route")
+    const res = await callRoute(GET, { method: "GET" })
+
+    expect(res.status).toBe(200)
+    expect(errorSpy).toHaveBeenCalledWith("Connection error PVE 1:", expect.any(Error))
+  })
+
+  it("answers 'Server error' when an unexpected failure has no message", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {})
+    getInfraMock.mockRejectedValue({})
+
+    const { GET } = await import("./route")
+    const res = await callRoute(GET, { method: "GET" })
+
+    expect(res.status).toBe(500)
+    expect((await res.json()).error).toBe("Server error")
+  })
+})

@@ -149,8 +149,8 @@ export async function GET() {
       },
     })
   } catch (error: any) {
-    console.error("Erreur GET users:", error)
-    return NextResponse.json({ error: error?.message || "Erreur serveur" }, { status: 500 })
+    console.error("GET users error:", error)
+    return NextResponse.json({ error: error?.message || "Server error" }, { status: 500 })
   }
 }
 
@@ -165,19 +165,19 @@ async function handlePost(req: Request) {
     const { email, password, name, tenantIds } = body
 
     if (!email || !password) {
-      return NextResponse.json({ error: "Email et mot de passe requis" }, { status: 400 })
+      return NextResponse.json({ error: "Email and password are required" }, { status: 400 })
     }
 
     // Valider l'email
     const emailRegex = /^[^\s@]+@[^\s@][^\s@.]*\.[^\s@]+$/
     if (email.length > 254 || !emailRegex.test(email)) {
-      return NextResponse.json({ error: "Format d'email invalide" }, { status: 400 })
+      return NextResponse.json({ error: "Invalid email format" }, { status: 400 })
     }
 
     // Valider le mot de passe
     if (password.length < 8) {
       return NextResponse.json(
-        { error: "Le mot de passe doit contenir au moins 8 caractères" },
+        { error: "Password must be at least 8 characters" },
         { status: 400 }
       )
     }
@@ -190,7 +190,7 @@ async function handlePost(req: Request) {
       select: { id: true },
     })
     if (existing) {
-      return NextResponse.json({ error: "Cet email est déjà utilisé" }, { status: 400 })
+      return NextResponse.json({ error: "This email is already in use" }, { status: 400 })
     }
 
     // Hasher le mot de passe
@@ -213,7 +213,7 @@ async function handlePost(req: Request) {
       initialTenantIds = (tenantIds as unknown[]).filter((x): x is string => typeof x === "string" && x.length > 0)
       if (initialTenantIds.length === 0) {
         return NextResponse.json(
-          { error: "Au moins un tenant doit être sélectionné" },
+          { error: "At least one tenant must be selected" },
           { status: 400 }
         )
       }
@@ -224,7 +224,7 @@ async function handlePost(req: Request) {
         select: { id: true },
       })
       if (known.length !== initialTenantIds.length) {
-        return NextResponse.json({ error: "Un ou plusieurs tenants sont introuvables" }, { status: 400 })
+        return NextResponse.json({ error: "One or more tenants were not found" }, { status: 400 })
       }
     } else {
       initialTenantIds = [callerTenantId]
@@ -311,8 +311,8 @@ async function handlePost(req: Request) {
       },
     })
   } catch (error: any) {
-    console.error("Erreur POST users:", error)
-    return NextResponse.json({ error: error?.message || "Erreur serveur" }, { status: 500 })
+    console.error("POST users error:", error)
+    return NextResponse.json({ error: error?.message || "Server error" }, { status: 500 })
   }
 }
 

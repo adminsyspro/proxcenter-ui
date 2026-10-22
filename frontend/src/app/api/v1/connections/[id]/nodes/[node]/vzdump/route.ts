@@ -109,7 +109,7 @@ async function handler(
     return NextResponse.json({
       success: true,
       data: result,
-      message: `Sauvegarde de VM ${vmid} lancée`
+      message: `Backup of VM ${vmid} started`
     })
   } catch (e: any) {
     console.error('Error creating backup:', e)

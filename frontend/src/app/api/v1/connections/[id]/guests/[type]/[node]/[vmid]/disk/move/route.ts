@@ -163,7 +163,7 @@ async function handler(
     return NextResponse.json({
       success: true,
       data: result,
-      message: `Déplacement du disque ${disk} vers ${storage} lancé`
+      message: `Move of disk ${disk} to ${storage} started`
     })
   } catch (e: any) {
     const excluded = licenseExcludedResponse(e)

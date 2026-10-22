@@ -78,7 +78,7 @@ export async function POST(req: Request) {
       category: "settings",
       resourceType: "oidc_config",
       resourceId: "default",
-      resourceName: "Configuration OIDC/SSO",
+      resourceName: "OIDC/SSO configuration",
       details: {
         issuer_url,
         discoveredIssuer: data.issuer,
@@ -110,7 +110,7 @@ export async function POST(req: Request) {
         category: "settings",
         resourceType: "oidc_config",
         resourceId: "default",
-        resourceName: "Configuration OIDC/SSO",
+        resourceName: "OIDC/SSO configuration",
         details: { error: error?.message },
         status: "failure",
         errorMessage: error?.message,

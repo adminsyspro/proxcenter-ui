@@ -53,11 +53,11 @@ async function postHandler(
 
     // Valider les paramètres requis
     if (!body.group) {
-      return NextResponse.json({ error: 'Le nom du groupe est requis' }, { status: 400 })
+      return NextResponse.json({ error: 'Group name is required' }, { status: 400 })
     }
 
     if (!body.nodes) {
-      return NextResponse.json({ error: 'Les nœuds sont requis' }, { status: 400 })
+      return NextResponse.json({ error: 'Nodes are required' }, { status: 400 })
     }
 
     // Construire les paramètres
@@ -86,7 +86,7 @@ async function postHandler(
 
     return NextResponse.json({ 
       data: result,
-      message: 'Groupe HA créé avec succès'
+      message: 'HA group created'
     })
   } catch (e: any) {
     console.error('Error creating HA group:', e)

@@ -22,7 +22,7 @@ export async function GET(req: Request, { params }: Params) {
     const rule = await prisma.alertRule.findFirst({ where: { id, tenantId } })
 
     if (!rule) {
-      return NextResponse.json({ error: 'Règle non trouvée' }, { status: 404 })
+      return NextResponse.json({ error: 'Rule not found' }, { status: 404 })
     }
 
     return NextResponse.json({
@@ -43,10 +43,10 @@ export async function GET(req: Request, { params }: Params) {
       },
     })
   } catch (error: any) {
-    console.error('Erreur GET alert-rules/[id]:', error)
+    console.error('GET alert-rules/[id] error:', error)
 
 return NextResponse.json(
-      { error: error?.message || 'Erreur serveur' },
+      { error: error?.message || 'Server error' },
       { status: 500 }
     )
   }
@@ -68,28 +68,28 @@ async function handlePut(req: Request, { params }: Params) {
     const existing = await prisma.alertRule.findFirst({ where: { id, tenantId }, select: { id: true } })
 
     if (!existing) {
-      return NextResponse.json({ error: 'Règle non trouvée' }, { status: 404 })
+      return NextResponse.json({ error: 'Rule not found' }, { status: 404 })
     }
 
     // Validation
     if (!name?.trim()) {
-      return NextResponse.json({ error: 'Le nom est requis' }, { status: 400 })
+      return NextResponse.json({ error: 'Name is required' }, { status: 400 })
     }
 
     if (!metric || !METRIC_TYPES[metric as keyof typeof METRIC_TYPES]) {
-      return NextResponse.json({ error: 'Métrique invalide' }, { status: 400 })
+      return NextResponse.json({ error: 'Invalid metric' }, { status: 400 })
     }
 
     if (!operator || !OPERATORS[operator as keyof typeof OPERATORS]) {
-      return NextResponse.json({ error: 'Opérateur invalide' }, { status: 400 })
+      return NextResponse.json({ error: 'Invalid operator' }, { status: 400 })
     }
 
     if (threshold === undefined || threshold === null || Number.isNaN(Number(threshold))) {
-      return NextResponse.json({ error: 'Seuil invalide' }, { status: 400 })
+      return NextResponse.json({ error: 'Invalid threshold' }, { status: 400 })
     }
 
     if (!severity || !SEVERITIES.includes(severity)) {
-      return NextResponse.json({ error: 'Sévérité invalide' }, { status: 400 })
+      return NextResponse.json({ error: 'Invalid severity' }, { status: 400 })
     }
 
     await prisma.alertRule.update({
@@ -109,12 +109,12 @@ async function handlePut(req: Request, { params }: Params) {
       },
     })
 
-    return NextResponse.json({ message: 'Règle mise à jour' })
+    return NextResponse.json({ message: 'Rule updated' })
   } catch (error: any) {
-    console.error('Erreur PUT alert-rules/[id]:', error)
+    console.error('PUT alert-rules/[id] error:', error)
 
 return NextResponse.json(
-      { error: error?.message || 'Erreur serveur' },
+      { error: error?.message || 'Server error' },
       { status: 500 }
     )
   }
@@ -138,15 +138,15 @@ async function handlePatch(req: Request, { params }: Params) {
     })
 
     if (result.count === 0) {
-      return NextResponse.json({ error: 'Règle non trouvée' }, { status: 404 })
+      return NextResponse.json({ error: 'Rule not found' }, { status: 404 })
     }
 
-    return NextResponse.json({ message: enabled ? 'Règle activée' : 'Règle désactivée' })
+    return NextResponse.json({ message: enabled ? 'Rule enabled' : 'Rule disabled' })
   } catch (error: any) {
-    console.error('Erreur PATCH alert-rules/[id]:', error)
+    console.error('PATCH alert-rules/[id] error:', error)
 
 return NextResponse.json(
-      { error: error?.message || 'Erreur serveur' },
+      { error: error?.message || 'Server error' },
       { status: 500 }
     )
   }
@@ -166,15 +166,15 @@ async function handleDelete(req: Request, { params }: Params) {
     const result = await prisma.alertRule.deleteMany({ where: { id, tenantId } })
 
     if (result.count === 0) {
-      return NextResponse.json({ error: 'Règle non trouvée' }, { status: 404 })
+      return NextResponse.json({ error: 'Rule not found' }, { status: 404 })
     }
 
-    return NextResponse.json({ message: 'Règle supprimée' })
+    return NextResponse.json({ message: 'Rule deleted' })
   } catch (error: any) {
-    console.error('Erreur DELETE alert-rules/[id]:', error)
+    console.error('DELETE alert-rules/[id] error:', error)
 
 return NextResponse.json(
-      { error: error?.message || 'Erreur serveur' },
+      { error: error?.message || 'Server error' },
       { status: 500 }
     )
   }

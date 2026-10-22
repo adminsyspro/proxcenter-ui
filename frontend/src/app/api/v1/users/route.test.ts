@@ -319,3 +319,56 @@ describe("GET /api/v1/users — active_session_count", () => {
     expect(sessionGroupByMock).not.toHaveBeenCalled()
   })
 })
+
+describe("/api/v1/users English error messages", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.spyOn(console, "error").mockImplementation(() => {})
+    checkPermissionMock.mockResolvedValue(null)
+    getCurrentTenantIdMock.mockResolvedValue("default")
+    userFindUniqueMock.mockResolvedValue(null)
+    getServerLicenseMock.mockResolvedValue({ enterprise: true, edition: "enterprise", licensed: true, features: [], resolved: true })
+  })
+
+  async function expectError(res: Response, status: number, message: string) {
+    expect(res.status).toBe(status)
+    expect((await readJson<any>(res))?.error).toBe(message)
+  }
+
+  it("GET 500 'Server error' when the permission check throws without a message", async () => {
+    checkPermissionMock.mockRejectedValue({})
+    const GET = await importGET()
+    await expectError(await GET(), 500, "Server error")
+  })
+
+  it("POST 400 'Email and password are required'", async () => {
+    await expectError(await createUser({ password: undefined }), 400, "Email and password are required")
+  })
+
+  it("POST 400 'Invalid email format'", async () => {
+    await expectError(await createUser({ email: "not-an-email" }), 400, "Invalid email format")
+  })
+
+  it("POST 400 'Password must be at least 8 characters'", async () => {
+    await expectError(await createUser({ password: "short" }), 400, "Password must be at least 8 characters")
+  })
+
+  it("POST 400 'This email is already in use'", async () => {
+    userFindUniqueMock.mockResolvedValue({ id: "existing" })
+    await expectError(await createUser(), 400, "This email is already in use")
+  })
+
+  it("POST 400 'At least one tenant must be selected'", async () => {
+    await expectError(await createUser({ tenantIds: [] }), 400, "At least one tenant must be selected")
+  })
+
+  it("POST 400 'One or more tenants were not found'", async () => {
+    tenantFindManyMock.mockResolvedValue([{ id: "t1" }])
+    await expectError(await createUser({ tenantIds: ["t1", "t2"] }), 400, "One or more tenants were not found")
+  })
+
+  it("POST 500 'Server error' when the transaction throws without a message", async () => {
+    transactionMock.mockRejectedValueOnce({})
+    await expectError(await createUser(), 500, "Server error")
+  })
+})

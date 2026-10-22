@@ -215,7 +215,7 @@ describe('PATCH /users/[id] — deleteApiTokens', () => {
     expect(audited.details).not.toHaveProperty('apiTokensDeleted')
   })
 
-  it('accepts a PATCH that carries only deleteApiTokens, instead of 400 "Aucune modification fournie"', async () => {
+  it('accepts a PATCH that carries only deleteApiTokens, instead of 400 "No changes provided"', async () => {
     const { PATCH } = await importRoute()
     const res = await callRoute(PATCH as any, {
       method: 'PATCH',

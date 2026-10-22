@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
     const session = await getServerSession(authOptions)
 
     if (!session?.user) {
-      return NextResponse.json({ error: "Non autorisé" }, { status: 401 })
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
     const tenantId = await getCurrentTenantId()
@@ -208,7 +208,7 @@ export async function GET(req: NextRequest) {
     console.error("GET /api/v1/rbac/assignments error:", error)
 
 return NextResponse.json(
-      { error: error.message || "Erreur serveur" },
+      { error: error.message || "Server error" },
       { status: 500 }
     )
   }
@@ -223,20 +223,20 @@ async function handlePost(req: NextRequest) {
     const session = await getServerSession(authOptions)
 
     if (!session?.user) {
-      return NextResponse.json({ error: "Non autorisé" }, { status: 401 })
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
     const tenantId = await getCurrentTenantId()
 
     if (!(await hasPermission({ userId: session.user.id, permission: "admin.rbac", tenantId }))) {
-      return NextResponse.json({ error: "Droits administrateur requis" }, { status: 403 })
+      return NextResponse.json({ error: "Admin rights required" }, { status: 403 })
     }
 
     const body = await req.json()
     const { user_id, role_id, scope_type, scope_target, expires_at, tenant_id: bodyTenantId } = body
 
     if (!user_id || !role_id) {
-      return NextResponse.json({ error: "user_id et role_id requis" }, { status: 400 })
+      return NextResponse.json({ error: "user_id and role_id are required" }, { status: 400 })
     }
 
     // Provider-tenant admins may target any tenant by passing `tenant_id` in
@@ -255,7 +255,7 @@ async function handlePost(req: NextRequest) {
         select: { id: true, enabled: true },
       })
       if (!tenantExists || !tenantExists.enabled) {
-        return NextResponse.json({ error: "Tenant introuvable" }, { status: 404 })
+        return NextResponse.json({ error: "Tenant not found" }, { status: 404 })
       }
     }
 
@@ -270,7 +270,7 @@ async function handlePost(req: NextRequest) {
     const tenantForbiddenRoles = [...PROVIDER_ONLY_ROLE_IDS, ...PROTECTED_ROLE_IDS] as readonly string[]
     if (targetTenantId !== DEFAULT_TENANT_ID && tenantForbiddenRoles.includes(role_id)) {
       return NextResponse.json(
-        { error: "Ce rôle ne peut être assigné que dans le tenant provider (default)" },
+        { error: "This role can only be assigned in the provider tenant (default)" },
         { status: 400 }
       )
     }
@@ -279,7 +279,7 @@ async function handlePost(req: NextRequest) {
     // RBAC assignments. Another admin must do it.
     if (user_id === session.user.id) {
       return NextResponse.json(
-        { error: "Vous ne pouvez pas modifier vos propres rôles" },
+        { error: "You cannot change your own roles" },
         { status: 400 }
       )
     }
@@ -291,10 +291,10 @@ async function handlePost(req: NextRequest) {
     const callerIsSuperAdmin = await isUserSuperAdmin(session.user.id)
     if (!callerIsSuperAdmin) {
       if ((PROTECTED_ROLE_IDS as readonly string[]).includes(role_id)) {
-        return NextResponse.json({ error: "Rôle non trouvé" }, { status: 404 })
+        return NextResponse.json({ error: "Role not found" }, { status: 404 })
       }
       if (await isUserProtected(user_id)) {
-        return NextResponse.json({ error: "Utilisateur non trouvé" }, { status: 404 })
+        return NextResponse.json({ error: "User not found" }, { status: 404 })
       }
     }
 
@@ -314,7 +314,7 @@ async function handlePost(req: NextRequest) {
     })
 
     if (!user) {
-      return NextResponse.json({ error: "Utilisateur non trouvé" }, { status: 404 })
+      return NextResponse.json({ error: "User not found" }, { status: 404 })
     }
 
     // Tenant membership check: refuse to bind a role to a tenant the target
@@ -332,7 +332,7 @@ async function handlePost(req: NextRequest) {
       })
       if (!membership) {
         return NextResponse.json(
-          { error: "L'utilisateur n'est pas membre de ce tenant" },
+          { error: "The user is not a member of this tenant" },
           { status: 400 }
         )
       }
@@ -344,7 +344,7 @@ async function handlePost(req: NextRequest) {
     const role = await prisma.rbacRole.findUnique({ where: { id: role_id }, select: { id: true, name: true, tenantId: true, permissions: { select: { permissionId: true } } } })
 
     if (!role || (role.tenantId !== null && role.tenantId !== targetTenantId)) {
-      return NextResponse.json({ error: "Rôle non trouvé" }, { status: 404 })
+      return NextResponse.json({ error: "Role not found" }, { status: 404 })
     }
 
     if (!callerIsSuperAdmin && roleHasSensitiveNicPermissions(role)) {
@@ -359,7 +359,7 @@ async function handlePost(req: NextRequest) {
 
     if (existingRole) {
       return NextResponse.json({
-        error: `L'utilisateur a déjà le rôle "${existingRole.role.name}". Supprimez-le d'abord ou modifiez l'assignation existante.`
+        error: `The user already has the role "${existingRole.role.name}". Remove it first or edit the existing assignment.`
       }, { status: 400 })
     }
 
@@ -378,7 +378,7 @@ async function handlePost(req: NextRequest) {
     })
 
     if (existingAssignment) {
-      return NextResponse.json({ error: "Cette assignation existe déjà" }, { status: 400 })
+      return NextResponse.json({ error: "This assignment already exists" }, { status: 400 })
     }
 
     const id = `assign_${nanoid(12)}`
@@ -435,7 +435,7 @@ async function handlePost(req: NextRequest) {
     console.error("POST /api/v1/rbac/assignments error:", error)
 
 return NextResponse.json(
-      { error: error.message || "Erreur serveur" },
+      { error: error.message || "Server error" },
       { status: 500 }
     )
   }

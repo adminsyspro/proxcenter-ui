@@ -57,8 +57,8 @@ export async function GET() {
     const config = await loadSyslogConfig(true)
     return NextResponse.json(payload(config))
   } catch (error: any) {
-    console.error('Erreur GET settings/syslog:', error)
-    return NextResponse.json({ error: error?.message || 'Erreur serveur' }, { status: 500 })
+    console.error('GET settings/syslog error:', error)
+    return NextResponse.json({ error: error?.message || 'Server error' }, { status: 500 })
   }
 }
 
@@ -107,8 +107,8 @@ async function handlePut(request: Request) {
 
     return NextResponse.json(payload(saved))
   } catch (error: any) {
-    console.error('Erreur PUT settings/syslog:', error)
-    return NextResponse.json({ error: error?.message || 'Erreur serveur' }, { status: 500 })
+    console.error('PUT settings/syslog error:', error)
+    return NextResponse.json({ error: error?.message || 'Server error' }, { status: 500 })
   }
 }
 

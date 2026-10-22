@@ -63,8 +63,8 @@ async function getHandler(request: Request) {
     const reconciled = await reconcileStaleJobs(rows)
     return NextResponse.json({ data: reconciled.map(toJobDto) })
   } catch (error: any) {
-    console.error('Erreur GET guest-file-restore/jobs:', error)
-    return NextResponse.json({ error: error?.message || 'Erreur serveur' }, { status: 500 })
+    console.error('GET guest-file-restore/jobs error:', error)
+    return NextResponse.json({ error: error?.message || 'Server error' }, { status: 500 })
   }
 }
 
@@ -193,8 +193,8 @@ async function postHandler(request: Request) {
 
     return NextResponse.json({ data: { id: row.id } }, { status: 202 })
   } catch (error: any) {
-    console.error('Erreur POST guest-file-restore/jobs:', error)
-    return NextResponse.json({ error: error?.message || 'Erreur serveur' }, { status: 500 })
+    console.error('POST guest-file-restore/jobs error:', error)
+    return NextResponse.json({ error: error?.message || 'Server error' }, { status: 500 })
   }
 }
 

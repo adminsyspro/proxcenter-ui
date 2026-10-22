@@ -18,6 +18,8 @@ export interface MigrationProgress {
   status: string
   progress: number
   message: string
+  step?: string
+  step_detail?: string
   started_at: string
 }
 

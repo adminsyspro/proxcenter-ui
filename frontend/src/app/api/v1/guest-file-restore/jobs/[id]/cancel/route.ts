@@ -61,8 +61,8 @@ async function handler(_request: Request, ctx: { params: Promise<{ id: string }>
     })
     return NextResponse.json({ data: toJobDto(updated) })
   } catch (error: any) {
-    console.error('Erreur POST guest-file-restore/jobs/[id]/cancel:', error)
-    return NextResponse.json({ error: error?.message || 'Erreur serveur' }, { status: 500 })
+    console.error('POST guest-file-restore/jobs/[id]/cancel error:', error)
+    return NextResponse.json({ error: error?.message || 'Server error' }, { status: 500 })
   }
 }
 

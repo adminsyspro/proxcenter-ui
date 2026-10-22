@@ -33,7 +33,7 @@ export async function denyIfTargetIsProtectedAndCallerIsNot(
 ): Promise<NextResponse | null> {
   if (!(await isUserProtected(targetUserId))) return null
   if (callerUserId && (await isUserSuperAdmin(callerUserId))) return null
-  return NextResponse.json({ error: "Utilisateur non trouvé" }, { status: 404 })
+  return NextResponse.json({ error: "User not found" }, { status: 404 })
 }
 
 /**

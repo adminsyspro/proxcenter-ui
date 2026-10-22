@@ -288,7 +288,7 @@ async function handlePut(req: Request) {
       category: "settings",
       resourceType: "oidc_config",
       resourceId: "default",
-      resourceName: "Configuration OIDC/SSO",
+      resourceName: "OIDC/SSO configuration",
       details: {
         enabled,
         issuer_url: issuer_url || null,

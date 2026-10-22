@@ -122,7 +122,7 @@ describe('GET /users/[id]/api-tokens', () => {
     const GET = await importGET()
     const res = await callRoute(GET as any, { params: { id: 'u-ghost' } })
     expect(res.status).toBe(404)
-    expect(await readJson<any>(res)).toEqual({ error: 'Utilisateur non trouvé' })
+    expect(await readJson<any>(res)).toEqual({ error: 'User not found' })
   })
 
   it('404s (never 403) when the target is a protected account and the caller is not a super admin', async () => {
@@ -200,5 +200,16 @@ describe('GET /users/[id]/api-tokens', () => {
     const res = await callRoute(GET as any, { params: { id: 'u-leaver' } })
     expect(res.status).toBe(200)
     expect(await readJson<any>(res)).toEqual({ data: [] })
+  })
+})
+
+describe('GET /users/[id]/api-tokens server error', () => {
+  it('answers "Server error" when an unexpected failure has no message', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    checkPermissionMock.mockRejectedValue({})
+    const GET = await importGET()
+    const res = await callRoute(GET as any, { params: { id: 'u-leaver' } })
+    expect(res.status).toBe(500)
+    expect(await readJson<any>(res)).toEqual({ error: 'Server error' })
   })
 })

@@ -82,7 +82,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
 
     return NextResponse.json({ data: results.flat() })
   } catch (error: any) {
-    console.error('Erreur GET pbs/[id]/pve-storages:', error)
-    return NextResponse.json({ error: error?.message || 'Erreur serveur' }, { status: 500 })
+    console.error('GET pbs/[id]/pve-storages error:', error)
+    return NextResponse.json({ error: error?.message || 'Server error' }, { status: 500 })
   }
 }

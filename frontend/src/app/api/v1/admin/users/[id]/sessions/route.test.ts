@@ -183,7 +183,7 @@ describe("DELETE /api/v1/admin/users/[id]/sessions", () => {
     const res = await callRoute(DELETE as any, { method: "DELETE", params: { id: "ghost" } })
 
     expect(res.status).toBe(404)
-    expect(await readJson<any>(res)).toEqual({ error: "Utilisateur non trouvé" })
+    expect(await readJson<any>(res)).toEqual({ error: "User not found" })
     expect(revokeAllSessionsMock).not.toHaveBeenCalled()
   })
 
@@ -195,7 +195,7 @@ describe("DELETE /api/v1/admin/users/[id]/sessions", () => {
     const res = await callRoute(DELETE as any, { method: "DELETE", params: { id: "target-1" } })
 
     expect(res.status).toBe(404)
-    expect(await readJson<any>(res)).toEqual({ error: "Utilisateur non trouvé" })
+    expect(await readJson<any>(res)).toEqual({ error: "User not found" })
     expect(revokeAllSessionsMock).not.toHaveBeenCalled()
     expect(isUserSuperAdminMock).toHaveBeenCalledWith("admin-1")
     // Blocked before tenant resolution / target lookup ever runs — same
@@ -224,7 +224,7 @@ describe("DELETE /api/v1/admin/users/[id]/sessions", () => {
     const res = await callRoute(DELETE as any, { method: "DELETE", params: { id: "target-1" } })
 
     expect(res.status).toBe(404)
-    expect(await readJson<any>(res)).toEqual({ error: "Utilisateur non trouvé" })
+    expect(await readJson<any>(res)).toEqual({ error: "User not found" })
     expect(revokeAllSessionsMock).not.toHaveBeenCalled()
     expect(userTenantFindUniqueMock).toHaveBeenCalledWith({
       where: { userId_tenantId: { userId: "target-1", tenantId: "tenant-a" } },

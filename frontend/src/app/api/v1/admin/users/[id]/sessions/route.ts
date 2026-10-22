@@ -67,7 +67,7 @@ async function handleDelete(_req: Request, ctx: { params: Promise<{ id: string }
     : await findUserInTenant(targetId, tenantId)
 
   if (!target) {
-    return NextResponse.json({ error: "Utilisateur non trouvé" }, { status: 404 })
+    return NextResponse.json({ error: "User not found" }, { status: 404 })
   }
 
   // No exception sid: every session of the target dies, unlike the

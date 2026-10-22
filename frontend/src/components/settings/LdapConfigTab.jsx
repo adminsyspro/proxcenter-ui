@@ -392,7 +392,7 @@ export default function LdapConfigTab() {
               label={t('ldap.nameAttribute')}
               value={config.name_attribute}
               onChange={e => setConfig({ ...config, name_attribute: e.target.value })}
-              placeholder='cn ou displayName'
+              placeholder={`cn ${t('common.or')} displayName`}
               disabled={!config.enabled}
               helperText={t('ldap.nameAttributeHelper')}
             />
@@ -602,37 +602,37 @@ export default function LdapConfigTab() {
           <Box component='ul' sx={{ pl: 2, '& li': { mb: 0.5 } }}>
             <li>
               <Typography variant='body2'>
-                <strong>URL :</strong> <code>ldaps://dc.votredomaine.com:636</code>
+                <strong>{t('ldap.serverUrl')}:</strong> <code>ldaps://dc.example.com:636</code>
               </Typography>
             </li>
             <li>
               <Typography variant='body2'>
-                <strong>Bind DN :</strong> <code>CN=Service ProxCenter,OU=Services,DC=votredomaine,DC=com</code>
+                <strong>{t('ldap.bindDn')}:</strong> <code>CN=Service ProxCenter,OU=Services,DC=example,DC=com</code>
               </Typography>
             </li>
             <li>
               <Typography variant='body2'>
-                <strong>Base DN :</strong> <code>OU=Users,DC=votredomaine,DC=com</code>
+                <strong>{t('ldap.baseDn')}:</strong> <code>OU=Users,DC=example,DC=com</code>
               </Typography>
             </li>
             <li>
               <Typography variant='body2'>
-                <strong>Filtre :</strong> <code>(sAMAccountName={'{{username}}'})</code> ou <code>(userPrincipalName={'{{username}}'}@votredomaine.com)</code>
+                <strong>{t('ldap.userFilter')}:</strong> <code>(sAMAccountName={'{{username}}'})</code> {t('common.or')} <code>(userPrincipalName={'{{username}}'}@example.com)</code>
               </Typography>
             </li>
             <li>
               <Typography variant='body2'>
-                <strong>Attribut email :</strong> <code>mail</code> ou <code>userPrincipalName</code>
+                <strong>{t('ldap.emailAttribute')}:</strong> <code>mail</code> {t('common.or')} <code>userPrincipalName</code>
               </Typography>
             </li>
             <li>
               <Typography variant='body2'>
-                <strong>Attribut nom :</strong> <code>displayName</code>
+                <strong>{t('ldap.nameAttribute')}:</strong> <code>displayName</code>
               </Typography>
             </li>
             <li>
               <Typography variant='body2'>
-                <strong>Group Attribute :</strong> <code>memberOf</code>
+                <strong>{t('ldap.groupAttribute')}:</strong> <code>memberOf</code>
               </Typography>
             </li>
             <li>
@@ -642,7 +642,7 @@ export default function LdapConfigTab() {
             </li>
             <li>
               <Typography variant='body2'>
-                {t('ldap.adNestedHelp')} <code>(memberOf:1.2.840.113556.1.4.1941:=CN=ProxCenter-Users,OU=Groups,DC=votredomaine,DC=com)</code>
+                {t('ldap.adNestedHelp')} <code>(memberOf:1.2.840.113556.1.4.1941:=CN=ProxCenter-Users,OU=Groups,DC=example,DC=com)</code>
               </Typography>
             </li>
           </Box>

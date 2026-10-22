@@ -44,7 +44,7 @@ export async function GET() {
     console.error('Error fetching favorites:', error)
 
 return NextResponse.json(
-      { error: error?.message || 'Erreur serveur' },
+      { error: error?.message || 'Server error' },
       { status: 500 }
     )
   }
@@ -62,7 +62,7 @@ export async function POST(req: Request) {
 
     if (!connectionId || !node || !vmType || !vmid) {
       return NextResponse.json(
-        { error: 'connectionId, node, vmType et vmid sont requis' },
+        { error: 'connectionId, node, vmType and vmid are required' },
         { status: 400 }
       )
     }
@@ -78,7 +78,7 @@ export async function POST(req: Request) {
 
     if (existing && existing.tenantId === tenantId) {
       return NextResponse.json(
-        { error: 'Cette VM est déjà dans vos favoris' },
+        { error: 'This VM is already in your favorites' },
         { status: 409 }
       )
     }
@@ -104,13 +104,13 @@ export async function POST(req: Request) {
     return NextResponse.json({
       success: true,
       data: { id, vmKey },
-      message: 'Favori ajouté',
+      message: 'Favorite added',
     })
   } catch (error: any) {
     console.error('Error adding favorite:', error)
 
 return NextResponse.json(
-      { error: error?.message || 'Erreur serveur' },
+      { error: error?.message || 'Server error' },
       { status: 500 }
     )
   }
@@ -128,7 +128,7 @@ export async function DELETE(req: Request) {
 
     if (!vmKey) {
       return NextResponse.json(
-        { error: 'vmKey est requis' },
+        { error: 'vmKey is required' },
         { status: 400 }
       )
     }
@@ -139,20 +139,20 @@ export async function DELETE(req: Request) {
 
     if (result.count === 0) {
       return NextResponse.json(
-        { error: 'Favori non trouvé' },
+        { error: 'Favorite not found' },
         { status: 404 }
       )
     }
 
     return NextResponse.json({
       success: true,
-      message: 'Favori supprimé',
+      message: 'Favorite removed',
     })
   } catch (error: any) {
     console.error('Error deleting favorite:', error)
 
 return NextResponse.json(
-      { error: error?.message || 'Erreur serveur' },
+      { error: error?.message || 'Server error' },
       { status: 500 }
     )
   }

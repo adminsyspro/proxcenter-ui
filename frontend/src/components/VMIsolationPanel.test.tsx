@@ -20,7 +20,7 @@ const VM = {
 
 const STATE = { firewall_enabled: false, policy_in: 'ACCEPT', policy_out: 'ACCEPT', is_isolated: false, applied_sgs: [] }
 
-function seed(counter: { list: number; isolate: unknown[] }) {
+function seed(counter: { list: number; isolate: unknown[] }, simulation: Record<string, unknown> = {}) {
   server.use(
     http.get(`${BASE}/vms`, () => {
       counter.list++
@@ -38,6 +38,7 @@ function seed(counter: { list: number; isolate: unknown[] }) {
       HttpResponse.json({
         vmid: 101, name: 'web-01', current_state: STATE, simulated_state: { ...STATE, is_isolated: true },
         allowed_flows: [], blocked_flows: [], affected_vms: [], warnings: [], required_actions: [],
+        ...simulation,
       }),
     ),
     http.post(`${BASE}/vm/pve1/qemu/101/isolate`, async ({ request }) => {
@@ -72,5 +73,19 @@ describe('VMIsolationPanel', () => {
       },
     ])
     expect(await screen.findByText('VM web-01 isolated in standard mode (1 SG applied)')).toBeInTheDocument()
+  })
+
+  it('shows the simulation warnings translated from their codes', async () => {
+    seed({ list: 0, isolate: [] }, {
+      warnings: ['Le Security Group sg-base-vlan10 n\'existe pas encore', 'An orchestrator warning without code'],
+      warning_codes: [{ code: 'baseSGMissing', network: 'vlan10' }, { code: 'notYetKnown' }],
+    })
+    renderWithProviders(<VMIsolationPanel connectionId="conn-1" />)
+
+    expect(await screen.findByText('web-01')).toBeInTheDocument()
+    fireEvent.click(document.querySelector('.ri-settings-3-line')!.closest('button')!)
+
+    expect(await screen.findByText('Security Group sg-base-vlan10 does not exist yet: generate it first')).toBeInTheDocument()
+    expect(screen.getByText('An orchestrator warning without code')).toBeInTheDocument()
   })
 })

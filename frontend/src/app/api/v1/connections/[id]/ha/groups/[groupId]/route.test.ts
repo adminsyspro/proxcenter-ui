@@ -98,7 +98,7 @@ describe('GET /api/v1/connections/[id]/ha/groups/[groupId]', () => {
 
     expect(res.status).toBe(404)
     const body = await readJson<any>(res)
-    expect(body.error).toBe('Groupe HA non trouvé')
+    expect(body.error).toBe('HA group not found')
   })
 
   it('404 when pveFetch throws a "does not exist" error', async () => {
@@ -110,7 +110,7 @@ describe('GET /api/v1/connections/[id]/ha/groups/[groupId]', () => {
 
     expect(res.status).toBe(404)
     const body = await readJson<any>(res)
-    expect(body.error).toBe('Groupe HA non trouvé')
+    expect(body.error).toBe('HA group not found')
   })
 
   it('500 on unexpected pveFetch error', async () => {
@@ -147,7 +147,7 @@ describe('PUT /api/v1/connections/[id]/ha/groups/[groupId]', () => {
 
     expect(res.status).toBe(200)
     const body = await readJson<any>(res)
-    expect(body.message).toBe('Groupe HA mis à jour avec succès')
+    expect(body.message).toBe('HA group updated')
 
     const [, path, opts] = pveFetchMock.mock.calls[0]
     expect(path).toBe('/cluster/ha/groups/ha-grp-prod')
@@ -242,7 +242,7 @@ describe('DELETE /api/v1/connections/[id]/ha/groups/[groupId]', () => {
 
     expect(res.status).toBe(200)
     const body = await readJson<any>(res)
-    expect(body.message).toBe('Groupe HA supprimé avec succès')
+    expect(body.message).toBe('HA group deleted')
     expect(body.data).toBeNull()
 
     expect(pveFetchMock).toHaveBeenCalledWith(CONN, '/cluster/ha/groups/ha-grp-prod', {

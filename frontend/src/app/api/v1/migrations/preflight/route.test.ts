@@ -9,6 +9,7 @@ vi.mock("@/lib/rbac", () => ({
 vi.mock("@/lib/migration/v2v-preflight", () => ({
   runV2vPreflight: vi.fn(async () => ({ ssh: true, errors: [] })),
   installV2vPackages: vi.fn(async () => ({ success: true })),
+  installVirtV2vBackport: vi.fn(async () => ({ success: true, output: "virt-v2v 2.6.0-1+deb13u1~proxcenter1 installed (Windows Server 2025 support)" })),
   startVirtioWinDownload: vi.fn(async () => ({ success: true })),
   checkVirtioWinProgress: vi.fn(async () => ({ done: true })),
 }))
@@ -52,7 +53,7 @@ import { POST } from "./route"
 import { callRoute, readJson } from "@/__tests__/setup/route-test"
 import { runWarmNodePreflight } from "@/lib/migration/warm/vddk-preflight"
 import { isVddkPackageTokenConfigured } from "@/lib/migration/warm/vddk-provision"
-import { runV2vPreflight } from "@/lib/migration/v2v-preflight"
+import { installVirtV2vBackport, runV2vPreflight } from "@/lib/migration/v2v-preflight"
 import { runXcpngWarmNodePreflight } from "@/lib/migration/warm/xcpng-node-preflight"
 import { checkTargetStorageSpace, type TargetSpaceResult } from "@/lib/migration/warm/target-space"
 import { runWarmCopyReachability } from "@/lib/migration/warm/nfc-reachability"
@@ -324,5 +325,15 @@ describe("POST /api/v1/migrations/preflight: storage-space action", () => {
       scope.infra = { kind: "provider" }
     }
     expect(mockSpace).not.toHaveBeenCalled()
+  })
+})
+
+describe("POST /api/v1/migrations/preflight: install-virt-v2v-backport action (#1173)", () => {
+  it("installs the Windows Server 2025 backport on the node and answers its result, without running a preflight", async () => {
+    const res = await callRoute(POST, { body: { action: "install-virt-v2v-backport", targetConnectionId: "c1", targetNode: "pve3" } })
+    expect(res.status).toBe(200)
+    expect(vi.mocked(installVirtV2vBackport)).toHaveBeenCalledWith("c1", "pve3")
+    expect(await res.json()).toEqual({ success: true, output: "virt-v2v 2.6.0-1+deb13u1~proxcenter1 installed (Windows Server 2025 support)" })
+    expect(mockV2v).not.toHaveBeenCalled()
   })
 })

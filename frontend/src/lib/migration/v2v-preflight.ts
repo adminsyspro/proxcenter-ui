@@ -2,6 +2,9 @@ import { executeSSH, shellEscape, type SSHResult } from "@/lib/ssh/exec"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { resolveNodeSshEndpoint } from "@/lib/ssh/node-endpoint"
 import { ntfsCompressionPluginCheckCommand, ntfsCompressionPluginInstallScript } from "./ntfs-compression-plugin"
+import { virtV2vBackportInstallCommand, virtV2vBackportInstallScript } from "./virt-v2v-backport"
+import { virtV2vSupportCommand, virtV2vSupportOf } from "./warm/guest-conversion"
+import type { VirtV2vSupport } from "./warm/virt-v2v-windows"
 
 export interface TempStorageOption {
   path: string
@@ -57,6 +60,8 @@ export interface PreflightResult {
   ntfsFixAvailable?: boolean
   virtCustomizeAvailable?: boolean
   tempStorages?: TempStorageOption[]
+  /** The node's virt-v2v and the Windows releases it knows: the dialog warns about the others and offers the backport. */
+  virtV2v?: VirtV2vSupport
 }
 
 /**
@@ -173,6 +178,14 @@ export async function runV2vPreflight(
     result.ntfsCompressionPluginInstalled = true
   } else {
     errors.push("ntfs-3g system-compression plugin is not installed (Windows guests using Compact OS fail with 'No root device found')")
+  }
+
+  // 3f. The Windows releases virt-v2v knows (#1173), and whether the backport
+  // applies. After the batch above, not within it: a twelfth connection at
+  // once goes past sshd's MaxStartups (10) and gets dropped (lab).
+  if (result.virtV2vInstalled) {
+    const supportCheck = await probe(`${virtV2vSupportCommand()}; true`)
+    if (supportCheck.success) result.virtV2v = virtV2vSupportOf(supportCheck.output || "")
   }
 
   // 4. Check virtio-win drivers
@@ -344,11 +357,29 @@ export async function installV2vPackages(
     "fi; " +
     // Compact OS support for libguestfs: plugin built from the pinned upstream
     // release and registered with supermin (idempotent, see the module).
-    ntfsCompressionPluginInstallScript()
+    ntfsCompressionPluginInstallScript() + "; " +
+    // Windows Server 2025 support on PVE 9: a warning, never a failure, when
+    // the download does not go through (see the module).
+    virtV2vBackportInstallScript()
 
   // shellEscape wraps in single quotes — critical here so the remote shell
   // doesn't expand $(mktemp -d) / $TMPDIR before bash -c receives the script.
   return executeSSH(targetConnectionId, nodeIp, `bash -c ${shellEscape(script)}`, INSTALL_V2V_PACKAGES_TIMEOUT_MS)
+}
+
+/** One package download and install; executeSSH's 30 s default is too short on a slow mirror. */
+const VIRT_V2V_BACKPORT_TIMEOUT_MS = 10 * 60 * 1000
+
+/**
+ * Installs ProxCenter's virt-v2v build with Windows Server 2025 support
+ * (virt-v2v-backport.ts) on a node that already has virt-v2v. Fails unless
+ * the binary then knows Windows Server 2025, so a download that did not go
+ * through reaches the dialog.
+ */
+export async function installVirtV2vBackport(targetConnectionId: string, targetNode: string): Promise<SSHResult> {
+  const conn = await getConnectionById(targetConnectionId)
+  const nodeIp = await resolveNodeSshEndpoint(conn, targetNode)
+  return executeSSH(targetConnectionId, nodeIp, `bash -c ${shellEscape(virtV2vBackportInstallCommand())}`, VIRT_V2V_BACKPORT_TIMEOUT_MS)
 }
 
 const VIRTIO_WIN_URL = "https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/virtio-win.iso"

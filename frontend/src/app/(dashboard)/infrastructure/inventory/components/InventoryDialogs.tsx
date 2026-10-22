@@ -55,7 +55,7 @@ import { diskControllerLabel } from '@/lib/proxmox/diskController'
 import MigrationLogLines from './MigrationLogLines'
 import MigrationReviewStep from './MigrationReviewStep'
 import type { GuestConversionReadiness } from '@/lib/migration/warm/guest-conversion-node'
-import { windowsUnsupportedByVirtV2v } from '@/lib/migration/warm/virt-v2v-windows'
+import { mergeVirtV2vSupport, windowsUnsupportedByVirtV2v, type VirtV2vSupport } from '@/lib/migration/warm/virt-v2v-windows'
 import { initialHardwareState, initialNicState, initialDiskState, reviewIsValid, buildHardwarePayload, buildNicsPayload, buildDisksPayload, keptReviewDisks, reviewDiskStorages, tempStorageTypeFor, warmSpaceNeeds, type ReviewSource, type ReviewSourceDisk, type ReviewHardwareState, type ReviewNicState, type ReviewDiskState } from './migrationReview'
 import { usedVmidsOnConnection, nextVmidOnConnection } from '@/components/hardware/utils'
 import { tooltipSlotProps } from '@/components/settings/ha/tooltipSlotProps'
@@ -378,7 +378,7 @@ export interface InventoryDialogsProps {
   migStoragesError: string | null
   retryMigStorages: () => void
   migSshfsAvailable: boolean | null
-  vcenterPreflight: { checked: boolean; ok: boolean; installing: boolean; errors: string[]; virtV2vInstalled: boolean; virtioWinInstalled: boolean; nbdkitInstalled: boolean; nbdcopyInstalled: boolean; guestfsToolsInstalled: boolean; ovmfInstalled: boolean; ntfsCompressionPluginInstalled: boolean; detectedDisks: string[]; tempStorages: { path: string; availableBytes: number; totalBytes: number; filesystem: string }[]; installError?: { hintKey?: '401_enterprise'; output: string } } | null
+  vcenterPreflight: { checked: boolean; ok: boolean; installing: boolean; errors: string[]; virtV2vInstalled: boolean; virtioWinInstalled: boolean; nbdkitInstalled: boolean; nbdcopyInstalled: boolean; guestfsToolsInstalled: boolean; ovmfInstalled: boolean; ntfsCompressionPluginInstalled: boolean; detectedDisks: string[]; tempStorages: { path: string; availableBytes: number; totalBytes: number; filesystem: string }[]; installError?: { hintKey?: '401_enterprise'; output: string }; virtV2v?: VirtV2vSupport } | null
   setVcenterPreflight: (v: any) => void
   migStarting: boolean
   setMigStarting: (v: boolean) => void
@@ -735,15 +735,16 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
   // per-node responses so we can surface apt failures (e.g. 401 Unauthorized
   // on enterprise.proxmox.com when no subscription is attached) instead of
   // silently re-checking and showing the same red list, then re-runs preflight
-  // and aggregates results with AND semantics.
-  const runV2vInstall = React.useCallback(async (nodes: string[]) => {
+  // and aggregates results with AND semantics. `action` picks the whole bundle
+  // or the Windows Server 2025 backport alone (renderColdUnsupportedWindows).
+  const runV2vInstall = React.useCallback(async (nodes: string[], action: 'install' | 'install-virt-v2v-backport' = 'install') => {
     setVcenterPreflight(prev => prev ? { ...prev, installing: true, installError: undefined } : prev)
     try {
       const installResponses = await Promise.all(nodes.map(async (node: string) => {
         const r = await fetch('/api/v1/migrations/preflight', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ targetConnectionId: migTargetConn, targetNode: node, action: 'install' }),
+          body: JSON.stringify({ targetConnectionId: migTargetConn, targetNode: node, action }),
         })
         const json = await r.json().catch(() => ({}))
         return { node, ok: r.ok && json.success !== false, output: String(json.output || ''), error: String(json.error || '') }
@@ -794,6 +795,7 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
         detectedDisks: firstWithDisks?.detectedDisks || [],
         tempStorages: firstWithStorages?.tempStorages || [],
         installError,
+        virtV2v: mergeVirtV2vSupport(results.map((r: any) => r.virtV2v)),
       })
     } catch {
       setVcenterPreflight(prev => prev ? { ...prev, installing: false } : prev)
@@ -1162,16 +1164,77 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
       )}
     </Alert>
   )
+  // A Windows release the node's virt-v2v does not know (#1173), warm and cold:
+  // on a PVE 9 node, ProxCenter's virt-v2v build that knows it can be installed
+  // from here (virt-v2v-backport.ts), then the check re-runs.
+  const renderUnsupportedWindows = (o: { message: string; release: string; backport?: boolean; installing: boolean; error?: string; onInstall: () => void; testId: string }) => (
+    <Alert severity="warning" sx={{ fontSize: 12 }} data-testid={o.testId}>
+      {o.message}
+      {o.backport && (
+        <>
+          <Typography variant="caption" sx={{ display: 'block', mt: 0.5 }}>{t('inventoryPage.esxiMigration.virtV2vBackportOffer', { release: o.release })}</Typography>
+          <Button size="small" variant="outlined" color="inherit" disabled={o.installing} onClick={o.onInstall} data-testid={`${o.testId}-install`}
+            startIcon={o.installing ? <CircularProgress size={12} /> : <i className="ri-download-line" />}
+            sx={{ mt: 1, textTransform: 'none', fontSize: 11 }}>
+            {o.installing ? t('inventoryPage.esxiMigration.convertGuestInstalling') : t('inventoryPage.esxiMigration.virtV2vBackportInstall')}
+          </Button>
+        </>
+      )}
+      {o.error && (
+        <Typography variant="caption" sx={{ display: 'block', mt: 0.5 }}>{t('inventoryPage.esxiMigration.convertGuestInstallFailed', { error: o.error })}</Typography>
+      )}
+    </Alert>
+  )
+  const [backportPrep, setBackportPrep] = useState<{ key: string; running: boolean; error?: string } | null>(null)
+  const backportPrepCurrent = backportPrep && backportPrep.key === `${migTargetConn}::${migTargetNode}` ? backportPrep : null
+  const installWarmBackport = React.useCallback(async () => {
+    const key = `${migTargetConn}::${migTargetNode}`
+    setBackportPrep({ key, running: true })
+    try {
+      const r = await fetch('/api/v1/migrations/preflight', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targetConnectionId: migTargetConn, targetNode: migTargetNode, action: 'install-virt-v2v-backport' }),
+      })
+      const d = await r.json().catch(() => ({}))
+      if (!r.ok || d?.success === false) throw new Error(String(d?.error || d?.output || 'install failed').slice(-400))
+      setBackportPrep(null)
+      setWarmPreflightRefresh(n => n + 1)
+    } catch (e) {
+      setBackportPrep({ key, running: false, error: e instanceof Error ? e.message : String(e) })
+    }
+  }, [migTargetConn, migTargetNode])
   const renderConvertGuestReadiness = () => (
     <>
-      {conversionUnsupported && (
-        <Alert severity="warning" sx={{ fontSize: 12 }} data-testid="mig-convert-guest-unsupported-os">
-          {t('inventoryPage.esxiMigration.convertGuestUnsupportedOs', { version: warmPreflightCurrent?.guestConversion?.virtV2v?.version ?? '', node: migTargetNode, release: conversionUnsupported.release, minVersion: conversionUnsupported.minVersion })}
-        </Alert>
-      )}
+      {conversionUnsupported && renderUnsupportedWindows({
+        message: t('inventoryPage.esxiMigration.convertGuestUnsupportedOs', { version: warmPreflightCurrent?.guestConversion?.virtV2v?.version ?? '', node: migTargetNode, release: conversionUnsupported.release, minVersion: conversionUnsupported.minVersion }),
+        release: conversionUnsupported.release,
+        backport: warmPreflightCurrent?.guestConversion?.virtV2v?.backport,
+        installing: !!backportPrepCurrent?.running,
+        error: backportPrepCurrent?.error,
+        onInstall: () => { void installWarmBackport() },
+        testId: 'mig-convert-guest-unsupported-os',
+      })}
       {conversionMissing.length > 0 && renderConvertGuestMissing()}
     </>
   )
+  // Cold side (virt-v2v pipeline): the preflight of every node the migration
+  // may land on, the backport installed on each of them, a failure shown by
+  // the install error alert of the checklist.
+  const renderColdUnsupportedWindows = (guestOs: string | undefined) => {
+    const unsupported = windowsUnsupportedByVirtV2v(guestOs, vcenterPreflight?.virtV2v)
+    if (!unsupported || !vcenterPreflight) return null
+    const nodes = migTargetNode === '__auto__'
+      ? migNodeOptions.filter((o: any) => o.connId === migTargetConn && o.status === 'online').map((o: any) => o.node)
+      : [migTargetNode]
+    return renderUnsupportedWindows({
+      message: t('inventoryPage.esxiMigration.coldUnsupportedOs', { version: vcenterPreflight.virtV2v?.version ?? '', node: nodes.join(', '), release: unsupported.release, minVersion: unsupported.minVersion }),
+      release: unsupported.release,
+      backport: vcenterPreflight.virtV2v?.backport,
+      installing: vcenterPreflight.installing,
+      onInstall: () => { void runV2vInstall(nodes, 'install-virt-v2v-backport') },
+      testId: 'mig-cold-unsupported-os',
+    })
+  }
 
   // Automated warm-node provisioning (Enterprise VDDK package). Offered inside
   // the not-ready alert only when the server reported a configured package
@@ -1714,6 +1777,7 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
         ntfsCompressionPluginInstalled: results.every((r: any) => !!r.ntfsCompressionPluginInstalled),
             detectedDisks: [],
             tempStorages: results[0]?.tempStorages || [],
+            virtV2v: mergeVirtV2vSupport(results.map((r: any) => r.virtV2v)),
           })
         }
       } catch {}
@@ -4027,6 +4091,9 @@ return
                     )
                   })()}
 
+                  {migType === 'cold' && (esxiMigrateVm?.hostType === 'vcenter' || esxiMigrateVm?.hostType === 'hyperv' || esxiMigrateVm?.hostType === 'nutanix' || esxiMigrateVm?.hostType === 'vmware')
+                    && vcenterPreflight?.checked && renderColdUnsupportedWindows(esxiMigrateVm?.guestOS)}
+
                   {/* Defensive: when virt-v2v is required but preflight returned no
                       tempStorages at all (degenerate node layout where even /tmp has
                       <1 GiB free), surface the cause explicitly instead of leaving the
@@ -5085,6 +5152,12 @@ return
                     Cold migration only. Disks will be downloaded from Nutanix and converted via virt-v2v with automatic virtio driver injection.
                   </Alert>
                 )}
+
+                {(bulkMigHostInfo?.hostType === 'vcenter' || bulkMigHostInfo?.hostType === 'hyperv' || bulkMigHostInfo?.hostType === 'nutanix') && migType !== 'warm' && vcenterPreflight?.checked
+                  && renderColdUnsupportedWindows((bulkMigHostInfo?.vms || [])
+                    .filter((vm: any) => bulkMigSelected.has(vm.vmid))
+                    .map((vm: any) => String(vm.guest_OS || vm.guestOS || ''))
+                    .find((os: string) => windowsUnsupportedByVirtV2v(os, vcenterPreflight.virtV2v)))}
 
                 {/* vCenter/Hyper-V/Nutanix preflight checklist for bulk migration.
                     Mirrors the single-VM checklist above: the Install button only

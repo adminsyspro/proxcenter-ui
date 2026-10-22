@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 vi.mock("@/lib/ssh/exec", async (importActual) => ({ ...(await importActual<typeof import("@/lib/ssh/exec")>()), executeSSH: vi.fn() }))
 
 import { executeSSH } from "@/lib/ssh/exec"
+import { virtV2vBackportProbe } from "../virt-v2v-backport"
 import {
   buildCommitScript, buildConversionScript, buildConversionXml, canKeepTrimsOut, conversionDir, conversionNotAppliedMessage, conversionPreflightCommand,
   convertGuestAtCutover, describeWindowsStaticIps, missingConversionPrereqs, nbdChainFunctions, parseConversionOutcome, virtV2vSupportOf, windowsStaticIpArgs,
@@ -236,6 +237,11 @@ describe("conversion prerequisites", () => {
     expect(virtV2vSupportOf("v2v-in-place\nv2v-version=2.6.0\nv2v-probed\nv2v-knows=2k25\n")).toEqual({ version: "2.6.0", knows: ["2k25"] })
     expect(virtV2vSupportOf("")).toEqual({})
     expect(missingConversionPrereqs("v2v-in-place virtio-win srvany v2v-version=2.6.0 v2v-probed", true)).toEqual([])
+  })
+
+  it("says when ProxCenter's virt-v2v build with Windows Server 2025 support applies to the node", () => {
+    expect(conversionPreflightCommand()).toContain(virtV2vBackportProbe())
+    expect(virtV2vSupportOf("v2v-version=2.6.0\nv2v-probed\nv2v-backport\n")).toEqual({ version: "2.6.0", knows: [], backport: true })
   })
 
   it("only asks Windows for the VirtIO drivers and the first-boot helper", () => {

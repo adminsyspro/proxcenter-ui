@@ -42,6 +42,7 @@ import { NBD_RELEASE_HOLDERS_FN, nbdReleaseHoldersCall } from "../nbd-holders"
 import type { GuestStaticIpv4 } from "@/lib/vmware/soap"
 import { buildNetworkPinScript, describeNetworkPinReport, NETWORK_PIN_REPORT, NETWORK_PIN_SCRIPT, parseNetworkPinReport, type GuestNic } from "./guest-network"
 import { unsupportedWindowsReason, VIRT_V2V_MARKERS, windowsUnsupportedByVirtV2v, type VirtV2vSupport } from "./virt-v2v-windows"
+import { virtV2vBackportProbe } from "../virt-v2v-backport"
 import { windowsOnlineDisksCommand, windowsOnlineDisksFailed, windowsOnlineDisksScheduled } from "../windows-online-disks"
 
 export { GUEST_CONVERSION_ESTIMATE_SEC } from "./guest-conversion-estimate"
@@ -314,10 +315,18 @@ export function conversionPreflightCommand(): string {
     `test -f ${VIRTIO_WIN_ISO} && echo virtio-win`,
     "( test -f /usr/share/virt-tools/rhsrvany.exe || test -f /usr/share/virt-tools/pvvxsvc.exe ) && echo srvany",
     "command -v qemu-nbd >/dev/null && command -v nbd-client >/dev/null && nbdkit --filter=nozero nbd --version >/dev/null 2>&1 && echo nbd-chain",
+    virtV2vSupportCommand(),
+    "true",
+  ].join("; ")
+}
+
+/** Shell lines printing what virtV2vSupportOf reads; only reads, for the warm and the cold preflight alike. */
+export function virtV2vSupportCommand(): string {
+  return [
     `v=$(virt-v2v-in-place --version 2>/dev/null | awk '{print $2; exit}'); test -n "$v" && echo "v2v-version=$v"`,
     // The Windows releases its compiled driver table knows (virt-v2v-windows.ts)
     `test -f /usr/bin/virt-v2v-in-place && echo v2v-probed && for m in ${VIRT_V2V_MARKERS.join(" ")}; do grep -aqF "$m" /usr/bin/virt-v2v-in-place && echo "v2v-knows=$m"; done`,
-    "true",
+    virtV2vBackportProbe(),
   ].join("; ")
 }
 
@@ -326,12 +335,12 @@ export function canKeepTrimsOut(output: string): boolean {
   return output.split(/\s+/).includes("nbd-chain")
 }
 
-/** What the preflight output says of the node's virt-v2v: its version, and the Windows releases it knows when the binary was probed. */
+/** What the preflight output says of the node's virt-v2v: its version, the Windows releases it knows when the binary was probed, and whether ProxCenter's backport applies. */
 export function virtV2vSupportOf(output: string): VirtV2vSupport {
   const tokens = output.split(/\s+/)
   const version = tokens.find(t => t.startsWith("v2v-version="))?.slice("v2v-version=".length)
   const knows = tokens.filter(t => t.startsWith("v2v-knows=")).map(t => t.slice("v2v-knows=".length))
-  return { ...(version && { version }), ...(tokens.includes("v2v-probed") && { knows }) }
+  return { ...(version && { version }), ...(tokens.includes("v2v-probed") && { knows }), ...(tokens.includes("v2v-backport") && { backport: true }) }
 }
 
 /** What is missing on the node to convert this guest, from the preflight output. */

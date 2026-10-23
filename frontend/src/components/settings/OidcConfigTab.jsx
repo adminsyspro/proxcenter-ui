@@ -57,6 +57,10 @@ export default function OidcConfigTab() {
     force_sso_redirect: false,
     group_role_mapping: '[]',
     group_mapping_strategy: 'first_match',
+    proxy_url: '',
+    proxy_username: '',
+    proxy_password: '',
+    proxy_bypass: '',
   })
 
   const [loading, setLoading] = useState(true)
@@ -67,6 +71,10 @@ export default function OidcConfigTab() {
   const [testResult, setTestResult] = useState(null)
   const [showSecret, setShowSecret] = useState(false)
   const [hasClientSecret, setHasClientSecret] = useState(false)
+  const [showProxyPassword, setShowProxyPassword] = useState(false)
+  const [hasProxyPassword, setHasProxyPassword] = useState(false)
+  // HTTPS_PROXY of the server, used when the proxy field is left empty.
+  const [envProxy, setEnvProxy] = useState(null)
   const [groupMappings, setGroupMappings] = useState([])
   const [availableRoles, setAvailableRoles] = useState([])
   // Tenant / vDC pickers are served by the OIDC config route itself: it gates on
@@ -103,9 +111,12 @@ export default function OidcConfigTab() {
           ...prev,
           ...data.data,
           client_secret: '',
+          proxy_password: '',
           default_role: normalizeRole(data.data.default_role) || 'role_viewer',
         }))
         setHasClientSecret(data.data.hasClientSecret || false)
+        setHasProxyPassword(data.data.hasProxyPassword || false)
+        setEnvProxy(data.data.env_proxy || null)
 
         setTenants(data.data.tenants || [])
         setVdcs(data.data.vdcs || [])
@@ -191,6 +202,14 @@ export default function OidcConfigTab() {
         setHasClientSecret(true)
         setConfig(prev => ({ ...prev, client_secret: '' }))
       }
+
+      // The route drops the proxy password with its username or URL.
+      if (!config.proxy_url?.trim() || !config.proxy_username?.trim()) {
+        setHasProxyPassword(false)
+      } else if (config.proxy_password) {
+        setHasProxyPassword(true)
+      }
+      setConfig(prev => ({ ...prev, proxy_password: '' }))
     } catch (e) {
       setError(t('oidc.saveError'))
     } finally {
@@ -208,22 +227,32 @@ export default function OidcConfigTab() {
       const res = await fetch('/api/v1/auth/oidc/test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ issuer_url: config.issuer_url }),
+        // The proxy as typed, so it can be tried before it is saved.
+        body: JSON.stringify({
+          issuer_url: config.issuer_url,
+          proxy_url: config.proxy_url,
+          proxy_username: config.proxy_username,
+          proxy_password: config.proxy_password,
+          proxy_bypass: config.proxy_bypass,
+        }),
       })
 
       const data = await res.json()
+      const route = testRouteMessage(data)
 
       if (res.ok && data.success) {
         setTestResult({
           success: true,
           message: data.message || t('oidc.testSuccess'),
           endpoints: data.endpoints,
+          route,
         })
       } else {
         setTestResult({
           success: false,
-          message: data.error || data.message || t('oidc.testFailed'),
+          message: testErrorMessage(data) || data.error || data.message || t('oidc.testFailed'),
           endpoints: data.endpoints || null,
+          route,
         })
       }
     } catch (e) {
@@ -231,6 +260,22 @@ export default function OidcConfigTab() {
     } finally {
       setTesting(false)
     }
+  }
+
+  const testRouteMessage = data => {
+    if (data.via === 'proxy') return t('oidc.testViaProxy', { proxy: data.proxy })
+    if (data.via === 'direct') return t('oidc.testViaDirect')
+
+    return null
+  }
+
+  // The route sends a code and the values; the sentence is built here.
+  const testErrorMessage = data => {
+    const code = data.error_code === 'dns' && data.via === 'direct' ? 'dnsDirect' : data.error_code
+
+    if (!code || code === 'other') return null
+
+    return t(`oidc.testError.${code}`, { host: data.error_host || '', status: data.error_status ?? '' })
   }
 
   const addGroupMapping = () => {
@@ -306,6 +351,11 @@ export default function OidcConfigTab() {
                 <Typography variant='caption' display='block'>Userinfo: <code>{testResult.endpoints.userinfo_endpoint}</code></Typography>
               )}
             </Box>
+          )}
+          {testResult.route && (
+            <Typography variant='caption' display='block' sx={{ mt: 1, opacity: 0.8 }}>
+              {testResult.route}
+            </Typography>
           )}
         </Alert>
       )}
@@ -519,6 +569,72 @@ export default function OidcConfigTab() {
               onChange={e => setConfig({ ...config, userinfo_url: e.target.value })}
               placeholder='https://idp.example.com/userinfo'
               disabled={!config.enabled}
+            />
+          </Box>
+        </AccordionDetails>
+      </Accordion>
+
+      {/* Outbound proxy towards the IdP (collapsed unless one is set) */}
+      <Accordion variant='outlined' disabled={!config.enabled} defaultExpanded={!!config.proxy_url}>
+        <AccordionSummary expandIcon={<i className='ri-arrow-down-s-line' />}>
+          <Typography variant='subtitle1' fontWeight={700} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <i className='ri-route-line' style={{ color: '#0ea5e9' }} />
+            {t('oidc.proxySection')}
+          </Typography>
+        </AccordionSummary>
+        <AccordionDetails>
+          <Typography variant='body2' sx={{ opacity: 0.6, mb: 2 }}>
+            {t('oidc.proxyDesc')}
+          </Typography>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <TextField
+              fullWidth
+              label={t('oidc.proxyUrl')}
+              value={config.proxy_url}
+              onChange={e => setConfig({ ...config, proxy_url: e.target.value })}
+              placeholder='http://proxy.example.com:3128'
+              disabled={!config.enabled}
+              helperText={envProxy ? t('oidc.proxyUrlHelperEnv', { proxy: envProxy }) : t('oidc.proxyUrlHelper')}
+            />
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2 }}>
+              <TextField
+                fullWidth
+                label={t('oidc.proxyUsername')}
+                value={config.proxy_username}
+                onChange={e => setConfig({ ...config, proxy_username: e.target.value })}
+                disabled={!config.enabled || !config.proxy_url}
+                helperText={t('oidc.proxyUsernameHelper')}
+                autoComplete='off'
+              />
+              <TextField
+                fullWidth
+                label={t('oidc.proxyPassword')}
+                type={showProxyPassword ? 'text' : 'password'}
+                value={config.proxy_password}
+                onChange={e => setConfig({ ...config, proxy_password: e.target.value })}
+                disabled={!config.enabled || !config.proxy_url || !config.proxy_username}
+                placeholder={hasProxyPassword ? '••••••••' : ''}
+                helperText={hasProxyPassword ? t('oidc.proxyPasswordKeep') : ' '}
+                autoComplete='new-password'
+                InputProps={{
+                  endAdornment: (
+                    <InputAdornment position='end'>
+                      <IconButton size='small' onClick={() => setShowProxyPassword(!showProxyPassword)}>
+                        <i className={showProxyPassword ? 'ri-eye-off-line' : 'ri-eye-line'} />
+                      </IconButton>
+                    </InputAdornment>
+                  ),
+                }}
+              />
+            </Box>
+            <TextField
+              fullWidth
+              label={t('oidc.proxyBypass')}
+              value={config.proxy_bypass}
+              onChange={e => setConfig({ ...config, proxy_bypass: e.target.value })}
+              placeholder='idp.corp.example.com, .corp.example.com'
+              disabled={!config.enabled}
+              helperText={t('oidc.proxyBypassHelper')}
             />
           </Box>
         </AccordionDetails>

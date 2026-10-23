@@ -12,6 +12,8 @@
 // advertise one (Google, for instance) simply gets the local sign-out we always
 // did. Degrading is deliberate — a missing endpoint must never block a logout.
 
+import { oidcFetchDispatcher, type OidcProxySettings } from "./oidcProxy"
+
 const DISCOVERY_TTL_MS = 5 * 60 * 1000
 
 type CacheEntry = { endSession: string | null; at: number }
@@ -52,6 +54,7 @@ export function buildDiscoveryUrl(issuerUrl: string | null | undefined): string 
 export async function discoverEndSessionEndpoint(
   issuerUrl: string | null | undefined,
   fetchImpl: typeof fetch = fetch,
+  proxy: OidcProxySettings | null = null,
 ): Promise<string | null> {
   const discoveryUrl = buildDiscoveryUrl(issuerUrl)
   if (!discoveryUrl) return null
@@ -61,10 +64,13 @@ export async function discoverEndSessionEndpoint(
 
   let endSession: string | null = null
   try {
+    // Through the SSO outbound proxy when one is set (roadmap#78).
+    const dispatcher = oidcFetchDispatcher(proxy, discoveryUrl)
     const res = await fetchImpl(discoveryUrl, {
       signal: AbortSignal.timeout(5000),
       headers: { Accept: "application/json" },
-    })
+      ...(dispatcher ? { dispatcher } : {}),
+    } as RequestInit)
     if (res.ok) {
       const doc = await res.json()
       const raw = doc?.end_session_endpoint

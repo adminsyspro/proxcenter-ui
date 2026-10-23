@@ -638,6 +638,13 @@ model OidcConfig {
   // How several matching rows combine: "first_match" keeps the topmost row per
   // tenant/vDC, "cumulative" grants every matching role (issue #992).
   groupMappingStrategy String @default("first_match") @map("group_mapping_strategy")
+  // Outbound HTTP proxy for the server-side calls to the IdP (roadmap#78).
+  // Empty: HTTPS_PROXY / HTTP_PROXY from the environment, else direct.
+  proxyUrl         String?  @map("proxy_url")
+  proxyUsername    String?  @map("proxy_username")
+  proxyPasswordEnc String?  @map("proxy_password_enc")
+  // Hosts reached directly, NO_PROXY syntax; NO_PROXY is added to it.
+  proxyBypass      String?  @map("proxy_bypass")
   createdAt        DateTime @map("created_at")
   updatedAt        DateTime @map("updated_at")
 

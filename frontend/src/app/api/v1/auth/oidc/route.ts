@@ -7,6 +7,7 @@ import {
   protectedRoleTargets,
   type GroupGrant,
 } from "@/lib/auth/groupMapping"
+import { checkProxyUrl, environmentProxyDisplay } from "@/lib/auth/oidcProxy"
 import { prisma } from "@/lib/db/prisma"
 import { encryptSecret } from "@/lib/crypto/secret"
 import { getRBACContext, PERMISSIONS } from "@/lib/rbac"
@@ -68,6 +69,11 @@ export async function GET(req: Request) {
           group_role_mapping: "[]",
           group_mapping_strategy: "first_match",
           hasClientSecret: false,
+          proxy_url: "",
+          proxy_username: "",
+          proxy_bypass: "",
+          hasProxyPassword: false,
+          env_proxy: environmentProxyDisplay(),
           tenants: await listMappingTenants(),
           vdcs: await listMappingVdcs(),
           app_origin: appOrigin(req),
@@ -102,6 +108,13 @@ export async function GET(req: Request) {
         group_role_mapping: groupRoleMappingStr,
         group_mapping_strategy: normalizeMappingStrategy(config.groupMappingStrategy),
         hasClientSecret: !!config.clientSecretEnc,
+        proxy_url: config.proxyUrl || "",
+        proxy_username: config.proxyUsername || "",
+        proxy_bypass: config.proxyBypass || "",
+        hasProxyPassword: !!config.proxyPasswordEnc,
+        // Shown as the fallback when the proxy field is left empty, without
+        // the credentials HTTPS_PROXY may carry.
+        env_proxy: environmentProxyDisplay(),
         tenants: await listMappingTenants(),
         vdcs: await listMappingVdcs(),
         app_origin: appOrigin(req),
@@ -218,6 +231,10 @@ async function handlePut(req: Request) {
       force_sso_redirect,
       group_role_mapping,
       group_mapping_strategy,
+      proxy_url,
+      proxy_username,
+      proxy_password,
+      proxy_bypass,
     } = body
 
     if (enabled) {
@@ -258,6 +275,17 @@ async function handlePut(req: Request) {
       return NextResponse.json({ error: targetError }, { status: 400 })
     }
 
+    const rawProxyUrl = typeof proxy_url === "string" ? proxy_url.trim() : ""
+    let proxyUrl: string | null = null
+    if (rawProxyUrl) {
+      const checked = checkProxyUrl(rawProxyUrl)
+      if (checked.error) return NextResponse.json({ error: checked.error }, { status: 400 })
+      proxyUrl = checked.url
+    }
+    // Credentials only mean something with a proxy: clearing the URL clears them.
+    const proxyUsername = proxyUrl && typeof proxy_username === "string" && proxy_username.trim() ? proxy_username.trim() : null
+    const proxyBypass = typeof proxy_bypass === "string" && proxy_bypass.trim() ? proxy_bypass.trim() : null
+
     const now = new Date()
     const baseData = {
       enabled: !!enabled,
@@ -277,6 +305,9 @@ async function handlePut(req: Request) {
       forceSsoRedirect: persistForceSsoRedirect,
       groupRoleMapping: grants,
       groupMappingStrategy: normalizeMappingStrategy(group_mapping_strategy),
+      proxyUrl,
+      proxyUsername,
+      proxyBypass,
       updatedAt: now,
     }
 
@@ -294,6 +325,15 @@ async function handlePut(req: Request) {
       const enc = encryptSecret(client_secret)
       update.clientSecretEnc = enc
       create.clientSecretEnc = enc
+    }
+    // Same keep-unless-retyped rule for the proxy password, dropped with the
+    // username it belongs to.
+    if (!proxyUsername) {
+      update.proxyPasswordEnc = null
+    } else if (proxy_password) {
+      const enc = encryptSecret(String(proxy_password))
+      update.proxyPasswordEnc = enc
+      create.proxyPasswordEnc = enc
     }
 
     await prisma.oidcConfig.upsert({
@@ -314,6 +354,8 @@ async function handlePut(req: Request) {
         issuer_url: issuer_url || null,
         client_id: client_id || null,
         clientSecretChanged: !!client_secret,
+        proxy_url: proxyUrl,
+        proxyPasswordChanged: !!(proxyUsername && proxy_password),
       },
       status: "success",
     })

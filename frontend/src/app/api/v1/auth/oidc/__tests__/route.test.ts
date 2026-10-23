@@ -465,3 +465,100 @@ describe("/api/v1/auth/oidc — provider tenant and protected roles", () => {
     expect(getRBACContextMock).not.toHaveBeenCalled()
   })
 })
+
+// ─── Outbound proxy towards the IdP (roadmap#78) ────────────────────────────
+
+describe("/api/v1/auth/oidc — outbound proxy", () => {
+  const base = { enabled: true, issuer_url: "https://idp.example.com", client_id: "cid" }
+
+  beforeEach(() => {
+    vi.unstubAllEnvs()
+    vi.stubEnv("HTTPS_PROXY", "")
+    vi.stubEnv("HTTP_PROXY", "")
+  })
+
+  it("serves the saved proxy, flags the password without returning it, and shows the environment proxy", async () => {
+    vi.stubEnv("HTTPS_PROXY", "http://envuser:envpass@squid.corp:3128")
+    findUniqueMock.mockResolvedValue({
+      enabled: true,
+      providerName: "Entra",
+      issuerUrl: "https://login.example.com/t/v2.0",
+      clientId: "cid",
+      clientSecretEnc: "enc",
+      groupRoleMapping: [],
+      groupMappingStrategy: "first_match",
+      proxyUrl: "http://proxy.corp:8080",
+      proxyUsername: "svc-proxcenter",
+      proxyPasswordEnc: "enc:pw",
+      proxyBypass: ".corp.example.com",
+    })
+    const { GET } = await importRoute()
+    const res = await callRoute(GET as any, { method: "GET" })
+    const body = await readJson<any>(res)
+    expect(body.data.proxy_url).toBe("http://proxy.corp:8080")
+    expect(body.data.proxy_username).toBe("svc-proxcenter")
+    expect(body.data.proxy_bypass).toBe(".corp.example.com")
+    expect(body.data.hasProxyPassword).toBe(true)
+    expect(body.data.env_proxy).toBe("http://squid.corp:3128")
+    const raw = JSON.stringify(body)
+    expect(raw).not.toContain("enc:pw")
+    expect(raw).not.toContain("envpass")
+  })
+
+  it("answers empty proxy fields and no environment proxy when nothing is configured", async () => {
+    findUniqueMock.mockResolvedValue(null)
+    const { GET } = await importRoute()
+    const body = await readJson<any>(await callRoute(GET as any, { method: "GET" }))
+    expect(body.data).toMatchObject({ proxy_url: "", proxy_username: "", proxy_bypass: "", hasProxyPassword: false, env_proxy: null })
+  })
+
+  it("normalises the proxy URL and encrypts the password", async () => {
+    encryptSecretMock.mockReturnValue("enc:pw")
+    const { PUT } = await importRoute()
+    const res = await callRoute(PUT as any, {
+      method: "PUT",
+      body: { ...base, proxy_url: " http://proxy.corp:3128/ ", proxy_username: " svc ", proxy_password: "P@ss:w%rd!", proxy_bypass: " .corp.example.com " },
+    })
+    expect(res.status).toBe(200)
+    expect(encryptSecretMock).toHaveBeenCalledWith("P@ss:w%rd!")
+    const arg = upsertMock.mock.calls[0][0]
+    expect(arg.update).toMatchObject({ proxyUrl: "http://proxy.corp:3128", proxyUsername: "svc", proxyBypass: ".corp.example.com", proxyPasswordEnc: "enc:pw" })
+    expect(arg.create.proxyPasswordEnc).toBe("enc:pw")
+    const audited = auditMock.mock.calls.find(c => c[0]?.resourceType === "oidc_config")?.[0]
+    expect(audited.details).toMatchObject({ proxy_url: "http://proxy.corp:3128", proxyPasswordChanged: true })
+    expect(JSON.stringify(auditMock.mock.calls)).not.toContain("P@ss")
+  })
+
+  it("keeps the saved proxy password when the field is left blank", async () => {
+    const { PUT } = await importRoute()
+    await callRoute(PUT as any, { method: "PUT", body: { ...base, proxy_url: "http://proxy.corp:3128", proxy_username: "svc", proxy_password: "" } })
+    const arg = upsertMock.mock.calls[0][0]
+    expect(arg.update.proxyUsername).toBe("svc")
+    expect("proxyPasswordEnc" in arg.update).toBe(false)
+    expect(encryptSecretMock).not.toHaveBeenCalled()
+  })
+
+  it("drops the credentials when the proxy URL or the username is cleared", async () => {
+    const { PUT } = await importRoute()
+    await callRoute(PUT as any, { method: "PUT", body: { ...base, proxy_url: "", proxy_username: "svc", proxy_password: "pw" } })
+    let arg = upsertMock.mock.calls[0][0]
+    expect(arg.update).toMatchObject({ proxyUrl: null, proxyUsername: null, proxyPasswordEnc: null })
+    expect(encryptSecretMock).not.toHaveBeenCalled()
+
+    await callRoute(PUT as any, { method: "PUT", body: { ...base, proxy_url: "http://proxy.corp:3128", proxy_username: "  " } })
+    arg = upsertMock.mock.calls[1][0]
+    expect(arg.update).toMatchObject({ proxyUrl: "http://proxy.corp:3128", proxyUsername: null, proxyPasswordEnc: null })
+  })
+
+  it.each([
+    ["http://user:pw@proxy.corp:3128", /username and password fields/],
+    ["socks5://proxy.corp:1080", /only http/],
+    ["not a url", /Invalid proxy URL/],
+  ])("rejects %s without saving", async (proxy_url, message) => {
+    const { PUT } = await importRoute()
+    const res = await callRoute(PUT as any, { method: "PUT", body: { ...base, proxy_url } })
+    expect(res.status).toBe(400)
+    expect((await readJson<any>(res)).error).toMatch(message)
+    expect(upsertMock).not.toHaveBeenCalled()
+  })
+})

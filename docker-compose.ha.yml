@@ -117,6 +117,13 @@ services:
       # refresh, and the maps say why they cannot show tiles. Written by
       # install-airgap.sh; leave empty on a connected site.
       PROXCENTER_OFFLINE: ${PROXCENTER_OFFLINE:-}
+      # Outbound HTTP proxy, written by the installer when it runs behind one.
+      # The frontend only uses it for the calls to the SSO identity provider
+      # (discovery, token, keys, sign-out), and only when no proxy is set in
+      # Settings > OIDC / SSO. Proxmox and the internal services stay direct.
+      HTTP_PROXY: ${HTTP_PROXY:-}
+      HTTPS_PROXY: ${HTTPS_PROXY:-}
+      NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,frontend,postgres,orchestrator,weasyprint}
       # Shared secret for the first-run setup endpoint, which is reachable
       # without authentication for as long as no account exists. Empty keeps
       # the historical behaviour. A converted cluster already has accounts, so

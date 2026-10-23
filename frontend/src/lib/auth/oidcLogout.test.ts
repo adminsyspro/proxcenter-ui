@@ -111,3 +111,20 @@ describe('buildEndSessionUrl', () => {
     expect(url.searchParams.get('id_token_hint')).toBe('t')
   })
 })
+
+describe('discoverEndSessionEndpoint through the SSO outbound proxy (roadmap#78)', () => {
+  it('hands fetch a proxy dispatcher when a proxy is set, none otherwise', async () => {
+    const { ProxyAgent } = await import('undici')
+    const fetchImpl = vi.fn(async () => okDoc({ end_session_endpoint: 'https://idp.example.com/logout' }))
+
+    await discoverEndSessionEndpoint('https://idp.example.com', fetchImpl as any, { proxyUrl: 'http://proxy.corp:3128' })
+    expect((fetchImpl.mock.calls[0] as any[])[1].dispatcher).toBeInstanceOf(ProxyAgent)
+
+    clearEndSessionCache()
+    vi.stubEnv('HTTPS_PROXY', '')
+    vi.stubEnv('HTTP_PROXY', '')
+    await discoverEndSessionEndpoint('https://idp.example.com', fetchImpl as any, null)
+    expect((fetchImpl.mock.calls[1] as any[])[1].dispatcher).toBeUndefined()
+    vi.unstubAllEnvs()
+  })
+})
